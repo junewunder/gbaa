@@ -194,6 +194,33 @@ real game. Each gets a small agb program of ours (source in `agb/`,
   test pins that). They agree with each other, so the native check can't
   see it; only a test program against mGBA would.
 
+  **Work in progress** (`native/ime-release`, paused 2026-11-01 after
+  reading only; no code yet):
+  - Play build: `Io` sets `event::IRQ` on an `IE` or `IME` write, but
+    `tick_native` acts only on halt, stop and serial, and `Sched::irq_line`
+    is false when `IME` was 0 at the last sync, so an `IME` write of 1 with
+    `IE & IF` pending waits for the next time point. Fix: in `tick_native`,
+    when `events & IRQ` is set, I is clear and `irq_pending()`, open the
+    window and return true. Exact timing is unaffected, because its tick
+    already syncs on any event. Caveat: the interpreter ticks after every
+    instruction and compiled code at a block's exit, so the IRQ can land
+    up to a block apart. The test program should write `IME` as a
+    function's last act before `bx lr`, which also absorbs mGBA's IRQ delay
+    of about 7 cycles. The pinned test `irqs_are_taken_only_where_time_passed`
+    changes with it.
+  - Hardware library: `Hw::write16(IME)` only sets `master_enable` and
+    can't reach `G`. The prelude's `io_write16` must call `hw::irq_release`
+    when `IME` goes from 0 to 1, on the program's current stack (agb's
+    wrapper stand-in runs on `Game::sp`, which is stale between waits). The
+    lifted code's local `r13` is current at each store, because the native
+    lift runs no dead-register-write pass. So either stores that may reach
+    I/O take `r13` (`st16(g, r13, a, v)`), or `g.sp = r13` is set before
+    them, with no line added.
+  - The old behaviour goes behind a `gbaa-lift` flag as a `planted_flags`
+    control. The test program is `agb/native-ime-release`, modelled on
+    `agb/native-irq-hold`: clear `IME`, poll past line 160, set `IME`, read
+    the count. Its route is checked with `just mgba-diff` on both timings.
+
 ### 2. Recognising the agb library
 
 **Parked (june, 2026-11-01).** gbaa's target is games, and agb programs
