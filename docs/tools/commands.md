@@ -1606,8 +1606,11 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
 - The server on fly.io (multiplayer/play-gate, `deploy/fly/`): the app
   `gbaa-server` (region ewr, one shared-cpu machine, **stopped between
   june's playtests**: `just fly-up` before playing or a test that needs
-  it, `just fly-down` after) runs `gbaa-server fly-global-services:7374`,
-  the address fly routes a public UDP port to. It keeps no files, so it
+  it, `just fly-down` after) runs `gbaa-server fly-global-services:7374
+  --min-version N`, the address fly routes a public UDP port to, turning
+  away builds older than netplay version N (`netplay::VERSION`, raised by
+  hand with the Dockerfile's N: docs/research/multiplayer.md,
+  "Versions"). It keeps no files, so it
   needs no volume (the volume `gbaa_data`, which held the QUIC
   certificate, is unused since multiplayer/remove-lockstep-quic and
   still billed until june destroys it: `fly volumes destroy`). `just
@@ -1658,10 +1661,13 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   SEAT ADDR`, `straight`. `cargo test -p netplay --test ping_sim` runs
   every profile (and `rough` with GBAs), about 20 s of wall time.
 - The server (multiplayer/relay-server, then multiplayer/remove-lockstep-quic,
-  `crates/relay`): `gbaa-server [ADDR]` serves plain-UDP rooms
-  (`relay::rooms`, default `0.0.0.0:7374`): it seats the players by a
-  six-letter code and passes their datagrams on, and keeps nothing on
-  disk, so players need only its address. A player's seat is freed when
+  `crates/relay`): `gbaa-server [ADDR] [--min-version N]` serves
+  plain-UDP rooms (`relay::rooms`, default `0.0.0.0:7374`): it seats the
+  players by a six-letter code and passes their datagrams on, and keeps
+  nothing on disk, so players need only its address. `--min-version N`
+  refuses clients older than netplay version N, saying "this game is too
+  old for the server (version V, needs N): get the new build"
+  (multiplayer/server-version-cutoff). A player's seat is freed when
   it leaves (`L`) or sends nothing for 10 s, and a room closes with its
   last player; it says so on stderr (`room CODE opened`, `player 2 left`,
   `closed: every player gone`). `gbaa-server --rooms ADDR` asks one how
