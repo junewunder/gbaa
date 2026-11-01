@@ -692,8 +692,44 @@ screens, 29 to 31 for Japanese: help slots no ability reaches; scattered
 entries from 183 to 324; runs of four from 560 to 687, and 732 to 782:
 screens the sweep doesn't open), and 76 blobs outside the table: 44
 in `0x0845_0000` to `0x084A_FFFF`, 6 in `0x082C` to `0x082E`, the rest
-one to four at a time between `0x0893` and `0x08E9`. Not looked into
-further.
+one to four at a time between `0x0893` and `0x08E9`.
+
+**Who loads the 158** (assets/kirby-fuzz-last-misses, 2026-10-31, from
+`out/fuzz/kirby/scan/scan.toml` against katam's `katam.elf` symbols and
+the index tables read out of the ROM; no code changed yet):
+
+- **70 of the 76 off-table blobs are likely not data**: each starts
+  inside a katam symbol (`gUnk_0845E108+0x54`, `gUnk_08D71FC8+0xc4cc`,
+  …) and no aligned ROM pointer leads to it. The 0x08D6-0x08E9 ones
+  repeat at the same offsets in six big symbols (`+0x2b0`, `+0xc4cc`,
+  `+0xc4dc`): one structure per language, read by the scan as LZ77
+  headers. The other six have a pointer: `gUnk_082D8498` and
+  `gUnk_082D8768` (from the ROM header area, 0x08000424 and 0x08000428),
+  `gUnk_0893EFC8`, `gUnk_08A1E720`, `sUnusedBgTileset` (named unused)
+  and `sCreditsEmptyTileset`. So about 88 of the 158 are real.
+- **Help slots 29 to 31** in each language (18 entries):
+  `sHelpMenuUnkTiledBGsIndices[language][2 + ability]` with abilities
+  27 to 29, which don't exist (`KIRBY_ABILITY_COUNT` is 27). Reachable
+  only by writing 27 to 29 into `ability` before START.
+- **The main menu, `gUnk_08385C14[gLanguage][16]`** (`code_08138D64.c`):
+  columns 14 and 15 (`sub_081404AC`, `sub_0813FF6C`; entries 313 to 324
+  and 670 to 685) are missed in every language. Columns 3, 4 and 6
+  (`sub_0813D550`, `sub_0813D784`, `sub_0813D364`) are missed in some
+  languages and reached in others (column 13 in Italian too), so the
+  masher reaches them by luck.
+  The menu is a task whose state is a function pointer (`a1->unk9CC`);
+  a sweep could set it to each state function.
+- **The sub-game menu**, `gUnk_082DE8DC`, `…90C`, `…93C` and `…96C`
+  `[game][gLanguage]` (`subgame_menu.c`): games 0 to 2 in Japanese
+  and English (entries 560 to 628). The other languages and game 3 are
+  reached.
+- **The link screen with `gUnk_02038580 == 1`**: `gUnk_082EC784`
+  (`multi_08032E98.c`; entries 672 to 687, three apart). The sweep reaches
+  the `== 0` version (`gUnk_082EC778`).
+- **`gUnk_08387FF0[gLanguage][0..3]`** (`code_0814EBE4.c`, entries 732
+  to 745): a screen with no katam name; its creator isn't traced yet.
+- **Entry 776**: `gUnk_082DE698[0]` in `sub_0801DD20` (`code_0801DA58.c`).
+- Not traced: 183 and 204 to 224 (every fourth entry).
 
 **Generic and Emerald-only.**
 
