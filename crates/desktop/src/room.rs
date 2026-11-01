@@ -39,8 +39,15 @@
 //!
 //! The end lines (the session's counts, frame times and how many ran over
 //! a frame, the round trip, how far ahead of the other player this peer
-//! ran) print at the end, show in the menu while it's open, and, from the
-//! window, are kept in `$GBAA_DATA/netplay/` ([`keep_report`]).
+//! ran, the frames whose hashes differed) print at the end, show in the
+//! menu while it's open, and, from the window or after a desync, are kept
+//! in `$GBAA_DATA/netplay/` ([`keep_report`]).
+//!
+//! A desync (the peers' hashes of a frame differ: the two players' games
+//! have gone apart) is said as soon as it's found: on stderr, as a
+//! `netplay notice:` line on stdout, in a toast and the mark over the
+//! game, and on the Netplay page. `--desync-at N` forces one, for a check
+//! ([`netplay::Rollback::skew`]).
 
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::PathBuf;
@@ -111,12 +118,15 @@ pub enum State {
     /// last opening. `left` says who left, once the other player has: the
     /// game goes on alone, the cable unplugged. `quiet`: the other player
     /// has sent nothing for [`SHAKY`] (they may be about to leave).
+    /// `desync`: the first frame whose hashes differed between the peers,
+    /// once one has ([`desync_note`]).
     Playing {
         code: String,
         seat: usize,
         lines: Vec<String>,
         left: Option<String>,
         quiet: bool,
+        desync: Option<u32>,
     },
     /// The last session ended, and why.
     Ended(String),
@@ -288,6 +298,12 @@ pub const QUIET: Duration = Duration::from_secs(3);
 /// left): a frame's inputs come every 17 ms.
 pub const SHAKY: Duration = Duration::from_millis(750);
 
+/// What a window says when the peers' consoles were first found apart,
+/// at frame `f`.
+pub fn desync_note(f: u32) -> String {
+    format!("Out of sync with the other player since frame {f}")
+}
+
 /// What a window says when player `who` (from 0) has left, `how`.
 pub fn left_note(who: usize, how: netplay::udp::Gone) -> String {
     match how {
@@ -362,19 +378,26 @@ fn play(
     // Muted, the window keeps time by a frame clock.
     let mut clock = (screen.is_some() && player(&mut gba, seat).is_none()).then(Clock::default);
     let mut s = Rollback::new(gba, net, seat, host, rollback::WINDOW);
+    if let Some(f) = opts.desync_at {
+        eprintln!("gbaa-desktop: forcing a desync: from frame {f} on, this peer runs A held");
+        s.skew(f, key::A);
+    }
     title(&format!("gbaa: room {code}, player {}", seat + 1));
     // Who left, once someone has: this seat plays on alone.
     let mut left: Option<String> = None;
     let mut left_at: Option<(usize, u64)> = None;
-    let playing = |lines, left: &Option<String>, quiet| State::Playing {
+    // The first frame found out of sync.
+    let mut desync: Option<u32> = None;
+    let playing = |lines, left: &Option<String>, quiet, desync| State::Playing {
         code: code.clone(),
         seat,
         lines,
         left: left.clone(),
         quiet,
+        desync,
     };
     if let Some(sc) = &screen {
-        sc.set_netplay(playing(Vec::new(), &left, false));
+        sc.set_netplay(playing(Vec::new(), &left, false, None));
     }
     // The Netplay page's lines as last told, and whether the other player
     // had gone quiet: the window's mark says so as it changes.
@@ -432,13 +455,26 @@ fn play(
                 quiet = false;
                 if let Some(sc) = &screen {
                     glance = report.glance(&mut s, seat, &left);
-                    sc.set_netplay(playing(glance.clone(), &left, quiet));
+                    sc.set_netplay(playing(glance.clone(), &left, quiet, desync));
                 }
             } else if let Some(sc) = &screen
                 && (s.transport_mut().quiet_for() >= SHAKY) != quiet
             {
                 quiet = !quiet;
-                sc.set_netplay(playing(glance.clone(), &left, quiet));
+                sc.set_netplay(playing(glance.clone(), &left, quiet, desync));
+            }
+            if desync.is_none()
+                && let Some(&f) = s.desyncs().first()
+            {
+                desync = Some(f);
+                let note = desync_note(f);
+                eprintln!("gbaa-desktop: {note}: the peers' hashes of frame {f} differ");
+                // What a script reads (the check does): the window's notice.
+                println!("netplay notice: {note}");
+                glance = report.glance(&mut s, seat, &left);
+                if let Some(sc) = &screen {
+                    sc.set_netplay(playing(glance.clone(), &left, quiet, desync));
+                }
             }
             status
         };
@@ -476,7 +512,7 @@ fn play(
             glance = report.glance(&mut s, seat, &left);
             if let Some(sc) = &screen {
                 sc.set_report(lines);
-                sc.set_netplay(playing(glance.clone(), &left, quiet));
+                sc.set_netplay(playing(glance.clone(), &left, quiet, desync));
             }
         }
         menu_was_open = menu;
@@ -557,8 +593,8 @@ fn play(
     }
     // A window's player may not see stdout (an app opened from the
     // desktop): the lines stay in a file, so a playtest leaves numbers on
-    // both sides.
-    if screen.is_some() {
+    // both sides. Headless, a desync's are kept too.
+    if screen.is_some() || !s.desyncs().is_empty() {
         match keep_report(&lines, &code, seat) {
             Ok(path) => eprintln!("gbaa-desktop: netplay report in {}", path.display()),
             Err(e) => eprintln!("gbaa-desktop: netplay report not kept: {e}"),
@@ -609,7 +645,8 @@ impl Report {
     }
 
     /// The menu's few lines: the other player's seat, the round trip, how
-    /// far ahead or behind, the rollbacks and the frames run again.
+    /// far ahead or behind, the rollbacks and the frames run again, and a
+    /// desync once one is found.
     fn glance(
         &self,
         s: &mut Rollback<Gba, Udp>,
@@ -619,8 +656,8 @@ impl Report {
         let ms = |d: Duration| d.as_secs_f64() * 1e3;
         let lead = s.lead();
         let st = s.stats;
-        if let Some(l) = left {
-            return vec![
+        let mut lines = if let Some(l) = left {
+            vec![
                 format!("{l}."),
                 format!(
                     "You are player {}, playing on alone, the cable unplugged.",
@@ -630,33 +667,43 @@ impl Report {
                     "{} rollbacks, {} frames run again, {} frozen, while linked",
                     st.rollbacks, st.rerun, self.freezes.count
                 ),
-            ];
-        }
-        vec![
-            format!(
-                "You are player {}, the other player {}",
-                seat + 1,
-                SEATS - seat
-            ),
-            match s.transport().rtt() {
-                Some((now, lo, hi)) => format!(
-                    "Round trip {:.0} ms (least {:.0}, most {:.0})",
-                    ms(now),
-                    ms(lo),
-                    ms(hi)
+            ]
+        } else {
+            vec![
+                format!(
+                    "You are player {}, the other player {}",
+                    seat + 1,
+                    SEATS - seat
                 ),
-                None => "Round trip not measured yet".into(),
-            },
-            if lead >= 0.0 {
-                format!("{lead:.1} frames ahead of the other player")
-            } else {
-                format!("{:.1} frames behind the other player", -lead)
-            },
-            format!(
-                "{} rollbacks, {} frames run again, {} frozen",
-                st.rollbacks, st.rerun, self.freezes.count
-            ),
-        ]
+                match s.transport().rtt() {
+                    Some((now, lo, hi)) => format!(
+                        "Round trip {:.0} ms (least {:.0}, most {:.0})",
+                        ms(now),
+                        ms(lo),
+                        ms(hi)
+                    ),
+                    None => "Round trip not measured yet".into(),
+                },
+                if lead >= 0.0 {
+                    format!("{lead:.1} frames ahead of the other player")
+                } else {
+                    format!("{:.1} frames behind the other player", -lead)
+                },
+                format!(
+                    "{} rollbacks, {} frames run again, {} frozen",
+                    st.rollbacks, st.rerun, self.freezes.count
+                ),
+            ]
+        };
+        if let Some(&f) = s.desyncs().first() {
+            lines.push(format!(
+                "{}: your games may differ ({} of the checks every {} frames differed)",
+                desync_note(f),
+                s.desyncs().len(),
+                netplay::session::HASH_EVERY
+            ));
+        }
+        lines
     }
 
     /// The end lines so far.
@@ -715,6 +762,7 @@ impl Report {
                 f.at
             ),
             format!("netplay link: {rtt}{lead}"),
+            desyncs_line(s.desyncs()),
         ];
         let gba = s.console();
         if gba.recompiled() {
@@ -734,6 +782,28 @@ impl Report {
         lines
     }
 }
+
+/// The end line naming the frames whose hashes differed between the
+/// peers: the first [`DESYNCS_LISTED`], and how many more.
+fn desyncs_line(d: &[u32]) -> String {
+    if d.is_empty() {
+        return "netplay desyncs: none".into();
+    }
+    let listed: Vec<String> = d.iter().take(DESYNCS_LISTED).map(u32::to_string).collect();
+    let more = match d.len().saturating_sub(DESYNCS_LISTED) {
+        0 => String::new(),
+        n => format!(" and {n} more"),
+    };
+    format!(
+        "netplay desyncs: {} (the peers' hashes differ), first at frame {}; at frames {}{more}",
+        d.len(),
+        d[0],
+        listed.join(", ")
+    )
+}
+
+/// How many desync frames the end line lists.
+const DESYNCS_LISTED: usize = 20;
 
 /// The waits on the other player longer than a frame: what a player sees
 /// as the game freezing.
