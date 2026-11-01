@@ -575,6 +575,28 @@ tokio + quinn.
 - **Not yet:** rejoining after a dropped connection, a room expiry
   beyond "empty", NAT hole punching.
 
+### Versions (multiplayer/server-version-cutoff)
+
+Built 2026-10-31, june's ask (2026-10-30): a friend on a stale binary is
+told to update, not let in to desync. `netplay::VERSION`
+(crates/netplay/src/lib.rs) is a number every client sends after its
+build ID in the rooms' `H` and `J` (a `u32`, little-endian; a build from
+before versions sends none and counts as 0). `gbaa-server --min-version
+N` refuses an older one with an `E`: "this game is too old for the
+server (version 1, needs 2): get the new build", which a pre-version
+client prints as any refusal, and the desktop window's netplay page
+shows as "The server said no: …", not a timeout. Without the flag every
+version is let in (the room-sim's and tests' in-process servers). The
+server compares the number and nothing more; the build ID still keeps
+two different builds out of one room.
+
+**When to raise it:** by hand, by one, in the commit of any change that
+can split peers (two builds stepping a console, the link or rollback
+differently) or changes the wire (the session's messages, `udp`'s
+datagrams, the rooms'). Then raise `--min-version` in
+deploy/fly/Dockerfile to match (a netplay test fails until they agree)
+and redeploy fly once the new build is with the friends.
+
 ## Desktop netplay
 
 Built 2026-10-25 (multiplayer/desktop-netplay), `crates/desktop/src/room.rs`:

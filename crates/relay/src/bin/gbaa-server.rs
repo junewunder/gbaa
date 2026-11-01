@@ -1,24 +1,23 @@
-//! `gbaa-server [ADDR]`: the netplay server, plain-UDP rooms for rollback
-//! netplay ([`relay::rooms`]) on one port (default 0.0.0.0:7374). ADDR may
-//! be HOST:PORT (deploy/fly/ runs it on fly.io as
+//! `gbaa-server [ADDR] [--min-version N]`: the netplay server, plain-UDP
+//! rooms for rollback netplay ([`relay::rooms`]) on one port (default
+//! 0.0.0.0:7374). ADDR may be HOST:PORT (deploy/fly/ runs it on fly.io as
 //! `fly-global-services:7374`). Players need only its address.
+//! `--min-version N` refuses clients older than netplay version N
+//! (`netplay::VERSION`), telling them to get the new build; without it,
+//! every version is let in.
 //!
 //! `gbaa-server --rooms ADDR` asks a running server how many rooms are
 //! open and how many players are in them ([`relay::rooms::query`]).
 
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 
-const USAGE: &str =
-    "usage: gbaa-server [ADDR]  (default 0.0.0.0:7374)\n       gbaa-server --rooms ADDR";
+const USAGE: &str = "usage: gbaa-server [ADDR] [--min-version N]  (default 0.0.0.0:7374)\n       gbaa-server --rooms ADDR";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let default = format!("0.0.0.0:{}", relay::PORT);
     let result = match args.as_slice() {
-        [] => serve(&default),
-        [addr] if !addr.starts_with('-') => serve(addr),
         [flag, addr] if flag == "--rooms" => rooms(addr),
-        _ => Err(USAGE.into()),
+        _ => server_args(&args).and_then(|(addr, min)| serve(&addr, min)),
     };
     if let Err(e) = result {
         eprintln!("gbaa-server: {e}");
@@ -38,6 +37,27 @@ fn rooms(addr: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// ADDR and the minimum version from `gbaa-server [ADDR] [--min-version N]`.
+fn server_args(args: &[String]) -> Result<(String, u32), String> {
+    let mut addr = None;
+    let mut min = 0;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--min-version" => {
+                let v = it.next().ok_or(USAGE)?;
+                min = v
+                    .parse()
+                    .map_err(|_| format!("--min-version {v}?\n{USAGE}"))?;
+            }
+            a if !a.starts_with('-') && addr.is_none() => addr = Some(a.to_string()),
+            _ => return Err(USAGE.into()),
+        }
+    }
+    let addr = addr.unwrap_or_else(|| format!("0.0.0.0:{}", relay::PORT));
+    Ok((addr, min))
+}
+
 fn resolve(addr: &str) -> Result<SocketAddr, String> {
     match addr.parse() {
         Ok(a) => Ok(a),
@@ -51,9 +71,12 @@ fn resolve(addr: &str) -> Result<SocketAddr, String> {
 
 /// `addr` may name a host (`fly-global-services:7374`, the address fly.io
 /// routes a public UDP port to): its first address is bound.
-fn serve(addr: &str) -> Result<(), String> {
+fn serve(addr: &str, min_version: u32) -> Result<(), String> {
     let addr = resolve(addr)?;
     let sock = UdpSocket::bind(addr).map_err(|e| format!("{addr}: {e}"))?;
-    eprintln!("gbaa-server: rooms on {addr} (UDP)");
-    relay::rooms::serve(sock).map_err(|e| format!("rooms stopped: {e}"))
+    match min_version {
+        0 => eprintln!("gbaa-server: rooms on {addr} (UDP), every version let in"),
+        v => eprintln!("gbaa-server: rooms on {addr} (UDP), netplay version {v} and newer"),
+    }
+    relay::rooms::serve(sock, min_version).map_err(|e| format!("rooms stopped: {e}"))
 }

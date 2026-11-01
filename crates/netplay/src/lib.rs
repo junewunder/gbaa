@@ -33,6 +33,16 @@ pub mod udp;
 pub use rollback::Rollback;
 pub use session::{Config, Error, Status};
 
+/// The netplay version, sent to the rooms server with every `H` and `J`
+/// so a server started with `--min-version` can turn away builds too old
+/// to play with today's (`relay::rooms`). Raise it by hand, by one,
+/// whenever a change can split peers (a console, rollback or link change
+/// that makes two builds step differently) or changes the wire (these
+/// messages, [`udp`]'s datagrams, the rooms server's); then raise
+/// `--min-version` in deploy/fly/Dockerfile to match and redeploy, once
+/// the new build is out. docs/research/multiplayer.md, "Versions".
+pub const VERSION: u32 = 1;
+
 /// One seat's input for one frame: a button bitmask or a pad's whole
 /// reading, fixed-size on the wire.
 pub trait Input: Copy + Eq + Default + core::fmt::Debug {
