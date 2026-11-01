@@ -1,0 +1,11 @@
+# agb/psg-square (the PSG's square channels with FIFO A, SOUND.md): the
+# native check's sound route (`just native-check`, route-check --native),
+# built by `just agb-tests`. The screen is forced blank throughout.
+rom = "$GBAA_DATA/agb/psg-square.gba"
+
+[[checkpoint]]
+name = "psg-square-120"
+frame = 120
+hash = "5a89fb4d57df1f25"
+# Verified: mGBA 0.10.5 (mgba-dump --hash) draws the same at frame 120: the
+# forced-blank white (`just native-check`, 2026-11-01).

@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!-- A sample ES-DE system entry for gbaa (deck/frontend-launch).
+     Copy to ~/ES-DE/custom_systems/es_systems.xml, with es_find_rules.xml
+     beside it. A custom system named like a bundled one replaces it whole,
+     so this keeps mGBA through RetroArch as an alternative emulator: pick
+     between them under Other settings > Alternative emulators, or per game
+     in its metadata editor. ES-DE passes only the ROM, so gbaa keeps the
+     game's save, states and resume file in its default folder,
+     ~/.local/share/gbaa/saves/NAME/, copying in a ROM.sav found beside the
+     ROM on the first run (docs/save-locations-design.md). -->
+<systemList>
+    <system>
+        <name>gba</name>
+        <fullname>Nintendo Game Boy Advance</fullname>
+        <path>%ROMPATH%/gba</path>
+        <extension>.agb .AGB .gba .GBA</extension>
+        <command label="gbaa">%EMULATOR_GBAA% --fullscreen %ROM%</command>
+        <command label="mGBA">%EMULATOR_RETROARCH% -L %CORE_RETROARCH%/mgba_libretro.so %ROM%</command>
+        <platform>gba</platform>
+        <theme>gba</theme>
+    </system>
+</systemList>

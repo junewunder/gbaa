@@ -1,0 +1,93 @@
+# Character tables for games whose source map has no pret [text] (unit
+# mod/text-tables; docs/mod-view-design.md, "Other games' tables"). The
+# readable print (codegen::text) decodes a ROM's text with the table its
+# sha1 names here, in place of any [text] its maps carry. Tables live
+# outside the repo like the ROMs: `table` is a path under $GBAA_DATA
+# (default ~/.local/share/gbaa); a game whose table file is missing prints
+# byte previews, as with no table.
+#
+# - format: "charmap" (pret's charmap.txt: `'A' = 41`, `NAME = FC 00`) or
+#   "tbl" (the ROM-hacking community's Thingy table: `41=A`, `/FF=` the
+#   end, `*FE=` a new line).
+# - unit: bytes a character takes, little-endian (a 2-byte table's entry
+#   `8100` is the bytes 00 81).
+# - end: the unit that ends a string, in the table's own hex.
+# - extra: characters outside ASCII the game's English text uses, besides
+#   codegen::text::COMMON.
+# - reached: "pointer" when code loads a string's (or a table of strings')
+#   address, which the readable print decodes at the pool word; "index"
+#   when the game looks its text up by a message number (Minish Cap's
+#   gTranslations), which the print decodes where a call in [game.index]'s
+#   `calls` passes a constant one in r0: `// message 0x0f07: "…"`. An
+#   index game's pool words keep their byte previews.
+# - index (reached = "index" only): `table`, the message table's address
+#   (codegen::text::Index says its layout); `calls`, the functions, by the
+#   map's names, whose first argument is a message number.
+# - codes (optional, 1-byte tables): control codes whose argument bytes
+#   follow them, printed as the game's source writes them
+#   (`{Sound:01:E8}`); `when` gives the count by the first argument's
+#   value where that decides it, `values` the first argument's names.
+#   `short` prints the arguments in hex without leading zeros (`{Var:1}`),
+#   `named` spells the whole code by its first argument (`{Player}`).
+#   They override the table's entries for the same byte.
+# - chars (optional): characters printed in place of the table's own
+#   entry for those bytes, by the bytes in the table's hex.
+# - source: where the table came from.
+
+[[game]]
+name = "Metroid: Zero Mission (USA)"
+rom_sha1 = "5de8536afe1f0078ee6fe1089f890e8c7aa0a6e8"
+table = "src/mzm/charmap.txt"
+format = "charmap"
+unit = 2
+end = "FF00"
+extra = "？　"
+reached = "pointer"
+source = "metroidret/mzm@7708d10 charmap.txt (just fetch-decomps)"
+
+[[game]]
+name = "The Legend of Zelda: The Minish Cap (USA)"
+rom_sha1 = "b4bd50e4131b027c334547b4524e2dbbd4227130"
+table = "src/tmc/charmap.txt"
+format = "charmap"
+unit = 1
+end = "00"
+extra = ""
+reached = "index"
+source = "zeldaret/tmc@6fb6dfb charmap.txt (just fetch-decomps); ASCII, from pokeruby's placeholder. Codes: the same commit's tools/src/tmc_strings/main.cpp (FuncConvertArray), which writes translations/USA.json"
+# GetCharacter (src/text.c) reads these codes' arguments; tmc_strings
+# names them.
+codes = [
+  { code = "01", name = "01", args = 1 },
+  { code = "02", name = "Color", args = 1, values = ["White", "Red", "Green", "Blue", "Yellow"] },
+  { code = "03", name = "Sound", args = 2 },
+  { code = "04", name = "04", args = 1, when = { "10" = 2 } },
+  { code = "05", name = "Choice", args = 2, when = { "FF" = 1 } },
+  { code = "06", name = "Var", args = 1, short = true, named = { "00" = "Player" } },
+  { code = "07", name = "07", args = 2 },
+  { code = "08", name = "08", args = 1 },
+  { code = "09", name = "09", args = 1 },
+  { code = "0C", name = "Key", args = 1, values = ["A", "B", "Left", "Right", "DUp", "DDown", "DLeft", "DRight", "Dpad", "Select", "Start"] },
+  { code = "0F", name = "Symbol", args = 1 },
+]
+# tmc's charmap names 22 `QT`; its text (and tmc_strings) writes a quote.
+chars = { "22" = '\"' }
+
+[game.index]
+# gTranslations[0] (data/const/text.s; every USA language's entry).
+table = "0x089b1d90"
+# include/message.h, src/text.c.
+calls = ["MessageFromTarget", "MessageNoOverlap", "MessageAtHeight", "MessageAtPos", "MessageRequest", "ShowTextBox"]
+
+# Games looked for and not found (2026-10-31): no table on Data Crystal,
+# romhacking.net or in a decomp, or the text isn't stored as characters.
+
+[[none]]
+name = "Kirby & the Amazing Mirror (USA)"
+rom_sha1 = "274b102b6d940f46861a92b4e65f89a51815c12c"
+why = "No table: Data Crystal's page has only a RAM map, and the katam decomp has no charmap (its preproc's charmap support is unused). Menus and signs are graphics."
+
+[[none]]
+name = "WarioWare, Inc.: Mega Microgame$! (USA)"
+rom_sha1 = "3f556448d290fa5406d6ed367fee16cc02387ad3"
+why = "No table: no Data Crystal page, nothing on romhacking.net, no decomp. Its prompts are drawn as graphics."

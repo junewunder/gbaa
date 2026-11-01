@@ -1,0 +1,431 @@
+{
+  "id": "structured",
+  "title": "Structured codegen that matches exactly",
+  "priority": 18,
+  "order": 14,
+  "units": [
+    {
+      "id": "structured/lit-control-flow",
+      "title": "Literature review: recovering structured control flow",
+      "detail": "Phase 2 of the plan in docs/open-decisions.md (Plan 2026-10-21, with june): structured codegen that still matches the interpreter exactly, before more ROMs than Emerald. A deep literature review: read the primary papers and the source of the tools named (not summaries), add each source to docs/references.md, and say for every technique whether it can stay exact for us (every flag a later instruction may read, cycle counts and tick points, I/O order, IRQs, self-patching RAM code, the interpreter fallback) and what it would cost. Ground it in our code: crates/codegen, docs/codegen-design.md, docs/decisions.md 8-10, and the generated Emerald in out/. End with what our design should take from it, for {unit:structured/design}. Topic: turning a CFG into if/while/loop without goto. Relooper (Zakai, Emscripten), Stackifier (Cheerp, Binaryen's), Ramsey's 'Beyond Relooper' (already in references.md), No More Gotos / DREAM (Yakdan et al.), Phoenix (Schwartz et al.), Hex-Rays' and Ghidra's structurers, rev.ng; irreducible control flow (node splitting, dispatch loops), loops with several exits, switch recovery from jump tables. Measure on Emerald: how many guest functions are reducible, their size, how many would need a dispatch fallback. Write docs/research/structured-control-flow.md.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "a54cbee3",
+        "at": "2026-10-24T04:58:50Z",
+        "evidence": "docs/research/structured-control-flow.md: 20+ primary sources (papers and source trees at named commits) judged for exactness and cost, added to references.md. just cfg-survey on 10 ROMs: Emerald 99.9% reducible, 13 irreducible regions = 422 insns; modern GCC 99.5%; return sites 30-54% of blocks. Recommends Ramsey + loop-match per irreducible region + resume body. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "structured/lit-recompilers",
+      "title": "Literature review: static recompilers and binary lifters",
+      "detail": "Phase 2 of the plan in docs/open-decisions.md (Plan 2026-10-21, with june): structured codegen that still matches the interpreter exactly, before more ROMs than Emerald. A deep literature review: read the primary papers and the source of the tools named (not summaries), add each source to docs/references.md, and say for every technique whether it can stay exact for us (every flag a later instruction may read, cycle counts and tick points, I/O order, IRQs, self-patching RAM code, the interpreter fallback) and what it would cost. Ground it in our code: crates/codegen, docs/codegen-design.md, docs/decisions.md 8-10, and the generated Emerald in out/. End with what our design should take from it, for {unit:structured/design}. Topic: how other static recompilers and lifters emit code and stay correct. N64Recomp, XenonRecomp and rexglue (Xbox 360), the PS2/GameCube recomp efforts, UltraHLE-era work, Rosetta 2 (what's public), McSema/Remill, rev.ng, RetDec, Ghidra's P-code, QEMU TCG, LLVM-based lifters (e.g. mctoll); what each does about indirect jumps, self-modifying code, interrupts, cycle timing, and condition flags (lazy flags, flag liveness), and what output size and compile time they report. Write docs/research/static-recompilers.md.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "9ce765e5",
+        "at": "2026-10-24T15:37:19Z",
+        "evidence": "docs/research/static-recompilers.md: 18 tools read in source at pinned commits (console, 4 GBA recompilers, lifters, QEMU/Rosetta/FEX/Box64/gpsp), each technique graded for exactness and cost, Emerald size counts, 8 takeaways for {unit:structured/design}; references.md updated; just check passes",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "structured/lit-validation",
+      "title": "Literature review: proving generated code matches",
+      "detail": "Phase 2 of the plan in docs/open-decisions.md (Plan 2026-10-21, with june): structured codegen that still matches the interpreter exactly, before more ROMs than Emerald. A deep literature review: read the primary papers and the source of the tools named (not summaries), add each source to docs/references.md, and say for every technique whether it can stay exact for us (every flag a later instruction may read, cycle counts and tick points, I/O order, IRQs, self-patching RAM code, the interpreter fallback) and what it would cost. Ground it in our code: crates/codegen, docs/codegen-design.md, docs/decisions.md 8-10, and the generated Emerald in out/. End with what our design should take from it, for {unit:structured/design}. Topic: how to know a transformation stayed exact, beyond frame hashes. Translation validation (Pnueli, Necula), Alive2, CompCert's validated passes, differential testing and fuzzing of lifters and emulators (e.g. SingleStepTests, which we already use), equivalence checking of basic blocks and functions (SMT), and how other recompilers test. What we could add cheaply: per-function differential runs against the interpreter, randomized states, a checker for each pass. Write docs/research/codegen-validation.md.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "46ca0e8d",
+        "at": "2026-10-24T16:14:14Z",
+        "evidence": "docs/research/codegen-validation.md: translation validation (Pnueli, Necula, Rinard, VOC), CompCert validators (Allocation.v, Linearize.v at e276a3f; KVX Duplicate.v), Peggy/PEC, Alive/Alive2 (defe4a4), STOKE/DDEC, lifter validation, regression verification, EMI/Csmith/PokeEMU/risu/SST, gbarecomp/Box64/FEX/Dolphin/DuckStation practice; verdict per technique vs the six exactness concerns, 9 recommendations; sources in references.md. Measured Emerald interp vs recompiled snap states: 25/24/983 payload bytes differ at frames 300/600/1500 with equal frame hashes. sst-ir 997,643 blocks 0 differ. Fresh-subagent review, fixes applied; just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-24T15:37:22Z",
+          "by": "9ce765e5",
+          "text": "From {unit:structured/lit-recompilers}: stale dead-flag CPSR reaches IWRAM via IntrMain's mrs spsr; stmfd at IRQ yields, so a memory compare vs the interpreter will differ there. gbarecomp co-simulates vs mGBA with a full-state hash: docs/COSIM_ORACLE.md."
+        }
+      ]
+    },
+    {
+      "id": "structured/lit-registers",
+      "title": "Literature review: registers as locals, ABI, types",
+      "detail": "Phase 2 of the plan in docs/open-decisions.md (Plan 2026-10-21, with june): structured codegen that still matches the interpreter exactly, before more ROMs than Emerald. A deep literature review: read the primary papers and the source of the tools named (not summaries), add each source to docs/references.md, and say for every technique whether it can stay exact for us (every flag a later instruction may read, cycle counts and tick points, I/O order, IRQs, self-patching RAM code, the interpreter fallback) and what it would cost. Ground it in our code: crates/codegen, docs/codegen-design.md, docs/decisions.md 8-10, and the generated Emerald in out/. End with what our design should take from it, for the design unit ({unit:structured/design}). Topic: moving guest registers and stack slots into host locals and recovering functions' signatures and types. SSA construction and register promotion (Braun et al. 'Simple and Efficient SSA Construction', mem2reg), where state must be spilled (calls, tick points, the dispatcher, fallback entry, IRQs, save states); calling-convention and stack-frame recovery (decompilers, our decision 10's ABI trust); type recovery (TIE, Retypd, Ghidra's and Hex-Rays' inference) and whether any of it buys speed or compile time while staying exact. Write docs/research/registers-and-types.md.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "5269002f",
+        "at": "2026-10-24T16:30:24Z",
+        "evidence": "docs/research/registers-and-types.md (commit d9010c9, merged with main eb7fe8c; just check passes): SSA/promotion (Braun, Cytron, LLVM mem2reg/SROA, QEMU TCG, Anvill, XenonRecomp, Dolphin, gpsp, Instrew), ABI recovery (Van Emmerik, Ghidra, RetDec, rev.ng, Hex-Rays, AAPCS/ATPCS/agbcc), types (TIE, Retypd, Ghidra, Hex-Rays, VSA, OSPREY/DIRTY/BinSub); each judged exact or not with cost; Emerald counts (687k reg writes, 45% dead in-block), a rustc spike of locals, the spill-point table, 8 design takeaways; sources added to references.md. Session took ~45 min (11:48-12:35), not the commit's 1h15.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "structured/design",
+      "title": "Design structured codegen from the four reviews",
+      "detail": "Phase 2 of the plan in docs/open-decisions.md. From the four literature reviews (docs/research/structured-control-flow.md, static-recompilers.md, registers-and-types.md, codegen-validation.md), write docs/structured-codegen-design.md: how crates/codegen goes from loop { match pc } to if/loops, then registers as Rust locals, staying exact (the frame hash matches the interpreter at every checkpoint) with a fallback for what doesn't structure; how each step is validated; what it should do to compile time and memory (Emerald today: ~8 statements per guest instruction, 42 part crates, 7.2 GB peak), measured where a spike can. Settle open decisions 8 and 10 where the reviews decide them (docs/decisions.md). Then check that the implementation units already filed in this group fit the design: edit their details, add units it needs, drop ones it doesn't. Ask june (just ask) about any choice that changes scope.",
+      "check": "recorded",
+      "needs": [
+        "structured/lit-control-flow",
+        "structured/lit-recompilers",
+        "structured/lit-registers",
+        "structured/lit-validation"
+      ],
+      "record": {
+        "state": "done",
+        "by": "a901a473",
+        "at": "2026-10-24T17:15:53Z",
+        "evidence": "docs/structured-codegen-design.md: 8 exact steps from the 4 reviews with validation and compile-cost expectations; decisions 8 and 10 settled in docs/decisions.md. Spikes: Emerald new-game route 9.5 resumes/frame; resumes interpreted keep all 4 checkpoints exact (share 99.2%->93.1%); p07 build 60 s/740 MB vs front end 4.7 s. Group re-planned: 7 units added, 5 edited; resume choice asked of june (blocks {unit:structured/emit-structured}). just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-24T16:30:22Z",
+          "by": "5269002f",
+          "text": "From {unit:structured/lit-registers}: regs+NZCV as fn locals are exact with no ABI trust (write back per the doc's table; LLVM SROA promotes, spike shown). Now: drop in-block overwritten reg writes (45%, exact). Decision 10 summaries only trim call spills; spike p07 first."
+        },
+        {
+          "at": "2026-10-24T16:14:37Z",
+          "by": "46ca0e8d",
+          "text": "From {unit:structured/lit-validation}: interpreter isn't a state-level reference (per-block ticks; Emerald states differ, frames equal). Use v1 as reference, a structure check per fn, liveness on-vs-off cosim for the stale-flag fix. See docs/research/codegen-validation.md"
+        },
+        {
+          "at": "2026-10-24T15:37:21Z",
+          "by": "9ce765e5",
+          "text": "From {unit:structured/lit-recompilers}: take IRQs/halts/frame end without unwinding (nested, guarded on return, as gbarecomp) so resumes get rare; keep a tick per edge; compute dropped flags on the tick's yield path: Emerald IntrMain saves SPSR to the stack."
+        }
+      ]
+    },
+    {
+      "id": "structured/cfg-stats",
+      "title": "Per-function CFGs and loop nests, with Emerald's stats",
+      "detail": "Step 3 of docs/structured-codegen-design.md. Move what gbaa-cfg-survey computes into a codegen module the structurer will use: each function's CFG over codegen's blocks and func::successors, dominators, loop nest, reducibility, irreducible regions as collapsed node sets, reverse postorder. Explain the block successors misses (Anim_FourPetal 0x0816135f in pokeemerald_modern). No change to the emitted Rust. Check: unit tests on hand-built CFGs (irreducible ones included); cfg-survey runs on the module with unchanged numbers; stats over Emerald, Rogue and Imperium in the design doc.",
+      "needs": ["structured/design"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "24f00eed",
+        "at": "2026-10-24T17:33:32Z",
+        "evidence": "codegen::cfg (Cfg::of, Shape::of: RPO, CHK dominators, Steensgaard regions with parent/entries/exits, reducibility, Shape::irreducible, Ramsey nesting; iterative Tarjan). 9 hand-built CFG tests incl. irreducible pass. gbaa-cfg-survey on it prints byte-identical output on Emerald, pokeemerald, pokeemerald_modern, Rogue, Imperium. Anim_FourPetal miss explained (stale static edge from a block split after const-prop folded an unresolved table load; same function in Rogue/Imperium). Stats table in docs/structured-codegen-design.md step 3. just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-24T04:58:42Z",
+          "by": "a54cbee3",
+          "text": "gbaa-cfg-survey (just cfg-survey) already does reducibility, loop nest, exits, Ramsey nesting over codegen's CFG; build on it. One block per modern-GCC ROM isn't reached by func::successors (Anim_FourPetal 0x0816135f in pokeemerald_modern): explain it."
+        }
+      ]
+    },
+    {
+      "id": "structured/emit-structured",
+      "title": "Emit if/loops instead of the match-on-pc loop",
+      "detail": "Step 8 of docs/structured-codegen-design.md, after {unit:structured/guest-stack}. Print each plan as loop / labeled blocks / if / match, one body per function (june, 2026-10-24); calls compare the key from step 5's settle with the return site; overlays and functions failing the structure check stay v1. Dispatch table of function entries (plus v1 functions' and overlays' blocks); the rare resumes left (about one a frame) run in the interpreter to the next entry; seeds not filled by resume keys. Snapshots of a few Emerald functions of each shape kept in the repo. Check: every Emerald, Rogue and Imperium checkpoint, sst-gen, gba-tests, armwrestler, first-frame unchanged; compiled share stays at v1's; generated size, p07 and whole-build time and memory, frame time, resumes before and after, in the design doc.",
+      "needs": ["structured/ramsey-plan", "structured/guest-stack"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "cbdef9f7",
+        "at": "2026-10-25T19:02:57Z",
+        "evidence": "Printer and entries-only table landed (commit 97d6ab9, main merged, just check passes). sst-gen: 22,500 cases and 4,000 sequences, 0 differ. Routes emerald-newgame, emerald-intro, rogue-newgame, imperium-newgame pass, recompiled = interpreted; Emerald new game 99.2% compiled as v1, run 3.91 s vs 3.98. Emerald build 255 s vs v1 294 s, p07 21.6 s vs 24-29 s, same memory; 15,158 of 15,158 functions structured. Remaining checks and v1 comparisons split to {unit:structured/emit-measure}.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-25T19:02:49Z",
+          "by": "cbdef9f7",
+          "text": "Split at 2 h: rest of the check and v1-vs-structured numbers are {unit:structured/emit-measure}. Resumes now count fallback runs into inner blocks (20,459 Emerald new game vs v1's 5,442 calls past entry); interpreted instrs +0.8%, share 99.2% both."
+        },
+        {
+          "at": "2026-10-25T16:45:38Z",
+          "by": "93ca9e66",
+          "text": "From {unit:structured/guest-stack}: Emerald's one resume a frame is m4a SoundMain (0x082df05c) resumed at 0x082df09f, 3 deep in the V-blank IRQ: its bx to SoundMainRAM in IWRAM isn't seen as a call. Settle it, or it runs interpreted each frame. Hacks: ~0 resumes."
+        },
+        {
+          "at": "2026-10-24T22:14:46Z",
+          "by": "862c0a49",
+          "text": "june answered the resumes question on 2026-10-24: one body, with the three runtime steps landed first (design doc steps 5-7). The earlier note about answers b and c no longer applies."
+        }
+      ]
+    },
+    {
+      "id": "structured/regs-locals",
+      "title": "Guest registers as Rust locals inside a function",
+      "detail": "Step 8 of docs/structured-codegen-design.md and decision 10 as re-scoped. First the p07 spike three ways (v1, dead-reg-writes, locals): rustc time and memory, object size, frame time; stop and report if locals cost more build than they win. Then registers a function reads or writes, and NZCV, in Rust locals; written back and reloaded at the points in registers-and-types.md's table through one printer function; no write dropped across a tick. Check: every route and CPU suite unchanged; a printer-level write-back check at recompile time; the differential runs locals on vs off; own-state-check; measurements in the design doc.",
+      "needs": [
+        "structured/dead-reg-writes",
+        "structured/yield-flags",
+        "structured/emit-structured",
+        "structured/validation"
+      ],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "e91d93e0",
+        "at": "2026-10-26T23:51:41Z",
+        "evidence": "Locals built behind Config::locals / --locals, off by default per the owner's call (d/registers-rust-locals-cost-58). Spike measured three ways on p07: +58% rustc time, +87% memory, +46% object, no frame-time gain; numbers in docs/structured-codegen-design.md step 9. Printer-level write-back check (locals::check) and unit test; sst-gen passes with locals on; just check passes after merging main (session e91d93e0).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-25T20:57:23Z",
+          "by": "427dd585",
+          "text": "Branch has locals built and off (Config::locals, --locals); spike numbers in design doc step 9; just check passes after merging main. Waits on q/registers-rust-locals-cost-58: a = record done as stopped spike; c = still owes routes, suites, own-state-check with locals."
+        }
+      ]
+    },
+    {
+      "id": "structured/validation",
+      "title": "Differential checks for each codegen pass",
+      "detail": "Per docs/structured-codegen-design.md, Validation (codegen-validation.md item 4). Record Machine at function entries in an interpreted route run; mutate each state (all 16 NZCV, randomised dead state, perturbed live values); run the function in two configurations to its return, comparing full state, ordered bus trace and tick list. Configurations: flag liveness on/off first, then each later step on/off. Needs a build carrying both forms of chosen functions. Check: a just recipe in docs/tools/commands.md; an injected one-byte fault is caught; liveness on/off passes.",
+      "needs": ["structured/design"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "8ee029b7",
+        "at": "2026-10-24T17:33:21Z",
+        "evidence": "just fn-diff (docs/tools/commands.md; crates/fn-diff + gbaa-recompile --fn-diff) on Emerald: 135 functions, 290 entry states x 22 mutations = 6380 runs a form; liveness on/off 0 differ (bus trace, ticks, full state; 50 differ only in CPSR flags at a yield, excused until yield-flags, --exact counts them); injected one-byte fault in f_08000541 caught; 75 s. just check passes.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "structured/more-roms-gate",
+      "title": "june looks at structured codegen before more ROMs",
+      "kind": "gate",
+      "detail": "The end of phase 2 (docs/open-decisions.md, Plan 2026-10-21). june sees the before/after numbers (generated size, build time and memory per game, frame time, share in compiled code) and a sample of the generated Rust, and decides whether phase 3, more ROMs than Emerald, starts.",
+      "needs": ["structured/regs-locals", "structured/validation", "structured/sst-sequences"],
+      "record": {
+        "state": "done",
+        "by": "owner",
+        "via": "e0202f56",
+        "at": "2026-10-27T02:23:34Z",
+        "evidence": "june 2026-10-26: play view is solid (exact, builds ~15% faster, binary 4% smaller, same speed); readability is the mod view's job, re-aimed at pret-like Rust."
+      }
+    },
+    {
+      "id": "structured/dead-reg-writes",
+      "title": "Drop register writes overwritten in the same block",
+      "detail": "Step 1 of docs/structured-codegen-design.md. The IR builder emits only each register's last write before the next point that can read cpu.r (exit, call, swi, msr/mrs, user-bank op: the table in docs/research/registers-and-types.md). Emerald: 307k of 687k register writes. Check: sst-gen, sst-ir, the CPU suites and every route unchanged; p07 and the whole Emerald build's time and peak memory before and after, in the design doc.",
+      "needs": ["structured/design"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "99c6400b",
+        "at": "2026-10-24T18:44:10Z",
+        "evidence": "Emerald register writes 687,497 -> 379,932. sst-ir (incl. 997k 2-6 opcode blocks) and sst-gen unchanged; gba-tests, armwrestler recompiled pass; fn-diff dead_regs 0/6380 differ; 9 of 10 routes pass, affine's frame-1 mismatch predates it (same with pass off; filed {unit:structured/affine-frame-one}). p07 771->735 MB, ~23 s both; whole build 255 s/4.8 GB -> 246 s/5.0 GB; table in the design doc.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "structured/yield-flags",
+      "title": "Exact flags on each tick's yield path",
+      "detail": "Step 2 of docs/structured-codegen-design.md. On each tick's yield branch, write the flag values flag liveness dropped on that edge, so the CPSR an IRQ handler saves (Emerald's IntrMain) is the interpreter's. Add a gbaa-recompile switch for liveness off. Check: liveness on and off builds' exact save states at the Emerald route checkpoints are byte-identical (they differ before the fix); routes and CPU suites unchanged; statements added, in the design doc.",
+      "needs": ["structured/design"],
+      "uses": ["heavy"],
+      "tags": ["slow-check"],
+      "record": {
+        "state": "done",
+        "by": "95e66740",
+        "at": "2026-10-24T19:39:56Z",
+        "evidence": "Yield paths write the flags liveness deleted (Op::YieldFlag), and a flag stays live into a block that yields before writing it. Emerald: fn-diff --exact liveness on/off 0 of 6380 differ (50 before); just liveness-states --every 50 on emerald-intro and emerald-newgame: exact states byte-identical at all 184 frames (the 10 checkpoints matched even before the fix; frame 950 of new-game differed in 7 bytes, CPSR/SPSR flags and IntrMain's saved CPSR). Source +2.9%, binary +3.2%; 45,936 exits write 141,807 flags. All routes pass but affine (frame 1, already filed as {unit:structured/affine-frame-one}); armwrestler recompiled and sst-gen (22500, 0 differ) pass; just check passes after merging main. Statements in docs/structured-codegen-design.md step 2.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-24T19:39:58Z",
+          "by": "95e66740",
+          "text": "liveness-states (25 min) ran before merging dead-reg-writes from main; after the merge only fn-diff --exact (0 differ, both switches) and just check were rerun. The 10 route checkpoints miss stale flags: use --every 50."
+        },
+        {
+          "at": "2026-10-24T17:33:19Z",
+          "by": "8ee029b7",
+          "text": "The liveness-off switch exists: codegen::func::Config.flag_liveness (Ctx.cfg). Check: `just fn-diff <Emerald> 200 --exact` fails today on exactly 50 of 6380 liveness runs, only in CPSR flags at a yield; the fix should take it to 0 (see {unit:structured/validation})."
+        }
+      ]
+    },
+    {
+      "id": "structured/ramsey-plan",
+      "title": "Structuring plan per function, and its structure check",
+      "detail": "Step 4 of docs/structured-codegen-design.md. A pure planner from a function's CFG to a tree (Block, Loop, Labeled, If, Match, Region for collapsed irreducible regions; edges as break/continue/next/return), Ramsey's translation, and the structure check (every block once, every edge to its successor with its tick, every table's fallback kept). No printing yet. Check: unit tests on hand-built CFGs in cargo test -p codegen; counts over Emerald, Rogue and Imperium (planned, collapsed, failed, nesting) in the design doc.",
+      "needs": ["structured/cfg-stats"],
+      "record": {
+        "state": "done",
+        "by": "7c4a8f0b",
+        "at": "2026-10-24T18:58:46Z",
+        "evidence": "codegen::plan: Ramsey plan + structure check; 11 hand-built CFG tests pass (cargo test -p codegen plan::). cfg-survey: Emerald 15158/15158, Rogue 13366/13366, Imperium 13765/13765 planned and checked; 13/76/67 regions collapsed; nesting p99 7/9/9, max 31/175/52. Counts in the design doc step 4.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-24T18:58:48Z",
+          "by": "7c4a8f0b",
+          "text": "For emit: merges count edges, not preds (agbcc beq over bl to its return site). Plan holds no IR: the printer must keep blocks' IR/markers/guards. Rogue 0x0801b4f1 nests 175; plan recursion is dominator-depth deep (fine on main thread)."
+        }
+      ]
+    },
+    {
+      "id": "structured/call-trampoline",
+      "title": "Calls settled where they're made, without unwinding",
+      "detail": "Step 5 of docs/structured-codegen-design.md, in v1 form, before {unit:structured/emit-structured}. A call whose callee comes back with a key other than its return site (tail call, unresolved indirect call, a call through a stub, IWRAM overlay code, interpreted code) no longer unwinds: rt::settle runs the dispatcher nested at the call site until the guest reaches the return site with the caller's sp and mode. Wider than first planned: most resumes come from the sound engine's overlay and stub calls. Start from the spike: branch spike/guest-stack on origin, rt::settle in crates/runtime/src/dispatch.rs. Check: every route and the CPU suites unchanged; resumes per frame, compiled share and frame time before and after, in the design doc.",
+      "needs": ["structured/design"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "8700f1c5",
+        "at": "2026-10-24T23:58:09Z",
+        "evidence": "rt::settle (runtime::dispatch) runs the dispatcher nested at Call, CallVia and unresolved indirect call sites, guarded on sp and mode. All 10 routes pass after merging main (recompiled = interpreted), just check, gba-tests, armwrestler both, sst-gen, sst, sst-ir pass. Emerald new game resumes 51,166 -> 16,489 (9.5 -> 3.1/frame), intro 35,526 -> 9,123; compiled share 99.2% both (same cycles); run time same within noise (2.64-3.74 s vs 2.67-2.82 s); depth 2. Table in docs/structured-codegen-design.md step 5.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "structured/nested-irq",
+      "title": "IRQs and halts taken inside the tick, without unwinding",
+      "detail": "Step 6 of docs/structured-codegen-design.md, in v1 form, before {unit:structured/emit-structured}. A tick that finds an IRQ takeable or the CPU halted runs it in place: cpu.pc = the edge's key, the dispatcher nested with stop_at that key (guarded on sp and mode); compiled code continues if the handler returns there, else unwinds as now. A nesting-depth cap shared with rt::settle; past it, unwind. The frame end is {unit:structured/guest-stack}. Spike: rt::yield_at on branch spike/guest-stack on origin. Check: every route, own-state-check, rewind-check, CPU suites unchanged; resumes per frame, compiled share, frame time and deepest host stack, in the design doc.",
+      "needs": ["structured/call-trampoline"],
+      "uses": ["heavy"],
+      "tags": ["slow-check"],
+      "record": {
+        "state": "done",
+        "by": "a4e22b51",
+        "at": "2026-10-25T15:20:28Z",
+        "evidence": "Every tick's yield path calls rt::yield_at (via the generated yield_at): IRQs and halts run in a nested dispatcher until the handler is back at the key with the same sp and mode; frame end, fault and MAX_DEPTH unwind. All 10 routes pass (recompiled = interpreted), own-state-check and rewind-check on Emerald and Rogue, armwrestler recompiled, just check before and after merging main. Emerald new game: resumes 16,489 -> 11,128, yields 10,742 -> 5,400 (frame ends only), compiled share 99.2% both, host stack 4,333 -> 4,397 bytes, run time same within noise; intro resumes 9,123 -> 6,167. Table in docs/structured-codegen-design.md step 6.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-24T23:58:22Z",
+          "by": "8700f1c5",
+          "text": "Reuse {unit:structured/call-trampoline}'s pieces: dispatch::run_inner takes stop_at with an (sp, cpsr) guard; Machine::nest holds depth (MAX_DEPTH 64) and the run's Stats pointer; nested cycles come off the outer call's. Left: 16,489 resumes on Emerald new game, from yields."
+        }
+      ]
+    },
+    {
+      "id": "structured/sst-sequences",
+      "title": "sst-gen on random blocks and short functions",
+      "detail": "Validation in docs/structured-codegen-design.md (codegen-validation.md item 7). Extend sst-gen from one instruction per fn to sst-ir's random 2-6 instruction blocks and short multi-block functions with branches, through generated Rust against the interpreter, comparing registers, the bus trace and the timing calls (rt::tick, rt::fetch, rt::stall, timing ops) against armv4t::cycles::cost. Check: a just recipe in docs/tools/commands.md, passing.",
+      "needs": ["structured/design"],
+      "record": {
+        "state": "done",
+        "by": "42380159",
+        "at": "2026-10-24T19:39:24Z",
+        "evidence": "just sst-gen (docs/tools/commands.md) passes: 22500 single cases and 4000 sequences (2000 random 2-6 opcode blocks, 2000 2-4 block functions with b<cond>/loops, 15543 ticks) 0 differ in CPU, bus+timing-call stream, or per-tick cycles vs interpreter with armv4t::cycles; 12 flag-only diffs at a yield excused as fn-diff. Mutating rt fetch/skipped/multiply/block/stall or lower::cost_expr each fails it.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-24T19:39:26Z",
+          "by": "42380159",
+          "text": "Flags at a yield are excused in sst-gen's sequences (12 of 2000 functions) like fn-diff; once step 2 (yield path) lands, drop stale_flags in crates/codegen/sst-gen/seq.rs to make it exact."
+        }
+      ]
+    },
+    {
+      "id": "structured/block-timed-interp",
+      "title": "Block-timed interpreter mode, a full-state reference",
+      "detail": "Validation in docs/structured-codegen-design.md (codegen-validation.md item 1). A fallback mode that steps a compiled block's instructions without ticking, then ticks once with the block's cost, so the interpreter's exact state matches compiled code's at every tick. Check: interpreted and recompiled Emerald save states byte-identical at the route checkpoints (they differ today: 25 to 983 bytes).",
+      "needs": ["structured/design"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "56275665",
+        "at": "2026-10-24T20:36:37Z",
+        "evidence": "Built --interp-blocks (runtime::dispatch::run_blocks, EXTENTS table from codegen) and just block-timed-states. After merging main: Emerald intro + new-game routes, checkpoints and every 50th frame, 184/184 states byte-identical to the recompiled build (plain --interp differed in 25 to 983 bytes). Six small ROMs' routes too. just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-24T20:36:51Z",
+          "by": "56275665",
+          "text": "Extents are the table owner's block; blocks shared by functions with different stops would tick apart (not seen on Emerald). Tick-moving transformations must keep EXTENTS true. Affine frame 1: --interp-blocks draws the recompiled picture."
+        },
+        {
+          "at": "2026-10-24T19:55:45Z",
+          "by": "f5bc53a8",
+          "text": "Affine route frame 1 (units/affine.toml block_timed) differs only by per-block ticking: DISPCNT store ends a block at 0x080007b4. If route-check compares against block-timed mode, that frame should match and route-check will say to drop block_timed."
+        }
+      ]
+    },
+    {
+      "id": "structured/affine-frame-one",
+      "title": "Affine route: recompiled frame 1 differs from interpreter",
+      "detail": "just unit affine fails on main (2026-10-24, quack): recompiled frame 1 hash 4e0d22f56681b64c, interpreter 3f22ca115812cd2c; frames 2-10 match, checkpoint passes. Same with dead-reg-writes off, so it predates that unit. Find why and fix it, or record it on the route.",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "f5bc53a8",
+        "at": "2026-10-24T19:55:47Z",
+        "evidence": "Cause: frame 1 differs only in line 24: scene()'s DISPCNT store at 0x080007b4 ends a long block whose cycles tick after it (codegen-design.md Timing, no mid-block I/O sync), so the recompiled build shows the scene a line early. Recorded on the route: new block_timed/block_timed_why checkpoint fields in route-check (skipped, fail once matching again); just unit affine passes 'but block-timed frame 1'; just check passes.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "structured/guest-stack",
+      "title": "The guest on its own stack: frame end without unwinding",
+      "detail": "Step 7 of docs/structured-codegen-design.md, in v1 form, before {unit:structured/emit-structured}. The dispatcher and compiled code run on their own stack (corosensei in the platform crate; the runtime gets only a hook and stays no_std). The tick that finds the frame over writes cpu.pc and switches to the frontend instead of unwinding. Sound &mut Machine: owned via a raw pointer, the frontend uses only the pointer handed out at the switch, until it resumes. State load and rewind force_reset the guest and restart from cpu.pc. present_frame (SDL) moves off the guest stack. Nesting-depth cap falls back to unwinding. Spike: crates/desktop/src/coro.rs on branch spike/guest-stack on origin (measured 1.0 resume a frame, 99.2% compiled, hashes = v1). Check: every route of every ROM, CPU suites, own-state-check, rewind-check; resumes per frame, compiled share, frame time, deepest host stack and nesting, in the design doc.",
+      "needs": ["structured/nested-irq"],
+      "uses": ["heavy"],
+      "tags": ["slow-check"],
+      "record": {
+        "state": "done",
+        "by": "7b9d4942",
+        "at": "2026-10-25T16:55:20Z",
+        "evidence": "Review fix: --audio-pace runs no longer start-count a guest (guest_code excludes audio_pace, lib.rs:655), so compiled share and the guest-stack line aren't zeroed. Earlier evidence stands (routes, CPU suites, own-state-check, rewind-check; numbers in the design doc). just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-25T16:53:07Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/desktop/src/lib.rs:655 and :826-829: `guest_code` is `Some` for any recompiled run that isn't `--interp-blocks` or `--unwind`, including `--audio-pace`. That path (lib.rs:658ff) never starts a guest. It…"
+        },
+        {
+          "at": "2026-10-25T16:45:42Z",
+          "by": "93ca9e66",
+          "text": "Windows and macOS builds now link corosensei (guest stack on by default); not built or run here. --unwind is the fallback if a platform misbehaves. Window build untested by eye: present moved to Machine::show_frame after the switch."
+        },
+        {
+          "at": "2026-10-25T15:20:34Z",
+          "by": "a4e22b51",
+          "text": "From {unit:structured/nested-irq}: what's left is the frame end, about 2.1 resumes a frame in Emerald. In the hacks most yield_at runs unwind: VBlankIntrWait halts idle into the V-blank (frame end). Stats.max_stack samples the stack at Machine::sync: 4.4-5.4 KB."
+        }
+      ]
+    },
+    {
+      "id": "structured/emit-measure",
+      "title": "Check and measure structured codegen against v1",
+      "needs": ["structured/emit-structured"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "ef4e8db0",
+        "at": "2026-10-25T20:48:11Z",
+        "evidence": "All 10 routes pass structured (recompiled = interpreted); gba-tests, armwrestler both builds, first-frame pass. v1 vs structured on Emerald intro/new game, Rogue, Imperium: same frame hashes, registers, compiled share (98.8/99.2/97.8/96.5%); exact states equal on Emerald (92), Rogue/Imperium differ only in open_bus+prefetch at 5 of 133. Run time same within noise, binaries -4 to -5%, Rogue build 422->351 s. Numbers in docs/structured-codegen-design.md step 8.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-25T19:02:48Z",
+          "by": "cbdef9f7",
+          "text": "v1 baseline: gbaa-recompile ROM out/<x>-v1 --no-structured, build, run with route-check's args (ROM --frames N --input … --headless --regs). Rogue v1 build took 11 min. just long stop leaves build-recompiled's cargo/rustc running (own scope) holding the lock: pkill -A it."
+        }
+      ]
+    },
+    {
+      "id": "structured/fn-diff-v1-ticks",
+      "title": "fn-diff: v1 form ticks apart from structured",
+      "detail": "just fn-diff on Emerald (200, --exact), 2026-10-25: forms liveness, dead_regs, locals 0 of 6380 runs differ, but v1 (Config::structured off) differs in 191, all in f_08000739 (e.g. entry 199: ticks 627 vs 624). Predates {unit:structured/regs-locals} (its printing with locals off is main's). Find whether the run's stop rule (return or first yield) or a real tick difference; fix fn-diff or the printer; just fn-diff passes.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "df027d2e",
+        "at": "2026-10-25T21:10:44Z",
+        "evidence": "Stop rule fine, printer fine: a settle ran on into 0x082df09f, a key in v1 but an inner block in the reference, which resumed in the interpreter (ticks per instruction, 5+2+8+8 vs one 23; same cycles, bus, state). fn_diff.rs now gives every form the reference's keys only. After merging main: just check passes; just fn-diff Emerald 200 --exact passes, v1 0 of 6380 runs differ, fault caught.",
+        "host": "quack"
+      }
+    }
+  ]
+}

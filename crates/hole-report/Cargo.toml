@@ -1,0 +1,19 @@
+[package]
+name = "hole-report"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# The hole report (`docs/research/native-holes.md`): what blocks a native
+# build of a ROM. The classification is `analysis::holes`; this runs the
+# coverage run and the function summaries and prints it.
+
+[[bin]]
+name = "gbaa-holes"
+path = "src/main.rs"
+
+[dependencies]
+analysis = { path = "../analysis" }
+armv4t = { path = "../armv4t" }
+codegen = { path = "../codegen" }
+runtime = { path = "../runtime" }

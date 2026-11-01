@@ -1,0 +1,14 @@
+[package]
+name = "naming"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# The mod view's naming loop (docs/mod-view-design.md, "The naming loop"):
+# a seeded sample of a ROM's functions, named by agents from their readable
+# print with pret's names hidden, scored against pret's.
+
+[dependencies]
+analysis = { path = "../analysis" }
+codegen = { path = "../codegen" }
+toml = "1"

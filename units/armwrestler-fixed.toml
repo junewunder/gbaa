@@ -1,0 +1,93 @@
+# armwrestler, the fixed build: every test page, walked as `just armwrestler` walks it (a press every 30
+# frames; Start steps the five ARM pages and back to the menu, three downs reach THUMB ALU, Start steps
+# its three pages), each page 20 frames after the press that opens it. Each hash is what mGBA 0.10.5
+# draws (mgba-dump, 2026-10-28), the same as ours; `just armwrestler` reads the pages' OK lines.
+rom = "$GBAA_DATA/armwrestler/armwrestler-gba-fixed.gba"
+
+[[press]]
+button = "start"
+at = 30
+
+[[press]]
+button = "start"
+at = 60
+
+[[press]]
+button = "start"
+at = 90
+
+[[press]]
+button = "start"
+at = 120
+
+[[press]]
+button = "start"
+at = 150
+
+[[press]]
+button = "start"
+at = 180
+
+[[press]]
+button = "down"
+at = 210
+
+[[press]]
+button = "down"
+at = 225
+
+[[press]]
+button = "down"
+at = 240
+
+[[press]]
+button = "start"
+at = 270
+
+[[press]]
+button = "start"
+at = 300
+
+[[press]]
+button = "start"
+at = 330
+
+[[checkpoint]]
+name = "arm1"
+frame = 50
+hash = "e9da3520d46ef155"
+
+[[checkpoint]]
+name = "arm2"
+frame = 80
+hash = "5a65e756b595d544"
+
+[[checkpoint]]
+name = "arm3"
+frame = 110
+hash = "349c32566b7d4bac"
+
+[[checkpoint]]
+name = "arm4"
+frame = 140
+hash = "3daa9325109eba31"
+
+[[checkpoint]]
+name = "arm5"
+frame = 170
+hash = "89f5fa399a44622f"
+
+[[checkpoint]]
+name = "thumb1"
+frame = 290
+hash = "29e82b1202982bf1"
+
+[[checkpoint]]
+name = "thumb2"
+frame = 320
+hash = "00ef7b773f87ce88"
+
+[[checkpoint]]
+name = "thumb3"
+frame = 350
+hash = "bef412d72bfe8c11"

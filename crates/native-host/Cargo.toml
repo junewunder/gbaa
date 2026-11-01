@@ -1,0 +1,14 @@
+[package]
+name = "native-host"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# What native programs share (crates/native-spike's by hand, and the
+# stage-A lifter's output, `gbaa-lift`): gbaa-desktop's headless flags, a
+# host that hashes each frame, and the native check's record.
+
+[dependencies]
+native-record = { path = "../native-record" }
+runtime = { path = "../runtime" }
+desktop = { path = "../desktop" }

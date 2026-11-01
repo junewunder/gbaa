@@ -1,0 +1,618 @@
+{
+  "id": "deck",
+  "title": "Playing on the Steam Deck",
+  "order": 7,
+  "units": [
+    {
+      "id": "deck/flash-saves",
+      "title": "In-game saves: the 128 KB flash chip, kept in a .sav",
+      "detail": "Emerald and its hacks save to a 128 KB flash chip (Macronix/Sanyo command protocol, two banks), not the plain 64 KB SRAM the bus has now, so an in-game save goes nowhere. Detect the save type, emulate the chip's commands and IDs, and keep it in <rom>.sav beside the ROM, written on change and readable by mGBA (and mGBA's .sav read back: ~/ROMs/gba/Emerald Rogue.sav). Check: save in Emerald, restart, Continue loads it; the same .sav loads in mGBA.",
+      "check": "recorded",
+      "needs": ["shared/flash-chip"],
+      "record": {
+        "state": "done",
+        "by": "b08168e6",
+        "at": "2026-10-22T14:29:06Z",
+        "evidence": "desktop::sav_file keeps ROM.sav (mGBA sizes, RTC trailer kept, written 30 frames after a change and on exit). Emerald Rogue: mGBA's own .sav gives Continue (player meadow) in ours; an in-game Save in ours wrote slot A (counter 4); with slot B wiped, Continue reaches the overworld in mGBA (mgba-dump --save) and ours, same frame-2000 hash fe4a369644557fb2. just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-22T14:29:12Z",
+          "by": "b08168e6",
+          "text": "Checked on Emerald Rogue (same flash library as Emerald); vanilla Emerald has no save to start from and a new game is a long route. Window play writes ~/ROMs/gba/<rom>.sav itself; test on /tmp copies with --save FILE."
+        },
+        {
+          "at": "2026-10-21T14:47:51Z",
+          "by": "9b00a3b2",
+          "text": "The chip itself (ID, commands, banks, in memory) is now {unit:shared/flash-chip}, which this needs; this unit keeps the .sav file, its detection and mGBA interop."
+        }
+      ]
+    },
+    {
+      "id": "deck/gamepad",
+      "title": "Controller input, Steam Deck buttons mapped to the GBA's",
+      "detail": "The desktop window (minifb) reads only the keyboard. Read gamepads (gilrs or SDL2's game controller API; research which runs best under Steam Input in Game Mode) and map them to the GBA keys, L/R to the shoulders, with a hotplug-safe default mapping and a config file to change it. Leave the keyboard working. Check: a test feeds gamepad events and sees KEYINPUT change; june's bench check on the Deck goes in the Deck gate.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "32d1e9e5",
+        "at": "2026-10-22T14:43:02Z",
+        "evidence": "gilrs pads in crates/desktop/src/gamepad.rs; tests gamepad_events_reach_keyinput (fed pad events change KEYINPUT over machine frames), gamepads_and_hotplug, gamepad_mappings pass; just check green; gilrs sees quack's Xbox 360 pad. Deck bench check is the play gate's.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-21T02:59:00Z",
+          "by": "13661119",
+          "text": "Stretch goals add macOS and Windows and per-ROM remapping later ({unit:stretch/remap}): pick an input library that works on all three and a mapping format that can take per-ROM overrides."
+        }
+      ]
+    },
+    {
+      "id": "deck/fast-forward",
+      "title": "Fast-forward: a held or toggled speed-up",
+      "detail": "A button (and key) that runs frames unthrottled or at a set multiple, with audio either sped up or muted rather than crackling, and frame pacing back to a steady 59.73 Hz when released. Check: a test runs N frames under fast-forward in under N/60 s of wall-clock and the frames match a normal run's.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "d77fc82f",
+        "at": "2026-10-22T14:49:09Z",
+        "evidence": "just check passes. Test fast_forward_runs_fast_and_frames_match: 60 frames paced at 59.73 Hz take >=0.99 s; under fast-forward (unthrottled and 4x) <1 s with identical per-frame hashes; fast_forward_mutes_and_sound_comes_back: queue empty during FF, refills after. Real window (cu session, agb sound ROM, 600 frames, --mute): 10.15 s normal, 0.59 s FF, 2.60 s at 4x, hash 756cb3912b8a9443 in all and headless.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-22T14:49:14Z",
+          "by": "d77fc82f",
+          "text": "With sound on, fast-forward was tested only through a player no device drains (test), not a real device: just audio-window doesn't take --fast-forward yet. Pad defaults: rthumb held, lthumb toggles."
+        }
+      ]
+    },
+    {
+      "id": "deck/save-states",
+      "title": "Save states of our own: quick save and load slots",
+      "detail": "Write and read our own save states (all of Machine at a frame boundary, versioned), to slots beside the ROM, bound to buttons. Builds on loading mGBA's states. Check: save at frame N, run on, load, and frames N..N+600 match the first run's hashes exactly, in the recompiled build.",
+      "check": "recorded",
+      "needs": ["shared/savestate-load"],
+      "record": {
+        "state": "done",
+        "by": "39c71a40",
+        "at": "2026-10-22T15:09:32Z",
+        "evidence": "runtime::snap saves all of Machine (cart save included) versioned with ROM and payload CRC-32s; desktop --state-out/--state-at/--state, slots ROM.state1-4 (Shift+F1-4 save, F1-4 load, pad west/north). just own-state-check on Emerald: state at 5400 and at 150 (363 distinct frames), 600 frames from it hash as straight through, interpreter and recompiled; just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-22T15:09:34Z",
+          "by": "39c71a40",
+          "text": "Window keys and pad buttons for slots are unit-tested (Slots, files round trip) but weren't tried in a real window or on the Deck. Loading a state also puts back its cart save (as mGBA does) and the .sav is rewritten."
+        }
+      ]
+    },
+    {
+      "id": "deck/rewind",
+      "title": "Rewind: step back through recent frames",
+      "detail": "A ring buffer of states (every few frames, delta-compressed if memory needs it) and a held button that plays it backwards. Say the memory per minute of rewind and keep it under a set cap on the Deck's 16 GB. Check: rewind 5 s, then let it run, and the frames match a run that was never rewound from that point.",
+      "check": "recorded",
+      "needs": ["deck/save-states"],
+      "record": {
+        "state": "done",
+        "by": "b3ba2b4f",
+        "at": "2026-10-22T15:34:11Z",
+        "evidence": "just rewind-check on Pokemon Emerald, rewinding 300 frames (5 s) at frame 900 then running to 1200: all 1800 shown frames hash as the straight run, interpreter and recompiled, both with no input (180 distinct frames) and with start/a presses. Memory measured per minute of rewind: 2-31 MB over six ROMs, cap 256 MB (--rewind-mb). just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-22T15:34:13Z",
+          "by": "b3ba2b4f",
+          "text": "Rewind (R key, right stick left) was only tested headless (--rewind F+N, unit tests); not yet held in a real window or on the Deck. Rewinding also rolls the cartridge save back and marks the .sav to be rewritten."
+        }
+      ]
+    },
+    {
+      "id": "deck/hack-checkpoints",
+      "title": "Plan Emerald Rogue's and Imperium's checkpoints",
+      "detail": "The hacks are built on the pokeemerald decomp but differ from it (Rogue with a newer compiler, new code paths, bigger ROMs). As Emerald's checkpoint plan did: list checkpoints from boot into play for each, each with a frame, input or a save state, and file one unit per checkpoint plus what they turn up (discovery misses, BIOS calls, features). Done when the units are filed.",
+      "check": "recorded",
+      "needs": ["emerald/title-gate"],
+      "record": {
+        "state": "done",
+        "by": "25f5ddf1",
+        "at": "2026-10-22T18:18:59Z",
+        "evidence": "units/rogue-*.env (9: splash 100 to the hub 6000) and units/imperium-*.env (10: copyright 100 to the truck 6800), mGBA hashes stable on repeat, eye-checked; filed one computed unit each in groups Emerald Rogue/Imperium checkpoint by checkpoint, chained; play gate needs {unit:rogue/hub} and {unit:imperium/truck}. Ours reaches all; diffs are darken rounding and timing, no BIOS fault. just check passes after merging main, commit b5ec12c.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "deck/deck-build",
+      "title": "A Steam Deck build that runs in Game Mode",
+      "detail": "A recompiled game as one x86_64 Linux binary that runs on SteamOS with no install step: fullscreen at the Deck's 1280x800 with aspect-correct scaling, added as a non-Steam game, audio through PipeWire. A just recipe builds one for a given hack, and the unit says what june copies to the Deck. Check: the binary runs fullscreen with no missing libraries in a clean SteamOS-like container.",
+      "check": "recorded",
+      "needs": ["deck/gamepad"],
+      "record": {
+        "state": "done",
+        "by": "5da0176f",
+        "at": "2026-10-22T16:11:13Z",
+        "evidence": "just deck-build on Emerald Rogue made out/deck/emerald-rogue (96 MB stripped binary, ROM, play.sh, README with Game Mode steps; links only libudev/libasound/libgcc_s/libc/libm, glibc 2.34). just deck-check emerald-rogue 20: ran 20 s via play.sh in a clean podman Arch container on 1280x800 Xvfb, exit 0, ldd nothing missing, window 1280x800+0+0, picture at 5x between black bars (rerun on gba-cart1 after merging main). In cu KWin sessions (X11 and Wayland) the window filled 1280x800 and sound reached PipeWire's null sink through the ALSA plugin, 0 underruns. Not yet tried on a real Deck.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-22T16:11:15Z",
+          "by": "5da0176f",
+          "text": "June copies out/deck/<name>/ (from just deck-build ROM) to the Deck and adds play.sh as a non-Steam game; its README.txt has the steps. Only tested in containers and headless KWin, not on a real Deck or under gamescope."
+        },
+        {
+          "at": "2026-10-22T14:42:58Z",
+          "by": "32d1e9e5",
+          "text": "gilrs (gamepads) links libudev.so.1 at run time: present on SteamOS, but the clean-container check must include it. Building needs libudev's pkg-config file (systemd-devel)."
+        }
+      ]
+    },
+    {
+      "id": "deck/play-gate",
+      "title": "june plays the Emerald hacks on the Steam Deck",
+      "kind": "gate",
+      "detail": "The satisfied line (docs/factory.md, Goal). On the Deck, june plays Emerald Rogue and Emerald Imperium recompiled: the controller works, an in-game save survives a restart, save states, fast-forward and rewind work, and it doesn't feel like a janky emulation layer (steady frames, clean sound). Each thing that falls short becomes a unit.",
+      "needs": ["rogue/newgame-route", "imperium/newgame-route", "deck/play-builds"],
+      "record": {
+        "state": "done",
+        "by": "owner",
+        "via": "65e71fe8",
+        "at": "2026-10-24T03:28:01Z",
+        "evidence": "Played on quack, not the Deck (same build, out/deck from d8422d3): Rogue a long session and Imperium ~10 min. Controller, in-game save across a restart (Rogue; Imperium's restart not tried), save states across a restart, fast-forward held and toggled, rewind, steady frames, clean sound (Rogue 4 underruns unheard, Imperium 0), 98.6-98.7% compiled. 'Feels AWESOME, literally perfect.' Shortfalls filed as deck/ units; the Deck itself is its own unit."
+      }
+    },
+    {
+      "id": "deck/play-builds",
+      "title": "Fresh Deck builds of Rogue and Imperium for the play test",
+      "detail": "The play gate needs builds from current main: none of Imperium exists, and lane 2's out/deck/emerald-rogue predates today's fixes. Run just deck-build for Emerald Rogue and Emerald Imperium, then just deck-check each, and copy both packages to the main checkout's out/deck/ so june finds them in one place. Evidence: the two paths and deck-check's result.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "priority": 20,
+      "record": {
+        "state": "done",
+        "by": "3114c609",
+        "at": "2026-10-23T22:44:31Z",
+        "evidence": "Built from main (d8422d3): ~/Documents/homelab/gbaa/out/deck/emerald-rogue (gbaa-emerald-rogue 115M, glibc 2.34) and .../out/deck/emerald-imperium (122M, glibc 2.34), sha256 match lane copies. deck-check 30 s passes both: 6 libs, 1200x800 centred; Rogue on its title, Imperium on its intro. At 10 s Rogue is mid-fade, so default now 30 s and the black-bar test fixed.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "deck/save-backup-on-exit",
+      "title": "Back up the cartridge save each time the game closes",
+      "detail": "From june's play test ({unit:deck/play-gate}). Each time a window build closes (Escape, the window's X, Steam's Exit game), copy the cartridge save (ROM.sav, the mGBA .sav) to a timestamped file in a backups folder beside it, e.g. saves/<game>-YYYYMMDD-HHMMSS.sav, so a bad save or a mistaken state load can be undone. Skip it when the game kept no .sav (--no-save, or nothing saved yet) and when the save hasn't changed since the newest backup. Make sure the pending write of the .sav (written a moment after the game saves) is flushed first, so the backup holds the latest save. Say where backups go in the Deck README and --help.",
+      "priority": 15,
+      "record": {
+        "state": "done",
+        "by": "f5e776a7",
+        "at": "2026-10-24T16:33:08Z",
+        "evidence": "Window exit now flushes the .sav then copies it to saves/NAME-YYYYMMDD-HHMMSS.sav beside it (local time), skipped with no .sav or when the newest backup is identical. Test sav_backups_on_exit; offscreen window runs on gba-tests sram.gba: first close backed up, unchanged second skipped, SIGTERM exit backed up. --help and Deck README updated; just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "deck/save-backup-prune",
+      "title": "Prune the oldest save backups past 1 GB",
+      "detail": "From june's play test ({unit:deck/play-gate}). When the save-backups folder ({unit:deck/save-backup-on-exit}) grows past about 1 GB, delete the oldest backups until it is under, but never a game's newest backup: every game that has backups keeps at least its latest one. Check on exit, after writing the new backup. Saves are 128 KB, so this takes thousands of sessions to matter; keep it simple. A test covers it: several games' backups over the cap, the oldest go, each game's newest stays.",
+      "needs": ["deck/save-backup-on-exit"],
+      "record": {
+        "state": "done",
+        "by": "84299543",
+        "at": "2026-10-24T20:12:22Z",
+        "evidence": "sav_file::prune runs on exit after the backup (lib.rs), deleting the oldest saves/ backups until they total under 1 GiB, keeping each game's newest. Test sav_backups_pruned_past_cap: three games over the cap, oldest four go, each newest stays, non-backups untouched. just check passes.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "deck/undo-load-state",
+      "title": "Undo loading a save state",
+      "detail": "From june's play test ({unit:deck/play-gate}). Loading a save state throws away the game as it was; let the player undo the load and get back to where they were just before it (as mGBA's 'undo load state'). Rewind's history already holds that moment, so this may be keeping the pre-load snapshot. june has user-interface ideas for how this should look and feel: ask them (just ask) before settling the design, and don't build a UI they haven't seen.",
+      "needs": ["research/ui-library", "stretch/egui-sdl3"],
+      "record": {
+        "state": "done",
+        "by": "53184f3d",
+        "at": "2026-10-24T20:50:35Z",
+        "evidence": "Built june's choice (menu row plus a key): F5 and the menu's 'Undo load state' row (greyed and skipped when nothing to undo) restore the game from before the last load, once; title says 'load undone'. just check passes after merging main; menu/slot tests cover it; live under headless gamescope a pad script saved, loaded, undid via the menu (stderr: load undone). Branch commits 8e888d4, 5a37d4f.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-24T20:16:13Z",
+          "by": "4845264b",
+          "text": "Mechanism committed on branch unit/deck/undo-load-state (a0b0a20): slots::act keeps pre-load state, Action::UndoLoad restores once; tested in slot_states. Only the trigger/UI is left, per june's answer to the undo-load question."
+        }
+      ]
+    },
+    {
+      "id": "deck/fast-speed-default",
+      "title": "Fast-forward at 2.5x by default, fractional speeds",
+      "detail": "From june's play test ({unit:deck/play-gate}): unthrottled fast-forward is uncontrollably fast. Until there's a UI for choosing the speed, a window build fast-forwards at 2.5x by default, not as fast as it can. --fast-speed takes fractional speeds (e.g. 1.5, 2.5; it takes only whole 2-16 now), and the speed can be set without a command-line flag (e.g. in ~/.config/gbaa, beside gamepad.conf), since Steam on the Deck runs play.sh. Update --help and the Deck README.",
+      "priority": 15,
+      "record": {
+        "state": "done",
+        "by": "dc2989d3",
+        "at": "2026-10-24T16:36:45Z",
+        "evidence": "Window fast-forward defaults to 2.5x; --fast-speed takes 1.1-16 with fractions or 'unlimited'; without the flag it reads 'fast-speed = N' from ~/.config/gbaa/settings.conf (beside gamepad.conf; bad line errors before the window opens). Menu gains 1.5x/2.5x. --help, Deck README, commands.md updated. Tests fast_forward_options, fast_forward_speed_settings, speeds_step_and_wrap; just check passes.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "deck/label-layout",
+      "title": "Default A and B to the pad's labels, not positions",
+      "detail": "From june's play test ({unit:deck/play-gate}): the positional default (GBA A on the east button, B on south, as on a GBA) felt wrong: june wants the button labelled A to press GBA A. Make the default a = south, b = east (Xbox and Deck labels), revisiting the decision 'Gamepads read through gilrs; positional default layout' (record the new one with june's reason). june's ~/.config/gbaa/gamepad.conf on quack already does this. Update DEFAULT in crates/desktop/src/gamepad.rs, its test, --help and the Deck README.",
+      "needs": ["stretch/sdl3-window"],
+      "record": {
+        "state": "done",
+        "by": "d7634b05",
+        "at": "2026-10-24T20:24:05Z",
+        "evidence": "DEFAULT in crates/desktop/src/gamepad.rs is now a = label-a, b = label-b (south/east on Xbox/Deck); tests updated (gamepad_mappings, hotplug, keyinput), --help and the Deck package README say the labelled A/B press GBA A/B; just check passes after merging main. New decision d/pad-a-and-b-follow-the-buttons-labels replaces the positional one.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "deck/escape-quit",
+      "title": "Escape shouldn't quit the game on one press",
+      "detail": "From june's play test ({unit:deck/play-gate}): Escape quits at once, and Steam's Desktop Mode controller layout sends Escape for the Deck's B, so pressing B closed the game (june took it for a crash). Make quitting deliberate: e.g. Escape held about a second, or a confirm, and never on a key a desktop gamepad layout sends for a face button. The window's close button and Steam's Exit game still quit at once (and still write the .sav).",
+      "priority": 15,
+      "record": {
+        "state": "done",
+        "by": "ba130907",
+        "at": "2026-10-24T16:49:01Z",
+        "evidence": "Escape no longer quits outside the menu (it only closes the menu); Ctrl+Q quits, as do the menu's Quit, the window's close (SDL Quit event, unchanged, still writes the .sav) and Steam's Exit game. window::quits is unit-tested (only_ctrl_q_quits: Escape/Enter/Space never quit, with or without Ctrl). Help text and docs updated; just check passes after merging main. Not tried on the Deck itself.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "deck/on-hardware",
+      "title": "Play both games on the Deck itself in Game Mode",
+      "detail": "The play gate ({unit:deck/play-gate}) was played on quack, not the Deck. On the Deck (its LocalSend name, see docs/machines.md, deck section): both games added as non-Steam games and launched from Game Mode; Steam Input's gamepad drives them (with june's layout or {unit:deck/label-layout}); frames steady and sound clean on the Deck's CPU (read the exit log: underruns, interpreter share); the .sav and states land beside the game. Needs june at the Deck; files are sent by LocalSend as tars (they keep the executable bit).",
+      "record": {
+        "state": "dropped",
+        "why": "Needs june at the Deck: refiled as a gate (deck/deck-gate)",
+        "by": "65e71fe8",
+        "at": "2026-10-24T03:29:10Z"
+      }
+    },
+    {
+      "id": "deck/deck-gate",
+      "title": "june plays both games on the Deck in Game Mode",
+      "kind": "gate",
+      "detail": "The play gate ({unit:deck/play-gate}) was played on quack, not the Deck. On the Deck (see docs/machines.md, deck section): both games added as non-Steam games and launched from Game Mode; Steam Input's gamepad drives them; frames steady and sound clean on the Deck's CPU (read the exit log: underruns, interpreter share); the .sav and states land beside the game. The fresh builds ({unit:deck/gate-builds}) are already in ~/gbaa/<game>/ on the Deck (rsync over Tailscale SSH, 2026-10-24). Agents can ssh deck@steamdeck to read logs and saves after a session.",
+      "needs": ["deck/label-layout", "deck/escape-quit", "deck/gate-builds"],
+      "record": {
+        "state": "done",
+        "by": "owner",
+        "via": "39c10957",
+        "at": "2026-10-25T02:29:50Z",
+        "evidence": "june, 2026-10-24: played Emerald Imperium from its Steam entry in Game Mode on the Deck (OLED, 90 Hz), 21:52 to 22:25, no problems; asked to clear the gate without playing Rogue there (same runtime and package, passed deck-check, played on quack in the earlier play test). Exit report from the Deck's journal: audio 0 underruns, queue 39.3 to 79.8 ms; 98.9% of cycles compiled; Steam Deck Controller detected; 1280x800 window with the frame at 5x; .sav beside the game with a backup in saves/. Presents p50 19.9 ms, p99 20.8, max 52.0, 5 over 25 ms: steady but about 50 fps, not 60, filed as {unit:deck/deck-50fps}. Save states weren't used."
+      }
+    },
+    {
+      "id": "deck/gate-builds",
+      "title": "Fresh Deck builds for the on-Deck play test",
+      "detail": "As {unit:deck/play-builds}: rebuild the Deck packages of Emerald Rogue and Emerald Imperium from main (just deck-build, just deck-check both) once the label layout and the Escape fix are in, for {unit:deck/deck-gate}. Also make the tars LocalSend needs (one per game, keeping the executable bit) under out/deck/.",
+      "needs": ["deck/label-layout", "deck/escape-quit"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "67cc8bff",
+        "at": "2026-10-24T21:12:40Z",
+        "evidence": "Built from main 905db26 plus d1fa432 (atan2f etc. kept on old glibc versions; quack's glibc 2.43 had pushed the binaries to 2.43): out/deck/emerald-rogue (126M) and emerald-imperium (133M), glibc 2.35, label layout and Escape fix in. deck-check 30 s passes both (5 libs, 1200x800 centred). Tars out/deck/emerald-rogue.tar, emerald-imperium.tar keep 0755 on binary and play.sh; packages and tars copied to the main checkout's out/deck/, sha256 match.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "deck/deck-50fps",
+      "title": "Fast-forward draws about 50 frames a second, not 60",
+      "detail": "In the on-Deck play test ({unit:deck/deck-gate}) presents read p50 19.9 ms, p99 20.8, but june was on 2.5x fast-forward most of the session, and that explains it: fast-forward redraws when at least 1/DRAW_HZ (1/60 s) has passed since the last draw (crates/desktop/src/platform.rs, near line 249). At 2.5x a GBA frame finishes every 6.7 ms, so the first frame past 16.7 ms comes at 20.1 ms: about 50 draws a second. Other speeds land at other uneven rates. Not a Deck problem. Fix: put the draws on a fixed 60 Hz schedule (advance the deadline by 1/60 s each draw, catching up if it falls behind) rather than counting from the last draw, so fast-forward shows close to 60 a second at any speed; check with the presents line at 2.5x (p50 near 16.7 ms). The exit report doesn't separate normal-speed presents from fast-forward ones, so the Deck's pacing at 1x wasn't measured on its own; consider reporting fast-forward presents separately, as the menu's are (with the menu:).",
+      "record": {
+        "state": "done",
+        "by": "3c8f7fb5",
+        "at": "2026-10-25T15:38:38Z",
+        "evidence": "Fast-forward redraws on a fixed 60 Hz schedule (fast::DrawPacer). Test fast_forward_draws_sixty_a_second on a made-up clock: 1.5x/2.5x/4x/16x mean gap 16.7 ms. Live under headless gamescope 1280x800, 900 frames: new 'fast-forward:' presents line, mean 16.7 ms at 2.5x (p50 14.8, p99 21.9), 1.5x and 4x also 16.7; was 20.1 at 2.5x. just check passes; main merged (up to date).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-25T03:26:29Z",
+          "by": "80d00c49",
+          "text": "Retro 2026-10-24: lanes only measured pacing at 1x, so this got to the Deck. Besides the live presents check, add a desktop unit test on the fake clock: at 1.5x, 2.5x and 4x, draws come about every 16.7 ms."
+        }
+      ]
+    },
+    {
+      "id": "deck/resume-on-launch",
+      "title": "Resume where you left off, safe across a crash",
+      "detail": "june, 2026-10-29: on by default, with a menu setting to turn it off. Because she'll come to trust it, it must survive a crash or a pulled battery: take an auto state every few seconds of play (1 to 5 s, cheap with rewind's delta states), written to a temp file and renamed so a crash mid-write never leaves a broken one, keeping the one before; take one on quit too. At launch, resume from it straight away. Separate from the four manual slots. Check: play, kill -9 the process, relaunch, and it resumes within a few seconds of where it was; also quit normally and relaunch. See docs/research/emulator-ux.md.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "10134f42",
+        "at": "2026-10-30T17:39:58Z",
+        "evidence": "Earlier session's window check stands (Kirby & the Amazing Mirror in a private cu session: kill -9 with ROM.resume 1.1 s old, relaunch resumed in the same spot; Ctrl+Q wrote one at quit and relaunch resumed there; unit tests auto_states_resume_and_keep_the_newer_sav). This session made the review's fix: set_title's doc comment moved back onto it at crates/desktop/src/platform.rs (comment-only); merged latest main; just check passes (exit 0).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-30T17:35:13Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/desktop/src/platform.rs:171: the new `resume_on` was inserted between `set_title` and its doc comment, so `/// Show `title` as the window's title (nothing headless).` now sits on top of `resume_on`, whi…"
+        }
+      ]
+    },
+    {
+      "id": "deck/frontend-launch",
+      "title": "Launch cleanly from ES-DE and other frontends",
+      "detail": "june, 2026-10-29: no game library of our own; fit into ES-DE and launchers like it. Command-line flags for where saves, states and settings live, and a fallback so switching launchers never strands a save: one fixed home per game keyed by the ROM's hash (e.g. under the XDG data dir), flags override it, and a save found in an older place (beside the ROM or executable) is picked up, not shadowed. Plus a sample ES-DE system entry. Ask june before settling the location rule. See docs/research/emulator-ux.md.",
+      "check": "recorded",
+      "needs": ["deck/save-dir-flags", "deck/save-move-in"],
+      "record": {
+        "state": "done",
+        "by": "5949c5c9",
+        "at": "2026-10-31T03:56:10Z",
+        "evidence": "Added --config-dir (gamepad::set_config_dir, test config_dir_flag) and deploy/es-de/ es_systems.xml + es_find_rules.xml (xmllint ok), documented in docs/tools/commands.md. End-to-end launch as ES-DE runs it: sh -c 'gbaa-desktop --fullscreen --config-dir CFG --frames 120 \"ROMs/gba/Save Test (SRAM).gba\"' from /, scratch HOME/XDG, SDL offscreen: exit 0, ROM.sav copied in to ~/.local/share/gbaa/saves/save-test-sram/save-test-sram.sav (cmp same) with a backup; 2nd run with a new ROM.sav beside left the folder's save alone; a bad line in CFG/settings.conf was reported by path, so --config-dir is read. just check passes before and after merging origin/main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-30T20:32:27Z",
+          "by": "0e32b9de",
+          "text": "2026-10-30 june settled saves: NOT keyed by ROM hash. The flags, folders and move-in are now their own units (needs); this unit is the ES-DE sample entry and an end-to-end launch check using them, plus --config-dir. Follow docs/save-locations-design.md over the What above."
+        },
+        {
+          "at": "2026-10-30T17:44:21Z",
+          "by": "7ca58e44",
+          "text": "No code yet. Saves/states/resume all use rom.with_extension in sav_file.rs, slots.rs, resume.rs; --save already exists (lib.rs ~687 defaults it via sav_file::beside). Build flags + fallback per june's answer to the save-location question; ES-DE sample independent."
+        }
+      ]
+    },
+    {
+      "id": "deck/stick-deadzone-40",
+      "title": "Stick dead zone 40% by default",
+      "detail": "june (2026-10-29): the GBA's pad is all or nothing, so a stick that counts small moves presses directions you didn't mean. In the Kirby playtest Athena kept inflating Kirby by accident (a stray up) at 20% and was fine at 40%. Make the sticks' default 40 (crates/desktop/src/gamepad.rs DEFAULT_DEADZONE; the triggers stay at 20), with the tests, --help, the settings doc and the Deck README; record the decision with june's reason. A settings file that sets deadzone keeps its value. Check: tests; just check.",
+      "record": {
+        "state": "done",
+        "by": "2df1830c",
+        "at": "2026-10-30T17:52:17Z",
+        "evidence": "Stick default 40, triggers DEFAULT_TRIGGER_DEADZONE 20; settings file values still win (lib.rs). New assertions in tests.rs gamepads_and_hotplug (0.35 stick nothing, 0.3 trigger L); menu tests updated. just check passed before and after merging origin/main. Decision recorded.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "deck/deadzone-axes",
+      "title": "Separate up/down and left/right dead zones, as a toggle",
+      "detail": "Athena's ask from the 2026-10-29 Kirby playtest: a vertical dead zone apart from the horizontal one; stray ups are the trouble (inflate, doors) while sideways should stay quick. A toggle on the Controls page in the way of 'directions = together|apart' (crates/desktop/src/settings.rs): 'deadzone-axes = together|apart', together by default; apart shows two sliders, horizontal and vertical, saved as their own keys. Check: tests on the stick-to-direction mapping with the split; a menu test; just check.",
+      "record": {
+        "state": "done",
+        "by": "c9983e2c",
+        "at": "2026-10-30T18:04:55Z",
+        "evidence": "Commit d135081f: deadzone-axes = together|apart (together default), deadzone-horizontal/-vertical keys; Controls page switch shows two stick rows when apart. Tests pass: gamepads_and_hotplug (stick-to-direction with a 30/70 split), the_settings_file, menu up_and_down_take_their_own_deadzone_apart; just check exit 0; main merged (already up to date).",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "deck/face-buttons-mirror",
+      "title": "Pad X presses B and Y presses A by default",
+      "detail": "june (2026-10-29, after the Kirby playtest): the buttons across from each other press the same GBA button, so X = B and Y = A by default (b = label-b label-x, a = label-a label-y in crates/desktop/src/gamepad.rs DEFAULT). Saving a state gets no pad control by default (june: no default on controller), as loading a state already has none; today the built-in DEFAULT still has save-state = west, while june's own ~/.config/gbaa/gamepad.conf on quack clears it. The keyboard's F-keys and the menu still save. ({d:pad-a-and-b-follow-the-buttons-labels} stays.) june's gamepad.conf also sets a = label-a and b = label-b, which would hide the new default for her: drop those lines from it (they match the old default). Update the tests, --help, the settings doc and the Deck README. Check: tests; just check.",
+      "record": {
+        "state": "done",
+        "by": "ea92d3a5",
+        "at": "2026-10-30T18:18:14Z",
+        "evidence": "DEFAULT now a = label-a label-y, b = label-b label-x, no save-state; new test asserts X/west=B, Y/north=A and no save/load by default; desktop tests 121 pass; just check exit 0 at 604eae39 (main merged, up to date). --help, slots doc, commands.md, Deck+Windows READMEs updated; a/b lines dropped from june's quack gamepad.conf.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "deck/embed-rom",
+      "title": "Recompiled builds carry their ROM inside",
+      "detail": "june (2026-10-29): a recompiled build should embed its .gba (include_bytes! in the generated crate), by default for every build: Linux, the Deck package, macOS and Windows. The ROM argument becomes optional and still overrides the embedded copy. Sending a friend a build is then one file (the Kirby playtest needed a zip, LocalSend and Discord), and netplay's build ID can't be paired with the wrong ROM. Builds stay out of git and the public mirror, as ever. Update recompile, the package recipes, docs/tools/commands.md and the READMEs. Check: a Kirby build run with no ROM argument plays; with a ROM path it uses that; just check.",
+      "record": {
+        "state": "done",
+        "by": "d59ceb04",
+        "at": "2026-10-30T20:43:32Z",
+        "evidence": "just check passed before and after merging main. Kirby NiDL recompiled+built (rom.gba embedded, binary 76 MB): run alone in /tmp with no ROM arg, headless 900 frames with inputs, reaches the game-select menu (PNG viewed), hash 2f3611b1e9ce250a; same run given a copy of the ROM path gives the same hash; given Amazing Mirror it refuses (not this build's ROM), with --interp it runs it, so the given path is used.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "deck/game-save-name",
+      "title": "Each build carries its game's save name",
+      "detail": "Bake the game's name (the out/<name> slug: lowercase, runs of other chars -> one dash) into the recompiled build; gbaa-recompile/just recompile take --name to set it. The interpreter (and desktop running a ROM directly) slugs the ROM's file name the same way. One function for the slug, shared. Design: docs/save-locations-design.md.",
+      "record": {
+        "state": "done",
+        "by": "b4b0843e",
+        "at": "2026-10-31T00:53:13Z",
+        "evidence": "just check passes after merging main (f06687e9). One slug fn, runtime::name::GameName, used by codegen crate_name, gbaa-recompile, desktop (ROM file name) and xmatch; unit tests cover it. just recompile arm.gba --name 'My Test & Game' wrote out/my-test-game with name \"my-test-game\" baked into main.rs; no --name gives \"arm\"; OUT plus --name works; the built binary ran 30 headless frames (hash ffb537b2).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T00:53:15Z",
+          "by": "b4b0843e",
+          "text": "The justfile's other recipes still slug out/<name> with their own tr/sed copy (same rule, except an empty name: bash gives '' where GameName gives 'game'). Desktop's Options::game is set but not yet used for save paths."
+        }
+      ]
+    },
+    {
+      "id": "deck/save-folders",
+      "title": "Saves, states and resume in a per-game folder",
+      "detail": "Move .sav, .state1-4, .resume (+.old/.fault/.tmp) and the backups to <OS data dir>/gbaa/saves/<name>/ (XDG on Linux/Deck, Application Support on macOS, %APPDATA% on Windows), files named <name>.sav etc., backups in backups/. One resolver for the folder with the full order (flags > per-game > global > default) stubbed for the layers later units add. Headless --save FILE runs unchanged. Design: docs/save-locations-design.md.",
+      "needs": ["deck/game-save-name"],
+      "record": {
+        "state": "done",
+        "by": "c7595ae0",
+        "at": "2026-10-31T01:38:20Z",
+        "evidence": "just check passes after merging main (new tests game_folder_layers, data_dir_per_os, save_options, embedded, auto states). Windowed run (offscreen SDL, XDG_DATA_HOME=/tmp) of 'SRAM Test!.gba': sram-test.sav, backups/sram-test-*.sav, sram-test.resume and .resume.old all in data/gbaa/saves/sram-test/. Headless --save path unchanged (test).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T01:38:27Z",
+          "by": "c7595ae0",
+          "text": "Resolver: desktop::game_dir (Layers: save_flag, state_flag, per_game, global; all None for now, Layers::default() in Options::parse_for). Default dir is $XDG_DATA_HOME/gbaa, as $GBAA_DATA's default: just emerald-saves' saves/emerald/alice.sav sits in game 'emerald''s folder."
+        },
+        {
+          "at": "2026-10-30T20:39:12Z",
+          "by": "d59ceb04",
+          "text": "Embedded-ROM builds name their save by desktop's embedded_path (exe gbaa-NAME -> NAME.gba beside it; macOS .app -> ~/Library/Application Support/gbaa/NAME/). Replace that with the per-game folder; Options.embedded marks a build run on its own ROM."
+        }
+      ]
+    },
+    {
+      "id": "deck/save-move-in",
+      "title": "Copy old saves beside the ROM into the new folder",
+      "detail": "First run with an empty folder: copy the .sav, states and resume found beside the ROM (or the built game) in, renamed to the game's name, originals kept; never copy over an existing save. Design: docs/save-locations-design.md.",
+      "needs": ["deck/save-folders"],
+      "record": {
+        "state": "done",
+        "by": "63db7f93",
+        "at": "2026-10-31T02:57:13Z",
+        "evidence": "Review fix made: move_in is filled only when the window's save is the folder's (crates/desktop/src/lib.rs). --save and --no-save now give an empty move_in, so the first normal run still brings the .sav. move_in_pairs takes the sav path as non-optional. move_in_options covers --save, --no-save and headless; move_in_copies_once shows a --no-save run copies nothing and the next run copies the .sav. just check passes after merging main (60a8c66f).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T02:49:51Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/desktop/src/lib.rs:787-790: a run with `--no-save` or `--save FILE` still copies in the states and resume, but leaves out the old `.sav`. Those copied files count as \"the game's files already in the fol…"
+        },
+        {
+          "at": "2026-10-31T02:47:00Z",
+          "by": "0637ec0b",
+          "text": "Old macOS app-bundle saves (~/Library/Application Support/gbaa/NAME/NAME.sav, pre-folder layout) are not copied in; only files beside the ROM / NAME.gba beside the binary. Trigger: none of the game's files in the folder yet."
+        }
+      ]
+    },
+    {
+      "id": "deck/state-rom-hash",
+      "title": "States and resume record their ROM; back up on mismatch",
+      "detail": "Write the ROM's hash into each state and resume file. On load with a different ROM: copy the file aside as .bak, then load anyway (june relies on resume over saving). No refusal until the research unit says loads break. Design: docs/save-locations-design.md.",
+      "needs": ["deck/save-folders"],
+      "record": {
+        "state": "done",
+        "by": "fc660ad7",
+        "at": "2026-10-31T03:11:05Z",
+        "evidence": "States/resume already hold the ROM CRC-32 in the snap header; slots::load now copies an other-ROM state to <file>.bak and loads it (load_state_any_rom). Tests: desktop slot test loads a 12-byte-ROM mismatch and checks .bak bytes + cpu; auto_states resumes under a cut ROM and checks game.resume.bak; runtime a_new_rom_is_hashed_afresh. just check passes after merging origin/main (up to date).",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "deck/state-across-versions",
+      "title": "Do states load across ROM versions and rebuilds?",
+      "detail": "Research: make states/resume on one ROM and load them (a) in a build of a different version of the same game (e.g. a hack's v1 -> v2, or two revisions) and (b) in a gbaa rebuild of the same ROM after a codegen change. Record what breaks and how; if loads break, file a follow-up changing what a mismatch does. Design: docs/save-locations-design.md.",
+      "needs": ["deck/state-rom-hash"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "93e66d80",
+        "at": "2026-10-31T03:55:04Z",
+        "evidence": "Ran on Emerald (scripts in /tmp, results in docs/save-locations-design.md): our state from frame 100,200 of the story run loaded in the interpreter, recompiled pokemon-emerald-version, -mod and emerald-text-speed builds: all 600 frames identical (final hash 9c46c9cb139745f6), and back from recompiled into interp. Oct-24 builds refuse v3 (read v2). Data-only ROM patch: plays identically. pokeemerald_modern: loads, jumps to 0 in frame 1. Follow-ups {unit:deck/state-format-upgrade}, {unit:deck/other-rom-state-faults}. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "deck/save-dir-flags",
+      "title": "Save and state folder flags for frontends",
+      "needs": ["deck/save-folders"],
+      "record": {
+        "state": "done",
+        "by": "95ae76e1",
+        "at": "2026-10-31T03:30:31Z",
+        "evidence": "gbaa-desktop parses --save-dir DIR (exact folder for NAME.sav, backups, slots, resume) and --state-dir DIR (slots+resume, follows --save-dir), window only, into game_dir::Layers. A flag folder's first run copies in the default folder's files first, else beside-ROM ones, never mixed. New tests save_dir_options and save_dir_moves_in_from_default pass; just check passes (exit 0) after merging origin/main (up to date). Usage text and docs/tools/commands.md updated.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "deck/save-folder-setting",
+      "title": "Save folder settings: global and per game in the menu",
+      "detail": "Global 'all saves go in…' in settings.conf (a parent: <name>/ inside) and a per-game menu row (an exact folder), pad-only like every menu action. When a flag is in charge, the row is greyed with 'set by the launcher'. Order: flags > per-game > global > default. Design: docs/save-locations-design.md.",
+      "needs": ["deck/save-folders", "deck/save-dir-flags"],
+      "minMinutes": 150,
+      "record": {
+        "state": "done",
+        "by": "cd1cd882",
+        "at": "2026-10-31T18:39:27Z",
+        "evidence": "Review fix made: SaveFolders.global_at_launch is written as previous-save-dir, so two picks in one run still move files from the launch folder. New test a_global_picked_twice_moves_from_the_launch_folder passes; the_save_folders_page_picks_folders_on_a_pad still passes; just check green after merging origin/main (9f59d064).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T17:58:59Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/desktop/src/menu/saves.rs, `set_folder`, the `Target::All` arm: `previous-save-dir` is set to whatever `s.global` held just before this click, not to the global setting this run started with. Say a run …"
+        },
+        {
+          "at": "2026-10-31T03:58:07Z",
+          "by": "930e7790",
+          "text": "Not started (lane hit stop time). Layers.per_game/global already exist in game_dir.rs, unused; lib.rs parse fills only the flags. No per-game settings file and no pad folder picker exist in the menu yet: both are new."
+        }
+      ]
+    },
+    {
+      "id": "deck/frame-blend",
+      "title": "Frame blending for games that flicker, as a toggle",
+      "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29): 'the flashing is awful, I hate GBA flashing'. Some games draw sprites on alternate frames and count on the slow LCD to blend them. Add frame blending (mix each frame with the last), a Display row in the menu and a settings key, off by default so the picture stays as {d:keep-the-picture-as-it-is-no-colour-correction} keeps it; maybe on per game where a game flickers (Kirby). docs/research/emulator-ux.md covers what others do. Check: a test on the blend; screenshots of Kirby's flicker off and on; just check.",
+      "record": {
+        "state": "parked",
+        "why": "june, 2026-10-30: filed for later, not now",
+        "by": "11558975",
+        "at": "2026-10-31T03:14:21Z"
+      }
+    },
+    {
+      "id": "deck/resume-off-default",
+      "title": "Resume on launch is off by default",
+      "detail": "june, 2026-10-30: resume on launch is now off by default (reverses 2026-10-29's 'on by default'). crates/desktop/src/settings.rs: resume left out of settings.conf means off; the menu setting turns it on. A settings.conf that already says resume = on keeps it on. Update the settings docs, resume.rs's doc comment and docs that say on by default. Check: a fresh config launches at the title screen, not the resume state; resume = on still resumes after kill -9.",
+      "check": "independent",
+      "needs": ["deck/resume-on-launch"],
+      "priority": 20,
+      "record": {
+        "state": "done",
+        "by": "c8c5875a",
+        "checker": "verifier-subagent-deck-resume-off-default",
+        "at": "2026-10-31T03:42:50Z",
+        "evidence": "just check passed (exit 0) after main merged. A fresh-context verifier ran Kirby in a cu session with a private config. With resume = on, kill -9 mid-demo, relaunch logged 'resumed where you left off' and came back to the same spot. With no resume line, or resume = off, and NAME.resume still there, it booted the HAL intro: no resume, no auto state written. Diff review found no bugs.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "deck/state-format-upgrade",
+      "title": "States of an older format load after a gbaa update",
+      "record": {
+        "state": "done",
+        "by": "17e59b09",
+        "at": "2026-10-31T04:07:21Z",
+        "evidence": "Older states migrate on load: snap::OLDEST=2, fields added since skip by Visitor::version and get defaults (migrate). Test an_older_state_loads loads a pinned v2 state built at 54ad684a^ and gets byte-identical bytes to this build's v3 state; v1 and truncated still refused. just check passes after merging main (f63a8fdf).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T03:52:38Z",
+          "by": "93e66d80",
+          "text": "From {unit:deck/state-across-versions}: a VERSION bump makes every older state and resume file refused (version 2 vs 3). Keep a reader per old version (migrate on load) or refuse with the .bak kept; a test loads a pinned old state. docs/save-locations-design.md."
+        }
+      ]
+    },
+    {
+      "id": "deck/other-rom-state-faults",
+      "title": "A state from another ROM that crashes undoes its load",
+      "record": {
+        "state": "done",
+        "by": "ad6bb39a",
+        "at": "2026-10-31T04:21:52Z",
+        "evidence": "A state from another ROM (slot or auto state) is on trial 60 frames (slots::Trial/watch); a fault puts the machine back as before the load, says why, .bak stays. Unit tests cover crash and play-on. Real: original Emerald's state into pokeemerald_modern in an offscreen window: 'state 1 is from another ROM and crashed in frame 1 (reached BIOS address 0x00000000…): load undone', intro played on to frame 400, .bak equal to the state. just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T03:52:40Z",
+          "by": "93e66d80",
+          "text": "From {unit:deck/state-across-versions}: pokeemerald modern's state from the original ROM loads, then jumps to 0 in frame 1. On an other-ROM load that faults within a few frames, restore the machine as before the load and say why; .bak stays. Data-only revisions play fine."
+        }
+      ]
+    }
+  ]
+}

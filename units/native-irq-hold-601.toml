@@ -1,0 +1,15 @@
+# agb/native-irq-hold for 601 frames with no input: the IRQ-hold program of
+# the stage-A lifter's check (native/lift-irq-hold; `just lift-check`), its
+# lift (gbaa-lift) against the play build at --timing native by route-check
+# --native. What it draws: agb/native-irq-hold/SCENE.md. Frame 601, not 600:
+# a pixel lands about every frame and a half, and at frame 600 our exact
+# interpreter has drawn one more than mGBA (the frame-599 picture is mGBA's
+# frame 600); at 598, 601 and 610 the two agree.
+rom = "$GBAA_DATA/agb/native-irq-hold.gba"
+
+[[checkpoint]]
+name = "native-irq-hold-601"
+frame = 601
+hash = "abc7ac7a22ed22b3"
+# Verified: mGBA 0.10.5 (`just mgba-diff`) draws the same at frame 601
+# (2026-11-01).

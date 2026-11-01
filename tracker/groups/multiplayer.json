@@ -1,0 +1,798 @@
+{
+  "id": "multiplayer",
+  "title": "Multiplayer: linked games over the internet",
+  "order": 12,
+  "units": [
+    {
+      "id": "multiplayer/measure-frame-cost",
+      "title": "Measure frame cost and state size for netplay",
+      "detail": "Design: docs/research/multiplayer.md. Overworld and battle frame times of recompiled Emerald on quack and the Deck, state save/load times and payload sizes; write them into the doc's Latency section and settle input delay and whether rollback fits.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "9b17eaaf",
+        "at": "2026-10-25T16:57:06Z",
+        "evidence": "Recompiled Emerald on quack, headless --frame-times (new flag): overworld standing/walking and a Route 101 wild battle all ~0.66 ms a frame mean, p99 0.85-1.4 ms; --state-bench: payload 642,696 B, save 0.2 ms, load 0.3 ms, ~30 KB zstd; whole state 28 ms (ROM CRC, filed {unit:multiplayer/rom-crc-once}). Written into docs/research/multiplayer.md Latency: lockstep fits, input delay default 3 adapted 2-8, rollback doesn't fit the Deck. Deck run split to {unit:multiplayer/deck-frame-cost}, asked june. Route reproducible from alice.sav (byte-identical battle state). just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "multiplayer/cable-club-saves",
+      "title": "Two Emerald saves at a Pokemon Center, for link tests",
+      "detail": "Design: docs/research/multiplayer.md. Two saves (different trainers, a Pokemon each) standing at the cable club, from an existing TAS (long routes use one) or june's save; kept outside git like ROMs, path recorded in docs/tools/commands.md.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "961b3b81",
+        "at": "2026-10-25T16:14:52Z",
+        "evidence": "just emerald-saves writes $GBAA_DATA/saves/emerald/alice.sav (ALICE: Mudkip L5, Wurmple L3) and bob.sav (BOB: Torchic L5, Zigzagoon L3), deterministic (sha1 85a1e042, 0e121747); path in docs/tools/commands.md. Base = the game's own new-game save blocks (run to the truck), patched. In mGBA and ours each continues into Oldale PC 2F below the cable club attendant; Up+A gives the Cable Club welcome, Trade Center passes the 2-mon check to the save prompt, and the game saves over it and reloads. Party screen shows both mons. just check passes; crate unit tests cover mon encryption/checksum and sectors.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-24T23:35:41Z",
+          "by": "3a6f8226",
+          "text": "June's Emerald .sav on quack is all 0xFF (empty). Trade centre needs >=2 party mons (data/scripts/cable_club.inc CheckPartyTradeRequirements), so make 2 each. Asked june which route (q/emerald-saves-pokemon-center); default: craft in Rust."
+        }
+      ]
+    },
+    {
+      "id": "multiplayer/link-hub",
+      "title": "A link hub: two GBAs on one serial bus",
+      "detail": "Design: docs/research/multiplayer.md. runtime::link (no_std): N Machines run in turns to a shared deadline; multiplayer-mode transfers complete on every machine at one cycle and raise serial IRQs. Check: two Emeralds from the saves reach LINK_STATE_CONN_ESTABLISHED (symbols), identically twice.",
+      "check": "recorded",
+      "needs": ["multiplayer/cable-club-saves"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "1ca30626",
+        "at": "2026-10-25T18:01:01Z",
+        "evidence": "runtime::link (no_std) hub: machines run in turns to a shared deadline (Sched::deadline), parent's SIOCNT start ends its turn, multiplayer transfers complete on all at one hub cycle with serial IRQs; 6 unit tests. just emerald-link: alice+bob reach LINK_STATE_CONN_ESTABLISHED at frame 3383 and the Trade Center at 3679, 6201 transfers, same log and state hashes (59e361a5…, 9caf98fd…) on both runs. just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-25T18:01:03Z",
+          "by": "1ca30626",
+          "text": "Hub state (hub time, transfer in flight) isn't in save states yet: the netplay session unit needs Link to snapshot for resync. Link borrows machines per call (no alloc). Not for dispatch::run_guest (the frame-end switch would fire at each deadline)."
+        }
+      ]
+    },
+    {
+      "id": "multiplayer/local-link-window",
+      "title": "Two linked GBAs in one desktop window",
+      "detail": "Design: docs/research/multiplayer.md. The desktop runs a link hub: both screens, two pads or a split keyboard. Check: a trade between the two cable-club saves completes from a short input script.",
+      "check": "recorded",
+      "needs": ["multiplayer/link-hub"],
+      "record": {
+        "state": "done",
+        "by": "bac56578",
+        "at": "2026-10-25T18:24:42Z",
+        "evidence": "gbaa-desktop ROM --link B.sav: two GBAs on runtime::link in one window, screens side by side, player 2 on I/J/K/L,N,B,U,O,.,, and the second pad, --input2 headless. just emerald-trade: copies of alice/bob trade first Pokémon in 7600 frames via the desktop headless; saves read back hold the swap (Mudkip<->Torchic, OT IDs), last-frame hash d40cf153… same twice. Window smoke-tested in a private cu session (each player's Start moves only its screen). just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-25T18:24:43Z",
+          "by": "bac56578",
+          "text": "Link mode runs the interpreter only (a recompiled build too); no fast-forward, rewind, save states or Lua scripts in linked play yet; only player 1's sound. Player 2's keys are fixed (gamepad::player2_keys), not in gamepad.conf."
+        }
+      ]
+    },
+    {
+      "id": "multiplayer/session-core",
+      "title": "Netplay session core over an in-memory transport",
+      "detail": "Design: docs/research/multiplayer.md. Crate netplay (std, console-neutral): Console trait, lockstep with input delay, start from exchanged states, hashes, resync by seat owner; the GBA hub's Console impl. Check: sync test with injected latency, jitter, loss gives a straight run's hashes.",
+      "check": "recorded",
+      "needs": ["multiplayer/link-hub", "multiplayer/measure-frame-cost"],
+      "record": {
+        "state": "done",
+        "by": "49517a17",
+        "at": "2026-10-25T19:09:24Z",
+        "evidence": "crates/netplay (Console, Transport, lockstep w/ input delay, start from exchanged states, hash every 60 frames, resync by seat owner, sim network, GBA hub Console). just emerald-netplay: 2 Emerald peers into the Trade Center at 40ms+30ms jitter 10% loss D=3 match the straight run's 70/70 hashes and end state (also 75ms+60ms/30%/D=6). cargo test -p netplay: toy 2-4 seats + tiny ROM under 25% loss, 2 resync tests. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "multiplayer/relay-server",
+      "title": "Relay server: rooms, codes, QUIC",
+      "detail": "Design: docs/research/multiplayer.md. gbaa-server (tokio + quinn): rooms with a 6-character code, 4 seats plus spectators, build-ID check, relays inputs and states. Check: two headless clients play a session through a local server under injected latency.",
+      "check": "recorded",
+      "needs": ["multiplayer/session-core", "multiplayer/relay-prototype", "multiplayer/ping-sim"],
+      "record": {
+        "state": "done",
+        "by": "f2791327",
+        "at": "2026-10-25T21:49:06Z",
+        "evidence": "Review fixes made: default cert dir is $GBAA_DATA/gbaa-server/ (outside the checkout), key.der written 0600 (unit test + smoke run show -rw-------), /gbaa-server/ gitignored, docs updated. After merging main: just check passes; just relay-sim rough passes (10 hashes and end match the straight run on both seats, ~2.4k lost/1.5k reordered per proxy).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-25T21:45:54Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/relay/src/bin/gbaa-server.rs:310-312 (with crates/relay/src/tls.rs:381-394, `Identity::in_dir`): with no `--cert-dir`, `gbaa-server` writes its TLS private key to `gbaa-server/key.der` relative to the w…"
+        },
+        {
+          "at": "2026-10-24T23:40:33Z",
+          "by": "6bc40475",
+          "text": "Start from crates/relay (the prototype): its wire messages and the 'Relay prototype' section of docs/research/multiplayer.md. Server stays game-neutral; clients compare build IDs, session messages ride in opaque payloads. Swap TCP/threads for quinn/tokio."
+        }
+      ]
+    },
+    {
+      "id": "multiplayer/desktop-netplay",
+      "title": "Desktop: host or join a room and play your seat",
+      "detail": "Design: docs/research/multiplayer.md. The window hosts or joins a room by code and shows its own seat; your cartridge save is kept, others' discarded. Check: two windows on one machine trade through the server.",
+      "check": "recorded",
+      "needs": ["multiplayer/relay-server", "multiplayer/local-link-window"],
+      "record": {
+        "state": "done",
+        "by": "255e1b98",
+        "at": "2026-10-25T22:21:20Z",
+        "evidence": "gbaa-desktop ROM --server ADDR --host|--join CODE (crates/desktop/src/room.rs): both peers run both GBAs in lockstep over netplay::relay, the window shows its own seat, keeps its own save and discards the other's. just emerald-netplay-trade (emerald-trade --netplay through the ping-sim profile): Alice hosts, Bob joins, the Mudkip/Torchic trade lands in both saves, same end hash 855c352f on both peers, no resync (calm 121 s, rough 265 s). Two windows in a private cu session through a real gbaa-server: each shows its own seat ('Bye-bye, MUDKIP!' / 'TORCHIC!'), 60 fps, 10 waits, trade in both final screens. Fixed: Save::dirty is snapshot state, so every peer clears all seats' flags each frame. just check passes after merging main. Follow-up: {unit:multiplayer/netplay-sound}.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "multiplayer/play-gate",
+      "title": "june trades and battles with a friend online",
+      "detail": "Design: docs/research/multiplayer.md. The play gate: june links Emerald with a friend over the internet through the server, a trade and a battle. Recorded by june.",
+      "check": "recorded",
+      "needs": ["multiplayer/desktop-netplay"],
+      "record": {
+        "state": "blocked",
+        "why": "Waits on june: the server is up on fly (37.16.3.41, rollback rooms on 7374); june plays Emerald's trade and battle with a friend by --rollback and records it.",
+        "by": "11c71ec8",
+        "at": "2026-10-28T03:33:46Z"
+      },
+      "notes": [
+        {
+          "at": "2026-10-28T03:58:44Z",
+          "by": "da8501f5",
+          "text": "2026-10-27: fly machine stopped by june's ask; just fly-up before playing (or a unit's test that needs it), just fly-down after. Same IPv4."
+        },
+        {
+          "at": "2026-10-28T03:51:00Z",
+          "by": "da8501f5",
+          "text": "2026-10-27: rollback at delay 0 is the desktop's default now; --rollback and --delay aren't needed: gbaa-desktop ROM --server 37.16.3.41 --host / --join CODE."
+        },
+        {
+          "at": "2026-10-28T03:33:14Z",
+          "by": "11c71ec8",
+          "text": "2026-10-27: fly is up (37.16.3.41; rollback rooms on 7374, no cert). Lockstep/QUIC parked by june. Emerald's trade and battle go by rollback now (--rollback), untested for Emerald yet; Kirby AM works."
+        }
+      ],
+      "round": "2026-10-27T01:04:33Z"
+    },
+    {
+      "id": "multiplayer/relay-prototype",
+      "title": "Prototype a relay that knows nothing about the game",
+      "detail": "june's answer ({decision:d/multiplayer-where-server-run}): the relay starts as its own program (later optionally built into the game) and should know nothing about the game, so one server serves any game on any console. Before {unit:multiplayer/relay-server}, a quick prototype finds out whether that holds: rooms and seats relaying opaque input and state messages, the build-ID only an opaque string clients compare. Two toy clients (not the emulator) through it, plus a written answer: what, if anything, the server needed to know about the game or console, and what has to move to the client to avoid it. Record it in docs/research/multiplayer.md.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "6bc40475",
+        "at": "2026-10-24T23:40:31Z",
+        "evidence": "crates/relay (gbaa-relay): game-neutral rooms/seats/opaque payloads; cargo test -p relay: 2 and 4 toy lockstep clients with jitter match an offline run, build-ID mismatch caught by clients, 400KB state relays; 3-process run agreed. Answer in docs/research/multiplayer.md 'Relay prototype': server needs nothing about game/console; build-ID check, console field, start, frames, hashes moved to clients. just check passes.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "multiplayer/deck-frame-cost",
+      "title": "Measure Emerald frame cost on the Deck",
+      "detail": "docs/research/multiplayer.md, Latency: rerun quack's measurement (the same route and flags: --frame-times, --state-bench) on june's Deck with a deck-build of Emerald, and replace the estimate there. Needs june's OK to use the Deck (docs/machines.md, deck).",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "priority": 13,
+      "record": {
+        "state": "dropped",
+        "why": "june 2026-10-27: skip the Deck; docs/research/multiplayer.md keeps its 2-2.5x estimate",
+        "by": "05901267",
+        "at": "2026-10-27T17:25:35Z"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T17:20:01Z",
+          "by": "812e1f23",
+          "text": "ssh deck@steamdeck hit Tailscale's check (login link) again; asked june to approve it. No build made. Once approved: just deck-build the Emerald USA ROM, rsync out/deck/<name> to ~/gbaa, run the doc's route with --frame-times, --state-bench."
+        },
+        {
+          "at": "2026-10-27T17:01:12Z",
+          "by": "05901267",
+          "text": "june said go on the Deck 2026-10-27 (this is the ask-first yes for this run). Reach it at deck@steamdeck; short headless benchmark only."
+        },
+        {
+          "at": "2026-10-25T20:51:01Z",
+          "by": "e7961bb4",
+          "text": "No work done yet. Deck ssh: use deck@steamdeck (name 'steamdeck' gave no route on :22); host key now in quack's known_hosts. Tailscale SSH check mode blocked it. Then: just deck-build the Emerald USA ROM, rsync, run binary headless with the doc's route."
+        }
+      ],
+      "round": "2026-10-27T17:18:25Z"
+    },
+    {
+      "id": "multiplayer/rom-crc-once",
+      "title": "Keep the ROM's CRC-32, not recompute it per save state",
+      "detail": "runtime::snap save_state and load_state CRC the whole ROM each time: 28 ms of a whole save or load on quack for Emerald's 16 MB (the payload alone is 0.2-0.3 ms). Compute it once per Machine; a netplay session start and the window's slots both gain. docs/research/multiplayer.md, Latency.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "31b158b1",
+        "at": "2026-10-25T20:56:01Z",
+        "evidence": "Bus::rom_crc keeps the ROM CRC-32 per machine (rehashed if rom changes; test a_new_rom_is_hashed_afresh). Emerald gbaa-desktop --state-bench 200 on quack: whole save 2.1 ms mean (first 43 ms), load 3.6 ms, was 27.6/28.8-29.9 ms. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "multiplayer/ping-sim",
+      "title": "A variable-ping simulator between two local peers",
+      "detail": "A UDP proxy (Rust, in crates/netplay's tests or a small bin) that sits between two local processes and adds latency that varies over time (base + jitter, spikes, loss, reordering), set from a TOML profile. Check: two local instances (two clients through a local relay, or two peers) play a headless session through it under several profiles and end with a straight run's hashes. No real network or Deck needed.",
+      "check": "independent",
+      "needs": ["multiplayer/session-core"],
+      "record": {
+        "state": "done",
+        "by": "641c88f1",
+        "checker": "a39c4674",
+        "at": "2026-10-25T21:22:20Z",
+        "evidence": "Verifier subagent a39c4674 (fresh context): cargo test -p netplay (tests/ping_sim.rs: calm, wander, spiky, rough, rough with linked GBAs) and just ping-sim per profile all pass: two gbaa-pingsim peer processes over UDP through netplay::proxy match the straight run's hashes and end hash, no resync. Its one finding (end hash unchecked off multiples of 60) fixed in f9746ec; just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "multiplayer/netplay-sound",
+      "title": "Netplay window: your seat's sound",
+      "detail": "Design: docs/research/multiplayer.md, Desktop netplay. The --server window is muted: netplay::gba's machines (Machine<Pad>) drop audio. Play this player's seat's sound, paced as the single window is, without changing what the consoles compute (hashes still match). Check: a netplay window in a private cu session plays sound (cu-silent sink) and emerald-netplay-trade still passes.",
+      "check": "recorded",
+      "needs": ["multiplayer/desktop-netplay"],
+      "record": {
+        "state": "done",
+        "by": "149f70a5",
+        "at": "2026-10-25T22:33:32Z",
+        "evidence": "Netplay host window in a private cu session, sound on cu-silent (an agb ROM, 900 frames): 720384 samples delivered, 0 underruns, presents 16.7 ms; both peers end 67f2bac4e30c6082. just emerald-netplay-trade (calm) passes, end 855c352f as before. New test: a Speaker leaves the GBAs' hash unchanged. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "multiplayer/rollback-design",
+      "title": "Spike: Slippi-style rollback beside lockstep, how it feels",
+      "detail": "The owner asked (2026-10-26): see how well input-only rollback (Slippi's kind: inputs cross the wire, every peer runs every console, states stay local) works beside lockstep, without deleting lockstep. What june cares about: lockstep freezes the game when an input is later than the delay allows; june would rather see the other player teleport than see the game stutter. Rivals 2's server-sent state (SnapNet) is prior work, not the plan: a GBA is deterministic, so inputs are enough. Read docs/research/multiplayer.md first: its numbers rejected rollback for the Deck (2 Emeralds, D=6: ~8 ms mean, 11-17 ms p99 on quack, plus whole-state save/load). Revisit them: the bare payload saves in ~0.2 ms and loads in ~0.3 ms; a small rollback window (2-4 frames) plus a little input delay; no re-run when the predicted inputs were right; GGRS (crates.io) against a hand-rolled session in crates/netplay. Spike it behind a flag in crates/netplay and the desktop room. Through the ping-sim proxy, profiles for a good, a typical and a bad connection (round trips 50/100/150 ms, jitter, spikes, 2-10% loss), measure for lockstep and rollback: stalls (frames the game froze) per minute and their length, rollbacks per second, frames re-run, frame time p50/p99, and what the player sees (Emerald overworld with both players walking, and a link battle). A sync test (forced rollbacks, state hashes compared) must pass on Emerald. Leave june a one-command way to feel both side by side through a chosen profile (docs/tools/commands.md). Check: a 'Rollback' section in docs/research/multiplayer.md with the numbers and a recommendation (switch, offer both, or keep lockstep); lockstep unchanged and still the default; just check passes. Rollback on the Deck is estimated until {unit:multiplayer/deck-frame-cost} runs. Stop and report at ~3 h.",
+      "check": "recorded",
+      "needs": ["multiplayer/desktop-netplay"],
+      "record": {
+        "state": "done",
+        "by": "d2e2405e",
+        "at": "2026-10-27T22:13:50Z",
+        "evidence": "8e5521e on main: netplay::rollback + relay::rooms (plain UDP, 7374) + desktop --rollback; docs/research/multiplayer.md 'Rollback' has the numbers and the recommendation (offer both, rollback for play). Kirby AM two-player through gbaa-pingsim desktop: wander profile, lockstep froze ~40 s/min, rollback 0.05-0.7 s (delay 2-0), peers on one end hash every run. Lockstep unchanged, still default. just check passes (663 tests). Done in june's thread directly."
+      },
+      "notes": [
+        {
+          "at": "2026-10-26T23:48:26Z",
+          "by": "59f27e93",
+          "text": "june felt lockstep's 3-frame input delay and it felt awful. Target zero input delay: measure rollback at delay 0, 1 and 2, with each one's re-run frames and frame time (quack, Deck estimate). If 0 misses a budget, say which and by how much."
+        }
+      ],
+      "round": "2026-10-27T01:07:11Z"
+    },
+    {
+      "id": "multiplayer/rogue-coop",
+      "title": "Emerald Rogue co-op, built into the desktop",
+      "detail": "The owner pointed at github.com/Pokabbie/pokeemerald-rogue-assistant (2026-10-26). Read 2026-10-26: Rogue's multiplayer is not link-cable multiplayer. Rogue's ROM carries a header (at 0x08000178: handshake 20012, a pointer to RogueAssistantHeader, handshake 30035; our ~/ROMs/gba/Emerald Rogue.gba has compat version 3, what the current assistant wants; the pre-2.2.1 copy has 2). The header gives offsets into a multiplayer blob in RAM: request/current state bytes, a handshake, a shared game state, player profiles and per-player state. Each player runs their own game; the assistant (a Windows-only native Lua module loaded by RogueAssistant_mGBA.lua, which only does emu:readRange and emu:write8/16/32 once a frame) copies those blobs between host and clients over ENet (UDP, port 30025): game state from the host at 5 Hz, player state at 30 Hz (Src/Behaviours/MultiplayerBehaviour.cpp, about 600 lines; CommonBehaviour.cpp and ObservedGameMemory.cpp for the headers). Do the same natively in gbaa-desktop: read the header and blob from guest RAM each frame, write the received blobs back, carry them through gbaa-server rooms (or ENet directly). Find out whether a Rust ENet (rusty_enet or similar) is wire-compatible, so a gbaa player could join a friend on mGBA with Rogue Assistant; say so in the doc either way. Check: two desktop windows on one machine start a Rogue multiplayer session and each sees the other player (route-check or a script for the menus); docs/research/multiplayer.md's 'Rogue Assistant is unknown' replaced by how it works. Stop and report at ~3 h.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "b6d03a29",
+        "at": "2026-10-29T03:49:50Z",
+        "evidence": "gbaa-desktop --rogue ADDR (crates/desktop/src/rogue.rs) is Rogue Assistant built in: reads the ROM's compat-3 header and the RAM blob each frame, ENet via rusty_enet. rogue::tests::two_games_see_each_other: host+client over localhost UDP vs a stand-in game, each sees the other's player state and profiles. Real ROM runs with --rogue. Doc: multiplayer.md 'Rogue Assistant' replaces 'unknown'; wire-compat yes (protocol.h unchanged 1.3.17 to 1.3.18). Two-window menu check split to {unit:multiplayer/rogue-coop-menus}. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "multiplayer/lag-report",
+      "title": "Find what made Kirby netplay feel laggy over fly",
+      "detail": "june's first real session (2026-10-27): Kirby & the Amazing Mirror two-player by rollback through gbaa-server on fly.io (ewr, 37.16.3.41:7374), june's Linux desktop and a friend's Mac (interpreter build), at delay 2, the default then. Verdict: 'it works, and it's laggy as hell'. Delay is 0 now ({d:netplay-zero-input-delay-others-may-teleport}), so play again at delay 0 and find what's bad, not cover it with delay: hitches when re-runs overrun the CPU budget (both linked Kirbys cost 6.8 ms a frame interpreted, room for about one re-run a frame), time sync's held-back frames, catch-up re-runs after a long gap (the window is 300 frames now), the Mac's frame times, the route to ewr. Make the window report it: on exit and in the menu, the end lines a headless run prints, plus the round trip and how far ahead or behind the other peer runs, so a playtest leaves numbers on both sides. Then one playtest with june.",
+      "check": "recorded",
+      "needs": ["multiplayer/rollback-design", "multiplayer/recompiled-netplay-mac"],
+      "priority": 3,
+      "notes": [
+        {
+          "at": "2026-10-29T03:35:08Z",
+          "by": "600a9d3e",
+          "text": "june 2026-10-28: this was meant to run AFTER netplay moved onto recompiled code. The 23:00 run measured the interpreter build; redo it on the v1 recompiled build (both peers), at delay 0, once the Mac half lands."
+        },
+        {
+          "at": "2026-10-28T03:58:46Z",
+          "by": "da8501f5",
+          "text": "Fly is stopped between playtests: just fly-up for the playtest, just fly-down after."
+        }
+      ]
+    },
+    {
+      "id": "multiplayer/recompiled-netplay",
+      "title": "Netplay on recompiled code, for rollback's CPU headroom",
+      "detail": "Netplay runs every console in the interpreter: desktop::run sends --server to room::run before it looks at the recompiled code (crates/desktop/src/lib.rs, run), and netplay::gba's build ID says 'gbaa gba interp', since a peer running recompiled code would desync from one interpreting. So a recompiled game (out/<game>/, gbaa-<game>) plays online no faster than gbaa-desktop. Rollback is bound by CPU: two linked Kirbys (Amazing Mirror) cost 6.8 ms a frame on quack, room for about one frame run again a frame; delay 0 hitches on a far connection and the Deck has no room at all. Run a session's consoles on the recompiled code when the binary has it, with a build ID that names the recompiled build (every peer must run the same one), snapshots and restores unchanged (the machine payload). Measure Kirby's frame cost and re-run headroom recompiled against interpreted, on quack and on june's Mac, and run the rollback checks (gbaa-pingsim desktop, wander and rough, delay 0 and 2) on the recompiled build: peers on one end hash. Check: the numbers in docs/research/multiplayer.md ('Rollback'), the Mac package (out/macos/gbaa-netplay-mac.zip, docs/tools/commands.md) built from the recompiled Amazing Mirror, just check passes.",
+      "check": "recorded",
+      "needs": ["multiplayer/rollback-design"],
+      "priority": 5,
+      "record": {
+        "state": "done",
+        "by": "7f382db5",
+        "at": "2026-10-29T02:55:39Z",
+        "evidence": "Netplay runs a v1 recompiled build's consoles on its code (Gba::with_code, build ID 'gbaa rc'+code-shape hash, snapshots unchanged); a structured build falls back to the interpreter (23% compiled in netplay, slower). Kirby 2P on quack, 3600 frames paced via gbaa-pingsim desktop --exe: p50 v1 3.4-3.6 ms vs interp 4.8-5.0, ~1.4x re-run headroom; wander and rough at delay 0 and 2, both peers on one end hash every run. Numbers in docs/research/multiplayer.md 'On recompiled code'. just check passes after merging main. Mac half split to the gate {unit:multiplayer/recompiled-netplay-mac} (no Mac here).",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "multiplayer/udp-resend-backoff",
+      "title": "Back off the rollback transport's resends",
+      "detail": "A 5-minute soak of Kirby rollback through fly (2026-10-27, both peers on quack, delay 2) resent 143k and 171k datagrams, against 52-386 in each 90-second run before it, and its 'waits' counter reached 508k (410 in 90 s). Players saw nothing (two freezes, both at the start), but on a worse home connection that traffic could hurt. Likely cause, unconfirmed: netplay::udp's reliable chunks (the start state, Msg::Hash every 60 frames) resend every RTO with no backoff, and by Karn's rule a resent chunk's ack gives no sample, so once the RTO (clamped at 20 ms) falls under the real round trip every chunk is resent before its ack and the RTO never grows. Reproduce (a long run through gbaa-pingsim relay with jitter, or fly), find the cause, fix it (e.g. double the RTO on each timeout, as TCP does), and show a 10-minute soak resends about what the 90-second runs do per minute. Check: the soak's end lines before and after in docs/research/multiplayer.md, a test in crates/netplay, just check passes.",
+      "check": "recorded",
+      "needs": ["multiplayer/rollback-design"],
+      "record": {
+        "state": "done",
+        "by": "4a9f2349",
+        "at": "2026-10-29T04:26:17Z",
+        "evidence": "netplay::udp now doubles its resend timeout on each timeout (to 1 s, reset by a Karn-valid sample) and acks selectively (64-chunk bitmap). Tests in crates/netplay/src/tests.rs: silent peer 64 -> 6 resends in 1.3 s; 400 KB over lossy proxy 393/140 lost -> 85/81 (both fail on the old code). 10-min Kirby soaks, old and new side by side through fly: old 84/156 resent, new 51/86 (5-9/min, under the 90-s runs' 35-257/min); proxy wander/rough old 440-1216. End lines in docs/research/multiplayer.md. The 143k storm itself was NOT reproduced (fly, proxy, joiner SIGSTOPped 10 s x3). just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T04:26:19Z",
+          "by": "4a9f2349",
+          "text": "The 143k-resend fly soak wasn't reproduced: 10 min through fly and the proxy (wander, rough) and a joiner frozen 10 s x3 all resent normally on the old build. If a report file shows thousands resent again, record what the session did (menu open, slow start, swap)."
+        }
+      ]
+    },
+    {
+      "id": "multiplayer/fly-lockstep-quic",
+      "title": "Lockstep's QUIC relay times out on fly.io",
+      "detail": "Through the deployed gbaa-server on fly.io (37.16.3.41:7373, QUIC, cert from just fly-cert), lockstep never starts (2026-10-27): two gbaa-desktop peers end at frame 0 with 'connection lost' and 'player 1 left', and the toy game (gbaa-server host 37.16.3.41:7373 CERT, then join) gets a room code for the host but the join times out. The plain-UDP rooms beside it (7374, rollback) work through the same machine. Lockstep had only been tested locally before. Low priority while rollback is what june plays. Find whether it's fly's UDP routing (fly-global-services, the QUIC server's replies' source address, packet sizes) or the relay, fix it, and pass the toy game and a Kirby lockstep session through fly. Check: both through fly, the cause in docs/research/multiplayer.md ('Playing a friend'), just check passes.",
+      "check": "recorded",
+      "needs": ["multiplayer/play-gate"],
+      "record": {
+        "state": "dropped",
+        "why": "june (2026-10-27): lockstep and QUIC are being removed ({unit:multiplayer/remove-lockstep-quic}).",
+        "by": "da8501f5",
+        "at": "2026-10-28T03:51:25Z"
+      }
+    },
+    {
+      "id": "multiplayer/rerun-no-draw",
+      "title": "Skip drawing on rollback's re-run frames",
+      "detail": "Rollback re-runs frames quietly ({d:netplay-zero-input-delay-others-may-teleport}): the speakers are muted (netplay::gba quiet) but the PPU likely still draws every scanline, and the picture isn't console state. Find whether re-run frames draw; if they do, skip drawing on them without changing what the consoles compute (hashes must still match a drawn run's: e.g. Kirby through gbaa-pingsim at delay 0). Measure a re-run frame's cost before and after, interpreted and recompiled. Check: just check, and a rollback-feel headless run's end hashes match.",
+      "needs": ["multiplayer/rollback-design"],
+      "priority": 4,
+      "record": {
+        "state": "done",
+        "by": "58689d16",
+        "at": "2026-10-29T02:52:48Z",
+        "evidence": "Re-run frames skip the PPU's line drawing (Ppu::draw off; affine refs still advance); snapshots/hash leave the picture out. Kirby frame 3000 x600 re-run: interpreted drawn ~3.4 ms -> undrawn ~2.8 ms; recompiled drawn ~1.75 ms -> undrawn ~1.53 ms (bench fails if they compute differently). After merging main: just check passes; rollback-feel wander headless 2400f Kirby multiplayer route: 12/18 rollbacks, 62/88 frames re-run, both seats end c8bf6b9aff26ff31.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T02:55:45Z",
+          "by": "7f382db5",
+          "text": "recompiled-netplay made netplay::gba::Gba generic (Gba<P: Seat>): a seat's Pad is m.platform.pad_mut() now, so merging this branch, quiet() becomes m.platform.pad_mut().quiet = on beside m.ppu.draw = !on. Rest of gba.rs should merge."
+        },
+        {
+          "at": "2026-10-28T07:52:28Z",
+          "by": "b045a6a4",
+          "text": "Done on branch, check passes, rollback-feel wander 1500f Kirby: 12 rollbacks, end hashes match. Interp Kirby gameplay: drawn ~3.4ms, undrawn ~2.8ms. Left: recompiled number (just recompile Kirby, run-recompiled out/kirby-the-amazing-mirror ... --rerun-bench 600), then just done."
+        }
+      ]
+    },
+    {
+      "id": "multiplayer/rollback-trade-check",
+      "title": "Emerald's netplay trade check, by rollback",
+      "detail": "just emerald-netplay-trade (crates/emerald-save/src/bin/emerald-trade.rs --netplay) plays by --lockstep over QUIC, pinned there when rollback became the default ({d:netplay-zero-input-delay-others-may-teleport}). Make it play by rollback at delay 0 through a local server's plain-UDP rooms (as gbaa-pingsim desktop starts one), the presses timed for no input delay, and keep it passing: both saves hold the trade, both peers end on one hash, no desync. Check: just emerald-netplay-trade calm and rough.",
+      "needs": ["multiplayer/rollback-design"],
+      "priority": 2,
+      "record": {
+        "state": "done",
+        "by": "8b70833b",
+        "at": "2026-10-29T03:13:11Z",
+        "evidence": "emerald-trade --netplay now plays by rollback at delay 0 through in-process plain-UDP rooms (relay::rooms::serve), no --lockstep/--cert; fails on desync too. quack 2026-10-28: just emerald-netplay-trade calm pass in 160 s, rough pass in 128 s (~20% lost); both saves hold the trade, both peers end 35d6b1be9c71e552, no resync/desync. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "multiplayer/remove-lockstep-quic",
+      "title": "Remove lockstep and the QUIC relay",
+      "detail": "june ({d:netplay-lockstep-and-quic-are-removed-not-parked}): rollback over plain UDP is the only netplay. Remove lockstep (netplay::session's lockstep, netplay::relay, the desktop's --lockstep and --cert), the QUIC server (crates/relay's quinn/tokio/TLS, cert files, port 7373; the plain-UDP rooms move to the server's one port, the desktop's ADDR port meaning it), and their recipes and checks (relay-sim, emerald-netplay's lockstep run, rollback-feel's MODE, fly-cert). Keep what rollback uses (Msg, Config, the start, hashes, Snapshot, netplay::sim tests ported to rollback). Update deploy/fly (no cert; whether the volume is still needed: say so, june pays for it), docs/research/multiplayer.md and docs/tools/commands.md. Check: just check, just emerald-netplay-trade, a rollback-feel headless run, and the toy game through fly.",
+      "needs": ["multiplayer/rollback-trade-check"],
+      "priority": 1,
+      "record": {
+        "state": "done",
+        "by": "992dd380",
+        "at": "2026-10-29T03:41:22Z",
+        "evidence": "Lockstep (Session, netplay::relay, --lockstep/--cert) and QUIC (quinn/tokio/rcgen, client, toy, cert, 7373) removed; gbaa-server = rooms on 7374. just check passes after merging main. emerald-netplay-trade calm: pass, both end 35d6b1be. emerald-netplay ported to rollback: 70/70 hashes, no desync. rollback-feel wander headless 1200 frames: one end hash, 0 freezes. room-sim calm local and --server 37.16.3.41 (fly): pass. Fly still runs the old build (deploy refused by permissions): {unit:multiplayer/fly-redeploy-rooms}; volume unneeded.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "multiplayer/menu-netplay",
+      "title": "Host and join netplay from the menu",
+      "detail": "june (2026-10-28), low priority: a multiplayer page in the window's menu (desktop::menu, F10 or Start+Select), so nobody needs --server/--host/--join on the command line. Host a room (the code shown big enough to read out), join by typing a code (keyboard and pad), the server address (default the fly one, editable, remembered), leave the room. While playing: the room, the other player's seat, round trip, how far ahead or behind, rollbacks and frames run again (the numbers {unit:multiplayer/lag-report} adds). Rollback only ({d:netplay-zero-input-delay-others-may-teleport}). Check: two windows in a private cu session host and join through a local gbaa-server from the menu alone, end on one hash; just check.",
+      "needs": ["multiplayer/rollback-design"],
+      "record": {
+        "state": "done",
+        "by": "99303829",
+        "at": "2026-10-29T04:12:19Z",
+        "evidence": "Menu Netplay page (desktop::menu, room::Ask/State, lib::run_window). Two Kirby windows in a private cu session, local gbaa-server: hosted (code shown big) and joined by typing the code, from the menus alone; both ended 3600 frames on end hash 07e78b00951f6677, no desync; the in-session page showed seats, round trip 13 ms, lead, rollbacks, reruns. just check passes after merging main; menu tests cover pad/keyboard code entry, host, join, leave.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "multiplayer/recompiled-netplay-mac",
+      "title": "june plays recompiled Kirby netplay on the Mac, with numbers",
+      "kind": "gate",
+      "detail": "The Mac half of {unit:multiplayer/recompiled-netplay}, which no factory machine can do. On june's Mac: just macos-app 'Kirby & The Amazing Mirror.gba' '' --no-structured (a v1 build: netplay runs only those on their code), zip the .app as out/macos/gbaa-netplay-mac.zip for the friend. Headless numbers: just rollback-feel wander rollback ROM --exe the .app's binary --headless --paced --frames 3600 --input1/--input2 as docs/research/multiplayer.md 'On recompiled code', once as is and once with --interp; add the Mac's p50/p99 to that table. Then a session at delay 0 against quack's v1 build (both peers must run the same build).",
+      "record": {
+        "state": "parked",
+        "why": "june parked it on 2026-10-31; unpark when she's at the Mac for the netplay session",
+        "by": "24176b67",
+        "at": "2026-11-01T00:32:18Z"
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T03:12:32Z",
+          "by": "b4937579",
+          "text": "Bring back both report files from the delay-0 session: each window keeps its end lines in $GBAA_DATA/netplay/<time>-<room>-p<seat>.txt (frames over 16.7 ms, round trip, lead), and the menu shows them. Interpreter on quack, wander: 3-4% of frames over budget."
+        }
+      ]
+    },
+    {
+      "id": "multiplayer/netplay-guest-stacks",
+      "title": "Structured builds in netplay: a guest stack per console",
+      "detail": "Netplay's cable ends each console's turn every scanline and compiled code unwinds to the dispatcher; a structured build resumed past a function's entry runs interpreted to the next key, so Kirby's structured build ran 23% compiled in netplay (72% alone) and slower than the interpreter, and room.rs now plays a structured build interpreted (docs/research/multiplayer.md, 'On recompiled code'). Give each console a guest stack (crates/desktop/src/coro.rs) that switches out at the hub's deadline, dropped at each frame's end so rollback's restores stay exact; then drop the fallback. Check: gbaa-pingsim desktop wander delay 0 and 2 on Kirby's structured build, peers on one hash, frame cost against v1's 3.4 ms.",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "157c3b36",
+        "at": "2026-10-29T19:31:01Z",
+        "evidence": "gbaa-pingsim desktop on Kirby's structured build, final code (just check passes after merging main): wander d0 peers both end a9e16c05 (= v1 build's hash), 48% compiled, p50 4.6-4.7 ms; wander d2 both end 00fdb075 (= v1), p50 4.3-4.8 ms; calm d2 71% compiled, 3.3 ms. v1 unwinding 3.4-3.6 ms; old structured unwinding 5.7 ms. Fallback dropped; rest filed as {unit:multiplayer/netplay-compiled-after-restore}.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T05:03:35Z",
+          "by": "432c8b65",
+          "text": "coro.rs's YIELDER is one thread-local, set only when a guest starts: with a guest per console alternating on one thread, a resumed guest would suspend through the other's yielder. Set it on every resume (and clear it after) in Guest::frame before adding a second guest."
+        }
+      ]
+    },
+    {
+      "id": "multiplayer/netplay-compiled-after-restore",
+      "title": "Netplay: compiled code again after a rollback's restore",
+      "detail": "A restore ends each console's guest stack; the new one resumes the functions it was in block-timed (exact: Kirby's structured build ends on v1's hash), but a function that never returns (the main loop) stays block-timed for good: Kirby structured at wander 48% compiled, p50 4.4-4.6 ms, against 71% and 3.3 ms with no rollbacks, and v1's 3.5 ms. Fix: keep each guest's stack in the snapshot and restore it, or print such functions v1 (every block a key). Check: gbaa-pingsim desktop wander delay 0 and 2 on Kirby's structured build, peers on one hash, compiled share near 71%, frame cost at or under v1's (docs/research/multiplayer.md, 'On recompiled code').",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "priority": 50,
+      "minMinutes": 150,
+      "record": {
+        "state": "done",
+        "by": "466a00e1",
+        "at": "2026-10-31T05:01:36Z",
+        "evidence": "Functions that never return (Kirby: GameLoop, AgbMain, entry) printed v1 (V1::NeverReturns). gbaa-pingsim desktop wander, Kirby structured: exact d0 70.7% compiled (was 48%), p50 3.6 ms, both peers a9e16c05 (= v1); d2 70.7%, 3.6-3.7 ms, 00fdb075 (= v1); v1 3.4-3.7 ms. Instant (after PR 74): 69.4%, 3.4-3.6 ms vs v1 3.5-3.9 ms. just check passes; fresh-subagent review, no bug. Branch t3/netplay-compiled-after-restore."
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T05:01:37Z",
+          "by": "466a00e1",
+          "text": "Instant builds: structured and v1 Kirby end on different hashes (41fb45c8 vs 2c3e0981 at wander d0), exact ones agree. No split (the build ID refuses a mix), but instant structured and v1 aren't tick-equal."
+        },
+        {
+          "at": "2026-10-30T03:40:14Z",
+          "by": "bed2b3a1",
+          "text": "v1 is hit too: june's internet playtest 2026-10-29 on Kirby's v1 build (quack, seat 1) ran 63-75% compiled, p50 5.7-7.5 ms, p99 24-31 ms, thousands of frames over 16.7 ms (reports in quack's $GBAA_DATA/netplay/, rooms MNHBLP, JSRJ99, RAHQUN). So v1 is no floor; check v1 too."
+        }
+      ],
+      "round": "2026-10-29T21:07:58Z"
+    },
+    {
+      "id": "multiplayer/kirby-ram-code",
+      "title": "Recompile the code Kirby copies to RAM (27% of its cycles)",
+      "detail": "A v1 Kirby & the Amazing Mirror build runs 28% of its guest cycles in the interpreter fallback, 27 points of them code it runs from RAM that codegen doesn't cover (4 overlays found), alone or in netplay: the interpreter is most of a recompiled frame's time, and what caps rollback's re-run headroom at about 1.4x the interpreter's (docs/research/multiplayer.md, 'On recompiled code'). Find what Kirby copies where (the fallback's seeds, the RAM keys) and recompile it as overlays. Check: just recompile-check on Kirby, its compiled share, and a netplay frame's cost.",
+      "uses": ["heavy"],
+      "minMinutes": 180,
+      "notes": [
+        {
+          "at": "2026-10-29T21:09:28Z",
+          "by": "641f35dd",
+          "text": "Start: overlays() (analysis discovery.rs) only takes BIOS copies (Discovery::copies) into IWRAM; Kirby's 27 pts likely come from its own memcpy or EWRAM. No per-PC split of interpreted_ram_cycles exists (runtime dispatch.rs stats): add one first to find the hot RAM ranges."
+        }
+      ],
+      "round": "2026-10-29T05:07:50Z"
+    },
+    {
+      "id": "multiplayer/fly-redeploy-rooms",
+      "title": "Redeploy fly's gbaa-server as rooms only, no volume",
+      "detail": "{unit:multiplayer/remove-lockstep-quic} changed deploy/fly (rooms alone on 7374, no QUIC on 7373, no [mounts]) but an agent session's permissions refused `just fly-deploy` (a production deploy), so fly still runs the QUIC build; its 7374 rooms are the same protocol, so play works meanwhile. Do: just fly-up; just fly-deploy (if fly refuses because the machine still mounts gbaa_data, destroy the machine and deploy again: the IPv4 is the app's and stays); just room-sim calm --server 37.16.3.41; just fly-down. Then the volume gbaa_data is unused: june's to destroy (fly volumes destroy), it's billed.",
+      "check": "recorded",
+      "needs": ["multiplayer/server-version-cutoff"]
+    },
+    {
+      "id": "multiplayer/rogue-coop-menus",
+      "title": "Rogue co-op: two games meet through the PokeConnect menu",
+      "detail": "The end-to-end check split from {unit:multiplayer/rogue-coop}: two gbaa-desktop runs on one machine (headless is fine: --headless --rogue 127.0.0.1 --input), one picking Host and one Join from the PokeConnect clerk in Rogue's hub (data/maps/Rogue_Interior_PokeConnect/scripts.pory), and each draws the other player. Start: ~/ROMs/gba/Emerald Rogue.sav reaches the hub by frame ~2000 (start@400, a every 60 frames). Find the walk to PokeConnect (a short --input script, or a Rust check in route-check style), copy the .sav for the second player (each needs its own), dump both screens once connected and show the other player sprite. Then try one side on mGBA + Rogue Assistant if a Windows box is at hand, or C ENet 1.3.17 against rusty_enet (this session's build of downloaded C was refused).",
+      "needs": ["multiplayer/rogue-coop"],
+      "uses": ["heavy"],
+      "minMinutes": 120,
+      "round": "2026-10-29T05:08:11Z"
+    },
+    {
+      "id": "multiplayer/ping-sim-rough-flaky",
+      "title": "Netplay ping_sim rough test fails under just check's load",
+      "record": {
+        "state": "done",
+        "by": "a60197c1",
+        "at": "2026-10-29T05:37:23Z",
+        "evidence": "Cause reproduced: under 40 busy loops a pingsim peer's fixed 1.5 s linger ended before the slower peer's last inputs arrived, so its end hash differed (1 of 3 loaded runs). Now peers linger until Rollback::settled() (+250 ms), --linger-ms a 20 s cap; ping_sim passed 5 of 5 loaded runs; just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T05:19:08Z",
+          "by": "407980d2",
+          "text": "Failed twice in just check on quack 2026-10-29 (netplay --test ping_sim, test rough), passed alone and on a third check. Timing-sensitive under parallel test load."
+        }
+      ]
+    },
+    {
+      "id": "multiplayer/menu-no-pause",
+      "title": "Netplay: opening the menu doesn't freeze the others",
+      "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): opening the menu (Start+Select) to change controls froze both players, so changing a dead zone meant 'everyone, the game is going to freeze, don't freak out' (room.rs: 'the menu pauses (the other player waits)'). In netplay the menu should cover only your window: the others keep playing, and your seat's pad reads as released while the menu is open. Check: two windows in a private cu session through a local gbaa-server; seat 1 opens the menu and changes its dead zone while seat 0 plays on, frames advance on both, both end on one hash; just check.",
+      "record": {
+        "state": "done",
+        "by": "183c3842",
+        "at": "2026-10-31T20:11:21Z",
+        "evidence": "Private cu session, local gbaa-server, two Kirby windows (--frames 3600 --hash): player 2 opened the menu at ~frame 330 (Paused shows 'off (netplay)'), went to Controls and stepped the stick dead zone 40->45% (settings.conf: deadzone = 45), menu left open to the end, while player 1 played a press script. The menu's report advanced 331->840 frames under it; both peers ended frame 3600 on end hash cce0284882481fd5, frozen 0 times each, no desync. New menu test a_netplay_session_is_never_paused; just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "multiplayer/menu-dropout",
+      "title": "Netplay: a player dropped out when the other paused",
+      "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly), about 5:00 in: june opened the controls menu, Athena's game froze, 'oh no, it crashed', then she was back on her own a few seconds later. Later, unpausing too early showed 'the rollback thing… but I'm not crashing'. Not seen again. Reproduce through gbaa-pingsim with jitter: menu open and close on each seat, quickly, both at once; find whether it was a resync, a long catch-up of frames run again, or a real crash or reset, and fix it. {unit:multiplayer/menu-no-pause} may remove the path; check the symptom is gone with the menu open either way. Check: the repro passes and both seats end on one hash; just check.",
+      "needs": ["multiplayer/menu-no-pause"],
+      "record": {
+        "state": "done",
+        "by": "c1c382ea",
+        "at": "2026-10-31T21:03:18Z",
+        "evidence": "Cause: the old menu pause stopped that peer pumping, so the other ran 300 frames ahead and froze, then after 15 s ended the session and played alone. Repro by SIGSTOP on the host via gbaa-pingsim desktop (Kirby, wander): 8 s gave frozen 4500 ms, deepest rollback 300; 22 s dropped both ('the other player stopped answering'). Gone since {unit:multiplayer/menu-no-pause}; new --menu1/--menu2 (gbaa-desktop --menu) open each seat's menu quickly, at once and apart: wander, rough, spiky 3000 frames, frozen 0, both seats one hash (7a288ae682eb11f0 wander+rough, again after merging main). just check passes after merge.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "multiplayer/four-seats",
+      "title": "Netplay rooms for up to four players (Kirby's four)",
+      "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): a third player joining got 'The session ended. The room is full.'; rooms have two seats (room.rs). Kirby & the Amazing Mirror links four GBAs on the multiplayer-mode cable (katam's gKirbys holds four Kirbys), and june wants all four in a room. Let 2 to 4 players join a room (the host starts once everyone's in, or the cable sees whoever is there); confirm runtime::link runs four machines on one bus. Every peer runs every console: measure four Kirbys' frame cost and re-run headroom, interpreted and recompiled, on quack and the Deck, in docs/research/multiplayer.md. Check: three and then four windows in a private cu session through a local gbaa-server get into Kirby's multiplayer, each shows its own seat, all end on one hash; a headless four-peer pingsim run; just check.",
+      "notes": [
+        {
+          "at": "2026-11-03T03:49:49Z",
+          "by": "87c063f4",
+          "text": "Git move, 2026-11-02: earlier work is only in git@github.com:junewunder/gbaa-private.git (branch unit/multiplayer/four-seats, tip e15eea92). Replaying it on main conflicts in crates/desktop/src/room.rs, so it wasn't moved; bring it over first."
+        },
+        {
+          "at": "2026-11-01T00:40:36Z",
+          "by": "8a55afe1",
+          "text": "Peer-leaves landed changes in the same files: udp.rs (BYE, gone(), leave()), rooms.rs (L/G/Q tags, per-seat heard, began, IDLE now 10 s per player), room.rs (State::Playing.left, solo after a leave), gba.rs (Gba::unplug). Expect conflicts on merge."
+        },
+        {
+          "at": "2026-10-31T23:50:02Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - docs/research/multiplayer.md, \"Four players\" section (the paragraph ending \"Not measured there: june's OK is needed each time ({unit:multiplayer/four-kirbys-deck})\"): the card asks for four Kirbys' frame cost …"
+        }
+      ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-10-31T23:50:02Z",
+        "findings": "- docs/research/multiplayer.md, \"Four players\" section (the paragraph ending \"Not measured there: june's OK is needed each time ({unit:multiplayer/four-kirbys-deck})\"): the card asks for four Kirbys' frame cost and re-run headroom, both interpreted and recompiled, measured on quack AND on the Deck. Only quack was measured. The Deck figure (about 14-18 ms a frame) is extrapolated from the quack numbers using a 2-2.5x slowdown factor, and the actual measurement was moved into a separate unit ({unit:multiplayer/four-kirbys-deck}) that the card didn't ask for. Only the owner can unblock this, because running on the Deck needs june's OK each time. The next session should ask june for that OK, then run the same `just rollback-feel ... --headless --paced --players 4` runs on the Deck, recompiled and interpreted, calm/2 and wander/0. Add the measured rows to the table, replace the estimate with them, and record the result in the unit's evidence. If june decides the Deck runs can stay as a follow-up, that decision should be written on the card rather than the split being made by the session."
+      },
+      "round": "2026-10-31T22:52:49Z"
+    },
+    {
+      "id": "multiplayer/peer-leaves",
+      "title": "Netplay: when a player leaves, the others are told",
+      "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly) and the session before it: quitting one window left the other stuck, then it crashed and reset; and after june quit and hosted again, Athena's window was still in the old room ('am I in the other room still?'). When a player quits or stops answering, the others should say so ('Athena left the room') and keep their own console running with the cable unplugged, as pulling a real cable would (the game shows its own link error); the server closes a room whose players are gone. Check: two windows in a private cu session, one quits or is SIGSTOPped, the other shows the message within a few seconds and keeps running; the server lists no room; just check.",
+      "record": {
+        "state": "done",
+        "by": "8a55afe1",
+        "at": "2026-11-01T00:40:34Z",
+        "evidence": "Private cu session on quack, Kirby, local gbaa-server, two windows: joiner SIGSTOPped, host toast+title 'Player 2 stopped answering and left the room' 3.1 s later, game kept moving (two shots differ); joiner resumed, 'Player 1 left the room' in 0.06 s; host window closed, joiner told in <10 ms and played on; gbaa-server --rooms: 0 rooms open each time. New tests in relay and netplay (rooms close, goodbye/quiet, unplugged Gba). just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "multiplayer/join-without-restart",
+      "title": "Join netplay without restarting the game",
+      "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): joining a room restarted the game ('it has to restart the game'), and june wants it fixed (2026-10-29). A GBA restarts nothing: you plug the cable in and pick multiplayer in the game, so this one is ours. room.rs already sends each player's own console state at the start: find why the session boots fresh rather than starting from each window's running state (link port state, RTC, save, build ID?), and start from the running states. If something truly stands in the way, ask june with what it would take rather than dropping it. Check: two windows each mid-game join a room, neither resets, both reach Kirby's multiplayer, both end on one hash; just check.",
+      "minMinutes": 120,
+      "notes": [
+        {
+          "at": "2026-11-01T01:35:00Z",
+          "by": "6f480fa6",
+          "text": "Cause: lib.rs run_window ends the solo run() and room::run builds Gba::with_code(rom, &[None; SEATS]..) fresh: no start state. Fix: solo run hands back its machine state; pass it as this seat's Some(state) to Gba::with_code (and resume alone from the session's end state)."
+        }
+      ],
+      "round": "2026-11-01T01:34:24Z"
+    },
+    {
+      "id": "multiplayer/connected-mark",
+      "title": "Netplay: show that you're connected",
+      "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): Athena, 'there probably should be some indicator that you're connected correctly.' While in a room, show a small mark that doesn't cover the play area much: connected, waiting for players, or lost, and how many players. The Netplay menu page has the numbers ({unit:multiplayer/menu-netplay}); this is a mark visible while playing. Check: screenshots of each state from a private cu session; just check.",
+      "record": {
+        "state": "done",
+        "by": "45b774b2",
+        "at": "2026-11-01T01:41:53Z",
+        "evidence": "Private cu session on quack (2026-10-31), Kirby through a local gbaa-server: host window shows 'Waiting for players 1/2' (amber), both windows 'Connected 2/2' (green), host 'Not hearing from them 2/2' 1.5 s after SIGSTOP of the joiner, then 'Lost: playing alone 1/2' (red) after it was taken to have left. Shots in $GBAA_DATA/netplay/connected-mark/{waiting,connected,quiet,lost}.png. Connecting covered by menu test a_room_shows_its_mark_over_the_game. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "multiplayer/overlay-hides-menu",
+      "title": "Netplay: the overlay hides the bottom of the menu",
+      "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): on the Deck, something netplay draws covered the bottom of the Controls page, where the dead zone is ('if you can see the bottom, because the netplay thing'); Athena found tapping the screen hid it. Find what it is (the room bar or the on-screen keyboard's space), and keep the whole menu visible while in a room. Check: a 1280x800 screenshot in a room, Controls page scrolled to its last row, nothing over it; just check.",
+      "minMinutes": 25,
+      "record": {
+        "state": "claimed",
+        "by": "91aceec8",
+        "session": "91aceec8-3519-4031-888d-a97e8641c07d",
+        "host": "quack",
+        "pid": 379246,
+        "start": "13117048",
+        "at": "2026-11-01T01:51:04Z",
+        "branch": "unit/multiplayer/overlay-hides-menu",
+        "resumed": "d86c5e5f",
+        "prevSession": "d86c5e5f-ef34-492b-99c5-b71936254f7e",
+        "pushed": true,
+        "beats": true,
+        "handedBack": "2026-11-01T01:51:19Z",
+        "ended": "2026-11-01T01:51:27Z"
+      },
+      "notes": [
+        {
+          "at": "2026-11-01T01:50:51Z",
+          "by": "d86c5e5f",
+          "text": "main merged into branch (merge commit on top of 57fcb251), no conflicts. just check started but cut by stop time again (tests were passing). Left: just check (~10+ min, start early), then done with the cu-shot evidence."
+        },
+        {
+          "at": "2026-11-01T01:49:12Z",
+          "by": "c52caa3f",
+          "text": "Fix committed on branch (57fcb251): netplay report box covered Main page's bottom rows; now menu fits above it. 1280x800 cu shots in a room: Main + Controls last rows clear. Left: just check (cut by stop), merge main, done. Steam OSK not seen here."
+        }
+      ],
+      "round": "2026-11-01T01:40:21Z"
+    },
+    {
+      "id": "multiplayer/rollback-feel-sim",
+      "title": "Rollback: a sim test of what players feel, then fix it",
+      "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): both players noticed small stutters ('a little framey sometimes', 'skipped frames'); it played well otherwise. ping-sim checks hashes, not feel. Build a sim that plays Kirby two-player (four with {unit:multiplayer/four-seats}) through ping-sim profiles like home Wi-Fi to fly, and measures what each window shows: frames presented late, doubled or skipped, rollback depth, frames run again, time-sync holds, the other Kirby's jumps. Put budgets on them in a test, then fix the worst offenders. Beside {unit:multiplayer/lag-report}, which needs a real session's numbers. june's view: rollback of whole consoles has a ceiling; the real fix for this game is a multiplayer mod on its decomp (docs/ideas.md). Check: before and after numbers in docs/research/multiplayer.md; the budget test in just check.",
+      "minMinutes": 150,
+      "round": "2026-11-01T01:44:42Z"
+    },
+    {
+      "id": "multiplayer/other-seat-sound",
+      "title": "Kirby netplay: should you hear the other Kirbys?",
+      "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): Athena couldn't hear june's Kirby. The window plays your own console's sound, as your own GBA would, so whether the other Kirbys make sound is the game's choice. But frames run again are muted (netplay::gba quiet), and those are just the frames where the other player's input arrived late, so sounds the other player caused may be dropped while yours play. Find out: in a two-GBA run with no rollback (the local link window, or mGBA's), does Kirby play the other Kirby's sounds when it's on screen? Then in netplay, count sounds lost to frames run again. If they're lost, make them play; if the game is silent there too, record that. Check: the answer with evidence in docs/research/multiplayer.md, and the fix's test if any; just check.",
+      "minMinutes": 120,
+      "notes": [
+        {
+          "at": "2026-11-01T01:45:53Z",
+          "by": "61fe8d7b",
+          "text": "Start: crates/netplay/src/gba.rs Pad::quiet mutes re-run frames; rollback.rs ~line 337. Measure in a test: gba() console, two seats, Speaker on seat 0, menu presses from docs/research/multiplayer.md (Kirby rollback-feel inputs), seat 2 jumps vs idle; compare seat 0 audio."
+        }
+      ],
+      "round": "2026-11-01T01:45:09Z"
+    },
+    {
+      "id": "multiplayer/link-cable-survey",
+      "title": "How the link cable works, and which games netplay covers",
+      "detail": "june's question (2026-10-29): can netplay be a generic network replacement for any game's link cable, and does the cable assume no lag? Write up for june, in docs/research/multiplayer.md: each SIO mode, its timing (how fast a transfer completes, how many frames a game waits before it calls it a link error), why we run every console on every peer instead of sending cable bytes, and which modes runtime::link covers today (multiplayer mode; normal 8/32-bit, multiboot single-pak, UART, JOY bus, the wireless adapter). Then list popular link games by mode (Four Swords, Mario Kart Super Circuit, Pokemon, Bomberman, single-pak multiboot games), run the ones june has ROMs for through two local peers headless, and say which work. File a unit for each gap worth closing. Check: the section, the table of games tried, the units.",
+      "minMinutes": 150,
+      "notes": [
+        {
+          "at": "2026-11-01T01:47:03Z",
+          "by": "3013558b",
+          "text": "Hub: runtime/src/link.rs, multiplayer mode only. Peers: just rollback-feel calm ROM --headless --paced --frames N --input1/2; end line counts transfers. --dump-dir goes to both seats (collides): add --dump-dir1/2 in gbaa-pingsim desktop(). quack: Emerald, Kirby AM, Kirby NiDL."
+        }
+      ],
+      "round": "2026-11-01T01:46:07Z"
+    },
+    {
+      "id": "multiplayer/desync-report",
+      "title": "Netplay: record and show desyncs",
+      "detail": "rollback.rs records differing hashes as desyncs, but room.rs only prints them to stdout at the end: not in the report file in $GBAA_DATA/netplay/, not in the window. june's 2026-10-29 playtest (room MNHBLP) looked like one and couldn't be confirmed. Put each desync frame in the end lines and report file, and show a notice in the window (and the menu's netplay lines) when one is found. Check: a session with a forced desync (e.g. one peer's input altered in a test) shows it in the window state, the end lines and the kept report.",
+      "check": "recorded",
+      "record": {
+        "state": "claimed",
+        "by": "9afcc2dd",
+        "session": "9afcc2dd-3298-4593-9c7c-df1eee38bdfd",
+        "host": "quack",
+        "pid": 379627,
+        "start": "13117516",
+        "at": "2026-11-01T01:47:18Z",
+        "branch": "unit/multiplayer/desync-report",
+        "beats": true,
+        "pushed": true,
+        "ended": "2026-11-01T01:57:37Z"
+      },
+      "notes": [
+        {
+          "at": "2026-11-01T01:57:27Z",
+          "by": "9afcc2dd",
+          "text": "Code done on branch (commit unchecked): skew, end line, report, toast/mark. Headless forced desync passes: gbaa-pingsim desktop wander Kirby --headless --paced --frames 900 --input1/2 start@400 --desync-at2 500. Left: just check (fixed a menu test), merge main, done."
+        }
+      ],
+      "round": "2026-11-01T01:47:18Z"
+    },
+    {
+      "id": "multiplayer/kirby-pause-desync",
+      "title": "Netplay: find what desynced Kirby's pause",
+      "detail": "june's internet playtest 2026-10-29 (Kirby v1 build, room MNHBLP, quack seat 1, rtt ~104 ms up to 290): the game paused and wouldn't stay unpaused though only the pauser can unpause and the other player touched nothing; it never recurred in later rooms; the session ended with the other peer 92 frames behind. Likely the consoles disagreed. Reproduce under gbaa-pingsim desktop (wander, rough) with pause/unpause presses near rollbacks, on v1 and structured builds, find the cause, fix it. Also look at room RAHQUN's 5.4 s freeze and 300-frame rollback, and JSRJ99's lead of -298 frames (reports in quack's $GBAA_DATA/netplay/). Check: repeated pause/unpause under rough ends both peers on one hash, no desync.",
+      "check": "recorded",
+      "needs": ["multiplayer/desync-report"],
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-10-30T03:49:55Z",
+          "by": "bed2b3a1",
+          "text": "Same night as {unit:multiplayer/menu-dropout} (Athena froze after june opened the menu, then 'the rollback thing' on an early unpause): may share a cause; read it first and fold findings into both."
+        }
+      ]
+    },
+    {
+      "id": "multiplayer/server-version-cutoff",
+      "title": "Server refuses netplay builds older than a cutoff",
+      "detail": "june (2026-10-30): the server should refuse netplay clients older than a version it allows, so a friend on a stale binary is told to update rather than joining and desyncing; june tells friends to replace binaries before playing. Today crates/relay/src/rooms.rs only compares the two peers' 32-byte build IDs to each other ('the room runs another build or game') and knows nothing of versions. Add a netplay version number (a constant in netplay, bumped by hand whenever a change can split peers or change the wire; say where in docs/research/multiplayer.md and AGENTS.md-level docs) sent in HOST and JOIN; gbaa-server takes --min-version (and deploy/fly sets it), refusing older or missing versions with a message naming both numbers: 'this game is too old for the server (version N, needs M): get the new build'. The window shows that refusal plainly, not as a timeout. Keep the relay game-agnostic. Check: relay unit tests (old refused, equal and newer let in, a pre-version client gets a clear refusal, not silence), just room-sim calm against a local server with --min-version above the client's, just check. Deploying it is {unit:multiplayer/fly-redeploy-rooms}.",
+      "check": "independent",
+      "record": {
+        "state": "claimed",
+        "by": "664c45c7",
+        "session": "664c45c7-0b11-4918-8a06-e9dc718f1604",
+        "host": "quack",
+        "pid": 379246,
+        "start": "13117048",
+        "at": "2026-11-01T01:51:33Z",
+        "branch": "unit/multiplayer/server-version-cutoff",
+        "beats": true,
+        "pushed": true,
+        "ended": "2026-11-01T01:57:16Z"
+      },
+      "notes": [
+        {
+          "at": "2026-11-01T01:57:06Z",
+          "by": "664c45c7",
+          "text": "Work committed on the branch: version in H/J, --min-version, window text, fly Dockerfile, docs, tests. Relay tests and both room-sim runs (refused at min 2, pass at min 1) passed. Left: just check (stopped at lane stop, after a fmt fix), merge main, verifier."
+        }
+      ],
+      "round": "2026-11-01T01:51:33Z"
+    },
+    {
+      "id": "multiplayer/timing-in-build-id",
+      "title": "Netplay build ID tells instant timing from exact",
+      "detail": "Since play builds default to --timing instant ({d:play-builds-use-timing-instant-checks-pass}; docs/decisions.md 11), an instant and an exact build of one ROM likely get the same netplay build ID: netplay::gba's code_id (crates/netplay/src/gba.rs) hashes keys, overlays, inner starts and folded ranges, and runtime::Code doesn't record the timing mode. Two such peers would share a room and split from the first frame, silently. The version cutoff ({unit:multiplayer/server-version-cutoff}) doesn't catch it: both can be the same version. Record the mode in Code (codegen fills it), hash it into code_id. Check: a test that two Codes differing only in timing get different build IDs; an instant Kirby v1 build through just rollback-feel wander --headless (both peers one hash; note p50 and compiled share beside the exact rows in docs/research/multiplayer.md 'On recompiled code'); just check.",
+      "check": "independent",
+      "minMinutes": 60,
+      "notes": [
+        {
+          "at": "2026-11-01T01:57:43Z",
+          "by": "5a44fbb6",
+          "text": "Correction: the code part is on branch t3/interp-instant-timing (worktree ~/.t3/worktrees/gbaa/t3-5f15b0aa, owner's T3 session), not t3/5f15b0aa. Bring it in from there or wait for it to land on main; then the instant Kirby v1 rollback-feel run."
+        },
+        {
+          "at": "2026-10-31T04:11:13Z",
+          "by": "b9540f68",
+          "text": "Code part done on branch t3/5f15b0aa: Code.timing (codegen fills it), hashed in code_id, build byte 29 = the interpreter's timing; test timing_is_part_of_the_build_id. Left: the instant Kirby v1 rollback-feel run and its multiplayer.md rows."
+        }
+      ],
+      "round": "2026-11-01T01:57:22Z"
+    },
+    {
+      "id": "multiplayer/four-kirbys-deck",
+      "title": "Four Kirbys' netplay frame cost on the Deck",
+      "detail": "From {unit:multiplayer/four-seats}: quack's numbers for four Kirbys a peer are in docs/research/multiplayer.md, 'Four players'. The Deck's own CPU, a short headless run (docs/machines.md, deck: ask june for a yes first, each time). Copy the recompiled Kirby binary to ~/gbaa, run just rollback-feel's headless four-player command from that section (calm delay 2 and wander delay 0, --interp and not, peers on the Deck) and add the Deck's rows to the table.",
+      "needs": ["multiplayer/four-seats"]
+    }
+  ]
+}

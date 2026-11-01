@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# factory/deploy: deploy the newest pushed wfactory skill on this machine. Runs
+# deploy.sh from the skill's checkout here (the one ~/.claude/skills links to), else from the
+# deployed copy. `just fleet start` runs it on every machine it starts.
+c="${FACTORY_SKILL_CHECKOUT:-$HOME/.claude/skills/wfactory}/scripts/deploy.sh"
+[ -x "$c" ] && exec "$c" "$@"
+unset FACTORY_SKILL FACTORY_SKILL_FROM
+. "$(dirname "$(realpath "$0")")/skill" && exec "$FACTORY_SKILL/scripts/deploy.sh" "$@"

@@ -1,0 +1,31 @@
+{
+  "id": "oracle",
+  "title": "Making mGBA a sharper oracle",
+  "priority": 4,
+  "order": 6,
+  "units": [
+    {
+      "id": "oracle/mgba-mismatches",
+      "title": "Shrink mGBA's known mismatches; match its reset",
+      "detail": "From GitHub #60/#61. mGBA 0.10.5 fails jsmolka arm 235 (cmp pc doesn't flush) and thumb 230 (base in rlist) and bios 001 (HLE open-bus word). Check whether mGBA master passes the CPU two; if so pin it in scripts/fetch-mgba.sh and drop their known-mismatches.tsv lines. Note mGBA's HLE reset leaves r14=0x08000000, r1=0 where ours zeroes all: decide (and record) whether ours copies it, for register comparisons.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "0f9995ba",
+        "at": "2026-10-21T15:22:16Z",
+        "evidence": "Built mGBA master fd9dc5c: jsmolka arm fails 522 (new), thumb still 230, bios passes; so 0.10.5 stays pinned and known-mismatches.tsv keeps its lines. Shim now compiled with libmgba's defines (master segfaulted without them). Machine::new copies mGBA HLE reset: r14=0x08000000, carry set. just check, gba-tests (5 pass), mgba-oracle (10 ok) pass after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "oracle/five-routes-red-on-main",
+      "title": "Five unit routes fail on main: armwrestler, 3 shares",
+      "detail": "Found 2026-11-01 by {unit:native/hw-library}, reproduced on the pre-change commit with byte-identical hashes, so main already fails them: just unit affine, mosaic-modes and windows-blend stop on the compiled share (0.8909, 0.9660, 0.9407 against a bar of 0.97; mGBA and the interpreter draw every checkpoint); armwrestler-fixed's recompiled frame 37 differs from the interpreter's; armwrestler-original's recompiled registers differ from the interpreter's at frame 350. Find which commit turned each red (git bisect over just unit <name>) and fix it, or ask the owner if a bar should move (never lower it to pass). Done when all five pass just unit.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit affine && just unit mosaic-modes && just unit windows-blend && just unit armwrestler-fixed && just unit armwrestler-original"
+      },
+      "uses": ["heavy"]
+    }
+  ]
+}

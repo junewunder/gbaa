@@ -1,0 +1,518 @@
+{
+  "id": "native",
+  "title": "Native ports: games as plain Rust programs",
+  "priority": 20,
+  "order": 20,
+  "units": [
+    {
+      "id": "native/design",
+      "title": "Design the native port: a game as a plain Rust program",
+      "detail": "june 2026-10-31 (d/modded-builds-are-plain-rust-programs-no-save): a modded build is literally a Rust program: no registers, no GBA memory block, no CPU, nothing preserved for save states or rewind; as regular and pretty as we can make it. Write docs/native-port-design.md covering: (1) where game state lives (globals as typed statics or one Game struct, from DWARF types where a decomp has them; a byte array only where types aren't known yet); (2) the hardware as a library, not memory (the runtime's PPU and sound behind an API like ppu.bg[0].scroll_x, the CPU gone; prior art: the SM64 and OoT PC ports' renderers); (3) the frame loop that replaces the main loop's V-blank wait, and interrupt handlers as callbacks; (4) function pointers as Rust fn values, and as IDs with a lookup table where the game does arithmetic on them (Emerald splits them into halves in task data); (5) ROM addresses as analysis-time facts only: return-address tricks like WarioWare's sub lr, lr, #24 resolved to a fixed destination at lift time (docs/research/code-without-rom-addresses.md); (6) holes: anything not statically resolved (undiscovered code, unresolved indirect jumps, RAM code, untyped pointer arithmetic) is a build error or a listed hole, since there's no interpreter fallback; (7) the oracle: the native program draws the same frames as the play build from the same inputs (the play build and its exact checks become the native port's oracle); (8) data pointers, DMA and struct copies, and what each needs. Read the existing analysis, structured codegen and mod-view designs first; cite the code. Propose the units that follow. Stop at ~3 h.",
+      "check": "independent",
+      "priority": 5,
+      "record": {
+        "state": "done",
+        "by": "95b01e10",
+        "checker": "verifier-7f20e324",
+        "at": "2026-11-01T01:29:21Z",
+        "evidence": "docs/native-port-design.md covers the card's 8 points with code citations and proposes 8 units (5 new filed). A fresh-context verifier spot-checked 20 citations, the WarioWare arithmetic and the units: first FAIL (Ref over non-POD Game, BIOS copy timing, 8 lesser points), all fixed, recheck PASS. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "native/agb-spike",
+      "title": "Spike: one of our agb programs as a native Rust program",
+      "detail": "Take one of our own agb programs (agb/, our own source: small, no legal issues; one with a frame loop, input and a background or sprites, e.g. agb/template or agb/windows-blend) and lift it all the way to a native Rust program per docs/native-port-design.md: no Machine, no registers, no GBA memory map; state in Rust types, the hardware through the library API, a frame loop. Done when it draws the same frames as its play build (exact recompiled build) for the same input script over a few hundred frames, the code is committed, and the doc records what was hard, what was done by hand that the lifter should do, and what the next units should be. Stop at ~4 h with what's measured. HARDENED (sprint 2026-10-31): no agb/ program reads input, so first write a new agb/native-spike (agb source only; D-pad moves a sprite and scrolls a background; SCENE.md). The native program lives in its own crate (crates/native-spike or agb/native-spike-native, your call) and takes the desktop's flags: --headless --frames N --input <script> --frame-hashes F. Done when: native and the exact play build give identical --frame-hashes files over 600 frames of a script that moves something at least every 60 frames, and one planted wrong store makes them differ.",
+      "check": "independent",
+      "needs": ["native/design"],
+      "uses": ["heavy"],
+      "priority": 23,
+      "minMinutes": 240,
+      "record": {
+        "state": "done",
+        "by": "3b0587c1",
+        "checker": "verifier-a30befd0",
+        "at": "2026-11-01T03:03:43Z",
+        "evidence": "just native-spike: native = play, 600 frames identical (510 distinct pictures), hashes file 5539f4ec2af9bb48, last frame 600 hash e40446740c70e154; planted wrong store (plant feature, OAM attr1 x+1 while facing left) caught at frame 212 (play f6dee7bb5c6ee4b7, planted f60d58b8ffc489bf). Script holds a D-pad key in every 60 frames (longest gap 10). Verifier reran agb-tests + native-spike and cmp'd its own runs: identical, planted differs frames 212-541. Findings: docs/research/native-agb-spike.md. Branch t3/a5d53ea7, unmerged."
+      },
+      "notes": [
+        {
+          "at": "2026-11-01T01:15:11Z",
+          "by": "95b01e10",
+          "text": "Per docs/native-port-design.md: make the spike's hardware library a throwaway adapter over today's Bus; the real one is {unit:native/hw-library}. The exact play build is a fine oracle for a lag-free program; timers or lag frames wait on q/may-native-port-s-check."
+        }
+      ],
+      "round": "2026-11-01T01:32:20Z"
+    },
+    {
+      "id": "native/hole-report",
+      "title": "Hole report: what blocks a native build of each game",
+      "detail": "A tool (Rust, not bash) that lists, for a ROM, everything that blocks a pure native build per docs/native-port-design.md's hole list: code reached in runs or fuzzing that discovery didn't find; indirect jumps and calls not resolved; return-address arithmetic (the scrambled-return-address side-by-side tool from docs/research/code-without-rom-addresses.md finds it, e.g. WarioWare's IWRAM helper); code run from RAM; pointer arithmetic or casts the known types don't explain, where types exist. Run it on the eight games of that research (Emerald, Kirby, Metroid Zero Mission, Minish Cap, WarioWare, moonbeam and the rest) and write each game's counts and worst holes into docs/research/native-holes.md, ranked by how close each game is to native. Propose discovery or fuzzing units aimed at the commonest holes. HARDENED (sprint 2026-10-31): put the hard-hole classification in the analysis crate (the lifter reuses it). Runs: the research doc's 5,400-frame press script through the interpreter's coverage, for all eight ROMs listed by file name. Untyped pointer arithmetic: report 'not measured until stage B'. Rank by hard holes, then bytes reached but not discovered. Done when native-holes.md's counts match the tool's output on all eight, and the controls hold: WarioWare's 0x3000468 lr-24 helper listed as a hole, moonbeam's __gnu_thumb1_case_* resolved, Emerald's unresolved-jump count equals Recovery's.",
+      "check": "independent",
+      "needs": ["native/design"],
+      "uses": ["heavy"],
+      "priority": 22,
+      "minMinutes": 150,
+      "record": {
+        "state": "done",
+        "by": "05e0b280",
+        "checker": "verifier-7c41e9",
+        "at": "2026-11-01T08:31:52Z",
+        "evidence": "just holes on all eight ROMs (5,400 frames, research press script): each first line identical to docs/research/native-holes.md's ranking lines (Metroid 18, WarioWare 22, moonbeam 23, Kirby AM 29, Kirby NiDL 30, Emerald 34, Minish Cap 46, Rogue 86). Controls: WarioWare 0x03000468 site-24 listed NOT resolved; moonbeam __gnu_thumb1_case_uqi/uhi (0x08042e00/14) resolved; Emerald 11 unresolved = Recovery's 670-659 (just discover). Classification in analysis::holes, cargo test -p analysis holes 10 passed. Review: fresh subagent, 11 findings fixed or documented (b251fd00). just check, disc-pret, disc-agb, jt-score pass."
+      },
+      "round": "2026-11-01T01:32:48Z"
+    },
+    {
+      "id": "native/emerald-ten",
+      "title": "Emerald: ten functions as native Rust, scored against pret",
+      "detail": "Like {unit:mod/decomp-spike}, but native per docs/native-port-design.md: ten Emerald functions of varied shape (a leaf getter, an array loop, a call chain, a switch, struct field access, u8/u16 arithmetic, one that stores a function pointer; ClearBattleMonForms and SeedRngAndSetTrainerId among them) lifted to plain Rust over typed state from pret's DWARF, with no registers, Machine or addresses. Emerald is the measuring stick, not the goal: score each against pret's C (statements, named accesses, loop shapes, anything left raw), and say what the lifter needs for each gap. Check behaviour where it can be: the same results as the play build's function on the same inputs (fn-diff style). Write side-by-sides and scores into docs/native-port-design.md. Never copy pret's C text into the repo ({d:mod-view-prints-pret-s-file-line-never-pret-s-c}). Stop at ~3 h. HARDENED (sprint 2026-10-31): mirror-safe (decision): lifted code and side-by-sides go in mods/emerald/native-ten/ (left out of the public mirror); docs/native-port-design.md gets only scores and gaps. The ten: {unit:mod/decomp-spike}'s eight (mods/emerald/decomp-spike/) plus CalcCRC16 and GetBgAttribute; reuse its scoring columns. Behaviour check: a native form of fn-diff (entry state as guest-layout RAM + params from {unit:native/summaries}; compare RAM, I/O, return value, ignoring stack below sp). Done when it prints 'native 0 of 10 differ' and a one-byte edit gets caught.",
+      "check": "independent",
+      "needs": ["native/design", "native/summaries"],
+      "uses": ["heavy"],
+      "priority": 21,
+      "minMinutes": 180,
+      "record": {
+        "state": "done",
+        "by": "48795438",
+        "checker": "verifier-09bd6b",
+        "at": "2026-11-01T09:44:45Z",
+        "evidence": "just native-ten: 'native 0 of 10 differ' (3,072 runs), ROM-byte fault under Random caught 671/672; verifier's own one-byte edits (CalcCRC16 0x8408->0x8409, GetBgType arm) caught; 19 hand edits caught. Review by fresh subagent: 6 findings fixed (8372fdfe). just check passes."
+      },
+      "round": "2026-11-01T01:33:11Z"
+    },
+    {
+      "id": "native/hw-library",
+      "title": "The GBA hardware as a library both builds share",
+      "detail": "docs/native-port-design.md section 2: split Video (display registers decoded, VRAM, palette, OAM) and Audio out of runtime::Bus; the PPU and mixer take them; Hw with typed registers (ppu.bg[n].scroll_x), the BIOS routines over slices, wait_vblank/idle/beam reads (section 3), DMA kinds (section 8). no_std. Done when the play build's checks are unchanged (first-frame, routes' frame hashes, same-states with --timing exact) and Hw has unit tests drawing a frame from fields alone. HARDENED (sprint 2026-10-31): 'unchanged' means against the play binary built from main before your change. Done when: just unit passes for every units/*.toml; route-check --same-states <pre-change emerald bin> <post-change bin> --every 60 units/emerald-newgame.toml shows 0 differences; just gba-tests, just armwrestler, just mgba-oracle and just check pass; a cargo test -p runtime test setting only Hw fields reproduces every pixel in agb/template/SCENE.md. Existing Emerald save states must still load (snap's versioned-layout test); if the payload must change, bump the version and keep loading the old one.",
+      "check": "independent",
+      "needs": ["native/design"],
+      "uses": ["heavy"],
+      "priority": 23,
+      "minMinutes": 180,
+      "record": {
+        "state": "done",
+        "by": "5b4212eb",
+        "checker": "verifier-aa640279",
+        "at": "2026-11-01T04:39:17Z",
+        "evidence": "runtime tests 266/266 incl. template_scene_from_fields_alone (every pixel of agb/template/SCENE.md from Hw fields alone); check-nostd ok; route-check --same-states main-built Emerald vs new, emerald-newgame --every 60: 93 frames same, 0 diffs; gba-tests, armwrestler, mgba-oracle, just check pass; native-spike on new Hw, hashes 5539f4ec2af9bb48; save payload unchanged. just unit 14/19: the 5 misses fail byte-identically on main before the change (filed as {unit:oracle/five-routes-red-on-main}). Sound, timers, serial, saves not split out yet."
+      },
+      "notes": [
+        {
+          "at": "2026-11-01T04:33:28Z",
+          "by": "5b4212eb",
+          "text": "Built on t3/native-hw-library; all checks pass but 5 units (affine, mosaic-modes, windows-blend: compiled share under min_compiled; armwrestler-fixed/original: recompiled parts from interp) fail identically on main before the change: same hashes. Not marked done; overseer's call."
+        }
+      ],
+      "round": "2026-11-01T01:33:38Z"
+    },
+    {
+      "id": "native/summaries",
+      "title": "Function summaries: parameters, results, callee-saves",
+      "detail": "docs/native-port-design.md section 5: Van Emmerik-style bottom-up summaries over the call graph (registers-and-types.md): r0-r3 read on entry, registers defined on every return that callers read, r4-r11 and sp proven preserved; failures listed. Done when Emerald's summaries agree with pret's DWARF prototypes on a stated share, every disagreement explained, and the counts are in the design doc. HARDENED (sprint 2026-10-31): extend codegen::saves (gbaa-recompile --saves already proves callee-saves for 8,894 of 15,158 Emerald functions), don't start over. Agree means summary params ⊆ DWARF prototype params and return matches (pret DWARF via crates/pret-names/src/dwarf.rs / names/pokeemerald.toml proto; readelf can't read it). No bar (decision: measure only): the tool prints agree/disagree/no-proto counts and per-category disagreement counts, 10 per category checked by hand, numbers quoted in the design doc. A unit test where a function clobbers r4 fails its proof.",
+      "check": "independent",
+      "needs": ["native/design"],
+      "uses": ["heavy"],
+      "priority": 23,
+      "minMinutes": 180,
+      "record": {
+        "state": "done",
+        "by": "3ddd5561",
+        "checker": "verifier-3f9c1e",
+        "at": "2026-11-01T05:25:44Z",
+        "evidence": "gbaa-recompile --summaries on Emerald (codegen::saves::summarize/compare, extends the callee-save proof): 13,359 agree, 1,664 disagree, 133 no proto, 2 unreadable (694 disagree trusting indirect calls); categories 1/505/656/0/0/619/0/1, all traced to 4 roots in docs/native-port-design.md s5; --saves still 8,894/15,158; r4-clobber test passes; just check, first-frame x4, gba-tests, mgba-oracle pass; review fixed; verifier re-ran and hand-checked."
+      },
+      "round": "2026-11-01T01:34:00Z"
+    },
+    {
+      "id": "native/timing-native",
+      "title": "Play build timing that matches a native program",
+      "detail": "docs/native-port-design.md section 7, option 1, if june picks it: --timing native for gbaa-recompile and the interpreter: blocks cost nothing; the clock moves only at BIOS waits, at store-free call-free loop back edges (a list from analysis, shared with the native lifter) and at VCOUNT/DISPSTAT/timer-counter reads, by the library's steps. Done when compiled matches interpreted under it (first-frame style) on the agb programs and Emerald's new-game route frames. HARDENED (sprint 2026-10-31): june chose this (d/may-native-port-s-check, option a); ignore 'if june picks it'. Include section 7's BIOS copy/fill/decompress and DMA costs (bios::call pricing) so Emerald's VRAM fill still spans a V-blank. route-check and recompile-check hard-code --timing exact: give them a timing parameter. Compare states, not mGBA hashes. Done when: just first-frame <rom> 60 native (or equivalent) passes for every program in $GBAA_DATA/agb; route-check --timing native --same-states compiled vs --interp --every 60 units/emerald-newgame.toml shows 0 differences; unit tests: N plain instructions move the clock 0, a VCOUNT poll loop exits after exactly the right lines, a 96 KB CpuFastSet crosses a V-blank.",
+      "check": "independent",
+      "needs": ["native/design"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "7712effa",
+        "checker": "verifier-9f1849",
+        "at": "2026-11-01T15:37:21Z",
+        "evidence": "verifier-9f1849: unit tests ok (no-time, VCOUNT poll 201 reads to line 100, 96 KB CpuFastSet crosses V-blank, spin budget then half lines; hw::spin same); just check exit 0; first-frame 60 native 15/15 identical (re-ran 3); Emerald native compiled vs --interp 93 frames 0 diffs, past CB2_NewGame to the truck at 5400; Emerald exact vs main-built base 93 frames 0 diffs, generated exact code unchanged. Reviews: 2 fresh-subagent rounds, fixes in f773f153, 1bb455af."
+      },
+      "notes": [
+        {
+          "at": "2026-11-01T15:37:23Z",
+          "by": "7712effa",
+          "text": "Next units: hw::spin moves exactly half a line past budget; the play build runs to the next event (a timer's can come first). Store-and-poll loops with no call need crates/runtime/spins.toml (Emerald's librfu at 0x082e2b6a); the hole report only finds call loops."
+        },
+        {
+          "at": "2026-11-01T08:34:03Z",
+          "by": "05e0b280",
+          "text": "Hole report measured busy loops that call functions (64+ non-progressing iterations in a row, reading IRQ-written RAM): only Emerald Rogue, 3 (LoadMapInStepsLocal, FreeTempTileDataBuffersIfPossible, CB2_NewGame). The 90 s route doesn't reach Emerald's map load."
+        },
+        {
+          "at": "2026-11-01T07:03:41Z",
+          "by": "7712effa",
+          "text": "Branch t3/c58bf1ab f773f153: --timing native built (runtime, codegen, idle list in analysis, route-check --timing, first-frame TIMING). Emerald native hangs after frame 5040: DoMapLoadLoop polls via calls (no idle edge), so no time passes. Needs a rule; see report."
+        }
+      ],
+      "round": "2026-11-01T05:29:18Z"
+    },
+    {
+      "id": "native/lift-stage-a",
+      "title": "Stage-A lifter: a whole program as Rust over byte RAM",
+      "detail": "docs/native-port-design.md sections 1-6, stage A: print a whole program from IR, structuring plan and summaries as plain Rust: no registers, CPU, stack or cycles; RAM as byte regions in Game; I/O through Hw; FnRef IDs; holes.toml for stand-ins, hard holes fail the build. Done when the agb spike's program lifts with no hand edits and passes the native check against its play build. HARDENED (sprint 2026-10-31): runs last, after {unit:native/oracle} and {unit:native/timing-native}. Against overfitting, also lift a second agb program the spike didn't touch (agb/affine or mosaic-modes). Done when, with no hand edits, the lifter's output for the spike program and the second program builds and passes the native check (route-check --native) against the --timing native play build for 600 frames, and a planted hard hole fails the build, named. ADDED 2026-11-01 from {unit:native/oracle}: build --fn-ids rom (FnRef IDs as ROM addresses in the check build) and run the native check with no replaced-library skip list (a literal lift keeps agb's RAM and VRAM state, so all RAM outside stack and code copies is compared). Lifted BIOS copies call hw::spend(cpu_set_cycles(...)); idle edges get hw::idle, spin edges hw::spin, per runtime::spins.",
+      "check": "independent",
+      "needs": [
+        "native/agb-spike",
+        "native/hw-library",
+        "native/summaries",
+        "native/oracle",
+        "native/timing-native"
+      ],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "9d780600",
+        "checker": "verifier-7c3e",
+        "at": "2026-11-01T18:05:02Z",
+        "evidence": "just lift-check (verifier-7c3e reran it, exit 0): gbaa-lift's output for agb/native-spike, agb/affine and agb/mosaic-modes, no hand edits (regenerated identical), passes route-check --native against the --timing native play build for 600 frames each with no --replaced list ('pass (600 frames, 0 differences in pictures, RAM, I/O, palette, VRAM and OAM)'); planted wrong store caught (frame 2: EWRAM byte 0x020000c0); planted hard hole fails lift and build ('error: hard hole in f_03000000 at 0x03000034: CPU state: mrs'). FnRefs are ROM keys; CpuSet spends cpu_set_cycles; hw::idle/hw::spin at the play build's edges. 0 hard holes, 4 holes-file stand-ins per program. just check, just native-check, gba-tests, disc-agb, disc-pret, jt-score, mgba-oracle, first-frame all pass. Review by a fresh subagent: 7 points, the real ones fixed (I/O offsets past 0x3FF, unused I/O halfwords, CpuSet bound, call returning into another entry, stale-output trap, name case, orphan stand-ins)."
+      },
+      "notes": [
+        {
+          "at": "2026-11-01T18:05:05Z",
+          "by": "9d780600",
+          "text": "Done on branch t3/e2c662e5. Stage B: agb is 109 of 111 functions; stack frames are IWRAM bytes (sp a parameter); fallthrough into another entry is a tail call losing r4-r11; Game::cpsr's I bit doesn't hold IRQs at waits. Discovery gaps decoded at lift (mosaic 143)."
+        }
+      ],
+      "round": "2026-11-01T17:05:00Z"
+    },
+    {
+      "id": "native/oracle",
+      "title": "Native check: frames and RAM against the play build",
+      "detail": "docs/native-port-design.md section 7: --layout guest and --fn-ids rom build parameters for a native program, and a route-check mode running a native binary and the play build on the same presses, comparing every frame, EWRAM/IWRAM outside the guest stack, Video and audio per frame, and naming the first difference. Plus the check that guest and packed layouts draw the same frames. Done on the agb spike's program. HARDENED (sprint 2026-10-31): runs after timing-native and before lift-stage-a, on the spike's hand-written native program (the spike provides both layouts by hand if needed); compares against the --timing native play build. The play build must report the lowest sp reached (new). Add a sound program (bios-sound or psg-square) besides the spike. Done when route-check --native NATIVE_BIN PLAY_BIN ROUTE reports 0 differences in frames, RAM outside stack and copy destinations, Video and audio for both, and names the frame and byte of a planted one-store fault; guest and packed layouts give identical --frame-hashes. AMENDED by the overseer 2026-11-01 after verifier-a7c3: audio samples move to {unit:native/hw-sound} (the library has no mixer; registers and wave RAM are compared); --fn-ids rom moves to {unit:native/lift-stage-a} (the spike has no function references); RAM skips for agb state the hand-written native programs replace are accepted, listed in crates/native-spike/check/*.replaced.toml and printed every run, and the lifter's literal lift must compare with no skip list.",
+      "check": "independent",
+      "needs": ["native/agb-spike", "native/hw-library", "native/timing-native"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "2a2e7dbf",
+        "checker": "verifier-a7c3",
+        "at": "2026-11-01T16:56:56Z",
+        "evidence": "just native-check: native-spike 600 frames 0 differences in pictures, RAM, I/O, palette, VRAM, OAM; play layout = guest layout; planted store caught (frame 212, OAM 0x07000002). psg-square 120 frames 0 differences, sound registers and wave RAM compared, samples not (no mixer: moved to {unit:native/hw-sound}). gba-tests, mgba-oracle, first-frame, native-spike, just check pass. verifier-a7c3 confirmed all compared clauses; its three misses were split by the overseer: audio samples to {unit:native/hw-sound}, --fn-ids rom to {unit:native/lift-stage-a}, replaced-agb RAM skips accepted (listed, printed every run)."
+      },
+      "notes": [
+        {
+          "at": "2026-11-01T16:55:46Z",
+          "by": "2a2e7dbf",
+          "text": "Built: route-check --native (just native-check), 0 diffs on spike+psg-square in what's compared. Verifier-a7c3 FAIL: psg-square audio not compared (no mixer in hw, --no-audio), agb RAM/VRAM skipped as replaced, no --fn-ids rom. Branch t3/42ef8378."
+        }
+      ],
+      "round": "2026-11-01T15:44:34Z"
+    },
+    {
+      "id": "native/disc-run-call-targets",
+      "title": "Discovery takes the run's call targets as function starts",
+      "detail": "From {unit:native/hole-report} (docs/research/native-holes.md): the largest hard hole in five of the eight games is a call through a register to an address discovery doesn't know as a start (13-26 a game in seven of the eight; e.g. Emerald's m4a SoundMainBTM family called from 0x082dfb5a). Make those starts: a per-game roots list from gbaa-holes' Run::indirect_calls/call_targets, or find the tables statically. Done when `just holes` shows 0 calls to non-entries in ROM on the eight, and disc-pret, disc-agb and jt-score keep their bars.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/disc-ram-copies",
+      "title": "Discovery finds code games copy to RAM themselves",
+      "detail": "From {unit:native/hole-report}: every game but moonbeam runs RAM code no overlay discovered (300-2,908 bytes: WarioWare's IWRAM loop from ROM 0x080007e4, Emerald's SoundMainRAM and IntrMain, Metroid's 0x03003b90/0x03004100, Minish Cap's 0x030040e0). Overlays only take BIOS CpuSet/CpuFastSet with constant args. Find copy loops and CpuSet with arguments discovery can't fold yet (or take the run's RamRun::rom_src as copies). Done when `just holes` shows 0 RAM bytes undiscovered outside the flash stack routines on the eight, and disc-pret, disc-agb, jt-score keep their bars.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/hole-coverage",
+      "title": "Coverage past the press script reaches the unresolved jumps",
+      "detail": "From {unit:native/hole-report}: of 109 unresolved indirect jumps over the eight games only 14 ran in the 5,400-frame press script (Rogue 2 of 50, Minish Cap 5 of 25). Feed gbaa-fuzz (or longer routes/save states) into gbaa-holes' Run so each unresolved jump is either seen with targets (a holes.toml list the coverage runs check) or shown unreached by everything. Done when native-holes.md has, per game, reached-by-any-run counts and each reached jump's observed targets.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/flash-stack-standin",
+      "title": "Hardware library stand-in for the flash save stack routines",
+      "detail": "From {unit:native/hole-report}: five of the eight games (Emerald, both Kirbys, Metroid, Emerald Rogue) copy the agb flash library's routines (ReadFlash_Core and siblings) onto the IWRAM stack at 0x03007dxx and run them; the bytes change between copies, a hard hole each time. One stand-in in the native hardware library (flash reads/writes as library calls), recognised at the copy, covers all five. Done when `just holes` counts 0 changed RAM runs at 0x03007dxx on those five.",
+      "check": "independent"
+    },
+    {
+      "id": "native/hw-sound",
+      "title": "Sound in the hardware library: mixer, timers, FIFOs",
+      "detail": "Split out of {unit:native/oracle} (2026-11-01): runtime::hw has no mixer, so the native check compares sound registers and wave RAM but not samples, and timers, FIFOs and DMA sound aren't modelled. Split Audio out of runtime::Bus (docs/native-port-design.md section 2), give Hw the play build's mixer, timers and DMA-to-FIFO, so the play build and native programs share one sound path. Done when route-check --native on units/psg-square.toml passes without --no-audio (samples equal every frame), a native bios-sound (direct sound via timer+DMA) passes the same, the play build's audio checks (docs/tools/commands.md audio-*) are unchanged, and just check passes.",
+      "check": "independent",
+      "needs": ["native/oracle"],
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-bars",
+      "title": "Lift report metrics and a bars file the lift check holds",
+      "detail": "docs/native-stage-b.md, 'How every piece is checked' and piece 0. Shared code every stage-B unit needs. (1) gbaa-lift writes its metrics into report.txt as `name value` lines, split by region so later bars mean something: lines of src/main.rs; functions lifted, recognised, replaced, unrecognised; functions with a summary hole; four-register functions without a summary hole; byte loads/stores at a constant address per region (RAM, I/O, ROM, VRAM/palette/OAM); at a computed address per region where the value set says, else unknown; sp-relative loads/stores; call_fn calls; jumps by value; stand-ins; gap targets (codegen::native's count() today lumps these). (2) `--bars FILE` fails the lift when any metric is over its bar (maxima only; a unit that needs a relation adds a metric whose bar is 0), naming it. (3) The program list moves out of the lift-check recipe into the same committed TOML (one table per program: ROM, route, flags, bars) read by a Rust driver (a gbaa-lift or route-check mode), so later units add a program by adding a table, not bash ({d:stage-b-checks-are-bars-in-one-committed-file}). Bars start at today's values; only lowered. Done when: just lift-check runs from the TOML and passes; a codegen test lowers one bar below the measured value and the lift fails naming that metric; the planted store and planted hard hole are still caught; just check passes.",
+      "check": "independent",
+      "uses": ["heavy"],
+      "minMinutes": 120,
+      "record": {
+        "state": "done",
+        "by": "1588052a",
+        "checker": "reviewer-subagent-opus",
+        "at": "2026-11-01T20:02:13Z",
+        "evidence": "just lift-check from crates/codegen/lift-check.toml (gbaa-lift-check driver): every metric within its bar for affine, mosaic-modes, native-spike; three routes pass (600 frames, 0 differences); planted store caught (frame 2 EWRAM 0x020000c0); planted hard hole caught (f_03000000 mrs). tests/lift_bars.rs: load_computed_unknown bar lowered to 0 fails the lift 'load_computed_unknown is 755, over its bar of 0', only that bar. Driver with load_sp 2232->2231 fails before builds naming it. just check exit 0; disc-agb and jt-score exit 0. Fresh reviewer subagent passed all four items; its 3 minor points fixed."
+      },
+      "round": "2026-11-01T19:31:29Z"
+    },
+    {
+      "id": "native/lift-fallthrough",
+      "title": "Fallthrough into another function keeps r4-r11 and flags",
+      "detail": "docs/native-stage-b.md, piece 1. Stage A prints a fall (or jump) into another function's entry as a tail call, so the continuation starts with r4-r11 and NZCV zeroed (codegen::native goto/call_then). Real agbcc games do this. Give the continuation the caller's registers and flags: an extended entry taking them, or the continuation's blocks copied into the caller (your call; say why in docs/native-stage-b.md). Write a new agb program of ours, agb/native-fallthrough (source only, SCENE.md, a units/*-600.toml route; global_asm! Thumb: function A sets r4 and the carry, falls into B's entry; B is also called normally; B's result depends on r4 and C and reaches a global and the screen), add it to just lift-check with its bars. Keep the old tail call behind a gbaa-lift flag. Done when: just lift-check passes with the new program; lifted with the old-behaviour flag the new program fails the native check; just check passes.",
+      "check": "independent",
+      "needs": ["native/lift-bars"],
+      "uses": ["heavy"],
+      "minMinutes": 120,
+      "record": {
+        "state": "done",
+        "by": "500ebc16",
+        "checker": "reviewer-subagent-opus",
+        "at": "2026-11-01T20:41:07Z",
+        "evidence": "just lift-check passed with 4 programs (affine, mosaic-modes, native-fallthrough, native-spike: each 'pass (600 frames, 0 differences ...)'); native-fallthrough lifted with --fall-as-tail-call caught: 'planted fault caught (...-fall-as-tail-call): frame 1: EWRAM byte 0x020000c4: play 0x59, native 0x5a' (RESULTS[0], ft_a(0) 0x5A59 vs old 0x5A5A); planted store and planted hard hole still caught; just check exit 0. Bars: new native-fallthrough table at measured values; 17 bars lowered on the other three (gap decoding fix: mosaic-modes lines 74432->51309, gap_targets 143->24), none raised. Independent subagent reran lift-check and check and reviewed the diff: PASS. Branch t3/b182c538 head de3849a1."
+      },
+      "round": "2026-11-01T20:07:33Z"
+    },
+    {
+      "id": "native/lift-irq-hold",
+      "title": "IRQs held while CPSR's I bit is set",
+      "detail": "docs/native-stage-b.md, piece 1. Game::cpsr is bookkeeping in stage A: an IRQ due at a wait (hw::wait_*, idle, spin) inside a critical section runs at once; the hardware holds it until a CPSR write clears I, and the play build does what the hardware does. Make waits wake without dispatching while I is set, and a CPSR write that clears I (the critical-section restore stand-ins, msr) dispatch what's pending. Reach: runtime::hw's dispatch can't see Game::cpsr today, so the Native trait gains a way to ask (update crates/native-spike's two impls, mods/emerald/native-ten/ram.rs and runtime tests); wait_irq loops until a handler runs, so with I set it must return on wake instead of hanging. Write a new agb program of ours, agb/native-irq-hold (source only, SCENE.md, a units/*-600.toml route): a V-blank handler that counts frames, and a critical section around a VCOUNT poll loop past line 160 whose result depends on whether the handler ran inside it. Add it to just lift-check with its bars; keep the old behaviour behind a gbaa-lift flag. Done when: just lift-check passes with the new program; lifted with the old-behaviour flag it fails the native check; a runtime unit test covers wake-without-dispatch and wait_irq with I set returning; just check passes.",
+      "check": "independent",
+      "needs": ["native/lift-bars"],
+      "uses": ["heavy"],
+      "minMinutes": 120,
+      "record": {
+        "state": "done",
+        "by": "0def0baa",
+        "checker": "reviewer-subagent-opus",
+        "at": "2026-11-01T21:28:23Z",
+        "evidence": "just lift-check passed (5 programs, every metric within its bar): native-irq-hold-601 pass (601 frames, 0 differences); planted fault caught (--irq-at-waits): frame 2: EWRAM byte 0x020000c8 (RESULTS[0], c1-c0): play 0x00, native 0x01; fall-as-tail-call, spike planted store and planted hard hole still caught. Runtime tests: a_masked_wait_wakes_without_dispatch_and_release_runs_it, wait_irq_and_halt_with_i_set_return_on_wake, sched an_irq_held_by_the_i_bit_is_taken_when_msr_clears_it (44 hw/sched tests ok). Play build fixed too: at --timing native it drew c2-c0 = 0 (IRQ held past the msr), now matches mGBA at frame 601 (abc7ac7a22ed22b3, same hash at exact). just check passed; just native-check and just gba-tests pass. Bars: lines split (owner's call) into lines (lifted code, old bars minus the old 414-line prelude: no rise) and lines_prelude 439 (+25: irq_masked impl, IRQ_HOLD, msr_cpsr_c, the IRQ entry's I bit). Independent checker reran lift-check --only native-irq-hold, the runtime tests and mgba-diff: PASS."
+      },
+      "round": "2026-11-01T20:49:37Z"
+    },
+    {
+      "id": "native/lib-signatures",
+      "title": "Library functions recognised by code bytes",
+      "detail": "docs/native-stage-b.md, piece 2. Signatures from our agb 0.25 builds' ELF symbols ($GBAA_DATA/agb/*.elf, all but one on agb 0.13: agb, core, alloc, compiler_builtins, portable_atomic, qrcodegen): each function's bytes with call targets and literal-pool words masked, as scripts/libmatch-poc.py did for Emerald, in Rust (in analysis, so gbaa-holes can use it; a signature file rebuilt by a command, committed if the lifter needs it at lift time). A function is library if it isn't in the program's own crate. Identical masked bytes under two names: unrecognised, not guessed. gbaa-lift names recognised functions by symbol (a comment and the report; keys stay the function names). Add a scored check command (a Rust binary, entry in docs/tools/commands.md): leave-one-out over the agb 0.25 builds, scored against the held-out ELF; and a false-positive control on agbcc games (Emerald and Metroid: Zero Mission from ~/ROMs/gba/), where Rust library signatures should name nothing. Done when: the check shows, for every held-out build, at least 95% of the library functions that also occur in another build recognised and 0 wrong names; the games get 0 names (or each one explained in docs/native-stage-b.md); just lift-check passes with the 'unrecognised functions' bar lowered to the measured value; just check passes.",
+      "check": "independent",
+      "needs": ["native/lift-bars"],
+      "uses": ["heavy"],
+      "minMinutes": 120,
+      "record": {
+        "state": "parked",
+        "why": "june, 2026-11-01: agb is our test input, not the project's target; recognising agb only makes test programs prettier, so it's off the path. Unpark if a real game needs library recognition.",
+        "by": "94d6f329",
+        "at": "2026-11-01T19:30:35Z"
+      }
+    },
+    {
+      "id": "native/lib-standins",
+      "title": "The four agb stand-ins written from recognised names",
+      "detail": "docs/native-stage-b.md, piece 2. The four stand-ins in holes/{native-spike,affine,mosaic-modes}.toml (portable_atomic interrupt::disable and restore, agb's InterruptHandler, the false function in the panic screen's rodata) are the same in every agb 0.25 program but for addresses. Keep each once, as Rust keyed by agb symbol (a folder the lifter scans, one file per replacement), with addresses filled in at lift from the recogniser; the false function goes when the recogniser marks the panic rodata as data. Remove the [[standin]]s from the three holes files (delete files left empty). Add agb/template to just lift-check with no holes file (write units/template-600.toml, 600 frames, like affine-600). The planted hard hole becomes a gbaa-lift flag turning off the IRQ wrapper's replacement; it must still fail the lift and build, named. Done when: the three holes files have no [[standin]]; just lift-check passes with template added and the planted hole caught; just check passes.",
+      "check": "independent",
+      "needs": ["native/lib-signatures", "native/lift-irq-hold"],
+      "uses": ["heavy"],
+      "minMinutes": 120,
+      "record": {
+        "state": "parked",
+        "why": "june, 2026-11-01: agb recognition is off the path (see Library functions recognised by code bytes); the hand-written stand-ins keep working",
+        "by": "94d6f329",
+        "at": "2026-11-01T19:30:37Z"
+      }
+    },
+    {
+      "id": "native/lib-leaves",
+      "title": "Library leaves as native code",
+      "detail": "docs/native-stage-b.md, piece 2. Replace recognised leaf library code with prelude functions that leave RAM byte for byte as the lifted code did, so the native check still needs no skip list: the panic path (agb's panic screen, core::fmt, qrcodegen; about 23.6 of the spike's 29 KB of code) becomes a native panic! carrying the panic's message; memcpy/memset/memmove/memcmp and the aeabi division helpers become slice and integer operations; portable_atomic's critical sections keep lift-irq-hold's semantics. Functions only those leaves reach drop out of the lift. The 600-frame routes never panic, so add a test that does: a new agb/native-panic (source only; panics with a known message at frame 30) whose lifted native binary exits with that message, checked by a Rust test or the lift-check driver. Done when: just lift-check passes, still with no skip list; the panic test passes; bars lowered to: the spike's lines at most 20,000 (from about 74,500) and each other program's at most a third of its stage-A count; just check passes.",
+      "check": "independent",
+      "needs": ["native/lib-standins"],
+      "uses": ["heavy"],
+      "minMinutes": 120,
+      "record": {
+        "state": "parked",
+        "why": "june, 2026-11-01: agb recognition is off the path",
+        "by": "94d6f329",
+        "at": "2026-11-01T19:30:39Z"
+      }
+    },
+    {
+      "id": "native/lib-agb-runtime",
+      "title": "agb's runtime as hardware-library calls",
+      "detail": "docs/native-stage-b.md, piece 2. Replace agb's stateful runtime with runtime::hw: add_interrupt_handler and the interrupt list (heap nodes, the master handler's walk) become g.hw.irq handlers calling the closure; wait_for_vblank and VBlank::get become hw::wait_vblank; the entry and crt0 copies become the program's start. Their RAM no longer exists natively, so gbaa-lift writes the native check's skip list (route-check --native --replaced, {d:the-native-check-skips-a-replaced-library-s}) from the RAM only the replaced functions touch, with why. agb's allocator stays lifted ({d:agb-s-allocator-stays-lifted-until-pointers-are}). The IRQ wrapper's stand-in goes with the interrupt list, so the planted hard hole moves to another replacement whose absence is a hard hole (the critical sections' msr). Done when: just lift-check passes using only the generated skip list; on the spike that list skips no byte crates/native-spike/check/native-spike.replaced.toml (the hand list) doesn't, and a bar on skipped bytes holds it; the planted wrong store and the moved planted hole are caught; bars lowered to: the spike's lines at most 8,000; just check passes.",
+      "check": "independent",
+      "needs": ["native/lib-leaves"],
+      "uses": ["heavy"],
+      "minMinutes": 120,
+      "record": {
+        "state": "parked",
+        "why": "june, 2026-11-01: agb recognition is off the path",
+        "by": "94d6f329",
+        "at": "2026-11-01T19:30:41Z"
+      }
+    },
+    {
+      "id": "native/lift-params",
+      "title": "Parameters and results from the summaries",
+      "detail": "docs/native-stage-b.md, piece 3. Every lifted function is fn(g, sp, [u32; 4]) -> [u32; 4] today. Print each from its summary (codegen::saves::Summaries: params, results): fn f(g, sp, a0, a1) -> u32 and so on; a function with a summary hole keeps the four-register form. Direct calls pass what the callee reads, including a register past its parameters where it reads one (Emerald's GetMonData2 callers, design section 5). Indirect calls pass all of r0-r3 through an adapter per FNS entry ({d:indirect-calls-pass-r0-r3-until-their-callee}). Fallthrough continuations ({unit:native/lift-fallthrough}) take the new signatures too. Done when: just lift-check passes; the bar on four-register functions without a summary hole (a {unit:native/lift-bars} metric) is 0 on every program; just check passes.",
+      "check": "independent",
+      "needs": ["native/lift-bars", "native/lift-fallthrough"],
+      "uses": ["heavy"],
+      "minMinutes": 120
+    },
+    {
+      "id": "native/fnref-dense",
+      "title": "Function pointers as dense FnRef IDs",
+      "detail": "docs/native-stage-b.md, piece 3; design section 4. Using {unit:native/fnref-flow}'s proven words: rewrite function-pointer words in the lifter's copy of ROM data and in pool constants to dense IDs; FNS dense from 1 under a new gbaa-lift --fn-ids dense (the flag doesn't exist yet: stage A's IDs are always ROM keys, {d:stage-a-function-pointers-are-rom-keys-no-dense}); ROM keys stay the default for the native check (RAM then holds the play build's numbers). Done when: just lift-check passes with ROM keys; each program's --fn-ids dense build draws the same frames over 600 frames as its ROM-key build (route-check --native ... --packed DENSE_BIN, wired into the lift-check driver); bar: 0 ROM keys left in a dense build; just check passes.",
+      "check": "independent",
+      "needs": ["native/fnref-flow"],
+      "uses": ["heavy"],
+      "minMinutes": 120
+    },
+    {
+      "id": "native/indirect-call-args",
+      "title": "Indirect calls pass what their callees read",
+      "detail": "docs/native-stage-b.md, piece 3. The open question {unit:native/summaries} left (design section 5), settled in {d:indirect-calls-pass-r0-r3-until-their-callee}: an indirect call whose callee set (from {unit:native/fnref-flow}) is complete passes and defines the union of its callees' summaries; an incomplete set keeps all four registers. Put the callee-set analysis where codegen::saves::summarize can use it, so gbaa-recompile --summaries shows it on Emerald without a lift. Done when: just lift-check passes with a new metric, indirect calls passing all four registers despite a complete callee set, at bar 0; Emerald's summaries re-measured with callee sets (disagreements from indirect calls were 656 in the section 5 table) and the counts and what blocks complete sets (callbacks stored through RAM globals, e.g. gMain.callback1) quoted in the design doc: measured, no bar on Emerald; just check passes.",
+      "check": "independent",
+      "needs": ["native/fnref-flow"],
+      "uses": ["heavy"],
+      "minMinutes": 120
+    },
+    {
+      "id": "native/frame-escape",
+      "title": "Stack frames: which slots escape",
+      "detail": "docs/native-stage-b.md, piece 4; design section 1 ('The stack is gone'). Per function: the frame's slots (from sp-relative accesses and their widths, sp moves tracked) and for each whether its address escapes (passed to a callee, stored to memory, returned, or used in arithmetic reaching past the slot), as data the lifter and the report use; nothing printed differently yet. agb passes stack addresses everywhere (&mut self on locals), so expect many escapes. Add two metrics: sp-relative accesses to slots that don't escape, and to slots that do. Done when: codegen unit tests on hand-built IR cover each escape kind and a non-escaping slot; the report gives slots, escaping slots and the two metrics per program, quoted in docs/native-stage-b.md; just check passes.",
+      "check": "independent",
+      "needs": ["native/lift-bars"],
+      "uses": ["heavy"],
+      "minMinutes": 120
+    },
+    {
+      "id": "native/frame-locals",
+      "title": "Stack slots that don't escape as Rust locals",
+      "detail": "docs/native-stage-b.md, piece 4. Using {unit:native/frame-escape}: loads and stores through sp to slots whose address never escapes become Rust locals; escaping slots stay IWRAM bytes, sp still passed. The native check skips the guest stack, so add a planted control: a gbaa-lift flag that gets one non-escaping slot wrong (e.g. its first store plus one) in a function whose slot value reaches a global; just lift-check must catch it ({d:shortcut-fixes-ship-with-an-agb-test-program}). Done when: just lift-check passes and catches the planted slot; bar: sp-relative accesses to non-escaping slots 0 on every program; just check passes.",
+      "check": "independent",
+      "needs": ["native/frame-escape", "native/lift-params"],
+      "uses": ["heavy"],
+      "minMinutes": 120
+    },
+    {
+      "id": "native/rom-statics",
+      "title": "ROM data as typed statics",
+      "detail": "docs/native-stage-b.md, piece 5; design section 8. ROM objects read at constant addresses or through pool pointers become statics typed by the widths the code reads them at ([u16; N]), with extents from the value sets; loads from them index the static. A function-pointer word in a table is an FnRef ({unit:native/fnref-dense}). A pointer loaded from ROM data stays a RomRef (soft hole, counted). Done when: just lift-check passes; bar: ROM byte loads (constant and computed, the {unit:native/lift-bars} ROM metrics) at most a quarter of the bars file's value when this unit is claimed, each program; just check passes.",
+      "check": "independent",
+      "needs": ["native/fnref-dense"],
+      "uses": ["heavy"],
+      "minMinutes": 120
+    },
+    {
+      "id": "native/ram-globals",
+      "title": "RAM globals as typed fields",
+      "detail": "docs/native-stage-b.md, piece 5; design section 1 ('A byte array only where types aren't known yet'). Carve byte RAM into globals found by constant-address accesses: d_<offset> fields sized and typed by access widths (gap 5 of Emerald's ten: a u8 array used only as halfwords is [u16; N]), names from a names file where one exists, at the guest's offsets under --layout guest so the native check still compares bytes. Done when: just lift-check passes; bar: constant-address RAM byte accesses (the RAM metric, not I/O or ROM) at most a tenth of the bars file's value when this unit is claimed, each program; just check passes.",
+      "check": "independent",
+      "needs": ["native/lift-bars"],
+      "uses": ["heavy"],
+      "minMinutes": 120
+    },
+    {
+      "id": "native/ref-in-object",
+      "title": "Pointers into one object as typed access",
+      "detail": "docs/native-stage-b.md, piece 5; design section 1 'Pointers into state'. A computed address whose value set stays inside one global ({unit:native/ram-globals}), one local ({unit:native/frame-locals}) or one ROM static becomes an indexed, typed access. Pointers into agb's heap are {unit:native/ref-heap}'s. Pointer arithmetic the types don't explain is a counted soft hole (a new metric), reported for the first time. Done when: just lift-check passes; bar: computed-address RAM byte accesses at most half of the bars file's value when this unit is claimed, each program; the new metric quoted in docs/native-stage-b.md; just check passes.",
+      "check": "independent",
+      "needs": ["native/ram-globals", "native/frame-locals"],
+      "uses": ["heavy"],
+      "minMinutes": 120
+    },
+    {
+      "id": "native/metroid-lifts",
+      "title": "Metroid lifts with no hard holes and builds",
+      "detail": "docs/native-stage-b.md, 'The first game' (june's to confirm: {q:first-native-game}). Metroid: Zero Mission (~/ROMs/gba/, by file name; never committed) ranks closest in docs/research/native-holes.md (18 hard holes). Lift it at stage A as `just lift ROM out/lift-metroid --name metroid` (the recipe takes the crate and holes names from the file name, which has spaces: pass --name, and make the recipe find holes/<name>.toml from --name), with holes/metroid.toml for what's left (stand-ins and the jump targets the coverage runs saw, each with why). Build under just capped, free -g first; the crate is split into modules ({unit:native/lift-modules}). Done when: the lift exits 0 (no hard hole left) and its crate builds in release; lines, build time and peak RAM quoted in docs/native-stage-b.md; just check passes.",
+      "check": "independent",
+      "needs": [
+        "native/lift-fallthrough",
+        "native/lift-irq-hold",
+        "native/disc-run-call-targets",
+        "native/disc-ram-copies",
+        "native/flash-stack-standin",
+        "native/hole-coverage",
+        "native/lift-modules",
+        "native/ime-release"
+      ],
+      "uses": ["heavy"],
+      "minMinutes": 120
+    },
+    {
+      "id": "native/metroid-native-check",
+      "title": "Metroid passes the native check on a route",
+      "detail": "docs/native-stage-b.md, 'The first game'. Write units/metroid-native.toml: presses from boot through the title screen into gameplay, at least 1,800 frames. Run route-check --native on the lifted Metroid against its --timing native play build: frames, RAM outside stack and copies, Video and audio every frame (audio via {unit:native/hw-sound}). Fix what differs in the lifter or the library. If the first run shows more than one session's worth, write each difference's cause in docs/native-stage-b.md, file a unit per cause, and stop. Done when: route-check --native reports 0 differences over the route; a planted wrong store in Metroid's code (gbaa-lift --plant) is caught, frame and byte named; just check passes.",
+      "check": "independent",
+      "needs": ["native/metroid-lifts", "native/hw-sound"],
+      "uses": ["heavy"],
+      "minMinutes": 120
+    },
+    {
+      "id": "native/fnref-flow",
+      "title": "Function addresses followed to every use",
+      "detail": "docs/native-stage-b.md, piece 3; design section 4. First half of dense IDs: follow every value a function address enters as (pool words, words in ROM data such as agb's vtables, constants stored to RAM) to its uses, under section 4's rule: only calls, stores, compares, the halves split and joined, | 1 folded; anything else is a hard hole. Output, used by {unit:native/fnref-dense} and {unit:native/indirect-call-args}: the proven function-pointer words (ROM data and pools) and each indirect call's callee set, complete or not. Nothing printed differently yet. Done when: codegen unit tests cover each allowed use and one forbidden one (a hole); the report lists per program the proven words, a 'function words not proven' metric (bar lowered to the measured value) and each call_fn site's callee set, totals quoted in docs/native-stage-b.md; just lift-check passes; just check passes.",
+      "check": "independent",
+      "needs": ["native/lift-params"],
+      "uses": ["heavy"],
+      "minMinutes": 120
+    },
+    {
+      "id": "native/ref-heap",
+      "title": "Heap pointers as Ref<T>",
+      "detail": "docs/native-stage-b.md, piece 5; design section 1 'Pointers into state', form 3. Pointers agb's (lifted) allocator returns, and pointers loaded from where they're stored, become Ref<T> resolved by g.at/g.at_mut, T from the access widths and offsets seen through them; a pointer the types don't explain stays bytes (soft hole, the metric {unit:native/ref-in-object} added). The allocator can then be replaced by native allocation in a later unit ({d:agb-s-allocator-stays-lifted-until-pointers-are}). Done when: just lift-check passes; bar: computed-address RAM byte accesses at most half of the bars file's value when this unit is claimed, each program; just check passes.",
+      "check": "independent",
+      "needs": ["native/ref-in-object"],
+      "uses": ["heavy"],
+      "minMinutes": 120
+    },
+    {
+      "id": "native/lift-modules",
+      "title": "Lifted crates split into modules that build",
+      "detail": "docs/native-stage-b.md, 'The first game'. gbaa-lift writes one src/main.rs; a literal lift of a real game is about a million lines (74,500 lines per 29 KB of agb code), which rustc may not build in one file within RAM. Split the generated crate: one module per function group (by ROM region or call-graph cluster), the prelude and FNS in their own, each module small enough to build in parallel. Done when: just lift-check passes with the split crates; the spike's crate has more than one module and builds no slower than before (times quoted); a synthetic large lift (e.g. the spike lifted N times under different names, or Emerald's discovery printed without building) shows peak rustc RAM per module in docs/native-stage-b.md; just check passes.",
+      "check": "independent",
+      "needs": ["native/lift-bars"],
+      "uses": ["heavy"],
+      "minMinutes": 120
+    },
+    {
+      "id": "native/lift-packed-layout",
+      "title": "Lifted programs at the packed layout draw the same",
+      "detail": "docs/native-stage-b.md, piece 5; design section 7 ('The check build'). Every stage-A/B lift is at --layout guest (RAM at the guest's offsets, so the native check compares bytes). Once RAM is fields ({unit:native/ram-globals}), lift at a packed layout too (fields in the lifter's order, no guest offsets), and check it draws the same frames as the guest build (route-check --native ... --packed BIN, in the lift-check driver). Done when: every lift-check program's packed build draws the same 600 frames as its guest build; just lift-check passes; just check passes.",
+      "check": "independent",
+      "needs": ["native/ram-globals"],
+      "uses": ["heavy"],
+      "minMinutes": 120
+    },
+    {
+      "id": "native/ime-release",
+      "title": "A pending IRQ is taken the moment IME is set again",
+      "detail": "Found by {unit:native/lift-irq-hold}, written up in docs/native-stage-b.md. agb's critical_section, and agbcc games, mask by clearing IME rather than the I bit; on the hardware a pending IRQ is taken the moment IME is written back to 1. Both the play build at --timing native and the hardware library take it at the next wait instead. They agree with each other, so the native check can't see it; only mGBA can. Write a small agb test program (source only, like agb/native-irq-hold) that clears IME across V-blank and reads its frame count before and after setting IME again; fix the hardware library and tick_native so an IME write releases held IRQs, like hw::irq_release for the I bit. Keep the old behaviour behind a gbaa-lift flag as a planted_flags control. Done when: the test program's route matches mGBA's hash (just mgba-diff) on both the play build at --timing native and the exact interpreter; just lift-check passes with the program added and the flag's control caught; just check passes.",
+      "check": "independent",
+      "needs": ["native/lift-irq-hold"],
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-03T03:49:30Z",
+          "by": "87c063f4",
+          "text": "Git move, 2026-11-02: the findings commit is now on unit/native/ime-release (3fc4bde7), on public main; a lane carries on from there. The old t3/ime-release-pending-irq stays in its worktree."
+        },
+        {
+          "at": "2026-11-01T21:47:22Z",
+          "by": "d1f70401",
+          "text": "Correction: the branch is t3/ime-release-pending-irq (head 3542e7bd, unpushed, no upstream), not t3/8da29f9a."
+        },
+        {
+          "at": "2026-11-01T21:47:06Z",
+          "by": "d1f70401",
+          "text": "Paused before code. Findings and plan on branch t3/8da29f9a in docs/native-stage-b.md (IME WIP): tick_native ignores event::IRQ; prelude io_write16 must irq_release on IME 0->1 using lifted r13 as sp. Next: both fixes, agb/native-ime-release, flag control, checks."
+        }
+      ],
+      "round": "2026-11-01T21:43:43Z"
+    }
+  ]
+}

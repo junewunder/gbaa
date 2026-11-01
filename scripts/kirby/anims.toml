@@ -1,0 +1,36 @@
+# Names for Kirby's sprite animations in gSpriteTables (research/kirby-sprite-tables,
+# docs/research/kirby-controller.md), from the sprite's animId/variant in moves.lua's trace
+# (spr=) while Kirby was in each state. Read by `gbaa-assets sprite-tables --labels`.
+
+[anims]
+0 = "stand"
+1 = "walk"
+2 = "run"
+3 = "slide"
+4 = "jump"
+6 = "mouth"
+7 = "float"
+10 = "hurt"
+
+[variants]
+"0/0" = "stand"
+"0/1" = "crouch"
+"1/0" = "walk"
+"2/0" = "run"
+"3/0" = "slide"
+"3/1" = "slide-end"
+"4/0" = "jump-rise"
+"4/1" = "fall-start"
+"4/2" = "fall"
+"4/3" = "land-bounce"
+"4/5" = "land-bounce-fall"
+"6/0" = "inhale-start"
+"6/1" = "inhale"
+"6/2" = "inhale-end"
+"6/5" = "float-inflate"
+"6/7" = "puff"
+"6/8" = "inhale-8"
+"6/9" = "inhale-9"
+"7/0" = "float"
+"7/1" = "float-flap"
+"10/1" = "hurt"

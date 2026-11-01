@@ -1,0 +1,16 @@
+# The spike behind docs/research/native-menu-bar.md: gbaa's menu bar
+# exported as com.canonical.dbusmenu on the session bus, the half of KDE's
+# global menu that no crate does for a non-Qt, non-GTK window. Not a
+# workspace member; build it with
+# `cargo build --manifest-path docs/research/native-menu-bar/Cargo.toml`.
+[package]
+name = "menubar-spike"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+zbus = "5"
+serde = { version = "1", features = ["derive"] }

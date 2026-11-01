@@ -1,0 +1,223 @@
+{
+  "id": "rogue",
+  "title": "Emerald Rogue, checkpoint by checkpoint",
+  "order": 9,
+  "units": [
+    {
+      "id": "rogue/splash",
+      "title": "Emerald Rogue's @Pokabbie splash screen",
+      "detail": "Frame 100, no input: the @Pokabbie splash. Our interpreter drew mGBA's hash (2026-10-22). The first Rogue unit: builds the recompiled crate (out/emerald-rogue, 32 MB ROM). Checkpoint: units/rogue-splash.env (frame, input, mGBA's hash). Pass: just unit rogue-splash (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit rogue-splash"
+      },
+      "uses": ["heavy"],
+      "tags": ["slow-check"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:rogue/newgame-route} (units/rogue-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:12:46Z"
+      },
+      "notes": [
+        {
+          "at": "2026-10-23T17:54:41Z",
+          "by": "51b96b1f",
+          "text": "main merged, just check passes; just unit rogue-splash passed again on quack lane 2 as a long job (28f55138fee82a10, 100% compiled). Left recheck to the loop: it needs a long-job slot, not a foreground call."
+        },
+        {
+          "at": "2026-10-22T19:11:09Z",
+          "by": "cf5d1ad1",
+          "text": "Overseer: both broken-again flips were exit 75: the loop's recheck couldn't build the crate while the other lane held memory (rustc OOM at 1-2 GB). Code passes; rerun the check as a long job when quack has 8+ GB free, don't hunt a bug."
+        },
+        {
+          "at": "2026-10-22T18:56:28Z",
+          "by": "6b1de9de",
+          "text": "2026-10-22 6b1de9de: the 18:43 'broken' was exit 75 (could not run: build refused/broke, not a verdict). Reran just unit rogue-splash on quack lane 2 as a long job: pass, 28f55138fee82a10, 100% compiled, ~18 min. Main merged, just check passes."
+        }
+      ]
+    },
+    {
+      "id": "rogue/pret",
+      "title": "Emerald Rogue's POWERED BY PRET x RHH screen",
+      "detail": "Frame 500, no input. Our interpreter drew mGBA's hash (2026-10-22). Checkpoint: units/rogue-pret.env (frame, input, mGBA's hash). Pass: just unit rogue-pret (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit rogue-pret"
+      },
+      "needs": ["rogue/splash"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:rogue/newgame-route} (units/rogue-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:12:48Z"
+      },
+      "notes": [
+        {
+          "at": "2026-10-23T19:13:35Z",
+          "by": "4da7dc43",
+          "text": "No code changes needed: just unit rogue-pret passed (hash 07eaa72e matches mGBA, 91.6% compiled). First recheck exited 101 while just check held the CPU; rerun as a long job passed. Main merged (tracker only), just check passes."
+        }
+      ]
+    },
+    {
+      "id": "rogue/title",
+      "title": "Emerald Rogue's title screen",
+      "detail": "Frame 1100, no input: the title with PRESS START over animated stars. Our interpreter differs from mGBA (2026-10-22, ours aee0c7ff7d986c46), not yet looked at. Checkpoint: units/rogue-title.env (frame, input, mGBA's hash). Pass: just unit rogue-title (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit rogue-title"
+      },
+      "needs": ["rogue/pret"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:rogue/newgame-route} (units/rogue-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:12:50Z"
+      }
+    },
+    {
+      "id": "rogue/main-menu",
+      "title": "Emerald Rogue's main menu with no save",
+      "detail": "Frame 1150 on Rogue's script (Start at 1000): New Game, Option, the version line. Ours differs in 7547 pixels, the unselected Option box and the version line: likely mGBA's 8-bit darken/blend rounding, as on Emerald's main menu. Checkpoint: units/rogue-main-menu.env (frame, input, mGBA's hash). Pass: just unit rogue-main-menu (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit rogue-main-menu"
+      },
+      "needs": ["rogue/title", "shared/route-checks"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:rogue/newgame-route} (units/rogue-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:12:52Z"
+      },
+      "notes": [
+        {
+          "at": "2026-10-23T19:50:11Z",
+          "by": "04cd8124",
+          "text": "From reset ours runs 1 frame ahead of mGBA from frame 707 (PRET x RHH fade-out) to at least 1106; hidden at the title's frame 1100. If this checkpoint's hash differs by a frame, find that lag frame near 700 first (memory/emerald-hacks.md)."
+        }
+      ]
+    },
+    {
+      "id": "rogue/difficulty",
+      "title": "Emerald Rogue's new-game difficulty menu",
+      "detail": "Frame 1870 on Rogue's script: the difficulty menu, Save & Exit selected. Ours differs in 18156 pixels, the unselected rows' panel: likely the same darken rounding as the main menu; check before anything else. Checkpoint: units/rogue-difficulty.env (frame, input, mGBA's hash). Pass: just unit rogue-difficulty (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit rogue-difficulty"
+      },
+      "needs": ["rogue/main-menu"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:rogue/newgame-route} (units/rogue-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:12:54Z"
+      }
+    },
+    {
+      "id": "rogue/speech",
+      "title": "Emerald Rogue's new game: the professor's speech",
+      "detail": "Frame 3300 on Rogue's script: Pokémon sprites around the professor, 'The world has cha'. Ours differs in 419 pixels: our text is a letter ahead ('chan') and sprite palettes differ, so a timing gap (lag frames, wait states, cycle costs). Checkpoint: units/rogue-speech.env (frame, input, mGBA's hash). Pass: just unit rogue-speech (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit rogue-speech"
+      },
+      "needs": ["rogue/difficulty"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:rogue/newgame-route} (units/rogue-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:12:55Z"
+      }
+    },
+    {
+      "id": "rogue/outfit",
+      "title": "Emerald Rogue's Player Outfit screen",
+      "detail": "Frame 4250 on Rogue's script: the outfit screen, Save & Exit selected. Our interpreter drew mGBA's hash (2026-10-22). Checkpoint: units/rogue-outfit.env (frame, input, mGBA's hash). Pass: just unit rogue-outfit (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit rogue-outfit"
+      },
+      "needs": ["rogue/speech"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:rogue/newgame-route} (units/rogue-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:12:57Z"
+      }
+    },
+    {
+      "id": "rogue/naming",
+      "title": "Emerald Rogue's naming screen",
+      "detail": "Frame 4600 on Rogue's script: the naming keyboard, AAAAAAA typed. Ours differs in 302 pixels (the player icon and cursor): blend rounding or timing. Checkpoint: units/rogue-naming.env (frame, input, mGBA's hash). Pass: just unit rogue-naming (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit rogue-naming"
+      },
+      "needs": ["rogue/outfit"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:rogue/newgame-route} (units/rogue-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:12:59Z"
+      }
+    },
+    {
+      "id": "rogue/hub",
+      "title": "Emerald Rogue's first overworld frame, in the hub",
+      "detail": "Frame 6000 on Rogue's script: the player in the Pokémon Hub, the first overworld frame of a new game. Our interpreter drew mGBA's hash (2026-10-22). Checkpoint: units/rogue-hub.env (frame, input, mGBA's hash). Pass: just unit rogue-hub (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit rogue-hub"
+      },
+      "needs": ["rogue/naming"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:rogue/newgame-route} (units/rogue-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:13:00Z"
+      }
+    },
+    {
+      "id": "rogue/newgame-route",
+      "title": "Emerald Rogue's new game, splash to hub: one route",
+      "detail": "Route units/rogue-newgame.toml: splash 100, pret 500, title 992, main-menu 1150, difficulty 1870, speech 3300, outfit 4250, naming 4600, hub 6000. Pass: just unit rogue-newgame (mGBA, interpreter and recompiled build agree at every checkpoint). Work it by the first failing checkpoint; a fix too big for one session is its own unit this needs. Through title passed 2026-10-23. Known when it was a unit each: ours runs 1 frame ahead of mGBA from frame 707 (memory/emerald-hacks.md); main-menu 7547 px and difficulty 18156 px in unselected boxes, likely mGBA's 8-bit darken rounding (as Emerald's main menu); speech 419 px, text a letter ahead (timing); naming 302 px, icon and cursor; outfit and hub drew mGBA's hash on 2026-10-22. No symbols: pokeemerald-expansion, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit rogue-newgame"
+      },
+      "needs": ["shared/route-checks"],
+      "uses": ["heavy"],
+      "tags": ["slow-check"],
+      "record": {
+        "state": "done",
+        "by": "check",
+        "worker": "9ca98628",
+        "at": "2026-10-23T22:25:04Z",
+        "evidence": "unit rogue-newgame: pass (splash, pret, title, main-menu, difficulty, speech, outfit, naming, hub to frame 6000; mGBA known wrong at title: its 32-bit colour build alpha-blends 8-bit channels widened ",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-23T22:25:10Z",
+          "by": "9ca98628",
+          "text": "Passes on the interruptible LZ77 stall from {unit:imperium/newgame-route}, whose branch this one merged in (not on main at 18:30); either branch may merge first. Darken mgba_hash added on main-menu and difficulty."
+        },
+        {
+          "at": "2026-10-23T22:04:21Z",
+          "by": "f40bb273",
+          "text": "Likely cause of the one-frame lead near 707: a multi-frame LZ77 ticked at once merged V-blanks. Fixed on {unit:imperium/newgame-route}'s branch (interruptible BIOS stall, bios::STALL_LOOP); once it's on main, rerun before tracing the fade."
+        }
+      ]
+    }
+  ]
+}

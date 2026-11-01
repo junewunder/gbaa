@@ -1,0 +1,7 @@
+# ROMs whose last frame is known to differ from mGBA's, read by `just
+# mgba-diff`. Tab-separated: name (the ROM's file name, lower-cased, as in
+# out/mgba-diff/<name>/), frames, mGBA's frame hash and ours (a change in
+# either still fails), the issue, why.
+arm	300	5a01030397b3229b	ffb537b2caeb46f1	#60	mGBA 0.10.5 fails test 235 (cmp pc, pc, r0 flushes the pipeline)
+thumb	300	167d8fe27b79f741	ffb537b2caeb46f1	#60	mGBA 0.10.5 fails test 230 (stm with the base in rlist)
+bios	300	90428ad37ad201f9	ffb537b2caeb46f1	#61	mGBA's HLE BIOS leaves a different open-bus value (test 001)

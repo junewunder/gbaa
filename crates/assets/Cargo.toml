@@ -1,0 +1,29 @@
+[package]
+name = "assets"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# Asset extraction (decision 2, docs/asset-extraction-design.md): a ROM's
+# songs (and later graphics and samples) out to editable files, found by
+# watching the game run, and checked against pret's sources.
+
+[[bin]]
+name = "gbaa-assets"
+path = "src/main.rs"
+required-features = ["cli"]
+
+# The exporter's command line reads source maps through codegen; the
+# library (the desktop's asset overrides) needs none of it.
+[features]
+default = ["cli"]
+cli = ["dep:codegen"]
+
+[dependencies]
+# SHA-1 for the manifest's rom_sha1 (runtime::sha1).
+runtime = { path = "../runtime" }
+asefile = "0.3.8"
+aseprite = { package = "aseprite-io", version = "0.2.0" }
+codegen = { path = "../codegen", optional = true }
+png = "0.18"
+toml = "1"

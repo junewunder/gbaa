@@ -1,0 +1,24 @@
+[package]
+name = "fuzz"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# The coverage-guided fuzzing spike (assets/fuzz-coverage-spike,
+# docs/research/fuzz-coverage.md): Emerald headless in the interpreter on
+# random presses from mutated saves and game state, keeping the states that
+# reach new graphics or code. Needs the provenance tags, so the worker is
+# built with `--features provenance` into target/prov (`just fuzz-coverage`).
+# assets/kirby-fuzz: Kirby & The Amazing Mirror too (src/kirby.rs, `just
+# kirby-fuzz`), the game-independent part in src/core.rs.
+
+[[bin]]
+name = "gbaa-fuzz"
+path = "src/main.rs"
+
+[dependencies]
+runtime = { path = "../runtime" }
+emerald-save = { path = "../emerald-save" }
+
+[features]
+provenance = ["runtime/provenance"]

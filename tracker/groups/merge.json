@@ -1,0 +1,168 @@
+{
+  "id": "merge",
+  "title": "Merges the loop couldn't do by itself",
+  "priority": 1000,
+  "order": 15,
+  "units": [
+    {
+      "id": "merge/quack-lane1-structured-yield-flags",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/structured/yield-flags` holds {unit:structured/yield-flags}, finished but not on main: merging main conflicts in crates/codegen/src/bin/gbaa-recompile.rs docs/tools/commands.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/structured/yield-flags",
+      "record": {
+        "state": "done",
+        "by": "f671e37b",
+        "at": "2026-10-24T19:42:03Z",
+        "evidence": "Merged origin/main into unit/structured/yield-flags (9a3a68f): gbaa-recompile.rs imports/usage unioned (--no-flag-liveness and --sst PER_FILE SEQS), commands.md sst-gen entry takes main's sequence text with yield-flags wording; just check exit 0.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane1-multiplayer-measure-frame-cost",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/multiplayer/measure-frame-cost` holds {unit:multiplayer/measure-frame-cost}, finished but not on main: merging main conflicts in crates/desktop/src/lib.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/multiplayer/measure-frame-cost",
+      "record": {
+        "state": "done",
+        "by": "78f777ca",
+        "at": "2026-10-25T16:58:44Z",
+        "evidence": "Merged origin/main (37d5906) into the branch as f2b696e; the lib.rs conflict is settled by keeping main's coroutine stats_ptr and frame dispatch, with the --frame-times clock started before the guest/frame match. just check passes (exit 0).",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane2-bios-diff-unfilter",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/bios/diff-unfilter` holds {unit:bios/diff-unfilter}, finished but not on main: `just check` fails on the branch with main merged in (error: recipe `check` failed on line 15 with exit code 101). Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/bios/diff-unfilter",
+      "record": {
+        "state": "done",
+        "by": "881e660f",
+        "at": "2026-10-27T01:56:54Z",
+        "evidence": "Merged origin/main into unit/bios/diff-unfilter clean (11dbff9, tracker-only changes); just check passes on the merged branch (exit 0: fmt, clippy, tests, check-nostd, rebuildable).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T01:54:16Z",
+          "by": "2c4c66dc",
+          "text": "started 21:53, merged main clean (c7a20fe, tracker-only). Fifth stop-time cutoff 1 min into just check. This unit keeps being offered in the last minutes; it needs ~10 min early in a run: just check, then just done."
+        },
+        {
+          "at": "2026-10-27T01:51:10Z",
+          "by": "eb16064e",
+          "text": "started 21:49, merged main clean (8c80f94, tracker-only). Fourth session cut off by the 22:00 stop 1 min into just check. Needs a lane run that starts it early: just check, then just done. Nothing to split."
+        },
+        {
+          "at": "2026-10-27T01:49:34Z",
+          "by": "8f28502c",
+          "text": "Merged latest main again (clean, f446370 on branch). Third session to hit the 22:00 stop ~1 min into just check; nothing to split. Needs a session started well before the stop: just check (~several min), then just done."
+        }
+      ]
+    },
+    {
+      "id": "merge/quack-lane2-bios-sound-driver-stubs",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/bios/sound-driver-stubs` holds {unit:bios/sound-driver-stubs}, finished but not on main: merging main conflicts in crates/runtime/src/bios.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/bios/sound-driver-stubs",
+      "record": {
+        "state": "done",
+        "by": "0a751334",
+        "at": "2026-10-27T16:06:41Z",
+        "evidence": "Merged origin/main into unit/bios/sound-driver-stubs (bb9b22c): bios.rs conflict settled by keeping main's SOUND_BIAS 0x19 and the branch's sound driver constants 0x1A-0x24 in number order; just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T16:03:41Z",
+          "by": "manual",
+          "text": "Merging failed again: merging main conflicts in crates/runtime/src/bios.rs"
+        }
+      ]
+    },
+    {
+      "id": "merge/quack-lane1-bios-midi-key2freq",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/bios/midi-key2freq` holds {unit:bios/midi-key2freq}, finished but not on main: merging main conflicts in crates/runtime/src/bios.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/bios/midi-key2freq",
+      "record": {
+        "state": "done",
+        "by": "49257938",
+        "at": "2026-10-27T16:11:57Z",
+        "evidence": "Merged origin/main into unit/bios/midi-key2freq; bios.rs conflict settled keeping MIDI_KEY2FREQ (0x1F) and main's sound-driver calls in number order; just check passes.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane1-mod-callee-saves",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/mod/callee-saves` holds {unit:mod/callee-saves}, finished but not on main: merging main conflicts in crates/codegen/src/bin/gbaa-recompile.rs crates/codegen/src/func.rs crates/codegen/src/locals.rs crates/codegen/src/names/check.rs crates/codegen/src/tests.rs docs/tools/commands.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/mod/callee-saves",
+      "record": {
+        "state": "done",
+        "by": "a82d88c2",
+        "at": "2026-10-27T17:30:12Z",
+        "evidence": "Merged origin/main (84166fb) into unit/mod/callee-saves; settled 6 conflicts keeping both callee-saves (kept, --saves, reload_kept) and readable form (readable, --readable, addr!); just check passes",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane2-mod-dwarf-print",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/mod/dwarf-print` holds {unit:mod/dwarf-print}, finished but not on main: merging main conflicts in crates/codegen/snapshots/emerald-readable.list crates/codegen/src/print.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/mod/dwarf-print",
+      "record": {
+        "state": "done",
+        "by": "2b5c4316",
+        "at": "2026-10-28T22:30:31Z",
+        "evidence": "Merged origin/main into unit/mod/dwarf-print (fb8c0ac): print.rs keeps both Printer fields (value_names, index); readable list keeps all nine functions; snapshot regenerated via just snapshots-readable; just check passes.",
+        "host": "quack"
+      },
+      "round": "2026-10-28T22:26:32Z"
+    },
+    {
+      "id": "merge/quack-lane1-multiplayer-recompiled-netplay",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/multiplayer/recompiled-netplay` holds {unit:multiplayer/recompiled-netplay}, finished but not on main: merging main conflicts in crates/netplay/src/gba.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/multiplayer/recompiled-netplay",
+      "record": {
+        "state": "done",
+        "by": "b5d6d4fc",
+        "at": "2026-10-29T03:00:24Z",
+        "evidence": "Merged origin/main into unit/multiplayer/recompiled-netplay (49a6b56); gba.rs quiet() conflict kept branch's platform.pad_mut().quiet and main's ppu.draw = !on; just check passes.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane2-assets-play-extract",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/assets/play-extract` holds {unit:assets/play-extract}, finished but not on main: merging main conflicts in crates/assets/src/lib.rs crates/assets/src/main.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/assets/play-extract",
+      "record": {
+        "state": "done",
+        "by": "b3cbc851",
+        "at": "2026-10-29T20:28:26Z",
+        "evidence": "Merged origin/main (d69b4b48) into unit/assets/play-extract; conflicts in crates/assets/src/lib.rs (kept both pub mod export and pub mod coverage) and main.rs USAGE (kept check-extract and coverage lines). just check passes (exit 0).",
+        "host": "quack"
+      }
+    }
+  ]
+}

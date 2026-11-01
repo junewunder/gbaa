@@ -1,0 +1,54 @@
+# Pokémon Emerald (US, sha1 f3ae0881…, the pokeemerald build): a new game from reset to the first overworld
+# frame, the truck. Each checkpoint's hash is what mGBA 0.10.5 draws (mgba-dump, 2026-10-21, the same on
+# repeat runs; checked by eye), or where mGBA is known wrong, ours. The pokeemerald ELF and map in
+# $GBAA_DATA/src/pokeemerald give symbols (same sha1).
+rom = "$HOME/ROMs/gba/Pokemon - Emerald Version.gba"
+
+# Start skips the intro, A leaves the title.
+[[press]]
+button = "start"
+at = 300
+
+[[press]]
+button = "a"
+at = 900
+
+# A every 20 frames through Birch's speech and the naming screen (the name typed is AAAAAAA) to the truck.
+[[press]]
+button = "a"
+from = 1100
+to = 5380
+every = 20
+
+# The main menu with no save (NEW GAME, OPTION). mGBA draws a8fc6043833e7c5f (checked by eye): the
+# unselected OPTION box, darkened (BLDCNT 0x00c1, BLDY 7), one 5-bit step darker in green and blue. Our
+# frame from mGBA's own frame-1000 state draws our hash, so the state agrees; with mGBA's 32-bit darken
+# swapped into blend.rs our interpreter draws exactly mGBA's hash (2026-10-22), so nothing else differs.
+[[checkpoint]]
+name = "main-menu"
+frame = 1000
+hash = "ac053b526342aa1f"
+mgba_hash = "a8fc6043833e7c5f"
+mgba_why = "its 32-bit colour build darkens 8-bit channels in place, a - a*y/16 then masked, so the borrow drops green and blue a 5-bit step where hardware (GBATEK's 5-bit formula, mGBA's own 16-bit build) does not"
+
+# Professor Birch's speech: the spotlight and a text box.
+[[checkpoint]]
+name = "birch-speech"
+frame = 2000
+hash = "6aefd56637162416"
+
+# The naming screen, AAAAA typed so far. mGBA draws 0cb3d73f0bc8dff9 (checked by eye): 80 pixels of the
+# blended keyboard cursor one 5-bit step brighter in every channel. Our interpreter with mGBA's 8-bit mix
+# in blend.rs draws exactly that hash (2026-10-22), so nothing else differs.
+[[checkpoint]]
+name = "naming"
+frame = 3800
+hash = "c35c1fea5c709a71"
+mgba_hash = "0cb3d73f0bc8dff9"
+mgba_why = "its 32-bit colour build alpha-blends 8-bit channels widened as (c<<3)|(c>>2), rounding up a 5-bit step where hardware (GBATEK's 5-bit formula, mGBA's own 16-bit build) does not"
+
+# The first overworld frame: the player in the moving truck.
+[[checkpoint]]
+name = "truck"
+frame = 5400
+hash = "26c2f9d4009c5696"

@@ -1,0 +1,13 @@
+[package]
+name = "native-record"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# The native check's per-frame record (docs/native-port-design.md,
+# section 7): what a play build (`gbaa-desktop --native-record`) and a
+# native program (`native-spike --native-record`) write at each frame's
+# end, and `route-check --native` reads and compares. No dependencies,
+# so the check reads it without the desktop.
+
+[dependencies]

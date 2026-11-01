@@ -1,0 +1,23 @@
+[package]
+name = "netplay"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# The netplay session core (multiplayer/session-core,
+# docs/research/multiplayer.md): every peer runs every console, by
+# rollback, over UDP (directly or through gbaa-server's rooms) or a
+# simulated network. The core knows nothing about the console; `gba` is the GBA's
+# adapter, the link hub's machines behind the `Console` trait.
+
+[dependencies]
+relay = { path = "../relay" }
+runtime = { path = "../runtime" }
+serde = { version = "1", features = ["derive"] }
+toml = "1"
+
+# The variable-ping simulator (multiplayer/ping-sim): two peer processes
+# through a UDP proxy that follows a profile in profiles/.
+[[bin]]
+name = "gbaa-pingsim"
+path = "src/bin/gbaa-pingsim.rs"

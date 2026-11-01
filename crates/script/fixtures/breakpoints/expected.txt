@@ -1,0 +1,14 @@
+script console:
+  log: write 03005D80 width 4 in frame 2: 00000000 -> 00006073, accessType 1
+  log: read 030022C0 width 4 in frame 13, accessType 2
+  log: read 030022C4 width 4 in frame 13, accessType 2
+  log: reads a frame, frames 1-20: 0,0,0,0,0,0,0,0,0,0,0,0,2,0,2,2,2,2,2,2
+  log: cleared range: true
+  log: break at 080AA7A4 in frame 242, lr 08000535, segment 0
+  log: by frame 300: 301 writes to gRngValue in 299 frames; the once-a-frame look agrees: true
+  log: by frame 300: Random+4 reached 301 times
+  log: cleared watch: true, again: false
+  log: title set-up broke in frames 242,243,247,248,249,250,251,252,253,254,255,256,257,258,259,260,261,262,263,264,265,266,267,268,269,270,271,272,273,274,275,276,277,278,279
+  log: callback2 was the set-up at the end of frames 241,242,243,244,245,246,247,248,249,250,251,252,253,254,255,256,257,258,259,260,261,262,263,264,265,266,267,268,269,270,271,272,273,274,275,276,277,278
+  log: second callback fired 35 times
+  log: cleared breaks: true true

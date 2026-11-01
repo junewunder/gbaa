@@ -1,0 +1,382 @@
+{
+  "id": "emerald",
+  "title": "Pokémon Emerald, checkpoint by checkpoint",
+  "priority": 5,
+  "order": 2,
+  "units": [
+    {
+      "id": "emerald/checkpoints",
+      "title": "Plan Emerald's checkpoints from boot to a new game",
+      "detail": "Original Emerald (~/ROMs/gba, matches the pokeemerald decomp). Find where it diverges from mGBA first, and pick checkpoints from boot through the intro and title screen to a new game's first overworld frame: each a frame + input script (or a save state, once {unit:shared/savestate-load} lands). File one emerald/<name> unit per checkpoint (computed, probe just unit), the BIOS calls and features they need as units, and make {unit:emerald/title-gate} need the title-screen one.",
+      "check": "recorded",
+      "needs": ["shared/unit-recipe"],
+      "record": {
+        "state": "done",
+        "by": "9b00a3b2",
+        "at": "2026-10-21T14:54:07Z",
+        "evidence": "Ours first differs from mGBA at frame 16: no flash chip, so AgbMain sets callback2 NULL (blank screen). Ten checkpoints in units/emerald-*.env (copyright 100 to truck 5400), mGBA hashes stable and eye-checked; filed one computed unit each, plus {unit:shared/flash-chip} and {unit:shared/cart-rtc}; no missing BIOS call on the path (MultiBoot is link-only). Title gate needs {unit:emerald/title}. just check passes, commit 56a9dc0.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-21T14:55:33Z",
+          "by": "8e96fe3f",
+          "text": "Our runtime freezes on Emerald from reset: white screen, pc looping at 0x080008c6 from frame 300 on. From mGBA's state at frame 300 (mgba-dump --save-state) ours draws the intro BG but no GAME FREAK text/logo, and stays frozen there too."
+        }
+      ]
+    },
+    {
+      "id": "emerald/title-gate",
+      "title": "june watches Emerald's title screen recompiled",
+      "kind": "gate",
+      "detail": "Gate (a) in docs/factory.md: before any gameplay checkpoint, june runs Emerald recompiled in the window (just run-recompiled) and looks at the intro and title screen. Gameplay units need this gate.",
+      "needs": ["emerald/checkpoints", "emerald/title"],
+      "record": {
+        "state": "done",
+        "by": "owner",
+        "via": "1292a1d3",
+        "at": "2026-10-22T17:54:19Z",
+        "evidence": "2026-10-22: june watched Emerald recompiled side by side with mGBA (copyright, GAME FREAK forest, bike scene, Groudon, Rayquaza, title shine): they look the same. Fresh recompile, 99.7% compiled, ~11100 frames, clean exit."
+      },
+      "notes": [
+        {
+          "at": "2026-10-22T17:54:31Z",
+          "by": "1292a1d3",
+          "text": "2026-10-22: june also confirms the recompiled build sounds the same as mGBA through the intro and title (9 brief audio underruns logged, none noticed)."
+        }
+      ]
+    },
+    {
+      "id": "emerald/copyright",
+      "title": "Emerald's copyright screen at frame 100",
+      "detail": "BG text on black after a palette fade from white. Today ours stays blank (no flash chip). With the flash check patched out in a scratch ROM, ours fades but draws no copyright text, and leaves the screen ~500 frames early (ours at 200 = mGBA at 700): look at the copyright task's timing and the text's BG/tiles. Checkpoint: units/emerald-copyright.env (frame, input, mGBA's hash). Pass: just unit emerald-copyright (mGBA, interpreter and recompiled build agree). The pokeemerald ELF and map in $GBAA_DATA/src/pokeemerald give symbols (same sha1).",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit emerald-intro copyright"
+      },
+      "needs": ["shared/flash-chip", "shared/emerald-crate-build"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "check",
+        "worker": "36e380c6",
+        "at": "2026-10-21T19:00:06Z",
+        "evidence": "unit emerald-copyright: pass (frame 100 hash 8e9a9d003b762492; mGBA matches; recompiled = interpreted)",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-21T19:00:12Z",
+          "by": "36e380c6",
+          "text": "36e380c6: after merging main the check passes again (mGBA, interp, recompiled agree at frame 100; just check clean). The 18:26 'broken again (exit 101)' didn't reproduce; if it recurs, look for a cargo panic or a lock clash in the loop's recheck."
+        },
+        {
+          "at": "2026-10-21T17:35:52Z",
+          "by": "b82e5158",
+          "text": "Emerald crate now builds under 8G as part crates (on {unit:shared/emerald-crate-build}'s branch). At frame 100 recompiled hash = interp's 80a69197c1fb9325, but pc/cpsr/r0 differ in the wait loop at 080008c6."
+        },
+        {
+          "at": "2026-10-21T15:25:15Z",
+          "by": "8e1242ad",
+          "text": "Fixed on branch: BIOS calls now take mGBA's time; interpreter draws mGBA's hash at frame 100. Only the recompiled step is left: building the Emerald crate OOMs at 8G and 16G, so this waits on {unit:shared/emerald-crate-build}. Then just rerun just unit emerald-copyright."
+        }
+      ]
+    },
+    {
+      "id": "emerald/intro-gamefreak",
+      "title": "Emerald's intro: the GAME FREAK logo in the forest",
+      "detail": "Intro scene 1 at frame 500: scrolling forest BGs, the logo fading in with blending, sparkle sprites, affine OBJs (intro.c). Checkpoint: units/emerald-intro-gamefreak.env (frame, input, mGBA's hash). Pass: just unit emerald-intro-gamefreak (mGBA, interpreter and recompiled build agree). The pokeemerald ELF and map in $GBAA_DATA/src/pokeemerald give symbols (same sha1).",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit emerald-intro gamefreak"
+      },
+      "needs": ["emerald/copyright", "ppu/windows-blend", "ppu/affine", "emerald/wait-states"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "check",
+        "worker": "42a9da12",
+        "at": "2026-10-21T21:12:12Z",
+        "evidence": "unit emerald-intro-gamefreak: pass (frame 500 hash 2d1792ee17819d57; mGBA known wrong: its 32-bit colour build alpha-blends 8-bit channels widened as (c<<3)|(c>>2), rounding up a 5-bit step where hard"
+      },
+      "notes": [
+        {
+          "at": "2026-10-21T20:46:51Z",
+          "by": "723368ec",
+          "text": "With wait states in ({unit:emerald/wait-states}) the 14-frame lag is gone (Task_Scene1_Load at frame 204 as in mGBA), but frame 500 still differs: interp hash 2d1792ee17819d57, 235 pixels off mGBA's. Next: diff the PNGs to see what's off."
+        },
+        {
+          "at": "2026-10-21T19:17:05Z",
+          "by": "b825462c",
+          "text": "Fails at 500 only on timing: we're 14 frames ahead of mGBA (no wait states, so mGBA's lag frames in the copyright fade and LoadGameSave are missing here). Waits on {unit:emerald/wait-states}; tracer in scripts/debug/mgba-trace.c, see memory/emerald-debugging.md."
+        }
+      ]
+    },
+    {
+      "id": "emerald/intro-bike",
+      "title": "Emerald's intro: the bike scene",
+      "detail": "Intro scene 2 at frame 1600: scrolling BGs, the bike rider, Torchic, Manectric and Volbeat sprites. Checkpoint: units/emerald-intro-bike.env (frame, input, mGBA's hash). Pass: just unit emerald-intro-bike (mGBA, interpreter and recompiled build agree). The pokeemerald ELF and map in $GBAA_DATA/src/pokeemerald give symbols (same sha1).",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit emerald-intro bike"
+      },
+      "needs": ["emerald/intro-gamefreak"],
+      "uses": ["heavy"],
+      "tags": ["slow-check"],
+      "record": {
+        "state": "done",
+        "by": "check",
+        "worker": "c9dfd33a",
+        "at": "2026-10-21T23:21:51Z",
+        "evidence": "unit emerald-intro-bike: pass (frame 1600 hash 29f1e33a0e19b9b5; mGBA matches; recompiled = interpreted)"
+      },
+      "notes": [
+        {
+          "at": "2026-10-21T22:19:04Z",
+          "by": "380662c8",
+          "text": "Fixed: mGBA's HLE LZ77 runs its EWRAM/VRAM accesses through the prefetch stall when called from ROM; we now match (decomp::lz77). Unit passed before merge; after merging main, just check passes and the interpreter's 1600 hash still matches."
+        }
+      ]
+    },
+    {
+      "id": "emerald/intro-legends",
+      "title": "Emerald's intro: the Groudon scene",
+      "detail": "Intro scene 3 at frame 2400: Groudon on red rock, letterboxed (windows), blending and affine effects in intro.c. Checkpoint: units/emerald-intro-legends.env (frame, input, mGBA's hash). Pass: just unit emerald-intro-legends (mGBA, interpreter and recompiled build agree). The pokeemerald ELF and map in $GBAA_DATA/src/pokeemerald give symbols (same sha1).",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit emerald-intro legends"
+      },
+      "needs": ["emerald/intro-bike"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "check",
+        "worker": "d6fe7d5d",
+        "at": "2026-10-22T14:32:52Z",
+        "evidence": "unit emerald-intro-legends: pass (frame 2400 hash 4d649ab75f2bca58; mGBA matches; recompiled = interpreted)"
+      }
+    },
+    {
+      "id": "emerald/intro-rayquaza",
+      "title": "Emerald's intro: Rayquaza in the clouds",
+      "detail": "Intro scene 3's end at frame 3000: Rayquaza's silhouette over grey clouds, blended. Checkpoint: units/emerald-intro-rayquaza.env (frame, input, mGBA's hash). Pass: just unit emerald-intro-rayquaza (mGBA, interpreter and recompiled build agree). The pokeemerald ELF and map in $GBAA_DATA/src/pokeemerald give symbols (same sha1).",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit emerald-intro rayquaza"
+      },
+      "needs": ["emerald/intro-legends"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "check",
+        "worker": "2b1a1ddc",
+        "at": "2026-10-22T15:46:02Z",
+        "evidence": "unit emerald-intro-rayquaza: pass (frame 3000 hash 1e6ffc9861f1cacd; mGBA matches; recompiled = interpreted)"
+      },
+      "notes": [
+        {
+          "at": "2026-10-22T15:40:09Z",
+          "by": "2b1a1ddc",
+          "text": "Passes on the branch (mGBA, interp, recompiled agree). New timing kept the interp hashes of copyright, gamefreak, bike, birch-speech, truck; legends was already wrong on main, filed as {unit:emerald/legends-again}."
+        },
+        {
+          "at": "2026-10-22T14:27:56Z",
+          "by": "d6fe7d5d",
+          "text": "PPU now draws each line at H-blank (from {unit:emerald/intro-legends}). Frame 3000 still differs from HASH, before and after that change: a separate cause."
+        }
+      ]
+    },
+    {
+      "id": "emerald/title",
+      "title": "Emerald's title screen",
+      "detail": "Frame 3800 after the whole intro, no input: the logo (affine BG2), Rayquaza blended in, clouds scrolling, the shine and PRESS START (title_screen.c: windows, blending). june's title gate needs this. Checkpoint: units/emerald-title.env (frame, input, mGBA's hash). Pass: just unit emerald-title (mGBA, interpreter and recompiled build agree). The pokeemerald ELF and map in $GBAA_DATA/src/pokeemerald give symbols (same sha1).",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit emerald-intro title"
+      },
+      "needs": ["emerald/intro-rayquaza"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "check",
+        "worker": "40072b46",
+        "at": "2026-10-22T16:35:34Z",
+        "evidence": "unit emerald-title: pass (frame 3800 hash 23646885cef08b73; mGBA known wrong: its 32-bit colour build alpha-blends 8-bit channels widened as (c<<3)|(c>>2), rounding up a 5-bit step where hardware (GBA"
+      }
+    },
+    {
+      "id": "emerald/main-menu",
+      "title": "Emerald's main menu with no save",
+      "detail": "Frame 1000, Start skips the intro and A leaves the title: NEW GAME and OPTION windows. Needs the flash chip (empty save) and the clock (else the dead-battery message shows). Checkpoint: units/emerald-main-menu.env (frame, input, mGBA's hash). Pass: just unit emerald-main-menu (mGBA, interpreter and recompiled build agree). The pokeemerald ELF and map in $GBAA_DATA/src/pokeemerald give symbols (same sha1).",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit emerald-newgame main-menu"
+      },
+      "needs": ["emerald/title", "shared/cart-rtc"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "check",
+        "worker": "a97c5acd",
+        "at": "2026-10-22T17:02:49Z",
+        "evidence": "unit emerald-main-menu: pass (frame 1000 hash ac053b526342aa1f; mGBA known wrong: its 32-bit colour build darkens 8-bit channels in place, a - a*y/16 then masked, so the borrow drops green and blue a "
+      },
+      "notes": [
+        {
+          "at": "2026-10-22T16:56:54Z",
+          "by": "a97c5acd",
+          "text": "2026-10-22 a97c5acd: passes. Only diff was the darkened OPTION box: mGBA's 32-bit _darken loses a G/B step to the borrow; proven by swapping it into blend.rs (exact hash), so HASH is ours and MGBA_HASH/MGBA_WHY are in the env."
+        },
+        {
+          "at": "2026-10-21T15:10:58Z",
+          "by": "9e846183",
+          "text": "With the RTC ({unit:shared/cart-rtc}) and flash saves in, our frame 1000 shows the menu with no battery message; hash f171e014c53005b4 vs mGBA's a8fc6043833e7c5f differs only in the OPTION box's grey shading (a dimmed/blended window)."
+        }
+      ]
+    },
+    {
+      "id": "emerald/birch-speech",
+      "title": "Emerald's new game: Professor Birch's speech",
+      "detail": "Frame 2000, A every 20 frames from 1100: Birch on the lit platform with a text box (main_menu.c: windows, blending, text printing). Checkpoint: units/emerald-birch-speech.env (frame, input, mGBA's hash). Pass: just unit emerald-birch-speech (mGBA, interpreter and recompiled build agree). The pokeemerald ELF and map in $GBAA_DATA/src/pokeemerald give symbols (same sha1).",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit emerald-newgame birch-speech"
+      },
+      "needs": ["emerald/main-menu"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "check",
+        "worker": "d0d30950",
+        "at": "2026-10-22T17:21:57Z",
+        "evidence": "unit emerald-birch-speech: pass (frame 2000 hash 6aefd56637162416; mGBA matches; recompiled = interpreted)",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-22T17:57:43Z",
+          "by": "cf5d1ad1",
+          "text": "june played through Birch's intro by hand on the evening of 2026-10-21, before this checkpoint was filed as passing; it played fine."
+        },
+        {
+          "at": "2026-10-22T17:22:03Z",
+          "by": "d0d30950",
+          "text": "2026-10-22 d0d30950: passed on first run with no code change; fixes from {unit:emerald/main-menu} covered it. Screen checked by eye: Birch on the spotlight, 'everyone calls me the POKéMON PROFESSOR'. 98.6% compiled."
+        }
+      ]
+    },
+    {
+      "id": "emerald/naming",
+      "title": "Emerald's naming screen",
+      "detail": "Frame 3800 on the same A-every-20 script: the naming keyboard with AAAAA typed (naming_screen.c: sprites, BG scrolling, a blend). Checkpoint: units/emerald-naming.env (frame, input, mGBA's hash). Pass: just unit emerald-naming (mGBA, interpreter and recompiled build agree). The pokeemerald ELF and map in $GBAA_DATA/src/pokeemerald give symbols (same sha1).",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit emerald-newgame naming"
+      },
+      "needs": ["emerald/birch-speech"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "check",
+        "worker": "c1e637e8",
+        "at": "2026-10-22T17:44:22Z",
+        "evidence": "unit emerald-naming: pass (frame 3800 hash c35c1fea5c709a71; mGBA known wrong: its 32-bit colour build alpha-blends 8-bit channels widened as (c<<3)|(c>>2), rounding up a 5-bit step where hardware (GB"
+      },
+      "notes": [
+        {
+          "at": "2026-10-22T17:37:57Z",
+          "by": "c1e637e8",
+          "text": "2026-10-22 c1e637e8: no code change. 80 cursor pixels one step brighter in mGBA; its 8-bit alpha mix swapped into blend.rs gives mGBA's hash exactly, so env sets MGBA_HASH. Unit check passes, 99.2% compiled."
+        }
+      ]
+    },
+    {
+      "id": "emerald/truck",
+      "title": "Emerald's first overworld frame, in the truck",
+      "detail": "Frame 5400 on the same A-every-20 script (name AAAAAAA): the moving-van map after the fade-in, the first overworld frame of a new game (field map BGs, the player sprite). Checkpoint: units/emerald-truck.env (frame, input, mGBA's hash). Pass: just unit emerald-truck (mGBA, interpreter and recompiled build agree). The pokeemerald ELF and map in $GBAA_DATA/src/pokeemerald give symbols (same sha1).",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit emerald-newgame truck"
+      },
+      "needs": ["emerald/naming"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "check",
+        "worker": "f1a10e7d",
+        "at": "2026-10-22T18:11:03Z",
+        "evidence": "unit emerald-truck: pass (frame 5400 hash 26c2f9d4009c5696; mGBA matches; recompiled = interpreted)",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-22T18:03:38Z",
+          "by": "f1a10e7d",
+          "text": "2026-10-22 f1a10e7d: no code change needed. just unit emerald-truck passes as filed (hash 26c2f9d4009c5696, mGBA matches, 99.4% compiled); frame checked by eye: player in the truck. just check passes."
+        }
+      ]
+    },
+    {
+      "id": "emerald/wait-states",
+      "title": "Memory wait states and prefetch in the cycle count",
+      "detail": "Decision 11 counts every access as 1 cycle; Emerald then runs ~2x fast and skips mGBA's lag frames: LoadGameSave takes 7.5 frames here, 14 in mGBA (189-203); copyright fade-out lags in mGBA too, so Task_Scene1_Load starts at frame 190 here, 204 in mGBA. Add WAITCNT-driven waits (ROM N/S, SRAM, EWRAM 2) and the prefetch buffer as mGBA models it, to the interpreter and codegen alike (bus-counted data waits, per-region fetch cost), and update decision 11. Done when gbaa-interp --trace 0816cf18 lands within a frame of mGBA's 204 and the units that pass now still pass (re-verify their hashes with mGBA if any change).",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "priority": 1,
+      "record": {
+        "state": "done",
+        "by": "723368ec",
+        "at": "2026-10-21T20:46:50Z",
+        "evidence": "gbaa-interp --trace 0816cf18 now hits frame 204 line 166, mGBA's 204 (was 190). WAITCNT fetch/data/DMA waits and mGBA's prefetch stall, interp and codegen alike; decision 11 updated. just unit passes, hashes unchanged: gba-cart1, jsmolka-arm, affine, bitmap-affine, mosaic-modes, windows-blend, emerald-copyright. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "emerald/legends-again",
+      "title": "Groudon scene's frame 2400 differs from mGBA again",
+      "detail": "Main (4a38c95) draws 99a67019fc2b4744 at frame 2400 in the interpreter, want 4d649ab75f2bca58: BG offset differs. First differing frame 2289: BG2X/BG2Y lows written in Task_Scene3_SpinPokeball (via SetGpuReg 0x28/0x2c) differ from mGBA from frame 2286. Same hash with and without the rayquaza timing change, so an older cause (maybe the flash save merge).",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit emerald-intro legends"
+      },
+      "uses": ["heavy"],
+      "priority": 6,
+      "record": {
+        "state": "done",
+        "by": "check",
+        "worker": "632019e6",
+        "at": "2026-10-22T16:17:07Z",
+        "evidence": "unit emerald-intro-legends: pass (frame 2400 hash 4d649ab75f2bca58; mGBA matches; recompiled = interpreted)",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-22T16:09:55Z",
+          "by": "632019e6",
+          "text": "No code change needed: passes on main 058ae0a (interp, mGBA, recompiled all 4d649ab75f2bca58). The 'regression' was measured at 4a38c95, before the per-line H-blank PPU fix (72c8944, {unit:emerald/intro-legends}) was merged."
+        }
+      ]
+    },
+    {
+      "id": "emerald/routes",
+      "title": "Emerald's checkpoints as two routes: intro and new game",
+      "detail": "The owner's one-check-per-route decision covers Emerald. units/emerald-*.toml are still one checkpoint each (converted from .env by {unit:shared/route-checks}). Make two routes: emerald-intro (copyright 100, gamefreak 500, bike 1600, legends 2400, rayquaza 3000, title 3800; no input) and emerald-newgame (main-menu 1000, birch-speech 2000, naming 3800, truck 5400; Start 300, A 900, A every 20 from 1100), keeping each hash and mgba_hash. Both routes pass with just unit; repoint each Emerald unit's check, or fold them into two route units as Rogue's and Imperium's were.",
+      "needs": ["shared/route-checks"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "da4f645f",
+        "at": "2026-10-23T21:30:18Z",
+        "evidence": "units/emerald-intro.toml (copyright 100, gamefreak 500, bike 1600, legends 2400, rayquaza 3000, title 3800) and units/emerald-newgame.toml (main-menu 1000, birch-speech 2000, naming 3800, truck 5400) replace the ten per-checkpoint files, hashes and mgba_hashes kept. just unit emerald-intro and just unit emerald-newgame both pass (mGBA, interpreter, recompiled = interpreted); just check passes. The eleven Emerald units' probes now run just unit <route> <checkpoint>.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-23T21:30:20Z",
+          "by": "da4f645f",
+          "text": "Repointed probes (just unit emerald-intro|emerald-newgame <checkpoint>) went to main before this branch merges; if an Emerald unit shows broken, it's that window: recheck after merge."
+        }
+      ]
+    }
+  ]
+}

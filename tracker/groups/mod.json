@@ -1,0 +1,1042 @@
+{
+  "id": "mod",
+  "title": "Mod view: source maps and readable code",
+  "priority": 12,
+  "order": 16,
+  "units": [
+    {
+      "id": "mod/lit-naming",
+      "title": "Literature review: recovering names for functions and data",
+      "detail": "The mod view (docs/decisions.md, decision 2, 'Two views of a ROM', june 2026-10-26): generated code named from a source-map sidecar and printed readably, mostly for agents to read, on Emerald first. A deep review: read the primary papers and tool source (not summaries), add each to docs/references.md. Cover symbol recovery from decomps (pret's .map and .sym files, pret's symbols branches), function matching (IDA FLIRT, Ghidra Function ID, BinDiff, Diaphora), and learned naming (DIRTY, VarBERT, ReSym, GenNm and newer LLM work): what each needs as input, how it is scored, what accuracy it reaches. Say what fits us, where names change no behaviour and we can print the code any way we like. Write docs/research/name-recovery.md.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "840fd6d0",
+        "at": "2026-10-27T00:20:33Z",
+        "evidence": "docs/research/name-recovery.md (653 lines): pret .sym/ELF/DWARF/.map measured on Emerald (names stable: 42 of 32,690 changed in a year; DWARF locals 70% in registers over 400 fns); FLIRT, Ghidra FID/BSim, BinDiff, Diaphora, WARP, decomp-toolkit, ds-decomp, objdiff read in source at pinned commits; DIRE, DIRTY, VarBERT, ReSym, GenNm, Debin, NERO, SymLM, XFL, SymGen, ReCopilot, REBENCH and others read as PDFs with input, metric and table numbers; fit for the mod view. references.md gains a Name recovery section. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "mod/pret-names",
+      "title": "Exact names for Emerald from pokeemerald's symbols",
+      "detail": "The mod view (docs/decisions.md, decision 2, 'Two views of a ROM', june 2026-10-26): generated code named from a source-map sidecar and printed readably, mostly for agents to read, on Emerald first. pokeemerald builds a byte-identical Emerald, so its symbol file gives the name and address of most functions and variables. Fetch pret's pokeemerald (symbols, and the source for later units) pinned by commit into $GBAA_DATA, as just fetch-tests does; never the ROM. Match its symbols to our discovered functions and to RAM/ROM data addresses, and report: how many of our 15,158 functions get a name, which pret functions we don't discover (and why), which of ours pret has no name for. Output a ground-truth names file the later units read (format is the design's; plain TOML is fine for now). Thumb bit and RAM-copied code (overlays) need care.",
+      "record": {
+        "state": "done",
+        "by": "300de8eb",
+        "at": "2026-10-27T00:31:06Z",
+        "evidence": "Review fix made: scripts/fetch-pret.sh now mode 100755 (git ls-files -s confirms), bash -n passes; latest main merged cleanly and just check passes. Names file and report as recorded earlier; fetch-pret's build path still unrun on a fresh GBAA_DATA (see note).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T00:28:30Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - scripts/fetch-pret.sh: the file is added without the executable bit (the diff shows `new file mode 100644`). The justfile `fetch-pret` recipe (justfile:194-195) runs it directly as `scripts/fetch-pret.sh`, the…"
+        },
+        {
+          "at": "2026-10-27T00:25:40Z",
+          "by": "5fc20032",
+          "text": "scripts/fetch-pret.sh (just fetch-pret) is unrun: the auto-mode classifier refused it (builds fetched code). quack's checkout already matches its pins. Run it once on a fresh GBAA_DATA to prove the build path. 14 discovery false positives listed in [unnamed] of the names file."
+        },
+        {
+          "at": "2026-10-27T00:03:40Z",
+          "by": "840fd6d0",
+          "text": "pokeemerald.elf has DWARF 2: locals/params with register or sp slot, struct types, file:line. binutils 15.2 readelf rejects it (.debug_abbrev 'not zero terminated'); Fedora gdb reads it (info scope FN, ptype, info line). One location per var, no loclists. See name-recovery.md"
+        }
+      ]
+    },
+    {
+      "id": "mod/design",
+      "title": "Design the mod view and its source map",
+      "detail": "The mod view (docs/decisions.md, decision 2, 'Two views of a ROM', june 2026-10-26): generated code named from a source-map sidecar and printed readably, mostly for agents to read, on Emerald first. From the review and the pret matching, write docs/mod-view-design.md: the source map's format (functions, globals and ROM data by address; per-function names for registers and locals by address range; types later, if at all), where it lives and how a mod copy is cut; how the printer applies it with no change in behaviour, and the check that proves it; the readable print form for chosen functions (registers as locals via --locals, tick!/call!/ret! macros, quieter insn! comments, call return values if the calling convention can be trusted for that function); and the naming loop: what an agent sees per function, how it is scored against pret, the cap of a few hundred functions before june's look. Then check this group's units fit, edit, add or drop them. Ask june (just ask) about any choice that changes scope.",
+      "check": "recorded",
+      "needs": ["mod/lit-naming", "mod/pret-names"],
+      "record": {
+        "state": "done",
+        "by": "c7879ead",
+        "at": "2026-10-27T00:42:37Z",
+        "evidence": "docs/mod-view-design.md written (source map TOML format with [map]/[functions]/[data]/[locals], derived vs committed names/<game>.toml, identifier escaping; --names-check token-equality proof plus route-check --same-states; readable form via --readable with tick!/call!/ret!, locals only where liveness agrees, trusted call returns; mod copies in mods/<game>/; 300-function naming loop with subtoken P/R, exact, leak controls). Group re-planned: edited {unit:mod/source-map}, {unit:mod/readable-print}, {unit:mod/naming-sample}; added {unit:mod/insn-text}, {unit:mod/dwarf-names}, {unit:mod/mod-copy}. just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T00:20:39Z",
+          "by": "840fd6d0",
+          "text": "From the naming review: Emerald's map is pret's ELF+DWARF by address, no recovery; DWARF locals only where our liveness agrees; agent score on Emerald is an upper bound (LLMs saw pokeemerald): measure the leak; score subtoken P/R plus exact."
+        }
+      ]
+    },
+    {
+      "id": "mod/source-map",
+      "title": "Source map file, and the printer applying it",
+      "detail": "The mod view (docs/decisions.md, decision 2), built as docs/mod-view-design.md 'The printer applying it' says, on the map loader from {unit:mod/source-map-loader}. gbaa-recompile --names A --names B applies it to function idents (link names stay gbaa_f_<key>), a /// name, file doc comment, and to pool-word data constants as addr!(name + off) (a pool-word flag on the IR constant if missing; names consts in base). Locals are {unit:mod/dwarf-names}'s. Check: --names-check (token equality after inverting every name) over all of Emerald, a codegen unit test with a synthetic map in just check, no --names prints byte-identical to today, and route-check --same-states named vs unnamed on the new-game route (--every 50).",
+      "needs": ["mod/design", "mod/source-map-loader"],
+      "uses": ["heavy"],
+      "tags": ["slow-check"],
+      "record": {
+        "state": "done",
+        "by": "3b500867",
+        "at": "2026-10-27T16:49:35Z",
+        "evidence": "Emerald + pret map: gbaa-recompile --names-check 15,167 functions, 0 failed (68,642 fn names, 54,992 addr! pool words, 54 s, rerun after merging main); no --names output byte-identical to main's (diff -r out dirs, only dir names differ); just names-states --every 50 units/emerald-newgame.toml: 108 frames, all the same (642,720 bytes). just check passes with the codegen unit test a_named_print_inverts_to_the_unnamed_one (synthetic map: keyword fn, colliding static, both pool words). Commit 2d1d9e8.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T00:45:04Z",
+          "by": "c149bef3",
+          "text": "Split for size (loader + printer + names-check + Emerald route-check is well over 3h): the loader, layering, identifier table and pret-names [map]/file are now {unit:mod/source-map-loader}; this unit is the printer, --names-check and same-states. No code yet."
+        }
+      ]
+    },
+    {
+      "id": "mod/readable-print",
+      "title": "Readable print form for chosen functions",
+      "detail": "The printer half of docs/mod-view-design.md 'The readable form': gbaa-recompile --readable FILE (names or keys, # comments) prints only the listed functions readable, Config per function (cfg_for(key) via Ctx), the rest in the play view's form. Readable: registers and NZCV as locals (locals::check per function, fallback reported), tick!/call!/ret! macro_rules in the prelude expanding to today's tokens, stall/fetch left as calls, insn! with Debug text until {unit:mod/insn-text}. Check in just check: sst-gen and a new readable fn-diff form exact; snapshots crates/codegen/snapshots/emerald-readable.rs of a few pret-named Emerald functions. Suites/own-state-check: {unit:mod/readable-exact}; Emerald route and cost: {unit:mod/readable-emerald}.",
+      "needs": ["mod/design", "mod/decomp-spike"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "0c8ef7a3",
+        "at": "2026-10-27T17:16:32Z",
+        "evidence": "Rescoped per the spike: readable list (gbaa-recompile --readable FILE, keys or pret names), Ctx::cfg_for per function (locals + asm text), report counts and fallbacks. fn-diff Emerald --exact: readable form 0 of 6,380 runs differ, fault caught; just sst-gen 500 4000 --readable: 22,500 cases + 4,000 sequences, 0 differ; snapshots-readable writes crates/codegen/snapshots/emerald-readable.rs (5 pret-named functions, all in locals after fixing locals::check refusing addr!); just check passes after merging main. Spike-form lowering split to {unit:mod/readable-lowering} then {unit:mod/readable-loops}.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T16:26:36Z",
+          "by": "a6e8d48c",
+          "text": "Spike done ({unit:mod/decomp-spike}): rescope as a new lowering printing the spike's form (mods/emerald/decomp-spike/prelude.rs). Its fn-diff --hand form becomes the readable form; bar: the spike's 8 functions printed automatically, exact. Plan: docs/mod-view-design.md, spike section."
+        },
+        {
+          "at": "2026-10-27T02:23:54Z",
+          "by": "e0202f56",
+          "text": "Held 2026-10-26 by june's call: the readable form is re-aimed at maintainable Rust near pret's C (d/mod-view-prints-maintainable-rust-close-to-pret). Rescope this from {unit:mod/decomp-spike}'s findings before starting."
+        },
+        {
+          "at": "2026-10-27T01:04:44Z",
+          "by": "0b2cff64",
+          "text": "insn! UAL text is ready: set Config::asm_text per readable function (gbaa-recompile --asm-text sets it globally); lower.rs asm_text pairs Thumb bl halves. Check: just insn-text."
+        }
+      ]
+    },
+    {
+      "id": "mod/naming-sample",
+      "title": "Agents name a sample of Emerald, scored against pret",
+      "detail": "The mod view's naming loop, as docs/mod-view-design.md 'The naming loop' says, capped at 300 Emerald functions (june 2026-10-26): crates/naming (prepare, score) in Rust; a seeded sample stratified by size with about 30 whole call subtrees; each prompt is the function's readable print with every pret name hidden plus its callees' and callers' agent names; rounds 0 (no context), 1 (bottom-up), 2 (with callers), then a vote for data names. Score subtoken precision/recall/F1 and exact match per round and size class; tokens and seconds per function. Leak controls: no-code naming, recognition, 30 FireRed functions. Don't run past the sample: june looks first ({unit:mod/naming-gate}).",
+      "needs": ["mod/source-map", "mod/pret-names", "mod/readable-print"],
+      "record": {
+        "state": "done",
+        "by": "558cd33e",
+        "at": "2026-10-27T18:08:52Z",
+        "evidence": "Review fixes made: report's cost bullet now says about $42 for rounds 0-2 plus $3.3 no-code; naming main.rs usage line drops PRET and Asker doc describes its fields. Sample run and scores unchanged (docs/research/naming-sample.md, work/mod-naming/s1). Merged latest main; just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T18:05:58Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - docs/research/naming-sample.md, the 'Cost:' bullet in 'What it shows': it says \"$14 list a round, $45 for the three rounds and $3.3 for the no-code control\". The report's own Cost table gives 14.47 + 13.76 + 1…"
+        }
+      ]
+    },
+    {
+      "id": "mod/naming-gate",
+      "title": "june sees the naming score before it runs at scale",
+      "kind": "gate",
+      "detail": "june sees the sample's score against pret, its cost per function and some named functions side by side with pret's, and decides whether naming runs on all of Emerald and on games with no decomp.",
+      "needs": ["mod/naming-sample", "mod/naming-firered"],
+      "record": {
+        "state": "parked",
+        "why": "june looked: naming isn't ready, and a lot is changing right now; parked until she brings it back",
+        "by": "24176b67",
+        "at": "2026-11-01T00:30:00Z"
+      }
+    },
+    {
+      "id": "mod/first-mod-gate",
+      "title": "june makes a small real mod to Emerald in the mod view",
+      "kind": "gate",
+      "detail": "june picks a small change to Emerald, cuts a mod copy of the functions it touches in the readable named form, edits them, and plays the result in gbaa. Says whether the mod view is useful, and what's missing.",
+      "needs": [
+        "mod/source-map",
+        "mod/readable-print",
+        "mod/mod-copy",
+        "mod/dwarf-names",
+        "mod/insn-text",
+        "mod/dwarf-print"
+      ],
+      "record": {
+        "state": "done",
+        "by": "owner",
+        "via": "0c5e1fa1",
+        "at": "2026-10-30T14:57:03Z",
+        "evidence": "june 2026-10-30: won't hand-edit the Rust until it reads much better; passed so it stops waiting. An agent tries the mod instead ({unit:mod/agent-first-mod})."
+      }
+    },
+    {
+      "id": "mod/insn-text",
+      "title": "Assembly text for insn! markers",
+      "detail": "docs/mod-view-design.md 'The readable form': a Display for armv4t's decoded ARM and Thumb instructions in UAL syntax (lsls r0, r0, #17; ldr r0, [pc, #36]; bl 0x080a6a54), printed in insn! by the readable form instead of the Debug text. Check: matches arm-none-eabi-objdump's text (normalised) on every instruction of jsmolka's arm.gba and thumb.gba and a sample of Emerald, a unit test per instruction class in just check.",
+      "needs": ["mod/design"],
+      "record": {
+        "state": "done",
+        "by": "0b2cff64",
+        "at": "2026-10-27T01:04:42Z",
+        "evidence": "just insn-text: armv4t::text vs arm-none-eabi-objdump 15.2 (normalised), 0 mismatches: jsmolka arm.gba 631 discovered + 2147 image words, thumb.gba 859 + 1577 halfwords, all 788815 pokeemerald.elf instructions. Unit tests per class (12 in armv4t text, codegen asm_text, checker). just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "mod/dwarf-names",
+      "title": "DWARF locals, lines, prototypes and types in Emerald's map",
+      "detail": "docs/mod-view-design.md: pret-names reads pokeemerald.elf's DWARF 2 in Rust (gimli; agbcc's unterminated abbrev tables and short line programs mended) into the map: src and proto on functions, type on data, [locals] (reg or sp slot, by scope), [lines], [types] (struct/union layouts with field offsets and bitfield bits, enums); codegen::names loads [locals] and [lines]. The printer's half is {unit:mod/dwarf-print}. Check: unit tests for the mending and the loader, just pret-names loads the map, just check.",
+      "needs": ["mod/source-map", "mod/readable-print", "mod/readable-exact", "mod/readable-emerald"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "1db3c2a4",
+        "at": "2026-10-28T06:09:53Z",
+        "evidence": "just pret-names on pokeemerald.elf: every unit and line program reads (gimli after mending agbcc's unterminated abbrev tables and 27 short line programs); map gains proto on 15,025 of 15,143 named functions, [locals] 20,651 reg + 2,545 slot, [lines] 186,515, type on 24,602 data, [types] 652; map loads as codegen's SourceMap; unit tests for the mending and the [locals]/[lines] loader; snapshots-readable rerun (prototypes in doc comments); just check passes after merging main. Printer half split to {unit:mod/dwarf-print}.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T16:26:38Z",
+          "by": "a6e8d48c",
+          "text": "Per the readable-form spike (docs/mod-view-design.md, spike section): also write [types] (globals' types, struct/union layouts with field offsets, bitfield bits, enums); readable-print needs it. gdb read every type the spike needed."
+        }
+      ]
+    },
+    {
+      "id": "mod/mod-copy",
+      "title": "Cut a mod copy of functions and build with it",
+      "detail": "docs/mod-view-design.md 'A mod copy': gbaa-recompile --cut writes mods/<game>/<mod>/ (mod.toml with rom_sha1, gbaa commit and map source; src/<Name>.rs readable and named with export_name gbaa_f_<key>; orig/ for 3-way merges after a re-cut); --mod builds without those functions and adds a modded part crate including them. The runtime counts resumes landing inside a modded function. Check: unedited cut of ten functions gives byte-identical states on the new-game route (route-check --same-states); a one-constant edit shows on screen; resume count reported.",
+      "needs": ["mod/source-map", "mod/readable-print"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "a7bfc458",
+        "at": "2026-10-27T18:35:09Z",
+        "evidence": "gbaa-recompile --cut/--mod and just mod-cut/mod-states. Cut ten main_menu.c functions to mods/emerald/main-menu (prints match orig/ at build). just mod-states, emerald-newgame --every 250: 23 frames byte-identical (642,720 bytes each), 'mod: 0 of the resumes landed inside a modded function'. Edit r1=7->16 (BLDY) in Task_DisplayMainMenu: OPTION box goes black at frame 1000, 3,100 px differ (out/mod-edit/side-by-side.png); edit reverted. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "mod/source-map-loader",
+      "title": "Source map loader, layering and identifier table",
+      "detail": "First half of {unit:mod/source-map}, split off for size. docs/mod-view-design.md 'The source map': a loader in codegen for the TOML map: [map] header checked against the ROM's sha1, layering (later file wins per key, refuse one name on two addresses in a file), report tables ignored, and the identifier table (Rust keywords and printer/prelude names get a trailing _, names occurring more than once get __<file stem>, then the address). pret-names writes [map] and each function's file from the ELF symtab's STT_FILE. Check: unit tests in just check (synthetic map: header mismatch, layering, keyword, collision) and a pret-names rerun whose Emerald map loads with every function named once.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "8005b1a5",
+        "at": "2026-10-27T01:01:15Z",
+        "evidence": "codegen::names loader with 9 unit tests in just check (sha1 vectors, header mismatch/missing/format, layering with report tables ignored, one-name-two-addresses refusal, keyword/prelude/printer _ suffix, stem then address qualification, one-to-one inverse). just check passes after merging main (600a8b9). just pret-names rerun writes [map] (sha1 f3ae0881, pret/pokeemerald@731ad5bf) and file per function from STT_FILE, then loads it: 15158 functions, 15158 identifiers; 56486 data, 56486 identifiers; 363/330 qualified.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "mod/readable-emerald",
+      "title": "Readable form on Emerald: same-states route and build cost",
+      "detail": "docs/mod-view-design.md 'The check': Emerald built with every function readable passes route-check --same-states against the play-view build on the new-game route; then rustc time and peak memory for a 200-function readable list, written into the design doc.",
+      "needs": ["mod/readable-print", "mod/readable-lowering"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "560a4a62",
+        "at": "2026-10-28T05:29:29Z",
+        "evidence": "just readable-states (new), Emerald with every function readable (mods/emerald/readable/all.list, new '*' line; 15,155 of 15,157 fns, 112,737 of 112,838 blocks) vs named play view, emerald-newgame --every 250: 23 frames byte-identical (642,730 B). Build cost (whole crate, touched): play view 271 s / 1,549 CPU-s / 4.7 GB peak; 200.list 261 s / 1,527 / 4.9 GB (noise); all readable 283 s / 1,645 / 4.5 GB. In docs/mod-view-design.md 'The check'. just check passes after merging main. Spike hand-file swap filed as {unit:mod/spike-hand-mod}.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T18:51:22Z",
+          "by": "68e6bb5b",
+          "text": "Since {unit:mod/readable-lowering}: mods/emerald/main-menu was cut in the old --locals form (re-cut with just mod-cut to print the new one). The spike hand file's macros clash with the prelude's if include!d; fn-diff pastes it in (fn_diff::hand_tokens)."
+        },
+        {
+          "at": "2026-10-27T16:26:42Z",
+          "by": "a6e8d48c",
+          "text": "Per the readable-form spike: also swap the spike's hand file (mods/emerald/decomp-spike/readable.rs, 8 functions) into Emerald once --mod exists ({unit:mod/mod-copy}) and route-check it; that check was left undone."
+        }
+      ]
+    },
+    {
+      "id": "mod/readable-exact",
+      "title": "Readable form exact on the CPU suites and own-state-check",
+      "detail": "docs/mod-view-design.md 'The check': with every function readable (--readable listing all, --locals on), run the CPU suites (sst, gba-tests, armwrestler) and own-state-check against the play view; these are the checks the --locals spike ({unit:structured/regs-locals}) skipped. Fix what differs in the readable printer or locals.rs.",
+      "needs": ["mod/readable-print", "mod/readable-lowering"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "5c561058",
+        "at": "2026-10-28T05:50:56Z",
+        "evidence": "Every function readable (list '*', now emit::all_entries: IWRAM copies and continuation roots too) vs the play view, route-check --same-states every 25 frames: just readable-suites passes on jsmolka arm/thumb/memory/nes/bios and both armwrestler builds (new routes units/jsmolka-*.toml, units/armwrestler-*.toml; thumb 122/177 blocks readable, armwrestler 64/201). sst-gen 500 4000 --readable: 22,500 cases + 4,000 seqs, 0 differ. own-state-check with all.list: Emerald 1000+100 (15,167 fns, 112,738/112,940 blocks readable) and armwrestler 200+150 pass. Yield-path sync already covered by fn-diff (737 yielding runs, 0 differ), so no IRQ states added. Nothing differed; report fix: IWRAM fns no longer 'not functions'. just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T16:26:40Z",
+          "by": "a6e8d48c",
+          "text": "Per the readable-form spike: none of its 1,584 fn-diff runs yielded, so tick! sync blocks went unexercised; add fn-diff states recorded at IRQ points here."
+        }
+      ]
+    },
+    {
+      "id": "mod/decomp-spike",
+      "title": "Spike: how close exact Rust gets to pret's C, 10 functions",
+      "detail": "june 2026-10-26 (d/mod-view-prints-maintainable-rust-close-to-pret): the mod view's readable form aims at maintainable Rust near pret's C, not asm with names. Take 10 Emerald functions of varied shape (a leaf getter, a loop over an array, a call chain, a switch or jump table, struct field access, a u8/u16 arithmetic one; ClearBattleMonForms and SeedRngAndSetTrainerId among them). Prototype a printer path that emits the closest Rust it can while staying exact: timing and flags folded into macros or hidden, registers as locals, expressions folded, names from the source map, types and struct fields from pret's DWARF (gdb reads it, see docs/research/name-recovery.md), loop idioms recovered. Target shape for ClearBattleMonForms: fn clear_battle_mon_forms(g: &mut Game) { for i in (0..4).rev() { g.battle_mon_forms[i] = 0; } }. Check each prototype is exact (fn-diff or sst-gen on those functions, and the Emerald new-game route with them swapped in). Score each against pret's C: statements, named accesses, loop shapes, what's left as raw addresses or casts. Write the side-by-sides and scores into docs/mod-view-design.md, say what each gap would take (by technique, from the decompiler literature in name-recovery.md), and propose how the readable-form units ({unit:mod/readable-print}, {unit:mod/readable-exact}, {unit:mod/readable-emerald}) should change. Stop at ~3 h with what's measured.",
+      "check": "independent",
+      "uses": ["heavy"],
+      "priority": 5,
+      "record": {
+        "state": "done",
+        "by": "a6e8d48c",
+        "checker": "verifier-subagent-a6e8d48c",
+        "at": "2026-10-27T16:31:22Z",
+        "evidence": "Independent verifier reran fn-diff --hand --exact on the 8 hand-written Emerald functions: hand 0 of 1584 runs differ (matches doc); a +1 tick edit gives 286 differ/FAIL; default fn-diff unchanged. Doc section scores, gaps and unit proposals checked against pret source. CalcCRC16/GetBgAttribute unwritten, yields and route swap-in unrun, as documented.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "mod/callee-saves",
+      "title": "Prove callee-saved registers per callee, drop reloads",
+      "detail": "docs/mod-view-design.md 'How close exact Rust gets to pret's C', gap 2: a codegen analysis proving a callee (and its call closure) restores r4-r11 and sp on every path, agbcc push/pop pairs; unknown indirect calls fail it. Where it holds, the readable form drops reloads after calls, so loops like ResetTasks print as for. Check: fn-diff with reloads dropped on every function the proof passes, exact.",
+      "check": "recorded",
+      "needs": ["mod/decomp-spike"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "e05c1166",
+        "at": "2026-10-27T17:26:40Z",
+        "evidence": "codegen::saves proves 8,894 of 15,158 Emerald functions keep r4-r11 and sp (gbaa-recompile --saves). fn-diff --exact on main-merged tree, every entered function (270 picks, 591 states): new saves form (no r4-r11/sp reload after 451 of 568 proven calls) 0 of 13,002 runs differ, fault caught; just check passes; ResetTasks' loop keeps r4-r7 across its call.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T17:26:39Z",
+          "by": "e05c1166",
+          "text": "Readable print ({unit:mod/readable-print}) is recorded done but its code wasn't on main at this merge: when it lands, its call! should take Config::callee_saves and print locals.reload_kept() at proven calls (lower.rs Plan::Call); expect a locals.rs/lower.rs conflict."
+        }
+      ]
+    },
+    {
+      "id": "mod/readable-lowering",
+      "title": "Readable lowering: accesses, locals as variables, sync",
+      "detail": "docs/mod-view-design.md 'What the readable-form units should become': a new lowering for functions on the readable list (Ctx::cfg_for) printing the spike's form from the IR and plan: mods/emerald/decomp-spike/prelude.rs moved into the generated prelude, accesses as g.get/g.set, push!/pop!/tick!/call!/ret!, locals as variables, sync blocks moved out of the body (gap 1). No types yet (Ptr<u8> from raw addresses). Check: fn-diff readable form exact on Emerald --exact, sst-gen --readable, the spike's 8 functions printed automatically and exact (fn-diff --hand as reference), snapshots-readable rerun.",
+      "needs": ["mod/readable-print"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "b5261934",
+        "at": "2026-10-28T04:28:47Z",
+        "evidence": "Review fix applied: configs' doc comment moved back above configs() in fn_diff.rs (c16b176); latest main merged; main's unformatted desktop tests.rs rustfmt'd; just check passes. Lowering unchanged since the earlier recorded fn-diff/sst-gen --readable evidence.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T18:53:17Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/fn_diff.rs:52-56: the new `hand_tokens` fn was inserted between `configs()` and its doc comment. As a result, `hand_tokens` now carries a four-line doc that starts with configs' text (\"The c…"
+        }
+      ]
+    },
+    {
+      "id": "mod/readable-loops",
+      "title": "Readable lowering: literal-pool loads folded into accesses",
+      "detail": "docs/mod-view-design.md spike Gaps 3: a pool load whose value only the next access uses folds into it (m.get_via/set_via/load_via), order unchanged. Split 2026-10-28: loops {unit:mod/readable-for-loops}, types {unit:mod/readable-types}, indexing {unit:mod/readable-indexing}, prototypes {unit:mod/readable-protos}. Check: fn-diff readable exact on Emerald --exact; snapshots-readable rerun.",
+      "needs": ["mod/readable-lowering", "mod/dwarf-names"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "1c496a44",
+        "at": "2026-10-28T06:55:49Z",
+        "evidence": "Pool loads folded into the next access (m.get_via/set_via/load_via, lower::fold_pools). fn-diff Emerald 2000 --exact: readable 0 of 13,002 runs differ, 354 pool loads folded; snapshots-readable rerun (7 of 10 fold); just check passes after merging main. Loops, types, indexing, prototypes split into {unit:mod/readable-for-loops}, {unit:mod/readable-types}, {unit:mod/readable-indexing}, {unit:mod/readable-protos}.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "mod/naming-firered",
+      "title": "FireRed leak control for the naming sample",
+      "detail": "The naming loop's third leak control (docs/mod-view-design.md 'Measuring the leak'): fetch-pret adds pret's pokefirered, pinned; build it and run pret-names on it; pick 30 FireRed functions whose Emerald counterpart (same code, matched by bytes or call position) has a different name; ask them with naming ask's round-0 prompt (crates/naming) and count answers giving Emerald's name. Reported beside {unit:mod/naming-sample}'s score.",
+      "needs": ["mod/naming-sample"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "f9c1d87c",
+        "at": "2026-10-28T19:46:10Z",
+        "evidence": "pokefirered ce6406d built (FireRed 1.0 SHA1), pret-names 11582/11592 entries named; naming sibling drew 30 of 591 renamed-same-code functions; round 0 (Sonnet 5.5): 0/30 answers gave Emerald's name (0 FireRed's), F1 0.102 vs FireRed names, 0.099 vs Emerald's; Emerald s1 round 0 is 0.155. docs/research/naming-sample.md 'FireRed control'; just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-28T06:09:15Z",
+          "by": "68fb3184",
+          "text": "Code done (de5bdd9): naming sibling FR_ROM FR_NAMES EM_ROM EM_NAMES OUT, then naming ask FR_ROM OUT 0, naming score OUT. Only missing: just fetch-pret (refused by the session's classifier as external code) and just pret-names pokefirered."
+        },
+        {
+          "at": "2026-10-27T18:04:16Z",
+          "by": "f0cba470",
+          "text": "Reuse crates/naming: naming prepare on the FireRed ROM + its pret-names map (it may need a 30-function --limit or a smaller Plan), then naming ask ... 0. Emerald's run is work/mod-naming/s1 on quack; results in docs/research/naming-sample.md."
+        }
+      ]
+    },
+    {
+      "id": "mod/spike-hand-mod",
+      "title": "The spike's hand-written functions as an Emerald mod",
+      "detail": "mods/emerald/decomp-spike/readable.rs (8 functions, written by hand by the readable-form spike) made a mod copy (mod.toml, src/ per function with export_name gbaa_f_<key>; its prelude.rs clashes with the generated prelude, see fn_diff::hand_tokens) and built with --mod; check: just mod-states on emerald-newgame --every 250, byte-identical.",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "2c6f5795",
+        "at": "2026-10-28T07:36:54Z",
+        "evidence": "mods/emerald/spike-hand: just mod-cut of the 8 functions (mod.toml, orig/), src/ = decomp-spike/readable.rs by hand with export_name gbaa_f_<key>, types in src/pret.rs, hand macros written per file (include! can't shadow: E0659). just mod-states --every 250 units/emerald-newgame.toml after merging main: 23 frames byte-identical (642,730 bytes), 0 resumes inside the mod. just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-28T07:36:56Z",
+          "by": "2c6f5795",
+          "text": "Since main's lower.rs change, report.txt's mod line lists 7 functions as printed differently from orig/ (the cut's print). Expected: src/ is hand-written; don't re-cut over it (git merge-file would mangle it). Refresh orig/ by cutting to a scratch dir if wanted."
+        }
+      ]
+    },
+    {
+      "id": "mod/dwarf-print",
+      "title": "DWARF names, lines and call values in the readable form",
+      "detail": "docs/mod-view-design.md 'The readable form' and 'Naming locals', on the map {unit:mod/dwarf-names} wrote ([locals], [lines], proto). Name a value from [locals] only where its register's live ranges lie inside the variable's scope (agbcc gives one location per function or lexical block), else a '// r4: name' comment; stack slots as comments at sp+slot accesses; src file:line per block from [lines]; r0 = call!(..) where the callee's proto isn't void. Report names vs comments. Check: --names-check extended to locals, fn-diff readable --exact, route-check --same-states, snapshots-readable rerun. After {unit:mod/readable-loops}, whose variables the names attach to.",
+      "needs": ["mod/dwarf-names", "mod/readable-loops", "mod/readable-for-loops"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "134d62e1",
+        "at": "2026-10-28T22:41:59Z",
+        "evidence": "Review fix: GetReg reads used only as stm/push stored values no longer get '// rN: name' comments (dwarf.rs). snapshots-readable regenerated (ResetTasks/CheckBagHasItem prologue comments gone); names-check --readable all.list: 15167 fns 0 failed, 16481 by name, 2726 only comments, 1239 neither; docs updated; just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-28T22:33:37Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/dwarf.rs:1110-1122 (the 'Registers read in a variable's scope' loop in FnDwarf::block): every GetReg of r0-r12 inside a variable's scope adds a `// rN: name` comment, including the prologue'…"
+        },
+        {
+          "at": "2026-10-28T22:26:13Z",
+          "by": "8a697918",
+          "text": "Verified: agbcc slot offsets are from sp after the prologue (ClearPokemonCrySongs tmp at sp+0 after sub sp,#4). Known miss: a temporary in a var's register of the var's type takes its name (CheckBagHasItem's call arg as quantity). names-check --readable runs with [types] off."
+        },
+        {
+          "at": "2026-10-28T06:10:05Z",
+          "by": "1db3c2a4",
+          "text": "Correction to the last note: dwarf::home reads breg13, breg7 and fbreg all as a slot; which op agbcc uses, and whether r7 equals sp after the prologue, is unverified. Check before printing slot comments."
+        }
+      ]
+    },
+    {
+      "id": "mod/readable-for-loops",
+      "title": "Readable: loop variables across blocks, and for loops",
+      "detail": "docs/mod-view-design.md spike Gaps 4: a value a loop carries in a register across its back edge's tick (ClearBattleMonForms' r0) held in a Rust local, the tick's sync still writing it; then for from an induction variable's init, step and compared bound over the structured loop (down-counts stay .rev()); loop { … break } where it is reloaded. Check: fn-diff Emerald 2000 --exact, readable 0 differ; snapshots-readable rerun; the spike's 8 by the doc's score table.",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "0fc3baa8",
+        "at": "2026-10-28T20:21:19Z",
+        "evidence": "After merging main: just check passes; fn-diff Emerald 2000 --exact readable 0 of 13,002 runs differ; snapshots-readable rerun (ClearBattleMonForms now 'for r0 in (0x202_44e4_u32..=0x202_44e7).rev()'); every Emerald fn readable type-checks, 188 fors. Spike's 8: 1 of 2 loops as for (ResetTasks stays loop: r6/r7 reread after memset), 370 lines/250 without insn!, m.cpu.r reads 29->24. New test a_counted_loop_prints_as_for.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-28T20:21:26Z",
+          "by": "0fc3baa8",
+          "text": "Not run: readable-states route with all.list (heavy). Next step for ResetTasks as for: carry r4-r11 across calls to proven callees (needs prove_saves on for readable lists; ctx.kept is empty unless locals+callee_saves)."
+        },
+        {
+          "at": "2026-10-28T06:55:55Z",
+          "by": "1c496a44",
+          "text": "ClearBattleMonForms' loop variable lives in m.cpu.r[0] across the back edge's tick!, re-read each iteration as m.cpu.r[0]; a for needs that value carried as a Rust local across blocks first. Pool folding (m.get_via) landed in {unit:mod/readable-loops}."
+        }
+      ]
+    },
+    {
+      "id": "mod/readable-types",
+      "title": "Readable: Ptr<T> globals and field accessors from [types]",
+      "detail": "docs/mod-view-design.md spike Gaps 6 and 8: codegen::names loads the map's [types]; globals print as typed consts (Ptr<[Task; 16]>), structs as marker types with one accessor per field, a bitfield accessor only where the access matches its offset and width (else & mask); access widths from the instruction; a pool word that is a function key prints as its name. Check: fn-diff Emerald 2000 --exact, readable 0 differ; snapshots-readable rerun; the spike's 8 by the doc's score table.",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "a218e912",
+        "at": "2026-10-28T20:32:14Z",
+        "evidence": "Review fix: names::files_for treats a missing names dir as no names (test a_missing_names_dir_gives_no_files). After merging main: just check passes; just fn-diff Emerald 2000 --exact passes, readable 0 of 13002 runs differ; snapshots-readable rerun leaves emerald-readable.rs unchanged.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-28T20:25:17Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - justfile:349 together with crates/codegen/src/bin/gbaa-recompile.rs:500-502 (fn fn_diff) and crates/codegen/src/names.rs files_for: `just fn-diff` now always passes `--names-dir $GBAA_DATA/names`. `files_for` …"
+        },
+        {
+          "at": "2026-10-28T20:22:40Z",
+          "by": "11eded97",
+          "text": "Not built here: a full named Emerald crate (base's globals module, 24,602 consts, glob-imported into every part). fn-diff compiled the same module in one crate; the next just names / readable-states run is its first whole-ROM build."
+        }
+      ]
+    },
+    {
+      "id": "mod/readable-indexing",
+      "title": "Readable: strength-reduced indexing as idx(i)",
+      "detail": "docs/mod-view-design.md spike Gaps 5: ((i<<2)+i)<<3 plus a base prints a.idx(i) where 40 is the element's DWARF size (a peephole on the address expression); the intermediate sum kept where a flag sync reads it. ResetTasks is the test case. Check: fn-diff Emerald 2000 --exact, readable 0 differ; snapshots-readable rerun; the spike's 8 by the doc's score table.",
+      "needs": ["mod/readable-types", "mod/readable-for-loops"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "184c23b4",
+        "at": "2026-10-28T22:06:48Z",
+        "evidence": "Review fix made: ptr_ty's doc comment moved back above ptr_ty in crates/codegen/src/print.rs (comment-only, no codegen change, so the earlier fn-diff Emerald 2000 --exact readable 0 differ result stands). Latest main merged; just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-28T21:27:46Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/print.rs:1374: the new `path` and `rest_of` helpers were added between `ptr_ty`'s doc comment and `ptr_ty` itself. As a result, `fn path` (line 1376) has two doc lines: the stray \"/// The ty…"
+        },
+        {
+          "at": "2026-10-28T21:24:49Z",
+          "by": "ea225ed2",
+          "text": "Left for later: a pointer loaded from a datum then indexed (Ptr::<T>::at(v) + i*size), pointer induction vars (ClearBattleMonForms' for r0 over addresses), sync values like r7 = gTasks+8. lower::known could also carry r4-r11 locals across kept calls."
+        },
+        {
+          "at": "2026-10-28T20:22:15Z",
+          "by": "11eded97",
+          "text": "Typed paths are in (codegen::types, Printer::ptr/typed_addr): extend typed_addr with Add(base, i*size) -> Step::Idx(var). bits_kept already picks bitfields from the load's mask/shifts, so GetPlayerFacingDirection's facingDirection comes out named once idx(id) does."
+        }
+      ]
+    },
+    {
+      "id": "mod/readable-protos",
+      "title": "Readable: parameters and returns from prototypes",
+      "detail": "docs/mod-view-design.md spike Gaps 7: with the map's proto, a parameter prints let quantity: Ptr<u16> = arg!(0); and a return ret!(… return dir) rather than Ptr::at(m.cpu.r[0]) and regs!(m; 0 = dir). Overlaps r0 = call!(..) in {unit:mod/dwarf-print}: agree the form with it. Check: fn-diff Emerald 2000 --exact, readable 0 differ; snapshots-readable rerun; the spike's 8 by the doc's score table.",
+      "needs": ["mod/readable-types"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "8ccf9b5c",
+        "at": "2026-10-28T23:18:26Z",
+        "evidence": "After merging main: fn-diff Emerald 2000 --exact, readable 0 of 13,002 runs differ; just check passes; snapshots-readable rerun (emerald-readable.rs shows arg! lets and ret! return). Every Emerald function readable type-checks with no warnings: 12,940 parameters (5,075 Ptr), 2,187 of 15,144 ret! with return. names-check --readable 0 failed (protos off with [types]). Spike's eight: both params, all 4 returns, 23 of 26 accesses with a path. Form agreed with {unit:mod/dwarf-print}: call values stay comments, return is a ret! argument.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-28T23:18:28Z",
+          "by": "8ccf9b5c",
+          "text": "Gap left: a return from a shared epilogue (r0 set in an earlier block, e.g. bool8 CheckBagHasItem) prints no 'return'; only its predecessor's sync shows 0 = 1. About half of non-void functions' returns. 6,440 of 12,940 params print as name_arg (DWARF names their copy)."
+        }
+      ]
+    },
+    {
+      "id": "mod/readable-io-names",
+      "title": "Readable: GBA I/O registers by name (REG_TM1CNT_L)",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "280b80e8",
+        "at": "2026-10-28T23:10:36Z",
+        "evidence": "codegen::io_regs (pret io_reg.h REG_* names/widths + GBATEK JOY/POSTFLG/HALTCNT) as Ptr consts in globals; named readable access at a constant I/O address prints REG_TM1CNT_L (snapshot SeedRngAndSetTrainerId: REG_TM1CNT_L/_H). Test an_io_register_prints_by_name. Emerald readable-states all.list newgame --every 250: 23/23 frames same; 1,083 accesses named, 11 raw (u32 over two SIO halves). just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-28T20:22:27Z",
+          "by": "11eded97",
+          "text": "The spike's REG_TM1CNT_L/H, REG_IE print as Ptr::<u16>::at(0x400_0104): no map entry. A names layer of GBA I/O registers (gba/io_reg.h's REG_*, typed u16/u32) under $GBAA_DATA/names or committed; types::Types already makes typed [data] into globals."
+        }
+      ]
+    },
+    {
+      "id": "mod/dwarf-print-recheck",
+      "title": "Readable names and types: fn-diff and states after merge",
+      "needs": ["mod/dwarf-print"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "b319f547",
+        "at": "2026-10-28T23:45:36Z",
+        "evidence": "On main with dwarf-print and readable-protos merged: just fn-diff Emerald 2000 --exact: readable (named+typed from pokeemerald.toml and assets) 0 of 13,002 runs differ, fault caught, pass. just readable-states Emerald pokeemerald.toml all.list --every 250 new-game: 15,167 of 15,167 listed readable, 23 frames the same, pass. just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-28T22:25:58Z",
+          "by": "8a697918",
+          "text": "Run after {unit:mod/dwarf-print} merged with main's [types]: just fn-diff EMERALD 2000 --exact (readable now named+typed) and just readable-states EMERALD NAMES all.list --every 250 units/emerald-newgame.toml. Pre-merge both passed; post-merge not run: a game held 13 GB."
+        }
+      ]
+    },
+    {
+      "id": "mod/cross-compiler-match",
+      "title": "Match Emerald functions across agbcc and modern GCC",
+      "detail": "Match each function of pokeemerald built with modern GCC 15.2 (pokeemerald_modern.elf, from fetch-pret) to the agbcc build's, names hidden, by IR fingerprints, anchors and call-graph spreading; score precision/recall by size against both ELFs' symbols. A matcher crate plus docs/research/cross-compiler-matching.md; then a look at Emerald Rogue.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "084ec885",
+        "at": "2026-10-29T01:38:13Z",
+        "evidence": "xmatch score, agbcc Emerald -> modern-GCC build: precision 97.1%, recall 70.5% (8,658/12,288); fingerprints alone 98.1%/19.0%, +spreading 65.6%. Rogue: 6,412/13,366 named, boot path to title read by hand. docs/research/cross-compiler-matching.md; just check passes after merging main; fresh-subagent review, fixes in 30880c58. PR #68."
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T01:38:18Z",
+          "by": "084ec885",
+          "text": "Rogue's precision is unmeasured: Rogue's source is public, so a symbol build of it would give truth. Checkpoints past the title need input-driven runs (gbaa-interp takes no input). Ask june before scaling."
+        }
+      ],
+      "round": "2026-10-29T00:43:25Z"
+    },
+    {
+      "id": "mod/rogue-symbols",
+      "title": "Score Rogue's names against a symbol build of Rogue",
+      "detail": "Build Emerald Rogue (Pokabbie/pokeemerald-rogue, the EX v2.2.1a source) with symbols, get its source map (pret-names), and score xmatch's Emerald-to-Rogue names against it: Rogue's real precision and recall. june asked for it, 2026-10-28.",
+      "check": "recorded",
+      "needs": ["mod/cross-compiler-match"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "084ec885",
+        "at": "2026-10-29T02:25:48Z",
+        "evidence": "just fetch-rogue + rogue-names: Rogue EX v2.2.1 (a6adfcf1) built with symbols. xmatch Emerald->Rogue: precision 94.4%, recall 59.1%. Build as reference names 12,188/13,366 of june's ROM. docs/research/cross-compiler-matching.md 'Rogue with symbols'; just check passes; PR #68."
+      },
+      "round": "2026-10-29T01:58:41Z"
+    },
+    {
+      "id": "mod/library-names",
+      "title": "Name only library functions in games unlike the reference",
+      "detail": "xmatch name --library: carry over only names of library functions (m4a, BIOS wrappers, libgcc/libc, flash, multiboot, RFU, RTC), listed in a TOML file, so an unrelated game gets no false game names. Hand-check a sample of the structural matches. june asked, 2026-10-28.",
+      "check": "recorded",
+      "needs": ["mod/cross-compiler-match"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "084ec885",
+        "at": "2026-10-29T03:03:04Z",
+        "evidence": "xmatch --library + libraries.toml; Emerald libs on FireRed 100%/98.4%, Rogue build 97.8%/65.2%, modern 97.3%/66.3% (100% with partial). Unrelated games get library names only (Kirby AM 76 ... Metroid 40). Their precision is scored with decomp truth in {unit:mod/decomp-references}. Commit d379c001, PR #68."
+      },
+      "round": "2026-10-29T02:48:19Z"
+    },
+    {
+      "id": "mod/decomp-references",
+      "title": "Bring in other GBA decomps as library references",
+      "detail": "Fetch and build zeldaret/tmc (Minish Cap), metroidret/mzm (Metroid ZM), jiangzhengwenjz/katam (Kirby AM) and pret/pokeruby with symbols, pinned, into GBAA_DATA; source maps via pret-names; use each as a library reference for every ROM (several references merged), and score library naming against each decomp's own game. june asked, 2026-10-28.",
+      "check": "recorded",
+      "needs": ["mod/library-names"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "084ec885",
+        "at": "2026-10-29T03:31:13Z",
+        "evidence": "just fetch-decomps + decomp-names: tmc, mzm, katam byte-identical to june's ROMs, maps load (7,520/2,611/5,605 named). xmatch matrix --library: 90-98% strict across games, below that mostly decomp renames. NiDL 80 library names, WarioWare 44. just check passes; PR #68."
+      },
+      "round": "2026-10-29T03:03:07Z"
+    },
+    {
+      "id": "mod/bios-call-names",
+      "title": "Name BIOS calls in the readable form",
+      "detail": "Each swi in a readable function prints a comment naming the call (runtime::bios::call::NAMES): // BIOS CpuSet (swi 0x0b). june asked whether GBA builtins are named by default, 2026-10-29.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "084ec885",
+        "at": "2026-10-29T04:07:18Z",
+        "evidence": "Readable swi prints '// BIOS CpuSet (swi 0x0b)'; snapshot shows CpuSet and LZ77UnCompWram; names-check passes for them; just check passes. PR #68."
+      },
+      "round": "2026-10-29T04:07:15Z"
+    },
+    {
+      "id": "mod/readable-ime-name",
+      "title": "Fix the readable SoftReset's REG_IME name mismatch",
+      "detail": "gbaa-recompile --names-check on Emerald with SoftReset (f_082e70ad) on the readable list fails: unnamed print has Ptr where the named one has REG_IME. Present on main before {unit:mod/bios-call-names}; found 2026-10-29.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "0e582aa3",
+        "at": "2026-10-29T04:28:30Z",
+        "evidence": "names-check walk now accepts a REG_* name where the unnamed print has the Ptr::<t>::at(lit) io_regs::at names; Emerald --names-check with SoftReset only and with all.list: 0 failed of 15,167; new unit test an_io_register_name_inverts_to_its_address; just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "mod/default-library-names",
+      "title": "Give every ROM library names by default",
+      "detail": "Write a library names file for every ROM in ~/ROMs/gba with no full map (xmatch name --library, all references: Emerald, FireRed, tmc, mzm, katam) into GBAA_DATA/names, from one Rust command and one just recipe; make the readable and mod-view prints (gbaa-recompile, mod view, fn-diff) find names files by the ROM's SHA1 as fn-diff does. If loading names would change what a play build produces, ask june first (just ask) rather than choosing. june asked, 2026-10-29.",
+      "check": "recorded",
+      "needs": ["mod/decomp-references"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "a0dd056b",
+        "at": "2026-10-29T04:44:18Z",
+        "evidence": "just library-names (xmatch library-names, 5 refs, 4 min, 0.5 GB) wrote $GBAA_DATA/names/<rom>-library.toml for the 7 ROMs with no full map (Imperium 174, Rogue 186, NiDL 80, Mariomon 341, WarioWare 45, homebrew 1/2), skipped 4 with pret maps. gbaa-recompile --names-dir names readable/mod/cut/names-check prints by sha1 (fn-diff shares it); names-check WarioWare+NiDL 0 failed; plain recompile byte-identical, so play builds unchanged, no ask. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "mod/fuzzy-library-match",
+      "title": "Match library versions that differ a little (BSim-style)",
+      "detail": "Add n-gram signatures over the IR (runs of operations and data flow, BSim-style) to xmatch so a library function with a line changed still scores close. Measure with xmatch matrix --library over the five references (Emerald, FireRed, tmc, mzm, katam) and the Rogue build; record the matrix before and after in docs/research/cross-compiler-matching.md. Keep the change only if total recall rises and no reference-to-game cell loses more than 1 point of strict precision; otherwise record the result and drop the change. Settings chosen on this truth must be named as such in the write-up (no held-out pair). Today: 90-98% strict precision; Kirby AM gets 48 of Emerald's ~110 m4a functions, WarioWare none.",
+      "check": "independent",
+      "needs": ["mod/decomp-references"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "00ddc26f",
+        "checker": "a4fea1cd",
+        "at": "2026-10-29T05:10:42Z",
+        "evidence": "Data-flow n-gram tokens tried at weights 0-1 over the 6-ROM library matrix: total recall up to 81.0% from 78.35%, but every weight lost 2.3-20 points strict precision on some cell (gate: 1), so code dropped; before/after matrices and sweep in docs/research/cross-compiler-matching.md. Verifier recomputed all cells from raw output: PASS (two prose fixes made). just check passes.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "mod/opus-library-judge",
+      "title": "Trial Opus as judge for unmatched library functions",
+      "detail": "For library-looking functions xmatch --library leaves unnamed, show Opus the function's readable print and the three nearest reference library functions, and ask which one it is, or none. Score against the decomps' truth (xmatch matrix references) and report precision and recall per game. Spend cap, june 2026-10-29: the command takes --limit N and this trial runs with at most --limit 300 calls in total, across reruns; record the calls and cost in the evidence. Anything larger is a new question for june ({unit:mod/naming-gate} still holds the naming loop at scale). Run claude -p as crates/naming does (no tools, safe mode, empty folder).",
+      "check": "independent",
+      "needs": ["mod/fuzzy-library-match"],
+      "record": {
+        "state": "done",
+        "by": "dc5b846f",
+        "checker": "verifier-a7c41e",
+        "at": "2026-10-29T19:30:38Z",
+        "evidence": "xmatch judge (crates/xmatch/src/judge.rs) ran over 6 ROMs with symbols: 170 claude -p calls (cap 300), Opus 5.5, $16.99 list cost. Precision 80.2%, recall 69.1% overall (per game in docs/research/cross-compiler-matching.md, 'A model as judge'); true name picked 85/85 when shown. Verifier recounted from work/opus-judge/trial answers: match. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "mod/readable-print-btree-panic",
+      "title": "Readable print panics on four library functions",
+      "detail": "xmatch judge ({unit:mod/opus-library-judge}) found the readable lowering panics 'range start is greater than range end in BTreeMap' on tmc 0x08000ee1 and 0x080af7d5, katam 0x0814f909, Rogue build 0x0800c719 (plain print works). Find the range call and fix it; a test per case.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "6966fdfe",
+        "at": "2026-10-29T19:59:09Z",
+        "evidence": "Cause: FnDwarf::in_effect's range(start..=a) for a block below the entry. Fix: no row there. gbaa-recompile --names-check --readable on each of the four keys (tmc 0x08000ee1, 0x080af7d5 with tmc.toml; katam 0x0814f909; Rogue build 0x0800c719): all four panicked at the commit before, 0 failed after. All four share one cause, so one codegen test covers that shape (a_block_below_the_entry_prints_readable_and_named): it fails without the fix and passes with it. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "mod/readable-insn-off",
+      "title": "Mod view without insn! lines by default, or as comments",
+      "detail": "june 2026-10-30, high priority: the insn! lines make the mod view hard for her to read (about a third of the lines; docs/mod-view-design.md's eight: 379 with, 259 without). insn! expands to nothing, so this is printing only. Do: (1) the readable/mod-view print leaves insn! out by default; (2) a flag brings them back as today's macros (--asm-text, which the readable form now turns on itself); (3) a flag prints them as plain comments instead, e.g. '// 0x0805_9810 push {r4, lr}'. The play view stays as it is. Check: a re-cut over an edited mod src/ file still merges with git merge-file (fewer unchanging lines to anchor on); --names-check and snapshots updated; fn-diff readable still 0 differ. Measure what the macros cost the build: time the Kirby or Emerald generated crate's build with and without them (heavy: one generated crate each), and write the number in commands.md.",
+      "priority": 25,
+      "record": {
+        "state": "done",
+        "by": "9ba41ab3",
+        "at": "2026-10-30T15:13:42Z",
+        "evidence": "Readable print omits insn! by default; --asm-text = macros, --asm-comments = '// 0x0805_9810 push {r4, lr}'. Play snapshot unchanged, readable snapshot regenerated (-191 lines). names-check Emerald all.list: 0 of 15167 failed in all 3 modes. fn-diff Emerald 2000 --exact: readable 0 of 13002 differ. Re-cut of 2 edited main-menu fns from an insn! cut: 0 conflicts (recast_insns), and a steady-state print change merged 0 conflicts. Build cost (Emerald all readable): 291 s with vs 270 s without, ~7%, in commands.md. just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-30T15:13:44Z",
+          "by": "9ba41ab3",
+          "text": "mods/emerald/main-menu was cut with insn! lines; its src is unedited, so a plain re-cut (just mod-cut) rewrites it without them. Until then report.txt's mod line lists its functions as printing differently. Left for june."
+        }
+      ]
+    },
+    {
+      "id": "mod/agent-first-mod",
+      "title": "An agent makes a small real Emerald mod, says what hurt",
+      "detail": "In june's place (june won't hand-edit the Rust until it reads much better, 2026-10-30): pick a small visible change to Emerald (e.g. a starter's level, a shop price, a text speed), cut a mod copy of the functions it touches in the readable named form (mods/emerald/), edit them as a modder would, build, and show the change in gbaa (headless frame dump or a private cu session). Done when the change shows in game and docs/ has a short write-up: what was hard to read or edit, ranked, each with the fix it suggests; file those fixes as mod units.",
+      "check": "independent",
+      "needs": ["mod/readable-insn-off"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "e5fe3d68",
+        "checker": "verifier-7c3e1a",
+        "at": "2026-10-30T15:29:48Z",
+        "evidence": "mods/emerald/text-speed cuts SetDefaultOptions (fast text, window frame 5). Modded build, headless with the new-game route's presses: frame 1100 main-menu boxes in frame 5's border, frame 2000 Birch two lines further on; stock frames differ, 1200-1500 same. Write-up docs/research/agent-first-mod.md ranks 5 pains, filed as {unit:mod/bitfield-writes}, {unit:mod/value-names}, {unit:mod/mod-run}, {unit:mod/cut-file-guide}, {unit:mod/mod-find}. Fresh verifier reran both builds and checked against pret: PASS. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "mod/bitfield-writes",
+      "title": "Mod view prints a bitfield write as a field set",
+      "detail": "From docs/research/agent-first-mod.md, item 1: a load, mask, or and store of one bitfield's byte prints as a write of the named field (e.g. set_bits on p.optionsWindowFrameType()), expanding to the same accesses. Done when SetDefaultOptions prints its six lines so and readable-states on Emerald stays the same.",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "abe3b843",
+        "at": "2026-10-30T15:59:49Z",
+        "evidence": "SetDefaultOptions (new_game.c:93-98) prints six m.set_bits on the named fields (optionsTextSpeed 1, optionsWindowFrameType 0, optionsSound, optionsBattleStyle, optionsBattleSceneOff, regionMapZoom 0), in the committed snapshot crates/codegen/snapshots/emerald-readable.rs. just readable-states Emerald, every function readable (all.list), emerald-newgame --every 250: same-states pass, 23 frames byte-identical; that build prints 808 field writes (733 set_bits, 75 set_bits_via). New test a_bitfield_write_prints_as_a_field_set (and a non-field run falls back). just check passes before and after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-30T15:59:56Z",
+          "by": "abe3b843",
+          "text": "Byte-wide bitfields only: a field whose narrowest access is a halfword (ldrh, the load's use a rotate) still prints as get/set. mods/emerald/text-speed was not re-cut; its src still has the old masks (it builds as is)."
+        }
+      ]
+    },
+    {
+      "id": "mod/value-names",
+      "title": "Mod view names pret's constants where a field takes them",
+      "detail": "From docs/research/agent-first-mod.md, item 2: the source map records a field's #define or enum family by name and value, and the print names stored and compared values (OPTIONS_TEXT_SPEED_MID, not 1). Names only, never C text. Done when SetDefaultOptions' line 93 prints the name and states stay the same.",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "c6d68465",
+        "at": "2026-10-30T16:29:56Z",
+        "evidence": "SetDefaultOptions' line 93 prints m.set_bits(.., optionsTextSpeed(), OPTIONS_TEXT_SPEED_MID) (also OPTIONS_SOUND_MONO, OPTIONS_BATTLE_STYLE_SHIFT) in the regenerated snapshot crates/codegen/snapshots/emerald-readable.rs. pret-names writes [values]: 29 #define families on 118 Emerald fields, linked only where pret's source sets/compares the field with them. Field stores and cmp (!NAME) print names too; 159 uses in the all-readable build. just readable-states Emerald all.list emerald-newgame --every 250: same-states pass, 23 frames byte-identical. New tests a_field_s_values_print_by_name, a_field_takes_the_define_family_pret_sets_it_with. just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-30T16:30:03Z",
+          "by": "c6d68465",
+          "text": "Linking is name-based plus pret-source evidence; enums (DWARF [types] values) and families with no #define (window frame 0-19) aren't linked. mods/emerald/text-speed not re-cut. Modern/FireRed maps have no [types], so no fields."
+        }
+      ]
+    },
+    {
+      "id": "mod/mod-run",
+      "title": "One command builds a mod and shows its frames beside stock",
+      "detail": "From docs/research/agent-first-mod.md, item 3: just mod-run ROM NAMES DIR [--dump-at N,...] ROUTE builds the mod and stock, dumps the route's frames from both, and writes a side-by-side PNG of each differing pair, naming the same ones. Done when mods/emerald/text-speed shows its main-menu and Birch differences so.",
+      "uses": ["heavy"],
+      "tags": ["slow-check"],
+      "record": {
+        "state": "done",
+        "by": "9b85e406",
+        "at": "2026-10-30T16:34:09Z",
+        "evidence": "just mod-run on mods/emerald/text-speed, emerald-newgame route: frames 1100 (main menu, 5752 px) and 2000 (Birch, 2096 px) differ, side-1100.png and side-2000.png written in out/mod-run/emerald-newgame; 1300 same. Review fix: NAMES \"\" docs now say both builds are named from the names dir (recipe unchanged). Main merged, just check passed.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-30T16:31:39Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - justfile:467 and docs/tools/commands.md:652-654 say that NAMES \"\" \"leaves stock unnamed and names the mod from the maps in $GBAA_DATA/names\". The recipe doesn't do that. justfile:473 builds one `names` array, …"
+        }
+      ]
+    },
+    {
+      "id": "mod/mod-find",
+      "title": "List the functions that read or write a struct field",
+      "detail": "From docs/research/agent-first-mod.md, item 5: just mod-find NAMES FIELD lists the functions whose readable print reads or writes a field (optionsWindowFrameType), writers and readers apart, by pret file:line, to pick what to cut. Done when it names SetDefaultOptions as a writer of optionsTextSpeed.",
+      "record": {
+        "state": "done",
+        "by": "d1e8e259",
+        "at": "2026-10-30T16:52:39Z",
+        "evidence": "Review fix made (cut's doc comment back above fn cut, 20ff8307); main merged (534b4697); just check exit 0. just mod-find on Emerald, field optionsTextSpeed: 'writers: SetDefaultOptions (0x0808433d): src/new_game.c:93 SaveBlock2.optionsTextSpeed', plus 4 readers of 15158 functions.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-30T17:07:21Z",
+          "by": "e5810573",
+          "text": "Once {unit:mod/computed-bitfield-writes} lands, report()'s closing line '(a bitfield stored from a computed value still prints as a byte store...)' is false: Task_OptionMenuSave prints set_bits and is listed a writer. Drop that line at merge."
+        },
+        {
+          "at": "2026-10-30T16:47:05Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/bin/gbaa-recompile.rs:465-470: the new `find` function was inserted between `cut`'s doc comment and `fn cut`. As a result, `fn find` now carries both comments: the `--cut DIR FUNCS: print FU…"
+        }
+      ]
+    },
+    {
+      "id": "mod/cut-file-guide",
+      "title": "A cut file says what at, ret! and regs! mean to an editor",
+      "detail": "From docs/research/agent-first-mod.md, item 4: the cut's src/ header says in a few lines what each access's address, the ret! cost and regs! are, and the safe-edit rules (reuse a neighbour's address; cost and regs! may stay as cut), with the why in docs/mod-view-design.md. Re-cut merges must still work.",
+      "record": {
+        "state": "done",
+        "by": "cfc15fee",
+        "at": "2026-10-30T16:46:18Z",
+        "evidence": "Header in codegen::modcopy HEAD; why in docs/mod-view-design.md 'Editing a cut'. New test a_re_cut_brings_in_a_new_header: 0 conflicts merging a pre-guide edited cut. A real re-cut of text-speed merged the header cleanly (its body conflict is from set_bits). just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-30T16:46:16Z",
+          "by": "cfc15fee",
+          "text": "Re-cutting mods/emerald/text-speed now conflicts (1) in its body: the generator prints set_bits for the fields its edit changed. The new header merged cleanly. Left the mod as committed; a re-cut needs its edit redone on set_bits."
+        }
+      ]
+    },
+    {
+      "id": "mod/computed-bitfield-writes",
+      "title": "Mod view prints a computed bitfield write as a field set",
+      "detail": "Follow-up of {unit:mod/bitfield-writes}: a bitfield stored from a computed value still prints as a byte mask, m.set(.., Ptr::<u8>::at(v.wrapping_add(20)), (7 & v191) | (v184 << 3)) (Task_OptionMenuSave, src/option_menu.c:354-358). Print it as a field set of the named field, so just mod-find counts it as a writer. Done when just mod-find names Task_OptionMenuSave a writer of optionsWindowFrameType and readable-states on Emerald stays the same.",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "e5810573",
+        "at": "2026-10-30T17:12:45Z",
+        "evidence": "just mod-find Emerald optionsWindowFrameType: 2 writers, SetDefaultOptions (new_game.c:94) and Task_OptionMenuSave (option_menu.c:358). Task_OptionMenuSave prints five m.set_bits (snapshot emerald-readable.rs). just readable-states Emerald, all.list, emerald-newgame --every 250: same-states pass, 23 frames; 852 field writes (808 before). New test a_computed_bitfield_write_prints_as_a_field_set. just check passes after merging main (mod-find's stale caveat line dropped).",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "mod/no-timing-flag",
+      "title": "Mod view without timing: play exact, static and none builds",
+      "detail": "A --timing exact|static|none flag on gbaa-recompile: static drops each access's address, rt::stall and rt::fetch for one constant per block; none prices every fetch as if the buffer always had it (fastest). Builds of Kirby in each for june to play side by side; docs/research/mod-view-without-timing.md.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "421d83ef",
+        "at": "2026-10-31T01:54:16Z",
+        "evidence": "PR #73. --timing exact|static|none; exact snapshots unchanged, fn-diff readable 0/6380; just check passes. Kirby builds out/kirby-{exact,static,none}; just timing-modes: static 136 frames differ, 1 extra lag; none 1482 differ, RNG drifts from 41."
+      },
+      "round": "2026-10-31T01:41:32Z"
+    },
+    {
+      "id": "mod/kirby-pause-spike",
+      "title": "Kirby mod spike: pausing stops only your Kirby",
+      "detail": "From the 2026-10-29 Kirby playtest: Kirby & the Amazing Mirror's own pause stops every player, and only the one who paused can unpause. A first mod on a second game: find Kirby's pause code (katam's source map; names are mostly sub_ placeholders), cut it with the mod view (gbaa-recompile --cut), make pause stop only the pausing player, build with --mod and play it in netplay (both peers run the mod; the build ID checks). Report what the mod view lacked on a game without pret-quality names. Wishes like this are in docs/ideas.md. Check: two-player run where one pauses and the other keeps moving; unedited cut gives the same states; just check.",
+      "record": {
+        "state": "parked",
+        "why": "june, 2026-10-30: filed for later, not now",
+        "by": "11558975",
+        "at": "2026-10-31T03:14:23Z"
+      }
+    },
+    {
+      "id": "mod/call-writes-lr",
+      "title": "call! writes lr and takes the callee's key itself",
+      "detail": "From {unit:research/code-without-rom-addresses}: june wants fewer ROM addresses in the code. In call!(m, pc, f_08002065 @ 0x0800_2065 -> 0x0800_bc3f, 6, { regs!(m; …, 14 = 0x800_bc3f) }) the lr write repeats the return site and the @ key repeats the callee's name. Make call!/call_any! write lr from -> ret (codegen drops 14 = … from the sync when it equals ret|1) and take the entry key from the callee (a const next to each fn, or a table lookup at compile time), so a call reads call!(m, pc, f_08002065 -> 0x0800_bc3f, 6, …). Guest state must stay byte-identical: same-states and own-state-check on Kirby and Emerald, exact and instant, both print modes. Update docs/mod-view-design.md.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "5846cc23",
+        "at": "2026-10-31T17:54:41Z",
+        "evidence": "call!(m, pc, f -> ret, ..) writes lr from ret (sync drops 14 = ret) and calls f at keys::f (prelude keys module, emit::keys_module). Every function readable vs play view, route-check --same-states: Emerald named, newgame --every 250, exact and instant, 23/23 identical; Kirby unnamed, scratch 1500-frame attract route --every 100, exact and instant, 15/15 identical. own-state-check readable: Emerald and Kirby 1000 100 pass. Snapshot regenerated; design doc and cut header updated. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "mod/mod-call-form",
+      "title": "A call a mod adds needs no ROM address",
+      "detail": "From {unit:research/code-without-rom-addresses}: a call a mod adds has no ROM return site, and today the editor must invent one. Give mods call!(m, f, …) with no addresses: lr gets a reserved key outside the GBA map (e.g. 0xF000_0000 + a per-mod-site index), the macro accepts that key as 'came back', and a restore or IRQ that has to resume at it is counted and reported like a mod resume today (docs/mod-view-design.md, 'Resumes'). Show it on a Kirby or moonbeam mod that calls a game function from a new place, with save, load and rewind inside the call.",
+      "check": "recorded",
+      "needs": ["mod/call-writes-lr"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "8d9cb62f",
+        "at": "2026-10-31T18:55:08Z",
+        "evidence": "call!(m, pc, f, {sync}) in a mod: lr gets a reserved per-site key above 0xF000_0000, registers restored, value r0; a guest-RAM record lets a lost frame rerun its block. mods/katam/half-speed (Kirby Amazing Mirror, GetInput waits an extra V-blank, game at half speed): state saved at frame 1001 inside the call, loaded, ran 300 frames, 'mod: 1 ... (1 at a call the mod added ...)'; rewind 1000+31 into the call, same count, ran to 1300; no fault. --unwind livelocks a call that always spans a frame end (documented). 3 runtime tests; just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "mod/text-emerald",
+      "title": "Readable code shows Emerald's text where it loads a string",
+      "detail": "From the naming work (docs/research/naming-sample.md, naming-prior-work.md): a function's meaning is in its leaves, and today a string pointer prints as an opaque addr!(d_...). Decode Emerald's text with pret's character table (charmap.txt, read as data into the source map, never C text; control codes and placeholders like {PLAYER} by name), and where the readable print loads a pointer into valid text, add the decoded string as a comment. Done when the main menu's NEW GAME / OPTION code and the Trainer Hill timer print their text in the regenerated Emerald snapshot, a test covers a control code, and the same-states check stays the same.",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "cb09087e",
+        "at": "2026-10-31T18:01:52Z",
+        "evidence": "Review fix made (Then's doc moved back onto the alias, comment-only). Merged origin/main; just check passes (exit 0) incl. snapshot test: emerald-readable.rs prints \"NEW GAME\"/\"OPTION\" (8 hits) and Trainer Hill timer text; text::tests::decodes_codes_placeholders_and_arguments covers control codes. From 562dda7f: names-check 15167 fns 0 failed; readable-states new-game --every 250: 23 of 23 the same.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T17:32:48Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/lower.rs:412-419: the new `text_notes` function and its doc comment were inserted between the doc comment of `type Then` (\"What follows exit `j` of a block: given the return site of a readab…"
+        },
+        {
+          "at": "2026-10-31T17:29:37Z",
+          "by": "6f84bc9f",
+          "text": "pret-names now writes [text] (charmap.txt) into names/*.toml; rerun just pret-names for a map without it. False-positive gates in codegen::text (COMMON chars, MIN_PLAIN, MAX_SPACES, DWARF u8-array type). Known pass: sFillValues \"zi\"."
+        }
+      ]
+    },
+    {
+      "id": "mod/data-preview",
+      "title": "Readable code shows the bytes behind ROM data pointers",
+      "detail": "Stopgap for games whose text encoding nobody has worked out yet ({unit:mod/text-tables} found no table, {unit:mod/text-from-screen} hasn't run). We can't tell text from other data, so every pointer into ROM data the readable print loads gets its bytes shown as a fixed array of integers, marked encoding unknown: up to the next address other code points at, capped at a size cutoff (start around 32 bytes; record the cap in TOML). Display only: the generated code still reads the ROM, so mods and asset overrides keep working. Where a game's table is known, decoded text replaces the array. Done when a game with no table (e.g. WarioWare) shows the arrays in its readable print, a test covers the cutoff and the next-label stop, and the same-states check stays the same.",
+      "needs": ["mod/text-emerald"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "0664764d",
+        "at": "2026-10-31T18:24:46Z",
+        "evidence": "WarioWare (library map, no [text]) every function readable: names-check 0 failed, 13,836 byte previews ('0x080f6140: [u8; 32] = [..]; encoding unknown, cut at 32'), cap 32 in crates/codegen/data-preview.toml. Tests text::previews_stop_at_the_next_label_or_the_cap and tests::rom_data_with_no_table_prints_its_bytes cover cutoff and next-label stop. just readable-states WarioWare all.list --every 100 on a scratch 1500-frame boot route: same states at all 15 frames. Emerald readable snapshot print byte-identical to main's printer. just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T18:24:48Z",
+          "by": "0664764d",
+          "text": "crates/codegen/snapshots/emerald-readable.rs on main is stale since call-writes-lr (SetGpuReg @ … and 14 = lr no longer printed); just snapshots-readable regenerates it. Not this unit's change."
+        }
+      ]
+    },
+    {
+      "id": "mod/text-tables",
+      "title": "Decode other games' text with community encoding tables",
+      "detail": "Most GBA games don't use ASCII: each maps bytes to its own font tiles. The ROM-hacking community has ready-made tables (.tbl files on Data Crystal, romhacking.net) for most well-known games. Load a per-game table (kept outside the repo like the ROMs, path recorded in TOML; note each table's source) and reuse {unit:mod/text-emerald}'s printing. Try it on the ROMs we have: Kirby & the Amazing Mirror, Minish Cap, Metroid: Zero Mission, WarioWare. Done when, for each game with a table found, the readable print shows text that matches a screenshot of the same scene, with a written list of the games where no table turned up or the text is compressed.",
+      "needs": ["mod/text-emerald"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "45ace83a",
+        "at": "2026-11-01T01:02:14Z",
+        "evidence": "Review fix made (load_names's doc comment moved back above it, e78dffe0); merged origin/main (fd0e0c50); just check exit 0 after merge; gbaa-recompile --messages-check tmc.gba translations/USA.json: 3699 match, 0 differ (owner-accepted check for Minish Cap). Earlier evidence for the other games stands.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-11-01T00:54:05Z",
+          "by": "24176b67",
+          "text": "Second review's only finding: a misplaced doc comment in gbaa-recompile.rs (put load_names's doc line back above fn load_names). Minish Cap's screenshot is settled: june chose the decomp-text check. Fix, land, then fold or drop {unit:mod/text-by-index}."
+        },
+        {
+          "at": "2026-10-31T20:38:59Z",
+          "by": "47e82313",
+          "text": "Index decode done on the branch: 29 messages, names-check 0 failed. Route notes: input start@1000,a@1100,a@1160,start@1200,a@1240,a@1600,a@1700, then walk reaches Festival Town ~frame 17k. No USA TAS exists. gPlayerEntity 0x03001160, gRoomControls 0x03000bf0."
+        },
+        {
+          "at": "2026-10-31T19:36:48Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - Card check not met for Minish Cap (crates/codegen/text-tables.toml:35-44, docs/mod-view-design.md 'Other games' tables' table row). The card's Done when says: for each game with a table found, the readable pri…"
+        }
+      ]
+    },
+    {
+      "id": "mod/text-from-screen",
+      "title": "Work out a game's text encoding from screenshots",
+      "detail": "For a game with no community table: run it to scenes with text on screen, then recover the byte-to-character map, e.g. by matching what's on screen against the ROM bytes the text renderer reads, or rendering each glyph on its own frame and having an agent read it. Score against a game whose table {unit:mod/text-tables} already has, with that table hidden: share of characters right, and of decoded strings right. Failing is fine; write up what stopped it. Done with that score and the method written up in docs/research/.",
+      "needs": ["mod/text-tables", "mod/data-preview"],
+      "uses": ["heavy"],
+      "minMinutes": 150,
+      "round": "2026-11-01T01:31:56Z"
+    },
+    {
+      "id": "mod/text-by-index",
+      "title": "Readable code shows Minish Cap's text by message number",
+      "detail": "Minish Cap looks its text up by a message number (MessageFromTarget(index), ShowTextBox(textIndexOrPtr); gTranslations[lang] -> bank offsets -> string, ASCII, 00 ends), not by pointer, so the pointer decoding of {unit:mod/text-tables} finds nothing real there. Decode a call's constant index argument through gTranslations with tmc's charmap (crates/codegen/text-tables.toml lists it, reached = \"index\") and comment the call with the string. Done when a readable print's comment matches a screenshot of the same text box.",
+      "check": "recorded",
+      "needs": ["mod/text-tables"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into {unit:mod/text-tables}: the index decode landed there, and the owner accepted the check against tmc's translations/USA.json (3699 of 3699 match) in place of a screenshot.",
+        "by": "9e3cc3aa",
+        "at": "2026-11-01T00:51:08Z"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T20:39:01Z",
+          "by": "47e82313",
+          "text": "The index decode is now in {unit:mod/text-tables} (codegen::text::Messages). Only the screenshot is left, and it waits on the owner's question about Minish Cap's check. Fold or drop this unit once that's answered."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,685 @@
+{
+  "id": "assets",
+  "title": "Asset extraction: graphics and music out of ROMs",
+  "priority": 12,
+  "order": 17,
+  "units": [
+    {
+      "id": "assets/lit-formats",
+      "title": "Literature review: GBA asset formats and rippers",
+      "detail": "Asset extraction (docs/decisions.md, decision 2, 'Two views of a ROM', june 2026-10-26): graphics and music out of a ROM with no hand reading of its code, by watching where the game's data goes at run time. Emerald first; pret's pokeemerald (graphics as PNG, music as MIDI) is the oracle. A review of primary sources and tool source (not summaries), each added to docs/references.md: the GBA's tile, palette, OAM and BG map formats; BIOS compression (LZ77, RL, Huffman, Diff); Nintendo's m4a/Sappy sound engine (song table, voicegroups, samples) and the tools that parse it (agbplay, gba-mus-ripper, sappy2midi); pret's own extraction tools (gbagfx, mid2agb, wav2agb) and the layout of pokeemerald's graphics/ and sound/; mGBA's tile and sprite viewers; Aseprite's file format and Rust crates for writing it; any prior work on finding assets dynamically (provenance or taint tracking in emulators). Write docs/research/asset-extraction.md.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "9cb940e3",
+        "at": "2026-10-27T00:44:44Z",
+        "evidence": "docs/research/asset-extraction.md (commit fc2aaa2): GBA tile/palette/OAM/map formats, BIOS LZ77/RL/Huffman/Diff vs our HLE, pokeemerald graphics/ and sound/ measured (3,850 PNG, 530 MIDI, 610-entry song table), gbagfx/mid2agb/wav2agb, m4a structs and run-time discovery via 0x03007FF0, agbplay/gba-mus-ripper/saptapper/VGMusicStudio, mGBA viewers, CDLs, taint costs, texture-replacement keying, Aseprite spec and crates. Sources with commits in references.md; just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "assets/provenance",
+      "title": "Spike: tag VRAM, palette and OAM bytes with their source",
+      "detail": "Asset extraction (docs/decisions.md, decision 2, 'Two views of a ROM', june 2026-10-26): graphics and music out of a ROM with no hand reading of its code, by watching where the game's data goes at run time. Emerald first; pret's pokeemerald (graphics as PNG, music as MIDI) is the oracle. In the interpreter (or the runtime, if cheaper), record for every byte written to VRAM, palette RAM, OAM and the sound FIFOs where it came from: a ROM address and the transform (CPU copy, CpuSet/CpuFastSet, DMA, BIOS decompression, or computed). Run the Emerald new-game route and report: how much of VRAM and palette RAM traces back to a ROM address, through which transforms, how many distinct source blobs, and what stays unexplained (drawn by the CPU, built from tables). Costs: time per frame with tagging on; off by default, so the normal run is unchanged.",
+      "record": {
+        "state": "done",
+        "by": "d1e2d6a4",
+        "at": "2026-10-27T16:58:15Z",
+        "evidence": "just provenance emerald-newgame (runtime::prov behind a feature; docs/research/assets-provenance.md): at the truck VRAM's non-zero bytes are 90.3% from ROM (62% LZ77+DMA, 15% CPU copy+DMA, 11% DMA, 3% CpuSet), 9.7% computed text tiles; menus 74-94% computed (font renderer). Palette is computed by the fade everywhere, but 90-100% equals ROM-copied gPlttBufferUnfaded (0x02037714, found by the report). OAM 46% ROM templates, rest computed; FIFOs 100% computed (mixer). Blobs: 37 LZ77, all at pret gfx symbols; 58 copied ranges, 57 in data symbols. Cost ~5%/frame (3.75-3.96 vs 3.91-4.26 ms); same truck hash 26c2f9d4009c5696. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "assets/design",
+      "title": "Design asset extraction from the spike and review",
+      "detail": "Asset extraction (docs/decisions.md, decision 2, 'Two views of a ROM', june 2026-10-26): graphics and music out of a ROM with no hand reading of its code, by watching where the game's data goes at run time. Emerald first; pret's pokeemerald (graphics as PNG, music as MIDI) is the oracle. From the review and the provenance spike, write docs/asset-extraction-design.md: how tagged sources become assets (tile sheets with their palettes, sprites assembled from OAM, animations from frame to frame, BG tilemaps, m4a songs and samples), the output formats (PNG, Aseprite, MIDI, WAV, a manifest by ROM address that the source map can name), how each is checked against pret's files, and how asset overrides would work in the runtime. Then check this group's units fit, edit, add or drop them. Ask june (just ask) about any choice that changes scope.",
+      "check": "recorded",
+      "needs": ["assets/lit-formats", "assets/provenance"],
+      "record": {
+        "state": "done",
+        "by": "14c3af97",
+        "at": "2026-10-27T17:46:21Z",
+        "evidence": "docs/asset-extraction-design.md written from the review and provenance spike; review fixes made: summary now says eleven units, eight open (matches tracker), Units table adds {unit:assets/wider-coverage}. just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T17:43:38Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - docs/asset-extraction-design.md:62: the summary says the group \"becomes nine units, seven of them open\", but the tracker (tracker/groups/assets.json) now has 11 units, 8 of them open. The 3 done ones are lit-f…"
+        },
+        {
+          "at": "2026-10-27T16:58:27Z",
+          "by": "d1e2d6a4",
+          "text": "From {unit:assets/provenance}: BIOS LZ77+DMA hooks find all 37 Emerald blobs exactly; palettes need a value match vs gPlttBufferUnfaded (fades compute them); copied ranges are only bytes shown, so take blob length from the DMA/CpuSet count. docs/research/assets-provenance.md"
+        }
+      ]
+    },
+    {
+      "id": "assets/graphics-export",
+      "title": "Export Emerald's tile sheets, palettes and tilemaps",
+      "detail": "Asset extraction (docs/decisions.md, decision 2, 'Two views of a ROM', june 2026-10-26): graphics and music out of a ROM with no hand reading of its code, by watching where the game's data goes at run time. Emerald first; pret's pokeemerald is the oracle. Design: docs/asset-extraction-design.md. Start crates/assets (gbaa-assets): read the ROM and the load and use logs, write tile sheets as indexed PNG with their paired palette, palettes as JASC .pal, BG tilemaps as .bin plus a drawn PNG, the manifest by ROM address, and the source-map names layer for unnamed blobs. check-pret for graphics: join to pret by ELF symbol and INCGFX flags; per image the four levels bytes, rebuilds, palette, image. Report how many of pret's images match at each level, and what misses and why. Sprites and Aseprite are {unit:assets/sprites}.",
+      "needs": ["assets/load-log"],
+      "record": {
+        "state": "done",
+        "by": "314a0b00",
+        "at": "2026-10-28T07:07:02Z",
+        "evidence": "Review fixes made: timeline keyed by route so tilemap re-classing compares frames only within one route (new two-route test), rebuilds level now checks packed blobs fit the padded size. Merged main (samples) keeping both; just check passes; assets-check-graphics unchanged: joined 85 of 93, bytes 79, rebuilds 80, palette 25/31, image 11/57.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-28T06:28:40Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/assets/src/graphics.rs:415 (built at lines 320 and 326, used in the tilemap re-classing loop after it): `timeline` collects BG-VRAM loads from every route's logs into one list and sorts it by frame. Fra…"
+        }
+      ]
+    },
+    {
+      "id": "assets/music-export",
+      "title": "Export Emerald's songs to MIDI",
+      "detail": "Asset extraction (docs/decisions.md, decision 2, 'Two views of a ROM', june 2026-10-26): graphics and music out of a ROM with no hand reading of its code, by watching where the game's data goes at run time. Emerald first; pret's pokeemerald is the oracle. Design: docs/asset-extraction-design.md. The design's Music section, songs: the m4a recorder (--m4a-log, from the word at 0x03007FF0, no Emerald address), the song table found by scanning for the first header played, every table song decoded to format-1 MIDI at 24 ticks with mid2agb's controllers and loop markers. check-pret for songs: our .mid through pret's mid2agb with midi.cfg's flags against pret's built .s (labels normalised), then flattened event streams. Report songs exact and equal as events, of 530. Samples are {unit:assets/music-samples}.",
+      "needs": ["assets/design"],
+      "record": {
+        "state": "done",
+        "by": "4734126c",
+        "at": "2026-10-27T18:10:04Z",
+        "evidence": "just assets-songs: table 0x086B49F0 (610) found from mus_intro at frame 208, 530 songs to MIDI. just assets-check-songs via pret mid2agb: 492/530 exact bytes, 530/530 equal as events, pret .s = ROM bytes 530/530. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "assets/overrides",
+      "title": "Asset overrides: the runtime serves edited assets",
+      "detail": "Asset extraction (docs/decisions.md, decision 2, 'Two views of a ROM', june 2026-10-26): graphics and music out of a ROM with no hand reading of its code, by watching where the game's data goes at run time. Emerald first; pret's pokeemerald is the oracle. Design: docs/asset-extraction-design.md. The design's Overrides section: a mod's mod.toml [assets] maps a manifest ROM address to an edited PNG, .aseprite or .pal; crates/assets encodes it back to the blob's unpacked bytes; the runtime gets a sorted static table: HLE LZ77 and RL write the override instead of decoding (size must equal the header's), raw blobs come from a patched ROM copy whose CRC stays the original's. Off without a mod folder, so play-view hashes are unchanged. Refuse an override of a range codegen's const-prop folds loads from, in a recompiled build. Check: an edited sprite (Aseprite) and tile sheet (PNG) show in game in both builds; an unedited export round-trips to identical frames.",
+      "needs": ["assets/sprites"],
+      "record": {
+        "state": "done",
+        "by": "a60beaf8",
+        "at": "2026-10-29T00:07:24Z",
+        "evidence": "Review fix made: the folded-range refusal in crates/desktop/src/lib.rs now continues its literal with a trailing backslash, so it reads '…{e:#010x}, which this recompiled build's code…'; the test asset_overrides_patch_a_copy_and_refuse_folded_bytes now asserts that text. Earlier evidence stands (edited Aseprite sprite and PNG tile sheet in both builds, unedited round-trip identical). just check passes after merging origin/main (6f624c6).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T00:01:18Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/desktop/src/lib.rs:849: the string literal of the folded-range refusal in `asset_overrides` has lost its line-continuation backslash. After `{e:#010x},` the literal holds about 22 spaces and then `which…"
+        }
+      ]
+    },
+    {
+      "id": "assets/sprite-mod-gate",
+      "title": "june edits an Emerald sprite in Aseprite and sees it in game",
+      "kind": "gate",
+      "detail": "june opens an exported Emerald sprite in Aseprite, changes it, and plays gbaa with it loaded as an override; and listens to a few exported songs (MIDI with the exported soundfont). Says whether extraction is useful, and which game to try it on next (Kirby, june 2026-10-26). Design: docs/asset-extraction-design.md.",
+      "needs": ["assets/overrides", "assets/music-samples"],
+      "record": {
+        "state": "parked",
+        "why": "june parked it on 2026-10-31 (no reason given); unpark when she wants to try the Aseprite edit",
+        "by": "24176b67",
+        "at": "2026-11-01T00:31:22Z"
+      },
+      "notes": [
+        {
+          "at": "2026-10-28T23:58:46Z",
+          "by": "ae8160a4",
+          "text": "To play a mod: gbaa-desktop ROM --assets-mod mods/emerald/<mod> --assets-manifest out/assets/emerald/manifest.toml (mod.toml [assets]: 0xADDR = \"assets/x.aseprite\"). Keep the export's size and frames. Example: out/assets/emerald/overrides/edited."
+        }
+      ]
+    },
+    {
+      "id": "assets/load-log",
+      "title": "Load and use logs for asset export",
+      "detail": "Asset extraction (docs/decisions.md, decision 2, 'Two views of a ROM', june 2026-10-26): graphics and music out of a ROM with no hand reading of its code, by watching where the game's data goes at run time. Emerald first; pret's pokeemerald is the oracle. Design: docs/asset-extraction-design.md. The design's Recording section: the load log (every BIOS decompression, DMA, CpuSet, CpuFastSet whose source traces to ROM, with its full length: bytes the decoder read, or the copy's count) and the use log (per VBlank, changes only: BG and OBJ tiles shown, their blob and offset, palette bank and its palette blob via the unfaded-buffer value match), from `just assets-record ROUTE` into out/assets/<game>/<route>/. Check: on Emerald's new-game route every one of the provenance spike's 37 compressed blobs and 58 copied ranges is in the load log with its full length, and every BG and OBJ tile shown at the truck has a use record.",
+      "check": "recorded",
+      "needs": ["assets/design"],
+      "record": {
+        "state": "done",
+        "by": "8250b67d",
+        "at": "2026-10-28T05:57:53Z",
+        "evidence": "just assets-record emerald-newgame (after merging main): out/assets/emerald/emerald-newgame/check.txt PASS. 37 of 37 compressed blobs decompressed in loads.tsv, each length equal to pret's symbol size; 58 of 58 copied ranges, every byte in a load; 2,624 of 2,624 tiles shown at the truck (frame 5400) have a use record, 1,973 from a loaded blob, 651 the computed text window, all banks' palettes found. just check passes. Unit test for gbaa-assets check-load-log. No subagent review (the loop reviews the diff).",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "assets/sprites",
+      "title": "Sprites from OAM with animations to Aseprite",
+      "detail": "Asset extraction (docs/decisions.md, decision 2, 'Two views of a ROM', june 2026-10-26): graphics and music out of a ROM with no hand reading of its code, by watching where the game's data goes at run time. Emerald first; pret's pokeemerald is the oracle. Design: docs/asset-extraction-design.md. The design's Sprites and animations section: assemble sprites from OAM (1D and 2D mapping), frames of one sheet laid out as pret's -mwidth/-mheight strips, animation sequences and timing per OAM index as Aseprite frames, durations and tags, composed multi-entry sprites, user data with ROM address and palette. aseprite-io 0.2.0, every file round-tripped through it and asefile; own writer if that fails. Check: pret's object-event and Pokémon strips the route shows match at the image level; report animations found.",
+      "check": "recorded",
+      "needs": ["assets/graphics-export"],
+      "record": {
+        "state": "done",
+        "by": "c6d250e4",
+        "at": "2026-10-28T21:56:58Z",
+        "evidence": "just assets-check-sprites: object-event and Pokémon strips at image level 3 of 3 (Brendan walking 9 frames across, moving box, Lotad 2 down; sheet PNG and every Aseprite sheet frame vs pret's PNG), other sheets 7 of 12; 15 sheets, 7 animations found (Brendan's walk-in-place loop 3,0,4,0 x8 frames = pret sAnim_GoSouth). Every .aseprite round-tripped through aseprite-io and asefile. Graphics check bytes 79->81, image 11->20 of 57; just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-28T06:25:40Z",
+          "by": "0acf2f98",
+          "text": "From graphics-export: raw copies merge only on overlap, so a strip DMA'd a frame at a time (Brendan walking 0x084975f8, 0x084978f8...) arrives as one tile blob per frame; join them by pret symbol range. Image level fails mostly on layout width, yours to fix."
+        },
+        {
+          "at": "2026-10-28T05:58:00Z",
+          "by": "8250b67d",
+          "text": "uses.tsv from {unit:assets/load-log} is aggregated (one line per distinct use, first/last frame, frames shown): no per-frame OAM sequence. Animation timing needs a per-frame OBJ record added to crates/desktop/src/assets_log.rs."
+        }
+      ]
+    },
+    {
+      "id": "assets/music-samples",
+      "title": "Emerald's samples, voicegroups and a soundfont",
+      "detail": "Asset extraction (docs/decisions.md, decision 2, 'Two views of a ROM', june 2026-10-26): graphics and music out of a ROM with no hand reading of its code, by watching where the game's data goes at run time. Emerald first; pret's pokeemerald is the oracle. Design: docs/asset-extraction-design.md. The design's Samples and voicegroups section: direct-sound WaveData to WAV (own RIFF writer with smpl, agbp, agbl chunks; DPCM cries decoded), programmable waves to .pcm, voicegroups to TOML, and an SF2 soundfont so the MIDI plays with Emerald's instruments. check-pret: our .wav through wav2agb against pret's direct_sound_samples .bin and the ROM's bytes; .pcm equal pret's. Report samples exact, of 544.",
+      "check": "recorded",
+      "needs": ["assets/music-export"],
+      "record": {
+        "state": "done",
+        "by": "99532d88",
+        "at": "2026-10-28T06:27:53Z",
+        "evidence": "just assets-check-samples: 544 of 544 samples (388 DPCM cries) through pret's wav2agb equal pret's .bin and the ROM's bytes; 21 of 25 programmable .pcm equal pret's (4 unused by any voice). 193 voicegroup TOMLs, 176 per-voicegroup SF2s (structure tested). just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-28T06:27:59Z",
+          "by": "99532d88",
+          "text": "SF2s are checked for structure only; nobody has listened to one yet (no fluidsynth on quack). Rerunning just assets-songs rewrites manifest.toml, so run just assets-samples after it. The 4 unused programmable waves aren't exported."
+        },
+        {
+          "at": "2026-10-27T18:10:12Z",
+          "by": "4734126c",
+          "text": "crates/assets exists (gbaa-assets). out/assets/emerald/manifest.toml [songs] gives each song's voicegroup address; m4a::Mem/Header/decode_song read the ROM. Add [samples]/[voicegroups] to that manifest; check-pret lives in assets::pret."
+        }
+      ]
+    },
+    {
+      "id": "assets/wider-coverage",
+      "title": "Widen graphics coverage past what routes show",
+      "detail": "Umbrella for june's answer to the coverage question (fuzzing, extended): when the coverage report, fuzzing v2, the static scan and the play-extract flag are done, update docs/asset-extraction-design.md 'Graphics coverage' and report Emerald's final counts against pret's used graphics (target ~90%).",
+      "check": "recorded",
+      "needs": [
+        "assets/graphics-export",
+        "assets/fuzz-coverage-spike",
+        "assets/coverage-report",
+        "assets/fuzz-v2",
+        "assets/static-scan",
+        "assets/play-extract",
+        "assets/fuzz-to-90"
+      ],
+      "record": {
+        "state": "done",
+        "by": "93382dd1",
+        "at": "2026-10-31T01:18:32Z",
+        "evidence": "Final counts, just assets-coverage out/fuzz/f90c: 4,325 of 6,755 pret used graphics files found by play (64.0%), 5,815 (86.1%) with the static scan's sheets; ~90% not met by play, curve flat. Design doc 'Graphics coverage' gains 'Where it ends': what's missing and the per-screen sweeps filed. Link-only files asked of june ({unit:assets/coverage-link-only}). just check passed after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "assets/fuzz-coverage-spike",
+      "title": "Spike: does fuzzing reveal graphics and code routes miss?",
+      "detail": "june wants a CPU-heavy answer tried before a token-heavy one. Drive Emerald headless under the interpreter with random/mutated inputs from mutated saves and RAM/game state (party, bag, flags, map, menus), many cheap runs, no agent in the loop. Coverage feedback: keep inputs/states that load new blobs (the load log) or reach new code. Report: graphics found vs routes' ~100 and pret's ~7,600, new code addresses vs discovery, CPU-hours spent, how the curve flattens. Then the overseer brings {q:asset-extraction-reach-graphics-route} back to june with these results.",
+      "check": "recorded",
+      "needs": ["assets/load-log"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "8a14d4a4",
+        "at": "2026-10-29T01:10:42Z",
+        "evidence": "just fuzz-coverage (crates/fuzz), 10 workers x 45 min on quack = 7.5 CPU-hours, 4.0M frames, 0 faults: graphics (blobs+copied ranges reaching screen) 2,334 vs route's 95; source-map image/palette symbols 1,203 vs route 94 (pret ~7,608 INCGFX, so ~16%); 47 new screens (bag, party, summary, Pokédex, battle, trainer card); ROM instructions 210,748 vs 40,170; pret functions 4,903 vs 1,153, 84 of them not among discovery's starts. Curve: ~400 image symbols the first CPU-hour, then ~110/CPU-hour, not flat; screens flat by ~3 CPU-hours. docs/research/fuzz-coverage.md; just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T01:10:44Z",
+          "by": "8a14d4a4",
+          "text": "For the graphics-coverage question: fuzzing is option d. Next cheap steps (not built): share the corpus across workers, seed saves at story points, species/item sweeps, pair with the static LZ77 scan. Rerun: just fuzz-coverage NAME WORKERS MINUTES."
+        }
+      ]
+    },
+    {
+      "id": "assets/song-bar-restarts",
+      "title": "Songs whose bar lines restart twice rebuild exactly",
+      "needs": ["assets/music-export"],
+      "record": {
+        "state": "done",
+        "by": "267c1dbe",
+        "at": "2026-10-28T07:45:46Z",
+        "evidence": "songs::bars infers bar-line restarts as (clock, length) lists, tested against wait splits and pattern spans; just assets-songs then assets-check-songs: 526 of 530 exact (was 492), 530 equal as events; floor raised to 526; just check passes after merging main. Rest filed as {unit:assets/song-last-four-exact}.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T18:10:02Z",
+          "by": "4734126c",
+          "text": "38 of 530 songs aren't exact through mid2agb (out/assets/emerald/pret-check.txt): pret's MIDI restarts the time signature more than once (mus_littleroot at 0, 12, 36). songs::bars infers one phase; infer several. Raise assets-check-songs' --min-exact after."
+        }
+      ]
+    },
+    {
+      "id": "assets/song-last-four-exact",
+      "title": "The last 4 of Emerald's songs rebuild exactly",
+      "needs": ["assets/song-bar-restarts"],
+      "record": {
+        "state": "done",
+        "by": "7a12bd7d",
+        "at": "2026-10-29T00:10:55Z",
+        "evidence": "Exporter writes CC 3 markers: value 0 for a wait split no bars explain (route104), other values to keep apart bars mid2agb would PATT but the ROM doesn't, found by simulating mid2agb's Compress on our MIDI (crates/assets/src/mid2agb.rs; sailing, encounter_champion); patterns may end at an EOT (mt_chimney's restart at 2352). just assets-songs then assets-check-songs: 530 of 530 exact, floor raised to 530; just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-28T07:45:40Z",
+          "by": "267c1dbe",
+          "text": "mus_mt_chimney: pret's bars (48 at 2304, 4/4 at 2352) fit the ROM as 4/4 does; only bars mid2agb didn't pattern tell them apart (simulate its Compress). mus_route104, mus_sailing, mus_encounter_champion: same bars as pret, differ elsewhere (sailing: a PATT pret lacks)."
+        }
+      ]
+    },
+    {
+      "id": "assets/sprites-composed",
+      "title": "Compose multi-entry sprites onto one Aseprite canvas",
+      "needs": ["assets/sprites"],
+      "record": {
+        "state": "done",
+        "by": "cd21c597",
+        "at": "2026-10-29T01:09:54Z",
+        "evidence": "Composed sheets get one Aseprite canvas: each arrangement of entries a frame (tag composed, a layer per entry). New-game route: EMERALD VERSION 128x32 now image-ok vs pret (other sheets 8 of 12, strips 3 of 3); GAME FREAK 160x16, 6 arrangements, viewed. Overrides round trip 106/106; interp unedited mod draws all 5400 frames as plain; just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T01:09:56Z",
+          "by": "cd21c597",
+          "text": "drops_logo still misses pret: pret's PNG is the plain sheet 4 tiles wide (32x320), ours 16 wide; no OAM evidence gives that width. Composed sprites' per-entry anims are dropped (OAM slots get reassigned; arrangements are the animation)."
+        },
+        {
+          "at": "2026-10-28T21:56:55Z",
+          "by": "c6d250e4",
+          "text": "From {unit:assets/sprites}: sprites.rs flags composed sheets (2 entries, one offset, 30+ frames: intro drops logo, title EMERALD VERSION) and keeps them per entry, plain layout. Compose on one canvas; pret's emerald_version.png is 2 frames across, drops_logo 32x320."
+        }
+      ]
+    },
+    {
+      "id": "assets/play-extract",
+      "title": "Extract-while-playing flag in the desktop app",
+      "detail": "june 2026-10-29: a flag so that as a player plays, every asset they see and hear is extracted (load and use logs, then the export at exit or on a hotkey), adding to what's already exported. The general answer for games with no decomp, where playing is the route. First find whether runtime provenance works in recompiled builds or only under the interpreter, and its cost; say so in docs/asset-extraction-design.md. Check: a short Emerald play session exports what it showed.",
+      "needs": ["assets/graphics-export"],
+      "record": {
+        "state": "done",
+        "by": "5bdfa389",
+        "at": "2026-10-29T20:22:42Z",
+        "evidence": "Review fix made (main's doc comment back above pub fn main, d3bdc76f), latest main merged. just check passed after the merge. just play-extract-check on Emerald (headless 6,800 frames, --extract into a copy of the export): 95 blobs shown, 0 missed, 10 new entries, 106 earlier kept, 0 lost or renamed.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T20:18:40Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/desktop/src/lib.rs:762-773: the new `extract` fn was inserted between `main`'s doc comment and `main`. The comment \"Parse the command line and run. Generated crates call this with their code; `gbaa-desk…"
+        },
+        {
+          "at": "2026-10-29T20:15:46Z",
+          "by": "447bfe10",
+          "text": "F6 hotkey path (window) not exercised by a person: the check runs headless (export at exit). Windowed F6 uses the same Recorder::write + export as exit. Music not in the flag: the song table gives every song."
+        }
+      ]
+    },
+    {
+      "id": "assets/coverage-report",
+      "title": "Coverage report: Emerald graphics found vs pret's used ones",
+      "detail": "The denominator for june's ~90% target (june 2026-10-29). List pret's Emerald image and palette files, map each to ROM symbols/ranges via the source map, mark the ones never used in play (unreferenced, debug, cut content) with the reason, and score a fuzz or route output against the rest: found with palette, found greyscale, missing, by kind (Pokémon pics, icons, tilesets, trainers, UI...). Rust, a just recipe; rescore the spike's run. Design: docs/asset-extraction-design.md, 'Graphics coverage'.",
+      "needs": ["assets/fuzz-coverage-spike"],
+      "record": {
+        "state": "done",
+        "by": "049b8f7f",
+        "at": "2026-10-29T20:17:49Z",
+        "evidence": "just assets-coverage (gbaa-assets coverage, crates/assets/src/coverage.rs): pret's 7,586 INCGFX files joined to the ROM by the source map; 181 left out as never used in play (135 named unused, 35 unreferenced, 10 placeholder Pokémon pics, 1 built out), 7,405 used. Spike's fuzz run rescored: 1,609 found (21.7%): images 802/3,875 (576 with palette, 132 greyscale, 94 unpaired), palettes 734/3,236, tilemaps 73/294, by kind in out/fuzz/spike/coverage.txt; route phase 132 (1.8%), route manifest 107. New unit test passes; just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T20:17:55Z",
+          "by": "049b8f7f",
+          "text": "Palette pairing is a heuristic (same folder or file name in pret); unreferenced = no aligned ROM word into the symbol. Fuzz palettes are found by load rows, since fade code drops provenance tags before palette RAM. Rerun: just assets-coverage RUN."
+        }
+      ]
+    },
+    {
+      "id": "assets/fuzz-v2",
+      "title": "Fuzzing v2: sweeps and a shared corpus, a first run",
+      "detail": "Push Emerald's graphics coverage toward ~90% of the coverage report's used graphics (june 2026-10-29). This unit: the shared corpus across workers and the sweeps (a wild battle vs every species, normal and shiny; each trainer; a warp to every map with the bag full), one run scored, the curve and what's left reported. Split at the session's limit: the Pokédex and bag sweeps, story-point seeds and the run to ~90% are their own units.",
+      "needs": ["assets/coverage-report"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "1fa09fd2",
+        "at": "2026-10-29T21:11:16Z",
+        "evidence": "just fuzz-coverage v2 12 35 (12 workers x 35 min, 7.0 CPU-hours, 3.5M frames, 0 faults): sweeps (wild battle per species normal+shiny reaching BattleMainCB2, each trainer, each map with full bag) and a shared corpus. just assets-coverage out/fuzz/v2: 2,987 of 7,405 used files, 40.3% (spike 21.7%); Pokémon pictures 62%, trainers 68%, battle anims 50%. Curve still rising ~170 image symbols/CPU-hour; what's left and why in docs/research/fuzz-coverage.md v2. The ~90% run split to {unit:assets/fuzz-to-90} after {unit:assets/fuzz-dex-bag-sweeps} and {unit:assets/fuzz-story-seeds}. just check passes after merging main; clippy -D warnings clean with --features provenance.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "assets/static-scan",
+      "title": "Static LZ77 scan for graphics fuzzing didn't reach",
+      "detail": "Option c of the coverage question, for the last mile (june 2026-10-29): scan Emerald's ROM for every LZ77 blob that decodes cleanly (Nintenlord's rule), export what fuzzing didn't reach as greyscale sheets marked 'found by scan, no palette/layout', and add a 'scan only' column to the coverage report. Generic: no pret needed to run it, only to score it.",
+      "needs": ["assets/coverage-report"],
+      "record": {
+        "state": "done",
+        "by": "5ad278ac",
+        "at": "2026-10-29T20:42:36Z",
+        "evidence": "just assets-scan (gbaa-assets scan, crates/assets/src/scan.rs): Emerald, no pret used, 4,350 LZ77 blobs by Nintenlord's rule; scored by just assets-coverage --scan: 4,332 at a source map symbol, 10 real payloads in other symbols, 8 false; all 4,245 used LZ77 files found (12 RL not looked for). Against the spike run: 3,607 unreached written as greyscale sheets marked 'found by scan, no palette/layout' (PNG text and scan/scan.toml; Milotic checked by eye). Coverage report's new scan-only column: 1,609 found (21.7%), 5,119 (69.1%) with scan sheets. New unit test passes; just check passes, main merged (up to date).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T20:42:39Z",
+          "by": "5ad278ac",
+          "text": "Spike run read from ../gbaa-lane1/out/fuzz/spike (not on lane 2). RL (0x30) scan tried: exact-fill rule gives 34 hits, 12 real; left out. Missing after scan are raw files (tileset palettes, footprints, icons): scan can't see them."
+        }
+      ]
+    },
+    {
+      "id": "assets/kirby-fuzz",
+      "title": "Fuzz Kirby & The Amazing Mirror for its graphics",
+      "detail": "june 2026-10-29: once Emerald's fuzzing is as good as it gets, try it on Kirby & The Amazing Mirror, which has no decomp and whose assets we don't have all of. Port the fuzzer (no pret: no Emerald save editor, so states from play/routes and RAM pokes), measure what it finds against the static scan's blob count as the only denominator, and report the curve and what's generic vs Emerald-only.",
+      "needs": ["assets/fuzz-v2", "assets/static-scan", "assets/fuzz-to-90"],
+      "uses": ["heavy"],
+      "minMinutes": 180,
+      "record": {
+        "state": "done",
+        "by": "8e880cd6",
+        "at": "2026-10-31T20:16:34Z",
+        "evidence": "just kirby-fuzz (12 workers, 45 min, 6.35M frames) scored by gbaa-assets scan --curve: 458 of the static scan's 1,202 LZ77 blobs (38.1%); 36.5% at 5 min, flat after (38.1% at 45). Fuzzer split into core.rs (generic) + kirby.rs; report and generic vs Emerald-only table in docs/research/fuzz-coverage.md, Kirby. Review fix done: fuzz-report's doc comment moved back above its recipe (just --list shows both docs). just check passes after merging main. Misses filed as {unit:assets/kirby-fuzz-screens}.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T20:11:14Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - justfile:694-696: the new `kirby-fuzz` recipe and its doc comment were inserted between `fuzz-report`'s doc comment (\"# The report of a `just fuzz-coverage` run NAME again: out/fuzz/NAME/report.txt and curve.t…"
+        }
+      ]
+    },
+    {
+      "id": "assets/fuzz-dex-bag-sweeps",
+      "title": "Fuzz sweeps that page the Pokédex and scroll the bag",
+      "detail": "Footprints (385 of 387 missing) are drawn only on Pokédex entry pages; item icons fell to 8% in fuzz v2 (the spike's random bags got 48%). Add sweeps to crates/fuzz that open each Pokédex entry and scroll each full bag pocket; score with just assets-coverage. See docs/research/fuzz-coverage.md, v2.",
+      "uses": ["heavy"],
+      "minMinutes": 150,
+      "record": {
+        "state": "done",
+        "by": "1b064ce7",
+        "at": "2026-10-30T15:38:16Z",
+        "evidence": "Sweeps alone (gbaa-fuzz run, 13 workers, --minutes 0, ~90 s each, 0 faults), scored by just assets-coverage out/fuzz/dexbag after merging main: Pokémon footprints 386/387 (was 2; the question-mark one no dex entry shows), item icons 218/218, their palettes 253/253. just check passes; clippy -D warnings with provenance clean.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "assets/fuzz-story-seeds",
+      "title": "Fuzz seed states at story points, from a TAS",
+      "detail": "Menus (533 missing), battle interface, contests, the Frontier and tileset palettes (745) sit behind story progress. Seed gbaa-fuzz with states at story points with consistent flags and vars, long stretches from an existing TAS's states (june's rule), and bias picks toward code that loads still-missing graphics. docs/research/fuzz-coverage.md, v2.",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "d3a96e1c",
+        "at": "2026-10-30T19:36:57Z",
+        "evidence": "TAS (movies 3287, 6182) desyncs on mGBA HLE BIOS; crafted story saves instead (just emerald-story, 12 points). All 12 Continue onto the right map and badge count in mGBA (gbaa-fuzz story). 10w x 30min: base30 3448 vs story30 3496 of 7405 files; menu images 115->142, tilemaps 32->43. just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T21:15:26Z",
+          "by": "f28f33b9",
+          "text": "No code yet. Asked owner which seed source (TAS via mGBA replay / crafted flag-var saves / owner plays). For a: mgba-dump is the replay tool; fuzz-v2 sweep save code in crates/fuzz already crafts saves (reuse for b). Expect 2-3h."
+        }
+      ]
+    },
+    {
+      "id": "assets/fuzz-to-90",
+      "title": "Fuzz Emerald's graphics to ~90% or a flat curve",
+      "detail": "With the Pokédex and bag sweeps and the story seeds in, run just fuzz-coverage (sweeps finished: fuzz v2 got through about two thirds of the species and trainer lists in 7 CPU-hours) until ~90% of the coverage report's used graphics or the curve is flat; report the curve and what's left and why. Split runs over ~1 hour per lane.",
+      "needs": ["assets/fuzz-dex-bag-sweeps", "assets/fuzz-story-seeds"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "669363e4",
+        "at": "2026-10-31T01:01:05Z",
+        "evidence": "Curve flat, not 90%. f90c (22 workers, 55 min, story seeds, sweeps 1 in 3): 4,325 of 6,755 used files (64.0%), 86.1% with scan; coverage-curve.tsv 31.3% at 5 min, 61.6% at 35, 63.2% at 40, then 63.5/63.8/64.0 (+12 files last 10 min) once sweeps ended. f90a (15 workers) 61.7% still rising. Left and why: design doc 'The curve' (link-only still pics 412 and ~130, move anims ~276, PC icons/storage 355, menus); sweeps filed {unit:assets/fuzz-pc-box-sweep} {unit:assets/fuzz-move-sweep}. just check passed after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T01:01:07Z",
+          "by": "669363e4",
+          "text": "Link-only graphics (412 still front pics read only by Pokémon Jump, ~130 Union Room/wireless/Mystery Gift files) stay in the denominator; leaving them out is june's call, not asked yet. Runs: out/fuzz/f90a, f90c on quack."
+        },
+        {
+          "at": "2026-10-29T21:11:18Z",
+          "by": "1fa09fd2",
+          "text": "fuzz v2 (out/fuzz/v2 on quack) left item icons at 8% (random bags got 48% in the spike: keep some random-bag boots) and the species/trainer sweeps ~2/3 done. Sweep battles: set gEnemyParty, BattleTypeFlags, savedCallback, callback2=CB2_InitBattle (worker.rs battle)."
+        }
+      ]
+    },
+    {
+      "id": "assets/fuzz-tas-bios",
+      "title": "Emerald TAS story states on an official GBA BIOS",
+      "detail": "Both TASVideos Emerald runs (3287, 6182; BizHawk's mGBA core) desync under mgba-dump's HLE BIOS soon after the starter. Add mgba-dump --bios (useBios, skipBios) and, if needed, BizHawk's clock (2010-01-01, running); replay with --bk2 --save-state-at, check with gbaa-fuzz story that badges rise, then seed the fuzzer with the states. docs/research/fuzz-coverage.md, Story seeds. Needs the owner's BIOS dump.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "e03509ef",
+        "at": "2026-10-31T03:44:46Z",
+        "evidence": "TAS 6182 replayed whole on BizHawk's mGBA fork (just mgba-dump-tas, official BIOS) via just emerald-tas; gbaa-fuzz story on 30 states: badges 0 to 8 never falling, game clear/Frontier pass/national dex by frame 2.9M. 10 workers x 30 min seeded with them (tas30): 3598/7405 files (47.2% to 48.6%), pret functions 5084 to 6108. just check passed after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T03:44:48Z",
+          "by": "e03509ef",
+          "text": "Merged worker untested end to end after main's contest/Frontier sweeps: story_base now takes the last .sav, not a TAS state. A 2-min smoke run never got past the earlier sweeps. 3287 (BizHawk 1.11.6) never tried on the fork; it ran a far older mGBA."
+        },
+        {
+          "at": "2026-10-31T00:43:08Z",
+          "by": "0c5e1fa1",
+          "text": "june said yes 3 times to building and running BizHawk's mGBA fork. auto-mode.json names fetch-mgba.sh tas and just mgba-dump-tas. If still refused, note the exact command and stop; never ask june again."
+        },
+        {
+          "at": "2026-10-31T00:11:14Z",
+          "by": "ba5957d0",
+          "text": "Branch has fetch-mgba.sh tas + just mgba-dump-tas (fork cloned in $GBAA_DATA/tools/mgba-tas/src at 645282a, not built). Auto-mode refused running its build; asked june. Then: just mgba-dump-tas ROM --bk2 '/tmp/tas-dl/6182/Input Log.txt' --bios … Only 6182 can sync."
+        }
+      ]
+    },
+    {
+      "id": "assets/fuzz-contest-frontier-sweeps",
+      "title": "Fuzz sweeps into contest halls and Frontier facilities",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "d5b35fb1",
+        "at": "2026-10-31T02:39:13Z",
+        "evidence": "Scene sweeps in crates/fuzz (worker.rs scene, scenes.tsv): all 20 contests run to CB2_ContestMain (most to results), Tower/Palace/Arena/Factory singles/Pyramid reach battles, Dome shows its tourney tree. just fuzz-coverage scenes16 16 0 + just assets-coverage: contests and Frontier images 12 of 14 (story30: 0), palettes 7/7, tilemaps 6/6; battle interface 26 of 67 (story30: 12). just check passes after merging main. docs/research/fuzz-coverage.md, Contest and Frontier sweeps.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T02:39:16Z",
+          "by": "d5b35fb1",
+          "text": "Scenes still short: Tower multis (partner pick needs walking), Dome battles (pre-battle menu doesn't move on), Factory doubles (stuck on a summary screen: B doesn't close it, cause unknown), Pike (ends in a reset). Each scene's screens per 600 frames: w*/scenes.tsv."
+        },
+        {
+          "at": "2026-10-30T19:32:40Z",
+          "by": "d3a96e1c",
+          "text": "Story seeds ({unit:assets/fuzz-story-seeds}) left contests and Frontier at 0 of 14 images. Want sweeps like fuzz-v2's map boots: enter each contest hall/rank, each Frontier facility's battle, from story saves 10-12 (just emerald-story). docs/research/fuzz-coverage.md, Story seeds."
+        }
+      ]
+    },
+    {
+      "id": "assets/fuzz-pc-box-sweep",
+      "title": "Fuzz sweep through full PC boxes for Pokémon icons",
+      "detail": "Fuzz to 90 (f90c, docs/asset-extraction-design.md The curve) left 190 Pokémon icons and 165 PC storage files: the PC is never opened with full boxes. Sweep: a save with every species in the 14 boxes, open the PC's storage and page each box (and its menus), as the dex/bag sweeps open menus. Score with just assets-coverage.",
+      "uses": ["heavy"],
+      "minMinutes": 150,
+      "record": {
+        "state": "done",
+        "by": "5e800119",
+        "at": "2026-10-31T20:40:15Z",
+        "evidence": "PC sweep added to the Emerald fuzz worker (4 passes: every species + 27 Unown forms in 14 boxes, each slot hovered, own wallpapers, box menu, party, move items + Info, Walda's 16 patterns/30 icons). just assets-coverage on f90c + out/fuzz/pc2 (4 --pc-only workers): 4,672/6,755 (69.2%, f90c alone 64.0%), 89.9% with scan; Pokémon icons 414/415 (from 225; Deoxys read from +0x400 only); PC storage 132/165 found (from 0; 32 scan-only WRAM tilemaps, 1 never loaded). just check passed after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T20:40:18Z",
+          "by": "5e800119",
+          "text": "Left: Deoxys icon (box reads it from +0x400, Emerald's form frame), box_selection_popup.pal (LoadChooseBoxMenuGfx never asked to load it), 29 unpaired Unown/? icons (palette pairing in scoring), wallpaper tilemaps scan-only (unpacked to WRAM)."
+        }
+      ]
+    },
+    {
+      "id": "assets/fuzz-move-sweep",
+      "title": "Fuzz sweep using each move in battle for its animation",
+      "detail": "Fuzz to 90 (f90c) left ~276 battle animation files: a move's animation plays only when it is used. Sweep: a battle per move (party lead knowing it, poked into its moveset), FIGHT then that move, as worker.rs battle() starts sweeps. Score with just assets-coverage.",
+      "uses": ["heavy"],
+      "minMinutes": 120,
+      "record": {
+        "state": "done",
+        "by": "e5d61c47",
+        "at": "2026-10-31T23:38:15Z",
+        "evidence": "Reran just fuzz-coverage moves16 16 1 on this branch with MoveSetup (exit 0) and scored it with just assets-coverage out/fuzz/moves16: battle animations 197/291 images, 202/277 palettes, 26/34 tilemaps (scenes16 without the sweep: 129, 124, 7); run 3333/6755 used files (49.3%). All 11 MoveSetup targets found (large_fresh_egg, sunlight, light_beam, moon, nail, ghostly_spirit, light wall, snore_z, fissure, guillotine, attract). docs/research/fuzz-coverage.md updated; just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T22:52:43Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - tracker evidence / docs/research/fuzz-coverage.md:500-509: the card says to score the sweep with `just assets-coverage`, but the only scored run (out/fuzz/moves16: 188 of 291 images, 192 of 277 palettes, 22 of…"
+        }
+      ]
+    },
+    {
+      "id": "assets/coverage-link-only",
+      "title": "Coverage report: settle link-only Emerald graphics",
+      "record": {
+        "state": "done",
+        "by": "5e9cf69e",
+        "at": "2026-11-01T00:56:21Z",
+        "evidence": "Owner answered 'Should link-only graphics count toward Emerald's coverage?': keep them in, report change dropped. docs/asset-extraction-design.md now records the call (denominator stays 6,755, report unchanged); just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "assets/kirby-fuzz-screens",
+      "title": "Kirby fuzz sweeps: sub-games, cutscenes, other languages",
+      "detail": "After the Kirby fuzz (38.1% of the scan's 1,202 LZ77 blobs, flat after the room sweep; docs/research/fuzz-coverage.md, Kirby): add sweeps in crates/fuzz/src/kirby.rs for what's missed: each sub-game and menu screen (Crackity Hack, Speed Eaters, Wave Ride; the menu index in RAM), the language variable (the US ROM carries Japanese and European text tilesets), and cutscene triggers (intro, bosses, ending). Rerun just kirby-fuzz and report the new curve. Done when recorded with the before and after blob counts.",
+      "check": "recorded",
+      "needs": ["assets/kirby-fuzz"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "1654b3a2",
+        "at": "2026-10-31T23:13:02Z",
+        "evidence": "just kirby-fuzz rerun (12 workers, 45 min, quack) with the new screen sweep (game fade to 17 screens + pause help per ability, 6 languages via a patched ROM gLanguage): 1,044 of 1,202 LZ77 blobs (86.9%), before 458 (38.1%); curve 961 at 5 min, 1,035 at 10, 1,044 at 45 (out/fuzz/kirby/scan-curve.tsv). just check passes after merging main. Table in docs/research/fuzz-coverage.md, Kirby.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "assets/coverage-unscripted-anim-tags",
+      "title": "Coverage: anim tags no battle script loads count as unused",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "8f0946c6",
+        "at": "2026-10-31T23:52:22Z",
+        "evidence": "gbaa-assets coverage now leaves out 164 battle-anim sheets/palettes whose ANIM_TAG no loadspritegfx in data/battle_anim_scripts.s (nor C indexing gBattleAnimPicTable) loads, as 'unscripted'. Run on out/fuzz/moves16: used 6755 -> 6591, found 3333 both (49.3% -> 50.6%), battle-anim images 197/200. New test coverage_leaves_out_anim_tags_no_script_loads; just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T22:44:29Z",
+          "by": "80eccc09",
+          "text": "167 battle-anim files counted used belong to ANIM_TAG_* no script in data/battle_anim_scripts.s loads (fangs, fury_swipes, substitute...); only the tag table points at them. Teach gbaa-assets coverage to leave them out with that reason. memory/emerald-battle-pokes.md."
+        }
+      ]
+    },
+    {
+      "id": "assets/fuzz-move-sweep-foe-side",
+      "title": "Move sweep: the foe uses each move, and Spit Up, scored",
+      "uses": ["heavy"],
+      "tags": ["slow-check"],
+      "record": {
+        "state": "done",
+        "by": "f951bde6",
+        "at": "2026-11-01T00:49:06Z",
+        "evidence": "just fuzz-coverage foemoves16 16 1 + just assets-coverage out/fuzz/foemoves16 (after the foe-side pass and Spit Up/Swallow stockpile poke): battle animation tilemaps 29/34 (26 before), every *_Player/*_Opponent bg found, only 5 contest tilemaps left; images 197/291, palettes 202/277; Spit Up's red_orb_2 and the Curse stat-form mask load; run 3346/6755 files (49.5%). just check passes before and after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T23:35:38Z",
+          "by": "e5d61c47",
+          "text": "Replaces the earlier note: MoveSetup is now scored ({unit:assets/fuzz-move-sweep}, moves16: 197/291 images, 202/277 palettes, 26/34 tilemaps); no rerun needed. This unit is only a pass where the Squirtle knows the move (Player/Opponent bg tilemaps), and Spit Up (poke the stockpile)."
+        },
+        {
+          "at": "2026-10-31T22:44:36Z",
+          "by": "80eccc09",
+          "text": "From {unit:assets/fuzz-move-sweep}: rerun just fuzz-coverage moves16 16 1 to score MoveSetup. Then a pass where the Squirtle knows the move (Player/Opponent bg tilemaps), and Spit Up (poke the stockpile after the intro). docs/research/fuzz-coverage.md, Move sweep."
+        }
+      ]
+    },
+    {
+      "id": "assets/kirby-fuzz-last-misses",
+      "title": "Kirby fuzz: the 158 blobs the screen sweep still misses",
+      "uses": ["heavy"],
+      "minMinutes": 150,
+      "record": {
+        "state": "claimed",
+        "by": "063123b8",
+        "session": "063123b8-530b-4ae8-a6c7-5cffacf4a2c0",
+        "host": "quack",
+        "pid": 379246,
+        "start": "13117048",
+        "at": "2026-11-01T00:53:50Z",
+        "branch": "unit/assets/kirby-fuzz-last-misses",
+        "beats": true,
+        "handedBack": "2026-11-01T01:01:17Z",
+        "pushed": true,
+        "ended": "2026-11-01T01:01:27Z"
+      },
+      "notes": [
+        {
+          "at": "2026-11-01T01:01:13Z",
+          "by": "063123b8",
+          "text": "Traced (branch commit cf1a2acc, fuzz-coverage.md Kirby): 70/76 off-table blobs look like scan false positives. Sweep to add: ability 27-29 help; menu task unk9CC set to each state fn; link with gUnk_02038580=1; sub-game menu JP/EN. Then a 45-min just kirby-fuzz."
+        },
+        {
+          "at": "2026-10-31T23:13:11Z",
+          "by": "1654b3a2",
+          "text": "Follow-up to {unit:assets/kirby-fuzz-screens}: 82 gUnk_082D7850 entries (help 29-31 per language, 183-324 scattered, 560-687, 732-782) and 76 blobs off-table (44 in 0x0845-0x084A). Find their users in katam, add SCREENS items in kirby.rs; list in docs/research/fuzz-coverage.md."
+        }
+      ],
+      "round": "2026-11-01T00:53:50Z"
+    },
+    {
+      "id": "assets/fuzz-contest-appeal-anims",
+      "title": "Contest appeals draw the 5 contest-only move backgrounds",
+      "uses": ["heavy"],
+      "tags": ["slow-check"],
+      "record": {
+        "state": "done",
+        "by": "4ba83e89",
+        "at": "2026-11-01T01:37:37Z",
+        "evidence": "Contest scenes' entered mon appeals with Mega Punch/Horn Drill/Guillotine/Scary Face/Surf (worker.rs CONTEST_MOVES); all 5 blobs load (events.tsv load+table rows). Scorer counts a compressed file by a table row at its blob start (unpacked, palette bits rewritten). just fuzz-coverage contest16 16 0 ROM STORY + just assets-coverage: battle anim tilemaps 34/34 (29), PC wallpaper tilemaps found too, run 3535/6591 (53.6%). just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-11-01T00:49:18Z",
+          "by": "f951bde6",
+          "text": "From {unit:assets/fuzz-move-sweep-foe-side}: drill/guillotine/impact_contests, scary_face_contest, water_contest tilemaps load only in a contest appeal; the scene sweep's contests don't use those moves. Give contest mons Horn Drill, Guillotine, Scary Face, Surf etc."
+        }
+      ]
+    }
+  ]
+}

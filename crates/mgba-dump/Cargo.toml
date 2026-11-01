@@ -1,0 +1,17 @@
+[package]
+name = "mgba-dump"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# Runs a ROM headless in mGBA (#55, milestone 3's oracle) and writes its
+# last frame the way `gbaa-desktop --headless` does, so the two compare by
+# hash. Links the static libmgba from scripts/fetch-mgba.sh.
+
+[dependencies]
+desktop = { path = "../desktop" }
+runtime = { path = "../runtime" }
+png = "0.18"
+
+[build-dependencies]
+cc = "1.2"

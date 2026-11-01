@@ -1,0 +1,8 @@
+[package]
+name = "analysis"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+armv4t = { path = "../armv4t" }

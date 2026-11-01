@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!-- Where ES-DE finds gbaa-desktop for es_systems.xml's %EMULATOR_GBAA%:
+     on the PATH, else ~/Applications/gbaa/. Copy to
+     ~/ES-DE/custom_systems/es_find_rules.xml. -->
+<ruleList>
+    <emulator name="GBAA">
+        <rule type="systempath">
+            <entry>gbaa-desktop</entry>
+        </rule>
+        <rule type="staticpath">
+            <entry>~/Applications/gbaa/gbaa-desktop</entry>
+        </rule>
+    </emulator>
+</ruleList>

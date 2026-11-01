@@ -1,0 +1,152 @@
+{
+  "id": "bios",
+  "title": "BIOS calls the runtime is missing",
+  "priority": 14,
+  "order": 18,
+  "units": [
+    {
+      "id": "bios/swi-survey",
+      "title": "Survey which BIOS calls the owner's ROMs make",
+      "detail": "Using discovery's decoded instructions (not a raw byte scan), list every swi number each ROM in ~/ROMs/gba makes, and which ones crates/runtime/src/bios.rs doesn't implement. Write the table to docs/research/bios-calls.md and reorder or add units in the bios group by what the games actually use. Kirby: Nightmare in Dream Land's pause screen stopped on HuffUnComp (0x13) until 2026-10-26 (ccb10ab); this finds the next one before a playtest does.",
+      "check": "recorded",
+      "priority": 20,
+      "record": {
+        "state": "done",
+        "by": "35340c52",
+        "at": "2026-10-27T01:38:08Z",
+        "evidence": "disc-check swis (just swis) over all 10 ROMs in ~/ROMs/gba, from discovery's decoded code plus IWRAM overlays; table in docs/research/bios-calls.md. Missing: MultiBoot 0x25 (6 ROMs, reached in Kirby NiDL), SoundDriverVSyncOff 0x28 (Kirby NiDL, reached), SoundBias 0x19 (Kirby AM). Bios units reprioritised. just check passes; new test keeps IMPLEMENTED equal to swi.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "bios/diff-unfilter",
+      "title": "Diff unfilter calls (swi 0x16, 0x17, 0x18)",
+      "detail": "Diff8bitUnFilterWram, Diff8bitUnFilterVram and Diff16bitUnFilter in crates/runtime/src/bios/decomp.rs, following mGBA's _unFilter: header word (type 0x80 | unit size, length in bits 8-31), each unit the running sum of the deltas; the VRAM variant writes halfwords. Source below 0x02000000 does nothing. Oracle: unit tests in crates/runtime/src/bios/tests.rs against hand-worked data, plus an agb program under agb/ that makes the call, checked with just unit against mGBA (whose HLE BIOS is at $GBAA_DATA/tools/mgba/src/src/gba/bios.c). The unimplemented-call tests use 0x16 as their example and need another number.",
+      "check": "recorded",
+      "priority": 4,
+      "record": {
+        "state": "done",
+        "by": "ac775189",
+        "at": "2026-10-27T01:40:42Z",
+        "evidence": "swi 0x16/0x17/0x18 in runtime bios/decomp.rs per mGBA _unFilter; unit tests diff8_unfilter, diff16_unfilter, unfilter_ignores_a_bios_source pass; agb/diff-unfilter (palette, tiles, map from the three calls) matches mGBA at frame 10 and every pixel matches SCENE.md's formula; just unit diff-unfilter passes; just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T01:37:05Z",
+          "by": "35340c52",
+          "text": "Survey (docs/research/bios-calls.md): no ROM in ~/ROMs/gba makes 0x16-0x18; priority lowered."
+        }
+      ]
+    },
+    {
+      "id": "bios/midi-key2freq",
+      "title": "MidiKey2Freq (swi 0x1F)",
+      "detail": "MidiKey2Freq in crates/runtime/src/bios/math.rs, following mGBA's _MidiKey2Freq: r0 a WaveData pointer (its frequency word at +4), r1 the MIDI key, r2 the fine adjust; returns r0 = freq / 2^((180 - key - fine/256)/12). Match mGBA's float rounding exactly. Oracle: unit tests in crates/runtime/src/bios/tests.rs against hand-worked data, plus an agb program under agb/ that makes the call, checked with just unit against mGBA (whose HLE BIOS is at $GBAA_DATA/tools/mgba/src/src/gba/bios.c).",
+      "check": "recorded",
+      "priority": 4,
+      "record": {
+        "state": "done",
+        "by": "6f401ac8",
+        "at": "2026-10-27T16:07:18Z",
+        "evidence": "aaf126a + merge of main: bios tests pass; just check passes; just unit midi-key2freq passes vs mGBA at frame 60, recompiled = interpreted.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T02:09:01Z",
+          "by": "46bb7812",
+          "text": "Done in aaf126a on unit/bios/midi-key2freq: tests pass, just unit midi-key2freq passes vs mGBA (hash 8abbd4cc2b9451bf). Left at stop time: rerun just check after the rustfmt fix, merge origin/main, then just done."
+        },
+        {
+          "at": "2026-10-27T01:37:04Z",
+          "by": "35340c52",
+          "text": "Survey (docs/research/bios-calls.md): no ROM in ~/ROMs/gba makes this call; priority lowered."
+        }
+      ]
+    },
+    {
+      "id": "bios/sound-bias",
+      "title": "SoundBias (swi 0x19)",
+      "detail": "SoundBias: r0 = 0 moves SOUNDBIAS's level (bits 0-9) to 0, otherwise to 0x200, one step at a time on hardware (GBATEK 'SoundBias'). mGBA's HLE does nothing (a stub), so it can't judge this one: unit tests against GBATEK, and say in the evidence that mGBA differs. The result must stay the same in the interpreter and recompiled builds.",
+      "check": "recorded",
+      "priority": 18,
+      "record": {
+        "state": "done",
+        "by": "56c40396",
+        "at": "2026-10-27T16:01:36Z",
+        "evidence": "SoundBias (swi 0x19) per GBATEK: r0=0 sets SOUNDBIAS level (bits 0-9) to 0, else 0x200, upper bits kept, as one store (the BIOS's stepping isn't modelled), 45-cycle entry. Shared runtime path, so interpreter and recompiled builds agree. Unit test bios::tests::sound_bias passes; just check green after merging latest main (commit 09aa764). mGBA differs: its HLE stubs SoundBias and leaves the register alone.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T01:59:25Z",
+          "by": "b79a679c",
+          "text": "Committed on its branch, main merged in: SoundBias per GBATEK (level to 0/0x200, upper bits kept, one store, 45 cycles; mGBA stubs it) + unit test. Runtime bios tests pass. Lane stop cut off just check after merge. Left: just check, then just done."
+        },
+        {
+          "at": "2026-10-27T01:37:02Z",
+          "by": "35340c52",
+          "text": "Survey: Kirby & The Amazing Mirror has 2 SoundBias sites (scanned, not yet reached by descent)."
+        }
+      ]
+    },
+    {
+      "id": "bios/sound-driver-stubs",
+      "title": "BIOS sound driver calls as mGBA's no-ops",
+      "detail": "SoundDriverInit, Mode, Main, VSync, ChannelClear (0x1A-0x1E), MusicPlayerOpen, Start, Stop, Continue, FadeOut (0x20-0x24), SoundDriverVSyncOff and On (0x28, 0x29): return at once, as mGBA's HLE BIOS does (hle-bios.s), and SoundGetJumpList (0x2A) fills 36 words at r0 with the address of a bx lr in our BIOS region, as mGBA's does. Games that play music through the BIOS's own driver stay silent, as in mGBA; a real driver is separate work, worth a unit only if the swi survey finds a game that needs it. Oracle: unit tests in crates/runtime/src/bios/tests.rs against hand-worked data, plus an agb program under agb/ that makes the call, checked with just unit against mGBA (whose HLE BIOS is at $GBAA_DATA/tools/mgba/src/src/gba/bios.c).",
+      "check": "recorded",
+      "priority": 19,
+      "record": {
+        "state": "done",
+        "by": "16b87fbf",
+        "at": "2026-10-27T15:59:03Z",
+        "evidence": "Runtime lib tests cover each sound call (no-op, 45 cycles) and SoundDriverGetJumpList's 36 NopCall words, r0/r1/r3. just unit bios-sound passes after merging main: mGBA and interp draw be89812fafdc86f4 at frame 10, recompiled = interpreted, 99.2% compiled (min 0.97). just check green.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T01:55:29Z",
+          "by": "86d4db02",
+          "text": "Work committed on its branch: stubs + tests (runtime lib tests pass), agb/bios-sound + units/bios-sound.toml; mGBA and interp match at frame 10. Left: just unit bios-sound (recompiled leg; maybe add min_compiled), just check, merge main, just done."
+        },
+        {
+          "at": "2026-10-27T01:37:00Z",
+          "by": "35340c52",
+          "text": "Survey: the only sound-driver call any owner ROM makes is SoundDriverVSyncOff 0x28 (Kirby: Nightmare in Dream Land, reached). Nothing uses 0x1A-0x1E/0x20-0x24/0x29/0x2A: do 0x28 first; no real driver needed."
+        }
+      ]
+    },
+    {
+      "id": "bios/multiboot-hardreset",
+      "title": "MultiBoot and HardReset (swi 0x25, 0x26)",
+      "detail": "MultiBoot (0x25): no link cable here, so fail as hardware does with nobody attached (r0 = 1); mGBA's HLE does nothing. HardReset (0x26): restart the machine as at power-on (the desktop's reset path), where mGBA's HLE does nothing; check with a unit test and an agb program that calls it and must come back to its first screen.",
+      "check": "recorded",
+      "priority": 20,
+      "record": {
+        "state": "done",
+        "by": "a1e05912",
+        "at": "2026-10-27T15:55:23Z",
+        "evidence": "MultiBoot 0x25 returns r0=1 (no client); HardReset 0x26 restarts as at power-on. bios unit tests pass; just check passes after merging main (conflict in bios.rs call list settled keeping the Diff unfilter calls); just first-frame hard-reset.gba 60: recompiled matches interpreter, identical frame hash d8374b32ea1a6b25; interp peek shows the program came back to its first screen.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T01:47:58Z",
+          "by": "0441d925",
+          "text": "started at 21:45, too near the 22:00 stop; just check was cut off at ~1 min (no failures seen). Branch unchanged at 79bbcf2. Left as before: just check, just first-frame on hard-reset.gba 60, merge main, done."
+        },
+        {
+          "at": "2026-10-27T01:46:13Z",
+          "by": "08f55acc",
+          "text": "Code+tests+agb/hard-reset committed on branch (79bbcf2); bios tests pass; gbaa-interp --frames 60 --peek 0203FF00/0203FF04/05000000 = 0,0x13,0x1f (same as frame 20). Left: just check, just first-frame on hard-reset.gba 60, merge main, done."
+        },
+        {
+          "at": "2026-10-27T01:36:59Z",
+          "by": "35340c52",
+          "text": "Survey (docs/research/bios-calls.md): MultiBoot 0x25 is in 6 of the owner's ROMs' stub tables, reached from the entry in Kirby: Nightmare in Dream Land: likeliest next stop. HardReset 0x26 is in none."
+        }
+      ]
+    }
+  ]
+}

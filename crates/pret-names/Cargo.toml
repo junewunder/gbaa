@@ -1,0 +1,19 @@
+[package]
+name = "pret-names"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# Exact names for a pret decomp's ROM (the mod view, decision 2): its ELF's
+# symbols matched to the functions codegen compiles and the data they read.
+
+[dependencies]
+analysis = { path = "../analysis" }
+codegen = { path = "../codegen" }
+disc-check = { path = "../disc-check" }
+# DWARF 2 (locals, lines, prototypes, types); its ELF sections by `object`.
+gimli = { version = "0.32", default-features = false, features = ["read", "std"] }
+object = { version = "0.36", default-features = false, features = ["read_core", "elf", "std"] }
+
+[dev-dependencies]
+toml = "1"

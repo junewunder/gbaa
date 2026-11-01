@@ -1,0 +1,111 @@
+<!doctype html>
+<!-- Mockup of the redesigned Controls page (docs/remap-design.md). Four
+     states of one screen, at the Steam Deck's 1280x800 halved. Render:
+     chromium-browser --headless --screenshot=… --window-size=1330,2260 -->
+<html><head><meta charset="utf-8"><style>
+body{background:#111;color:#e6e6e6;font:13px system-ui,sans-serif;margin:0;padding:16px}
+h2{color:#888;font-size:13px;font-weight:normal;margin:18px 0 6px}
+.screen{width:1280px;height:520px;background:#2a3a2a url() ;position:relative;border-radius:6px;overflow:hidden;
+ background:linear-gradient(#36503a,#24301f)}
+.box{position:absolute;inset:14px 60px;background:#1c1e22;border-radius:10px;padding:12px 18px;display:flex;flex-direction:column}
+.title{text-align:center;font-size:18px;margin-bottom:6px}
+.tabs{display:flex;justify-content:center;gap:6px;margin-bottom:8px}
+.tab{padding:5px 16px;border-radius:14px;background:#2c2f35;color:#aaa}
+.tab.on{background:#2662b4;color:#fff}
+.tab .sh{font-size:10px;color:#9ab;border:1px solid #567;border-radius:3px;padding:0 3px;margin:0 6px}
+.scope{display:flex;align-items:center;gap:10px;background:#24272c;border-radius:8px;padding:6px 10px;margin-bottom:8px}
+.seg{display:flex;border:1px solid #445;border-radius:6px;overflow:hidden}
+.seg span{padding:4px 12px;color:#aaa}
+.seg span.on{background:#2662b4;color:#fff}
+.scope .why{color:#999;font-size:12px}
+.main{display:flex;gap:16px;flex:1;min-height:0}
+.pic{width:330px;flex:none}
+.list{flex:1;overflow:hidden}
+.row{display:flex;align-items:center;height:28px;border-radius:5px;padding:0 6px;gap:6px}
+.row.focusrow{background:#23324a}
+.name{width:150px;flex:none}
+.name small{color:#888}
+.chip{display:inline-flex;align-items:center;gap:6px;background:#2f3f55;color:#96bee b;color:#cfe3ff;border-radius:12px;padding:2px 4px 2px 10px}
+.chip .x{display:inline-block;width:16px;height:16px;line-height:16px;text-align:center;border-radius:8px;background:#46566e;color:#fff;font-size:11px}
+.chip.focus{outline:2px solid #aad2ff;background:#2662b4}
+.chip.focus .x{background:#d24b4b}
+.chip.warn{background:#4d3f1f;color:#ffd98a}
+.add{border:1px dashed #556;border-radius:12px;padding:2px 10px;color:#9ab}
+.add.focus{outline:2px solid #aad2ff;color:#fff;border-color:#aad2ff}
+.none{color:#e08080}
+.tag{font-size:10px;padding:1px 6px;border-radius:8px;background:#5a3f8a;color:#e9d8ff}
+.inh{color:#777;font-size:11px}
+.reset{margin-left:auto;color:#8a9;font-size:12px;border:1px solid #3b4a44;border-radius:10px;padding:1px 8px}
+.sect{color:#8aa;font-size:11px;text-transform:uppercase;letter-spacing:1px;margin:6px 0 2px 6px}
+.foot{border-top:1px solid #333;margin-top:6px;padding-top:6px;display:flex;gap:18px;font-size:12px;color:#bbb;align-items:center}
+.foot b{color:#fff;font-weight:normal;border:1px solid #666;border-radius:9px;padding:0 6px;margin-right:4px}
+.foot .btn{margin-left:auto;border:1px solid #555;border-radius:10px;padding:2px 10px}
+.toast{position:absolute;left:50%;transform:translateX(-50%);bottom:52px;background:#4d3f1f;color:#ffd98a;border-radius:8px;padding:6px 14px}
+.toast u{color:#fff}
+.modal{position:absolute;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center}
+.dlg{background:#20242b;border:2px solid #2662b4;border-radius:12px;padding:20px 30px;text-align:center;width:430px}
+.dlg .big{font-size:20px;margin:8px 0}
+.bar{height:6px;background:#333;border-radius:3px;margin:12px 0}
+.bar i{display:block;height:6px;width:60%;background:#2662b4;border-radius:3px}
+.dlg .cancel{display:inline-block;border:1px solid #888;border-radius:10px;padding:4px 18px;margin-top:6px}
+svg text{font:11px system-ui;fill:#cfe3ff}
+</style></head><body>
+
+<script>
+// The GBA picture, one copy per screen; hi = the button lit as focused.
+function gba(hi, labels){
+ const L=labels;
+ const lit=(k)=>k===hi?'#2662b4':'#3a3f48';
+ return `<svg width="330" height="300" viewBox="0 0 330 300">
+ <rect x="15" y="70" width="300" height="150" rx="40" fill="#5b4f8f"/>
+ <rect x="95" y="85" width="140" height="100" rx="6" fill="#222"/>
+ <rect x="105" y="93" width="120" height="84" fill="#3c5c3c"/>
+ <rect x="20" y="62" width="70" height="16" rx="8" fill="${lit('l')}"/>
+ <rect x="240" y="62" width="70" height="16" rx="8" fill="${lit('r')}"/>
+ <rect x="45" y="130" width="14" height="42" fill="${lit('dpad')}"/><rect x="31" y="144" width="42" height="14" fill="${lit('dpad')}"/>
+ <circle cx="290" cy="138" r="13" fill="${lit('a')}"/><circle cx="262" cy="156" r="13" fill="${lit('b')}"/>
+ <text x="286" y="142" style="fill:#fff">A</text><text x="258" y="160" style="fill:#fff">B</text>
+ <rect x="130" y="195" width="26" height="8" rx="4" fill="${lit('select')}"/><rect x="174" y="195" width="26" height="8" rx="4" fill="${lit('start')}"/>
+ <text x="20" y="40">L: ${L.l}</text><text x="240" y="40">R: ${L.r}</text>
+ <line x1="55" y1="45" x2="55" y2="62" stroke="#667"/><line x1="275" y1="45" x2="275" y2="62" stroke="#667"/>
+ <text x="5" y="250">D-pad: ${L.dpad}</text><line x1="52" y1="172" x2="52" y2="238" stroke="#667"/>
+ <text x="238" y="105">A: ${L.a}</text><line x1="290" y1="110" x2="290" y2="125" stroke="#667"/>
+ <text x="215" y="250">B: ${L.b}</text><line x1="262" y1="169" x2="262" y2="238" stroke="#667"/>
+ <text x="95" y="275" text-anchor="end">Select: ${L.select}</text><polyline points="143,203 143,271 100,271" fill="none" stroke="#667"/>
+ <text x="235" y="275">Start: ${L.start}</text><polyline points="187,203 187,271 230,271" fill="none" stroke="#667"/>
+ </svg>`}
+const PAD={a:'Ⓐ',b:'Ⓑ',l:'LB, LT',r:'RB, RT',dpad:'D-pad, left stick',start:'Start ☰',select:'Select ⧉'};
+const KEYS={a:'Z',b:'X',l:'A',r:'S',dpad:'arrow keys',start:'Enter',select:'Backspace'};
+function chips(list,focus,warn){return list.map((c,i)=>`<span class="chip${i===focus?' focus':''}${warn===i?' warn':''}">${c}<span class="x">✕</span></span>`).join(' ')}
+function row(name,list,o={}){
+ const body=list.length?chips(list,o.chip,o.warn):'<span class="none">Not bound: nothing presses it</span>';
+ return `<div class="row${o.chip!==undefined||o.add?' focusrow':''}"><span class="name">${name}</span>${body}
+  <span class="add${o.add?' focus':''}">+ Add</span>${o.tag?`<span class="tag">${o.tag}</span>`:''}${o.inh?`<span class="inh">${o.inh}</span>`:''}${o.reset?`<span class="reset">↺ ${o.reset}</span>`:''}</div>`}
+function screen(o){
+ return `<div class="screen"><div class="box">
+ <div class="title">Controls</div>
+ <div class="tabs"><span class="sh">LB</span><span class="tab${o.keys?'':' on'}">🎮 Controller</span><span class="tab${o.keys?' on':''}">⌨ Keyboard</span><span class="sh">RB</span></div>
+ <div class="scope"><span>Changes apply to</span><div class="seg"><span class="${o.game?'':'on'}">Every game</span><span class="${o.game?'on':''}">Only Pokémon Emerald</span></div>
+ <span class="why">${o.game?'This game uses every-game controls, except the rows marked “this game”.':'A game can override these; its own changes are kept.'}</span></div>
+ <div class="main"><div class="pic">${gba(o.hi,o.keys?KEYS:o.pic||PAD)}</div><div class="list">${o.rows}</div></div>
+ <div class="foot">${o.foot}<span class="btn">↺ Reset ${o.game?'this game to every-game controls':'every game to defaults'}</span></div>
+ </div>${o.extra||''}</div>`}
+const R=(rows)=>rows.join('');
+document.write(`<h2>1. Controller, every game. The focus is on a binding: its ✕ is red; A removes it. Left/right moves along the row, up/down between rows.</h2>`+screen({hi:'l',
+ rows:R([`<div class="sect">Game Boy buttons</div>`,
+ row('A',['Ⓐ']),row('B',['Ⓑ']),row('L',['LB','LT'],{chip:1}),row('R',['RB','RT']),
+ row('Start',['Start ☰']),row('Select',['Select ⧉']),row('Up / Down / Left / Right',['D-pad','left stick']),
+ `<div class="sect">Shortcuts</div>`,row('Fast-forward (hold)',['right stick click']),row('Load state',[])]),
+ foot:'<span><b>A</b>remove LT from L</span><span><b>B</b>back</span>'}));
+document.write(`<h2>2. Listening, after A on “+ Add” beside B. Any pad button binds; Cancel by mouse, Esc, or let the bar run out (5 s). B binds B here, it doesn't cancel.</h2>`+screen({hi:'b',
+ rows:R([`<div class="sect">Game Boy buttons</div>`,row('A',['Ⓐ']),row('B',['Ⓑ'],{add:true}),row('L',['LB','LT']),row('R',['RB','RT'])]),
+ foot:'',extra:`<div class="modal"><div class="dlg">Adding a control to the GBA's <b>B</b><div class="big">Press a button or move a stick…</div><div class="bar"><i></i></div><span class="cancel">Cancel (Esc)</span><div class="inh" style="margin-top:8px">Waits 3 more seconds, then cancels by itself.</div></div></div>`}));
+document.write(`<h2>3. Only this game. B was given LB here, which every game uses for L: the move is said and can be undone. Rows this game changed are tagged and can go back to every-game.</h2>`+screen({game:true,hi:'b',pic:{...PAD,b:'Ⓑ, LB',l:'LT'},
+ rows:R([`<div class="sect">Game Boy buttons</div>`,row('A',['Ⓐ'],{inh:'from every game'}),row('B',['Ⓑ','LB'],{tag:'this game',reset:'use every-game',add:true}),
+ row('L',['LT'],{tag:'this game',reset:'use every-game'}),row('R',['RB','RT'],{inh:'from every game'}),row('Start',['Start ☰'],{inh:'from every game'})]),
+ foot:'<span><b>A</b>add another control to B</span><span><b>B</b>back</span>',extra:`<div class="toast">⚠ LB moved from L to B (this game only).  <u>Undo (Y)</u></div>`}));
+document.write(`<h2>4. Keyboard: the same screen. Listening takes the next key; Esc cancels and can't be bound.</h2>`+screen({keys:true,hi:'a',
+ rows:R([`<div class="sect">Game Boy buttons</div>`,row('A',['Z'],{chip:0}),row('B',['X']),row('L',['A']),row('R',['S']),row('Start',['Enter']),row('Select',['Backspace']),
+ `<div class="sect">Shortcuts</div>`,row('Fast-forward (hold)',['Tab']),row('Rewind (hold)',['R'])]),
+ foot:'<span><b>Enter</b>remove Z from A</span><span><b>Esc</b>back</span>'}));
+</script></body></html>

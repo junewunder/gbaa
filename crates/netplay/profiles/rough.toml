@@ -1,0 +1,9 @@
+# A bad mobile link: 30 ms + up to 40 ms, a fifth lost, 15% held 30 ms back
+# so later datagrams overtake them, and 5% arriving twice.
+latency_ms = 30
+jitter_ms = 40
+loss = 0.2
+reorder = 0.15
+reorder_ms = 30
+duplicate = 0.05
+seed = 4

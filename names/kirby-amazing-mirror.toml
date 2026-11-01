@@ -1,0 +1,60 @@
+# Names given to Kirby & the Amazing Mirror's (USA) player controller by research/kirby-controller-probe
+# (docs/research/kirby-controller.md): what each function does, from a scripted-input RAM trace of
+# gKirbys[0] (scripts/kirby/moves.lua) read against the katam decomp (github.com/jiangzhengwenjz/katam
+# @7d969fb, mostly sub_XXXXXXXX there). `katam` is the decomp's name for it. Hand-written; edit freely.
+
+[map]
+rom_sha1 = "274b102b6d940f46861a92b4e65f89a51815c12c"
+source = "names/kirby-amazing-mirror.toml"
+format = 1
+
+[functions]
+# The per-frame player task and what it runs before the state function.
+0x0803ee19 = { name = "KirbyTask", file = "kirby.o", katam = "sub_0803EE18" }
+0x0803f325 = { name = "KirbyReadInput", file = "kirby.o", katam = "sub_0803F324" }
+0x0803fbb5 = { name = "KirbyPreStateChecks", file = "kirby.o", katam = "sub_0803FBB4" }
+# States (struct Kirby's stateFn at +0x78), each with the function that enters it.
+0x0803fe75 = { name = "KirbyEnterStand", file = "kirby.o", katam = "sub_0803FE74" }
+0x0803ff65 = { name = "KirbyStand", file = "kirby.o", katam = "sub_0803FF64" }
+0x08040869 = { name = "KirbyEnterCrouch", file = "kirby.o", katam = "sub_08040868" }
+0x08040931 = { name = "KirbyCrouch", file = "kirby.o", katam = "sub_08040930" }
+0x080411e9 = { name = "KirbyEnterWalk", file = "kirby.o", katam = "sub_080411E8" }
+0x080412ad = { name = "KirbyWalk", file = "kirby.o", katam = "sub_080412AC" }
+0x08041b09 = { name = "KirbyEnterRun", file = "kirby.o", katam = "sub_08041B08" }
+0x08041c51 = { name = "KirbyRun", file = "kirby.o", katam = "sub_08041C50" }
+0x08042d71 = { name = "KirbyEnterSlide", file = "kirby.o", katam = "sub_08042D70" }
+0x08042e29 = { name = "KirbySlide", file = "kirby.o", katam = "sub_08042E28" }
+0x08043361 = { name = "KirbyEnterJump", file = "kirby.o", katam = "sub_08043360" }
+0x080435f9 = { name = "KirbyJumpRise", file = "kirby.o", katam = "sub_080435F8" }
+0x0804464d = { name = "KirbyJumpApex", file = "kirby.o", katam = "sub_0804464C" }
+0x08044ea9 = { name = "KirbyEnterFall", file = "kirby.o", katam = "sub_08044EA8" }
+0x08044fd5 = { name = "KirbyFall", file = "kirby.o", katam = "sub_08044FD4" }
+0x080458fd = { name = "KirbyEnterLandingBounce", file = "kirby.o", katam = "sub_080458FC" }
+0x08045a35 = { name = "KirbyLandingBounce", file = "kirby.o", katam = "sub_08045A34" }
+0x080476c5 = { name = "KirbyEnterFloat", file = "kirby.o", katam = "kirbyFlyUp" }
+0x08047815 = { name = "KirbyFloatInflate", file = "kirby.o", katam = "sub_08047814" }
+0x080487ad = { name = "KirbyEnterFloatFlap", file = "kirby.o", katam = "sub_080487AC" }
+0x080488e1 = { name = "KirbyFloatFlap", file = "kirby.o", katam = "sub_080488E0" }
+0x0804990d = { name = "KirbyEnterExhale", file = "kirby.o", katam = "sub_0804990C" }
+0x08049a61 = { name = "KirbyExhale", file = "kirby.o", katam = "sub_08049A60" }
+0x0804a729 = { name = "KirbyTakeHit", file = "kirby.o", katam = "sub_0804A728" }
+0x0804acfd = { name = "KirbyHurt", file = "kirby.o", katam = "sub_0804ACFC" }
+0x0805474d = { name = "KirbyEnterInhale", file = "kirby.o", katam = "sub_0805474C" }
+0x08054951 = { name = "KirbyInhale", file = "kirby.o", katam = "sub_08054950" }
+0x08055921 = { name = "KirbyEnterRoomArrive", file = "kirby.o", katam = "sub_08055920" }
+0x08055d9d = { name = "KirbyRoomArrive", file = "kirby.o", katam = "sub_08055D9C" }
+0x08056129 = { name = "KirbyRoomArriveEnd", file = "kirby.o", katam = "sub_08056128" }
+# Physics helpers the ground states call.
+0x0805b1b9 = { name = "KirbyGroundFriction", file = "kirby.o", katam = "sub_0805B1B8" }
+0x0805b2fd = { name = "KirbyGroundAccel", file = "kirby.o", katam = "sub_0805B2FC" }
+0x0805c071 = { name = "KirbyWallBump", file = "kirby.o", katam = "sub_0805C070" }
+# Boxes: the body's (left, top, half width and height, +0x38) and the terrain bounds (+0x3C).
+0x0803e2b1 = { name = "ObjectSetHitbox", file = "kirby.o", katam = "sub_0803E2B0" }
+0x0803e309 = { name = "ObjectSetBounds", file = "kirby.o", katam = "ObjectSetBounds" }
+# Attack and effect objects the moves spawn, with their hitboxes in code.
+0x080711a9 = { name = "SpawnSlideAttack", file = "code_0806F780.o", katam = "sub_080711A8" }
+0x08072c5d = { name = "SpawnAirPuff", file = "code_0806F780.o", katam = "sub_08072C5C" }
+0x08089d99 = { name = "SpawnSlideDust", file = "code_0806F780.o", katam = "sub_08089D98" }
+
+[data]
+0x02020ee0 = { name = "gKirbys", size = 1696, type = "struct Kirby [4]" }

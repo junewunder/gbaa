@@ -1,0 +1,6 @@
+# The readable print's byte previews (codegen::text::Preview; unit
+# mod/data-preview; docs/mod-view-design.md, "Bytes where no table is
+# known"). For a game whose source map has no [text], each pool word that
+# points at ROM data prints its bytes as `name: [u8; N] = [..]`, up to the
+# next address other code points at, and at most max_bytes of them.
+max_bytes = 32

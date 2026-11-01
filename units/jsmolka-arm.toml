@@ -1,0 +1,11 @@
+# jsmolka's arm test: "All tests passed" on screen (r12 = 0, just gba-tests).
+rom = "$GBAA_DATA/gba-tests/arm/arm.gba"
+
+[[checkpoint]]
+name = "jsmolka-arm"
+frame = 300
+hash = "ffb537b2caeb46f1"
+mgba_hash = "5a01030397b3229b"
+mgba_why = "mGBA 0.10.5 fails test 235 (cmp pc, pc, r0 flushes the pipeline)"
+# Verified: our frame reads "All tests passed"; mGBA's reads "Failed test 235"
+# (known-mismatches.tsv, unit oracle/mgba-mismatches).

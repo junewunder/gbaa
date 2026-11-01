@@ -1,0 +1,15 @@
+[package]
+name = "size-slint"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Not part of the gbaa workspace: a hello world, to measure build time and
+# binary size (docs/research/ui-library.md).
+[workspace]
+
+[profile.release]
+strip = true
+
+[dependencies]
+slint = "1.18"

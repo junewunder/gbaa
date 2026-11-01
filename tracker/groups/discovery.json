@@ -1,0 +1,108 @@
+{
+  "id": "discovery",
+  "title": "Discovery and jump-table accuracy",
+  "priority": 2,
+  "order": 5,
+  "units": [
+    {
+      "id": "discovery/scanned-cuts",
+      "title": "False scanned starts cutting a scanned function",
+      "detail": "From GitHub #43. On modern-GCC Emerald, 9 of 15 false starts sit inside true functions (6 in PokemonUseItemEffects, 0x08167cd1), cutting its extent so switch cases go unreached. Try: a scanned start can't cut a function whose analysis reached it by b or a far jump, or rank it down where a resolved jump lands. Check: just disc-pret pokeemerald_modern false-starts-inside goes down, code reached goes up, bars hold.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "b5cb8346",
+        "at": "2026-10-21T17:14:34Z",
+        "evidence": "disc-pret pokeemerald_modern: false starts inside true functions 3 -> 2 (VBlankCB_Slice fixed; PokemonUseItemEffects already had none), precision 0.9993 -> 0.9994, recall 0.7776 -> 0.7777, code reached 712101 -> 712105. agbcc Emerald bar holds (0.9992/0.9555, unchanged), disc-agb unchanged, just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-21T17:14:35Z",
+          "by": "b5cb8346",
+          "text": "Left: SetSelectedWordGroup+4 is a dead out-of-line copy (calls inlined) hit by a sound-data word. __aeabi_ddiv+0x19c is libgcc's ARM bleq Ldv_s, a bl used as a jump; returns mix sp 0/+16 so the far-jump rule misses it; ddiv itself is reached only by b from its veneer."
+        }
+      ]
+    },
+    {
+      "id": "discovery/branching-helper",
+      "title": "A branching helper in a caller's span taken as far jump",
+      "detail": "From GitHub #48. The own-span bl rule (analyze_capped, crates/analysis/src/vsa/func.rs) treats a Thumb bl into its own reached span as a jump unless the target looks like a function; a helper ending bx lr but with a conditional branch or over 24 instructions becomes a false far jump. Skip targets whose probe returns balanced. Check: a unit test with such a helper; disc-agb, jt-score, both disc-pret hold.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "4e6531d0",
+        "at": "2026-10-21T17:25:19Z",
+        "evidence": "Own-span bl rule now skips targets whose probe answers Bl::Balanced (every known return leaves sp at entry). New test branching_helper_in_the_span_is_a_call fails without the fix. jt-score 676/676, 584/617, far 548/548 and 726/732, 0 false; disc-agb 1.0/0.98, 1.0/0.86, 1.0/0.58; disc-pret 0.9992/0.9555 and 0.9994/0.7777, unchanged; just check passes.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "discovery/tiny-agb-fns",
+      "title": "Tiny agb functions reached only through pointers",
+      "detail": "From GitHub #62. The agb sound ROM's last fallback entries are 6-8-byte Thumb functions (ldr r0,[pc]; bx lr getters, FnOnce::call_once shims) reached by bl to a bx rN stub with rN from data: 11 in the 18157 Hz ROM (0x08003871...0x08004f1d), 10 in 10512 Hz ROM. Let the pointer scan take very short pool-load + bx lr bodies, or feed fallback seeds back (decision 6). disc-agb precision 1.0 must hold; recall should rise.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "9dbf4790",
+        "at": "2026-10-21T17:54:38Z",
+        "evidence": "Pointer scan scores constant getters (pool loads then bx lr) 2. disc-agb: agb sound ROM recall 0.857->0.969 (95/98), precision 1.0, others unchanged; disc-pret agbcc 0.9992/0.9555 unchanged, modern 12393->12407 found, 8 false starts as before. just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-21T17:54:36Z",
+          "by": "9dbf4790",
+          "text": "Left: 0x08004ef9/0x08004f1d (vtable entries with a sub sp body, next to size/align words, not tiny) and 0x080051c1 (ldr r0,[r0]; b . : never returns, so validate rejects it). 3 of 98 in the agb sound ROM."
+        }
+      ]
+    },
+    {
+      "id": "discovery/jt-modern-misses",
+      "title": "Remaining modern-GCC jump-table misses, if they cost",
+      "detail": "From GitHub #23. 32 of 617 modern-GCC tables missed: mostly a narrowed index (bound on a zero-extended copy; needs backward refinement), one lost to the conservative frame rule. Misses only cost speed. First profile a modern-GCC game (Rogue, Imperium, moonbeam) for time in unresolved switches; if it's small, drop this with the numbers. Bars: jt-score 584/617 must not fall.",
+      "check": "recorded",
+      "priority": -1,
+      "record": {
+        "state": "dropped",
+        "why": "Profiled: misses cost almost nothing. Emerald Rogue recompiled (50 of 664 indirect jumps unresolved), 1800 and 5400 frames of menus: ROM-code fallback 0.1 points of running guest time (33-40 entry keys); moonbeam from its state, 1800 frames: 0% fallback (11 of 73 unresolved). jt-score untouched. Rogue's real cost is RAM code (37.7 points), filed separately.",
+        "by": "a0f40835",
+        "at": "2026-10-21T18:43:15Z"
+      }
+    },
+    {
+      "id": "discovery/modern-iwram-code",
+      "title": "Emerald Rogue's RAM code runs in the fallback (38% of time)",
+      "detail": "Found profiling jump-table misses: Emerald Rogue recompiled, 5400 frames of menus, spends 37.8% of running guest cycles in the interpreter fallback, 37.7 points of it in RAM code; overlays 0 (decision 7 only finds agb's CpuSet/CpuFastSet copies). Find how pokeemerald-expansion copies code to IWRAM/EWRAM and recompile it as overlays. Building out/emerald-rogue needs a long job with --mem 14G (8G was killed).",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "5f36f243",
+        "at": "2026-10-21T20:29:19Z",
+        "evidence": "Rogue (pokeemerald-expansion) copies its mixer by CpuSet through a swi;bx lr wrapper and patches its unrolled loop per channel. Now: wrapper copies found, per-block overlay guards, patched block versions compiled from a 1800-frame recompile-time interpreter run. Rogue 5400 frames of menus: fallback 37.8% to 2.2%, 42.0% compiled in RAM, frame hash+registers equal to interpreter. first-frame passes on iwram-rewrite (1 invalidation), agb sound ROM and gba-cart1 at 600; just check passes. Leftover 2.1 points filed as {unit:discovery/ram-code-misses}.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "discovery/ram-code-misses",
+      "title": "RAM code discovery misses: DMA copies, code on the stack",
+      "detail": "After {unit:discovery/modern-iwram-code}, Rogue (5400 frames of menus) still spends 2.1 points of running guest time on RAM code in the fallback: ~1.7 the flash read code (agb_flash ReadFlash_Core, copied onto the stack by a CPU loop, run at 0x03007dd4, called from 0x0800ce93) and ~0.4 IntrMain (DmaCopy32 from ROM 0x0800025c to 0x03001930, 0x800 bytes). Decide if either is worth it; the same pattern is in vanilla Emerald. Measure: build out/emerald-rogue as a long job with --mem 14G.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "c1c01a0b",
+        "at": "2026-10-21T23:09:52Z",
+        "evidence": "IntrMain (DMA copy): worth it, done. gbaa-recompile's 1800-frame run now finds IWRAM code outside known copies, locates its bytes in ROM and compiles it as overlays (codegen/src/seen.rs). Stack code (ReadFlash_Core): not worth it, left interpreted: its address moves with call depth (d28/d58 at recompile, dd4 later) and it is a one-time save read at boot. Rogue 5400 frames, same runtime: RAM-code fallback 1.9 -> 1.7 points, fallback 11.47M -> 10.43M cycles; hash 317f1f5fd5f7b3ba equal to interpreter. first-frame iwram-rewrite passes; just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-21T23:09:54Z",
+          "by": "c1c01a0b",
+          "text": "just run-recompiled passes its args unquoted ({{args}}), so a ROM path with a space (Emerald Rogue.gba) splits; ran target/recompiled/release/gbaa-emerald-rogue directly. Wait states doubled Rogue's running cycles: old 5400-frame cycle lines aren't comparable."
+        }
+      ]
+    }
+  ]
+}

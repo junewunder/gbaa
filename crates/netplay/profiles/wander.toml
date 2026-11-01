@@ -1,0 +1,8 @@
+# A far friend on a busy line: the latency drifts 20-100 ms over 4 s, with
+# 20 ms of jitter on top and 2% lost.
+latency_ms = 60
+wander_ms = 40
+wander_period_s = 4
+jitter_ms = 20
+loss = 0.02
+seed = 2

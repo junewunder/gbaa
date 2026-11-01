@@ -1,0 +1,1188 @@
+{
+  "questions": [
+    {
+      "id": "q/multiplayer-kind-linking-built-first",
+      "title": "Multiplayer: which kind of linking should be built first?",
+      "context": "Research in docs/research/multiplayer.md. The plan links games over the internet by having every player's computer run every player's game, exchanging only button presses; the link cable is then emulated exactly inside each computer. That suits Emerald's cable trades, battles, Record Mixing and Berry Blender with up to 4 players. The wireless adapter (Union Room, many players) needs a different design, and a shared overworld (seeing other players walk around) is a third, per-game layer.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Cable first: trades and battles with friends",
+          "changes": "builds the plan as filed: link hub, local two-player window, netplay core, relay server, then june plays a friend. Wireless and shared overworld stay later research"
+        },
+        {
+          "key": "b",
+          "label": "Wireless first: the Union Room",
+          "changes": "emulate the wireless adapter and send its radio through the server; more players, each running only their own game, but an undocumented device with unmeasured timeouts: slower and riskier. The cable units wait"
+        },
+        {
+          "key": "c",
+          "label": "Shared overworld first",
+          "changes": "other players' avatars shown in your Hoenn, no trades or battles until later; per-game hooks, designed after the Lua scripting research"
+        }
+      ],
+      "default": "a",
+      "blocks": ["multiplayer/link-hub", "multiplayer/local-link-window", "multiplayer/play-gate"],
+      "asked": {
+        "at": "2026-10-24T03:38:30Z",
+        "by": "d1083785",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "65e71fe8",
+        "at": "2026-10-24T04:00:37Z",
+        "decision": "d/multiplayer-kind-linking-built-first"
+      }
+    },
+    {
+      "id": "q/multiplayer-where-server-run",
+      "title": "Multiplayer: where should the server run?",
+      "context": "Research in docs/research/multiplayer.md. Players' computers connect to a small relay server (rooms with a 6-character code, passing button presses and game states between players). If everyone connects out to a server, nobody's router needs configuring. No machine in docs/machines.md is an always-on server today.",
+      "options": [
+        {
+          "key": "a",
+          "label": "A machine of june's that is always on",
+          "changes": "june names the machine and how friends reach it (a forwarded port or a tunnel); free, and latency is fine for friends nearby. The relay server unit deploys there"
+        },
+        {
+          "key": "b",
+          "label": "No server: one player hosts",
+          "changes": "the host's game is the relay, and the host forwards a port on their router (or the connection falls back to failing); nothing to keep running, but each session needs the host's setup"
+        },
+        {
+          "key": "c",
+          "label": "A small rented server (a VPS)",
+          "changes": "always reachable, a few dollars a month, and an account somewhere; best for friends far away"
+        }
+      ],
+      "default": "a",
+      "blocks": ["multiplayer/relay-server", "multiplayer/desktop-netplay"],
+      "asked": {
+        "at": "2026-10-24T03:38:39Z",
+        "by": "d1083785",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "note": "Start the relay as a separate program (later optionally built into the game). june wants it to know nothing about the game: the same server works for any game, any console. Build a quick prototype first to find out if that holds. Which always-on machine: not named yet, ask june when the relay unit needs it.",
+        "by": "owner",
+        "via": "65e71fe8",
+        "at": "2026-10-24T04:00:39Z",
+        "decision": "d/multiplayer-where-server-run"
+      }
+    },
+    {
+      "id": "q/much-may-lua-script-your",
+      "title": "How much may a Lua script do on your machine?",
+      "context": "mGBA lets a script do anything you can: read and write any file, run programs, open network connections. The Ironmon tracker uses that: when tested here it ran curl on its own to check for updates, and it runs programs to list folders, launch the Java randomizer and open web pages. Scripts are downloaded from the internet, and on the Deck you can't easily see what one does. docs/research/lua-scripting.md, Sandboxing.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Full access, as mGBA",
+          "changes": "every script works exactly as in mGBA, Ironmon's updater and new-run automation included; a bad script can do anything you can"
+        },
+        {
+          "key": "b",
+          "label": "Limited, with a per-script full-access switch",
+          "changes": "scripts can only touch files in their own folder and talk to this machine; Ironmon's tracking works at once, and its updater and new-run automation work once you flip its switch (remembered)"
+        },
+        {
+          "key": "c",
+          "label": "Always limited",
+          "changes": "the safest; Ironmon's updater and new-run automation never work"
+        }
+      ],
+      "default": "b",
+      "blocks": ["scripting/sandbox"],
+      "asked": {
+        "at": "2026-10-24T03:49:09Z",
+        "by": "ea00af67",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "b",
+        "by": "owner",
+        "via": "f8f08620",
+        "at": "2026-10-24T04:48:09Z",
+        "decision": "d/much-may-lua-script-your"
+      }
+    },
+    {
+      "id": "q/scripts-breakpoints-watchpoints",
+      "title": "Should scripts get breakpoints and watchpoints?",
+      "context": "mGBA's next version (0.11, not released yet) lets scripts stop when the game runs a given address or touches a given variable. No released mGBA has it, and none of the popular scripts checked use it. Recompiled code has no place to stop between instructions, so it costs: running the game in our interpreter while one is set is exact but about 6 times slower (still 3.7 times real speed on quack; the Deck is unmeasured). Building checks into the compiled game would slow every game a little all the time. docs/research/lua-scripting.md.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Leave them out for now",
+          "changes": "nothing to build; a script that asks gets a warning"
+        },
+        {
+          "key": "b",
+          "label": "Yes, by running interpreted while one is set",
+          "changes": "exact, the game runs slower only while a breakpoint or watchpoint exists"
+        },
+        {
+          "key": "c",
+          "label": "Yes, built into the compiled game",
+          "changes": "full speed while stopped-on code runs, but every game pays a small cost always and the code generator grows"
+        }
+      ],
+      "default": "a",
+      "blocks": ["scripting/breakpoints"],
+      "asked": {
+        "at": "2026-10-24T03:49:10Z",
+        "by": "ea00af67",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "f8f08620",
+        "at": "2026-10-24T04:48:10Z",
+        "decision": "d/scripts-breakpoints-watchpoints"
+      }
+    },
+    {
+      "id": "q/emerald-build-run-randomized-emerald",
+      "title": "Should our Emerald build run randomized Emerald ROMs (Ironmon)?",
+      "context": "The Ironmon tracker, the most popular mGBA script, starts each new run by loading a freshly randomized copy of the game. Our recompiled Emerald only runs the exact ROM it was made from, and refuses anything else. A randomizer mostly changes data, not code, so most of the compiled code would still be right. docs/research/lua-scripting.md.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Keep it compiled where the code is unchanged",
+          "changes": "check each compiled function against the new ROM when it loads and run only changed ones in the interpreter; full speed if the randomizer leaves code alone, which is to be measured"
+        },
+        {
+          "key": "b",
+          "label": "Run other ROMs fully in the interpreter",
+          "changes": "simple, exact, about 6 times slower than compiled but still faster than real speed on a PC"
+        },
+        {
+          "key": "c",
+          "label": "Don't support it",
+          "changes": "Ironmon's new-run feature won't work in our build; tracking a run started elsewhere still does"
+        }
+      ],
+      "default": "a",
+      "blocks": ["scripting/randomized-rom"],
+      "asked": {
+        "at": "2026-10-24T03:49:12Z",
+        "by": "ea00af67",
+        "host": "quack"
+      },
+      "answer": null,
+      "withdrawn": {
+        "at": "2026-10-24T04:48:36Z",
+        "by": "f8f08620",
+        "why": "june asked for research first; {unit:scripting/randomized-rom-research} measures it and asks again"
+      }
+    },
+    {
+      "id": "q/game-menus-built",
+      "title": "What should the in-game menus be built on?",
+      "context": "docs/research/ui-library.md. Whatever draws the menus, the window moves from minifb to winit: minifb can't toggle fullscreen (none on Wayland, macOS or Windows) and only stretches on resize. Both spikes ran pad-only under gamescope with no added hitching.",
+      "options": [
+        {
+          "key": "a",
+          "label": "winit + egui (OpenGL)",
+          "changes": "Menus and the later Lua console are egui widgets, one toolkit for both; mouse and text entry built in; pad drives egui's focus through a small adapter. Binary about +5 MB, clean build about +20 s, needs an OpenGL context."
+        },
+        {
+          "key": "b",
+          "label": "winit + hand-drawn menus",
+          "changes": "Menus drawn into the 240x160 frame with a pixel font, pad behaviour exactly ours, smallest (about 3.9 MB) and no GPU; every widget is ours to write, and the Lua console would need its own text UI or egui added then."
+        },
+        {
+          "key": "c",
+          "label": "stay on minifb, hand-drawn",
+          "changes": "Least work now; no fullscreen toggle on Wayland, macOS or Windows and no real resizable window, so those stretch units can't be done as written."
+        }
+      ],
+      "default": "a",
+      "blocks": [
+        "stretch/resizable-window",
+        "stretch/fullscreen-toggle",
+        "stretch/remap",
+        "scripting/console-ui"
+      ],
+      "asked": {
+        "at": "2026-10-24T03:52:14Z",
+        "by": "78027c08",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "note": "Changed by june (2026-10-24): egui yes, but SDL3 (the sdl3 crate, vhspace/sdl3-rs) instead of winit for the window and graphics layer, and for gamepads (button labels, the Deck's controller, Steam Input), replacing gilrs; egui drawn through SDL's renderer (Vulkan/Metal/D3D as SDL picks), not OpenGL. The glue from egui to the SDL renderer may be ours to write. Audio (cpal or SDL's) is the implementer's call, say why. egui's look is ours to style; june has no opinion on egui details. Accessibility through AccessKit (AT-SPI on Linux) is wanted later, not now.",
+        "by": "owner",
+        "via": "65e71fe8",
+        "at": "2026-10-24T04:10:31Z",
+        "decision": "d/game-menus-built"
+      }
+    },
+    {
+      "id": "q/structured-code-interpret-resumes-second",
+      "title": "Structured code: interpret resumes, or keep a second body?",
+      "context": "Structured Rust can only start at a function's entry, but after an IRQ or frame end every function on the stack is re-entered mid-way (resumed): 9.5 times a frame in Emerald. A spike sent those resumes to the interpreter: every checkpoint of the new-game route still matched, but compiled share fell from 99.2% to 93.1% and the intro ran 20-60% slower (still far above real time). Design: docs/structured-codegen-design.md, step 5.",
+      "options": [
+        {
+          "key": "a",
+          "label": "One structured body; resumes interpreted, then won back",
+          "changes": "No code growth. Share drops ~6 points until two runtime units land before your review: calls that don't unwind and IRQs taken inside the tick"
+        },
+        {
+          "key": "b",
+          "label": "Two bodies: structured from the entry, v1 for resumes",
+          "changes": "No share drop and no runtime change, but every function's generated code roughly doubles (build time and memory up, against phase 1)"
+        },
+        {
+          "key": "c",
+          "label": "One structured body; resumes interpreted, won back later",
+          "changes": "As a, but the two runtime units move after your review, so you'd review with the ~6-point drop"
+        }
+      ],
+      "default": "a",
+      "blocks": ["structured/emit-structured"],
+      "asked": {
+        "at": "2026-10-24T17:03:21Z",
+        "by": "a901a473",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "note": "One body, but the runtime changes come first and change: calls settled in place (wider), IRQs in the tick, and the guest on its own stack so the frame end doesn't unwind. Spike: 1 resume a frame, 99.2% compiled, hashes exact. Design doc steps 5-8.",
+        "by": "owner",
+        "via": "862c0a49",
+        "at": "2026-10-24T22:14:55Z",
+        "decision": "d/structured-code-interpret-resumes-second"
+      }
+    },
+    {
+      "id": "q/undoing-state-load-look-feel",
+      "title": "How should undoing a state load look and feel?",
+      "context": "The mechanism is built on the unit branch for {unit:deck/undo-load-state}: each load keeps the game as it was just before, and an undo puts it back (once, as mGBA). Nothing triggers it yet; the card says you have UI ideas. Pick one, or describe yours in the answer.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Menu row plus a key",
+          "changes": "An 'Undo load state' row in the Start+Select menu (greyed when nothing to undo), and F5 on the keyboard; no pad button; the window title says 'load undone'"
+        },
+        {
+          "key": "b",
+          "label": "Pad chord too",
+          "changes": "As a, plus holding the load button (north) for about a second undoes the last load, so it works on the Deck without opening the menu"
+        },
+        {
+          "key": "c",
+          "label": "Toast with undo",
+          "changes": "After each load a small egui notice shows 'Loaded state N, press north again to undo' for ~3 s; pressing it in that window undoes; also the menu row"
+        },
+        {
+          "key": "d",
+          "label": "Your own design",
+          "changes": "You describe how it should look; the next session builds exactly that"
+        }
+      ],
+      "default": "a",
+      "blocks": ["deck/undo-load-state"],
+      "asked": {
+        "at": "2026-10-24T20:16:07Z",
+        "by": "4845264b",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "note": "june: as a temporary solution for now; may revisit the UI later",
+        "by": "owner",
+        "via": "30499a0c",
+        "at": "2026-10-24T20:32:58Z",
+        "decision": "d/undoing-state-load-look-feel"
+      }
+    },
+    {
+      "id": "q/emerald-saves-pokemon-center",
+      "title": "How should we get two Emerald saves at a Pokemon Center?",
+      "context": "Link tests need two saves standing in a Pokemon Center. June's Emerald .sav on quack (~/ROMs/gba) is empty, all 0xFF, and no other is here. Also, the trade centre refuses a party under 2 Pokemon (CheckPartyTradeRequirements), so the trade test needs 2 each, not 1. Our new-game script already reaches the truck in 5400 frames.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Craft them",
+          "changes": "A Rust tool builds both saves from pokeemerald's save layout (checksummed sectors): different names and IDs, 2 Pokemon each, standing in Oldale's Pokemon Center. No long route; a crafted save may lack flags a played one has, but the cable club only checks party size"
+        },
+        {
+          "key": "b",
+          "label": "Published TAS",
+          "changes": "Convert a TASVideos Emerald movie to our input format and run it to a Pokemon Center; the second trainer needs a changed name, and 2 Pokemon each means running past the first catch. Days of work, and the TAS rule asks you first"
+        },
+        {
+          "key": "c",
+          "label": "June plays",
+          "changes": "You play two new games to a Pokemon Center with 2 Pokemon each (~20-30 min each) and put the two .sav files at ~/.local/share/gbaa/saves/ on quack"
+        }
+      ],
+      "default": "a",
+      "blocks": ["multiplayer/cable-club-saves", "multiplayer/link-hub", "multiplayer/local-link-window"],
+      "asked": {
+        "at": "2026-10-24T23:35:35Z",
+        "by": "3a6f8226",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "note": "june: a or b both fine; a chosen as the cheaper. If crafting hits a wall, a published TAS (b) is pre-approved as the fallback.",
+        "by": "owner",
+        "via": "30499a0c",
+        "at": "2026-10-24T23:59:39Z",
+        "decision": "d/emerald-saves-pokemon-center"
+      }
+    },
+    {
+      "id": "q/may-lane-run-1-minute",
+      "title": "May a lane run a 1-minute Emerald benchmark on your Deck?",
+      "context": "Netplay sizing measured Emerald on quack: about 0.66 ms a frame in the overworld and battles. The Deck's CPU is slower (estimated 2-2.5x), and the plan wants a real number there. It means copying a benchmark build to ~/gbaa on the Deck over Tailscale SSH and running it headless for about a minute, no window, nothing of yours touched. docs/machines.md says to ask before touching the Deck.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Yes, whenever it's awake",
+          "changes": "a lane copies the build and runs it when the Deck answers; the Deck measurement unit becomes workable"
+        },
+        {
+          "key": "b",
+          "label": "Ask me each time",
+          "changes": "the unit waits until you say the Deck is free; the doc keeps the estimate meanwhile"
+        },
+        {
+          "key": "c",
+          "label": "No, keep the estimate",
+          "changes": "the Deck measurement unit is dropped; netplay plans on the 2-2.5x estimate"
+        }
+      ],
+      "default": "b",
+      "blocks": ["multiplayer/deck-frame-cost"],
+      "asked": {
+        "at": "2026-10-25T16:55:27Z",
+        "by": "9b17eaaf",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "note": "june: sure; network behaviour itself is tested locally with injected latency/jitter/loss",
+        "by": "owner",
+        "via": "4b7a9cc9",
+        "at": "2026-10-25T18:27:05Z",
+        "decision": "d/may-lane-run-1-minute"
+      }
+    },
+    {
+      "id": "q/headless-lane-ssh-onto-your",
+      "title": "How should a headless lane get SSH onto your Deck?",
+      "context": "You OK'd a 1-minute Emerald benchmark on the Deck for {unit:multiplayer/deck-frame-cost}. The Deck is awake on the tailnet (tailscale ping answers), but ssh deck@steamdeck from quack stops at 'Tailscale SSH requires an additional check: visit login.tailscale.com/a/…': the tailnet's SSH rule for the Deck is in check mode, which wants a browser login every so often. A headless lane can't click that, so the benchmark can't run. (ssh to the name 'steamdeck' also says 'no route to host' on port 22; the tailnet IP the Deck's tailnet address reaches Tailscale SSH.)",
+      "options": [
+        {
+          "key": "a",
+          "label": "Switch the Deck's SSH rule to accept",
+          "changes": "In the tailnet ACL, set the ssh rule that lets your machines reach deck@steamdeck to action 'accept' instead of 'check'. Lanes then reach the Deck with no login; the next session runs the benchmark straight away."
+        },
+        {
+          "key": "b",
+          "label": "You approve the check now and then",
+          "changes": "Leave check mode; you open the login link from a quack terminal (ssh deck@steamdeck once) shortly before a lane runs the unit; it works for the check period (12 h by default). The unit stays blocked until you say you did."
+        },
+        {
+          "key": "c",
+          "label": "Skip the Deck measurement",
+          "changes": "Drop the unit; docs/research/multiplayer.md keeps its 2-2.5x-slower estimate for the Deck."
+        }
+      ],
+      "default": "a",
+      "blocks": ["multiplayer/deck-frame-cost"],
+      "asked": {
+        "at": "2026-10-25T20:50:55Z",
+        "by": "e7961bb4",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "b",
+        "note": "june 2026-10-27: lanes can already ssh onto the Deck via Tailscale, but must ask june before each time they do; june approves, then the unit runs.",
+        "by": "owner",
+        "via": "05901267",
+        "at": "2026-10-27T16:54:56Z",
+        "decision": "d/headless-lane-ssh-onto-your"
+      }
+    },
+    {
+      "id": "q/registers-rust-locals-cost-58",
+      "title": "Registers in Rust locals cost 58% more build for no speed: keep, drop or turn on?",
+      "context": "Step 9 of docs/structured-codegen-design.md, spiked on Emerald (numbers in that step). Locals are exact (sst-gen 0 differ, same new-game frame hash, fn-diff 0 of 6,380 runs differ) but part p07 builds in 38 s instead of 24 s, at 1.4 GB instead of 0.76 GB, its object is 46% bigger, the whole build no longer fits 6 jobs in 8 GB, and LLVM crashes on part p37 unless it is built at opt-level s. The new-game route ran no faster (2.6-3.5 s against 2.6-3.2 s for 5,400 frames). As the card says, I stopped and am reporting. The code is on the branch, off by default, so generated code is unchanged.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Keep it, off",
+          "changes": "The locals printer and its write-back check stay behind gbaa-recompile --locals and fn-diff's locals form; nothing generated changes; {unit:structured/regs-locals} is recorded done as a stopped spike and the before-more-ROMs look can start"
+        },
+        {
+          "key": "b",
+          "label": "Drop the code",
+          "changes": "Same generated code; codegen loses the locals module and its check (about 700 lines); the measurements stay in the design doc; the unit is dropped and the look can start"
+        },
+        {
+          "key": "c",
+          "label": "Turn it on anyway",
+          "changes": "Every Emerald-size build about 1.6x slower and 1.9x the memory, with an opt-level workaround for the LLVM crash; this unit then still owes all routes, CPU suites and own-state-check with locals before the look"
+        },
+        {
+          "key": "d",
+          "label": "Try a cheaper form first",
+          "changes": "A new unit spikes locals only in functions with no tick inside a loop (or only hot ones); the look waits for it"
+        }
+      ],
+      "default": "a",
+      "blocks": ["structured/regs-locals"],
+      "asked": {
+        "at": "2026-10-25T20:57:17Z",
+        "by": "427dd585",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "note": "june 2026-10-26: keep it, off by default behind --locals. It's the play view's answer; a future mod view may turn it on per function.",
+        "by": "owner",
+        "via": "944ccabe",
+        "at": "2026-10-26T04:17:53Z",
+        "decision": "d/registers-rust-locals-cost-58"
+      }
+    },
+    {
+      "id": "q/online-play-friend-where-server",
+      "title": "Online play with a friend: where does the server run?",
+      "context": "Everything for {unit:multiplayer/play-gate} is built and checked locally (two windows trading through a real gbaa-server). To play a friend over the internet, gbaa-server must run where both of you reach UDP port 7373. Your earlier answer was 'a machine of june's that is always on', and said to ask which one when it was needed: it is now. Steps for the session are in docs/research/multiplayer.md, 'Playing a friend'. The play itself is yours: when it's done, record it as done with what you saw.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Run it on quack for the session, friend over Tailscale",
+          "changes": "You start gbaa-server on quack and share quack's node with the friend in Tailscale (or they join your tailnet); no router change; works only while quack is up"
+        },
+        {
+          "key": "b",
+          "label": "An always-on machine of yours, with a port forward",
+          "changes": "You name the machine; a unit sets gbaa-server up there as a service and you forward UDP 7373 on your router; the friend connects to your public address"
+        },
+        {
+          "key": "c",
+          "label": "A small rented VPS",
+          "changes": "A unit sets gbaa-server up on a VPS you rent (a few dollars a month); no home network changes; you give a lane SSH to it"
+        }
+      ],
+      "default": "a",
+      "blocks": ["multiplayer/play-gate"],
+      "asked": {
+        "at": "2026-10-25T22:24:36Z",
+        "by": "8261f09c",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "c",
+        "note": "june: a fly.io app, not a VPS: deploy gbaa-server there with flyctl (no SSH needed). The rollback side is its own spike, {unit:multiplayer/rollback-design}.",
+        "by": "owner",
+        "via": "e0202f56",
+        "at": "2026-10-26T23:51:12Z",
+        "decision": "d/online-play-friend-where-server"
+      }
+    },
+    {
+      "id": "q/emerald-build-run-randomized-emerald-2",
+      "title": "Should our Emerald build run randomized Emerald ROMs (Ironmon)?",
+      "context": "Measured (docs/research/randomized-roms.md): Ironmon randomizes with UPR ZX. With the Kaizo settings it changes 20 of our 15,158 compiled Emerald functions (an upper bound); the rest is data the game reads at run time. Taken from the randomizer's source and our generated code, not yet from a real randomized ROM: running the randomizer's jar here needs your OK.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Keep it compiled where unchanged",
+          "changes": "Check each function against the new ROM at load; the ~20 changed ones run interpreted. A check at each function's entry costs every build ~1% (a guess); full speed otherwise. About 2-3 units, and needs the jar run to test"
+        },
+        {
+          "key": "b",
+          "label": "Run other ROMs fully interpreted",
+          "changes": "About 1 unit. 220 frames/s on quack (3.7x real time); the Deck is a guess at 1.5-1.8x real time, for a whole run"
+        },
+        {
+          "key": "c",
+          "label": "Don't support it",
+          "changes": "No work. Ironmon's new-run button and tracking a randomized run won't work in a recompiled build, only in gbaa-desktop's interpreter or mGBA"
+        }
+      ],
+      "default": "a",
+      "blocks": ["scripting/randomized-rom"],
+      "asked": {
+        "at": "2026-10-25T22:54:59Z",
+        "by": "c24895ec",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "note": "june 2026-10-26: default",
+        "by": "owner",
+        "via": "59f27e93",
+        "at": "2026-10-26T22:27:41Z",
+        "decision": "d/emerald-build-run-randomized-emerald-2"
+      }
+    },
+    {
+      "id": "q/randomized-emerald-test",
+      "title": "How do we get a randomized Emerald to test with?",
+      "context": "{unit:scripting/randomized-rom}'s check plays a Kaizo-randomized Emerald recompiled against the interpreter. Making one means running the Universal Pokemon Randomizer ZX 4.6.1 jar (downloaded Java code); the session's permission check refused that on 2026-10-25. The work units before it don't need the ROM.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Allow a session to run the UPR ZX jar on quack",
+          "changes": "a session downloads the release, runs it headless with the Kaizo settings string, writes the ROM to $GBAA_DATA; needs that command allowed"
+        },
+        {
+          "key": "b",
+          "label": "June makes the ROM",
+          "changes": "you run the randomizer once and drop the ROM in ~/ROMs/gba/; the check waits until it's there"
+        },
+        {
+          "key": "c",
+          "label": "Synthesize one in Rust",
+          "changes": "a tool applies the randomizer's code patches and scrambles its data tables from kaizo-emerald.txt; no downloaded code, but not a real randomizer's output"
+        }
+      ],
+      "default": "b",
+      "blocks": ["scripting/randomized-rom"],
+      "asked": {
+        "at": "2026-10-27T01:09:15Z",
+        "by": "2419d67f",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "note": "june (2026-10-28): approved after checking the repo; factory/auto-mode.json now allows the UPR ZX 4.6.1 jar run",
+        "by": "owner",
+        "via": "e70ceba9",
+        "at": "2026-10-28T04:28:51Z",
+        "decision": "d/randomized-emerald-test"
+      }
+    },
+    {
+      "id": "q/may-readable-rust-leave-dead",
+      "title": "May readable Rust leave dead scratch registers at a return?",
+      "context": "The readable-form spike wrote 8 Emerald functions as Rust near pret's C, exact. About a third of each body is syncing r1-r3, r12 and the flags at each return and tick, values no C caller reads. Today 'exact' means the full machine state matches the generated code's, so they must stay. docs/mod-view-design.md, 'How close exact Rust gets to pret's C', gap 1.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Keep full-state exactness; move the syncs out of the body",
+          "changes": "Each function gets its return syncs in a macro at its top or a trailing block, so the body reads like C. fn-diff stays the bar. The default."
+        },
+        {
+          "key": "b",
+          "label": "Allow registers dead at every return site to differ",
+          "changes": "The printer drops those syncs, so bodies get about a third shorter. Needs an interprocedural liveness proof, and fn-diff compares only live state at returns. The Emerald route same-states check still runs."
+        }
+      ],
+      "default": "a",
+      "blocks": ["mod/readable-print"],
+      "asked": {
+        "at": "2026-10-27T16:26:27Z",
+        "by": "a6e8d48c",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "b",
+        "by": "owner",
+        "via": "05901267",
+        "at": "2026-10-27T16:53:50Z",
+        "decision": "d/may-readable-rust-leave-dead"
+      }
+    },
+    {
+      "id": "q/approve-tailscale-ssh-onto-your",
+      "title": "Approve Tailscale SSH onto your Deck for the Emerald benchmark?",
+      "context": "The Deck frame-cost run ({unit:multiplayer/deck-frame-cost}) reached deck@steamdeck on 2026-10-27 but Tailscale SSH stopped at its check: it wants a login at a link, which a headless lane can't do. Your approval lasts a while, so a lane can then run the one-minute headless benchmark.",
+      "options": [
+        {
+          "key": "a",
+          "label": "I approve the check",
+          "changes": "You run 'ssh deck@steamdeck' once from any tailnet machine (or open the link it prints) and answer; the next lane builds Emerald for the Deck, copies it to ~/gbaa and runs a minute's headless benchmark, replacing the estimate in docs/research/multiplayer.md."
+        },
+        {
+          "key": "b",
+          "label": "Skip the Deck",
+          "changes": "The unit is dropped; the doc keeps its estimate (Deck 2-2.5x slower than quack, about 1.5 ms a frame), which the lockstep plan already fits."
+        }
+      ],
+      "default": "a",
+      "blocks": ["multiplayer/deck-frame-cost"],
+      "asked": {
+        "at": "2026-10-27T17:20:00Z",
+        "by": "812e1f23",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "b",
+        "note": "june 2026-10-27: skip the Deck",
+        "by": "owner",
+        "via": "05901267",
+        "at": "2026-10-27T17:25:25Z",
+        "decision": "d/approve-tailscale-ssh-onto-your"
+      }
+    },
+    {
+      "id": "q/asset-extraction-reach-graphics-route",
+      "title": "How should asset extraction reach graphics a route doesn't show?",
+      "context": "Asset extraction finds graphics by watching what the game loads and draws. Emerald's new-game route shows about 100 of pret's ~7,600 graphics; music isn't limited (the song table gives all 530 songs). The core export units go ahead either way; only {unit:assets/wider-coverage} waits. Design: docs/asset-extraction-design.md, 'Graphics coverage'.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Routes only",
+          "changes": "Export only what the factory's routes show (a few hundred images, with palettes, animations and layouts). The wider-coverage unit is dropped."
+        },
+        {
+          "key": "b",
+          "label": "More short scripts",
+          "changes": "Short input scripts from crafted saves to asset-heavy screens (bag, party summary, Pokédex, a wild battle, PC). Still found by watching; a few thousand images; one small unit per screen."
+        },
+        {
+          "key": "c",
+          "label": "Scripts plus a static scan",
+          "changes": "(b), and also scan the ROM for every LZ77 blob that decodes cleanly: most of pret's 4,329 compressed files, but greyscale and without layouts unless a route drew them. Steps outside 'watch where the data goes'."
+        }
+      ],
+      "default": "b",
+      "blocks": ["assets/wider-coverage"],
+      "asked": {
+        "at": "2026-10-27T17:40:28Z",
+        "by": "3196d7f9",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "other",
+        "note": "Fuzzing, extended. No general solution covers every GBA game, so do our best and give Claude and players good extraction tools. Emerald: a coverage report vs pret (unused excluded), aim ~90%; fuzz v2 with sweeps and story saves; static scan for the rest; an extract-while-playing flag. Then try it on Kirby.",
+        "by": "owner",
+        "via": "d0eeeaaa",
+        "at": "2026-10-29T18:19:23Z",
+        "decision": "d/asset-extraction-reach-graphics-route"
+      }
+    },
+    {
+      "id": "q/may-loop-build-pret-s",
+      "title": "May the loop build pret's pokefirered for the FireRed control?",
+      "context": "The FireRed leak control needs pret's pokefirered cloned and built (scripts/fetch-pret.sh, now pinned at ce6406d; agbcc and make on quack). The session's permission classifier refused running it as external code. Everything else is committed on unit/mod/naming-firered: naming sibling matches FireRed to Emerald by masked code; then naming ask 0 on 30 functions (about $1.50 of Sonnet).",
+      "options": [
+        {
+          "key": "a",
+          "label": "june runs it",
+          "changes": "june runs just fetch-pret once on quack; the next session runs pret-names pokefirered, naming sibling, ask 0 and score, and records the control"
+        },
+        {
+          "key": "b",
+          "label": "allow it",
+          "changes": "june adds a permission rule letting loop sessions run scripts/fetch-pret.sh; the next session builds and finishes the unit itself"
+        },
+        {
+          "key": "c",
+          "label": "drop",
+          "changes": "the FireRed control is dropped; the naming gate shows only the no-code and recognition controls"
+        }
+      ],
+      "default": "a",
+      "blocks": ["mod/naming-firered"],
+      "asked": {
+        "at": "2026-10-28T06:09:09Z",
+        "by": "68fb3184",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "b",
+        "note": "june (2026-10-28): approved; factory/auto-mode.json now allows just fetch-pret",
+        "by": "owner",
+        "via": "e70ceba9",
+        "at": "2026-10-28T13:35:12Z",
+        "decision": "d/may-loop-build-pret-s"
+      }
+    },
+    {
+      "id": "q/build-controls-page-mockup",
+      "title": "Build the Controls page as in the mockup?",
+      "context": "Proposal for {unit:stretch/remap-redesign}: docs/design/remap-design.md, mockup docs/design/remap-mock.png (open remap-mock.html in a browser for the live one), on branch unit/stretch/remap-redesign. Every binding is a chip with a visible X (click it, or A on it, removes it); '+ Add' on each row listens in a dialog with a countdown and a Cancel button; tabs Controller | Keyboard; a switch 'Changes apply to: Every game | Only <this game>', with this game's rows tagged and a 'use every-game' button; a GBA picture labelled with what presses each button; conflicts shown as a toast with undo; reset buttons at the foot. egui isn't holding it back: all of it is buttons and painter shapes, plus our own pad focus over the chips (about a day's work). Building it is roughly 6 to 9 hours.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Build it as mocked",
+          "changes": "the next session builds the design as drawn, picture included, and tests it on someone new"
+        },
+        {
+          "key": "b",
+          "label": "Build it without the GBA picture",
+          "changes": "same chips, dialog, tabs and scope switch, a plain list instead of the picture; saves an hour or two and keeps the box narrower in a small window"
+        },
+        {
+          "key": "c",
+          "label": "Change the design first",
+          "changes": "june says what to change in a note on the unit; the next session redoes the mockup instead of building"
+        }
+      ],
+      "default": "a",
+      "blocks": ["stretch/remap-redesign"],
+      "asked": {
+        "at": "2026-10-29T03:36:36Z",
+        "by": "d64be3fe",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "note": "june: yes, as mocked. Built tomorrow by an agent under june's supervision from a GitHub issue, not by a lane.",
+        "by": "owner",
+        "via": "600a9d3e",
+        "at": "2026-10-29T03:39:09Z",
+        "decision": "d/build-controls-page-mockup"
+      }
+    },
+    {
+      "id": "q/may-agent-sessions-run-just",
+      "title": "May agent sessions run just fly-deploy?",
+      "context": "The lockstep/QUIC removal changed deploy/fly, but the session's permission check refused fly deploy as a production deploy, so fly still runs the old QUIC build (its rooms on 7374 are the same, so play works). Someone must redeploy, and the unused 1 GB volume gbaa_data is still billed.",
+      "options": [
+        {
+          "key": "a",
+          "label": "june deploys",
+          "changes": "june runs the steps in {unit:multiplayer/fly-redeploy-rooms} by hand (fly-up, fly-deploy, room-sim through fly, fly-down) and destroys the volume when ready; agents never deploy"
+        },
+        {
+          "key": "b",
+          "label": "agents may deploy",
+          "changes": "june adds a permission rule allowing just fly-deploy; a lane then does {unit:multiplayer/fly-redeploy-rooms}; the volume stays june's to destroy"
+        }
+      ],
+      "default": "a",
+      "blocks": ["multiplayer/fly-redeploy-rooms"],
+      "asked": {
+        "at": "2026-10-29T03:41:16Z",
+        "by": "992dd380",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "b",
+        "by": "owner",
+        "via": "0c5e1fa1",
+        "at": "2026-10-30T14:55:15Z",
+        "decision": "d/may-agent-sessions-run-just"
+      }
+    },
+    {
+      "id": "q/source-emerald-story-point-fuzz",
+      "title": "Which source for Emerald story-point fuzz seed states?",
+      "context": "The fuzz v2 run found 40% of pret's used graphics; menus (533), battle interface, contests, the Frontier and 745 tileset palettes sit behind story progress. The seed-states unit needs consistent saves at story points (each town's events, a contest, the Frontier). The TAS rule says ask you before using a published TAS. Note: whichever is chosen is a multi-hour unit; this session had 45 min left.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Published TAS",
+          "changes": "Download a TASVideos Emerald movie (BizHawk), replay it in mGBA via our mgba-dump tool, snapshot RAM at ~10 story points and turn those into fuzz seed states. Most faithful flags; risk: the movie may not sync on mGBA, costing hours"
+        },
+        {
+          "key": "b",
+          "label": "Crafted story saves",
+          "changes": "A Rust tool sets pokeemerald's flags, vars and badges for each milestone from pret's scripts (as the Pokemon Center saves were crafted). No network, no sync risk; a crafted milestone may miss a flag a played game sets"
+        },
+        {
+          "key": "c",
+          "label": "You play",
+          "changes": "You play Emerald and drop .sav files at story points into ~/.local/share/gbaa/saves/ on quack. Exact, but hours of your time"
+        }
+      ],
+      "default": "a",
+      "blocks": ["assets/fuzz-story-seeds"],
+      "asked": {
+        "at": "2026-10-29T21:15:21Z",
+        "by": "f28f33b9",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "other",
+        "note": "june: a and b. Try the published TAS first (replay in mGBA via mgba-dump, snapshot ~10 story points); if it won't sync on mGBA, or for story points it doesn't reach, use crafted story saves (a Rust tool setting pokeemerald's flags, vars and badges from pret's scripts).",
+        "by": "owner",
+        "via": "0c5e1fa1",
+        "at": "2026-10-30T14:55:52Z",
+        "decision": "d/source-emerald-story-point-fuzz"
+      }
+    },
+    {
+      "id": "q/where-game-s-saves-states",
+      "title": "Where should a game's saves, states and resume file live?",
+      "context": "Today the .sav, the four .stateN slots and the .resume auto state all sit beside the ROM (ROM.sav etc.), settings.conf in ~/.config/gbaa. Launchers like ES-DE keep ROMs in their own folders, so switching launchers or moving ROMs can strand a save. The frontend unit adds --save-dir/--state-dir/--config-dir flags whatever you pick; this is about the default when no flag is given.",
+      "example": "pokemon-emerald.gba, hash 1f2e…: a → ~/.local/share/gbaa/games/1f2e…/emerald.sav; b → ROMs/pokemon-emerald.sav",
+      "options": [
+        {
+          "key": "a",
+          "label": "One home per game under the data dir, keyed by ROM hash",
+          "changes": "Default becomes $XDG_DATA_HOME/gbaa/games/<rom-hash>/ (save, states, resume, backups); a save found beside the ROM is picked up once (moved in, original kept as .sav.bak) so nothing is shadowed. Moving or renaming the ROM never loses progress."
+        },
+        {
+          "key": "b",
+          "label": "Keep everything beside the ROM",
+          "changes": "No change to defaults; only the new flags. Matches mGBA/RetroArch-from-folder habits and stays portable on SD cards, but moving the ROM leaves its save behind."
+        },
+        {
+          "key": "c",
+          "label": "Hash home, but keep the .sav beside the ROM if one exists there",
+          "changes": "New games go to the per-hash home; a game already with ROM.sav keeps using it in place (never moved), states and resume go to the hash home. Nothing on disk is touched, at the cost of two places to look."
+        }
+      ],
+      "default": "a",
+      "blocks": ["deck/frontend-launch"],
+      "asked": {
+        "at": "2026-10-30T17:44:11Z",
+        "by": "7ca58e44",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "other",
+        "note": "Per-game folder under a readable name (build's name, set at recompile; interpreter slugs the file name), not a hash. Order: --save-dir/--state-dir (exact folder) > per-game menu setting > global setting > <OS data dir>/gbaa/saves/<name>/. Files named after the game. States/resume record the ROM hash, load anyway with a .bak on mismatch, research whether that's risky. Old saves beside the ROM copied in once, originals kept. Full design: docs/save-locations-design.md",
+        "by": "owner",
+        "via": "0e32b9de",
+        "at": "2026-10-30T20:31:41Z",
+        "decision": "d/where-game-s-saves-states"
+      }
+    },
+    {
+      "id": "q/supply-gba-bios-dump-emerald",
+      "title": "Can you supply a GBA BIOS dump so the Emerald TASes can sync?",
+      "context": "Both published Emerald TASes (TASVideos 3287 and 6182, made on BizHawk's mGBA core with the official BIOS) desync in mgba-dump soon after the starter, most likely because mgba-dump runs mGBA's built-in HLE BIOS, whose calls take different cycles. This machine has no BIOS dump. Story seeds now come from crafted saves (12 points from pret's scripts) instead, which works.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Yes, I'll put my own dump at $GBAA_DATA/bios/gba_bios.bin",
+          "changes": "a session adds mgba-dump --bios and replays both TASes for real story states ({unit:assets/fuzz-tas-bios})"
+        },
+        {
+          "key": "b",
+          "label": "No, crafted saves are enough",
+          "changes": "{unit:assets/fuzz-tas-bios} is dropped; story seeds stay crafted"
+        }
+      ],
+      "default": "b",
+      "blocks": ["assets/fuzz-tas-bios"],
+      "asked": {
+        "at": "2026-10-30T18:32:32Z",
+        "by": "2a843264",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "note": "june supplied it 2026-10-30; at $GBAA_DATA/bios/gba_bios.bin on quack, read-only, SHA1 300c20df… (the official BIOS). Never commit it.",
+        "by": "owner",
+        "via": "0c5e1fa1",
+        "at": "2026-10-30T18:50:14Z",
+        "decision": "d/supply-gba-bios-dump-emerald"
+      }
+    },
+    {
+      "id": "q/may-build-bizhawk-s-mgba",
+      "title": "May we build BizHawk's mGBA fork to sync the Emerald TAS?",
+      "context": "With your BIOS dump and BizHawk's movie settings copied (BIOS intro on, idle skipping off, its clock), both Emerald TASes still desync early: the living-dex run stalls in May's house before the starter. The likely cause left is the emulator version: that run was made on BizHawk 2.9, whose mGBA is TASEmulators' fork at commit 645282a (2023, 0.11-dev); we replay on mGBA 0.10.5. Building that fork was refused as running outside code, so it needs your OK. Your earlier call (crafted saves where the TAS won't sync) still covers the story seeds either way. The oracle would stay on 0.10.5.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Yes, build the fork",
+          "changes": "A session clones TASEmulators/mgba at 645282a into $GBAA_DATA/tools/, builds a second libmgba with fetch-mgba.sh's flags, links a TAS-only mgba-dump build to it, and replays the living-dex run again; if it syncs, the fuzzer gets TAS story states too"
+        },
+        {
+          "key": "b",
+          "label": "No, stop chasing the TAS",
+          "changes": "The crafted story saves (the story-seeds unit's Rust tool) are the only story seeds; the TAS-on-BIOS unit is dropped and mgba-dump keeps --bios as it is"
+        }
+      ],
+      "default": "a",
+      "blocks": ["assets/fuzz-tas-bios"],
+      "asked": {
+        "at": "2026-10-30T20:03:14Z",
+        "by": "0fe447b9",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "0c5e1fa1",
+        "at": "2026-10-30T20:06:37Z",
+        "decision": "d/may-build-bizhawk-s-mgba"
+      }
+    },
+    {
+      "id": "q/may-sessions-run-bizhawk-mgba",
+      "title": "May sessions run the BizHawk mGBA fork's build?",
+      "context": "You OK'd building TASEmulators' mGBA fork for the Emerald TAS replay. The branch now has scripts/fetch-mgba.sh tas and just mgba-dump-tas, but Claude Code's auto-mode check refuses running the fork's build (code from outside), so the replay of the living-dex TAS can't start.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Add a permission rule",
+          "changes": "you allow Bash 'scripts/fetch-mgba.sh tas' and 'just mgba-dump-tas *'; a lane builds it and replays the TAS"
+        },
+        {
+          "key": "b",
+          "label": "You run it once",
+          "changes": "you run 'scripts/fetch-mgba.sh tas' on quack yourself; a lane then only links and runs it (may still be refused)"
+        },
+        {
+          "key": "c",
+          "label": "Drop the TAS route",
+          "changes": "fuzzing keeps only the crafted story saves; this unit is dropped"
+        }
+      ],
+      "default": "a",
+      "blocks": ["assets/fuzz-tas-bios"],
+      "asked": {
+        "at": "2026-10-31T00:11:07Z",
+        "by": "ba5957d0",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "note": "june 2026-10-30: same yes as building the fork; sessions may build and run it. Don't ask again for this route: if refused, ask the overseer to reword factory/auto-mode.json.",
+        "by": "owner",
+        "via": "0c5e1fa1",
+        "at": "2026-10-31T00:43:03Z",
+        "decision": "d/may-sessions-run-bizhawk-mgba"
+      }
+    },
+    {
+      "id": "q/link-only-graphics-count-toward",
+      "title": "Should link-only graphics count toward Emerald's coverage?",
+      "context": "Emerald's coverage report ends at 64.0% of pret's used graphics found by play (86.1% with the static scan). About 540 files are only drawn over a link cable or wireless: 412 still front pictures read only by Pokémon Jump, and ~130 Union Room, wireless and Mystery Gift files. Fuzzing alone can't reach them.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Keep them in",
+          "changes": "the denominator stays 6,755; play's share stays 64%; reaching them waits on the multiplayer link work"
+        },
+        {
+          "key": "b",
+          "label": "Leave them out as link-only",
+          "changes": "the report gets a 'link-only' left-out reason; play's share becomes about 70%; nothing more to fuzz for them"
+        }
+      ],
+      "default": "a",
+      "blocks": ["assets/fuzz-pc-box-sweep"],
+      "asked": {
+        "at": "2026-10-31T01:09:30Z",
+        "by": "93382dd1",
+        "host": "quack"
+      },
+      "answer": null,
+      "withdrawn": {
+        "at": "2026-10-31T01:09:37Z",
+        "by": "93382dd1",
+        "why": "Blocked the wrong unit; re-asked blocking the report change it decides"
+      }
+    },
+    {
+      "id": "q/link-only-graphics-count-toward-2",
+      "title": "Should link-only graphics count toward Emerald's coverage?",
+      "context": "Emerald's coverage report ends at 64.0% of pret's used graphics found by play (86.1% with the static scan). About 540 files are only drawn over a link cable or wireless: 412 still front pictures read only by Pokémon Jump, and ~130 Union Room, wireless and Mystery Gift files. Fuzzing alone can't reach them.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Keep them in",
+          "changes": "the denominator stays 6,755 and play's share 64%; the report change is dropped; reaching them waits on the multiplayer link work"
+        },
+        {
+          "key": "b",
+          "label": "Leave them out as link-only",
+          "changes": "the coverage report gets a 'link-only' left-out reason; play's share becomes about 70%"
+        }
+      ],
+      "default": "a",
+      "blocks": ["assets/coverage-link-only"],
+      "asked": {
+        "at": "2026-10-31T01:09:46Z",
+        "by": "93382dd1",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "24176b67",
+        "at": "2026-11-01T00:25:03Z",
+        "decision": "d/link-only-graphics-count-toward-2"
+      }
+    },
+    {
+      "id": "q/minish-cap-s-decoded-text",
+      "title": "How should Minish Cap's decoded text be checked against mGBA?",
+      "context": "{unit:mod/text-tables} now decodes Minish Cap's messages by number: 29 calls in the readable print show text, e.g. Stockwell's shop 'I'm sorry, my good lad, but that is not for sale!'. The card wants a screenshot of the same text box. Every such call comes after the opening festival (Festival Town has no doors). Getting there means a long route. The only Minish Cap TASes on TASVideos are for the Japanese ROM, and we have the USA one. An input script reached Festival Town in about 9 minutes of game time; finishing the festival and the tournament is probably 10 to 20 more minutes of hand-steered input.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Accept the check without a scene",
+          "changes": "Record the unit with the decode tested against the decomp's own text (translations/USA.json) instead of a screenshot. Minish Cap gets no screen match."
+        },
+        {
+          "key": "b",
+          "label": "A hand route to the shop",
+          "changes": "A new unit writes an input script past the festival to Stockwell's shop and screenshots the dog-food line. That is likely 1-3 hours of steering, and the script lives in the repo."
+        },
+        {
+          "key": "c",
+          "label": "Move Minish Cap out of this card",
+          "changes": "Record this unit with Metroid only, and fold the screenshot into {unit:mod/text-by-index}, which waits for a route or a save file from june."
+        },
+        {
+          "key": "d",
+          "label": "june supplies a save",
+          "changes": "june plays past the festival and drops a .sav in ~/ROMs/gba/saves. A session then loads it and screenshots a text box in minutes."
+        }
+      ],
+      "default": "d",
+      "blocks": ["mod/text-tables"],
+      "asked": {
+        "at": "2026-10-31T20:38:53Z",
+        "by": "47e82313",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "note": "june asked why an earlier text box can't be used; the 29 decoded calls are the only ones with a constant message number and all sit after the festival, so a",
+        "by": "owner",
+        "via": "24176b67",
+        "at": "2026-11-01T00:27:34Z",
+        "decision": "d/minish-cap-s-decoded-text"
+      }
+    },
+    {
+      "id": "q/may-lane-ssh-onto-your",
+      "title": "May a lane SSH onto your Deck to time four Kirbys' netplay?",
+      "context": "Netplay rooms for up to four players {unit:multiplayer/four-seats} is built and checked on quack (three and four windows, one hash, headless four-peer run). Its card also asks for four Kirbys' frame cost on the Deck, which needs your yes each time. The run is short and headless: copy the recompiled Kirby binary to ~/gbaa, then four rollback-feel runs (recompiled and interpreted, calm and wander), a few minutes of CPU, nothing on screen. The review said only you may move that measurement to a follow-up.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Yes, run it now (while the Deck is awake)",
+          "changes": "a lane SSHes onto the Deck via Tailscale once, measures, replaces the 14-18 ms estimate in the research doc with real rows, and the four-player rooms unit is done"
+        },
+        {
+          "key": "b",
+          "label": "Leave the Deck for later",
+          "changes": "the four-player rooms unit is recorded done on quack's numbers; the Deck timing stays its own follow-up {unit:multiplayer/four-kirbys-deck}, run whenever you next say yes"
+        }
+      ],
+      "default": "b",
+      "blocks": ["multiplayer/four-seats"],
+      "asked": {
+        "at": "2026-10-31T23:57:03Z",
+        "by": "109163b3",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "b",
+        "by": "owner",
+        "via": "24176b67",
+        "at": "2026-11-01T00:23:05Z",
+        "decision": "d/may-lane-ssh-onto-your"
+      }
+    },
+    {
+      "id": "q/may-native-port-s-check",
+      "title": "May the native port's check use a new timing, not exact?",
+      "context": "A native port (a game as a plain Rust program) counts no cycles: its time moves only when the game waits for V-blank, spins in a loop, or reads the beam or a timer. The play build at exact timing lags and takes interrupts mid-frame where the native program can't, so they part ways at the first lag frame (Emerald's intro has one). docs/native-port-design.md, section 7. Today's rule says every check passes --timing exact.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Add --timing native for the native check",
+          "changes": "the play build and interpreter get a fourth timing that moves the clock where the native program does; the native check compares frames and RAM byte for byte against that build, every frame. mGBA stays the oracle for the play build through its exact checks, as now. One more timing to keep correct ({unit:native/timing-native})"
+        },
+        {
+          "key": "b",
+          "label": "Native check against exact only",
+          "changes": "no new timing; the native check compares by game frame and only up to the first lag frame or mid-frame interrupt, replaying timer reads; long routes can't be checked exactly"
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/timing-native", "native/oracle"],
+      "asked": {
+        "at": "2026-11-01T01:14:33Z",
+        "by": "95b01e10",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "964dca9b",
+        "at": "2026-11-01T01:51:48Z",
+        "decision": "d/may-native-port-s-check"
+      }
+    },
+    {
+      "id": "q/busy-loop-calls-functions-let",
+      "title": "How should a busy loop that calls functions let time pass under native timing?",
+      "context": "Found by {unit:native/timing-native}: Emerald hangs under --timing native at the new game's map load. DoMapLoadLoop spins until the V-blank handler drains the DMA3 queue, polling through function calls. The design only lets time pass at store-free, call-free loops, so time never moves and V-blank never comes. A native program lifted from the same code would hang the same way, so the native check and the Stage-A lifter both wait on this. The timing itself is built on branch t3/c58bf1ab (head f773f153): unit tests pass, 8 of 15 agb programs match compiled vs interpreted.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Back-edge budget",
+          "changes": "both builds count backward branches; after ~10,000 with no time passing, the next one counts as an idle loop. Deterministic, same instruction in both builds, works for any game. Cost: the native program carries a counting call on loop back edges the analysis can't prove finish, a little less plain than hand-written Rust"
+        },
+        {
+          "key": "b",
+          "label": "Widen idle through calls",
+          "changes": "a loop counts as idle if the functions it calls don't store, using the new function summaries. Native code stays clean, but fragile: LoadMapInStepsLocal does store in other states, so Emerald's loop may still not qualify"
+        },
+        {
+          "key": "c",
+          "label": "Hand-mark wait loops per game",
+          "changes": "a list of known wait loops per game in TOML. Cheapest and cleanest output, but every new game needs hand work and an unlisted loop hangs"
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/timing-native", "native/oracle", "native/lift-stage-a"],
+      "asked": {
+        "at": "2026-11-01T07:04:35Z",
+        "by": "7b10ef7b",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "note": "june 2026-11-01: default to (a), refined per docs/research/busy-wait-loops.md: count only loops that contain a call, each loop on its own; past ~2,000 passes with no time passing, each pass moves the clock half a scanline (hw::spin in native code), under --timing native only. Also build the tooling for (c): a per-game list of wait loops (TOML) as a fallback for loops the rule misses, with the hole report flagging candidates.",
+        "by": "owner",
+        "via": "7b10ef7b",
+        "at": "2026-11-01T14:29:08Z",
+        "decision": "d/busy-loop-calls-functions-let"
+      }
+    },
+    {
+      "id": "q/first-native-game",
+      "title": "Which game should be the first real game lifted natively?",
+      "context": "Stage B of the native lifter is filed (docs/native-stage-b.md). Besides making agb programs prettier, it needs a first real game to lift. The hole report ranks Metroid: Zero Mission closest (18 hard holes, all covered by units already filed) and it's mid-sized. Emerald is the game your romhacks are built on and has pret's types for the typed stage, but it has 34 hard holes and 15,158 functions, the biggest literal build there is. The choice decides which game you first see run as a plain Rust program.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Metroid first, at stage A; Emerald after typed stage B",
+          "changes": "Metroid's two units (lift with no hard holes; pass the native check on a route) go ahead once the discovery units are done; Emerald is filed when Metroid passes, typed from pret's DWARF"
+        },
+        {
+          "key": "b",
+          "label": "Emerald first",
+          "changes": "the two Metroid units are rewritten for Emerald: more holes and a much bigger build to get through, but the first native game is the one you'll mod"
+        },
+        {
+          "key": "c",
+          "label": "No game yet: finish stage B on our agb programs first",
+          "changes": "the Metroid units wait (parked) until the typed lifter is done; nothing on a real game meanwhile"
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/metroid-lifts", "native/metroid-native-check"],
+      "asked": {
+        "at": "2026-11-01T18:45:35Z",
+        "by": "2de7f8d5",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "note": "june picked (a) in thread 40c9bac3",
+        "by": "owner",
+        "via": "40c9bac3-237d-4d11-bbbe-da08935342c5",
+        "at": "2026-11-01T19:26:11Z",
+        "decision": "d/first-native-game"
+      }
+    }
+  ]
+}

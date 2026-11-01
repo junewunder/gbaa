@@ -1,0 +1,366 @@
+{
+  "id": "scripting",
+  "title": "Lua scripting, mGBA-compatible",
+  "order": 13,
+  "needs": ["research/lua-scripting"],
+  "units": [
+    {
+      "id": "scripting/lua-host",
+      "title": "Run mGBA Lua scripts in the desktop build",
+      "detail": "Design in docs/research/lua-scripting.md. New std crate crates/script on mlua (lua54, vendored); gbaa-desktop --script FILE (repeatable). mGBA 0.10.5's API: emu (memory, emu.memory domains, ROM info, CRC32 big-endian, getGameCode as AGB-XXXX, keys, registers, states ours or mGBA's, screenshot, step, runFrame, reset), callbacks (frame, keysRead before the pad poll, start, reset, stop, shutdown, crashed, savedataUpdated), console and text buffers (kept in memory, printed on exit headless), C, util, system; a missing name warns once on the console. Guard: an instruction-count hook stops a callback that overruns a frame. docs/research/lua-probe is the sketch. Check: a fixture script in the repo and mGBA 0.10.5's res/scripts/pokemon.lua (pinned checkout, scripts/fetch-mgba.sh) run headless on Emerald with the expected output.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "fa5a48d4",
+        "at": "2026-10-25T15:26:15Z",
+        "evidence": "just script-check passes on the merge with main (crates/desktop/tests/script_emerald.rs): the fixture in crates/script/fixtures/emerald (require and dofile beside it, memory, domains, ROM info, AGB-BPEE, CRC32 1F1C08FB, keys through the title, state round trip, reset, step, runFrame, screenshot, a missing name warned once, a hanging callback stopped and removed) and mGBA 0.10.5's pokemon.lua run headless 1500 frames on Emerald and match expected.txt; pokemon.lua shows the mon the fixture wrote (LUA Lv5 TORCHIC 19/20). just check passes; 6 unit tests in crates/script.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-24T16:26:02Z",
+          "by": "9fd6a95a",
+          "text": "From {unit:scripting/survey-scripts}: 4 of 10 surveyed mGBA projects load Lua files beside the script (require/dofile: Ironmon, mcp-mgba, RAManimator); make that part of the check. See docs/research/lua-scripts-survey.md"
+        }
+      ]
+    },
+    {
+      "id": "scripting/sandbox",
+      "title": "Sandbox what a Lua script may do",
+      "detail": "Per june's answer on how much a script may do (docs/research/lua-scripting.md, Sandboxing). Limits on io, os, debug, package and sockets, and the per-script full-access switch if chosen. Check: a fixture script trying each blocked call gets an error, an allowed one works.",
+      "check": "recorded",
+      "needs": ["scripting/lua-host"],
+      "record": {
+        "state": "done",
+        "by": "0d340cfe",
+        "at": "2026-10-25T21:14:32Z",
+        "evidence": "Review fix: checked() in crates/script prelude now turns number paths into strings before the folder check; fixture tries io.open(123,'w'), os.remove(1), emu:saveStateFile(7), all blocked, and the test asserts no 123/7 file appears. Full fixture test passes; just check passes after merging main (kept both scripts' Access option and linked play's link/input2).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-25T16:35:27Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/script/src/lib.rs, the prelude's `checked` (`if full or type(p) ~= \"string\" or allowed(p) then return p end`): anything that isn't a string skips the check, but Lua's io.open/io.lines/io.input/io.output…"
+        }
+      ]
+    },
+    {
+      "id": "scripting/console-ui",
+      "title": "Show the script console and buffers in the window",
+      "detail": "docs/research/lua-scripting.md, Recommended design. The console and each text buffer in a side panel on the desktop and an overlay on the Deck toggled by a button; a line to type Lua into (Ironmon's commands; Steam's on-screen keyboard on the Deck); loading and unloading scripts from the menu. Check: pokemon.lua's Party buffer and a typed command shown, seen in a screenshot.",
+      "check": "recorded",
+      "needs": ["scripting/lua-host", "research/ui-library", "stretch/sdl3-window", "stretch/egui-sdl3"],
+      "record": {
+        "state": "done",
+        "by": "234b8406",
+        "at": "2026-10-25T21:30:02Z",
+        "evidence": "Window's script console (desktop::console): buffers, console and a Lua line; side panel in a window (widens 720->1153 and back), overlay fullscreen at 1280x800 (frame 5x). Private cu session on the merged tree: give.lua via --script, pokemon.lua loaded from the menu's new Scripts page, give(5) typed: Party buffer shows LUA Lv5 TORCHIC 19/20 under '> give(5)' (runs/console-ui/side-panel.png). F9/right-stick-right toggles (pad unit-tested: no pad in cu headless). Host::eval sees scripts' globals (Ironmon style), unload drops callbacks+buffers; 2 script tests, 5 desktop tests. just check passes after merging main. Not seen: Steam's on-screen keyboard on a real Deck (SDL text input opens it).",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "scripting/sockets",
+      "title": "Script sockets, as mGBA's",
+      "detail": "mGBA's socket API (lua.c:67-196 at mGBA fd9dc5c): a native _socket over std::net, non-blocking, and the Lua prelude's socket.bind/connect/tcp, listen, accept, send, receive, add(received|error), polled from a frame callback. Check: mGBA 0.10.5's res/scripts/socketserver.lua answers a loopback client in a headless run.",
+      "check": "recorded",
+      "needs": ["scripting/lua-host"],
+      "record": {
+        "state": "done",
+        "by": "257daa47",
+        "at": "2026-10-25T21:47:47Z",
+        "evidence": "Review fix in: makeSocket(create) gives each sandboxed env its own socket method tables (no proxy over the host's socket). New test a_sandboxed_script_cant_swap_a_full_scripts_socket_methods: sandboxed overwrite of poll/receive/send/accept/_hook leaves a full script's echo server working. Socketserver-style echo tests pass; just check green after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-25T21:43:11Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/script/src/lib.rs:911-927 (loopbackSocket) and the `socket` table at :775-905: a sandboxed script can get past the loopback-only rule. Its `socket` reads `_mt`, `_tcpMT`, `_errMT`, `_create` and `_wrap`…"
+        },
+        {
+          "at": "2026-10-25T21:41:14Z",
+          "by": "a9070789",
+          "text": "std binds+listens in one step, so _socket:open listens and listen only reports; a listener's select accepts and keeps the client for accept. Sandboxed envs no longer copy the host's __ globals: __prompt let a sandboxed script reach full io/os."
+        },
+        {
+          "at": "2026-10-25T16:33:33Z",
+          "by": "8686b97d",
+          "text": "Sandbox is in (crates/script Access): sandboxed scripts must get loopback-only sockets; full access (Access::Full, --script-full) any address. Add _socket to the sandboxed _ENV in the prelude's env maker with that check."
+        }
+      ]
+    },
+    {
+      "id": "scripting/storage",
+      "title": "Script storage buckets, as mGBA 0.11's",
+      "detail": "storage:getBucket(name), reload, flush, enableAutoFlush, flushAll (mGBA src/script/storage.c at fd9dc5c): a table persisted per bucket in the platform's data folder. Check: a fixture script writes a bucket in one headless run and reads it back in the next.",
+      "check": "recorded",
+      "needs": ["scripting/lua-host"],
+      "record": {
+        "state": "done",
+        "by": "0ce854f5",
+        "at": "2026-10-25T21:59:49Z",
+        "evidence": "storage:getBucket/reload/flush/enableAutoFlush/flushAll in crates/script/src/storage.rs (after mGBA storage.c fd9dc5c), buckets as JSON in the config folder's storage/. Check: crates/desktop/tests/script_storage.rs runs fixtures/storage/storage.lua headless 3 times with one GBAA_CONFIG_DIR; run 2 reads back run 1's bucket (nested table, list, float, bool). Passes in just check after merging main; plus 2 host tests in script.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "scripting/breakpoints",
+      "title": "Script breakpoints and watchpoints",
+      "detail": "Per june's answer (docs/research/lua-scripting.md, Can't, or costs). mGBA 0.11-dev's setBreakpoint, setWatchpoint, setRangeWatchpoint, clearBreakpoint; compiled code has no instruction boundary, so the recommended way is to run in the interpreter while one is set (220 vs 1270 frames/s on quack). Check: a fixture breakpoint and a watchpoint fire on Emerald at the expected frame.",
+      "check": "recorded",
+      "needs": ["scripting/lua-host"],
+      "record": {
+        "state": "done",
+        "by": "3a7504bf",
+        "at": "2026-10-25T22:23:13Z",
+        "evidence": "emu:setBreakpoint/setWatchpoint/setRangeWatchpoint/clearBreakpoint and C.WATCHPOINT_TYPE (crates/script/src/points.rs, over new runtime::debug: Machine::run_frame_debug). While any point is set frames run interpreted, recompiled builds too, compiled again once cleared. Check: just script-check's script_breakpoints, fixtures/breakpoints on Emerald 600 frames: break at CB2_InitTitleScreen first in frame 242 (frames 242-279, matching callback2 seen at frame ends 241-278), Random+4 301 times = 301 gRngValue writes in 299 frames, agreeing with a once-a-frame look; callback reads from frame 13. Same output and all 600 frame hashes on the recompiled Emerald build (last 100 frames compiled). just check passes after merging main; plus a unit test in script.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-24T16:26:04Z",
+          "by": "9fd6a95a",
+          "text": "From {unit:scripting/survey-scripts}: PokeLua breaks at CreateBoxMon+0x25a, SetWildMonHeldItem+0x1e (mid-function, set at load, never cleared); its TID bot's write watchpoint only sets a flag read in frame: a once-a-frame check serves it. lua-scripts-survey.md"
+        }
+      ]
+    },
+    {
+      "id": "scripting/randomized-rom",
+      "title": "A recompiled build runs a randomized copy of its ROM",
+      "detail": "Per june's answer. A recompiled build refuses any ROM but its own (crates/desktop/src/lib.rs:486). Ironmon loads a freshly randomized ROM each run: accept a ROM whose code bytes match, checking each compiled function's bytes at load and sending a changed one to the interpreter fallback. Measure how much stays compiled on a randomized Emerald. Check: a randomized Emerald plays its first minute recompiled, matching --interp.",
+      "check": "recorded",
+      "needs": ["scripting/randomized-rom-research", "scripting/load-changed-rom"],
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-10-27T01:09:21Z",
+          "by": "2419d67f",
+          "text": "Split 2026-10-26: the work is {unit:scripting/code-hashes} then {unit:scripting/load-changed-rom}; this unit is now only the check on a real randomized Emerald, waiting on them and the owner's answer on how to make that ROM."
+        },
+        {
+          "at": "2026-10-25T22:55:08Z",
+          "by": "c24895ec",
+          "text": "Not measured on a real randomized ROM: running the downloaded PokeRandoZX.jar was refused by the permission check. Once allowed, the probe in docs/research/randomized-roms/probe.rs takes --base/--other to count stale functions directly."
+        },
+        {
+          "at": "2026-10-24T16:26:05Z",
+          "by": "9fd6a95a",
+          "text": "From {unit:scripting/survey-scripts}: besides Ironmon, Archipelago (base code patch + per-seed data), RAManimator (script writes Thumb code into cart0 at load) need a ROM differing from the recompiled one; script ROM writes should go the same path."
+        }
+      ],
+      "round": "2026-10-27T01:08:05Z"
+    },
+    {
+      "id": "scripting/ironmon",
+      "title": "The Ironmon tracker runs on Emerald in our build",
+      "detail": "Ironmon tracker (besteon/Ironmon-Tracker, v9.4.0 ran in docs/research/lua-probe with no missing calls) on the recompiled Emerald: its screens fill from a save with a party, a battle updates them, crash recovery's save states work, and Quickload starts a new run on a randomized ROM. Check: screenshots of each and the tracker's console with no errors.",
+      "check": "recorded",
+      "needs": [
+        "scripting/lua-host",
+        "scripting/sandbox",
+        "scripting/console-ui",
+        "scripting/randomized-rom"
+      ],
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-10-25T21:30:11Z",
+          "by": "234b8406",
+          "text": "From {unit:scripting/console-ui}: typed commands run via Host::eval, which finds names scripts set (newest first) past their own _ENVs; check Ironmon's console commands that way. Steam's on-screen keyboard on the Deck (SDL text input on tapping the line) isn't yet seen on hardware."
+        }
+      ]
+    },
+    {
+      "id": "scripting/canvas",
+      "title": "Script overlays: mGBA's canvas and image API",
+      "detail": "mGBA 0.11-dev's canvas (newLayer, update, setPosition, screen sizes) and image/painter (src/script/canvas.c, image.c at fd9dc5c), composited over the game picture by the front end. Check: mGBA's res/scripts/demos text-demo.lua and logo-bounce.lua draw over Emerald, seen in a screenshot.",
+      "check": "recorded",
+      "needs": ["scripting/console-ui"],
+      "record": {
+        "state": "done",
+        "by": "849c3590",
+        "at": "2026-10-25T22:46:08Z",
+        "evidence": "mGBA's canvas/image API in crates/script/src/canvas.rs (layers, images, painter, text via ab_glyph). text-demo.lua and logo-bounce.lua (fd9dc5c) draw over Emerald: window screenshot in a private cu session (work/scripting-canvas/window.png: nine labels plus the logo) and headless dumps; just script-check's new script_canvas test checks the label colours and the moving logo; just check passes after merging main. Text edges differ slightly from FreeType's.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "scripting/survey-scripts",
+      "title": "Survey what the community's Lua scripts do today",
+      "detail": "june's ask (2026-10-24): what can the scripts people already use actually do? A survey of the community around Lua scripting for GBA (above all Pokemon) games, starting from github.com/Real96/PokeLua (june's example) and the Ironmon tracker already looked at in docs/research/lua-scripting.md, then the others that community points to (RNG manipulation and seed finders, encounter/IV/PID viewers, trackers, randomizer helpers, speedrun and TAS tools, overlays, Twitch/stream integrations). For each script: what it does for a player, which emulator(s) it targets (mGBA, BizHawk, VBA-rr, Desmume: say which API dialect), which API calls it uses (memory reads/writes, frame callbacks, input, drawing/overlays, files, sockets, savestates), and whether our build could run it as-is, with an mGBA-compatible host ({unit:scripting/lua-host}), or not at all (and why: e.g. per-instruction hooks, BizHawk-only calls). Run a few against mGBA on quack where it helps (ROMs from ~/ROMs/gba only; never download ROMs). Write docs/research/lua-scripts-survey.md with a table and what it means for the scripting group: which API surface covers most scripts, whether BizHawk compatibility is worth having too, and whether the three open scripting questions (sandboxing, breakpoints, randomized ROMs) look different in its light. Don't change those questions' defaults; say what it found.",
+      "check": "recorded",
+      "priority": 18,
+      "record": {
+        "state": "done",
+        "by": "9fd6a95a",
+        "at": "2026-10-24T16:28:34Z",
+        "evidence": "docs/research/lua-scripts-survey.md (commit cb378ba): 22 community scripts/bridges surveyed by grep of their API calls (mGBA, BizHawk, VBA-rr), table with what each needs in our build. PokeLua E_RNG and held-item scripts ran 900/600 Emerald frames in lua-probe on quack: missing only input.isKeyActive, setWatchpoint, setBreakpoint (mid-function: CreateBoxMon+0x25a). Findings on sockets, BizHawk (Archipelago shim only) and the three open questions; filed {unit:scripting/input-keys}.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "scripting/randomized-rom-research",
+      "title": "Research what a randomizer changes in Emerald's code",
+      "detail": "june couldn't choose how our Emerald build should run randomized ROMs (Ironmon) without more facts; see the withdrawn {unit:q/emerald-build-run-randomized-emerald} and docs/research/lua-scripting.md. Find out, measured where possible: which randomizers Ironmon uses (the Java Universal Pokemon Randomizer and its settings), whether they patch code or only data, and on a real randomized Emerald how many compiled functions' bytes differ from the base ROM. Also what each option costs to build and run: per-function check at load with interpreter fallback, fully interpreted, or no support. Write it up in docs/research/randomized-roms.md in plain words. Then ask june again with just ask (same three options, now with the numbers), blocking {unit:scripting/randomized-rom}.",
+      "check": "independent",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "c24895ec",
+        "checker": "verifier-7c3e91",
+        "at": "2026-10-25T22:55:06Z",
+        "evidence": "docs/research/randomized-roms.md and its probe: 20 of 15158 compiled functions stale under Kaizo UPR ZX (upper bound); a fresh verifier reproduced every number, its minor fixes made; june asked again",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "scripting/input-keys",
+      "title": "Script keyboard state, as mGBA 0.11's input",
+      "detail": "mGBA 0.11-dev's input global (input:isKeyActive, activeKeys, the keyboard and mouse events), from the window's keyboard. PokeLua's Gen 3 RNG scripts call isKeyActive 19 times a frame for their hotkeys (bots, state slots); see docs/research/lua-scripts-survey.md. Check: a fixture script reads a key held in a headless run, and PokeLua's E_RNG_mGBA.lua runs with no missing input calls.",
+      "check": "recorded",
+      "needs": ["research/lua-scripting", "scripting/lua-host"],
+      "record": {
+        "state": "done",
+        "by": "9f0a62d0",
+        "at": "2026-10-25T23:08:26Z",
+        "evidence": "crates/desktop/tests/script_input.rs: a fixture script reads keys held via --script-keys in a headless run, and PokeLua's E_RNG_mGBA.lua runs with no missing input calls; review fix (pointer's doc comment) made, main merged, just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-25T23:05:31Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/desktop/src/window.rs:1125: the new code went in between `pointer`'s doc comment and `pointer`. As a result, `script_event`'s doc now starts with `/// The mouse at `x`, `y` in SDL's window points, in eg…"
+        }
+      ]
+    },
+    {
+      "id": "scripting/state-slots",
+      "title": "Script state slots: emu:saveStateSlot and loadStateSlot",
+      "detail": "mGBA's emu:saveStateSlot(n) and loadStateSlot(n), over the window's own slots (src/slots.rs, ROM.stateN). PokeLua's E_RNG_mGBA.lua saves and loads slots 1-9 on its Shift+number and number hotkeys ({unit:scripting/input-keys} delivers the keys; the calls now warn as unsupported). Check: a fixture saves a slot headless and loads it back; PokeLua's hotkeys run with no warnings.",
+      "check": "recorded",
+      "needs": ["scripting/input-keys"],
+      "record": {
+        "state": "done",
+        "by": "19429b0f",
+        "at": "2026-10-25T23:16:23Z",
+        "evidence": "crates/desktop/tests/script_slots.rs: fixtures/slots/slots.lua saves slot 7 headless (ROM.state7) and loads it back; empty and negative slots give false. PokeLua E_RNG_mGBA.lua Shift+1 then 1 via --script-keys: no warnings, state1 written, advances back to the save's (402 vs 701). just check passes, main merged.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "scripting/canvas-sidebar",
+      "title": "Script sidebars: canvas layers beside the game",
+      "detail": "Drop the canvas's clamp to the 240x160 picture, as mGBA 0.11-dev's canvas does: a layer placed past the picture asks the window for a sidebar region (left or right), drawn at the game's integer scale so it keeps the pixel look of the BizHawk Ironmon tracker's panel. Headless dumps include the region. Check: a script draws a panel to the right of Emerald, seen in a screenshot of the window and in a headless dump.",
+      "check": "recorded",
+      "needs": ["scripting/canvas"],
+      "record": {
+        "state": "done",
+        "by": "a058ec35",
+        "at": "2026-10-27T01:17:25Z",
+        "evidence": "A layer past the picture's edge makes a sidebar (canvas.rs Overlay, up to 240px a side). crates/script/fixtures/sidebar/panel.lua on Emerald: headless --dump-at PNG is 320x160 with the picture unchanged and the panel at x 240..319 (script_canvas test a_sidebar_panel_is_drawn_right_of_emerald, passes); in a private cu session the window widened 720->960 at 3x and the screenshot shows the panel right of the game. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "scripting/sidebar-drawer",
+      "title": "Script sidebar as a drawer on narrow screens",
+      "detail": "When the window can't fit the game plus the sidebar at a whole scale (the Deck at 1280x800, fullscreen), the sidebar becomes an overlay drawer toggled by the console's toggle (F9, right-stick-right), not Start+Select: games read that combo, and A+B+Start+Select is the soft reset. Check: the drawer opens and closes over Emerald at 1280x800, seen in screenshots.",
+      "check": "recorded",
+      "needs": ["scripting/canvas-sidebar"],
+      "record": {
+        "state": "done",
+        "by": "25201ee8",
+        "at": "2026-10-27T01:28:28Z",
+        "evidence": "In a private 1280x800 cu session, gbaa-desktop --fullscreen on Emerald with crates/script/fixtures/sidebar/panel.lua: shut, the picture alone at 5x (not 4x with the 80px panel); F9 opened the panel as a drawer left of the console; F9 again shut it. Screenshots runs/drawer/c1-shut, c2-open, c3-shut.png (quack). window::place unit test; just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "scripting/bizhawk-gui",
+      "title": "BizHawk drawing calls over the canvas",
+      "detail": "Most drawn panels in the wild are BizHawk scripts (docs/research/lua-scripts-survey.md: PokemonBizhawkLua, the full Ironmon tracker). A shim for client.SetGameExtraPadding (the sidebar region), gui.drawRectangle, drawText, drawImage, drawLine, drawPolygon and BizHawk's memory.read_u* over the host. forms.* is out of scope. Check: PokemonBizhawkLua's or Ironmon's BizHawk build draws its panel beside Emerald, seen in a screenshot; record which calls it still lacks.",
+      "check": "recorded",
+      "needs": ["scripting/canvas-sidebar"],
+      "record": {
+        "state": "done",
+        "by": "4f828727",
+        "at": "2026-10-29T21:05:15Z",
+        "evidence": "PokemonBizhawkLua pkmgen3.lua (5a2be67) run headless in gbaa-desktop --script on Emerald with alice.sav: its party panel (Mudkip HP/IV/EV table, OT IDs, nature) draws in a 150px right sidebar beside the game, seen in the frame-1500 dump, identical after merging main; needed bizstring.hex (added + test). Still lacks: forms.* (seed/settings dialogs); UP_GAP/DOWN_GAP rows clipped. just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T20:52:17Z",
+          "by": "907a8c73",
+          "text": "running pkmgen3.lua refused again: the allow rule (ec0c6174) wasn't in this branch's factory/auto-mode.json at session start. Main merged in now (check passes); clone is at $GBAA_DATA/tools/PokemonBizhawkLua @5a2be67. Next session: just run it."
+        },
+        {
+          "at": "2026-10-29T14:48:49Z",
+          "by": "600a9d3e",
+          "text": "june approved running PokemonBizhawkLua (any number of runs) in gbaa's Lua host; factory/auto-mode.json allows it. Run the check on the branch's shim."
+        },
+        {
+          "at": "2026-10-29T04:44:21Z",
+          "by": "608891e5",
+          "text": "Shim on the branch (src/bizhawk.lua, tests, fixtures/bizhawk/panel.lua seen beside Emerald). Static read of PokemonBizhawkLua: lacks forms.* (button dialogs); its UP/DOWN_GAP rows (map, lower box) clip. Run: cwd its folder, --script pkmgen3.lua, --save alice.sav."
+        }
+      ]
+    },
+    {
+      "id": "scripting/lua-widgets",
+      "title": "A widget library for Lua scripts (egui)",
+      "detail": "june's idea for later: expose a retained UI (egui, already the menu toolkit) to scripts for buttons and layout in the sidebar. No existing script uses it, so it pays off once people write gbaa-specific scripts. A Lua layout helper over the canvas is the cheaper first step.",
+      "check": "recorded",
+      "needs": ["scripting/canvas-sidebar"],
+      "record": {
+        "state": "parked",
+        "why": "june: hold off on egui for scripts for now; maybe later (2026-10-26)",
+        "by": "44a41ff1",
+        "at": "2026-10-27T00:21:24Z"
+      }
+    },
+    {
+      "id": "scripting/code-hashes",
+      "title": "Recompiled functions know their ROM bytes; stale ones skip",
+      "detail": "First of the split of {unit:scripting/randomized-rom}; plan in docs/research/randomized-roms.md option a. Codegen emits per function a hash of its instruction bytes and baked ROM loads; runtime, given a ROM, computes the stale set and drops those from dispatch. Direct calls: recommended, mark every transitive caller stale (155 on Kaizo, no cost on the exact ROM) over a per-call stale bit; record that as a decision. Tests: flip a byte in a function, it runs interpreted, matches --interp.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "minMinutes": 150,
+      "round": "2026-10-27T01:12:49Z"
+    },
+    {
+      "id": "scripting/load-changed-rom",
+      "title": "Desktop loads a ROM whose code mostly matches its build",
+      "detail": "Second of the split of {unit:scripting/randomized-rom}. Replace the whole-ROM refusal (crates/desktop/src/lib.rs, 'not the ROM this build was recompiled from') with the per-function check from {unit:scripting/code-hashes}; report how many functions went stale. Save states, rewind, netplay and scripts compare the loaded ROM's own hash. Script ROM writes (RAManimator) take the same path. Tests with a patched copy of a test ROM.",
+      "check": "recorded",
+      "needs": ["scripting/code-hashes"],
+      "uses": ["heavy"]
+    },
+    {
+      "id": "scripting/gamescope-fullscreen",
+      "title": "Fullscreen seen as fullscreen under gamescope",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "0e826cbf",
+        "at": "2026-10-29T05:31:41Z",
+        "evidence": "Review fix made: is_fullscreen/fills take 'ours' (widened.is_some() || sidebars != 0) and never count a window we widened as filling the display, so console hide and sidebar removal shrink it back; unit test for the Deck desktop 1200->1280x800 case; just check passes after merging origin/main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T05:21:44Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/desktop/src/window.rs:92-98 together with :918-921 and :1046: `is_fullscreen` now also returns true for any window whose size reaches the display bounds. That includes a window that only got that big be…"
+        },
+        {
+          "at": "2026-10-27T01:27:06Z",
+          "by": "25201ee8",
+          "text": "Under gamescope --backend headless 1280x800, --fullscreen's window reports fullscreen Off, so it widens for sidebars/console and gamescope shrinks it (no drawer). Deck Game Mode is gamescope: check there, and treat a window filling the display as fullscreen."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,213 @@
+{
+  "id": "shared",
+  "title": "Shared code the units need",
+  "priority": 10,
+  "order": 1,
+  "units": [
+    {
+      "id": "shared/unit-recipe",
+      "title": "just unit: one checkpoint against mGBA",
+      "detail": "Build `just unit <name>` and the units/<name>.env format (ROM, FRAMES, INPUT, optional STATE, how the hash was verified), per docs/factory-units.md 'A unit's check command'. Clears out/units/<name>/ first; needs mGBA = our interpreter (via mgba-dump) then recompiled = interpreted (first-frame). A known mismatch reads known-mismatches.tsv. Add one example unit file (jsmolka arm) and test a sabotaged hash fails.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "8fa58b46",
+        "checker": "review-subagent",
+        "at": "2026-10-21T02:43:03Z",
+        "evidence": "just unit gba-cart1 passes (frame 60 hash 459cfeeff72ae451, mGBA matches, 99.9% compiled); jsmolka-arm passes with mGBA known wrong; 9 sabotaged env files fail as they should; fresh review's 4 findings fixed; just check passes; merged 0f00ab7."
+      }
+    },
+    {
+      "id": "shared/lock-in-recipes",
+      "title": "Build lock inside the recipes, around cargo only",
+      "detail": "Move CARGO_BUILD_JOBS=6 flock /tmp/gbaa-build.lock into each compiling recipe around the cargo step only, so running a prebuilt binary never waits. Then callers stop wrapping just in flock (a recipe taking the lock under a caller holding it deadlocks): update AGENTS.md, docs/factory.md Resources, the sprint rules in docs.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "0063ca3b",
+        "at": "2026-10-21T14:27:15Z",
+        "evidence": "justfile lock var (CARGO_BUILD_JOBS=6 flock /tmp/gbaa-build.lock) prefixes every cargo build/clippy; tests build --no-run under it and run outside; cargo run split into build+binary; fetch-mgba.sh locks cmake. AGENTS.md, factory.md Resources, factory-units.md rules, codegen-design, commands.md say never wrap just. just check passed (commit e4f718a, merged main).",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "shared/test-scaffold",
+      "title": "PPU test scaffolding: agb template and halfword fills",
+      "detail": "A starter agb program under agb/ (with SCENE.md listing expected pixels) that just agb-tests builds, copied by later screen-feature units; and a halfword-fill helper for runtime PPU unit tests, since byte stores to OBJ VRAM and OAM are dropped (12 of 13 of the sprites unit's tests failed on that).",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "9f8ef30d",
+        "at": "2026-10-21T14:35:14Z",
+        "evidence": "agb/template (mode-0 BG0 square + two sprites, halfword stores only) builds under just agb-tests; first-frame identical and mgba-diff matches at frame 10 (hash 18b2cabd67ab9125); all 11 SCENE.md pixels read back from the frame. test_util::ppu adds fill16/store_bytes/tile4/tile8/hide_objs with a test that byte stores to OBJ VRAM/OAM drop; PPU tests use them; just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "shared/compiled-share-bar",
+      "title": "A bar on the compiled share of guest time",
+      "detail": "dispatch::Stats splits cycles between compiled code and the fallback. Let a units/<name>.env set a minimum compiled share (MIN_COMPILED=0.97) that just unit enforces from recompiled.log's cycles line, so 'mostly recompiled' is barred, not just printed.",
+      "check": "recorded",
+      "needs": ["shared/unit-recipe"],
+      "record": {
+        "state": "done",
+        "by": "099c649e",
+        "at": "2026-10-21T14:36:00Z",
+        "evidence": "just unit reads MIN_COMPILED (0-1) from units/NAME.env and fails when compiled/(compiled+interpreted) from recompiled.log's cycles line is under it; exit 2 on a bad value. gba-cart1 sets 0.97 and passes at 0.9994; a 0.9999 copy FAILs; 1.5 exits 2. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "shared/savestate-load",
+      "title": "Load mGBA save states and run checkpoints from them",
+      "detail": "Decision 16. mgba-dump saves and loads mGBA states; the runtime loads one (mGBA's GBASerializedState) into Machine at a frame boundary and the dispatcher resumes at cpu.pc, interpreted and recompiled. units/*.env gets STATE; just unit runs both from it. Prove it: a state at frame N, then N+k frames, hashes as booting straight through to N+k does. States live in GBAA_DATA/states/.",
+      "check": "recorded",
+      "needs": ["shared/unit-recipe"],
+      "record": {
+        "state": "done",
+        "by": "8e96fe3f",
+        "at": "2026-10-21T14:59:35Z",
+        "evidence": "runtime::state loads mGBA 0.10 raw states (unwinds HLE Halt/IntrWait); mgba-dump --save-state/--state, gbaa-desktop --state; just unit passes STATE. just savestate-check agb sound ROM 100+100: mGBA, interpreter and recompiled from the state all draw dcc7ff594e3b9a33 as 200 from reset; gba-cart1 30+30 regs identical; a STATE unit env passed just unit; just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-21T14:59:37Z",
+          "by": "8e96fe3f",
+          "text": "PNG states (mGBA GUI .ss0) refused: {unit:shared/png-states}. Not loaded: cart save data, irq_depth (a wait inside a handler is taken as depth 1). Unit states must come from a command (mgba-dump --save-state) or rebuildable fails where missing."
+        },
+        {
+          "at": "2026-10-21T02:43:07Z",
+          "by": "8fa58b46",
+          "text": "just unit refuses STATE with exit 2 until this lands: add STATE to its run args (mgba-dump and gbaa-desktop) and drop that refusal. rebuildable already checks STATE paths exist."
+        }
+      ]
+    },
+    {
+      "id": "shared/flash-chip",
+      "title": "The 128 KB flash save chip on the bus: ID and commands",
+      "detail": "Emerald's ReadFlashId finds no chip in our bus (plain 64 KB SRAM at 0E), so AgbMain sets callback2 to NULL and the screen stays blank from frame 16. Emulate the 1 Mbit flash as mGBA does for FLASH1M_V ROMs: ID mode, erase, program, bank switch, the same chip ID. In memory only; the .sav file stays with {unit:deck/flash-saves}. Check: unit tests per command, and Emerald's gFlashMemoryPresent (0x03005d88) reads 1 after boot.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "d625bf30",
+        "at": "2026-10-21T15:01:53Z",
+        "evidence": "crates/runtime/src/save.rs: SRAM or flash by the ROM's save tag, mGBA's flash command machine (ID 1362 Sanyo / 1B32, erase chip+sector, program, bank switch); 9 unit tests per command pass, just check passes after merging main; gbaa-interp Emerald --frames 30 --peek 03005d88 prints 00000001.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "shared/cart-rtc",
+      "title": "The cartridge real-time clock on the GPIO port, pinned",
+      "detail": "Emerald's main menu always runs Task_MainMenuCheckBattery: with no clock answering on the GPIO port (0x080000C4-C9, S-3511 serial protocol) it shows 'The internal battery has run dry', which mGBA doesn't. Emulate the RTC in the bus as mGBA does. mgba-dump uses the wall clock today: pin its RTC to one fixed time (mRTC fixed source) and give our headless runs the same, so hashes stay reproducible; the window may use the wall clock. Check: unit tests for the protocol; Emerald's RtcGetErrorStatus is 0 after boot.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "9e846183",
+        "at": "2026-10-21T15:10:52Z",
+        "evidence": "runtime::gpio emulates the GPIO port and S-3511 RTC as mGBA 0.10 does (game codes from its override table; states load it). 7 protocol tests drive it as Emerald's siirtc.c. Emerald sErrorStatus (0x03000db8) is 0 at frame 120 here and in mGBA (0x90 without the clock); port state matches mGBA's field for field; our frame-1000 main menu shows no battery message. Clock pinned to FIXED_CLOCK 2004-09-16 12:00 UTC in headless runs and mgba-dump (RTC_FIXED, TZ=UTC); Emerald unit mGBA hashes unchanged; window uses wall clock. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "shared/png-states",
+      "title": "Load mGBA's PNG save states (the GUI's .ss files)",
+      "detail": "mGBA's GUI writes states as PNGs (a screenshot with the state zlib-compressed in a gbAs chunk, extra data such as save data after it); runtime::state loads only the raw GBASerializedState and refuses PNGs. Unpack them in the desktop (std) and pass the state on; june's ~/ROMs/gba/moonbeam.ss0 is one. Prove: a GUI state loads and K frames match mGBA from it.",
+      "check": "recorded",
+      "needs": ["shared/savestate-load"],
+      "record": {
+        "state": "done",
+        "by": "eb73be0e",
+        "at": "2026-10-21T15:06:58Z",
+        "evidence": "desktop::state_file unpacks mGBA GUI PNG states (gbAs state, gbAx save data); gbaa-desktop --state and mgba-dump --state take them, save data applied in both. moonbeam.ss0: frame hashes equal mGBA's at 30/120/400 frames under 5 input scripts (right, a, start, down, combo); frame 1 differs only in lines 0-55 (state saved at line 56, mGBA's fresh buffer black). PC differs only inside the 0x368-0x36c wait loop. just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-21T15:07:00Z",
+          "by": "eb73be0e",
+          "text": "A GUI state is saved mid-frame (moonbeam.ss0 at line 56): mGBA's first frame after loading leaves the lines above it black, so a unit from a GUI state should check K>=2. Registers can differ inside a busy-wait loop (no waitstates); compare hashes."
+        }
+      ]
+    },
+    {
+      "id": "shared/emerald-crate-build",
+      "title": "Build recompiled Emerald in under 8 GB of RAM",
+      "detail": "cargo build of the recompiled Emerald crate (out/pokemon-emerald-version: 15167 functions, 112943 blocks, 815k instructions, table.rs 3.5 MB) was killed at its memory cap at 8G and again at 16G (peak 16G after 4 min). Split the generated code across codegen units or crates, or shrink it, so it builds within 8G. Every Emerald unit's check builds this crate.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just recompile \"$HOME/ROMs/gba/Pokemon - Emerald Version.gba\" out/pokemon-emerald-version >/dev/null && systemd-run --user --scope -q -p MemoryMax=8G -p MemorySwapMax=0 just build-recompiled out/pokemon-emerald-version"
+      },
+      "uses": ["heavy"],
+      "tags": ["slow-check"],
+      "record": {
+        "state": "done",
+        "by": "check",
+        "worker": "b82e5158",
+        "at": "2026-10-21T17:44:16Z",
+        "evidence": "wrote out/pokemon-emerald-version (15168 functions) in 64.1s"
+      },
+      "notes": [
+        {
+          "at": "2026-10-21T17:35:48Z",
+          "by": "b82e5158",
+          "text": "Split into 42 part crates (PART_INSNS=20k). Check passed by hand under 8G: 7m19s, max process 2.3 GB. Frame-100 hash matches interp; regs differ in a wait loop (separate issue)."
+        },
+        {
+          "at": "2026-10-21T17:21:07Z",
+          "by": "885773ca",
+          "text": "Overseer: a bare rustc on this crate hit ~21 GB at 11:44 and the kernel killed two of the owner's other sessions. Compile only under just capped, cap 8G or less. Capped tries hit 17-18 GB: split the crate or change codegen, don't raise the cap."
+        }
+      ]
+    },
+    {
+      "id": "shared/recompile-unchanged",
+      "title": "Rerunning the recompiler leaves an unchanged crate unbuilt",
+      "detail": "Each checkpoint compiles its game crate 2-3 times (~12-20 min each for Imperium) though nothing changed: codegen/src/emit.rs deletes src/, base/ and parts/ and rewrites every file, so cargo sees new mtimes. Write each generated file only when its bytes differ (Cargo.toml's GENERATED marker too), delete only files no longer generated, same in bin/gbaa-recompile.rs. Check: recompile a ROM twice with no code change; the second build-recompiled compiles nothing (cargo shows no Compiling line for gbaa-* crates) and its output still matches; a change to one function rebuilds only its part. Owner asked for this 2026-10-23.",
+      "check": "independent",
+      "uses": ["heavy"],
+      "priority": 20,
+      "record": {
+        "state": "done",
+        "by": "9f39ddb3",
+        "checker": "a1db1755",
+        "at": "2026-10-23T20:44:36Z",
+        "evidence": "Verifier: arm.gba recompiled twice, second build compiles no gbaa crate, output md5-identical; split into 3 parts, a hand-edit to p01 is restored and rebuilds only p01 + main; stray files pruned; foreign dir refused; first-frame identical. Emerald recompiled twice changes 0 of 174 files.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "shared/route-checks",
+      "title": "One check per route: every checkpoint, one build, in Rust",
+      "detail": "Owner's call 2026-10-23. A route file (TOML, units/<rom>-<route>.toml): ROM, the input script, and a list of checkpoints (name, frame, hash, optional mgba_hash+why, min_compiled). A ROM may have several routes (diverging paths). A Rust checker builds the crate once, runs mGBA, interpreter, recompiled to the last frame, compares each checkpoint, reports the first mismatch with PNGs. Input repeats in the script syntax itself, no bash loops; just unit becomes a thin call. Move Rogue and Imperium's checkpoints into one route each, one unit per route; drop the per-checkpoint units. Check: both routes pass; a corrupted hash fails at that checkpoint by name.",
+      "check": "independent",
+      "uses": ["heavy"],
+      "priority": 20,
+      "record": {
+        "state": "done",
+        "by": "485e5fdd",
+        "checker": "verifier-3e9a71",
+        "at": "2026-10-23T21:20:03Z",
+        "evidence": "route-check (crates/route-check) + units/*.toml routes; just unit is a thin call. mGBA draws all 10 Imperium and 9 Rogue checkpoints along one route each; just unit imperium-newgame gamefreak and rogue-newgame title pass end to end (recompiled = interpreted); full routes fail at bike / main-menu (open interpreter bugs, named with PNGs); a corrupted hash fails at its checkpoint by name; just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-23T21:20:05Z",
+          "by": "485e5fdd",
+          "text": "Route units {unit:rogue/newgame-route} and {unit:imperium/newgame-route} replace the per-checkpoint units (dropped). Their probes are slow-check: a cold build is ~15 min, over the 900 s probe timeout. mGBA is checked at every checkpoint before the interpreter runs."
+        },
+        {
+          "at": "2026-10-23T21:05:45Z",
+          "by": "9d04aecd",
+          "text": "From {unit:imperium/intro-gamefreak}: a cold Imperium check takes ~15 min, over the tracker's 900 s probe timeout, so recheck exits 101. The route units' probes need a longer timeout (or rely on the warm build from {unit:shared/recompile-unchanged}, now done)."
+        },
+        {
+          "at": "2026-10-23T20:06:02Z",
+          "by": "9d04aecd",
+          "text": "Input format settled by the owner: [[press]] tables in the route TOML (button; at, or from/to/every; optional hold), not repeats in the string. The CLI --input string stays as is."
+        }
+      ]
+    }
+  ]
+}

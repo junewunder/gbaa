@@ -1,0 +1,79 @@
+# Emerald Imperium (sha1 1d20091c…, pokeemerald-expansion, modern GCC): the intro, then a new game to the
+# first overworld frame in the moving truck. No symbols. Each checkpoint's hash is what mGBA 0.10.5 draws
+# (mgba-dump, 2026-10-22, the same on repeat runs; checked by eye), or ours where mgba_hash says mGBA is wrong.
+rom = "$HOME/ROMs/gba/Emerald Imperium.gba"
+
+# Start skips the intro and leaves the title, then A every 20 frames until the truck (the name is left empty).
+[[press]]
+button = "start"
+at = 4100
+
+[[press]]
+button = "a"
+from = 4300
+to = 6580
+every = 20
+
+# The copyright screen (the same frame as Emerald's).
+[[checkpoint]]
+name = "copyright"
+frame = 100
+hash = "8e9a9d003b762492"
+
+# The POWERED BY PRET x RHH screen with its sprites.
+[[checkpoint]]
+name = "pret"
+frame = 400
+hash = "2ceee58cd9a088d2"
+
+# The intro's GAME FREAK logo in the forest.
+[[checkpoint]]
+name = "gamefreak"
+frame = 700
+hash = "a527bc9f0601632d"
+
+# The intro's bike scene.
+[[checkpoint]]
+name = "bike"
+frame = 2000
+hash = "ec09a5bbeb2568a7"
+
+# The intro's legendary scene (the red silhouette over water).
+[[checkpoint]]
+name = "legends"
+frame = 2800
+hash = "16c553bb2e405f37"
+
+# The title screen.
+[[checkpoint]]
+name = "title"
+frame = 4000
+hash = "e37f60909fc706f4"
+
+# The main menu with no save (New Game, Option).
+[[checkpoint]]
+name = "main-menu"
+frame = 4250
+hash = "657cebc506b58d1b"
+mgba_hash = "f31a393f58ef671b"
+mgba_why = "its 32-bit colour build darkens 8-bit channels in place, a - a*y/16 then masked, so the borrow drops green and blue a 5-bit step where hardware (GBATEK's 5-bit formula, mGBA's own 16-bit build) does not"
+
+# The professor's speech, Piplup beside him.
+[[checkpoint]]
+name = "birch"
+frame = 5300
+hash = "6c38e5f130a1c6b7"
+
+# The naming screen, nothing typed.
+[[checkpoint]]
+name = "naming"
+frame = 5600
+hash = "dbdcbd2d09153442"
+mgba_hash = "7568e8d3fd24e272"
+mgba_why = "its 32-bit colour build alpha-blends 8-bit channels widened as (c<<3)|(c>>2), rounding up a 5-bit step where hardware (GBATEK's 5-bit formula, mGBA's own 16-bit build) does not"
+
+# The first overworld frame: the player in the moving truck (the same frame as Emerald's).
+[[checkpoint]]
+name = "truck"
+frame = 6800
+hash = "26c2f9d4009c5696"

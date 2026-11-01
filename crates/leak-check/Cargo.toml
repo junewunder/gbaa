@@ -1,0 +1,10 @@
+[package]
+name = "leak-check"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# The repo is public: a test (so `just check` and every lane run it) that
+# fails if a tracked file, or an unpushed commit's message, holds a private
+# string. The private strings themselves can't be in the repo, so they're
+# in $GBAA_DATA/leak-words.txt (src/lib.rs).

@@ -1,0 +1,5 @@
+# Stable Rust plus the no_std target that `just check` builds `runtime` for.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+targets = ["riscv32imac-unknown-none-elf"]

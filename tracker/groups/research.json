@@ -1,0 +1,126 @@
+{
+  "id": "research",
+  "title": "Research for what comes after the Deck",
+  "priority": 10,
+  "order": 11,
+  "units": [
+    {
+      "id": "research/ui-library",
+      "title": "Choose a cross-platform UI library for in-game menus",
+      "detail": "june wants more UI before the Deck: in-game menus for rebinding ({unit:stretch/remap}), fast-forward speed ({unit:deck/fast-speed-default}), undoing a state load ({unit:deck/undo-load-state}), save slots, fullscreen. Research what to build it on, replacing or sitting over minifb: e.g. egui (+ winit/wgpu or glow), iced, slint, SDL2/SDL3 with an immediate-mode layer, a hand-drawn overlay in our own framebuffer. Needs: Linux X11 and Wayland, SteamOS Game Mode (gamescope) fullscreen, macOS and Windows ({unit:stretch/macos}, {unit:stretch/windows}); fully usable with a gamepad alone (focus navigation, no mouse) as well as mouse and keyboard; resizable window and fullscreen toggle ({unit:stretch/resizable-window}, {unit:stretch/fullscreen-toggle}); integer-scaled pixel output with no added latency or frame hitching; audio and gilrs stay as they are; the runtime crate stays no_std (UI lives in desktop only); binary size and build time. Build a small spike for the top two or three if that settles it (a menu over a scaled GBA frame, driven by the pad). Write docs/research/ui-library.md: the options, how each fits, a recommendation and why. End by asking june to choose (just ask), saying plainly what each choice changes.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "78027c08",
+        "at": "2026-10-24T03:52:21Z",
+        "evidence": "docs/research/ui-library.md written: options table, spikes in spikes/ui (winit+softbuffer hand-drawn menu, winit+egui_glow) driven pad-only in headless gamescope, 0 presents over 25 ms; sizes and clean build times for minifb, eframe/wgpu, iced, slint, SDL3. Recommends winit + egui; asked june (q/game-menus-built). just check passes.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "research/lua-scripting",
+      "title": "Research Lua scripting, mGBA-script compatible if we can",
+      "detail": "june wants Lua scripting like mGBA's, ideally running existing mGBA Lua scripts unchanged. Research: mGBA's scripting API (emu memory read/write, callbacks on frame/keys/reset, console, buffers, sockets, the storage API) and what popular scripts use (Pokemon trackers, randomizer helpers, Ironmon tracker); which parts map onto our recompiled build and which can't (e.g. breakpoints and per-instruction hooks don't exist in compiled code; memory watch callbacks may cost speed); a Lua runtime for Rust (mlua with LuaJIT or Lua 5.4, piccolo, others), its cost and portability (Deck, macOS, Windows), and sandboxing. Try running one or two real mGBA scripts' API calls against a stub to see how far compatibility goes. Write docs/research/lua-scripting.md: what's possible, how compatible, the cost, a recommended design and a plan of units. Then ask june (just ask) the decisions it needs.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "ea00af67",
+        "at": "2026-10-24T03:51:35Z",
+        "evidence": "docs/research/lua-scripting.md written (mGBA 0.10.5 vs 0.11-dev API, script survey, what maps, runtimes, sandboxing, design). docs/research/lua-probe ran mGBA's pokemon.lua (both versions) and Ironmon v9.4.0 on Emerald unchanged, no missing calls, Lua 0.1 ms/frame. Filed the scripting group (9 units), asked june 3 questions, recorded 2 decisions. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "research/multiplayer",
+      "title": "Research multiplayer: a server, planned beyond the GBA",
+      "detail": "june wants a multiplayer server for the recompiled games, planned ahead so future recompiled consoles could use it too. Research: what multiplayer means here (GBA link cable emulation: SIO multiplayer/normal/UART modes as Emerald's trades, battles and Union Room use them; wireless adapter; and features beyond the original, like shared overworlds, spectating); how others do it (mGBA's link, Pokemon link-over-network projects, netplay with rollback vs lockstep in emulators like RetroArch, Dolphin, Project64 netplay, PokeMMO-style servers); timing: our recompiled cycle counting vs the link cable's tight timing; latency over the internet; a server architecture (relay vs authoritative, matchmaking, NAT traversal, protocol) with a console-neutral core and a per-console adapter, so a later recompiled NDS/GB/GC fits. Write docs/research/multiplayer.md: options, a recommended architecture with its layers, risks, and a plan of units. Then ask june (just ask) the decisions it needs.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "d1083785",
+        "at": "2026-10-24T03:41:11Z",
+        "evidence": "docs/research/multiplayer.md: link modes, Emerald cable protocol (link.c: 8 transfers/frame, lag rules), wireless, prior art, timing, latency, measured 0.84 ms/frame; recommends shared simulation + lockstep + relay; 8 units filed in group multiplayer; two questions asked of june; just check passes.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "research/kirby-controller-probe",
+      "title": "Find Kirby's controller code and assets in Amazing Mirror",
+      "detail": "Pie-in-the-sky probe (june, 2026-10-28): could a Kirby & the Amazing Mirror Kirby become a Rivals of Aether 2 Workshop character via rivals-forge and the official RoA1 2D-character import? This unit asks only whether an agent can (1) identify Kirby's character-controller code in the ROM: the per-frame player update and state machine, plus the slide, air puff, jump/float and their physics constants, using the mod view's readable code and naming, recorded RAM traces of scripted inputs, and the katam decomp if it helps; and (2) extract Kirby's assets: sprite frames per move (OAM/VRAM capture through the asset-extraction tools), palettes, and hitbox data if a table can be found. Deliverable: docs/research/kirby-controller.md (functions found with addresses and confidence, state list, constants, how the hitboxes work or why they weren't found) plus a rebuild command for the extracted assets into gitignored out/. Game data stays out of git. Not in scope: building the RoA1/RoA2 character (that goes in rivals-forge if this works). Failing is fine (june, 2026-10-28): if either half can't be done, write up exactly what stopped it and mark the unit done with that as evidence; don't stretch the scope to force it. Then add a retry unit that needs whatever would unblock it (an existing unit or gate, or a new one), and ask june through just ask, with that gate as the default option, so june hears about it and agrees when it gets tried again.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "42ab52e8",
+        "at": "2026-10-29T01:43:03Z",
+        "evidence": "docs/research/kirby-controller.md: Kirby's controller functions with addresses and confidence, state list, physics constants and hitbox reading; just kirby-assets rebuilds trace, tiles, palettes, sprites and the controller cut into out/assets/kirby/ (about 25 s, byte-identical reruns). Review fix: justfile comment now says 25 s like both docs. just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T01:38:30Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - justfile:523 (the comment above the `kirby-assets` recipe): it ends \"About 2 minutes once built.\", but docs/research/kirby-controller.md (Rebuilding) and docs/tools/commands.md both say the recipe takes about …"
+        }
+      ]
+    },
+    {
+      "id": "research/kirby-sprite-tables",
+      "title": "Read Kirby's sprite tables: whole frames and hitboxes",
+      "detail": "Follow-up to {unit:research/kirby-controller-probe} (docs/research/kirby-controller.md, What's left). Kirby's walk/jump/fall frames are built from 2-4 OAM pieces of mixed sizes, so gbaa-assets graphics writes loose tiles for them. Read the engine's gSpriteTables (0x083B909C: anims, attrs with each frame's pieces, oamData, palette, tiles; katam include/sprite.h, the Sonic Advance engine) in Rust (a gbaa-assets subcommand), compose every Kirby animation's frames into whole Aseprite sheets with the pink palette 0x084BB12C, and list each animation's AnimCmd_6 per-frame hitboxes (ability attacks use them). Done: just kirby-assets also writes whole frames for walk, run, jump, fall, float, slide, inhale, hurt, and a hitbox list; doc updated.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "6606f5fd",
+        "at": "2026-10-29T01:55:17Z",
+        "evidence": "just kirby-assets now runs gbaa-assets sprite-tables (crates/assets/src/spritetables.rs) on gSpriteTables 0x083B909C: out/assets/kirby/sprite-tables/ has whole-frame Aseprite+PNG in pink 0x084BB12C for all 46 plain-Kirby anims (walk, run, slide, jump/fall, inhale/inflate/puff, float, hurt named via scripts/kirby/anims.toml; frames viewed, no seams), anims.txt for all 939 anims, hitboxes.tsv (73 anims, 1192 steps, copy abilities). Unit test added; two runs md5-identical; just check passes after merging main; recipe rerun OK. Doc: docs/research/kirby-controller.md 'Sprite tables'.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "research/native-menu-bar",
+      "title": "Native menu bar on macOS and KDE's global menu",
+      "detail": "june, 2026-10-29: wants a real menu bar (Save State, Load State, Fullscreen, Quit and so on) on macOS and on Linux, where she uses KDE's global menu and almost nothing supports it. Find out how from an SDL3 window: macOS NSMenu (muda?), and on KDE the dbusmenu export plus the appmenu hint (X11 window property, Wayland org_kde_kwin_appmenu). Write docs/research/native-menu-bar.md with a recommendation and a spike if one is cheap.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "9afc4e64",
+        "at": "2026-10-30T17:13:52Z",
+        "evidence": "docs/research/native-menu-bar.md: SDL 3.4 has no menu bar API; recommend muda (macOS-only dep, init_for_nsapp after SDL window) and our own com.canonical.dbusmenu over zbus pointed at by org_kde_kwin_appmenu / _KDE_NET_WM_APPMENU_* for KDE. Spike docs/research/native-menu-bar/ ran on quack: busctl GetLayout returned the tree, Event clicks reached the frame-loop channel, Fullscreen bumped revision and toggle-state. Panel display not seen (no display in lanes). Follow-ups filed: {unit:stretch/menubar-actions}, {unit:stretch/menubar-kde}, {unit:stretch/menubar-macos}, gate {unit:stretch/menubar-gate}. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "research/why-timing-is-runtime",
+      "title": "Why GBA timing can't be baked in, shown on Kirby",
+      "detail": "june 2026-10-30, for fun learning: convince her, by showing what happens, why exact timing has to be worked out while the game runs (the m.get address and rt::stall in the readable view) and why it matters at all. She suspects 'statically exact timing reduces to the halting problem'. Test that honestly, don't just agree: the prefetch buffer holds at most 8 halfwords and WAITCNT has few values, so a block's cost may be a function of a small entry state. Show on Kirby & the Amazing Mirror: (1) log rt::stall per instruction site over a route and show sites whose cost varies between visits, and from what (path in, buffer fill, WAITCNT, DMA); (2) build variants with timing wrong (prefetch off, stalls zeroed, each site's most common cost baked in) and show what diverges and when: first differing frame, lag frames, RNG, a mid-screen effect, sound, with screenshots or frame diffs; (3) say whether a static table (site x buffer state x WAITCNT) could replace the address, and what that would mean for the readable view. Write docs/research/why-timing-is-runtime.md for june to read at bedtime: plain words, diagrams, real numbers, no wall of text. Heavy steps: builds of the generated crate; follow the RAM rules.",
+      "priority": 24,
+      "record": {
+        "state": "done",
+        "by": "26b033f1",
+        "at": "2026-10-30T15:16:05Z",
+        "evidence": "docs/research/why-timing-is-runtime.md written from `just timing-lab` (Kirby, 4500 frames, report reproduced byte-identical 3 times, also after merging main; just check passes). (1) 36.7M stalls at 18444 sites: 98.7% of runs at one-cost sites; 79 sites vary, by buffer fill (54), address (21), WAITCNT (4). (2) buffer off: 1866 frames differ, lags 19->21, RNG from frame 262, music one frame late, helper Kirbys diverge, frame-6 tear line 23->72; stalls deleted: 1 frame; baked per site (trained on frames 1-3000): 0 frames, 296 sound samples. (3) only site x lead x address x WAITCNT is exact (0 mispriced); halting question answered: cost decidable, inputs (pointer, path) are not.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "research/code-without-rom-addresses",
+      "title": "Could compiled code stop depending on ROM addresses?",
+      "detail": "june (2026-10-31), reading moonbeam's mod view (instant timing, all readable): she wants exact ROM addresses gone from the code, e.g. call!(m, pc, f_08002065 @ 0x0800_2065 -> 0x0800_bc3f, 6, { regs!(m; 0 = …, 14 = 0x800_bc3f); }). Instant timing removed the addresses that priced wait states; what stays is the callee key (repeats the name), the return address (written to lr, usually pushed to the guest stack in RAM, checked by settle on return) and tick!'s pc (where the dispatcher goes on after an IRQ, a frame end or a restore; cpu.pc in snapshots). Research only, no build: what it would take for compiled code to call as plain Rust calls with lr and the stack holding something other than ROM addresses. Cover: save states, rewind and rollback (snapshots are guest RAM and registers; restores find their way back through stacked return addresses; relates to {unit:multiplayer/netplay-compiled-after-restore}); mixing with the interpreter fallback (Kirby's RAM code {unit:multiplayer/kirby-ram-code}, uncovered code, which push and pop real addresses); games that read lr (call-via-register veneers like bx r3, functions that pop their return and jump elsewhere, longjmp-like code) and how often they occur in Emerald, Kirby, moonbeam; IRQs, which run game code mid-function; mods that add calls (no ROM address to return to); what a mixed scheme could look like (native where proven safe, addresses elsewhere) and what it would gain in speed and readability. Survey how other static recompilers handle this (N64Recomp, XenonRecomp, ps2recomp, and similar) and the literature. Write docs/research/code-without-rom-addresses.md with a recommendation and what would change june's mind, and file units for whatever is worth building. Separate from hiding them only in the printed mod view, which june hasn't asked for.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "699581f7",
+        "at": "2026-10-31T15:07:31Z",
+        "evidence": "docs/research/code-without-rom-addresses.md: what reads each address (restores, interpreter fallback, IRQs, byte-for-byte checks, mods), a census of returns over Emerald, Kirby and moonbeam (crates/interp/examples/returns.rs; no call returns elsewhere, Kirby re-run agrees), prior art (N64Recomp and XenonRecomp drop lr and have no save states; PS2Recomp and gbarecomp keep it). Recommends real addresses stay in guest state, fewer in the code text; filed {unit:mod/call-writes-lr} and {unit:mod/mod-call-form}. just check passes."
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T16:39:16Z",
+          "by": "699581f7",
+          "text": "the first evidence (all games identical, from a mirror experiment) was wrong; a review caught it. The token experiment (lr_numbers) finds WarioWare returning to lr - 24 from an IWRAM helper; seven other games clean. Doc rewritten."
+        }
+      ],
+      "round": "2026-10-31T04:27:11Z"
+    }
+  ]
+}

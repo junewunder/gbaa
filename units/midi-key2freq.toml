@@ -1,0 +1,9 @@
+# The BIOS's MidiKey2Freq (swi 0x1F): our agb test program
+# (agb/midi-key2freq/, pixels in its SCENE.md), built by `just agb-tests`.
+rom = "$GBAA_DATA/agb/midi-key2freq.gba"
+
+[[checkpoint]]
+name = "midi-key2freq"
+frame = 60
+hash = "8abbd4cc2b9451bf"
+# Verified: mGBA 0.10.5 draws the same hash (just mgba-diff, 2026-10-26).

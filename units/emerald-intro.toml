@@ -1,0 +1,49 @@
+# Pokémon Emerald (US, sha1 f3ae0881…, the pokeemerald build): the intro from reset to the title screen, no
+# input. Each checkpoint's hash is what mGBA 0.10.5 draws (mgba-dump, 2026-10-21, the same on repeat runs;
+# checked by eye), or where mGBA is known wrong, ours. The pokeemerald ELF and map in
+# $GBAA_DATA/src/pokeemerald give symbols (same sha1).
+rom = "$HOME/ROMs/gba/Pokemon - Emerald Version.gba"
+
+# The copyright screen.
+[[checkpoint]]
+name = "copyright"
+frame = 100
+hash = "8e9a9d003b762492"
+
+# The forest with the GAME FREAK logo. mGBA draws 283b88a4d90e5630: 235 pixels of the semi-transparent
+# logo one 5-bit step brighter in green or blue. Our interpreter with mGBA's 8-bit mix in blend.rs draws
+# exactly that hash (and mGBA's at 499 and 501 too), so nothing else differs.
+[[checkpoint]]
+name = "gamefreak"
+frame = 500
+hash = "2d1792ee17819d57"
+mgba_hash = "283b88a4d90e5630"
+mgba_why = "its 32-bit colour build alpha-blends 8-bit channels widened as (c<<3)|(c>>2), rounding up a 5-bit step where hardware (GBATEK's 5-bit formula, mGBA's own 16-bit build) does not"
+
+# The bike scene (Torchic, Manectric, Volbeat).
+[[checkpoint]]
+name = "bike"
+frame = 1600
+hash = "29f1e33a0e19b9b5"
+
+# The Groudon scene.
+[[checkpoint]]
+name = "legends"
+frame = 2400
+hash = "4d649ab75f2bca58"
+
+# Rayquaza's silhouette in the clouds.
+[[checkpoint]]
+name = "rayquaza"
+frame = 3000
+hash = "1e6ffc9861f1cacd"
+
+# The title screen after the whole intro (logo, Rayquaza, the shine). mGBA draws 5481b4b32e143d6b: 7488
+# pixels of the blended clouds one 5-bit step brighter in green or blue. Our interpreter with mGBA's 8-bit
+# mix in blend.rs draws exactly that hash (2026-10-22), so nothing else differs.
+[[checkpoint]]
+name = "title"
+frame = 3800
+hash = "23646885cef08b73"
+mgba_hash = "5481b4b32e143d6b"
+mgba_why = "its 32-bit colour build alpha-blends 8-bit channels widened as (c<<3)|(c>>2), rounding up a 5-bit step where hardware (GBATEK's 5-bit formula, mGBA's own 16-bit build) does not"

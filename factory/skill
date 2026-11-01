@@ -1,0 +1,36 @@
+# factory/skill: sourced by the stubs in factory/. It says where this repo is, and which copy
+# of the wfactory skill to run. The loop's code lives in the skill, not here. Each
+# machine runs a deployed copy under ~/.local/share/wfactory (`current` is the newest;
+# the skill's scripts/deploy.sh makes it, and `just fleet start` runs that on every machine it
+# starts). A running loop keeps the copy it started with (FACTORY_SKILL, inherited), so a
+# deploy mid-run never mixes versions. Set FACTORY_SKILL by hand to run another copy (tests,
+# trying a change before it's pushed). Don't edit this file: it's the same in every factory.
+FACTORY_ROOT=$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/.." && pwd)
+_fd=${FACTORY_DEPLOY:-$HOME/.local/share/wfactory}
+# Pinned only if it's a deployed version: a FACTORY_SKILL set by hand stays the hand's choice
+# even when a FACTORY_SKILL_FROM from some outer loop came along with it.
+case "${FACTORY_SKILL:-}" in "$_fd"/versions/*|"$(readlink -f "$_fd")"/versions/*) ;; *) [ "${FACTORY_SKILL_FROM:-}" != deploy ] || unset FACTORY_SKILL_FROM ;; esac
+if [ -z "${FACTORY_SKILL:-}" ]; then
+  # First use on a machine: deploy from the installed skill.
+  _sc=${FACTORY_SKILL_CHECKOUT:-$HOME/.claude/skills/wfactory}
+  if [ ! -e "$_fd/current" ] && [ -x "$_sc/scripts/deploy.sh" ]; then
+    "$_sc/scripts/deploy.sh" >&2 || true
+  fi
+  [ -e "$_fd/current" ] || { echo "factory: the wfactory skill isn't deployed on this machine (no $_fd/current). Install it (the skill's install.md), then run its scripts/deploy.sh." >&2; exit 2; }
+  FACTORY_SKILL="$(readlink -f "$_fd/current")/wfactory" FACTORY_SKILL_FROM=deploy
+  _fl="$_fd/current/wfactory"
+elif [ "${FACTORY_SKILL_FROM:-}" != deploy ]; then
+  _fl=$FACTORY_SKILL   # a copy chosen by hand
+fi
+# `just` reads the skill's recipes through .tracker/skill (factory/factory.just imports them).
+if [ -n "${_fl:-}" ] && [ "$(readlink "$FACTORY_ROOT/.tracker/skill" 2>/dev/null)" != "$_fl" ]; then
+  mkdir -p "$FACTORY_ROOT/.tracker" && ln -sfn "$_fl" "$FACTORY_ROOT/.tracker/skill.new.$$" && mv -T "$FACTORY_ROOT/.tracker/skill.new.$$" "$FACTORY_ROOT/.tracker/skill"
+fi
+# The Node the stubs run: the one deployed beside this copy (deploy.sh puts it there, as the
+# skill's runtime/node.txt pins it), else the deployed current's (a copy chosen by hand), else,
+# with nothing deployed, the node on PATH.
+case "$FACTORY_SKILL" in */versions/*/wfactory) FACTORY_NODE=${FACTORY_SKILL%/wfactory}/node/bin/node ;; *) FACTORY_NODE= ;; esac
+[ -x "$FACTORY_NODE" ] || FACTORY_NODE=$_fd/current/node/bin/node
+[ -x "$FACTORY_NODE" ] || FACTORY_NODE=node
+unset _fd _fl _sc
+export FACTORY_ROOT FACTORY_SKILL FACTORY_SKILL_FROM FACTORY_NODE

@@ -1,0 +1,11 @@
+# For deploy/fly/Dockerfile: the relay builds from the sources alone.
+target/
+out/
+work
+runs/
+.scratch/
+.tracker/
+.git/
+tracker/
+*.gba
+*.bin

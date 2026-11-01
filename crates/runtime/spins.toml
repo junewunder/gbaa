@@ -1,0 +1,23 @@
+# Spin loops the rule misses (docs/research/busy-wait-loops.md, option (c)
+# as a fallback): per game, by the ROM's SHA-1, the addresses of loop back
+# edges (the backward branch, without the Thumb bit) that --timing native
+# treats as spin loops though armv4t::idle::is_spin_edge doesn't find them
+# (a loop longer than its 64 instructions, or one shaped otherwise). Both
+# builds apply them (runtime::spins: the code generator, and every front
+# end for its interpreter), and the native lifter reads them here. A loop goes here
+# when the hole report lists it as a busy loop that isn't a spin edge.
+#
+# [games."<sha1>"]
+# name = "…"
+# edges = [0x0800_1234]
+#
+# The format is read by a small parser (runtime::spins, no_std): a
+# `[games."<sha1>"]` header per game, then `edges = [ … ]` (one line or
+# several), addresses in hex or decimal.
+
+# Pokémon Emerald (US). librfu's AgbRFU_SoftReset (from InitRFU at boot):
+# `while (*timerL <= 0x11) REG_RCNT = 0x80A2;` polls timer 3 and stores
+# each pass, so it is neither an idle loop nor a call loop.
+[games."f3ae088181bf583e55daf962a92bb46f4f1d07b7"]
+name = "Pokemon - Emerald Version"
+edges = [0x082e_2b6a]

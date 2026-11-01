@@ -1,0 +1,331 @@
+{
+  "id": "stretch",
+  "title": "Stretch: macOS, Windows and controller remapping",
+  "order": 8,
+  "needs": ["deck/play-gate"],
+  "units": [
+    {
+      "id": "stretch/remap",
+      "title": "Controller remapping, global and per ROM",
+      "detail": "On top of the controller input the Deck group built: a global mapping plus per-ROM overrides (keyed by the ROM's hash or title), changed from inside the game (an in-window remap screen), not only by editing a file. Check: a test loads a global map and a per-ROM override and sees the override win for that ROM only.",
+      "check": "recorded",
+      "needs": ["research/ui-library", "stretch/sdl3-window", "stretch/egui-sdl3"],
+      "record": {
+        "state": "done",
+        "by": "991ea0a8",
+        "at": "2026-10-24T20:38:27Z",
+        "evidence": "desktop::remap: mapping file gets [title …]/[hash …] sections over global lines; test remap::a_roms_override_wins_for_it_only loads a global map plus per-ROM overrides and sees them win for that ROM only. Menu Controls screen binds the next pad control for this game or all games, saves in place (menu::the_remap_screen_binds_for_this_game); seen working under headless gamescope 1280x800, wrote a [hash] section. just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-22T14:43:00Z",
+          "by": "32d1e9e5",
+          "text": "Mapping format is crates/desktop/src/gamepad.rs: 'button = controls' lines over the default; lines starting '[' are rejected now, kept free for per-ROM sections."
+        }
+      ]
+    },
+    {
+      "id": "stretch/macos",
+      "title": "A macOS build, controller included",
+      "detail": "A recompiled game builds and runs on macOS (Apple silicon first), as an .app, with the window, audio, controllers and save files working. Research cross-compiling from Linux versus building on a Mac; say which and why. Check: the build recipe produces the .app; running it needs june's or a CI Mac, so say which.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "b8f6936b",
+        "at": "2026-10-24T21:02:23Z",
+        "evidence": "Built on a Mac, not cross-compiled (docs/research/macos-build.md: Apple SDK licence, no toolchain here, a Mac needed to run it anyway). just macos-app ROM builds aarch64-apple-darwin and scripts/macos-package.sh makes the .app (launcher puts saves in ~/Library/Application Support/gbaa/<name>/, ad hoc signed); layout and launcher tested on Linux with a stand-in arm64 Mach-O, recipe refuses off a Mac. Running it needs june's Mac: {unit:stretch/macos-play-gate}. just check passes.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "stretch/windows",
+      "title": "A Windows build, controller included",
+      "detail": "A recompiled game builds for Windows x86_64 (cross-compiled from Linux if it can be) and runs with the window, audio, controllers (XInput pads included) and save files working. Check: the recipe produces the .exe and it runs its first checkpoint under Wine matching the Linux build's frames; a real-Windows check is june's.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "5cb990c2",
+        "at": "2026-10-24T23:33:10Z",
+        "evidence": "just windows-exe cross-compiles with MinGW-w64 in a podman image (scripts/windows.Containerfile); .exe imports only Windows DLLs; SDL3 built with XInput, WGI, RawInput, HIDAPI, DInput, WASAPI. just windows-check under Wine: gba-cart1 (60 frames, after merging main) and Emerald Rogue to splash (100 frames) match the Linux build frame for frame, same registers and route hash. Window, sound and pads on real Windows: {unit:stretch/windows-play-gate}.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "stretch/resizable-window",
+      "title": "A resizable window that scales the picture to fit",
+      "detail": "The desktop window can't be resized now (minifb, fixed --scale). Make it resizable by dragging: the frame scales to the largest size that fits, whole-number scaling by default, centred on black, aspect ratio kept. Check: a test resizes the window (or calls the layout function) to several sizes and gets the expected scale and offset; june can drag the window edge.",
+      "check": "recorded",
+      "needs": ["deck/play-gate", "stretch/sdl3-window"],
+      "record": {
+        "state": "done",
+        "by": "486f8b16",
+        "at": "2026-10-24T21:27:25Z",
+        "evidence": "Windowed SDL3 window built resizable (min size = frame at 1x, in points); drawing already used platform::fit per frame on Resized/PixelSizeChanged. New test a_resized_window_fits_the_largest_whole_scale_centred checks scale+offset at 6 sizes; just check passes (exit 0) after merging main. Owner drag test still to try.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "stretch/fullscreen-toggle",
+      "title": "Toggle fullscreen while playing, on any screen size",
+      "detail": "Today --fullscreen is a launch flag that assumes a 1280x800 screen (or --screen WxH) and only asks X11 window managers. Add a key and pad combination (e.g. F11, Alt+Enter) to switch fullscreen on and off mid-game, sized from the real monitor, on X11 and Wayland. Builds on the resizable window's scaling code. Seen in june's play test ({unit:deck/play-gate}) on quack (KDE Wayland, 2560x1600 at fractional scaling): --fullscreen --screen 2560x1600 came out larger than the screen and kept its title bar; size from the logical monitor and the scale factor.",
+      "check": "recorded",
+      "needs": ["stretch/resizable-window", "stretch/sdl3-window"],
+      "record": {
+        "state": "done",
+        "by": "4e4a2a0f",
+        "at": "2026-10-24T22:08:23Z",
+        "evidence": "In a private cu session (KWin 2560x1600 at 1.5x): --fullscreen fills 0,0 1707x1067 points (2561x1601 px, no title bar); F11, Alt+Enter and the menu's Fullscreen row toggle to a 720x480 window and back, on Wayland and X11 (XWayland), from fullscreen or windowed starts. just deck-check gba-cart1 passes (Xvfb, no WM). just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "stretch/keyboard-remap",
+      "title": "Rebind keyboard keys, global and per ROM",
+      "detail": "Keyboard keys are hard-coded in crates/desktop/src/platform.rs (arrows, Z/X, A/S…). Extend the controller remapping's mapping file and in-window remap screen to keyboard keys too, with the same global map plus per-ROM overrides. Check: a test loads a keyboard map and an override and sees the override win for that ROM only.",
+      "check": "recorded",
+      "needs": ["stretch/remap"],
+      "record": {
+        "state": "done",
+        "by": "1282e42a",
+        "at": "2026-10-24T22:15:49Z",
+        "evidence": "Keyboard keys now live in the mapping file as 'key <button> = <keys>' lines with global lines plus [title]/[hash] per-ROM sections; menu Controls screen has a pad/keyboard row. Test remap::tests::a_roms_keyboard_override_wins_for_it_only loads a global keyboard map and a hash override and sees the override win for that ROM only (plus binding_a_key_leaves_the_pads_alone, menu the_remap_screen_binds_keys); just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "stretch/sdl3-window",
+      "title": "Move the window, graphics and pads to SDL3",
+      "detail": "Per june's decision on SDL3 + egui (just decisions sdl3). Replace minifb with SDL3 (the sdl3 crate, built from source and linked statically: note the C compiler and cmake it needs in docs) and gilrs with SDL3's gamepad API. The window and drawing on the main thread, the game on its own thread handing frames over (as the spikes in spikes/ui/ do; docs/research/ui-library.md). The frame drawn by SDL's renderer at a whole scale (SDL_SetRenderLogicalPresentation, INTEGER_SCALE), centred on black, correct under fractional display scaling. Pads: same mapping file and names as now, plus SDL's face-button labels available for {unit:deck/label-layout}. Check: the existing desktop tests pass, the play checks (save, states, fast-forward, rewind, sound) still pass on quack, a Game Mode-like run under gamescope at 1280x800 shows presents ~16.7 ms apart with no new hitching, and the Deck build still passes just deck-check.",
+      "priority": 20,
+      "record": {
+        "state": "done",
+        "by": "49c32b12",
+        "at": "2026-10-24T15:32:44Z",
+        "evidence": "SDL3 (static, built from source) replaces minifb and gilrs; window on main thread, game on its own. On quack: desktop tests 43 pass; own-state, rewind, savestate, audio-check and audio-window pass; fast-forward 3000 frames in 3.2 s; gamescope headless 1280x800 Rogue recompiled with sound: presents p50 16.8 ms, p99 17.8, max 23.6, none over 25 (pacer now extrapolates the device between pulls; before, pairs at 21 ms); deck-build Rogue (glibc 2.34) and deck-check pass (OpenGL renderer, 1200x800 centred); just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "stretch/egui-sdl3",
+      "title": "egui menus drawn through SDL3, driven by a pad",
+      "detail": "Per the SDL3 + egui decision (just decisions sdl3). egui drawn through SDL3's renderer (egui's meshes as SDL_RenderGeometry triangles and its textures as SDL textures; an existing crate if a sound one exists, else our own small glue), over the game's frame. A pad adapter turning pad controls into egui's arrow, Enter and Escape (the lessons in docs/research/ui-library.md, egui spike: default_fonts, repaint requests, B closes the menu before egui sees Escape, one focus stop per row, text zoom for the Deck). One menu to prove it: pause the game, fast-forward speed, close. Check: the menu works pad-only on quack and under gamescope at 1280x800 with no added hitching.",
+      "needs": ["stretch/sdl3-window"],
+      "priority": 20,
+      "record": {
+        "state": "done",
+        "by": "d2af0367",
+        "at": "2026-10-24T15:47:54Z",
+        "evidence": "egui 0.37 menu drawn through SDL3's renderer by our own glue (SDL_RenderGeometry, premultiplied blend; egui-sdl3 crate pinned to old sdl3/egui). Pad-only via new --pad-script (SDL virtual pad): Start+Select opens, D-pad moves, A picks, B/Start close; paused, fast-forward speed, close and quit all worked under gamescope headless 1280x800 (screenshots) and in a Wayland window on quack. Hitching under gamescope: no menu p99 17.6 ms max 17.9; menu open over the running game p99 17.7 max 19.9, none over 25 ms; egui draw p50 0.2 ms p99 0.4; with sound, pause and resume p99 17.5, none over 25. 7 new menu tests; just check passes after merging main. Not run: deck-check (egui is pure Rust, no new system libs).",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "stretch/macos-play-gate",
+      "title": "june builds and plays the macOS .app on a Mac",
+      "kind": "gate",
+      "detail": "On june's Apple silicon Mac: just macos-app ROM (docs/tools/commands.md) builds out/macos/<name>/gbaa-<name>.app; opened from Finder, the window, sound, a gamepad, an in-game save across a restart and save states work. No Mac in the factory; a CI Mac instead is june's call (docs/research/macos-build.md). Each shortfall becomes a unit.",
+      "needs": ["stretch/macos"],
+      "record": {
+        "state": "done",
+        "by": "owner",
+        "via": "e70ceba9",
+        "at": "2026-10-28T04:27:52Z",
+        "evidence": "june (2026-10-28): played the macOS .app on the Mac: success"
+      }
+    },
+    {
+      "id": "stretch/windows-play-gate",
+      "title": "june plays the Windows .exe on real Windows",
+      "kind": "gate",
+      "detail": "On a Windows 10/11 PC: just windows-exe ROM (docs/tools/commands.md) on a factory machine, copy out/windows/<name>/ over, double-click gbaa-<name>.exe: the window, sound, an Xbox (XInput) pad and another pad, an in-game save across a restart and save states work. Wine checks only the headless run (docs/research/windows-build.md). Each shortfall becomes a unit.",
+      "check": "recorded",
+      "needs": ["stretch/windows"],
+      "record": {
+        "state": "done",
+        "by": "owner",
+        "via": "e70ceba9",
+        "at": "2026-10-28T04:27:54Z",
+        "evidence": "june (2026-10-28): played the Windows .exe on real Windows: success"
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T01:30:31Z",
+          "by": "e6b01c8d",
+          "text": "When june next plays the Windows .exe: confirm the start volume is sane now with the -6 dB default; if still loud, check Loudness Equalization in the speaker's Enhancements tab ({unit:volume/windows-loud})."
+        },
+        {
+          "at": "2026-10-28T03:51:21Z",
+          "by": "ff7e05af",
+          "text": "While playing on Windows, also note how loud sound starts versus other apps, for {unit:volume/windows-loud}."
+        },
+        {
+          "at": "2026-10-24T23:33:12Z",
+          "by": "5cb990c2",
+          "text": "Built and Wine-checked by {unit:stretch/windows}: out/windows/<name>/ on quack holds gbaa-<name>.exe, <name>.gba, README.txt. Untested anywhere: the window under Windows' video driver, WASAPI sound, XInput pads, the console window behind it (not hidden yet)."
+        }
+      ]
+    },
+    {
+      "id": "stretch/sdl-debug-rebuild",
+      "title": "Debug desktop build opens no window: stale SDL build",
+      "detail": "Found in the retro of 2026-10-24: lane 1's debug gbaa-desktop ({unit:stretch/remap} session) failed under gamescope with 'x11 not available' while the release build worked, so that checkout's debug SDL3 build in crates/desktop/sdl-build was probably built before the X11 libraries or settings changed and never rebuilt. Find why the static SDL3 build doesn't rebuild when its inputs change (build.rs rerun-if-changed, the cmake cache under target/), fix it, and show a debug build in a fresh lane clone and in one with an old target/ both open a window under gamescope --backend headless. Lanes have been using the release build to get around it.",
+      "check": "recorded",
+      "priority": 20,
+      "record": {
+        "state": "done",
+        "by": "c66d8ae8",
+        "at": "2026-10-25T14:45:52Z",
+        "evidence": "Cause: sdl3-sys's build script prints no rerun-if lines, so Cargo never reran it, and CMake kept stale results; lane 1's debug cache had XEXT_LIB-NOTFOUND (binary without libXext.so.6, 'No available video device' under gamescope, release fine). Fix: patched cmake crate (vendor/cmake via [patch] in .cargo/config.toml) watches crates/desktop/sdl-build/inputs.txt paths + cmake env vars, clears the build dir on change or when no stamp; toolchain retries NOTFOUND libs. Shown: this lane's old target/ debug build and a fresh clone (/tmp/gbaa-fresh) debug build both log 'window: x11, opengl renderer' and open the menu under gamescope --backend headless 1280x800; no-change rebuild Fresh, toolchain edit and revert each rerun with 'cleaning out the build directory'. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "stretch/config-dir-env",
+      "title": "GBAA_CONFIG_DIR moves the desktop's config files",
+      "detail": "From the retro of 2026-10-24: lanes run as june and read june's own ~/.config/gbaa (gamepad.conf, settings.conf); a lane noticed june's gamepad.conf turns pad save states off, and the remap screen saves to that file at once. Make the desktop app take its config folder from GBAA_CONFIG_DIR when set (before XDG_CONFIG_HOME; crates/desktop/src/gamepad.rs near line 497 and the settings.conf lookup), document it in --help and docs/tools/commands.md, and test that a set GBAA_CONFIG_DIR is read and written and ~/.config isn't. Once wfactory's session_env lands (github.com/junewunder/wfactory issue 120), tracker/project.json sets GBAA_CONFIG_DIR to a folder in each lane's clone; until then, live runs pass --pad-config.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "e4cf30f2",
+        "at": "2026-10-25T15:45:39Z",
+        "evidence": "gamepad::config_dir_in takes GBAA_CONFIG_DIR before XDG_CONFIG_HOME/HOME (APPDATA on Windows); gamepad.conf and settings.conf both use it; --help and docs/tools/commands.md updated. Test gbaa_config_dir_moves_the_config_files saves a remap into the set dir, reads it and settings.conf back, asserts HOME/XDG dirs untouched. just check passes (a513209).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-25T15:45:41Z",
+          "by": "e4cf30f2",
+          "text": "Lanes still need tracker/project.json to set GBAA_CONFIG_DIR per lane clone once wfactory session_env lands (wfactory issue 120); until then pass --pad-config in live runs."
+        }
+      ]
+    },
+    {
+      "id": "stretch/menu-jump",
+      "title": "Menu jumps into place after leaving a wider page",
+      "detail": "june (2026-10-28): open the menu (F10 or Start+Select), go into the Controls (remap) page, which is wider, then back to the top page: the top page is drawn in the wrong place until something makes the menu draw again, then it snaps to where it belongs. Likely the menu is centred from the size egui remembers from the last frame (the wider page's), and the window only redraws on input while paused (desktop::menu, egui_sdl). Fix it so a page change is placed right on its first frame (e.g. ask egui for another pass/repaint when the size changes, or centre by the new content's size). Check: a test or a cu session screenshot right after going back shows the top page centred; just check.",
+      "priority": 3,
+      "record": {
+        "state": "done",
+        "by": "833fd919",
+        "at": "2026-10-28T07:58:27Z",
+        "evidence": "Menu::run lays out a page's first pass dry (no keys, focus kept) then draws it, so egui centres it by the new page's size. New test back_from_a_wider_page_is_centred_at_once: first pass back from Controls drew 70pt off-centre before the fix, centred after; just check passes, branch up to date with main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "stretch/menu-polish",
+      "title": "Polish the menu's look",
+      "detail": "june (2026-10-28): a general prettiness and polish pass on the window's menu (desktop::menu, egui through desktop::egui_sdl): spacing, alignment, sizes and fonts readable on the Deck at 1280x800 and in a small window, a clear focus highlight for pad navigation, consistent row layout (label left, value right), greyed rows that look greyed, a title per page, transitions between pages that don't jump. Show june before and after screenshots of every page (a private cu session, both window and fullscreen sizes) and keep pad and keyboard driving working. Check: the menu's tests, just check, the screenshots in the unit's evidence.",
+      "needs": ["stretch/menu-jump"],
+      "record": {
+        "state": "done",
+        "by": "a8dbf058",
+        "at": "2026-10-29T03:29:19Z",
+        "evidence": "Every menu page is now one fixed box (no move or resize on turning a page), rows scroll above a hint footer so the main page fits a 2x 480x320 window and Controls fits at 3x; focus filled+outlined+barred, values coloured apart, page links marked with ›, greyed row faded, title per page. Menu tests 22/22 incl. new every_page_draws_the_same_box_at_once and a_small_window_fits_the_menu_and_scrolls_to_every_row; just check passes; branch has latest main. Before/after screenshots of Main, Controls (top and scrolled) and Scripts at 2x and 3x windows and 1280x800 fullscreen, from a private cu session driven by keyboard, plus a --pad-script run: work/menu-polish/before-after-{win2,win3,full}.png, shots/ and shoot.sh.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "stretch/remap-redesign",
+      "title": "A rebinding screen that explains itself",
+      "detail": "june (2026-10-28): the Controls (remap) page (desktop::remap, desktop::menu) isn't intuitive; do better, and say plainly if egui is what's holding it back. Known failure: nobody, june included, could find how to unbind a control, and a tester read the hint 'press left to unbind' and asked 'what does that mean'. Unbinding must be visible on screen (e.g. a clear button on each binding, reachable by pad and mouse), never a hidden key explained by a hint. Look at how good rebinding screens work (Steam Input, Dolphin, RetroArch, Switch's remap, modern console games) and design one: e.g. a picture of the pad with each GBA button's control on it, a clear listening state with cancel, per-game versus every game made obvious, conflicts shown, reset to defaults, the keyboard side in the same shape. Propose the design to june with a mockup before building (an html_render mock is fine), then build it in egui, or say what egui can't do and what the alternative costs. Check: someone who hasn't seen it binds and unbinds a control without being told how; the remap tests and just check pass.",
+      "needs": ["stretch/menu-polish"],
+      "record": {
+        "state": "parked",
+        "why": "june 2026-10-28: build it from a GitHub issue tomorrow with june supervising, not in the loop",
+        "by": "600a9d3e",
+        "at": "2026-10-29T03:39:20Z"
+      },
+      "notes": [
+        {
+          "at": "2026-11-03T03:49:28Z",
+          "by": "87c063f4",
+          "text": "Git move, 2026-11-02: earlier work is only on the private repo (git fetch git@github.com:junewunder/gbaa-private.git unit/stretch/remap-redesign, tip 1d657dd0). Replaying it on public main conflicts in docs/design/remap-design.md, so it wasn't moved."
+        },
+        {
+          "at": "2026-10-29T03:39:42Z",
+          "by": "600a9d3e",
+          "text": "Filed as GitHub issue junewunder/gbaa#69 for june to supervise tomorrow; design on branch unit/stretch/remap-redesign at 1d657dd0. Keep that branch."
+        },
+        {
+          "at": "2026-10-29T03:36:41Z",
+          "by": "d64be3fe",
+          "text": "Design + mockup committed on this branch: docs/design/remap-design.md, remap-mock.html/.png. Asked june to approve. On yes: build per the doc; keep own (row, chip) pad focus, not egui's geometric arrow focus; '+ Add' appends, chip X removes one control."
+        }
+      ],
+      "round": "2026-10-29T03:32:03Z"
+    },
+    {
+      "id": "stretch/menubar-actions",
+      "title": "Menu bar items and actions, shared by macOS and KDE",
+      "detail": "desktop::menubar: the item tree (Game: Save State/Load State per slot, Undo Load, Quit; View: Fullscreen) and an Action enum the frame loop maps onto what the hotkeys set (slot, undo, fullscreen_asked, quit). Unit-tested, no window. docs/research/native-menu-bar.md 'The plan'.",
+      "record": {
+        "state": "done",
+        "by": "aa240973",
+        "at": "2026-10-31T04:32:07Z",
+        "evidence": "crates/desktop/src/menubar.rs: tree() (Game: Save/Load State x4 slots, Undo Load enabled only when undoable, Quit; View: Fullscreen), Action enum, Action::ask setting slot/undo/fullscreen_asked/quit as the hotkeys do, id/from_id. 7 unit tests pass; just check exit 0 after merging main (7cf5181f).",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "stretch/menubar-kde",
+      "title": "Menu bar in KDE's global menu (dbusmenu over zbus)",
+      "detail": "Export the menu as com.canonical.dbusmenu (start from docs/research/native-menu-bar/ spike), point the SDL window at it: org_kde_kwin_appmenu on Wayland, _KDE_NET_WM_APPMENU_* on X11; no-op elsewhere. Check: a test on a private dbus-daemon walks the menu and clicks. docs/research/native-menu-bar.md",
+      "needs": ["stretch/menubar-actions"],
+      "record": {
+        "state": "done",
+        "by": "e8e35b2f",
+        "at": "2026-10-31T19:03:30Z",
+        "evidence": "cargo test -p desktop menubar: a_private_bus_walks_and_clicks_the_menu starts its own dbus-daemon, reads Version 3, walks GetLayout (Game/View, slots, separator, shortcuts, disabled Undo), clicks rows (Save 2, Load 4, Quit, EventGroup Fullscreen) into Export::clicks with wakes, sees LayoutUpdated rev 2 and Leave Fullscreen. 9/9 pass; just check passes after merging main (4d7ced7c). Wayland/X11 pointers built but unseen in a panel (no display here; the gate unit covers it).",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "stretch/menubar-macos",
+      "title": "Menu bar on macOS through muda",
+      "detail": "muda as a macOS-only dependency, Menu::init_for_nsapp after the SDL window exists, rebuilding SDL's app and Window menus with PredefinedMenuItem; clicks drained once a frame. Builds only on a Mac: check it compiles there or leave to the gate. docs/research/native-menu-bar.md",
+      "needs": ["stretch/menubar-actions"],
+      "record": {
+        "state": "done",
+        "by": "226fc030",
+        "at": "2026-10-31T19:47:02Z",
+        "evidence": "Built crates/desktop/src/menubar/macos.rs (muda, macOS-only dep, init_for_nsapp after the window, app+Window menus rebuilt, clicks drained per frame). just check passes on Linux; clippy -D warnings for aarch64-apple-darwin passes on a scratch crate of menubar.rs+macos.rs with muda (whole crate can't cross-build: SDL/Lua C). Not run on a Mac: left to the gate, as the card allows.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-31T19:47:04Z",
+          "by": "226fc030",
+          "text": "Mac compile check: scratch crate of menubar.rs (tests cut) + menubar/macos.rs + stub slots::SLOTS, muda 0.19 no default features, cargo clippy --target aarch64-apple-darwin. Desktop crate itself can't cross-check (sdl3-sys, mlua-sys C builds)."
+        }
+      ]
+    },
+    {
+      "id": "stretch/menubar-gate",
+      "title": "june uses the menu bar in KDE's global menu and on the Mac",
+      "kind": "gate",
+      "detail": "On june's KDE desktop the global menu shows Game and View for gbaa-desktop and each item works; on her Mac the same in the menu bar. Each shortfall becomes a unit.",
+      "needs": ["stretch/menubar-kde", "stretch/menubar-macos"],
+      "record": {
+        "state": "done",
+        "by": "owner",
+        "via": "24176b67",
+        "at": "2026-11-01T02:19:28Z",
+        "evidence": "june passed it on KDE alone (global menu works); the Mac menu bar wasn't tried, so its shortfalls become units when seen"
+      },
+      "notes": [
+        {
+          "at": "2026-11-01T02:15:02Z",
+          "by": "24176b67",
+          "text": "KDE half works: global menu shows Game and View for gbaa-desktop (Kirby), View has Fullscreen F11. Mac half not tried yet."
+        },
+        {
+          "at": "2026-10-31T19:03:32Z",
+          "by": "e8e35b2f",
+          "text": "KDE half is in (menubar/kde.rs): exports only if KWin's appmenu global (Wayland) or org.kde.kappmenu (X11) exists. Pointer code never ran on a real display; if the panel shows nothing, check stderr for 'no global menu:' lines."
+        }
+      ]
+    }
+  ]
+}

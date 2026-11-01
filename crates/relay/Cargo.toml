@@ -1,0 +1,14 @@
+[package]
+name = "relay"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# The netplay server, gbaa-server (multiplayer/relay-server, then
+# multiplayer/remove-lockstep-quic): plain-UDP rooms that seat the players
+# and pass their datagrams on, knowing nothing about the game or the
+# console. docs/research/multiplayer.md, "Relay server".
+
+[[bin]]
+name = "gbaa-server"
+path = "src/bin/gbaa-server.rs"

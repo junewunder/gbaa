@@ -1,0 +1,30 @@
+[package]
+name = "native-fn-diff"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# fn-diff for native functions (docs/native-port-design.md, "The check
+# build"; unit native/emerald-ten): hand-lifted native Rust run from the
+# play build's recorded entry states, its RAM, I/O and result compared
+# with the play build's run of the same function. The library is the
+# harness and knows no game; a game's functions are a binary that gives
+# it a `Spec`.
+
+[[bin]]
+# Emerald's ten (mods/emerald/native-ten/, private: mods/ is gitignored,
+# its own private repo). `just native-ten`.
+name = "native-ten"
+path = "src/bin/native-ten.rs"
+required-features = ["emerald"]
+
+[features]
+emerald = []
+
+[dependencies]
+analysis = { path = "../analysis" }
+armv4t = { path = "../armv4t" }
+codegen = { path = "../codegen" }
+fn-diff = { path = "../fn-diff" }
+runtime = { path = "../runtime" }
+zerocopy = { version = "0.8", features = ["derive", "alloc"] }

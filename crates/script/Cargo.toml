@@ -1,0 +1,19 @@
+[package]
+name = "script"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+runtime = { path = "../runtime" }
+# Lua 5.4, mGBA's default, built from source with the C compiler
+# (docs/research/lua-scripting.md): mGBA's scripts use 5.3+ syntax.
+mlua = { version = "0.12", features = ["lua54", "vendored"] }
+# `canvas` and `image` (src/canvas.rs): fonts where mGBA has FreeType,
+# and PNGs (both already in the workspace's lock).
+ab_glyph = "0.2"
+png = "0.18"
+# The BizHawk shim (src/bizhawk.lua): `gui.drawText`'s built-in font
+# (egui's, already in the lock) and `gui.drawImage`'s GIFs.
+epaint_default_fonts = "0.37"
+gif = { version = "0.14", default-features = false, features = ["std"] }

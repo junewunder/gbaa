@@ -1,0 +1,11 @@
+# agb/affine for 600 frames with no input: the second program of the stage-A
+# lifter's check (native/lift-stage-a; `just lift-check`), its lift
+# (gbaa-lift) against the play build at --timing native by route-check
+# --native. The scene is set up once and never changes (agb/affine/SCENE.md),
+# so frame 600 draws frame 10's picture (units/affine.toml).
+rom = "$GBAA_DATA/agb/affine.gba"
+
+[[checkpoint]]
+name = "affine-600"
+frame = 600
+hash = "ec6ab5fd2f3454cf"

@@ -1,0 +1,85 @@
+{
+  "id": "ppu",
+  "title": "Screen features still missing",
+  "priority": 3,
+  "order": 3,
+  "units": [
+    {
+      "id": "ppu/windows-blend",
+      "title": "Windows and alpha blending, one test program",
+      "detail": "WIN0/WIN1/OBJ window and BLDCNT/BLDALPHA/BLDY in runtime/src/ppu.rs compose. One agb program from the template covers both; its frame must match mGBA (just mgba-diff) and first-frame. Once just unit lands, record it as a units/*.env.",
+      "check": "recorded",
+      "needs": ["shared/test-scaffold"],
+      "record": {
+        "state": "done",
+        "by": "c4dab3db",
+        "at": "2026-10-21T16:19:42Z",
+        "evidence": "Windows (WIN0/WIN1/OBJ window) and BLDCNT/BLDALPHA/BLDY effects in runtime ppu compose (ppu/window.rs, ppu/blend.rs). agb/windows-blend matches mGBA and first-frame at frame 10 (hash e627b66bddd453a5); just unit windows-blend passes (99.8% compiled); just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-21T16:19:43Z",
+          "by": "c4dab3db",
+          "text": "mGBA 0.10.5 brightens sprites that aren't a first target when the OBJ window is on; the ROM makes sprites a first target to avoid it (memory/mgba-blend-quirks.md). Semi-transparent sprites blend even where the window turns effects off, as mGBA does."
+        }
+      ]
+    },
+    {
+      "id": "ppu/affine",
+      "title": "Affine backgrounds and affine sprites",
+      "detail": "Rotation/scaling for BG2/BG3 (modes 1 and 2) and affine OBJs (double size). One agb test program; frame matches mGBA and recompiled matches interpreted.",
+      "check": "recorded",
+      "needs": ["shared/test-scaffold"],
+      "record": {
+        "state": "done",
+        "by": "f2b30043",
+        "at": "2026-10-21T16:31:54Z",
+        "evidence": "agb/affine (mode 2: rotated BG2, wrapping scaled BG3, four affine sprites incl. double size, shear, 90-degree wrap) matches mGBA 0.10.5 at frame 10 (hash ec6ab5fd2f3454cf); just unit affine passes: recompiled = interpreted, 99.6% compiled; 26 SCENE.md pixels hand-derived and checked; just check passes. Mode 1 BG2 covered by runtime unit tests.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-21T16:31:59Z",
+          "by": "f2b30043",
+          "text": "Reference points reload when BGxX/BGxY's value changes (bg_affine::Refs); rewriting the same value mid-frame isn't seen. Runners render at V-blank, so the test ROM is mode 2 only; mode 1's BG2 is checked by runtime unit tests."
+        }
+      ]
+    },
+    {
+      "id": "ppu/bitmap-affine",
+      "title": "Affine transform for the bitmap modes 3-5",
+      "detail": "BG2 in modes 3-5 is drawn untransformed; hardware samples it through BG2's matrix and reference point (out of bounds transparent, no wrap). bg_affine::Refs already tracks the points. One agb test program; frame matches mGBA.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "c8c6b6f4",
+        "at": "2026-10-21T16:40:09Z",
+        "evidence": "BG2 in modes 3-5 samples through its matrix and Refs' reference point, out of bounds transparent, wrap ignored (unit tests for each mode). New agb/bitmap-affine (mode 5 page 1, 30 deg, 1.25x): just unit bitmap-affine passes, hash 295be5b30dc6be77, mGBA matches; all 38400 pixels equal SCENE.md's formula by script. just check passes; jsmolka-arm unit still passes.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "ppu/mosaic-modes",
+      "title": "Mosaic, and modes 1 and 2 end to end",
+      "detail": "MOSAIC for backgrounds and sprites, and modes 1/2 mixing regular and affine backgrounds. One agb test program; matches mGBA and first-frame.",
+      "check": "recorded",
+      "needs": ["ppu/affine"],
+      "record": {
+        "state": "done",
+        "by": "9423d3f1",
+        "at": "2026-10-21T17:01:34Z",
+        "evidence": "Mosaic for text, affine and bitmap BGs and regular/affine sprites (runtime ppu/mosaic.rs, 6 unit tests). New agb/mosaic-modes (mode 1: text BG0 in mosaic, text BG1, affine BG2 in mosaic, 5 sprites, 3 in mosaic): just unit mosaic-modes passes, hash 6766e80e49684d00, mGBA 0.10.5 matches, recompiled = interpreted, 99.9% compiled; 20 SCENE.md pixels hand-derived and checked. Mode 2 stays covered by agb/affine. just check passes; affine, bitmap-affine, windows-blend, gba-cart1 units still pass.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-21T17:01:36Z",
+          "by": "9423d3f1",
+          "text": "Mosaic follows mGBA 0.10.5: a regular sprite's last mosaic block runs past its right edge; an affine sprite's block starting left of its box draws nothing; affine BG mosaic steps the ref point back by PB/PD. Test ROM avoids mGBA's affine out-of-bounds block quirk (BG2 wraps)."
+        }
+      ]
+    }
+  ]
+}

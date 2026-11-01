@@ -1,0 +1,22 @@
+[package]
+name = "runtime"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+armv4t = { path = "../armv4t" }
+
+[features]
+# Feed `runtime::trace`'s digests (a generated `fn-diff` crate turns it on).
+trace = []
+# Tag memory bytes with where they came from (`runtime::prov`, the
+# provenance builds of gbaa-desktop).
+provenance = []
+# A hook on every prefetch stall (`runtime::timing_lab`, gbaa-desktop's
+# timing-lab build; docs/research/why-timing-is-runtime.md).
+timing-lab = []
+
+[dev-dependencies]
+# Inflates the pinned old states the snap tests load (src/snap/*.zz).
+miniz_oxide = "0.8"

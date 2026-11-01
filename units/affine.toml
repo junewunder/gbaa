@@ -1,0 +1,17 @@
+# Affine backgrounds and sprites: our agb test program (agb/affine/,
+# pixels in its SCENE.md), built by `just agb-tests`.
+rom = "$GBAA_DATA/agb/affine.gba"
+
+[[checkpoint]]
+name = "affine"
+frame = 10
+hash = "ec6ab5fd2f3454cf"
+min_compiled = 0.97
+# Frame 1 (2026-10-24): the recompiled PNG differs from the interpreter's
+# only in line 24, which the interpreter draws white (display still off) and
+# the recompiled build draws as line 25. The DISPCNT store at 0x080007b4 ends
+# a block, so the scanlines reach line 24 only at the tick after it.
+block_timed = [1]
+block_timed_why = "scene() turns the display on with the last store of a long block, whose cycles tick after it, so line 24 already shows the scene"
+# Verified: mGBA 0.10.5 draws the same hash (just mgba-diff, 2026-10-21), and
+# its frame shows every pixel SCENE.md lists, each derived by hand.

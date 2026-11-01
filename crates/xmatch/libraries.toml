@@ -1,0 +1,69 @@
+# The libraries GBA games share, by the object files a reference's source map
+# puts their functions in (its `file`). `xmatch name --library` and
+# `xmatch score --library` match only these of the reference's functions, so
+# a game unlike the reference gets library names and no game names
+# (docs/research/cross-compiler-matching.md, "Library names").
+#
+# Objects as pret's pokeemerald, zeldaret's tmc, metroidret's mzm and
+# jiangzhengwenjz's katam name them; another decomp naming its objects
+# otherwise adds them to the library's list.
+
+[m4a]
+what = "Nintendo's sound engine (MusicPlayer2000)"
+objects = ["m4a.o", "m4a_1.o", "m4a_asm.o"]
+
+[bios]
+what = "BIOS call wrappers (libagbsyscall)"
+objects = [
+  "ArcTan2.o", "BgAffineSet.o", "CpuFastSet.o", "CpuSet.o", "Div.o",
+  "LZ77UnCompVram.o", "LZ77UnCompWram.o", "MultiBoot.o", "ObjAffineSet.o",
+  "RLUnCompVram.o", "RLUnCompWram.o", "RegisterRamReset.o", "SoftReset.o",
+  "Sqrt.o", "libagbsyscall.o", "syscalls.o",
+]
+
+[libgcc]
+what = "GCC's arithmetic helpers"
+objects = [
+  "_divdi3.o", "_divsi3.o", "_dvmd_tls.o", "_fixunsdfsi.o", "_fixunssfsi.o",
+  "_lshrdi3.o", "_modsi3.o", "_muldi3.o", "_negdi2.o", "_udivdi3.o",
+  "_udivsi3.o", "_umodsi3.o", "dp-bit.o", "fp-bit.o", "libgcc.o",
+]
+
+[libc]
+what = "newlib's string functions"
+objects = ["memcpy.o", "memset.o", "strcmp.o", "strcpy.o"]
+
+[flash]
+what = "the AGB SDK's flash save library"
+objects = ["agb_flash.o", "agb_flash_1m.o", "agb_flash_mx.o"]
+
+[eeprom]
+what = "the AGB SDK's EEPROM save library"
+objects = ["eeprom.o"]
+
+[sram]
+what = "the AGB SDK's SRAM save library"
+objects = ["agb_sram.o"]
+
+[rtc]
+what = "Seiko's real-time clock library"
+objects = ["siirtc.o"]
+
+[multiboot]
+what = "the AGB SDK's multiboot (link-cable boot) library"
+objects = ["multiboot.o", "multi_boot.o"]
+
+[sio32multiload]
+what = "the AGB SDK's Sio32 multi-load library"
+objects = ["sio32_multi_load.o"]
+
+[gcmultiboot]
+what = "GameCube multiboot"
+objects = ["libgcnmultiboot.o"]
+
+[rfu]
+what = "the wireless adapter library and its link manager"
+objects = [
+  "librfu_intr.o", "librfu_rfu.o", "librfu_sio32id.o", "librfu_stwi.o",
+  "AgbRfu_LinkManager.o",
+]
