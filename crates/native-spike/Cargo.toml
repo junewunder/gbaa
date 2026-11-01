@@ -1,0 +1,45 @@
+[package]
+name = "native-spike"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# native/agb-spike: agb/native-spike lifted by hand to a native Rust
+# program (docs/native-port-design.md; what was learnt:
+# docs/research/native-agb-spike.md). `native-spike` is the program;
+# `native-spike-check` (`just native-spike`) runs it beside the exact play
+# build and compares their frame hashes.
+
+[[bin]]
+name = "native-spike"
+path = "src/main.rs"
+
+[[bin]]
+name = "native-spike-check"
+path = "src/bin/check.rs"
+
+[[bin]]
+# agb/psg-square as a native program, for the native check's sound
+# (src/psg_square.rs). Its registers only: the library plays no sound.
+name = "native-psg-square"
+path = "src/psg_square.rs"
+
+[dependencies]
+native-host = { path = "../native-host" }
+native-record = { path = "../native-record" }
+zerocopy = { version = "0.8", features = ["derive", "alloc"] }
+# The throwaway hardware adapter draws with the runtime's PPU over a Bus.
+runtime = { path = "../runtime" }
+# The desktop's --input scripts and frame hash, so both sides read the
+# same presses and hash the same way.
+desktop = { path = "../desktop" }
+serde = { version = "1", features = ["derive"] }
+toml = "1"
+
+[features]
+# One planted wrong store in the game (src/game.rs): the check must see it.
+plant = []
+# The check layout (docs/native-port-design.md section 7, `--layout
+# guest`): RAM as the ROM's EWRAM and IWRAM, globals at their link
+# addresses, so `--native-record` can write it.
+guest-layout = []

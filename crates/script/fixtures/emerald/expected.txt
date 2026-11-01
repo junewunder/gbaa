@@ -1,0 +1,25 @@
+script console:
+  log: extra.lua loaded
+  log: dofile: 42
+  log: title POKEMON EMER, code AGB-BPEE, crc32 1F1C08FB, 16777216 bytes
+  log: platform 0, 280896 cycles a frame at 16777216 Hz
+  log: cart0 08000000-0A000000; header byte 96, logo word 51AEFF24
+  log: readRange: 504F4B454D4F4E20454D4552
+  log: wram 12345678 BEEF 12
+  log: bitmask 9, 0,3
+  warn: emu.notAnMgbaCall is not supported by gbaa
+  log: missing: nil nil
+  log: Found game: Emerald (USA)
+  log: frame 1: start fired 0 time(s), pc 082E0764
+  log: reset at frame 1, pc 08000000
+  log: stepped to pc 082E0778
+  log: screenshot: true, PNG file
+  log: state loaded: true, restored: true
+  log: hanging at frame 200
+  error: frame callback: runtime error: stopped: ran past its time budget (about a frame)
+  error: frame callback removed
+  log: shutdown, savedata updates 0
+script buffer Fixture:
+frames 1500, party 1
+script buffer Party:
+LUA        (Lv  5    TORCHIC):  19/ 20

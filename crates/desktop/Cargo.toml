@@ -1,0 +1,77 @@
+[package]
+name = "desktop"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[[bin]]
+name = "gbaa-desktop"
+path = "src/main.rs"
+
+# What `just timing-lab` found (docs/research/why-timing-is-runtime.md).
+[[bin]]
+name = "gbaa-timing-report"
+path = "src/bin/timing_report.rs"
+
+[dependencies]
+runtime = { path = "../runtime" }
+# The native check's per-frame record (`--native-record`).
+native-record = { path = "../native-record" }
+assets = { path = "../assets", default-features = false }
+# Netplay (`--server`, src/room.rs): the session and its relay client.
+netplay = { path = "../netplay" }
+relay = { path = "../relay" }
+# Emerald Rogue's co-op (`--rogue`, src/rogue.rs): ENet, as Rogue Assistant
+# speaks it (a Rust transpile of the same C library).
+rusty_enet = "0.4"
+# mGBA Lua scripts (`--script`).
+script = { path = "../script" }
+# The window, its drawing and the gamepads (docs/decisions.md): SDL3,
+# built from source with cmake and a C compiler and linked statically.
+# It loads X11 or Wayland, the GPU's drivers and udev with dlopen at run
+# time, so the binary links no more system libraries than before.
+sdl3 = { version = "0.20", features = ["build-from-source-static"] }
+png = "0.18"
+# Inflates the state in mGBA's PNG save states (already in via png).
+miniz_oxide = "0.8"
+cpal = "0.18.2"
+# The menus (docs/decisions.md), drawn through SDL's renderer by our own
+# glue (src/egui_sdl.rs). Its fonts are a feature: without it every glyph
+# is a box.
+egui = { version = "0.37", default-features = false, features = ["default_fonts"] }
+# The local time in a save backup's name (src/sav_file.rs).
+libc = "0.2"
+# The guest on its own stack (src/coro.rs): a stackful coroutine, so a
+# frame end switches to the frame loop instead of unwinding compiled code.
+corosensei = "0.3.4"
+
+# KDE's global menu (src/menubar/kde.rs; docs/research/native-menu-bar.md):
+# the menu bar exported as com.canonical.dbusmenu on the session bus, and
+# the window's pointer to it, KWin's appmenu protocol on SDL's own Wayland
+# display (libwayland dlopened, as SDL does) or two X11 properties. All
+# pure Rust.
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = { version = "5", default-features = false, features = ["async-io", "blocking-api"] }
+serde = { version = "1", features = ["derive"] }
+wayland-client = "0.31"
+wayland-backend = { version = "0.3", features = ["client_system", "dlopen"] }
+wayland-protocols-plasma = { version = "0.3", features = ["client"] }
+x11rb = "0.13"
+
+# The menu bar on macOS (src/menubar/macos.rs;
+# docs/research/native-menu-bar.md): the app's NSMenu through muda. Its
+# default features are Linux's GTK and libxdo, so none, and macOS only.
+[target.'cfg(target_os = "macos")'.dependencies]
+muda = { version = "0.19", default-features = false }
+
+[features]
+# Write where palette, VRAM and OAM bytes came from beside each --dump-at
+# PNG (src/prov_report.rs; `runtime::prov`). Off in every normal build.
+provenance = ["runtime/provenance"]
+# Log or replace every prefetch stall's cost (src/timing_lab.rs,
+# `just timing-lab`; docs/research/why-timing-is-runtime.md).
+timing-lab = ["runtime/timing-lab"]
+
+[build-dependencies]
+# Compiles sdl-build/glibc-compat.c (build.rs; already in through SDL's build).
+cc = "1"

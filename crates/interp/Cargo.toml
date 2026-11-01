@@ -1,0 +1,16 @@
+[package]
+name = "interp"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# The headless interpreter runner (#27): a ROM on the runtime, N frames, then
+# the CPU state. The reference the recompiled code is compared against.
+
+[[bin]]
+name = "gbaa-interp"
+path = "src/main.rs"
+
+[dependencies]
+armv4t = { path = "../armv4t" }
+runtime = { path = "../runtime" }

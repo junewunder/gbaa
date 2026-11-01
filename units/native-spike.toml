@@ -1,0 +1,69 @@
+# agb/native-spike (the native spike's program, agb/native-spike/SCENE.md)
+# along crates/native-spike/check.toml's script: the native check's route
+# (`just native-check`, route-check --native), built by `just agb-tests`.
+rom = "$GBAA_DATA/agb/native-spike.gba"
+
+[[press]]
+button = "right"
+at = 5
+hold = 100
+
+[[press]]
+button = "b"
+at = 60
+hold = 40
+
+[[press]]
+button = "down"
+at = 110
+hold = 90
+
+[[press]]
+button = "a"
+at = 130
+
+[[press]]
+button = "a"
+at = 200
+
+[[press]]
+button = "left"
+at = 210
+hold = 200
+
+[[press]]
+button = "b"
+at = 250
+hold = 100
+
+[[press]]
+button = "a"
+at = 330
+
+[[press]]
+button = "up"
+at = 420
+hold = 120
+
+[[press]]
+button = "b"
+at = 440
+hold = 60
+
+[[press]]
+button = "right"
+at = 540
+hold = 60
+
+[[press]]
+button = "down"
+at = 540
+hold = 60
+
+[[checkpoint]]
+name = "spike-600"
+frame = 600
+hash = "e40446740c70e154"
+# Verified: mGBA 0.10.5 (mgba-dump --hash) draws the same at frame 600, as
+# do the play build at --timing native and the native program
+# (`just native-check`, 2026-11-01).

@@ -1,0 +1,15 @@
+# What `route-check --native` skips in agb/psg-square's RAM and VRAM beside
+# the stack and code copies: agb's own state, which the native program
+# replaced with runtime::hw (crates/native-spike/check/native-spike.replaced.toml
+# says why). Ranges from $GBAA_DATA/agb/psg-square.elf; the program has no
+# globals of its own.
+
+[[replaced]]
+start = 0x0200_0000
+end = 0x0204_0000
+why = "agb's .ewram and .bss (GLOBAL_ALLOC, INTERRUPT_TABLE, NUM_VBLANKS, ...), then its heap"
+
+[[replaced]]
+start = 0x0600_0040
+end = 0x0600_8000
+why = "agb's tile allocator's free list, kept in the free VRAM it hands out"

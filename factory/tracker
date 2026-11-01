@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# factory/tracker: run the shared tracker CLI from the wfactory skill, the copy
+# factory/skill picks, on the Node it picks. The state is this repo's tracker/ folder.
+# FACTORY_TRACKER overrides which file runs (the skill's tracker/main.ts, or tracker/tracker.mjs).
+. "$(dirname "$(realpath "$0")")/skill" || exit 2
+T="${FACTORY_TRACKER:-$FACTORY_SKILL/tracker/main.ts}"
+[ -f "$T" ] || { echo "tracker: no $T (factory/skill)" >&2; exit 2; }
+exec "$FACTORY_NODE" "$T" "$@"

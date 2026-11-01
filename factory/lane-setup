@@ -1,0 +1,9 @@
+#!/bin/sh
+# factory/lane-setup: run once in a new lane clone (factory/lane.sh). Links
+# in what git doesn't carry: mods/ (game-derived code, its own private repo)
+# and docs/machines.private.md, both from the checkout work/ points into.
+root=$(dirname "$(readlink -f work)")
+for p in mods docs/machines.private.md; do
+  [ -e "$root/$p" ] && ln -sfn "$root/$p" "$p"
+done
+exit 0

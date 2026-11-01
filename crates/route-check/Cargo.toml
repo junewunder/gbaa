@@ -1,0 +1,18 @@
+[package]
+name = "route-check"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# One route's check (`just unit NAME`): a ROM, its presses and its
+# checkpoints from units/NAME.toml, run once each in mGBA, our interpreter
+# and the recompiled build, every checkpoint compared on the way.
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "1"
+png = "0.18"
+# The native check (`--native`): the records both builds write, and the
+# ROM's code copies, which it skips.
+native-record = { path = "../native-record" }
+analysis = { path = "../analysis" }

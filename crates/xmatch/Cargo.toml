@@ -1,0 +1,22 @@
+[package]
+name = "xmatch"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# The same function across a compiler change (docs/research/cross-compiler-matching.md):
+# one ROM's functions matched to another's from IR fingerprints, byte
+# anchors and the call graph, names hidden, scored against pret's.
+
+[dependencies]
+analysis = { path = "../analysis" }
+armv4t = { path = "../armv4t" }
+codegen = { path = "../codegen" }
+# The game's-name rule, for a library map's file name.
+runtime = { path = "../runtime" }
+# Which named functions run in B's first frames, for a look by hand.
+fn-diff = { path = "../fn-diff" }
+# libraries.toml, the library objects.
+toml = "1"
+# `judge`: claude -p as the naming loop runs it.
+naming = { path = "../naming" }

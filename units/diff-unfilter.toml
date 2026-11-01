@@ -1,0 +1,15 @@
+# The BIOS's diff unfilter calls (swi 0x16, 0x17, 0x18): our agb test
+# program (agb/diff-unfilter/, pixels in its SCENE.md), built by
+# `just agb-tests`.
+rom = "$GBAA_DATA/agb/diff-unfilter.gba"
+
+[[checkpoint]]
+name = "diff-unfilter"
+frame = 10
+hash = "fcd3912cf7bf7425"
+# Lower than the other agb routes' 0.97: the scene takes only ~44k guest
+# cycles to set up, so the ~5k the interpreter fallback spends (99
+# instructions, 2026-10-26) weigh 11.7%.
+min_compiled = 0.85
+# Verified: mGBA 0.10.5 draws the same hash (just mgba-diff, 2026-10-26),
+# and every pixel of its frame is the colour SCENE.md's formula gives.

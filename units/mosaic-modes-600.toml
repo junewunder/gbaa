@@ -1,0 +1,11 @@
+# agb/mosaic-modes for 600 frames with no input: the second program of the stage-A
+# lifter's check (native/lift-stage-a; `just lift-check`), its lift
+# (gbaa-lift) against the play build at --timing native by route-check
+# --native. The scene is set up once and never changes (agb/mosaic-modes/SCENE.md),
+# so frame 600 draws frame 10's picture (units/mosaic-modes.toml).
+rom = "$GBAA_DATA/agb/mosaic-modes.gba"
+
+[[checkpoint]]
+name = "mosaic-modes-600"
+frame = 600
+hash = "6766e80e49684d00"

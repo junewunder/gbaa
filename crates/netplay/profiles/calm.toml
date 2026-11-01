@@ -1,0 +1,4 @@
+# A good line to a nearby friend: 20 ms one way, a little jitter, nothing lost.
+latency_ms = 20
+jitter_ms = 5
+seed = 1

@@ -1,0 +1,13 @@
+[package]
+name = "insn-text-check"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# The check of armv4t's assembly text (`armv4t::text`) against
+# arm-none-eabi-objdump's, normalised: on a ROM's discovered code, or on
+# every instruction of an ELF that has ARM/Thumb mapping symbols.
+
+[dependencies]
+analysis = { path = "../analysis" }
+armv4t = { path = "../armv4t" }

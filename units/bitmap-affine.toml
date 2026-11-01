@@ -1,0 +1,11 @@
+# The bitmap modes' affine transform: our agb test program
+# (agb/bitmap-affine/, pixels in its SCENE.md), built by `just agb-tests`.
+rom = "$GBAA_DATA/agb/bitmap-affine.gba"
+
+[[checkpoint]]
+name = "bitmap-affine"
+frame = 10
+hash = "295be5b30dc6be77"
+min_compiled = 0.97
+# Verified: mGBA 0.10.5 draws the same hash (just mgba-diff, 2026-10-21), and
+# every pixel of our frame equals SCENE.md's formula, computed independently.

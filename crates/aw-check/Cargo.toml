@@ -1,0 +1,11 @@
+[package]
+name = "aw-check"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# Reads armwrestler's result pages from frame dumps (#35): the text drawn
+# with the ROM's own 8x8 font, and which lines say BAD.
+
+[dependencies]
+png = "0.18"

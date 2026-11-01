@@ -1,0 +1,22 @@
+[package]
+name = "emerald-save"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# Crafted Pokémon Emerald saves for link tests (multiplayer/cable-club-saves):
+# two trainers standing at Oldale Town's cable club, patched into the game's
+# own new-game save blocks (run to the truck in `runtime`) and written in its
+# flash format.
+
+[dependencies]
+runtime = { path = "../runtime" }
+# emerald-netplay: two Emeralds as a netplay session.
+netplay = { path = "../netplay" }
+# emerald-trade --netplay: the server's rooms in-process.
+relay = { path = "../relay" }
+# emerald-link's --dump-at frames.
+png = "0.18"
+# emerald-story: crates/emerald-save/story.toml.
+serde = { version = "1", features = ["derive"] }
+toml = "1"

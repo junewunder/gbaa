@@ -1,0 +1,9 @@
+# Wi-Fi with someone streaming: 40 ms, and every 2 s or so a 250 ms spike
+# lasting 400 ms; 5% lost.
+latency_ms = 40
+jitter_ms = 10
+spike_every_s = 2
+spike_ms = 250
+spike_len_ms = 400
+loss = 0.05
+seed = 3

@@ -1,0 +1,3 @@
+tracker/log.jsonl merge=union
+tracker/**/*.json merge=tracker-json
+memory/MEMORY.md merge=union

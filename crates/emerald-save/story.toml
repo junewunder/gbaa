@@ -1,0 +1,532 @@
+# Pokémon Emerald story points (male player, rival May): per-point deltas from pret's scripts.
+
+male = true   # a boy: the rival is May, and she chose Treecko (the party leads with Mudkip)
+
+[[point]]
+name = "oldale-pokedex"
+title = "After the Route 103 rival battle, with the Pokédex and Running Shoes"
+map = "MAP_OLDALE_TOWN"
+x = 6                               # one below the Pokémon Center door (6,16)
+y = 17
+level = 7
+beaten = ["TRAINER_MAY_ROUTE_103_TREECKO"]
+set = [
+  "FLAG_VISITED_LITTLEROOT_TOWN",
+  "FLAG_HIDE_LITTLEROOT_TOWN_MAYS_HOUSE_MOM",              # InsideOfTruck, male
+  "FLAG_HIDE_LITTLEROOT_TOWN_MAYS_HOUSE_TRUCK",
+  "FLAG_HIDE_LITTLEROOT_TOWN_BRENDANS_HOUSE_RIVAL_MOM",
+  "FLAG_HIDE_LITTLEROOT_TOWN_BRENDANS_HOUSE_RIVAL_SIBLING",
+  "FLAG_HIDE_LITTLEROOT_TOWN_BRENDANS_HOUSE_2F_POKE_BALL",
+  "FLAG_HIDE_LITTLEROOT_TOWN_BRENDANS_HOUSE_TRUCK",         # stepped off the truck
+  "FLAG_SET_WALL_CLOCK",
+  "FLAG_HIDE_LITTLEROOT_TOWN_PLAYERS_HOUSE_VIGOROTH_1",
+  "FLAG_HIDE_LITTLEROOT_TOWN_PLAYERS_HOUSE_VIGOROTH_2",
+  "FLAG_SYS_TV_HOME",
+  "FLAG_MET_RIVAL_MOM",
+  "FLAG_HIDE_LITTLEROOT_TOWN_MAYS_HOUSE_2F_POKE_BALL",      # met May in her room
+  "FLAG_RIVAL_LEFT_FOR_ROUTE103",
+  "FLAG_SYS_POKEMON_GET",                                  # Birch's bag on Route 101
+  "FLAG_RESCUED_BIRCH",
+  "FLAG_HIDE_ROUTE_101_BIRCH_ZIGZAGOON_BATTLE",
+  "FLAG_HIDE_ROUTE_101_BIRCH_STARTERS_BAG",
+  "FLAG_DEFEATED_RIVAL_ROUTE103",
+  "FLAG_HIDE_ROUTE_103_RIVAL",                             # removeobject after the battle
+  "FLAG_SYS_POKEDEX_GET",
+  "FLAG_RECEIVED_POKEDEX_FROM_BIRCH",
+  "FLAG_ADVENTURE_STARTED",
+  "FLAG_RECEIVED_RUNNING_SHOES",                           # Mom outside the house
+  "FLAG_SYS_B_DASH",
+  "FLAG_VISITED_OLDALE_TOWN",
+  "FLAG_RECEIVED_POTION_OLDALE",                           # the mart clerk's tour
+]
+clear = [
+  "FLAG_HIDE_LITTLEROOT_TOWN_FAT_MAN",
+  "FLAG_HIDE_LITTLEROOT_TOWN_BIRCHS_LAB_BIRCH",
+  "FLAG_HIDE_ROUTE_101_BOY",                               # agreed to go see May
+  "FLAG_HIDE_LITTLEROOT_TOWN_BIRCHS_LAB_RIVAL",            # May waits in the lab
+]
+items = []
+[point.vars]
+VAR_LITTLEROOT_INTRO_STATE = 7            # watched the Petalburg Gym broadcast
+VAR_LITTLEROOT_HOUSES_STATE_BRENDAN = 2   # met May's mom
+VAR_LITTLEROOT_RIVAL_STATE = 4
+VAR_LITTLEROOT_TOWN_STATE = 4             # running shoes received
+VAR_ROUTE101_STATE = 3
+VAR_BIRCH_LAB_STATE = 5
+VAR_OLDALE_RIVAL_STATE = 2                # May's Oldale talk on the way back
+VAR_OLDALE_TOWN_STATE = 1
+VAR_CABLE_CLUB_TUTORIAL_STATE = 1
+
+[[point]]
+name = "rustboro-badge1"
+title = "After Roxanne, the Devon Goods and the PokéNav: the Stone Badge"
+map = "MAP_RUSTBORO_CITY"
+x = 16                              # one below the Pokémon Center door (16,38)
+y = 39
+level = 15
+beaten = ["TRAINER_ROXANNE_1", "TRAINER_MAY_RUSTBORO_TREECKO"]
+set = [
+  "FLAG_VISITED_PETALBURG_CITY",
+  "FLAG_HIDE_PETALBURG_CITY_WALLYS_MOM",          # Wally catch tutorial
+  "FLAG_HIDE_LITTLEROOT_TOWN_BIRCHS_LAB_RIVAL",   # set by the tutorial's gym script
+  "FLAG_HIDE_PETALBURG_WOODS_AQUA_GRUNT",
+  "FLAG_HIDE_PETALBURG_WOODS_DEVON_EMPLOYEE",
+  "FLAG_VISITED_RUSTBORO_CITY",
+  "FLAG_RECEIVED_HM_CUT",                         # Cutter's house, normal before Route 116
+  "FLAG_DEFEATED_RUSTBORO_GYM",
+  "FLAG_BADGE01_GET",
+  "FLAG_INTERACTED_WITH_DEVON_EMPLOYEE_GOODS_STOLEN",
+  "FLAG_RECOVERED_DEVON_GOODS",
+  "FLAG_RETURNED_DEVON_GOODS",
+  "FLAG_SYS_POKENAV_GET",
+  "FLAG_RECEIVED_POKENAV",
+  "FLAG_HIDE_RUSTBORO_CITY_POKEMON_SCHOOL_SCOTT",
+  "FLAG_HIDE_ROUTE_116_WANDAS_BOYFRIEND",
+  "FLAG_HAS_MATCH_CALL",
+  "FLAG_ADDED_MATCH_CALL_TO_POKENAV",
+  "FLAG_MET_RIVAL_RUSTBORO",
+  "FLAG_ENABLE_RIVAL_MATCH_CALL",
+  "FLAG_DEFEATED_RIVAL_RUSTBORO",                 # May's battle is optional; normal play takes it
+]
+clear = [
+  "FLAG_HIDE_BRINEYS_HOUSE_MR_BRINEY",            # Devon 3F sends Briney home
+  "FLAG_HIDE_BRINEYS_HOUSE_PEEKO",
+  "FLAG_HIDE_RUSTURF_TUNNEL_WANDAS_BOYFRIEND",
+  "FLAG_HIDE_RUSTURF_TUNNEL_WANDA",
+  "FLAG_HIDE_RUSTBORO_CITY_RIVAL",                # May waits in Rustboro until Briney's house
+]
+items = ["ITEM_HM01", "ITEM_LETTER"]            # Cut; the Letter stays (no way to remove it later)
+[point.vars]
+VAR_PETALBURG_CITY_STATE = 3
+VAR_PETALBURG_GYM_STATE = 3                     # 2 after the tutorial, +1 per badge
+VAR_SCOTT_PETALBURG_ENCOUNTER = 1
+VAR_SCOTT_STATE = 1
+VAR_PETALBURG_WOODS_STATE = 1
+VAR_RUSTBORO_CITY_STATE = 8
+VAR_RUSTURF_TUNNEL_STATE = 3
+VAR_ROUTE116_STATE = 2
+VAR_BRINEY_HOUSE_STATE = 1
+VAR_BRINEY_LOCATION = 1
+VAR_DEVON_CORP_3F_STATE = 1
+VAR_ROUTE104_STATE = 2
+
+[[point]]
+name = "dewford-badge2"
+title = "After Brawly and Steven's letter: the Knuckle Badge"
+map = "MAP_DEWFORD_TOWN"
+x = 2                               # one below the Pokémon Center door (2,10)
+y = 11
+level = 19
+beaten = ["TRAINER_BRAWLY_1"]
+set = [
+  "FLAG_LANDMARK_MR_BRINEY_HOUSE",
+  "FLAG_MR_BRINEY_SAILING_INTRO",
+  "FLAG_HIDE_BRINEYS_HOUSE_MR_BRINEY",
+  "FLAG_HIDE_BRINEYS_HOUSE_PEEKO",
+  "FLAG_HIDE_RUSTBORO_CITY_RIVAL",
+  "FLAG_HIDE_ROUTE_104_RIVAL",
+  "FLAG_ENABLE_NORMAN_MATCH_CALL",                # Dad calls on the boat
+  "FLAG_VISITED_DEWFORD_TOWN",
+  "FLAG_RECEIVED_HM_FLASH",                       # Granite Cave hiker, optional but normal
+  "FLAG_DELIVERED_STEVEN_LETTER",
+  "FLAG_REGISTERED_STEVEN_POKENAV",
+  "FLAG_HIDE_GRANITE_CAVE_STEVEN",
+  "FLAG_DEFEATED_DEWFORD_GYM",
+  "FLAG_BADGE02_GET",
+  "FLAG_ENABLE_BRAWLY_MATCH_CALL",
+  "FLAG_ENABLE_ROXANNE_FIRST_CALL",               # Roxanne calls 250 steps later
+]
+clear = ["FLAG_HIDE_MR_BRINEY_DEWFORD_TOWN", "FLAG_HIDE_MR_BRINEY_BOAT_DEWFORD_TOWN"]
+items = ["ITEM_HM05"]                            # Flash
+[point.vars]
+VAR_BRINEY_LOCATION = 2                         # set on entering a Pokémon Center in Dewford
+VAR_PETALBURG_GYM_STATE = 4
+
+[[point]]
+name = "mauville-badge3"
+title = "After Wattson: the Dynamo Badge, Mach Bike and Rock Smash in hand"
+map = "MAP_MAUVILLE_CITY"
+x = 22                              # one below the Pokémon Center door (22,5)
+y = 6
+level = 24
+beaten = ["TRAINER_WALLY_MAUVILLE", "TRAINER_WATTSON_1", "TRAINER_MAY_ROUTE_110_TREECKO"]
+set = [
+  "FLAG_HIDE_MR_BRINEY_DEWFORD_TOWN",             # Briney sails to Route 109
+  "FLAG_HIDE_MR_BRINEY_BOAT_DEWFORD_TOWN",
+  "FLAG_VISITED_SLATEPORT_CITY",
+  "FLAG_DOCK_REJECTED_DEVON_GOODS",               # talked to Dock at the shipyard first
+  "FLAG_HIDE_SLATEPORT_CITY_TEAM_AQUA",
+  "FLAG_HIDE_SLATEPORT_CITY_OCEANIC_MUSEUM_FAMILIAR_AQUA_GRUNT",  # optional TM Thief grunt
+  "FLAG_HIDE_SLATEPORT_CITY_OCEANIC_MUSEUM_AQUA_GRUNTS",
+  "FLAG_HIDE_SLATEPORT_CITY_OCEANIC_MUSEUM_2F_CAPTAIN_STERN",
+  "FLAG_HIDE_ROUTE_110_TEAM_AQUA",
+  "FLAG_DELIVERED_DEVON_GOODS",
+  "FLAG_HIDE_RUSTBORO_CITY_DEVON_CORP_3F_EMPLOYEE",
+  "FLAG_ENABLE_SCOTT_MATCH_CALL",                 # Scott outside the museum
+  "FLAG_ENABLE_PROF_BIRCH_MATCH_CALL",            # Birch scene, south Route 110
+  "FLAG_HIDE_ROUTE_110_RIVAL",
+  "FLAG_VISITED_MAUVILLE_CITY",
+  "FLAG_SYS_TV_START",
+  "FLAG_RECEIVED_BIKE",
+  "FLAG_HIDE_MAUVILLE_CITY_WALLY",
+  "FLAG_HIDE_MAUVILLE_CITY_WALLYS_UNCLE",
+  "FLAG_DEFEATED_WALLY_MAUVILLE",
+  "FLAG_ENABLE_FIRST_WALLY_POKENAV_CALL",         # Wally's call not yet taken (250 steps)
+  "FLAG_DEFEATED_MAUVILLE_GYM",
+  "FLAG_BADGE03_GET",
+  "FLAG_ENABLE_WATTSON_MATCH_CALL",
+  "FLAG_ENABLE_ROXANNE_MATCH_CALL",               # her step-call came on the way
+  "FLAG_RECEIVED_HM_ROCK_SMASH",                  # Mauville house; needed for Route 111
+  "FLAG_HIDE_ROUTE_111_ROCK_SMASH_TIP_GUY",
+]
+clear = [
+  "FLAG_HIDE_ROUTE_109_MR_BRINEY",
+  "FLAG_HIDE_ROUTE_109_MR_BRINEY_BOAT",
+  "FLAG_HIDE_ROUTE_116_DEVON_EMPLOYEE",
+  "FLAG_HIDE_SLATEPORT_MUSEUM_POPULATION",        # cleared on entering Mauville
+  "FLAG_HIDE_VERDANTURF_TOWN_WANDAS_HOUSE_WALLY",
+  "FLAG_HIDE_VERDANTURF_TOWN_WANDAS_HOUSE_WALLYS_UNCLE",
+  "FLAG_HIDE_VERDANTURF_TOWN_SCOTT",
+  "FLAG_ENABLE_ROXANNE_FIRST_CALL",
+]
+items = ["ITEM_ITEMFINDER", "ITEM_MACH_BIKE", "ITEM_HM06"]   # Mach Bike chosen; Rock Smash
+[point.vars]
+VAR_BRINEY_LOCATION = 3
+VAR_SLATEPORT_OUTSIDE_MUSEUM_STATE = 3
+VAR_SCOTT_STATE = 3
+VAR_REGISTER_BIRCH_STATE = 2
+VAR_ROUTE110_STATE = 1
+VAR_PETALBURG_GYM_STATE = 5
+
+[[point]]
+name = "lavaridge-badge4"
+title = "After Flannery: the Heat Badge, Go-Goggles from May"
+map = "MAP_LAVARIDGE_TOWN"
+x = 9                               # one below the Pokémon Center door (9,6)
+y = 7
+level = 30
+beaten = ["TRAINER_TABITHA_MT_CHIMNEY", "TRAINER_MAXIE_MT_CHIMNEY", "TRAINER_FLANNERY_1"]
+set = [
+  "FLAG_LANDMARK_FIERY_PATH",
+  "FLAG_HIDE_VERDANTURF_TOWN_SCOTT",              # Fiery Path moves Scott to Fallarbor
+  "FLAG_VISITED_FALLARBOR_TOWN",
+  "FLAG_MET_SCOTT_IN_FALLARBOR",                  # optional talk in the Battle Tent
+  "FLAG_HIDE_FALLARBOR_TOWN_BATTLE_TENT_SCOTT",   # Meteor Falls scene hides him again
+  "FLAG_HIDE_METEOR_FALLS_TEAM_MAGMA",            # removeobject in the theft scene
+  "FLAG_HIDE_METEOR_FALLS_TEAM_AQUA",
+  "FLAG_HIDE_ROUTE_112_TEAM_MAGMA",
+  "FLAG_MET_ARCHIE_METEOR_FALLS",
+  "FLAG_MET_PROF_COZMO",
+  "FLAG_HIDE_MT_CHIMNEY_TEAM_MAGMA",
+  "FLAG_HIDE_MT_CHIMNEY_TEAM_AQUA",
+  "FLAG_DEFEATED_EVIL_TEAM_MT_CHIMNEY",
+  "FLAG_HIDE_METEOR_FALLS_1F_1R_COZMO",
+  "FLAG_RECEIVED_METEORITE",                      # taken from the machine, as most players do
+  "FLAG_VISITED_LAVARIDGE_TOWN",
+  "FLAG_DEFEATED_LAVARIDGE_GYM",
+  "FLAG_BADGE04_GET",
+  "FLAG_PETALBURG_MART_EXPANDED_ITEMS",           # gym state reaches 6 with badge 4
+  "FLAG_HIDE_VERDANTURF_TOWN_WANDAS_HOUSE_WALLY",
+  "FLAG_RECEIVED_TM_OVERHEAT",
+  "FLAG_ENABLE_FLANNERY_MATCH_CALL",
+  "FLAG_RECEIVED_GO_GOGGLES",
+]
+clear = [
+  "FLAG_HIDE_FALLARBOR_HOUSE_PROF_COZMO",
+  "FLAG_HIDE_MT_CHIMNEY_LAVA_COOKIE_LADY",
+  "FLAG_HIDE_MT_CHIMNEY_TRAINERS",                # Lavaridge clears it after the Chimney win
+  "FLAG_HIDE_PETALBURG_GYM_GREETER",              # Common_EventScript_ReadyPetalburgGymForBattle
+]
+items = ["ITEM_METEORITE", "ITEM_GO_GOGGLES"]
+[point.vars]
+VAR_METEOR_FALLS_STATE = 1
+VAR_PETALBURG_GYM_STATE = 6
+VAR_LAVARIDGE_TOWN_STATE = 2
+
+[[point]]
+name = "petalburg-badge5"
+title = "After Norman: the Balance Badge, HM Surf from Wally's father"
+map = "MAP_PETALBURG_CITY"
+x = 20                              # one below the Pokémon Center door (20,16)
+y = 17
+level = 33
+beaten = ["TRAINER_NORMAN_1"]
+set = [
+  "FLAG_VISITED_VERDANTURF_TOWN",                 # walk back via Verdanturf and Rusturf Tunnel
+  "FLAG_HIDE_RUSTURF_TUNNEL_ROCK_1",              # the boulder Rock Smash breaks (either rock)
+  "FLAG_HIDE_RUSTURF_TUNNEL_WANDAS_BOYFRIEND",
+  "FLAG_HIDE_RUSTURF_TUNNEL_WANDA",
+  "FLAG_RUSTURF_TUNNEL_OPENED",
+  "FLAG_RECEIVED_HM_STRENGTH",
+  "FLAG_DEFEATED_PETALBURG_GYM",
+  "FLAG_BADGE05_GET",
+  "FLAG_HIDE_MR_BRINEY_DEWFORD_TOWN",             # EventScript_HideMrBriney after Norman
+  "FLAG_HIDE_MR_BRINEY_BOAT_DEWFORD_TOWN",
+  "FLAG_HIDE_ROUTE_109_MR_BRINEY",
+  "FLAG_HIDE_ROUTE_109_MR_BRINEY_BOAT",
+  "FLAG_HIDE_ROUTE_104_MR_BRINEY",
+  "FLAG_HIDE_ROUTE_104_MR_BRINEY_BOAT",
+  "FLAG_HIDE_BRINEYS_HOUSE_MR_BRINEY",
+  "FLAG_HIDE_BRINEYS_HOUSE_PEEKO",
+  "FLAG_HIDE_MAUVILLE_GYM_WATTSON",
+  "FLAG_RECEIVED_TM_FACADE",
+  "FLAG_RECEIVED_HM_SURF",
+]
+clear = [
+  "FLAG_HIDE_VERDANTURF_TOWN_WANDAS_HOUSE_WANDAS_BOYFRIEND",
+  "FLAG_HIDE_VERDANTURF_TOWN_WANDAS_HOUSE_WANDA",
+  "FLAG_HIDE_MAUVILLE_CITY_WATTSON",
+  "FLAG_HIDE_DEWFORD_HALL_SLUDGE_BOMB_MAN",
+]
+items = ["ITEM_HM04", "ITEM_HM03"]   # Strength, Surf
+[point.vars]
+VAR_RUSTURF_TUNNEL_STATE = 6
+VAR_PETALBURG_GYM_STATE = 7
+VAR_BRINEY_LOCATION = 0
+VAR_PETALBURG_CITY_STATE = 5
+
+[[point]]
+name = "fortree-badge6"
+title = "After Winona: the Feather Badge, Fly and the Devon Scope"
+map = "MAP_FORTREE_CITY"
+x = 5                               # one below the Pokémon Center door (5,6)
+y = 7
+level = 35
+beaten = ["TRAINER_SHELLY_WEATHER_INSTITUTE", "TRAINER_MAY_ROUTE_119_TREECKO", "TRAINER_WINONA_1"]
+set = [
+  "FLAG_HIDE_ROUTE_118_STEVEN",                   # Route 118 Steven scene, removeobject
+  "FLAG_HIDE_ROUTE_119_TEAM_AQUA",                # Shelly beaten at the Weather Institute
+  "FLAG_HIDE_WEATHER_INSTITUTE_2F_WORKERS",       # set again when stepping back onto Route 119
+  "FLAG_RECEIVED_CASTFORM",
+  "FLAG_RECEIVED_HM_FLY",                         # May on Route 119
+  "FLAG_VISITED_FORTREE_CITY",
+  "FLAG_HIDE_ROUTE_120_KECLEON_BRIDGE",           # bridge Kecleon beaten, not caught
+  "FLAG_HIDE_ROUTE_120_KECLEON_BRIDGE_SHADOW",
+  "FLAG_RECEIVED_DEVON_SCOPE",
+  "FLAG_HIDE_ROUTE_120_STEVEN",
+  "FLAG_HIDE_FORTREE_CITY_KECLEON",               # Kecleon blocking the gym flees
+  "FLAG_KECLEON_FLED_FORTREE",
+  "FLAG_DEFEATED_FORTREE_GYM",
+  "FLAG_BADGE06_GET",
+  "FLAG_RECEIVED_TM_AERIAL_ACE",
+  "FLAG_ENABLE_WINONA_MATCH_CALL",
+  "FLAG_SCOTT_CALL_FORTREE_GYM",                  # Scott's call is still pending
+]
+clear = ["FLAG_HIDE_WEATHER_INSTITUTE_1F_WORKERS"]
+items = ["ITEM_HM02", "ITEM_DEVON_SCOPE"]   # Fly
+[point.vars]
+VAR_ROUTE118_STATE = 1
+VAR_WEATHER_INSTITUTE_STATE = 2
+VAR_ROUTE119_STATE = 1
+
+[[point]]
+name = "lilycove-aqua-hideout"
+title = "Lilycove after Mt. Pyre and the Magma and Aqua hideouts, with the Pokéblock Case"
+map = "MAP_LILYCOVE_CITY"
+x = 23                              # one below the Contest Hall door (23,24)
+y = 25
+level = 38
+beaten = ["TRAINER_MAY_LILYCOVE_TREECKO", "TRAINER_TABITHA_MAGMA_HIDEOUT", "TRAINER_MAXIE_MAGMA_HIDEOUT"]
+set = [
+  "FLAG_VISITED_LILYCOVE_CITY",
+  "FLAG_HIDE_LILYCOVE_CONTEST_HALL_REPORTER",     # Lilycove's OnTransition sets it
+  "FLAG_RECEIVED_POKEBLOCK_CASE",
+  "FLAG_MET_RIVAL_LILYCOVE",                      # beat May outside the dept. store
+  "FLAG_HIDE_LILYCOVE_CITY_RIVAL",                # May flies off (removeobject)
+  "FLAG_HIDE_ROUTE_121_TEAM_AQUA_GRUNTS",
+  "FLAG_HIDE_MT_PYRE_SUMMIT_ARCHIE",
+  "FLAG_HIDE_MT_PYRE_SUMMIT_TEAM_AQUA",
+  "FLAG_RECEIVED_RED_OR_BLUE_ORB",
+  "FLAG_HIDE_JAGGED_PASS_MAGMA_GUARD",
+  "FLAG_HIDE_MAGMA_HIDEOUT_4F_GROUDON_ASLEEP",
+  "FLAG_HIDE_MAGMA_HIDEOUT_GRUNTS",
+  "FLAG_GROUDON_AWAKENED_MAGMA_HIDEOUT",
+  "FLAG_MET_TEAM_AQUA_HARBOR",
+  "FLAG_HIDE_LILYCOVE_MOTEL_SCOTT",
+  "FLAG_HIDE_SLATEPORT_CITY_HARBOR_PATRONS",      # until badge 7
+  "FLAG_HIDE_AQUA_HIDEOUT_1F_GRUNT_1_BLOCKING_ENTRANCE",
+  "FLAG_HIDE_AQUA_HIDEOUT_1F_GRUNT_2_BLOCKING_ENTRANCE",
+  "FLAG_HIDE_AQUA_HIDEOUT_B2F_SUBMARINE_SHADOW",
+  "FLAG_TEAM_AQUA_ESCAPED_IN_SUBMARINE",
+  "FLAG_HIDE_LILYCOVE_CITY_AQUA_GRUNTS",          # opens the sea east to Route 124
+]
+clear = [
+  "FLAG_HIDE_LITTLEROOT_TOWN_MAYS_HOUSE_RIVAL_BEDROOM",  # May goes home after Lilycove
+  "FLAG_HIDE_LITTLEROOT_TOWN_MAYS_HOUSE_2F_PICHU_DOLL",
+  "FLAG_HIDE_SLATEPORT_CITY_HARBOR_CAPTAIN_STERN",  # Stern's interview sends him to the harbor
+]
+items = ["ITEM_POKEBLOCK_CASE", "ITEM_MAGMA_EMBLEM"]
+[point.vars]
+VAR_CONTEST_HALL_STATE = 0
+VAR_ROUTE121_STATE = 1
+VAR_MT_PYRE_STATE = 1
+VAR_JAGGED_PASS_STATE = 2
+VAR_SLATEPORT_CITY_STATE = 2
+VAR_SLATEPORT_HARBOR_STATE = 2
+
+[[point]]
+name = "mossdeep-badge7"
+title = "After Tate & Liza: the Mind Badge, the Space Center fight and HM08 Dive"
+map = "MAP_MOSSDEEP_CITY"
+x = 28                              # one below the Pokémon Center door (28,16)
+y = 17
+level = 42
+beaten = ["TRAINER_TATE_AND_LIZA_1", "TRAINER_TABITHA_MOSSDEEP", "TRAINER_MAXIE_MOSSDEEP"]
+set = [
+  "FLAG_VISITED_MOSSDEEP_CITY",
+  "FLAG_DEFEATED_MOSSDEEP_GYM",
+  "FLAG_BADGE07_GET",
+  "FLAG_HIDE_AQUA_HIDEOUT_GRUNTS",
+  "FLAG_ENABLE_TATE_AND_LIZA_MATCH_CALL",
+  "FLAG_HIDE_MOSSDEEP_CITY_SPACE_CENTER_1F_STEVEN",
+  "FLAG_DEFEATED_GRUNT_SPACE_CENTER_1F",
+  "FLAG_DEFEATED_MAGMA_SPACE_CENTER",
+  "FLAG_HIDE_MOSSDEEP_CITY_SPACE_CENTER_MAGMA_NOTE",
+  "FLAG_HIDE_MOSSDEEP_CITY_SCOTT",
+  "FLAG_RECEIVED_HM_DIVE",
+  "FLAG_OMIT_DIVE_FROM_STEVEN_LETTER",
+  "FLAG_HIDE_SEAFLOOR_CAVERN_ENTRANCE_AQUA_GRUNT",
+]
+# The gym clears the Magma/Steven hide flags, the Space Center win sets them again
+# (net unchanged); Steven moves from the Space Center to his house.
+clear = [
+  "FLAG_HIDE_SLATEPORT_CITY_STERNS_SHIPYARD_MR_BRINEY",
+  "FLAG_UNKNOWN_0x393",
+  "FLAG_HIDE_SLATEPORT_CITY_HARBOR_PATRONS",
+  "FLAG_HIDE_MOSSDEEP_CITY_STEVENS_HOUSE_STEVEN",
+]
+items = ["ITEM_HM08"]               # Dive
+[point.vars]
+VAR_MOSSDEEP_CITY_STATE = 3
+VAR_MOSSDEEP_SPACE_CENTER_STATE = 3
+VAR_MOSSDEEP_SPACE_CENTER_STAIR_GUARD_STATE = 2   # beaten facing north (west gives 1)
+VAR_STEVENS_HOUSE_STATE = 2
+
+[[point]]
+name = "sootopolis-badge8"
+title = "After Juan: Kyogre, Rayquaza and the Rain Badge, with HM07 Waterfall"
+map = "MAP_SOOTOPOLIS_CITY"
+x = 43                              # one below the Pokémon Center door (43,31)
+y = 32
+level = 46
+beaten = ["TRAINER_SHELLY_SEAFLOOR_CAVERN", "TRAINER_ARCHIE", "TRAINER_JUAN_1"]
+set = [
+  "FLAG_LANDMARK_SEAFLOOR_CAVERN",
+  "FLAG_HIDE_SEAFLOOR_CAVERN_ROOM_9_KYOGRE_ASLEEP",
+  "FLAG_HIDE_SEAFLOOR_CAVERN_AQUA_GRUNTS",
+  "FLAG_KYOGRE_ESCAPED_SEAFLOOR_CAVERN",
+  "FLAG_HIDE_MOSSDEEP_CITY_STEVENS_HOUSE_STEVEN",  # Steven leaves for Sootopolis
+  "FLAG_VISITED_SOOTOPOLIS_CITY",
+  "FLAG_STEVEN_GUIDES_TO_CAVE_OF_ORIGIN",
+  "FLAG_WALLACE_GOES_TO_SKY_PILLAR",
+  "FLAG_HIDE_CAVE_OF_ORIGIN_B1F_WALLACE",
+  "FLAG_VISITED_PACIFIDLOG_TOWN",                  # passed on the way to Sky Pillar
+  "FLAG_LANDMARK_SKY_PILLAR",
+  "FLAG_HIDE_SKY_PILLAR_TOP_RAYQUAZA",             # the sleeping Rayquaza flies off
+  "FLAG_MET_MAXIE_SOOTOPOLIS",
+  "FLAG_MET_ARCHIE_SOOTOPOLIS",
+  "FLAG_SOOTOPOLIS_ARCHIE_MAXIE_LEAVE",
+  "FLAG_RECEIVED_HM_WATERFALL",
+  "FLAG_DEFEATED_SOOTOPOLIS_GYM",
+  "FLAG_BADGE08_GET",
+  "FLAG_ENABLE_JUAN_MATCH_CALL",
+]
+# Weather and legendaries flags are set by Kyogre's escape and cleared by Rayquaza (net clear);
+# the Sootopolis Steven/Wallace/residents/Archie/Maxie/legendary hide flags end as at new game.
+clear = [
+  "FLAG_SYS_WEATHER_CTRL",
+  "FLAG_LEGENDARIES_IN_SOOTOPOLIS",
+  "FLAG_HIDE_MT_PYRE_SUMMIT_MAXIE",                # they wait at the summit to return the orbs
+  "FLAG_HIDE_MT_PYRE_SUMMIT_ARCHIE",
+]
+items = ["ITEM_HM07"]               # Waterfall
+[point.vars]
+VAR_SEAFLOOR_CAVERN_STATE = 1
+VAR_ROUTE128_STATE = 2
+VAR_SOOTOPOLIS_CITY_STATE = 6
+VAR_SKY_PILLAR_STATE = 3
+VAR_SKY_PILLAR_RAYQUAZA_CRY_DONE = 1
+VAR_SOOTOPOLIS_WALLACE_STATE = 1                # faced one way when Wallace gave Waterfall (or 2)
+VAR_MT_PYRE_STATE = 2
+
+[[point]]
+name = "league-before-e4"
+title = "Victory Road done: in the Pokémon League lobby, before the Elite Four"
+map = "MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F"
+x = 9                               # one above the exit warp (9,11)
+y = 10
+level = 50
+beaten = ["TRAINER_WALLY_VR_1"]
+set = [
+  "FLAG_VISITED_EVER_GRANDE_CITY",
+  "FLAG_DEFEATED_WALLY_VICTORY_ROAD",
+  "FLAG_LANDMARK_POKEMON_LEAGUE",                  # League 1F OnTransition
+]                                                  # FLAG_ENTERED_ELITE_FOUR unset: guards still up
+clear = [
+  "FLAG_HIDE_VICTORY_ROAD_ENTRANCE_WALLY",         # Wally stays by the entrance after his battle
+  "FLAG_HIDE_EVER_GRANDE_POKEMON_CENTER_1F_SCOTT", # PC visited with badge 6; Scott not spoken to
+]
+items = []
+[point.vars]
+VAR_VICTORY_ROAD_1F_STATE = 1                    # 1 or 2 by which trigger tile; picked 1
+
+[[point]]
+name = "frontier-postgame"
+title = "Champion: national dex, SS Ticket, Frontier Pass, at the Battle Frontier"
+map = "MAP_BATTLE_FRONTIER_OUTSIDE_WEST"
+x = 26                              # just north of the reception gate's north door (26,61)
+y = 60
+level = 58
+beaten = ["TRAINER_SIDNEY", "TRAINER_PHOEBE", "TRAINER_GLACIA", "TRAINER_DRAKE", "TRAINER_WALLACE"]
+national_dex = true
+set = [
+  "FLAG_MET_SCOTT_IN_EVERGRANDE",                   # Sidney's room OnTransition
+  "FLAG_HIDE_EVER_GRANDE_POKEMON_CENTER_1F_SCOTT",
+  "FLAG_ENTERED_ELITE_FOUR",
+  "FLAG_HIDE_PETALBURG_GYM_GREETER",                # champion's room, before the Hall of Fame
+  "FLAG_IS_CHAMPION",                               # hall_of_fame.inc SetGameClearFlags
+  "FLAG_HIDE_SLATEPORT_CITY_STERNS_SHIPYARD_MR_BRINEY",
+  "FLAG_HIDE_VICTORY_ROAD_ENTRANCE_WALLY",
+  "FLAG_HIDE_SAFARI_ZONE_SOUTH_CONSTRUCTION_WORKERS",
+  "FLAG_HIDE_LILYCOVE_CITY_RIVAL",
+  "FLAG_HIDE_LITTLEROOT_TOWN_BRENDANS_HOUSE_RIVAL_BEDROOM",
+  "FLAG_HIDE_LITTLEROOT_TOWN_MAYS_HOUSE_RIVAL_BEDROOM",
+  "FLAG_SYS_GAME_CLEAR",                            # special GameClear (post_battle_event_funcs.c)
+  "FLAG_SYS_RIBBON_GET",                            # GameClear: champion ribbons
+  "FLAG_HIDE_PLAYERS_HOUSE_DAD",                    # cleared at HoF, set when Dad leaves (net set)
+  "FLAG_RECEIVED_SS_TICKET",
+  "FLAG_LATIOS_OR_LATIAS_ROAMING",
+  "FLAG_SYS_NATIONAL_DEX",                          # Birch's lab, plus EnableNationalPokedex
+  "FLAG_HIDE_LITTLEROOT_TOWN_BIRCH",
+  "FLAG_HIDE_LITTLEROOT_TOWN_RIVAL",
+  "FLAG_MET_SCOTT_ON_SS_TIDAL",                     # first ride Slateport to Lilycove
+  "FLAG_HIDE_SS_TIDAL_CORRIDOR_SCOTT",              # removeobject after his scene
+  "FLAG_LANDMARK_BATTLE_FRONTIER",
+  "FLAG_SYS_FRONTIER_PASS",                         # reception gate, first entry
+  "FLAG_HIDE_BATTLE_FRONTIER_RECEPTION_GATE_SCOTT", # removeobject after the gate scene
+  "FLAG_HIDE_BATTLE_TOWER_REPORTER",                # OutsideWest OnTransition
+]
+clear = [
+  "FLAG_HIDE_LILYCOVE_MOTEL_GAME_DESIGNERS",
+  "FLAG_HIDE_SS_TIDAL_CORRIDOR_MR_BRINEY",
+  "FLAG_HIDE_MOSSDEEP_CITY_STEVENS_HOUSE_INVISIBLE_NINJA_BOY",
+  "FLAG_HIDE_VICTORY_ROAD_EXIT_WALLY",
+  "FLAG_HIDE_SLATEPORT_CITY_HARBOR_SS_TIDAL",
+  "FLAG_HIDE_LILYCOVE_HARBOR_SSTIDAL",
+  "FLAG_HIDE_SAFARI_ZONE_SOUTH_EAST_EXPANSION",
+  "FLAG_HIDE_MOSSDEEP_CITY_STEVENS_HOUSE_BELDUM_POKEBALL",  # Beldum not yet taken
+]
+items = ["ITEM_SS_TICKET"]
+[point.vars]
+VAR_STEVENS_HOUSE_STATE = 2
+VAR_FOSSIL_MANIAC_STATE = 1
+VAR_ELITE_4_STATE = 0
+VAR_LITTLEROOT_HOUSES_STATE_MAY = 5             # left home after the Lati TV / SS Ticket
+VAR_LITTLEROOT_HOUSES_STATE_BRENDAN = 5
+VAR_DEX_UPGRADE_JOHTO_STARTER_STATE = 3         # left the lab after the national dex
+VAR_NATIONAL_DEX = 0x302                        # EnableNationalPokedex (also needs nationalMagic)
+VAR_SCOTT_BF_CALL_STEP_COUNTER = 10             # Scott's Frontier call has fired
+VAR_ROAMER_POKEMON = 0                          # answered "red": Latias
+VAR_SS_TIDAL_STATE = 4                          # landed in Lilycove, then the Frontier ferry
+VAR_SS_TIDAL_SCOTT_STATE = 1
+VAR_HAS_ENTERED_BATTLE_FRONTIER = 1

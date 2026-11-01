@@ -1,0 +1,22 @@
+# gbaa-server, the netplay server, on fly.io: `just fly-deploy` (docs/tools/
+# commands.md). Public UDP on fly needs a dedicated IPv4 (`fly ips allocate-v4`)
+# and the server bound to fly-global-services. It keeps no files: no volume.
+app = "gbaa-server"
+primary_region = "ewr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# Plain-UDP rooms for rollback netplay (relay::rooms), the server's one port.
+[[services]]
+  protocol = "udp"
+  internal_port = 7374
+  auto_stop_machines = "off"
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 7374
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

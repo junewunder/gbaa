@@ -1,0 +1,10 @@
+# What SDL3's build depends on beyond its sources (CMAKE_INPUTS in
+# .cargo/config.toml, vendor/README.md): when one changes, sdl3-sys reruns
+# its build from an empty CMake cache. Paths relative to this file, or
+# absolute; a directory counts with everything in it.
+.
+# The headers SDL's X11 and Wayland drivers are built from, where a machine
+# has them: installing a -devel package changes what the build finds.
+/usr/include/X11
+/usr/include/wayland-client.h
+/usr/include/xkbcommon

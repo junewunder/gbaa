@@ -1,0 +1,9 @@
+[package]
+name = "fn-diff"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+armv4t = { path = "../armv4t" }
+runtime = { path = "../runtime" }

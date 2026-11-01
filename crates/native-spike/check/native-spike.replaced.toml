@@ -1,0 +1,21 @@
+# What `route-check --native` skips in agb/native-spike's RAM and VRAM
+# beside the stack and code copies: agb's own state, which the native
+# program doesn't have because it replaced agb's allocator, interrupt list
+# and tile allocator with runtime::hw (docs/research/native-agb-spike.md,
+# rule 1). Ranges from the ROM's ELF ($GBAA_DATA/agb/native-spike.elf).
+# The program's one global, FRAMES at 0x020000c0, is compared.
+
+[[replaced]]
+start = 0x0200_0000
+end = 0x0200_00C0
+why = "agb's .ewram and .bss: GLOBAL_ALLOC, INTERRUPT_TABLE, IS_PANICKING, HAS_CREATED_INTERRUPT"
+
+[[replaced]]
+start = 0x0200_00C4
+end = 0x0204_0000
+why = "agb's NUM_VBLANKS, then its heap (from __ewram_data_end: the boxed V-blank closure)"
+
+[[replaced]]
+start = 0x0600_0080
+end = 0x0600_8000
+why = "agb's tile allocator's free list, kept in the free VRAM it hands out"

@@ -1,0 +1,125 @@
+# Emerald Rogue (EX v2.2.1a, sha1 7600af1f…, pokeemerald-expansion, modern GCC): a new game from reset to
+# the first overworld frame in the Pokémon Hub. No symbols. Each checkpoint's hash is what mGBA 0.10.5 draws
+# (mgba-dump, 2026-10-22, the same on repeat runs; checked by eye), or where mGBA is known wrong, ours.
+# The title moved from frame 1100 to 992, before Start, when the checkpoints became one route (2026-10-23).
+rom = "$HOME/ROMs/gba/Emerald Rogue.gba"
+
+# Start leaves the title; A through the intro text.
+[[press]]
+button = "start"
+at = 1000
+
+[[press]]
+button = "a"
+from = 1200
+to = 1780
+every = 20
+
+# On the difficulty menu Down four times to Save & Exit, and A.
+[[press]]
+button = "down"
+from = 1800
+to = 1860
+every = 20
+
+[[press]]
+button = "a"
+at = 1880
+
+# A through the professor's speech.
+[[press]]
+button = "a"
+from = 2000
+to = 3760
+every = 20
+
+[[press]]
+button = "a"
+at = 3960
+
+# On the outfit screen Down five times to Save & Exit, and A.
+[[press]]
+button = "down"
+from = 4150
+to = 4230
+every = 20
+
+[[press]]
+button = "a"
+at = 4260
+
+# A every 20 frames (the name and the village name are typed as AAAAAAA) until the hub.
+[[press]]
+button = "a"
+from = 4400
+to = 5780
+every = 20
+
+# The @Pokabbie splash.
+[[checkpoint]]
+name = "splash"
+frame = 100
+hash = "28f55138fee82a10"
+
+# The POWERED BY PRET x RHH screen.
+[[checkpoint]]
+name = "pret"
+frame = 500
+hash = "07eaa72e17e27973"
+
+# The title screen with PRESS START, before Start is pressed. Its stars change every 4 frames and ours
+# runs one frame ahead of mGBA from frame 707 (memory/emerald-hacks.md), so this frame is inside both
+# runs' hold of one picture. mGBA 0.10.5 draws a385e601dddbd393 (mgba-dump, 2026-10-23): 282 pixels of
+# the stars (BG1 alpha-blended over BG0) one 5-bit step brighter in one channel, nothing else different
+# from ours, as at frame 1100 with no input (checked there with mGBA's 8-bit mix in blend.rs).
+[[checkpoint]]
+name = "title"
+frame = 992
+hash = "b4a4143f08308f1a"
+mgba_hash = "a385e601dddbd393"
+mgba_why = "its 32-bit colour build alpha-blends 8-bit channels widened as (c<<3)|(c>>2), rounding up a 5-bit step where hardware (GBATEK's 5-bit formula, mGBA's own 16-bit build) does not"
+
+# The main menu with no save (New Game, Option, the version line). mGBA 0.10.5 draws 382c5abdbb71bd20
+# (mgba-dump, 2026-10-22): the unselected Option box, darkened, a 5-bit step darker in green and blue
+# (7547 pixels). With mGBA's 32-bit darken swapped into blend.rs our interpreter draws exactly that hash
+# (2026-10-23), so nothing else differs.
+[[checkpoint]]
+name = "main-menu"
+frame = 1150
+hash = "cacf24942e1b5b6c"
+mgba_hash = "382c5abdbb71bd20"
+mgba_why = "its 32-bit colour build darkens 8-bit channels in place, a - a*y/16 then masked, so the borrow drops green and blue a 5-bit step where hardware (GBATEK's 5-bit formula, mGBA's own 16-bit build) does not"
+
+# The new game's difficulty menu, Save & Exit selected. mGBA 0.10.5 draws 6ac77d0362863a38 (mgba-dump,
+# 2026-10-22): the unselected boxes, darkened, a 5-bit step darker in green and blue (18156 pixels). With
+# mGBA's 32-bit darken swapped into blend.rs our interpreter draws exactly that hash (2026-10-23).
+[[checkpoint]]
+name = "difficulty"
+frame = 1870
+hash = "7e61e79be3039748"
+mgba_hash = "6ac77d0362863a38"
+mgba_why = "its 32-bit colour build darkens 8-bit channels in place, a - a*y/16 then masked, so the borrow drops green and blue a 5-bit step where hardware (GBATEK's 5-bit formula, mGBA's own 16-bit build) does not"
+
+# The professor's speech, Pokémon sprites around her ("The world has cha").
+[[checkpoint]]
+name = "speech"
+frame = 3300
+hash = "b0c62e6a8abe9b6c"
+
+# The Player Outfit screen, Save & Exit selected.
+[[checkpoint]]
+name = "outfit"
+frame = 4250
+hash = "5f868c9474a99d7a"
+
+# The naming screen, AAAAAAA typed.
+[[checkpoint]]
+name = "naming"
+frame = 4600
+hash = "1f42702878162ed3"
+
+# The first overworld frame: the player in the Pokémon Hub.
+[[checkpoint]]
+name = "hub"
+frame = 6000
+hash = "18d809fc0ef630d8"

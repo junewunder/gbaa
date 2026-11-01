@@ -1,0 +1,12 @@
+# agb/native-fallthrough for 600 frames with no input: the fallthrough
+# program of the stage-A lifter's check (native/lift-fallthrough; `just
+# lift-check`), its lift (gbaa-lift) against the play build at --timing
+# native by route-check --native. What it draws: agb/native-fallthrough/SCENE.md.
+rom = "$GBAA_DATA/agb/native-fallthrough.gba"
+
+[[checkpoint]]
+name = "native-fallthrough-600"
+frame = 600
+hash = "34f6c5ecdabbc7b6"
+# Verified: mGBA 0.10.5 (`just mgba-diff`) draws the same at frame 600
+# (2026-11-01).

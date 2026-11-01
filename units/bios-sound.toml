@@ -1,0 +1,12 @@
+# The BIOS sound driver's calls as mGBA's no-ops, and SoundDriverGetJumpList:
+# our agb test program (agb/bios-sound/, rows in its SCENE.md), built by
+# `just agb-tests`.
+rom = "$GBAA_DATA/agb/bios-sound.gba"
+
+[[checkpoint]]
+name = "bios-sound"
+frame = 10
+hash = "be89812fafdc86f4"
+min_compiled = 0.97
+# Verified: mGBA 0.10.5 draws the same hash (just mgba-diff, 2026-10-26), and
+# our frame is the green block of SCENE.md, every call as mGBA's BIOS leaves it.

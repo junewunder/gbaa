@@ -1,0 +1,20 @@
+# SDL3's build from source (crates/desktop/sdl-build/README.md): the
+# libXext header it needs for its X11 driver where the machine has none,
+# and the X11 extensions to go without where the machine lacks their
+# development files.
+[env]
+CPATH = { value = "crates/desktop/sdl-build/include", relative = true }
+CMAKE_INCLUDE_PATH = { value = "crates/desktop/sdl-build/include", relative = true }
+CMAKE_TOOLCHAIN_FILE = { value = "crates/desktop/sdl-build/toolchain.cmake", relative = true }
+# What SDL3's build depends on beyond its sources: a change to one reruns it
+# from a clean CMake cache, through the patched cmake crate (vendor/README.md).
+CMAKE_INPUTS = { value = "crates/desktop/sdl-build/inputs.txt", relative = true }
+
+[patch.crates-io]
+cmake = { path = "vendor/cmake" }
+
+# An Intel Mac build links SDL3's camera through Swift's CoreMedia overlay
+# (@rpath/libswiftCoreMedia.dylib), which macOS keeps in /usr/lib/swift;
+# without the rpath the binary won't start there.
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-rpath,/usr/lib/swift"]

@@ -1,0 +1,9 @@
+# june's first-frame ROM (agb, a 4bpp tiled background): its first frame.
+rom = "$GBAA_DATA/agb/gba-cart1.gba"
+
+[[checkpoint]]
+name = "gba-cart1"
+frame = 60
+hash = "459cfeeff72ae451"
+min_compiled = 0.97
+# Verified: mGBA 0.10.5 draws the same hash (mgba-dump, 2026-10-20).

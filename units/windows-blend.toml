@@ -1,0 +1,11 @@
+# Windows and colour effects: our agb test program (agb/windows-blend/,
+# pixels in its SCENE.md), built by `just agb-tests`.
+rom = "$GBAA_DATA/agb/windows-blend.gba"
+
+[[checkpoint]]
+name = "windows-blend"
+frame = 10
+hash = "e627b66bddd453a5"
+min_compiled = 0.97
+# Verified: mGBA 0.10.5 draws the same hash (just mgba-diff, 2026-10-21), and
+# the interpreter's frame shows every pixel SCENE.md lists.

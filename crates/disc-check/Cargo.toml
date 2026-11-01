@@ -1,0 +1,15 @@
+[package]
+name = "disc-check"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# The discovery-accuracy check (decision 5, "Checking discovery"): truth from
+# a pret ELF, and precision/recall of a discovered-starts file against it.
+# A separate crate so `object` stays out of `analysis`.
+
+[dependencies]
+analysis = { path = "../analysis" }
+armv4t = { path = "../armv4t" }
+runtime = { path = "../runtime" }
+object = { version = "0.36", default-features = false, features = ["read_core", "elf", "std"] }

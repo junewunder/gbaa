@@ -1,0 +1,11 @@
+# Mosaic and mode 1: our agb test program (agb/mosaic-modes/, pixels in
+# its SCENE.md), built by `just agb-tests`.
+rom = "$GBAA_DATA/agb/mosaic-modes.gba"
+
+[[checkpoint]]
+name = "mosaic-modes"
+frame = 10
+hash = "6766e80e49684d00"
+min_compiled = 0.97
+# Verified: mGBA 0.10.5 draws the same hash (just mgba-diff, 2026-10-21), and
+# our frame shows every pixel SCENE.md lists, each derived by hand.

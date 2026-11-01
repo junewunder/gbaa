@@ -1,0 +1,8 @@
+# jsmolka's memory test: "All tests passed" on screen (r12 = 0, just gba-tests). Its hash is what
+# mGBA 0.10.5 draws (mgba-dump, 2026-10-28), or ours where mGBA is known wrong (known-mismatches.tsv).
+rom = "$GBAA_DATA/gba-tests/memory/memory.gba"
+
+[[checkpoint]]
+name = "jsmolka-memory"
+frame = 300
+hash = "ffb537b2caeb46f1"

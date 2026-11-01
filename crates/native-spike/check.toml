@@ -1,0 +1,13 @@
+# The native spike's check (`just native-spike`, src/bin/check.rs): the
+# play build and the native program run this script; their frame hashes
+# must match, and the planted build's must not.
+frames = 600
+# Walks right (B: faster) until the camera follows, down until it
+# follows, left at speed into the world's left edge (the sprite's x clamps
+# at 0 from frame 362, the camera's from 324), up at speed into the top
+# edge (y from 522, the camera from 491), then down and right together;
+# A steps the sprite's palette three times. A D-pad key is held in every
+# 60-frame window (the check checks).
+input = "right@5+100,b@60+40,down@110+90,a@130,a@200,left@210+200,b@250+100,a@330,up@420+120,b@440+60,right@540+60,down@540+60"
+# The longest the script may go without a D-pad key held.
+move_every = 60

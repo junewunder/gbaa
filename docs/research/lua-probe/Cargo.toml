@@ -1,0 +1,16 @@
+# The probe behind docs/research/lua-scripting.md: mGBA's Lua globals,
+# stubbed over our runtime's interpreter, to see how far real mGBA scripts
+# get. Not a workspace member (it pulls in a C Lua build); build it with
+# `cargo build --release --manifest-path docs/research/lua-probe/Cargo.toml`.
+[package]
+name = "lua-probe"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+runtime = { path = "../../../crates/runtime" }
+desktop = { path = "../../../crates/desktop" }
+mlua = { version = "0.12", features = ["lua54", "vendored"] }

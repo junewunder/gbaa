@@ -1,0 +1,9 @@
+[package]
+name = "armv4t"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+# Decision 4: pinned exactly; only the ARMv4T parts.
+unarm = { version = "=2.3.0", default-features = false, features = ["arm", "thumb", "v4", "v4t"] }

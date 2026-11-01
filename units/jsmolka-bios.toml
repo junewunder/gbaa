@@ -1,0 +1,10 @@
+# jsmolka's bios test: "All tests passed" on screen (r12 = 0, just gba-tests). Its hash is what
+# mGBA 0.10.5 draws (mgba-dump, 2026-10-28), or ours where mGBA is known wrong (known-mismatches.tsv).
+rom = "$GBAA_DATA/gba-tests/bios/bios.gba"
+
+[[checkpoint]]
+name = "jsmolka-bios"
+frame = 300
+hash = "ffb537b2caeb46f1"
+mgba_hash = "90428ad37ad201f9"
+mgba_why = "mGBA's HLE BIOS leaves a different open-bus value (test 001)"

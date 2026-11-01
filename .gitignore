@@ -1,0 +1,18 @@
+/target
+out/
+
+# ROMs and test data never go in the repo; they live in $GBAA_DATA.
+*.gba
+*.bin
+/runs/
+/.scratch/
+/.tracker/
+/work
+/gbaa-server/
+
+# Machine details that must not be public.
+docs/machines.private.md
+
+# Game-derived code (translated Emerald, mod copies, snapshots): never public.
+# Its own private git repo, checked out here.
+/mods
