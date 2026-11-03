@@ -4,8 +4,8 @@ Static recompiler: GBA ROMs (ARM7TDMI) to Rust, plus a runtime crate.
 
 Visibility: public (github.com/junewunder/gbaa). History before 2026-11-01
 is in the private github.com/junewunder/gbaa-private (remote `private`,
-branch `private-main` in june's checkout); the public root commit has the
-same files as its last commit. A branch begun before the switch moves over
+branch `private-main` in june's checkout); the public root commit is
+those files with private details taken out, not an exact copy. A branch begun before the switch moves over
 with `git rebase --onto main private-main <branch>`; a pre-push hook refuses
 to push the old history to the public repo.
 
