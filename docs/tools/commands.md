@@ -53,6 +53,14 @@ says what a recipe or tool does and what it must still pass.
   `analysis::flash`) and each list. About a minute a game, capped at 3 GB. The
   doc's table is these lines; rerun all eight after changing
   `analysis::holes` or `crates/hole-report` and update it.
+  `--cover FILE` (`holes/coverage/<game>.toml`, native/hole-coverage)
+  adds the file's coverage runs after the press script (reset, the
+  owner's saves under `$GBAA_DATA/saves/`, Emerald's story saves and TAS
+  states, each with seeded random presses), classifies against them all,
+  and checks the file's `[[jump]]` list (each unresolved jump: the runs
+  that reached it, its targets) against what they saw, failing on a
+  difference; `--update` rewrites the list instead. Deterministic, so a
+  rerun matches. 10 to 30 minutes a game: run it as a long job.
 - `just jt-score`: the jump-table check (decision 5c). Builds truth tables
   from `$GBAA_DATA/src/pokeemerald/pokeemerald{,_modern}.elf` and the ROMs
   beside them, runs `analysis::jumptable` over each ELF's code map, and
