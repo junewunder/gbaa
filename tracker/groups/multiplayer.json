@@ -798,7 +798,19 @@
     },
     {
       "id": "multiplayer/fly-one-machine",
-      "title": "Scale fly's gbaa-server back to one machine"
+      "title": "Scale fly's gbaa-server back to one machine",
+      "record": {
+        "state": "claimed",
+        "by": "178b8ae4",
+        "session": "178b8ae4-04e8-431b-af40-45a771933d83",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T13:32:17Z",
+        "branch": "unit/multiplayer/fly-one-machine",
+        "beats": true
+      },
+      "round": "2026-11-06T13:32:17Z"
     }
   ]
 }
