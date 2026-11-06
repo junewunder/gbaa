@@ -734,18 +734,24 @@
       "detail": "june (2026-10-30): the server should refuse netplay clients older than a version it allows, so a friend on a stale binary is told to update rather than joining and desyncing; june tells friends to replace binaries before playing. Today crates/relay/src/rooms.rs only compares the two peers' 32-byte build IDs to each other ('the room runs another build or game') and knows nothing of versions. Add a netplay version number (a constant in netplay, bumped by hand whenever a change can split peers or change the wire; say where in docs/research/multiplayer.md and AGENTS.md-level docs) sent in HOST and JOIN; gbaa-server takes --min-version (and deploy/fly sets it), refusing older or missing versions with a message naming both numbers: 'this game is too old for the server (version N, needs M): get the new build'. The window shows that refusal plainly, not as a timeout. Keep the relay game-agnostic. Check: relay unit tests (old refused, equal and newer let in, a pre-version client gets a clear refusal, not silence), just room-sim calm against a local server with --min-version above the client's, just check. Deploying it is {unit:multiplayer/fly-redeploy-rooms}.",
       "check": "independent",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "493244a8",
-        "session": "493244a8-bd3b-429d-8195-64c1ed3bd09f",
-        "host": "quack",
-        "pid": 1418242,
-        "start": "29954965",
-        "at": "2026-11-06T03:30:49Z",
+        "checker": "ada715af",
+        "at": "2026-11-06T03:35:16Z",
+        "evidence": "Fresh verifier subagent: cargo test -p relay passes (old_versions_are_refused: older refused, equal/newer let in, versionless HOST/JOIN gets E too_old(0,3)); netplay tests pass; just room-sim calm vs local gbaa-server --min-version 2 refused at once 'version 1, needs 2', --min-version 1 passes; just check passes after merging main.",
         "branch": "unit/multiplayer/server-version-cutoff",
-        "resumed": "664c45c7",
-        "prevSession": "664c45c7-0b11-4918-8a06-e9dc718f1604",
-        "pushed": true,
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T03:35:16Z",
+          "by": "493244a8",
+          "host": "quack",
+          "pid": 1418242,
+          "start": "29954965",
+          "beats": true,
+          "session": "493244a8-bd3b-429d-8195-64c1ed3bd09f",
+          "lane": "quack/2"
+        },
+        "pushed": true
       },
       "notes": [
         {
