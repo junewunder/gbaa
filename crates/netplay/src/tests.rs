@@ -261,6 +261,33 @@ fn a_desync_is_seen_by_every_peer() {
 }
 
 #[test]
+fn a_skewed_input_is_a_desync_both_peers_see() {
+    let frames = 600;
+    let consoles = (0..2).map(|s| Toy::peer(2, s)).collect();
+    // Over a bad network, so rollbacks run the skewed frames again too.
+    let (mut peers, net) = rollback_session(consoles, BAD, 4, Config::default());
+    peers[1].skew(200, 0x155);
+    play(&mut peers, &net, frames, script, |_, _| {}).unwrap();
+    settle(&mut peers, &net);
+    let want = straight(Toy::new(2), 0, frames);
+    let (a, b) = (peers[0].hashes(), peers[1].hashes());
+    // Seat 0's peer ran the real inputs: the straight run.
+    let real: Vec<_> = a.iter().filter(|(f, _)| *f < frames).collect();
+    let straight: Vec<_> = want.iter().filter(|(f, _)| *f < frames).collect();
+    assert_eq!(real, straight);
+    // Seat 1's, right up to the skew and apart after it.
+    assert_eq!(b[..4], want[..4]);
+    assert_ne!(b[5], want[5]);
+    assert_eq!(peers[0].desyncs(), peers[1].desyncs());
+    assert!(
+        peers[0]
+            .desyncs()
+            .first()
+            .is_some_and(|&f| f > 200 && f <= 300)
+    );
+}
+
+#[test]
 fn rollback_keeps_two_peers_level() {
     // 50 ms each way: both peers should guess about as far, ~3 frames.
     let cond = Conditions {

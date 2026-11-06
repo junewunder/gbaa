@@ -61,7 +61,8 @@ pub const VOLUME_STEP: u32 = 10;
 /// How long the volume keys' toast stays up.
 pub const TOAST_TIME: Duration = Duration::from_secs(1);
 
-/// How long the toast saying the other netplay player left stays up.
+/// How long the toast saying the other netplay player left, or that the
+/// players' games went out of sync, stays up.
 pub const LEFT_TOAST_TIME: Duration = Duration::from_secs(8);
 
 /// How a netplay room is, as the mark over the game shows it.
@@ -75,6 +76,9 @@ pub enum Mark {
     Connected,
     /// Playing, but the other player has sent nothing for a while.
     Quiet,
+    /// Playing, but the peers' consoles have gone apart (a desync): the
+    /// players' games may differ.
+    Desynced,
     /// The other player has left: this one plays on alone.
     Lost,
 }
@@ -87,6 +91,9 @@ impl Mark {
             room::State::Making | room::State::Joining(_) => Mark::Connecting,
             room::State::Waiting(_) => Mark::Waiting,
             room::State::Playing { left: Some(_), .. } => Mark::Lost,
+            room::State::Playing {
+                desync: Some(_), ..
+            } => Mark::Desynced,
             room::State::Playing { quiet: true, .. } => Mark::Quiet,
             room::State::Playing { .. } => Mark::Connected,
         })
@@ -100,17 +107,19 @@ impl Mark {
             Mark::Waiting => ("Waiting for players", 1),
             Mark::Connected => ("Connected", room::SEATS),
             Mark::Quiet => ("Not hearing from them", room::SEATS),
+            Mark::Desynced => ("Out of sync", room::SEATS),
             Mark::Lost => ("Lost: playing alone", 1),
         };
         format!("{said} · {n}/{}", room::SEATS)
     }
 
-    /// Its dot's colour: green connected, amber waiting, red lost.
+    /// Its dot's colour: green connected, amber waiting, red lost or out
+    /// of sync.
     pub fn colour(self) -> egui::Color32 {
         match self {
             Mark::Connected => egui::Color32::from_rgb(80, 200, 100),
             Mark::Connecting | Mark::Waiting | Mark::Quiet => egui::Color32::from_rgb(230, 170, 50),
-            Mark::Lost => egui::Color32::from_rgb(220, 70, 60),
+            Mark::Lost | Mark::Desynced => egui::Color32::from_rgb(220, 70, 60),
         }
     }
 }
@@ -738,7 +747,8 @@ impl Menu {
     }
 
     /// Where netplay is now. A session begun closes the menu, so the game
-    /// goes on; the other player leaving says so over the game.
+    /// goes on; the other player leaving, or the games going out of sync,
+    /// says so over the game.
     pub fn set_netplay(&mut self, state: room::State) {
         let playing = |s: &room::State| matches!(s, room::State::Playing { .. });
         let began = playing(&state) && !playing(&self.netplay);
@@ -750,6 +760,15 @@ impl Menu {
             && left(&self.netplay).as_ref() != Some(&l)
         {
             self.toast = Some((l, Instant::now() + LEFT_TOAST_TIME));
+        }
+        let desync = |s: &room::State| match s {
+            room::State::Playing { desync, .. } => *desync,
+            _ => None,
+        };
+        if let Some(f) = desync(&state)
+            && desync(&self.netplay).is_none()
+        {
+            self.toast = Some((room::desync_note(f), Instant::now() + LEFT_TOAST_TIME));
         }
         // The page's rows change with it: the focus goes to the first.
         if std::mem::discriminant(&state) != std::mem::discriminant(&self.netplay)
@@ -1755,6 +1774,7 @@ mod tests {
             lines: Vec::new(),
             left: left.map(Into::into),
             quiet,
+            desync: None,
         };
         let marks = [
             (room::State::Making, Mark::Connecting, "Connecting…"),
@@ -1778,6 +1798,18 @@ mod tests {
                 playing(Some("Player 2 left the room"), false),
                 Mark::Lost,
                 "Lost: playing alone · 1/2",
+            ),
+            (
+                room::State::Playing {
+                    code: "QWERTY".into(),
+                    seat: 0,
+                    lines: Vec::new(),
+                    left: None,
+                    quiet: true,
+                    desync: Some(240),
+                },
+                Mark::Desynced,
+                "Out of sync · 2/2",
             ),
         ];
         let bare = pass(&mut m);
@@ -1803,6 +1835,7 @@ mod tests {
             lines: Vec::new(),
             left: None,
             quiet: false,
+            desync: None,
         });
         pass(&mut m);
         m.nav(Nav::Toggle);
@@ -2913,8 +2946,28 @@ mod tests {
             lines: vec!["Round trip 40 ms".into()],
             left: None,
             quiet: false,
+            desync: None,
         });
         assert!(!m.open);
+        assert!(m.toast.is_none());
+        // The games go out of sync: a toast says so over the game, once,
+        // and the Netplay page's lines with it.
+        let apart = room::State::Playing {
+            code: "QWERTY".into(),
+            seat: 0,
+            lines: vec![format!("{}: your games may differ", room::desync_note(240))],
+            left: None,
+            quiet: false,
+            desync: Some(240),
+        };
+        m.set_netplay(apart.clone());
+        assert_eq!(
+            m.toast.as_ref().unwrap().0,
+            "Out of sync with the other player since frame 240"
+        );
+        assert_eq!(Mark::of(&apart), Some(Mark::Desynced));
+        m.toast = None;
+        m.set_netplay(apart);
         assert!(m.toast.is_none());
         // The other player leaves: a toast says so over the game, once.
         let alone = room::State::Playing {
@@ -2923,6 +2976,7 @@ mod tests {
             lines: vec!["Player 2 left the room.".into()],
             left: Some("Player 2 left the room".into()),
             quiet: false,
+            desync: Some(240),
         };
         m.set_netplay(alone.clone());
         assert_eq!(m.toast.as_ref().unwrap().0, "Player 2 left the room");
