@@ -1,0 +1,15 @@
+# agb/direct-sound (direct sound as a software mixer drives it: both FIFOs
+# by DMA from IWRAM double buffers, a cascaded timer's IRQ swapping them,
+# SOUND.md): the native check's direct-sound route (`just native-check`,
+# route-check --native), built by `just agb-tests`. The screen is forced
+# blank throughout.
+rom = "$GBAA_DATA/agb/direct-sound.gba"
+
+[[checkpoint]]
+name = "direct-sound-300"
+frame = 300
+hash = "5a89fb4d57df1f25"
+# Verified: mGBA 0.10.5 draws the same at frame 300, the forced-blank white
+# (just mgba-diff, 2026-11-06); and from mGBA's state after frame 1, 299
+# frames' FIFO records and PSG samples are byte-identical with mGBA's
+# (just mgba-audio-diff, 2026-11-06).

@@ -41,14 +41,30 @@ says what a recipe or tool does and what it must still pass.
   encodings with should-be bits off (`canonical_arm`), which objdump reads
   strictly. Fails on any other mismatch. About 5 s.
 - `just holes ROM [--frames N] [--press KEY@F-G/E]… [--no-summaries]
-  [--show N]`: the hole report (`docs/research/native-holes.md`):
-  discovery, a 5,400-frame instant-timing interpreter run with the
-  research press script, the function summaries, then
+  [--no-run-roots] [--show N]`: the hole report
+  (`docs/research/native-holes.md`): discovery, a 5,400-frame
+  instant-timing interpreter run with the research press script,
+  discovery again with the ROM targets of the run's calls through a
+  register as function starts (`discover_with`; `--no-run-roots` skips
+  it), the function summaries, the RAM copies found with the run
+  (`analysis::holes::ram_copies`: BIOS copies given the run's entries,
+  copies by DMA or the game's loops found by their bytes), then
   `analysis::holes::classify`. Prints one ranking line (hard holes by
   kind; bytes reached but not discovered; busy loops that call
-  functions) and each list. About a minute a game, capped at 3 GB. The
+  functions; the flash library's stack routines stood in for,
+  `analysis::flash`) and each list, the RAM copies among them (the ones
+  only the run shows also as `[[copy]]` tables for the lift's holes
+  file). About a minute a game, capped at 3 GB. The
   doc's table is these lines; rerun all eight after changing
   `analysis::holes` or `crates/hole-report` and update it.
+  `--cover FILE` (`holes/coverage/<game>.toml`, native/hole-coverage)
+  adds the file's coverage runs after the press script (reset, the
+  owner's saves under `$GBAA_DATA/saves/`, Emerald's story saves and TAS
+  states, each with seeded random presses), classifies against them all,
+  and checks the file's `[[jump]]` list (each unresolved jump: the runs
+  that reached it, its targets) against what they saw, failing on a
+  difference; `--update` rewrites the list instead. Deterministic, so a
+  rerun matches. 10 to 30 minutes a game: run it as a long job.
 - `just jt-score`: the jump-table check (decision 5c). Builds truth tables
   from `$GBAA_DATA/src/pokeemerald/pokeemerald{,_modern}.elf` and the ROMs
   beside them, runs `analysis::jumptable` over each ELF's code map, and
@@ -1142,16 +1158,18 @@ says what a recipe or tool does and what it must still pass.
   build's differ. Passes with 510 distinct pictures, hashes file
   `5539f4ec2af9bb48`, planted caught at frame 212 (2026-11-01). Heavy:
   builds a generated crate.
-- `just native-check` (native/oracle; docs/native-port-design.md,
-  section 7): the native check. Recompiles `agb/native-spike` and
-  `agb/psg-square` (`just agb-tests`) at `--timing native` and builds
-  them, builds `crates/native-spike`'s programs in the check layout
-  (`--features guest-layout`: RAM as the ROM's EWRAM and IWRAM, each
-  global at its link address), the spike also in the play layout and with
-  its planted wrong store, then runs `route-check --native NATIVE PLAY
+- `just native-check` (native/oracle, native/hw-sound;
+  docs/native-port-design.md, section 7): the native check. Recompiles
+  `agb/native-spike`, `agb/psg-square` and `agb/direct-sound` (`just
+  agb-tests`) at `--timing native` and builds them, builds
+  `crates/native-spike`'s programs in the check layout (`--features
+  guest-layout`: RAM as the ROM's EWRAM and IWRAM, each global at its
+  link address), the spike also in the play layout, the spike and
+  psg-square with their planted faults, then runs `route-check --native NATIVE PLAY
   ROUTE [--replaced FILE] [--packed BIN] [--planted BIN]...` on
-  `units/native-spike.toml` (600 frames) and `units/psg-square.toml`
-  (120). Each build writes every frame's record at its present
+  `units/native-spike.toml` (600 frames), `units/psg-square.toml`
+  (120) and `units/direct-sound.toml` (300). Each build writes every
+  frame's record at its present
   (`--native-record`, `crates/native-record`); the play build runs a
   second time with `--interp`, whose records must be the compiled run's
   and which reports the lowest sp (compiled code doesn't keep it). Fails
@@ -1160,40 +1178,70 @@ says what a recipe or tool does and what it must still pass.
   code copies, and `crates/native-spike/check/*.replaced.toml`: agb's
   globals, heap and VRAM free list, which the native programs replaced),
   the I/O registers the library models (display, `DISPSTAT`'s writable
-  bits, `VCOUNT`, sound registers but `SOUNDCNT_X`'s status, wave RAM,
-  `IE`/`IF`/`WAITCNT`/`IME`), palette, VRAM, OAM, and audio where both
-  make some; the play layout must draw the same frames and the planted
-  store must be caught. The library has no mixer, so psg-square's audio
-  is reported "NOT compared" (its sound registers are): play's sound
-  against a native program's none fails unless `--no-audio WHY`, which
-  the recipe gives for psg-square. A lowest sp outside IWRAM fails; a
-  code copy's skip covers any variables copied with the code. Passes with 0
-  differences for both, the spike's audio silent in both, the plant
-  caught at frame 212, OAM byte `0x07000002` (2026-11-01). Writes
-  `out/native-check/`. Heavy: builds two generated crates.
+  bits, `VCOUNT`, the sound registers with `SOUNDCNT_X`'s status, wave
+  RAM, the FIFOs' last stores, the timers, `IE`/`IF`/`WAITCNT`/`IME`),
+  palette, VRAM, OAM, and each frame's audio (samples' count and hash):
+  `runtime::hw` mixes with the play build's own sound path
+  (native/hw-sound), so psg-square's FIFO A and PSG and direct-sound's
+  two FIFOs with their timer-IRQ buffer swaps are compared sample for
+  sample. The play layout must draw the same frames, and the planted
+  faults must be caught: the spike's wrong store, psg-square's one wrong
+  sample (`--features plant`). Play's sound against a native program's
+  none (a host that records none) fails unless `--no-audio WHY`. A lowest
+  sp outside IWRAM fails; a code copy's skip covers any variables copied
+  with the code. Passes with 0 differences and audio the same in every
+  frame for all three (2026-11-06). Writes `out/native-check/`. Heavy:
+  builds three generated crates.
 - `just lift ROM [OUT] [FLAGS]` (native/lift-stage-a;
   `docs/native-port-design.md`, "The stage-A lifter as built"): the
   stage-A lifter. `gbaa-lift ROM OUT [--name NAME] [--holes FILE]
-  [--bars FILE] [--drop-standin KEY] [--plant AT]` (`codegen::native`) writes the whole
-  program to OUT (default `out/lift-<name>`) as one `src/main.rs`: every
+  [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY]
+  [--plant AT] [--copies N]` (`codegen::native`) writes the whole
+  program to OUT (default `out/lift-<name>`) as `src/`: `main.rs` (the
+  prelude, RAM, `ENTRY`), `fns.rs` (`FNS`) and the functions in modules
+  of about 4,000 lines, `m_<first key>.rs`, which rustc builds in parallel
+  (`codegen::native::modules`, native/lift-modules; `--copies N` writes
+  them N times over under new names, a synthetic large lift for measuring
+  the build); every
   function plain Rust over byte RAM (`Game::ram`, EWRAM then IWRAM) and
-  `runtime::hw`, its registers locals, blocks a `loop { match }` over
+  `runtime::hw`, a RAM access at a constant address a typed global's
+  field (`g.ram.d_020000c0`; `Game::ram` is a `Ram` struct of them at the
+  guest's offsets, `--layout guest`, the default, which derefs to
+  the bytes; `--layout packed`, the play layout, puts them in the
+  lifter's order with the rest of RAM as `bytes`, and `g.ram[offset]`
+  finds a byte in the field that holds it, native/lift-packed-layout; names from DIR's names files for this ROM, default `names/`;
+  native/ram-globals), its registers locals, blocks a `loop { match }` over
   local labels, calls Rust calls; then the recipe builds it into
   `target/recompiled` (`gbaa-native-<name>`, the native programs' headless
   flags, `crates/native-host`). It reads `holes/<name>.toml` when there is
-  one: `[[standin]]` (a function's hand-written Rust, and why) and
-  `[[jump]]` (an unresolved jump's targets). A hard hole no stand-in
+  one, else `mods/<name>/holes.toml` (a commercial game's, private: its
+  stand-ins are ports of the game's code); `<name>` is `--name`'s when
+  given (a file name with spaces: `just lift "…/Metroid - Zero Mission
+  (USA).gba" out/lift-metroid --name metroid`), else the ROM's file name
+  lowercased. The file has `[[standin]]` (a function's hand-written Rust,
+  and why), `[[jump]]` (an unresolved jump's targets), `[[copy]]` (code
+  the game copies to RAM that discovery's static copies don't have:
+  `src`, `dst`, `len`, `roots` and why, as `just holes` prints its run's
+  copies; lifted at its RAM keys like a static copy, native/lift-ram-copies)
+  and, at the top,
+  `skip_fn_flow = "why"` (the function-address flow left out, for a game
+  it doesn't settle on). A hard hole no stand-in
   covers (CPU state, an unresolved jump, a BIOS call the prelude lacks, an
   undefined instruction, a jump to no code, a summary that returns r4-r11
   or sp changed) fails the lift, naming each, and the build (a
   `compile_error!` each). `report.txt` lists the soft holes and ends
   with the metrics as `name value` lines (`codegen::native::metrics`):
   lines; functions (lifted, recognised, unrecognised, replaced, with a
-  summary hole, four-register without one); callee-saves unproven; hard
+  summary hole, four-register without one, bar 0 since `native/lift-params`); callee-saves unproven; hard
   holes; blocks; every load and store by how its address is known
   (`const` by region, `sp`, `computed` by the region the value-set
   analysis bounds it to, else `computed_unknown`; regions `ram`, `io`,
-  `rom`, `display`, `sram`, `other`); `call_fn` calls; jumps by value;
+  `rom`, `display`, `sram`, `other`; `const_ram` counts only byte
+  accesses, the globals' are `ram_global`, unbarred, with `ram_globals`
+  the count of globals; `computed_ram` likewise, the ones the value
+  sets bound to one global are `ram_object`, unbarred, checked by the
+  prelude's `pin` and `ix` at run time, and `pointer_unexplained` the
+  rest, native/ref-in-object); `call_fn` calls; jumps by value;
   gap targets. `--bars FILE` fails the lift (after writing it) on any
   metric over `[program.NAME.bars]`'s maximum, each named with both
   numbers (`gbaa-lift: affine: load_computed_unknown is 755, over its
@@ -1210,10 +1258,12 @@ says what a recipe or tool does and what it must still pass.
   `$GBAA_DATA`, `route`, optional `lift_flags`, `route_flags`,
   `planted_store`, `planted_hole`, `planted_flags`) and its bars,
   `[program.<name>.bars]`. Today `agb/native-spike`, `agb/affine`,
-  `agb/mosaic-modes`, `agb/native-fallthrough` and `agb/native-irq-hold`
-  (`just agb-tests`) on `units/native-spike.toml`, `units/affine-600.toml`,
-  `units/mosaic-modes-600.toml`, `units/native-fallthrough-600.toml` and
-  `units/native-irq-hold-601.toml`. First every
+  `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
+  `agb/native-frame-locals` and `agb/native-ime-release` (`just
+  agb-tests`) on `units/native-spike.toml`, `units/affine-600.toml`,
+  `units/mosaic-modes-600.toml`, `units/native-fallthrough-600.toml`,
+  `units/native-irq-hold-601.toml`, `units/native-frame-locals-600.toml`
+  and `units/native-ime-release-601.toml`. First every
   program is lifted with `--bars` (seconds), failing before any build on
   a metric over its bar; then each lift and its play build
   (`--timing native`) are built and `route-check --native` runs them for
@@ -1222,16 +1272,36 @@ says what a recipe or tool does and what it must still pass.
   `planted_store` (0x08000186, the V-blank handler's frame count) must be
   caught, and with its `planted_hole` (agb's IRQ wrapper's stand-in
   dropped) the lift and the build must fail naming `f_03000000`'s `mrs`.
-  native-fallthrough and native-irq-hold lifted with their
-  `planted_flags` (`--fall-as-tail-call`, the old fall into another
-  function; `--irq-at-waits`, the old IRQ run at a wait inside a critical
-  section) must be caught too. Passes with `every metric within its bar`,
-  five `pass (60x frames, 0 differences …)` lines, `planted fault caught
-  (…-planted: frame 2: EWRAM byte 0x020000c0 …)`, `(…-fall-as-tail-call:
-  frame 1: EWRAM byte 0x020000c4 …)` and `(…-irq-at-waits: frame 2: EWRAM
-  byte 0x020000c8: play 0x00, native 0x01 …)`, `planted hard hole caught`
-  and `lift-check: passed`. Logs in `out/lift-*.txt`. About 10 minutes on
-  quack. Heavy: builds thirteen generated crates.
+  native-fallthrough, native-irq-hold, native-frame-locals and
+  native-ime-release lifted with their `planted_flags`
+  (`--fall-as-tail-call`, the old fall into another function;
+  `--irq-at-waits`, the old IRQ run at a wait inside a critical section;
+  `--plant-slot=0x08000182`, `fl_keep`'s store to a stack local made one
+  more, native/frame-locals; `--ime-at-waits`, the old IRQ held past the
+  store that sets `IME` again to the next wait, native/ime-release) must
+  be caught too. Each program is
+  lifted once more with `--layout packed` (`out/lift-<name>-packed`),
+  passed as `--packed`: it must draw the guest layout's frames and
+  record the same bytes, nothing skipped (native/lift-packed-layout).
+  Passes with
+  `every metric within its bar`, seven `pass (60x frames, 0 differences …;
+  the play layout draws the same 60x frames, its records the same …)`
+  lines, `planted fault caught (…-planted: frame 2: EWRAM byte 0x020000c0
+  …)`, `(…-fall-as-tail-call: frame 1: EWRAM byte 0x020000c4 …)`,
+  `(…-plant-slot-0x08000182: frame 1: EWRAM byte 0x020000c4: play 0x61,
+  native 0x62 …)` and `(…-irq-at-waits: frame 2: EWRAM byte 0x020000c8:
+  play 0x00, native 0x01 …)`, `(…-ime-at-waits: frame 2: EWRAM byte
+  0x020000cc: play 0x01, native 0x00 …)`, `planted hard hole caught` and
+  `lift-check: passed`. Logs in `out/lift-*.txt`. About 10 minutes on
+  quack. Heavy: builds twenty-six generated crates.
+
+  `gbaa-lift --shadow-locals` (native/frame-locals; by hand, not part of
+  the check) keeps every stack local in the frame's bytes too and prints
+  `shadow local: AT loads X from lN, the frame's bytes hold Y` wherever a
+  load differs: a write to the frame the escape analysis didn't see. Lift
+  with `--name <name>-shadow`, `just build-recompiled`, then run
+  `target/recompiled/release/gbaa-native-<name>-shadow --headless --frames
+  601` and grep its stderr.
 
   **Lowering a bar** (every stage-B unit's check): change the one
   `metric = N` line in the program's bars table and run `just lift-check`
@@ -1510,14 +1580,19 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   dropped the link while the BIOS ran it at once (2026-10-26). About a
   minute.
 - Netplay in the desktop (multiplayer/desktop-netplay, `crates/desktop/src/room.rs`):
-  `gbaa-desktop ROM --server ADDR --host` makes a two-seat room on a
-  `gbaa-server` (ADDR a host or IP, port default 7374), prints `room
-  CODE`, puts it in the window's title and waits for the other player;
-  `--server ADDR --join CODE` takes the other seat (codes in any case).
+  `gbaa-desktop ROM --server ADDR --host` makes a room on a
+  `gbaa-server` (ADDR a host or IP, port default 7374) of two seats, or
+  `--players N` (2 to 4: Kirby's four, multiplayer/four-seats), prints
+  `room CODE`, puts it in the window's title and waits until every seat
+  is taken (the title counts them); `--server ADDR --join CODE` takes the
+  next free seat (codes in any case), so players are numbered in the
+  order they join, and one more is told the room is full. Every peer
+  runs every seat's GBA, all on one cable.
   The window's menu does the same with no flags (multiplayer/
   menu-netplay, its Netplay page: F10 or Start+Select): the server
   (fly's 37.16.3.41 until set, then remembered as `server` in
-  `settings.conf`), Host a room (the code shown big), the code to join
+  `settings.conf`), Players (2 to 4; A or right steps it), Host a room
+  (the code shown big, and how many are in), the code to join
   typed on the keyboard or a pad (up/down step a letter), Leave the room;
   in a session it shows the seats, round trip, lead, rollbacks and frames
   run again. The game alone stops for the session and comes back after
@@ -1537,10 +1612,19 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   (`Gba::unplug`), so the game shows its own link error.
   In a room a small mark in the window's top right corner (`menu::Mark`,
   multiplayer/connected-mark) says how it is: connecting, waiting for
-  players (1/2), connected (2/2), not hearing from them (nothing for
-  0.75 s, `room::SHAKY`) or lost (1/2, playing alone). Seen 2026-10-31 in a
+  players (1/2; 3/4 in a room of four with three in), connected (2/2,
+  4/4), not hearing from them (nothing for 0.75 s, `room::SHAKY`) or lost
+  (1/2, playing alone). With three or four players, one leaving unplugs
+  every remaining player's cable too. Seen 2026-10-31 in a
   private `cu session` on quack, Kirby through a local `gbaa-server`, the
   joiner stopped with `SIGSTOP`.
+  A desync (the peers' hashes of a frame differ; multiplayer/desync-report)
+  is said when found: a toast and the mark (out of sync, red), a line on
+  the Netplay page, `netplay notice: …` on stdout; the end lines add
+  `netplay desyncs: N …, at frames …` (or `none`), and a headless run
+  with one keeps its report in `$GBAA_DATA/netplay/` too. `--desync-at N`
+  (`--desync-at1/2` in `gbaa-pingsim desktop`) forces one: from frame N
+  this peer runs its own seat holding A (`Rollback::skew`).
   Both peers run both GBAs on one cable (`netplay::gba`), interpreted in
   `gbaa-desktop`; a recompiled game's binary (`gbaa-<game>`) runs them on
   its code (multiplayer/recompiled-netplay; `--interp` forces the
@@ -1580,7 +1664,9 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   presents 16.7 ms apart, both peers ending on one hash.
 - `just rollback-feel [PROFILE] [ROM] [ARGS]` (multiplayer/
   rollback-design; `gbaa-pingsim desktop`): two `gbaa-desktop` netplay
-  peers through a local server's rooms, the joiner behind a proxy
+  peers (`--players N`: up to four, a second apart, `--input3`/`--input4`
+  and the like for the others' own options; multiplayer/four-seats)
+  through a local server's rooms, each joiner behind a proxy
   following `crates/netplay/profiles/PROFILE.toml` (default wander), ROM
   default Kirby & the Amazing Mirror. Windows to feel it (keyboard to the focused one, a pad to
   both); with `--headless --paced --frames N --input1 S --input2 S`,
@@ -1606,13 +1692,17 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
 - The server on fly.io (multiplayer/play-gate, `deploy/fly/`): the app
   `gbaa-server` (region ewr, one shared-cpu machine, **stopped between
   june's playtests**: `just fly-up` before playing or a test that needs
-  it, `just fly-down` after) runs `gbaa-server fly-global-services:7374`,
-  the address fly routes a public UDP port to. It keeps no files, so it
+  it, `just fly-down` after) runs `gbaa-server fly-global-services:7374
+  --min-version N`, the address fly routes a public UDP port to, turning
+  away builds older than netplay version N (`netplay::VERSION`, raised by
+  hand with the Dockerfile's N: docs/research/multiplayer.md,
+  "Versions"). It keeps no files, so it
   needs no volume (the volume `gbaa_data`, which held the QUIC
   certificate, is unused since multiplayer/remove-lockstep-quic and
   still billed until june destroys it: `fly volumes destroy`). `just
   fly-setup` once (billed: a dedicated IPv4; fly serves UDP only on
-  one), `just fly-deploy` after any server change (built by fly's remote
+  one), `just fly-deploy` after any server change (`--ha=false`: rooms
+  live in one process, so the app must have one machine; built by fly's remote
   builder from `deploy/fly/Dockerfile`, the repo root as context,
   `.dockerignore` keeping out builds and data). The address is
   37.16.3.41 (`fly ips list -a gbaa-server`). Players: `gbaa-desktop ROM
@@ -1658,10 +1748,13 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   SEAT ADDR`, `straight`. `cargo test -p netplay --test ping_sim` runs
   every profile (and `rough` with GBAs), about 20 s of wall time.
 - The server (multiplayer/relay-server, then multiplayer/remove-lockstep-quic,
-  `crates/relay`): `gbaa-server [ADDR]` serves plain-UDP rooms
-  (`relay::rooms`, default `0.0.0.0:7374`): it seats the players by a
-  six-letter code and passes their datagrams on, and keeps nothing on
-  disk, so players need only its address. A player's seat is freed when
+  `crates/relay`): `gbaa-server [ADDR] [--min-version N]` serves
+  plain-UDP rooms (`relay::rooms`, default `0.0.0.0:7374`): it seats the
+  players by a six-letter code and passes their datagrams on, and keeps
+  nothing on disk, so players need only its address. `--min-version N`
+  refuses clients older than netplay version N, saying "this game is too
+  old for the server (version V, needs N): get the new build"
+  (multiplayer/server-version-cutoff). A player's seat is freed when
   it leaves (`L`) or sends nothing for 10 s, and a room closes with its
   last player; it says so on stderr (`room CODE opened`, `player 2 left`,
   `closed: every player gone`). `gbaa-server --rooms ADDR` asks one how
@@ -1671,8 +1764,11 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   per peer between it and the server, both following the profile
   (default calm); seat 0 (`gbaa-pingsim room-peer 0 ADDR`) makes a room
   and prints its code, seat 1 joins by it, and they play the toy game by
-  rollback over `netplay::udp` through the rooms. Passes as `ping-sim`
-  does; ARGS are its. `cargo test -p relay` covers the rooms; `cargo test
+  rollback over `netplay::udp` through the rooms. `--players N` (2-4)
+  makes the room N seats and starts N - 1 joiners, each through a proxy
+  of its own; `--players 4 --console gba` is four GBAs on one cable in
+  every peer (multiplayer/four-seats, 2026-10-31: wander, every seat on
+  the straight run's hashes). Passes as `ping-sim` does; ARGS are its. `cargo test -p relay` covers the rooms; `cargo test
   -p netplay --test ping_sim` runs calm, spiky and rough with GBAs
   through a local server.
 - Factory units (`docs/factory.md`): `just unit NAME [THROUGH]` runs

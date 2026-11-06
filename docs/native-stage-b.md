@@ -187,12 +187,57 @@ real game. Each gets a small agb program of ours (source in `agb/`,
   2 (`RESULTS`, EWRAM 0x020000c8). The play build before the fix got
   `c2 - c0` 0.
 
-  Not done here: `IME` has the same shape. agb's own `critical_section`
-  clears `IME`, not I, and a write that sets `IME` with an IRQ pending is
-  taken at once on the hardware; both builds take it at the next time
-  point instead (the play build's `irqs_are_taken_only_where_time_passed`
-  test pins that). They agree with each other, so the native check can't
-  see it; only a test program against mGBA would.
+- **A pending IRQ is taken the moment IME is set again**
+  (`native/ime-release`). `IME` has the I bit's shape: agbcc games'
+  critical sections (and our test's) clear `IME`, not I, and a write
+  that sets `IME` with an IRQ pending is taken at once on the hardware.
+  Both builds took it at the next time point instead (the play build's
+  `irqs_are_taken_only_where_time_passed` test pinned that), and agreed
+  with each other, so the native check couldn't see it; only mGBA could.
+
+  As built (2026-11-06):
+  - Play build: `Io` raises `event::IME_ON` when a write takes `IME` from
+    0 to 1, and `Machine::tick_native` takes it out and opens the IRQ
+    window if I is clear and `IME`, `IE & IF` are set. Only that write:
+    an IRQ requested between time points with `IME` already on still
+    waits for the next one (a DMA's end, say), as the native program's
+    library does. The interpreter ticks after every instruction and
+    compiled code at a block's exit, so the IRQ can land up to a block
+    apart; the test program writes `IME` as a function's last act before
+    `bx lr`, and reads the count two `nop`s after the return (mGBA takes
+    an IRQ a few cycles after the write). Exact timing is unaffected: its
+    tick already syncs on any event. So the compiled code and its
+    interpreter take it at the same instruction, the recompiler at
+    `--timing native` ends a block after a store whose address folds to
+    `IME` (`func::build_block`), as a control `msr` already does; without
+    that, lift-check caught the two disagreeing on the IRQ stack's saved
+    return address. A store to `IME` through an address it can't fold
+    still ticks at its block's end.
+  - Hardware library: `hw::write_ime(g, v)` stores `IME` and, when that
+    sets it again, runs what's pending at once, unless the CPSR's I bit
+    holds it (`Hw::write16` alone can't reach the program). The prelude's
+    `io_write16` sends `IME` through it, so every store does; its
+    `intr_wait` writes `IME` straight to `Hw`, since the BIOS runs with I
+    set. The handler runs on `Game::sp`, so the lift prints `g.sp = r13;`
+    on the same line before every store that may reach I/O (all but
+    sp-relative ones and constants outside I/O): the lifted code's local
+    `r13` is current there, as the native lift runs no dead-register-write
+    pass. No line is added to the lifted code.
+  - `gbaa-lift --ime-at-waits` brings the old behaviour back
+    (`IME_RELEASE` false); lift-check's `planted_flags` runs it as the
+    control on `agb/native-ime-release`. The prelude grew by 8 lines,
+    from 500 to 508 (`IME_RELEASE` and its doc, the `IME` case in
+    `io_write16`), so `lines_prelude`'s bar rose to 508 in every program.
+
+  The test program, `agb/native-ime-release`: a V-blank handler counts
+  frames; `ir_probe` (Thumb, `global_asm!`) polls `VCOUNT` to line 100,
+  clears `IME` with `ir_ime(0)`, polls to line 170, past V-blank's start,
+  and sets `IME` again with `ir_ime(1)`, reading the count before (`c0`),
+  after the poll (`c1`) and after the return (`c2`). The hardware gives
+  `c1 - c0` 0 and `c2 - c0` 1; mGBA, the play build at both timings and
+  the lift agree (frame 601's hash, `abc7ac7a22ed22b3`, the same picture
+  as `agb/native-irq-hold`'s); the play build at `--timing native` before
+  the fix drew `0346a4614af57b13` (`c2 - c0` 0).
 
 ### 2. Recognising the agb library
 
@@ -257,6 +302,39 @@ build for the host.
   passes a register its callee reads past its parameters (Emerald's
   `GetMonData2` callers) passes it explicitly. Bar: four-register
   functions no more than the functions with summary holes.
+
+  As built (2026-11-06; `crates/codegen/src/native/shape.rs`): a
+  function is *shaped* when its summary has no hole and none of the
+  callee summaries its run used (`Summary::callees`, its calls and tail
+  calls) stopped at a hole (`Summary::stopped`: a jump into code the run
+  doesn't follow, to an unknown place, a mode change; reads past it are
+  unseen, so its callers' parameters may be short). A shaped function is
+  `f_<key>(g, sp, a0, a2) -> Result<u32, Exit>` (`()`, `u32` or a tuple),
+  its extended entry `x_<key>` returns the same, and `a_<key>` is its
+  four-register adapter, which `FNS` and `ENTRY` hold. Parameters are the
+  summary's `params`, which already include a register passed on to a
+  callee that reads it (the `GetMonData2` case is a parameter of the
+  caller, so a direct call passes the callee's parameters and nothing
+  else). Results are what may be read after it returns, among the
+  registers it may change: the summary's `results`, r0 (an indirect
+  call's caller reads it, as the summaries assume), all four where a
+  direct caller's reads aren't known (its run stopped, or it is in the
+  other code context), what is read after a function that returns its
+  value unread (`forwards`), all four after a call by value whose target
+  the lifter knows (the summaries take it as indirect), and what the
+  callers of a function that falls or jumps into it read (a fixed point; a jump by value the run didn't
+  prove a return adds its function's to every function: r0 on all five
+  programs). A result it may leave as it came is a parameter too. A
+  register it never changes stays the caller's. The indirect calls'
+  r1-r3 come back from the adapter as they went in, which the summaries
+  take as undefined anyway. Measured: 27, 22, 29, 28, 29 shaped
+  functions (affine, mosaic-modes, native-spike, native-fallthrough,
+  native-irq-hold); four-register functions without a summary hole 0 on
+  each (bar 0); `lines` unchanged (each adapter's line replaces the
+  summary comment the signature now says). Many shaped functions return
+  all four, because a caller whose run stopped (a fall into library
+  code) calls them: `native/indirect-call-args` and the stack units
+  narrow those as the summaries' holes close.
 - **Function addresses followed to every use** (`native/fnref-flow`).
   Today pointers are ROM keys, because the literal lift loads them from
   ROM bytes and RAM. Dense IDs need every place a function address enters
@@ -266,6 +344,90 @@ build for the host.
   anything else a hard hole) and reports the words it proved and each
   indirect call's callee set. Check: unit tests per use; bar on function
   words not proven.
+
+  As built (2026-11-06): `crates/codegen/src/native/fnref.rs`, a
+  whole-program abstract run of every function's IR (stand-ins' original
+  code too). A value is a set of tokens: a function's key in a form
+  (whole; `>> 16`, `& 0xffff` or a halfword store; `<< 16` of either;
+  bytes; `!` of it or a difference with it, the two sides of a compare),
+  each with its origin (a ROM word, or a constant the code makes); a
+  number; a ROM pointer, exact or "from here on" after an index the run
+  doesn't follow (reading every word to the next code); and two flags,
+  read from RAM and unknown. Sources: constants and pool words equal to a
+  function's key (the IR's `Pool` op is placed back at its word by
+  decoding the `ldr [pc]`), loads through a ROM pointer of a word holding
+  one, the start's copies of ROM data to RAM, `CpuSet` from ROM. Memory:
+  each function's frame words where the frame's run placed the access
+  and the slot doesn't escape (a saved register's slot reads as the
+  register as it came, unknown; one at or above the entry sp, a stack
+  argument, also reads the pile its caller's store went to), constant
+  RAM addresses one cell each (mirrors folded), and one pile for every
+  other store; memory marks what else was stored, so a cell nothing
+  else reached is exactly what was; a load the value-set analysis bounds
+  to ROM reads the words there. A call passes r0-r3 and takes back its callee's
+  returns; a tail call or fall passes every register; an indirect call
+  passes them to each function its target may hold. The rule: a function
+  value may be called, stored and loaded back (a copy by bytes or halves
+  reassembles it), compared for equality as a whole (`== 0` of a
+  difference with another, 0 or an unknown: a small constant could be a
+  dense ID, and a half's top is 0 when dense, so halves aren't
+  compared), split and joined (a half joined only with the other half),
+  `| 1` on a Thumb key; anything else (an address, other arithmetic, an
+  ordered compare, a bit test, a piece used as a number, a piece called)
+  marks its origin not proven, and so does a value given to the BIOS or
+  stored outside RAM (I/O, display memory, SRAM). A word is proven when the run read it and no
+  value it entered met any of those. It rests on a closed world: function
+  and ROM addresses enter values only from those sources, so an unknown
+  value is never one, and a callee set of whole addresses is complete,
+  unless the run dropped a ROM word or pointer on its way (a flag on the
+  value, carried through memory: a "from here on" read cut short, a
+  ROM-bounded read too wide to make, a ROM pointer less an unknown);
+  a call through such a value is incomplete. A
+  forbidden use is reported, not a hard hole: nothing printed changes yet
+  (`main.rs` byte-identical), and `native/fnref-dense` is where one stops
+  a dense build. The report's `function addresses` line and a line per
+  word, constant and site; metrics `fn_words_not_proven` (barred at the
+  values below) and `fn_words_proven` (unbarred). The run takes 3-6 s of
+  each lift's 6-12 s (about a second of it reading the 110 KB of ROM data).
+
+  | program | function words (pools, data) | proven | never read | not allowed | through the pile | code constants proven | `call_fn` sets complete |
+  |---|---|---|---|---|---|---|---|
+  | native-spike | 58 (34, 24) | 5 | 9 | 44 | 43 | 11 of 13 | 59 of 59 |
+  | affine | 56 (34, 22) | 4 | 15 | 37 | 35 | 11 of 13 | 57 of 57 |
+  | mosaic-modes | 55 (34, 21) | 4 | 14 | 37 | 36 | 11 of 14 | 57 of 57 |
+  | native-fallthrough | 57 (35, 22) | 4 | 15 | 38 | 36 | 11 of 13 | 58 of 58 |
+  | native-irq-hold | 61 (36, 25) | 6 | 15 | 40 | 38 | 11 of 13 | 61 of 61 |
+  | native-frame-locals | 56 (34, 22) | 4 | 15 | 37 | 35 | 11 of 13 | 57 of 57 |
+
+  ("Not allowed" counts the BIOS too; "through the pile" are the
+  not-proven words whose values were stored where the run can't place
+  them.) **The pile is the limit.** agb keeps its closures and trait
+  objects on the heap, and every heap store goes to the one pile, so a
+  load through any heap pointer may give every function address ever
+  stored there; when one such load is used as a number (a length, a
+  flag), every one of them is marked. That is most of the not-proven
+  words, and why each `call_fn` set, though complete, is every
+  address-taken function (17 on the spike). Splitting the pile by the
+  value-set analysis's bounds on each store's address proved nothing
+  more (agb's heap stores aren't bounded) and was nine times slower.
+  What would: the heap by allocation site and field (agb's allocator's
+  callers), which `native/fnref-dense`'s bar (0 ROM keys left) needs.
+  The "never read" words are words no tracked load reaches (vtables of
+  types never made, or reached by a path the run loses); they stay ROM
+  keys. Order matters a little to the widening (more than 8 numbers are
+  unknown, more than 16 exact ROM pointers become one "from the lowest
+  on"), so the first reason given per word can move with the code. Gaps
+  the review named, kept: a "from here on" read stops after 256 KB (the
+  agb programs' data runs to about 110 KB, which the old 16 KB cut lost)
+  and a ROM-bounded read wider than that reads nothing; a ROM pointer
+  less an unknown is unknown (each flags the value, so a call through it
+  is incomplete rather than wrongly complete); a load through a pointer
+  with no bounds at all reads no ROM; a RAM-to-RAM `CpuSet` isn't
+  followed; `ror` by an unknown amount (a word load's alignment rotation)
+  keeps a function's form, and a ROM pointer's. `native/fnref-dense` should know that proofs are per origin,
+  and a pool load folded from a non-pc-relative address gets a
+  code-constant origin, so dense needs per-site constant rewriting.
+  `GBAA_FNREF_TRACE=1` prints the run's rounds and each use not allowed.
 - **Function pointers as dense IDs** (`native/fnref-dense`). The proven
   words rewritten in the lifter's copy of ROM data, `FNS` dense from 1
   under a new `--fn-ids dense`; ROM keys stay the native check's (RAM holds
@@ -295,11 +457,93 @@ local), so locals need an escape analysis first.
   returned, or used in arithmetic past the slot. Reported, not printed.
   Check: unit tests on hand-built cases of each kind; the report's counts
   on the three programs.
+
+  As built (2026-11-06): `crates/codegen/src/native/frame.rs`, an
+  abstract run of each lifted function's IR from its entry (values are
+  the entry sp plus a constant, a constant, a register as it came, or
+  "made from these sp offsets" by arithmetic it doesn't follow; frame
+  words keep what was stored in them). Slots are the byte ranges
+  sp-relative accesses reach, overlaps merged; an escaping address no
+  access reaches is an empty slot of its own. The kinds: passed to a
+  callee in a register it reads (its summary's parameters, all four
+  without one; a tail call or fall, every register); a callee's stack
+  argument (at or above sp at the call, within the bytes the callee reads
+  above its entry sp; an indirect call, the most any function reads);
+  stored outside the frame or in a slot that escapes; returned in r0-r3;
+  arithmetic the run can't follow, used as an address; sp lost. An
+  escaping address is an object of unknown size: its slot escapes, and so
+  does every slot above it up to the first saved-register slot (every
+  store a word holding r4-r11 or lr as they came) or the entry sp.
+  Nothing printed changes (`main.rs` is byte-identical). The report's
+  `stack frames` line and two metrics, barred in `lift-check.toml`:
+  `sp_accesses_local_slot` and `sp_accesses_escaping_slot`, which sum to
+  `load_sp` + `store_sp`.
+
+  | program | slots | escaping | to slots kept | to slots escaping |
+  |---|---|---|---|---|
+  | native-spike | 856 | 391 | 2,239 | 1,289 |
+  | affine | 852 | 248 | 2,905 | 704 |
+  | mosaic-modes | 718 | 353 | 1,093 | 1,124 |
+  | native-fallthrough | 858 | 252 | 2,892 | 708 |
+  | native-irq-hold | 866 | 253 | 2,912 | 708 |
+
+  On native-spike, by kind: passed to a callee 148, stack argument 232,
+  stored 122, returned 2, arithmetic 69; no function loses sp. The spike's
+  stack-argument count is high because one function there reads 54 bytes
+  above its entry sp, and every indirect call is assumed to call it; the
+  callee sets of `native/fnref-flow` would narrow that. Two gaps the
+  locals unit must weigh: an escaping address marks only the slots at and
+  above it (a pointer into an object's middle reaching below isn't
+  followed), and a callee's stack-argument bytes count only its exact
+  sp-relative reads.
 - **Stack slots that don't escape as Rust locals**
   (`native/frame-locals`). Their loads and stores through sp become locals;
   escaping slots stay IWRAM bytes. Bar: 0 sp-relative accesses to slots
   that don't escape (a metric the escape analysis adds). Planted control: a
   slot the lift gets wrong on purpose, reaching a global, is caught.
+
+  As built (2026-11-06): a slot that doesn't escape, lies below the entry
+  sp and is only accessed aligned (`Frame::locals`) is a Rust local,
+  `l<bytes below the entry sp>`, a `u32` for an aligned word only ever
+  accessed whole, else `[u8; N]`, declared zero at the top of `x_<key>`;
+  its loads and stores are the local's, and the address arithmetic only
+  they used isn't printed (a per-block pass drops every pure value
+  nothing printed uses). Slots at or above the entry sp are the caller's
+  (a fall's shared epilogue, stack arguments), never locals: a metric of
+  their own, `sp_accesses_callers_frame`. The escape analysis gained one
+  rule: a callee from whose entry sp + k an address escapes (agb's
+  `assert_failed` passes on a pointer to its stack argument) reaches up
+  into its caller's frame from the caller's sp + k, an escaping address
+  there, unless the caller is done with its frame after the call (the
+  callee never returns, or a tail call): then the locals are written to
+  the frame's bytes before the call (`Frame::flush`; 4 calls on the
+  spike). For a call through a register, the reach is the lowest of the
+  functions whose address is a ROM word. The gap the escape analysis left
+  open, a pointer that walks down from where it escaped, stays open:
+  walking down too would leave about three times the accesses in memory
+  (native-spike: 2,711 sp accesses to escaping slots, not 1,289).
+  `gbaa-lift --shadow-locals` checks it at run time instead: every local
+  is kept in the frame's bytes too, and a load that differs from them
+  prints `shadow local:`. All six programs run 601 frames with none (a
+  lift with one mirrored store taken out prints them from frame 0).
+
+  The control is a sixth program, `agb/native-frame-locals`: `fl_keep`
+  keeps a word, a halfword and a byte in its frame across a call that
+  clobbers r0-r3 and returns them combined, which the main loop stores to
+  a global; `fl_esc`'s slot escapes to `fl_double`, which writes through
+  it. `--plant-slot=0x08000182` makes `fl_keep`'s local store of `x + 7`
+  store one more (the lift fails if the address isn't a store to a local).
+
+  Lines are with `native/ram-globals` merged, which landed alongside.
+
+  | program | locals | accesses to them | `load_sp` | `store_sp` | lines |
+  |---|---|---|---|---|---|
+  | native-spike | 458 | 2,291 | 2,177 → 669 | 1,351 → 628 | 72,733 → 71,823 |
+  | affine | 597 | 2,907 | 2,232 → 268 | 1,377 → 443 | 72,638 → 71,213 |
+  | mosaic-modes | 362 | 1,151 | 1,202 → 574 | 1,015 → 554 | 49,882 → 49,238 |
+  | native-fallthrough | 597 | 2,892 | 2,221 → 268 | 1,379 → 449 | 71,520 → 70,103 |
+  | native-irq-hold | 606 | 2,923 | 2,227 → 267 | 1,393 → 448 | 72,204 → 70,762 |
+  | native-frame-locals | 603 | 2,904 | 265 | 446 | 70,185 |
 
 Escaping slots passed as `&mut` (the design's section 1 form 1) come with
 typed pointers, below; until then they are soft holes, counted.
@@ -317,10 +561,92 @@ typed pointers, below; until then they are soft holes, counted.
   typed by access widths, names from a names file where one exists), laid
   out at the guest's offsets under `--layout guest`. Bar: constant-address
   RAM byte accesses at most a tenth of their bar.
+
+  As built (2026-11-06): `crates/codegen/src/native/globals.rs`. Every
+  constant-address RAM access of the functions printed (not stand-ins')
+  is a byte range in `Game::ram`; a names file's datum of known size that
+  one reaches is one too; overlapping ranges are one global, its element
+  the widest access (`u32`, `[u16; N]`), a narrower access inside an
+  element its bits (shift and mask; a store a read-modify-write). Aligned
+  accesses nest, so only a datum of odd size can leave a wide access as
+  bytes. Without names, accesses that only touch are separate globals:
+  nothing says they are one array (the agb programs have no names file,
+  so their globals are all `d_<guest address>` scalars). The globals are
+  the fields of `Ram`, `#[repr(C, align(4))]`, at the guest's offsets
+  with `[u8; N]` padding between; the prelude asserts its size is EWRAM
+  plus IWRAM (so it has no padding of its own) and the target
+  little-endian, allocates it zeroed and derefs it to `[u8; EWRAM +
+  IWRAM]`, which every other access, the stand-ins and the native check
+  use as before. `gbaa-lift --names DIR` (default `names/`) and
+  `--layout guest` (the only value yet). Metrics: `load_const_ram` and
+  `store_const_ram` now count byte accesses only (0 on all five
+  programs, from 27-36 and 5-11); the field accesses are
+  `load_ram_global` and `store_ram_global` and the globals `ram_globals`
+  (23-28), unbarred. The spike's planted wrong store is a field store
+  now, still caught.
+
+  The field accesses don't print their address, so the constant
+  arithmetic only they used isn't printed; nor is a load from a
+  constant ROM address nothing uses. Every constant ROM load was one: a
+  literal pool's, whose word the IR already has as a `Pool` constant.
+  So `load_const_rom` fell to 0 (from 425-514) and `lines` by 830-1,010
+  a program, which pays for `Ram` (one line per global and gap). For
+  `native/rom-statics` that leaves the computed ROM loads as its bar.
+  The prelude grew by 31 lines (439 to 470): `Ram`'s zeroed allocation,
+  its two `Deref` impls and the layout assertion.
 - **Pointers into one object as typed access** (`native/ref-in-object`). A
   computed address whose value set stays in one global (or one local, or
   one ROM static) becomes an indexed, typed access. Bar: computed-address
   RAM byte accesses at most half of their bar.
+
+  As built (2026-11-06): `Globals::object` in
+  `crates/codegen/src/native/globals.rs`. A load or store whose address
+  isn't a constant in its block but which the value sets bound to RAM
+  (`analysis::vsa::func::Access`, the instruction's hull, in one
+  mirror) is carved like a constant one: a single address is an access
+  at it; a range (lowest to highest address plus the width) is an
+  object's extent, one global, if it reaches at most one of the globals
+  the rest carve, else it is left out (ranges aren't weighed against
+  each other: two that overlap may join the globals they reach). Printing: a single address is
+  that global's field, with the prelude's `pin(a, off)` checking the
+  pointer (`{ pin(v3 & !3, 0x8); g.ram.d_02000008 }`); a range inside
+  one array global at its element's width is
+  `g.ram.d_…[ix(a, off, elem, n)]`, the element the pointer finds, checked.
+  A pointer the value sets got wrong (a caller they didn't see) stops the
+  program naming it, rather than reading the wrong bytes. Both print
+  their address, so nothing else is dropped and `lines` is unchanged.
+
+  Metrics: `load_ram_object` and `store_ram_object` (unbarred, meant to
+  rise) count the typed ones, and `pointer_unexplained`, the new soft
+  hole, the computed RAM accesses no one global explains (several
+  globals, or one at a width not its element's): measured for the
+  first time here, 1 on every program but native-irq-hold (0): crt0's
+  `.bss` clear, a word loop over four separate globals. The report says
+  it on its `pointers into one global` line.
+
+  | program | `load_computed_ram` | `store_computed_ram` | typed loads, stores | `pointer_unexplained` |
+  |---|---|---|---|---|
+  | native-spike | 27 → 0 | 9 → 1 | 27, 8 | 1 |
+  | affine | 26 → 0 | 9 → 1 | 26, 8 | 1 |
+  | mosaic-modes | 26 → 0 | 9 → 1 | 26, 8 | 1 |
+  | native-fallthrough | 23 → 0 | 8 → 1 | 23, 7 | 1 |
+  | native-irq-hold | 25 → 0 | 9 → 0 | 25, 9 | 0 |
+  | native-frame-locals | 23 → 0 | 8 → 1 | 23, 7 | 1 |
+
+  Every typed access on the agb programs is a single address (agb's
+  allocator state, `0x02000000`-`0x02000014`, reached through a pointer
+  its callers pass): the value sets knew it where the block didn't. No
+  program has a range inside one global yet, so the `ix` form is checked
+  only by unit tests of what it prints; no lift runs it. The prelude grew by 27 lines (470 to
+  497): `pin`, `ix` and their shared panic.
+
+  Not done here, because nothing is there to point into: escaping stack
+  slots are still frame bytes (a local's address never escapes, so no
+  pointer reaches one; `&mut` locals are stage C), and ROM statics wait
+  on `native/rom-statics`, whose loads index the static from the value
+  sets' extents. Most computed accesses (`load_computed_unknown`, 589-762
+  a program) have no value set at all: parameters from callers the
+  analysis can't see and the heap's pointers, `native/ref-heap`'s.
 - **Heap pointers as `Ref<T>`** (`native/ref-heap`). What agb's allocator
   returns, typed by the accesses through it; the allocator can be replaced
   after this. Same kind of bar.
@@ -328,6 +654,29 @@ typed pointers, below; until then they are soft holes, counted.
   (`native/lift-packed-layout`). Once RAM is fields, a lift with fields in
   the lifter's order (no guest offsets) must draw the same frames as the
   guest-layout build (`route-check --native … --packed`).
+
+  As built (2026-11-06): `gbaa-lift --layout packed`
+  (`Globals::ram_struct`, `crates/codegen/src/native/globals.rs`, and
+  `native/prelude_packed.rs`, which takes the place of the prelude's
+  guest-layout `Ram` code). `Ram`'s fields are the globals, widest
+  element first and then from the highest guest address down (so globals
+  the guest has side by side aren't neighbours here), then `bytes`, all
+  of RAM; `RAM_GLOBALS` gives each global's RAM offset, size and
+  `offset_of!` field. Typed accesses are the same code in both layouts;
+  everything else reaches RAM as `g.ram[offset]` (computed addresses,
+  the stack, the BIOS calls, the stand-ins through `ld`/`st`), which the
+  packed `Index` finds in the field holding that byte, else in `bytes`.
+  So the prelude's `ld16`/`ld32`/`st16`/`st32` now go a byte at a time
+  (a word may span two globals, as crt0's `.bss` clear's do): 3 more
+  prelude lines (497 to 500). A packed program records RAM as the guest
+  lays it out (`Ram::image`), and `route-check --packed` now compares its
+  records with the guest build's whole, nothing skipped, after the frame
+  hashes. `gbaa-lift-check` lifts and builds every program once more at
+  `packed` and passes it as `--packed`: all six draw and record the same
+  600 (601) frames. Pointers are still guest addresses in both layouts
+  (no `Ref<T>` until `native/ref-heap`); a packed build with two of the
+  spike's allocator globals swapped in `RAM_GLOBALS` crashed the check,
+  by hand.
 
 Pointer arithmetic the types don't explain (section 6's last hard-hole
 kind for stage B) is measured here for the first time.
@@ -350,10 +699,70 @@ and the two shortcuts above at game scale.
   (`native/lift-modules`). A literal lift of a real game is about a million
   lines (74,500 per 29 KB of agb code); one `main.rs` that size may not
   build. Split the generated crate into modules, proved on the agb programs.
+
+  Built 2026-11-06 on quack (`codegen::native::modules`). `src/` is
+  `main.rs` (the prelude, RAM's struct, `NAME`, `ENTRY`, and a `mod` and
+  glob `use` per file), `fns.rs` (`FNS`) and `m_<first key>.rs`: the
+  functions in print order (ROM address, then each IWRAM copy), a module
+  closing at the first function that takes it past 4,000 lines (one
+  longer function is a module of its own). Each module starts `use
+  crate::*;`. The point is codegen: rustc gives a module its own codegen
+  unit, so one `main.rs` ran LLVM on one core. The `lines` metric leaves
+  out the wiring (`mod`, `use`, each module's head); the four `use`
+  lines the root lost lowered every program's bar by 5.
+
+  Measured on quack (24 cores, the build lock's `CARGO_BUILD_JOBS=6`, the
+  crate alone rebuilt, deps built; `/usr/bin/time`, maxrss the largest
+  rustc):
+
+  | crate | lines, all files | modules | wall | CPU | peak rustc RSS |
+  |---|---|---|---|---|---|
+  | native-spike, one `main.rs` | 72,320 | 1 | 6.4, 9.7, 8.1 s | 6.5-9.9 s | 0.50 GB |
+  | native-spike, split | 72,439 | 17 (+2) | 4.3, 6.7, 5.5 s | 8.3-9.3 s | 0.55 GB |
+  | spike `--copies 4` | 288,084 | 68 | 18.1 s | 30.2 s | 1.27 GB |
+  | spike `--copies 14` | 1,006,884 | 238 | 54.8 s | 94.0 s | 3.67 GB |
+
+  (Runs of the two spike crates alternated, on a machine with the other
+  lane busy, hence the spread.) Peak RAM grows by about 14 MB per
+  4,000-line module, both from 1 to 4 copies and from 4 to 14: rustc's
+  front end holds the whole crate, so this is the crate's cost spread
+  over its modules, not a module's alone; a million-line game builds in
+  under 4 GB and a minute. `gbaa-lift --copies N` makes the synthetic
+  crate (each copy's functions renamed `f<i>_<key>`, kept by a `#[used]`
+  table of their entries).
 - **Metroid lifts with no hard holes and builds**
   (`native/metroid-lifts`). Needs the discovery units, both shortcuts and
   the module split. The ROM's file name has spaces, so it lifts with
-  `--name metroid` and `holes/metroid.toml`.
+  `--name metroid`; its holes file is `mods/metroid/holes.toml` (private:
+  its stand-ins port the game's own code).
+
+  First lift, 2026-11-06 on quack: 2,616 functions, 27,707 blocks, 26
+  hard holes, not the hole report's 18: `gbaa-holes` counts neither the
+  BIOS calls the lifter can't print nor the reset's and IRQ
+  dispatcher's `msr`/`mrs`. Stood in (6): the reset (0x08000000) and
+  the IRQ dispatcher (0x08000104, agbcc's `intr_main` shape: nested
+  IRQs through `msr_cpsr_c`), and four functions of the classic NES
+  Metroid the ROM carries (an embedded GBA image, `NES METROID`, at
+  0x087d8000, and its launcher), panics: no coverage run reached them.
+  The function-address flow (`fnref::follow`) took 68 s for its first
+  round and over 8 minutes for its second, so the holes file skips it
+  (`skip_fn_flow`; `native/fnref-flow-scale`); the lift then takes 7 s
+  and 0.23 GB. Left: 9 BIOS calls the prelude lacks (Stop, Sqrt,
+  CpuFastSet, both LZ77s, SoundBias, MidiKey2Freq, MultiBoot), shared
+  work (`native/lift-bios-calls`). With those 9 stood in by panics, a
+  measurement only: 956,792 lines (report's `lines`; 959,153 in all
+  files), 266 modules, the largest 6,175 lines; the crate alone
+  rebuilt in release in 31.5 s wall, 64 s CPU, peak 3.99 GB (quack,
+  `CARGO_BUILD_JOBS=6`, deps built; `/usr/bin/time`), as the
+  synthetic million-line crate predicted. Discovery is static, so that
+  lift had no IWRAM copies; since `native/lift-ram-copies` the holes
+  file gives the five the hole report's run sees as `[[copy]]` tables
+  (the IRQ dispatcher's copy at 0x03000c7c, and Thumb code at
+  0x030016c4, 0x03003b90, 0x030041ec and 0x03004294, all called through
+  pointers): 8 functions at their RAM keys, two of them stand-ins that
+  call their ROM originals (the dispatcher's copy; 0x030016c5, a switch
+  whose ROM jump table sends it back into the ROM function's cases).
+  Hard holes stay the 9 BIOS calls; 2,624 functions, 27,749 blocks.
 - **Metroid passes the native check on a route**
   (`native/metroid-native-check`). A route `units/metroid-native.toml`
   from boot into gameplay, compared every frame with sound

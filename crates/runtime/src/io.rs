@@ -112,6 +112,10 @@ pub mod event {
     pub const STOP: u32 = 1 << 9;
     /// `IE`, `IF` or `IME` changed: an interrupt may now be due.
     pub const IRQ: u32 = 1 << 10;
+    /// `IME` went from 0 to 1. Under native timing a pending IRQ is taken
+    /// at the next tick, as the hardware takes it at once, not at the
+    /// next time point (native/ime-release).
+    pub const IME_ON: u32 = 1 << 11;
     /// A sound register other than the FIFOs was written.
     pub const SOUND: u32 = 1 << 13;
     /// `SOUNDCNT_H` was written with bit 11 set: reset FIFO A. (The bit
@@ -372,7 +376,13 @@ impl Io {
                 self.events |= event::IRQ;
                 return;
             }
-            reg::IE | reg::IME => self.events |= event::IRQ,
+            reg::IE => self.events |= event::IRQ,
+            reg::IME => {
+                self.events |= event::IRQ;
+                if old & 1 == 0 && v & m & 1 != 0 {
+                    self.events |= event::IME_ON;
+                }
+            }
             0x0BA | 0x0C6 | 0x0D2 | 0x0DE => {
                 self.events |= event::DMA0 << ((o - 0x0BA) / 12);
             }

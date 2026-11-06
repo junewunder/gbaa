@@ -9,4 +9,5 @@ RUN rm -f rust-toolchain.toml && cargo build --release --locked -p relay --bin g
 
 FROM debian:bookworm-slim
 COPY --from=build /src/target/release/gbaa-server /usr/local/bin/gbaa-server
-CMD ["gbaa-server", "fly-global-services:7374"]
+# --min-version: netplay::VERSION, raised with it (crates/netplay/src/lib.rs).
+CMD ["gbaa-server", "fly-global-services:7374", "--min-version", "1"]

@@ -176,7 +176,7 @@ fn play_netplay(
     let any: SocketAddr = "127.0.0.1:0".parse().unwrap();
     let sock = UdpSocket::bind(any).map_err(|e| format!("server: {e}"))?;
     let rooms = sock.local_addr().map_err(|e| format!("server: {e}"))?;
-    std::thread::spawn(move || relay::rooms::serve(sock));
+    std::thread::spawn(move || relay::rooms::serve(sock, 0));
     let mut proxies = Vec::new();
     let mut to = [rooms; 2];
     if let Some(p) = profile {

@@ -509,7 +509,14 @@
       "title": "Redeploy fly's gbaa-server as rooms only, no volume",
       "detail": "{unit:multiplayer/remove-lockstep-quic} changed deploy/fly (rooms alone on 7374, no QUIC on 7373, no [mounts]) but an agent session's permissions refused `just fly-deploy` (a production deploy), so fly still runs the QUIC build; its 7374 rooms are the same protocol, so play works meanwhile. Do: just fly-up; just fly-deploy (if fly refuses because the machine still mounts gbaa_data, destroy the machine and deploy again: the IPv4 is the app's and stays); just room-sim calm --server 37.16.3.41; just fly-down. Then the volume gbaa_data is unused: june's to destroy (fly volumes destroy), it's billed.",
       "check": "recorded",
-      "needs": ["multiplayer/server-version-cutoff"]
+      "needs": ["multiplayer/server-version-cutoff"],
+      "record": {
+        "state": "done",
+        "by": "a87279be",
+        "at": "2026-11-06T04:13:27Z",
+        "evidence": "just fly-up; just fly-deploy refused (old machine mounted gbaa_data), destroyed it, deployed again: logs show 'gbaa-server fly-global-services:7374 --min-version 1', rooms on UDP 7374, no volume, IPv4 37.16.3.41 kept. just room-sim calm --server 37.16.3.41: pass, 10 hashes and the end match on both seats. just fly-down: stopped. Fly made 2 machines (HA); fly-deploy now passes --ha=false; scaling to 1 was refused here, asked june. just check passes.",
+        "host": "quack"
+      }
     },
     {
       "id": "multiplayer/rogue-coop-menus",
@@ -567,6 +574,13 @@
       "id": "multiplayer/four-seats",
       "title": "Netplay rooms for up to four players (Kirby's four)",
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): a third player joining got 'The session ended. The room is full.'; rooms have two seats (room.rs). Kirby & the Amazing Mirror links four GBAs on the multiplayer-mode cable (katam's gKirbys holds four Kirbys), and june wants all four in a room. Let 2 to 4 players join a room (the host starts once everyone's in, or the cable sees whoever is there); confirm runtime::link runs four machines on one bus. Every peer runs every console: measure four Kirbys' frame cost and re-run headroom, interpreted and recompiled, on quack and the Deck, in docs/research/multiplayer.md. Check: three and then four windows in a private cu session through a local gbaa-server get into Kirby's multiplayer, each shows its own seat, all end on one hash; a headless four-peer pingsim run; just check.",
+      "record": {
+        "state": "done",
+        "by": "78de4417",
+        "at": "2026-11-06T04:39:07Z",
+        "evidence": "Private branch's work replayed on public main (71be9531, merge with main after). quack 2026-11-05: room-sim wander --players 4 --console gba and --players 3 pass every seat; private cu session: 3 then 4 Kirby windows via local gbaa-server, titled player 1-4, mark Connected 3/3 and 4/4, each on its own Kirby in Rainbow Route, one hash each (3: 27f2caeb at 3000, 4: 245b958b at 3600); headless 4 peers c894de98 after a CATCH_UP fix for an early goodbye; just check passes after the merge. Frame cost on quack in docs/research/multiplayer.md; Deck runs left for later by june's 2026-11-01 decision (may-lane-ssh-onto-your), in {unit:multiplayer/four-kirbys-deck}.",
+        "host": "quack"
+      },
       "notes": [
         {
           "at": "2026-11-03T03:49:49Z",
@@ -583,13 +597,7 @@
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - docs/research/multiplayer.md, \"Four players\" section (the paragraph ending \"Not measured there: june's OK is needed each time ({unit:multiplayer/four-kirbys-deck})\"): the card asks for four Kirbys' frame cost …"
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-10-31T23:50:02Z",
-        "findings": "- docs/research/multiplayer.md, \"Four players\" section (the paragraph ending \"Not measured there: june's OK is needed each time ({unit:multiplayer/four-kirbys-deck})\"): the card asks for four Kirbys' frame cost and re-run headroom, both interpreted and recompiled, measured on quack AND on the Deck. Only quack was measured. The Deck figure (about 14-18 ms a frame) is extrapolated from the quack numbers using a 2-2.5x slowdown factor, and the actual measurement was moved into a separate unit ({unit:multiplayer/four-kirbys-deck}) that the card didn't ask for. Only the owner can unblock this, because running on the Deck needs june's OK each time. The next session should ask june for that OK, then run the same `just rollback-feel ... --headless --paced --players 4` runs on the Deck, recompiled and interpreted, calm/2 and wander/0. Add the measured rows to the table, replace the estimate with them, and record the result in the unit's evidence. If june decides the Deck runs can stay as a follow-up, that decision should be written on the card rather than the split being made by the session."
-      },
-      "round": "2026-10-31T22:52:49Z"
+      ]
     },
     {
       "id": "multiplayer/peer-leaves",
@@ -635,25 +643,22 @@
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): on the Deck, something netplay draws covered the bottom of the Controls page, where the dead zone is ('if you can see the bottom, because the netplay thing'); Athena found tapping the screen hid it. Find what it is (the room bar or the on-screen keyboard's space), and keep the whole menu visible while in a room. Check: a 1280x800 screenshot in a room, Controls page scrolled to its last row, nothing over it; just check.",
       "minMinutes": 25,
       "record": {
-        "state": "done",
-        "by": "14bc78bb",
-        "at": "2026-11-06T03:18:00Z",
-        "evidence": "Cause: the netplay session report box at the screen foot covered the Main page's bottom rows (Controls had no report). Fix 83d96268 lays the report out first and fits the menu above it. 1280x800 cu shots in a room (session ohm1, server+host+headless joiner): Main and Controls last rows clear, nothing over them. Main merged (8438a2d9); just check passed (exit 0) after merge.",
-        "branch": "unit/multiplayer/overlay-hides-menu",
+        "state": "claimed",
+        "by": "31168110",
+        "session": "31168110-59b0-412e-9723-af09371d6a8b",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-06T03:18:00Z",
-          "by": "14bc78bb",
-          "host": "quack",
-          "pid": 1418242,
-          "start": "29954965",
-          "beats": true,
-          "session": "14bc78bb-6b07-46da-82a6-5c179483fb6f",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T13:24:33Z",
+        "branch": "unit/multiplayer/overlay-hides-menu",
+        "beats": true
       },
       "notes": [
+        {
+          "at": "2026-11-06T03:21:25Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/desktop/src/menu.rs:1017-1034: the fix doesn't touch the problem the card reports. The card says something covered the bottom of the Controls page, where the dead zone rows are. Those rows are the DEADZ…"
+        },
         {
           "at": "2026-11-01T01:50:51Z",
           "by": "d86c5e5f",
@@ -665,6 +670,11 @@
           "text": "Fix committed on branch (57fcb251): netplay report box covered Main page's bottom rows; now menu fits above it. 1280x800 cu shots in a room: Main + Controls last rows clear. Left: just check (cut by stop), merge main, done. Steam OSK not seen here."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-06T03:21:25Z",
+        "findings": "- crates/desktop/src/menu.rs:1017-1034: the fix doesn't touch the problem the card reports. The card says something covered the bottom of the Controls page, where the dead zone rows are. Those rows are the DEADZONES section in menu/controls.rs:351, shown under Page::Remap. The report box is drawn only when `page == Page::Main`. The Evidence admits this ('Controls had no report'), so the box it moved could never have covered the Controls page. Moving it is a real fix for the Main page and can stay, but the card's 'Find what it is' is still unanswered for the Controls page. The playtest clue was that tapping the screen hid the cover, which points at something outside this menu: the Steam on-screen keyboard (for example, left open after typing a room code on the Netplay page), or another Steam/gamescope overlay. Next session: find out what draws over the Controls page on the Deck while in a room. Check whether the room-code entry raises the Deck's on-screen keyboard and whether it stays up after leaving the Netplay page. Then fix that or keep the Controls page clear of it, and record the cause in the Evidence.\n- Evidence (tracker multiplayer.json:641): the card's check was a 1280x800 shot in a room with the Controls page scrolled to its last row and nothing over it. The shots were taken in a cu session on quack, which never had whatever covered the Controls page. The earlier note says 'Steam OSK not seen here'. So a clear Controls page in cu proves nothing about the bug reported from the Deck. To meet the card, the shot has to come from a setup where the cover actually showed up: the Deck in gamescope/Steam, in a room, after joining by code. If only the owner's Deck can show it, the next session should ask the owner to run that check on the Deck: join a room, open Controls, scroll to the dead zone rows, and say whether anything covers them."
+      },
       "round": "2026-11-01T01:40:21Z"
     },
     {
@@ -708,17 +718,11 @@
       "detail": "rollback.rs records differing hashes as desyncs, but room.rs only prints them to stdout at the end: not in the report file in $GBAA_DATA/netplay/, not in the window. june's 2026-10-29 playtest (room MNHBLP) looked like one and couldn't be confirmed. Put each desync frame in the end lines and report file, and show a notice in the window (and the menu's netplay lines) when one is found. Check: a session with a forced desync (e.g. one peer's input altered in a test) shows it in the window state, the end lines and the kept report.",
       "check": "recorded",
       "record": {
-        "state": "claimed",
-        "by": "9afcc2dd",
-        "session": "9afcc2dd-3298-4593-9c7c-df1eee38bdfd",
-        "host": "quack",
-        "pid": 379627,
-        "start": "13117516",
-        "at": "2026-11-01T01:47:18Z",
-        "branch": "unit/multiplayer/desync-report",
-        "beats": true,
-        "pushed": true,
-        "ended": "2026-11-01T01:57:37Z"
+        "state": "done",
+        "by": "cb21d00f",
+        "at": "2026-11-06T03:27:32Z",
+        "evidence": "After merging origin/main, just check passes (exit 0). Forced desync: just rollback-feel wander Kirby --headless --paced --frames 900 --input1/2 start@400 --desync-at2 500. Seat 2 printed 'netplay notice: Out of sync with the other player since frame 540' (the window-state path). Both seats' end lines say 'netplay desyncs: 7 ..., first at frame 540'. The kept report XFKMPJ-p1.txt holds the same line. Menu tests check the Desynced mark and the toast.",
+        "host": "quack"
       },
       "notes": [
         {
@@ -726,8 +730,7 @@
           "by": "9afcc2dd",
           "text": "Code done on branch (commit unchecked): skew, end line, report, toast/mark. Headless forced desync passes: gbaa-pingsim desktop wander Kirby --headless --paced --frames 900 --input1/2 start@400 --desync-at2 500. Left: just check (fixed a menu test), merge main, done."
         }
-      ],
-      "round": "2026-11-01T01:47:18Z"
+      ]
     },
     {
       "id": "multiplayer/kirby-pause-desync",
@@ -750,17 +753,12 @@
       "detail": "june (2026-10-30): the server should refuse netplay clients older than a version it allows, so a friend on a stale binary is told to update rather than joining and desyncing; june tells friends to replace binaries before playing. Today crates/relay/src/rooms.rs only compares the two peers' 32-byte build IDs to each other ('the room runs another build or game') and knows nothing of versions. Add a netplay version number (a constant in netplay, bumped by hand whenever a change can split peers or change the wire; say where in docs/research/multiplayer.md and AGENTS.md-level docs) sent in HOST and JOIN; gbaa-server takes --min-version (and deploy/fly sets it), refusing older or missing versions with a message naming both numbers: 'this game is too old for the server (version N, needs M): get the new build'. The window shows that refusal plainly, not as a timeout. Keep the relay game-agnostic. Check: relay unit tests (old refused, equal and newer let in, a pre-version client gets a clear refusal, not silence), just room-sim calm against a local server with --min-version above the client's, just check. Deploying it is {unit:multiplayer/fly-redeploy-rooms}.",
       "check": "independent",
       "record": {
-        "state": "claimed",
-        "by": "664c45c7",
-        "session": "664c45c7-0b11-4918-8a06-e9dc718f1604",
-        "host": "quack",
-        "pid": 379246,
-        "start": "13117048",
-        "at": "2026-11-01T01:51:33Z",
-        "branch": "unit/multiplayer/server-version-cutoff",
-        "beats": true,
-        "pushed": true,
-        "ended": "2026-11-01T01:57:16Z"
+        "state": "done",
+        "by": "493244a8",
+        "checker": "ada715af",
+        "at": "2026-11-06T03:35:16Z",
+        "evidence": "Fresh verifier subagent: cargo test -p relay passes (old_versions_are_refused: older refused, equal/newer let in, versionless HOST/JOIN gets E too_old(0,3)); netplay tests pass; just room-sim calm vs local gbaa-server --min-version 2 refused at once 'version 1, needs 2', --min-version 1 passes; just check passes after merging main.",
+        "host": "quack"
       },
       "notes": [
         {
@@ -768,8 +766,7 @@
           "by": "664c45c7",
           "text": "Work committed on the branch: version in H/J, --min-version, window text, fly Dockerfile, docs, tests. Relay tests and both room-sim runs (refused at min 2, pass at min 1) passed. Left: just check (stopped at lane stop, after a fmt fix), merge main, verifier."
         }
-      ],
-      "round": "2026-11-01T01:51:33Z"
+      ]
     },
     {
       "id": "multiplayer/timing-in-build-id",
@@ -796,6 +793,10 @@
       "title": "Four Kirbys' netplay frame cost on the Deck",
       "detail": "From {unit:multiplayer/four-seats}: quack's numbers for four Kirbys a peer are in docs/research/multiplayer.md, 'Four players'. The Deck's own CPU, a short headless run (docs/machines.md, deck: ask june for a yes first, each time). Copy the recompiled Kirby binary to ~/gbaa, run just rollback-feel's headless four-player command from that section (calm delay 2 and wander delay 0, --interp and not, peers on the Deck) and add the Deck's rows to the table.",
       "needs": ["multiplayer/four-seats"]
+    },
+    {
+      "id": "multiplayer/fly-one-machine",
+      "title": "Scale fly's gbaa-server back to one machine"
     }
   ]
 }
