@@ -800,6 +800,7 @@
       "detail": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): the lifter prints only swi 0x02, 0x04-0x06 and 0x0B (native.rs, Plan::Swi); every other call is a hard hole, and gbaa-holes doesn't count them (it reported Metroid's BIOS holes as 0). Metroid needs 0x03 Stop, 0x08 Sqrt, 0x0C CpuFastSet, 0x11/0x12 LZ77UnComp, 0x19 SoundBias, 0x1F MidiKey2Freq, 0x25 MultiBoot; other games more ({unit:bios/swi-survey} lists them). Add them to the prelude over runtime::hw::bios (it has lz77, rl, arctan2), each with an agb test program or lift-check case, and make gbaa-holes count the calls the lifter can't print. lines_prelude may rise (say how many and why). Done when: lift-check green with a case per new call, and gbaa-holes' BIOS count matches the lifter's on the eight games.",
       "check": "independent",
       "uses": ["heavy"],
+      "minMinutes": 180,
       "record": {
         "state": "claimed",
         "by": "f9620931",
@@ -809,8 +810,18 @@
         "start": "29954965",
         "at": "2026-11-06T12:46:45Z",
         "branch": "unit/native/lift-bios-calls",
-        "beats": true
+        "beats": true,
+        "handedBack": "2026-11-06T12:58:40Z",
+        "pushed": true,
+        "ended": "2026-11-06T12:59:01Z"
       },
+      "notes": [
+        {
+          "at": "2026-11-06T12:58:47Z",
+          "by": "f9620931",
+          "text": "Branch has the gbaa-holes half: analysis::holes::NATIVE_BIOS is the lifter's list and bios_implemented's. Left: prelude fns (reuse runtime::bios math/decomp logic over ld/st, as cpu_set does), one agb program calling each swi + its lift-check table and route, 8-game compare."
+        }
+      ],
       "round": "2026-11-06T12:46:45Z"
     },
     {
@@ -837,7 +848,19 @@
       "title": "Function-address flow settles on a whole game",
       "detail": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): fnref::follow on Metroid (2,616 functions) took 68 s for round 0 and over 8 min for round 1 on quack (GBAA_FNREF_TRACE=1), so its lift skips it (skip_fn_flow in mods/metroid/holes.toml). It only feeds the report and stage B's fn_words metrics, but dense FnRef IDs need it. Make it settle in minutes on Metroid (per-function summaries, sparse reruns), then drop skip_fn_flow. Done when: Metroid's lift runs it in under 5 minutes and lift-check's bars hold.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "1e655045",
+        "session": "1e655045-e354-400c-a9ca-854c3c4380de",
+        "host": "quack",
+        "pid": 1418242,
+        "start": "29954965",
+        "at": "2026-11-06T12:59:15Z",
+        "branch": "unit/native/fnref-flow-scale",
+        "beats": true
+      },
+      "round": "2026-11-06T12:59:15Z"
     },
     {
       "id": "native/indirect-call-args-emerald",
