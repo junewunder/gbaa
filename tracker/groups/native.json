@@ -237,15 +237,24 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "b58ddd69",
-        "session": "b58ddd69-6643-47c2-8e0c-62a209be6be7",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T06:38:04Z",
+        "checker": "a92953cdff8d9f304",
+        "at": "2026-11-06T06:57:00Z",
+        "evidence": "Review fix made (ae62dec1): ram_copies skips groups at mirror addresses, unit test covers 0x0300_8100 and 0x0204_0100. Merged main (c1f865f5), just check passes. Fresh verifier ran just holes on all eight: 0 RAM bytes undiscovered each; disc-pret 0.9991/0.9549, disc-agb 1.0/0.9835 and 1.0/0.5789, jt-score 676/676, 548/548, 584/617, 726/732, all at their bars.",
         "branch": "unit/native/disc-ram-copies",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T06:57:00Z",
+          "by": "b58ddd69",
+          "host": "quack",
+          "pid": 1417300,
+          "start": "29954434",
+          "beats": true,
+          "session": "b58ddd69-6643-47c2-8e0c-62a209be6be7",
+          "lane": "quack/1"
+        },
+        "pushed": true
       },
       "notes": [
         {
@@ -310,16 +319,32 @@
       "needs": ["native/oracle"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "338023f7",
-        "session": "338023f7-0f12-4931-a685-4327f7b419f5",
-        "host": "quack",
-        "pid": 1418242,
-        "start": "29954965",
-        "at": "2026-11-06T06:19:07Z",
+        "checker": "verifier-a7c3e9",
+        "at": "2026-11-06T06:57:37Z",
+        "evidence": "Verifier reran just native-check: psg-square passes 120 frames with audio the same in 120 frames, no --no-audio, planted wrong sample caught at frame 74 on audio; direct-sound (stands for bios-sound, decision recorded) passes 300 frames with audio the same in all; native-spike still passes. just psg-square and psg-wave-noise match mGBA. Main session also: mgba-audio-diff byte-identical on the 18157 Hz ROM (600) and 10512 Hz ROM (1000), audio-check on both, audio-pace, lift-check pass; just check passes after merging main.",
         "branch": "unit/native/hw-sound",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T06:57:37Z",
+          "by": "338023f7",
+          "host": "quack",
+          "pid": 1418242,
+          "start": "29954965",
+          "beats": true,
+          "session": "338023f7-0f12-4931-a685-4327f7b419f5",
+          "lane": "quack/2"
+        },
+        "pushed": true
       },
+      "notes": [
+        {
+          "at": "2026-11-06T06:57:41Z",
+          "by": "338023f7",
+          "text": "Not yet in hw: H-blank DMA's price on the clock, DMA/FIFO DMA by address via write16 (panics). direct-sound has no planted fault; psg-square's plant covers the audio compare."
+        }
+      ],
       "round": "2026-11-06T06:19:07Z"
     },
     {
