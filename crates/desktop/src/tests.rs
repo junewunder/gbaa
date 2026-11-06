@@ -1955,7 +1955,13 @@ fn netplay_options() {
     assert_eq!(o.save, Some(sav_in_folder("g")));
     let o = parse("g.gba --headless --server 127.0.0.1:7374 --host --delay 5").unwrap();
     assert_eq!((o.role, o.delay), (Some(room::Role::Host), Some(5)));
+    let o = parse("g.gba --headless --server s --host --players 4").unwrap();
+    assert_eq!(o.players, Some(4));
     for (args, why) in [
+        ("--server s --host --players 5", "--players"),
+        ("--server s --host --players 1", "--players"),
+        ("--server s --join abcdef --players 3", "host's"),
+        ("--players 3", "with --server"),
         ("--host", "--server"),
         ("--server s", "--host or --join"),
         ("--server s --join abc", "room code"),

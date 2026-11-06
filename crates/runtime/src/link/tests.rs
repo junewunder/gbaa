@@ -136,3 +136,40 @@ fn runs_are_deterministic() {
     assert_eq!(first.0.transfers, 4);
     assert_eq!(first, go());
 }
+
+fn refs(ms: &mut [M]) -> std::vec::Vec<&mut Machine<Headless>> {
+    ms.iter_mut().map(|m| &mut **m).collect()
+}
+
+#[test]
+fn four_players_share_one_bus() {
+    let mut ms: std::vec::Vec<M> = (0..MAX_PLAYERS).map(|_| machine()).collect();
+    for (p, m) in ms.iter_mut().enumerate() {
+        multi(m, 0x1111 * (p as u16 + 1));
+    }
+    let mut l = Link::new(&mut refs(&mut ms));
+    // The parent alone has SI low; every one sees SD, all four ready.
+    for (p, m) in ms.iter().enumerate() {
+        let si = if p == 0 { 0 } else { sio::SI };
+        assert_eq!(siocnt(m) & (sio::SI | sio::SD), si | sio::SD);
+    }
+    l.run(&mut refs(&mut ms), 100, |_, m| m.run_frame());
+    let start = ms[0].now();
+    let w = siocnt(&ms[0]) | sio::START;
+    ms[0].bus.write16(IO + reg::SIOCNT, w);
+    // Four players: the slowest of the baud rate's transfers.
+    let end = start + TRANSFER_CYCLES[3][3];
+    let n = end - 1 - l.now();
+    l.run(&mut refs(&mut ms), n, |_, m| m.run_frame());
+    assert_eq!(l.transfers, 0);
+    l.run(&mut refs(&mut ms), 1, |_, m| m.run_frame());
+    assert_eq!(l.transfers, 1);
+    for (p, m) in ms.iter().enumerate() {
+        assert_eq!(multis(m), [0x1111, 0x2222, 0x3333, 0x4444]);
+        assert_eq!(
+            siocnt(m) & (sio::START | sio::ID),
+            (p as u16) << sio::ID_SHIFT
+        );
+        assert_ne!(m.bus.read16(IO + reg::IF) & irq::SERIAL, 0);
+    }
+}
