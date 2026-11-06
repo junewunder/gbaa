@@ -650,6 +650,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-06T13:27:21Z",
+          "by": "31168110",
+          "text": "Not our overlays: Controls draws no report/mark at its foot. Suspect Steam's floating OSK: SDL x11 opens steam://open/keyboard on text_input.start (window.rs:1105, no rect for Netplay fields); a tap outside closes it. Asked owner for a Deck test. Main merged (62910042)."
+        },
+        {
           "at": "2026-11-06T03:21:25Z",
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - crates/desktop/src/menu.rs:1017-1034: the fix doesn't touch the problem the card reports. The card says something covered the bottom of the Controls page, where the dead zone rows are. Those rows are the DEADZ…"
@@ -658,11 +663,6 @@
           "at": "2026-11-01T01:50:51Z",
           "by": "d86c5e5f",
           "text": "main merged into branch (merge commit on top of 57fcb251), no conflicts. just check started but cut by stop time again (tests were passing). Left: just check (~10+ min, start early), then done with the cu-shot evidence."
-        },
-        {
-          "at": "2026-11-01T01:49:12Z",
-          "by": "c52caa3f",
-          "text": "Fix committed on branch (57fcb251): netplay report box covered Main page's bottom rows; now menu fits above it. 1280x800 cu shots in a room: Main + Controls last rows clear. Left: just check (cut by stop), merge main, done. Steam OSK not seen here."
         }
       ],
       "review": {
