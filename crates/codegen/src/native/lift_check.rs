@@ -170,6 +170,12 @@ mod tests {
             ps.iter()
                 .any(|p| p.planted_flags.iter().any(|f| f == "--ime-at-waits"))
         );
+        // native/frame-locals'.
+        assert!(ps.iter().any(|p| {
+            p.planted_flags
+                .iter()
+                .any(|f| f.starts_with("--plant-slot="))
+        }));
     }
 
     #[test]

@@ -5,11 +5,15 @@
 //!
 //! What each function becomes:
 //!
-//! - `fn f_<key>(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit>`:
-//!   r0-r3 in and out (the registers AAPCS passes and returns; the
-//!   summaries, [`crate::saves::summarize`], say which a function really
-//!   reads and defines, and are printed beside each one), the stack
-//!   pointer as a parameter, `Exit` passed up from the waits with `?`.
+//! - `fn f_<key>(g: &mut Game, sp: u32, a0: u32, a1: u32) -> Result<u32, Exit>`:
+//!   its parameters and results from the summaries
+//!   ([`crate::saves::summarize`]; [`shape`], unit `native/lift-params`),
+//!   the stack pointer as a parameter, `Exit` passed up from the waits
+//!   with `?`; `a_<key>`, its adapter, takes and gives all of r0-r3, for
+//!   `call_fn`. A function whose summary has a hole (or rests on a
+//!   callee's that stopped) keeps stage A's four-register form,
+//!   `f_<key>(g, sp, a: [u32; 4]) -> Result<[u32; 4], Exit>`, with the
+//!   summary printed above it.
 //! - Registers and NZCV are Rust locals; each block's IR values are `let`s.
 //!   r4-r11 outlive a call because callees keep them (the summaries' proof,
 //!   `keeps`; a function that returns without it is a hard hole).
@@ -24,7 +28,17 @@
 //!   code moves it through the stack.
 //! - Memory is `ld8/16/32` and `st8/16/32` over `Game::ram` (EWRAM then
 //!   IWRAM, as bytes), the library's I/O registers (`Hw::read16` and
-//!   `write16`), its palette, VRAM and OAM, and the ROM's bytes.
+//!   `write16`), its palette, VRAM and OAM, and the ROM's bytes. A RAM
+//!   access at a constant address is a typed global's field instead
+//!   (`g.ram.d_02000100`, [`globals`]): `Game::ram` is a `Ram` struct of
+//!   them at the guest's offsets, which derefs to the bytes (`--layout
+//!   guest`), or in the lifter's order with the rest of RAM as bytes,
+//!   each byte found by its offset (`--layout packed`, the play layout).
+//! - Stack slots whose address doesn't escape ([`frame`]) are Rust locals,
+//!   `l<bytes below the entry sp>`: a `u32` for an aligned word only ever
+//!   accessed whole, else bytes (unit `native/frame-locals`); escaping
+//!   slots stay IWRAM bytes, and sp is still passed. A value nothing
+//!   printed uses (the address of an access to a local) isn't printed.
 //! - BIOS calls are the library's: the waits (`IntrWait`, `VBlankIntrWait`
 //!   as `hw::halt` until the game's handler sets the flag), `CpuSet` with
 //!   its time (`hw::spend`), `Div`.
@@ -47,8 +61,9 @@
 //! - an undefined instruction, a jump to no code;
 //! - a function that returns without keeping r4-r11 and sp.
 //!
-//! Soft holes (counted in the report): every RAM access is bytes, every
-//! pointer a guest address, every ROM read at run time.
+//! Soft holes (counted in the report): every RAM access but the globals'
+//! and the stack locals' is bytes, every pointer a guest address, every
+//! ROM read at run time.
 
 use crate::func::{Ctx, ExitInfo, Func, Idle, Plan, build_func, exits, key};
 use crate::saves::{Summaries, Summary, summarize};
@@ -56,16 +71,45 @@ use analysis::discovery::{self, Discovery};
 use analysis::ir::{BinOp, BitOp, Exit, Inst, Op, ValueId};
 use analysis::vsa::func::JumpRes;
 use armv4t::sem::{Flag, ShiftType, Width};
+use frame::{Frame, Kind, Local};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
+pub mod frame;
+pub mod globals;
 pub mod lift_check;
 pub mod metrics;
+pub mod modules;
+pub mod shape;
 
+use globals::{Globals, Layout, Obj, Place};
 use metrics::{Metrics, Where};
+use shape::{Shape, Shapes};
 
-/// The prelude every lifted crate starts with.
+/// The prelude every lifted crate starts with, at the guest layout.
 pub const PRELUDE: &str = include_str!("native/prelude.rs");
+
+/// What the play layout (`--layout packed`) puts in place of the
+/// prelude's guest-layout `Ram` code ([`GUEST_RAM`] to [`GUEST_RAM_END`]).
+const PACKED_RAM: &str = include_str!("native/prelude_packed.rs");
+const GUEST_RAM: &str = "// `Ram` (printed after the prelude) is EWRAM and IWRAM byte for byte:";
+const GUEST_RAM_END: &str = "/// The handler the game stored at";
+
+/// The prelude for `layout`.
+pub fn prelude(layout: Layout) -> String {
+    match layout {
+        Layout::Guest => PRELUDE.to_string(),
+        Layout::Packed => {
+            let (a, b) = (
+                PRELUDE
+                    .find(GUEST_RAM)
+                    .expect("the guest layout's Ram code"),
+                PRELUDE.find(GUEST_RAM_END).expect("irq_entry"),
+            );
+            format!("{}{PACKED_RAM}{}", &PRELUDE[..a], &PRELUDE[b..])
+        }
+    }
+}
 
 /// The BIOS calls the prelude has.
 const BIOS: &[u8] = &[0x02, 0x04, 0x05, 0x06, 0x0B];
@@ -101,6 +145,29 @@ pub struct Holes {
     /// (`native/ime-release`): the native check must catch it on
     /// `agb/native-ime-release`.
     pub ime_at_waits: bool,
+    /// The stack-locals check's planted control (`gbaa-lift --plant-slot
+    /// AT`, `native/frame-locals`): the store of the instruction at this
+    /// address, which must be to a slot printed as a Rust local, stores
+    /// its value plus one. The native check skips the guest stack, so it
+    /// must catch this where the slot's value reaches a global.
+    pub plant_slot: Option<u32>,
+    /// Shadow every stack local in the frame's bytes (`gbaa-lift
+    /// --shadow-locals`): a local starts as its bytes, every store to it
+    /// writes them too, and every load reads them and prints a line to
+    /// stderr (`shadow local:`) where they differ from the local, which
+    /// is where something the escape analysis didn't see wrote the frame.
+    pub shadow_locals: bool,
+    /// The synthetic large lift (`gbaa-lift --copies N`, [`modules`]): the
+    /// functions' modules N times over under different names. 0 or 1: once.
+    pub copies: usize,
+    /// Data names and sizes (0: not known) by guest address, from the
+    /// game's names files (`gbaa-lift --names DIR`): a RAM global that
+    /// starts at one is named so, else `d_<address>`, and spans a sized
+    /// datum an access reaches ([`globals`]).
+    pub names: BTreeMap<u32, (String, u32)>,
+    /// Where `Ram`'s globals are (`gbaa-lift --layout`): the guest's
+    /// offsets, or the play layout's order ([`globals::Layout`]).
+    pub layout: Layout,
 }
 
 impl Holes {
@@ -169,8 +236,9 @@ impl std::fmt::Display for Hole {
 
 /// A lifted program.
 pub struct Lifted {
-    /// The crate's `src/main.rs`.
-    pub main: String,
+    /// The crate's sources: `(path under src/, text)`, `main.rs` first
+    /// ([`modules`]).
+    pub files: Vec<(String, String)>,
     /// The hard holes no stand-in covers: the crate won't build.
     pub holes: Vec<Hole>,
     /// What was lifted, and the soft holes counted: ends with
@@ -185,6 +253,8 @@ struct Code<'a> {
     ctx: Ctx<'a>,
     funcs: Vec<Func>,
     sums: Summaries,
+    /// Each function's stack frame ([`frame`]).
+    frames: BTreeMap<u32, Frame>,
 }
 
 /// Lift `rom` whole. `name` is the program's name for its front end.
@@ -224,7 +294,43 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     for c in &codes {
         all.extend(c.funcs.iter().map(|f| f.entry));
     }
-    let mut out = String::new();
+    // RAM's globals: what the constant-address accesses of the functions
+    // printed (a stand-in's code is its own) reach.
+    // And what their computed ones reach, where the value sets bound it
+    // (native/ref-in-object): one address is an access like a constant
+    // one; a range, an object's extent.
+    let mut ram = Vec::new();
+    let mut ranges = Vec::new();
+    for c in &codes {
+        for f in c
+            .funcs
+            .iter()
+            .filter(|f| !holes.standins.contains_key(&f.entry))
+        {
+            for gb in f.blocks.values() {
+                let insts = &gb.block.insts;
+                let mut at = 0;
+                for inst in insts {
+                    if let Op::Insn(a) = inst.op {
+                        at = a;
+                    }
+                    if let Some((a, w)) = const_access(insts, &inst.op) {
+                        ram.push((a, w));
+                    } else if let Some((lo, hi, w)) = computed_ram(&c.ctx, insts, &inst.op, at) {
+                        if lo == hi {
+                            ram.push((lo, w));
+                        } else {
+                            ranges.push((lo, hi + w, w));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let globals = Globals::carve(&ram, &ranges, &holes.names);
+    let shapes = shapes_of(&codes, &all, holes);
+    // Each function's text by key, in print order: the modules' contents.
+    let mut out: Vec<(u32, String)> = Vec::new();
     let mut report = String::new();
     let mut hard = Vec::new();
     let mut soft = Soft::default();
@@ -234,39 +340,56 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         for f in &c.funcs {
             fns.push(f.entry);
             if let Some((code, why)) = holes.standins.get(&f.entry) {
-                writeln!(
-                    out,
-                    "// f_{:08x}: a stand-in from the holes file: {why}",
+                let mut t = format!(
+                    "// f_{:08x}: a stand-in from the holes file: {why}\n",
                     f.entry
-                )
-                .unwrap();
-                out.push_str(code);
-                out.push('\n');
+                );
+                t.push_str(code);
+                if !t.ends_with('\n') {
+                    t.push('\n');
+                }
+                t.push('\n');
+                out.push((f.entry, t));
                 soft.standins += 1;
                 continue;
+            }
+            if shapes.callee_hole.contains_key(&f.entry) {
+                soft.callee_holes += 1;
             }
             let mut p = FnPrinter {
                 ctx: &c.ctx,
                 f,
                 all: &all,
+                shapes: &shapes.shaped,
+                me: shapes.shaped.get(&f.entry).copied(),
                 holes,
                 found: Vec::new(),
                 soft: &mut soft,
                 labels: f.blocks.keys().enumerate().map(|(i, &k)| (k, i)).collect(),
+                frame: c.frames.get(&f.entry),
+                locals: c
+                    .frames
+                    .get(&f.entry)
+                    .map(Frame::locals)
+                    .unwrap_or_default(),
+                cur: f.entry,
+                globals: &globals,
             };
             let s = c.sums.get(f.entry);
-            let text = p.print(s, &c.ctx.disc.rec.jumps);
+            let text = p.print(s);
             if p.found.is_empty() {
-                out.push_str(&text);
+                out.push((f.entry, text));
             } else {
+                let mut t = String::new();
                 for h in &p.found {
                     writeln!(
-                        out,
+                        t,
                         "compile_error!(\"{}\");",
                         h.to_string().replace('"', "'")
                     )
                     .unwrap();
                 }
+                out.push((f.entry, t));
                 hard.extend(p.found);
             }
         }
@@ -282,30 +405,36 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let mut table = String::new();
     writeln!(table, "pub static FNS: [(u32, Fn); {}] = [", fns.len()).unwrap();
     for k in &fns {
-        writeln!(table, "    ({k:#010x}, f_{k:08x}),").unwrap();
+        writeln!(table, "    ({k:#010x}, {}),", plain(&shapes.shaped, *k)).unwrap();
     }
     table.push_str("];\n");
     let n_funcs = fns.len();
     let mut main = String::new();
     main.push_str("// Generated by gbaa-lift (crates/codegen/src/native.rs). Don't edit; rerun `just lift`.\n");
-    main.push_str("#![allow(unused_mut, unused_parens, unused_variables, unused_assignments, unreachable_code, non_snake_case, clippy::all)]\n\n");
-    let mut prelude = PRELUDE.to_string();
+    main.push_str("#![allow(unused_mut, unused_parens, unused_variables, unused_imports, unused_assignments, unreachable_code, non_snake_case, clippy::all)]\n\n");
+    let mut pre = prelude(holes.layout);
     for (on, flag) in [
         (holes.irq_at_waits, "IRQ_HOLD"),
         (holes.ime_at_waits, "IME_RELEASE"),
     ] {
         let set = format!("pub const {flag}: bool = true;");
-        debug_assert!(PRELUDE.contains(&set));
+        debug_assert!(pre.contains(&set));
         if on {
-            prelude = prelude.replace(&set, &format!("pub const {flag}: bool = false;"));
+            pre = pre.replace(&set, &format!("pub const {flag}: bool = false;"));
         }
     }
-    main.push_str(&prelude);
+    main.push_str(&pre);
+    main.push('\n');
+    main.push_str(&globals.ram_struct(holes.layout));
     writeln!(main, "\npub const NAME: &str = {name:?};").unwrap();
-    writeln!(main, "pub const ENTRY: Fn = f_{entry:08x};\n").unwrap();
-    main.push_str(&table);
-    main.push_str("\nuse armv4t::sem::prim;\nuse armv4t::sem::ShiftType;\nuse armv4t::sem::prim::MulKind;\n\n");
-    main.push_str(&out);
+    writeln!(
+        main,
+        "pub const ENTRY: Fn = {};\n",
+        plain(&shapes.shaped, entry)
+    )
+    .unwrap();
+    let plains: Vec<String> = fns.iter().map(|&k| plain(&shapes.shaped, k)).collect();
+    let files = modules::split(main, table, &plains, &out, holes.copies);
     let blocks: usize = codes
         .iter()
         .flat_map(|c| &c.funcs)
@@ -351,6 +480,18 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     }
     writeln!(
         report,
+        "parameters and results from the summaries: {} functions shaped; four registers for the {} whose summary has a hole and the {} whose parameters rest on a callee's run that stopped at a hole; read after a tail call by value: {{{}}}",
+        shapes.shaped.len(),
+        soft.summary_holes,
+        soft.callee_holes,
+        reg_list(shapes.by_value as u16)
+    )
+    .unwrap();
+    for (f, c) in &shapes.callee_hole {
+        writeln!(report, "  f_{f:08x}: through f_{c:08x}").unwrap();
+    }
+    writeln!(
+        report,
         "callee-saves not proven (soft: each function's r4-r11 and sp are its own locals): {}",
         soft.unproven.len()
     )
@@ -358,13 +499,77 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     for (f, why) in &soft.unproven {
         writeln!(report, "  f_{f:08x}: {why}").unwrap();
     }
+    // The stack frames of the functions printed (a stand-in's isn't).
+    let frames: Vec<&Frame> = codes
+        .iter()
+        .flat_map(|c| {
+            c.funcs
+                .iter()
+                .filter(|f| !holes.standins.contains_key(&f.entry))
+                .filter_map(|f| c.frames.get(&f.entry))
+        })
+        .collect();
+    let slots: usize = frames.iter().map(|f| f.slots.len()).sum();
+    let escaping: usize = frames.iter().map(|f| f.escaping()).sum();
+    let by_kind = Kind::ALL
+        .iter()
+        .map(|&k| {
+            let n: usize = frames
+                .iter()
+                .flat_map(|f| &f.slots)
+                .filter(|s| s.escapes & k as u8 != 0)
+                .count();
+            format!("{} {n}", k.what())
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    writeln!(
+        report,
+        "stack frames (native/frame.rs): {slots} slots in {} functions with any, {escaping} of them escaping ({by_kind}); {} functions lose sp's offset; sp-relative accesses left in memory to slots that don't escape {}, that do {}, in the caller's frame {}",
+        frames.iter().filter(|f| !f.slots.is_empty()).count(),
+        frames.iter().filter(|f| f.lost).count(),
+        soft.sp_slots[0],
+        soft.sp_slots[1],
+        soft.sp_slots[2],
+    )
+    .unwrap();
+    writeln!(
+        report,
+        "stack locals (native/frame-locals): {} slots in {} functions printed as Rust locals, {} loads and stores to them; {} calls write the locals to the frame first",
+        soft.local_slots,
+        soft.local_fns,
+        soft.locals,
+        frames.iter().map(|f| f.flush.len()).sum::<usize>(),
+    )
+    .unwrap();
+    let objs = |st| soft.access.get(&(st, Where::Object)).copied().unwrap_or(0);
+    writeln!(
+        report,
+        "pointers into one global (native/ref-in-object): {} loads and {} stores through a computed address the value sets bound to one typed global; {} computed RAM accesses no one global explains (pointer arithmetic the types don't explain)",
+        objs(false),
+        objs(true),
+        soft.unexplained,
+    )
+    .unwrap();
+    if let Some(at) = holes.plant_slot
+        && !soft.planted_slot
+    {
+        let h = Hole {
+            func: at,
+            at,
+            what: "--plant-slot: no store to a stack local there".into(),
+        };
+        writeln!(report, "  {h}").unwrap();
+        hard.push(h);
+    }
     let mut m = Metrics::default();
     let n = |x: usize| x as u64;
     // The prelude is hand-written, not lifted: its own metric, which may
     // rise with the evidence of why; `lines` (the lifted code, stand-ins
     // included) only goes down.
-    let prelude = PRELUDE.lines().count();
-    m.push("lines", n(main.lines().count() - prelude));
+    let prelude = pre.lines().count();
+    let all_lines: usize = files.files.iter().map(|(_, t)| t.lines().count()).sum();
+    m.push("lines", n(all_lines - files.wiring - prelude));
     m.push("lines_prelude", n(prelude));
     m.push("functions", n(n_funcs));
     m.push(
@@ -387,9 +592,34 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("hard_holes", n(hard.len()));
     m.push("blocks", n(blocks));
     m.push_accesses(&soft.access);
+    m.push("ram_globals", n(globals.0.len()));
+    m.push("pointer_unexplained", soft.unexplained);
+    m.push("sp_accesses_local_slot", soft.sp_slots[0]);
+    m.push("sp_accesses_escaping_slot", soft.sp_slots[1]);
+    m.push("sp_accesses_callers_frame", soft.sp_slots[2]);
     m.push("call_fn_calls", n(soft.indirect));
     m.push("jumps_by_value", n(soft.dyn_jumps));
     m.push("gap_targets", n(gaps.len()));
+    writeln!(
+        report,
+        "modules (native/modules.rs): {} files under src/, the largest {} lines{}",
+        files.files.len(),
+        files
+            .files
+            .iter()
+            .map(|(_, t)| t.lines().count())
+            .max()
+            .unwrap_or(0),
+        if holes.copies > 1 {
+            format!(
+                " (--copies {}: a synthetic lift, not the program)",
+                holes.copies
+            )
+        } else {
+            String::new()
+        }
+    )
+    .unwrap();
     writeln!(
         report,
         "metrics (`name value`; bars: crates/codegen/lift-check.toml):"
@@ -397,7 +627,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     .unwrap();
     report.push_str(&m.lines());
     Lifted {
-        main,
+        files: files.files,
         holes: hard,
         report,
         metrics: m,
@@ -506,18 +736,40 @@ fn force_code(rom: &[u8], disc: &mut Discovery, k: u32) {
 fn code(ctx: Ctx<'_>) -> Code<'_> {
     let funcs: Vec<Func> = ctx.entries.iter().map(|&e| build_func(&ctx, e)).collect();
     let sums = summarize(&ctx, &funcs);
-    Code { ctx, funcs, sums }
+    let frames = frame::of_code(&ctx, &funcs, &sums);
+    Code {
+        ctx,
+        funcs,
+        sums,
+        frames,
+    }
 }
 
 #[derive(Default)]
 struct Soft {
     /// Loads (false) and stores (true) by where their address is.
     access: BTreeMap<(bool, Where), u64>,
+    /// The sp-relative ones left in memory: to slots that don't escape
+    /// (none should be: they are locals), to slots that do, and to the
+    /// caller's frame.
+    sp_slots: [u64; 3],
+    /// Loads and stores printed as a stack local's.
+    locals: u64,
+    /// Computed RAM accesses no one global explains (native/ref-in-object).
+    unexplained: u64,
+    /// Stack locals, and the functions with any.
+    local_slots: usize,
+    local_fns: usize,
+    /// The `--plant-slot` store printed.
+    planted_slot: bool,
     /// Lifted functions whose summary has a hole, or that have none.
     summary_holes: usize,
     /// Lifted functions taking and returning all of r0-r3 whose summary
-    /// has no hole (stage A prints every function so).
+    /// has no hole (stage A printed every function so).
     four_reg_clean: usize,
+    /// Lifted functions with a clean summary whose parameters rest on a
+    /// callee's run that stopped at a hole ([`Shapes::callee_hole`]).
+    callee_holes: usize,
     indirect: usize,
     dyn_jumps: usize,
     /// Falls and jumps into another function's entry, printed through its
@@ -532,10 +784,22 @@ struct FnPrinter<'a, 'b> {
     ctx: &'a Ctx<'a>,
     f: &'a Func,
     all: &'a BTreeSet<u32>,
+    /// Every shaped function's parameters and results.
+    shapes: &'a BTreeMap<u32, Shape>,
+    /// This one's, `None` for the four-register form.
+    me: Option<Shape>,
     holes: &'a Holes,
     found: Vec<Hole>,
     soft: &'b mut Soft,
     labels: BTreeMap<u32, usize>,
+    /// The function's stack frame.
+    frame: Option<&'a Frame>,
+    /// Its slots printed as Rust locals ([`Frame::locals`]).
+    locals: Vec<Local>,
+    /// The block being printed.
+    cur: u32,
+    /// RAM's typed globals.
+    globals: &'a Globals,
 }
 
 fn v(i: ValueId) -> String {
@@ -573,14 +837,19 @@ impl FnPrinter<'_, '_> {
         });
     }
 
-    fn print(&mut self, sum: Option<&Summary>, jumps: &BTreeMap<u32, JumpRes>) -> String {
+    fn print(&mut self, sum: Option<&Summary>) -> String {
         let f = self.f;
         let mut s = String::new();
         match sum {
-            Some(sum) if sum.holes.is_empty() => self.soft.four_reg_clean += 1,
+            Some(sum) if sum.holes.is_empty() => {
+                if self.me.is_none() {
+                    self.soft.four_reg_clean += 1;
+                }
+            }
             _ => self.soft.summary_holes += 1,
         }
-        // The summary, as a comment: what the function reads and defines.
+        // The summary, as a comment: what a four-register function reads
+        // and defines (a shaped one's signature says it).
         if let Some(sum) = sum {
             let regs = |m: u16| {
                 (0..4)
@@ -589,14 +858,18 @@ impl FnPrinter<'_, '_> {
                     .collect::<Vec<_>>()
                     .join(", ")
             };
-            writeln!(
-                s,
-                "/// Reads {{{}}}; returns {{{}}}{}.",
-                regs(sum.params as u16),
-                regs(sum.results),
-                if sum.returns { "" } else { "; never returns" }
-            )
-            .unwrap();
+            if self.me.is_none() {
+                writeln!(
+                    s,
+                    "/// Reads {{{}}}; returns {{{}}}{}.",
+                    regs(sum.params as u16),
+                    regs(sum.results),
+                    if sum.returns { "" } else { "; never returns" }
+                )
+                .unwrap();
+            } else if !sum.returns {
+                s.push_str("/// Never returns.\n");
+            }
             // Callers keep r4-r11 and sp in their own locals, so a callee
             // can't change them; only one that really returns them changed
             // (`analysis::holes`' rule) is lifted wrongly.
@@ -615,19 +888,54 @@ impl FnPrinter<'_, '_> {
         }
         // The plain entry, for calls, and the extended one, for a fall or
         // jump from another function, which passes its registers and flags.
+        // A shaped function's plain entry takes its parameters and gives
+        // its results; its adapter, `a_<key>`, is the four-register form
+        // `call_fn` takes it by (`FNS`), and gives back the registers that
+        // aren't results as they came.
+        let k = f.entry;
+        let ty = ret_ty(self.me);
+        match self.me {
+            None => writeln!(
+                s,
+                "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ x_{k:08x}(g, Regs::call(sp, a)) }}"
+            )
+            .unwrap(),
+            Some(sh) => {
+                let ps: Vec<String> = shape::regs(sh.params)
+                    .map(|r| format!("a{r}: u32"))
+                    .collect();
+                let a: Vec<String> = (0..4)
+                    .map(|r| {
+                        if sh.params & 1 << r != 0 {
+                            format!("a{r}")
+                        } else {
+                            "0".into()
+                        }
+                    })
+                    .collect();
+                writeln!(
+                    s,
+                    "pub fn f_{k:08x}(g: &mut Game, sp: u32{}) -> Result<{ty}, Exit> {{ x_{k:08x}(g, Regs::call(sp, [{}])) }}",
+                    ps.iter().map(|p| format!(", {p}")).collect::<String>(),
+                    a.join(", ")
+                )
+                .unwrap();
+                writeln!(
+                    s,
+                    "pub fn a_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ let [mut r0, mut r1, mut r2, mut r3] = a; {}f_{k:08x}(g, sp{})?; Ok([r0, r1, r2, r3]) }}",
+                    lhs(sh.results),
+                    args(sh.params)
+                )
+                .unwrap();
+            }
+        }
         writeln!(
             s,
-            "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ x_{k:08x}(g, Regs::call(sp, a)) }}",
-            k = f.entry
-        )
-        .unwrap();
-        writeln!(
-            s,
-            "pub fn x_{:08x}(g: &mut Game, s: Regs) -> Result<[u32; 4], Exit> {{",
-            f.entry
+            "pub fn x_{k:08x}(g: &mut Game, s: Regs) -> Result<{ty}, Exit> {{"
         )
         .unwrap();
         s.push_str("    let Regs { r: [mut r0, mut r1, mut r2, mut r3, mut r4, mut r5, mut r6, mut r7, mut r8, mut r9, mut r10, mut r11, mut r12, mut r13, mut r14], f: [mut nf, mut zf, mut cf, mut vf] } = s;\n");
+        s.push_str(&self.declare_locals());
         if f.blocks.len() == 1 {
             s.push_str("    let b = 0usize;\n    loop {\n        match b {\n");
         } else {
@@ -642,7 +950,8 @@ impl FnPrinter<'_, '_> {
             let label = self.labels[k];
             writeln!(s, "            {label} => {{ // {:#010x}", gb.key).unwrap();
             let xs = exits(self.ctx, gb);
-            let body = self.block(&gb.block.insts, &xs, gb.block.thumb, jumps);
+            self.cur = *k;
+            let body = self.block(&gb.block.insts, &xs, gb.block.thumb);
             s.push_str(&body);
             s.push_str("            }\n");
         }
@@ -650,18 +959,44 @@ impl FnPrinter<'_, '_> {
         s
     }
 
-    fn block(
-        &mut self,
-        insts: &[Inst],
-        xs: &[ExitInfo],
-        thumb: bool,
-        jumps: &BTreeMap<u32, JumpRes>,
-    ) -> String {
+    fn block(&mut self, insts: &[Inst], xs: &[ExitInfo], thumb: bool) -> String {
         let mut s = String::new();
         let mut at = 0u32;
         let ind = "                ";
+        // The accesses printed as a typed global's field, and the address
+        // arithmetic only they used, which isn't printed; and the values
+        // nothing printed uses (a stack local's address among them).
+        let typed: Vec<Option<Place>> = insts
+            .iter()
+            .map(|inst| {
+                let (a, w) = const_access(insts, &inst.op)?;
+                self.globals.place(a, w)
+            })
+            .collect();
+        // The computed accesses into one global (native/ref-in-object),
+        // which print their address: the pointer finds or checks the field.
+        let mut pc = 0;
+        let objs: Vec<Option<Obj>> = insts
+            .iter()
+            .map(|inst| {
+                if let Op::Insn(a) = inst.op {
+                    pc = a;
+                }
+                if const_access(insts, &inst.op).is_some() {
+                    return None;
+                }
+                let (lo, hi, w) = computed_ram(self.ctx, insts, &inst.op, pc)?;
+                self.globals
+                    .object(globals::guest(lo), globals::guest(hi), w)
+            })
+            .collect();
+        let dead = dead_addresses(insts, &typed);
+        let used = self.used(insts, &typed);
         for (i, inst) in insts.iter().enumerate() {
             let id = ValueId(i as u32);
+            if dead[i] || (pure(&inst.op) && !used[i]) {
+                continue;
+            }
             let guard = inst.guard.map(v);
             let stmt = |s: &mut String, body: String| match &guard {
                 Some(g) => writeln!(s, "{ind}if {g} {{ {body} }}").unwrap(),
@@ -687,8 +1022,28 @@ impl FnPrinter<'_, '_> {
                         Width::Half => ("ld16", " & !1"),
                         Width::Word => ("ld32", " & !3"),
                     };
-                    self.count(insts, addr, at, false);
-                    let e = format!("{f}(g, {}{m})", v(addr));
+                    let mem = match (&typed[i], &objs[i]) {
+                        (Some(p), _) => globals::load(p, bytes(width)),
+                        (None, Some(o)) => o.load(&format!("{}{m}", v(addr)), bytes(width)),
+                        (None, None) => format!("{f}(g, {}{m})", v(addr)),
+                    };
+                    let e = match self.local(i) {
+                        Some((l, d, n)) => {
+                            let x = local_read(&l, d, n);
+                            if self.holes.shadow_locals {
+                                format!(
+                                    "{{ let x: u32 = {x}; let m: u32 = {mem}; if x != m {{ eprintln!(\"shadow local: {at:#010x} loads {{x:#x}} from {}, the frame's bytes hold {{m:#x}}\"); }} x }}",
+                                    l.name()
+                                )
+                            } else {
+                                x
+                            }
+                        }
+                        None => {
+                            self.count(insts, addr, at, i, false, typed_as(&typed[i], &objs[i]));
+                            mem
+                        }
+                    };
                     match &guard {
                         Some(gv) => writeln!(
                             s,
@@ -705,22 +1060,51 @@ impl FnPrinter<'_, '_> {
                         Width::Half => ("st16", " & !1"),
                         Width::Word => ("st32", " & !3"),
                     };
-                    // A store that may reach I/O may set `IME` again, which
-                    // runs a pending IRQ's handler on the current stack.
-                    let sp = match self.count(insts, addr, at, true) {
-                        Where::Sp => "",
-                        Where::Const(r) if metrics::REGIONS[r] != "io" => "",
-                        _ => "g.sp = r13; ",
-                    };
-                    let plant = if self.holes.plant == Some(at) {
+                    let local = self.local(i);
+                    let plant = if self.holes.plant == Some(at)
+                        || (local.is_some() && self.holes.plant_slot == Some(at))
+                    {
+                        self.soft.planted_slot |= local.is_some();
                         ".wrapping_add(1)"
                     } else {
                         ""
                     };
-                    stmt(
-                        &mut s,
-                        format!("{sp}{f}(g, {}{m}, {}{plant});", v(addr), v(value)),
-                    );
+                    let val = format!("{}{plant}", v(value));
+                    let mem = match (&typed[i], &objs[i]) {
+                        (Some(p), _) => globals::store(p, bytes(width), &val),
+                        (None, Some(o)) => o.store(&format!("{}{m}", v(addr)), bytes(width), &val),
+                        (None, None) => format!("{f}(g, {}{m}, {val});", v(addr)),
+                    };
+                    let body = match local {
+                        Some((l, d, n)) => {
+                            let w = local_write(&l, d, n, &val);
+                            if self.holes.shadow_locals {
+                                format!("{w} {mem}")
+                            } else {
+                                w
+                            }
+                        }
+                        None => {
+                            let w =
+                                self.count(insts, addr, at, i, true, typed_as(&typed[i], &objs[i]));
+                            // A store that may reach I/O may set `IME` again,
+                            // which runs a pending IRQ's handler on the
+                            // current stack.
+                            let io = typed[i].is_none()
+                                && objs[i].is_none()
+                                && match w {
+                                    Where::Sp => false,
+                                    Where::Const(r) => metrics::REGIONS[r] == "io",
+                                    _ => true,
+                                };
+                            if io {
+                                format!("g.sp = r13; {mem}")
+                            } else {
+                                mem
+                            }
+                        }
+                    };
+                    stmt(&mut s, body);
                 }
                 Op::Exit(e) => {
                     let x = xs
@@ -728,7 +1112,7 @@ impl FnPrinter<'_, '_> {
                         .find(|x| x.index == i)
                         .copied()
                         .expect("every exit planned");
-                    let body = self.exit(e, &x, thumb, jumps);
+                    let body = format!("{}{}", self.flush(i), self.exit(e, &x, thumb));
                     match &guard {
                         Some(gv) => writeln!(s, "{ind}if {gv} {{\n{body}{ind}}}").unwrap(),
                         None => s.push_str(&body),
@@ -744,12 +1128,23 @@ impl FnPrinter<'_, '_> {
         s
     }
 
-    /// Count an access by the instruction at `at`: a constant address by
+    /// Count an access by the instruction at `at`: one printed `typed` as
+    /// a field as that; a constant address by
     /// its region; else as the value-set analysis knows the instruction's
     /// addresses (code it didn't reach, such as discovery's gaps, is
-    /// unknown).
-    fn count(&mut self, insts: &[Inst], addr: ValueId, at: u32, store: bool) -> Where {
+    /// unknown). An sp-relative one also by whether the slot it reaches
+    /// escapes ([`frame`]; one the frame's run didn't place, as escaping).
+    fn count(
+        &mut self,
+        insts: &[Inst],
+        addr: ValueId,
+        at: u32,
+        i: usize,
+        store: bool,
+        typed: Option<Where>,
+    ) -> Where {
         let w = match konst(insts, addr) {
+            _ if typed.is_some() => typed.unwrap(),
             Some(a) => Where::Const(metrics::region(a)),
             None => match self.ctx.disc.rec.accesses.get(&at) {
                 Some(x) if x.stack_only() => Where::Sp,
@@ -761,7 +1156,120 @@ impl FnPrinter<'_, '_> {
             },
         };
         *self.soft.access.entry((store, w)).or_default() += 1;
+        self.soft.unexplained += (w == Where::Computed(0)) as u64;
+        if w == Where::Sp {
+            let esc = self
+                .frame
+                .and_then(|f| f.escapes_at(self.cur, i))
+                .unwrap_or(true);
+            let callers = self.frame.is_some_and(|f| f.in_callers(self.cur, i));
+            let k = match (esc, callers) {
+                (true, _) => 1,
+                (false, true) => 2,
+                (false, false) => 0,
+            };
+            self.soft.sp_slots[k] += 1;
+        }
         w
+    }
+
+    /// Which of a block's values something printed uses. An access
+    /// printed as a stack local's (unless `--shadow-locals` reads the
+    /// frame's bytes too) or a typed global's (`typed`) doesn't use its
+    /// address, so the arithmetic only the address needed isn't printed
+    /// ([`pure`]).
+    fn used(&self, insts: &[Inst], typed: &[Option<Place>]) -> Vec<bool> {
+        let mut used = vec![false; insts.len()];
+        for (i, inst) in insts.iter().enumerate().rev() {
+            if pure(&inst.op) && !used[i] {
+                continue;
+            }
+            let local = !self.holes.shadow_locals
+                && self
+                    .frame
+                    .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
+            let field = typed[i].is_some();
+            let ops = match inst.op {
+                Op::Load { .. } if local || field => Vec::new(),
+                Op::Store { value, .. } if local || field => vec![value],
+                ref op => op.operands(),
+            };
+            for x in ops.into_iter().chain(inst.guard) {
+                used[x.index()] = true;
+            }
+        }
+        used
+    }
+
+    /// The stack local the access at inst `i` of the current block lands
+    /// in, if any ([`Frame::local_at`]), counted.
+    fn local(&mut self, i: usize) -> Option<(Local, u32, u8)> {
+        let r = self.frame?.local_at(&self.locals, self.cur, i);
+        self.soft.locals += r.is_some() as u64;
+        r
+    }
+
+    /// The stack locals' declarations, after the entry's registers: each
+    /// zero, or its frame bytes with `--shadow-locals`; and the entry sp,
+    /// `sp0`, where a flush or the shadow needs the frame's address.
+    fn declare_locals(&mut self) -> String {
+        let mut s = String::new();
+        if self.locals.is_empty() {
+            return s;
+        }
+        self.soft.local_slots += self.locals.len();
+        self.soft.local_fns += 1;
+        let shadow = self.holes.shadow_locals;
+        if shadow || self.frame.is_some_and(|f| !f.flush.is_empty()) {
+            s.push_str("    let sp0: u32 = r13;\n");
+        }
+        for l in &self.locals {
+            let name = l.name();
+            let (ty, init) = if l.word {
+                let init = if shadow {
+                    format!("ld32(g, {})", local_addr(l, 0))
+                } else {
+                    "0".into()
+                };
+                ("u32".to_string(), init)
+            } else {
+                let init = if shadow {
+                    let bs: Vec<String> = (0..l.len)
+                        .map(|j| format!("ld8(g, {}) as u8", local_addr(l, j)))
+                        .collect();
+                    format!("[{}]", bs.join(", "))
+                } else {
+                    format!("[0; {}]", l.len)
+                };
+                (format!("[u8; {}]", l.len), init)
+            };
+            writeln!(s, "    let mut {name}: {ty} = {init};").unwrap();
+        }
+        s
+    }
+
+    /// Before a call the frame is done with after, whose callee may reach
+    /// up into it ([`Frame::flush`]): every stack local to its bytes.
+    fn flush(&self, i: usize) -> String {
+        let ind = "                ";
+        if !self.frame.is_some_and(|f| f.flush.contains(&(self.cur, i))) {
+            return String::new();
+        }
+        let mut s = String::new();
+        for l in &self.locals {
+            let name = l.name();
+            if l.word {
+                writeln!(s, "{ind}st32(g, {}, {name});", local_addr(l, 0)).unwrap();
+            } else {
+                writeln!(
+                    s,
+                    "{ind}for (j, x) in {name}.iter().enumerate() {{ st8(g, {}.wrapping_add(j as u32), *x as u32); }}",
+                    local_addr(l, 0)
+                )
+                .unwrap();
+            }
+        }
+        s
     }
 
     /// A jump to block or function `k`: a label, or a fall into another
@@ -781,13 +1289,62 @@ impl FnPrinter<'_, '_> {
     /// A fall or jump into function `k`'s entry, as the last thing this
     /// one does.
     fn fall_into(&mut self, k: u32) -> String {
-        if self.holes.fall_as_tail_call || self.holes.standins.contains_key(&k) {
-            format!("return f_{k:08x}(g, r13, [r0, r1, r2, r3]);")
+        let callee = self.shape(k);
+        let (lhs, call) = if self.holes.fall_as_tail_call || self.holes.standins.contains_key(&k) {
+            self.call(k)
         } else {
             self.soft.falls += 1;
-            format!(
-                "return x_{k:08x}(g, Regs {{ r: [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14], f: [nf, zf, cf, vf] }});"
+            (
+                callee.map_or("[r0, r1, r2, r3] = ".into(), |c| lhs(c.results)),
+                format!(
+                    "x_{k:08x}(g, Regs {{ r: [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14], f: [nf, zf, cf, vf] }})"
+                ),
             )
+        };
+        self.tail(callee.map(|c| c.results), &lhs, &call)
+    }
+
+    /// `k`'s shape, `None` for a four-register function or a stand-in.
+    fn shape(&self, k: u32) -> Option<Shape> {
+        if self.holes.standins.contains_key(&k) {
+            return None;
+        }
+        self.shapes.get(&k).copied()
+    }
+
+    /// A plain call of `k` with this function's registers: what it
+    /// assigns its results to, and the call (without `?`).
+    fn call(&self, k: u32) -> (String, String) {
+        match self.shape(k) {
+            None => (
+                "[r0, r1, r2, r3] = ".into(),
+                format!("f_{k:08x}(g, r13, [r0, r1, r2, r3])"),
+            ),
+            Some(c) => (
+                lhs(c.results),
+                format!("f_{k:08x}(g, r13{})", args(c.params)),
+            ),
+        }
+    }
+
+    /// The call statement: `lhs call?;`.
+    fn call_stmt(&self, k: u32) -> String {
+        let (lhs, call) = self.call(k);
+        format!("{lhs}{call}?;")
+    }
+
+    /// The return statement.
+    fn ret(&self) -> String {
+        format!("return Ok({});", ret_expr(self.me))
+    }
+
+    /// A tail call, `call` giving `results` (`None`: all of r0-r3) into
+    /// `lhs`: returned as it is where this function gives the same.
+    fn tail(&self, results: Option<u8>, lhs: &str, call: &str) -> String {
+        if results == self.me.map(|m| m.results) {
+            format!("return {call};")
+        } else {
+            format!("{lhs}{call}?; {}", self.ret())
         }
     }
 
@@ -805,13 +1362,7 @@ impl FnPrinter<'_, '_> {
         format!("{call}\n                    {then}")
     }
 
-    fn exit(
-        &mut self,
-        e: Exit,
-        x: &ExitInfo,
-        thumb: bool,
-        jumps: &BTreeMap<u32, JumpRes>,
-    ) -> String {
+    fn exit(&mut self, e: Exit, x: &ExitInfo, thumb: bool) -> String {
         let ind = "                    ";
         let at = x.at;
         let regs = "[r0, r1, r2, r3]";
@@ -827,7 +1378,7 @@ impl FnPrinter<'_, '_> {
                 writeln!(s, "{ind}{wait}{j}").unwrap();
             }
             Plan::Call { target, ret } => {
-                let c = format!("[r0, r1, r2, r3] = f_{target:08x}(g, r13, {regs})?;");
+                let c = self.call_stmt(target);
                 let c = self.call_then(c, ret, at);
                 writeln!(s, "{ind}{wait}{c}").unwrap();
             }
@@ -860,9 +1411,7 @@ impl FnPrinter<'_, '_> {
                 if let Some(ret) = ret {
                     // An indirect call.
                     let c = match target {
-                        Some(tk) if self.all.contains(&tk) => {
-                            format!("[r0, r1, r2, r3] = f_{tk:08x}(g, r13, {regs})?;")
-                        }
+                        Some(tk) if self.all.contains(&tk) => self.call_stmt(tk),
                         _ => {
                             self.soft.indirect += 1;
                             format!("[r0, r1, r2, r3] = call_fn(g, {k}, r13, {regs})?;")
@@ -874,33 +1423,18 @@ impl FnPrinter<'_, '_> {
                 }
                 // A return, a jump through a table or a known target, or a
                 // tail call through a register.
-                let mut targets: Vec<u32> = target.into_iter().collect();
-                let jump_at = [at, at.wrapping_sub(2)]
-                    .into_iter()
-                    .find(|a| jumps.contains_key(a));
-                match jump_at.map(|a| (a, &jumps[&a])) {
-                    Some((_, JumpRes::Resolved(_))) => {
-                        targets.extend(self.ctx.table_targets(at, thumb).unwrap_or_default());
+                let targets = match dyn_targets(self.ctx, self.holes, at, thumb, target) {
+                    Ok(ts) => ts,
+                    Err(a) => {
+                        self.hole(
+                            a,
+                            "an indirect jump Recovery didn't resolve (give its targets in the holes file)",
+                        );
+                        target.into_iter().collect()
                     }
-                    Some((a, JumpRes::Unresolved | JumpRes::Rejected(_))) => {
-                        match self.holes.jumps.get(&a) {
-                            Some((ts, _)) => targets.extend(ts),
-                            None => self.hole(
-                                a,
-                                "an indirect jump Recovery didn't resolve (give its targets in the holes file)",
-                            ),
-                        }
-                    }
-                    None => {}
-                }
-                targets.sort_unstable();
-                targets.dedup();
+                };
                 writeln!(s, "{ind}let t: u32 = {t};").unwrap();
-                writeln!(
-                    s,
-                    "{ind}if t & !3 == RET {{ return Ok([r0, r1, r2, r3]); }}"
-                )
-                .unwrap();
+                writeln!(s, "{ind}if t & !3 == RET {{ {} }}", self.ret()).unwrap();
                 if !targets.is_empty() {
                     self.soft.dyn_jumps += 1;
                     writeln!(s, "{ind}match {k} {{").unwrap();
@@ -913,7 +1447,12 @@ impl FnPrinter<'_, '_> {
                 }
                 // Anything else is a function's entry, taken as a tail call
                 // (`call_fn` panics on any other value).
-                writeln!(s, "{ind}return call_fn(g, {k}, r13, {regs});").unwrap();
+                let t = self.tail(
+                    None,
+                    "[r0, r1, r2, r3] = ",
+                    &format!("call_fn(g, {k}, r13, {regs})"),
+                );
+                writeln!(s, "{ind}{t}").unwrap();
             }
             Plan::Swi { next } => {
                 let Exit::Swi { comment, .. } = e else {
@@ -940,6 +1479,276 @@ impl FnPrinter<'_, '_> {
             Plan::Undefined => self.hole(at, "an undefined instruction"),
         }
         s
+    }
+}
+
+/// How an access printed typed is counted: a constant address's field
+/// (`Global`) or a computed one's (`Object`).
+fn typed_as(field: &Option<Place>, obj: &Option<Obj>) -> Option<Where> {
+    match (field, obj) {
+        (Some(_), _) => Some(Where::Global),
+        (None, Some(_)) => Some(Where::Object),
+        (None, None) => None,
+    }
+}
+
+fn bytes(w: Width) -> u32 {
+    match w {
+        Width::Byte => 1,
+        Width::Half => 2,
+        Width::Word => 4,
+    }
+}
+
+/// A load or store whose address is a constant in RAM: its offset in
+/// `Game::ram` (aligned as the access aligns it) and width in bytes.
+fn const_access(insts: &[Inst], op: &Op) -> Option<(u32, u32)> {
+    let (Op::Load { width, addr } | Op::Store { width, addr, .. }) = *op else {
+        return None;
+    };
+    let w = bytes(width);
+    Some((globals::ram_at(konst(insts, addr)? & !(w - 1))?, w))
+}
+
+/// A load or store whose address isn't a constant in its block but which
+/// the value sets bound to RAM (`analysis::vsa::func::Access`, by the
+/// instruction at `at`): the offsets in `Game::ram` of its lowest and
+/// highest address (aligned as the access aligns them, in one mirror) and
+/// its width in bytes. A whole instruction's accesses share a bound (an
+/// `ldm`'s words).
+fn computed_ram(ctx: &Ctx, insts: &[Inst], op: &Op, at: u32) -> Option<(u32, u32, u32)> {
+    let (Op::Load { width, addr } | Op::Store { width, addr, .. }) = *op else {
+        return None;
+    };
+    if konst(insts, addr).is_some() {
+        return None;
+    }
+    let x = ctx.disc.rec.accesses.get(&at)?;
+    let (lo, hi) = x.hull.filter(|_| !x.sp && !x.top)?;
+    if metrics::region_of(lo, hi) != Some(0) {
+        return None;
+    }
+    let w = bytes(width);
+    let (lo, hi) = (lo & !(w - 1), hi & !(w - 1));
+    let (o_lo, o_hi) = (globals::ram_at(lo)?, globals::ram_at(hi)?);
+    (o_hi >= o_lo && o_hi - o_lo == hi - lo).then_some((o_lo, o_hi, w))
+}
+
+/// The values of a block's address arithmetic (constants and the ops
+/// [`konst`] folds) that nothing uses but the accesses `typed` prints as
+/// fields, which don't print their address; and the loads from constant
+/// ROM addresses nothing uses (a literal pool's, whose word the IR has as
+/// a `Pool` constant), with their addresses.
+fn dead_addresses(insts: &[Inst], typed: &[Option<Place>]) -> Vec<bool> {
+    let mut uses = vec![0u32; insts.len()];
+    for (i, inst) in insts.iter().enumerate() {
+        let skip = match inst.op {
+            Op::Load { addr, .. } | Op::Store { addr, .. } if typed[i].is_some() => Some(addr),
+            _ => None,
+        };
+        let mut ops = inst.op.operands();
+        if let Some(a) = skip {
+            let k = ops
+                .iter()
+                .position(|&o| o == a)
+                .expect("the access's address");
+            ops.remove(k);
+        }
+        for o in ops.into_iter().chain(inst.guard) {
+            uses[o.index()] += 1;
+        }
+    }
+    let mut dead = vec![false; insts.len()];
+    for i in (0..insts.len()).rev() {
+        let folds = matches!(
+            insts[i].op,
+            Op::Const(_) | Op::Pool(_) | Op::Bin(..) | Op::Not(_)
+        ) && konst(insts, ValueId(i as u32)).is_some();
+        // A literal pool's load whose word the IR has as a `Pool` constant:
+        // ROM reads change nothing.
+        let pool = match insts[i].op {
+            Op::Load { addr, .. } => konst(insts, addr).is_some_and(|a| metrics::region(a) == 2),
+            _ => false,
+        };
+        if (folds && insts[i].guard.is_none() || pool) && uses[i] == 0 {
+            dead[i] = true;
+            for o in insts[i].op.operands() {
+                uses[o.index()] -= 1;
+            }
+        }
+    }
+    dead
+}
+
+/// Every function's shape ([`shape::shapes`]), over all code contexts.
+fn shapes_of(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> Shapes {
+    let mut nodes = BTreeMap::new();
+    for (i, c) in codes.iter().enumerate() {
+        let edges = |f: &Func| {
+            shape::edges(&c.ctx, f, all, |at, thumb, target| {
+                dyn_targets(&c.ctx, holes, at, thumb, target).unwrap_or_default()
+            })
+        };
+        nodes.extend(shape::nodes_of(i, &c.funcs, &c.sums, edges, |k| {
+            holes.standins.contains_key(&k)
+        }));
+    }
+    shape::shapes(&nodes)
+}
+
+/// The known targets of a jump by value at `at` (not a call): its own
+/// (`target`), a resolved table's cases, the holes file's for one
+/// Recovery didn't resolve. `Err` with the jump's address where it's
+/// unresolved and the holes file gives none.
+fn dyn_targets(
+    ctx: &Ctx,
+    holes: &Holes,
+    at: u32,
+    thumb: bool,
+    target: Option<u32>,
+) -> Result<Vec<u32>, u32> {
+    let jumps = &ctx.disc.rec.jumps;
+    let mut targets: Vec<u32> = target.into_iter().collect();
+    let jump_at = [at, at.wrapping_sub(2)]
+        .into_iter()
+        .find(|a| jumps.contains_key(a));
+    match jump_at.map(|a| (a, &jumps[&a])) {
+        Some((_, JumpRes::Resolved(_))) => {
+            targets.extend(ctx.table_targets(at, thumb).unwrap_or_default());
+        }
+        Some((a, JumpRes::Unresolved | JumpRes::Rejected(_))) => match holes.jumps.get(&a) {
+            Some((ts, _)) => targets.extend(ts),
+            None => return Err(a),
+        },
+        None => {}
+    }
+    targets.sort_unstable();
+    targets.dedup();
+    Ok(targets)
+}
+
+/// The plain four-register entry of `k`, as `FNS` holds it: a shaped
+/// function's adapter.
+fn plain(shapes: &BTreeMap<u32, Shape>, k: u32) -> String {
+    if shapes.contains_key(&k) {
+        format!("a_{k:08x}")
+    } else {
+        format!("f_{k:08x}")
+    }
+}
+
+/// A function's return type: all of r0-r3 (`None`), or its results.
+fn ret_ty(s: Option<Shape>) -> String {
+    match s.map(|s| s.results.count_ones()) {
+        None => "[u32; 4]".into(),
+        Some(0) => "()".into(),
+        Some(1) => "u32".into(),
+        Some(n) => format!("({})", vec!["u32"; n as usize].join(", ")),
+    }
+}
+
+/// Its return value, from the registers.
+fn ret_expr(s: Option<Shape>) -> String {
+    match s {
+        None => "[r0, r1, r2, r3]".into(),
+        Some(s) => tuple(s.results),
+    }
+}
+
+/// The registers of `m` as a value: `()`, `r0`, `(r0, r1)`.
+fn tuple(m: u8) -> String {
+    let rs: Vec<String> = shape::regs(m).map(|r| format!("r{r}")).collect();
+    match rs.len() {
+        1 => rs[0].clone(),
+        _ => format!("({})", rs.join(", ")),
+    }
+}
+
+/// What a call's results are assigned to: nothing, `r0 = `, `(r0, r1) = `.
+fn lhs(m: u8) -> String {
+    if m == 0 {
+        String::new()
+    } else {
+        format!("{} = ", tuple(m))
+    }
+}
+
+/// A call's arguments after `sp`: `, r0, r2`.
+fn args(m: u8) -> String {
+    shape::regs(m).map(|r| format!(", r{r}")).collect()
+}
+
+/// `{r0, r1}`.
+fn reg_list(m: u16) -> String {
+    (0..4)
+        .filter(|r| m & 1 << r != 0)
+        .map(|r| format!("r{r}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Whether `op` is printed as a `let` of a value and does nothing else, so
+/// it needn't be printed where nothing uses it.
+fn pure(op: &Op) -> bool {
+    !matches!(
+        op,
+        Op::Insn(_)
+            | Op::Timing(_)
+            | Op::YieldFlag(..)
+            | Op::SetReg(..)
+            | Op::SetFlag(..)
+            | Op::GetUserReg(_)
+            | Op::SetUserReg(..)
+            | Op::GetCpsr
+            | Op::GetSpsr
+            | Op::SetCpsr { .. }
+            | Op::SetSpsr { .. }
+            | Op::Load { .. }
+            | Op::Store { .. }
+            | Op::Exit(_)
+    )
+}
+
+/// Byte `d` of stack local `l`'s frame bytes: `sp0` less how far below
+/// it the byte is.
+fn local_addr(l: &Local, d: u32) -> String {
+    format!("sp0.wrapping_sub({:#x})", (-l.lo) as u32 - d)
+}
+
+/// A load of `n` bytes at byte `d` of stack local `l`, as a `u32`.
+fn local_read(l: &Local, d: u32, n: u8) -> String {
+    let name = l.name();
+    if l.word {
+        return name;
+    }
+    let b = |j: u32| format!("{name}[{}]", d + j);
+    match n {
+        1 => format!("{} as u32", b(0)),
+        2 => format!("u16::from_le_bytes([{}, {}]) as u32", b(0), b(1)),
+        _ => format!(
+            "u32::from_le_bytes([{}, {}, {}, {}])",
+            b(0),
+            b(1),
+            b(2),
+            b(3)
+        ),
+    }
+}
+
+/// A store of `val`'s low `n` bytes at byte `d` of stack local `l`.
+fn local_write(l: &Local, d: u32, n: u8, val: &str) -> String {
+    let name = l.name();
+    match (l.word, n) {
+        (true, _) => format!("{name} = {val};"),
+        (_, 1) => format!("{name}[{d}] = ({val}) as u8;"),
+        (_, 2) => format!(
+            "{name}[{d}..{}].copy_from_slice(&(({val}) as u16).to_le_bytes());",
+            d + 2
+        ),
+        _ => format!(
+            "{name}[{d}..{}].copy_from_slice(&({val}).to_le_bytes());",
+            d + 4
+        ),
     }
 }
 

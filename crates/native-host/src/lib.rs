@@ -23,6 +23,7 @@ use desktop::Script;
 use native_record::{Frame as Record, Region, Writer};
 use runtime::hw::{Exit, Host, Hw, Native};
 use runtime::platform::{Frame, HEIGHT, WIDTH};
+use runtime::sound::AudioChunk;
 
 pub struct Options {
     frames: u64,
@@ -114,6 +115,25 @@ impl Host for AnyHost {
         self.0.present(frame)
     }
 
+    /// Kept for the frame's record, if there is one (as the play build's
+    /// capture keeps it: each FIFO record's two bytes, each PSG sample's
+    /// two little-endian halfwords), then passed on.
+    fn audio(&mut self, chunk: &AudioChunk<'_>) {
+        SOUND.with_borrow_mut(|s| {
+            let Some((fifo, psg)) = s else {
+                return;
+            };
+            for &(a, b) in chunk.fifo {
+                fifo.extend([a as u8, b as u8]);
+            }
+            for &(l, r) in chunk.psg {
+                psg.extend(l.to_le_bytes());
+                psg.extend(r.to_le_bytes());
+            }
+        });
+        self.0.audio(chunk);
+    }
+
     fn keys(&mut self) -> u16 {
         self.0.keys()
     }
@@ -151,12 +171,16 @@ thread_local! {
     /// `--native-record`'s writer and the record it fills, if asked for.
     static RECORD: RefCell<Option<(Writer<std::io::BufWriter<std::fs::File>>, Record)>> =
         const { RefCell::new(None) };
+    /// The sound handed to the host since the last record (FIFO bytes,
+    /// PSG bytes), kept only when there is a record to write.
+    static SOUND: RefCell<Option<(Vec<u8>, Vec<u8>)>> = const { RefCell::new(None) };
 }
 
 /// The frame just finished, recorded (for [`Hw::on_frame_end`]): the
 /// picture's hash, `ram` (the guest layout's EWRAM then IWRAM), the
-/// library's I/O registers ([`Hw::raw16`]), the display's memories. No
-/// audio: the library plays none yet.
+/// library's I/O registers ([`Hw::raw16`]), the display's memories, and
+/// the sound handed off since the last record (the frame's own, as the
+/// play build's record has it).
 // Unused by the play layout's build of `native-spike`, which has no RAM to
 // record.
 #[allow(dead_code)]
@@ -177,7 +201,17 @@ pub fn record<G: Native>(hw: &Hw<G>, ram: &[u8]) {
             .copy_from_slice(&hw.ppu.palette);
         f.region_mut(Region::Vram).copy_from_slice(&hw.ppu.vram);
         f.region_mut(Region::Oam).copy_from_slice(&hw.ppu.oam);
-        f.audio = None;
+        f.audio = SOUND.with_borrow_mut(|s| {
+            let (fifo, psg) = s.as_mut()?;
+            let a = native_record::Audio {
+                samples: (fifo.len() / 2 + psg.len() / 4) as u32,
+                hash: native_record::fnv(native_record::fnv(native_record::FNV, fifo), psg),
+                silent: fifo.iter().chain(psg.iter()).all(|&b| b == 0),
+            };
+            fifo.clear();
+            psg.clear();
+            Some(a)
+        });
         if let Err(e) = w.write(f) {
             panic!("--native-record: {e}");
         }
@@ -217,6 +251,7 @@ fn run<G: Native<Host = AnyHost>>(
         }
         let w = Writer::create(p).map_err(|e| format!("{}: {e}", p.display()))?;
         RECORD.set(Some((w, Record::new())));
+        SOUND.set(Some((Vec::new(), Vec::new())));
     }
     let host = Rc::new(RefCell::new(Headless {
         input: o.input,

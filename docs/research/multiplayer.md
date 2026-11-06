@@ -575,10 +575,33 @@ tokio + quinn.
 - **Not yet:** rejoining after a dropped connection, a room expiry
   beyond "empty", NAT hole punching.
 
+### Versions (multiplayer/server-version-cutoff)
+
+Built 2026-10-31, june's ask (2026-10-30): a friend on a stale binary is
+told to update, not let in to desync. `netplay::VERSION`
+(crates/netplay/src/lib.rs) is a number every client sends after its
+build ID in the rooms' `H` and `J` (a `u32`, little-endian; a build from
+before versions sends none and counts as 0). `gbaa-server --min-version
+N` refuses an older one with an `E`: "this game is too old for the
+server (version 1, needs 2): get the new build", which a pre-version
+client prints as any refusal, and the desktop window's netplay page
+shows as "The server said no: …", not a timeout. Without the flag every
+version is let in (the room-sim's and tests' in-process servers). The
+server compares the number and nothing more; the build ID still keeps
+two different builds out of one room.
+
+**When to raise it:** by hand, by one, in the commit of any change that
+can split peers (two builds stepping a console, the link or rollback
+differently) or changes the wire (the session's messages, `udp`'s
+datagrams, the rooms'). Then raise `--min-version` in
+deploy/fly/Dockerfile to match (a netplay test fails until they agree)
+and redeploy fly once the new build is with the friends.
+
 ## Desktop netplay
 
 Built 2026-10-25 (multiplayer/desktop-netplay), `crates/desktop/src/room.rs`:
-`gbaa-desktop ROM --server ADDR --host` or `--join CODE`, two seats, the
+`gbaa-desktop ROM --server ADDR --host` or `--join CODE`, two seats
+(2 to 4 since 2026-10-31, `--players N`: "Four players" below), the
 host the cable's parent. Each peer opens its own cartridge save into its
 seat's machine, the session swaps the states and runs both GBAs; the
 window draws its seat's PPU, writes its seat's save as it changes and
@@ -595,7 +618,7 @@ host's wall clock (sent in `Start`), headless the fixed clock.
   resync), and two windows in a private `cu session` through a real
   `gbaa-server`, each showing its own seat through the trade at 60 fps.
 - **Not yet:** sound (`netplay::gba`'s machines drop it), more than two
-  seats, spectating, a room-code prompt in the menu (the code is a
+  seats (since 2026-10-31: up to four), spectating, a room-code prompt in the menu (the code is a
   flag), and leaving: a player who closes the window ends the other's
   session ("player N left").
 
@@ -892,6 +915,81 @@ fly pairs' round trip was about 52 ms (least 32-35, most 139-217). If
 a playtest's report file shows thousands resent again, the cause is
 still open: note what the session did (a menu open, a slow start, the
 machine swapping).
+
+### Four players (multiplayer/four-seats)
+
+From june's Kirby playtest (2026-10-29): a third player joining was told
+the room was full, as rooms had two seats. Since 2026-10-31 a room has 2
+to 4: the host picks how many (`gbaa-desktop --players N`, the menu's
+Players row), joiners take the next free seat in the order they arrive,
+and the session starts once every seat is taken (one more is told the
+room is full). The server had always taken 2-4 (`relay::rooms`), and
+the session core and `runtime::link` were already N-seat; the desktop
+was what fixed two. The room's build ID leaves out the seat count (byte
+28), which a joiner learns from the room before it makes its consoles.
+`runtime::link`'s `four_players_share_one_bus` test runs four machines
+on one cable: every player gets all four halfwords at one cycle, with
+its own ID.
+
+Checked on quack, 2026-10-31: `gbaa-pingsim room --players 3|4`, toy
+and GBA consoles on wander, every seat on the straight run's hashes;
+three and then four windows of the recompiled Kirby in a private `cu
+session` through a local `gbaa-server`, each showing its own seat (P1
+to P4 on Kirby's cable screen, then its own Kirby's colour in Rainbow
+Route), all ending on one hash (three: `929be1bd…` at 3000 frames;
+four: `2749087a…` at 3600).
+
+Brought onto the public main on 2026-11-05, over peer-leaves and the
+desync report, and checked again on quack (interpreted): `just room-sim
+wander --players 4 --console gba` and `--players 3` pass on every seat;
+three and four Kirby windows in a private `cu session` (calm, delay 2),
+titled player 1 to 4, the corner mark `Connected · 3/3` and `4/4`, each
+window on its own Kirby in Rainbow Route, ending on one hash (three:
+`27f2caeb…` at 3000; four: `245b958b…` at 3600). With peer-leaves, a
+headless four-peer run first ended apart: a peer that finished early
+said goodbye while a slower one (four interpreted consoles run behind
+real time) was 200 frames back, and that one unplugged its cable. A
+peer at `--frames`' end now waits (up to 30 s, `room::CATCH_UP`) until
+every seat has run as far before it lingers and leaves; headless, four
+peers then ended on `c894de98…` (calm, delay 2, 3000 frames) and three
+on `71a8ed2d…` (wander, delay 0). With three or four players, one leaving
+unplugs everyone's cable: each remaining peer plays on alone.
+
+Frame cost, four Kirbys a peer, quack, 3600 frames paced through `just
+rollback-feel PROFILE ROM --exe BIN [--interp] --headless --paced
+--players 4` with the menu presses above on all four, then from 2200
+`right`/`left` every 18, 18, 30 and 24 frames on players 1 to 4. All four
+peers ran on quack at once (16 consoles, three proxies), so each peer
+shares the machine's cores and caches with three others, as a real
+session's wouldn't: these are upper bounds. The structured build, its
+default instant timing:
+
+| players | build | profile, delay | frame p50 | frame p99 | frames over 16.7 ms | end hash |
+|---|---|---|---|---|---|---|
+| 2 | recompiled | calm, 2 | 3.5-3.8 ms | 6.7-9.2 ms | 1 | `db772d4f…` |
+| 2 | interpreted | calm, 2 | 6.8-7.1 ms | 10.8-10.9 ms | 2 | `b67bf1e1…` |
+| 2 | recompiled | wander, 0 | 3.7 ms | 27 ms | 94-100 | `41fb45c8…` |
+| 4 | recompiled | calm, 2 | 7.0-7.3 ms | 19-26 ms | 79-145 | `47aeef69…` |
+| 4 | interpreted | calm, 2 | 17.9-20.8 ms | 35-62 ms | 2160-3400 | `9d6fb426…` |
+| 4 | recompiled | wander, 0 | 7.1-7.3 ms | 69-81 ms | 290-360 | `531a181f…` |
+| 4 | interpreted | wander, 0 | 14.5-18.4 ms | 150-166 ms | 860-2430 | `d5a8ecef…` |
+
+Every run's peers ended on one hash, and each setting on the same hash
+every time it ran; none froze once playing. A frame of four Kirbys costs
+about twice two, so the **re-run headroom** (frames a 16.7 ms frame has
+room to run again) falls from about 3.5 to about 1.3 recompiled, and
+the interpreter has none: at four it runs behind real time on quack
+even with no rollbacks (most frames over budget). With four, a late
+input from any of three others means a rollback, so at delay 0 on
+wander each peer ran about 2100-2500 frames again a minute (deepest 14
+to 107 frames), against about 830 for two; the p99 is a hitch of 4-5
+frames. On the Deck (2-2.5x slower than quack, "Latency over the
+internet" above) four recompiled Kirbys would take about 14-18 ms a
+frame: about one frame's budget, no re-runs. An estimate, not measured
+there: june decided on 2026-11-01 to leave the Deck's runs for later
+("May a lane SSH onto your Deck to time four Kirbys' netplay": leave the
+Deck for later), so they are their own unit (multiplayer/four-kirbys-deck),
+run whenever june next says yes.
 
 ## Playing a friend (the play gate)
 

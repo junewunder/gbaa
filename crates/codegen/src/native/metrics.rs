@@ -9,17 +9,29 @@
 //! lowered. One exception: `lines_prelude` counts the prelude
 //! (`native/prelude.rs`, hand-written runtime code in every lifted crate),
 //! which may rise when a unit adds to it, its evidence saying how many
-//! lines and why; `lines` counts everything else the lift writes, and only
-//! goes down.
+//! lines and why; `lines` counts everything else the lift writes but the
+//! modules' wiring (`super::modules`), and only goes down.
 //!
 //! Memory accesses are split by how their address is known and by region,
 //! so that a bar on one family means something:
 //! - `const`: the address is a constant within its block (a literal, a
-//!   pool word, arithmetic on them), by the region it is in;
+//!   pool word, arithmetic on them), by the region it is in, a byte
+//!   access; one in RAM that is printed as a typed global's field
+//!   (`super::globals`) is `ram_global` instead, which has no bar (it
+//!   should rise), and `ram_globals` counts the globals;
 //! - `sp`: sp-relative (the value-set analysis says it is the function's
 //!   entry sp plus a constant);
 //! - `computed`: anything else, by region where the value-set analysis
-//!   bounds it to one, else `computed_unknown`.
+//!   bounds it to one, else `computed_unknown`; one in RAM the value sets
+//!   bound to one typed global (`super::globals::Obj`) is `ram_object`
+//!   instead (no bar: it should rise), and `pointer_unexplained` counts
+//!   the computed RAM accesses that aren't (native/ref-in-object: they
+//!   reach several globals, or one at a width not its element's).
+//!
+//! The sp-relative ones are split again by whether the stack slot they
+//! reach escapes (`super::frame`): `sp_accesses_local_slot` and
+//! `sp_accesses_escaping_slot` (one the frame's run didn't place counts as
+//! escaping).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -54,6 +66,12 @@ pub fn region_of(lo: u32, hi: u32) -> Option<usize> {
 pub enum Where {
     /// A constant in this region.
     Const(usize),
+    /// A constant in RAM, printed as a typed global's field
+    /// (`super::globals`): not a byte access.
+    Global,
+    /// Computed, into one typed global (`super::globals::Obj`): not a
+    /// byte access.
+    Object,
     /// sp-relative.
     Sp,
     /// Computed, bounded to this region.
@@ -84,6 +102,8 @@ impl Metrics {
             for (r, name) in REGIONS.iter().enumerate() {
                 self.push(format!("{dir}_const_{name}"), n(Where::Const(r)));
             }
+            self.push(format!("{dir}_ram_global"), n(Where::Global));
+            self.push(format!("{dir}_ram_object"), n(Where::Object));
             self.push(format!("{dir}_sp"), n(Where::Sp));
             for (r, name) in REGIONS.iter().enumerate() {
                 self.push(format!("{dir}_computed_{name}"), n(Where::Computed(r)));
@@ -103,7 +123,14 @@ impl Metrics {
 }
 
 /// The metrics with no bar: they are meant to rise.
-pub const UNBARRED: &[&str] = &["functions_recognised"];
+pub const UNBARRED: &[&str] = &[
+    "functions_recognised",
+    "ram_globals",
+    "load_ram_global",
+    "store_ram_global",
+    "load_ram_object",
+    "store_ram_object",
+];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each
 /// `metric = maximum`.

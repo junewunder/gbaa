@@ -410,6 +410,45 @@ fn crt0_copies_and_jumps_over_its_pool() {
 }
 
 #[test]
+fn extra_starts_are_confirmed_and_cut_a_copy_source() {
+    let mut a = Asm::new();
+    // crt0_copies_and_jumps_over_its_pool's crt0, copying 4 words from
+    // 0x300; a run saw calls to 0x308 (inside the copy's source: m4a's
+    // `SoundMainRAM` copy reads past its end) and to 0x400, which nothing
+    // in ROM points at.
+    a.w(0x00, 0xe59f_0010)
+        .w(0x04, 0xe59f_1010)
+        .w(0x08, 0xe59f_2010)
+        .w(0x0c, 0xef0b_0000)
+        .w(0x10, 0xe59f_300c)
+        .w(0x14, 0xe12f_ff13)
+        .w(0x18, B + 0x300)
+        .w(0x1c, 0x0300_0000)
+        .w(0x20, 0x0400_0004)
+        .w(0x24, thumb(0x100))
+        .h(0x100, 0x4770)
+        .h(0x308, 0x2001) // movs r0, #1
+        .h(0x30a, 0x4770) // bx lr
+        .h(0x400, 0x2002) // movs r0, #2
+        .h(0x402, 0x4770); // bx lr
+    let plain = a.run();
+    assert!(!plain.funcs.contains_key(&thumb(0x308)));
+    assert!(!plain.funcs.contains_key(&thumb(0x400)));
+    let d = discover_with(a.0.clone(), &[thumb(0x308), thumb(0x400)]);
+    for f in [thumb(0x100), thumb(0x308), thumb(0x400)] {
+        assert_eq!(d.funcs.get(&f), Some(&Evidence::Confirmed), "{f:x}");
+    }
+    assert!(d.code.contains_key(&(B + 0x30a)));
+    assert!(d.code.contains_key(&(B + 0x402)));
+    assert!(d.data.contains(&(B + 0x300, B + 0x308)), "{:x?}", d.data);
+    // The copy itself is unchanged.
+    assert_eq!(
+        d.copies.iter().copied().collect::<Vec<_>>(),
+        [(B + 0x300, 0x0300_0000, 16)]
+    );
+}
+
+#[test]
 fn a_leaf_inside_the_callers_span_is_still_called() {
     let mut a = Asm::new();
     a.entry(0x100)
