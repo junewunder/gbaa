@@ -1212,8 +1212,14 @@ says what a recipe or tool does and what it must still pass.
   local labels, calls Rust calls; then the recipe builds it into
   `target/recompiled` (`gbaa-native-<name>`, the native programs' headless
   flags, `crates/native-host`). It reads `holes/<name>.toml` when there is
-  one: `[[standin]]` (a function's hand-written Rust, and why) and
-  `[[jump]]` (an unresolved jump's targets). A hard hole no stand-in
+  one, else `mods/<name>/holes.toml` (a commercial game's, private: its
+  stand-ins are ports of the game's code); `<name>` is `--name`'s when
+  given (a file name with spaces: `just lift "…/Metroid - Zero Mission
+  (USA).gba" out/lift-metroid --name metroid`), else the ROM's file name
+  lowercased. The file has `[[standin]]` (a function's hand-written Rust,
+  and why), `[[jump]]` (an unresolved jump's targets) and, at the top,
+  `skip_fn_flow = "why"` (the function-address flow left out, for a game
+  it doesn't settle on). A hard hole no stand-in
   covers (CPU state, an unresolved jump, a BIOS call the prelude lacks, an
   undefined instruction, a jump to no code, a summary that returns r4-r11
   or sp changed) fails the lift, naming each, and the build (a
