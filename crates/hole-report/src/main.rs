@@ -1,14 +1,17 @@
 //! `gbaa-holes ROM [--frames N] [--press KEY@F | KEY@F-G/E]… [--no-summaries]
-//! [--show N]`: what blocks a native build of ROM
+//! [--no-run-roots] [--show N]`: what blocks a native build of ROM
 //! (`docs/native-port-design.md`, section 6; `docs/research/native-holes.md`).
 //!
 //! Discovers the ROM and its IWRAM overlays, runs it in the interpreter
 //! (instant timing, no save file) for N frames (default 5,400) with a press
 //! script (default: the one of `docs/research/code-without-rom-addresses.md`,
-//! [`DEFAULT_PRESSES`]), computes the function summaries
-//! (`codegen::saves::summarize`), finds the RAM copies again with what the
-//! run saw ([`analysis::holes::ram_copies`]: the run's entries into BIOS
-//! copies, and copies made by DMA or the game's own loops), and prints
+//! [`DEFAULT_PRESSES`]), discovers the ROM again with the ROM targets of
+//! the run's calls through a register it lacked as function starts
+//! ([`analysis::discovery::discover_with`]; not with `--no-run-roots`),
+//! computes the function summaries (`codegen::saves::summarize`), finds
+//! the RAM copies again with what the run saw
+//! ([`analysis::holes::ram_copies`]: the run's entries into BIOS copies,
+//! and copies made by DMA or the game's own loops), and prints
 //! [`analysis::holes::classify`]'s report over those: one ranking line,
 //! then the holes by kind (`--show N` of each list, default 12).
 //!
@@ -573,7 +576,7 @@ fn run(
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let (mut rom_path, mut frames, mut presses) = (None, 5400u32, Vec::new());
-    let (mut sums, mut show) = (true, 12usize);
+    let (mut sums, mut show, mut run_roots) = (true, 12usize, true);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -590,6 +593,7 @@ fn main() -> ExitCode {
                 None => return usage(),
             },
             "--no-summaries" => sums = false,
+            "--no-run-roots" => run_roots = false,
             _ if rom_path.is_none() && !a.starts_with("--") => rom_path = Some(a.clone()),
             _ => return usage(),
         }
@@ -643,6 +647,30 @@ fn main() -> ExitCode {
         t.elapsed().as_secs_f64(),
         run.instructions
     );
+    // The run's calls through a register into ROM become starts: discover
+    // again with their targets as roots. All of them, not only the ones
+    // discovery lacked: a start the pointer scan found is lost when the new
+    // roots reach it first by a `b` (m4a's `ply_goto`). Not every call
+    // target: a far-jump `bl`'s lands inside a function.
+    let roots: Vec<u32> = run
+        .indirect_calls
+        .keys()
+        .copied()
+        .filter(|&a| a >= 0x0800_0000)
+        .collect();
+    let lacked = roots.iter().filter(|a| !disc.funcs.contains_key(a)).count();
+    let disc = if run_roots && lacked > 0 {
+        let t = std::time::Instant::now();
+        let d = analysis::discovery::discover_with(rom.to_vec(), &roots);
+        eprintln!(
+            "discovery with {} run roots: {:.1} s",
+            roots.len(),
+            t.elapsed().as_secs_f64()
+        );
+        d
+    } else {
+        disc
+    };
     let summaries = sums.then(|| {
         let t = std::time::Instant::now();
         let ctx = codegen::func::Ctx::new(rom, &disc);
@@ -700,6 +728,17 @@ fn main() -> ExitCode {
     let r = holes::classify(rom, &disc, &overlays, &run, summaries.as_ref());
 
     println!("{}", r.line(&game));
+    println!(
+        "run roots: {} ROM targets of calls through a register, {lacked} not discovered{}",
+        roots.len(),
+        if lacked == 0 {
+            ""
+        } else if run_roots {
+            ": all given to discovery as function starts"
+        } else {
+            " (--no-run-roots: not given to it)"
+        }
+    );
     println!(
         "run: {} frames, {} instructions, presses {}",
         run.frames,
@@ -894,7 +933,7 @@ fn main() -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: gbaa-holes ROM [--frames N] [--press KEY@F | KEY@F-G/E]... [--no-summaries] [--show N]"
+        "usage: gbaa-holes ROM [--frames N] [--press KEY@F | KEY@F-G/E]... [--no-summaries] [--no-run-roots] [--show N]"
     );
     ExitCode::from(2)
 }

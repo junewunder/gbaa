@@ -215,17 +215,20 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "db7eff8c",
-        "session": "db7eff8c-1d5d-4ee8-8f8f-55872db846b4",
-        "host": "quack",
-        "pid": 1418242,
-        "start": "29954965",
-        "at": "2026-11-06T03:38:19Z",
-        "branch": "unit/native/disc-run-call-targets",
-        "beats": true
+        "checker": "verifier-ad7b2bec",
+        "at": "2026-11-06T05:05:41Z",
+        "evidence": "Fresh verifier subagent, merged branch: just holes on all eight lists 0 ROM targets among calls to non-entries (left: Metroid 4, WarioWare 2, Minish 1, all RAM). disc-pret 0.9991/0.9549, disc-agb 1.0/0.9835 and 1.0/0.5789, jt-score 676/676 and 584/617, far 548/548 and 726/732: all exit 0. just check passes.",
+        "host": "quack"
       },
-      "round": "2026-11-06T03:38:19Z"
+      "notes": [
+        {
+          "at": "2026-11-06T05:05:45Z",
+          "by": "db7eff8c",
+          "text": "Roots come from the holes run itself (discover_with, in-process): only targets the press script reaches. The lifter doesn't take run roots yet; a native game build needs a roots source. New m4a code shows bx r12 returns: {unit:native/recovery-saved-lr-return}."
+        }
+      ]
     },
     {
       "id": "native/disc-ram-copies",
@@ -251,7 +254,19 @@
       "title": "Coverage past the press script reaches the unresolved jumps",
       "detail": "From {unit:native/hole-report}: of 109 unresolved indirect jumps over the eight games only 14 ran in the 5,400-frame press script (Rogue 2 of 50, Minish Cap 5 of 25). Feed gbaa-fuzz (or longer routes/save states) into gbaa-holes' Run so each unresolved jump is either seen with targets (a holes.toml list the coverage runs check) or shown unreached by everything. Done when native-holes.md has, per game, reached-by-any-run counts and each reached jump's observed targets.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "feed14da",
+        "session": "feed14da-c1d4-43aa-bdd3-8c374c76acfb",
+        "host": "quack",
+        "pid": 1418242,
+        "start": "29954965",
+        "at": "2026-11-06T05:09:01Z",
+        "branch": "unit/native/hole-coverage",
+        "beats": true
+      },
+      "round": "2026-11-06T05:09:01Z"
     },
     {
       "id": "native/flash-stack-standin",
