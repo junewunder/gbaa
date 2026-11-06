@@ -554,7 +554,19 @@
       "check": "independent",
       "needs": ["native/ram-globals", "native/frame-locals"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "d26f71a1",
+        "session": "d26f71a1-45d6-4ac6-84d3-239c57a6fbbc",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T08:52:55Z",
+        "branch": "unit/native/ref-in-object",
+        "beats": true
+      },
+      "round": "2026-11-06T08:52:55Z"
     },
     {
       "id": "native/metroid-lifts",
