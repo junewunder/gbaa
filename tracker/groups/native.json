@@ -666,7 +666,19 @@
       "check": "independent",
       "needs": ["native/ram-globals"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "dc17d7b0",
+        "session": "dc17d7b0-4c8e-4721-af71-e612e905e48b",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T10:01:17Z",
+        "branch": "unit/native/lift-packed-layout",
+        "beats": true
+      },
+      "round": "2026-11-06T10:01:17Z"
     },
     {
       "id": "native/ime-release",
