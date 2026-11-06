@@ -574,6 +574,17 @@
       "id": "multiplayer/four-seats",
       "title": "Netplay rooms for up to four players (Kirby's four)",
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): a third player joining got 'The session ended. The room is full.'; rooms have two seats (room.rs). Kirby & the Amazing Mirror links four GBAs on the multiplayer-mode cable (katam's gKirbys holds four Kirbys), and june wants all four in a room. Let 2 to 4 players join a room (the host starts once everyone's in, or the cable sees whoever is there); confirm runtime::link runs four machines on one bus. Every peer runs every console: measure four Kirbys' frame cost and re-run headroom, interpreted and recompiled, on quack and the Deck, in docs/research/multiplayer.md. Check: three and then four windows in a private cu session through a local gbaa-server get into Kirby's multiplayer, each shows its own seat, all end on one hash; a headless four-peer pingsim run; just check.",
+      "record": {
+        "state": "claimed",
+        "by": "78de4417",
+        "session": "78de4417-f0a6-4e19-9efc-2032439ac701",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T04:17:05Z",
+        "branch": "unit/multiplayer/four-seats",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-03T03:49:49Z",
