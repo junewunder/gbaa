@@ -21,7 +21,8 @@
 # exception is lines_prelude, the hand-written prelude every lift starts with
 # (crates/codegen/src/native/prelude.rs): it may rise when a unit adds to the
 # prelude, the unit's evidence saying how many lines and why. lines is the rest
-# of what the lift writes (the lifted code and the stand-ins), and only goes down.
+# of what the lift writes (the lifted code and the stand-ins; not the modules'
+# wiring, native/modules.rs), and only goes down.
 # functions_recognised has no bar (it should rise); every other metric needs one.
 # Metric names: crates/codegen/src/native/metrics.rs.
 
@@ -30,7 +31,7 @@ rom = "agb/affine.gba"
 route = "units/affine-600.toml"
 
 [program.affine.bars]
-lines = 71213
+lines = 71208
 lines_prelude = 497
 functions = 110
 functions_iwram = 3
@@ -85,7 +86,7 @@ rom = "agb/mosaic-modes.gba"
 route = "units/mosaic-modes-600.toml"
 
 [program.mosaic-modes.bars]
-lines = 49238
+lines = 49233
 lines_prelude = 497
 functions = 103
 functions_iwram = 3
@@ -144,7 +145,7 @@ planted_store = 0x08000186
 planted_hole = { drop_standin = 0x03000000, names = "error: hard hole in f_03000000 at 0x03000034: CPU state: mrs" }
 
 [program.native-spike.bars]
-lines = 71823
+lines = 71818
 lines_prelude = 497
 functions = 111
 functions_iwram = 3
@@ -203,7 +204,7 @@ route = "units/native-fallthrough-600.toml"
 planted_flags = ["--fall-as-tail-call"]
 
 [program.native-fallthrough.bars]
-lines = 70103
+lines = 70098
 lines_prelude = 497
 functions = 113
 functions_iwram = 3
@@ -263,7 +264,7 @@ route = "units/native-irq-hold-601.toml"
 planted_flags = ["--irq-at-waits"]
 
 [program.native-irq-hold.bars]
-lines = 70762
+lines = 70757
 lines_prelude = 497
 functions = 115
 functions_iwram = 3
@@ -325,7 +326,7 @@ route = "units/native-frame-locals-600.toml"
 planted_flags = ["--plant-slot=0x08000182"]
 
 [program.native-frame-locals.bars]
-lines = 70185
+lines = 70180
 lines_prelude = 497
 functions = 114
 functions_iwram = 3

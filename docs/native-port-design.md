@@ -988,7 +988,9 @@ macros, which DWARF doesn't carry.
 Built 2026-11-01 on quack: `codegen::native` (`crates/codegen/src/native.rs`,
 its prelude `native/prelude.rs`), the `gbaa-lift` binary, `just lift` and
 `just lift-check`. It prints a whole program from discovery, the IR and
-the summaries as one `src/main.rs`, with no `Machine`, CPU, cycles or
+the summaries as one `src/main.rs` (since `native/lift-modules`, a
+`main.rs` and modules of about 4,000 lines; `docs/native-stage-b.md`,
+"The first game"), with no `Machine`, CPU, cycles or
 dispatcher, and it is checked against the `--timing native` play build
 with the native check and no replaced-library list.
 

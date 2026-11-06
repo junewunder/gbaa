@@ -1194,8 +1194,13 @@ says what a recipe or tool does and what it must still pass.
   `docs/native-port-design.md`, "The stage-A lifter as built"): the
   stage-A lifter. `gbaa-lift ROM OUT [--name NAME] [--holes FILE]
   [--bars FILE] [--names DIR] [--layout guest] [--drop-standin KEY]
-  [--plant AT]` (`codegen::native`) writes the whole
-  program to OUT (default `out/lift-<name>`) as one `src/main.rs`: every
+  [--plant AT] [--copies N]` (`codegen::native`) writes the whole
+  program to OUT (default `out/lift-<name>`) as `src/`: `main.rs` (the
+  prelude, RAM, `ENTRY`), `fns.rs` (`FNS`) and the functions in modules
+  of about 4,000 lines, `m_<first key>.rs`, which rustc builds in parallel
+  (`codegen::native::modules`, native/lift-modules; `--copies N` writes
+  them N times over under new names, a synthetic large lift for measuring
+  the build); every
   function plain Rust over byte RAM (`Game::ram`, EWRAM then IWRAM) and
   `runtime::hw`, a RAM access at a constant address a typed global's
   field (`g.ram.d_020000c0`; `Game::ram` is a `Ram` struct of them at the
