@@ -1366,6 +1366,11 @@ holes rom *args:
     {{lock}} cargo build -q --release -p hole-report
     systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 target/release/gbaa-holes "$@"
 
+# The hole report over the corpus (holes/corpus.toml; crates/hole-report/src/corpus.rs): every game in turn, each report in OUT/<name>.txt, then one table of the ranking lines' numbers, saved as OUT/summary.toml. ARGS: --out DIR (default out/holes/<git short hash>[-dirty]), --against DIR2 (changes from DIR2's summary in brackets), --only NAME (repeatable), --cover (each game's coverage runs: hours), and any `just holes` flag for every game. About 9 minutes for the eight; run it with `just long`. The games run one at a time under one 3 GB cap, no swap.
+holes-all *args:
+    {{lock}} cargo build -q --release -p hole-report
+    systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 target/release/gbaa-holes --corpus holes/corpus.toml --roms {{quote(roms)}} {{args}}
+
 # Emerald's ten native functions against the play build (native/emerald-ten; scores in docs/native-port-design.md, "Emerald's ten"): the hand-lifted Rust in mods/emerald/native-ten/ run by crates/native-fn-diff from 600 no-input frames' entry states (borrowed for functions not entered) in 96 variants each, against the interpreter untimed; then one byte of Random's literal pool changed must be caught. Fails unless it prints `native 0 of 10 differ` and the fault is caught. ROM defaults to pret's build. About 30 s (the function summaries are most of it), capped at 3 GB of RAM and no swap. Private: mods/ isn't in the public mirror.
 [positional-arguments]
 native-ten rom=(gbaa_data / "src/pokeemerald/pokeemerald.gba"):
