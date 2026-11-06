@@ -767,6 +767,13 @@
       "detail": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): the lifter prints only swi 0x02, 0x04-0x06 and 0x0B (native.rs, Plan::Swi); every other call is a hard hole, and gbaa-holes doesn't count them (it reported Metroid's BIOS holes as 0). Metroid needs 0x03 Stop, 0x08 Sqrt, 0x0C CpuFastSet, 0x11/0x12 LZ77UnComp, 0x19 SoundBias, 0x1F MidiKey2Freq, 0x25 MultiBoot; other games more ({unit:bios/swi-survey} lists them). Add them to the prelude over runtime::hw::bios (it has lz77, rl, arctan2), each with an agb test program or lift-check case, and make gbaa-holes count the calls the lifter can't print. lines_prelude may rise (say how many and why). Done when: lift-check green with a case per new call, and gbaa-holes' BIOS count matches the lifter's on the eight games.",
       "check": "independent",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-ram-copies",
+      "title": "The lifter lifts the code a game copies to RAM",
+      "detail": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): gbaa-lift's discovery is static, so Metroid lifts with 0 IWRAM copies, though it runs its IRQ dispatcher from an IWRAM copy of 0x08000104 and calls 0x03003b90-0x03004440 and 0x030016d8 through pointers; natively call_fn panics on those keys. The hole report's run finds them (analysis::holes::ram_copies, {unit:native/disc-ram-copies}'s note). Lift them from that run's copies (or a static finder of copy loops and DMA3), with their stand-ins at RAM keys. Done when: Metroid's lift has its IWRAM copies and lift-check stays green.",
+      "check": "independent",
+      "uses": ["heavy"]
     }
   ]
 }
