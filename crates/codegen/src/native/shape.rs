@@ -11,11 +11,14 @@
 //! Its parameters are the summary's `params`; its results are what may be
 //! read after it returns and it may change:
 //!
-//! - what its direct callers read after it (`read_after`, `passed_after`,
-//!   `forwarded_after`; the summary's `results` are these it defines);
-//! - r0, which an indirect call's caller reads (the summaries take an
-//!   indirect callee to define r0 and leave r1-r3 undefined), and which a
-//!   call through `call_fn` gets back from the function's adapter;
+//! - what its callers read after it (`read_after`, `passed_after`,
+//!   `forwarded_after`: its direct callers, and indirect ones whose
+//!   complete callee set has it; the summary's `results` are these it
+//!   defines);
+//! - r0, which an indirect call's caller reads where the callee set is
+//!   incomplete (the summaries take such a callee to define r0 and leave
+//!   r1-r3 undefined), and which a call through `call_fn` gets back from
+//!   the function's adapter;
 //! - all of r0-r3 where a caller's reads aren't known: a direct caller
 //!   whose run stopped at a hole (what it reads past the hole is unseen),
 //!   one in another code context (the ROM and an IWRAM copy are

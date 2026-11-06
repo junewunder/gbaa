@@ -541,7 +541,7 @@ says what a recipe or tool does and what it must still pass.
   `codegen::saves` proves keep r4-r11 and sp, groups why the rest don't,
   and answers for each KEY (20 s, 300 MB on Emerald: 8,894 of 15,158).
   `gbaa-recompile --summaries ROM [--names FILE]... [--names-dir DIR]
-  [--show N] [KEY...]` gives every function's summary
+  [--show N] [--callee-sets] [KEY...]` gives every function's summary
   (`codegen::saves::summarize`: parameters r0-r3, results, callee-saves,
   holes) and, with a map, checks it against the DWARF prototypes
   (`codegen::saves::compare`): agree, disagree and no-prototype counts,
@@ -550,7 +550,14 @@ says what a recipe or tool does and what it must still pass.
   trusting indirect calls to read nothing, and each KEY's summary. No
   bar: it measures. Emerald (`--names $GBAA_DATA/names/pokeemerald.toml`,
   25 s, 430 MB): the counts and what each category is are in
-  `docs/native-port-design.md` section 5.
+  `docs/native-port-design.md` section 5. `--callee-sets` first follows
+  function addresses (`codegen::native::callee_sets`, the lifter's
+  `fnref` flow, over the ROM's code) and takes each indirect call with a
+  complete callee set as calling exactly those
+  (`codegen::saves::summarize_sets`; unit `native/indirect-call-args`),
+  printing the counts without the sets too. About 5 s on an agb program;
+  on Emerald the flow didn't finish in 35 minutes (killed at 6 GB, then
+  stopped at 8 GB under a 16 GB cap), `native/fnref-flow-scale`'s work.
   fn-diff's summary line gives the same count and
   how many picks call a proven function. Emerald, `just fn-diff ROM 2000
   --exact` (2026-10-27): every entered function picked, 270, 591 states,

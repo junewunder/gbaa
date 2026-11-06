@@ -401,6 +401,61 @@ build for the host.
   may stay incomplete). Bar on the agb programs: no indirect call with a
   complete callee set still passing all four.
 
+  As built (2026-11-06): the sets are `native/fnref-flow`'s, a call's
+  (not a jump by value's) when complete. `codegen::saves::summarize_sets`
+  takes them by call address: such a call reads the union of its
+  callees' parameters (the cause, the first callee that reads one), leaves
+  what any of them may leave, and what is read after it is read after
+  each callee, so their results include it; the callees join
+  `Summary::callees`, so one that grows reruns the caller. An incomplete
+  set is as before (r0-r3 in, r0 out). The lift summarises twice: plainly
+  first, since the frames need summaries and the flow needs the frames,
+  then with the sets (the frames stay the first's).
+  `native::callee_sets` is the flow over one context without a lift, for
+  `gbaa-recompile --summaries`. A `call_fn` call with a complete set
+  passes what its callees read (a shaped callee's parameters, all four
+  for a four-register one) and a register one may change while another
+  leaves it as it came (that one's adapter hands back what it was given),
+  and takes back what any may change; the rest stay the caller's:
+  `{ let o = call_fn(g, k, r13, [r0, r1, 0, 0])?; r0 = o[0]; }`.
+  Metrics `call_fn_complete` and `call_fn_four_complete`, and a report
+  line, `indirect call arguments`.
+
+  | program | `call_fn` calls | complete set | still all four | complete sets: callees' summaries read all four / a four-register callee |
+  |---|---|---|---|---|
+  | native-spike | 63 | 58 | 58 | 59 / 59 of 59 |
+  | affine | 61 | 56 | 56 | 57 / 57 of 57 |
+  | mosaic-modes | 61 | 56 | 56 | 57 / 57 of 57 |
+  | native-fallthrough | 62 | 57 | 57 | 57 / 58 of 58 |
+  | native-irq-hold | 65 | 60 | 60 | 59 / 61 of 61 |
+  | native-frame-locals | 61 | 56 | 56 | 57 / 57 of 57 |
+
+  **So the bar is not 0: it is the values measured.** Every complete set
+  on these programs that `call_fn` prints is the same one, every
+  address-taken function (21 on the spike, `native/fnref-flow`'s pile),
+  and between them those functions' summaries read all four registers
+  even taken at their word; 15 of the 21 are four-register besides (a
+  summary hole, or the IRQ wrapper's stand-in). (The few sets whose
+  summaries read fewer have a four-register callee too; a set counted
+  here may be a call the lifter prints directly, its target known.) The sets narrow only
+  with the heap split by allocation site and field (`native/fnref-dense`
+  needs that too). What did change is the results: a callee's leftovers
+  in r1-r3 after a call through a complete set are now defined (they were
+  the "undefined" that let `a_<key>` hand r1-r3 back as given), and a
+  caller that reads or passes them on makes them results. So more shaped
+  functions return two to four registers (the spike's `f_0800017d`
+  returns `(r0, r1)`; what is read after a tail call by value went from
+  {r0} to all four), where an adapter used to hand back a register the
+  function really changed. `lines` unchanged on all six; `lift-check`
+  passes.
+
+  Emerald isn't re-measured: `gbaa-recompile --summaries --callee-sets`
+  runs the flow over its ROM code, which didn't finish in 35 minutes (553
+  indirect calls waiting on it; Metroid's round 1 alone took 8 minutes,
+  `native/fnref-flow-scale`). Without the flag `--summaries` is as it was
+  (25 s; 13,359 agree, 656 from indirect calls). The re-measurement is
+  `native/indirect-call-args-emerald`, after the flow scales.
+
 ### 4. The stack
 
 agb passes the addresses of stack values everywhere (`&mut self` on a
