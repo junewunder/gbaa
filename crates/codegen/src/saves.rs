@@ -211,7 +211,7 @@ fn walk<'a>(
     while let Some(k) = w.work.pop() {
         steps += 1;
         if steps > 64 * w.blocks.len() + 64 {
-            w.fail("didn't settle".into())?;
+            w.stop("didn't settle".into())?;
             break;
         }
         w.block(k)?;
@@ -248,6 +248,16 @@ impl Walk<'_> {
         }
     }
 
+    /// [`Walk::fail`] where the path's run ends: what runs after it (a
+    /// jump into code the run doesn't follow) is unseen, so the summary
+    /// may miss reads there ([`Summary::stopped`]).
+    fn stop(&mut self, why: String) -> Result<(), String> {
+        if let Some(s) = &mut self.sum {
+            s.stopped = true;
+        }
+        self.fail(why)
+    }
+
     /// Go on at `to` with `s`.
     fn flow(&mut self, to: u32, s: &State) -> Result<(), String> {
         if !self.blocks.contains_key(&to) {
@@ -272,7 +282,7 @@ impl Walk<'_> {
                         self.blocks.entry(k).or_insert(b);
                     }
                 }
-                _ => return self.fail(format!("jumps to 0x{to:08x}, which has no code here")),
+                _ => return self.stop(format!("jumps to 0x{to:08x}, which has no code here")),
             }
         }
         let next = match self.ins.get(&to) {
@@ -431,7 +441,7 @@ impl Walk<'_> {
                 local: false,
             } => {
                 if t != V::Entry(14) {
-                    return self.fail(format!("0x{at:08x}: a jump to an unknown place"));
+                    return self.stop(format!("0x{at:08x}: a jump to an unknown place"));
                 }
                 if !s.kept() {
                     self.fail(format!("0x{at:08x}: returns with r4-r11 or sp changed"))?;
@@ -459,7 +469,7 @@ impl Walk<'_> {
                 }
                 Ok(())
             }
-            Plan::Rekey(_) => self.fail(format!("0x{at:08x}: changes mode")),
+            Plan::Rekey(_) => self.stop(format!("0x{at:08x}: changes mode")),
             Plan::Undefined => self.fail(format!("0x{at:08x}: an undefined instruction")),
         }
     }

@@ -257,6 +257,39 @@ build for the host.
   passes a register its callee reads past its parameters (Emerald's
   `GetMonData2` callers) passes it explicitly. Bar: four-register
   functions no more than the functions with summary holes.
+
+  As built (2026-11-06; `crates/codegen/src/native/shape.rs`): a
+  function is *shaped* when its summary has no hole and none of the
+  callee summaries its run used (`Summary::callees`, its calls and tail
+  calls) stopped at a hole (`Summary::stopped`: a jump into code the run
+  doesn't follow, to an unknown place, a mode change; reads past it are
+  unseen, so its callers' parameters may be short). A shaped function is
+  `f_<key>(g, sp, a0, a2) -> Result<u32, Exit>` (`()`, `u32` or a tuple),
+  its extended entry `x_<key>` returns the same, and `a_<key>` is its
+  four-register adapter, which `FNS` and `ENTRY` hold. Parameters are the
+  summary's `params`, which already include a register passed on to a
+  callee that reads it (the `GetMonData2` case is a parameter of the
+  caller, so a direct call passes the callee's parameters and nothing
+  else). Results are what may be read after it returns, among the
+  registers it may change: the summary's `results`, r0 (an indirect
+  call's caller reads it, as the summaries assume), all four where a
+  direct caller's reads aren't known (its run stopped, or it is in the
+  other code context), what is read after a function that returns its
+  value unread (`forwards`), all four after a call by value whose target
+  the lifter knows (the summaries take it as indirect), and what the
+  callers of a function that falls or jumps into it read (a fixed point; a jump by value the run didn't
+  prove a return adds its function's to every function: r0 on all five
+  programs). A result it may leave as it came is a parameter too. A
+  register it never changes stays the caller's. The indirect calls'
+  r1-r3 come back from the adapter as they went in, which the summaries
+  take as undefined anyway. Measured: 27, 22, 29, 28, 29 shaped
+  functions (affine, mosaic-modes, native-spike, native-fallthrough,
+  native-irq-hold); four-register functions without a summary hole 0 on
+  each (bar 0); `lines` unchanged (each adapter's line replaces the
+  summary comment the signature now says). Many shaped functions return
+  all four, because a caller whose run stopped (a fall into library
+  code) calls them: `native/indirect-call-args` and the stack units
+  narrow those as the summaries' holes close.
 - **Function addresses followed to every use** (`native/fnref-flow`).
   Today pointers are ROM keys, because the literal lift loads them from
   ROM bytes and RAM. Dense IDs need every place a function address enters
