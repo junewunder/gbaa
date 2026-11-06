@@ -651,15 +651,23 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "ef819a4e",
-        "session": "ef819a4e-07b6-41b4-a33b-b956d450a077",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T09:28:13Z",
+        "checker": "verifier-abb32b70",
+        "at": "2026-11-06T09:57:59Z",
+        "evidence": "Verifier subagent (fresh context) after merging main: full just lift-check passed (6 programs, all planted faults caught, lines = new bars, lowered by 5); spike lift has 17 m_*.rs modules + main.rs + fns.rs; spike rebuild 4.2-4.8 s split vs 6.3-7.9 s one file, 0.55 vs 0.50 GB; --copies 4 16.4 s 1.27 GB; just check exit 0; diff reviewed, no bugs. Doc table (docs/native-stage-b.md, The first game): --copies 14, 1.0M lines, 238 modules, 54.8 s, 3.67 GB peak, ~14 MB per 4,000-line module.",
         "branch": "unit/native/lift-modules",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T09:57:59Z",
+          "by": "ef819a4e",
+          "host": "quack",
+          "pid": 1417300,
+          "start": "29954434",
+          "beats": true,
+          "session": "ef819a4e-07b6-41b4-a33b-b956d450a077",
+          "lane": "quack/1"
+        }
       },
       "round": "2026-11-06T09:28:13Z"
     },
