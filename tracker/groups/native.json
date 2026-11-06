@@ -446,7 +446,19 @@
       "check": "independent",
       "needs": ["native/lift-bars", "native/lift-fallthrough"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "5676c8cf",
+        "session": "5676c8cf-660d-4eec-8079-aa5a1175c958",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T07:00:03Z",
+        "branch": "unit/native/lift-params",
+        "beats": true
+      },
+      "round": "2026-11-06T07:00:03Z"
     },
     {
       "id": "native/fnref-dense",
