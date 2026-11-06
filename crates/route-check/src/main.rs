@@ -119,6 +119,9 @@ fn main() -> ExitCode {
             }
         };
     }
+    // The checks run the builds (and with --native, recompiles): heavy.
+    // --missing and --args above only read files.
+    analysis::cap::require_cap("route-check");
     if let [flag, a, b, rest @ ..] = args.as_slice()
         && flag == "--same-states"
     {
