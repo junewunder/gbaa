@@ -685,15 +685,23 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "dc17d7b0",
-        "session": "dc17d7b0-4c8e-4721-af71-e612e905e48b",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T10:01:17Z",
+        "checker": "subagent-a2e598a7",
+        "at": "2026-11-06T10:21:10Z",
+        "evidence": "Fresh-context verifier ran just lift-check: six passes, each 'the play layout draws the same 600 (601 irq-hold) frames, its records the same', lift-check: passed; packed Ram reordered, no padding, modules identical to guest lift; just check passes. Hand control: two allocator globals swapped in RAM_GLOBALS caught. lines_prelude 497->500 (byte-at-a-time ld/st).",
         "branch": "unit/native/lift-packed-layout",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T10:21:10Z",
+          "by": "dc17d7b0",
+          "host": "quack",
+          "pid": 1417300,
+          "start": "29954434",
+          "beats": true,
+          "session": "dc17d7b0-4c8e-4721-af71-e612e905e48b",
+          "lane": "quack/1"
+        }
       },
       "round": "2026-11-06T10:01:17Z"
     },
