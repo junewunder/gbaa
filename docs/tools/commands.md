@@ -1324,9 +1324,10 @@ says what a recipe or tool does and what it must still pass.
   `target/recompiled/release/gbaa-native-<name>-shadow --headless --frames
   601` and grep its stderr.
 
-  **Lowering a bar** (every stage-B unit's check): change the one
-  `metric = N` line in the program's bars table and run `just lift-check`
-  (or `--only NAME`). Bars are only lowered; raising one is changing the
+  **Lowering a bar** (every stage-B unit's check): `just lift-metrics
+  --lower-bars` (`--metric`, `--only` to lower only some), or change the
+  one `metric = N` line in the program's bars table, and run `just
+  lift-check` (or `--only NAME`). Bars are only lowered; raising one is changing the
   oracle (ask june). The exception is `lines_prelude`, the hand-written
   prelude every lift starts with: it may rise when a unit adds prelude
   code, the evidence saying how many lines and why; `lines` is the rest
@@ -1334,6 +1335,24 @@ says what a recipe or tool does and what it must still pass.
   fails on a metric with none); a new program is a new table, its bars
   at the values its first lift reports. `cargo test -p codegen --test
   lift_bars` shows a lowered bar failing the lift by name.
+- `just lift-metrics [--only NAME]… [--metric REGEX] [--lower-bars]`
+  (native/lift-bars): `gbaa-lift-check --metrics-only`, step 1 of `just
+  lift-check` alone. Lifts every program of
+  `crates/codegen/lift-check.toml` (the file is the list; a new table is a
+  new column) with its `lift_flags` and `--bars`, into the same
+  `out/lift-<name>` as the check, and reads each lift's
+  `metrics.toml` (gbaa-lift writes it beside `report.txt`). Prints a
+  table, a row per metric, a column per program: `v` at its bar, `v<b`
+  under bar b, `v>b!` over it, `v` alone for a metric with no bar.
+  `--metric REGEX` keeps the metrics whose names match, `--only` the
+  programs. `--lower-bars` rewrites `lift-check.toml` (comments and
+  order kept, `toml_edit`) with every shown bar that is over its metric
+  lowered to the metric, and prints each `program: metric old -> new`;
+  it never raises a bar (that stays a hand edit with a reason). It builds
+  no crate and runs no route check and none of the planted controls, so
+  it isn't the check: run `just lift-check` before calling a unit done.
+  Fails on a metric over its bar. About 15 seconds (the lifts run at
+  once).
 - `just native-ten [ROM]` (native/emerald-ten; scores in
   `docs/native-port-design.md`, "Emerald's ten, scored"): fn-diff for
   native functions (`crates/native-fn-diff`). Emerald's ten, lifted by

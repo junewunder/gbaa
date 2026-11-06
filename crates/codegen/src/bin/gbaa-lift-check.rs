@@ -22,9 +22,20 @@
 //!    with that stand-in dropped, from a fresh OUT: the lift and the
 //!    crate's build must both fail, the build naming the hole.
 //!
-//! `--only NAME` runs one program's steps.
+//! `--only NAME` (repeatable) runs those programs' steps.
+//!
+//! `--metrics-only [--metric REGEX] [--lower-bars]` (`just
+//! lift-metrics`) does step 1 alone, every program's lift at once, and prints a table
+//! of each metric (rows; `--metric` keeps the names REGEX matches) by
+//! program (columns), its bar beside it: from each lift's
+//! `metrics.toml` and the file's bars, not from the report's text. No
+//! crate is built and no route or planted control runs. `--lower-bars`
+//! rewrites FILE, keeping its comments and order, with every bar shown
+//! that is over its metric lowered to the metric
+//! ([`codegen::native::metrics::lower_bars`]); bars are never raised.
 
 use codegen::native::lift_check::{Program, programs};
+use codegen::native::metrics::{self, Metrics};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
@@ -117,6 +128,95 @@ impl Run {
             )]
         } else {
             fails
+        })
+    }
+
+    /// `--metrics-only`: every program lifted with `--bars`, then the
+    /// table, and with `--lower-bars` the file rewritten.
+    fn metrics_only(&self, ps: &[Program], o: &MetricsOnly) -> ExitCode {
+        let text = match std::fs::read_to_string(&self.file) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("gbaa-lift-check: {}: {e}", self.file);
+                return ExitCode::FAILURE;
+            }
+        };
+        // The lifts at once: each is one thread and under 100 MB, and
+        // seconds alone.
+        let lifts: Vec<Result<Column, String>> = std::thread::scope(|s| {
+            let hs: Vec<_> = ps
+                .iter()
+                .map(|p| s.spawn(|| self.measure(p, &text)))
+                .collect();
+            hs.into_iter()
+                .map(|h| h.join().unwrap_or(Err("the lift's thread panicked".into())))
+                .collect()
+        });
+        let mut cols = Vec::new();
+        for (p, l) in ps.iter().zip(lifts) {
+            match l {
+                Ok(c) => cols.push(c),
+                Err(e) => {
+                    eprintln!("gbaa-lift-check: {}: {e}", p.name);
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
+        let keep = |n: &str| o.metric.as_ref().is_none_or(|r| r.is_match(n));
+        let (table, over, lowerable) = metrics_table(&cols, &keep);
+        print!("{table}");
+        println!(
+            "lift-metrics: {} over their bars, {} under (`--lower-bars` lowers them)",
+            over,
+            lowerable.len()
+        );
+        if o.lower && !lowerable.is_empty() {
+            match metrics::lower_bars(&text, &lowerable).and_then(|(t, c)| {
+                std::fs::write(&self.file, t)
+                    .map(|_| c)
+                    .map_err(|e| e.to_string())
+            }) {
+                Ok(changed) => {
+                    for c in &changed {
+                        println!("lift-metrics: lowered {c}");
+                    }
+                    println!(
+                        "lift-metrics: {} bars lowered in {}",
+                        changed.len(),
+                        self.file
+                    );
+                }
+                Err(e) => {
+                    eprintln!("gbaa-lift-check: {}: {e}", self.file);
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
+        if over == 0 {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        }
+    }
+
+    /// One program lifted with its bars: its column of the table, from
+    /// the lift's `metrics.toml`.
+    fn measure(&self, p: &Program, text: &str) -> Result<Column, String> {
+        let out = format!("out/lift-{}", p.name);
+        let file = Path::new(&out).join("metrics.toml");
+        // So a lift that stops early can't leave an old run's numbers.
+        let _ = std::fs::remove_file(&file);
+        let mut c = lift(&self.rom(p), &p.name, &out);
+        c.args(["--bars", &self.file]).args(&p.lift_flags);
+        let log = format!("out/lift-{}.txt", p.name);
+        run(&mut c, Path::new(&log))?;
+        let m = std::fs::read_to_string(&file)
+            .map_err(|e| format!("{}: {e} (the lift's log: {log})", file.display()))
+            .and_then(|t| Metrics::from_toml(&t))?;
+        Ok(Column {
+            name: p.name.clone(),
+            metrics: m,
+            bars: metrics::bars(text, &p.name)?,
         })
     }
 
@@ -266,25 +366,48 @@ impl Run {
     }
 }
 
+/// `--metrics-only`'s options.
+struct MetricsOnly {
+    metric: Option<regex::Regex>,
+    lower: bool,
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
-        eprintln!("usage: gbaa-lift-check FILE --data DIR [--only NAME]");
+        eprintln!(
+            "usage: gbaa-lift-check FILE --data DIR [--only NAME]... [--metrics-only [--metric REGEX] [--lower-bars]]"
+        );
         ExitCode::FAILURE
     };
     let [file, rest @ ..] = &args[..] else {
         return usage();
     };
-    let (mut data, mut only) = (None, None);
+    let (mut data, mut only, mut metrics_only) = (None, Vec::new(), false);
+    let (mut metric, mut lower) = (None, false);
     let mut it = rest.iter();
     while let Some(a) = it.next() {
-        match (a.as_str(), it.next()) {
-            ("--data", Some(d)) => data = Some(PathBuf::from(d)),
-            ("--only", Some(n)) => only = Some(n.clone()),
-            _ => return usage(),
+        match a.as_str() {
+            "--metrics-only" => metrics_only = true,
+            "--lower-bars" => lower = true,
+            k => match (k, it.next()) {
+                ("--data", Some(d)) => data = Some(PathBuf::from(d)),
+                ("--only", Some(n)) => only.push(n.clone()),
+                ("--metric", Some(r)) => match regex::Regex::new(r) {
+                    Ok(r) => metric = Some(r),
+                    Err(e) => {
+                        eprintln!("gbaa-lift-check: --metric: {e}");
+                        return ExitCode::FAILURE;
+                    }
+                },
+                _ => return usage(),
+            },
         }
     }
     let Some(data) = data else { return usage() };
+    if (metric.is_some() || lower) && !metrics_only {
+        return usage();
+    }
     let mut ps = match std::fs::read_to_string(file)
         .map_err(|e| e.to_string())
         .and_then(|t| programs(&t))
@@ -295,12 +418,12 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    if let Some(n) = &only {
-        ps.retain(|p| &p.name == n);
-        if ps.is_empty() {
-            eprintln!("gbaa-lift-check: {file}: no program {n}");
-            return ExitCode::FAILURE;
-        }
+    if let Some(n) = only.iter().find(|n| !ps.iter().any(|p| &p.name == *n)) {
+        eprintln!("gbaa-lift-check: {file}: no program {n}");
+        return ExitCode::FAILURE;
+    }
+    if !only.is_empty() {
+        ps.retain(|p| only.contains(&p.name));
     }
     let r = Run {
         file: file.clone(),
@@ -322,6 +445,9 @@ fn main() -> ExitCode {
     if let Err(e) = std::fs::create_dir_all("out") {
         eprintln!("gbaa-lift-check: out: {e}");
         return ExitCode::FAILURE;
+    }
+    if metrics_only {
+        return r.metrics_only(&ps, &MetricsOnly { metric, lower });
     }
     // 1. Every program's bars first: they take seconds, the builds minutes.
     let mut over = Vec::new();
@@ -354,4 +480,117 @@ fn main() -> ExitCode {
     }
     println!("lift-check: passed");
     ExitCode::SUCCESS
+}
+
+/// A program's column of the metrics table.
+struct Column {
+    name: String,
+    metrics: Metrics,
+    bars: std::collections::BTreeMap<String, u64>,
+}
+
+/// The table, a row per metric `keep` keeps (in the first program's
+/// order, then any others'), a column per program: `v` at its bar, `v<b`
+/// under, `v>b!` over, `v` alone with no bar. With how many are over, and
+/// the ones under as (program, metric, value) for `lower_bars`.
+fn metrics_table(
+    cols: &[Column],
+    keep: &dyn Fn(&str) -> bool,
+) -> (String, usize, Vec<(String, String, u64)>) {
+    let mut names: Vec<&str> = Vec::new();
+    for c in cols {
+        for (n, _) in &c.metrics.0 {
+            if keep(n) && !names.contains(&n.as_str()) {
+                names.push(n);
+            }
+        }
+    }
+    let (mut over, mut lower) = (0, Vec::new());
+    let mut rows = vec![
+        std::iter::once("metric".to_string())
+            .chain(cols.iter().map(|c| c.name.clone()))
+            .collect::<Vec<_>>(),
+    ];
+    for n in &names {
+        let mut row = vec![n.to_string()];
+        for c in cols {
+            row.push(match (c.metrics.get(n), c.bars.get(*n)) {
+                (None, _) => "-".into(),
+                (Some(v), None) => v.to_string(),
+                (Some(v), Some(&b)) if v > b => {
+                    over += 1;
+                    format!("{v}>{b}!")
+                }
+                (Some(v), Some(&b)) if v < b => {
+                    lower.push((c.name.clone(), n.to_string(), v));
+                    format!("{v}<{b}")
+                }
+                (Some(v), Some(_)) => v.to_string(),
+            });
+        }
+        rows.push(row);
+    }
+    let widths: Vec<usize> = (0..rows[0].len())
+        .map(|i| rows.iter().map(|r| r[i].len()).max().unwrap_or(0))
+        .collect();
+    let mut s = String::new();
+    for r in &rows {
+        let cells: Vec<String> = r
+            .iter()
+            .enumerate()
+            .map(|(i, v)| {
+                if i == 0 {
+                    format!("{v:<w$}", w = widths[i])
+                } else {
+                    format!("{v:>w$}", w = widths[i])
+                }
+            })
+            .collect();
+        s.push_str(cells.join("  ").trim_end());
+        s.push('\n');
+    }
+    s.push_str("(v: at its bar; v<b: under bar b; v>b!: over it; no bar: v alone)\n");
+    (s, over, lower)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_table_marks_each_bar() {
+        let col = |name: &str, ms: &[(&str, u64)], bs: &[(&str, u64)]| Column {
+            name: name.into(),
+            metrics: Metrics(ms.iter().map(|(n, v)| (n.to_string(), *v)).collect()),
+            bars: bs.iter().map(|(n, v)| (n.to_string(), *v)).collect(),
+        };
+        let cols = [
+            col(
+                "a",
+                &[("lines", 10), ("blocks", 5), ("ram_globals", 2)],
+                &[("lines", 12), ("blocks", 5)],
+            ),
+            col(
+                "b",
+                &[("lines", 20), ("blocks", 6)],
+                &[("lines", 20), ("blocks", 4)],
+            ),
+        ];
+        let (t, over, lower) = metrics_table(&cols, &|_| true);
+        assert_eq!(over, 1);
+        assert_eq!(lower, vec![("a".into(), "lines".into(), 10)]);
+        let rows: Vec<&str> = t.lines().collect();
+        assert!(
+            rows[1].starts_with("lines") && rows[1].contains("10<12"),
+            "{t}"
+        );
+        assert!(rows[2].contains("6>4!"), "{t}");
+        assert!(
+            rows[3].starts_with("ram_globals") && rows[3].ends_with("-"),
+            "{t}"
+        );
+        let re = regex::Regex::new("^bl").unwrap();
+        let (t, over, lower) = metrics_table(&cols, &|n| re.is_match(n));
+        assert_eq!((t.lines().count(), over, lower.len()), (3, 1, 0), "{t}");
+    }
 }
