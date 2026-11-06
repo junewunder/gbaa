@@ -804,21 +804,8 @@
         "by": "178b8ae4",
         "at": "2026-11-06T13:33:47Z",
         "evidence": "Owner allowed it (d/may-lane-scale-fly-s). fly scale count 1 -a gbaa-server --region ewr destroyed 850d37c4e70228; fly machines list now shows one machine, 784563db002518 (ewr, shared-cpu-1x). just fly-up; just room-sim calm --server 37.16.3.41: pass, 10 hashes and the end match on both seats; just fly-down: stopped. IPv4 37.16.3.41 kept. No repo change (fly-deploy already passes --ha=false); branch equals origin/main, so just check not rerun.",
-        "branch": "unit/multiplayer/fly-one-machine",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-06T13:33:47Z",
-          "by": "178b8ae4",
-          "host": "quack",
-          "pid": 1417300,
-          "start": "29954434",
-          "beats": true,
-          "session": "178b8ae4-04e8-431b-af40-45a771933d83",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-06T13:32:17Z"
+        "host": "quack"
+      }
     }
   ]
 }
