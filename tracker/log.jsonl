@@ -2313,3 +2313,4 @@
 {"at":"2026-11-06T13:33:47Z","actor":"loop","tag":"178b8ae4","host":"quack","cmd":"done","id":"multiplayer/fly-one-machine","text":"Scale fly's gbaa-server back to one machine: done"}
 {"at":"2026-11-06T13:34:09Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"multiplayer/fly-one-machine","text":"Scale fly's gbaa-server back to one machine: on main"}
 {"at":"2026-11-06T13:35:11Z","actor":"loop","tag":"1e655045","host":"quack","cmd":"edit","id":"native/fnref-flow-scale","text":"Function-address flow settles on a whole game: edited (min-minutes)"}
+{"at":"2026-11-06T13:35:17Z","actor":"loop","tag":"1e655045","host":"quack","cmd":"unclaim","id":"native/fnref-flow-scale","text":"Function-address flow settles on a whole game: handed back by its session, its work kept (2 commits on its branch); ready"}
