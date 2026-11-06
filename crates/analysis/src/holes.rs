@@ -33,6 +33,11 @@
 //! - a function summary whose hole is a return with r4-r11 or sp changed
 //!   (a run-time sp adjustment: a variable-length array).
 //!
+//! The flash save library's stack routines ([`crate::flash`]) are none of
+//! these: a call into RAM whose target held a recognised routine every time
+//! it was called is a hardware-library call ([`Report::flash`]), and the
+//! RAM it ran (changed or not, discovered or not) isn't counted.
+//!
 //! **Not discovered** ([`Report::undiscovered_bytes`]) is the bytes of code
 //! the run executed that discovery (or an overlay's) didn't find. It ranks
 //! games second, after hard holes. Pointer arithmetic the types don't
@@ -113,7 +118,15 @@ pub struct Run {
     /// progress of their own. By the branch's address: the longest such
     /// streak.
     pub busy_loops: BTreeMap<u32, u32>,
+    /// Calls into RAM: by target (interworking form), the distinct
+    /// [`RAM_CALL_BYTES`] bytes there when called. The flash library's
+    /// stack routines are recognised from these ([`crate::flash`]).
+    pub ram_calls: BTreeMap<u32, BTreeSet<Vec<u8>>>,
 }
+
+/// How many bytes at a RAM call's target the run keeps: more than the
+/// longest routine [`crate::flash`] recognises.
+pub const RAM_CALL_BYTES: u32 = 64;
 
 /// How many qualifying iterations in a row make a busy-wait loop. A wait
 /// spins until the interrupt comes, up to a frame's worth of iterations
@@ -214,6 +227,16 @@ pub struct RamRun {
     pub rom_src: Option<u32>,
 }
 
+/// A call into RAM the hardware library stands in for: the flash
+/// library's stack routine `routine` at `target` (interworking form),
+/// `len` bytes of code.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FlashCall {
+    pub target: u32,
+    pub routine: crate::flash::Routine,
+    pub len: u32,
+}
+
 /// Summary holes of one kind.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SummaryKind {
@@ -229,8 +252,11 @@ pub struct Report {
     /// The overlays' Recovery.
     pub overlay_unresolved: Vec<Unresolved>,
     pub ret: Vec<RetHole>,
-    /// RAM code that changed while it ran.
+    /// RAM code that changed while it ran, but for the flash routines'.
     pub ram_changed: Vec<RamRun>,
+    /// Calls into RAM that are the flash library's stack routines: not
+    /// holes, the hardware library's calls.
+    pub flash: Vec<FlashCall>,
     /// RAM code the run executed that no overlay discovered.
     pub ram_undiscovered: Vec<RamRun>,
     pub cpu: Vec<CpuHole>,
@@ -298,6 +324,16 @@ impl Report {
             + self.hard_summary()
     }
 
+    /// The flash library's routines the run called on the stack, each
+    /// once however many places it was copied to.
+    pub fn flash_routines(&self) -> usize {
+        self.flash
+            .iter()
+            .map(|f| f.routine)
+            .collect::<BTreeSet<_>>()
+            .len()
+    }
+
     pub fn undiscovered_bytes(&self) -> u32 {
         self.rom_undiscovered_bytes + self.ram_undiscovered_bytes
     }
@@ -309,7 +345,7 @@ impl Report {
             "{game}: hard {} (jumps {}+{}, return arithmetic {}, RAM code changed {}, \
              CPU state {}, BIOS {}, calls to non-entries {}, summaries {}); \
              not discovered {} bytes ({} ROM, {} RAM) of {} reached; \
-             busy loops calling functions {}",
+             busy loops calling functions {}; flash library stand-ins {}",
             self.hard(),
             self.unresolved.len(),
             self.overlay_unresolved.len(),
@@ -324,6 +360,7 @@ impl Report {
             self.ram_undiscovered_bytes,
             self.reached_bytes,
             self.busy_loops.len(),
+            self.flash_routines(),
         )
     }
 }
@@ -460,6 +497,31 @@ pub fn classify(
     let mut r = Report::default();
     let reached = |a: u32| run.code.contains_key(&(a & !1));
 
+    // The flash library's stack routines: a RAM target is one only if every
+    // version of its bytes the run saw called was recognised.
+    let mut flash: BTreeSet<FlashCall> = BTreeSet::new();
+    for (&target, versions) in &run.ram_calls {
+        let sigs: Option<Vec<_>> = versions
+            .iter()
+            .map(|b| crate::flash::recognise(b))
+            .collect();
+        for s in sigs.unwrap_or_default() {
+            flash.insert(FlashCall {
+                target,
+                routine: s.routine,
+                len: s.len,
+            });
+        }
+    }
+    let flash: Vec<FlashCall> = flash.into_iter().collect();
+    let flash_targets: BTreeSet<u32> = flash.iter().map(|f| f.target).collect();
+    let in_flash = |a: u32| {
+        flash.iter().any(|f| {
+            let start = f.target & !1;
+            a >= start && a < start + f.len
+        })
+    };
+
     // Indirect jumps.
     let unres = |rec: &crate::jumptable::Recovery| -> Vec<Unresolved> {
         rec.jumps
@@ -535,6 +597,9 @@ pub fn classify(
         if !is_ram(a) {
             r.rom_reached_bytes += size;
         }
+        if in_flash(a) {
+            continue;
+        }
         let new = (a..a + size)
             .step_by(2)
             .filter(|h| !covered.contains(h))
@@ -575,7 +640,7 @@ pub fn classify(
     let ram: Vec<(u32, &Seen)> = run
         .code
         .iter()
-        .filter(|(a, _)| is_ram(**a))
+        .filter(|(a, _)| is_ram(**a) && !in_flash(**a))
         .map(|(a, s)| (*a, s))
         .collect();
     r.ram_changed = runs(
@@ -791,12 +856,13 @@ pub fn classify(
         .map(|a| a & !1)
         .collect();
     for (&t, &site) in &run.indirect_calls {
-        if !entries.contains(&(t & !1)) {
+        if !entries.contains(&(t & !1)) && !flash_targets.contains(&t) {
             r.indirect_non_entry.push((t, site));
         }
     }
 
     r.busy_loops = run.busy_loops.iter().map(|(&a, &n)| (a, n)).collect();
+    r.flash = flash;
 
     if let Some(sums) = summaries {
         for (&f, holes) in sums {

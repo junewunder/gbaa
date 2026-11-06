@@ -69,10 +69,15 @@
 //! check can compare them, but not played (the play build's
 //! [`crate::sound`] still reads the bus).
 //!
+//! **Saves** are the play build's chip ([`Hw::save`], a 512 Kbit flash
+//! chip until the program sets its kind), driven by the chip's commands
+//! or, for the flash library's stack routines, by [`flash`]'s calls.
+//!
 //! What isn't here yet: timers, the sound mixer and its FIFOs, DMA by
-//! address, serial, saves.
+//! address, serial, keeping the save in a `.sav`.
 
 pub mod bios;
+pub mod flash;
 
 use crate::io::{self, irq, reg};
 use crate::platform::{Frame, HEIGHT};
@@ -312,6 +317,9 @@ pub struct Hw<G: Native> {
     pub irq: Irq<G>,
     pub dma: Dma<G>,
     pub sound: Sound,
+    /// The cartridge's save chip, as the play build emulates it: the
+    /// program sets its kind ([`crate::save::Kind::detect`] on its ROM).
+    pub save: crate::save::Save,
     pub host: G::Host,
     /// Run at each V-blank's start just before the present, after V-blank
     /// DMA ([`Hw::on_frame_end`]).
@@ -348,6 +356,7 @@ impl<G: Native> Hw<G> {
             irq: Irq::default(),
             dma: Dma::default(),
             sound: Sound::new(),
+            save: crate::save::Save::new(crate::save::Kind::Flash512),
             host,
             frame_end: None,
             line: 0,

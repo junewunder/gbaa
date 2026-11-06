@@ -223,6 +223,62 @@ fn ram_code_that_changed_and_where_it_came_from() {
     assert_eq!(r.ram_undiscovered_bytes, 12);
 }
 
+/// The flash library's `ReadFlash1` (`ldrb r0, [r0]; bx lr`) called at
+/// 0x03007d48, where other code ran before: the call stands in, and its
+/// RAM isn't a hole; an unrecognised routine called at 0x03007d60 still is.
+#[test]
+fn flash_stack_routines_are_library_calls() {
+    let mut run = Run::default();
+    for (a, raw, changed) in [
+        (0x0300_7d48, 0x7800, true),
+        (0x0300_7d4a, 0x4770, true),
+        (0x0300_7d60, 0x7801, true),
+        (0x0300_7d62, 0x4770, false),
+    ] {
+        run.code.insert(
+            a,
+            Seen {
+                thumb: true,
+                raw,
+                changed,
+                after_boot: true,
+                ..Seen::default()
+            },
+        );
+    }
+    let mut stack = vec![0x00, 0x78, 0x70, 0x47];
+    stack.resize(RAM_CALL_BYTES as usize, 0);
+    run.ram_calls
+        .entry(0x0300_7d49)
+        .or_default()
+        .insert(stack.clone());
+    stack[0] = 0x01;
+    run.ram_calls.entry(0x0300_7d61).or_default().insert(stack);
+    run.indirect_calls.insert(0x0300_7d49, B + 0x10);
+    run.indirect_calls.insert(0x0300_7d61, B + 0x10);
+    let r = classify(&[0; 0x40], &Discovery::default(), &[], &run, None);
+    assert_eq!(
+        r.flash,
+        vec![FlashCall {
+            target: 0x0300_7d49,
+            routine: crate::flash::Routine::ReadByte,
+            len: 4,
+        }]
+    );
+    assert_eq!(r.flash_routines(), 1);
+    assert_eq!(
+        r.ram_changed,
+        vec![RamRun {
+            start: 0x0300_7d60,
+            end: 0x0300_7d62,
+            rom_src: None
+        }]
+    );
+    assert_eq!(r.indirect_non_entry, vec![(0x0300_7d61, B + 0x10)]);
+    assert_eq!(r.ram_undiscovered_bytes, 4);
+    assert_eq!(r.reached_bytes, 8);
+}
+
 #[test]
 fn bios_and_summaries() {
     assert!(bios_implemented(0x0b) && bios_implemented(0x2a));
