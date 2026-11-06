@@ -2260,3 +2260,4 @@
 {"at":"2026-11-06T10:18:58Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/fnref-flow","text":"Function addresses followed to every use: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-06T10:19:12Z","actor":"loop","tag":"d543fce8","host":"quack","cmd":"claim","id":"native/fnref-flow","text":"Function addresses followed to every use: claimed"}
 {"at":"2026-11-06T10:21:10Z","actor":"loop","tag":"dc17d7b0","host":"quack","cmd":"done","id":"native/lift-packed-layout","text":"Lifted programs at the packed layout draw the same: done, checked by subagent-a2e598a7"}
+{"at":"2026-11-06T10:25:07Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-packed-layout","text":"Lifted programs at the packed layout draw the same: on main"}
