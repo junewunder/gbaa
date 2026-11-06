@@ -19,7 +19,7 @@
 //! keeps): a return through `bx`, `pop {pc}`, `mov pc` or `ldr pc` that lands
 //! within 64 bytes before or 1 KiB after the innermost open call's return
 //! site, but not on it, is return-address arithmetic. Calls through a
-//! register record their target.
+//! register record their target, and calls into RAM the bytes there.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::ExitCode;
@@ -296,6 +296,28 @@ fn returns(i: &Instr) -> bool {
     }
 }
 
+/// A call into RAM: the bytes at its target when called
+/// ([`Run::ram_calls`]), for the flash library's stack routines
+/// (`analysis::flash`).
+fn ram_call(run: &mut Run, bus: &runtime::Bus, callee: u32) {
+    let a = callee & !1;
+    if !(0x0200_0000..0x0400_0000).contains(&a) {
+        return;
+    }
+    let bytes: Vec<u8> = (0..holes::RAM_CALL_BYTES)
+        .map(|i| bus.read8(a + i))
+        .collect();
+    let seen = run.ram_calls.entry(callee).or_default();
+    // A loop that copies a different routine in each time is a handful; a
+    // cap keeps code built at run time from growing it, and an empty entry
+    // past it (recognised as nothing) says some weren't kept.
+    if seen.len() < 16 {
+        seen.insert(bytes);
+    } else if !seen.contains(&bytes) {
+        seen.insert(Vec::new());
+    }
+}
+
 /// Whether the instruction before `a` is a call, so `a` is some call's
 /// return site: a Thumb `bl` pair, an ARM `bl`, or ARM `mov lr, pc` and a
 /// jump.
@@ -485,6 +507,7 @@ fn run(
                 if !bl {
                     rec.run.indirect_calls.entry(callee).or_insert(site);
                 }
+                ram_call(&mut rec.run, &m.bus, callee);
                 if !rec.far_jumps.contains(&site) {
                     rec.stack.push(Frame {
                         site,
@@ -511,6 +534,7 @@ fn run(
                     let (site, callee) = (top.site, rec.canon(npc) | ntb);
                     rec.run.call_targets.insert(callee);
                     rec.run.indirect_calls.entry(callee).or_insert(site);
+                    ram_call(&mut rec.run, &m.bus, callee);
                     if let Some(top) = rec.stack.last_mut() {
                         top.callee = callee;
                     }
@@ -716,6 +740,20 @@ fn main() -> ExitCode {
             c.rom_src
                 .map(|s| format!("copy of ROM 0x{s:08x}"))
                 .unwrap_or("not found in ROM".into())
+        );
+    }
+    println!(
+        "flash library stack routines (hardware-library calls, not holes): {} routines, {} places",
+        r.flash_routines(),
+        r.flash.len()
+    );
+    for f in r.flash.iter().take(show) {
+        println!(
+            "  0x{:08x} {} ({} bytes): {}",
+            f.target,
+            f.routine.name(),
+            f.len,
+            f.routine.call()
         );
     }
     let mut cpu: BTreeMap<(CpuWhere, holes::CpuKind), (usize, usize)> = BTreeMap::new();
