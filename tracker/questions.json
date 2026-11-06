@@ -1300,6 +1300,36 @@
         "host": "quack"
       },
       "answer": null
+    },
+    {
+      "id": "q/may-lane-ssh-onto-your-2",
+      "title": "May a lane SSH onto your Deck to time four Kirbys' netplay now?",
+      "context": "Quack's frame cost for four Kirby peers is in docs/research/multiplayer.md, 'Four players'. The Deck's row is the open follow-up: copy the recompiled Kirby binary to ~/gbaa on the Deck and run rollback-feel's headless four-player command (calm delay 2, wander delay 0, with and without --interp), a few minutes of CPU, no window. You said 'leave it for later' on 2026-11-01, to run whenever you next say yes; the Deck rules need a fresh yes each time.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Yes, once",
+          "changes": "A lane SSHes onto the Deck for this one run, adds the Deck rows to the table and records the unit done."
+        },
+        {
+          "key": "b",
+          "label": "Not yet",
+          "changes": "The unit stays waiting; the four-player rooms stay judged on quack's numbers alone."
+        },
+        {
+          "key": "c",
+          "label": "Drop it",
+          "changes": "The Deck timing is dropped; quack's numbers stand as the only four-player measurement."
+        }
+      ],
+      "default": "b",
+      "blocks": ["multiplayer/four-kirbys-deck"],
+      "asked": {
+        "at": "2026-11-06T13:31:55Z",
+        "by": "17508d61",
+        "host": "quack"
+      },
+      "answer": null
     }
   ]
 }

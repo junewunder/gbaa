@@ -789,15 +789,10 @@
       "detail": "From {unit:multiplayer/four-seats}: quack's numbers for four Kirbys a peer are in docs/research/multiplayer.md, 'Four players'. The Deck's own CPU, a short headless run (docs/machines.md, deck: ask june for a yes first, each time). Copy the recompiled Kirby binary to ~/gbaa, run just rollback-feel's headless four-player command from that section (calm delay 2 and wander delay 0, --interp and not, peers on the Deck) and add the Deck's rows to the table.",
       "needs": ["multiplayer/four-seats"],
       "record": {
-        "state": "claimed",
+        "state": "blocked",
+        "on": "q/may-lane-ssh-onto-your-2",
         "by": "17508d61",
-        "session": "17508d61-a134-4540-9e24-c825fcea2350",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T13:31:13Z",
-        "branch": "unit/multiplayer/four-kirbys-deck",
-        "beats": true
+        "at": "2026-11-06T13:31:55Z"
       },
       "round": "2026-11-06T13:31:13Z"
     },
