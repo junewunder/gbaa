@@ -295,6 +295,41 @@ local), so locals need an escape analysis first.
   returned, or used in arithmetic past the slot. Reported, not printed.
   Check: unit tests on hand-built cases of each kind; the report's counts
   on the three programs.
+
+  As built (2026-11-06): `crates/codegen/src/native/frame.rs`, an
+  abstract run of each lifted function's IR from its entry (values are
+  the entry sp plus a constant, a constant, a register as it came, or
+  "made from these sp offsets" by arithmetic it doesn't follow; frame
+  words keep what was stored in them). Slots are the byte ranges
+  sp-relative accesses reach, overlaps merged; an escaping address no
+  access reaches is an empty slot of its own. The kinds: passed to a
+  callee in a register it reads (its summary's parameters, all four
+  without one; a tail call or fall, every register); a callee's stack
+  argument (at or above sp at the call, within the bytes the callee reads
+  above its entry sp; an indirect call, the most any function reads);
+  stored outside the frame or in a slot that escapes; returned in r0-r3;
+  arithmetic the run can't follow, used as an address; sp lost. An
+  escaping address is an object of unknown size: its slot escapes, and so
+  does every slot above it up to the first saved-register slot (every
+  store a word holding r4-r11 or lr as they came) or the entry sp.
+  Nothing printed changes (`main.rs` is byte-identical). The report's
+  `stack frames` line and two metrics, barred in `lift-check.toml`:
+  `sp_accesses_local_slot` and `sp_accesses_escaping_slot`, which sum to
+  `load_sp` + `store_sp`.
+
+  | program | slots | escaping | to slots kept | to slots escaping |
+  |---|---|---|---|---|
+  | native-spike | 856 | 391 | 2,239 | 1,289 |
+  | affine | 852 | 248 | 2,905 | 704 |
+  | mosaic-modes | 718 | 353 | 1,093 | 1,124 |
+  | native-fallthrough | 858 | 252 | 2,892 | 708 |
+  | native-irq-hold | 866 | 253 | 2,912 | 708 |
+
+  On native-spike, by kind: passed to a callee 148, stack argument 232,
+  stored 121, returned 2, arithmetic 69; no function loses sp. The spike's
+  stack-argument count is high because one function there reads 54 bytes
+  above its entry sp, and every indirect call is assumed to call it; the
+  callee sets of `native/fnref-flow` would narrow that.
 - **Stack slots that don't escape as Rust locals**
   (`native/frame-locals`). Their loads and stores through sp become locals;
   escaping slots stay IWRAM bytes. Bar: 0 sp-relative accesses to slots
