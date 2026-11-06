@@ -2253,3 +2253,4 @@
 {"at":"2026-11-06T09:41:41Z","actor":"loop","tag":"cfd5e5aa","host":"quack","cmd":"add-unit","id":"native/fnref-heap-sites","text":"new unit: Function flow: the heap by allocation site and field"}
 {"at":"2026-11-06T09:41:45Z","actor":"loop","tag":"cfd5e5aa","host":"quack","cmd":"edit","id":"native/fnref-dense","text":"Function pointers as dense FnRef IDs: edited (add-needs)"}
 {"at":"2026-11-06T09:57:59Z","actor":"loop","tag":"ef819a4e","host":"quack","cmd":"done","id":"native/lift-modules","text":"Lifted crates split into modules that build: done, checked by verifier-abb32b70"}
+{"at":"2026-11-06T10:01:09Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-modules","text":"Lifted crates split into modules that build: on main"}
