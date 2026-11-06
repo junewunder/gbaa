@@ -612,19 +612,7 @@
         "checker": "verifier-fnref-d543",
         "at": "2026-11-06T11:03:20Z",
         "evidence": "Review fix made: Val.lost_rom (joined, carried in memory as a mark) set when a ROM read is cut short, a ROM-bounded read is too wide, or a ROM pointer less an unknown; callees() needs it clear for complete. ROM read limit 16 KB->256 KB, ror keeps ROM pointers. Verifier verifier-fnref-d543: PASS, found a frame-slot narrow-store flag drop, fixed in dacc917b with a test. 21 fnref tests pass (3 new incomplete-site tests fail without the fix). After merging main: just lift-check passed (all 6 programs, call_fn sets complete 59/57/57/58/61/57, not proven 53/52/51/53/55/52 = bars), just check passed. Table in docs/native-stage-b.md updated.",
-        "branch": "unit/native/fnref-flow",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-06T11:03:20Z",
-          "by": "d543fce8",
-          "host": "quack",
-          "pid": 1418242,
-          "start": "29954965",
-          "beats": true,
-          "session": "d543fce8-a7f4-4572-9683-705981824328",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -642,13 +630,7 @@
           "by": "cfd5e5aa",
           "text": "Proofs are weak: one heap pile makes 32-36 words per agb program unprovable; call_fn sets are complete but each is all ~17 address-taken fns. Filed {unit:native/fnref-heap-sites} (allocation site + field), now needed by {unit:native/fnref-dense}. GBAA_FNREF_TRACE=1 traces the run."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-06T10:18:58Z",
-        "findings": "- crates/codegen/src/native/fnref.rs:719, :1184-1213 and :827 — a call site can be marked as having a complete callee set when it isn't. The card's output is each indirect call's callee set, \"complete or not\", and the indirect-call-args unit ({unit:native/indirect-call-args}) will rely on that flag. `callees()` calls a set complete whenever it holds at least one whole function address. The closed-world argument behind that only holds if every function address the run could load is in the value, and the run drops some without saying so. (1) `rom_from` stops after 0x4000 bytes, even when `Image::bound` is further out, so any function words past 16 KB never enter the value. (2) A load whose value-set range is in ROM but 0x4000 or wider takes the pile path, which marks the value unknown and never reads the ROM words. (3) A ROM pointer minus an unknown becomes unknown, so loads through it miss the ROM table the same way. In each case, a target that also holds some other function address comes out \"complete\" with callees missing. docs/native-stage-b.md lists these as gaps the review kept, but they make the deliverable's complete flag wrong rather than just less precise. What to do: add a flag to `Val` (for example `lost_rom: bool`, joined like `mem`/`unk`). Set it when `rom_from` is cut off before `bound`, when a ROM-bounded load is too wide to read, and when ROM-pointer arithmetic gives up. In `callees()`, require the flag to be unset for `complete`. Add a fnref unit test that loads through a table index past 16 KB and asserts the site is incomplete. Then update the call_fn-sets-complete column in docs/native-stage-b.md with the rerun numbers, and the fn_words_not_proven bars in crates/codegen/lift-check.toml if they change."
-      },
-      "round": "2026-11-06T08:11:49Z"
+      ]
     },
     {
       "id": "native/ref-heap",
