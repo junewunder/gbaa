@@ -2237,3 +2237,4 @@
 {"at":"2026-11-06T07:54:22Z","actor":"loop","tag":"48c9e983","host":"quack","cmd":"claim","id":"native/frame-locals","text":"Stack slots that don't escape as Rust locals: claimed"}
 {"at":"2026-11-06T08:07:34Z","actor":"loop","tag":"cec56176","host":"quack","cmd":"done","id":"native/ram-globals","text":"RAM globals as typed fields: done, checked by verifier-carve"}
 {"at":"2026-11-06T08:07:38Z","actor":"loop","tag":"cec56176","host":"quack","cmd":"note","id":"native/rom-statics","text":"ROM data as typed statics: note: From {unit:native/ram-globals}: every constant ROM load was a dead literal-pool load (the IR has the word as Pool); the lifter now drops unused ROM loads, so load_const_rom is 0 on all programs and this unit's bar is effectively the computed ROM loads."}
+{"at":"2026-11-06T08:11:36Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/ram-globals","text":"RAM globals as typed fields: on main"}

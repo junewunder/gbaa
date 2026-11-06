@@ -543,21 +543,8 @@
         "checker": "verifier-carve",
         "at": "2026-11-06T08:07:34Z",
         "evidence": "just lift-check passed after merging main (5 programs, 600/601 frames 0 differences, planted store now a typed-field store caught, planted hole caught); just check passed. load_const_ram and store_const_ram 0 on all five (bars were 27-36, 5-11), lowered in lift-check.toml; ram_globals 23-28. lines down 830-1010; lines_prelude 439->470 (+31: Ram zeroed alloc, Deref impls, layout assert). Verifier verifier-carve re-lifted all five, reviewed the diff: PASS.",
-        "branch": "unit/native/ram-globals",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-06T08:07:34Z",
-          "by": "cec56176",
-          "host": "quack",
-          "pid": 1418242,
-          "start": "29954965",
-          "beats": true,
-          "session": "cec56176-8567-4f04-8955-3ded870dd589",
-          "lane": "quack/2"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-06T07:41:20Z"
+        "host": "quack"
+      }
     },
     {
       "id": "native/ref-in-object",
