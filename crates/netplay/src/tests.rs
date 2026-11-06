@@ -261,6 +261,33 @@ fn a_desync_is_seen_by_every_peer() {
 }
 
 #[test]
+fn a_skewed_input_is_a_desync_both_peers_see() {
+    let frames = 600;
+    let consoles = (0..2).map(|s| Toy::peer(2, s)).collect();
+    // Over a bad network, so rollbacks run the skewed frames again too.
+    let (mut peers, net) = rollback_session(consoles, BAD, 4, Config::default());
+    peers[1].skew(200, 0x155);
+    play(&mut peers, &net, frames, script, |_, _| {}).unwrap();
+    settle(&mut peers, &net);
+    let want = straight(Toy::new(2), 0, frames);
+    let (a, b) = (peers[0].hashes(), peers[1].hashes());
+    // Seat 0's peer ran the real inputs: the straight run.
+    let real: Vec<_> = a.iter().filter(|(f, _)| *f < frames).collect();
+    let straight: Vec<_> = want.iter().filter(|(f, _)| *f < frames).collect();
+    assert_eq!(real, straight);
+    // Seat 1's, right up to the skew and apart after it.
+    assert_eq!(b[..4], want[..4]);
+    assert_ne!(b[5], want[5]);
+    assert_eq!(peers[0].desyncs(), peers[1].desyncs());
+    assert!(
+        peers[0]
+            .desyncs()
+            .first()
+            .is_some_and(|&f| f > 200 && f <= 300)
+    );
+}
+
+#[test]
 fn rollback_keeps_two_peers_level() {
     // 50 ms each way: both peers should guess about as far, ~3 frames.
     let cond = Conditions {
@@ -557,7 +584,7 @@ fn a_room_whose_players_leave_closes() {
     use std::time::Duration;
     let sock = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
     let server = sock.local_addr().unwrap();
-    std::thread::spawn(move || relay::rooms::serve(sock));
+    std::thread::spawn(move || relay::rooms::serve(sock, 0));
     let build = [5; 32];
     let (tx, rx) = std::sync::mpsc::channel();
     let host = std::thread::spawn(move || {
@@ -587,4 +614,38 @@ fn a_room_whose_players_leave_closes() {
     settles_at((1, 1));
     b.leave();
     settles_at((0, 0));
+}
+
+#[test]
+fn a_server_too_new_for_this_build_refuses_it_plainly() {
+    use std::time::Duration;
+    let sock = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    let server = sock.local_addr().unwrap();
+    std::thread::spawn(move || relay::rooms::serve(sock, crate::VERSION + 1));
+    let start = std::time::Instant::now();
+    let Err(e) = udp::Udp::host(server, 2, &[5; 32], |_| {}, || true) else {
+        panic!("seated by a server that needs a newer version");
+    };
+    assert!(start.elapsed() < Duration::from_secs(5), "{e}");
+    let v = crate::VERSION;
+    assert_eq!(
+        e,
+        format!(
+            "{}this game is too old for the server (version {v}, needs {}): get the new build",
+            udp::REFUSED,
+            v + 1
+        )
+    );
+}
+
+/// fly's server lets in this build and refuses the one before.
+#[test]
+fn fly_refuses_versions_before_this_one() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../deploy/fly/Dockerfile");
+    let docker = std::fs::read_to_string(path).unwrap();
+    let want = format!("\"--min-version\", \"{}\"", crate::VERSION);
+    assert!(
+        docker.contains(&want),
+        "deploy/fly/Dockerfile's CMD should pass {want}: netplay::VERSION changed"
+    );
 }

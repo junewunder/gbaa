@@ -47,6 +47,11 @@ mod rooms {
     pub const CODE: usize = relay::CODE_LEN;
 }
 
+/// How [`Udp::host`]'s and [`Udp::join`]'s error starts when the rooms
+/// server said no (no such room, full, too old a version); its words
+/// follow.
+pub const REFUSED: &str = "the rooms server says: ";
+
 /// The most of a reliable message one datagram carries: under any path's
 /// MTU, as a real network needs.
 pub const CHUNK: usize = 1200;
@@ -173,7 +178,8 @@ impl Udp {
 
     /// Make a room of `seats` on the rooms server `server` for `build`, say
     /// its code (`say`), and wait while `go_on` says so for every seat to
-    /// fill. This peer is seat 0.
+    /// fill. This peer is seat 0. The server may refuse, as too old a
+    /// [`crate::VERSION`]: the error is then a [`REFUSED`] one.
     pub fn host(
         server: SocketAddr,
         seats: usize,
@@ -183,6 +189,7 @@ impl Udp {
     ) -> Result<(Udp, [u8; rooms::CODE]), String> {
         let mut ask = vec![rooms::HOST, seats as u8];
         ask.extend_from_slice(build);
+        ask.extend_from_slice(&crate::VERSION.to_le_bytes());
         Udp::seat(server, &ask, Some(say), go_on)
     }
 
@@ -197,6 +204,7 @@ impl Udp {
         let mut ask = vec![rooms::JOIN];
         ask.extend_from_slice(&code);
         ask.extend_from_slice(build);
+        ask.extend_from_slice(&crate::VERSION.to_le_bytes());
         Udp::seat(server, &ask, None::<fn(_)>, go_on)
     }
 
@@ -253,10 +261,7 @@ impl Udp {
             }
             match d.first() {
                 Some(&rooms::ERROR) => {
-                    return Err(format!(
-                        "the rooms server says: {}",
-                        String::from_utf8_lossy(&d[1..])
-                    ));
+                    return Err(format!("{REFUSED}{}", String::from_utf8_lossy(&d[1..])));
                 }
                 Some(&rooms::ROOM) if n == 1 + rooms::CODE + 3 => {
                     heard = true;
