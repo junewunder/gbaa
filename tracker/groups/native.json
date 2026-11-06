@@ -784,17 +784,6 @@
       "needs": ["native/fnref-flow"],
       "uses": ["heavy"],
       "minMinutes": 180,
-      "record": {
-        "state": "claimed",
-        "by": "41e1a197",
-        "session": "41e1a197-c4f3-496f-9ea1-6e09ccc945ba",
-        "host": "quack",
-        "pid": 1418242,
-        "start": "29954965",
-        "at": "2026-11-06T12:44:46Z",
-        "branch": "unit/native/fnref-heap-sites",
-        "beats": true
-      },
       "notes": [
         {
           "at": "2026-11-06T12:46:23Z",
