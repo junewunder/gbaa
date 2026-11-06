@@ -612,6 +612,13 @@
         "branch": "unit/native/metroid-lifts",
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-06T12:12:12Z",
+          "by": "f93b1ecd",
+          "text": "26 hard holes -> 9: mods/metroid/holes.toml stands in reset, IRQ dispatcher, classic-NES code; skips fnref flow. Left: 9 BIOS calls ({unit:native/lift-bios-calls}). Then just lift ROM out/lift-metroid --name metroid, build, quote numbers (doc has a measurement build)."
+        }
+      ],
       "round": "2026-11-06T11:28:38Z"
     },
     {
