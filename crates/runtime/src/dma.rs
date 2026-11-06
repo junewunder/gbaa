@@ -133,6 +133,20 @@ fn feeds(bus: &Bus, n: usize) -> Option<usize> {
     FIFO_ADDR.iter().position(|&a| ch.dst & !3 == a)
 }
 
+/// What a FIFO refill costs the clock: 4 words, 2 cycles each, and 2.
+/// Native programs' FIFO DMA ([`crate::hw::Sound`]) charges the same.
+pub const FIFO_REFILL_CYCLES: u64 = 2 * 4 + 2;
+
+/// Source address step of a FIFO refill under `DMAxCNT_H` `control`: up,
+/// down or fixed (prohibited 3 counts up).
+pub fn fifo_step(control: u16) -> u32 {
+    match control >> ctl::SRC_SHIFT & 3 {
+        1 => 4u32.wrapping_neg(),
+        2 => 0,
+        _ => 4,
+    }
+}
+
 /// Sound FIFO `fifo` popped down to its refill level: run the channel that
 /// feeds it, if any (the lower one if both do). Moves exactly 4 words from
 /// the source into the FIFO, whatever `DMAxCNT_L` and the destination
@@ -144,11 +158,7 @@ pub fn fifo_refill(bus: &mut Bus, fifo: usize) -> bool {
     };
     let mut ch = bus.dma[n];
     let c = ch.control;
-    let step = match c >> ctl::SRC_SHIFT & 3 {
-        1 => 4u32.wrapping_neg(),
-        2 => 0,
-        _ => 4,
-    };
+    let step = fifo_step(c);
     #[cfg(feature = "provenance")]
     let _copying = crate::prov::enter_copy(crate::prov::via::DMA);
     for _ in 0..4 {
@@ -169,7 +179,7 @@ pub fn fifo_refill(bus: &mut Bus, fifo: usize) -> bool {
         bus.io.set_raw16(o, bus.io.raw16(o) & !ctl::ENABLE);
     }
     bus.dma[n] = ch;
-    bus.io.now += 2 * 4 + 2;
+    bus.io.now += FIFO_REFILL_CYCLES;
     true
 }
 
