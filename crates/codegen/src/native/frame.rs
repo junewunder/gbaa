@@ -22,10 +22,30 @@
 //! comes first. Locals sit below the saved registers in every frame
 //! compiled from C or Rust, so that is as far as the object can reach.
 //!
-//! The lifter prints nothing differently yet: the report counts slots and
-//! escaping slots, and the metrics count sp-relative accesses to slots
-//! that don't escape and to slots that do (`native/frame-locals` makes the
-//! first kind Rust locals, and its bar is 0).
+//! A callee may also reach up into its caller's frame from an address at
+//! or above its own entry sp that escapes from it (a pointer to a stack
+//! argument passed on): at a call to it, that address in the caller's
+//! frame escapes too ([`Kind::Args`]), unless the frame is done with after
+//! the call (the callee never returns, or it is a tail call), where the
+//! lift writes the locals to the frame's bytes before it instead
+//! ([`Frame::flush`]). For a call through a register, every function
+//! whose address is a word of the ROM may be the callee.
+//!
+//! The lift (`native/frame-locals`) prints the slots that don't escape, in
+//! the function's own frame, as Rust locals ([`Frame::locals`]), and their
+//! loads and stores as the locals'; the rest stay the frame's IWRAM bytes.
+//! The report counts slots, escaping slots and locals, and the metrics the
+//! sp-relative accesses left in memory: to slots that don't escape (none:
+//! the bar is 0), to slots that do, and to the caller's frame.
+//!
+//! Two gaps, weighed by `native/frame-locals`: an escaping address makes
+//! only the slots at and above it escape (a pointer into an object's
+//! middle reaching below it, or a loop walking down from an end pointer,
+//! isn't followed: walking down too would leave three times the accesses
+//! in memory on the agb programs); and what a callee reaches up from is
+//! followed one call deep (a tail call's callee's reach isn't the tail
+//! caller's). `gbaa-lift --shadow-locals` checks a lift against both at
+//! run time.
 //!
 //! The run is on [`FBlock`]s (a block's IR and what each exit does), so
 //! the tests build them by hand; [`of_code`] builds them from a lifted
@@ -127,6 +147,12 @@ pub struct Frame {
     pub args: u32,
     /// Each load and store the run reached, by (block, inst index).
     pub places: BTreeMap<(u32, usize), Place>,
+    /// The calls, by their exit's (block, inst index), before which the
+    /// frame's locals go to its bytes: the callee may reach up into the
+    /// frame from an address above its own sp (a pointer to a stack
+    /// argument), and the frame is done with after it (the callee never
+    /// returns, or it is a tail call).
+    pub flush: BTreeSet<(u32, usize)>,
 }
 
 impl Frame {
@@ -148,6 +174,83 @@ impl Frame {
 
     pub fn escaping(&self) -> usize {
         self.slots.iter().filter(|s| s.escapes()).count()
+    }
+
+    /// The slot an access placed exactly reaches, with its offset and
+    /// width.
+    fn slot_at(&self, b: u32, i: usize) -> Option<(&Slot, i32, u8)> {
+        match self.places.get(&(b, i))? {
+            Place::Exact(o, n) => {
+                let s = self.slots.iter().find(|s| s.lo <= *o && *o < s.hi)?;
+                Some((s, *o, *n))
+            }
+            _ => None,
+        }
+    }
+
+    /// The slots the lift prints as Rust locals (`native/frame-locals`):
+    /// those that don't escape, lie below the entry sp (above it is the
+    /// caller's frame: the stack arguments, a frame a fall shares), and
+    /// that every access reaches at an offset its width divides (an
+    /// unaligned one reaches the bytes the hardware's rounding picks).
+    pub fn locals(&self) -> Vec<Local> {
+        let mut odd = BTreeSet::new();
+        let mut words = BTreeSet::new();
+        for p in self.places.values() {
+            if let Place::Exact(o, n) = p {
+                if o.rem_euclid(*n as i32) != 0 {
+                    odd.insert(*o);
+                }
+                if *n != 4 {
+                    words.insert(*o);
+                }
+            }
+        }
+        self.slots
+            .iter()
+            .filter(|s| !s.escapes() && s.lo < s.hi && s.hi <= 0)
+            .filter(|s| !odd.iter().any(|&o| s.lo <= o && o < s.hi))
+            .map(|s| Local {
+                lo: s.lo,
+                len: (s.hi - s.lo) as u32,
+                word: s.lo % 4 == 0
+                    && s.hi - s.lo == 4
+                    && !words.iter().any(|&o| s.lo <= o && o < s.hi),
+            })
+            .collect()
+    }
+
+    /// Where the access at inst `i` of block `b` lands in `locals` (this
+    /// frame's [`Frame::locals`]): the local, the offset in it, and the
+    /// access's width.
+    pub fn local_at(&self, locals: &[Local], b: u32, i: usize) -> Option<(Local, u32, u8)> {
+        let (s, o, n) = self.slot_at(b, i)?;
+        let l = locals.iter().find(|l| l.lo == s.lo)?;
+        Some((*l, (o - l.lo) as u32, n))
+    }
+
+    /// Whether the access at inst `i` of block `b` is into a slot of the
+    /// caller's frame that doesn't escape here: at or above the entry sp.
+    pub fn in_callers(&self, b: u32, i: usize) -> bool {
+        self.slot_at(b, i)
+            .is_some_and(|(s, _, _)| !s.escapes() && s.hi > 0)
+    }
+}
+
+/// A slot printed as a Rust local: bytes `lo..lo + len` from the entry sp,
+/// a `u32` if it is one aligned word only ever accessed whole (`word`),
+/// else bytes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Local {
+    pub lo: i32,
+    pub len: u32,
+    pub word: bool,
+}
+
+impl Local {
+    /// Its Rust name: `l<bytes below the entry sp>`.
+    pub fn name(&self) -> String {
+        format!("l{}", -self.lo)
     }
 }
 
@@ -184,6 +287,17 @@ pub struct FBlock<'a> {
 pub trait Env {
     /// The registers (bit `n` for rN) a call to `target` reads.
     fn params(&self, target: Option<u32>) -> u16;
+
+    /// Whether function `f`'s address may be taken: a call through a
+    /// register may reach it. Every function, unless told otherwise.
+    fn taken(&self, _f: u32) -> bool {
+        true
+    }
+
+    /// Whether a call to `target` may return. Yes, unless told otherwise.
+    fn returns(&self, _target: Option<u32>) -> bool {
+        true
+    }
 }
 
 /// Every register r0-r3, for a callee nothing is known of.
@@ -308,6 +422,10 @@ impl State {
     }
 }
 
+/// One call: its sp (if known), its callee (if known), and whether it is
+/// a tail call or a fall.
+type Call = (Option<i32>, Option<u32>, bool);
+
 /// What one function's run found, before the program's other functions
 /// are known.
 #[derive(Debug, Default)]
@@ -315,8 +433,8 @@ struct Raw {
     places: BTreeMap<(u32, usize), Place>,
     /// Addresses that escape, by offset.
     escapes: BTreeSet<(i32, Kind)>,
-    /// Each call's sp (if known) and callee (if known).
-    calls: BTreeSet<(Option<i32>, Option<u32>)>,
+    /// Each call, by its exit's (block, inst index).
+    calls: BTreeMap<(u32, usize), Call>,
     /// The frame addresses stored in each frame word.
     holds: BTreeMap<i32, BTreeSet<i32>>,
     /// Whether every store to a word is a saved register, by offset.
@@ -480,7 +598,7 @@ impl Run<'_, '_> {
                     V::Other
                 }
                 Op::Exit(_) => {
-                    self.exit(&b.edges[&i], &s);
+                    self.exit((key, i), &b.edges[&i], &s);
                     V::Other
                 }
                 _ => V::Other,
@@ -489,7 +607,7 @@ impl Run<'_, '_> {
         }
     }
 
-    fn exit(&mut self, e: &Edge, s: &State) {
+    fn exit(&mut self, at: (u32, usize), e: &Edge, s: &State) {
         match e {
             Edge::Goto(ks) => {
                 for &k in ks {
@@ -498,7 +616,7 @@ impl Run<'_, '_> {
             }
             Edge::Call { target, ret } => {
                 self.pass(self.env.params(*target) & 0xf, s, Kind::Call);
-                self.raw.calls.insert((Run::sp(s), *target));
+                self.raw.calls.insert(at, (Run::sp(s), *target, false));
                 let mut after = s.clone();
                 for r in [0, 1, 2, 3, 12, 14] {
                     after.regs[r] = V::Other;
@@ -513,11 +631,11 @@ impl Run<'_, '_> {
             Edge::Return => self.pass(0xf, s, Kind::Returned),
             Edge::Tail(t) => {
                 self.pass(0x5fff, s, Kind::Call);
-                self.raw.calls.insert((Run::sp(s), *t));
+                self.raw.calls.insert(at, (Run::sp(s), *t, true));
             }
             Edge::TailOr(ks) => {
-                self.exit(&Edge::Tail(None), s);
-                self.exit(&Edge::Goto(ks.clone()), s);
+                self.exit(at, &Edge::Tail(None), s);
+                self.exit(at, &Edge::Goto(ks.clone()), s);
             }
             Edge::Swi(next) => {
                 self.pass(0xf, s, Kind::Call);
@@ -584,12 +702,62 @@ impl Raw {
             .max()
             .unwrap_or(0)
     }
+
+    /// The lowest offset at or above the entry sp whose address escapes
+    /// or that an access reaches by arithmetic the run didn't follow: from
+    /// there the function may reach up into its caller's frame, by an
+    /// amount nobody knows (`va_list`, a pointer to a stack argument).
+    fn reaches_up(&self) -> Option<i32> {
+        let through = self.places.values().flat_map(|p| match p {
+            Place::Through(b) => b.iter().copied().collect(),
+            _ => Vec::new(),
+        });
+        self.escapes
+            .iter()
+            .map(|&(k, _)| k)
+            .chain(through)
+            .filter(|&k| k >= 0)
+            .min()
+    }
 }
 
-/// The frames of a program's functions, from their runs: `args` gives
-/// each callee's stack-argument bytes (the most any function reads, for
-/// a callee not known).
-fn resolve(raw: Raw, args: &dyn Fn(Option<u32>) -> u32) -> Frame {
+/// What a callee reads of its caller's frame: its exact stack-argument
+/// bytes, and the offset above its sp from which it may reach further up
+/// ([`Raw::reaches_up`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Reads {
+    args: u32,
+    up: Option<i32>,
+}
+
+impl Reads {
+    fn of(raw: &Raw) -> Reads {
+        Reads {
+            args: raw.args(),
+            up: raw.reaches_up(),
+        }
+    }
+
+    /// What a callee not known reads: the most any function in `all`
+    /// reads exactly, and the lowest any whose address `taken` reaches up
+    /// from. (The exact bytes stay the most of every function, as
+    /// `native/frame-escape` measured them.)
+    fn most(all: &BTreeMap<u32, Reads>, taken: impl Fn(u32) -> bool) -> Reads {
+        Reads {
+            args: all.values().map(|r| r.args).max().unwrap_or(0),
+            up: all
+                .iter()
+                .filter(|(f, _)| taken(**f))
+                .filter_map(|(_, r)| r.up)
+                .min(),
+        }
+    }
+}
+
+/// The frames of a program's functions, from their runs: `reads` gives
+/// what each callee reads of its caller's frame (what any function does,
+/// for a callee not known).
+fn resolve(raw: Raw, reads: &dyn Fn(Option<u32>) -> Reads, env: &dyn Env) -> Frame {
     // The slots: accessed ranges, overlaps merged.
     let mut ranges: Vec<(i32, i32)> = raw
         .places
@@ -643,16 +811,34 @@ fn resolve(raw: Raw, args: &dyn Fn(Option<u32>) -> u32) -> Frame {
             .collect();
         s.saved = s.hi - s.lo == 4 && words == [true];
     }
-    // Stack arguments: what each callee reads above its sp.
-    for (sp, callee) in &raw.calls {
+    // Stack arguments: what each callee reads above its sp. One that may
+    // reach further up is an escaping address there, an object of unknown
+    // size like any other; unless the frame is done with after the call
+    // (a callee that never returns, a tail call): then the lift writes its
+    // locals to the frame's bytes before it ([`Frame::flush`]).
+    let mut ups = Vec::new();
+    let mut flush = BTreeSet::new();
+    for (&at, &(sp, callee, tail)) in &raw.calls {
         if let Some(sp) = sp {
-            let n = args(*callee) as i32;
+            let r = reads(callee);
+            let n = r.args as i32;
             for s in &mut slots {
-                if s.lo < sp + n && *sp < s.hi.max(s.lo + 1) {
+                if s.lo < sp + n && sp < s.hi.max(s.lo + 1) {
                     s.escapes |= Kind::Args as u8;
                 }
             }
+            if let Some(k) = r.up {
+                if tail || !env.returns(callee) {
+                    flush.insert(at);
+                } else {
+                    ups.push(sp + k);
+                }
+            }
         }
+    }
+    for &b in &ups {
+        unplaced(&mut slots, b);
+        points.insert((b, Kind::Args));
     }
     // What the stack-argument slots hold escapes too (`f(1, 2, 3, 4, &x)`).
     for s in slots.iter().filter(|s| s.escapes()) {
@@ -693,6 +879,7 @@ fn resolve(raw: Raw, args: &dyn Fn(Option<u32>) -> u32) -> Frame {
         slots,
         lost: raw.lost,
         places: raw.places,
+        flush,
     }
 }
 
@@ -703,25 +890,52 @@ pub fn frames<'a>(
     env: &dyn Env,
 ) -> BTreeMap<u32, Frame> {
     let raws: Vec<(u32, Raw)> = funcs.iter().map(|(e, bs)| (*e, run(*e, bs, env))).collect();
-    let by: BTreeMap<u32, u32> = raws.iter().map(|(e, r)| (*e, r.args())).collect();
-    let most = by.values().copied().max().unwrap_or(0);
-    let args = |c: Option<u32>| c.and_then(|c| by.get(&c).copied()).unwrap_or(most);
+    let by: BTreeMap<u32, Reads> = raws.iter().map(|(e, r)| (*e, Reads::of(r))).collect();
+    let most = Reads::most(&by, |f| env.taken(f));
+    let reads = |c: Option<u32>| c.and_then(|c| by.get(&c).copied()).unwrap_or(most);
     raws.into_iter()
-        .map(|(e, r)| (e, resolve(r, &args)))
+        .map(|(e, r)| (e, resolve(r, &reads, env)))
         .collect()
 }
 
 /// The parameters from the summaries: a callee's, where its summary has
-/// no hole; all four otherwise.
-pub struct FromSummaries<'a>(pub &'a Summaries);
+/// no hole; all four otherwise. A function's address is taken if it is a
+/// word of the context's bytes: a literal pool, a table in ROM. (Not any
+/// constant of the IR: a call's target and its return address are
+/// constants too.)
+pub struct FromSummaries<'a> {
+    pub sums: &'a Summaries,
+    pub taken: BTreeSet<u32>,
+}
 
 impl Env for FromSummaries<'_> {
     fn params(&self, target: Option<u32>) -> u16 {
-        match target.and_then(|t| self.0.get(t)) {
+        match target.and_then(|t| self.sums.get(t)) {
             Some(s) if s.holes.is_empty() => s.params as u16,
             _ => 0xf,
         }
     }
+
+    fn taken(&self, f: u32) -> bool {
+        self.taken.contains(&f)
+    }
+
+    fn returns(&self, target: Option<u32>) -> bool {
+        target
+            .and_then(|t| self.sums.get(t))
+            .is_none_or(|s| s.returns)
+    }
+}
+
+/// The functions of `all` whose address is a word of `bytes`.
+fn taken(all: &BTreeSet<u32>, bytes: &[u8]) -> BTreeSet<u32> {
+    bytes
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_le_bytes(*w))
+        .filter(|w| all.contains(w))
+        .collect()
 }
 
 /// The frames of one lifted context's functions, as the lifter prints
@@ -807,7 +1021,11 @@ pub fn of_code(ctx: &Ctx, funcs: &[Func], sums: &Summaries) -> BTreeMap<u32, Fra
             (f.entry, bs)
         })
         .collect();
-    frames(&fs, &FromSummaries(sums))
+    let env = FromSummaries {
+        sums,
+        taken: taken(&all, ctx.rom),
+    };
+    frames(&fs, &env)
 }
 
 #[cfg(test)]

@@ -164,7 +164,10 @@ impl Run {
                 .arg(format!("target/recompiled/release/gbaa-native-{n}-planted"));
         }
         for flag in &p.planted_flags {
-            let tag = flag.trim_start_matches('-');
+            // A crate name: `--plant-slot=0x…` is `plant-slot-0x…`.
+            let tag = flag
+                .trim_start_matches('-')
+                .replace(|c: char| !c.is_ascii_alphanumeric(), "-");
             let out = format!("out/lift-{n}-{tag}");
             let mut c = lift(&rom, n, &out);
             c.args(["--name", &format!("{n}-{tag}"), flag])

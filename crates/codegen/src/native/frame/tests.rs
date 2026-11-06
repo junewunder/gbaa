@@ -98,6 +98,38 @@ fn frames_of(fns: &Fns) -> BTreeMap<u32, Frame> {
     frames(&fs, &AllFour)
 }
 
+/// [`frames_of`] where a call to `9` never returns.
+fn frames_9_never_returns(fns: &Fns) -> BTreeMap<u32, Frame> {
+    struct NeverReturns;
+    impl Env for NeverReturns {
+        fn params(&self, _: Option<u32>) -> u16 {
+            0xf
+        }
+        fn returns(&self, t: Option<u32>) -> bool {
+            t != Some(9)
+        }
+    }
+    let fs: Vec<(u32, BTreeMap<u32, FBlock>)> = fns
+        .iter()
+        .map(|(e, bs)| {
+            let m = bs
+                .iter()
+                .map(|(k, insts, edge)| {
+                    (
+                        *k,
+                        FBlock {
+                            insts,
+                            edges: BTreeMap::from([(insts.len() - 1, edge.clone())]),
+                        },
+                    )
+                })
+                .collect();
+            (*e, m)
+        })
+        .collect();
+    frames(&fs, &NeverReturns)
+}
+
 /// The frame of a one-block function `b`, ending with `edge`.
 fn one(b: B, edge: Edge) -> Frame {
     frames_of(&vec![func(1, vec![(1, b, edge)])])
@@ -383,4 +415,139 @@ fn two_paths_with_different_pointers_join_to_both() {
     let f = &fs[&1];
     assert_eq!(kinds(f, -16), vec![Kind::Call]);
     assert_eq!(kinds(f, -12), vec![Kind::Call]);
+}
+
+/// A caller that keeps words at -16 and -12 and calls 9, which passes on
+/// the address of its stack argument at its sp + 4 (the caller's -12).
+fn reaching_up() -> Fns {
+    let mut b = B::default();
+    b.prologue();
+    let x = b.k(5);
+    let a = b.sp(0);
+    b.st(a, x);
+    let a = b.sp(4);
+    b.st(a, x);
+    let caller = func(
+        1,
+        vec![(
+            1,
+            b,
+            Edge::Call {
+                target: Some(9),
+                ret: 2,
+            },
+        )],
+    );
+    let mut c = B::default();
+    let p = c.sp(4);
+    c.set(0, p);
+    let callee = func(
+        9,
+        vec![(
+            9,
+            c,
+            Edge::Call {
+                target: Some(10),
+                ret: 11,
+            },
+        )],
+    );
+    vec![caller, callee]
+}
+
+#[test]
+fn a_callee_passing_on_a_stack_arguments_address_reaches_up_into_the_frame() {
+    let fs = frames_of(&reaching_up());
+    // It reads nothing exactly, but from its sp + 4 up the object is of
+    // unknown size: up to the saved registers.
+    assert_eq!(fs[&9].args, 0);
+    assert_eq!(kinds(&fs[&1], -12), vec![Kind::Args]);
+    assert!(!at(&fs[&1], -16).escapes() && !at(&fs[&1], -8).escapes());
+    assert!(fs[&1].flush.is_empty());
+}
+
+#[test]
+fn before_a_callee_that_reaches_up_and_never_returns_the_locals_go_to_memory() {
+    let fns = reaching_up();
+    let fs = frames_9_never_returns(&fns);
+    assert!(
+        fs[&1].slots.iter().all(|s| !s.escapes()),
+        "{:?}",
+        fs[&1].slots
+    );
+    let exit = fns[0].1[0].1.len() - 1;
+    assert_eq!(fs[&1].flush, BTreeSet::from([(1, exit)]));
+}
+
+#[test]
+fn locals_are_the_frames_own_slots_that_dont_escape() {
+    // Words at -16 and -12, a byte at -20 and a halfword at -18 (one slot
+    // of bytes, as they don't overlap: two), a word read at the entry sp
+    // (the caller's), and a word stored at -30 (unaligned).
+    let mut b = B::default();
+    b.prologue();
+    let x = b.k(5);
+    let w0 = b.sp(0);
+    let st0 = b.st(w0, x).index();
+    let w4 = b.sp(4);
+    b.st(w4, x);
+    let by = b.sp(-4);
+    let stb = b
+        .op(Op::Store {
+            width: Width::Byte,
+            addr: by,
+            value: x,
+        })
+        .index();
+    let h = b.sp(-2);
+    let ldh = b
+        .op(Op::Load {
+            width: Width::Half,
+            addr: h,
+        })
+        .index();
+    let up = b.sp(16);
+    let ldu = b.ld(up).index();
+    let odd = b.sp(-14);
+    b.st(odd, x);
+    let f = one(b, Edge::Return);
+    let locals = f.locals();
+    let at_lo = |lo: i32| locals.iter().find(|l| l.lo == lo).copied();
+    assert_eq!(
+        at_lo(-16),
+        Some(Local {
+            lo: -16,
+            len: 4,
+            word: true
+        })
+    );
+    assert!(at_lo(-12).is_some_and(|l| l.word));
+    assert!(at_lo(-20).is_some_and(|l| !l.word && l.len == 1));
+    assert!(at_lo(-18).is_some_and(|l| !l.word && l.len == 2));
+    // The saved registers' slots are the function's own too.
+    assert!(at_lo(-8).is_some() && at_lo(-4).is_some());
+    assert!(at_lo(0).is_none() && at_lo(-30).is_none());
+    assert_eq!(
+        f.local_at(&locals, 1, st0).map(|(l, d, n)| (l.lo, d, n)),
+        Some((-16, 0, 4))
+    );
+    assert_eq!(
+        f.local_at(&locals, 1, stb).map(|(l, d, n)| (l.lo, d, n)),
+        Some((-20, 0, 1))
+    );
+    assert_eq!(
+        f.local_at(&locals, 1, ldh).map(|(l, d, n)| (l.lo, d, n)),
+        Some((-18, 0, 2))
+    );
+    assert_eq!(f.local_at(&locals, 1, ldu), None);
+    assert!(f.in_callers(1, ldu) && !f.in_callers(1, st0));
+    assert_eq!(
+        Local {
+            lo: -16,
+            len: 4,
+            word: true
+        }
+        .name(),
+        "l16"
+    );
 }
