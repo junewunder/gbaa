@@ -584,7 +584,7 @@ fn a_room_whose_players_leave_closes() {
     use std::time::Duration;
     let sock = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
     let server = sock.local_addr().unwrap();
-    std::thread::spawn(move || relay::rooms::serve(sock));
+    std::thread::spawn(move || relay::rooms::serve(sock, 0));
     let build = [5; 32];
     let (tx, rx) = std::sync::mpsc::channel();
     let host = std::thread::spawn(move || {
@@ -614,4 +614,38 @@ fn a_room_whose_players_leave_closes() {
     settles_at((1, 1));
     b.leave();
     settles_at((0, 0));
+}
+
+#[test]
+fn a_server_too_new_for_this_build_refuses_it_plainly() {
+    use std::time::Duration;
+    let sock = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    let server = sock.local_addr().unwrap();
+    std::thread::spawn(move || relay::rooms::serve(sock, crate::VERSION + 1));
+    let start = std::time::Instant::now();
+    let Err(e) = udp::Udp::host(server, 2, &[5; 32], |_| {}, || true) else {
+        panic!("seated by a server that needs a newer version");
+    };
+    assert!(start.elapsed() < Duration::from_secs(5), "{e}");
+    let v = crate::VERSION;
+    assert_eq!(
+        e,
+        format!(
+            "{}this game is too old for the server (version {v}, needs {}): get the new build",
+            udp::REFUSED,
+            v + 1
+        )
+    );
+}
+
+/// fly's server lets in this build and refuses the one before.
+#[test]
+fn fly_refuses_versions_before_this_one() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../deploy/fly/Dockerfile");
+    let docker = std::fs::read_to_string(path).unwrap();
+    let want = format!("\"--min-version\", \"{}\"", crate::VERSION);
+    assert!(
+        docker.contains(&want),
+        "deploy/fly/Dockerfile's CMD should pass {want}: netplay::VERSION changed"
+    );
 }

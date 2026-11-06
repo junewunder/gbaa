@@ -1426,7 +1426,12 @@ fn run_window(
         if netplay {
             screen.end_session(match &r {
                 Ok(()) => room::State::Ended("You left the room.".into()),
-                Err(e) => room::State::Ended(format!("The session ended: {e}")),
+                // The server turning the game away (too old a build, no
+                // such room) is said as it is: no session began.
+                Err(e) => match e.strip_prefix(netplay::udp::REFUSED) {
+                    Some(why) => room::State::Ended(format!("The server said no: {why}")),
+                    None => room::State::Ended(format!("The session ended: {e}")),
+                },
             });
             if let Err(e) = &r {
                 eprintln!("gbaa-desktop: {e}");
