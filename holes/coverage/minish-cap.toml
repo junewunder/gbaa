@@ -1,0 +1,186 @@
+# Coverage runs for `gbaa-holes ROM --cover FILE` (native/hole-coverage;
+# docs/research/native-holes.md, "Coverage runs"): start points beyond the
+# press script, each played with seeded random presses, so each jump
+# Recovery leaves unresolved is seen with its targets or shown unreached.
+# Paths are under $GBAA_DATA. The [[jump]] list below the marker is what
+# the runs saw; `just holes ROM --cover FILE` checks it.
+
+# From reset: Start and A through the title, then a random walk.
+[[run]]
+name = "walk"
+frames = 9000
+presses = ["start@300-1500/120", "a@400-1500/30"]
+random_from = 1500
+seeds = 4
+
+# --- Observed: written by `gbaa-holes ROM --cover FILE --update`; checked without it ---
+
+[[jump]]
+at = 0x0800029e
+runs = ["walk"]
+targets = [0x03005780]
+
+[[jump]]
+at = 0x080002a2
+runs = ["press", "walk"]
+targets = [0x0300579c]
+
+[[jump]]
+at = 0x080002a6
+runs = ["press", "walk"]
+targets = [0x030057a8]
+
+[[jump]]
+at = 0x080002aa
+runs = ["walk"]
+targets = [0x030057bc]
+
+[[jump]]
+at = 0x080002b2
+runs = ["press", "walk"]
+targets = [0x030057d4]
+
+[[jump]]
+at = 0x080002b6
+runs = ["walk"]
+targets = [0x03005800]
+
+[[jump]]
+at = 0x080002ba
+runs = ["walk"]
+targets = [0x0300581c]
+
+[[jump]]
+at = 0x080002be
+runs = []
+targets = []
+
+[[jump]]
+at = 0x080002c2
+runs = []
+targets = []
+
+[[jump]]
+at = 0x080002ca
+runs = ["walk"]
+targets = [0x03005854]
+
+[[jump]]
+at = 0x080002ce
+runs = ["walk"]
+targets = [0x03005864]
+
+[[jump]]
+at = 0x080002d2
+runs = ["walk"]
+targets = [0x03005880]
+
+[[jump]]
+at = 0x080002d6
+runs = []
+targets = []
+
+[[jump]]
+at = 0x080002e2
+runs = ["walk"]
+targets = [0x030058b8]
+
+[[jump]]
+at = 0x080002e6
+runs = ["walk"]
+targets = [0x030058c8]
+
+[[jump]]
+at = 0x080002ee
+runs = ["walk"]
+targets = [0x030058f8]
+
+[[jump]]
+at = 0x080002f2
+runs = ["walk"]
+targets = [0x03005918]
+
+[[jump]]
+at = 0x08000f12
+runs = ["walk"]
+targets = [0x03005e60]
+
+[[jump]]
+at = 0x0800129a
+runs = []
+targets = []
+
+[[jump]]
+at = 0x080012c4
+runs = []
+targets = []
+
+[[jump]]
+at = 0x080042aa
+runs = []
+targets = []
+
+[[jump]]
+at = 0x08004486
+runs = ["press", "walk"]
+targets = [0x03005ff0]
+
+[[jump]]
+at = 0x080045c2
+runs = []
+targets = []
+
+[[jump]]
+at = 0x080045d8
+runs = []
+targets = []
+
+[[jump]]
+at = 0x080af758
+runs = ["press", "walk"]
+targets = [0x080b03f1]
+
+[[jump]]
+at = 0x080af822
+runs = ["press", "walk"]
+targets = [0x080afa15]
+
+[[jump]]
+at = 0x080af834
+runs = ["press", "walk"]
+targets = [0x080afa15]
+
+[[jump]]
+at = 0x080af864
+runs = ["press", "walk"]
+targets = [0x080afa15]
+
+[[jump]]
+at = 0x080af878
+runs = ["press", "walk"]
+targets = [0x080afa15]
+
+[[jump]]
+at = 0x080af88e
+runs = ["press", "walk"]
+targets = [0x080afa15]
+
+[[jump]]
+at = 0x080af8c0
+runs = ["press", "walk"]
+targets = [0x080afa15]
+
+[[jump]]
+at = 0x080af8ee
+runs = ["press", "walk"]
+targets = [0x080afa15]
+
+[[jump]]
+at = 0x080afe84
+runs = ["press", "walk"]
+targets = [0x080afa15]
+
+[[jump]]
+at = 0x080afe98
+runs = ["press", "walk"]
+targets = [0x080afa15]

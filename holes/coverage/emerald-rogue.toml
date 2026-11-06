@@ -1,0 +1,343 @@
+# Coverage runs for `gbaa-holes ROM --cover FILE` (native/hole-coverage;
+# docs/research/native-holes.md, "Coverage runs"): start points beyond the
+# press script, each played with seeded random presses, so each jump
+# Recovery leaves unresolved is seen with its targets or shown unreached.
+# Paths are under $GBAA_DATA. The [[jump]] list below the marker is what
+# the runs saw; `just holes ROM --cover FILE` checks it.
+
+# From reset: Start and A through the title, then a random walk.
+[[run]]
+name = "walk"
+frames = 9000
+presses = ["start@300-1500/120", "a@400-1500/30"]
+random_from = 1500
+seeds = 4
+
+# The owner's save and its backup, continued, then a random walk.
+[[run]]
+name = "saves"
+save = "saves/emerald-rogue"
+frames = 9000
+presses = ["start@300", "a@900", "a@1100"]
+random_from = 1400
+seeds = 2
+
+[[run]]
+name = "save-backups"
+save = "saves/emerald-rogue/backups"
+frames = 9000
+presses = ["start@300", "a@900", "a@1100"]
+random_from = 1400
+seeds = 2
+
+# --- Observed: written by `gbaa-holes ROM --cover FILE --update`; checked without it ---
+
+[[jump]]
+at = 0x08000384
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0800b5a0
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0800b622
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0800b7f0
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x03005599]
+
+[[jump]]
+at = 0x0800c69c
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0800a099]
+
+[[jump]]
+at = 0x0800c750
+runs = ["save-backups"]
+targets = [0x0800c99b]
+
+[[jump]]
+at = 0x0800c766
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0800c99b]
+
+[[jump]]
+at = 0x0800c778
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0800c99b]
+
+[[jump]]
+at = 0x0800c7a8
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0800c99b]
+
+[[jump]]
+at = 0x0800c7bc
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0800c99b]
+
+[[jump]]
+at = 0x0800c7d2
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0800c99b]
+
+[[jump]]
+at = 0x0800c7e6
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0800c99b]
+
+[[jump]]
+at = 0x0800c7f8
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0800c99b]
+
+[[jump]]
+at = 0x0800c804
+runs = ["save-backups"]
+targets = [0x0800c99b]
+
+[[jump]]
+at = 0x0800c832
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0800c99b]
+
+[[jump]]
+at = 0x0800cdf0
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0800c99b]
+
+[[jump]]
+at = 0x0800ce04
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0800c99b]
+
+[[jump]]
+at = 0x0800f130
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0800f134
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0800f138
+runs = []
+targets = []
+
+[[jump]]
+at = 0x08022210
+runs = []
+targets = []
+
+[[jump]]
+at = 0x080222f0
+runs = []
+targets = []
+
+[[jump]]
+at = 0x080287a8
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0802d2c2
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0802f970
+runs = []
+targets = []
+
+[[jump]]
+at = 0x080375c6
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0803d1ec
+runs = []
+targets = []
+
+[[jump]]
+at = 0x08041c68
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0806ae5e
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0806c416
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0807e002
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0808306e
+runs = []
+targets = []
+
+[[jump]]
+at = 0x080a4132
+runs = []
+targets = []
+
+[[jump]]
+at = 0x080ba13c
+runs = []
+targets = []
+
+[[jump]]
+at = 0x080bb454
+runs = []
+targets = []
+
+[[jump]]
+at = 0x080bceca
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0811ab26
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0811dc06
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0811dc3a
+runs = []
+targets = []
+
+[[jump]]
+at = 0x08120270
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0813a1d4
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0814c1d0
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0814c474
+runs = []
+targets = []
+
+[[jump]]
+at = 0x081786cc
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0818079c
+runs = []
+targets = []
+
+[[jump]]
+at = 0x08184db0
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0819aa60
+runs = ["saves"]
+targets = [0x0819aa63, 0x0819aab7, 0x0819aad9, 0x0819aaeb, 0x0819ab07, 0x0819ab11, 0x0819ab29, 0x0819ab3d, 0x0819ab5b, 0x0819ab6b, 0x0819ab87, 0x0819abc1, 0x0819abe1]
+
+[[jump]]
+at = 0x0819d4be
+runs = ["saves"]
+targets = [0x0819d4c1, 0x0819d4f1, 0x0819d4fd, 0x0819d503, 0x0819d51d, 0x0819d537, 0x0819d541, 0x0819d54b]
+
+[[jump]]
+at = 0x0819de7e
+runs = ["saves"]
+targets = [0x0819de81, 0x0819deb1, 0x0819debd, 0x0819dec3, 0x0819decd, 0x0819ded7, 0x0819dee1, 0x0819deeb, 0x0819df1d]
+
+[[jump]]
+at = 0x0819e5e4
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0819e910
+runs = []
+targets = []
+
+[[jump]]
+at = 0x081b2f68
+runs = []
+targets = []
+
+[[jump]]
+at = 0x081b305c
+runs = []
+targets = []
+
+[[jump]]
+at = 0x081c3064
+runs = ["saves"]
+targets = [0x081c306f, 0x081c30b9]
+
+[[jump]]
+at = 0x081e2676
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0822bcf4
+runs = []
+targets = []
+
+[[jump]]
+at = 0x08264aaa
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0826a946
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0826a9c2
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0826b184
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0826bb32
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0826c5fa
+runs = []
+targets = []
