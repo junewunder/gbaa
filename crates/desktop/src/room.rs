@@ -1,18 +1,20 @@
 //! Netplay (`--server ADDR` with `--host` or `--join CODE`, or the
-//! window menu's Netplay page, which asks for an [`Ask`]): two GBAs
-//! running the same ROM on one link cable, as with `--link`, but each
+//! window menu's Netplay page, which asks for an [`Ask`]): 2 to 4 GBAs
+//! running the same ROM on one link cable, as `--link` links two, but each
 //! player in their own window, maybe on another machine, through the
 //! server's rooms (`gbaa-server`, crates/relay) and the netplay session
 //! (crates/netplay; `docs/research/multiplayer.md`, "Recommended: the
 //! layers").
 //!
-//! Every peer runs both GBAs, by rollback; only inputs (and,
+//! Every peer runs every GBA, by rollback; only inputs (and,
 //! at the start, each player's own console state) cross the network. The
-//! host creates a two-seat room, prints its code and waits for the other
-//! player; the host is seat 0, the cable's parent. The window shows this
-//! player's seat alone. Its cartridge save is kept as `--save` keeps any
-//! game's; the other seat's console, built from the state its owner sent,
-//! is discarded at the end. This seat's sound plays and paces the window,
+//! host creates a room of `--players` seats (2 by default; the menu's
+//! Players row), prints its code and waits until every seat is taken; the
+//! host is seat 0, the cable's parent, and the others take seats 1 to 3 in
+//! the order they join. The window shows this player's seat alone. Its
+//! cartridge save is kept as `--save` keeps any game's; the other seats'
+//! consoles, built from the states their owners sent, are discarded at
+//! the end. This seat's sound plays and paces the window,
 //! as the single window's does (or, muted, the frame clock). The menu
 //! doesn't pause a session: while it's open the game plays on and this
 //! seat's pad reads as let go, so the other player never waits on it.
@@ -21,13 +23,14 @@
 //!
 //! A player who quits or leaves the room says goodbye; one whose machine
 //! stops answering (a crash, a lost connection) is taken to have left
-//! after [`QUIET`]. Either way the other window says so, on the game and
-//! on the Netplay page, and its own console plays on with the cable
+//! after [`QUIET`]. Either way the other windows say so, on the game and
+//! on the Netplay page, and each one's own console plays on with the cable
 //! pulled out ([`netplay::gba::Gba::unplug`]): the game shows its own
-//! link error, as with a real cable. It leaves the room too, so the
-//! server closes it.
+//! link error, as with a real cable. With three or four players, one
+//! leaving unplugs everyone's cable, not just that player's. Each leaves
+//! the room too, so the server closes it.
 //!
-//! A recompiled game's binary runs both GBAs on its code (`--interp`: the
+//! A recompiled game's binary runs every GBA on its code (`--interp`: the
 //! interpreter), which the build ID names: every peer must run the same
 //! build, or every peer the interpreter. The cable ends each machine's
 //! turn every scanline; each runs on a guest stack of its own
@@ -69,19 +72,27 @@ use crate::{Code, Desktop, Options, dump_at_path, sav_file};
 /// built for.
 type Gba = netplay::gba::Gba<Desktop>;
 
-/// Seats in a room.
+/// Seats in a room unless the host says otherwise (`--players`).
 pub const SEATS: usize = 2;
+
+/// The most seats a room has: the cable's players.
+pub const MAX_SEATS: usize = runtime::link::MAX_PLAYERS;
 
 /// While the menu is open, how often (in frames) its report of the
 /// session is brought up to date.
 const REPORT_EVERY: u64 = 30;
 
-/// How long a headless host waits for the other player.
+/// How long a headless host waits for the other players.
 const WAIT: Duration = Duration::from_secs(600);
 
-/// After the last frame, headless: how long to keep answering, so the
-/// other peer gets the inputs and hashes it still lacks.
+/// After the last frame, headless, once every seat has run as far: how
+/// long to keep answering, so the others get the acks and hashes they
+/// still lack.
 const LINGER: Duration = Duration::from_secs(2);
+
+/// After the last frame: the longest to wait for the other peers to run
+/// as far, before [`LINGER`].
+const CATCH_UP: Duration = Duration::from_secs(30);
 
 /// What `--host` or `--join` asked for.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -94,11 +105,13 @@ pub enum Role {
 /// (`docs/tools/commands.md`, the server on fly.io).
 pub const DEFAULT_SERVER: &str = "37.16.3.41";
 
-/// A session the menu asked for: the server and the seat.
+/// A session the menu asked for: the server, the seat, and the seats in
+/// the room if hosting.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Ask {
     pub server: String,
     pub role: Role,
+    pub players: usize,
 }
 
 /// Where this window's netplay is, as the menu shows it.
@@ -109,8 +122,13 @@ pub enum State {
     Off,
     /// Asking the server for a room.
     Making,
-    /// The host, in room `code`, waiting for the other player.
-    Waiting(String),
+    /// The host, in room `code`, `filled` of its `seats` taken, waiting
+    /// for the rest.
+    Waiting {
+        code: String,
+        filled: usize,
+        seats: usize,
+    },
     /// Joining room `code`.
     Joining(String),
     /// Playing seat `seat` (from 0) of room `code`; `lines` say how it's
@@ -123,6 +141,7 @@ pub enum State {
     Playing {
         code: String,
         seat: usize,
+        seats: usize,
         lines: Vec<String>,
         left: Option<String>,
         quiet: bool,
@@ -166,6 +185,9 @@ pub fn check(o: &Options) -> Result<(), String> {
     }
     if o.delay.is_some() && o.role != Some(Role::Host) {
         return Err("--delay is the host's to set".into());
+    }
+    if o.players.is_some() && o.role != Some(Role::Host) {
+        return Err("--players is the host's to set".into());
     }
     crate::link::check(o).map_err(|e| e.replace("linked play (--link)", "netplay"))
 }
@@ -227,25 +249,46 @@ pub fn run(
             opts.rom.display()
         ));
     }
-    let mut gba = Gba::with_code(rom, &[None; SEATS], code, timing);
-    if code.is_some() {
-        gba.set_turns(Box::<crate::coro::Guests>::default());
-    }
+    let make = |seats: usize| {
+        let mut gba = Gba::with_code(rom, &vec![None; seats], code, timing);
+        if code.is_some() {
+            gba.set_turns(Box::<crate::coro::Guests>::default());
+        }
+        gba
+    };
+    let seats = opts.players.unwrap_or(SEATS);
+    let mut gba = make(seats);
+    // The room's build: the console's, but for the number of seats, which
+    // a joiner learns from the room.
+    let mut room_build = gba.build_id();
+    room_build[28] = 0;
     let title = |t: &str| {
         if let Some(s) = &screen {
             s.set_title(t);
         }
     };
-    let say = |code: [u8; relay::CODE_LEN]| {
+    let mut said: Option<usize> = None;
+    let say = |code: [u8; relay::CODE_LEN], filled: usize, seats: usize| {
         let code = String::from_utf8_lossy(&code).into_owned();
-        // What a script reads (the check does) and a player tells the
-        // other.
-        println!("room {code}");
-        use std::io::Write;
-        let _ = std::io::stdout().flush();
-        title(&format!("gbaa: room {code}, waiting for player 2"));
+        if said.is_none() {
+            // What a script reads (the check does) and a player tells the
+            // others.
+            println!("room {code}");
+            use std::io::Write;
+            let _ = std::io::stdout().flush();
+        }
+        if said.replace(filled) == Some(filled) {
+            return;
+        }
+        title(&format!(
+            "gbaa: room {code}, {filled} of {seats} players in, waiting"
+        ));
         if let Some(s) = &screen {
-            s.set_netplay(State::Waiting(code));
+            s.set_netplay(State::Waiting {
+                code,
+                filled,
+                seats,
+            });
         }
     };
     // Headless, for a while; the window, until its player closes it.
@@ -274,21 +317,24 @@ pub fn run(
         });
     }
     let r = match role {
-        Role::Host => Udp::host(addr, SEATS, &gba.build_id(), say, go_on),
-        Role::Join(code) => Udp::join(addr, *code, &gba.build_id(), go_on),
+        Role::Host => Udp::host(addr, seats, &room_build, say, go_on),
+        Role::Join(code) => Udp::join(addr, *code, &room_build, go_on),
     };
     let (net, code) = match r {
         Err(_) if closed.get() => return Ok(()),
         r => r?,
     };
     let seat = net.seat_of();
-    if net.seats() != SEATS {
-        return Err(format!("the room has {} seats, not {SEATS}", net.seats()));
+    if !(2..=MAX_SEATS).contains(&net.seats()) {
+        return Err(format!("the room has {} seats", net.seats()));
+    }
+    if net.seats() != gba.seats() {
+        gba = make(net.seats());
     }
     play(opts, screen, gba, seat, code, delay, net)
 }
 
-/// How long the other player may send nothing before this peer takes
+/// How long another player may send nothing before this peer takes
 /// them to have left: a seated peer sends every frame, and this is under
 /// the rollback window (5 s), so the game doesn't stop for someone gone.
 pub const QUIET: Duration = Duration::from_secs(3);
@@ -336,14 +382,15 @@ fn play(
         "the host's delay".into()
     };
     eprintln!(
-        "gbaa-desktop: room {code}, seat {}, rollback, {delay_said}, {}",
+        "gbaa-desktop: room {code}, seat {} of {}, rollback, {delay_said}, {}",
         seat + 1,
+        gba.seats(),
         match gba.recompiled() {
             true => "recompiled",
             false => "interpreted",
         }
     );
-    // This seat's cartridge save; the other's arrives in its owner's state.
+    // This seat's cartridge save; the others' arrive in their owners' states.
     let mut sav = match &opts.save {
         Some(path) => Some(sav_file::SavFile::open(
             path,
@@ -388,9 +435,11 @@ fn play(
     let mut left_at: Option<(usize, u64)> = None;
     // The first frame found out of sync.
     let mut desync: Option<u32> = None;
+    let seats = s.console().seats();
     let playing = |lines, left: &Option<String>, quiet, desync| State::Playing {
         code: code.clone(),
         seat,
+        seats,
         lines,
         left: left.clone(),
         quiet,
@@ -424,7 +473,7 @@ fn play(
         };
         let local = (script | held) & key::ALL;
         let status = if left.is_some() {
-            let mut keys = [0; SEATS];
+            let mut keys = vec![0; s.console().seats()];
             keys[seat] = local;
             s.console_mut().step(&keys)?;
             solo += 1;
@@ -549,9 +598,18 @@ fn play(
         open = i.open && !i.leave;
         held = i.keys | i.pads;
     }
-    // Headless, or at --frames' end: the other peer still needs what it
-    // lacks to end where this one does.
+    // Headless, or at --frames' end: the other peers still need what they
+    // lack to end where this one does. A slower one (four consoles a peer
+    // can run behind real time) may be seconds behind, and a goodbye
+    // before it gets here would unplug its cable early: wait (up to
+    // [`CATCH_UP`]) until every seat has run this far and holds this
+    // one's inputs, then answer a while more.
     if left.is_none() && (screen.is_none() || open) {
+        let until = Instant::now() + CATCH_UP;
+        while !s.settled() && Instant::now() < until {
+            s.pump().map_err(e)?;
+            std::thread::sleep(Duration::from_millis(1));
+        }
         let until = Instant::now() + LINGER;
         while Instant::now() < until {
             s.pump().map_err(e)?;
@@ -601,6 +659,23 @@ fn play(
         }
     }
     Ok(())
+}
+
+/// The menu's first line: this player's number and the others'.
+fn you_are(seat: usize, seats: usize) -> String {
+    let others: Vec<String> = (1..=seats)
+        .filter(|&p| p != seat + 1)
+        .map(|p| p.to_string())
+        .collect();
+    match others.as_slice() {
+        [one] => format!("You are player {}, the other player {one}", seat + 1),
+        [rest @ .., last] => format!(
+            "You are player {} of {seats}, the others {} and {last}",
+            seat + 1,
+            rest.join(", ")
+        ),
+        [] => format!("You are player {}", seat + 1),
+    }
 }
 
 /// Write `lines` to `$GBAA_DATA/netplay/<unix seconds>-<room>-p<seat>.txt`.
@@ -670,11 +745,7 @@ impl Report {
             ]
         } else {
             vec![
-                format!(
-                    "You are player {}, the other player {}",
-                    seat + 1,
-                    SEATS - seat
-                ),
+                you_are(seat, s.console().seats()),
                 match s.transport().rtt() {
                     Some((now, lo, hi)) => format!(
                         "Round trip {:.0} ms (least {:.0}, most {:.0})",
