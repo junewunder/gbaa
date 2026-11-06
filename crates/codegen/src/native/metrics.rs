@@ -15,7 +15,10 @@
 //! Memory accesses are split by how their address is known and by region,
 //! so that a bar on one family means something:
 //! - `const`: the address is a constant within its block (a literal, a
-//!   pool word, arithmetic on them), by the region it is in;
+//!   pool word, arithmetic on them), by the region it is in, a byte
+//!   access; one in RAM that is printed as a typed global's field
+//!   (`super::globals`) is `ram_global` instead, which has no bar (it
+//!   should rise), and `ram_globals` counts the globals;
 //! - `sp`: sp-relative (the value-set analysis says it is the function's
 //!   entry sp plus a constant);
 //! - `computed`: anything else, by region where the value-set analysis
@@ -59,6 +62,9 @@ pub fn region_of(lo: u32, hi: u32) -> Option<usize> {
 pub enum Where {
     /// A constant in this region.
     Const(usize),
+    /// A constant in RAM, printed as a typed global's field
+    /// (`super::globals`): not a byte access.
+    Global,
     /// sp-relative.
     Sp,
     /// Computed, bounded to this region.
@@ -89,6 +95,7 @@ impl Metrics {
             for (r, name) in REGIONS.iter().enumerate() {
                 self.push(format!("{dir}_const_{name}"), n(Where::Const(r)));
             }
+            self.push(format!("{dir}_ram_global"), n(Where::Global));
             self.push(format!("{dir}_sp"), n(Where::Sp));
             for (r, name) in REGIONS.iter().enumerate() {
                 self.push(format!("{dir}_computed_{name}"), n(Where::Computed(r)));
@@ -108,7 +115,12 @@ impl Metrics {
 }
 
 /// The metrics with no bar: they are meant to rise.
-pub const UNBARRED: &[&str] = &["functions_recognised"];
+pub const UNBARRED: &[&str] = &[
+    "functions_recognised",
+    "ram_globals",
+    "load_ram_global",
+    "store_ram_global",
+];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each
 /// `metric = maximum`.
