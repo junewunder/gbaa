@@ -861,6 +861,13 @@
         "branch": "unit/native/fnref-flow-scale",
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-06T13:26:46Z",
+          "by": "1e655045",
+          "text": "Branch f02475e3: cached every-cell reads, cap once per load: Metroid settles in 614 s, 11 rounds (was 63 s r0, 534 s r1, unsettled); same counts. Rounds 1-4 rerun ~2600 fns, ~90 s each; values carry the 5270-token pile. Next: join shares Rc if subset; why r2-3 rerun all."
+        }
+      ],
       "round": "2026-11-06T12:59:15Z"
     },
     {
