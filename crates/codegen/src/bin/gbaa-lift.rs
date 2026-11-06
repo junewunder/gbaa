@@ -1,5 +1,5 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
-//! [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits]`:
+//! [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
 //! stage A). Writes the whole program as a Rust crate to OUT (`Cargo.toml`,
 //! `src/main.rs`, a copy of the ROM for its data, `report.txt`), with the
@@ -24,7 +24,11 @@
 //! `--irq-at-waits` runs an IRQ at a wait whatever the CPSR's I bit, as
 //! stage A first did, where the hardware holds it until a critical
 //! section's end, which the native check must catch on
-//! `agb/native-irq-hold` (unit `native/lift-irq-hold`).
+//! `agb/native-irq-hold` (unit `native/lift-irq-hold`); `--ime-at-waits`
+//! leaves an IRQ pending when a store sets `IME` again to the next wait,
+//! as stage A first did, where the hardware takes it at once, which the
+//! native check must catch on `agb/native-ime-release` (unit
+//! `native/ime-release`).
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -41,7 +45,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits]"
         );
         ExitCode::FAILURE
     };
@@ -49,7 +53,8 @@ fn main() -> ExitCode {
         return usage();
     };
     let (mut name, mut holes, mut bars) = (None, None, None);
-    let (mut drop, mut plant, mut tail, mut irq_at_waits) = (None, None, false, false);
+    let (mut drop, mut plant, mut tail) = (None, None, false);
+    let (mut irq_at_waits, mut ime_at_waits) = (false, false);
     let hex = |s: &str| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok();
     let mut it = rest.iter();
     while let Some(a) = it.next() {
@@ -59,6 +64,10 @@ fn main() -> ExitCode {
         }
         if a == "--irq-at-waits" {
             irq_at_waits = true;
+            continue;
+        }
+        if a == "--ime-at-waits" {
+            ime_at_waits = true;
             continue;
         }
         match (a.as_str(), it.next()) {
@@ -105,6 +114,7 @@ fn main() -> ExitCode {
     holes.plant = plant;
     holes.fall_as_tail_call = tail;
     holes.irq_at_waits = irq_at_waits;
+    holes.ime_at_waits = ime_at_waits;
     // Read before the lift, so a bad file fails at once.
     let bars = match &bars {
         Some(p) => match std::fs::read_to_string(p)

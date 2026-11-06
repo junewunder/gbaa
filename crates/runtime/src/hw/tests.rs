@@ -246,6 +246,34 @@ fn a_masked_wait_wakes_without_dispatch_and_release_runs_it() {
     assert_eq!(g.hw.line(), 170, "a release moves no time");
 }
 
+/// With `IME` clear a V-blank waits in `IF`; writing `IME` back runs it
+/// at once, at the line the beam is on, and a write that leaves `IME` on
+/// runs nothing (native/ime-release).
+#[test]
+fn setting_ime_again_runs_what_is_pending() {
+    let mut g = game(100);
+    g.hw.stat.vblank_irq = true;
+    g.hw.irq.on(irq::VBLANK, on_vblank);
+    write_ime(&mut *g, 0);
+    while g.hw.line() != 170 {
+        idle(&mut *g).unwrap();
+    }
+    assert_eq!((g.ram.vblanks, g.hw.irq.flags), (0, irq::VBLANK));
+    // With I set, IME's return runs nothing yet.
+    g.masked = true;
+    write_ime(&mut *g, 1);
+    assert_eq!(g.ram.vblanks, 0);
+    g.masked = false;
+    write_ime(&mut *g, 0);
+    write_ime(&mut *g, 1);
+    assert_eq!((g.ram.vblanks, g.ram.seen_line), (1, 170));
+    assert_eq!(g.hw.line(), 170, "moves no time");
+    // IME already on: nothing new.
+    g.hw.irq.flags = irq::VBLANK;
+    write_ime(&mut *g, 1);
+    assert_eq!(g.ram.vblanks, 1);
+}
+
 /// `wait_irq` with I set returns when one of its sources is requested
 /// (the CPU wakes), where unmasked it waits for the handler; it must not
 /// hang. `halt` likewise.
