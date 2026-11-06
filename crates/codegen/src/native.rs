@@ -28,7 +28,10 @@
 //!   code moves it through the stack.
 //! - Memory is `ld8/16/32` and `st8/16/32` over `Game::ram` (EWRAM then
 //!   IWRAM, as bytes), the library's I/O registers (`Hw::read16` and
-//!   `write16`), its palette, VRAM and OAM, and the ROM's bytes.
+//!   `write16`), its palette, VRAM and OAM, and the ROM's bytes. A RAM
+//!   access at a constant address is a typed global's field instead
+//!   (`g.ram.d_02000100`, [`globals`]): `Game::ram` is a `Ram` struct of
+//!   them at the guest's offsets, which derefs to the bytes.
 //! - Stack slots whose address doesn't escape ([`frame`]) are Rust locals,
 //!   `l<bytes below the entry sp>`: a `u32` for an aligned word only ever
 //!   accessed whole, else bytes (unit `native/frame-locals`); escaping
@@ -56,9 +59,9 @@
 //! - an undefined instruction, a jump to no code;
 //! - a function that returns without keeping r4-r11 and sp.
 //!
-//! Soft holes (counted in the report): every RAM access but a stack
-//! local's is bytes, every pointer a guest address, every ROM read at run
-//! time.
+//! Soft holes (counted in the report): every RAM access but the globals'
+//! and the stack locals' is bytes, every pointer a guest address, every
+//! ROM read at run time.
 
 use crate::func::{Ctx, ExitInfo, Func, Idle, Plan, build_func, exits, key};
 use crate::saves::{Summaries, Summary, summarize};
@@ -71,10 +74,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 pub mod frame;
+pub mod globals;
 pub mod lift_check;
 pub mod metrics;
 pub mod shape;
 
+use globals::{Globals, Place};
 use metrics::{Metrics, Where};
 use shape::{Shape, Shapes};
 
@@ -121,6 +126,11 @@ pub struct Holes {
     /// stderr (`shadow local:`) where they differ from the local, which
     /// is where something the escape analysis didn't see wrote the frame.
     pub shadow_locals: bool,
+    /// Data names and sizes (0: not known) by guest address, from the
+    /// game's names files (`gbaa-lift --names DIR`): a RAM global that
+    /// starts at one is named so, else `d_<address>`, and spans a sized
+    /// datum an access reaches ([`globals`]).
+    pub names: BTreeMap<u32, (String, u32)>,
 }
 
 impl Holes {
@@ -246,6 +256,26 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     for c in &codes {
         all.extend(c.funcs.iter().map(|f| f.entry));
     }
+    // RAM's globals: what the constant-address accesses of the functions
+    // printed (a stand-in's code is its own) reach.
+    let mut ram = Vec::new();
+    for c in &codes {
+        for f in c
+            .funcs
+            .iter()
+            .filter(|f| !holes.standins.contains_key(&f.entry))
+        {
+            for gb in f.blocks.values() {
+                let insts = &gb.block.insts;
+                for inst in insts {
+                    if let Some((a, w)) = const_access(insts, &inst.op) {
+                        ram.push((a, w));
+                    }
+                }
+            }
+        }
+    }
+    let globals = Globals::carve(&ram, &holes.names);
     let shapes = shapes_of(&codes, &all, holes);
     let mut out = String::new();
     let mut report = String::new();
@@ -288,6 +318,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     .map(Frame::locals)
                     .unwrap_or_default(),
                 cur: f.entry,
+                globals: &globals,
             };
             let s = c.sums.get(f.entry);
             let text = p.print(s);
@@ -331,6 +362,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     } else {
         main.push_str(PRELUDE);
     }
+    main.push('\n');
+    main.push_str(&globals.ram_struct());
     writeln!(main, "\npub const NAME: &str = {name:?};").unwrap();
     writeln!(
         main,
@@ -481,6 +514,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("hard_holes", n(hard.len()));
     m.push("blocks", n(blocks));
     m.push_accesses(&soft.access);
+    m.push("ram_globals", n(globals.0.len()));
     m.push("sp_accesses_local_slot", soft.sp_slots[0]);
     m.push("sp_accesses_escaping_slot", soft.sp_slots[1]);
     m.push("sp_accesses_callers_frame", soft.sp_slots[2]);
@@ -663,6 +697,8 @@ struct FnPrinter<'a, 'b> {
     locals: Vec<Local>,
     /// The block being printed.
     cur: u32,
+    /// RAM's typed globals.
+    globals: &'a Globals,
 }
 
 fn v(i: ValueId) -> String {
@@ -826,10 +862,21 @@ impl FnPrinter<'_, '_> {
         let mut s = String::new();
         let mut at = 0u32;
         let ind = "                ";
-        let used = self.used(insts);
+        // The accesses printed as a typed global's field, and the address
+        // arithmetic only they used, which isn't printed; and the values
+        // nothing printed uses (a stack local's address among them).
+        let typed: Vec<Option<Place>> = insts
+            .iter()
+            .map(|inst| {
+                let (a, w) = const_access(insts, &inst.op)?;
+                self.globals.place(a, w)
+            })
+            .collect();
+        let dead = dead_addresses(insts, &typed);
+        let used = self.used(insts, &typed);
         for (i, inst) in insts.iter().enumerate() {
             let id = ValueId(i as u32);
-            if pure(&inst.op) && !used[i] {
+            if dead[i] || (pure(&inst.op) && !used[i]) {
                 continue;
             }
             let guard = inst.guard.map(v);
@@ -857,7 +904,10 @@ impl FnPrinter<'_, '_> {
                         Width::Half => ("ld16", " & !1"),
                         Width::Word => ("ld32", " & !3"),
                     };
-                    let mem = format!("{f}(g, {}{m})", v(addr));
+                    let mem = match &typed[i] {
+                        Some(p) => globals::load(p, bytes(width)),
+                        None => format!("{f}(g, {}{m})", v(addr)),
+                    };
                     let e = match self.local(i) {
                         Some((l, d, n)) => {
                             let x = local_read(&l, d, n);
@@ -871,7 +921,7 @@ impl FnPrinter<'_, '_> {
                             }
                         }
                         None => {
-                            self.count(insts, addr, at, i, false);
+                            self.count(insts, addr, at, i, false, typed[i].is_some());
                             mem
                         }
                     };
@@ -901,7 +951,10 @@ impl FnPrinter<'_, '_> {
                         ""
                     };
                     let val = format!("{}{plant}", v(value));
-                    let mem = format!("{f}(g, {}{m}, {val});", v(addr));
+                    let mem = match &typed[i] {
+                        Some(p) => globals::store(p, bytes(width), &val),
+                        None => format!("{f}(g, {}{m}, {val});", v(addr)),
+                    };
                     let body = match local {
                         Some((l, d, n)) => {
                             let w = local_write(&l, d, n, &val);
@@ -912,7 +965,7 @@ impl FnPrinter<'_, '_> {
                             }
                         }
                         None => {
-                            self.count(insts, addr, at, i, true);
+                            self.count(insts, addr, at, i, true, typed[i].is_some());
                             mem
                         }
                     };
@@ -945,8 +998,17 @@ impl FnPrinter<'_, '_> {
     /// addresses (code it didn't reach, such as discovery's gaps, is
     /// unknown). An sp-relative one also by whether the slot it reaches
     /// escapes ([`frame`]; one the frame's run didn't place, as escaping).
-    fn count(&mut self, insts: &[Inst], addr: ValueId, at: u32, i: usize, store: bool) {
+    fn count(
+        &mut self,
+        insts: &[Inst],
+        addr: ValueId,
+        at: u32,
+        i: usize,
+        store: bool,
+        global: bool,
+    ) {
         let w = match konst(insts, addr) {
+            Some(_) if global => Where::Global,
             Some(a) => Where::Const(metrics::region(a)),
             None => match self.ctx.disc.rec.accesses.get(&at) {
                 Some(x) if x.stack_only() => Where::Sp,
@@ -974,10 +1036,11 @@ impl FnPrinter<'_, '_> {
     }
 
     /// Which of a block's values something printed uses. An access
-    /// printed as a stack local's doesn't use its address (unless
-    /// `--shadow-locals` reads the frame's bytes too), so the arithmetic
-    /// only the address needed isn't printed ([`pure`]).
-    fn used(&self, insts: &[Inst]) -> Vec<bool> {
+    /// printed as a stack local's (unless `--shadow-locals` reads the
+    /// frame's bytes too) or a typed global's (`typed`) doesn't use its
+    /// address, so the arithmetic only the address needed isn't printed
+    /// ([`pure`]).
+    fn used(&self, insts: &[Inst], typed: &[Option<Place>]) -> Vec<bool> {
         let mut used = vec![false; insts.len()];
         for (i, inst) in insts.iter().enumerate().rev() {
             if pure(&inst.op) && !used[i] {
@@ -987,9 +1050,10 @@ impl FnPrinter<'_, '_> {
                 && self
                     .frame
                     .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
+            let field = typed[i].is_some();
             let ops = match inst.op {
-                Op::Load { .. } if local => Vec::new(),
-                Op::Store { value, .. } if local => vec![value],
+                Op::Load { .. } if local || field => Vec::new(),
+                Op::Store { value, .. } if local || field => vec![value],
                 ref op => op.operands(),
             };
             for x in ops.into_iter().chain(inst.guard) {
@@ -1278,6 +1342,70 @@ impl FnPrinter<'_, '_> {
         }
         s
     }
+}
+
+fn bytes(w: Width) -> u32 {
+    match w {
+        Width::Byte => 1,
+        Width::Half => 2,
+        Width::Word => 4,
+    }
+}
+
+/// A load or store whose address is a constant in RAM: its offset in
+/// `Game::ram` (aligned as the access aligns it) and width in bytes.
+fn const_access(insts: &[Inst], op: &Op) -> Option<(u32, u32)> {
+    let (Op::Load { width, addr } | Op::Store { width, addr, .. }) = *op else {
+        return None;
+    };
+    let w = bytes(width);
+    Some((globals::ram_at(konst(insts, addr)? & !(w - 1))?, w))
+}
+
+/// The values of a block's address arithmetic (constants and the ops
+/// [`konst`] folds) that nothing uses but the accesses `typed` prints as
+/// fields, which don't print their address; and the loads from constant
+/// ROM addresses nothing uses (a literal pool's, whose word the IR has as
+/// a `Pool` constant), with their addresses.
+fn dead_addresses(insts: &[Inst], typed: &[Option<Place>]) -> Vec<bool> {
+    let mut uses = vec![0u32; insts.len()];
+    for (i, inst) in insts.iter().enumerate() {
+        let skip = match inst.op {
+            Op::Load { addr, .. } | Op::Store { addr, .. } if typed[i].is_some() => Some(addr),
+            _ => None,
+        };
+        let mut ops = inst.op.operands();
+        if let Some(a) = skip {
+            let k = ops
+                .iter()
+                .position(|&o| o == a)
+                .expect("the access's address");
+            ops.remove(k);
+        }
+        for o in ops.into_iter().chain(inst.guard) {
+            uses[o.index()] += 1;
+        }
+    }
+    let mut dead = vec![false; insts.len()];
+    for i in (0..insts.len()).rev() {
+        let folds = matches!(
+            insts[i].op,
+            Op::Const(_) | Op::Pool(_) | Op::Bin(..) | Op::Not(_)
+        ) && konst(insts, ValueId(i as u32)).is_some();
+        // A literal pool's load whose word the IR has as a `Pool` constant:
+        // ROM reads change nothing.
+        let pool = match insts[i].op {
+            Op::Load { addr, .. } => konst(insts, addr).is_some_and(|a| metrics::region(a) == 2),
+            _ => false,
+        };
+        if (folds && insts[i].guard.is_none() || pool) && uses[i] == 0 {
+            dead[i] = true;
+            for o in insts[i].op.operands() {
+                uses[o.index()] -= 1;
+            }
+        }
+    }
+    dead
 }
 
 /// Every function's shape ([`shape::shapes`]), over all code contexts.
