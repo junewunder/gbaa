@@ -494,15 +494,23 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "48c9e983",
-        "session": "48c9e983-8334-4adc-b139-07b0759cc7e5",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T07:54:22Z",
+        "checker": "verifier-frame-locals",
+        "at": "2026-11-06T08:49:16Z",
+        "evidence": "Verifier (fresh context) ran just lift-check on the merged branch: passed, 6 pass lines, native-frame-locals-600 planted fault caught (plant-slot-0x08000182: frame 1 EWRAM 0x020000c4 play 0x61 native 0x62). sp_accesses_local_slot 0 in all six tables and measured 0; no bar raised vs main. just check passes. --shadow-locals: 0 mismatches on all six programs over 601 frames.",
         "branch": "unit/native/frame-locals",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T08:49:16Z",
+          "by": "48c9e983",
+          "host": "quack",
+          "pid": 1417300,
+          "start": "29954434",
+          "beats": true,
+          "session": "48c9e983-8334-4adc-b139-07b0759cc7e5",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
