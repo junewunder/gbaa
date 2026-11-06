@@ -115,8 +115,9 @@ pub fn prelude(layout: Layout) -> String {
     }
 }
 
-/// The BIOS calls the prelude has.
-const BIOS: &[u8] = &[0x02, 0x04, 0x05, 0x06, 0x0B];
+/// The BIOS calls the prelude has, the list `gbaa-holes` counts the rest
+/// by.
+use analysis::holes::NATIVE_BIOS as BIOS;
 
 /// What the game's holes file (`holes/<game>.toml`) gives: hand-written
 /// stand-ins for functions, and targets for unresolved jumps.

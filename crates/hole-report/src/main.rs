@@ -1103,7 +1103,7 @@ fn main() -> ExitCode {
         );
     }
     println!(
-        "BIOS calls the library doesn't implement: {} (and {} CPU-state or BIOS items in scanned code nothing ran, not counted)",
+        "BIOS calls the native lifter doesn't print: {} (and {} CPU-state or BIOS items in scanned code nothing ran, not counted)",
         r.bios.len(),
         r.scanned_skipped
     );
