@@ -163,6 +163,21 @@
         "evidence": "Merged origin/main (d69b4b48) into unit/assets/play-extract; conflicts in crates/assets/src/lib.rs (kept both pub mod export and pub mod coverage) and main.rs USAGE (kept check-extract and coverage lines). just check passes (exit 0).",
         "host": "quack"
       }
+    },
+    {
+      "id": "merge/quack-lane1-native-ime-release",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/native/ime-release` holds {unit:native/ime-release}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/native/ime-release",
+      "record": {
+        "state": "done",
+        "by": "aba07131",
+        "at": "2026-11-06T11:24:20Z",
+        "evidence": "Merged origin/main into unit/native/ime-release (4f61b72f): lift-check.toml conflict settled keeping main's fn_words_not_proven bar and the branch's native-ime-release table, its new bar 55 from its first lift. just lift-check passed (all programs, planted faults caught); just check exit 0.",
+        "host": "quack"
+      }
     }
   ]
 }

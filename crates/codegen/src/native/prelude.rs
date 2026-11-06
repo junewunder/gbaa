@@ -55,6 +55,11 @@ impl Native for Game {
 /// IRQs held while the CPSR's I bit is set (`false`: `gbaa-lift --irq-at-waits`).
 pub const IRQ_HOLD: bool = true;
 
+/// A store that sets `IME` again runs what's pending at once, on the
+/// stack the lifted code put in `Game::sp` before the store (`false`:
+/// `gbaa-lift --ime-at-waits`, held to the next wait).
+pub const IME_RELEASE: bool = true;
+
 /// `msr cpsr_c, v` (a critical section's end, a stand-in's): the control
 /// byte as written. Clearing the I bit runs the handlers of the IRQs it
 /// held at once, as the hardware takes them, on the stack the program is
@@ -222,6 +227,9 @@ fn io_write16(g: &mut Game, o: u32, v: u32) {
     if io_unused(o) {
         return;
     }
+    if IME_RELEASE && o == runtime::io::reg::IME {
+        return hw::write_ime(g, v as u16);
+    }
     g.hw.write16(o, v as u16);
 }
 
@@ -373,8 +381,8 @@ pub fn st32(g: &mut Game, a: u32, v: u32) {
 
 /// `IntrWait` (r0: discard old flags, r1: the interrupts to wait for), as
 /// the play build's BIOS does it: the flags at `0x0300_7FF8` the game's
-/// handler sets, `IME` forced on, halted until one in `mask` is set.
-/// Returns them (r0).
+/// handler sets, `IME` forced on (straight to `Hw`: the BIOS runs with I
+/// set, so it releases nothing), halted until one in `mask` is set. r0.
 pub fn intr_wait(g: &mut Game, sp: u32, discard: bool, mask: u32) -> Result<u32, Exit> {
     const BIOS_IF: u32 = 0x0300_7FF8;
     const IME: u32 = runtime::io::reg::IME;
@@ -382,17 +390,17 @@ pub fn intr_wait(g: &mut Game, sp: u32, discard: bool, mask: u32) -> Result<u32,
     if discard {
         let f = ld16(g, BIOS_IF);
         st16(g, BIOS_IF, f & !mask);
-        io_write16(g, IME, 1);
+        g.hw.write16(IME, 1);
     }
     loop {
         if check {
-            io_write16(g, IME, 0);
+            g.hw.write16(IME, 0);
             let f = ld16(g, BIOS_IF);
             let hit = f & mask;
             if hit != 0 {
                 st16(g, BIOS_IF, f ^ hit);
             }
-            io_write16(g, IME, 1);
+            g.hw.write16(IME, 1);
             if hit != 0 {
                 return Ok(hit);
             }

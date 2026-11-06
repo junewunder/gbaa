@@ -596,17 +596,40 @@
         "native/flash-stack-standin",
         "native/hole-coverage",
         "native/lift-modules",
-        "native/ime-release"
+        "native/ime-release",
+        "native/lift-bios-calls"
       ],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "f93b1ecd",
+        "session": "f93b1ecd-f104-48fc-9e5b-29cfd643d68a",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T11:28:38Z",
+        "branch": "unit/native/metroid-lifts",
+        "beats": true,
+        "handedBack": "2026-11-06T12:12:16Z",
+        "pushed": true,
+        "ended": "2026-11-06T12:12:36Z"
+      },
+      "notes": [
+        {
+          "at": "2026-11-06T12:12:12Z",
+          "by": "f93b1ecd",
+          "text": "26 hard holes -> 9: mods/metroid/holes.toml stands in reset, IRQ dispatcher, classic-NES code; skips fnref flow. Left: 9 BIOS calls ({unit:native/lift-bios-calls}). Then just lift ROM out/lift-metroid --name metroid, build, quote numbers (doc has a measurement build)."
+        }
+      ],
+      "round": "2026-11-06T11:28:38Z"
     },
     {
       "id": "native/metroid-native-check",
       "title": "Metroid passes the native check on a route",
       "detail": "docs/native-stage-b.md, 'The first game'. Write units/metroid-native.toml: presses from boot through the title screen into gameplay, at least 1,800 frames. Run route-check --native on the lifted Metroid against its --timing native play build: frames, RAM outside stack and copies, Video and audio every frame (audio via {unit:native/hw-sound}). Fix what differs in the lifter or the library. If the first run shows more than one session's worth, write each difference's cause in docs/native-stage-b.md, file a unit per cause, and stop. Done when: route-check --native reports 0 differences over the route; a planted wrong store in Metroid's code (gbaa-lift --plant) is caught, frame and byte named; just check passes.",
       "check": "independent",
-      "needs": ["native/metroid-lifts", "native/hw-sound"],
+      "needs": ["native/metroid-lifts", "native/hw-sound", "native/lift-ram-copies"],
       "uses": ["heavy"],
       "minMinutes": 120
     },
@@ -709,17 +732,19 @@
       "needs": ["native/lift-irq-hold"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "75500cb2",
-        "session": "75500cb2-dfaf-4678-bdab-8f6f12e58fca",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T10:25:12Z",
-        "branch": "unit/native/ime-release",
-        "beats": true
+        "checker": "verifier-75500cb2",
+        "at": "2026-11-06T11:09:20Z",
+        "evidence": "Verifier (fresh context) reran: just mgba-diff native-ime-release 601 matches mGBA (abc7ac7a22ed22b3); gbaa-desktop --timing native same hash (old play build drew 0346a4614af57b13); just lift-check (all 7 programs, after merging main) passed with --ime-at-waits caught at frame 2 EWRAM 0x020000cc; just check passed; diff review found no bugs. lines_prelude 500->508: IME_RELEASE const+doc and io_write16's IME case.",
+        "host": "quack"
       },
       "notes": [
+        {
+          "at": "2026-11-06T11:09:15Z",
+          "by": "75500cb2",
+          "text": "Untested edge: play build drops IME_ON when I is set at the tick after the IME write, so 'I set, IME on, msr clears I' waits for the next time point (hw lib would take it at the msr). Fixing only the play build would split it from the lift's IRQ wrapper."
+        },
         {
           "at": "2026-11-03T03:49:30Z",
           "by": "87c063f4",
@@ -729,21 +754,27 @@
           "at": "2026-11-01T21:47:22Z",
           "by": "d1f70401",
           "text": "Correction: the branch is t3/ime-release-pending-irq (head 3542e7bd, unpushed, no upstream), not t3/8da29f9a."
-        },
-        {
-          "at": "2026-11-01T21:47:06Z",
-          "by": "d1f70401",
-          "text": "Paused before code. Findings and plan on branch t3/8da29f9a in docs/native-stage-b.md (IME WIP): tick_native ignores event::IRQ; prelude io_write16 must irq_release on IME 0->1 using lifted r13 as sp. Next: both fixes, agb/native-ime-release, flag control, checks."
         }
-      ],
-      "round": "2026-11-01T21:43:43Z"
+      ]
     },
     {
       "id": "native/recovery-saved-lr-return",
       "title": "Recovery takes a bx through a copy of lr as a return",
       "detail": "From {unit:native/disc-run-call-targets}: once discovery has m4a's ply_* routines (run roots), each 'mov r12, lr; ... bx r12' is an unresolved jump, reached: Emerald 11->22, Rogue 50->60, both Kirbys 2->14, Minish Cap 25->34 in just holes. The value-set analysis should know r12 holds the entry lr and call it a return. Done when just holes shows none of these and jt-score, disc-pret and disc-agb keep their bars.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "8ec58597",
+        "session": "8ec58597-d49b-446a-b426-08be5f75aaf9",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T12:12:53Z",
+        "branch": "unit/native/recovery-saved-lr-return",
+        "beats": true
+      },
+      "round": "2026-11-06T12:12:53Z"
     },
     {
       "id": "native/fnref-heap-sites",
@@ -751,6 +782,35 @@
       "detail": "docs/native-stage-b.md, piece 3, fnref-flow as built: one pile holds every heap store, so a heap load used as a number marks every function word stored there (32-36 of each agb program's ~55 words). Split the pile by allocation site (agb's allocator's callers) and field offset in crates/codegen/src/native/fnref.rs. Done when: fn_words_not_proven bar lowered to the measured value on every program (it must fall), unit tests for two heap objects kept apart, just lift-check and just check pass.",
       "check": "independent",
       "needs": ["native/fnref-flow"],
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-bios-calls",
+      "title": "Lifted code makes the BIOS calls games use",
+      "detail": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): the lifter prints only swi 0x02, 0x04-0x06 and 0x0B (native.rs, Plan::Swi); every other call is a hard hole, and gbaa-holes doesn't count them (it reported Metroid's BIOS holes as 0). Metroid needs 0x03 Stop, 0x08 Sqrt, 0x0C CpuFastSet, 0x11/0x12 LZ77UnComp, 0x19 SoundBias, 0x1F MidiKey2Freq, 0x25 MultiBoot; other games more ({unit:bios/swi-survey} lists them). Add them to the prelude over runtime::hw::bios (it has lz77, rl, arctan2), each with an agb test program or lift-check case, and make gbaa-holes count the calls the lifter can't print. lines_prelude may rise (say how many and why). Done when: lift-check green with a case per new call, and gbaa-holes' BIOS count matches the lifter's on the eight games.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-ram-copies",
+      "title": "The lifter lifts the code a game copies to RAM",
+      "detail": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): gbaa-lift's discovery is static, so Metroid lifts with 0 IWRAM copies, though it runs its IRQ dispatcher from an IWRAM copy of 0x08000104 and calls 0x03003b90-0x03004440 and 0x030016d8 through pointers; natively call_fn panics on those keys. The hole report's run finds them (analysis::holes::ram_copies, {unit:native/disc-ram-copies}'s note). Lift them from that run's copies (or a static finder of copy loops and DMA3), with their stand-ins at RAM keys. Done when: Metroid's lift has its IWRAM copies and lift-check stays green.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-flow-scale",
+      "title": "Function-address flow settles on a whole game",
+      "detail": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): fnref::follow on Metroid (2,616 functions) took 68 s for round 0 and over 8 min for round 1 on quack (GBAA_FNREF_TRACE=1), so its lift skips it (skip_fn_flow in mods/metroid/holes.toml). It only feeds the report and stage B's fn_words metrics, but dense FnRef IDs need it. Make it settle in minutes on Metroid (per-function summaries, sparse reruns), then drop skip_fn_flow. Done when: Metroid's lift runs it in under 5 minutes and lift-check's bars hold.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/indirect-call-args-emerald",
+      "title": "Emerald's summaries re-measured with callee sets",
+      "detail": "Split from {unit:native/indirect-call-args} (its lift side is done): run gbaa-recompile --summaries ROM --names $GBAA_DATA/names/pokeemerald.toml --callee-sets on pret's Emerald once the function-address flow settles on a whole game. It didn't finish in 35 min (past 8 GB) on quack, 2026-11-06. Done when: the counts (agree/disagree, the 656 from indirect calls re-measured, how many of the 553 indirect calls have a complete set) and what blocks complete sets (callbacks through RAM globals, e.g. gMain.callback1) are quoted in docs/native-port-design.md section 5, the 'With callee sets' paragraph; measured, no bar; just check passes.",
+      "check": "independent",
+      "needs": ["native/fnref-flow-scale"],
       "uses": ["heavy"]
     }
   ]
