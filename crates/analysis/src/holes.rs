@@ -2,8 +2,9 @@
 //! section 6): the hole classification the hole report prints and the
 //! lifter reuses.
 //!
-//! Inputs are the ROM's [`Discovery`], its IWRAM overlays
-//! ([`crate::discovery::overlays`]), what a coverage run saw ([`Run`]:
+//! Inputs are the ROM's [`Discovery`], its RAM overlays
+//! ([`crate::discovery::overlays`], or with the run's evidence
+//! [`ram_copies`]), what a coverage run saw ([`Run`]:
 //! filled by `gbaa-holes`, which runs the interpreter) and, optionally, the
 //! holes the function summaries recorded (`codegen::saves::summarize`).
 //! [`classify`] sorts them into [`Report`]'s lists.
@@ -488,20 +489,9 @@ struct Known {
     raw: u32,
 }
 
-/// Sort what discovery, the overlays, the run and the summaries say into
-/// holes. `summaries` is each function entry's summary holes, if measured.
-pub fn classify(
-    rom: &[u8],
-    disc: &Discovery,
-    overlays: &[Overlay],
-    run: &Run,
-    summaries: Option<&BTreeMap<u32, Vec<String>>>,
-) -> Report {
-    let mut r = Report::default();
-    let reached = |a: u32| run.code.contains_key(&(a & !1));
-
-    // The flash library's stack routines: a RAM target is one only if every
-    // version of its bytes the run saw called was recognised.
+/// The flash library's stack routines the run called: a RAM target is one
+/// only if every version of its bytes the run saw called was recognised.
+pub fn flash_calls(run: &Run) -> Vec<FlashCall> {
     let mut flash: BTreeSet<FlashCall> = BTreeSet::new();
     for (&target, versions) in &run.ram_calls {
         let sigs: Option<Vec<_>> = versions
@@ -516,14 +506,32 @@ pub fn classify(
             });
         }
     }
-    let flash: Vec<FlashCall> = flash.into_iter().collect();
+    flash.into_iter().collect()
+}
+
+/// Whether `a` is in one of `flash`'s routines.
+fn in_flash(flash: &[FlashCall], a: u32) -> bool {
+    flash.iter().any(|f| {
+        let start = f.target & !1;
+        a >= start && a < start + f.len
+    })
+}
+
+/// Sort what discovery, the overlays, the run and the summaries say into
+/// holes. `summaries` is each function entry's summary holes, if measured.
+pub fn classify(
+    rom: &[u8],
+    disc: &Discovery,
+    overlays: &[Overlay],
+    run: &Run,
+    summaries: Option<&BTreeMap<u32, Vec<String>>>,
+) -> Report {
+    let mut r = Report::default();
+    let reached = |a: u32| run.code.contains_key(&(a & !1));
+
+    let flash = flash_calls(run);
     let flash_targets: BTreeSet<u32> = flash.iter().map(|f| f.target).collect();
-    let in_flash = |a: u32| {
-        flash.iter().any(|f| {
-            let start = f.target & !1;
-            a >= start && a < start + f.len
-        })
-    };
+    let in_flash = |a: u32| in_flash(&flash, a);
 
     // Indirect jumps.
     let unres = |rec: &crate::jumptable::Recovery| -> Vec<Unresolved> {
@@ -547,6 +555,14 @@ pub fn classify(
     r.unresolved = unres(&disc.rec);
     for o in overlays {
         r.overlay_unresolved.extend(unres(&o.disc.rec));
+        // A ROM source and its RAM copy count once, at the copy: the
+        // copy's analysis of the jump is the one that runs (unless the
+        // run ran the ROM original too).
+        r.unresolved.retain(|u| {
+            u.reached
+                || !(o.src..o.src + o.len).contains(&u.at)
+                || !o.disc.rec.jumps.contains_key(&(o.dst + (u.at - o.src)))
+        });
     }
 
     // Every instruction known: discovered (ROM, overlays) and run.
@@ -930,6 +946,9 @@ fn runs<'a>(
         })
         .collect()
 }
+
+mod copies;
+pub use copies::{RamCopy, ram_copies};
 
 #[cfg(test)]
 mod tests;

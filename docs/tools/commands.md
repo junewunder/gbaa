@@ -46,11 +46,13 @@ says what a recipe or tool does and what it must still pass.
   instant-timing interpreter run with the research press script,
   discovery again with the ROM targets of the run's calls through a
   register as function starts (`discover_with`; `--no-run-roots` skips
-  it), the function summaries, then
+  it), the function summaries, the RAM copies found with the run
+  (`analysis::holes::ram_copies`: BIOS copies given the run's entries,
+  copies by DMA or the game's loops found by their bytes), then
   `analysis::holes::classify`. Prints one ranking line (hard holes by
   kind; bytes reached but not discovered; busy loops that call
   functions; the flash library's stack routines stood in for,
-  `analysis::flash`) and each list. About a minute a game, capped at 3 GB. The
+  `analysis::flash`) and each list, the RAM copies among them. About a minute a game, capped at 3 GB. The
   doc's table is these lines; rerun all eight after changing
   `analysis::holes` or `crates/hole-report` and update it.
   `--cover FILE` (`holes/coverage/<game>.toml`, native/hole-coverage)
