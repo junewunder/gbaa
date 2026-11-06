@@ -233,8 +233,9 @@ per game:
 - **walk** (all eight): from reset, Start and A through the title for
   1,500 frames, then the random walk; four seeds, 9,000 frames each.
 - **saves** and **save-backups** (moonbeam, Kirby & the Amazing Mirror,
-  Emerald, Rogue): the owner's saves in `$GBAA_DATA/saves/<game>/` and
-  their backups, continued, then the walk; 6,000 or 9,000 frames each.
+  Rogue; Emerald's one is **save**, with no backups run): the owner's saves
+  in `$GBAA_DATA/saves/<game>/` and their backups, continued, then the
+  walk; 6,000 or 9,000 frames each.
 - **story** and **tas** (Emerald): every other story-point save (`just
   emerald-story`), continued as the fuzzer does, 3,000 frames; every
   other state along the living-dex TAS (`just emerald-tas`), 2,000 frames.
