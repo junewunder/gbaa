@@ -10,10 +10,16 @@
 //! before the next is looked at. Stores to the FIFOs push at the moment of
 //! the store ([`io_written`]).
 //!
+//! **One sound path for both builds** (docs/native-port-design.md,
+//! section 2): every function here runs on an [`Audio`]: the I/O block's
+//! sound and timer registers with the clock and `IF` ([`Io`]), the
+//! [`Sound`] state, and whatever refills a FIFO. The play build's
+//! [`Bus`](crate::bus::Bus) is one (its DMA refills, [`crate::dma`]); a
+//! native program's [`crate::hw::Sound`] the other (its FIFO DMA reads
+//! the game's state).
+//!
 //! [`Platform::audio`]: crate::Platform::audio
 
-use crate::bus::Bus;
-use crate::dma;
 use crate::io::{Io, event, reg};
 use crate::timer::{self, ctl};
 
@@ -293,6 +299,19 @@ impl Sound {
     }
 }
 
+/// What the sound path runs on: the registers, timers, clock and `IF`
+/// ([`Io`]), the [`Sound`] state, and the DMA that refills a FIFO.
+pub trait Audio {
+    /// The registers and the sound state, both at once.
+    fn parts(&mut self) -> (&mut Io, &mut Sound);
+
+    /// FIFO `fifo` popped down to its refill level: run the DMA channel
+    /// that feeds it, if any (as [`crate::dma::fifo_refill`] does: 4 words,
+    /// its IRQ, its repeat, and [`crate::dma::FIFO_REFILL_CYCLES`] on the
+    /// clock). Returns whether one ran.
+    fn fifo_refill(&mut self, fifo: usize) -> bool;
+}
+
 /// Map one record to `(left, right)` with the registers as they are now,
 /// adding `psg`, the PSG's share ([`Psg::level_at`]): GBATEK's 10-bit DAC,
 /// centred and scaled to `i16`. The sum is mGBA's.
@@ -358,11 +377,12 @@ fn period(io: &Io, n: usize) -> Option<u32> {
     Some(p.min(u32::MAX as u64) as u32)
 }
 
-/// Bring the timers up to `bus.io.now`, walking each overflow of a timer
+/// Bring the timers up to the clock (`Io::now`), walking each overflow of a timer
 /// that clocks a FIFO one at a time; [`timer::run`] when none does.
-pub fn run_timers(bus: &mut Bus) {
+pub fn run_timers<A: Audio>(a: &mut A) {
     loop {
-        let clocks = clocks(&bus.io);
+        let (io, _) = a.parts();
+        let clocks = clocks(io);
         if clocks == 0 {
             break;
         }
@@ -371,36 +391,57 @@ pub fn run_timers(bus: &mut Bus) {
             if clocks & (1 << n) == 0 {
                 continue;
             }
-            if let Some(at) = chain_base(&bus.io, n).and_then(|b| bus.io.timers[b].next_overflow())
-            {
+            if let Some(at) = chain_base(io, n).and_then(|b| io.timers[b].next_overflow()) {
                 next = Some(next.map_or(at, |e| e.min(at)));
             }
         }
-        let Some(at) = next.filter(|&at| at <= bus.io.now) else {
+        let Some(at) = next.filter(|&at| at <= io.now) else {
             break;
         };
-        let over = timer::run_to(&mut bus.io, at);
-        overflowed(bus, over, clocks, at);
+        let over = timer::run_to(io, at);
+        overflowed(a, over, clocks, at);
     }
-    timer::run(&mut bus.io);
-    let now = bus.io.now as i64;
-    advance_psg(bus, now);
+    let (io, _) = a.parts();
+    timer::run(io);
+    let now = io.now as i64;
+    advance_psg(a, now);
 }
 
 /// Run the PSG's events due by `t`, making the stream's samples from its
 /// grid if no timer clocks a FIFO.
-pub fn advance_psg(bus: &mut Bus, t: i64) {
-    bus.sound.with_psg(&mut bus.io, |p, io| p.advance(io, t));
+pub fn advance_psg<A: Audio>(a: &mut A, t: i64) {
+    let (io, s) = a.parts();
+    s.with_psg(io, |p, io| p.advance(io, t));
+}
+
+/// The sound since the last hand-off, brought up to the clock (the PSG's
+/// grid), given to `give` and cleared, if there is any: at each V-blank,
+/// and whenever a buffer is half full.
+pub fn hand_off<A: Audio>(a: &mut A, give: impl FnOnce(&AudioChunk<'_>)) {
+    let now = a.parts().0.now as i64;
+    advance_psg(a, now);
+    let (_, s) = a.parts();
+    if !s.pending() {
+        return;
+    }
+    give(&s.chunk());
+    s.clear();
+}
+
+/// Whether a buffer is half full, so the sound is due to be handed off
+/// ([`hand_off`]) at the end of the sync.
+pub fn half_full(s: &Sound) -> bool {
+    s.len >= CHUNK / 2 || s.psg.len >= psg::PSG_CHUNK / 2
 }
 
 /// The timers in `over` overflowed at cycle `at`: pop the FIFOs they
 /// clock, refill them, and record the sample.
-fn overflowed(bus: &mut Bus, over: u8, clocks: u8, at: u64) {
+fn overflowed<A: Audio>(a: &mut A, over: u8, clocks: u8, at: u64) {
     let popping = over & clocks;
     if popping == 0 {
         return;
     }
-    let h = bus.io.raw16(reg::SOUNDCNT_H);
+    let h = a.parts().0.raw16(reg::SOUNDCNT_H);
     let mut popped: Option<usize> = None;
     for ch in 0..2 {
         let routed = h & (0x0300 << (4 * ch)) != 0;
@@ -409,36 +450,39 @@ fn overflowed(bus: &mut Bus, over: u8, clocks: u8, at: u64) {
             continue;
         }
         popped = Some(popped.map_or(timer, |t| t.min(timer)));
-        let s = &mut bus.sound;
+        let (_, s) = a.parts();
         s.out[ch] = s.fifo[ch].pop().unwrap_or(0);
         if s.swap.waiting[ch] {
             s.swap.pops[ch] += 1;
         }
-        if s.fifo[ch].len() <= REFILL_AT && dma::fifo_refill(bus, ch) && bus.sound.swap.waiting[ch]
-        {
-            bus.sound.swap.refills[ch] += 1;
+        if s.fifo[ch].len() <= REFILL_AT && a.fifo_refill(ch) {
+            let (_, s) = a.parts();
+            if s.swap.waiting[ch] {
+                s.swap.refills[ch] += 1;
+            }
         }
     }
+    let (io, s) = a.parts();
     if let Some(timer) = popped
-        && let Some(p) = period(&bus.io, timer)
+        && let Some(p) = period(io, timer)
     {
-        bus.sound.period = p;
+        s.period = p;
     }
-    advance_psg(bus, at as i64);
-    bus.sound.record(&bus.io, at);
+    advance_psg(a, at as i64);
+    let (io, s) = a.parts();
+    s.record(io, at);
     // A timer IRQ from this step, the popping timer's own or one cascaded
     // above it, asks for the next buffer: mark it, and time the re-latch.
     let Some(low) = popped else { return };
     let mut swap = false;
     for n in low..4 {
-        let c = bus.io.timers[n].control;
+        let c = io.timers[n].control;
         if n > low && c & (ctl::ENABLE | ctl::CASCADE) != ctl::ENABLE | ctl::CASCADE {
             break;
         }
         swap |= over & (1 << n) != 0 && c & ctl::IRQ != 0;
     }
     if swap {
-        let s = &mut bus.sound;
         if s.swaps_len < MAX_MARKS && s.len > 0 {
             s.swaps[s.swaps_len] = (s.len - 1) as u16;
             s.swaps_len += 1;
@@ -458,43 +502,73 @@ fn overflowed(bus: &mut Bus, over: u8, clocks: u8, at: u64) {
 /// it, if it can change what a FIFO does (a timer, the sound registers,
 /// DMA1 or DMA2), and bring the PSG up to it if it's a sound register.
 #[inline]
-pub fn before_io_write(bus: &mut Bus, o: u32, bytes: u32) {
+pub fn before_io_write<A: Audio>(a: &mut A, o: u32, bytes: u32) {
     let timers = (reg::TM0CNT_L..reg::TM0CNT_L + 16).contains(&o);
     let sound = (0x060..reg::FIFO_B + 4).contains(&o);
     let dma12 = (reg::DMA0SAD + 12..reg::DMA0SAD + 36).contains(&o);
     if timers || sound || dma12 {
-        run_timers(bus);
+        run_timers(a);
     }
     if (0x060..reg::WAVE_RAM + 16).contains(&o) {
-        let now = bus.io.now as i64;
-        bus.sound.bias_before = bus.io.raw16(reg::SOUNDBIAS);
-        bus.sound
-            .with_psg(&mut bus.io, |p, io| p.before_write(io, o, bytes, now));
+        let (io, s) = a.parts();
+        let now = io.now as i64;
+        s.bias_before = io.raw16(reg::SOUNDBIAS);
+        s.with_psg(io, |p, io| p.before_write(io, o, bytes, now));
     }
 }
 
 /// After an I/O store of `v` (`w` wide) at `o`: push FIFO stores, low byte
 /// first, and act on FIFO resets.
 #[inline]
-pub fn io_written(bus: &mut Bus, o: u32, bytes: u32, v: u32) {
+pub fn io_written<A: Audio>(a: &mut A, o: u32, bytes: u32, v: u32) {
+    let (io, s) = a.parts();
     if (0x060..reg::WAVE_RAM + 16).contains(&o) {
-        let (now, bias) = (bus.io.now as i64, bus.sound.bias_before);
-        bus.sound.psg.written(&mut bus.io, o, bytes, v, now, bias);
+        let (now, bias) = (io.now as i64, s.bias_before);
+        s.psg.written(io, o, bytes, v, now, bias);
     }
     if (reg::FIFO_A..reg::FIFO_B + 4).contains(&o) {
         let ch = ((o - reg::FIFO_A) / 4) as usize;
         for i in 0..bytes {
-            bus.sound.fifo[ch].push((v >> (8 * i)) as u8);
+            s.fifo[ch].push((v >> (8 * i)) as u8);
         }
     }
-    let resets = bus.io.events & (event::FIFO_A_RESET | event::FIFO_B_RESET);
+    let resets = io.events & (event::FIFO_A_RESET | event::FIFO_B_RESET);
     if resets != 0 {
-        bus.io.events &= !resets;
+        io.events &= !resets;
         if resets & event::FIFO_A_RESET != 0 {
-            bus.sound.fifo[0].reset();
+            s.fifo[0].reset();
         }
         if resets & event::FIFO_B_RESET != 0 {
-            bus.sound.fifo[1].reset();
+            s.fifo[1].reset();
+        }
+    }
+}
+
+/// A CPU store of `v` (`bytes` wide: 1, 2 or 4) at I/O offset `o`, as the
+/// play build's bus makes it: the overflows due before it walked
+/// ([`before_io_write`]), the store through the registers' masks, its
+/// sound effects ([`io_written`]), and a timer it rewrote switched to its
+/// new settings ([`timer::control_written`]; the timer's event stays in
+/// [`Io::events`] for the scheduler). DMA and `WAITCNT` are the caller's.
+pub fn store<A: Audio>(a: &mut A, o: u32, bytes: u32, v: u32) {
+    // Count up to now on the old settings first (timers; and the sound
+    // FIFOs' overflows, one at a time, before a store that changes them).
+    before_io_write(a, o, bytes);
+    let (io, _) = a.parts();
+    match bytes {
+        1 => io.write8(o, v as u8),
+        2 => io.write16(o, v as u16),
+        _ => {
+            io.write16(o, v as u16);
+            io.write16(o + 2, (v >> 16) as u16);
+        }
+    }
+    io_written(a, o, bytes, v);
+    let io = a.parts().0;
+    let timers = io.events & (0xF * event::TIMER0);
+    for n in 0..4 {
+        if timers & (event::TIMER0 << n) != 0 {
+            timer::control_written(io, n);
         }
     }
 }
