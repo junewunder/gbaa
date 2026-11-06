@@ -333,22 +333,26 @@ build for the host.
   stored outside RAM (I/O, display memory, SRAM). A word is proven when the run read it and no
   value it entered met any of those. It rests on a closed world: function
   and ROM addresses enter values only from those sources, so an unknown
-  value is never one, and a callee set of whole addresses is complete. A
+  value is never one, and a callee set of whole addresses is complete,
+  unless the run dropped a ROM word or pointer on its way (a flag on the
+  value, carried through memory: a "from here on" read cut short, a
+  ROM-bounded read too wide to make, a ROM pointer less an unknown);
+  a call through such a value is incomplete. A
   forbidden use is reported, not a hard hole: nothing printed changes yet
   (`main.rs` byte-identical), and `native/fnref-dense` is where one stops
   a dense build. The report's `function addresses` line and a line per
   word, constant and site; metrics `fn_words_not_proven` (barred at the
-  values below) and `fn_words_proven` (unbarred). The run takes 2-5 s of
-  each lift's 6-10 s.
+  values below) and `fn_words_proven` (unbarred). The run takes 3-6 s of
+  each lift's 6-12 s (about a second of it reading the 110 KB of ROM data).
 
   | program | function words (pools, data) | proven | never read | not allowed | through the pile | code constants proven | `call_fn` sets complete |
   |---|---|---|---|---|---|---|---|
-  | native-spike | 58 (34, 24) | 5 | 16 | 37 | 36 | 11 of 13 | 59 of 59 |
-  | affine | 56 (34, 22) | 4 | 19 | 33 | 32 | 11 of 13 | 57 of 57 |
-  | mosaic-modes | 55 (34, 21) | 4 | 18 | 33 | 32 | 11 of 14 | 57 of 57 |
-  | native-fallthrough | 57 (35, 22) | 4 | 19 | 34 | 33 | 11 of 13 | 58 of 58 |
-  | native-irq-hold | 61 (36, 25) | 6 | 19 | 36 | 35 | 11 of 13 | 61 of 61 |
-  | native-frame-locals | 56 (34, 22) | 4 | 19 | 33 | 32 | 11 of 13 | 57 of 57 |
+  | native-spike | 58 (34, 24) | 5 | 9 | 44 | 43 | 11 of 13 | 59 of 59 |
+  | affine | 56 (34, 22) | 4 | 15 | 37 | 35 | 11 of 13 | 57 of 57 |
+  | mosaic-modes | 55 (34, 21) | 4 | 14 | 37 | 36 | 11 of 14 | 57 of 57 |
+  | native-fallthrough | 57 (35, 22) | 4 | 15 | 38 | 36 | 11 of 13 | 58 of 58 |
+  | native-irq-hold | 61 (36, 25) | 6 | 15 | 40 | 38 | 11 of 13 | 61 of 61 |
+  | native-frame-locals | 56 (34, 22) | 4 | 15 | 37 | 35 | 11 of 13 | 57 of 57 |
 
   ("Not allowed" counts the BIOS too; "through the pile" are the
   not-proven words whose values were stored where the run can't place
@@ -368,11 +372,14 @@ build for the host.
   keys. Order matters a little to the widening (more than 8 numbers are
   unknown, more than 16 exact ROM pointers become one "from the lowest
   on"), so the first reason given per word can move with the code. Gaps
-  the review named, kept: a "from here on" read stops after 16 KB and a
-  ROM-bounded read wider than that reads nothing; a ROM pointer less an
-  unknown is unknown; a RAM-to-RAM `CpuSet` isn't followed; `ror` by an
-  unknown amount (a word load's alignment rotation) keeps a function's
-  form. `native/fnref-dense` should know that proofs are per origin,
+  the review named, kept: a "from here on" read stops after 256 KB (the
+  agb programs' data runs to about 110 KB, which the old 16 KB cut lost)
+  and a ROM-bounded read wider than that reads nothing; a ROM pointer
+  less an unknown is unknown (each flags the value, so a call through it
+  is incomplete rather than wrongly complete); a load through a pointer
+  with no bounds at all reads no ROM; a RAM-to-RAM `CpuSet` isn't
+  followed; `ror` by an unknown amount (a word load's alignment rotation)
+  keeps a function's form, and a ROM pointer's. `native/fnref-dense` should know that proofs are per origin,
   and a pool load folded from a non-pc-relative address gets a
   code-constant origin, so dense needs per-site constant rewriting.
   `GBAA_FNREF_TRACE=1` prints the run's rounds and each use not allowed.

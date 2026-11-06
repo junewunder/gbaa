@@ -23,12 +23,15 @@ const CELL: u32 = 0x0300_0100;
 
 struct Img {
     words: BTreeMap<u32, u32>,
+    /// Where ROM, and its data, ends.
+    top: u32,
 }
 
 impl Img {
     fn new() -> Img {
         Img {
             words: BTreeMap::from([(POOL, F), (VT + 12, F), (0x0800_0404, H), (POOL_A, A)]),
+            top: 0x0800_1000,
         }
     }
 }
@@ -38,12 +41,12 @@ impl Image for Img {
         v == F || v == H || v == A
     }
     fn word(&self, a: u32) -> Option<u32> {
-        (0x0800_0000..0x0800_1000)
+        (0x0800_0000..self.top)
             .contains(&a)
             .then(|| self.words.get(&(a & !3)).copied().unwrap_or(0))
     }
     fn bound(&self, _: u32) -> u32 {
-        0x0800_1000
+        self.top
     }
 }
 
@@ -113,6 +116,10 @@ fn run(fns: &[Built]) -> Flow {
 
 /// With frames: function entry -> its frame.
 fn run_with(fns: &[Built], frames: &BTreeMap<u32, Frame>) -> Flow {
+    run_img(fns, frames, &Img::new())
+}
+
+fn run_img(fns: &[Built], frames: &BTreeMap<u32, Frame>, img: &Img) -> Flow {
     let ins: Vec<FnIn> = fns
         .iter()
         .map(|(e, bs)| FnIn {
@@ -134,7 +141,7 @@ fn run_with(fns: &[Built], frames: &BTreeMap<u32, Frame>) -> Flow {
             frame: frames.get(e),
         })
         .collect();
-    follow(&ins, &Img::new(), &[])
+    follow(&ins, img, &[])
 }
 
 /// A function at `e` of two blocks: `b` ending in an indirect call
@@ -355,6 +362,39 @@ fn a_target_loaded_from_an_unknown_place_is_incomplete() {
     let t = b.get(0);
     let f = run(&[calling(0x0800_1001, b, t)]);
     assert!(!site(&f).complete);
+}
+
+#[test]
+fn a_table_read_past_what_the_run_reads_is_incomplete() {
+    // ldr r0, =VT; ldr r3, [r0, r1] with r1 unknown, the data running on
+    // past what one read reads to another function's word.
+    let mut img = Img::new();
+    img.top = VT + ROM_READ + 0x1000;
+    img.words.insert(VT + ROM_READ + 0x800, H);
+    let mut b = B::default();
+    let vt = b.pool(0x0800_0408, VT);
+    let i = b.get(1);
+    let a = b.bin(BinOp::Add, vt, i);
+    let t = b.ld(Width::Word, a);
+    let f = run_img(&[calling(0x0800_1001, b, t)], &BTreeMap::new(), &img);
+    assert_eq!(site(&f).callees, BTreeSet::from([F]));
+    assert!(!site(&f).complete, "{f:?}");
+}
+
+#[test]
+fn a_rom_pointer_minus_an_unknown_is_incomplete() {
+    // A table walked down from its end: the run gives the pointer up, so
+    // a call through what it loads can't be complete, though it holds F.
+    let mut b = B::default();
+    let vt = b.pool(0x0800_0408, VT + 0x10);
+    let i = b.get(1);
+    let a = b.bin(BinOp::Sub, vt, i);
+    let x = b.ld(Width::Word, a);
+    let p = b.pool(POOL, F);
+    let t = b.op(Op::Select { c: x, a: x, b: p });
+    let f = run(&[calling(0x0800_1001, b, t)]);
+    assert_eq!(site(&f).callees, BTreeSet::from([F]));
+    assert!(!site(&f).complete, "{f:?}");
 }
 
 /// A one-block function returning at once.
