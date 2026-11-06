@@ -948,6 +948,14 @@
       "at": "2026-11-06T04:23:41Z",
       "question": "q/may-lane-scale-fly-s",
       "via": "1f762505"
+    },
+    {
+      "id": "d/a-native-direct-sound-program-stands-for-the",
+      "title": "A native direct-sound program stands for the card's bios-sound",
+      "why": "From {unit:native/hw-sound}: the card asked for a native bios-sound playing direct sound by timer and DMA, but agb/bios-sound only calls the BIOS sound driver's no-op stubs and plays nothing. agb/direct-sound (new) plays both FIFOs from IWRAM double buffers swapped by a cascaded timer's IRQ (agb's mixer's shape), matches mGBA's sound for 299 frames, and its native port passes route-check --native with samples equal every frame; psg-square covers FIFO A by DMA1 on timer 0 with the PSG.",
+      "by": "338023f7",
+      "at": "2026-11-06T06:52:47Z",
+      "scope": ["native/hw-sound"]
     }
   ]
 }
