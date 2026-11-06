@@ -1193,10 +1193,15 @@ says what a recipe or tool does and what it must still pass.
 - `just lift ROM [OUT] [FLAGS]` (native/lift-stage-a;
   `docs/native-port-design.md`, "The stage-A lifter as built"): the
   stage-A lifter. `gbaa-lift ROM OUT [--name NAME] [--holes FILE]
-  [--bars FILE] [--drop-standin KEY] [--plant AT]` (`codegen::native`) writes the whole
+  [--bars FILE] [--names DIR] [--layout guest] [--drop-standin KEY]
+  [--plant AT]` (`codegen::native`) writes the whole
   program to OUT (default `out/lift-<name>`) as one `src/main.rs`: every
   function plain Rust over byte RAM (`Game::ram`, EWRAM then IWRAM) and
-  `runtime::hw`, its registers locals, blocks a `loop { match }` over
+  `runtime::hw`, a RAM access at a constant address a typed global's
+  field (`g.ram.d_020000c0`; `Game::ram` is a `Ram` struct of them at the
+  guest's offsets, `--layout guest`, the only layout yet, which derefs to
+  the bytes; names from DIR's names files for this ROM, default `names/`;
+  native/ram-globals), its registers locals, blocks a `loop { match }` over
   local labels, calls Rust calls; then the recipe builds it into
   `target/recompiled` (`gbaa-native-<name>`, the native programs' headless
   flags, `crates/native-host`). It reads `holes/<name>.toml` when there is
@@ -1212,7 +1217,9 @@ says what a recipe or tool does and what it must still pass.
   holes; blocks; every load and store by how its address is known
   (`const` by region, `sp`, `computed` by the region the value-set
   analysis bounds it to, else `computed_unknown`; regions `ram`, `io`,
-  `rom`, `display`, `sram`, `other`); `call_fn` calls; jumps by value;
+  `rom`, `display`, `sram`, `other`; `const_ram` counts only byte
+  accesses, the globals' are `ram_global`, unbarred, with `ram_globals`
+  the count of globals); `call_fn` calls; jumps by value;
   gap targets. `--bars FILE` fails the lift (after writing it) on any
   metric over `[program.NAME.bars]`'s maximum, each named with both
   numbers (`gbaa-lift: affine: load_computed_unknown is 755, over its

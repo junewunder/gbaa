@@ -1,11 +1,18 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
-//! [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits]`:
+//! [--names DIR] [--layout guest] [--drop-standin KEY] [--plant AT]
+//! [--fall-as-tail-call] [--irq-at-waits]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
 //! stage A). Writes the whole program as a Rust crate to OUT (`Cargo.toml`,
 //! `src/main.rs`, a copy of the ROM for its data, `report.txt`), with the
 //! stand-ins and jump targets the holes file gives. Fails, naming each, if
 //! a hard hole is left: the crate then has a `compile_error!` for each and
 //! won't build.
+//!
+//! RAM's globals (`codegen::native::globals`, unit `native/ram-globals`)
+//! take their names from the names files in DIR whose `[map]` names this
+//! ROM (default the repo's `names/`; none is fine). `--layout guest` puts
+//! them at the guest's offsets, the native check's layout and the only
+//! one yet (`native/lift-packed-layout` adds `packed`).
 //!
 //! `--bars FILE` (`crates/codegen/lift-check.toml`, unit
 //! `native/lift-bars`) holds the report's metrics to the maxima of
@@ -41,14 +48,14 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits]"
         );
         ExitCode::FAILURE
     };
     let [rom, out, rest @ ..] = &args[..] else {
         return usage();
     };
-    let (mut name, mut holes, mut bars) = (None, None, None);
+    let (mut name, mut holes, mut bars, mut names) = (None, None, None, None);
     let (mut drop, mut plant, mut tail, mut irq_at_waits) = (None, None, false, false);
     let hex = |s: &str| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok();
     let mut it = rest.iter();
@@ -65,6 +72,8 @@ fn main() -> ExitCode {
             ("--name", Some(n)) => name = Some(n.clone()),
             ("--holes", Some(f)) => holes = Some(PathBuf::from(f)),
             ("--bars", Some(f)) => bars = Some(PathBuf::from(f)),
+            ("--names", Some(d)) => names = Some(PathBuf::from(d)),
+            ("--layout", Some(l)) if l == "guest" => {}
             ("--drop-standin", Some(k)) if hex(k).is_some() => drop = hex(k),
             ("--plant", Some(a)) if hex(a).is_some() => plant = hex(a),
             _ => return usage(),
@@ -105,6 +114,27 @@ fn main() -> ExitCode {
     holes.plant = plant;
     holes.fall_as_tail_call = tail;
     holes.irq_at_waits = irq_at_waits;
+    let names = names.unwrap_or_else(|| crates_dir().parent().expect("the repo").join("names"));
+    let sha = codegen::names::sha1_hex(&bytes);
+    match codegen::names::files_for(&names, &sha)
+        .map_err(|e| e.to_string())
+        .and_then(|fs| codegen::names::SourceMap::load(&sha, &fs))
+    {
+        Ok(map) => {
+            holes.names = map
+                .data
+                .iter()
+                .filter_map(|(&a, item)| {
+                    let id = map.ident(codegen::names::Kind::Data, a)?;
+                    Some((a, (id.to_string(), item.size.unwrap_or(0) as u32)))
+                })
+                .collect();
+        }
+        Err(e) => {
+            eprintln!("gbaa-lift: {}: {e}", names.display());
+            return ExitCode::FAILURE;
+        }
+    }
     // Read before the lift, so a bad file fails at once.
     let bars = match &bars {
         Some(p) => match std::fs::read_to_string(p)
