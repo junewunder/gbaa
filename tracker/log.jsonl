@@ -2285,3 +2285,4 @@
 {"at":"2026-11-06T12:12:16Z","actor":"loop","tag":"f93b1ecd","host":"quack","cmd":"unclaim","id":"native/metroid-lifts","text":"Metroid lifts with no hard holes and builds: handed back by its session, its work kept (1 commit on its branch); can't start until Lifted code makes the BIOS calls games use (native/lift-bios-calls) is done"}
 {"at":"2026-11-06T12:12:53Z","actor":"loop","tag":"8ec58597","host":"quack","cmd":"claim","id":"native/recovery-saved-lr-return","text":"Recovery takes a bx through a copy of lr as a return: claimed"}
 {"at":"2026-11-06T12:30:21Z","actor":"loop","tag":"62031260","host":"quack","cmd":"add-unit","id":"native/indirect-call-args-emerald","text":"new unit: Emerald's summaries re-measured with callee sets"}
+{"at":"2026-11-06T12:31:40Z","actor":"loop","tag":"62031260","host":"quack","cmd":"ask","text":"asked the owner: Accept the indirect-call bar at today's values, not 0?","q":"q/accept-indirect-call-bar-today"}

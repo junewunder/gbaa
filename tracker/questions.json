@@ -1245,6 +1245,31 @@
         "host": "quack"
       },
       "answer": null
+    },
+    {
+      "id": "q/accept-indirect-call-bar-today",
+      "title": "Accept the indirect-call bar at today's values, not 0?",
+      "context": "{unit:native/indirect-call-args} asked for a lift-check bar of 0 on indirect calls that still pass all four registers despite a complete callee set. Built and measured: every complete set on the agb programs is the same 21 address-taken functions (fnref's one heap pile), and their summaries read all four registers between them, so 56-60 calls per program still pass four. Only splitting the heap by allocation site ({unit:native/fnref-heap-sites}) narrows the sets. The work is committed with the bar at the measured values; lift-check and just check pass.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Accept the measured bars",
+          "changes": "call_fn_four_complete stays barred at 56-60; the unit is checked and lands now; the heap-site unit is noted to lower the bar when its sets narrow"
+        },
+        {
+          "key": "b",
+          "label": "Hold out for 0",
+          "changes": "the unit stays open and unmerged until the heap split narrows the sets and the bar reaches 0"
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/indirect-call-args"],
+      "asked": {
+        "at": "2026-11-06T12:31:40Z",
+        "by": "62031260",
+        "host": "quack"
+      },
+      "answer": null
     }
   ]
 }
