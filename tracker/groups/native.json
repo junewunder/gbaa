@@ -514,7 +514,19 @@
       "check": "independent",
       "needs": ["native/lift-bars"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "cec56176",
+        "session": "cec56176-8567-4f04-8955-3ded870dd589",
+        "host": "quack",
+        "pid": 1418242,
+        "start": "29954965",
+        "at": "2026-11-06T07:41:20Z",
+        "branch": "unit/native/ram-globals",
+        "beats": true
+      },
+      "round": "2026-11-06T07:41:20Z"
     },
     {
       "id": "native/ref-in-object",
