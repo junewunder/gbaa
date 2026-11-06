@@ -460,13 +460,25 @@
       "needs": ["native/fnref-flow"],
       "uses": ["heavy"],
       "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "62031260",
+        "session": "62031260-5636-4dad-9863-cc39f80d7abf",
+        "host": "quack",
+        "pid": 1418242,
+        "start": "29954965",
+        "at": "2026-11-06T11:08:08Z",
+        "branch": "unit/native/indirect-call-args",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-06T07:50:52Z",
           "by": "5676c8cf",
           "text": "From {unit:native/lift-params}: a_<key> adapters return r1-r3 as passed in (summaries treat them undefined after an indirect call); undefined_reads after indirect calls aren't counted anywhere. Stand-ins call f_08002995-style dispatchers four-reg by name: shaping one breaks the build."
         }
-      ]
+      ],
+      "round": "2026-11-06T11:08:08Z"
     },
     {
       "id": "native/frame-escape",
