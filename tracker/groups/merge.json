@@ -170,7 +170,19 @@
       "detail": "Branch `unit/native/ime-release` holds {unit:native/ime-release}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
       "check": "recorded",
       "lane": "quack/1",
-      "branch": "unit/native/ime-release"
+      "branch": "unit/native/ime-release",
+      "record": {
+        "state": "claimed",
+        "by": "aba07131",
+        "session": "aba07131-e03d-48f4-96eb-8e525de39c9d",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T11:09:56Z",
+        "branch": "unit/native/ime-release",
+        "beats": true
+      },
+      "round": "2026-11-06T11:09:56Z"
     }
   ]
 }
