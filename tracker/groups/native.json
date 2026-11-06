@@ -472,7 +472,19 @@
       "check": "independent",
       "needs": ["native/lift-bars"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "40e2fde3",
+        "session": "40e2fde3-1647-4557-937b-41ac16b9aa1a",
+        "host": "quack",
+        "pid": 1418242,
+        "start": "29954965",
+        "at": "2026-11-06T07:03:58Z",
+        "branch": "unit/native/frame-escape",
+        "beats": true
+      },
+      "round": "2026-11-06T07:03:58Z"
     },
     {
       "id": "native/frame-locals",
