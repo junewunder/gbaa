@@ -41,9 +41,12 @@ says what a recipe or tool does and what it must still pass.
   encodings with should-be bits off (`canonical_arm`), which objdump reads
   strictly. Fails on any other mismatch. About 5 s.
 - `just holes ROM [--frames N] [--press KEY@F-G/E]… [--no-summaries]
-  [--show N]`: the hole report (`docs/research/native-holes.md`):
-  discovery, a 5,400-frame instant-timing interpreter run with the
-  research press script, the function summaries, then
+  [--no-run-roots] [--show N]`: the hole report
+  (`docs/research/native-holes.md`): discovery, a 5,400-frame
+  instant-timing interpreter run with the research press script,
+  discovery again with the ROM targets of the run's calls through a
+  register as function starts (`discover_with`; `--no-run-roots` skips
+  it), the function summaries, then
   `analysis::holes::classify`. Prints one ranking line (hard holes by
   kind; bytes reached but not discovered; busy loops that call
   functions) and each list. About a minute a game, capped at 3 GB. The
