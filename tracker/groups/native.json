@@ -841,21 +841,8 @@
         "checker": "verifier-a5468275",
         "at": "2026-11-06T13:20:18Z",
         "evidence": "Verifier subagent (fresh context) lifted Metroid with mods/metroid/holes.toml's five [[copy]] tables: functions_iwram 8 (0x03000c7c, 0x030016c5 stand-ins calling their ROM originals, checked against ROM bytes; 0x03003b91/ba0, 0x030041ed/1fc, 0x03004295/2a4 lifted), hard holes only the 9 BIOS calls, none in f_03…; just lift-check passed. just check passes after merging main (and after the review's bounds fix). Branch also merges unit/native/metroid-lifts (holes from mods/, skip_fn_flow).",
-        "branch": "unit/native/lift-ram-copies",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-06T13:20:18Z",
-          "by": "eb63ac1b",
-          "host": "quack",
-          "pid": 1417300,
-          "start": "29954434",
-          "beats": true,
-          "session": "eb63ac1b-1ff4-437c-8963-0586d4d3af12",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-06T12:56:00Z"
+        "host": "quack"
+      }
     },
     {
       "id": "native/fnref-flow-scale",
