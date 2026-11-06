@@ -769,21 +769,8 @@
         "checker": "verifier-7c3e91a4",
         "at": "2026-11-06T12:51:20Z",
         "evidence": "VSA takes a jump to lr's entry value as a return; bl keeps r0-r3/r12 a short call-free callee never writes. just holes unresolved ROM jumps: Emerald 21->9, Rogue 59->46, Kirby AM 13->0, Kirby NiDL 14->1, Minish 34->23, none in m4a ply_* (verifier checked Emerald, Kirby AM). jt-score, disc-pret, disc-agb exit 0 (jt unresolved 38->22, 53->37, nothing else moved); just check and just lift-check pass; 2 new unit tests.",
-        "branch": "unit/native/recovery-saved-lr-return",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-06T12:51:20Z",
-          "by": "8ec58597",
-          "host": "quack",
-          "pid": 1417300,
-          "start": "29954434",
-          "beats": true,
-          "session": "8ec58597-d49b-446a-b426-08be5f75aaf9",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-06T12:12:53Z"
+        "host": "quack"
+      }
     },
     {
       "id": "native/fnref-heap-sites",
