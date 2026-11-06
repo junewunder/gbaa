@@ -187,39 +187,57 @@ real game. Each gets a small agb program of ours (source in `agb/`,
   2 (`RESULTS`, EWRAM 0x020000c8). The play build before the fix got
   `c2 - c0` 0.
 
-  Not done here: `IME` has the same shape. agb's own `critical_section`
-  clears `IME`, not I, and a write that sets `IME` with an IRQ pending is
-  taken at once on the hardware; both builds take it at the next time
-  point instead (the play build's `irqs_are_taken_only_where_time_passed`
-  test pins that). They agree with each other, so the native check can't
-  see it; only a test program against mGBA would.
+- **A pending IRQ is taken the moment IME is set again**
+  (`native/ime-release`). `IME` has the I bit's shape: agbcc games'
+  critical sections (and our test's) clear `IME`, not I, and a write
+  that sets `IME` with an IRQ pending is taken at once on the hardware.
+  Both builds took it at the next time point instead (the play build's
+  `irqs_are_taken_only_where_time_passed` test pinned that), and agreed
+  with each other, so the native check couldn't see it; only mGBA could.
 
-  **Work in progress** (`native/ime-release`, paused 2026-11-01 after
-  reading only; no code yet):
-  - Play build: `Io` sets `event::IRQ` on an `IE` or `IME` write, but
-    `tick_native` acts only on halt, stop and serial, and `Sched::irq_line`
-    is false when `IME` was 0 at the last sync, so an `IME` write of 1 with
-    `IE & IF` pending waits for the next time point. Fix: in `tick_native`,
-    when `events & IRQ` is set, I is clear and `irq_pending()`, open the
-    window and return true. Exact timing is unaffected, because its tick
-    already syncs on any event. Caveat: the interpreter ticks after every
-    instruction and compiled code at a block's exit, so the IRQ can land
-    up to a block apart. The test program should write `IME` as a
-    function's last act before `bx lr`, which also absorbs mGBA's IRQ delay
-    of about 7 cycles. The pinned test `irqs_are_taken_only_where_time_passed`
-    changes with it.
-  - Hardware library: `Hw::write16(IME)` only sets `master_enable` and
-    can't reach `G`. The prelude's `io_write16` must call `hw::irq_release`
-    when `IME` goes from 0 to 1, on the program's current stack (agb's
-    wrapper stand-in runs on `Game::sp`, which is stale between waits). The
-    lifted code's local `r13` is current at each store, because the native
-    lift runs no dead-register-write pass. So either stores that may reach
-    I/O take `r13` (`st16(g, r13, a, v)`), or `g.sp = r13` is set before
-    them, with no line added.
-  - The old behaviour goes behind a `gbaa-lift` flag as a `planted_flags`
-    control. The test program is `agb/native-ime-release`, modelled on
-    `agb/native-irq-hold`: clear `IME`, poll past line 160, set `IME`, read
-    the count. Its route is checked with `just mgba-diff` on both timings.
+  As built (2026-11-06):
+  - Play build: `Io` raises `event::IME_ON` when a write takes `IME` from
+    0 to 1, and `Machine::tick_native` takes it out and opens the IRQ
+    window if I is clear and `IME`, `IE & IF` are set. Only that write:
+    an IRQ requested between time points with `IME` already on still
+    waits for the next one (a DMA's end, say), as the native program's
+    library does. The interpreter ticks after every instruction and
+    compiled code at a block's exit, so the IRQ can land up to a block
+    apart; the test program writes `IME` as a function's last act before
+    `bx lr`, and reads the count two `nop`s after the return (mGBA takes
+    an IRQ a few cycles after the write). Exact timing is unaffected: its
+    tick already syncs on any event. So the compiled code and its
+    interpreter take it at the same instruction, the recompiler at
+    `--timing native` ends a block after a store whose address folds to
+    `IME` (`func::build_block`), as a control `msr` already does; without
+    that, lift-check caught the two disagreeing on the IRQ stack's saved
+    return address. A store to `IME` through an address it can't fold
+    still ticks at its block's end.
+  - Hardware library: `hw::write_ime(g, v)` stores `IME` and, when that
+    sets it again, runs what's pending at once, unless the CPSR's I bit
+    holds it (`Hw::write16` alone can't reach the program). The prelude's
+    `io_write16` sends `IME` through it, so every store does; its
+    `intr_wait` writes `IME` straight to `Hw`, since the BIOS runs with I
+    set. The handler runs on `Game::sp`, so the lift prints `g.sp = r13;`
+    on the same line before every store that may reach I/O (all but
+    sp-relative ones and constants outside I/O): the lifted code's local
+    `r13` is current there, as the native lift runs no dead-register-write
+    pass. No line is added to the lifted code.
+  - `gbaa-lift --ime-at-waits` brings the old behaviour back
+    (`IME_RELEASE` false); lift-check's `planted_flags` runs it as the
+    control on `agb/native-ime-release`. The prelude grew from 439 to 447
+    lines (`IME_RELEASE` and its doc, the `IME` case in `io_write16`), so
+    `lines_prelude`'s bar rose to 447 in every program.
+
+  The test program, `agb/native-ime-release`: a V-blank handler counts
+  frames; `ir_probe` (Thumb, `global_asm!`) polls `VCOUNT` to line 100,
+  clears `IME` with `ir_ime(0)`, polls to line 170, past V-blank's start,
+  and sets `IME` again with `ir_ime(1)`, reading the count before (`c0`),
+  after the poll (`c1`) and after the return (`c2`). The hardware gives
+  `c1 - c0` 0 and `c2 - c0` 1; mGBA, the play build at both timings and
+  the lift agree (frame 601's hash, `abc7ac7a22ed22b3`, the same picture
+  as `agb/native-irq-hold`'s); the play build at `--timing native` before
+  the fix drew `0346a4614af57b13` (`c2 - c0` 0).
 
 ### 2. Recognising the agb library
 

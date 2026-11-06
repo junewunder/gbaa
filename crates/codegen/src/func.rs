@@ -669,7 +669,41 @@ pub fn successors(ctx: &Ctx, x: &ExitInfo) -> Vec<u32> {
 }
 
 /// Build the block starting at `k`, stopping before any key in `stops`.
+///
+/// Under [`Clock::Native`] a store to `IME` (its address folded) ends the
+/// block too: an IRQ it lets through is taken at the tick after it, so the
+/// compiled code takes it at the same instruction as the interpreter, which
+/// ticks after each one (native/ime-release). Elsewhere the store's tick
+/// would only be later by a block, as any I/O write's is.
 fn build_block(ctx: &Ctx, k: u32, stops: &BTreeSet<u32>) -> GBlock {
+    let gb = build_block_until(ctx, k, stops, None);
+    if ctx.cfg.clock == Clock::Native
+        && let Some(at) = ime_store(&gb.block)
+        && gb.insns.last().is_some_and(|&(last, _)| last != at)
+    {
+        return build_block_until(ctx, k, stops, Some(at));
+    }
+    gb
+}
+
+/// The address of the first instruction in `b` that stores to `IME`.
+fn ime_store(b: &Block) -> Option<u32> {
+    let mut at = 0;
+    b.insts.iter().find_map(|inst| match inst.op {
+        Op::Insn(a) => {
+            at = a;
+            None
+        }
+        Op::Store { addr, .. } => fold(b, addr)
+            .is_some_and(|a| (0x0400_0208..0x0400_020C).contains(&a))
+            .then_some(at),
+        _ => None,
+    })
+}
+
+/// [`build_block`], ending after the instruction at `last` if it gets
+/// there.
+fn build_block_until(ctx: &Ctx, k: u32, stops: &BTreeSet<u32>, last: Option<u32>) -> GBlock {
     let thumb = k & 1 != 0;
     let mut a = k & !1;
     let mut b = Builder::new(a, thumb);
@@ -685,7 +719,7 @@ fn build_block(ctx: &Ctx, k: u32, stops: &BTreeSet<u32>) -> GBlock {
             b.timing(&instr, at);
             execute(&mut b, at, thumb, instr);
             insns.push((at, instr));
-            if b.ended() {
+            if b.ended() || last == Some(at) {
                 break;
             }
         }
@@ -697,7 +731,13 @@ fn build_block(ctx: &Ctx, k: u32, stops: &BTreeSet<u32>) -> GBlock {
             insns.last(),
             Some((_, Instr::Msr { spsr: false, fields, .. })) if fields.c
         );
-        if b.ended() || control || insns.len() >= MAX_BLOCK || stops.contains(&key(a, thumb)) {
+        let stop = last.is_some() && insns.last().map(|x| x.0) == last;
+        if b.ended()
+            || control
+            || stop
+            || insns.len() >= MAX_BLOCK
+            || stops.contains(&key(a, thumb))
+        {
             break;
         }
     }

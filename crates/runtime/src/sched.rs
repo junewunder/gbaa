@@ -146,7 +146,8 @@ impl<P: Platform> Machine<P> {
 
     /// [`Machine::tick`] under [`crate::Timing::Native`], where code takes
     /// no time: the cycles are dropped, and only a halt (a `HALTCNT`
-    /// store) or a serial start is acted on. A clock a DMA moved is
+    /// store), a serial start, or an IRQ that an `msr` or an `IME` write
+    /// let through is acted on. A clock a DMA moved is
     /// brought up to date at the next point where time passes (an idle
     /// back edge, a BIOS call or wait), the same instruction in generated
     /// code and the interpreter, so IRQs are taken at the same places in
@@ -154,6 +155,8 @@ impl<P: Platform> Machine<P> {
     #[inline(never)]
     pub fn tick_native(&mut self) -> bool {
         self.bus.take_data_cycles();
+        let ime_on = self.bus.io.events & event::IME_ON != 0;
+        self.bus.io.events &= !event::IME_ON;
         if core::mem::take(&mut self.sched.fresh) {
             return self.sched.halted || self.sched.frame_ended || self.irq_takeable();
         }
@@ -161,8 +164,13 @@ impl<P: Platform> Machine<P> {
         // critical section) is taken as soon as an `msr` clears I, as the
         // hardware takes it, not at the next time point (native/lift-irq-
         // hold). One the sync found with I clear was taken in its window,
-        // so this is only ever a held one.
-        if self.sched.irq_line && self.cpu.cpsr & I_BIT == 0 && self.bus.io.irq_pending() {
+        // so this is only ever a held one. Likewise one pending when `IME`
+        // is set again (a critical section that clears `IME`, as agbcc
+        // games' do): taken at this tick (native/ime-release).
+        if (self.sched.irq_line || ime_on)
+            && self.cpu.cpsr & I_BIT == 0
+            && self.bus.io.irq_pending()
+        {
             self.sched.window = true;
             return true;
         }

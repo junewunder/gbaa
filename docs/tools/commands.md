@@ -1210,10 +1210,11 @@ says what a recipe or tool does and what it must still pass.
   `$GBAA_DATA`, `route`, optional `lift_flags`, `route_flags`,
   `planted_store`, `planted_hole`, `planted_flags`) and its bars,
   `[program.<name>.bars]`. Today `agb/native-spike`, `agb/affine`,
-  `agb/mosaic-modes`, `agb/native-fallthrough` and `agb/native-irq-hold`
-  (`just agb-tests`) on `units/native-spike.toml`, `units/affine-600.toml`,
-  `units/mosaic-modes-600.toml`, `units/native-fallthrough-600.toml` and
-  `units/native-irq-hold-601.toml`. First every
+  `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold` and
+  `agb/native-ime-release` (`just agb-tests`) on `units/native-spike.toml`,
+  `units/affine-600.toml`, `units/mosaic-modes-600.toml`,
+  `units/native-fallthrough-600.toml`, `units/native-irq-hold-601.toml` and
+  `units/native-ime-release-601.toml`. First every
   program is lifted with `--bars` (seconds), failing before any build on
   a metric over its bar; then each lift and its play build
   (`--timing native`) are built and `route-check --native` runs them for
@@ -1222,16 +1223,18 @@ says what a recipe or tool does and what it must still pass.
   `planted_store` (0x08000186, the V-blank handler's frame count) must be
   caught, and with its `planted_hole` (agb's IRQ wrapper's stand-in
   dropped) the lift and the build must fail naming `f_03000000`'s `mrs`.
-  native-fallthrough and native-irq-hold lifted with their
-  `planted_flags` (`--fall-as-tail-call`, the old fall into another
+  native-fallthrough, native-irq-hold and native-ime-release lifted with
+  their `planted_flags` (`--fall-as-tail-call`, the old fall into another
   function; `--irq-at-waits`, the old IRQ run at a wait inside a critical
-  section) must be caught too. Passes with `every metric within its bar`,
-  five `pass (60x frames, 0 differences …)` lines, `planted fault caught
+  section; `--ime-at-waits`, the old IRQ held past the store that sets
+  `IME` again to the next wait) must be caught too. Passes with `every
+  metric within its bar`, six `pass (60x frames, 0 differences …)` lines, `planted fault caught
   (…-planted: frame 2: EWRAM byte 0x020000c0 …)`, `(…-fall-as-tail-call:
   frame 1: EWRAM byte 0x020000c4 …)` and `(…-irq-at-waits: frame 2: EWRAM
-  byte 0x020000c8: play 0x00, native 0x01 …)`, `planted hard hole caught`
+  byte 0x020000c8: play 0x00, native 0x01 …)` and `(…-ime-at-waits: frame
+  2: EWRAM byte 0x020000c0: play 0x01, native 0x00 …)`, `planted hard hole caught`
   and `lift-check: passed`. Logs in `out/lift-*.txt`. About 10 minutes on
-  quack. Heavy: builds thirteen generated crates.
+  quack. Heavy: builds sixteen generated crates.
 
   **Lowering a bar** (every stage-B unit's check): change the one
   `metric = N` line in the program's bars table and run `just lift-check`
