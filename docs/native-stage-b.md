@@ -274,8 +274,10 @@ build for the host.
   registers it may change: the summary's `results`, r0 (an indirect
   call's caller reads it, as the summaries assume), all four where a
   direct caller's reads aren't known (its run stopped, or it is in the
-  other code context), and what the callers of a function that falls or
-  jumps into it read (a fixed point; a jump by value the run didn't
+  other code context), what is read after a function that returns its
+  value unread (`forwards`), all four after a call by value whose target
+  the lifter knows (the summaries take it as indirect), and what the
+  callers of a function that falls or jumps into it read (a fixed point; a jump by value the run didn't
   prove a return adds its function's to every function: r0 on all five
   programs). A result it may leave as it came is a parameter too. A
   register it never changes stays the caller's. The indirect calls'
