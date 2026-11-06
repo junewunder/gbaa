@@ -91,7 +91,9 @@ impl Globals {
     /// the value sets bound (`native/ref-in-object`): each is one object,
     /// so one global, if it reaches at most one of the globals the rest
     /// carve (a loop over an array whose first element is also read at
-    /// its constant address); one reaching more is left out.
+    /// its constant address); one reaching more is left out. Ranges
+    /// aren't weighed against each other: two that overlap may join the
+    /// globals they reach.
     pub fn carve(
         accesses: &[(u32, u32)],
         ranges: &[(u32, u32, u32)],
