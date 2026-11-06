@@ -373,6 +373,47 @@ local), so locals need an escape analysis first.
   that don't escape (a metric the escape analysis adds). Planted control: a
   slot the lift gets wrong on purpose, reaching a global, is caught.
 
+  As built (2026-11-06): a slot that doesn't escape, lies below the entry
+  sp and is only accessed aligned (`Frame::locals`) is a Rust local,
+  `l<bytes below the entry sp>`, a `u32` for an aligned word only ever
+  accessed whole, else `[u8; N]`, declared zero at the top of `x_<key>`;
+  its loads and stores are the local's, and the address arithmetic only
+  they used isn't printed (a per-block pass drops every pure value
+  nothing printed uses). Slots at or above the entry sp are the caller's
+  (a fall's shared epilogue, stack arguments), never locals: a metric of
+  their own, `sp_accesses_callers_frame`. The escape analysis gained one
+  rule: a callee from whose entry sp + k an address escapes (agb's
+  `assert_failed` passes on a pointer to its stack argument) reaches up
+  into its caller's frame from the caller's sp + k, an escaping address
+  there, unless the caller is done with its frame after the call (the
+  callee never returns, or a tail call): then the locals are written to
+  the frame's bytes before the call (`Frame::flush`; 4 calls on the
+  spike). For a call through a register, the reach is the lowest of the
+  functions whose address is a ROM word. The gap the escape analysis left
+  open, a pointer that walks down from where it escaped, stays open:
+  walking down too would leave about three times the accesses in memory
+  (native-spike: 2,711 sp accesses to escaping slots, not 1,289).
+  `gbaa-lift --shadow-locals` checks it at run time instead: every local
+  is kept in the frame's bytes too, and a load that differs from them
+  prints `shadow local:`. All six programs run 601 frames with none (a
+  lift with one mirrored store taken out prints them from frame 0).
+
+  The control is a sixth program, `agb/native-frame-locals`: `fl_keep`
+  keeps a word, a halfword and a byte in its frame across a call that
+  clobbers r0-r3 and returns them combined, which the main loop stores to
+  a global; `fl_esc`'s slot escapes to `fl_double`, which writes through
+  it. `--plant-slot=0x08000182` makes `fl_keep`'s local store of `x + 7`
+  store one more (the lift fails if the address isn't a store to a local).
+
+  | program | locals | accesses to them | `load_sp` | `store_sp` | lines |
+  |---|---|---|---|---|---|
+  | native-spike | 458 | 2,291 | 2,177 → 669 | 1,351 → 628 | 73,686 → 72,776 |
+  | affine | 597 | 2,907 | 2,232 → 268 | 1,377 → 443 | 73,533 → 72,108 |
+  | mosaic-modes | 362 | 1,151 | 1,202 → 574 | 1,015 → 554 | 50,895 → 50,251 |
+  | native-fallthrough | 597 | 2,892 | 2,221 → 268 | 1,379 → 449 | 72,357 → 70,940 |
+  | native-irq-hold | 606 | 2,923 | 2,227 → 267 | 1,393 → 448 | 73,082 → 71,640 |
+  | native-frame-locals | 603 | 2,904 | 265 | 446 | 71,020 |
+
 Escaping slots passed as `&mut` (the design's section 1 form 1) come with
 typed pointers, below; until then they are soft holes, counted.
 
