@@ -469,6 +469,55 @@ typed pointers, below; until then they are soft holes, counted.
   computed address whose value set stays in one global (or one local, or
   one ROM static) becomes an indexed, typed access. Bar: computed-address
   RAM byte accesses at most half of their bar.
+
+  As built (2026-11-06): `Globals::object` in
+  `crates/codegen/src/native/globals.rs`. A load or store whose address
+  isn't a constant in its block but which the value sets bound to RAM
+  (`analysis::vsa::func::Access`, the instruction's hull, in one
+  mirror) is carved like a constant one: a single address is an access
+  at it; a range (lowest to highest address plus the width) is an
+  object's extent, one global, if it reaches at most one of the globals
+  the rest carve, else it is left out (ranges aren't weighed against
+  each other: two that overlap may join the globals they reach). Printing: a single address is
+  that global's field, with the prelude's `pin(a, off)` checking the
+  pointer (`{ pin(v3 & !3, 0x8); g.ram.d_02000008 }`); a range inside
+  one array global at its element's width is
+  `g.ram.d_…[ix(a, off, elem, n)]`, the element the pointer finds, checked.
+  A pointer the value sets got wrong (a caller they didn't see) stops the
+  program naming it, rather than reading the wrong bytes. Both print
+  their address, so nothing else is dropped and `lines` is unchanged.
+
+  Metrics: `load_ram_object` and `store_ram_object` (unbarred, meant to
+  rise) count the typed ones, and `pointer_unexplained`, the new soft
+  hole, the computed RAM accesses no one global explains (several
+  globals, or one at a width not its element's): measured for the
+  first time here, 1 on every program but native-irq-hold (0): crt0's
+  `.bss` clear, a word loop over four separate globals. The report says
+  it on its `pointers into one global` line.
+
+  | program | `load_computed_ram` | `store_computed_ram` | typed loads, stores | `pointer_unexplained` |
+  |---|---|---|---|---|
+  | native-spike | 27 → 0 | 9 → 1 | 27, 8 | 1 |
+  | affine | 26 → 0 | 9 → 1 | 26, 8 | 1 |
+  | mosaic-modes | 26 → 0 | 9 → 1 | 26, 8 | 1 |
+  | native-fallthrough | 23 → 0 | 8 → 1 | 23, 7 | 1 |
+  | native-irq-hold | 25 → 0 | 9 → 0 | 25, 9 | 0 |
+  | native-frame-locals | 23 → 0 | 8 → 1 | 23, 7 | 1 |
+
+  Every typed access on the agb programs is a single address (agb's
+  allocator state, `0x02000000`-`0x02000014`, reached through a pointer
+  its callers pass): the value sets knew it where the block didn't. No
+  program has a range inside one global yet, so the `ix` form is checked
+  only by unit tests of what it prints; no lift runs it. The prelude grew by 27 lines (470 to
+  497): `pin`, `ix` and their shared panic.
+
+  Not done here, because nothing is there to point into: escaping stack
+  slots are still frame bytes (a local's address never escapes, so no
+  pointer reaches one; `&mut` locals are stage C), and ROM statics wait
+  on `native/rom-statics`, whose loads index the static from the value
+  sets' extents. Most computed accesses (`load_computed_unknown`, 589-762
+  a program) have no value set at all: parameters from callers the
+  analysis can't see and the heap's pointers, `native/ref-heap`'s.
 - **Heap pointers as `Ref<T>`** (`native/ref-heap`). What agb's allocator
   returns, typed by the accesses through it; the allocator can be replaced
   after this. Same kind of bar.
