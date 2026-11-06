@@ -232,7 +232,19 @@
       "title": "Discovery finds code games copy to RAM themselves",
       "detail": "From {unit:native/hole-report}: every game but moonbeam runs RAM code no overlay discovered (300-2,908 bytes: WarioWare's IWRAM loop from ROM 0x080007e4, Emerald's SoundMainRAM and IntrMain, Metroid's 0x03003b90/0x03004100, Minish Cap's 0x030040e0). Overlays only take BIOS CpuSet/CpuFastSet with constant args. Find copy loops and CpuSet with arguments discovery can't fold yet (or take the run's RamRun::rom_src as copies). Done when `just holes` shows 0 RAM bytes undiscovered outside the flash stack routines on the eight, and disc-pret, disc-agb, jt-score keep their bars.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "82db0e66",
+        "session": "82db0e66-b6de-4f36-9df2-d644270c71be",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T04:42:48Z",
+        "branch": "unit/native/disc-ram-copies",
+        "beats": true
+      },
+      "round": "2026-11-06T04:42:48Z"
     },
     {
       "id": "native/hole-coverage",
