@@ -471,7 +471,14 @@
       "check": "independent",
       "needs": ["native/fnref-flow"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "notes": [
+        {
+          "at": "2026-11-06T07:50:52Z",
+          "by": "5676c8cf",
+          "text": "From {unit:native/lift-params}: a_<key> adapters return r1-r3 as passed in (summaries treat them undefined after an indirect call); undefined_reads after indirect calls aren't counted anywhere. Stand-ins call f_08002995-style dispatchers four-reg by name: shaping one breaks the build."
+        }
+      ]
     },
     {
       "id": "native/frame-escape",
