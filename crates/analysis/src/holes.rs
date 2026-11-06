@@ -36,7 +36,10 @@
 //! The flash save library's stack routines ([`crate::flash`]) are none of
 //! these: a call into RAM whose target held a recognised routine every time
 //! it was called is a hardware-library call ([`Report::flash`]), and the
-//! RAM it ran (changed or not, discovered or not) isn't counted.
+//! RAM it ran (changed or not, discovered or not) isn't counted. The
+//! exemption is by address: other code run there without a call into it
+//! (a fall-through, a plain `bx`) would go uncounted too; the run keeps
+//! only each address's first bytes, so it can't tell.
 //!
 //! **Not discovered** ([`Report::undiscovered_bytes`]) is the bytes of code
 //! the run executed that discovery (or an overlay's) didn't find. It ranks
