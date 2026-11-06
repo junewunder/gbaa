@@ -699,6 +699,7 @@ fn run(rec: &mut Rec, m: &mut Machine<Script>, frames: u32, boot: bool) -> Resul
 }
 
 fn main() -> ExitCode {
+    analysis::cap::require_cap("gbaa-holes");
     let args: Vec<String> = std::env::args().skip(1).collect();
     let (mut rom_path, mut frames, mut presses) = (None, 5400u32, Vec::new());
     let (mut sums, mut show, mut run_roots) = (true, 12usize, true);

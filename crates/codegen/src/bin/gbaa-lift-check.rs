@@ -267,6 +267,7 @@ impl Run {
 }
 
 fn main() -> ExitCode {
+    analysis::cap::require_cap("gbaa-lift-check");
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!("usage: gbaa-lift-check FILE --data DIR [--only NAME]");

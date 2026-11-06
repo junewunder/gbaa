@@ -68,6 +68,7 @@ fn crates_dir() -> PathBuf {
 }
 
 fn main() -> ExitCode {
+    analysis::cap::require_cap("gbaa-lift");
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(

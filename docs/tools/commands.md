@@ -3,6 +3,15 @@
 Moved out of AGENTS.md to keep it under the factory's line cap. Each entry
 says what a recipe or tool does and what it must still pass.
 
+`gbaa-lift`, `gbaa-recompile`, `gbaa-holes`, `gbaa-lift-check` and
+`route-check` (but `--args` and `--missing`) refuse to run, exit 2, unless
+under a memory cap of their own: the recipes cap each run with the
+justfile's `cap` (`{{cap}} MemoryMax=8G …`, a systemd scope with no swap;
+gbaa-lift 16G, gbaa-holes 3G), and children run in their parent's. Run one
+by hand through `just capped`, `just long start` or that systemd-run line;
+`GBAA_UNCAPPED=1` skips the check, for a small input you've measured
+(`analysis::cap`).
+
 - `just sst` / `just sst-ir`: SingleStepTests against the interpreter, and
   through the IR builder and evaluator (also against the interpreter). Both
   print the per-file table and fail on any change from `EXPECTED` in
@@ -1252,6 +1261,7 @@ says what a recipe or tool does and what it must still pass.
   hard hole and wrong store; `--fall-as-tail-call` prints a fall into
   another function's entry as the old tail call (r4-r12 and the flags
   zeroed, native/lift-fallthrough), the fallthrough control. About 6 s to lift, 15 s-2 min to build.
+  The lift runs capped at 16 GB, no swap (a commercial game's needs several).
 - `just lift-check [--only NAME]` (native/lift-stage-a, native/lift-bars):
   the lifter's check, `gbaa-lift-check` driven by
   `crates/codegen/lift-check.toml`: one table per program (`rom` under
@@ -1293,7 +1303,7 @@ says what a recipe or tool does and what it must still pass.
   play 0x00, native 0x01 …)`, `(…-ime-at-waits: frame 2: EWRAM byte
   0x020000cc: play 0x01, native 0x00 …)`, `planted hard hole caught` and
   `lift-check: passed`. Logs in `out/lift-*.txt`. About 10 minutes on
-  quack. Heavy: builds twenty-six generated crates.
+  quack. Heavy: builds twenty-six generated crates; gbaa-lift-check runs capped at 8 GB (its lifts and route-check in its scope; the builds in their own).
 
   `gbaa-lift --shadow-locals` (native/frame-locals; by hand, not part of
   the check) keeps every stack local in the frame's bytes too and prints

@@ -231,6 +231,10 @@ moves on to the next workable unit. Don't guess.
   through `just capped <cmd>`, or a recipe that already uses it. A runaway
   child must die in its own scope, not take the desktop and every other agent
   down.
+  The heavy tools enforce it: `gbaa-lift`, `gbaa-recompile`, `gbaa-holes`,
+  `gbaa-lift-check` and `route-check` exit 2 unless they run under a
+  memory cap of their own (one shared with the session's shell doesn't
+  count; `crates/analysis/src/cap.rs`); `GBAA_UNCAPPED=1` runs one anyway.
   A command killed for going over the cap says "killed: out of memory at
   <cap>": that's the cap, not the pipeline, so record it as such.
 - **CPU:** a capped or long job is a heavy one, and a machine runs only as
