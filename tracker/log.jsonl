@@ -2208,3 +2208,4 @@
 {"at":"2026-11-06T04:39:07Z","actor":"loop","tag":"78de4417","host":"quack","cmd":"done","id":"multiplayer/four-seats","text":"Netplay rooms for up to four players (Kirby's four): done"}
 {"at":"2026-11-06T04:42:35Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"multiplayer/four-seats","text":"Netplay rooms for up to four players (Kirby's four): on main"}
 {"at":"2026-11-06T04:42:48Z","actor":"loop","tag":"82db0e66","host":"quack","cmd":"claim","id":"native/disc-ram-copies","text":"Discovery finds code games copy to RAM themselves: claimed"}
+{"at":"2026-11-06T05:05:41Z","actor":"loop","tag":"db7eff8c","host":"quack","cmd":"done","id":"native/disc-run-call-targets","text":"Discovery takes the run's call targets as function starts: done, checked by verifier-ad7b2bec"}
