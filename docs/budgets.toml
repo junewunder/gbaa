@@ -1,0 +1,29 @@
+# Line budgets for the docs every session reads (crates/leak-check,
+# src/budgets.rs; `just check` fails a doc over its budget). A plan doc
+# keeps the plan: a unit's measured numbers go in the doc's generated
+# numbers file (`*.numbers.md`) or the unit's tracker evidence, not the
+# doc. Raising a budget is fine with a reason: say it in a comment here.
+#   path       from the repo root
+#   max_lines  the most lines it may have
+
+# The stage-B plan, cut from 810 lines to a plan on 2026-11-06.
+[[doc]]
+path = "docs/native-stage-b.md"
+max_lines = 400
+
+# The hole report's method and findings, cut from 667 lines on 2026-11-06.
+[[doc]]
+path = "docs/research/native-holes.md"
+max_lines = 360
+
+[[doc]]
+path = "docs/tools/commands.md"
+max_lines = 1950
+
+[[doc]]
+path = "docs/native-port-design.md"
+max_lines = 1250
+
+[[doc]]
+path = "AGENTS.md"
+max_lines = 85
