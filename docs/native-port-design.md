@@ -268,7 +268,12 @@ g.hw.sound.fifo_a.stream(Ref::of(&g.gSoundInfo.pcmBuffer));
   `g.hw.save.read(sector, &mut buf)`/`write`, persisted as the same `.sav`
   file the play build writes, so the two read each other's saves. A game
   whose save code isn't recognised keeps its chip protocol, through
-  `hw.save.cmd8(addr, v)`, the chip emulation's own entry.
+  `hw.save.cmd8(addr, v)`, the chip emulation's own entry. Built so far
+  (native/flash-stack-standin): `Hw::save` is the chip emulation itself,
+  and the three routines `AgbFlash` copies onto the stack and calls there
+  (`ReadFlash1`, `ReadFlash_Core`, `VerifyFlashSector_Core`; recognised at
+  the call by `analysis::flash`) are `hw::flash::{read_byte, read,
+  verify}` over it.
 
 **Prior art.** The PC ports of Super Mario 64 (`sm64-port`, `sm64ex`) and
 Ocarina of Time (Ship of Harkinian, on `libultraship`) compile the
