@@ -69,7 +69,9 @@ states in `states/`); `~/ROMs/gba/` read only. Never june's own checkouts.
 **What it produces, and where:** code and tests in `crates/`, a
 route `units/<name>.toml` per ROM path (its checkpoints, one check;
 `docs/tools/commands.md`), agb test programs in `agb/<name>/`
-(source only; builds go to `$GBAA_DATA/agb/`), docs in `docs/`. Outputs go
+(source only; builds go to `$GBAA_DATA/agb/`), docs in `docs/` (plan docs
+hold the plan: a unit's measured numbers go in the tracker or a generated
+`*.numbers.md`, and `docs/budgets.toml` caps their lines). Outputs go
 in `out/units/<name>/`, generated crates in `out/<game>/`.
 
 ## The oracle

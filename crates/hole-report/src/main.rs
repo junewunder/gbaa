@@ -1281,7 +1281,7 @@ fn main() -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: gbaa-holes ROM [--frames N] [--press KEY@F | KEY@F-G/E]... [--cover FILE [--update]] [--no-summaries] [--no-run-roots] [--show N] [--line FILE]\n       gbaa-holes --corpus FILE --roms DIR [--out DIR] [--against DIR] [--only NAME]... [--cover] [flags above...]"
+        "usage: gbaa-holes ROM [--frames N] [--press KEY@F | KEY@F-G/E]... [--cover FILE [--update]] [--no-summaries] [--no-run-roots] [--show N] [--line FILE]\n       gbaa-holes --corpus FILE --roms DIR [--out DIR] [--against DIR] [--only NAME]... [--cover] [--write-doc FILE] [flags above...]\n       gbaa-holes --corpus FILE --from DIR [--write-doc FILE]"
     );
     ExitCode::from(2)
 }
