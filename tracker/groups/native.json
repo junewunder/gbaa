@@ -254,7 +254,19 @@
       "title": "Coverage past the press script reaches the unresolved jumps",
       "detail": "From {unit:native/hole-report}: of 109 unresolved indirect jumps over the eight games only 14 ran in the 5,400-frame press script (Rogue 2 of 50, Minish Cap 5 of 25). Feed gbaa-fuzz (or longer routes/save states) into gbaa-holes' Run so each unresolved jump is either seen with targets (a holes.toml list the coverage runs check) or shown unreached by everything. Done when native-holes.md has, per game, reached-by-any-run counts and each reached jump's observed targets.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "feed14da",
+        "session": "feed14da-c1d4-43aa-bdd3-8c374c76acfb",
+        "host": "quack",
+        "pid": 1418242,
+        "start": "29954965",
+        "at": "2026-11-06T05:09:01Z",
+        "branch": "unit/native/hole-coverage",
+        "beats": true
+      },
+      "round": "2026-11-06T05:09:01Z"
     },
     {
       "id": "native/flash-stack-standin",
