@@ -634,26 +634,12 @@
       "title": "Netplay: the overlay hides the bottom of the menu",
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): on the Deck, something netplay draws covered the bottom of the Controls page, where the dead zone is ('if you can see the bottom, because the netplay thing'); Athena found tapping the screen hid it. Find what it is (the room bar or the on-screen keyboard's space), and keep the whole menu visible while in a room. Check: a 1280x800 screenshot in a room, Controls page scrolled to its last row, nothing over it; just check.",
       "minMinutes": 25,
-      "record": {
-        "state": "done",
-        "by": "14bc78bb",
-        "at": "2026-11-06T03:18:00Z",
-        "evidence": "Cause: the netplay session report box at the screen foot covered the Main page's bottom rows (Controls had no report). Fix 83d96268 lays the report out first and fits the menu above it. 1280x800 cu shots in a room (session ohm1, server+host+headless joiner): Main and Controls last rows clear, nothing over them. Main merged (8438a2d9); just check passed (exit 0) after merge.",
-        "branch": "unit/multiplayer/overlay-hides-menu",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-06T03:18:00Z",
-          "by": "14bc78bb",
-          "host": "quack",
-          "pid": 1418242,
-          "start": "29954965",
-          "beats": true,
-          "session": "14bc78bb-6b07-46da-82a6-5c179483fb6f",
-          "lane": "quack/2"
-        },
-        "pushed": true
-      },
       "notes": [
+        {
+          "at": "2026-11-06T03:21:25Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/desktop/src/menu.rs:1017-1034: the fix doesn't touch the problem the card reports. The card says something covered the bottom of the Controls page, where the dead zone rows are. Those rows are the DEADZ…"
+        },
         {
           "at": "2026-11-01T01:50:51Z",
           "by": "d86c5e5f",
@@ -665,6 +651,11 @@
           "text": "Fix committed on branch (57fcb251): netplay report box covered Main page's bottom rows; now menu fits above it. 1280x800 cu shots in a room: Main + Controls last rows clear. Left: just check (cut by stop), merge main, done. Steam OSK not seen here."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-06T03:21:25Z",
+        "findings": "- crates/desktop/src/menu.rs:1017-1034: the fix doesn't touch the problem the card reports. The card says something covered the bottom of the Controls page, where the dead zone rows are. Those rows are the DEADZONES section in menu/controls.rs:351, shown under Page::Remap. The report box is drawn only when `page == Page::Main`. The Evidence admits this ('Controls had no report'), so the box it moved could never have covered the Controls page. Moving it is a real fix for the Main page and can stay, but the card's 'Find what it is' is still unanswered for the Controls page. The playtest clue was that tapping the screen hid the cover, which points at something outside this menu: the Steam on-screen keyboard (for example, left open after typing a room code on the Netplay page), or another Steam/gamescope overlay. Next session: find out what draws over the Controls page on the Deck while in a room. Check whether the room-code entry raises the Deck's on-screen keyboard and whether it stays up after leaving the Netplay page. Then fix that or keep the Controls page clear of it, and record the cause in the Evidence.\n- Evidence (tracker multiplayer.json:641): the card's check was a 1280x800 shot in a room with the Controls page scrolled to its last row and nothing over it. The shots were taken in a cu session on quack, which never had whatever covered the Controls page. The earlier note says 'Steam OSK not seen here'. So a clear Controls page in cu proves nothing about the bug reported from the Deck. To meet the card, the shot has to come from a setup where the cover actually showed up: the Deck in gamescope/Steam, in a room, after joining by code. If only the owner's Deck can show it, the next session should ask the owner to run that check on the Deck: join a room, open Controls, scroll to the dead zone rows, and say whether anything covers them."
+      },
       "round": "2026-11-01T01:40:21Z"
     },
     {
