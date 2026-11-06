@@ -28,6 +28,10 @@
 //! reach escapes (`super::frame`): `sp_accesses_local_slot` and
 //! `sp_accesses_escaping_slot` (one the frame's run didn't place counts as
 //! escaping).
+//!
+//! Function words (`super::fnref`): the words of ROM outside code that hold
+//! a function's key, `fn_words_not_proven` those the flow didn't prove
+//! (barred), `fn_words_proven` the rest (no bar: it should rise).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -120,6 +124,7 @@ pub const UNBARRED: &[&str] = &[
     "ram_globals",
     "load_ram_global",
     "store_ram_global",
+    "fn_words_proven",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each
