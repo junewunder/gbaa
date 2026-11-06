@@ -557,7 +557,9 @@ fn run(rec: &mut Rec, m: &mut Machine<Script>, frames: u32, boot: bool) -> Resul
                 } => regs & 1 << 15 != 0,
                 _ => false,
             };
-            if indirect && nmode == mode && npc >= 0x4000 {
+            // An ARM jump whose condition failed falls through: not a target.
+            let skipped = !thumb && raw >> 28 != 0xE && npc == next;
+            if indirect && !skipped && nmode == mode && npc >= 0x4000 {
                 let to = rec.canon(npc) | (m.cpu.cpsr >> 5) & 1;
                 let bit = rec.run_bit;
                 let j = rec.jumps.entry(canon).or_default();
