@@ -575,15 +575,22 @@
       "title": "Netplay rooms for up to four players (Kirby's four)",
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): a third player joining got 'The session ended. The room is full.'; rooms have two seats (room.rs). Kirby & the Amazing Mirror links four GBAs on the multiplayer-mode cable (katam's gKirbys holds four Kirbys), and june wants all four in a room. Let 2 to 4 players join a room (the host starts once everyone's in, or the cable sees whoever is there); confirm runtime::link runs four machines on one bus. Every peer runs every console: measure four Kirbys' frame cost and re-run headroom, interpreted and recompiled, on quack and the Deck, in docs/research/multiplayer.md. Check: three and then four windows in a private cu session through a local gbaa-server get into Kirby's multiplayer, each shows its own seat, all end on one hash; a headless four-peer pingsim run; just check.",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "78de4417",
-        "session": "78de4417-f0a6-4e19-9efc-2032439ac701",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T04:17:05Z",
+        "at": "2026-11-06T04:39:07Z",
+        "evidence": "Private branch's work replayed on public main (71be9531, merge with main after). quack 2026-11-05: room-sim wander --players 4 --console gba and --players 3 pass every seat; private cu session: 3 then 4 Kirby windows via local gbaa-server, titled player 1-4, mark Connected 3/3 and 4/4, each on its own Kirby in Rainbow Route, one hash each (3: 27f2caeb at 3000, 4: 245b958b at 3600); headless 4 peers c894de98 after a CATCH_UP fix for an early goodbye; just check passes after the merge. Frame cost on quack in docs/research/multiplayer.md; Deck runs left for later by june's 2026-11-01 decision (may-lane-ssh-onto-your), in {unit:multiplayer/four-kirbys-deck}.",
         "branch": "unit/multiplayer/four-seats",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T04:39:07Z",
+          "by": "78de4417",
+          "host": "quack",
+          "pid": 1417300,
+          "start": "29954434",
+          "beats": true,
+          "session": "78de4417-f0a6-4e19-9efc-2032439ac701",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
