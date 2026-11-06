@@ -4,11 +4,11 @@
 //!
 //! What it plays (agb/psg-square/SOUND.md): each V-blank, DMA3 copies the
 //! next row of `SCORE` to the sound registers `0x60`-`0x83`, here a
-//! V-blank DMA callback writing them into [`Hw::sound`]; FIFO A plays a
-//! triangle wave through DMA1 on timer 0. The library has no timers, no
-//! FIFO DMA and no mixer yet, so the FIFO's set-up (DMA1, timer 0) isn't
-//! here and nothing is played: the check compares the sound registers
-//! this program writes with the play build's, not the audio.
+//! V-blank DMA callback writing them into [`Hw::sound`] a word at a time,
+//! at the play build's price for the copy; FIFO A plays `WAVE`, a
+//! triangle wave, through DMA1 ([`Hw::fifo_dma`]) on timer 0. The
+//! library mixes them with the play build's own sound path, so the check
+//! compares every frame's samples.
 
 mod host;
 
@@ -71,9 +71,19 @@ pub fn program(g: &mut Game) -> Result<Infallible, Exit> {
     // Master enable, then FIFO A set up and reset.
     g.hw.write16(reg::SOUNDCNT_X, 0x80);
     g.hw.write16(reg::SOUNDCNT_H, cnt_h(2) | 1 << 11);
-    // (DMA1 feeding FIFO A, and timer 0 clocking it: not in the library.)
+    // DMA1: FIFO A from WAVE, 32-bit, repeat, special timing.
+    g.hw.fifo_dma(
+        1,
+        0,
+        WAVE_AT,
+        0x8000 | 3 << 12 | 1 << 10 | 1 << 9 | 2 << 5,
+        rom32,
+    );
     // DMA3: the next row of SCORE to the sound registers every V-blank.
     g.hw.dma.vblank(3, score_row);
+    // Timer 0: overflow every 1024 cycles.
+    g.hw.write16(reg::TM0CNT_L, 0xFC00);
+    g.hw.write16(reg::TM0CNT_L + 2, 0x80);
     // agb's `VBlank::get`.
     g.hw.stat.vblank_irq = true;
     g.hw.irq.on(irq::VBLANK, |_| {});
@@ -82,17 +92,61 @@ pub fn program(g: &mut Game) -> Result<Infallible, Exit> {
     }
 }
 
-/// DMA3's V-blank copy: nine words of the score from `0x60`.
-fn score_row(g: &mut Game) {
+/// DMA3's V-blank copy: nine words of the score from `0x60`, each a word
+/// store as DMA's 32-bit units are. Returns the play build's price for it.
+fn score_row(g: &mut Game) -> u32 {
     let row = &SCORE[g.row];
     for (i, &w) in row.iter().enumerate() {
-        let o = 0x60 + 4 * i as u32;
-        g.hw.write16(o, w as u16);
-        g.hw.write16(o + 2, (w >> 16) as u16);
+        g.hw.write32(0x60 + 4 * i as u32, w);
     }
     // Past the score DMA3 reads on into the ROM, which this doesn't
     // have: the index panics there, and the check runs fewer frames.
+    let src = SCORE_AT + 36 * g.row as u32;
     g.row += 1;
+    hw::dma_cycles(g.hw.waitcnt, 4, src, 0x0400_0060, 9)
+}
+
+/// Where the ROM keeps `WAVE` and, right after it, `SCORE` (the ELF's
+/// symbols): FIFO A's DMA reads on from one into the other.
+const WAVE_AT: u32 = 0x0800_70C8;
+const SCORE_AT: u32 = WAVE_AT + 32768;
+
+/// The ROM's word at `a` (aligned), for FIFO A's DMA: `WAVE`, then
+/// `SCORE`; past those, the ROM this program doesn't have (the check runs
+/// fewer frames than reach it).
+fn rom32(_: &mut Game, a: u32) -> u32 {
+    let o = a.wrapping_sub(WAVE_AT) as usize;
+    if o < WAVE.len() {
+        // The planted fault (`--features plant`): one sample of the
+        // wave's 32768 a step off, which only the audio compare sees.
+        let b = |i: usize| {
+            let off = cfg!(feature = "plant") && o + i == 20_000;
+            (WAVE[o + i] as u8).wrapping_add(off as u8)
+        };
+        return u32::from_le_bytes([b(0), b(1), b(2), b(3)]);
+    }
+    let w = (o - WAVE.len()) / 4;
+    SCORE[w / 9][w % 9]
+}
+
+/// FIFO A's stream: a triangle wave, period 64 samples, peak ±48 (the
+/// agb source's `wave`, run at compile time).
+static WAVE: [i8; 32768] = wave();
+
+const fn wave() -> [i8; 32768] {
+    let mut w = [0i8; 32768];
+    let mut i = 0;
+    while i < w.len() {
+        let p = (i % 64) as i32;
+        let v = if p < 32 {
+            p * 3 - 48
+        } else {
+            (63 - p) * 3 - 48
+        };
+        w[i] = v as i8;
+        i += 1;
+    }
+    w
 }
 
 fn record(g: &mut Game) {

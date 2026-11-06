@@ -871,22 +871,28 @@ native-spike:
     target/release/native-spike-check crates/native-spike/check.toml out/native-spike/check \
         target/recompiled/release/gbaa-native-spike "$rom" target/release/native-spike target/release/native-spike-planted
 
-# The native check (native/oracle; docs/native-port-design.md section 7, docs/tools/commands.md): agb/native-spike and agb/psg-square (`just agb-tests`) recompiled at --timing native and built, then route-check --native runs each with its native program (crates/native-spike, check layout) on units/native-spike.toml and units/psg-square.toml and compares every frame's picture, RAM (outside the stack, code copies and crates/native-spike/check/*.replaced.toml), I/O, display memories and audio; for the spike also its play layout's frame hashes and a planted wrong store, which must be caught. Writes out/native-check/. Heavy: builds two generated crates.
+# The native check (native/oracle, native/hw-sound; docs/native-port-design.md section 7, docs/tools/commands.md): agb/native-spike, agb/psg-square and agb/direct-sound (`just agb-tests`) recompiled at --timing native and built, then route-check --native runs each with its native program (crates/native-spike, check layout) on units/native-spike.toml, units/psg-square.toml and units/direct-sound.toml and compares every frame's picture, RAM (outside the stack, code copies and crates/native-spike/check/*.replaced.toml), I/O (sound and timers too), display memories and audio samples (psg-square's FIFO A and PSG, direct-sound's two FIFOs and timer-IRQ buffer swaps, mixed by the play build's own sound path in runtime::hw); for the spike also its play layout's frame hashes and a planted wrong store, and for psg-square a planted wrong sample, each of which must be caught. Writes out/native-check/. Heavy: builds three generated crates.
 native-check:
     #!/usr/bin/env bash
     set -eu
     spike={{quote(gbaa_data / "agb/native-spike.gba")}}
     psg={{quote(gbaa_data / "agb/psg-square.gba")}}
-    [ -f "$spike" ] && [ -f "$psg" ] || { echo "no $spike or $psg: run just agb-tests" >&2; exit 1; }
+    direct={{quote(gbaa_data / "agb/direct-sound.gba")}}
+    for r in "$spike" "$psg" "$direct"; do
+        [ -f "$r" ] || { echo "no $r: run just agb-tests" >&2; exit 1; }
+    done
     mkdir -p out
     just recompile "$spike" out/native-spike --timing native > out/native-spike.recompile.txt
     just build-recompiled out/native-spike
     just recompile "$psg" out/psg-square --timing native > out/psg-square.recompile.txt
     just build-recompiled out/psg-square
+    just recompile "$direct" out/direct-sound --timing native > out/direct-sound.recompile.txt
+    just build-recompiled out/direct-sound
     {{lock}} cargo build -q --release -p route-check
-    {{lock}} cargo build -q --release -p native-spike --features guest-layout,plant --bin native-spike
+    {{lock}} cargo build -q --release -p native-spike --features guest-layout,plant --bin native-spike --bin native-psg-square
     cp target/release/native-spike target/release/native-spike-planted-guest
-    {{lock}} cargo build -q --release -p native-spike --features guest-layout --bin native-spike --bin native-psg-square
+    cp target/release/native-psg-square target/release/native-psg-square-planted-guest
+    {{lock}} cargo build -q --release -p native-spike --features guest-layout --bin native-spike --bin native-psg-square --bin native-direct-sound
     cp target/release/native-spike target/release/native-spike-guest
     {{lock}} cargo build -q --release -p native-spike --bin native-spike
     target/release/route-check --native target/release/native-spike-guest target/recompiled/release/gbaa-native-spike \
@@ -894,7 +900,9 @@ native-check:
         --packed target/release/native-spike --planted target/release/native-spike-planted-guest
     target/release/route-check --native target/release/native-psg-square target/recompiled/release/gbaa-psg-square \
         units/psg-square.toml --replaced crates/native-spike/check/psg-square.replaced.toml \
-        --no-audio "runtime::hw has no mixer yet: the sound registers are compared, not the samples"
+        --planted target/release/native-psg-square-planted-guest
+    target/release/route-check --native target/release/native-direct-sound target/recompiled/release/gbaa-direct-sound \
+        units/direct-sound.toml --replaced crates/native-spike/check/direct-sound.replaced.toml
 
 # The stage-A lifter (native/lift-stage-a; docs/native-port-design.md, "The stage-A lifter as built"; docs/tools/commands.md): gbaa-lift writes ROM whole as plain Rust over byte RAM and runtime::hw to OUT (default out/lift-<name>), with the stand-ins of holes/<name>.toml if there is one, then builds it into target/recompiled. FLAGS go to gbaa-lift (--name, --holes, --bars, --drop-standin, --plant). Fails, naming each, on a hard hole no stand-in covers. Heavy: builds a generated crate.
 [positional-arguments]

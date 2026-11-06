@@ -1156,16 +1156,18 @@ says what a recipe or tool does and what it must still pass.
   build's differ. Passes with 510 distinct pictures, hashes file
   `5539f4ec2af9bb48`, planted caught at frame 212 (2026-11-01). Heavy:
   builds a generated crate.
-- `just native-check` (native/oracle; docs/native-port-design.md,
-  section 7): the native check. Recompiles `agb/native-spike` and
-  `agb/psg-square` (`just agb-tests`) at `--timing native` and builds
-  them, builds `crates/native-spike`'s programs in the check layout
-  (`--features guest-layout`: RAM as the ROM's EWRAM and IWRAM, each
-  global at its link address), the spike also in the play layout and with
-  its planted wrong store, then runs `route-check --native NATIVE PLAY
+- `just native-check` (native/oracle, native/hw-sound;
+  docs/native-port-design.md, section 7): the native check. Recompiles
+  `agb/native-spike`, `agb/psg-square` and `agb/direct-sound` (`just
+  agb-tests`) at `--timing native` and builds them, builds
+  `crates/native-spike`'s programs in the check layout (`--features
+  guest-layout`: RAM as the ROM's EWRAM and IWRAM, each global at its
+  link address), the spike also in the play layout, the spike and
+  psg-square with their planted faults, then runs `route-check --native NATIVE PLAY
   ROUTE [--replaced FILE] [--packed BIN] [--planted BIN]...` on
-  `units/native-spike.toml` (600 frames) and `units/psg-square.toml`
-  (120). Each build writes every frame's record at its present
+  `units/native-spike.toml` (600 frames), `units/psg-square.toml`
+  (120) and `units/direct-sound.toml` (300). Each build writes every
+  frame's record at its present
   (`--native-record`, `crates/native-record`); the play build runs a
   second time with `--interp`, whose records must be the compiled run's
   and which reports the lowest sp (compiled code doesn't keep it). Fails
@@ -1174,17 +1176,20 @@ says what a recipe or tool does and what it must still pass.
   code copies, and `crates/native-spike/check/*.replaced.toml`: agb's
   globals, heap and VRAM free list, which the native programs replaced),
   the I/O registers the library models (display, `DISPSTAT`'s writable
-  bits, `VCOUNT`, sound registers but `SOUNDCNT_X`'s status, wave RAM,
-  `IE`/`IF`/`WAITCNT`/`IME`), palette, VRAM, OAM, and audio where both
-  make some; the play layout must draw the same frames and the planted
-  store must be caught. The library has no mixer, so psg-square's audio
-  is reported "NOT compared" (its sound registers are): play's sound
-  against a native program's none fails unless `--no-audio WHY`, which
-  the recipe gives for psg-square. A lowest sp outside IWRAM fails; a
-  code copy's skip covers any variables copied with the code. Passes with 0
-  differences for both, the spike's audio silent in both, the plant
-  caught at frame 212, OAM byte `0x07000002` (2026-11-01). Writes
-  `out/native-check/`. Heavy: builds two generated crates.
+  bits, `VCOUNT`, the sound registers with `SOUNDCNT_X`'s status, wave
+  RAM, the FIFOs' last stores, the timers, `IE`/`IF`/`WAITCNT`/`IME`),
+  palette, VRAM, OAM, and each frame's audio (samples' count and hash):
+  `runtime::hw` mixes with the play build's own sound path
+  (native/hw-sound), so psg-square's FIFO A and PSG and direct-sound's
+  two FIFOs with their timer-IRQ buffer swaps are compared sample for
+  sample. The play layout must draw the same frames, and the planted
+  faults must be caught: the spike's wrong store, psg-square's one wrong
+  sample (`--features plant`). Play's sound against a native program's
+  none (a host that records none) fails unless `--no-audio WHY`. A lowest
+  sp outside IWRAM fails; a code copy's skip covers any variables copied
+  with the code. Passes with 0 differences and audio the same in every
+  frame for all three (2026-11-06). Writes `out/native-check/`. Heavy:
+  builds three generated crates.
 - `just lift ROM [OUT] [FLAGS]` (native/lift-stage-a;
   `docs/native-port-design.md`, "The stage-A lifter as built"): the
   stage-A lifter. `gbaa-lift ROM OUT [--name NAME] [--holes FILE]
