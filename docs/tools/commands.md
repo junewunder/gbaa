@@ -31,6 +31,17 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `$GBAA_DATA/truth/<name>.funcs.tsv` from any ELF (default the pokeemerald
   one), then scores a discovered-starts file against a truth file (default
   Emerald's). `just check` doesn't need them.
+- `just dis ROM ADDR [LEN] [--arm] [--names FILE]`: the disassembler,
+  `gbaa-dis` (`crates/codegen/src/bin/gbaa-dis.rs`). LEN bytes (hex,
+  default 0x40) at ROM address ADDR (hex, 0x08000000 and up), one
+  instruction a line as `080004c6: f00a ffa1  bl 0x0800b40c`, in
+  `armv4t::text`'s objdump UAL form (`just insn-text` checks it); a
+  Thumb `bl` pair is one line. Thumb unless `--arm`; an odd ADDR is
+  Thumb, the bit stripped. `--names FILE`, a names map for this ROM
+  (`$GBAA_DATA/names/<game>.toml`, loaded as `codegen::names` does, so
+  its `rom_sha1` must match), prints `<name>:` at each named function's
+  start and `<name>` after a branch to one. Paths are from where it's run;
+  ROM only (no save states). Light: no cap.
 - `just insn-text`: the check of `armv4t::text`, the assembly
   `gbaa-recompile --asm-text` prints in `insn!` and `--asm-comments` as
   `// 0x0805_9810 push {r4, lr}` (`Config::insn`; the readable form prints
