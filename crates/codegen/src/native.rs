@@ -32,6 +32,11 @@
 //!   access at a constant address is a typed global's field instead
 //!   (`g.ram.d_02000100`, [`globals`]): `Game::ram` is a `Ram` struct of
 //!   them at the guest's offsets, which derefs to the bytes.
+//! - Stack slots whose address doesn't escape ([`frame`]) are Rust locals,
+//!   `l<bytes below the entry sp>`: a `u32` for an aligned word only ever
+//!   accessed whole, else bytes (unit `native/frame-locals`); escaping
+//!   slots stay IWRAM bytes, and sp is still passed. A value nothing
+//!   printed uses (the address of an access to a local) isn't printed.
 //! - BIOS calls are the library's: the waits (`IntrWait`, `VBlankIntrWait`
 //!   as `hw::halt` until the game's handler sets the flag), `CpuSet` with
 //!   its time (`hw::spend`), `Div`.
@@ -58,7 +63,8 @@
 //! - a function that returns without keeping r4-r11 and sp.
 //!
 //! Soft holes (counted in the report): every RAM access but the globals'
-//! is bytes, every pointer a guest address, every ROM read at run time.
+//! and the stack locals' is bytes, every pointer a guest address, every
+//! ROM read at run time.
 
 use crate::func::{Ctx, ExitInfo, Func, Idle, Plan, build_func, exits, key};
 use crate::saves::{Summaries, Summary, summarize};
@@ -66,7 +72,7 @@ use analysis::discovery::{self, Discovery};
 use analysis::ir::{BinOp, BitOp, Exit, Inst, Op, ValueId};
 use analysis::vsa::func::JumpRes;
 use armv4t::sem::{Flag, ShiftType, Width};
-use frame::{Frame, Kind};
+use frame::{Frame, Kind, Local};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
@@ -77,7 +83,7 @@ pub mod lift_check;
 pub mod metrics;
 pub mod shape;
 
-use globals::{Globals, Place};
+use globals::{Globals, Obj, Place};
 use metrics::{Metrics, Where};
 use shape::{Shape, Shapes};
 
@@ -112,6 +118,18 @@ pub struct Holes {
     /// IRQ-hold check's planted control (`native/lift-irq-hold`): the
     /// native check must catch it on `agb/native-irq-hold`.
     pub irq_at_waits: bool,
+    /// The stack-locals check's planted control (`gbaa-lift --plant-slot
+    /// AT`, `native/frame-locals`): the store of the instruction at this
+    /// address, which must be to a slot printed as a Rust local, stores
+    /// its value plus one. The native check skips the guest stack, so it
+    /// must catch this where the slot's value reaches a global.
+    pub plant_slot: Option<u32>,
+    /// Shadow every stack local in the frame's bytes (`gbaa-lift
+    /// --shadow-locals`): a local starts as its bytes, every store to it
+    /// writes them too, and every load reads them and prints a line to
+    /// stderr (`shadow local:`) where they differ from the local, which
+    /// is where something the escape analysis didn't see wrote the frame.
+    pub shadow_locals: bool,
     /// Data names and sizes (0: not known) by guest address, from the
     /// game's names files (`gbaa-lift --names DIR`): a RAM global that
     /// starts at one is named so, else `d_<address>`, and spans a sized
@@ -244,7 +262,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     }
     // RAM's globals: what the constant-address accesses of the functions
     // printed (a stand-in's code is its own) reach.
+    // And what their computed ones reach, where the value sets bound it
+    // (native/ref-in-object): one address is an access like a constant
+    // one; a range, an object's extent.
     let mut ram = Vec::new();
+    let mut ranges = Vec::new();
     for c in &codes {
         for f in c
             .funcs
@@ -253,15 +275,25 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         {
             for gb in f.blocks.values() {
                 let insts = &gb.block.insts;
+                let mut at = 0;
                 for inst in insts {
+                    if let Op::Insn(a) = inst.op {
+                        at = a;
+                    }
                     if let Some((a, w)) = const_access(insts, &inst.op) {
                         ram.push((a, w));
+                    } else if let Some((lo, hi, w)) = computed_ram(&c.ctx, insts, &inst.op, at) {
+                        if lo == hi {
+                            ram.push((lo, w));
+                        } else {
+                            ranges.push((lo, hi + w, w));
+                        }
                     }
                 }
             }
         }
     }
-    let globals = Globals::carve(&ram, &holes.names);
+    let globals = Globals::carve(&ram, &ranges, &holes.names);
     let shapes = shapes_of(&codes, &all, holes);
     let fnrefs = fn_flow(rom, &disc, &overlays, &codes, &all);
     let mut out = String::new();
@@ -299,6 +331,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 soft: &mut soft,
                 labels: f.blocks.keys().enumerate().map(|(i, &k)| (k, i)).collect(),
                 frame: c.frames.get(&f.entry),
+                locals: c
+                    .frames
+                    .get(&f.entry)
+                    .map(Frame::locals)
+                    .unwrap_or_default(),
                 cur: f.entry,
                 globals: &globals,
             };
@@ -439,15 +476,45 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .join(", ");
     writeln!(
         report,
-        "stack frames (native/frame.rs): {slots} slots in {} functions with any, {escaping} of them escaping ({by_kind}); {} functions lose sp's offset; sp-relative accesses to slots that don't escape {}, that do {}",
+        "stack frames (native/frame.rs): {slots} slots in {} functions with any, {escaping} of them escaping ({by_kind}); {} functions lose sp's offset; sp-relative accesses left in memory to slots that don't escape {}, that do {}, in the caller's frame {}",
         frames.iter().filter(|f| !f.slots.is_empty()).count(),
         frames.iter().filter(|f| f.lost).count(),
         soft.sp_slots[0],
         soft.sp_slots[1],
+        soft.sp_slots[2],
     )
     .unwrap();
     report.push_str(&fnrefs.0.report(&fnrefs.1, &fnrefs.2));
     let fn_proven = fnrefs.1.keys().filter(|w| fnrefs.0.proven(**w)).count();
+    writeln!(
+        report,
+        "stack locals (native/frame-locals): {} slots in {} functions printed as Rust locals, {} loads and stores to them; {} calls write the locals to the frame first",
+        soft.local_slots,
+        soft.local_fns,
+        soft.locals,
+        frames.iter().map(|f| f.flush.len()).sum::<usize>(),
+    )
+    .unwrap();
+    let objs = |st| soft.access.get(&(st, Where::Object)).copied().unwrap_or(0);
+    writeln!(
+        report,
+        "pointers into one global (native/ref-in-object): {} loads and {} stores through a computed address the value sets bound to one typed global; {} computed RAM accesses no one global explains (pointer arithmetic the types don't explain)",
+        objs(false),
+        objs(true),
+        soft.unexplained,
+    )
+    .unwrap();
+    if let Some(at) = holes.plant_slot
+        && !soft.planted_slot
+    {
+        let h = Hole {
+            func: at,
+            at,
+            what: "--plant-slot: no store to a stack local there".into(),
+        };
+        writeln!(report, "  {h}").unwrap();
+        hard.push(h);
+    }
     let mut m = Metrics::default();
     let n = |x: usize| x as u64;
     // The prelude is hand-written, not lifted: its own metric, which may
@@ -478,8 +545,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("blocks", n(blocks));
     m.push_accesses(&soft.access);
     m.push("ram_globals", n(globals.0.len()));
+    m.push("pointer_unexplained", soft.unexplained);
     m.push("sp_accesses_local_slot", soft.sp_slots[0]);
     m.push("sp_accesses_escaping_slot", soft.sp_slots[1]);
+    m.push("sp_accesses_callers_frame", soft.sp_slots[2]);
     m.push("call_fn_calls", n(soft.indirect));
     m.push("jumps_by_value", n(soft.dyn_jumps));
     m.push("fn_words_proven", n(fn_proven));
@@ -785,8 +854,19 @@ fn code(ctx: Ctx<'_>) -> Code<'_> {
 struct Soft {
     /// Loads (false) and stores (true) by where their address is.
     access: BTreeMap<(bool, Where), u64>,
-    /// The sp-relative ones to slots that don't escape, and that do.
-    sp_slots: [u64; 2],
+    /// The sp-relative ones left in memory: to slots that don't escape
+    /// (none should be: they are locals), to slots that do, and to the
+    /// caller's frame.
+    sp_slots: [u64; 3],
+    /// Loads and stores printed as a stack local's.
+    locals: u64,
+    /// Computed RAM accesses no one global explains (native/ref-in-object).
+    unexplained: u64,
+    /// Stack locals, and the functions with any.
+    local_slots: usize,
+    local_fns: usize,
+    /// The `--plant-slot` store printed.
+    planted_slot: bool,
     /// Lifted functions whose summary has a hole, or that have none.
     summary_holes: usize,
     /// Lifted functions taking and returning all of r0-r3 whose summary
@@ -819,6 +899,8 @@ struct FnPrinter<'a, 'b> {
     labels: BTreeMap<u32, usize>,
     /// The function's stack frame.
     frame: Option<&'a Frame>,
+    /// Its slots printed as Rust locals ([`Frame::locals`]).
+    locals: Vec<Local>,
     /// The block being printed.
     cur: u32,
     /// RAM's typed globals.
@@ -958,6 +1040,7 @@ impl FnPrinter<'_, '_> {
         )
         .unwrap();
         s.push_str("    let Regs { r: [mut r0, mut r1, mut r2, mut r3, mut r4, mut r5, mut r6, mut r7, mut r8, mut r9, mut r10, mut r11, mut r12, mut r13, mut r14], f: [mut nf, mut zf, mut cf, mut vf] } = s;\n");
+        s.push_str(&self.declare_locals());
         if f.blocks.len() == 1 {
             s.push_str("    let b = 0usize;\n    loop {\n        match b {\n");
         } else {
@@ -986,7 +1069,8 @@ impl FnPrinter<'_, '_> {
         let mut at = 0u32;
         let ind = "                ";
         // The accesses printed as a typed global's field, and the address
-        // arithmetic only they used, which isn't printed.
+        // arithmetic only they used, which isn't printed; and the values
+        // nothing printed uses (a stack local's address among them).
         let typed: Vec<Option<Place>> = insts
             .iter()
             .map(|inst| {
@@ -994,10 +1078,28 @@ impl FnPrinter<'_, '_> {
                 self.globals.place(a, w)
             })
             .collect();
+        // The computed accesses into one global (native/ref-in-object),
+        // which print their address: the pointer finds or checks the field.
+        let mut pc = 0;
+        let objs: Vec<Option<Obj>> = insts
+            .iter()
+            .map(|inst| {
+                if let Op::Insn(a) = inst.op {
+                    pc = a;
+                }
+                if const_access(insts, &inst.op).is_some() {
+                    return None;
+                }
+                let (lo, hi, w) = computed_ram(self.ctx, insts, &inst.op, pc)?;
+                self.globals
+                    .object(globals::guest(lo), globals::guest(hi), w)
+            })
+            .collect();
         let dead = dead_addresses(insts, &typed);
+        let used = self.used(insts, &typed);
         for (i, inst) in insts.iter().enumerate() {
             let id = ValueId(i as u32);
-            if dead[i] {
+            if dead[i] || (pure(&inst.op) && !used[i]) {
                 continue;
             }
             let guard = inst.guard.map(v);
@@ -1025,10 +1127,27 @@ impl FnPrinter<'_, '_> {
                         Width::Half => ("ld16", " & !1"),
                         Width::Word => ("ld32", " & !3"),
                     };
-                    self.count(insts, addr, at, i, false, typed[i].is_some());
-                    let e = match &typed[i] {
-                        Some(p) => globals::load(p, bytes(width)),
-                        None => format!("{f}(g, {}{m})", v(addr)),
+                    let mem = match (&typed[i], &objs[i]) {
+                        (Some(p), _) => globals::load(p, bytes(width)),
+                        (None, Some(o)) => o.load(&format!("{}{m}", v(addr)), bytes(width)),
+                        (None, None) => format!("{f}(g, {}{m})", v(addr)),
+                    };
+                    let e = match self.local(i) {
+                        Some((l, d, n)) => {
+                            let x = local_read(&l, d, n);
+                            if self.holes.shadow_locals {
+                                format!(
+                                    "{{ let x: u32 = {x}; let m: u32 = {mem}; if x != m {{ eprintln!(\"shadow local: {at:#010x} loads {{x:#x}} from {}, the frame's bytes hold {{m:#x}}\"); }} x }}",
+                                    l.name()
+                                )
+                            } else {
+                                x
+                            }
+                        }
+                        None => {
+                            self.count(insts, addr, at, i, false, typed_as(&typed[i], &objs[i]));
+                            mem
+                        }
                     };
                     match &guard {
                         Some(gv) => writeln!(
@@ -1046,18 +1165,36 @@ impl FnPrinter<'_, '_> {
                         Width::Half => ("st16", " & !1"),
                         Width::Word => ("st32", " & !3"),
                     };
-                    self.count(insts, addr, at, i, true, typed[i].is_some());
-                    let plant = if self.holes.plant == Some(at) {
+                    let local = self.local(i);
+                    let plant = if self.holes.plant == Some(at)
+                        || (local.is_some() && self.holes.plant_slot == Some(at))
+                    {
+                        self.soft.planted_slot |= local.is_some();
                         ".wrapping_add(1)"
                     } else {
                         ""
                     };
-                    let x = format!("{}{plant}", v(value));
-                    let st = match &typed[i] {
-                        Some(p) => globals::store(p, bytes(width), &x),
-                        None => format!("{f}(g, {}{m}, {x});", v(addr)),
+                    let val = format!("{}{plant}", v(value));
+                    let mem = match (&typed[i], &objs[i]) {
+                        (Some(p), _) => globals::store(p, bytes(width), &val),
+                        (None, Some(o)) => o.store(&format!("{}{m}", v(addr)), bytes(width), &val),
+                        (None, None) => format!("{f}(g, {}{m}, {val});", v(addr)),
                     };
-                    stmt(&mut s, st);
+                    let body = match local {
+                        Some((l, d, n)) => {
+                            let w = local_write(&l, d, n, &val);
+                            if self.holes.shadow_locals {
+                                format!("{w} {mem}")
+                            } else {
+                                w
+                            }
+                        }
+                        None => {
+                            self.count(insts, addr, at, i, true, typed_as(&typed[i], &objs[i]));
+                            mem
+                        }
+                    };
+                    stmt(&mut s, body);
                 }
                 Op::Exit(e) => {
                     let x = xs
@@ -1065,7 +1202,7 @@ impl FnPrinter<'_, '_> {
                         .find(|x| x.index == i)
                         .copied()
                         .expect("every exit planned");
-                    let body = self.exit(e, &x, thumb);
+                    let body = format!("{}{}", self.flush(i), self.exit(e, &x, thumb));
                     match &guard {
                         Some(gv) => writeln!(s, "{ind}if {gv} {{\n{body}{ind}}}").unwrap(),
                         None => s.push_str(&body),
@@ -1081,7 +1218,8 @@ impl FnPrinter<'_, '_> {
         s
     }
 
-    /// Count an access by the instruction at `at`: a constant address by
+    /// Count an access by the instruction at `at`: one printed `typed` as
+    /// a field as that; a constant address by
     /// its region; else as the value-set analysis knows the instruction's
     /// addresses (code it didn't reach, such as discovery's gaps, is
     /// unknown). An sp-relative one also by whether the slot it reaches
@@ -1093,10 +1231,10 @@ impl FnPrinter<'_, '_> {
         at: u32,
         i: usize,
         store: bool,
-        global: bool,
+        typed: Option<Where>,
     ) {
         let w = match konst(insts, addr) {
-            Some(_) if global => Where::Global,
+            _ if typed.is_some() => typed.unwrap(),
             Some(a) => Where::Const(metrics::region(a)),
             None => match self.ctx.disc.rec.accesses.get(&at) {
                 Some(x) if x.stack_only() => Where::Sp,
@@ -1108,13 +1246,119 @@ impl FnPrinter<'_, '_> {
             },
         };
         *self.soft.access.entry((store, w)).or_default() += 1;
+        self.soft.unexplained += (w == Where::Computed(0)) as u64;
         if w == Where::Sp {
             let esc = self
                 .frame
                 .and_then(|f| f.escapes_at(self.cur, i))
                 .unwrap_or(true);
-            self.soft.sp_slots[esc as usize] += 1;
+            let callers = self.frame.is_some_and(|f| f.in_callers(self.cur, i));
+            let k = match (esc, callers) {
+                (true, _) => 1,
+                (false, true) => 2,
+                (false, false) => 0,
+            };
+            self.soft.sp_slots[k] += 1;
         }
+    }
+
+    /// Which of a block's values something printed uses. An access
+    /// printed as a stack local's (unless `--shadow-locals` reads the
+    /// frame's bytes too) or a typed global's (`typed`) doesn't use its
+    /// address, so the arithmetic only the address needed isn't printed
+    /// ([`pure`]).
+    fn used(&self, insts: &[Inst], typed: &[Option<Place>]) -> Vec<bool> {
+        let mut used = vec![false; insts.len()];
+        for (i, inst) in insts.iter().enumerate().rev() {
+            if pure(&inst.op) && !used[i] {
+                continue;
+            }
+            let local = !self.holes.shadow_locals
+                && self
+                    .frame
+                    .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
+            let field = typed[i].is_some();
+            let ops = match inst.op {
+                Op::Load { .. } if local || field => Vec::new(),
+                Op::Store { value, .. } if local || field => vec![value],
+                ref op => op.operands(),
+            };
+            for x in ops.into_iter().chain(inst.guard) {
+                used[x.index()] = true;
+            }
+        }
+        used
+    }
+
+    /// The stack local the access at inst `i` of the current block lands
+    /// in, if any ([`Frame::local_at`]), counted.
+    fn local(&mut self, i: usize) -> Option<(Local, u32, u8)> {
+        let r = self.frame?.local_at(&self.locals, self.cur, i);
+        self.soft.locals += r.is_some() as u64;
+        r
+    }
+
+    /// The stack locals' declarations, after the entry's registers: each
+    /// zero, or its frame bytes with `--shadow-locals`; and the entry sp,
+    /// `sp0`, where a flush or the shadow needs the frame's address.
+    fn declare_locals(&mut self) -> String {
+        let mut s = String::new();
+        if self.locals.is_empty() {
+            return s;
+        }
+        self.soft.local_slots += self.locals.len();
+        self.soft.local_fns += 1;
+        let shadow = self.holes.shadow_locals;
+        if shadow || self.frame.is_some_and(|f| !f.flush.is_empty()) {
+            s.push_str("    let sp0: u32 = r13;\n");
+        }
+        for l in &self.locals {
+            let name = l.name();
+            let (ty, init) = if l.word {
+                let init = if shadow {
+                    format!("ld32(g, {})", local_addr(l, 0))
+                } else {
+                    "0".into()
+                };
+                ("u32".to_string(), init)
+            } else {
+                let init = if shadow {
+                    let bs: Vec<String> = (0..l.len)
+                        .map(|j| format!("ld8(g, {}) as u8", local_addr(l, j)))
+                        .collect();
+                    format!("[{}]", bs.join(", "))
+                } else {
+                    format!("[0; {}]", l.len)
+                };
+                (format!("[u8; {}]", l.len), init)
+            };
+            writeln!(s, "    let mut {name}: {ty} = {init};").unwrap();
+        }
+        s
+    }
+
+    /// Before a call the frame is done with after, whose callee may reach
+    /// up into it ([`Frame::flush`]): every stack local to its bytes.
+    fn flush(&self, i: usize) -> String {
+        let ind = "                ";
+        if !self.frame.is_some_and(|f| f.flush.contains(&(self.cur, i))) {
+            return String::new();
+        }
+        let mut s = String::new();
+        for l in &self.locals {
+            let name = l.name();
+            if l.word {
+                writeln!(s, "{ind}st32(g, {}, {name});", local_addr(l, 0)).unwrap();
+            } else {
+                writeln!(
+                    s,
+                    "{ind}for (j, x) in {name}.iter().enumerate() {{ st8(g, {}.wrapping_add(j as u32), *x as u32); }}",
+                    local_addr(l, 0)
+                )
+                .unwrap();
+            }
+        }
+        s
     }
 
     /// A jump to block or function `k`: a label, or a fall into another
@@ -1327,6 +1571,16 @@ impl FnPrinter<'_, '_> {
     }
 }
 
+/// How an access printed typed is counted: a constant address's field
+/// (`Global`) or a computed one's (`Object`).
+fn typed_as(field: &Option<Place>, obj: &Option<Obj>) -> Option<Where> {
+    match (field, obj) {
+        (Some(_), _) => Some(Where::Global),
+        (None, Some(_)) => Some(Where::Object),
+        (None, None) => None,
+    }
+}
+
 fn bytes(w: Width) -> u32 {
     match w {
         Width::Byte => 1,
@@ -1343,6 +1597,30 @@ fn const_access(insts: &[Inst], op: &Op) -> Option<(u32, u32)> {
     };
     let w = bytes(width);
     Some((globals::ram_at(konst(insts, addr)? & !(w - 1))?, w))
+}
+
+/// A load or store whose address isn't a constant in its block but which
+/// the value sets bound to RAM (`analysis::vsa::func::Access`, by the
+/// instruction at `at`): the offsets in `Game::ram` of its lowest and
+/// highest address (aligned as the access aligns them, in one mirror) and
+/// its width in bytes. A whole instruction's accesses share a bound (an
+/// `ldm`'s words).
+fn computed_ram(ctx: &Ctx, insts: &[Inst], op: &Op, at: u32) -> Option<(u32, u32, u32)> {
+    let (Op::Load { width, addr } | Op::Store { width, addr, .. }) = *op else {
+        return None;
+    };
+    if konst(insts, addr).is_some() {
+        return None;
+    }
+    let x = ctx.disc.rec.accesses.get(&at)?;
+    let (lo, hi) = x.hull.filter(|_| !x.sp && !x.top)?;
+    if metrics::region_of(lo, hi) != Some(0) {
+        return None;
+    }
+    let w = bytes(width);
+    let (lo, hi) = (lo & !(w - 1), hi & !(w - 1));
+    let (o_lo, o_hi) = (globals::ram_at(lo)?, globals::ram_at(hi)?);
+    (o_hi >= o_lo && o_hi - o_lo == hi - lo).then_some((o_lo, o_hi, w))
 }
 
 /// The values of a block's address arithmetic (constants and the ops
@@ -1496,6 +1774,71 @@ fn reg_list(m: u16) -> String {
         .map(|r| format!("r{r}"))
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// Whether `op` is printed as a `let` of a value and does nothing else, so
+/// it needn't be printed where nothing uses it.
+fn pure(op: &Op) -> bool {
+    !matches!(
+        op,
+        Op::Insn(_)
+            | Op::Timing(_)
+            | Op::YieldFlag(..)
+            | Op::SetReg(..)
+            | Op::SetFlag(..)
+            | Op::GetUserReg(_)
+            | Op::SetUserReg(..)
+            | Op::GetCpsr
+            | Op::GetSpsr
+            | Op::SetCpsr { .. }
+            | Op::SetSpsr { .. }
+            | Op::Load { .. }
+            | Op::Store { .. }
+            | Op::Exit(_)
+    )
+}
+
+/// Byte `d` of stack local `l`'s frame bytes: `sp0` less how far below
+/// it the byte is.
+fn local_addr(l: &Local, d: u32) -> String {
+    format!("sp0.wrapping_sub({:#x})", (-l.lo) as u32 - d)
+}
+
+/// A load of `n` bytes at byte `d` of stack local `l`, as a `u32`.
+fn local_read(l: &Local, d: u32, n: u8) -> String {
+    let name = l.name();
+    if l.word {
+        return name;
+    }
+    let b = |j: u32| format!("{name}[{}]", d + j);
+    match n {
+        1 => format!("{} as u32", b(0)),
+        2 => format!("u16::from_le_bytes([{}, {}]) as u32", b(0), b(1)),
+        _ => format!(
+            "u32::from_le_bytes([{}, {}, {}, {}])",
+            b(0),
+            b(1),
+            b(2),
+            b(3)
+        ),
+    }
+}
+
+/// A store of `val`'s low `n` bytes at byte `d` of stack local `l`.
+fn local_write(l: &Local, d: u32, n: u8, val: &str) -> String {
+    let name = l.name();
+    match (l.word, n) {
+        (true, _) => format!("{name} = {val};"),
+        (_, 1) => format!("{name}[{d}] = ({val}) as u8;"),
+        (_, 2) => format!(
+            "{name}[{d}..{}].copy_from_slice(&(({val}) as u16).to_le_bytes());",
+            d + 2
+        ),
+        _ => format!(
+            "{name}[{d}..{}].copy_from_slice(&({val}).to_le_bytes());",
+            d + 4
+        ),
+    }
 }
 
 /// The value of `x` if it is a constant within its block: a literal, a

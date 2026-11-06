@@ -22,7 +22,11 @@
 //! - `sp`: sp-relative (the value-set analysis says it is the function's
 //!   entry sp plus a constant);
 //! - `computed`: anything else, by region where the value-set analysis
-//!   bounds it to one, else `computed_unknown`.
+//!   bounds it to one, else `computed_unknown`; one in RAM the value sets
+//!   bound to one typed global (`super::globals::Obj`) is `ram_object`
+//!   instead (no bar: it should rise), and `pointer_unexplained` counts
+//!   the computed RAM accesses that aren't (native/ref-in-object: they
+//!   reach several globals, or one at a width not its element's).
 //!
 //! The sp-relative ones are split again by whether the stack slot they
 //! reach escapes (`super::frame`): `sp_accesses_local_slot` and
@@ -69,6 +73,9 @@ pub enum Where {
     /// A constant in RAM, printed as a typed global's field
     /// (`super::globals`): not a byte access.
     Global,
+    /// Computed, into one typed global (`super::globals::Obj`): not a
+    /// byte access.
+    Object,
     /// sp-relative.
     Sp,
     /// Computed, bounded to this region.
@@ -100,6 +107,7 @@ impl Metrics {
                 self.push(format!("{dir}_const_{name}"), n(Where::Const(r)));
             }
             self.push(format!("{dir}_ram_global"), n(Where::Global));
+            self.push(format!("{dir}_ram_object"), n(Where::Object));
             self.push(format!("{dir}_sp"), n(Where::Sp));
             for (r, name) in REGIONS.iter().enumerate() {
                 self.push(format!("{dir}_computed_{name}"), n(Where::Computed(r)));
@@ -125,6 +133,8 @@ pub const UNBARRED: &[&str] = &[
     "load_ram_global",
     "store_ram_global",
     "fn_words_proven",
+    "load_ram_object",
+    "store_ram_object",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each
