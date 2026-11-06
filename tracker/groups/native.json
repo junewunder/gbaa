@@ -556,16 +556,32 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "d26f71a1",
-        "session": "d26f71a1-45d6-4ac6-84d3-239c57a6fbbc",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T08:52:55Z",
+        "checker": "verifier-ref-in-object",
+        "at": "2026-11-06T09:19:55Z",
+        "evidence": "Independent verifier: just lift-check passed (all six programs, planted controls caught); just check exit 0 (rerun after merging main). Bars: load_computed_ram 23-27 -> 0, store_computed_ram 8-9 -> 0-1 on every program (at most half). New soft-hole metric pointer_unexplained (1; 0 on native-irq-hold: crt0's .bss clear) quoted in docs/native-stage-b.md. lines_prelude 470->497: pin, ix and their panic (27 lines).",
         "branch": "unit/native/ref-in-object",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T09:19:55Z",
+          "by": "d26f71a1",
+          "host": "quack",
+          "pid": 1417300,
+          "start": "29954434",
+          "beats": true,
+          "session": "d26f71a1-45d6-4ac6-84d3-239c57a6fbbc",
+          "lane": "quack/1"
+        },
+        "pushed": true
       },
+      "notes": [
+        {
+          "at": "2026-11-06T09:20:00Z",
+          "by": "d26f71a1",
+          "text": "The ix (indexed range) form runs in no lift yet: every typed access on the agb programs is a single pinned address. pointer_unexplained equals the computed_ram bars for now; ranges aren't weighed against each other in Globals::carve."
+        }
+      ],
       "round": "2026-11-06T08:52:55Z"
     },
     {
