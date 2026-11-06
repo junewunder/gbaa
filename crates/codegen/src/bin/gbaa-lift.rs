@@ -1,9 +1,10 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
 //! [--names DIR] [--layout guest] [--drop-standin KEY] [--plant AT]
-//! [--fall-as-tail-call] [--irq-at-waits] [--plant-slot=AT] [--shadow-locals]`:
+//! [--fall-as-tail-call] [--irq-at-waits] [--plant-slot=AT] [--shadow-locals]
+//! [--copies N]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
 //! stage A). Writes the whole program as a Rust crate to OUT (`Cargo.toml`,
-//! `src/main.rs`, a copy of the ROM for its data, `report.txt`), with the
+//! `src/`, a copy of the ROM for its data, `report.txt`), with the
 //! stand-ins and jump targets the holes file gives. Fails, naming each, if
 //! a hard hole is left: the crate then has a `compile_error!` for each and
 //! won't build.
@@ -41,6 +42,13 @@
 //! and prints a `shadow local:` line to stderr wherever a load from a
 //! local differs from them: something the escape analysis didn't see
 //! wrote the frame. A check by hand, not part of the lift check.
+//!
+//! `src/` is `main.rs` (the prelude, RAM, `ENTRY`), `fns.rs` (`FNS`) and
+//! the functions in modules of about 4,000 lines (`codegen::native::modules`,
+//! unit `native/lift-modules`), so rustc builds them in parallel; a `.rs`
+//! file there from an earlier lift that this one didn't write is removed.
+//! `--copies N` writes the modules N times over under different names: a
+//! synthetic large lift, for measuring the build of a game-sized crate.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -57,7 +65,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--plant-slot=AT] [--shadow-locals]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--plant-slot=AT] [--shadow-locals] [--copies N]"
         );
         ExitCode::FAILURE
     };
@@ -66,7 +74,7 @@ fn main() -> ExitCode {
     };
     let (mut name, mut holes, mut bars, mut names) = (None, None, None, None);
     let (mut drop, mut plant, mut tail, mut irq_at_waits) = (None, None, false, false);
-    let (mut plant_slot, mut shadow) = (None, false);
+    let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
     let hex = |s: &str| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok();
     let mut it = rest.iter();
     while let Some(a) = it.next() {
@@ -98,6 +106,9 @@ fn main() -> ExitCode {
             ("--layout", Some(l)) if l == "guest" => {}
             ("--drop-standin", Some(k)) if hex(k).is_some() => drop = hex(k),
             ("--plant", Some(a)) if hex(a).is_some() => plant = hex(a),
+            ("--copies", Some(n)) if n.parse::<usize>().is_ok_and(|n| n >= 1) => {
+                copies = n.parse().unwrap()
+            }
             _ => return usage(),
         }
     }
@@ -138,6 +149,7 @@ fn main() -> ExitCode {
     holes.irq_at_waits = irq_at_waits;
     holes.plant_slot = plant_slot;
     holes.shadow_locals = shadow;
+    holes.copies = copies;
     let names = names.unwrap_or_else(|| crates_dir().parent().expect("the repo").join("names"));
     let sha = codegen::names::sha1_hex(&bytes);
     match codegen::names::files_for(&names, &sha)
@@ -198,8 +210,31 @@ fn main() -> ExitCode {
         }
         std::fs::write(p, b)
     };
+    let src = out.join("src");
+    let stale = |src: &Path| -> std::io::Result<()> {
+        let Ok(dir) = std::fs::read_dir(src) else {
+            return Ok(());
+        };
+        for e in dir {
+            let p = e?.path();
+            let mine = p
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.ends_with(".rs") && !lifted.files.iter().any(|(f, _)| f == n));
+            if mine {
+                std::fs::remove_file(&p)?;
+            }
+        }
+        Ok(())
+    };
     let r = write(&out.join("Cargo.toml"), cargo.as_bytes())
-        .and_then(|_| write(&out.join("src/main.rs"), lifted.main.as_bytes()))
+        .and_then(|_| {
+            lifted
+                .files
+                .iter()
+                .try_for_each(|(f, t)| write(&src.join(f), t.as_bytes()))
+        })
+        .and_then(|_| stale(&src))
         .and_then(|_| write(&out.join("rom.gba"), &bytes))
         .and_then(|_| write(&out.join("report.txt"), lifted.report.as_bytes()));
     if let Err(e) = r {

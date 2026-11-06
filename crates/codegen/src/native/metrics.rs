@@ -9,8 +9,8 @@
 //! lowered. One exception: `lines_prelude` counts the prelude
 //! (`native/prelude.rs`, hand-written runtime code in every lifted crate),
 //! which may rise when a unit adds to it, its evidence saying how many
-//! lines and why; `lines` counts everything else the lift writes, and only
-//! goes down.
+//! lines and why; `lines` counts everything else the lift writes but the
+//! modules' wiring (`super::modules`), and only goes down.
 //!
 //! Memory accesses are split by how their address is known and by region,
 //! so that a bar on one family means something:
