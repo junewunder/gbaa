@@ -783,6 +783,7 @@
       "check": "independent",
       "needs": ["native/fnref-flow"],
       "uses": ["heavy"],
+      "minMinutes": 180,
       "record": {
         "state": "claimed",
         "by": "41e1a197",
