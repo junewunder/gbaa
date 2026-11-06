@@ -699,18 +699,23 @@
       "detail": "rollback.rs records differing hashes as desyncs, but room.rs only prints them to stdout at the end: not in the report file in $GBAA_DATA/netplay/, not in the window. june's 2026-10-29 playtest (room MNHBLP) looked like one and couldn't be confirmed. Put each desync frame in the end lines and report file, and show a notice in the window (and the menu's netplay lines) when one is found. Check: a session with a forced desync (e.g. one peer's input altered in a test) shows it in the window state, the end lines and the kept report.",
       "check": "recorded",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "cb21d00f",
-        "session": "cb21d00f-2fa4-4d48-9491-bba57e9e4d03",
-        "host": "quack",
-        "pid": 1418242,
-        "start": "29954965",
-        "at": "2026-11-06T03:21:38Z",
+        "at": "2026-11-06T03:27:32Z",
+        "evidence": "After merging origin/main, just check passes (exit 0). Forced desync: just rollback-feel wander Kirby --headless --paced --frames 900 --input1/2 start@400 --desync-at2 500. Seat 2 printed 'netplay notice: Out of sync with the other player since frame 540' (the window-state path). Both seats' end lines say 'netplay desyncs: 7 ..., first at frame 540'. The kept report XFKMPJ-p1.txt holds the same line. Menu tests check the Desynced mark and the toast.",
         "branch": "unit/multiplayer/desync-report",
-        "resumed": "9afcc2dd",
-        "prevSession": "9afcc2dd-3298-4593-9c7c-df1eee38bdfd",
-        "pushed": true,
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T03:27:32Z",
+          "by": "cb21d00f",
+          "host": "quack",
+          "pid": 1418242,
+          "start": "29954965",
+          "beats": true,
+          "session": "cb21d00f-2fa4-4d48-9491-bba57e9e4d03",
+          "lane": "quack/2"
+        },
+        "pushed": true
       },
       "notes": [
         {
