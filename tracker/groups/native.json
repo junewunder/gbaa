@@ -700,6 +700,17 @@
       "check": "independent",
       "needs": ["native/lift-irq-hold"],
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "75500cb2",
+        "session": "75500cb2-dfaf-4678-bdab-8f6f12e58fca",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T10:25:12Z",
+        "branch": "unit/native/ime-release",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-03T03:49:30Z",
