@@ -172,11 +172,17 @@ pub struct Holes {
     /// Where `Ram`'s globals are (`gbaa-lift --layout`): the guest's
     /// offsets, or the play layout's order ([`globals::Layout`]).
     pub layout: Layout,
+    /// Why the function addresses aren't followed (`skip_fn_flow = "…"`
+    /// in the holes file): [`fnref::follow`] only feeds the report and
+    /// stage B's metrics, and on a game it doesn't settle in a session
+    /// (Metroid: 68 s a round, rounds growing). `None`: followed.
+    pub skip_fn_flow: Option<String>,
 }
 
 impl Holes {
     /// Parse a holes file: `[[standin]] entry = 0x…, why = "…", code =
-    /// '''…'''` and `[[jump]] at = 0x…, targets = [0x…], why = "…"`.
+    /// '''…'''`, `[[jump]] at = 0x…, targets = [0x…], why = "…"`, and at
+    /// the top, `skip_fn_flow = "why"`.
     pub fn parse(text: &str) -> Result<Holes, String> {
         let t: toml::Table = text.parse().map_err(|e| format!("{e}"))?;
         let mut h = Holes::default();
@@ -192,6 +198,11 @@ impl Holes {
                 .ok_or(format!("missing {k}"))
         };
         for (k, v) in &t {
+            if k == "skip_fn_flow" {
+                let why = v.as_str().ok_or("skip_fn_flow: not a string (why)")?;
+                h.skip_fn_flow = Some(why.to_string());
+                continue;
+            }
             let list = v.as_array().ok_or(format!("{k}: not a list of tables"))?;
             for e in list {
                 let e = e.as_table().ok_or(format!("{k}: not a table"))?;
@@ -333,7 +344,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     }
     let globals = Globals::carve(&ram, &ranges, &holes.names);
     let shapes = shapes_of(&codes, &all, holes);
-    let fnrefs = fn_flow(rom, &disc, &overlays, &codes, &all);
+    let fnrefs = match &holes.skip_fn_flow {
+        None => Some(fn_flow(rom, &disc, &overlays, &codes, &all)),
+        Some(_) => None,
+    };
     // Each function's text by key, in print order: the modules' contents.
     let mut out: Vec<(u32, String)> = Vec::new();
     let mut report = String::new();
@@ -538,8 +552,15 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         soft.sp_slots[2],
     )
     .unwrap();
-    report.push_str(&fnrefs.0.report(&fnrefs.1, &fnrefs.2));
-    let fn_proven = fnrefs.1.keys().filter(|w| fnrefs.0.proven(**w)).count();
+    match (&fnrefs, &holes.skip_fn_flow) {
+        (Some(f), _) => report.push_str(&f.0.report(&f.1, &f.2)),
+        (None, why) => writeln!(
+            report,
+            "function addresses (native/fnref-flow): not followed, as the holes file says: {}",
+            why.as_deref().unwrap_or("")
+        )
+        .unwrap(),
+    }
     writeln!(
         report,
         "stack locals (native/frame-locals): {} slots in {} functions printed as Rust locals, {} loads and stores to them; {} calls write the locals to the frame first",
@@ -606,8 +627,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("sp_accesses_callers_frame", soft.sp_slots[2]);
     m.push("call_fn_calls", n(soft.indirect));
     m.push("jumps_by_value", n(soft.dyn_jumps));
-    m.push("fn_words_proven", n(fn_proven));
-    m.push("fn_words_not_proven", n(fnrefs.1.len() - fn_proven));
+    if let Some(f) = &fnrefs {
+        let fn_proven = f.1.keys().filter(|w| f.0.proven(**w)).count();
+        m.push("fn_words_proven", n(fn_proven));
+        m.push("fn_words_not_proven", n(f.1.len() - fn_proven));
+    }
     m.push("gap_targets", n(gaps.len()));
     writeln!(
         report,
@@ -2056,6 +2080,10 @@ why = "a table"
         assert_eq!(h.jumps[&0x0800_1234].0, vec![0x0800_1240, 0x0800_1251]);
         assert!(Holes::parse("[[nothing]]\nx = 1\n").is_err());
         assert!(Holes::parse("[[standin]]\nwhy = \"no entry\"\n").is_err());
+        assert_eq!(h.skip_fn_flow, None);
+        let h = Holes::parse("skip_fn_flow = \"too slow\"\n").unwrap();
+        assert_eq!(h.skip_fn_flow.as_deref(), Some("too slow"));
+        assert!(Holes::parse("skip_fn_flow = true\n").is_err());
     }
 
     #[test]

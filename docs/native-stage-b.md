@@ -733,7 +733,30 @@ and the two shortcuts above at game scale.
 - **Metroid lifts with no hard holes and builds**
   (`native/metroid-lifts`). Needs the discovery units, both shortcuts and
   the module split. The ROM's file name has spaces, so it lifts with
-  `--name metroid` and `holes/metroid.toml`.
+  `--name metroid`; its holes file is `mods/metroid/holes.toml` (private:
+  its stand-ins port the game's own code).
+
+  First lift, 2026-11-06 on quack: 2,616 functions, 27,707 blocks, 26
+  hard holes, not the hole report's 18: `gbaa-holes` counts neither the
+  BIOS calls the lifter can't print nor the reset's and IRQ
+  dispatcher's `msr`/`mrs`. Stood in (6): the reset (0x08000000) and
+  the IRQ dispatcher (0x08000104, agbcc's `intr_main` shape: nested
+  IRQs through `msr_cpsr_c`), and four functions of the classic NES
+  Metroid the ROM carries (an embedded GBA image, `NES METROID`, at
+  0x087d8000, and its launcher), panics: no coverage run reached them.
+  The function-address flow (`fnref::follow`) took 68 s for its first
+  round and over 8 minutes for its second, so the holes file skips it
+  (`skip_fn_flow`; `native/fnref-flow-scale`); the lift then takes 7 s
+  and 0.23 GB. Left: 9 BIOS calls the prelude lacks (Stop, Sqrt,
+  CpuFastSet, both LZ77s, SoundBias, MidiKey2Freq, MultiBoot), shared
+  work (`native/lift-bios-calls`). With those 9 stood in by panics, a
+  measurement only: 956,792 lines (report's `lines`; 959,153 in all
+  files), 266 modules, the largest 6,175 lines; the crate alone
+  rebuilt in release in 31.5 s wall, 64 s CPU, peak 3.99 GB (quack,
+  `CARGO_BUILD_JOBS=6`, deps built; `/usr/bin/time`), as the
+  synthetic million-line crate predicted. The lift has no IWRAM copies
+  (discovery is static): `native/lift-ram-copies`, which the native
+  check needs.
 - **Metroid passes the native check on a route**
   (`native/metroid-native-check`). A route `units/metroid-native.toml`
   from boot into gameplay, compared every frame with sound
