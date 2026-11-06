@@ -474,6 +474,7 @@ build for the host.
   | native-fallthrough | 62 | 57 | 57 | 57 / 58 of 58 |
   | native-irq-hold | 65 | 60 | 60 | 59 / 61 of 61 |
   | native-frame-locals | 61 | 56 | 56 | 57 / 57 of 57 |
+| native-ime-release | 63 | 58 | 58 | 59 / 59 of 59 |
 
   **So the bar is not 0: it is the values measured.** Every complete set
   on these programs that `call_fn` prints is the same one, every
@@ -491,7 +492,7 @@ build for the host.
   functions return two to four registers (the spike's `f_0800017d`
   returns `(r0, r1)`; what is read after a tail call by value went from
   {r0} to all four), where an adapter used to hand back a register the
-  function really changed. `lines` unchanged on all six; `lift-check`
+  function really changed. `lines` unchanged on all seven; `lift-check`
   passes.
 
   Emerald isn't re-measured: `gbaa-recompile --summaries --callee-sets`
