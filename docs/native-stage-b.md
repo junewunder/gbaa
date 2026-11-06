@@ -477,7 +477,8 @@ typed pointers, below; until then they are soft holes, counted.
   mirror) is carved like a constant one: a single address is an access
   at it; a range (lowest to highest address plus the width) is an
   object's extent, one global, if it reaches at most one of the globals
-  the rest carve, else it is left out. Printing: a single address is
+  the rest carve, else it is left out (ranges aren't weighed against
+  each other: two that overlap may join the globals they reach). Printing: a single address is
   that global's field, with the prelude's `pin(a, off)` checking the
   pointer (`{ pin(v3 & !3, 0x8); g.ram.d_02000008 }`); a range inside
   one array global at its element's width is
@@ -507,7 +508,7 @@ typed pointers, below; until then they are soft holes, counted.
   allocator state, `0x02000000`-`0x02000014`, reached through a pointer
   its callers pass): the value sets knew it where the block didn't. No
   program has a range inside one global yet, so the `ix` form is checked
-  by unit tests only, not by a lift. The prelude grew by 27 lines (470 to
+  only by unit tests of what it prints; no lift runs it. The prelude grew by 27 lines (470 to
   497): `pin`, `ix` and their shared panic.
 
   Not done here, because nothing is there to point into: escaping stack
