@@ -3,8 +3,8 @@ import 'factory/factory.just'
 # The machine's build lock: every compile takes it, at 6 jobs, so lanes take turns. Recipes take it around the compile only, so running a built binary never waits; never run `just` under it (a recipe taking it under a caller that holds it deadlocks).
 lock := "env CARGO_BUILD_JOBS=6 flock /tmp/gbaa-build.lock"
 
-# A memory cap for a heavy tool: `{{cap}} MemoryMax=8G <cmd>` runs it in a systemd scope of its own with that cap and no swap. gbaa-lift, gbaa-recompile, gbaa-holes, gbaa-lift-check and route-check (but its --args and --missing) refuse to run without one (crates/analysis/src/cap.rs; GBAA_UNCAPPED=1 skips that); a cap inside one is fine, and their children run in it.
-cap := "systemd-run --user --scope -q -p MemorySwapMax=0 -p"
+# A memory cap for a heavy tool: `{{cap}} MemoryMax=8G <cmd>` runs it in a systemd scope of its own with that cap and no swap. gbaa-lift, gbaa-recompile, gbaa-holes, gbaa-lift-check and route-check (but its --args and --missing) refuse to run without one (crates/analysis/src/cap.rs; GBAA_UNCAPPED=1 skips that). Inside a factory job (`just capped`, `just long start`: FACTORY_CAPPED_IN is set) it makes no scope, so the tool stays in the job's, under its cap and in its peak (a `systemd-run --scope` would leave it); off Linux there is no systemd. Either way `env MemoryMax=…` just runs the command.
+cap := if env("FACTORY_CAPPED_IN", "") != "" { "env" } else if os() != "linux" { "env" } else { "systemd-run --user --scope -q -p MemorySwapMax=0 -p" }
 
 # Lists the recipes.
 default:
@@ -1380,13 +1380,13 @@ emerald-netplay-trade profile="calm" rom=(roms / "Pokemon - Emerald Version.gba"
 [positional-arguments]
 holes rom *args:
     {{lock}} cargo build -q --release -p hole-report
-    systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 target/release/gbaa-holes "$@"
+    {{cap}} MemoryMax=3G target/release/gbaa-holes "$@"
 
 # The hole report over the corpus (holes/corpus.toml; crates/hole-report/src/corpus.rs): every game in turn, each report in OUT/<name>.txt, then one table of the ranking lines' numbers, saved as OUT/summary.toml. ARGS: --out DIR (default out/holes/<git short hash>[-dirty]), --against DIR2 (changes from DIR2's summary in brackets), --only NAME (repeatable), --cover (each game's coverage runs: hours), and any `just holes` flag for every game. About 10 minutes for the eight (9.5 to 11 measured); run it with `just long`. The games run one at a time under one 3 GB cap, no swap.
 [positional-arguments]
 holes-all *args:
     {{lock}} cargo build -q --release -p hole-report
-    systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 target/release/gbaa-holes --corpus holes/corpus.toml --roms {{quote(roms)}} "$@"
+    {{cap}} MemoryMax=3G target/release/gbaa-holes --corpus holes/corpus.toml --roms {{quote(roms)}} "$@"
 
 # Emerald's ten native functions against the play build (native/emerald-ten; scores in docs/native-port-design.md, "Emerald's ten"): the hand-lifted Rust in mods/emerald/native-ten/ run by crates/native-fn-diff from 600 no-input frames' entry states (borrowed for functions not entered) in 96 variants each, against the interpreter untimed; then one byte of Random's literal pool changed must be caught. Fails unless it prints `native 0 of 10 differ` and the fault is caught. ROM defaults to pret's build. About 30 s (the function summaries are most of it), capped at 3 GB of RAM and no swap. Private: mods/ isn't in the public mirror.
 [positional-arguments]

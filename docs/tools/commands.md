@@ -7,7 +7,10 @@ says what a recipe or tool does and what it must still pass.
 `route-check` (but `--args` and `--missing`) refuse to run, exit 2, unless
 under a memory cap of their own: the recipes cap each run with the
 justfile's `cap` (`{{cap}} MemoryMax=8G …`, a systemd scope with no swap;
-gbaa-lift 16G, gbaa-holes 3G), and children run in their parent's. Run one
+gbaa-lift 16G, gbaa-holes 3G); inside a factory job (`just capped`,
+`just long start`) `cap` makes no scope, so the tool stays under the
+job's cap and in its peak. A child spawned with `Command` runs in its
+parent's scope. Run one
 by hand through `just capped`, `just long start` or that systemd-run line;
 `GBAA_UNCAPPED=1` skips the check, for a small input you've measured
 (`analysis::cap`).
@@ -1335,7 +1338,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   play 0x00, native 0x01 …)`, `(…-ime-at-waits: frame 2: EWRAM byte
   0x020000cc: play 0x01, native 0x00 …)`, `planted hard hole caught` and
   `lift-check: passed`. Logs in `out/lift-*.txt`. About 10 minutes on
-  quack. Heavy: builds twenty-six generated crates; gbaa-lift-check runs capped at 8 GB (its lifts and route-check in its scope; the builds in their own).
+  quack. Heavy: builds twenty-six generated crates; gbaa-lift-check runs capped at 8 GB (its lifts in its scope; route-check in a 3 GB scope and the builds in their own).
 
   `gbaa-lift --shadow-locals` (native/frame-locals; by hand, not part of
   the check) keeps every stack local in the frame's bytes too and prints
