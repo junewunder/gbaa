@@ -19,20 +19,25 @@
 //!   (`[[replaced]]`: the globals of a library the native program replaces,
 //!   each with its why);
 //! - the I/O registers the library models ([`IO`]): the display's,
-//!   `DISPSTAT`'s writable bits, `VCOUNT`, the sound registers (but
-//!   `SOUNDCNT_X`'s channel status) and wave RAM, `IE`, `IF`, `WAITCNT`,
-//!   `IME`. Not the FIFOs, timers, DMA, serial or the keypad's (`KEYINPUT`
+//!   `DISPSTAT`'s writable bits, `VCOUNT`, the sound registers (with
+//!   `SOUNDCNT_X`'s channel status, which the shared mixer sets), wave
+//!   RAM, the FIFOs' last stores, the timers' reloads and controls, `IE`,
+//!   `IF`, `WAITCNT`, `IME`. Not DMA, serial or the keypad's (`KEYINPUT`
 //!   is latched after the present, when the play build records);
 //! - palette, VRAM and OAM, but FILE's ranges there too (a replaced
 //!   library's state kept in VRAM: agb's tile allocator's free list);
-//! - each frame's audio, when both make some. Play's silence equals a
-//!   native program's none; play's sound against none fails unless
-//!   `--no-audio WHY` (the library has no mixer yet) says why it may pass,
-//!   and the pass line says "audio NOT compared".
+//! - each frame's audio (its samples' count and hash), when both make
+//!   some: the library mixes with the play build's own sound path, so a
+//!   native program records its samples as the play build does. Play's
+//!   silence equals a program's none (a host that records none); play's
+//!   sound against none fails unless `--no-audio WHY` says why it may
+//!   pass, and the pass line says "audio NOT compared".
 //!
 //! and fails at the first difference, naming the frame, the region and the
 //! byte (address, play's value, native's). `--packed BIN`: the same
-//! program's play layout must draw NATIVE's frames (frame hashes).
+//! program's play layout must draw NATIVE's frames (frame hashes), and
+//! its records must be NATIVE's, nothing skipped (RAM as the guest lays it
+//! out, which a packed program records).
 //! `--planted BIN` (any number): a build with a planted fault (one wrong
 //! store, or an old behaviour a lifter flag brings back), which must
 //! differ; its first difference is printed. A lowest sp outside IWRAM
@@ -56,9 +61,10 @@ pub const IO: &[(u32, u32, u16, &str)] = &[
     (0x006, 0x008, 0xFFFF, "VCOUNT"),
     (0x008, 0x056, 0xFFFF, "the display's registers"),
     (0x060, 0x084, 0xFFFF, "the sound registers"),
-    // Bits 0-3 are the channels' status, which only a mixer sets.
-    (0x084, 0x086, 0xFF80, "SOUNDCNT_X (writable bits)"),
+    (0x084, 0x086, 0xFFFF, "SOUNDCNT_X"),
     (0x086, 0x0A0, 0xFFFF, "SOUNDBIAS and wave RAM"),
+    (0x0A0, 0x0A8, 0xFFFF, "the FIFOs' last stores"),
+    (0x100, 0x110, 0xFFFF, "the timers' reloads and controls"),
     (0x200, 0x204, 0xFFFF, "IE and IF"),
     (0x204, 0x206, 0xFFFF, "WAITCNT"),
     (0x208, 0x20A, 0xFFFF, "IME"),
@@ -218,7 +224,7 @@ pub fn run(
     let mut parts = vec![format!("{frames} frames, {said}")];
 
     if let Some(p) = &extra.packed {
-        runner(&out, "packed", p, &r, &[], false)?;
+        runner(&out, "packed", p, &r, &[], true)?;
         let (a, b) = (
             read_hashes(&out.join("native-hashes.txt"))?,
             read_hashes(&out.join("packed-hashes.txt"))?,
@@ -231,7 +237,24 @@ pub fn run(
                 b.get(i).map_or("(none)", String::as_str)
             )));
         }
-        parts.push(format!("the play layout draws the same {} frames", a.len()));
+        // Its records too, whole: both are native programs, so nothing is
+        // skipped (a byte the layout moved shows here first).
+        compare(
+            &out.join("native.rec"),
+            &out.join("packed.rec"),
+            &[],
+            frames,
+        )
+        .map_err(|e| match e {
+            Differ::Fail(f) => Fail(format!(
+                "the play layout's record differs from the guest layout's: {f}"
+            )),
+            Differ::Unrun(f) => Unrun(f),
+        })?;
+        parts.push(format!(
+            "the play layout draws the same {} frames, its records the same",
+            a.len()
+        ));
     }
     for (i, p) in extra.planted.iter().enumerate() {
         let run = match i {
@@ -532,11 +555,14 @@ mod tests {
         // In the stack: skipped.
         b.region_mut(Region::Iwram)[0x7F10] = 1;
         assert_eq!(frame_diff(&a, &b, &skips), None);
-        // A timer, and SOUNDCNT_X's status bits: not compared.
-        b.set_io16(0x100, 5);
-        b.set_io16(0x084, 0x000F);
+        // DMA's and serial's registers: not compared.
+        b.set_io16(0x0B0, 5);
+        b.set_io16(0x128, 0x0080);
         assert_eq!(frame_diff(&a, &b, &skips), None);
-        b.set_io16(0x084, 0);
+        // A timer: compared, now the library has the play build's.
+        b.set_io16(0x102, 0x0080);
+        assert!(frame_diff(&a, &b, &skips).unwrap().contains("timers"));
+        b.set_io16(0x102, 0);
         b.region_mut(Region::Ewram)[0xC0] = 2;
         assert_eq!(
             frame_diff(&a, &b, &skips).unwrap(),

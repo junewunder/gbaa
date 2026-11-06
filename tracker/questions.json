@@ -1183,6 +1183,68 @@
         "at": "2026-11-01T19:26:11Z",
         "decision": "d/first-native-game"
       }
+    },
+    {
+      "id": "q/may-lane-scale-fly-s",
+      "title": "May a lane scale fly's gbaa-server down to one machine?",
+      "context": "The rooms-only redeploy is done and checked, but fly made two machines (850d37c4e70228 and 784563db002518, both stopped). Rooms live in one process's memory, so two players could land on different machines and never meet. fly-deploy now passes --ha=false, but removing the extra machine (fly scale count 1 -a gbaa-server) was refused by a lane's permissions as a production deploy. The volume gbaa_data is now detached and still billed: fly volumes destroy vol_vwnozd7kkpjdpz8v.",
+      "options": [
+        {
+          "key": "a",
+          "label": "june runs it",
+          "changes": "june runs fly scale count 1 -a gbaa-server --yes (and destroys the volume); the unit is then recorded done by a lane checking fly machine list"
+        },
+        {
+          "key": "b",
+          "label": "lanes may",
+          "changes": "june adds a permission rule for fly scale count; a lane runs it and checks room-sim"
+        }
+      ],
+      "default": "a",
+      "blocks": ["multiplayer/fly-one-machine"],
+      "asked": {
+        "at": "2026-11-06T04:13:45Z",
+        "by": "a87279be",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "b",
+        "note": "june: lanes may do almost anything with the fly deploy; nobody uses it now and no friend has an up-to-date install, so no users, no harm.",
+        "by": "owner",
+        "via": "1f762505",
+        "at": "2026-11-06T04:23:41Z",
+        "decision": "d/may-lane-scale-fly-s"
+      }
+    },
+    {
+      "id": "q/heap-pointer-unit-s-bar",
+      "title": "What should the heap-pointer unit's bar measure?",
+      "context": "{unit:native/ref-heap}'s bar says computed-address RAM byte accesses at most half their bar. {unit:native/ref-in-object} already typed them: load_computed_ram is 0 and store_computed_ram 1 on every program (0 on native-irq-hold). That last store is crt0's .bss clear, a word loop over four separate globals, not the heap. Heap traffic hides in computed_unknown (741+414 sites on affine), but agb's test programs never allocate themselves: an instrumented 600-frame run of the native-spike lift found 21 sites touching the heap (0x020000c8 on), of 162 that ran: the interrupt-handler list walk (x_08002789, 1198 loads each), init stores in x_080001ad, an IWRAM copy loop. Typing those can't halve anything; the literal bar can only be met by merging crt0's four globals, which isn't heap work.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Bar on what moves",
+          "changes": "ref-heap types the allocator's pointers as Ref<T> anyway; new metric ref_accesses (unbarred, should rise) and its bar is computed_unknown falling by the accesses typed, stated in the evidence; store_computed_ram's bar stays 1"
+        },
+        {
+          "key": "b",
+          "label": "Park it until a game",
+          "changes": "drop ref-heap for now: agb's own heap is only its interrupt list; refile it when Metroid or Emerald lifts and its heap traffic can be measured. lift-packed-layout goes next"
+        },
+        {
+          "key": "c",
+          "label": "Keep the literal bar",
+          "changes": "ref-heap also merges crt0's .bss globals so its clear loop is one typed object (store_computed_ram 1 to 0), plus the heap work as in a"
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/ref-heap"],
+      "asked": {
+        "at": "2026-11-06T09:27:43Z",
+        "by": "76e43878",
+        "host": "quack"
+      },
+      "answer": null
     }
   ]
 }

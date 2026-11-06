@@ -871,22 +871,28 @@ native-spike:
     target/release/native-spike-check crates/native-spike/check.toml out/native-spike/check \
         target/recompiled/release/gbaa-native-spike "$rom" target/release/native-spike target/release/native-spike-planted
 
-# The native check (native/oracle; docs/native-port-design.md section 7, docs/tools/commands.md): agb/native-spike and agb/psg-square (`just agb-tests`) recompiled at --timing native and built, then route-check --native runs each with its native program (crates/native-spike, check layout) on units/native-spike.toml and units/psg-square.toml and compares every frame's picture, RAM (outside the stack, code copies and crates/native-spike/check/*.replaced.toml), I/O, display memories and audio; for the spike also its play layout's frame hashes and a planted wrong store, which must be caught. Writes out/native-check/. Heavy: builds two generated crates.
+# The native check (native/oracle, native/hw-sound; docs/native-port-design.md section 7, docs/tools/commands.md): agb/native-spike, agb/psg-square and agb/direct-sound (`just agb-tests`) recompiled at --timing native and built, then route-check --native runs each with its native program (crates/native-spike, check layout) on units/native-spike.toml, units/psg-square.toml and units/direct-sound.toml and compares every frame's picture, RAM (outside the stack, code copies and crates/native-spike/check/*.replaced.toml), I/O (sound and timers too), display memories and audio samples (psg-square's FIFO A and PSG, direct-sound's two FIFOs and timer-IRQ buffer swaps, mixed by the play build's own sound path in runtime::hw); for the spike also its play layout's frame hashes and a planted wrong store, and for psg-square a planted wrong sample, each of which must be caught. Writes out/native-check/. Heavy: builds three generated crates.
 native-check:
     #!/usr/bin/env bash
     set -eu
     spike={{quote(gbaa_data / "agb/native-spike.gba")}}
     psg={{quote(gbaa_data / "agb/psg-square.gba")}}
-    [ -f "$spike" ] && [ -f "$psg" ] || { echo "no $spike or $psg: run just agb-tests" >&2; exit 1; }
+    direct={{quote(gbaa_data / "agb/direct-sound.gba")}}
+    for r in "$spike" "$psg" "$direct"; do
+        [ -f "$r" ] || { echo "no $r: run just agb-tests" >&2; exit 1; }
+    done
     mkdir -p out
     just recompile "$spike" out/native-spike --timing native > out/native-spike.recompile.txt
     just build-recompiled out/native-spike
     just recompile "$psg" out/psg-square --timing native > out/psg-square.recompile.txt
     just build-recompiled out/psg-square
+    just recompile "$direct" out/direct-sound --timing native > out/direct-sound.recompile.txt
+    just build-recompiled out/direct-sound
     {{lock}} cargo build -q --release -p route-check
-    {{lock}} cargo build -q --release -p native-spike --features guest-layout,plant --bin native-spike
+    {{lock}} cargo build -q --release -p native-spike --features guest-layout,plant --bin native-spike --bin native-psg-square
     cp target/release/native-spike target/release/native-spike-planted-guest
-    {{lock}} cargo build -q --release -p native-spike --features guest-layout --bin native-spike --bin native-psg-square
+    cp target/release/native-psg-square target/release/native-psg-square-planted-guest
+    {{lock}} cargo build -q --release -p native-spike --features guest-layout --bin native-spike --bin native-psg-square --bin native-direct-sound
     cp target/release/native-spike target/release/native-spike-guest
     {{lock}} cargo build -q --release -p native-spike --bin native-spike
     target/release/route-check --native target/release/native-spike-guest target/recompiled/release/gbaa-native-spike \
@@ -894,7 +900,9 @@ native-check:
         --packed target/release/native-spike --planted target/release/native-spike-planted-guest
     target/release/route-check --native target/release/native-psg-square target/recompiled/release/gbaa-psg-square \
         units/psg-square.toml --replaced crates/native-spike/check/psg-square.replaced.toml \
-        --no-audio "runtime::hw has no mixer yet: the sound registers are compared, not the samples"
+        --planted target/release/native-psg-square-planted-guest
+    target/release/route-check --native target/release/native-direct-sound target/recompiled/release/gbaa-direct-sound \
+        units/direct-sound.toml --replaced crates/native-spike/check/direct-sound.replaced.toml
 
 # The stage-A lifter (native/lift-stage-a; docs/native-port-design.md, "The stage-A lifter as built"; docs/tools/commands.md): gbaa-lift writes ROM whole as plain Rust over byte RAM and runtime::hw to OUT (default out/lift-<name>), with the stand-ins of holes/<name>.toml if there is one, then builds it into target/recompiled. FLAGS go to gbaa-lift (--name, --holes, --bars, --drop-standin, --plant). Fails, naming each, on a hard hole no stand-in covers. Heavy: builds a generated crate.
 [positional-arguments]
@@ -914,7 +922,7 @@ lift rom out="" *flags:
     just build-recompiled "$out"
     exit $lifted
 
-# The stage-A lifter's check (native/lift-stage-a, native/lift-bars; docs/native-stage-b.md, "How every piece is checked"): gbaa-lift-check runs the programs of crates/codegen/lift-check.toml (one table each: ROM under $GBAA_DATA, route, flags, bars; today agb/native-spike, agb/affine, agb/mosaic-modes, agb/native-fallthrough, agb/native-irq-hold and agb/native-ime-release from `just agb-tests`). First each is lifted with `--bars`, failing on any metric over its bar, named with both numbers; then each lift and its play build (--timing native) are built and route-check --native compares them for the route's 600 frames (601 for native-irq-hold and native-ime-release) with no replaced-library list: pictures, RAM outside the stack and code copies, I/O, display memories. Controls from the file: the spike lifted with a planted wrong store (planted_store, the V-blank handler's frame count) must be caught, and with its IRQ wrapper's stand-in dropped (planted_hole) the lift and the crate's build must fail naming f_03000000's mrs; native-fallthrough, native-irq-hold and native-ime-release lifted with each of their planted_flags (--fall-as-tail-call: the old fall into another function as a tail call; --irq-at-waits: the old IRQ at a wait inside a critical section; --ime-at-waits: the old IRQ held past the store that sets IME again) must be caught by the native check. ARGS: --only NAME. Writes out/lift-*. Heavy: builds sixteen generated crates (about 10 minutes).
+# The stage-A lifter's check (native/lift-stage-a, native/lift-bars; docs/native-stage-b.md, "How every piece is checked"): gbaa-lift-check runs the programs of crates/codegen/lift-check.toml (one table each: ROM under $GBAA_DATA, route, flags, bars; today agb/native-spike, agb/affine, agb/mosaic-modes, agb/native-fallthrough, agb/native-irq-hold, agb/native-frame-locals and agb/native-ime-release from `just agb-tests`). First each is lifted with `--bars`, failing on any metric over its bar, named with both numbers; then each lift and its play build (--timing native) are built and route-check --native compares them for the route's 600 frames (601 for native-irq-hold and native-ime-release) with no replaced-library list: pictures, RAM outside the stack and code copies, I/O, display memories. Controls from the file: the spike lifted with a planted wrong store (planted_store, the V-blank handler's frame count) must be caught, and with its IRQ wrapper's stand-in dropped (planted_hole) the lift and the crate's build must fail naming f_03000000's mrs; native-fallthrough, native-irq-hold, native-frame-locals and native-ime-release lifted with each of their planted_flags (--fall-as-tail-call: the old fall into another function as a tail call; --irq-at-waits: the old IRQ at a wait inside a critical section; --plant-slot=0x08000182: a store to a stack local, fl_keep's x + 7, made one more; --ime-at-waits: the old IRQ held past the store that sets IME again) must be caught by the native check. Each program is also lifted at the play layout (--layout packed: globals in the lifter's order; native/lift-packed-layout), which route-check --packed holds to the guest layout's frames and records. ARGS: --only NAME. Writes out/lift-*. Heavy: builds twenty-six generated crates (about 10 minutes).
 lift-check *args:
     {{lock}} cargo build -q --release -p route-check
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift --bin gbaa-lift-check
@@ -1325,8 +1333,9 @@ rollback-feel profile="wander" rom=(roms / "Kirby & The Amazing Mirror.gba") *ar
 fly-setup:
     fly ips list -a gbaa-server | grep -q 'v4.*dedicated' || fly ips allocate-v4 -a gbaa-server -y
 
+# --ha=false: rooms live in one process's memory, so a second machine behind the same IPv4 could split a room's players. Without it, a deploy onto an app with no machines makes two.
 fly-deploy:
-    fly deploy --config deploy/fly/fly.toml --remote-only .
+    fly deploy --config deploy/fly/fly.toml --remote-only --ha=false .
 
 # The fly machine is stopped between june's playtests (june, 2026-10-27): fly-up before playing or before a unit's test that needs it, fly-down after. Stopped, the IPv4 is still billed and kept, so the address stays 37.16.3.41.
 fly-up:

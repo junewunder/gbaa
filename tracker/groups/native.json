@@ -213,27 +213,85 @@
       "title": "Discovery takes the run's call targets as function starts",
       "detail": "From {unit:native/hole-report} (docs/research/native-holes.md): the largest hard hole in five of the eight games is a call through a register to an address discovery doesn't know as a start (13-26 a game in seven of the eight; e.g. Emerald's m4a SoundMainBTM family called from 0x082dfb5a). Make those starts: a per-game roots list from gbaa-holes' Run::indirect_calls/call_targets, or find the tables statically. Done when `just holes` shows 0 calls to non-entries in ROM on the eight, and disc-pret, disc-agb and jt-score keep their bars.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "db7eff8c",
+        "checker": "verifier-ad7b2bec",
+        "at": "2026-11-06T05:05:41Z",
+        "evidence": "Fresh verifier subagent, merged branch: just holes on all eight lists 0 ROM targets among calls to non-entries (left: Metroid 4, WarioWare 2, Minish 1, all RAM). disc-pret 0.9991/0.9549, disc-agb 1.0/0.9835 and 1.0/0.5789, jt-score 676/676 and 584/617, far 548/548 and 726/732: all exit 0. just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-11-06T05:05:45Z",
+          "by": "db7eff8c",
+          "text": "Roots come from the holes run itself (discover_with, in-process): only targets the press script reaches. The lifter doesn't take run roots yet; a native game build needs a roots source. New m4a code shows bx r12 returns: {unit:native/recovery-saved-lr-return}."
+        }
+      ]
     },
     {
       "id": "native/disc-ram-copies",
       "title": "Discovery finds code games copy to RAM themselves",
       "detail": "From {unit:native/hole-report}: every game but moonbeam runs RAM code no overlay discovered (300-2,908 bytes: WarioWare's IWRAM loop from ROM 0x080007e4, Emerald's SoundMainRAM and IntrMain, Metroid's 0x03003b90/0x03004100, Minish Cap's 0x030040e0). Overlays only take BIOS CpuSet/CpuFastSet with constant args. Find copy loops and CpuSet with arguments discovery can't fold yet (or take the run's RamRun::rom_src as copies). Done when `just holes` shows 0 RAM bytes undiscovered outside the flash stack routines on the eight, and disc-pret, disc-agb, jt-score keep their bars.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "b58ddd69",
+        "checker": "a92953cdff8d9f304",
+        "at": "2026-11-06T06:57:00Z",
+        "evidence": "Review fix made (ae62dec1): ram_copies skips groups at mirror addresses, unit test covers 0x0300_8100 and 0x0204_0100. Merged main (c1f865f5), just check passes. Fresh verifier ran just holes on all eight: 0 RAM bytes undiscovered each; disc-pret 0.9991/0.9549, disc-agb 1.0/0.9835 and 1.0/0.5789, jt-score 676/676, 548/548, 584/617, 726/732, all at their bars.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-11-06T06:37:58Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/analysis/src/holes/copies.rs:130-138 (`ram_copies`, the found-copies loop): `region_end` is 0x0204_0000 for EWRAM and 0x0300_8000 for anything else, but `exec` takes all RAM code in 0x0200_0000..0x0400_…"
+        },
+        {
+          "at": "2026-11-06T06:34:09Z",
+          "by": "82db0e66",
+          "text": "Copies come from the run (analysis::holes::ram_copies), not static: a lift with no run still lacks them. A static finder (DMA3 stores, copy loops) would be its own unit."
+        }
+      ]
     },
     {
       "id": "native/hole-coverage",
       "title": "Coverage past the press script reaches the unresolved jumps",
       "detail": "From {unit:native/hole-report}: of 109 unresolved indirect jumps over the eight games only 14 ran in the 5,400-frame press script (Rogue 2 of 50, Minish Cap 5 of 25). Feed gbaa-fuzz (or longer routes/save states) into gbaa-holes' Run so each unresolved jump is either seen with targets (a holes.toml list the coverage runs check) or shown unreached by everything. Done when native-holes.md has, per game, reached-by-any-run counts and each reached jump's observed targets.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "feed14da",
+        "checker": "feed14da-verifier",
+        "at": "2026-11-06T06:15:38Z",
+        "evidence": "Fresh verifier subagent: native-holes.md 'Coverage runs' per-game counts (88 of 165 unresolved jumps reached by any run, 68 by press script) match holes/coverage/*.toml jump lists; each reached jump's targets listed; WarioWare and Minish Cap reruns of gbaa-holes --cover in check mode matched their lists (exit 0); just check passed after merging main.",
+        "host": "quack"
+      }
     },
     {
       "id": "native/flash-stack-standin",
       "title": "Hardware library stand-in for the flash save stack routines",
       "detail": "From {unit:native/hole-report}: five of the eight games (Emerald, both Kirbys, Metroid, Emerald Rogue) copy the agb flash library's routines (ReadFlash_Core and siblings) onto the IWRAM stack at 0x03007dxx and run them; the bytes change between copies, a hard hole each time. One stand-in in the native hardware library (flash reads/writes as library calls), recognised at the copy, covers all five. Done when `just holes` counts 0 changed RAM runs at 0x03007dxx on those five.",
-      "check": "independent"
+      "check": "independent",
+      "record": {
+        "state": "done",
+        "by": "2e628fae",
+        "checker": "verifier-ac768f4a",
+        "at": "2026-11-06T04:01:23Z",
+        "evidence": "Fresh verifier subagent ran just holes on Emerald, both Kirbys, Metroid, Rogue: 0 changed RAM runs at 0x03007dxx in each (Rogue's one left is its mixer at 0x030059f0); hard totals 29/21/25/7/80, were 34/29/30/18/86. ReadFlash1/ReadFlash_Core/VerifyFlashSector_Core recognised by analysis::flash, stood in by runtime::hw::flash, checked against agb_flash.c. just check passes after merging main; lift-check --only native-spike passes (Hw gained save).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-11-06T04:01:25Z",
+          "by": "2e628fae",
+          "text": "Not wired into gbaa-lift yet (no lifted game saves to flash): at a recognised call into RAM, call Routine::call on Hw::save. Hw::save starts as Flash512; a program must set its kind. Exemption is by address only (see holes.rs doc)."
+        }
+      ]
     },
     {
       "id": "native/hw-sound",
@@ -241,7 +299,22 @@
       "detail": "Split out of {unit:native/oracle} (2026-11-01): runtime::hw has no mixer, so the native check compares sound registers and wave RAM but not samples, and timers, FIFOs and DMA sound aren't modelled. Split Audio out of runtime::Bus (docs/native-port-design.md section 2), give Hw the play build's mixer, timers and DMA-to-FIFO, so the play build and native programs share one sound path. Done when route-check --native on units/psg-square.toml passes without --no-audio (samples equal every frame), a native bios-sound (direct sound via timer+DMA) passes the same, the play build's audio checks (docs/tools/commands.md audio-*) are unchanged, and just check passes.",
       "check": "independent",
       "needs": ["native/oracle"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "338023f7",
+        "checker": "verifier-a7c3e9",
+        "at": "2026-11-06T06:57:37Z",
+        "evidence": "Verifier reran just native-check: psg-square passes 120 frames with audio the same in 120 frames, no --no-audio, planted wrong sample caught at frame 74 on audio; direct-sound (stands for bios-sound, decision recorded) passes 300 frames with audio the same in all; native-spike still passes. just psg-square and psg-wave-noise match mGBA. Main session also: mgba-audio-diff byte-identical on the 18157 Hz ROM (600) and 10512 Hz ROM (1000), audio-check on both, audio-pace, lift-check pass; just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-11-06T06:57:41Z",
+          "by": "338023f7",
+          "text": "Not yet in hw: H-blank DMA's price on the clock, DMA/FIFO DMA by address via write16 (panics). direct-sound has no planted fault; psg-square's plant covers the audio compare."
+        }
+      ]
     },
     {
       "id": "native/lift-bars",
@@ -360,14 +433,22 @@
       "check": "independent",
       "needs": ["native/lift-bars", "native/lift-fallthrough"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "done",
+        "by": "5676c8cf",
+        "checker": "verifier-forwards",
+        "at": "2026-11-06T07:50:45Z",
+        "evidence": "Fresh-context verifier (verifier-forwards) reviewed the diff and reran just check (pass) and gbaa-lift --bars on all five programs: four_register_functions_without_summary_hole 0 on each (was 27/22/29/28/29), shaped 27/22/29/28/29, lines unchanged. Its one real finding (demand not following forwards; known calls by value) was fixed with a test. After the final merge of main: just lift-check passed (5 native checks, 600/601 frames, 0 differences, all planted controls caught), just check passed.",
+        "host": "quack"
+      }
     },
     {
       "id": "native/fnref-dense",
       "title": "Function pointers as dense FnRef IDs",
       "detail": "docs/native-stage-b.md, piece 3; design section 4. Using {unit:native/fnref-flow}'s proven words: rewrite function-pointer words in the lifter's copy of ROM data and in pool constants to dense IDs; FNS dense from 1 under a new gbaa-lift --fn-ids dense (the flag doesn't exist yet: stage A's IDs are always ROM keys, {d:stage-a-function-pointers-are-rom-keys-no-dense}); ROM keys stay the default for the native check (RAM then holds the play build's numbers). Done when: just lift-check passes with ROM keys; each program's --fn-ids dense build draws the same frames over 600 frames as its ROM-key build (route-check --native ... --packed DENSE_BIN, wired into the lift-check driver); bar: 0 ROM keys left in a dense build; just check passes.",
       "check": "independent",
-      "needs": ["native/fnref-flow"],
+      "needs": ["native/fnref-flow", "native/fnref-heap-sites"],
       "uses": ["heavy"],
       "minMinutes": 120
     },
@@ -378,7 +459,14 @@
       "check": "independent",
       "needs": ["native/fnref-flow"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "notes": [
+        {
+          "at": "2026-11-06T07:50:52Z",
+          "by": "5676c8cf",
+          "text": "From {unit:native/lift-params}: a_<key> adapters return r1-r3 as passed in (summaries treat them undefined after an indirect call); undefined_reads after indirect calls aren't counted anywhere. Stand-ins call f_08002995-style dispatchers four-reg by name: shaping one breaks the build."
+        }
+      ]
     },
     {
       "id": "native/frame-escape",
@@ -387,7 +475,15 @@
       "check": "independent",
       "needs": ["native/lift-bars"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "done",
+        "by": "40e2fde3",
+        "checker": "verifier-frame-escape-7c3e",
+        "at": "2026-11-06T07:37:56Z",
+        "evidence": "Independent verifier (verifier-frame-escape-7c3e): 10 frame unit tests pass (each escape kind plus a non-escaping slot); main.rs byte-identical to main's lifter on all 5 programs; every lift within bars; report's stack-frames line and sp_accesses_local_slot/escaping_slot match docs/native-stage-b.md and sum to load_sp+store_sp; just check exit 0. Its soundness find (stack-argument slots' held addresses) fixed with an 11th test; bars and totals unchanged; just check green after merging main.",
+        "host": "quack"
+      }
     },
     {
       "id": "native/frame-locals",
@@ -396,7 +492,27 @@
       "check": "independent",
       "needs": ["native/frame-escape", "native/lift-params"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "done",
+        "by": "48c9e983",
+        "checker": "verifier-frame-locals",
+        "at": "2026-11-06T08:49:16Z",
+        "evidence": "Verifier (fresh context) ran just lift-check on the merged branch: passed, 6 pass lines, native-frame-locals-600 planted fault caught (plant-slot-0x08000182: frame 1 EWRAM 0x020000c4 play 0x61 native 0x62). sp_accesses_local_slot 0 in all six tables and measured 0; no bar raised vs main. just check passes. --shadow-locals: 0 mismatches on all six programs over 601 frames.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-11-06T08:49:27Z",
+          "by": "48c9e983",
+          "text": "Open gaps (docs/native-stage-b.md): escapes don't walk below the escaping address; a callee in another code context (ROM to IWRAM) gets the caller context's most reads; address-taken means ROM words only. gbaa-lift --shadow-locals checks a lift at run time."
+        },
+        {
+          "at": "2026-11-06T07:38:00Z",
+          "by": "40e2fde3",
+          "text": "Escape analysis (native/frame.rs) marks only slots at/above an escaping address (a pointer into an object's middle reaching lower isn't followed) and counts a callee's stack-arg bytes from exact sp reads only. Weigh both before turning slots into locals."
+        }
+      ]
     },
     {
       "id": "native/rom-statics",
@@ -405,7 +521,14 @@
       "check": "independent",
       "needs": ["native/fnref-dense"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "notes": [
+        {
+          "at": "2026-11-06T08:07:38Z",
+          "by": "cec56176",
+          "text": "From {unit:native/ram-globals}: every constant ROM load was a dead literal-pool load (the IR has the word as Pool); the lifter now drops unused ROM loads, so load_const_rom is 0 on all programs and this unit's bar is effectively the computed ROM loads."
+        }
+      ]
     },
     {
       "id": "native/ram-globals",
@@ -414,7 +537,15 @@
       "check": "independent",
       "needs": ["native/lift-bars"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "done",
+        "by": "cec56176",
+        "checker": "verifier-carve",
+        "at": "2026-11-06T08:07:34Z",
+        "evidence": "just lift-check passed after merging main (5 programs, 600/601 frames 0 differences, planted store now a typed-field store caught, planted hole caught); just check passed. load_const_ram and store_const_ram 0 on all five (bars were 27-36, 5-11), lowered in lift-check.toml; ram_globals 23-28. lines down 830-1010; lines_prelude 439->470 (+31: Ram zeroed alloc, Deref impls, layout assert). Verifier verifier-carve re-lifted all five, reviewed the diff: PASS.",
+        "host": "quack"
+      }
     },
     {
       "id": "native/ref-in-object",
@@ -423,7 +554,22 @@
       "check": "independent",
       "needs": ["native/ram-globals", "native/frame-locals"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "done",
+        "by": "d26f71a1",
+        "checker": "verifier-ref-in-object",
+        "at": "2026-11-06T09:19:55Z",
+        "evidence": "Independent verifier: just lift-check passed (all six programs, planted controls caught); just check exit 0 (rerun after merging main). Bars: load_computed_ram 23-27 -> 0, store_computed_ram 8-9 -> 0-1 on every program (at most half). New soft-hole metric pointer_unexplained (1; 0 on native-irq-hold: crt0's .bss clear) quoted in docs/native-stage-b.md. lines_prelude 470->497: pin, ix and their panic (27 lines).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-11-06T09:20:00Z",
+          "by": "d26f71a1",
+          "text": "The ix (indexed range) form runs in no lift yet: every typed access on the agb programs is a single pinned address. pointer_unexplained equals the computed_ram bars for now; ranges aren't weighed against each other in Globals::carve."
+        }
+      ]
     },
     {
       "id": "native/metroid-lifts",
@@ -459,7 +605,36 @@
       "check": "independent",
       "needs": ["native/lift-params"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "d543fce8",
+        "session": "d543fce8-a7f4-4572-9683-705981824328",
+        "host": "quack",
+        "pid": 1418242,
+        "start": "29954965",
+        "at": "2026-11-06T10:19:12Z",
+        "branch": "unit/native/fnref-flow",
+        "beats": true
+      },
+      "notes": [
+        {
+          "at": "2026-11-06T10:18:58Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/native/fnref.rs:719, :1184-1213 and :827 — a call site can be marked as having a complete callee set when it isn't. The card's output is each indirect call's callee set, \"complete or not\", a…"
+        },
+        {
+          "at": "2026-11-06T10:14:06Z",
+          "by": "cfd5e5aa",
+          "text": "Proofs are weak: one heap pile makes 32-36 words per agb program unprovable; call_fn sets are complete but each is all ~17 address-taken fns. Filed {unit:native/fnref-heap-sites} (allocation site + field), now needed by {unit:native/fnref-dense}. GBAA_FNREF_TRACE=1 traces the run."
+        }
+      ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-06T10:18:58Z",
+        "findings": "- crates/codegen/src/native/fnref.rs:719, :1184-1213 and :827 — a call site can be marked as having a complete callee set when it isn't. The card's output is each indirect call's callee set, \"complete or not\", and the indirect-call-args unit ({unit:native/indirect-call-args}) will rely on that flag. `callees()` calls a set complete whenever it holds at least one whole function address. The closed-world argument behind that only holds if every function address the run could load is in the value, and the run drops some without saying so. (1) `rom_from` stops after 0x4000 bytes, even when `Image::bound` is further out, so any function words past 16 KB never enter the value. (2) A load whose value-set range is in ROM but 0x4000 or wider takes the pile path, which marks the value unknown and never reads the ROM words. (3) A ROM pointer minus an unknown becomes unknown, so loads through it miss the ROM table the same way. In each case, a target that also holds some other function address comes out \"complete\" with callees missing. docs/native-stage-b.md lists these as gaps the review kept, but they make the deliverable's complete flag wrong rather than just less precise. What to do: add a flag to `Val` (for example `lost_rom: bool`, joined like `mem`/`unk`). Set it when `rom_from` is cut off before `bound`, when a ROM-bounded load is too wide to read, and when ROM-pointer arithmetic gives up. In `callees()`, require the flag to be unset for `complete`. Add a fnref unit test that loads through a table index past 16 KB and asserts the site is incomplete. Then update the call_fn-sets-complete column in docs/native-stage-b.md with the rerun numbers, and the fn_words_not_proven bars in crates/codegen/lift-check.toml if they change."
+      },
+      "round": "2026-11-06T08:11:49Z"
     },
     {
       "id": "native/ref-heap",
@@ -468,7 +643,21 @@
       "check": "independent",
       "needs": ["native/ref-in-object"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "blocked",
+        "on": "q/heap-pointer-unit-s-bar",
+        "by": "76e43878",
+        "at": "2026-11-06T09:27:43Z"
+      },
+      "notes": [
+        {
+          "at": "2026-11-06T09:27:51Z",
+          "by": "76e43878",
+          "text": "Measured (scratch, not committed): #[track_caller] on the prelude's ld/st in a copy of the native-spike lift, 600 frames headless: 21 of 162 sites run touch the heap (>=0x020000c8): x_08002789's IRQ list walk, x_080001ad init, x_03000170 copy. Bar asked of the owner."
+        }
+      ],
+      "round": "2026-11-06T09:23:27Z"
     },
     {
       "id": "native/lift-modules",
@@ -477,7 +666,15 @@
       "check": "independent",
       "needs": ["native/lift-bars"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "done",
+        "by": "ef819a4e",
+        "checker": "verifier-abb32b70",
+        "at": "2026-11-06T09:57:59Z",
+        "evidence": "Verifier subagent (fresh context) after merging main: full just lift-check passed (6 programs, all planted faults caught, lines = new bars, lowered by 5); spike lift has 17 m_*.rs modules + main.rs + fns.rs; spike rebuild 4.2-4.8 s split vs 6.3-7.9 s one file, 0.55 vs 0.50 GB; --copies 4 16.4 s 1.27 GB; just check exit 0; diff reviewed, no bugs. Doc table (docs/native-stage-b.md, The first game): --copies 14, 1.0M lines, 238 modules, 54.8 s, 3.67 GB peak, ~14 MB per 4,000-line module.",
+        "host": "quack"
+      }
     },
     {
       "id": "native/lift-packed-layout",
@@ -486,7 +683,15 @@
       "check": "independent",
       "needs": ["native/ram-globals"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "done",
+        "by": "dc17d7b0",
+        "checker": "subagent-a2e598a7",
+        "at": "2026-11-06T10:21:10Z",
+        "evidence": "Fresh-context verifier ran just lift-check: six passes, each 'the play layout draws the same 600 (601 irq-hold) frames, its records the same', lift-check: passed; packed Ram reordered, no padding, modules identical to guest lift; just check passes. Hand control: two allocator globals swapped in RAM_GLOBALS caught. lines_prelude 497->500 (byte-at-a-time ld/st).",
+        "host": "quack"
+      }
     },
     {
       "id": "native/ime-release",
@@ -495,6 +700,17 @@
       "check": "independent",
       "needs": ["native/lift-irq-hold"],
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "75500cb2",
+        "session": "75500cb2-dfaf-4678-bdab-8f6f12e58fca",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T10:25:12Z",
+        "branch": "unit/native/ime-release",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-03T03:49:30Z",
@@ -513,6 +729,21 @@
         }
       ],
       "round": "2026-11-01T21:43:43Z"
+    },
+    {
+      "id": "native/recovery-saved-lr-return",
+      "title": "Recovery takes a bx through a copy of lr as a return",
+      "detail": "From {unit:native/disc-run-call-targets}: once discovery has m4a's ply_* routines (run roots), each 'mov r12, lr; ... bx r12' is an unresolved jump, reached: Emerald 11->22, Rogue 50->60, both Kirbys 2->14, Minish Cap 25->34 in just holes. The value-set analysis should know r12 holds the entry lr and call it a return. Done when just holes shows none of these and jt-score, disc-pret and disc-agb keep their bars.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-heap-sites",
+      "title": "Function flow: the heap by allocation site and field",
+      "detail": "docs/native-stage-b.md, piece 3, fnref-flow as built: one pile holds every heap store, so a heap load used as a number marks every function word stored there (32-36 of each agb program's ~55 words). Split the pile by allocation site (agb's allocator's callers) and field offset in crates/codegen/src/native/fnref.rs. Done when: fn_words_not_proven bar lowered to the measured value on every program (it must fall), unit tests for two heap objects kept apart, just lift-check and just check pass.",
+      "check": "independent",
+      "needs": ["native/fnref-flow"],
+      "uses": ["heavy"]
     }
   ]
 }

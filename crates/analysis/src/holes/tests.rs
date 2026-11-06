@@ -223,6 +223,62 @@ fn ram_code_that_changed_and_where_it_came_from() {
     assert_eq!(r.ram_undiscovered_bytes, 12);
 }
 
+/// The flash library's `ReadFlash1` (`ldrb r0, [r0]; bx lr`) called at
+/// 0x03007d48, where other code ran before: the call stands in, and its
+/// RAM isn't a hole; an unrecognised routine called at 0x03007d60 still is.
+#[test]
+fn flash_stack_routines_are_library_calls() {
+    let mut run = Run::default();
+    for (a, raw, changed) in [
+        (0x0300_7d48, 0x7800, true),
+        (0x0300_7d4a, 0x4770, true),
+        (0x0300_7d60, 0x7801, true),
+        (0x0300_7d62, 0x4770, false),
+    ] {
+        run.code.insert(
+            a,
+            Seen {
+                thumb: true,
+                raw,
+                changed,
+                after_boot: true,
+                ..Seen::default()
+            },
+        );
+    }
+    let mut stack = vec![0x00, 0x78, 0x70, 0x47];
+    stack.resize(RAM_CALL_BYTES as usize, 0);
+    run.ram_calls
+        .entry(0x0300_7d49)
+        .or_default()
+        .insert(stack.clone());
+    stack[0] = 0x01;
+    run.ram_calls.entry(0x0300_7d61).or_default().insert(stack);
+    run.indirect_calls.insert(0x0300_7d49, B + 0x10);
+    run.indirect_calls.insert(0x0300_7d61, B + 0x10);
+    let r = classify(&[0; 0x40], &Discovery::default(), &[], &run, None);
+    assert_eq!(
+        r.flash,
+        vec![FlashCall {
+            target: 0x0300_7d49,
+            routine: crate::flash::Routine::ReadByte,
+            len: 4,
+        }]
+    );
+    assert_eq!(r.flash_routines(), 1);
+    assert_eq!(
+        r.ram_changed,
+        vec![RamRun {
+            start: 0x0300_7d60,
+            end: 0x0300_7d62,
+            rom_src: None
+        }]
+    );
+    assert_eq!(r.indirect_non_entry, vec![(0x0300_7d61, B + 0x10)]);
+    assert_eq!(r.ram_undiscovered_bytes, 4);
+    assert_eq!(r.reached_bytes, 8);
+}
+
 #[test]
 fn bios_and_summaries() {
     assert!(bios_implemented(0x0b) && bios_implemented(0x2a));
@@ -327,4 +383,159 @@ fn a_rom_source_and_its_ram_copy_count_once() {
     let r = classify(&rom, &d, &[], &run, None);
     assert_eq!(r.cpu.len(), 1);
     assert_eq!(r.cpu[0].at, 0x0300_0104);
+}
+
+/// A Thumb leaf (`movs r1, #5; movs r0, #1; adds r0, #2; bx lr`) at
+/// ROM 0x80, and a run that executed it at `dst`, entered by a call when
+/// `called`.
+fn copied_leaf(dst: u32, called: bool) -> (Vec<u8>, Run) {
+    let mut rom = vec![0u8; 0x100];
+    let leaf = [0x2105u16, 0x2001, 0x3002, 0x4770];
+    let mut run = Run::default();
+    for (k, h) in leaf.into_iter().enumerate() {
+        put16(&mut rom, B + 0x80 + 2 * k as u32, h);
+        run.code.insert(
+            dst + 2 * k as u32,
+            Seen {
+                thumb: true,
+                raw: h as u32,
+                ..Seen::default()
+            },
+        );
+    }
+    if called {
+        run.call_targets.insert(dst | 1);
+    }
+    (rom, run)
+}
+
+#[test]
+fn ram_code_the_run_shows_copied_is_discovered_there() {
+    let (rom, run) = copied_leaf(0x0300_0100, true);
+    let d = Discovery::default();
+    assert_eq!(
+        classify(&rom, &d, &[], &run, None).ram_undiscovered_bytes,
+        8
+    );
+    let copies = ram_copies(&rom, &d, &run);
+    assert_eq!(copies.len(), 1);
+    let c = &copies[0];
+    assert!(c.seen);
+    assert_eq!((c.overlay.src, c.overlay.dst), (B + 0x80, 0x0300_0100));
+    // The image runs to the ROM's end: TAIL is longer than what's left.
+    assert_eq!(c.overlay.len, 0x80);
+    assert_eq!(c.entered, vec![0x0300_0101]);
+    assert!(c.filled.is_empty());
+    let overlays: Vec<Overlay> = copies.into_iter().map(|c| c.overlay).collect();
+    let r = classify(&rom, &d, &overlays, &run, None);
+    assert_eq!(r.ram_undiscovered_bytes, 0);
+    assert!(r.ram_undiscovered.is_empty());
+}
+
+#[test]
+fn a_bios_copy_entered_by_a_jump_gets_a_root_where_the_run_ran() {
+    let (rom, run) = copied_leaf(0x0300_0200, false);
+    let mut d = Discovery::default();
+    d.copies.insert((B + 0x80, 0x0300_0200, 0x20));
+    // No constant entry and no call: overlays() can't discover it.
+    assert!(crate::discovery::overlays(&rom, &d).is_empty());
+    let copies = ram_copies(&rom, &d, &run);
+    assert_eq!(copies.len(), 1);
+    let c = &copies[0];
+    assert!(!c.seen);
+    assert_eq!(c.overlay.len, 0x20);
+    assert!(c.entered.is_empty());
+    assert_eq!(c.filled, vec![0x0300_0201]);
+    assert!(c.overlay.disc.code.contains_key(&0x0300_0206));
+}
+
+#[test]
+fn ram_code_not_in_the_rom_or_changed_isnt_a_copy() {
+    let (rom, mut run) = copied_leaf(0x0300_0100, true);
+    // Built at run time: its bytes aren't the ROM's.
+    for s in run.code.values_mut() {
+        s.raw ^= 0x0100;
+    }
+    assert!(ram_copies(&rom, &Discovery::default(), &run).is_empty());
+    let (rom, mut run) = copied_leaf(0x0300_0100, true);
+    for s in run.code.values_mut() {
+        s.changed = true;
+    }
+    assert!(ram_copies(&rom, &Discovery::default(), &run).is_empty());
+}
+
+#[test]
+fn a_jump_in_a_rom_source_and_its_copy_counts_once() {
+    let (rom, mut d) = case_helper();
+    d.rec.jumps.insert(B + 0x84, JumpRes::Unresolved);
+    d.rec.jumps.insert(B + 0x20, JumpRes::Unresolved);
+    let mut od = Discovery::default();
+    od.rec.jumps.insert(0x0300_0104, JumpRes::Unresolved);
+    let o = Overlay {
+        src: B + 0x80,
+        dst: 0x0300_0100,
+        len: 0x20,
+        disc: od,
+    };
+    let r = classify(&rom, &d, &[o], &Run::default(), None);
+    assert_eq!(
+        r.unresolved.iter().map(|u| u.at).collect::<Vec<_>>(),
+        vec![B + 0x20]
+    );
+    assert_eq!(r.overlay_unresolved.len(), 1);
+    assert_eq!(r.hard_unresolved(), 2);
+}
+
+#[test]
+fn a_copy_ends_where_another_source_agrees_further() {
+    // ROM 0x80: a leaf, then the first three instructions of the leaf at
+    // 0xc0. RAM 0x0300_0100 holds the first leaf, 0x0300_0110 the second:
+    // at the first's offset, 0x0300_0110 is ROM 0x90, which agrees for
+    // three instructions; ROM 0xc0 agrees for all six.
+    let mut rom = vec![0u8; 0x100];
+    let first = [0x2105u16, 0x2001, 0x3002, 0x4770];
+    let second = [0x2201u16, 0x2302, 0x2403, 0x2504, 0x2605, 0x4770];
+    let mut run = Run::default();
+    for (k, &h) in first.iter().enumerate() {
+        put16(&mut rom, B + 0x80 + 2 * k as u32, h);
+    }
+    for (k, &h) in second[..3].iter().enumerate() {
+        put16(&mut rom, B + 0x90 + 2 * k as u32, h);
+    }
+    for (k, &h) in second.iter().enumerate() {
+        put16(&mut rom, B + 0xc0 + 2 * k as u32, h);
+    }
+    for (dst, code) in [(0x0300_0100, &first[..]), (0x0300_0110, &second[..])] {
+        for (k, &h) in code.iter().enumerate() {
+            run.code.insert(
+                dst + 2 * k as u32,
+                Seen {
+                    thumb: true,
+                    raw: h as u32,
+                    ..Seen::default()
+                },
+            );
+        }
+        run.call_targets.insert(dst | 1);
+    }
+    let copies = ram_copies(&rom, &Discovery::default(), &run);
+    let got: Vec<(u32, u32, u32)> = copies
+        .iter()
+        .map(|c| (c.overlay.dst, c.overlay.len, c.overlay.src))
+        .collect();
+    assert_eq!(
+        got,
+        vec![(0x0300_0100, 0x10, B + 0x80), (0x0300_0110, 0x40, B + 0xc0)]
+    );
+    let overlays: Vec<Overlay> = copies.into_iter().map(|c| c.overlay).collect();
+    let r = classify(&rom, &Discovery::default(), &overlays, &run, None);
+    assert_eq!(r.ram_undiscovered_bytes, 0);
+}
+
+#[test]
+fn ram_code_run_at_a_mirror_isnt_a_copy() {
+    for dst in [0x0300_8100, 0x0204_0100] {
+        let (rom, run) = copied_leaf(dst, true);
+        assert!(ram_copies(&rom, &Discovery::default(), &run).is_empty());
+    }
 }

@@ -1,14 +1,17 @@
 // The stage-A prelude (docs/native-port-design.md, section 6, stage A),
 // written into every lifted crate by `gbaa-lift` (crates/codegen/src/native.rs):
-// the program's state as byte regions, the memory those regions and the
-// hardware library make up, the BIOS calls, and the function table.
+// the program's state (RAM as bytes, which the typed globals of `Ram` lie
+// over), the memory it and the hardware library make up, the BIOS calls,
+// and the function table.
 // Generated: don't edit; rerun `just lift`.
 
 use runtime::hw::{self, Exit, Hw, Native};
 
-/// EWRAM's and IWRAM's sizes: `Game::ram` is EWRAM then IWRAM, laid out as
-/// the game has them (the check layout, `--layout guest`, is the only one
-/// a byte-region program has).
+/// EWRAM's and IWRAM's sizes: `Game::ram` is EWRAM then IWRAM, each byte
+/// `g.ram[offset]` in either layout (the check layout, `--layout guest`, at
+/// the game's offsets; the play layout, `--layout packed`, with the globals
+/// as fields in the lifter's order). RAM is reached a byte at a time, so a
+/// word may span two globals.
 pub const EWRAM: usize = 0x4_0000;
 pub const IWRAM: usize = 0x8000;
 
@@ -25,8 +28,8 @@ pub static ROM: &[u8] = include_bytes!("../rom.gba");
 
 /// The whole program's state.
 pub struct Game {
-    /// EWRAM then IWRAM, as bytes (stage A: no types yet).
-    pub ram: Box<[u8; EWRAM + IWRAM]>,
+    /// EWRAM then IWRAM: the typed globals of [`Ram`], and bytes.
+    pub ram: Box<Ram>,
     pub hw: Hw<Game>,
     /// The stack pointer where the program last waited: where an IRQ
     /// handler that switches to system mode puts its frames, as the
@@ -73,10 +76,7 @@ pub fn msr_cpsr_c(g: &mut Game, sp: u32, v: u32) {
 impl Game {
     pub fn new(host: native_host::AnyHost) -> Box<Game> {
         let mut g = Box::new(Game {
-            ram: vec![0u8; EWRAM + IWRAM]
-                .into_boxed_slice()
-                .try_into()
-                .expect("RAM's size"),
+            ram: Ram::zeroed(),
             hw: Hw::new(host),
             sp: 0x0300_7F00,
             cpsr: 0x1F,
@@ -84,6 +84,39 @@ impl Game {
         g.hw.irq.set_handler(irq_entry);
         g.hw.on_frame_end(record);
         g
+    }
+}
+
+impl Ram {
+    fn zeroed() -> Box<Ram> {
+        let l = std::alloc::Layout::new::<Ram>();
+        // SAFETY: every bit pattern is a `Ram` (integers only), and the
+        // allocation is `Ram`'s layout, owned by the box.
+        let p = unsafe { std::alloc::alloc_zeroed(l) };
+        if p.is_null() {
+            std::alloc::handle_alloc_error(l);
+        }
+        unsafe { Box::from_raw(p.cast::<Ram>()) }
+    }
+}
+
+// `Ram` (printed after the prelude) is EWRAM and IWRAM byte for byte:
+// integer fields only, at the guest's offsets with no padding between
+// (its size says so), little-endian as the GBA is.
+const _: () = assert!(size_of::<Ram>() == EWRAM + IWRAM && cfg!(target_endian = "little"));
+
+impl std::ops::Deref for Ram {
+    type Target = [u8; EWRAM + IWRAM];
+    fn deref(&self) -> &Self::Target {
+        // SAFETY: `Ram` is that many initialised bytes (the assert above).
+        unsafe { &*(self as *const Ram).cast() }
+    }
+}
+
+impl std::ops::DerefMut for Ram {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: as `deref`; any bytes written are a valid `Ram`.
+        unsafe { &mut *(self as *mut Ram).cast() }
     }
 }
 
@@ -116,6 +149,33 @@ fn ram_at(a: u32) -> Option<usize> {
         3 => Some(EWRAM + (a & 0x7FFF) as usize),
         _ => None,
     }
+}
+
+/// A pointer the value sets say is always the global at RAM offset `off`
+/// (native/ref-in-object): the lift reads the field, and checks the pointer.
+#[inline(always)]
+#[track_caller]
+pub fn pin(a: u32, off: usize) {
+    if ram_at(a) != Some(off) {
+        unexplained(a, off, 1, 1)
+    }
+}
+
+/// The element `a` points to of the global at RAM offset `off`, `n` of `e`
+/// bytes, which the value sets bound it to (native/ref-in-object), checked.
+#[inline(always)]
+#[track_caller]
+pub fn ix(a: u32, off: usize, e: usize, n: usize) -> usize {
+    match ram_at(a) {
+        Some(o) if o >= off && (o - off) % e == 0 && (o - off) / e < n => (o - off) / e,
+        _ => unexplained(a, off, e, n),
+    }
+}
+
+#[cold]
+#[track_caller]
+fn unexplained(a: u32, off: usize, e: usize, n: usize) -> ! {
+    panic!("pointer {a:#010x} outside its global (RAM offset {off:#x}, {n} of {e} bytes): arithmetic the lift's types don't explain")
 }
 
 /// VRAM's offset for `a`, or `None` in the bitmap modes' dead window (the
@@ -204,7 +264,7 @@ pub fn ld8(g: &mut Game, a: u32) -> u32 {
 
 pub fn ld16(g: &mut Game, a: u32) -> u32 {
     if let Some(o) = ram_at(a) {
-        return u16::from_le_bytes([g.ram[o], g.ram[o + 1]]) as u32;
+        return g.ram[o] as u32 | (g.ram[o + 1] as u32) << 8;
     }
     let le = |m: &[u8], o: usize| u16::from_le_bytes([m[o], m[o + 1]]) as u32;
     match a >> 24 {
@@ -219,8 +279,7 @@ pub fn ld16(g: &mut Game, a: u32) -> u32 {
 
 pub fn ld32(g: &mut Game, a: u32) -> u32 {
     if let Some(o) = ram_at(a) {
-        let r = &g.ram[o..o + 4];
-        return u32::from_le_bytes([r[0], r[1], r[2], r[3]]);
+        return (0..4).fold(0, |v, i| v | (g.ram[o + i] as u32) << (8 * i));
     }
     match a >> 24 {
         4 => {
@@ -275,7 +334,7 @@ pub fn st8(g: &mut Game, a: u32, v: u32) {
 pub fn st16(g: &mut Game, a: u32, v: u32) {
     let b = (v as u16).to_le_bytes();
     if let Some(o) = ram_at(a) {
-        g.ram[o..o + 2].copy_from_slice(&b);
+        (g.ram[o], g.ram[o + 1]) = (b[0], b[1]);
         return;
     }
     match a >> 24 {
@@ -300,7 +359,9 @@ pub fn st16(g: &mut Game, a: u32, v: u32) {
 
 pub fn st32(g: &mut Game, a: u32, v: u32) {
     if let Some(o) = ram_at(a) {
-        g.ram[o..o + 4].copy_from_slice(&v.to_le_bytes());
+        for (i, b) in v.to_le_bytes().into_iter().enumerate() {
+            g.ram[o + i] = b;
+        }
         return;
     }
     match a >> 24 {
@@ -413,7 +474,7 @@ pub fn call_fn(g: &mut Game, k: u32, sp: u32, a: [u32; 4]) -> Result<[u32; 4], E
     }
 }
 
-/// A lifted function: the game, the stack pointer, r0-r3 in; r0-r3 out.
+/// A lifted function's four-register form (`a_<key>` if shaped): sp, r0-r3 in; r0-r3 out.
 pub type Fn = fn(&mut Game, u32, [u32; 4]) -> Result<[u32; 4], Exit>;
 
 /// Every register and flag a function's extended entry (`x_<key>`) starts

@@ -39,7 +39,6 @@ use crate::io::{self, Io, event};
 use crate::overlay::Overlays;
 use crate::save::{self, Save};
 use crate::sound::{self, Sound};
-use crate::timer;
 use crate::video::Video;
 use crate::waits::{self, Waits};
 use armv4t::sem::Width;
@@ -546,26 +545,11 @@ impl Bus {
     /// the next tick reschedules overflows.
     #[inline(never)]
     fn io_write(&mut self, o: u32, w: Width, v: u32) {
-        // Count up to now on the old settings first (timers; and the sound
-        // FIFOs' overflows, one at a time, before a store that changes them).
-        sound::before_io_write(self, o, w.bytes());
-        match w {
-            Width::Byte => self.io.write8(o, v as u8),
-            Width::Half => self.io.write16(o, v as u16),
-            Width::Word => {
-                self.io.write16(o, v as u16);
-                self.io.write16(o + 2, (v >> 16) as u16);
-            }
-        }
-        sound::io_written(self, o, w.bytes(), v);
+        // The registers, the sound and the timers, as a native program's
+        // library stores them too.
+        sound::store(self, o, w.bytes(), v);
         if o & !3 == io::reg::WAITCNT {
             self.waitcnt_written();
-        }
-        let timers = self.io.events & (0xF * event::TIMER0);
-        for n in 0..4 {
-            if timers & (event::TIMER0 << n) != 0 {
-                timer::control_written(&mut self.io, n);
-            }
         }
         let dmas = self.io.events & (0xF * event::DMA0);
         self.io.events &= !dmas;
@@ -668,6 +652,19 @@ fn set16(m: &mut [u8], o: usize, v: u16) {
 #[inline(always)]
 fn set32(m: &mut [u8], o: usize, v: u32) {
     m[o..o + 4].copy_from_slice(&v.to_le_bytes());
+}
+
+/// The play build's sound path runs on the bus: its I/O block and sound
+/// state, and DMA channels 1 and 2 refilling the FIFOs.
+impl sound::Audio for Bus {
+    #[inline(always)]
+    fn parts(&mut self) -> (&mut Io, &mut Sound) {
+        (&mut self.io, &mut self.sound)
+    }
+
+    fn fifo_refill(&mut self, fifo: usize) -> bool {
+        dma::fifo_refill(self, fifo)
+    }
 }
 
 #[cfg(test)]
