@@ -2192,3 +2192,4 @@
 {"at":"2026-11-06T03:30:37Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"multiplayer/desync-report","text":"Netplay: record and show desyncs: on main"}
 {"at":"2026-11-06T03:30:49Z","actor":"loop","tag":"493244a8","host":"quack","cmd":"claim","id":"multiplayer/server-version-cutoff","text":"Server refuses netplay builds older than a cutoff: claimed (picking up after 664c45c7)"}
 {"at":"2026-11-06T03:35:16Z","actor":"loop","tag":"493244a8","host":"quack","cmd":"done","id":"multiplayer/server-version-cutoff","text":"Server refuses netplay builds older than a cutoff: done, checked by ada715af"}
+{"at":"2026-11-06T03:38:15Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"multiplayer/server-version-cutoff","text":"Server refuses netplay builds older than a cutoff: on main"}

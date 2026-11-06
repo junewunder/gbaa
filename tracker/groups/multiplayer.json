@@ -739,19 +739,7 @@
         "checker": "ada715af",
         "at": "2026-11-06T03:35:16Z",
         "evidence": "Fresh verifier subagent: cargo test -p relay passes (old_versions_are_refused: older refused, equal/newer let in, versionless HOST/JOIN gets E too_old(0,3)); netplay tests pass; just room-sim calm vs local gbaa-server --min-version 2 refused at once 'version 1, needs 2', --min-version 1 passes; just check passes after merging main.",
-        "branch": "unit/multiplayer/server-version-cutoff",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-06T03:35:16Z",
-          "by": "493244a8",
-          "host": "quack",
-          "pid": 1418242,
-          "start": "29954965",
-          "beats": true,
-          "session": "493244a8-bd3b-429d-8195-64c1ed3bd09f",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -759,8 +747,7 @@
           "by": "664c45c7",
           "text": "Work committed on the branch: version in H/J, --min-version, window text, fly Dockerfile, docs, tests. Relay tests and both room-sim runs (refused at min 2, pass at min 1) passed. Left: just check (stopped at lane stop, after a fmt fix), merge main, verifier."
         }
-      ],
-      "round": "2026-11-01T01:51:33Z"
+      ]
     },
     {
       "id": "multiplayer/timing-in-build-id",
