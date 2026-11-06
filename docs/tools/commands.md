@@ -1514,14 +1514,19 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   dropped the link while the BIOS ran it at once (2026-10-26). About a
   minute.
 - Netplay in the desktop (multiplayer/desktop-netplay, `crates/desktop/src/room.rs`):
-  `gbaa-desktop ROM --server ADDR --host` makes a two-seat room on a
-  `gbaa-server` (ADDR a host or IP, port default 7374), prints `room
-  CODE`, puts it in the window's title and waits for the other player;
-  `--server ADDR --join CODE` takes the other seat (codes in any case).
+  `gbaa-desktop ROM --server ADDR --host` makes a room on a
+  `gbaa-server` (ADDR a host or IP, port default 7374) of two seats, or
+  `--players N` (2 to 4: Kirby's four, multiplayer/four-seats), prints
+  `room CODE`, puts it in the window's title and waits until every seat
+  is taken (the title counts them); `--server ADDR --join CODE` takes the
+  next free seat (codes in any case), so players are numbered in the
+  order they join, and one more is told the room is full. Every peer
+  runs every seat's GBA, all on one cable.
   The window's menu does the same with no flags (multiplayer/
   menu-netplay, its Netplay page: F10 or Start+Select): the server
   (fly's 37.16.3.41 until set, then remembered as `server` in
-  `settings.conf`), Host a room (the code shown big), the code to join
+  `settings.conf`), Players (2 to 4; A or right steps it), Host a room
+  (the code shown big, and how many are in), the code to join
   typed on the keyboard or a pad (up/down step a letter), Leave the room;
   in a session it shows the seats, round trip, lead, rollbacks and frames
   run again. The game alone stops for the session and comes back after
@@ -1541,8 +1546,10 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   (`Gba::unplug`), so the game shows its own link error.
   In a room a small mark in the window's top right corner (`menu::Mark`,
   multiplayer/connected-mark) says how it is: connecting, waiting for
-  players (1/2), connected (2/2), not hearing from them (nothing for
-  0.75 s, `room::SHAKY`) or lost (1/2, playing alone). Seen 2026-10-31 in a
+  players (1/2; 3/4 in a room of four with three in), connected (2/2,
+  4/4), not hearing from them (nothing for 0.75 s, `room::SHAKY`) or lost
+  (1/2, playing alone). With three or four players, one leaving unplugs
+  every remaining player's cable too. Seen 2026-10-31 in a
   private `cu session` on quack, Kirby through a local `gbaa-server`, the
   joiner stopped with `SIGSTOP`.
   A desync (the peers' hashes of a frame differ; multiplayer/desync-report)
@@ -1591,7 +1598,9 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   presents 16.7 ms apart, both peers ending on one hash.
 - `just rollback-feel [PROFILE] [ROM] [ARGS]` (multiplayer/
   rollback-design; `gbaa-pingsim desktop`): two `gbaa-desktop` netplay
-  peers through a local server's rooms, the joiner behind a proxy
+  peers (`--players N`: up to four, a second apart, `--input3`/`--input4`
+  and the like for the others' own options; multiplayer/four-seats)
+  through a local server's rooms, each joiner behind a proxy
   following `crates/netplay/profiles/PROFILE.toml` (default wander), ROM
   default Kirby & the Amazing Mirror. Windows to feel it (keyboard to the focused one, a pad to
   both); with `--headless --paced --frames N --input1 S --input2 S`,
@@ -1689,8 +1698,11 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   per peer between it and the server, both following the profile
   (default calm); seat 0 (`gbaa-pingsim room-peer 0 ADDR`) makes a room
   and prints its code, seat 1 joins by it, and they play the toy game by
-  rollback over `netplay::udp` through the rooms. Passes as `ping-sim`
-  does; ARGS are its. `cargo test -p relay` covers the rooms; `cargo test
+  rollback over `netplay::udp` through the rooms. `--players N` (2-4)
+  makes the room N seats and starts N - 1 joiners, each through a proxy
+  of its own; `--players 4 --console gba` is four GBAs on one cable in
+  every peer (multiplayer/four-seats, 2026-10-31: wander, every seat on
+  the straight run's hashes). Passes as `ping-sim` does; ARGS are its. `cargo test -p relay` covers the rooms; `cargo test
   -p netplay --test ping_sim` runs calm, spiky and rough with GBAs
   through a local server.
 - Factory units (`docs/factory.md`): `just unit NAME [THROUGH]` runs

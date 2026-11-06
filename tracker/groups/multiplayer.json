@@ -579,19 +579,7 @@
         "by": "78de4417",
         "at": "2026-11-06T04:39:07Z",
         "evidence": "Private branch's work replayed on public main (71be9531, merge with main after). quack 2026-11-05: room-sim wander --players 4 --console gba and --players 3 pass every seat; private cu session: 3 then 4 Kirby windows via local gbaa-server, titled player 1-4, mark Connected 3/3 and 4/4, each on its own Kirby in Rainbow Route, one hash each (3: 27f2caeb at 3000, 4: 245b958b at 3600); headless 4 peers c894de98 after a CATCH_UP fix for an early goodbye; just check passes after the merge. Frame cost on quack in docs/research/multiplayer.md; Deck runs left for later by june's 2026-11-01 decision (may-lane-ssh-onto-your), in {unit:multiplayer/four-kirbys-deck}.",
-        "branch": "unit/multiplayer/four-seats",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-06T04:39:07Z",
-          "by": "78de4417",
-          "host": "quack",
-          "pid": 1417300,
-          "start": "29954434",
-          "beats": true,
-          "session": "78de4417-f0a6-4e19-9efc-2032439ac701",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -609,13 +597,7 @@
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - docs/research/multiplayer.md, \"Four players\" section (the paragraph ending \"Not measured there: june's OK is needed each time ({unit:multiplayer/four-kirbys-deck})\"): the card asks for four Kirbys' frame cost …"
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-10-31T23:50:02Z",
-        "findings": "- docs/research/multiplayer.md, \"Four players\" section (the paragraph ending \"Not measured there: june's OK is needed each time ({unit:multiplayer/four-kirbys-deck})\"): the card asks for four Kirbys' frame cost and re-run headroom, both interpreted and recompiled, measured on quack AND on the Deck. Only quack was measured. The Deck figure (about 14-18 ms a frame) is extrapolated from the quack numbers using a 2-2.5x slowdown factor, and the actual measurement was moved into a separate unit ({unit:multiplayer/four-kirbys-deck}) that the card didn't ask for. Only the owner can unblock this, because running on the Deck needs june's OK each time. The next session should ask june for that OK, then run the same `just rollback-feel ... --headless --paced --players 4` runs on the Deck, recompiled and interpreted, calm/2 and wander/0. Add the measured rows to the table, replace the estimate with them, and record the result in the unit's evidence. If june decides the Deck runs can stay as a follow-up, that decision should be written on the card rather than the split being made by the session."
-      },
-      "round": "2026-10-31T22:52:49Z"
+      ]
     },
     {
       "id": "multiplayer/peer-leaves",

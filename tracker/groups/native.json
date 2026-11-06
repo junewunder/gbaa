@@ -215,16 +215,32 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "db7eff8c",
-        "session": "db7eff8c-1d5d-4ee8-8f8f-55872db846b4",
-        "host": "quack",
-        "pid": 1418242,
-        "start": "29954965",
-        "at": "2026-11-06T03:38:19Z",
+        "checker": "verifier-ad7b2bec",
+        "at": "2026-11-06T05:05:41Z",
+        "evidence": "Fresh verifier subagent, merged branch: just holes on all eight lists 0 ROM targets among calls to non-entries (left: Metroid 4, WarioWare 2, Minish 1, all RAM). disc-pret 0.9991/0.9549, disc-agb 1.0/0.9835 and 1.0/0.5789, jt-score 676/676 and 584/617, far 548/548 and 726/732: all exit 0. just check passes.",
         "branch": "unit/native/disc-run-call-targets",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T05:05:41Z",
+          "by": "db7eff8c",
+          "host": "quack",
+          "pid": 1418242,
+          "start": "29954965",
+          "beats": true,
+          "session": "db7eff8c-1d5d-4ee8-8f8f-55872db846b4",
+          "lane": "quack/2"
+        },
+        "pushed": true
       },
+      "notes": [
+        {
+          "at": "2026-11-06T05:05:45Z",
+          "by": "db7eff8c",
+          "text": "Roots come from the holes run itself (discover_with, in-process): only targets the press script reaches. The lifter doesn't take run roots yet; a native game build needs a roots source. New m4a code shows bx r12 returns: {unit:native/recovery-saved-lr-return}."
+        }
+      ],
       "round": "2026-11-06T03:38:19Z"
     },
     {
@@ -232,7 +248,19 @@
       "title": "Discovery finds code games copy to RAM themselves",
       "detail": "From {unit:native/hole-report}: every game but moonbeam runs RAM code no overlay discovered (300-2,908 bytes: WarioWare's IWRAM loop from ROM 0x080007e4, Emerald's SoundMainRAM and IntrMain, Metroid's 0x03003b90/0x03004100, Minish Cap's 0x030040e0). Overlays only take BIOS CpuSet/CpuFastSet with constant args. Find copy loops and CpuSet with arguments discovery can't fold yet (or take the run's RamRun::rom_src as copies). Done when `just holes` shows 0 RAM bytes undiscovered outside the flash stack routines on the eight, and disc-pret, disc-agb, jt-score keep their bars.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "82db0e66",
+        "session": "82db0e66-b6de-4f36-9df2-d644270c71be",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T04:42:48Z",
+        "branch": "unit/native/disc-ram-copies",
+        "beats": true
+      },
+      "round": "2026-11-06T04:42:48Z"
     },
     {
       "id": "native/hole-coverage",

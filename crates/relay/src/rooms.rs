@@ -244,7 +244,7 @@ impl Rooms {
                     return no("the room's game has begun");
                 }
                 let Some(seat) = room.seats.iter().position(Option::is_none) else {
-                    return no("the room is full");
+                    return no("the room is full (the host sets its seats)");
                 };
                 // A player in another room leaves it for this one.
                 self.leave(from, "joined another room");
@@ -579,5 +579,32 @@ mod tests {
             .try_into()
             .unwrap();
         assert_eq!(r.take(a(2), &join(&code, Some(0)), now).len(), 2);
+    }
+
+    #[test]
+    fn four_players_take_seats_in_order() {
+        let mut r = Rooms::default();
+        let now = Instant::now();
+        let mut host = vec![HOST, 4];
+        host.extend_from_slice(&[7; 32]);
+        let code: Code = r.take(a(1), &host, now)[0].1[1..7].try_into().unwrap();
+        let mut join = vec![JOIN];
+        join.extend_from_slice(&code);
+        join.extend_from_slice(&[7; 32]);
+        for p in 2..=4u16 {
+            let out = r.take(a(p), &join, now);
+            // Everyone seated hears the count; the newcomer its seat.
+            assert_eq!(out.len(), p as usize);
+            assert!(out.iter().all(|(_, m)| m[8] == 4 && m[9] == p as u8));
+            let mine = out.iter().find(|(to, _)| *to == a(p)).unwrap();
+            assert_eq!(mine.1[7], p as u8 - 1);
+        }
+        assert_eq!(r.take(a(5), &join, now)[0].1[0], ERROR);
+        // Seat 3 to seat 1, and back.
+        assert_eq!(r.take(a(4), &[DATA, 1, 9], now), [(a(2), vec![DATA, 3, 9])]);
+        assert_eq!(r.take(a(2), &[DATA, 3, 8], now), [(a(4), vec![DATA, 1, 8])]);
+        let mut five = host.clone();
+        five[1] = 5;
+        assert_eq!(r.take(a(6), &five, now)[0].1[0], ERROR);
     }
 }
