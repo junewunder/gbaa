@@ -124,6 +124,67 @@ impl Metrics {
         }
         s
     }
+
+    /// The metrics as TOML, `name = value` in report order: what
+    /// `gbaa-lift` writes beside `report.txt` as `metrics.toml`.
+    pub fn to_toml(&self) -> String {
+        let mut s = String::from("# Written by gbaa-lift: the lift's metrics, as in report.txt.\n");
+        for (n, v) in &self.0 {
+            writeln!(s, "{n} = {v}").unwrap();
+        }
+        s
+    }
+
+    /// Read [`Metrics::to_toml`]'s text back, in its order.
+    pub fn from_toml(text: &str) -> Result<Metrics, String> {
+        let d: toml_edit::DocumentMut = text.parse().map_err(|e| format!("{e}"))?;
+        d.iter()
+            .map(|(k, v)| {
+                v.as_integer()
+                    .and_then(|i| u64::try_from(i).ok())
+                    .map(|i| (k.to_string(), i))
+                    .ok_or(format!("{k}: not a whole number"))
+            })
+            .collect::<Result<_, _>>()
+            .map(Metrics)
+    }
+}
+
+/// Lower bars in a bars file's `text`, keeping its comments and order:
+/// each (program, metric, value) sets `[program.<program>.bars]`'s
+/// `metric` to `value`. Only lowers: a value at or over its bar, or a bar
+/// that isn't there, is an error (raising a bar is a hand edit with a
+/// reason). The new text and a line per bar changed.
+pub fn lower_bars(
+    text: &str,
+    lower: &[(String, String, u64)],
+) -> Result<(String, Vec<String>), String> {
+    let mut d: toml_edit::DocumentMut = text.parse().map_err(|e| format!("{e}"))?;
+    let mut changed = Vec::new();
+    for (p, m, x) in lower {
+        let at = format!("program.{p}.bars.{m}");
+        let v = d
+            .get_mut("program")
+            .and_then(|t| t.get_mut(p.as_str()))
+            .and_then(|t| t.get_mut("bars"))
+            .and_then(|t| t.get_mut(m.as_str()))
+            .and_then(|v| v.as_value_mut())
+            .ok_or(format!("{at}: no such bar"))?;
+        let bar = v
+            .as_integer()
+            .and_then(|i| u64::try_from(i).ok())
+            .ok_or(format!("{at}: not a whole number"))?;
+        if *x >= bar {
+            return Err(format!(
+                "{at}: {x} isn't under its bar of {bar}; bars are only lowered"
+            ));
+        }
+        let decor = v.decor().clone();
+        *v = toml_edit::Value::from(*x as i64);
+        *v.decor_mut() = decor;
+        changed.push(format!("{p}: {m} {bar} -> {x}"));
+    }
+    Ok((d.to_string(), changed))
 }
 
 /// The metrics with no bar: they are meant to rise.
@@ -229,6 +290,36 @@ mod tests {
         );
         assert!(v.failures.is_empty());
         assert_eq!(v.lowerable, vec![("lines".to_string(), 100, 120)]);
+    }
+
+    #[test]
+    fn metrics_toml_reads_back_in_order() {
+        let mut m = Metrics::default();
+        m.push("lines", 100);
+        m.push("blocks", 7);
+        m.push("functions", 3);
+        assert_eq!(Metrics::from_toml(&m.to_toml()).unwrap(), m);
+    }
+
+    #[test]
+    fn lowering_bars_keeps_the_file() {
+        let text = "# The bars.\n\n[program.p]\nrom = \"p.gba\"\n\n[program.p.bars]\n\
+                    lines = 120 # a note\nload_sp = 7\n\n# q's.\n[program.q.bars]\nlines = 50\n";
+        let low = |p: &str, m: &str, x| (p.to_string(), m.to_string(), x);
+        let (t, changed) =
+            lower_bars(text, &[low("p", "lines", 100), low("q", "lines", 40)]).unwrap();
+        assert_eq!(
+            t,
+            text.replace("lines = 120 #", "lines = 100 #")
+                .replace("lines = 50", "lines = 40")
+        );
+        assert_eq!(changed, vec!["p: lines 120 -> 100", "q: lines 50 -> 40"]);
+        assert_eq!(bars(&t, "p").unwrap()["lines"], 100);
+        // Never raised, never equal, never a bar that isn't there.
+        assert!(lower_bars(text, &[low("p", "load_sp", 8)]).is_err());
+        assert!(lower_bars(text, &[low("p", "load_sp", 7)]).is_err());
+        assert!(lower_bars(text, &[low("p", "blocks", 1)]).is_err());
+        assert!(lower_bars(text, &[low("r", "lines", 1)]).is_err());
     }
 
     #[test]

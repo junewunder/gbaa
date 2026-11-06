@@ -85,6 +85,27 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   that reached it, its targets) against what they saw, failing on a
   difference; `--update` rewrites the list instead. Deterministic, so a
   rerun matches. 10 to 30 minutes a game: run it as a long job.
+  `--line FILE` writes the ranking line's numbers to FILE as TOML.
+- `just holes-all [--out DIR] [--against DIR2] [--only NAME]… [--cover]
+  [holes flags…]`: the hole report over the corpus, `holes/corpus.toml`
+  (each game's short name, ROM file name under the justfile's `roms`,
+  coverage file), `gbaa-holes --corpus` (`crates/hole-report/src/corpus.rs`).
+  Runs each game in turn as its own `gbaa-holes ROM … --line`, writing
+  `DIR/<name>.txt` (the report), `DIR/<name>.log` (its timings), then
+  prints one table, a row per game and a total: hard holes, ROM and
+  overlay jumps, return arithmetic, RAM code changed, CPU state, BIOS,
+  calls to non-entries, summaries, bytes not discovered, seconds. The
+  numbers come from the report's own counts, saved in `DIR/summary.toml`
+  (`[[game]]` each). `--against DIR2` reads DIR2's `summary.toml` and
+  shows each change in brackets, `4 (-3)`, `10 (0)`. DIR defaults to
+  `out/holes/<git short hash>` (`-dirty` with tracked changes). Other
+  flags (`--frames N`, `--no-summaries`, `--press …`) go to every game;
+  `--cover` gives each its coverage file (hours, not minutes). Fails if
+  any game's run did. One 3 GB cap, no swap, for the whole run (the games
+  run one at a time). About 10 minutes for the eight (9.5 to 11 measured): run it
+  with `just long start holes -- just holes-all`. Use it, not a loop over `just
+  holes`, to compare before and after a change: run it on main, then on
+  the branch with `--against` the first DIR.
 - `just jt-score`: the jump-table check (decision 5c). Builds truth tables
   from `$GBAA_DATA/src/pokeemerald/pokeemerald{,_modern}.elf` and the ROMs
   beside them, runs `analysis::jumptable` over each ELF's code map, and
@@ -1324,9 +1345,10 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `target/recompiled/release/gbaa-native-<name>-shadow --headless --frames
   601` and grep its stderr.
 
-  **Lowering a bar** (every stage-B unit's check): change the one
-  `metric = N` line in the program's bars table and run `just lift-check`
-  (or `--only NAME`). Bars are only lowered; raising one is changing the
+  **Lowering a bar** (every stage-B unit's check): `just lift-metrics
+  --lower-bars` (`--metric`, `--only` to lower only some), or change the
+  one `metric = N` line in the program's bars table, and run `just
+  lift-check` (or `--only NAME`). Bars are only lowered; raising one is changing the
   oracle (ask june). The exception is `lines_prelude`, the hand-written
   prelude every lift starts with: it may rise when a unit adds prelude
   code, the evidence saying how many lines and why; `lines` is the rest
@@ -1334,6 +1356,24 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   fails on a metric with none); a new program is a new table, its bars
   at the values its first lift reports. `cargo test -p codegen --test
   lift_bars` shows a lowered bar failing the lift by name.
+- `just lift-metrics [--only NAME]… [--metric REGEX] [--lower-bars]`
+  (native/lift-bars): `gbaa-lift-check --metrics-only`, step 1 of `just
+  lift-check` alone. Lifts every program of
+  `crates/codegen/lift-check.toml` (the file is the list; a new table is a
+  new column) with its `lift_flags` and `--bars`, into the same
+  `out/lift-<name>` as the check, and reads each lift's
+  `metrics.toml` (gbaa-lift writes it beside `report.txt`). Prints a
+  table, a row per metric, a column per program: `v` at its bar, `v<b`
+  under bar b, `v>b!` over it, `v` alone for a metric with no bar.
+  `--metric REGEX` keeps the metrics whose names match, `--only` the
+  programs. `--lower-bars` rewrites `lift-check.toml` (comments and
+  order kept, `toml_edit`) with every shown bar that is over its metric
+  lowered to the metric, and prints each `program: metric old -> new`;
+  it never raises a bar (that stays a hand edit with a reason). It builds
+  no crate and runs no route check and none of the planted controls, so
+  it isn't the check: run `just lift-check` before calling a unit done.
+  Fails on a metric over its bar. About 15 seconds (the lifts run at
+  once).
 - `just native-ten [ROM]` (native/emerald-ten; scores in
   `docs/native-port-design.md`, "Emerald's ten, scored"): fn-diff for
   native functions (`crates/native-fn-diff`). Emerald's ten, lifted by

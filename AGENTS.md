@@ -61,6 +61,7 @@ are game-derived: `mods/<game>/holes.toml`). Generated code goes in
   `recompile*` and `first-frame`; sound and `audio-*`; `mgba-diff` and
   `mgba-oracle`) is in `docs/tools/commands.md`. Read the entry before
   running or changing one.
+- Comparing across games or programs: `just holes-all`, `just lift-metrics`.
 
 ## Factory
 
