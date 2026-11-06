@@ -964,6 +964,14 @@
       "by": "75500cb2",
       "at": "2026-11-06T11:04:28Z",
       "scope": ["native/*"]
+    },
+    {
+      "id": "d/a-commercial-game-s-holes-file-lives-in-mods",
+      "title": "A commercial game's holes file lives in mods/<game>/holes.toml",
+      "why": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): a stand-in is a hand port of the game's own function (Metroid's reset and IRQ dispatcher), game-derived code AGENTS.md keeps out of the public repo. holes/ keeps the agb test programs' files; just lift takes holes/<name>.toml, else mods/<name>/holes.toml, <name> from --name if given.",
+      "by": "f93b1ecd",
+      "at": "2026-11-06T11:56:43Z",
+      "scope": ["native/*"]
     }
   ]
 }

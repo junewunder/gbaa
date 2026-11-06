@@ -2280,3 +2280,4 @@
 {"at":"2026-11-06T11:56:18Z","actor":"loop","tag":"f93b1ecd","host":"quack","cmd":"add-unit","id":"native/fnref-flow-scale","text":"new unit: Function-address flow settles on a whole game"}
 {"at":"2026-11-06T11:56:28Z","actor":"loop","tag":"f93b1ecd","host":"quack","cmd":"edit","id":"native/metroid-native-check","text":"Metroid passes the native check on a route: edited (add-needs)"}
 {"at":"2026-11-06T11:56:32Z","actor":"loop","tag":"f93b1ecd","host":"quack","cmd":"edit","id":"native/metroid-lifts","text":"Metroid lifts with no hard holes and builds: edited (add-needs)"}
+{"at":"2026-11-06T11:56:43Z","actor":"loop","tag":"f93b1ecd","host":"quack","cmd":"decide","text":"decided: A commercial game's holes file lives in mods/<game>/holes.toml","d":"d/a-commercial-game-s-holes-file-lives-in-mods"}
