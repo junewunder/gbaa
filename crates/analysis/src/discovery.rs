@@ -19,6 +19,10 @@
 //!   them). A `bl` from a function with a prologue into the span of its own
 //!   code is a jump too ([`crate::vsa::func`]): LLVM's long branches to
 //!   cold blocks and to the chunks of a `main` that never returns.
+//! - **Run roots.** [`discover_with`] takes more starts known to be code
+//!   (a run's calls through a register, from `gbaa-holes`) into the first
+//!   descent beside the entry; a BIOS copy's source ends at the first of
+//!   them inside it.
 //! - **The pointer scan** (5d, [`scan`]) runs once descent has nothing left:
 //!   ROM words pointing at ROM become candidates, validated and ranked, and
 //!   the accepted ones seed more descent. Functions and code found that way
@@ -143,9 +147,22 @@ impl Discovery {
 
 /// Discover the code of a ROM image (loaded at [`ROM_BASE`]).
 pub fn discover(rom: Vec<u8>) -> Discovery {
-    let mut d = Driver::new(Program::new(rom, Vec::new(), Vec::new()), vec![ROM_BASE]);
+    discover_with(rom, &[])
+}
+
+/// [`discover`], with more function starts (interworking form) known to be
+/// code: the call targets a run saw (`gbaa-holes`: m4a's routines called
+/// through its table in RAM, code reached only through computed
+/// pointers). They join the ROM entry in the first descent, so what they
+/// lead to is [`Evidence::Confirmed`] and the pointer scan works around
+/// them. Starts outside ROM are ignored.
+pub fn discover_with(rom: Vec<u8>, roots: &[u32]) -> Discovery {
     // The cartridge header starts with an ARM branch to the entry code.
-    d.descend(vec![(ROM_BASE, Kind::Func)]);
+    let mut entry = vec![ROM_BASE];
+    entry.extend(roots.iter().copied().filter(|&a| a != ROM_BASE));
+    let mut d = Driver::new(Program::new(rom, Vec::new(), Vec::new()), entry.clone());
+    d.extra = roots.iter().map(|a| a & !1).collect();
+    d.descend(entry.into_iter().map(|a| (a, Kind::Func)).collect());
     // Descent from the entry is done: what it found is confirmed, and the
     // starts and pools the scan finds from here on don't change it.
     d.eng.kept = d.eng.results.keys().copied().collect();
@@ -234,6 +251,9 @@ struct Driver {
     prog: Program,
     /// What descent starts from: the confirmed code is what they lead to.
     entry: Vec<u32>,
+    /// The extra starts of [`discover_with`], aligned: code in ROM even
+    /// where a BIOS copy reads them as its source.
+    extra: BTreeSet<u32>,
     eng: Engine,
     roots: BTreeMap<Key, Kind>,
     /// Pools and tables found, as `start..end`, possibly overlapping.
@@ -296,6 +316,7 @@ impl Driver {
         Driver {
             prog,
             entry,
+            extra: BTreeSet::new(),
             eng,
             roots: BTreeMap::new(),
             data: BTreeSet::new(),
@@ -483,7 +504,16 @@ impl Driver {
                 JumpRes::Resolved(j) => j.table.map(|s| (s.first, s.last + s.size)),
                 _ => None,
             });
-            let copies = r.copies.iter().map(|&(s, _, n)| (s, s + n));
+            // A copy longer than its code (m4a's `SoundMainRAM`, copied
+            // 2 KiB at a time) reads the ROM functions after it: its
+            // source ends at the first extra start inside it.
+            let extra = &self.extra;
+            let copies = r.copies.iter().map(|&(s, _, n)| {
+                (
+                    s,
+                    extra.range(s + 1..s + n).next().copied().unwrap_or(s + n),
+                )
+            });
             for d in r.pools.iter().copied().chain(tables).chain(copies) {
                 if self.data.insert(d) {
                     new_data.push(d);
