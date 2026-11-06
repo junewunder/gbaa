@@ -435,15 +435,24 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "5676c8cf",
-        "session": "5676c8cf-660d-4eec-8079-aa5a1175c958",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T07:00:03Z",
+        "checker": "verifier-forwards",
+        "at": "2026-11-06T07:50:45Z",
+        "evidence": "Fresh-context verifier (verifier-forwards) reviewed the diff and reran just check (pass) and gbaa-lift --bars on all five programs: four_register_functions_without_summary_hole 0 on each (was 27/22/29/28/29), shaped 27/22/29/28/29, lines unchanged. Its one real finding (demand not following forwards; known calls by value) was fixed with a test. After the final merge of main: just lift-check passed (5 native checks, 600/601 frames, 0 differences, all planted controls caught), just check passed.",
         "branch": "unit/native/lift-params",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T07:50:45Z",
+          "by": "5676c8cf",
+          "host": "quack",
+          "pid": 1417300,
+          "start": "29954434",
+          "beats": true,
+          "session": "5676c8cf-660d-4eec-8079-aa5a1175c958",
+          "lane": "quack/1"
+        },
+        "pushed": true
       },
       "round": "2026-11-06T07:00:03Z"
     },
@@ -463,7 +472,14 @@
       "check": "independent",
       "needs": ["native/fnref-flow"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "notes": [
+        {
+          "at": "2026-11-06T07:50:52Z",
+          "by": "5676c8cf",
+          "text": "From {unit:native/lift-params}: a_<key> adapters return r1-r3 as passed in (summaries treat them undefined after an indirect call); undefined_reads after indirect calls aren't counted anywhere. Stand-ins call f_08002995-style dispatchers four-reg by name: shaping one breaks the build."
+        }
+      ]
     },
     {
       "id": "native/frame-escape",
