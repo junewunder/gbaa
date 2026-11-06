@@ -610,7 +610,8 @@
         "start": "29954434",
         "at": "2026-11-06T11:28:38Z",
         "branch": "unit/native/metroid-lifts",
-        "beats": true
+        "beats": true,
+        "handedBack": "2026-11-06T12:12:16Z"
       },
       "notes": [
         {
