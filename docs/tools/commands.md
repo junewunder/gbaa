@@ -87,7 +87,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   rerun matches. 10 to 30 minutes a game: run it as a long job.
   `--line FILE` writes the ranking line's numbers to FILE as TOML.
 - `just holes-all [--out DIR] [--against DIR2] [--only NAME]… [--cover]
-  [holes flags…]`: the hole report over the corpus, `holes/corpus.toml`
+  [--write-doc FILE] [holes flags…]`: the hole report over the corpus, `holes/corpus.toml`
   (each game's short name, ROM file name under the justfile's `roms`,
   coverage file), `gbaa-holes --corpus` (`crates/hole-report/src/corpus.rs`).
   Runs each game in turn as its own `gbaa-holes ROM … --line`, writing
@@ -105,7 +105,11 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   run one at a time). About 10 minutes for the eight (9.5 to 11 measured): run it
   with `just long start holes -- just holes-all`. Use it, not a loop over `just
   holes`, to compare before and after a change: run it on main, then on
-  the branch with `--against` the first DIR.
+  the branch with `--against` the first DIR. `--write-doc
+  docs/research/native-holes.numbers.md` also writes the table as that
+  generated numbers file (header, date, commit); `--from DIR` runs
+  nothing and renders DIR's saved `summary.toml` (with `--write-doc`, the
+  file), for a run already made at the commit wanted.
 - `just jt-score`: the jump-table check (decision 5c). Builds truth tables
   from `$GBAA_DATA/src/pokeemerald/pokeemerald{,_modern}.elf` and the ROMs
   beside them, runs `analysis::jumptable` over each ELF's code map, and
@@ -1356,7 +1360,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   fails on a metric with none); a new program is a new table, its bars
   at the values its first lift reports. `cargo test -p codegen --test
   lift_bars` shows a lowered bar failing the lift by name.
-- `just lift-metrics [--only NAME]… [--metric REGEX] [--lower-bars]`
+- `just lift-metrics [--only NAME]… [--metric REGEX] [--lower-bars] [--write-doc FILE]`
   (native/lift-bars): `gbaa-lift-check --metrics-only`, step 1 of `just
   lift-check` alone. Lifts every program of
   `crates/codegen/lift-check.toml` (the file is the list; a new table is a
@@ -1374,6 +1378,9 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   it isn't the check: run `just lift-check` before calling a unit done.
   Fails on a metric over its bar. About 15 seconds (the lifts run at
   once).
+  `--write-doc docs/native-stage-b.numbers.md` also writes the table as
+  that generated numbers file (header, date, commit): rerun it when a
+  unit changes the metrics, rather than copying numbers into the plan.
 - `just native-ten [ROM]` (native/emerald-ten; scores in
   `docs/native-port-design.md`, "Emerald's ten, scored"): fn-diff for
   native functions (`crates/native-fn-diff`). Emerald's ten, lifted by

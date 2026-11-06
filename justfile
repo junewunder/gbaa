@@ -944,7 +944,7 @@ lift-check *args:
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift --bin gbaa-lift-check
     {{cap}} MemoryMax=8G target/release/gbaa-lift-check crates/codegen/lift-check.toml --data {{quote(gbaa_data)}} {{args}}
 
-# The lift's metrics against their bars (gbaa-lift-check --metrics-only; native/lift-bars): every program of crates/codegen/lift-check.toml lifted with its flags and --bars, nothing built, no route or planted control run; prints a table of metric by program, each bar beside its value (v<b under, v>b! over). ARGS: --only NAME (repeatable), --metric REGEX, --lower-bars (rewrites lift-check.toml with each bar shown that is over its metric lowered to it; never raises one). Fails on a metric over its bar. About 15 seconds (the lifts run at once).
+# The lift's metrics against their bars (gbaa-lift-check --metrics-only; native/lift-bars): every program of crates/codegen/lift-check.toml lifted with its flags and --bars, nothing built, no route or planted control run; prints a table of metric by program, each bar beside its value (v<b under, v>b! over). ARGS: --only NAME (repeatable), --metric REGEX, --lower-bars (rewrites lift-check.toml with each bar shown that is over its metric lowered to it; never raises one), --write-doc FILE (the table as a generated numbers file: docs/native-stage-b.numbers.md). Fails on a metric over its bar. About 15 seconds (the lifts run at once).
 [positional-arguments]
 lift-metrics *args:
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift --bin gbaa-lift-check
@@ -1382,7 +1382,7 @@ holes rom *args:
     {{lock}} cargo build -q --release -p hole-report
     systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 target/release/gbaa-holes "$@"
 
-# The hole report over the corpus (holes/corpus.toml; crates/hole-report/src/corpus.rs): every game in turn, each report in OUT/<name>.txt, then one table of the ranking lines' numbers, saved as OUT/summary.toml. ARGS: --out DIR (default out/holes/<git short hash>[-dirty]), --against DIR2 (changes from DIR2's summary in brackets), --only NAME (repeatable), --cover (each game's coverage runs: hours), and any `just holes` flag for every game. About 10 minutes for the eight (9.5 to 11 measured); run it with `just long`. The games run one at a time under one 3 GB cap, no swap.
+# The hole report over the corpus (holes/corpus.toml; crates/hole-report/src/corpus.rs): every game in turn, each report in OUT/<name>.txt, then one table of the ranking lines' numbers, saved as OUT/summary.toml. ARGS: --out DIR (default out/holes/<git short hash>[-dirty]), --against DIR2 (changes from DIR2's summary in brackets), --only NAME (repeatable), --cover (each game's coverage runs: hours), --write-doc FILE (the table as a generated numbers file: docs/research/native-holes.numbers.md), --from DIR (run nothing: render DIR's summary.toml), and any `just holes` flag for every game. About 10 minutes for the eight (9.5 to 11 measured); run it with `just long`. The games run one at a time under one 3 GB cap, no swap.
 [positional-arguments]
 holes-all *args:
     {{lock}} cargo build -q --release -p hole-report
