@@ -735,16 +735,17 @@
       "check": "independent",
       "record": {
         "state": "claimed",
-        "by": "664c45c7",
-        "session": "664c45c7-0b11-4918-8a06-e9dc718f1604",
+        "by": "493244a8",
+        "session": "493244a8-bd3b-429d-8195-64c1ed3bd09f",
         "host": "quack",
-        "pid": 379246,
-        "start": "13117048",
-        "at": "2026-11-01T01:51:33Z",
+        "pid": 1418242,
+        "start": "29954965",
+        "at": "2026-11-06T03:30:49Z",
         "branch": "unit/multiplayer/server-version-cutoff",
-        "beats": true,
+        "resumed": "664c45c7",
+        "prevSession": "664c45c7-0b11-4918-8a06-e9dc718f1604",
         "pushed": true,
-        "ended": "2026-11-01T01:57:16Z"
+        "beats": true
       },
       "notes": [
         {
