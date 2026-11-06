@@ -1,14 +1,15 @@
 // The stage-A prelude (docs/native-port-design.md, section 6, stage A),
 // written into every lifted crate by `gbaa-lift` (crates/codegen/src/native.rs):
-// the program's state as byte regions, the memory those regions and the
-// hardware library make up, the BIOS calls, and the function table.
+// the program's state (RAM as bytes, which the typed globals of `Ram` lie
+// over), the memory it and the hardware library make up, the BIOS calls,
+// and the function table.
 // Generated: don't edit; rerun `just lift`.
 
 use runtime::hw::{self, Exit, Hw, Native};
 
 /// EWRAM's and IWRAM's sizes: `Game::ram` is EWRAM then IWRAM, laid out as
 /// the game has them (the check layout, `--layout guest`, is the only one
-/// a byte-region program has).
+/// the lifter has yet).
 pub const EWRAM: usize = 0x4_0000;
 pub const IWRAM: usize = 0x8000;
 
@@ -25,8 +26,8 @@ pub static ROM: &[u8] = include_bytes!("../rom.gba");
 
 /// The whole program's state.
 pub struct Game {
-    /// EWRAM then IWRAM, as bytes (stage A: no types yet).
-    pub ram: Box<[u8; EWRAM + IWRAM]>,
+    /// EWRAM then IWRAM: the typed globals of [`Ram`], and bytes.
+    pub ram: Box<Ram>,
     pub hw: Hw<Game>,
     /// The stack pointer where the program last waited: where an IRQ
     /// handler that switches to system mode puts its frames, as the
@@ -68,10 +69,7 @@ pub fn msr_cpsr_c(g: &mut Game, sp: u32, v: u32) {
 impl Game {
     pub fn new(host: native_host::AnyHost) -> Box<Game> {
         let mut g = Box::new(Game {
-            ram: vec![0u8; EWRAM + IWRAM]
-                .into_boxed_slice()
-                .try_into()
-                .expect("RAM's size"),
+            ram: Ram::zeroed(),
             hw: Hw::new(host),
             sp: 0x0300_7F00,
             cpsr: 0x1F,
@@ -79,6 +77,39 @@ impl Game {
         g.hw.irq.set_handler(irq_entry);
         g.hw.on_frame_end(record);
         g
+    }
+}
+
+// `Ram` (printed after the prelude) is EWRAM and IWRAM byte for byte:
+// integer fields only, at the guest's offsets with no padding between
+// (its size says so), little-endian as the GBA is.
+const _: () = assert!(size_of::<Ram>() == EWRAM + IWRAM && cfg!(target_endian = "little"));
+
+impl Ram {
+    fn zeroed() -> Box<Ram> {
+        let l = std::alloc::Layout::new::<Ram>();
+        // SAFETY: every bit pattern is a `Ram` (integers only), and the
+        // allocation is `Ram`'s layout, owned by the box.
+        let p = unsafe { std::alloc::alloc_zeroed(l) };
+        if p.is_null() {
+            std::alloc::handle_alloc_error(l);
+        }
+        unsafe { Box::from_raw(p.cast::<Ram>()) }
+    }
+}
+
+impl std::ops::Deref for Ram {
+    type Target = [u8; EWRAM + IWRAM];
+    fn deref(&self) -> &Self::Target {
+        // SAFETY: `Ram` is that many initialised bytes (the assert above).
+        unsafe { &*(self as *const Ram).cast() }
+    }
+}
+
+impl std::ops::DerefMut for Ram {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: as `deref`; any bytes written are a valid `Ram`.
+        unsafe { &mut *(self as *mut Ram).cast() }
     }
 }
 
