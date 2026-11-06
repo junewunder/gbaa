@@ -213,7 +213,19 @@
       "title": "Discovery takes the run's call targets as function starts",
       "detail": "From {unit:native/hole-report} (docs/research/native-holes.md): the largest hard hole in five of the eight games is a call through a register to an address discovery doesn't know as a start (13-26 a game in seven of the eight; e.g. Emerald's m4a SoundMainBTM family called from 0x082dfb5a). Make those starts: a per-game roots list from gbaa-holes' Run::indirect_calls/call_targets, or find the tables statically. Done when `just holes` shows 0 calls to non-entries in ROM on the eight, and disc-pret, disc-agb and jt-score keep their bars.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "db7eff8c",
+        "session": "db7eff8c-1d5d-4ee8-8f8f-55872db846b4",
+        "host": "quack",
+        "pid": 1418242,
+        "start": "29954965",
+        "at": "2026-11-06T03:38:19Z",
+        "branch": "unit/native/disc-run-call-targets",
+        "beats": true
+      },
+      "round": "2026-11-06T03:38:19Z"
     },
     {
       "id": "native/disc-ram-copies",
