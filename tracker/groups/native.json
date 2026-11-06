@@ -461,17 +461,17 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "blocked",
+        "on": "q/accept-indirect-call-bar-today",
         "by": "62031260",
-        "session": "62031260-5636-4dad-9863-cc39f80d7abf",
-        "host": "quack",
-        "pid": 1418242,
-        "start": "29954965",
-        "at": "2026-11-06T11:08:08Z",
-        "branch": "unit/native/indirect-call-args",
-        "beats": true
+        "at": "2026-11-06T12:31:40Z"
       },
       "notes": [
+        {
+          "at": "2026-11-06T12:31:50Z",
+          "by": "62031260",
+          "text": "Built on the branch (lift + summaries + gbaa-recompile --callee-sets); lift-check, just check pass. Waits on the bar question (measured 56-60, not 0: sets are the heap pile's 21 fns). Emerald part split to {unit:native/indirect-call-args-emerald}."
+        },
         {
           "at": "2026-11-06T07:50:52Z",
           "by": "5676c8cf",
@@ -782,7 +782,14 @@
       "detail": "docs/native-stage-b.md, piece 3, fnref-flow as built: one pile holds every heap store, so a heap load used as a number marks every function word stored there (32-36 of each agb program's ~55 words). Split the pile by allocation site (agb's allocator's callers) and field offset in crates/codegen/src/native/fnref.rs. Done when: fn_words_not_proven bar lowered to the measured value on every program (it must fall), unit tests for two heap objects kept apart, just lift-check and just check pass.",
       "check": "independent",
       "needs": ["native/fnref-flow"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-06T12:31:54Z",
+          "by": "62031260",
+          "text": "When sets narrow, lower lift-check's call_fn_four_complete (56-60 per program, set by {unit:native/indirect-call-args}): every complete call_fn set today is the pile's 21 address-taken functions."
+        }
+      ]
     },
     {
       "id": "native/lift-bios-calls",
@@ -803,6 +810,14 @@
       "title": "Function-address flow settles on a whole game",
       "detail": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): fnref::follow on Metroid (2,616 functions) took 68 s for round 0 and over 8 min for round 1 on quack (GBAA_FNREF_TRACE=1), so its lift skips it (skip_fn_flow in mods/metroid/holes.toml). It only feeds the report and stage B's fn_words metrics, but dense FnRef IDs need it. Make it settle in minutes on Metroid (per-function summaries, sparse reruns), then drop skip_fn_flow. Done when: Metroid's lift runs it in under 5 minutes and lift-check's bars hold.",
       "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/indirect-call-args-emerald",
+      "title": "Emerald's summaries re-measured with callee sets",
+      "detail": "Split from {unit:native/indirect-call-args} (its lift side is done): run gbaa-recompile --summaries ROM --names $GBAA_DATA/names/pokeemerald.toml --callee-sets on pret's Emerald once the function-address flow settles on a whole game. It didn't finish in 35 min (past 8 GB) on quack, 2026-11-06. Done when: the counts (agree/disagree, the 656 from indirect calls re-measured, how many of the 553 indirect calls have a complete set) and what blocks complete sets (callbacks through RAM globals, e.g. gMain.callback1) are quoted in docs/native-port-design.md section 5, the 'With callee sets' paragraph; measured, no bar; just check passes.",
+      "check": "independent",
+      "needs": ["native/fnref-flow-scale"],
       "uses": ["heavy"]
     }
   ]
