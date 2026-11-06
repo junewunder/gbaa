@@ -344,6 +344,90 @@ build for the host.
   anything else a hard hole) and reports the words it proved and each
   indirect call's callee set. Check: unit tests per use; bar on function
   words not proven.
+
+  As built (2026-11-06): `crates/codegen/src/native/fnref.rs`, a
+  whole-program abstract run of every function's IR (stand-ins' original
+  code too). A value is a set of tokens: a function's key in a form
+  (whole; `>> 16`, `& 0xffff` or a halfword store; `<< 16` of either;
+  bytes; `!` of it or a difference with it, the two sides of a compare),
+  each with its origin (a ROM word, or a constant the code makes); a
+  number; a ROM pointer, exact or "from here on" after an index the run
+  doesn't follow (reading every word to the next code); and two flags,
+  read from RAM and unknown. Sources: constants and pool words equal to a
+  function's key (the IR's `Pool` op is placed back at its word by
+  decoding the `ldr [pc]`), loads through a ROM pointer of a word holding
+  one, the start's copies of ROM data to RAM, `CpuSet` from ROM. Memory:
+  each function's frame words where the frame's run placed the access
+  and the slot doesn't escape (a saved register's slot reads as the
+  register as it came, unknown; one at or above the entry sp, a stack
+  argument, also reads the pile its caller's store went to), constant
+  RAM addresses one cell each (mirrors folded), and one pile for every
+  other store; memory marks what else was stored, so a cell nothing
+  else reached is exactly what was; a load the value-set analysis bounds
+  to ROM reads the words there. A call passes r0-r3 and takes back its callee's
+  returns; a tail call or fall passes every register; an indirect call
+  passes them to each function its target may hold. The rule: a function
+  value may be called, stored and loaded back (a copy by bytes or halves
+  reassembles it), compared for equality as a whole (`== 0` of a
+  difference with another, 0 or an unknown: a small constant could be a
+  dense ID, and a half's top is 0 when dense, so halves aren't
+  compared), split and joined (a half joined only with the other half),
+  `| 1` on a Thumb key; anything else (an address, other arithmetic, an
+  ordered compare, a bit test, a piece used as a number, a piece called)
+  marks its origin not proven, and so does a value given to the BIOS or
+  stored outside RAM (I/O, display memory, SRAM). A word is proven when the run read it and no
+  value it entered met any of those. It rests on a closed world: function
+  and ROM addresses enter values only from those sources, so an unknown
+  value is never one, and a callee set of whole addresses is complete,
+  unless the run dropped a ROM word or pointer on its way (a flag on the
+  value, carried through memory: a "from here on" read cut short, a
+  ROM-bounded read too wide to make, a ROM pointer less an unknown);
+  a call through such a value is incomplete. A
+  forbidden use is reported, not a hard hole: nothing printed changes yet
+  (`main.rs` byte-identical), and `native/fnref-dense` is where one stops
+  a dense build. The report's `function addresses` line and a line per
+  word, constant and site; metrics `fn_words_not_proven` (barred at the
+  values below) and `fn_words_proven` (unbarred). The run takes 3-6 s of
+  each lift's 6-12 s (about a second of it reading the 110 KB of ROM data).
+
+  | program | function words (pools, data) | proven | never read | not allowed | through the pile | code constants proven | `call_fn` sets complete |
+  |---|---|---|---|---|---|---|---|
+  | native-spike | 58 (34, 24) | 5 | 9 | 44 | 43 | 11 of 13 | 59 of 59 |
+  | affine | 56 (34, 22) | 4 | 15 | 37 | 35 | 11 of 13 | 57 of 57 |
+  | mosaic-modes | 55 (34, 21) | 4 | 14 | 37 | 36 | 11 of 14 | 57 of 57 |
+  | native-fallthrough | 57 (35, 22) | 4 | 15 | 38 | 36 | 11 of 13 | 58 of 58 |
+  | native-irq-hold | 61 (36, 25) | 6 | 15 | 40 | 38 | 11 of 13 | 61 of 61 |
+  | native-frame-locals | 56 (34, 22) | 4 | 15 | 37 | 35 | 11 of 13 | 57 of 57 |
+
+  ("Not allowed" counts the BIOS too; "through the pile" are the
+  not-proven words whose values were stored where the run can't place
+  them.) **The pile is the limit.** agb keeps its closures and trait
+  objects on the heap, and every heap store goes to the one pile, so a
+  load through any heap pointer may give every function address ever
+  stored there; when one such load is used as a number (a length, a
+  flag), every one of them is marked. That is most of the not-proven
+  words, and why each `call_fn` set, though complete, is every
+  address-taken function (17 on the spike). Splitting the pile by the
+  value-set analysis's bounds on each store's address proved nothing
+  more (agb's heap stores aren't bounded) and was nine times slower.
+  What would: the heap by allocation site and field (agb's allocator's
+  callers), which `native/fnref-dense`'s bar (0 ROM keys left) needs.
+  The "never read" words are words no tracked load reaches (vtables of
+  types never made, or reached by a path the run loses); they stay ROM
+  keys. Order matters a little to the widening (more than 8 numbers are
+  unknown, more than 16 exact ROM pointers become one "from the lowest
+  on"), so the first reason given per word can move with the code. Gaps
+  the review named, kept: a "from here on" read stops after 256 KB (the
+  agb programs' data runs to about 110 KB, which the old 16 KB cut lost)
+  and a ROM-bounded read wider than that reads nothing; a ROM pointer
+  less an unknown is unknown (each flags the value, so a call through it
+  is incomplete rather than wrongly complete); a load through a pointer
+  with no bounds at all reads no ROM; a RAM-to-RAM `CpuSet` isn't
+  followed; `ror` by an unknown amount (a word load's alignment rotation)
+  keeps a function's form, and a ROM pointer's. `native/fnref-dense` should know that proofs are per origin,
+  and a pool load folded from a non-pc-relative address gets a
+  code-constant origin, so dense needs per-site constant rewriting.
+  `GBAA_FNREF_TRACE=1` prints the run's rounds and each use not allowed.
 - **Function pointers as dense IDs** (`native/fnref-dense`). The proven
   words rewritten in the lifter's copy of ROM data, `FNS` dense from 1
   under a new `--fn-ids dense`; ROM keys stay the native check's (RAM holds
