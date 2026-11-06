@@ -13,4 +13,6 @@ prettyplease = "0.2"
 proc-macro2 = "1"
 quote = "1"
 toml = "1"
+toml_edit = "0.25"
+regex = { version = "1", default-features = false, features = ["std", "unicode-perl"] }
 syn = { version = "2", default-features = false, features = ["full", "parsing", "printing"] }

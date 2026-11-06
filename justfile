@@ -934,6 +934,12 @@ lift-check *args:
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift --bin gbaa-lift-check
     target/release/gbaa-lift-check crates/codegen/lift-check.toml --data {{quote(gbaa_data)}} {{args}}
 
+# The lift's metrics against their bars (gbaa-lift-check --metrics-only; native/lift-bars): every program of crates/codegen/lift-check.toml lifted with its flags and --bars, nothing built, no route or planted control run; prints a table of metric by program, each bar beside its value (v<b under, v>b! over). ARGS: --only NAME (repeatable), --metric REGEX, --lower-bars (rewrites lift-check.toml with each bar shown that is over its metric lowered to it; never raises one). Fails on a metric over its bar. About 15 seconds (the lifts run at once).
+[positional-arguments]
+lift-metrics *args:
+    {{lock}} cargo build -q --release -p codegen --bin gbaa-lift --bin gbaa-lift-check
+    target/release/gbaa-lift-check crates/codegen/lift-check.toml --data {{quote(gbaa_data)}} --metrics-only "$@"
+
 # Milestone 2's pass check (#32): `recompile-check` (at TIMING, exact unless told), then the two frame dumps (out/<name>/{interp,recompiled}.png) must be byte-identical. Prints the guest-cycle split between recompiled code and the interpreter fallback (decision 1). Heavy: builds a generated crate.
 first-frame rom frames="60" timing="exact":
     #!/usr/bin/env bash
@@ -1367,9 +1373,10 @@ holes rom *args:
     systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 target/release/gbaa-holes "$@"
 
 # The hole report over the corpus (holes/corpus.toml; crates/hole-report/src/corpus.rs): every game in turn, each report in OUT/<name>.txt, then one table of the ranking lines' numbers, saved as OUT/summary.toml. ARGS: --out DIR (default out/holes/<git short hash>[-dirty]), --against DIR2 (changes from DIR2's summary in brackets), --only NAME (repeatable), --cover (each game's coverage runs: hours), and any `just holes` flag for every game. About 9 minutes for the eight; run it with `just long`. The games run one at a time under one 3 GB cap, no swap.
+[positional-arguments]
 holes-all *args:
     {{lock}} cargo build -q --release -p hole-report
-    systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 target/release/gbaa-holes --corpus holes/corpus.toml --roms {{quote(roms)}} {{args}}
+    systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 target/release/gbaa-holes --corpus holes/corpus.toml --roms {{quote(roms)}} "$@"
 
 # Emerald's ten native functions against the play build (native/emerald-ten; scores in docs/native-port-design.md, "Emerald's ten"): the hand-lifted Rust in mods/emerald/native-ten/ run by crates/native-fn-diff from 600 no-input frames' entry states (borrowed for functions not entered) in 96 variants each, against the interpreter untimed; then one byte of Random's literal pool changed must be caught. Fails unless it prints `native 0 of 10 differ` and the fault is caught. ROM defaults to pret's build. About 30 s (the function summaries are most of it), capped at 3 GB of RAM and no swap. Private: mods/ isn't in the public mirror.
 [positional-arguments]
