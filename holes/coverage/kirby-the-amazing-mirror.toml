@@ -1,0 +1,103 @@
+# Coverage runs for `gbaa-holes ROM --cover FILE` (native/hole-coverage;
+# docs/research/native-holes.md, "Coverage runs"): start points beyond the
+# press script, each played with seeded random presses, so each jump
+# Recovery leaves unresolved is seen with its targets or shown unreached.
+# Paths are under $GBAA_DATA. The [[jump]] list below the marker is what
+# the runs saw; `just holes ROM --cover FILE` checks it.
+
+# From reset: Start and A through the title, then a random walk.
+[[run]]
+name = "walk"
+frames = 9000
+presses = ["start@300-1500/120", "a@400-1500/30"]
+random_from = 1500
+seeds = 4
+
+# The owner's save and every other backup, a file picked, then a random walk.
+[[run]]
+name = "saves"
+save = "saves/kirby-the-amazing-mirror"
+frames = 6000
+presses = ["start@300-1200/120", "a@400-1200/30"]
+random_from = 1200
+seeds = 2
+
+[[run]]
+name = "save-backups"
+save = "saves/kirby-the-amazing-mirror/backups"
+every = 2
+frames = 6000
+presses = ["start@300-1200/120", "a@400-1200/30"]
+random_from = 1200
+
+# --- Observed: written by `gbaa-holes ROM --cover FILE --update`; checked without it ---
+
+[[jump]]
+at = 0x080001bc
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0814f88c
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0815053b]
+
+[[jump]]
+at = 0x0814f940
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0814fb8b]
+
+[[jump]]
+at = 0x0814f956
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0814fb8b]
+
+[[jump]]
+at = 0x0814f968
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0814fb8b]
+
+[[jump]]
+at = 0x0814f998
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0814fb8b]
+
+[[jump]]
+at = 0x0814f9ac
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0814fb8b]
+
+[[jump]]
+at = 0x0814f9c2
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0814fb8b]
+
+[[jump]]
+at = 0x0814f9d6
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0814fb8b]
+
+[[jump]]
+at = 0x0814f9e8
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0814fb8b]
+
+[[jump]]
+at = 0x0814f9f4
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0814fb8b]
+
+[[jump]]
+at = 0x0814fa0e
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0814fb8b]
+
+[[jump]]
+at = 0x0814ffdc
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0814fb8b]
+
+[[jump]]
+at = 0x0814fff0
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0814fb8b]

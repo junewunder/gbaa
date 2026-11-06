@@ -1,0 +1,31 @@
+# Coverage runs for `gbaa-holes ROM --cover FILE` (native/hole-coverage;
+# docs/research/native-holes.md, "Coverage runs"): start points beyond the
+# press script, each played with seeded random presses, so each jump
+# Recovery leaves unresolved is seen with its targets or shown unreached.
+# Paths are under $GBAA_DATA. The [[jump]] list below the marker is what
+# the runs saw; `just holes ROM --cover FILE` checks it.
+
+# From reset: Start and A through the title, then a random walk.
+[[run]]
+name = "walk"
+frames = 9000
+presses = ["start@300-1500/120", "a@400-1500/30"]
+random_from = 1500
+seeds = 4
+
+# --- Observed: written by `gbaa-holes ROM --cover FILE --update`; checked without it ---
+
+[[jump]]
+at = 0x08000208
+runs = []
+targets = []
+
+[[jump]]
+at = 0x087608fc
+runs = []
+targets = []
+
+[[jump]]
+at = 0x087d8004
+runs = []
+targets = []
