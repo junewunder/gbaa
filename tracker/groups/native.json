@@ -242,19 +242,7 @@
         "checker": "a92953cdff8d9f304",
         "at": "2026-11-06T06:57:00Z",
         "evidence": "Review fix made (ae62dec1): ram_copies skips groups at mirror addresses, unit test covers 0x0300_8100 and 0x0204_0100. Merged main (c1f865f5), just check passes. Fresh verifier ran just holes on all eight: 0 RAM bytes undiscovered each; disc-pret 0.9991/0.9549, disc-agb 1.0/0.9835 and 1.0/0.5789, jt-score 676/676, 548/548, 584/617, 726/732, all at their bars.",
-        "branch": "unit/native/disc-ram-copies",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-06T06:57:00Z",
-          "by": "b58ddd69",
-          "host": "quack",
-          "pid": 1417300,
-          "start": "29954434",
-          "beats": true,
-          "session": "b58ddd69-6643-47c2-8e0c-62a209be6be7",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -267,13 +255,7 @@
           "by": "82db0e66",
           "text": "Copies come from the run (analysis::holes::ram_copies), not static: a lift with no run still lacks them. A static finder (DMA3 stores, copy loops) would be its own unit."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-06T06:37:58Z",
-        "findings": "- crates/analysis/src/holes/copies.rs:130-138 (`ram_copies`, the found-copies loop): `region_end` is 0x0204_0000 for EWRAM and 0x0300_8000 for anything else, but `exec` takes all RAM code in 0x0200_0000..0x0400_0000, including mirror addresses (0x0204_0000 and up, 0x0300_8000 and up). If a run executes code at a mirror (for example, IWRAM code entered through 0x03FFxxxx), `stop` ends up below `dst` and `stop - dst` underflows. That panics in a debug build. In release it wraps to a huge length, and `build` then quietly returns None. Fix: either fold mirror addresses back to their base before grouping, or skip any group whose `dst >= region_end`. Add a unit test with one instruction run at 0x0300_8100 (or 0x0204_0100) that checks `ram_copies` doesn't panic."
-      },
-      "round": "2026-11-06T04:42:48Z"
+      ]
     },
     {
       "id": "native/hole-coverage",
