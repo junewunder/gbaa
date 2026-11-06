@@ -233,6 +233,13 @@
           "lane": "quack/2"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-06T05:05:45Z",
+          "by": "db7eff8c",
+          "text": "Roots come from the holes run itself (discover_with, in-process): only targets the press script reaches. The lifter doesn't take run roots yet; a native game build needs a roots source. New m4a code shows bx r12 returns: {unit:native/recovery-saved-lr-return}."
+        }
+      ],
       "round": "2026-11-06T03:38:19Z"
     },
     {
