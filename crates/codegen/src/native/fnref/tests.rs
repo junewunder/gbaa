@@ -397,6 +397,54 @@ fn a_rom_pointer_minus_an_unknown_is_incomplete() {
     assert!(!site(&f).complete, "{f:?}");
 }
 
+#[test]
+fn a_lost_value_through_a_local_slot_by_halves_is_incomplete() {
+    use super::super::frame::{Place, Slot};
+    // The pointer-less-unknown value of the test above, split, its halves
+    // kept in a local (sp - 8, never escaping), loaded and joined.
+    let mut b = B::default();
+    let vt = b.pool(0x0800_0408, VT + 0x10);
+    let i = b.get(1);
+    let a = b.bin(BinOp::Sub, vt, i);
+    let x = b.ld(Width::Word, a);
+    let p = b.pool(POOL, F);
+    let v = b.op(Op::Select { c: x, a: x, b: p });
+    let hi = b.shift(ShiftType::Lsr, v, 16);
+    let sp = b.get(13);
+    b.st(Width::Half, sp, hi);
+    let st_hi = b.insts.len() - 1;
+    b.st(Width::Half, sp, v);
+    let st_lo = b.insts.len() - 1;
+    let hi = b.ld(Width::Half, sp);
+    let ld_hi = b.insts.len() - 1;
+    let lo = b.ld(Width::Half, sp);
+    let ld_lo = b.insts.len() - 1;
+    let up = b.shift(ShiftType::Lsl, hi, 16);
+    let t = b.bin(BinOp::Or, up, lo);
+    let e = 0x0800_1001;
+    let frames = BTreeMap::from([(
+        e,
+        Frame {
+            slots: vec![Slot {
+                lo: -8,
+                hi: -4,
+                saved: false,
+                escapes: 0,
+            }],
+            places: BTreeMap::from([
+                ((e, st_hi), Place::Exact(-8, 2)),
+                ((e, st_lo), Place::Exact(-6, 2)),
+                ((e, ld_hi), Place::Exact(-8, 2)),
+                ((e, ld_lo), Place::Exact(-6, 2)),
+            ]),
+            ..Frame::default()
+        },
+    )]);
+    let f = run_with(&[calling(e, b, t)], &frames);
+    assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
+    assert!(!site(&f).complete, "{f:?}");
+}
+
 /// A one-block function returning at once.
 fn just(e: u32, b: B) -> Built {
     (e, vec![(e, b.end(None, Edge::Return))])

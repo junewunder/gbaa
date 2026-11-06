@@ -806,12 +806,16 @@ impl Run<'_, '_> {
                     }
                     R::Unk => {
                         out.unk = true;
-                        // A ROM pointer less an unknown: the run gives it
-                        // up (other ops on a pointer make a number, by the
-                        // closed world: an alignment test, a difference).
+                        // A ROM pointer less an unknown, or one "from here
+                        // on" taken below ROM: the run gives it up (other
+                        // ops on a pointer make a number, by the closed
+                        // world: an alignment test, a difference).
                         if op == BinOp::Sub
-                            && matches!(x, Some(Tok::Rom(_) | Tok::RomFrom(_)))
-                            && y.is_none()
+                            && matches!(
+                                (x, y),
+                                (Some(Tok::Rom(_) | Tok::RomFrom(_)), None)
+                                    | (Some(Tok::RomFrom(_)), Some(Tok::Num(_)))
+                            )
                         {
                             out.lost_rom = true;
                         }
@@ -1306,8 +1310,12 @@ impl Run<'_, '_> {
                         x.clone()
                     } else {
                         let mut v = Val::unk();
-                        v.toks
-                            .extend(toks.iter().filter(|(t, _)| *t != OTHER).map(|(t, _)| *t));
+                        v.toks.extend(
+                            toks.iter()
+                                .filter(|(t, _)| *t != OTHER && *t != LOST)
+                                .map(|(t, _)| *t),
+                        );
+                        v.lost_rom = x.lost_rom;
                         v
                     };
                     let new = match (guarded, old) {
