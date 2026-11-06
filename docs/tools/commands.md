@@ -65,6 +65,27 @@ says what a recipe or tool does and what it must still pass.
   that reached it, its targets) against what they saw, failing on a
   difference; `--update` rewrites the list instead. Deterministic, so a
   rerun matches. 10 to 30 minutes a game: run it as a long job.
+  `--line FILE` writes the ranking line's numbers to FILE as TOML.
+- `just holes-all [--out DIR] [--against DIR2] [--only NAME]… [--cover]
+  [holes flags…]`: the hole report over the corpus, `holes/corpus.toml`
+  (each game's short name, ROM file name under the justfile's `roms`,
+  coverage file), `gbaa-holes --corpus` (`crates/hole-report/src/corpus.rs`).
+  Runs each game in turn as its own `gbaa-holes ROM … --line`, writing
+  `DIR/<name>.txt` (the report), `DIR/<name>.log` (its timings), then
+  prints one table, a row per game and a total: hard holes, ROM and
+  overlay jumps, return arithmetic, RAM code changed, CPU state, BIOS,
+  calls to non-entries, summaries, bytes not discovered, seconds. The
+  numbers come from the report's own counts, saved in `DIR/summary.toml`
+  (`[[game]]` each). `--against DIR2` reads DIR2's `summary.toml` and
+  shows each change in brackets, `4 (-3)`, `10 (0)`. DIR defaults to
+  `out/holes/<git short hash>` (`-dirty` with tracked changes). Other
+  flags (`--frames N`, `--no-summaries`, `--press …`) go to every game;
+  `--cover` gives each its coverage file (hours, not minutes). Fails if
+  any game's run did. One 3 GB cap, no swap, for the whole run (the games
+  run one at a time). About 9 minutes for the eight: run it with `just
+  long start holes -- just holes-all`. Use it, not a loop over `just
+  holes`, to compare before and after a change: run it on main, then on
+  the branch with `--against` the first DIR.
 - `just jt-score`: the jump-table check (decision 5c). Builds truth tables
   from `$GBAA_DATA/src/pokeemerald/pokeemerald{,_modern}.elf` and the ROMs
   beside them, runs `analysis::jumptable` over each ELF's code map, and
