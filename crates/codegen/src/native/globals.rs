@@ -40,7 +40,7 @@ pub fn ram_at(a: u32) -> Option<u32> {
 }
 
 /// The guest address of a `Game::ram` offset.
-fn guest(off: u32) -> u32 {
+pub fn guest(off: u32) -> u32 {
     if off < EWRAM {
         0x0200_0000 + off
     } else {
@@ -86,12 +86,48 @@ impl Globals {
     /// `names` (guest address to identifier and size in bytes, 0 if not
     /// known) names a global that starts at a named datum, and a datum of
     /// known size that an access reaches is one global over all of it.
-    pub fn carve(accesses: &[(u32, u32)], names: &BTreeMap<u32, (String, u32)>) -> Globals {
-        // (offset, end, width): an access, or a named datum's extent (width 0).
+    ///
+    /// `ranges` (offset, end, width) are the extents of computed accesses
+    /// the value sets bound (`native/ref-in-object`): each is one object,
+    /// so one global, if it reaches at most one of the globals the rest
+    /// carve (a loop over an array whose first element is also read at
+    /// its constant address); one reaching more is left out.
+    pub fn carve(
+        accesses: &[(u32, u32)],
+        ranges: &[(u32, u32, u32)],
+        names: &BTreeMap<u32, (String, u32)>,
+    ) -> Globals {
+        let first = Globals::carve_all(accesses, &[], names);
+        let ranges: Vec<_> = ranges
+            .iter()
+            .copied()
+            .filter(|&(lo, hi, _)| {
+                first
+                    .0
+                    .values()
+                    .filter(|g| g.lo < hi && lo < g.lo + g.len)
+                    .count()
+                    <= 1
+            })
+            .collect();
+        if ranges.is_empty() {
+            return first;
+        }
+        Globals::carve_all(accesses, &ranges, names)
+    }
+
+    fn carve_all(
+        accesses: &[(u32, u32)],
+        ranges: &[(u32, u32, u32)],
+        names: &BTreeMap<u32, (String, u32)>,
+    ) -> Globals {
+        // (offset, end, width): an access, a range of them, or a named
+        // datum's extent (width 0).
         let mut xs: Vec<(u32, u32, u32)> = accesses
             .iter()
-            .filter(|&&(o, w)| o + w <= SIZE)
             .map(|&(o, w)| (o, o + w, w))
+            .chain(ranges.iter().copied())
+            .filter(|&(_, e, _)| e <= SIZE)
             .collect();
         let extents: Vec<(u32, u32, u32)> = names
             .iter()
@@ -161,6 +197,31 @@ impl Globals {
         })
     }
 
+    /// The typed access through a computed address that the value sets
+    /// bound to guest addresses `lo..=hi` (`native/ref-in-object`), of
+    /// `width` bytes, if every address there is in one global that can
+    /// hold it as typed: one address (aligned as the access aligns it) is
+    /// that field, the pointer checked ([`Obj::Pin`]); more, an element
+    /// of the global's array each, indexed by the pointer ([`Obj::Index`]).
+    /// Anything else is pointer arithmetic the types don't explain.
+    pub fn object(&self, lo: u32, hi: u32, width: u32) -> Option<Obj> {
+        let (lo, hi) = (lo & !(width - 1), hi & !(width - 1));
+        let (o_lo, o_hi) = (ram_at(lo)?, ram_at(hi)?);
+        if o_hi < o_lo || o_hi - o_lo != hi - lo {
+            return None;
+        }
+        if o_lo == o_hi {
+            return self.place(o_lo, width).map(|p| Obj::Pin(p, o_lo));
+        }
+        let (_, g) = self.0.range(..=o_lo).next_back()?;
+        (o_hi + width <= g.lo + g.len && width == g.elem && g.len > g.elem).then(|| Obj::Index {
+            global: format!("g.ram.{}", g.name),
+            off: g.lo,
+            elem: g.elem,
+            n: g.len / g.elem,
+        })
+    }
+
     /// The `Ram` struct: each global at its offset, bytes between.
     pub fn ram_struct(&self) -> String {
         let mut s = String::new();
@@ -180,6 +241,59 @@ impl Globals {
         pad(&mut s, at, SIZE);
         s.push_str("}\n");
         s
+    }
+}
+
+/// A typed access through a computed address ([`Globals::object`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Obj {
+    /// Always this place, at this offset in `Game::ram`: the prelude's
+    /// `pin` checks the pointer.
+    Pin(Place, u32),
+    /// An element of the array `global`, `n` elements of `elem` bytes
+    /// from offset `off`: the prelude's `ix` finds it from the pointer,
+    /// checked.
+    Index {
+        global: String,
+        off: u32,
+        elem: u32,
+        n: u32,
+    },
+}
+
+impl Obj {
+    /// A load of `width` bytes through the pointer `a` (a `u32`
+    /// expression, aligned as the access aligns it), as a `u32`
+    /// expression.
+    pub fn load(&self, a: &str, width: u32) -> String {
+        match self {
+            Obj::Pin(p, off) => format!("{{ pin({a}, {off:#x}); {} }}", load(p, width)),
+            Obj::Index { elem: 4, .. } => self.elem(a),
+            Obj::Index { .. } => format!("{} as u32", self.elem(a)),
+        }
+    }
+
+    /// A store of `width` bytes of `v` through the pointer `a`, as a
+    /// statement.
+    pub fn store(&self, a: &str, width: u32, v: &str) -> String {
+        match self {
+            Obj::Pin(p, off) => format!("pin({a}, {off:#x}); {}", store(p, width, v)),
+            Obj::Index { elem: 4, .. } => format!("{} = {v};", self.elem(a)),
+            Obj::Index { elem, .. } => format!("{} = {v} as u{};", self.elem(a), elem * 8),
+        }
+    }
+
+    fn elem(&self, a: &str) -> String {
+        let Obj::Index {
+            global,
+            off,
+            elem,
+            n,
+        } = self
+        else {
+            unreachable!()
+        };
+        format!("{global}[ix({a}, {off:#x}, {elem}, {n})]")
     }
 }
 
@@ -237,7 +351,11 @@ mod tests {
     #[test]
     fn globals_by_access_width() {
         // A named datum used only as halfwords: a [u16; 3], not bytes.
-        let g = Globals::carve(&[(0x102, 2), (0x104, 2), (0x200, 4), (0x102, 2)], &names());
+        let g = Globals::carve(
+            &[(0x102, 2), (0x104, 2), (0x200, 4), (0x102, 2)],
+            &[],
+            &names(),
+        );
         let v: Vec<_> = g.0.values().map(|g| (g.lo, g.len, g.elem)).collect();
         assert_eq!(v, vec![(0x100, 6, 2), (0x200, 4, 4)]);
         assert_eq!(g.0[&0x100].ty(), "[u16; 3]");
@@ -253,7 +371,7 @@ mod tests {
         // are globals of their own.
         assert_eq!(g.place(0x106, 2), None);
         assert_eq!(
-            Globals::carve(&[(0x102, 2), (0x104, 2)], &BTreeMap::new())
+            Globals::carve(&[(0x102, 2), (0x104, 2)], &[], &BTreeMap::new())
                 .0
                 .len(),
             2
@@ -262,7 +380,7 @@ mod tests {
 
     #[test]
     fn a_byte_inside_a_word_is_its_bits() {
-        let g = Globals::carve(&[(EWRAM + 0x10, 4), (EWRAM + 0x12, 1)], &names());
+        let g = Globals::carve(&[(EWRAM + 0x10, 4), (EWRAM + 0x12, 1)], &[], &names());
         assert_eq!(g.0.len(), 1);
         assert_eq!(g.0[&(EWRAM + 0x10)].name, "gFrames");
         let p = g.place(EWRAM + 0x12, 1).unwrap();
@@ -272,7 +390,7 @@ mod tests {
             store(&p, 1, "v1"),
             "g.ram.gFrames = g.ram.gFrames & 0xff00ffff | ((v1 & 0xff) << 16) as u32;"
         );
-        let g = Globals::carve(&[(0x20, 2), (0x21, 1)], &BTreeMap::new());
+        let g = Globals::carve(&[(0x20, 2), (0x21, 1)], &[], &BTreeMap::new());
         let p = g.place(0x21, 1).unwrap();
         assert_eq!(load(&p, 1), "((g.ram.d_02000020 as u32) >> 8 & 0xff)");
         assert_eq!(
@@ -284,7 +402,7 @@ mod tests {
     #[test]
     fn an_odd_sized_datum_keeps_its_wide_accesses_as_bytes() {
         // gOdd is 6 bytes: a word at its start doesn't fit its halfwords.
-        let g = Globals::carve(&[(0x300, 4), (0x304, 2)], &names());
+        let g = Globals::carve(&[(0x300, 4), (0x304, 2)], &[], &names());
         assert_eq!(g.0[&0x300].ty(), "[u16; 3]");
         assert!(g.place(0x300, 4).is_none());
         assert!(g.place(0x304, 2).is_some());
@@ -293,8 +411,56 @@ mod tests {
     }
 
     #[test]
+    fn a_pointer_into_one_global_is_its_field_or_element() {
+        // Constant accesses carve a word at 0x10 and a byte at 0x40; a
+        // loop's halfwords over 0x20..0x28 are an array of their own, and
+        // its words over 0x3c..0x44 take in the byte.
+        let g = Globals::carve(
+            &[(0x10, 4), (0x40, 1)],
+            &[(0x20, 0x28, 2), (0x3c, 0x44, 4)],
+            &BTreeMap::new(),
+        );
+        let v: Vec<_> = g.0.values().map(|g| (g.lo, g.len, g.elem)).collect();
+        assert_eq!(v, vec![(0x10, 4, 4), (0x20, 8, 2), (0x3c, 8, 4)]);
+        // One address: the field, the pointer pinned to it (mirrors too).
+        let o = g.object(0x0204_0012, 0x0204_0012, 2).unwrap();
+        assert_eq!(
+            o.load("v3 & !1", 2),
+            "{ pin(v3 & !1, 0x12); (g.ram.d_02000010 >> 16 & 0xffff) }"
+        );
+        // A range: an index the pointer finds.
+        let o = g.object(0x0200_0022, 0x0200_0026, 2).unwrap();
+        assert_eq!(
+            o.load("v3 & !1", 2),
+            "g.ram.d_02000020[ix(v3 & !1, 0x20, 2, 4)] as u32"
+        );
+        assert_eq!(
+            o.store("v3 & !1", 2, "v4"),
+            "g.ram.d_02000020[ix(v3 & !1, 0x20, 2, 4)] = v4 as u16;"
+        );
+        let o = g.object(0x0200_003c, 0x0200_0040, 4).unwrap();
+        assert_eq!(
+            o.store("v1 & !3", 4, "v2"),
+            "g.ram.d_0200003c[ix(v1 & !3, 0x3c, 4, 2)] = v2;"
+        );
+        // Not explained: bytes of a halfword array, a range past its
+        // global, one across a mirror's end.
+        assert_eq!(g.object(0x0200_0020, 0x0200_0027, 1), None);
+        assert_eq!(g.object(0x0200_0020, 0x0200_002a, 2), None);
+        assert_eq!(g.object(0x0203_fffe, 0x0204_0000, 2), None);
+    }
+
+    #[test]
+    fn a_range_over_several_globals_is_none() {
+        // A clear loop over two separate globals (crt0's .bss): no object.
+        let g = Globals::carve(&[(0x8, 1), (0xc, 4)], &[(0x8, 0x10, 4)], &BTreeMap::new());
+        assert_eq!(g.0.len(), 2);
+        assert_eq!(g.object(0x0200_0008, 0x0200_000c, 4), None);
+    }
+
+    #[test]
     fn the_struct_is_the_whole_ram() {
-        let g = Globals::carve(&[(0x8, 4), (SIZE - 4, 4)], &BTreeMap::new());
+        let g = Globals::carve(&[(0x8, 4), (SIZE - 4, 4)], &[], &BTreeMap::new());
         let s = g.ram_struct();
         assert!(s.contains("    _p00000: [u8; 0x8],\n    pub d_02000008: u32,\n"));
         assert!(s.contains("    _p0000c: [u8; 0x47ff0],\n    pub d_03007ffc: u32,\n}"));
