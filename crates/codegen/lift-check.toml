@@ -76,6 +76,7 @@ sp_accesses_escaping_slot = 704
 call_fn_calls = 61
 jumps_by_value = 8
 gap_targets = 5
+fn_words_not_proven = 52
 
 [program.mosaic-modes]
 rom = "agb/mosaic-modes.gba"
@@ -128,6 +129,7 @@ sp_accesses_escaping_slot = 1124
 call_fn_calls = 61
 jumps_by_value = 8
 gap_targets = 24
+fn_words_not_proven = 51
 
 [program.native-spike]
 rom = "agb/native-spike.gba"
@@ -184,6 +186,7 @@ sp_accesses_escaping_slot = 1289
 call_fn_calls = 63
 jumps_by_value = 8
 gap_targets = 22
+fn_words_not_proven = 53
 
 [program.native-fallthrough]
 rom = "agb/native-fallthrough.gba"
@@ -240,6 +243,7 @@ sp_accesses_escaping_slot = 708
 call_fn_calls = 62
 jumps_by_value = 8
 gap_targets = 5
+fn_words_not_proven = 53
 
 [program.native-irq-hold]
 rom = "agb/native-irq-hold.gba"
@@ -297,3 +301,4 @@ sp_accesses_escaping_slot = 708
 call_fn_calls = 65
 jumps_by_value = 8
 gap_targets = 11
+fn_words_not_proven = 55
