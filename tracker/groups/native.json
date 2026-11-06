@@ -540,6 +540,13 @@
         }
       ],
       "round": "2026-11-01T21:43:43Z"
+    },
+    {
+      "id": "native/recovery-saved-lr-return",
+      "title": "Recovery takes a bx through a copy of lr as a return",
+      "detail": "From {unit:native/disc-run-call-targets}: once discovery has m4a's ply_* routines (run roots), each 'mov r12, lr; ... bx r12' is an unresolved jump, reached: Emerald 11->22, Rogue 50->60, both Kirbys 2->14, Minish Cap 25->34 in just holes. The value-set analysis should know r12 holds the entry lr and call it a return. Done when just holes shows none of these and jt-score, disc-pret and disc-agb keep their bars.",
+      "check": "independent",
+      "uses": ["heavy"]
     }
   ]
 }
