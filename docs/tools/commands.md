@@ -1246,11 +1246,12 @@ says what a recipe or tool does and what it must still pass.
   `$GBAA_DATA`, `route`, optional `lift_flags`, `route_flags`,
   `planted_store`, `planted_hole`, `planted_flags`) and its bars,
   `[program.<name>.bars]`. Today `agb/native-spike`, `agb/affine`,
-  `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold` and
-  `agb/native-frame-locals` (`just agb-tests`) on `units/native-spike.toml`,
-  `units/affine-600.toml`, `units/mosaic-modes-600.toml`,
-  `units/native-fallthrough-600.toml`, `units/native-irq-hold-601.toml` and
-  `units/native-frame-locals-600.toml`. First every
+  `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
+  `agb/native-frame-locals` and `agb/native-ime-release` (`just
+  agb-tests`) on `units/native-spike.toml`, `units/affine-600.toml`,
+  `units/mosaic-modes-600.toml`, `units/native-fallthrough-600.toml`,
+  `units/native-irq-hold-601.toml`, `units/native-frame-locals-600.toml`
+  and `units/native-ime-release-601.toml`. First every
   program is lifted with `--bars` (seconds), failing before any build on
   a metric over its bar; then each lift and its play build
   (`--timing native`) are built and `route-check --native` runs them for
@@ -1259,24 +1260,28 @@ says what a recipe or tool does and what it must still pass.
   `planted_store` (0x08000186, the V-blank handler's frame count) must be
   caught, and with its `planted_hole` (agb's IRQ wrapper's stand-in
   dropped) the lift and the build must fail naming `f_03000000`'s `mrs`.
-  native-fallthrough, native-irq-hold and native-frame-locals lifted with
-  their `planted_flags` (`--fall-as-tail-call`, the old fall into another
-  function; `--irq-at-waits`, the old IRQ run at a wait inside a critical
-  section; `--plant-slot=0x08000182`, `fl_keep`'s store to a stack local
-  made one more, native/frame-locals) must be caught too. Each program is
+  native-fallthrough, native-irq-hold, native-frame-locals and
+  native-ime-release lifted with their `planted_flags`
+  (`--fall-as-tail-call`, the old fall into another function;
+  `--irq-at-waits`, the old IRQ run at a wait inside a critical section;
+  `--plant-slot=0x08000182`, `fl_keep`'s store to a stack local made one
+  more, native/frame-locals; `--ime-at-waits`, the old IRQ held past the
+  store that sets `IME` again to the next wait, native/ime-release) must
+  be caught too. Each program is
   lifted once more with `--layout packed` (`out/lift-<name>-packed`),
   passed as `--packed`: it must draw the guest layout's frames and
   record the same bytes, nothing skipped (native/lift-packed-layout).
   Passes with
-  `every metric within its bar`, six `pass (60x frames, 0 differences …;
+  `every metric within its bar`, seven `pass (60x frames, 0 differences …;
   the play layout draws the same 60x frames, its records the same …)`
   lines, `planted fault caught (…-planted: frame 2: EWRAM byte 0x020000c0
   …)`, `(…-fall-as-tail-call: frame 1: EWRAM byte 0x020000c4 …)`,
   `(…-plant-slot-0x08000182: frame 1: EWRAM byte 0x020000c4: play 0x61,
   native 0x62 …)` and `(…-irq-at-waits: frame 2: EWRAM byte 0x020000c8:
-  play 0x00, native 0x01 …)`, `planted hard hole caught` and `lift-check:
-  passed`. Logs in `out/lift-*.txt`. About 10 minutes on quack. Heavy:
-  builds twenty-two generated crates.
+  play 0x00, native 0x01 …)`, `(…-ime-at-waits: frame 2: EWRAM byte
+  0x020000cc: play 0x01, native 0x00 …)`, `planted hard hole caught` and
+  `lift-check: passed`. Logs in `out/lift-*.txt`. About 10 minutes on
+  quack. Heavy: builds twenty-six generated crates.
 
   `gbaa-lift --shadow-locals` (native/frame-locals; by hand, not part of
   the check) keeps every stack local in the frame's bytes too and prints

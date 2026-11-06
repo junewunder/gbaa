@@ -1,0 +1,15 @@
+# agb/native-ime-release for 601 frames with no input: the IME-release program
+# of the stage-A lifter's check (native/ime-release; `just lift-check`), its
+# lift (gbaa-lift) against the play build at --timing native by route-check
+# --native. What it draws: agb/native-ime-release/SCENE.md. Frame 601, not 600,
+# as for native-irq-hold: at frame 600 our exact interpreter has drawn one more
+# pixel than mGBA; at 601 and 610 the two agree.
+rom = "$GBAA_DATA/agb/native-ime-release.gba"
+
+[[checkpoint]]
+name = "native-ime-release-601"
+frame = 601
+hash = "abc7ac7a22ed22b3"
+# Verified: mGBA 0.10.5 (`just mgba-diff`) draws the same at frame 601, as our
+# interpreter does at --timing exact and --timing native (2026-11-06). The
+# play build at --timing native before native/ime-release drew 0346a4614af57b13.
