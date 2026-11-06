@@ -233,7 +233,19 @@
       "id": "native/flash-stack-standin",
       "title": "Hardware library stand-in for the flash save stack routines",
       "detail": "From {unit:native/hole-report}: five of the eight games (Emerald, both Kirbys, Metroid, Emerald Rogue) copy the agb flash library's routines (ReadFlash_Core and siblings) onto the IWRAM stack at 0x03007dxx and run them; the bytes change between copies, a hard hole each time. One stand-in in the native hardware library (flash reads/writes as library calls), recognised at the copy, covers all five. Done when `just holes` counts 0 changed RAM runs at 0x03007dxx on those five.",
-      "check": "independent"
+      "check": "independent",
+      "record": {
+        "state": "claimed",
+        "by": "2e628fae",
+        "session": "2e628fae-dffe-4d31-ac94-df1f651f6eeb",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T03:01:11Z",
+        "branch": "unit/native/flash-stack-standin",
+        "beats": true
+      },
+      "round": "2026-11-06T03:01:11Z"
     },
     {
       "id": "native/hw-sound",
