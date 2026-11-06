@@ -700,16 +700,17 @@
       "check": "recorded",
       "record": {
         "state": "claimed",
-        "by": "9afcc2dd",
-        "session": "9afcc2dd-3298-4593-9c7c-df1eee38bdfd",
+        "by": "cb21d00f",
+        "session": "cb21d00f-2fa4-4d48-9491-bba57e9e4d03",
         "host": "quack",
-        "pid": 379627,
-        "start": "13117516",
-        "at": "2026-11-01T01:47:18Z",
+        "pid": 1418242,
+        "start": "29954965",
+        "at": "2026-11-06T03:21:38Z",
         "branch": "unit/multiplayer/desync-report",
-        "beats": true,
+        "resumed": "9afcc2dd",
+        "prevSession": "9afcc2dd-3298-4593-9c7c-df1eee38bdfd",
         "pushed": true,
-        "ended": "2026-11-01T01:57:37Z"
+        "beats": true
       },
       "notes": [
         {

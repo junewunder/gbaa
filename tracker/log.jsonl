@@ -2187,3 +2187,4 @@
 {"at":"2026-11-06T03:01:21Z","actor":"loop","tag":"14bc78bb","host":"quack","cmd":"claim","id":"multiplayer/overlay-hides-menu","text":"Netplay: the overlay hides the bottom of the menu: claimed (picking up after 91aceec8)"}
 {"at":"2026-11-06T03:18:00Z","actor":"loop","tag":"14bc78bb","host":"quack","cmd":"done","id":"multiplayer/overlay-hides-menu","text":"Netplay: the overlay hides the bottom of the menu: done"}
 {"at":"2026-11-06T03:21:25Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"multiplayer/overlay-hides-menu","text":"Netplay: the overlay hides the bottom of the menu: back to ready: the loop's review asked for fixes"}
+{"at":"2026-11-06T03:21:38Z","actor":"loop","tag":"cb21d00f","host":"quack","cmd":"claim","id":"multiplayer/desync-report","text":"Netplay: record and show desyncs: claimed (picking up after 9afcc2dd)"}
