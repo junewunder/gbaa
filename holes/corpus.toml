@@ -1,0 +1,46 @@
+# The hole report's corpus (`just holes-all`; `gbaa-holes --corpus`,
+# crates/hole-report/src/corpus.rs): the eight games the ranking in
+# docs/research/native-holes.md is over, in its order.
+#   name    the short name: the report is DIR/<name>.txt, `--only NAME` picks it
+#   rom     the ROM's file name in the ROM directory (the justfile's `roms`)
+#   cover   its coverage runs (holes/coverage/), played with `holes-all --cover`
+
+[[game]]
+name = "metroid"
+rom = "Metroid - Zero Mission (USA).gba"
+cover = "holes/coverage/metroid-zero-mission.toml"
+
+[[game]]
+name = "warioware"
+rom = "WarioWare, Inc. - Mega Microgame$!.gba"
+cover = "holes/coverage/warioware.toml"
+
+[[game]]
+name = "kirby-mirror"
+rom = "Kirby & The Amazing Mirror.gba"
+cover = "holes/coverage/kirby-the-amazing-mirror.toml"
+
+[[game]]
+name = "kirby-nightmare"
+rom = "Kirby - Nightmare in Dream Land.gba"
+cover = "holes/coverage/kirby-nightmare-in-dream-land.toml"
+
+[[game]]
+name = "moonbeam"
+rom = "moonbeam.gba"
+cover = "holes/coverage/moonbeam.toml"
+
+[[game]]
+name = "emerald"
+rom = "Pokemon - Emerald Version.gba"
+cover = "holes/coverage/pokemon-emerald-version.toml"
+
+[[game]]
+name = "minish-cap"
+rom = "Legend of Zelda, The - The Minish Cap (USA).gba"
+cover = "holes/coverage/minish-cap.toml"
+
+[[game]]
+name = "emerald-rogue"
+rom = "Emerald Rogue.gba"
+cover = "holes/coverage/emerald-rogue.toml"
