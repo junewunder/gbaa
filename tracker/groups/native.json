@@ -596,7 +596,8 @@
         "native/flash-stack-standin",
         "native/hole-coverage",
         "native/lift-modules",
-        "native/ime-release"
+        "native/ime-release",
+        "native/lift-bios-calls"
       ],
       "uses": ["heavy"],
       "minMinutes": 120,
