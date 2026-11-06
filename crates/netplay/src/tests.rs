@@ -588,7 +588,7 @@ fn a_room_whose_players_leave_closes() {
     let build = [5; 32];
     let (tx, rx) = std::sync::mpsc::channel();
     let host = std::thread::spawn(move || {
-        udp::Udp::host(server, 2, &build, |c| tx.send(c).unwrap(), || true).unwrap()
+        udp::Udp::host(server, 2, &build, |c, _, _| tx.send(c).unwrap(), || true).unwrap()
     });
     let code = rx.recv_timeout(Duration::from_secs(10)).unwrap();
     let (mut b, _) = udp::Udp::join(server, code, &build, || true).unwrap();
@@ -623,7 +623,7 @@ fn a_server_too_new_for_this_build_refuses_it_plainly() {
     let server = sock.local_addr().unwrap();
     std::thread::spawn(move || relay::rooms::serve(sock, crate::VERSION + 1));
     let start = std::time::Instant::now();
-    let Err(e) = udp::Udp::host(server, 2, &[5; 32], |_| {}, || true) else {
+    let Err(e) = udp::Udp::host(server, 2, &[5; 32], |_, _, _| {}, || true) else {
         panic!("seated by a server that needs a newer version");
     };
     assert!(start.elapsed() < Duration::from_secs(5), "{e}");
