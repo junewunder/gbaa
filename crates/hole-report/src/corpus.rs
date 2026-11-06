@@ -1,5 +1,5 @@
 //! `gbaa-holes --corpus FILE --roms DIR [--out DIR] [--against DIR]
-//! [--only NAME]… [--cover] [FLAGS…]` (`just holes-all`): the hole report
+//! [--only NAME]… [--cover] [--write-doc FILE] [FLAGS…]` (`just holes-all`): the hole report
 //! over every game of FILE (`holes/corpus.toml`), one table at the end.
 //!
 //! Each game is its own `gbaa-holes ROM FLAGS… --line OUT/<name>.toml`
@@ -15,6 +15,14 @@
 //! OUT defaults to `out/holes/<git short hash>` (`-dirty` after it when
 //! tracked files have changed). FLAGS (`--frames N`, `--no-summaries`,
 //! `--press …`, …) go to every child as they are.
+//!
+//! `--write-doc FILE` also writes the table as a generated numbers file
+//! ([`analysis::numbers_doc`]; `docs/research/native-holes.numbers.md`).
+//! `--from DIR` runs nothing: it prints (and with `--write-doc` writes)
+//! the table of DIR's `summary.toml`, so a run already made at the
+//! commit wanted needn't be made again (`--roms` isn't needed then). A
+//! summary keeps the commit and date it was made at; one from before it
+//! did takes DIR's name as its commit and the file's date.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -117,8 +125,40 @@ pub struct Entry {
 
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Summary {
+    /// The commit the run was made at ([`analysis::numbers_doc::commit`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+    /// The run's date, `YYYY-MM-DD`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
     #[serde(default)]
     pub game: Vec<Entry>,
+}
+
+/// The numbers file's text for `s`, read from `from` (or just run).
+pub fn numbers_doc(s: &Summary, path: &str, from: &Path) -> String {
+    let date = s.date.clone().unwrap_or_else(|| {
+        std::fs::metadata(from.join("summary.toml"))
+            .and_then(|m| m.modified())
+            .map(analysis::numbers_doc::date)
+            .unwrap_or_else(|_| "on an unknown date".into())
+    });
+    let commit = s.commit.clone().unwrap_or_else(|| {
+        from.file_name()
+            .map_or("unknown".into(), |n| n.to_string_lossy().into_owned())
+    });
+    analysis::numbers_doc::render(
+        "The hole report over the corpus",
+        &format!("just holes-all --write-doc {path}"),
+        &date,
+        &commit,
+        &[
+            "Each game of `holes/corpus.toml` through `gbaa-holes` (its ranking line's \
+             numbers, a row a game); `s` is the game's run time in seconds."
+                .into(),
+        ],
+        &table(s, None),
+    )
 }
 
 /// `n` with its change from `was`: `4 (-3)`, `4 (0)`; no bracket when
@@ -244,9 +284,22 @@ fn read_summary(dir: &Path) -> Result<Summary, String> {
     toml::from_str(&t).map_err(|e| format!("{}: {e}", p.display()))
 }
 
+fn write_doc_file(s: &Summary, path: &str, from: &Path) -> ExitCode {
+    match analysis::numbers_doc::write(path, &numbers_doc(s, path, from)) {
+        Ok(()) => {
+            println!("wrote {path}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("gbaa-holes: --write-doc: {e}");
+            ExitCode::from(2)
+        }
+    }
+}
+
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: gbaa-holes --corpus FILE --roms DIR [--out DIR] [--against DIR] [--only NAME]... [--cover] [gbaa-holes flags...]"
+        "usage: gbaa-holes --corpus FILE --roms DIR [--out DIR] [--against DIR] [--only NAME]... [--cover] [--write-doc FILE] [gbaa-holes flags...]\n       gbaa-holes --corpus FILE --from DIR [--write-doc FILE]"
     );
     ExitCode::from(2)
 }
@@ -257,14 +310,17 @@ pub fn main(args: &[String]) -> ExitCode {
         return usage();
     };
     let (mut roms, mut out, mut against) = (None, None, None);
+    let (mut write_doc, mut from) = (None::<String>, None::<PathBuf>);
     let (mut only, mut cover, mut pass) = (Vec::new(), false, Vec::new());
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
-            "--roms" | "--out" | "--against" | "--only" => {
+            "--roms" | "--out" | "--against" | "--only" | "--write-doc" | "--from" => {
                 let Some(v) = it.next() else { return usage() };
                 match a.as_str() {
                     "--roms" => roms = Some(PathBuf::from(v)),
+                    "--write-doc" => write_doc = Some(v.clone()),
+                    "--from" => from = Some(PathBuf::from(v)),
                     "--out" => out = Some(PathBuf::from(v)),
                     "--against" => against = Some(PathBuf::from(v)),
                     _ => only.push(v.clone()),
@@ -274,6 +330,20 @@ pub fn main(args: &[String]) -> ExitCode {
             "--line" | "--update" => return usage(),
             _ => pass.push(a.clone()),
         }
+    }
+    if let Some(dir) = &from {
+        let s = match read_summary(dir) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("gbaa-holes: --from: {e}");
+                return ExitCode::from(2);
+            }
+        };
+        print!("{}", table(&s, None));
+        return match &write_doc {
+            Some(p) => write_doc_file(&s, p, dir),
+            None => ExitCode::SUCCESS,
+        };
     }
     let Some(roms) = roms else { return usage() };
     let corpus: CorpusFile = match std::fs::read_to_string(file)
@@ -320,7 +390,11 @@ pub fn main(args: &[String]) -> ExitCode {
         }
     };
     eprintln!("gbaa-holes: {} games into {}", games.len(), out.display());
-    let mut summary = Summary::default();
+    let mut summary = Summary {
+        commit: Some(analysis::numbers_doc::commit()),
+        date: Some(analysis::numbers_doc::date(std::time::SystemTime::now())),
+        ..Summary::default()
+    };
     for g in &games {
         let t = std::time::Instant::now();
         let line_path = out.join(format!("{}.toml", g.name));
@@ -383,6 +457,11 @@ pub fn main(args: &[String]) -> ExitCode {
     }
     print!("{}", table(&summary, was.as_ref()));
     println!("reports in {}, data in {}", out.display(), path.display());
+    if let Some(p) = &write_doc
+        && write_doc_file(&summary, p, &out) != ExitCode::SUCCESS
+    {
+        return ExitCode::from(2);
+    }
     if summary.game.iter().all(|e| e.exit == 0) {
         ExitCode::SUCCESS
     } else {
@@ -419,9 +498,11 @@ mod tests {
     fn the_table_against_another_run() {
         let now = Summary {
             game: vec![entry("a", 4, 3), entry("b", 10, 10)],
+            ..Summary::default()
         };
         let was = Summary {
             game: vec![entry("a", 7, 6), entry("b", 10, 10)],
+            ..Summary::default()
         };
         let t = table(&now, Some(&was));
         let rows: Vec<&str> = t.lines().collect();
@@ -454,9 +535,11 @@ mod tests {
                     line: None,
                 },
             ],
+            ..Summary::default()
         };
         let was = Summary {
             game: vec![entry("b", 1, 1)],
+            ..Summary::default()
         };
         let t = table(&now, Some(&was));
         assert!(t.contains("stopped (exit 101)"), "{t}");
@@ -470,8 +553,30 @@ mod tests {
     }
 
     #[test]
+    fn the_numbers_file_from_an_old_summary() {
+        // No commit or date kept: the directory's name stands for it.
+        let s = Summary {
+            game: vec![entry("a", 4, 3)],
+            ..Summary::default()
+        };
+        let t = numbers_doc(&s, "F", Path::new("out/holes/abc1234"));
+        assert!(t.contains("`just holes-all --write-doc F`"), "{t}");
+        assert!(t.contains("`abc1234`"), "{t}");
+        assert!(t.contains("```text\ngame") && t.contains("\ntotal"), "{t}");
+        let s = Summary {
+            commit: Some("def5678".into()),
+            date: Some("2026-11-06".into()),
+            ..s
+        };
+        let t = numbers_doc(&s, "F", Path::new("out/holes/abc1234"));
+        assert!(t.contains("2026-11-06 at commit `def5678`"), "{t}");
+    }
+
+    #[test]
     fn the_summary_reads_back() {
         let s = Summary {
+            commit: Some("abc1234".into()),
+            date: Some("2026-11-06".into()),
             game: vec![entry("a", 4, 3)],
         };
         let t = toml::to_string(&s).unwrap();

@@ -24,7 +24,7 @@
 //!
 //! `--only NAME` (repeatable) runs those programs' steps.
 //!
-//! `--metrics-only [--metric REGEX] [--lower-bars]` (`just
+//! `--metrics-only [--metric REGEX] [--lower-bars] [--write-doc FILE]` (`just
 //! lift-metrics`) does step 1 alone, every program's lift at once, and prints a table
 //! of each metric (rows; `--metric` keeps the names REGEX matches) by
 //! program (columns), its bar beside it: from each lift's
@@ -33,6 +33,8 @@
 //! rewrites FILE, keeping its comments and order, with every bar shown
 //! that is over its metric lowered to the metric
 //! ([`codegen::native::metrics::lower_bars`]); bars are never raised.
+//! `--write-doc FILE` also writes the table as a generated numbers file
+//! ([`analysis::numbers_doc`]; `docs/native-stage-b.numbers.md`).
 
 use codegen::native::lift_check::{Program, programs};
 use codegen::native::metrics::{self, Metrics};
@@ -165,6 +167,25 @@ impl Run {
         let keep = |n: &str| o.metric.as_ref().is_none_or(|r| r.is_match(n));
         let (table, over, lowerable) = metrics_table(&cols, &keep);
         print!("{table}");
+        if let Some(path) = &o.write_doc {
+            let text = analysis::numbers_doc::render(
+                "Stage B: the lift's metrics",
+                &format!("just lift-metrics --write-doc {path}"),
+                &analysis::numbers_doc::date(std::time::SystemTime::now()),
+                &analysis::numbers_doc::commit(),
+                &[format!(
+                    "Each program of `{}` lifted with its flags and `--bars`: a row per \
+                     metric, a column per program, each bar beside its value.",
+                    self.file
+                )],
+                &table,
+            );
+            if let Err(e) = analysis::numbers_doc::write(path, &text) {
+                eprintln!("gbaa-lift-check: --write-doc: {e}");
+                return ExitCode::FAILURE;
+            }
+            println!("lift-metrics: wrote {path}");
+        }
         println!(
             "lift-metrics: {} over their bars, {} under (`--lower-bars` lowers them)",
             over,
@@ -370,6 +391,8 @@ impl Run {
 struct MetricsOnly {
     metric: Option<regex::Regex>,
     lower: bool,
+    /// `--write-doc FILE`: the table as a numbers file too.
+    write_doc: Option<String>,
 }
 
 fn main() -> ExitCode {
@@ -377,7 +400,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift-check FILE --data DIR [--only NAME]... [--metrics-only [--metric REGEX] [--lower-bars]]"
+            "usage: gbaa-lift-check FILE --data DIR [--only NAME]... [--metrics-only [--metric REGEX] [--lower-bars] [--write-doc FILE]]"
         );
         ExitCode::FAILURE
     };
@@ -385,7 +408,7 @@ fn main() -> ExitCode {
         return usage();
     };
     let (mut data, mut only, mut metrics_only) = (None, Vec::new(), false);
-    let (mut metric, mut lower) = (None, false);
+    let (mut metric, mut lower, mut write_doc) = (None, false, None);
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -394,6 +417,7 @@ fn main() -> ExitCode {
             k => match (k, it.next()) {
                 ("--data", Some(d)) => data = Some(PathBuf::from(d)),
                 ("--only", Some(n)) => only.push(n.clone()),
+                ("--write-doc", Some(f)) => write_doc = Some(f.clone()),
                 ("--metric", Some(r)) => match regex::Regex::new(r) {
                     Ok(r) => metric = Some(r),
                     Err(e) => {
@@ -406,7 +430,7 @@ fn main() -> ExitCode {
         }
     }
     let Some(data) = data else { return usage() };
-    if (metric.is_some() || lower) && !metrics_only {
+    if (metric.is_some() || lower || write_doc.is_some()) && !metrics_only {
         return usage();
     }
     let mut ps = match std::fs::read_to_string(file)
@@ -448,7 +472,14 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
     if metrics_only {
-        return r.metrics_only(&ps, &MetricsOnly { metric, lower });
+        return r.metrics_only(
+            &ps,
+            &MetricsOnly {
+                metric,
+                lower,
+                write_doc,
+            },
+        );
     }
     // 1. Every program's bars first: they take seconds, the builds minutes.
     let mut over = Vec::new();
