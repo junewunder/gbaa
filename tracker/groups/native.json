@@ -599,7 +599,19 @@
         "native/ime-release"
       ],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "f93b1ecd",
+        "session": "f93b1ecd-f104-48fc-9e5b-29cfd643d68a",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T11:28:38Z",
+        "branch": "unit/native/metroid-lifts",
+        "beats": true
+      },
+      "round": "2026-11-06T11:28:38Z"
     },
     {
       "id": "native/metroid-native-check",

@@ -2274,3 +2274,4 @@
 {"at":"2026-11-06T11:24:20Z","actor":"loop","tag":"aba07131","host":"quack","cmd":"done","id":"merge/quack-lane1-native-ime-release","text":"Merge main on quack lane 1: done"}
 {"at":"2026-11-06T11:28:29Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane1-native-ime-release","text":"Merge main on quack lane 1: on main"}
 {"at":"2026-11-06T11:28:29Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/ime-release","text":"A pending IRQ is taken the moment IME is set again: on main"}
+{"at":"2026-11-06T11:28:38Z","actor":"loop","tag":"f93b1ecd","host":"quack","cmd":"claim","id":"native/metroid-lifts","text":"Metroid lifts with no hard holes and builds: claimed"}
