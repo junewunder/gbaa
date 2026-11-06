@@ -606,6 +606,17 @@
       "needs": ["native/lift-params"],
       "uses": ["heavy"],
       "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "d543fce8",
+        "session": "d543fce8-a7f4-4572-9683-705981824328",
+        "host": "quack",
+        "pid": 1418242,
+        "start": "29954965",
+        "at": "2026-11-06T10:19:12Z",
+        "branch": "unit/native/fnref-flow",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-06T10:18:58Z",
