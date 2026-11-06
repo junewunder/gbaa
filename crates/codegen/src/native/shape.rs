@@ -20,6 +20,11 @@
 //!   whose run stopped at a hole (what it reads past the hole is unseen),
 //!   one in another code context (the ROM and an IWRAM copy are
 //!   summarised apart), or one with no summary;
+//! - what may be read after a function that returns its value unread
+//!   (`return f(x);`, the summary's `forwards`), wherever that is;
+//! - all four after a call by value whose target the lifter knows (the
+//!   summaries take it as an indirect call, so its caller's reads reach
+//!   no callee);
 //! - what may be read after a function that falls or jumps into its
 //!   entry, since its return goes there ([`Shape`]'s demand is a fixed
 //!   point over those jumps), and after one that jumps to a function by
@@ -51,6 +56,10 @@ pub fn regs(m: u8) -> impl Iterator<Item = usize> {
 pub struct Edges {
     /// Its direct calls' targets.
     pub calls: BTreeSet<u32>,
+    /// Those made through a register whose target is known (the lifter
+    /// calls them directly; the summaries take them as indirect, so what
+    /// is read after them reaches no callee's summary).
+    pub calls_by_value: BTreeSet<u32>,
     /// The other functions' entries it falls or jumps into (a call's
     /// return site included), which return to its caller.
     pub jumps: BTreeSet<u32>,
@@ -90,6 +99,7 @@ pub fn edges(
                     ..
                 } => {
                     e.calls.extend(target.filter(|t| all.contains(t)));
+                    e.calls_by_value.extend(target.filter(|t| all.contains(t)));
                     jump(&mut e, ret);
                 }
                 Plan::Dynamic {
@@ -173,7 +183,7 @@ pub fn shapes(nodes: &BTreeMap<u32, Node>) -> Shapes {
         let blind = stopped(n) || n.standin;
         for c in &n.edges.calls {
             if let Some(m) = nodes.get(c)
-                && (blind || m.ctx != n.ctx)
+                && (blind || m.ctx != n.ctx || n.edges.calls_by_value.contains(c))
             {
                 *demand.get_mut(c).expect("every node has a demand") = 0xf;
             }
@@ -195,6 +205,22 @@ pub fn shapes(nodes: &BTreeMap<u32, Node>) -> Shapes {
             if n.edges.by_value.iter().any(unknown) && by_value | d != by_value {
                 by_value |= d;
                 grew = true;
+            }
+            // A value it returns from a callee unread (`return f(x);`)
+            // is read where its own is.
+            let forwards = n.sum.map(|s| &s.forwards).into_iter().flatten();
+            for (&r, cs) in forwards {
+                if r > 3 || d & 1 << r == 0 {
+                    continue;
+                }
+                for c in cs {
+                    if let Some(t) = demand.get_mut(c)
+                        && *t & 1 << r == 0
+                    {
+                        *t |= 1 << r;
+                        grew = true;
+                    }
+                }
             }
             for j in &n.edges.jumps {
                 if let Some(t) = demand.get_mut(j)
@@ -318,6 +344,7 @@ mod tests {
                 calls: calls.iter().copied().collect(),
                 jumps: jumps.iter().copied().collect(),
                 by_value: BTreeSet::new(),
+                calls_by_value: BTreeSet::new(),
             },
             standin: false,
         }
@@ -425,6 +452,30 @@ mod tests {
             }
         );
         assert!(!s.shaped.contains_key(&1));
+    }
+
+    #[test]
+    fn a_value_returned_unread_is_read_where_its_returner_is() {
+        // c: `bl x; pop {pc}`, returning x's r1; c's caller stopped, so
+        // c's demand is all four, and x's must take r1 from it.
+        let mut x = sum(0, 0, [DEF, DEF, KEEP, KEEP]);
+        x.read_after = 0;
+        let mut c = sum(0, 0, [DEF, DEF, KEEP, KEEP]);
+        c.callees.insert(1);
+        c.forwards.insert(1, BTreeSet::from([1]));
+        let mut b = sum(0, 0, [DEF; 4]);
+        b.callees.insert(2);
+        b.holes
+            .insert("jumps to 0x08000100, which has no code here".into());
+        b.stopped = true;
+        let nodes = BTreeMap::from([
+            (1, node(&x, &[], &[])),
+            (2, node(&c, &[1], &[])),
+            (3, node(&b, &[2], &[])),
+        ]);
+        let s = shapes(&nodes);
+        assert_eq!(s.shaped[&2].results, 0b0011);
+        assert_eq!(s.shaped[&1].results, 0b0011);
     }
 
     #[test]
