@@ -633,6 +633,13 @@
         "by": "76e43878",
         "at": "2026-11-06T09:27:43Z"
       },
+      "notes": [
+        {
+          "at": "2026-11-06T09:27:51Z",
+          "by": "76e43878",
+          "text": "Measured (scratch, not committed): #[track_caller] on the prelude's ld/st in a copy of the native-spike lift, 600 frames headless: 21 of 162 sites run touch the heap (>=0x020000c8): x_08002789's IRQ list walk, x_080001ad init, x_03000170 copy. Bar asked of the owner."
+        }
+      ],
       "round": "2026-11-06T09:23:27Z"
     },
     {
