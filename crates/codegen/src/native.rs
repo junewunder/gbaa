@@ -5,11 +5,15 @@
 //!
 //! What each function becomes:
 //!
-//! - `fn f_<key>(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit>`:
-//!   r0-r3 in and out (the registers AAPCS passes and returns; the
-//!   summaries, [`crate::saves::summarize`], say which a function really
-//!   reads and defines, and are printed beside each one), the stack
-//!   pointer as a parameter, `Exit` passed up from the waits with `?`.
+//! - `fn f_<key>(g: &mut Game, sp: u32, a0: u32, a1: u32) -> Result<u32, Exit>`:
+//!   its parameters and results from the summaries
+//!   ([`crate::saves::summarize`]; [`shape`], unit `native/lift-params`),
+//!   the stack pointer as a parameter, `Exit` passed up from the waits
+//!   with `?`; `a_<key>`, its adapter, takes and gives all of r0-r3, for
+//!   `call_fn`. A function whose summary has a hole (or rests on a
+//!   callee's that stopped) keeps stage A's four-register form,
+//!   `f_<key>(g, sp, a: [u32; 4]) -> Result<[u32; 4], Exit>`, with the
+//!   summary printed above it.
 //! - Registers and NZCV are Rust locals; each block's IR values are `let`s.
 //!   r4-r11 outlive a call because callees keep them (the summaries' proof,
 //!   `keeps`; a function that returns without it is a hard hole).
@@ -63,8 +67,10 @@ use std::fmt::Write as _;
 pub mod frame;
 pub mod lift_check;
 pub mod metrics;
+pub mod shape;
 
 use metrics::{Metrics, Where};
+use shape::{Shape, Shapes};
 
 /// The prelude every lifted crate starts with.
 pub const PRELUDE: &str = include_str!("native/prelude.rs");
@@ -222,6 +228,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     for c in &codes {
         all.extend(c.funcs.iter().map(|f| f.entry));
     }
+    let shapes = shapes_of(&codes, &all, holes);
     let mut out = String::new();
     let mut report = String::new();
     let mut hard = Vec::new();
@@ -243,10 +250,15 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 soft.standins += 1;
                 continue;
             }
+            if shapes.callee_hole.contains_key(&f.entry) {
+                soft.callee_holes += 1;
+            }
             let mut p = FnPrinter {
                 ctx: &c.ctx,
                 f,
                 all: &all,
+                shapes: &shapes.shaped,
+                me: shapes.shaped.get(&f.entry).copied(),
                 holes,
                 found: Vec::new(),
                 soft: &mut soft,
@@ -255,7 +267,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 cur: f.entry,
             };
             let s = c.sums.get(f.entry);
-            let text = p.print(s, &c.ctx.disc.rec.jumps);
+            let text = p.print(s);
             if p.found.is_empty() {
                 out.push_str(&text);
             } else {
@@ -282,7 +294,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let mut table = String::new();
     writeln!(table, "pub static FNS: [(u32, Fn); {}] = [", fns.len()).unwrap();
     for k in &fns {
-        writeln!(table, "    ({k:#010x}, f_{k:08x}),").unwrap();
+        writeln!(table, "    ({k:#010x}, {}),", plain(&shapes.shaped, *k)).unwrap();
     }
     table.push_str("];\n");
     let n_funcs = fns.len();
@@ -297,7 +309,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         main.push_str(PRELUDE);
     }
     writeln!(main, "\npub const NAME: &str = {name:?};").unwrap();
-    writeln!(main, "pub const ENTRY: Fn = f_{entry:08x};\n").unwrap();
+    writeln!(
+        main,
+        "pub const ENTRY: Fn = {};\n",
+        plain(&shapes.shaped, entry)
+    )
+    .unwrap();
     main.push_str(&table);
     main.push_str("\nuse armv4t::sem::prim;\nuse armv4t::sem::ShiftType;\nuse armv4t::sem::prim::MulKind;\n\n");
     main.push_str(&out);
@@ -336,6 +353,18 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             "--irq-at-waits: IRQs run at waits whatever the CPSR's I bit (stage A's old Game::cpsr)"
         )
         .unwrap();
+    }
+    writeln!(
+        report,
+        "parameters and results from the summaries: {} functions shaped; four registers for the {} whose summary has a hole and the {} whose parameters rest on a callee's run that stopped at a hole; read after a tail call by value: {{{}}}",
+        shapes.shaped.len(),
+        soft.summary_holes,
+        soft.callee_holes,
+        reg_list(shapes.by_value as u16)
+    )
+    .unwrap();
+    for (f, c) in &shapes.callee_hole {
+        writeln!(report, "  f_{f:08x}: through f_{c:08x}").unwrap();
     }
     writeln!(
         report,
@@ -547,8 +576,11 @@ struct Soft {
     /// Lifted functions whose summary has a hole, or that have none.
     summary_holes: usize,
     /// Lifted functions taking and returning all of r0-r3 whose summary
-    /// has no hole (stage A prints every function so).
+    /// has no hole (stage A printed every function so).
     four_reg_clean: usize,
+    /// Lifted functions with a clean summary whose parameters rest on a
+    /// callee's run that stopped at a hole ([`Shapes::callee_hole`]).
+    callee_holes: usize,
     indirect: usize,
     dyn_jumps: usize,
     /// Falls and jumps into another function's entry, printed through its
@@ -563,6 +595,10 @@ struct FnPrinter<'a, 'b> {
     ctx: &'a Ctx<'a>,
     f: &'a Func,
     all: &'a BTreeSet<u32>,
+    /// Every shaped function's parameters and results.
+    shapes: &'a BTreeMap<u32, Shape>,
+    /// This one's, `None` for the four-register form.
+    me: Option<Shape>,
     holes: &'a Holes,
     found: Vec<Hole>,
     soft: &'b mut Soft,
@@ -608,14 +644,19 @@ impl FnPrinter<'_, '_> {
         });
     }
 
-    fn print(&mut self, sum: Option<&Summary>, jumps: &BTreeMap<u32, JumpRes>) -> String {
+    fn print(&mut self, sum: Option<&Summary>) -> String {
         let f = self.f;
         let mut s = String::new();
         match sum {
-            Some(sum) if sum.holes.is_empty() => self.soft.four_reg_clean += 1,
+            Some(sum) if sum.holes.is_empty() => {
+                if self.me.is_none() {
+                    self.soft.four_reg_clean += 1;
+                }
+            }
             _ => self.soft.summary_holes += 1,
         }
-        // The summary, as a comment: what the function reads and defines.
+        // The summary, as a comment: what a four-register function reads
+        // and defines (a shaped one's signature says it).
         if let Some(sum) = sum {
             let regs = |m: u16| {
                 (0..4)
@@ -624,14 +665,18 @@ impl FnPrinter<'_, '_> {
                     .collect::<Vec<_>>()
                     .join(", ")
             };
-            writeln!(
-                s,
-                "/// Reads {{{}}}; returns {{{}}}{}.",
-                regs(sum.params as u16),
-                regs(sum.results),
-                if sum.returns { "" } else { "; never returns" }
-            )
-            .unwrap();
+            if self.me.is_none() {
+                writeln!(
+                    s,
+                    "/// Reads {{{}}}; returns {{{}}}{}.",
+                    regs(sum.params as u16),
+                    regs(sum.results),
+                    if sum.returns { "" } else { "; never returns" }
+                )
+                .unwrap();
+            } else if !sum.returns {
+                s.push_str("/// Never returns.\n");
+            }
             // Callers keep r4-r11 and sp in their own locals, so a callee
             // can't change them; only one that really returns them changed
             // (`analysis::holes`' rule) is lifted wrongly.
@@ -650,16 +695,50 @@ impl FnPrinter<'_, '_> {
         }
         // The plain entry, for calls, and the extended one, for a fall or
         // jump from another function, which passes its registers and flags.
+        // A shaped function's plain entry takes its parameters and gives
+        // its results; its adapter, `a_<key>`, is the four-register form
+        // `call_fn` takes it by (`FNS`), and gives back the registers that
+        // aren't results as they came.
+        let k = f.entry;
+        let ty = ret_ty(self.me);
+        match self.me {
+            None => writeln!(
+                s,
+                "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ x_{k:08x}(g, Regs::call(sp, a)) }}"
+            )
+            .unwrap(),
+            Some(sh) => {
+                let ps: Vec<String> = shape::regs(sh.params)
+                    .map(|r| format!("a{r}: u32"))
+                    .collect();
+                let a: Vec<String> = (0..4)
+                    .map(|r| {
+                        if sh.params & 1 << r != 0 {
+                            format!("a{r}")
+                        } else {
+                            "0".into()
+                        }
+                    })
+                    .collect();
+                writeln!(
+                    s,
+                    "pub fn f_{k:08x}(g: &mut Game, sp: u32{}) -> Result<{ty}, Exit> {{ x_{k:08x}(g, Regs::call(sp, [{}])) }}",
+                    ps.iter().map(|p| format!(", {p}")).collect::<String>(),
+                    a.join(", ")
+                )
+                .unwrap();
+                writeln!(
+                    s,
+                    "pub fn a_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ let [mut r0, mut r1, mut r2, mut r3] = a; {}f_{k:08x}(g, sp{})?; Ok([r0, r1, r2, r3]) }}",
+                    lhs(sh.results),
+                    args(sh.params)
+                )
+                .unwrap();
+            }
+        }
         writeln!(
             s,
-            "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ x_{k:08x}(g, Regs::call(sp, a)) }}",
-            k = f.entry
-        )
-        .unwrap();
-        writeln!(
-            s,
-            "pub fn x_{:08x}(g: &mut Game, s: Regs) -> Result<[u32; 4], Exit> {{",
-            f.entry
+            "pub fn x_{k:08x}(g: &mut Game, s: Regs) -> Result<{ty}, Exit> {{"
         )
         .unwrap();
         s.push_str("    let Regs { r: [mut r0, mut r1, mut r2, mut r3, mut r4, mut r5, mut r6, mut r7, mut r8, mut r9, mut r10, mut r11, mut r12, mut r13, mut r14], f: [mut nf, mut zf, mut cf, mut vf] } = s;\n");
@@ -678,7 +757,7 @@ impl FnPrinter<'_, '_> {
             writeln!(s, "            {label} => {{ // {:#010x}", gb.key).unwrap();
             let xs = exits(self.ctx, gb);
             self.cur = *k;
-            let body = self.block(&gb.block.insts, &xs, gb.block.thumb, jumps);
+            let body = self.block(&gb.block.insts, &xs, gb.block.thumb);
             s.push_str(&body);
             s.push_str("            }\n");
         }
@@ -686,13 +765,7 @@ impl FnPrinter<'_, '_> {
         s
     }
 
-    fn block(
-        &mut self,
-        insts: &[Inst],
-        xs: &[ExitInfo],
-        thumb: bool,
-        jumps: &BTreeMap<u32, JumpRes>,
-    ) -> String {
+    fn block(&mut self, insts: &[Inst], xs: &[ExitInfo], thumb: bool) -> String {
         let mut s = String::new();
         let mut at = 0u32;
         let ind = "                ";
@@ -758,7 +831,7 @@ impl FnPrinter<'_, '_> {
                         .find(|x| x.index == i)
                         .copied()
                         .expect("every exit planned");
-                    let body = self.exit(e, &x, thumb, jumps);
+                    let body = self.exit(e, &x, thumb);
                     match &guard {
                         Some(gv) => writeln!(s, "{ind}if {gv} {{\n{body}{ind}}}").unwrap(),
                         None => s.push_str(&body),
@@ -818,13 +891,62 @@ impl FnPrinter<'_, '_> {
     /// A fall or jump into function `k`'s entry, as the last thing this
     /// one does.
     fn fall_into(&mut self, k: u32) -> String {
-        if self.holes.fall_as_tail_call || self.holes.standins.contains_key(&k) {
-            format!("return f_{k:08x}(g, r13, [r0, r1, r2, r3]);")
+        let callee = self.shape(k);
+        let (lhs, call) = if self.holes.fall_as_tail_call || self.holes.standins.contains_key(&k) {
+            self.call(k)
         } else {
             self.soft.falls += 1;
-            format!(
-                "return x_{k:08x}(g, Regs {{ r: [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14], f: [nf, zf, cf, vf] }});"
+            (
+                callee.map_or("[r0, r1, r2, r3] = ".into(), |c| lhs(c.results)),
+                format!(
+                    "x_{k:08x}(g, Regs {{ r: [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14], f: [nf, zf, cf, vf] }})"
+                ),
             )
+        };
+        self.tail(callee.map(|c| c.results), &lhs, &call)
+    }
+
+    /// `k`'s shape, `None` for a four-register function or a stand-in.
+    fn shape(&self, k: u32) -> Option<Shape> {
+        if self.holes.standins.contains_key(&k) {
+            return None;
+        }
+        self.shapes.get(&k).copied()
+    }
+
+    /// A plain call of `k` with this function's registers: what it
+    /// assigns its results to, and the call (without `?`).
+    fn call(&self, k: u32) -> (String, String) {
+        match self.shape(k) {
+            None => (
+                "[r0, r1, r2, r3] = ".into(),
+                format!("f_{k:08x}(g, r13, [r0, r1, r2, r3])"),
+            ),
+            Some(c) => (
+                lhs(c.results),
+                format!("f_{k:08x}(g, r13{})", args(c.params)),
+            ),
+        }
+    }
+
+    /// The call statement: `lhs call?;`.
+    fn call_stmt(&self, k: u32) -> String {
+        let (lhs, call) = self.call(k);
+        format!("{lhs}{call}?;")
+    }
+
+    /// The return statement.
+    fn ret(&self) -> String {
+        format!("return Ok({});", ret_expr(self.me))
+    }
+
+    /// A tail call, `call` giving `results` (`None`: all of r0-r3) into
+    /// `lhs`: returned as it is where this function gives the same.
+    fn tail(&self, results: Option<u8>, lhs: &str, call: &str) -> String {
+        if results == self.me.map(|m| m.results) {
+            format!("return {call};")
+        } else {
+            format!("{lhs}{call}?; {}", self.ret())
         }
     }
 
@@ -842,13 +964,7 @@ impl FnPrinter<'_, '_> {
         format!("{call}\n                    {then}")
     }
 
-    fn exit(
-        &mut self,
-        e: Exit,
-        x: &ExitInfo,
-        thumb: bool,
-        jumps: &BTreeMap<u32, JumpRes>,
-    ) -> String {
+    fn exit(&mut self, e: Exit, x: &ExitInfo, thumb: bool) -> String {
         let ind = "                    ";
         let at = x.at;
         let regs = "[r0, r1, r2, r3]";
@@ -864,7 +980,7 @@ impl FnPrinter<'_, '_> {
                 writeln!(s, "{ind}{wait}{j}").unwrap();
             }
             Plan::Call { target, ret } => {
-                let c = format!("[r0, r1, r2, r3] = f_{target:08x}(g, r13, {regs})?;");
+                let c = self.call_stmt(target);
                 let c = self.call_then(c, ret, at);
                 writeln!(s, "{ind}{wait}{c}").unwrap();
             }
@@ -897,9 +1013,7 @@ impl FnPrinter<'_, '_> {
                 if let Some(ret) = ret {
                     // An indirect call.
                     let c = match target {
-                        Some(tk) if self.all.contains(&tk) => {
-                            format!("[r0, r1, r2, r3] = f_{tk:08x}(g, r13, {regs})?;")
-                        }
+                        Some(tk) if self.all.contains(&tk) => self.call_stmt(tk),
                         _ => {
                             self.soft.indirect += 1;
                             format!("[r0, r1, r2, r3] = call_fn(g, {k}, r13, {regs})?;")
@@ -911,33 +1025,18 @@ impl FnPrinter<'_, '_> {
                 }
                 // A return, a jump through a table or a known target, or a
                 // tail call through a register.
-                let mut targets: Vec<u32> = target.into_iter().collect();
-                let jump_at = [at, at.wrapping_sub(2)]
-                    .into_iter()
-                    .find(|a| jumps.contains_key(a));
-                match jump_at.map(|a| (a, &jumps[&a])) {
-                    Some((_, JumpRes::Resolved(_))) => {
-                        targets.extend(self.ctx.table_targets(at, thumb).unwrap_or_default());
+                let targets = match dyn_targets(self.ctx, self.holes, at, thumb, target) {
+                    Ok(ts) => ts,
+                    Err(a) => {
+                        self.hole(
+                            a,
+                            "an indirect jump Recovery didn't resolve (give its targets in the holes file)",
+                        );
+                        target.into_iter().collect()
                     }
-                    Some((a, JumpRes::Unresolved | JumpRes::Rejected(_))) => {
-                        match self.holes.jumps.get(&a) {
-                            Some((ts, _)) => targets.extend(ts),
-                            None => self.hole(
-                                a,
-                                "an indirect jump Recovery didn't resolve (give its targets in the holes file)",
-                            ),
-                        }
-                    }
-                    None => {}
-                }
-                targets.sort_unstable();
-                targets.dedup();
+                };
                 writeln!(s, "{ind}let t: u32 = {t};").unwrap();
-                writeln!(
-                    s,
-                    "{ind}if t & !3 == RET {{ return Ok([r0, r1, r2, r3]); }}"
-                )
-                .unwrap();
+                writeln!(s, "{ind}if t & !3 == RET {{ {} }}", self.ret()).unwrap();
                 if !targets.is_empty() {
                     self.soft.dyn_jumps += 1;
                     writeln!(s, "{ind}match {k} {{").unwrap();
@@ -950,7 +1049,12 @@ impl FnPrinter<'_, '_> {
                 }
                 // Anything else is a function's entry, taken as a tail call
                 // (`call_fn` panics on any other value).
-                writeln!(s, "{ind}return call_fn(g, {k}, r13, {regs});").unwrap();
+                let t = self.tail(
+                    None,
+                    "[r0, r1, r2, r3] = ",
+                    &format!("call_fn(g, {k}, r13, {regs})"),
+                );
+                writeln!(s, "{ind}{t}").unwrap();
             }
             Plan::Swi { next } => {
                 let Exit::Swi { comment, .. } = e else {
@@ -978,6 +1082,113 @@ impl FnPrinter<'_, '_> {
         }
         s
     }
+}
+
+/// Every function's shape ([`shape::shapes`]), over all code contexts.
+fn shapes_of(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> Shapes {
+    let mut nodes = BTreeMap::new();
+    for (i, c) in codes.iter().enumerate() {
+        let edges = |f: &Func| {
+            shape::edges(&c.ctx, f, all, |at, thumb, target| {
+                dyn_targets(&c.ctx, holes, at, thumb, target).unwrap_or_default()
+            })
+        };
+        nodes.extend(shape::nodes_of(i, &c.funcs, &c.sums, edges, |k| {
+            holes.standins.contains_key(&k)
+        }));
+    }
+    shape::shapes(&nodes)
+}
+
+/// The known targets of a jump by value at `at` (not a call): its own
+/// (`target`), a resolved table's cases, the holes file's for one
+/// Recovery didn't resolve. `Err` with the jump's address where it's
+/// unresolved and the holes file gives none.
+fn dyn_targets(
+    ctx: &Ctx,
+    holes: &Holes,
+    at: u32,
+    thumb: bool,
+    target: Option<u32>,
+) -> Result<Vec<u32>, u32> {
+    let jumps = &ctx.disc.rec.jumps;
+    let mut targets: Vec<u32> = target.into_iter().collect();
+    let jump_at = [at, at.wrapping_sub(2)]
+        .into_iter()
+        .find(|a| jumps.contains_key(a));
+    match jump_at.map(|a| (a, &jumps[&a])) {
+        Some((_, JumpRes::Resolved(_))) => {
+            targets.extend(ctx.table_targets(at, thumb).unwrap_or_default());
+        }
+        Some((a, JumpRes::Unresolved | JumpRes::Rejected(_))) => match holes.jumps.get(&a) {
+            Some((ts, _)) => targets.extend(ts),
+            None => return Err(a),
+        },
+        None => {}
+    }
+    targets.sort_unstable();
+    targets.dedup();
+    Ok(targets)
+}
+
+/// The plain four-register entry of `k`, as `FNS` holds it: a shaped
+/// function's adapter.
+fn plain(shapes: &BTreeMap<u32, Shape>, k: u32) -> String {
+    if shapes.contains_key(&k) {
+        format!("a_{k:08x}")
+    } else {
+        format!("f_{k:08x}")
+    }
+}
+
+/// A function's return type: all of r0-r3 (`None`), or its results.
+fn ret_ty(s: Option<Shape>) -> String {
+    match s.map(|s| s.results.count_ones()) {
+        None => "[u32; 4]".into(),
+        Some(0) => "()".into(),
+        Some(1) => "u32".into(),
+        Some(n) => format!("({})", vec!["u32"; n as usize].join(", ")),
+    }
+}
+
+/// Its return value, from the registers.
+fn ret_expr(s: Option<Shape>) -> String {
+    match s {
+        None => "[r0, r1, r2, r3]".into(),
+        Some(s) => tuple(s.results),
+    }
+}
+
+/// The registers of `m` as a value: `()`, `r0`, `(r0, r1)`.
+fn tuple(m: u8) -> String {
+    let rs: Vec<String> = shape::regs(m).map(|r| format!("r{r}")).collect();
+    match rs.len() {
+        1 => rs[0].clone(),
+        _ => format!("({})", rs.join(", ")),
+    }
+}
+
+/// What a call's results are assigned to: nothing, `r0 = `, `(r0, r1) = `.
+fn lhs(m: u8) -> String {
+    if m == 0 {
+        String::new()
+    } else {
+        format!("{} = ", tuple(m))
+    }
+}
+
+/// A call's arguments after `sp`: `, r0, r2`.
+fn args(m: u8) -> String {
+    shape::regs(m).map(|r| format!(", r{r}")).collect()
+}
+
+/// `{r0, r1}`.
+fn reg_list(m: u16) -> String {
+    (0..4)
+        .filter(|r| m & 1 << r != 0)
+        .map(|r| format!("r{r}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// The value of `x` if it is a constant within its block: a literal, a

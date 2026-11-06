@@ -405,7 +405,7 @@ pub fn call_fn(g: &mut Game, k: u32, sp: u32, a: [u32; 4]) -> Result<[u32; 4], E
     }
 }
 
-/// A lifted function: the game, the stack pointer, r0-r3 in; r0-r3 out.
+/// A lifted function's four-register form (`a_<key>` if shaped): sp, r0-r3 in; r0-r3 out.
 pub type Fn = fn(&mut Game, u32, [u32; 4]) -> Result<[u32; 4], Exit>;
 
 /// Every register and flag a function's extended entry (`x_<key>`) starts
