@@ -1,0 +1,154 @@
+# Coverage runs for `gbaa-holes ROM --cover FILE` (native/hole-coverage;
+# docs/research/native-holes.md, "Coverage runs"): start points beyond the
+# press script, each played with seeded random presses, so each jump
+# Recovery leaves unresolved is seen with its targets or shown unreached.
+# Paths are under $GBAA_DATA. The [[jump]] list below the marker is what
+# the runs saw; `just holes ROM --cover FILE` checks it.
+
+# From reset: Start and A through the title, then a random walk.
+[[run]]
+name = "walk"
+frames = 9000
+presses = ["start@300-1500/120", "a@400-1500/30"]
+random_from = 1500
+seeds = 4
+
+# The owner's save, continued, then a random walk.
+[[run]]
+name = "save"
+save = "saves/pokemon-emerald-version"
+frames = 9000
+presses = ["start@300", "a@900", "a@1100"]
+random_from = 1400
+seeds = 2
+
+# Every other story-point save (`just emerald-story`), continued as the
+# fuzzer does, then a random walk.
+[[run]]
+name = "story"
+save = "saves/emerald/story"
+every = 2
+frames = 3000
+presses = ["start@300", "a@900", "a@1100"]
+random_from = 1400
+
+# Every other state along the living-dex TAS (`just emerald-tas`),
+# then a random walk.
+[[run]]
+name = "tas"
+state = "saves/emerald/story"
+every = 2
+frames = 2000
+random_from = 60
+
+# --- Observed: written by `gbaa-holes ROM --cover FILE --update`; checked without it ---
+
+[[jump]]
+at = 0x08000370
+runs = []
+targets = []
+
+[[jump]]
+at = 0x082db334
+runs = []
+targets = []
+
+[[jump]]
+at = 0x082db596
+runs = []
+targets = []
+
+[[jump]]
+at = 0x082db848
+runs = []
+targets = []
+
+[[jump]]
+at = 0x082dee74
+runs = []
+targets = []
+
+[[jump]]
+at = 0x082dee94
+runs = []
+targets = []
+
+[[jump]]
+at = 0x082deef6
+runs = []
+targets = []
+
+[[jump]]
+at = 0x082df860
+runs = ["press", "walk", "save", "story"]
+targets = [0x082e057f]
+
+[[jump]]
+at = 0x082df92a
+runs = ["press", "walk", "save", "story", "tas"]
+targets = [0x082dfb5f]
+
+[[jump]]
+at = 0x082df93c
+runs = ["press", "walk", "save", "story", "tas"]
+targets = [0x082dfb5f]
+
+[[jump]]
+at = 0x082df96c
+runs = ["press", "walk", "save", "story", "tas"]
+targets = [0x082dfb5f]
+
+[[jump]]
+at = 0x082df980
+runs = ["press", "walk", "save", "story", "tas"]
+targets = [0x082dfb5f]
+
+[[jump]]
+at = 0x082df996
+runs = ["press", "walk", "save", "story", "tas"]
+targets = [0x082dfb5f]
+
+[[jump]]
+at = 0x082df9aa
+runs = ["press", "walk", "save", "story", "tas"]
+targets = [0x082dfb5f]
+
+[[jump]]
+at = 0x082df9bc
+runs = ["press", "walk", "save", "story", "tas"]
+targets = [0x082dfb5f]
+
+[[jump]]
+at = 0x082df9f6
+runs = ["press", "walk", "save", "tas"]
+targets = [0x082dfb5f]
+
+[[jump]]
+at = 0x082dffb4
+runs = ["press", "walk", "save", "story", "tas"]
+targets = [0x082dfb5f]
+
+[[jump]]
+at = 0x082dffc8
+runs = ["press", "walk", "save", "story", "tas"]
+targets = [0x082dfb5f]
+
+[[jump]]
+at = 0x082e89f4
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0850dbce
+runs = []
+targets = []
+
+[[jump]]
+at = 0x08613d08
+runs = []
+targets = []
+
+[[jump]]
+at = 0x087f22e8
+runs = []
+targets = []

@@ -17,3 +17,5 @@ analysis = { path = "../analysis" }
 armv4t = { path = "../armv4t" }
 codegen = { path = "../codegen" }
 runtime = { path = "../runtime" }
+serde = { version = "1", features = ["derive"] }
+toml = "1"
