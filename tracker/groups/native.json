@@ -236,6 +236,17 @@
       "detail": "From {unit:native/hole-report}: every game but moonbeam runs RAM code no overlay discovered (300-2,908 bytes: WarioWare's IWRAM loop from ROM 0x080007e4, Emerald's SoundMainRAM and IntrMain, Metroid's 0x03003b90/0x03004100, Minish Cap's 0x030040e0). Overlays only take BIOS CpuSet/CpuFastSet with constant args. Find copy loops and CpuSet with arguments discovery can't fold yet (or take the run's RamRun::rom_src as copies). Done when `just holes` shows 0 RAM bytes undiscovered outside the flash stack routines on the eight, and disc-pret, disc-agb, jt-score keep their bars.",
       "check": "independent",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "b58ddd69",
+        "session": "b58ddd69-6643-47c2-8e0c-62a209be6be7",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T06:38:04Z",
+        "branch": "unit/native/disc-ram-copies",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-06T06:37:58Z",
