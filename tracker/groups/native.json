@@ -818,7 +818,19 @@
       "title": "The lifter lifts the code a game copies to RAM",
       "detail": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): gbaa-lift's discovery is static, so Metroid lifts with 0 IWRAM copies, though it runs its IRQ dispatcher from an IWRAM copy of 0x08000104 and calls 0x03003b90-0x03004440 and 0x030016d8 through pointers; natively call_fn panics on those keys. The hole report's run finds them (analysis::holes::ram_copies, {unit:native/disc-ram-copies}'s note). Lift them from that run's copies (or a static finder of copy loops and DMA3), with their stand-ins at RAM keys. Done when: Metroid's lift has its IWRAM copies and lift-check stays green.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "eb63ac1b",
+        "session": "eb63ac1b-1ff4-437c-8963-0586d4d3af12",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T12:56:00Z",
+        "branch": "unit/native/lift-ram-copies",
+        "beats": true
+      },
+      "round": "2026-11-06T12:56:00Z"
     },
     {
       "id": "native/fnref-flow-scale",
