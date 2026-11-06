@@ -51,7 +51,7 @@
 //! the tests build them by hand; [`of_code`] builds them from a lifted
 //! context's functions.
 
-use crate::func::{Ctx, Func, Plan, exits, successors};
+use crate::func::{Ctx, ExitInfo, Func, GBlock, Plan, exits, successors};
 use crate::saves::Summaries;
 use analysis::ir::{BinOp, Exit, Inst, Op, ValueId};
 use armv4t::sem::Width;
@@ -938,9 +938,65 @@ fn taken(all: &BTreeSet<u32>, bytes: &[u8]) -> BTreeSet<u32> {
         .collect()
 }
 
+/// What exit `x` of block `gb` of `f` does, as the lifter prints it: a
+/// jump to a block that isn't the function's own goes into another
+/// function ([`Edge::Tail`]). `all`: every function's entry.
+pub fn edge(ctx: &Ctx, f: &Func, all: &BTreeSet<u32>, gb: &GBlock, x: &ExitInfo) -> Edge {
+    let e = match gb.block.insts[x.index].op {
+        Op::Exit(e) => e,
+        _ => unreachable!("an exit's inst is an exit"),
+    };
+    let to = |k: u32| {
+        if f.blocks.contains_key(&k) {
+            Edge::Goto(vec![k])
+        } else {
+            Edge::Tail(Some(k))
+        }
+    };
+    match x.plan {
+        Plan::Static(k) | Plan::Rekey(k) => to(k),
+        Plan::Call { target, ret } => Edge::Call {
+            target: Some(target),
+            ret,
+        },
+        Plan::CallVia { ret, .. } => Edge::Call { target: None, ret },
+        Plan::Dynamic {
+            ret: Some(ret),
+            target,
+            ..
+        } => Edge::Call {
+            target: target.filter(|t| all.contains(t)),
+            ret,
+        },
+        Plan::Dynamic { .. } if matches!(e, Exit::ExceptionReturn(_)) => Edge::Stop,
+        Plan::Dynamic {
+            target: None,
+            local: false,
+            ..
+        } => Edge::Return,
+        Plan::Dynamic { .. } => {
+            let mut own = Vec::new();
+            let mut other = false;
+            for k in successors(ctx, x) {
+                if f.blocks.contains_key(&k) {
+                    own.push(k);
+                } else {
+                    other = true;
+                }
+            }
+            if other {
+                Edge::TailOr(own)
+            } else {
+                Edge::Goto(own)
+            }
+        }
+        Plan::Swi { next } => Edge::Swi(next),
+        Plan::Undefined => Edge::Stop,
+    }
+}
+
 /// The frames of one lifted context's functions, as the lifter prints
-/// them: a jump to a block that isn't the function's own goes into
-/// another function ([`Edge::Tail`]).
+/// them ([`edge`]).
 pub fn of_code(ctx: &Ctx, funcs: &[Func], sums: &Summaries) -> BTreeMap<u32, Frame> {
     let all: BTreeSet<u32> = funcs.iter().map(|f| f.entry).collect();
     let fs: Vec<(u32, BTreeMap<u32, FBlock>)> = funcs
@@ -952,62 +1008,7 @@ pub fn of_code(ctx: &Ctx, funcs: &[Func], sums: &Summaries) -> BTreeMap<u32, Fra
                 .map(|(&k, gb)| {
                     let edges = exits(ctx, gb)
                         .iter()
-                        .map(|x| {
-                            let e = match gb.block.insts[x.index].op {
-                                Op::Exit(e) => e,
-                                _ => unreachable!("an exit's inst is an exit"),
-                            };
-                            let to = |k: u32| {
-                                if f.blocks.contains_key(&k) {
-                                    Edge::Goto(vec![k])
-                                } else {
-                                    Edge::Tail(Some(k))
-                                }
-                            };
-                            let edge = match x.plan {
-                                Plan::Static(k) | Plan::Rekey(k) => to(k),
-                                Plan::Call { target, ret } => Edge::Call {
-                                    target: Some(target),
-                                    ret,
-                                },
-                                Plan::CallVia { ret, .. } => Edge::Call { target: None, ret },
-                                Plan::Dynamic {
-                                    ret: Some(ret),
-                                    target,
-                                    ..
-                                } => Edge::Call {
-                                    target: target.filter(|t| all.contains(t)),
-                                    ret,
-                                },
-                                Plan::Dynamic { .. } if matches!(e, Exit::ExceptionReturn(_)) => {
-                                    Edge::Stop
-                                }
-                                Plan::Dynamic {
-                                    target: None,
-                                    local: false,
-                                    ..
-                                } => Edge::Return,
-                                Plan::Dynamic { .. } => {
-                                    let mut own = Vec::new();
-                                    let mut other = false;
-                                    for k in successors(ctx, x) {
-                                        if f.blocks.contains_key(&k) {
-                                            own.push(k);
-                                        } else {
-                                            other = true;
-                                        }
-                                    }
-                                    if other {
-                                        Edge::TailOr(own)
-                                    } else {
-                                        Edge::Goto(own)
-                                    }
-                                }
-                                Plan::Swi { next } => Edge::Swi(next),
-                                Plan::Undefined => Edge::Stop,
-                            };
-                            (x.index, edge)
-                        })
+                        .map(|x| (x.index, edge(ctx, f, &all, gb, x)))
                         .collect();
                     (
                         k,
