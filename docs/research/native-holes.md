@@ -9,17 +9,23 @@ in the way of each.
 ## Summary
 
 - **Ranked by hard holes, then bytes reached but not discovered:**
-  Metroid: Zero Mission (7), Kirby & the Amazing Mirror (21), WarioWare
-  (21), moonbeam (23), Kirby: Nightmare in Dream Land (25), Pokémon Emerald
-  (29), The Minish Cap (46), Emerald Rogue (80). (Before the flash
-  stand-in, 2026-11-05: 18, 29, 22, 23, 30, 34, 46, 86.)
-- **The commonest hard hole in five of the eight is a call through a
+  Metroid: Zero Mission (7), WarioWare (10), Kirby & the Amazing Mirror
+  (15), Kirby: Nightmare in Dream Land (18), moonbeam (23), Pokémon Emerald
+  (24), The Minish Cap (41), Emerald Rogue (69), with the run's call
+  targets as starts ([below](#with-the-runs-call-targets)). (Before them,
+  with the flash stand-in: 7, 21, 21, 23, 25, 29, 46, 80; before both,
+  2026-11-01: 18, 22, 29, 30, 23, 34, 46, 86.)
+- **The commonest hard hole in five of the eight was a call through a
   register to an address discovery doesn't know as a function start** (13
   to 19 a game in WarioWare, both Kirbys and Emerald; 15 and 21 in
   Minish Cap and Rogue; 4 in Metroid; none in moonbeam): m4a's routines called through
   its tables (Emerald's `SoundMainBTM` family), and code the games copy
   into RAM with their own loops. Both are discovery gaps, not code a native
-  program can't express: give discovery the roots and they go.
+  program can't express: give discovery the roots and they go. Since
+  2026-11-05 `just holes` gives discovery the run's ROM call targets: none
+  of the ROM ones is left, and the m4a code they reach brings 9 to 12
+  reached unresolved jumps a game (m4a's `mov r12, lr` … `bx r12`
+  returns).
 - **Indirect jumps Recovery leaves unresolved** (2 to 50) lead in Minish
   Cap (25) and Emerald Rogue (50), and almost none were reached in 90
   seconds of play (14 of 109 over all eight), so coverage runs that reach
@@ -128,7 +134,9 @@ three map-load loops remain.
 
 ## The ranking
 
-Each line as `just holes` prints it (2026-11-05, with the flash stand-in):
+Each line as `just holes` printed it (2026-11-05, with the flash stand-in,
+before discovery took the run's call targets; `--no-run-roots` prints
+these):
 
 1. `Metroid - Zero Mission (USA).gba: hard 7 (jumps 3+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 4, summaries 0); not discovered 1946 bytes (12 ROM, 1934 RAM) of 83346 reached; busy loops calling functions 0; flash library stand-ins 2`
 2. `Kirby & The Amazing Mirror.gba: hard 21 (jumps 2+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 18, summaries 1); not discovered 1584 bytes (746 ROM, 838 RAM) of 105088 reached; busy loops calling functions 0; flash library stand-ins 2`
@@ -150,7 +158,67 @@ Each line as `just holes` prints it (2026-11-05, with the flash stand-in):
 | The Minish Cap | 46 | 25 (5) | 0 | 0 | 0 | 15 (1, 14) | 6 | 3,294 (386 + 2,908) |
 | Emerald Rogue | 80 | 50 (2) | 0 | 1 | 0 | 21 (0, 21) | 8 | 890 (662 + 228) |
 
+## With the run's call targets
+
+Since 2026-11-05 (unit native/disc-run-call-targets) `gbaa-holes` discovers
+the ROM a second time after the run, with every ROM target of the run's
+calls through a register as a function start
+(`analysis::discovery::discover_with`), and classifies against that
+(`--no-run-roots` gives the table above). Two things made that work:
+
+- **All the targets, not only the missing ones.** A start the pointer scan
+  found the first time (Kirby's `ply_goto`) is lost when a new root reaches
+  it first by a tail `b`: code at an instruction start the scan only takes
+  when a pool loads it. Every target is code the run called, so all are
+  confirmed starts. Only calls through a register: a far-jump `bl`'s
+  target is inside a function, and taking every call target cut those
+  (moonbeam's undiscovered bytes went from 438 to 4,932).
+- **A copy source ends at a run root.** m4a copies `SoundMainRAM` to
+  IWRAM 2 KiB at a time (`CpuCopy32` of the buffer's size), so the copy
+  reads on into `SoundMainBTM`, `ply_fine` and their neighbours, which run
+  in ROM. Copy sources are data to discovery; with run roots, a source
+  ends at the first one inside it. Plain `discover` (no extra roots) is
+  unchanged, and `disc-pret`, `disc-agb` and `jt-score` keep their bars.
+
+What the run's targets were: m4a's command table
+(`gMPlayJumpTableTemplate` and its copies in RAM: Emerald, both Kirbys,
+Minish Cap, Rogue), leaf routines without a `push {lr}` that the scan's
+score passes over, and WarioWare's pointers computed at run time (three
+targets no ROM word points at).
+
+Lines of 2026-11-05, with the flash stand-in and the run's call targets:
+
+1. `Metroid - Zero Mission (USA).gba: hard 7 (jumps 3+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 4, summaries 0); not discovered 1946 bytes (12 ROM, 1934 RAM) of 83346 reached; busy loops calling functions 0; flash library stand-ins 2`
+2. `WarioWare, Inc. - Mega Microgame$!.gba: hard 10 (jumps 4+0, return arithmetic 2, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 2, summaries 2); not discovered 2062 bytes (14 ROM, 2048 RAM) of 54360 reached; busy loops calling functions 0; flash library stand-ins 1`
+3. `Kirby & The Amazing Mirror.gba: hard 15 (jumps 14+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 0, summaries 1); not discovered 1200 bytes (362 ROM, 838 RAM) of 105088 reached; busy loops calling functions 0; flash library stand-ins 2`
+4. `Kirby - Nightmare in Dream Land.gba: hard 18 (jumps 14+1, return arithmetic 0, RAM code changed 0, CPU state 3, BIOS 0, calls to non-entries 0, summaries 0); not discovered 2574 bytes (1748 ROM, 826 RAM) of 60236 reached; busy loops calling functions 0; flash library stand-ins 2`
+5. `moonbeam.gba: hard 23 (jumps 11+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 0, summaries 12); not discovered 438 bytes (438 ROM, 0 RAM) of 49918 reached; busy loops calling functions 0; flash library stand-ins 0`
+6. `Pokemon - Emerald Version.gba: hard 24 (jumps 22+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 0, summaries 2); not discovered 1638 bytes (50 ROM, 1588 RAM) of 58454 reached; busy loops calling functions 0; flash library stand-ins 2`
+7. `Legend of Zelda, The - The Minish Cap (USA).gba: hard 41 (jumps 34+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 1, summaries 6); not discovered 2960 bytes (52 ROM, 2908 RAM) of 40408 reached; busy loops calling functions 0; flash library stand-ins 0`
+8. `Emerald Rogue.gba: hard 69 (jumps 60+0, return arithmetic 0, RAM code changed 1, CPU state 0, BIOS 0, calls to non-entries 0, summaries 8); not discovered 270 bytes (42 ROM, 228 RAM) of 79416 reached; busy loops calling functions 3; flash library stand-ins 2`
+
+| Game | Hard | Jumps (reached) | Ret. arith. | RAM changed | CPU | Non-entries (RAM, ROM) | Summaries | Not discovered (ROM + RAM) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Metroid: Zero Mission | 7 | 3 (0) | 0 | 0 | 0 | 4 (4, 0) | 0 | 1,946 (12 + 1,934) |
+| WarioWare, Inc. | 10 | 4 (1) | 2 | 0 | 0 | 2 (2, 0) | 2 | 2,062 (14 + 2,048) |
+| Kirby & the Amazing Mirror | 15 | 14 (13) | 0 | 0 | 0 | 0 | 1 | 1,200 (362 + 838) |
+| Kirby: Nightmare in Dream Land | 18 | 14+1 (13) | 0 | 0 | 3 | 0 | 0 | 2,574 (1,748 + 826) |
+| moonbeam | 23 | 11 (3) | 0 | 0 | 0 | 0 | 12 | 438 (438 + 0) |
+| Pokémon Emerald | 24 | 22 (11) | 0 | 0 | 0 | 0 | 2 | 1,638 (50 + 1,588) |
+| The Minish Cap | 41 | 34 (14) | 0 | 0 | 0 | 1 (1, 0) | 6 | 2,960 (52 + 2,908) |
+| Emerald Rogue | 69 | 60 (12) | 0 | 1 | 0 | 0 | 8 | 270 (42 + 228) |
+
+Every new unresolved jump is an m4a command routine returning through
+the lr it saved in r12 (`mov r12, lr`, a `bl`, `bx r12`): reached, and a
+return, which Recovery doesn't see yet (filed as its own unit). The
+non-entries left are all in RAM, the games' own IWRAM copies: the RAM
+copies unit's work. The lifter doesn't take run roots yet:
+`discover_with` is what it would call.
+
 ## Each game's worst holes
+
+As of "The ranking", before discovery took the run's call targets: the
+ROM call targets named here are starts now.
 
 - **Metroid: Zero Mission.** Its 4 calls to non-entries are into the code
   Metroid copies to IWRAM itself (0x03003b90, copy of ROM 0x08004464;
@@ -210,13 +278,15 @@ Each line as `just holes` prints it (2026-11-05, with the flash stand-in):
 Filed from this report (see the tracker for their state):
 
 - Discovery takes the run's call targets as function starts (the largest
-  hard class in every game).
+  hard class in every game; done: "With the run's call targets", above).
 - Discovery finds code games copy to RAM themselves (loops, and `CpuSet`
   with arguments it can't fold): the RAM bytes not discovered.
 - Coverage runs past the press script, to reach the unresolved jumps and
   settle each as a table or dead code.
 - A hardware-library stand-in for the flash library's stack routines
   (done: "The flash library's stack routines", above).
+- Recovery takes a `bx` through a copy of lr as a return (filed after
+  the run's call targets, 2026-11-05: m4a's `bx r12`).
 
 ## Limits
 
