@@ -32,7 +32,8 @@
 //!   `--headless --paced --frames N`, ...); `--input1 S` and `--input2 S`
 //!   among them go to one each as `--input`, `--save1 F` and `--save2 F`
 //!   as `--save`, `--menu1 S` and `--menu2 S` as `--menu` (when the
-//!   seat's menu is open; `--menu S` goes to both); `--exe BIN` runs BIN
+//!   seat's menu is open; `--menu S` goes to both), `--desync-at1 N`
+//!   and `--desync-at2 N` as `--desync-at` (a forced desync); `--exe BIN` runs BIN
 //!   for both instead of `gbaa-desktop` (a recompiled game's binary,
 //!   `gbaa-<game>`). Prints each peer's end
 //!   lines; fails if their end hashes differ. Without `--headless`, two
@@ -362,7 +363,7 @@ fn run_room(profile_path: &Path, o: &Options) -> Result<(), String> {
         None => {
             let sock = UdpSocket::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
             let addr = sock.local_addr().map_err(|e| e.to_string())?;
-            std::thread::spawn(move || relay::rooms::serve(sock));
+            std::thread::spawn(move || relay::rooms::serve(sock, 0));
             addr
         }
     };
@@ -540,6 +541,8 @@ fn desktop(profile_path: &Path, rom: &str, extra: &[&str]) -> Result<(), String>
             "--save2" => one(1, "--save")?,
             "--menu1" => one(0, "--menu")?,
             "--menu2" => one(1, "--menu")?,
+            "--desync-at1" => one(0, "--desync-at")?,
+            "--desync-at2" => one(1, "--desync-at")?,
             // The host's to set.
             "--delay" => one(0, "--delay")?,
             "--exe" => exe = it.next().ok_or("--exe needs a value")?.into(),
@@ -551,7 +554,7 @@ fn desktop(profile_path: &Path, rom: &str, extra: &[&str]) -> Result<(), String>
     // it.
     let sock = UdpSocket::bind(local).map_err(|e| e.to_string())?;
     let server = sock.local_addr().map_err(|e| e.to_string())?;
-    std::thread::spawn(move || relay::rooms::serve(sock));
+    std::thread::spawn(move || relay::rooms::serve(sock, 0));
     let proxy = Proxy::to(profile, local, server).map_err(|e| format!("proxy: {e}"))?;
     let join_addr = proxy.addrs()[0];
     let spawn = |seat: usize, addr: SocketAddr, role: &[String]| -> Result<Child, String> {
