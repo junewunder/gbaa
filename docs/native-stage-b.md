@@ -342,6 +342,7 @@ build for the host.
   | mosaic-modes | 55 (34, 21) | 4 | 18 | 33 | 32 | 11 of 18 | 57 of 57 |
   | native-fallthrough | 57 (35, 22) | 4 | 19 | 34 | 32 | 11 of 19 | 58 of 58 |
   | native-irq-hold | 61 (36, 25) | 6 | 19 | 36 | 35 | 11 of 17 | 61 of 61 |
+  | native-frame-locals | 56 (34, 22) | 4 | 19 | 33 | 32 | 11 of 19 | 57 of 57 |
 
   ("Not allowed" counts the BIOS too; "through the pile" are the
   not-proven words whose values were stored where the run can't place
@@ -436,6 +437,49 @@ local), so locals need an escape analysis first.
   that don't escape (a metric the escape analysis adds). Planted control: a
   slot the lift gets wrong on purpose, reaching a global, is caught.
 
+  As built (2026-11-06): a slot that doesn't escape, lies below the entry
+  sp and is only accessed aligned (`Frame::locals`) is a Rust local,
+  `l<bytes below the entry sp>`, a `u32` for an aligned word only ever
+  accessed whole, else `[u8; N]`, declared zero at the top of `x_<key>`;
+  its loads and stores are the local's, and the address arithmetic only
+  they used isn't printed (a per-block pass drops every pure value
+  nothing printed uses). Slots at or above the entry sp are the caller's
+  (a fall's shared epilogue, stack arguments), never locals: a metric of
+  their own, `sp_accesses_callers_frame`. The escape analysis gained one
+  rule: a callee from whose entry sp + k an address escapes (agb's
+  `assert_failed` passes on a pointer to its stack argument) reaches up
+  into its caller's frame from the caller's sp + k, an escaping address
+  there, unless the caller is done with its frame after the call (the
+  callee never returns, or a tail call): then the locals are written to
+  the frame's bytes before the call (`Frame::flush`; 4 calls on the
+  spike). For a call through a register, the reach is the lowest of the
+  functions whose address is a ROM word. The gap the escape analysis left
+  open, a pointer that walks down from where it escaped, stays open:
+  walking down too would leave about three times the accesses in memory
+  (native-spike: 2,711 sp accesses to escaping slots, not 1,289).
+  `gbaa-lift --shadow-locals` checks it at run time instead: every local
+  is kept in the frame's bytes too, and a load that differs from them
+  prints `shadow local:`. All six programs run 601 frames with none (a
+  lift with one mirrored store taken out prints them from frame 0).
+
+  The control is a sixth program, `agb/native-frame-locals`: `fl_keep`
+  keeps a word, a halfword and a byte in its frame across a call that
+  clobbers r0-r3 and returns them combined, which the main loop stores to
+  a global; `fl_esc`'s slot escapes to `fl_double`, which writes through
+  it. `--plant-slot=0x08000182` makes `fl_keep`'s local store of `x + 7`
+  store one more (the lift fails if the address isn't a store to a local).
+
+  Lines are with `native/ram-globals` merged, which landed alongside.
+
+  | program | locals | accesses to them | `load_sp` | `store_sp` | lines |
+  |---|---|---|---|---|---|
+  | native-spike | 458 | 2,291 | 2,177 → 669 | 1,351 → 628 | 72,733 → 71,823 |
+  | affine | 597 | 2,907 | 2,232 → 268 | 1,377 → 443 | 72,638 → 71,213 |
+  | mosaic-modes | 362 | 1,151 | 1,202 → 574 | 1,015 → 554 | 49,882 → 49,238 |
+  | native-fallthrough | 597 | 2,892 | 2,221 → 268 | 1,379 → 449 | 71,520 → 70,103 |
+  | native-irq-hold | 606 | 2,923 | 2,227 → 267 | 1,393 → 448 | 72,204 → 70,762 |
+  | native-frame-locals | 603 | 2,904 | 265 | 446 | 70,185 |
+
 Escaping slots passed as `&mut` (the design's section 1 form 1) come with
 typed pointers, below; until then they are soft holes, counted.
 
@@ -489,6 +533,55 @@ typed pointers, below; until then they are soft holes, counted.
   computed address whose value set stays in one global (or one local, or
   one ROM static) becomes an indexed, typed access. Bar: computed-address
   RAM byte accesses at most half of their bar.
+
+  As built (2026-11-06): `Globals::object` in
+  `crates/codegen/src/native/globals.rs`. A load or store whose address
+  isn't a constant in its block but which the value sets bound to RAM
+  (`analysis::vsa::func::Access`, the instruction's hull, in one
+  mirror) is carved like a constant one: a single address is an access
+  at it; a range (lowest to highest address plus the width) is an
+  object's extent, one global, if it reaches at most one of the globals
+  the rest carve, else it is left out (ranges aren't weighed against
+  each other: two that overlap may join the globals they reach). Printing: a single address is
+  that global's field, with the prelude's `pin(a, off)` checking the
+  pointer (`{ pin(v3 & !3, 0x8); g.ram.d_02000008 }`); a range inside
+  one array global at its element's width is
+  `g.ram.d_…[ix(a, off, elem, n)]`, the element the pointer finds, checked.
+  A pointer the value sets got wrong (a caller they didn't see) stops the
+  program naming it, rather than reading the wrong bytes. Both print
+  their address, so nothing else is dropped and `lines` is unchanged.
+
+  Metrics: `load_ram_object` and `store_ram_object` (unbarred, meant to
+  rise) count the typed ones, and `pointer_unexplained`, the new soft
+  hole, the computed RAM accesses no one global explains (several
+  globals, or one at a width not its element's): measured for the
+  first time here, 1 on every program but native-irq-hold (0): crt0's
+  `.bss` clear, a word loop over four separate globals. The report says
+  it on its `pointers into one global` line.
+
+  | program | `load_computed_ram` | `store_computed_ram` | typed loads, stores | `pointer_unexplained` |
+  |---|---|---|---|---|
+  | native-spike | 27 → 0 | 9 → 1 | 27, 8 | 1 |
+  | affine | 26 → 0 | 9 → 1 | 26, 8 | 1 |
+  | mosaic-modes | 26 → 0 | 9 → 1 | 26, 8 | 1 |
+  | native-fallthrough | 23 → 0 | 8 → 1 | 23, 7 | 1 |
+  | native-irq-hold | 25 → 0 | 9 → 0 | 25, 9 | 0 |
+  | native-frame-locals | 23 → 0 | 8 → 1 | 23, 7 | 1 |
+
+  Every typed access on the agb programs is a single address (agb's
+  allocator state, `0x02000000`-`0x02000014`, reached through a pointer
+  its callers pass): the value sets knew it where the block didn't. No
+  program has a range inside one global yet, so the `ix` form is checked
+  only by unit tests of what it prints; no lift runs it. The prelude grew by 27 lines (470 to
+  497): `pin`, `ix` and their shared panic.
+
+  Not done here, because nothing is there to point into: escaping stack
+  slots are still frame bytes (a local's address never escapes, so no
+  pointer reaches one; `&mut` locals are stage C), and ROM statics wait
+  on `native/rom-statics`, whose loads index the static from the value
+  sets' extents. Most computed accesses (`load_computed_unknown`, 589-762
+  a program) have no value set at all: parameters from callers the
+  analysis can't see and the heap's pointers, `native/ref-heap`'s.
 - **Heap pointers as `Ref<T>`** (`native/ref-heap`). What agb's allocator
   returns, typed by the accesses through it; the allocator can be replaced
   after this. Same kind of bar.
