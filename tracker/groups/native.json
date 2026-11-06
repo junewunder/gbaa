@@ -589,7 +589,19 @@
       "check": "independent",
       "needs": ["native/lift-params"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "cfd5e5aa",
+        "session": "cfd5e5aa-2325-4e51-b4de-73e817760205",
+        "host": "quack",
+        "pid": 1418242,
+        "start": "29954965",
+        "at": "2026-11-06T08:11:49Z",
+        "branch": "unit/native/fnref-flow",
+        "beats": true
+      },
+      "round": "2026-11-06T08:11:49Z"
     },
     {
       "id": "native/ref-heap",
