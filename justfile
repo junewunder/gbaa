@@ -1325,8 +1325,9 @@ rollback-feel profile="wander" rom=(roms / "Kirby & The Amazing Mirror.gba") *ar
 fly-setup:
     fly ips list -a gbaa-server | grep -q 'v4.*dedicated' || fly ips allocate-v4 -a gbaa-server -y
 
+# --ha=false: rooms live in one process's memory, so a second machine behind the same IPv4 could split a room's players. Without it, a deploy onto an app with no machines makes two.
 fly-deploy:
-    fly deploy --config deploy/fly/fly.toml --remote-only .
+    fly deploy --config deploy/fly/fly.toml --remote-only --ha=false .
 
 # The fly machine is stopped between june's playtests (june, 2026-10-27): fly-up before playing or before a unit's test that needs it, fly-down after. Stopped, the IPv4 is still billed and kept, so the address stays 37.16.3.41.
 fly-up:
