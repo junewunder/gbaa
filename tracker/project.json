@@ -4,5 +4,9 @@
   "title": "gbaa",
   "resources": {},
   "ranking": 2,
-  "last_call": 10
+  "last_call": 10,
+  "private_words": [
+    "$GBAA_DATA/leak-words.txt",
+    "~/.local/share/gbaa/leak-words.txt"
+  ]
 }

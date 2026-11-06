@@ -636,19 +636,17 @@
       "minMinutes": 25,
       "record": {
         "state": "claimed",
-        "by": "91aceec8",
-        "session": "91aceec8-3519-4031-888d-a97e8641c07d",
+        "by": "14bc78bb",
+        "session": "14bc78bb-6b07-46da-82a6-5c179483fb6f",
         "host": "quack",
-        "pid": 379246,
-        "start": "13117048",
-        "at": "2026-11-01T01:51:04Z",
+        "pid": 1418242,
+        "start": "29954965",
+        "at": "2026-11-06T03:01:21Z",
         "branch": "unit/multiplayer/overlay-hides-menu",
-        "resumed": "d86c5e5f",
-        "prevSession": "d86c5e5f-ef34-492b-99c5-b71936254f7e",
+        "resumed": "91aceec8",
+        "prevSession": "91aceec8-3519-4031-888d-a97e8641c07d",
         "pushed": true,
-        "beats": true,
-        "handedBack": "2026-11-01T01:51:19Z",
-        "ended": "2026-11-01T01:51:27Z"
+        "beats": true
       },
       "notes": [
         {
