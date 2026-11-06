@@ -574,6 +574,13 @@
           "lane": "quack/1"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-06T09:20:00Z",
+          "by": "d26f71a1",
+          "text": "The ix (indexed range) form runs in no lift yet: every typed access on the agb programs is a single pinned address. pointer_unexplained equals the computed_ram bars for now; ranges aren't weighed against each other in Globals::carve."
+        }
+      ],
       "round": "2026-11-06T08:52:55Z"
     },
     {
