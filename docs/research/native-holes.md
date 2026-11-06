@@ -9,11 +9,15 @@ in the way of each.
 ## Summary
 
 - **Ranked by hard holes, then bytes reached but not discovered:**
-  Metroid: Zero Mission (4), WarioWare (8), Kirby & the Amazing Mirror
-  (15), Kirby: Nightmare in Dream Land (18), moonbeam (23), Pokémon
-  Emerald (24), The Minish Cap (41), Emerald Rogue (69), with the run's
-  call targets as starts ([below](#with-the-runs-call-targets)) and the
-  RAM copies found with the run ("RAM copies", below). (With the call
+  Kirby & the Amazing Mirror (2), Metroid: Zero Mission (4), Kirby:
+  Nightmare in Dream Land (5), WarioWare (8), Pokémon Emerald (12),
+  moonbeam (19), The Minish Cap (30), Emerald Rogue (56), with the run's
+  call targets as starts ([below](#with-the-runs-call-targets)), the
+  RAM copies found with the run ("RAM copies", below) and m4a's `bx r12`
+  taken as returns ([below](#the-ranking)). (Before the `bx r12` returns,
+  in the order Metroid, WarioWare, Kirby & the Amazing Mirror, Kirby:
+  Nightmare, moonbeam, Emerald, Minish Cap, Rogue: 4, 8, 15, 18, 23, 24,
+  41, 69; with the call
   targets, before the RAM copies, 2026-11-05: 7, 10, 15, 18, 23, 24, 41,
   69; before them, with the flash stand-in: 7, 21, 21, 23, 25, 29, 46,
   80; before all three, 2026-11-01: 18, 22, 29, 30, 23, 34, 46, 86.)
@@ -37,7 +41,8 @@ in the way of each.
   2026-11-05 `just holes` gives discovery the run's ROM call targets: none
   of the ROM ones is left, and the m4a code they reach brings 9 to 12
   reached unresolved jumps a game (m4a's `mov r12, lr` … `bx r12`
-  returns). Since 2026-11-06 the RAM ones (Metroid's four, WarioWare's
+  returns), which Recovery takes as returns since 2026-11-06
+  (native/recovery-saved-lr-return). Since 2026-11-06 the RAM ones (Metroid's four, WarioWare's
   two, Minish Cap's one) are gone with the RAM copies: no game has one.
 - **Indirect jumps Recovery leaves unresolved** (2 to 50) lead in Minish
   Cap (25) and Emerald Rogue (50), and almost none were reached in 90
@@ -47,6 +52,10 @@ in the way of each.
   the run's call targets are reached (68 by the press script), each with
   its targets: m4a's `bx r12` returns, Minish Cap's IWRAM veneers, and
   real switch tables in Rogue and moonbeam; the other 77 no run reached.
+  Since 2026-11-06 the `bx r12` returns aren't counted: unresolved jumps
+  are 0 to 46 a game (Kirby & the Amazing Mirror 0, Kirby: Nightmare 1,
+  Metroid 2, WarioWare 3, moonbeam 7, Emerald 9, Minish Cap 23, Rogue
+  46, ROM only), each below its count before the run's call targets.
   moonbeam's largest class is 12 functions whose summary returns with sp
   changed.
 - **Five games ran code from RAM that changes; one still does.** The
@@ -195,7 +204,36 @@ three map-load loops remain.
 ## The ranking
 
 Each line as `just holes` prints it (2026-11-06, with the run's call
-targets and the RAM copies):
+targets, the RAM copies and m4a's `bx r12` taken as returns:
+native/recovery-saved-lr-return). Value-set analysis takes a jump to
+lr's entry value as a return wherever it is held, and a `bl` keeps the
+caller-saved registers a short callee never writes, so r12 survives
+`bl ld_r3_tp_adr_i` (`docs/research/jump-tables.md`, V's rules). Of the
+reached unresolved jumps none is m4a's now; what is left reached is
+Minish Cap's ROM-to-IWRAM veneers (`ldr r3, =…; bx r3`), RAM code and a
+few switch tables:
+
+1. `Kirby & The Amazing Mirror.gba: hard 2 (jumps 0+1, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 0, summaries 1); not discovered 362 bytes (362 ROM, 0 RAM) of 105088 reached; busy loops calling functions 0; flash library stand-ins 2`
+2. `Metroid - Zero Mission (USA).gba: hard 4 (jumps 2+2, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 0, summaries 0); not discovered 12 bytes (12 ROM, 0 RAM) of 83346 reached; busy loops calling functions 0; flash library stand-ins 2`
+3. `Kirby - Nightmare in Dream Land.gba: hard 5 (jumps 1+1, return arithmetic 0, RAM code changed 0, CPU state 3, BIOS 0, calls to non-entries 0, summaries 0); not discovered 1748 bytes (1748 ROM, 0 RAM) of 60236 reached; busy loops calling functions 0; flash library stand-ins 2`
+4. `WarioWare, Inc. - Mega Microgame$!.gba: hard 8 (jumps 3+1, return arithmetic 2, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 0, summaries 2); not discovered 14 bytes (14 ROM, 0 RAM) of 54360 reached; busy loops calling functions 0; flash library stand-ins 1`
+5. `Pokemon - Emerald Version.gba: hard 12 (jumps 9+1, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 0, summaries 2); not discovered 50 bytes (50 ROM, 0 RAM) of 58454 reached; busy loops calling functions 0; flash library stand-ins 2`
+6. `moonbeam.gba: hard 19 (jumps 7+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 0, summaries 12); not discovered 438 bytes (438 ROM, 0 RAM) of 49918 reached; busy loops calling functions 0; flash library stand-ins 0`
+7. `Legend of Zelda, The - The Minish Cap (USA).gba: hard 30 (jumps 23+1, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 0, summaries 6); not discovered 52 bytes (52 ROM, 0 RAM) of 40408 reached; busy loops calling functions 0; flash library stand-ins 0`
+8. `Emerald Rogue.gba: hard 56 (jumps 46+1, return arithmetic 0, RAM code changed 1, CPU state 0, BIOS 0, calls to non-entries 0, summaries 8); not discovered 42 bytes (42 ROM, 0 RAM) of 79416 reached; busy loops calling functions 3; flash library stand-ins 2`
+
+| Game | Hard | Jumps (reached) | Ret. arith. | RAM changed | CPU | Non-entries | Summaries | Not discovered (ROM + RAM) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Kirby & the Amazing Mirror | 2 | 0+1 (1) | 0 | 0 | 0 | 0 | 1 | 362 (362 + 0) |
+| Metroid: Zero Mission | 4 | 2+2 (2) | 0 | 0 | 0 | 0 | 0 | 12 (12 + 0) |
+| Kirby: Nightmare in Dream Land | 5 | 1+1 (1) | 0 | 0 | 3 | 0 | 0 | 1,748 (1,748 + 0) |
+| WarioWare, Inc. | 8 | 3+1 (2) | 2 | 0 | 0 | 0 | 2 | 14 (14 + 0) |
+| Pokémon Emerald | 12 | 9+1 (1) | 0 | 0 | 0 | 0 | 2 | 50 (50 + 0) |
+| moonbeam | 19 | 7 (2) | 0 | 0 | 0 | 0 | 12 | 438 (438 + 0) |
+| The Minish Cap | 30 | 23+1 (4) | 0 | 0 | 0 | 0 | 6 | 52 (52 + 0) |
+| Emerald Rogue | 56 | 46+1 (2) | 0 | 1 | 0 | 0 | 8 | 42 (42 + 0) |
+
+Lines of 2026-11-06 before the `bx r12` returns:
 
 1. `Metroid - Zero Mission (USA).gba: hard 4 (jumps 2+2, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 0, summaries 0); not discovered 12 bytes (12 ROM, 0 RAM) of 83346 reached; busy loops calling functions 0; flash library stand-ins 2`
 2. `WarioWare, Inc. - Mega Microgame$!.gba: hard 8 (jumps 3+1, return arithmetic 2, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 0, summaries 2); not discovered 14 bytes (14 ROM, 0 RAM) of 54360 reached; busy loops calling functions 0; flash library stand-ins 1`

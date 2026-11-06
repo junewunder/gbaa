@@ -49,6 +49,11 @@ impl State {
         Sym::new(ENTRY, entry, 0, 13)
     }
 
+    /// The name of lr's value on entry to the function at `entry`.
+    pub fn lr0(entry: u32) -> Sym {
+        Sym::new(ENTRY, entry, 0, 14)
+    }
+
     pub fn reg(&self, r: Reg) -> &AbsVal {
         &self.regs[r.index()]
     }

@@ -482,3 +482,52 @@ fn what_a_probe_says() {
     };
     assert_eq!(probe_says(&capped, Bl::Jump), Bl::Call);
 }
+
+/// m4a's `ply_*` routines keep the return address in r12 (`mov r12, lr`)
+/// and leave by `bx r12`: a return, not an unresolved jump. A `bx` through
+/// any other register stays a jump.
+#[test]
+fn bx_through_a_copy_of_lr_is_a_return() {
+    let mut a = Asm::new();
+    a.h(0x00, 0x46f4) // mov r12, lr
+        .h(0x02, 0x2001) // movs r0, #1
+        .h(0x04, 0x4760); // bx r12
+    let p = a.program(0x06);
+    let r = crate::vsa::func::analyze(&p, ROM_BASE, true, &mut |_, _| Bl::Call);
+    assert!(r.jumps.is_empty(), "{:?}", r.jumps);
+    assert_eq!(r.ret_sp, [Some(0)]);
+
+    let mut a = Asm::new();
+    a.h(0x00, 0x468c) // mov r12, r1
+        .h(0x02, 0x4760); // bx r12
+    let p = a.program(0x04);
+    let r = crate::vsa::func::analyze(&p, ROM_BASE, true, &mut |_, _| Bl::Call);
+    assert_eq!(r.jumps[&(ROM_BASE + 0x02)], JumpRes::Unresolved);
+}
+
+/// The same through a `bl` to a helper that branches (m4a's
+/// `ld_r3_tp_adr_i`) but never writes r12: the call keeps r12, so the
+/// `bx r12` after it is still a return. A helper that writes r12 doesn't.
+#[test]
+fn a_call_keeps_registers_its_callee_never_writes() {
+    let helper = |a: &mut Asm, r12: bool| {
+        a.h(0x10, 0x2800) // cmp r0, #0
+            .bcond(0x12, 0, 0x16) // beq ret
+            .h(0x14, if r12 { 0x4684 } else { 0x2301 }) // mov r12, r0 / movs r3, #1
+            .h(0x16, 0x4770); // ret: bx lr
+    };
+    for r12 in [false, true] {
+        let mut a = Asm::new();
+        a.h(0x00, 0x46f4) // mov r12, lr
+            .bl(0x02, 0x10)
+            .h(0x06, 0x4760); // bx r12
+        helper(&mut a, r12);
+        let p = a.program_with(0x18, 0x08);
+        let r = crate::vsa::func::analyze(&p, ROM_BASE, true, &mut |_, _| Bl::Call);
+        if r12 {
+            assert_eq!(r.jumps[&(ROM_BASE + 0x06)], JumpRes::Unresolved);
+        } else {
+            assert!(r.jumps.is_empty(), "{:?}", r.jumps);
+        }
+    }
+}
