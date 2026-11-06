@@ -7,9 +7,11 @@
 
 use runtime::hw::{self, Exit, Hw, Native};
 
-/// EWRAM's and IWRAM's sizes: `Game::ram` is EWRAM then IWRAM, laid out as
-/// the game has them (the check layout, `--layout guest`, is the only one
-/// the lifter has yet).
+/// EWRAM's and IWRAM's sizes: `Game::ram` is EWRAM then IWRAM, each byte
+/// `g.ram[offset]` in either layout (the check layout, `--layout guest`, at
+/// the game's offsets; the play layout, `--layout packed`, with the globals
+/// as fields in the lifter's order). RAM is reached a byte at a time, so a
+/// word may span two globals.
 pub const EWRAM: usize = 0x4_0000;
 pub const IWRAM: usize = 0x8000;
 
@@ -80,11 +82,6 @@ impl Game {
     }
 }
 
-// `Ram` (printed after the prelude) is EWRAM and IWRAM byte for byte:
-// integer fields only, at the guest's offsets with no padding between
-// (its size says so), little-endian as the GBA is.
-const _: () = assert!(size_of::<Ram>() == EWRAM + IWRAM && cfg!(target_endian = "little"));
-
 impl Ram {
     fn zeroed() -> Box<Ram> {
         let l = std::alloc::Layout::new::<Ram>();
@@ -97,6 +94,11 @@ impl Ram {
         unsafe { Box::from_raw(p.cast::<Ram>()) }
     }
 }
+
+// `Ram` (printed after the prelude) is EWRAM and IWRAM byte for byte:
+// integer fields only, at the guest's offsets with no padding between
+// (its size says so), little-endian as the GBA is.
+const _: () = assert!(size_of::<Ram>() == EWRAM + IWRAM && cfg!(target_endian = "little"));
 
 impl std::ops::Deref for Ram {
     type Target = [u8; EWRAM + IWRAM];
@@ -254,7 +256,7 @@ pub fn ld8(g: &mut Game, a: u32) -> u32 {
 
 pub fn ld16(g: &mut Game, a: u32) -> u32 {
     if let Some(o) = ram_at(a) {
-        return u16::from_le_bytes([g.ram[o], g.ram[o + 1]]) as u32;
+        return g.ram[o] as u32 | (g.ram[o + 1] as u32) << 8;
     }
     let le = |m: &[u8], o: usize| u16::from_le_bytes([m[o], m[o + 1]]) as u32;
     match a >> 24 {
@@ -269,8 +271,7 @@ pub fn ld16(g: &mut Game, a: u32) -> u32 {
 
 pub fn ld32(g: &mut Game, a: u32) -> u32 {
     if let Some(o) = ram_at(a) {
-        let r = &g.ram[o..o + 4];
-        return u32::from_le_bytes([r[0], r[1], r[2], r[3]]);
+        return (0..4).fold(0, |v, i| v | (g.ram[o + i] as u32) << (8 * i));
     }
     match a >> 24 {
         4 => {
@@ -325,7 +326,7 @@ pub fn st8(g: &mut Game, a: u32, v: u32) {
 pub fn st16(g: &mut Game, a: u32, v: u32) {
     let b = (v as u16).to_le_bytes();
     if let Some(o) = ram_at(a) {
-        g.ram[o..o + 2].copy_from_slice(&b);
+        (g.ram[o], g.ram[o + 1]) = (b[0], b[1]);
         return;
     }
     match a >> 24 {
@@ -350,7 +351,9 @@ pub fn st16(g: &mut Game, a: u32, v: u32) {
 
 pub fn st32(g: &mut Game, a: u32, v: u32) {
     if let Some(o) = ram_at(a) {
-        g.ram[o..o + 4].copy_from_slice(&v.to_le_bytes());
+        for (i, b) in v.to_le_bytes().into_iter().enumerate() {
+            g.ram[o + i] = b;
+        }
         return;
     }
     match a >> 24 {
