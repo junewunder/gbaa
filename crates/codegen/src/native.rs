@@ -127,6 +127,16 @@ pub struct Holes {
     pub standins: BTreeMap<u32, (String, String)>,
     /// By the jump's instruction address: its targets (keys), and why.
     pub jumps: BTreeMap<u32, (Vec<u32>, String)>,
+    /// Code the game copies to RAM itself that discovery's static copies
+    /// don't have (by DMA, by its own loop, through a pointer):
+    /// `[[copy]] src = 0x…, dst = 0x…, len = 0x…, roots = [0x…], why = "…"`
+    /// in the holes file, as `gbaa-holes` prints its run's copies
+    /// (`analysis::holes::ram_copies`, native/lift-ram-copies). Each is
+    /// discovered at `dst` from `roots` (keys) and lifted as a static copy
+    /// is, its functions at their RAM keys. One that overlaps a static copy
+    /// or an earlier one, leaves the ROM or its RAM region, or has a root
+    /// outside it is a hard hole.
+    pub copies_seen: Vec<SeenCopy>,
     /// A check's planted wrong store (`gbaa-lift --plant AT`): the store
     /// of the instruction at this address stores its value plus one, which
     /// the native check must catch.
@@ -172,11 +182,17 @@ pub struct Holes {
     /// Where `Ram`'s globals are (`gbaa-lift --layout`): the guest's
     /// offsets, or the play layout's order ([`globals::Layout`]).
     pub layout: Layout,
+    /// Why the function addresses aren't followed (`skip_fn_flow = "…"`
+    /// in the holes file): [`fnref::follow`] only feeds the report and
+    /// stage B's metrics, and on a game it doesn't settle in a session
+    /// (Metroid: 68 s a round, rounds growing). `None`: followed.
+    pub skip_fn_flow: Option<String>,
 }
 
 impl Holes {
     /// Parse a holes file: `[[standin]] entry = 0x…, why = "…", code =
-    /// '''…'''` and `[[jump]] at = 0x…, targets = [0x…], why = "…"`.
+    /// '''…'''`, `[[jump]] at = 0x…, targets = [0x…], why = "…"`, and at
+    /// the top, `skip_fn_flow = "why"`.
     pub fn parse(text: &str) -> Result<Holes, String> {
         let t: toml::Table = text.parse().map_err(|e| format!("{e}"))?;
         let mut h = Holes::default();
@@ -192,6 +208,11 @@ impl Holes {
                 .ok_or(format!("missing {k}"))
         };
         for (k, v) in &t {
+            if k == "skip_fn_flow" {
+                let why = v.as_str().ok_or("skip_fn_flow: not a string (why)")?;
+                h.skip_fn_flow = Some(why.to_string());
+                continue;
+            }
             let list = v.as_array().ok_or(format!("{k}: not a list of tables"))?;
             for e in list {
                 let e = e.as_table().ok_or(format!("{k}: not a table"))?;
@@ -212,12 +233,41 @@ impl Holes {
                             .collect::<Result<Vec<_>, _>>()?;
                         h.jumps.insert(at, (targets, str_of(e, "why")?));
                     }
+                    "copy" => {
+                        let field = |f: &str| -> Result<u32, String> {
+                            int(e.get(f).ok_or(format!("copy: missing {f}"))?, f)
+                        };
+                        let roots = e
+                            .get("roots")
+                            .and_then(|v| v.as_array())
+                            .ok_or("copy: missing roots")?
+                            .iter()
+                            .map(|v| int(v, "roots"))
+                            .collect::<Result<Vec<_>, _>>()?;
+                        h.copies_seen.push(SeenCopy {
+                            src: field("src")?,
+                            dst: field("dst")?,
+                            len: field("len")?,
+                            roots,
+                            why: str_of(e, "why")?,
+                        });
+                    }
                     _ => return Err(format!("unknown table {k}")),
                 }
             }
         }
         Ok(h)
     }
+}
+
+/// One `[[copy]]` of the holes file ([`Holes::copies_seen`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SeenCopy {
+    pub src: u32,
+    pub dst: u32,
+    pub len: u32,
+    pub roots: Vec<u32>,
+    pub why: String,
 }
 
 /// A hard hole: the function, the instruction, and what it is.
@@ -287,7 +337,40 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         }
     }
     let disc = disc;
-    let overlays = discovery::overlays(rom, &disc);
+    let mut overlays = discovery::overlays(rom, &disc);
+    // The holes file's copies, which only a run shows.
+    let mut bad_copies = Vec::new();
+    for c in &holes.copies_seen {
+        let ok = c.len > 0
+            && c.src >= 0x0800_0000
+            && (c.src - 0x0800_0000) as usize + c.len as usize <= rom.len()
+            && [0x0200_0000..0x0204_0000, 0x0300_0000..0x0300_8000]
+                .iter()
+                .any(|r| r.contains(&c.dst) && c.dst + c.len <= r.end)
+            && c.roots
+                .iter()
+                .all(|k| (c.dst..c.dst + c.len).contains(&(k & !1)))
+            && !overlays
+                .iter()
+                .any(|o| c.dst < o.dst + o.len && o.dst < c.dst + c.len);
+        if !ok {
+            bad_copies.push(Hole {
+                func: c.dst,
+                at: c.dst,
+                what: "the holes file's copy is outside the ROM, EWRAM or IWRAM, has a root outside it, or overlaps another copy"
+                    .into(),
+            });
+            continue;
+        }
+        let image = rom[(c.src - 0x0800_0000) as usize..][..c.len as usize].to_vec();
+        overlays.push(discovery::Overlay {
+            src: c.src,
+            dst: c.dst,
+            len: c.len,
+            disc: discovery::discover_at(c.dst, image, &c.roots),
+        });
+    }
+    let overlays = overlays;
     let mut codes = vec![code(Ctx::new(rom, &disc))];
     for o in &overlays {
         let o_rom = &rom[(o.src - 0x0800_0000) as usize..][..o.len as usize];
@@ -333,11 +416,14 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     }
     let globals = Globals::carve(&ram, &ranges, &holes.names);
     let shapes = shapes_of(&codes, &all, holes);
-    let fnrefs = fn_flow(rom, &disc, &overlays, &codes, &all);
+    let fnrefs = match &holes.skip_fn_flow {
+        None => Some(fn_flow(rom, &disc, &overlays, &codes, &all)),
+        Some(_) => None,
+    };
     // Each function's text by key, in print order: the modules' contents.
     let mut out: Vec<(u32, String)> = Vec::new();
     let mut report = String::new();
-    let mut hard = Vec::new();
+    let mut hard = bad_copies;
     let mut soft = Soft::default();
     let mut fns = Vec::new();
     let entry = key(0x0800_0000, false);
@@ -538,8 +624,15 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         soft.sp_slots[2],
     )
     .unwrap();
-    report.push_str(&fnrefs.0.report(&fnrefs.1, &fnrefs.2));
-    let fn_proven = fnrefs.1.keys().filter(|w| fnrefs.0.proven(**w)).count();
+    match (&fnrefs, &holes.skip_fn_flow) {
+        (Some(f), _) => report.push_str(&f.0.report(&f.1, &f.2)),
+        (None, why) => writeln!(
+            report,
+            "function addresses (native/fnref-flow): not followed, as the holes file says: {}",
+            why.as_deref().unwrap_or("")
+        )
+        .unwrap(),
+    }
     writeln!(
         report,
         "stack locals (native/frame-locals): {} slots in {} functions printed as Rust locals, {} loads and stores to them; {} calls write the locals to the frame first",
@@ -606,8 +699,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("sp_accesses_callers_frame", soft.sp_slots[2]);
     m.push("call_fn_calls", n(soft.indirect));
     m.push("jumps_by_value", n(soft.dyn_jumps));
-    m.push("fn_words_proven", n(fn_proven));
-    m.push("fn_words_not_proven", n(fnrefs.1.len() - fn_proven));
+    if let Some(f) = &fnrefs {
+        let fn_proven = f.1.keys().filter(|w| f.0.proven(**w)).count();
+        m.push("fn_words_proven", n(fn_proven));
+        m.push("fn_words_not_proven", n(f.1.len() - fn_proven));
+    }
     m.push("gap_targets", n(gaps.len()));
     writeln!(
         report,
@@ -2054,8 +2150,27 @@ why = "a table"
         assert_eq!(h.standins[&0x0300_0000].1, "the IRQ wrapper");
         assert!(h.standins[&0x0300_0000].0.contains("f_03000000"));
         assert_eq!(h.jumps[&0x0800_1234].0, vec![0x0800_1240, 0x0800_1251]);
+        let h = Holes::parse(
+            "[[copy]]\nsrc = 0x08000104\ndst = 0x03000c7c\nlen = 0x230\nroots = [0x03000c7c, 0x03000d84]\nwhy = \"seen\"\n",
+        )
+        .unwrap();
+        assert_eq!(
+            h.copies_seen,
+            vec![SeenCopy {
+                src: 0x0800_0104,
+                dst: 0x0300_0c7c,
+                len: 0x230,
+                roots: vec![0x0300_0c7c, 0x0300_0d84],
+                why: "seen".into(),
+            }]
+        );
+        assert!(Holes::parse("[[copy]]\nsrc = 0x08000104\nwhy = \"x\"\n").is_err());
         assert!(Holes::parse("[[nothing]]\nx = 1\n").is_err());
         assert!(Holes::parse("[[standin]]\nwhy = \"no entry\"\n").is_err());
+        assert_eq!(h.skip_fn_flow, None);
+        let h = Holes::parse("skip_fn_flow = \"too slow\"\n").unwrap();
+        assert_eq!(h.skip_fn_flow.as_deref(), Some("too slow"));
+        assert!(Holes::parse("skip_fn_flow = true\n").is_err());
     }
 
     #[test]

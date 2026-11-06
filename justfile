@@ -904,17 +904,23 @@ native-check:
     target/release/route-check --native target/release/native-direct-sound target/recompiled/release/gbaa-direct-sound \
         units/direct-sound.toml --replaced crates/native-spike/check/direct-sound.replaced.toml
 
-# The stage-A lifter (native/lift-stage-a; docs/native-port-design.md, "The stage-A lifter as built"; docs/tools/commands.md): gbaa-lift writes ROM whole as plain Rust over byte RAM and runtime::hw to OUT (default out/lift-<name>), with the stand-ins of holes/<name>.toml if there is one, then builds it into target/recompiled. FLAGS go to gbaa-lift (--name, --holes, --bars, --drop-standin, --plant). Fails, naming each, on a hard hole no stand-in covers. Heavy: builds a generated crate.
+# The stage-A lifter (native/lift-stage-a; docs/native-port-design.md, "The stage-A lifter as built"; docs/tools/commands.md): gbaa-lift writes ROM whole as plain Rust over byte RAM and runtime::hw to OUT (default out/lift-<name>), with the stand-ins of holes/<name>.toml if there is one, else of mods/<name>/holes.toml (a commercial game's, game-derived and private) (<name> is --name NAME's if given, else the ROM's file name lowercased), then builds it into target/recompiled. FLAGS go to gbaa-lift (--name, --holes, --bars, --drop-standin, --plant). Fails, naming each, on a hard hole no stand-in covers. Heavy: builds a generated crate.
 [positional-arguments]
 lift rom out="" *flags:
     #!/usr/bin/env bash
     set -eu
     rom={{quote(join(invocation_directory(), rom))}}
     name=$(basename "$rom" .gba | tr '[:upper:]' '[:lower:]')
-    out=${2:-out/lift-$name}
+    out=${2-}
     shift 2 || shift $#
+    # --name NAME (for a file name with spaces) names the crate and the holes file.
+    prev=""
+    for a in "$@"; do [ "$prev" = --name ] && name=$a; prev=$a; done
+    out=${out:-out/lift-$name}
     holes=()
-    [ -f "holes/$name.toml" ] && holes=(--holes "holes/$name.toml")
+    # A game's holes file is game-derived, so it lives in the private mods/<name>/.
+    if [ -f "holes/$name.toml" ]; then holes=(--holes "holes/$name.toml")
+    elif [ -f "mods/$name/holes.toml" ]; then holes=(--holes "mods/$name/holes.toml"); fi
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift
     # A hard hole fails the lift, and the build too (a compile_error! names each).
     lifted=0
