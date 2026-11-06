@@ -134,7 +134,8 @@ pub struct Holes {
     /// (`analysis::holes::ram_copies`, native/lift-ram-copies). Each is
     /// discovered at `dst` from `roots` (keys) and lifted as a static copy
     /// is, its functions at their RAM keys. One that overlaps a static copy
-    /// or an earlier one is a hard hole.
+    /// or an earlier one, leaves the ROM or its RAM region, or has a root
+    /// outside it is a hard hole.
     pub copies_seen: Vec<SeenCopy>,
     /// A check's planted wrong store (`gbaa-lift --plant AT`): the store
     /// of the instruction at this address stores its value plus one, which
@@ -343,7 +344,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         let ok = c.len > 0
             && c.src >= 0x0800_0000
             && (c.src - 0x0800_0000) as usize + c.len as usize <= rom.len()
-            && (0x0200_0000..0x0400_0000).contains(&c.dst)
+            && [0x0200_0000..0x0204_0000, 0x0300_0000..0x0300_8000]
+                .iter()
+                .any(|r| r.contains(&c.dst) && c.dst + c.len <= r.end)
+            && c.roots
+                .iter()
+                .all(|k| (c.dst..c.dst + c.len).contains(&(k & !1)))
             && !overlays
                 .iter()
                 .any(|o| c.dst < o.dst + o.len && o.dst < c.dst + c.len);
@@ -351,7 +357,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             bad_copies.push(Hole {
                 func: c.dst,
                 at: c.dst,
-                what: "the holes file's copy is outside the ROM or RAM, or overlaps another copy"
+                what: "the holes file's copy is outside the ROM, EWRAM or IWRAM, has a root outside it, or overlaps another copy"
                     .into(),
             });
             continue;
