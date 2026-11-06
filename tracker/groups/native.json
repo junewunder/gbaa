@@ -520,7 +520,14 @@
       "check": "independent",
       "needs": ["native/fnref-dense"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "notes": [
+        {
+          "at": "2026-11-06T08:07:38Z",
+          "by": "cec56176",
+          "text": "From {unit:native/ram-globals}: every constant ROM load was a dead literal-pool load (the IR has the word as Pool); the lifter now drops unused ROM loads, so load_const_rom is 0 on all programs and this unit's bar is effectively the computed ROM loads."
+        }
+      ]
     },
     {
       "id": "native/ram-globals",
