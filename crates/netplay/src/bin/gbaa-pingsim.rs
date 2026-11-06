@@ -363,7 +363,7 @@ fn run_room(profile_path: &Path, o: &Options) -> Result<(), String> {
         None => {
             let sock = UdpSocket::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
             let addr = sock.local_addr().map_err(|e| e.to_string())?;
-            std::thread::spawn(move || relay::rooms::serve(sock));
+            std::thread::spawn(move || relay::rooms::serve(sock, 0));
             addr
         }
     };
@@ -554,7 +554,7 @@ fn desktop(profile_path: &Path, rom: &str, extra: &[&str]) -> Result<(), String>
     // it.
     let sock = UdpSocket::bind(local).map_err(|e| e.to_string())?;
     let server = sock.local_addr().map_err(|e| e.to_string())?;
-    std::thread::spawn(move || relay::rooms::serve(sock));
+    std::thread::spawn(move || relay::rooms::serve(sock, 0));
     let proxy = Proxy::to(profile, local, server).map_err(|e| format!("proxy: {e}"))?;
     let join_addr = proxy.addrs()[0];
     let spawn = |seat: usize, addr: SocketAddr, role: &[String]| -> Result<Child, String> {
