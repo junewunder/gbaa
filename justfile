@@ -1372,7 +1372,7 @@ holes rom *args:
     {{lock}} cargo build -q --release -p hole-report
     systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 target/release/gbaa-holes "$@"
 
-# The hole report over the corpus (holes/corpus.toml; crates/hole-report/src/corpus.rs): every game in turn, each report in OUT/<name>.txt, then one table of the ranking lines' numbers, saved as OUT/summary.toml. ARGS: --out DIR (default out/holes/<git short hash>[-dirty]), --against DIR2 (changes from DIR2's summary in brackets), --only NAME (repeatable), --cover (each game's coverage runs: hours), and any `just holes` flag for every game. About 9 minutes for the eight; run it with `just long`. The games run one at a time under one 3 GB cap, no swap.
+# The hole report over the corpus (holes/corpus.toml; crates/hole-report/src/corpus.rs): every game in turn, each report in OUT/<name>.txt, then one table of the ranking lines' numbers, saved as OUT/summary.toml. ARGS: --out DIR (default out/holes/<git short hash>[-dirty]), --against DIR2 (changes from DIR2's summary in brackets), --only NAME (repeatable), --cover (each game's coverage runs: hours), and any `just holes` flag for every game. About 10 minutes for the eight (9.5 to 11 measured); run it with `just long`. The games run one at a time under one 3 GB cap, no swap.
 [positional-arguments]
 holes-all *args:
     {{lock}} cargo build -q --release -p hole-report
