@@ -9,29 +9,36 @@ in the way of each.
 ## Summary
 
 - **Ranked by hard holes, then bytes reached but not discovered:**
-  Metroid: Zero Mission (18), WarioWare (22), moonbeam (23), Kirby & the
-  Amazing Mirror (29), Kirby: Nightmare in Dream Land (30), Pokémon Emerald
-  (34), The Minish Cap (46), Emerald Rogue (86).
+  Metroid: Zero Mission (7), WarioWare (10), Kirby & the Amazing Mirror
+  (15), Kirby: Nightmare in Dream Land (18), moonbeam (23), Pokémon Emerald
+  (24), The Minish Cap (41), Emerald Rogue (69), with the run's call
+  targets as starts ([below](#with-the-runs-call-targets)). (Before them,
+  with the flash stand-in: 7, 21, 21, 23, 25, 29, 46, 80; before both,
+  2026-11-01: 18, 22, 29, 30, 23, 34, 46, 86.)
 - **The commonest hard hole in five of the eight was a call through a
   register to an address discovery doesn't know as a function start** (13
-  to 23 a game in Metroid, WarioWare, both Kirbys and Emerald; 15 and 26 in
-  Minish Cap and Rogue; none in moonbeam): m4a's routines called through
+  to 19 a game in WarioWare, both Kirbys and Emerald; 15 and 21 in
+  Minish Cap and Rogue; 4 in Metroid; none in moonbeam): m4a's routines called through
   its tables (Emerald's `SoundMainBTM` family), and code the games copy
   into RAM with their own loops. Both are discovery gaps, not code a native
   program can't express: give discovery the roots and they go. Since
-  2026-11-05 `just holes` gives discovery the run's ROM call targets
-  ([With the run's call targets](#with-the-runs-call-targets)): none of the
-  ROM ones is left, and the m4a code they reach brings 9 to 12 reached
-  unresolved jumps a game (m4a's `mov r12, lr` … `bx r12` returns).
+  2026-11-05 `just holes` gives discovery the run's ROM call targets: none
+  of the ROM ones is left, and the m4a code they reach brings 9 to 12
+  reached unresolved jumps a game (m4a's `mov r12, lr` … `bx r12`
+  returns).
 - **Indirect jumps Recovery leaves unresolved** (2 to 50) lead in Minish
   Cap (25) and Emerald Rogue (50), and almost none were reached in 90
   seconds of play (14 of 109 over all eight), so coverage runs that reach
   them are what tell real tables from dead code. moonbeam's largest class
   is 12 functions whose summary returns with sp changed.
-- **Five games run code from RAM that changes:** the flash save library
-  copies its routines onto the stack (`ReadFlash_Core` and its siblings, at
-  0x03007dxx; Emerald, both Kirbys, Metroid, Rogue), and Emerald Rogue's
-  mixer stamps templates into its loop. Both were in the design's list.
+- **Five games ran code from RAM that changes; one still does.** The
+  flash save library copies its routines onto the stack (`ReadFlash_Core`
+  and its siblings, at 0x03007dxx; Emerald, both Kirbys, Metroid, Rogue,
+  and WarioWare once, unchanged): these are now hardware-library calls
+  (`runtime::hw::flash`, recognised by `analysis::flash`; "The flash
+  library's stack routines" below), not holes. Emerald Rogue's mixer
+  stamping templates into its loop remains. Both were in the design's
+  list.
 - **The controls hold:** WarioWare's IWRAM helper (0x3000468, `sub lr, lr,
   #24`) and its twin are the only return-address arithmetic not resolved;
   moonbeam's `__gnu_thumb1_case_uqi` and `_uhi` are found statically and
@@ -78,9 +85,9 @@ instructions, 5 s summaries).
 | Call to a non-entry | the run: a call through a register (`mov lr, pc` or `adr lr, …` then `bx rN`, or a `bl` to a `bx rN` stub other than `bx pc`) to an address not a discovered function start or RAM entry | each target |
 | Summary hole | `returns with r4-r11 or sp changed` (sp moved by a run-time amount, as a variable-length array does) | each function |
 
-A place can be counted under two kinds: the flash library's stack
-routines are RAM code that changed and, at each entry, a call to a
-non-entry. A ROM source and its RAM copy are classified once, at the copy;
+A place can be counted under two kinds: a routine copied onto the stack
+that isn't recognised would be RAM code that changed and, at each entry,
+a call to a non-entry. A ROM source and its RAM copy are classified once, at the copy;
 a `bl` to a switch helper that Recovery rejects counts as a jump only.
 
 CPU-state and BIOS items in code only the pointer scan found and the run
@@ -89,6 +96,25 @@ never ran aren't counted (Emerald's 0x087f22xx: data that decodes as
 Other summary holes are counted elsewhere (an unknown jump, a mode change,
 RAM code) or aren't holes for a native build (an indirect call is an
 `FnRef`), and are printed but not counted.
+
+### The flash library's stack routines
+
+Nintendo's `AgbFlash` (pret's `agb_flash.c`) copies three tiny routines
+into a buffer in its caller's frame and calls them there: `ReadFlash1`
+(a byte: the chip's ID and status), `ReadFlash_Core` (a sector into RAM)
+and `VerifyFlashSector_Core` (RAM against a sector). The run keeps the
+64 bytes at each call into RAM (`Run::ram_calls`); a target whose every
+version is a routine `analysis::flash` recognises (its code's length and
+hash: agbcc's three, modern GCC's `ReadFlash_Core` and
+`VerifyFlashSector_Core`) is a call of `runtime::hw::flash::{read_byte,
+read, verify}` on the hardware library's save chip (`Hw::save`), listed in
+the report and in the ranking line ("flash library stand-ins", routines),
+and the RAM it ran is neither changed code, undiscovered code nor a
+non-entry. In the eight: Emerald (`ReadFlash1`, `ReadFlash_Core`), Rogue
+(the same, modern GCC's), Metroid and both Kirbys (`ReadFlash_Core`,
+`VerifyFlashSector_Core`), WarioWare (`ReadFlash_Core`, once). The
+lifter doesn't call them yet: no stage-A build lifts a game that saves to
+flash.
 
 **Not discovered** is the bytes of code the run executed that discovery
 (or an overlay's) didn't find, ROM and RAM.
@@ -108,28 +134,29 @@ three map-load loops remain.
 
 ## The ranking
 
-Each line as `just holes` printed it (2026-11-01, before discovery took
-the run's call targets; `--no-run-roots` prints these):
+Each line as `just holes` printed it (2026-11-05, with the flash stand-in,
+before discovery took the run's call targets; `--no-run-roots` prints
+these):
 
-1. `Metroid - Zero Mission (USA).gba: hard 18 (jumps 3+0, return arithmetic 0, RAM code changed 2, CPU state 0, BIOS 0, calls to non-entries 13, summaries 0); not discovered 2098 bytes (12 ROM, 2086 RAM) of 83346 reached; busy loops calling functions 0`
-2. `WarioWare, Inc. - Mega Microgame$!.gba: hard 22 (jumps 4+0, return arithmetic 2, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 14, summaries 2); not discovered 2266 bytes (184 ROM, 2082 RAM) of 54360 reached; busy loops calling functions 0`
-3. `moonbeam.gba: hard 23 (jumps 11+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 0, summaries 12); not discovered 438 bytes (438 ROM, 0 RAM) of 49918 reached; busy loops calling functions 0`
-4. `Kirby & The Amazing Mirror.gba: hard 29 (jumps 2+0, return arithmetic 0, RAM code changed 3, CPU state 0, BIOS 0, calls to non-entries 23, summaries 1); not discovered 1740 bytes (746 ROM, 994 RAM) of 105088 reached; busy loops calling functions 0`
-5. `Kirby - Nightmare in Dream Land.gba: hard 30 (jumps 2+1, return arithmetic 0, RAM code changed 1, CPU state 3, BIOS 0, calls to non-entries 23, summaries 0); not discovered 3464 bytes (2514 ROM, 950 RAM) of 60236 reached; busy loops calling functions 0`
-6. `Pokemon - Emerald Version.gba: hard 34 (jumps 11+0, return arithmetic 0, RAM code changed 1, CPU state 0, BIOS 0, calls to non-entries 20, summaries 2); not discovered 2444 bytes (772 ROM, 1672 RAM) of 58454 reached; busy loops calling functions 0`
-7. `Legend of Zelda, The - The Minish Cap (USA).gba: hard 46 (jumps 25+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 15, summaries 6); not discovered 3294 bytes (386 ROM, 2908 RAM) of 40408 reached; busy loops calling functions 0`
-8. `Emerald Rogue.gba: hard 86 (jumps 50+0, return arithmetic 0, RAM code changed 2, CPU state 0, BIOS 0, calls to non-entries 26, summaries 8); not discovered 962 bytes (662 ROM, 300 RAM) of 79416 reached; busy loops calling functions 3`
+1. `Metroid - Zero Mission (USA).gba: hard 7 (jumps 3+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 4, summaries 0); not discovered 1946 bytes (12 ROM, 1934 RAM) of 83346 reached; busy loops calling functions 0; flash library stand-ins 2`
+2. `Kirby & The Amazing Mirror.gba: hard 21 (jumps 2+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 18, summaries 1); not discovered 1584 bytes (746 ROM, 838 RAM) of 105088 reached; busy loops calling functions 0; flash library stand-ins 2`
+3. `WarioWare, Inc. - Mega Microgame$!.gba: hard 21 (jumps 4+0, return arithmetic 2, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 13, summaries 2); not discovered 2232 bytes (184 ROM, 2048 RAM) of 54360 reached; busy loops calling functions 0; flash library stand-ins 1`
+4. `moonbeam.gba: hard 23 (jumps 11+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 0, summaries 12); not discovered 438 bytes (438 ROM, 0 RAM) of 49918 reached; busy loops calling functions 0; flash library stand-ins 0`
+5. `Kirby - Nightmare in Dream Land.gba: hard 25 (jumps 2+1, return arithmetic 0, RAM code changed 0, CPU state 3, BIOS 0, calls to non-entries 19, summaries 0); not discovered 3340 bytes (2514 ROM, 826 RAM) of 60236 reached; busy loops calling functions 0; flash library stand-ins 2`
+6. `Pokemon - Emerald Version.gba: hard 29 (jumps 11+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 16, summaries 2); not discovered 2360 bytes (772 ROM, 1588 RAM) of 58454 reached; busy loops calling functions 0; flash library stand-ins 2`
+7. `Legend of Zelda, The - The Minish Cap (USA).gba: hard 46 (jumps 25+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 15, summaries 6); not discovered 3294 bytes (386 ROM, 2908 RAM) of 40408 reached; busy loops calling functions 0; flash library stand-ins 0`
+8. `Emerald Rogue.gba: hard 80 (jumps 50+0, return arithmetic 0, RAM code changed 1, CPU state 0, BIOS 0, calls to non-entries 21, summaries 8); not discovered 890 bytes (662 ROM, 228 RAM) of 79416 reached; busy loops calling functions 3; flash library stand-ins 2`
 
 | Game | Hard | Jumps (reached) | Ret. arith. | RAM changed | CPU | Non-entries (RAM, ROM) | Summaries | Not discovered (ROM + RAM) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Metroid: Zero Mission | 18 | 3 (0) | 0 | 2 | 0 | 13 (13, 0) | 0 | 2,098 (12 + 2,086) |
-| WarioWare, Inc. | 22 | 4 (1) | 2 | 0 | 0 | 14 (3, 11) | 2 | 2,266 (184 + 2,082) |
+| Metroid: Zero Mission | 7 | 3 (0) | 0 | 0 | 0 | 4 (4, 0) | 0 | 1,946 (12 + 1,934) |
+| Kirby & the Amazing Mirror | 21 | 2 (1) | 0 | 0 | 0 | 18 (0, 18) | 1 | 1,584 (746 + 838) |
+| WarioWare, Inc. | 21 | 4 (1) | 2 | 0 | 0 | 13 (2, 11) | 2 | 2,232 (184 + 2,048) |
 | moonbeam | 23 | 11 (3) | 0 | 0 | 0 | 0 | 12 | 438 (438 + 0) |
-| Kirby & the Amazing Mirror | 29 | 2 (1) | 0 | 3 | 0 | 23 (5, 18) | 1 | 1,740 (746 + 994) |
-| Kirby: Nightmare in Dream Land | 30 | 2+1 (2) | 0 | 1 | 3 | 23 (4, 19) | 0 | 3,464 (2,514 + 950) |
-| Pokémon Emerald | 34 | 11 (0) | 0 | 1 | 0 | 20 (4, 16) | 2 | 2,444 (772 + 1,672) |
+| Kirby: Nightmare in Dream Land | 25 | 2+1 (2) | 0 | 0 | 3 | 19 (0, 19) | 0 | 3,340 (2,514 + 826) |
+| Pokémon Emerald | 29 | 11 (0) | 0 | 0 | 0 | 16 (0, 16) | 2 | 2,360 (772 + 1,588) |
 | The Minish Cap | 46 | 25 (5) | 0 | 0 | 0 | 15 (1, 14) | 6 | 3,294 (386 + 2,908) |
-| Emerald Rogue | 86 | 50 (2) | 0 | 2 | 0 | 26 (5, 21) | 8 | 962 (662 + 300) |
+| Emerald Rogue | 80 | 50 (2) | 0 | 1 | 0 | 21 (0, 21) | 8 | 890 (662 + 228) |
 
 ## With the run's call targets
 
@@ -153,57 +180,58 @@ calls through a register as a function start
   ends at the first one inside it. Plain `discover` (no extra roots) is
   unchanged, and `disc-pret`, `disc-agb` and `jt-score` keep their bars.
 
-What the run's targets were, per game: m4a's command table
+What the run's targets were: m4a's command table
 (`gMPlayJumpTableTemplate` and its copies in RAM: Emerald, both Kirbys,
-Minish Cap, Rogue), its leaf routines without a `push {lr}` that the
-scan's score rejects, and WarioWare's pointers computed at run time (three
+Minish Cap, Rogue), leaf routines without a `push {lr}` that the scan's
+score passes over, and WarioWare's pointers computed at run time (three
 targets no ROM word points at).
 
-Lines of 2026-11-05:
+Lines of 2026-11-05, with the flash stand-in and the run's call targets:
 
-1. `WarioWare, Inc. - Mega Microgame$!.gba: hard 11 (jumps 4+0, return arithmetic 2, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 3, summaries 2); not discovered 2096 bytes (14 ROM, 2082 RAM) of 54360 reached; busy loops calling functions 0`
-2. `Metroid - Zero Mission (USA).gba: hard 18 (jumps 3+0, return arithmetic 0, RAM code changed 2, CPU state 0, BIOS 0, calls to non-entries 13, summaries 0); not discovered 2098 bytes (12 ROM, 2086 RAM) of 83346 reached; busy loops calling functions 0`
-3. `moonbeam.gba: hard 23 (jumps 11+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 0, summaries 12); not discovered 438 bytes (438 ROM, 0 RAM) of 49918 reached; busy loops calling functions 0`
-4. `Kirby & The Amazing Mirror.gba: hard 23 (jumps 14+0, return arithmetic 0, RAM code changed 3, CPU state 0, BIOS 0, calls to non-entries 5, summaries 1); not discovered 1356 bytes (362 ROM, 994 RAM) of 105088 reached; busy loops calling functions 0`
-5. `Kirby - Nightmare in Dream Land.gba: hard 23 (jumps 14+1, return arithmetic 0, RAM code changed 1, CPU state 3, BIOS 0, calls to non-entries 4, summaries 0); not discovered 2698 bytes (1748 ROM, 950 RAM) of 60236 reached; busy loops calling functions 0`
-6. `Pokemon - Emerald Version.gba: hard 29 (jumps 22+0, return arithmetic 0, RAM code changed 1, CPU state 0, BIOS 0, calls to non-entries 4, summaries 2); not discovered 1722 bytes (50 ROM, 1672 RAM) of 58454 reached; busy loops calling functions 0`
-7. `Legend of Zelda, The - The Minish Cap (USA).gba: hard 41 (jumps 34+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 1, summaries 6); not discovered 2960 bytes (52 ROM, 2908 RAM) of 40408 reached; busy loops calling functions 0`
-8. `Emerald Rogue.gba: hard 75 (jumps 60+0, return arithmetic 0, RAM code changed 2, CPU state 0, BIOS 0, calls to non-entries 5, summaries 8); not discovered 342 bytes (42 ROM, 300 RAM) of 79416 reached; busy loops calling functions 3`
+1. `Metroid - Zero Mission (USA).gba: hard 7 (jumps 3+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 4, summaries 0); not discovered 1946 bytes (12 ROM, 1934 RAM) of 83346 reached; busy loops calling functions 0; flash library stand-ins 2`
+2. `WarioWare, Inc. - Mega Microgame$!.gba: hard 10 (jumps 4+0, return arithmetic 2, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 2, summaries 2); not discovered 2062 bytes (14 ROM, 2048 RAM) of 54360 reached; busy loops calling functions 0; flash library stand-ins 1`
+3. `Kirby & The Amazing Mirror.gba: hard 15 (jumps 14+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 0, summaries 1); not discovered 1200 bytes (362 ROM, 838 RAM) of 105088 reached; busy loops calling functions 0; flash library stand-ins 2`
+4. `Kirby - Nightmare in Dream Land.gba: hard 18 (jumps 14+1, return arithmetic 0, RAM code changed 0, CPU state 3, BIOS 0, calls to non-entries 0, summaries 0); not discovered 2574 bytes (1748 ROM, 826 RAM) of 60236 reached; busy loops calling functions 0; flash library stand-ins 2`
+5. `moonbeam.gba: hard 23 (jumps 11+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 0, summaries 12); not discovered 438 bytes (438 ROM, 0 RAM) of 49918 reached; busy loops calling functions 0; flash library stand-ins 0`
+6. `Pokemon - Emerald Version.gba: hard 24 (jumps 22+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 0, summaries 2); not discovered 1638 bytes (50 ROM, 1588 RAM) of 58454 reached; busy loops calling functions 0; flash library stand-ins 2`
+7. `Legend of Zelda, The - The Minish Cap (USA).gba: hard 41 (jumps 34+0, return arithmetic 0, RAM code changed 0, CPU state 0, BIOS 0, calls to non-entries 1, summaries 6); not discovered 2960 bytes (52 ROM, 2908 RAM) of 40408 reached; busy loops calling functions 0; flash library stand-ins 0`
+8. `Emerald Rogue.gba: hard 69 (jumps 60+0, return arithmetic 0, RAM code changed 1, CPU state 0, BIOS 0, calls to non-entries 0, summaries 8); not discovered 270 bytes (42 ROM, 228 RAM) of 79416 reached; busy loops calling functions 3; flash library stand-ins 2`
 
 | Game | Hard | Jumps (reached) | Ret. arith. | RAM changed | CPU | Non-entries (RAM, ROM) | Summaries | Not discovered (ROM + RAM) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| WarioWare, Inc. | 11 | 4 (1) | 2 | 0 | 0 | 3 (3, 0) | 2 | 2,096 (14 + 2,082) |
-| Metroid: Zero Mission | 18 | 3 (0) | 0 | 2 | 0 | 13 (13, 0) | 0 | 2,098 (12 + 2,086) |
+| Metroid: Zero Mission | 7 | 3 (0) | 0 | 0 | 0 | 4 (4, 0) | 0 | 1,946 (12 + 1,934) |
+| WarioWare, Inc. | 10 | 4 (1) | 2 | 0 | 0 | 2 (2, 0) | 2 | 2,062 (14 + 2,048) |
+| Kirby & the Amazing Mirror | 15 | 14 (13) | 0 | 0 | 0 | 0 | 1 | 1,200 (362 + 838) |
+| Kirby: Nightmare in Dream Land | 18 | 14+1 (13) | 0 | 0 | 3 | 0 | 0 | 2,574 (1,748 + 826) |
 | moonbeam | 23 | 11 (3) | 0 | 0 | 0 | 0 | 12 | 438 (438 + 0) |
-| Kirby & the Amazing Mirror | 23 | 14 (13) | 0 | 3 | 0 | 5 (5, 0) | 1 | 1,356 (362 + 994) |
-| Kirby: Nightmare in Dream Land | 23 | 14+1 (13) | 0 | 1 | 3 | 4 (4, 0) | 0 | 2,698 (1,748 + 950) |
-| Pokémon Emerald | 29 | 22 (11) | 0 | 1 | 0 | 4 (4, 0) | 2 | 1,722 (50 + 1,672) |
+| Pokémon Emerald | 24 | 22 (11) | 0 | 0 | 0 | 0 | 2 | 1,638 (50 + 1,588) |
 | The Minish Cap | 41 | 34 (14) | 0 | 0 | 0 | 1 (1, 0) | 6 | 2,960 (52 + 2,908) |
-| Emerald Rogue | 75 | 60 (12) | 0 | 2 | 0 | 5 (5, 0) | 8 | 342 (42 + 300) |
+| Emerald Rogue | 69 | 60 (12) | 0 | 1 | 0 | 0 | 8 | 270 (42 + 228) |
 
 Every new unresolved jump is an m4a command routine returning through
 the lr it saved in r12 (`mov r12, lr`, a `bl`, `bx r12`): reached, and a
 return, which Recovery doesn't see yet (filed as its own unit). The
-non-entries left are all in RAM: the flash library's stack routines and
-the games' own IWRAM copies, the other two discovery units' work. The
-lifter doesn't take run roots yet: `discover_with` is what it would call.
+non-entries left are all in RAM, the games' own IWRAM copies: the RAM
+copies unit's work. The lifter doesn't take run roots yet:
+`discover_with` is what it would call.
 
 ## Each game's worst holes
 
-- **Metroid: Zero Mission.** All 13 calls to non-entries are into RAM:
-  the flash library's stack routines (0x03007d09-0x03007d91, which also
-  change) and the code Metroid copies to IWRAM itself (0x03003b90, copy of
-  ROM 0x08004464; 0x03004100, of 0x080046d0). None of its three
+As of "The ranking", before discovery took the run's call targets: the
+ROM call targets named here are starts now.
+
+- **Metroid: Zero Mission.** Its 4 calls to non-entries are into the code
+  Metroid copies to IWRAM itself (0x03003b90, copy of ROM 0x08004464;
+  0x03004100, of 0x080046d0); the other 9 were the flash library's stack
+  routines (0x03007d09-0x03007d91), stood in for now. None of its three
   unresolved jumps was reached. Closest to native: discover its own
-  IWRAM copies and stand in for the flash routines, and only three jumps
-  remain to explain.
+  IWRAM copies, and only three jumps remain to explain.
 - **WarioWare.** The return arithmetic: 0x3000468 (returns to the site
   - 24) and 0x3000474 (site - 20), the IWRAM loop of
   `code-without-rom-addresses.md`, copied by the game from ROM 0x080007e4.
-  One hand-written stand-in covers both. Its other RAM code (2,082 bytes,
-  seven runs, each a copy of ROM bytes) needs only discovery.
-- **Kirby & the Amazing Mirror.** The flash stack routines (three changing
-  runs at 0x03007d58-0x03007da2) and 18 ROM call targets not discovered as
+  One hand-written stand-in covers both. Its other RAM code (2,048 bytes,
+  each a copy of ROM bytes) needs only discovery.
+- **Kirby & the Amazing Mirror.** 18 ROM call targets not discovered as
   starts (0x08149865-0x0814ffe1, most of them called from one site,
   0x0814fb86).
 - **Kirby: Nightmare in Dream Land.** Its coroutine switch (code at
@@ -212,8 +240,7 @@ lifter doesn't take run roots yet: `discover_with` is what it would call.
   machine). Also 2,514 ROM bytes run but not discovered, the most of the
   eight.
 - **Pokémon Emerald.** 16 m4a routines called through tables
-  (`SoundMainBTM` 0x082df7e4 and its neighbours, from 0x082dfb5a), the
-  flash stack routines, and `SoundMainRAM` (0x082df0e0) and `IntrMain`
+  (`SoundMainBTM` 0x082df7e4 and its neighbours, from 0x082dfb5a), and `SoundMainRAM` (0x082df0e0) and `IntrMain`
   copied to IWRAM without a BIOS copy discovery recognises. Eleven
   unresolved jumps, none reached.
 - **moonbeam.** No RAM code at all, no call to a non-entry, and the fewest
@@ -227,7 +254,7 @@ lifter doesn't take run roots yet: `discover_with` is what it would call.
   0x080af438, the largest).
 - **Emerald Rogue.** 50 unresolved jumps (2 reached: in `SoundMain` and
   `MPlayJumpTableCopy`), its mixer's template stamping (0x030059f0-
-  0x03005b10, `codegen::variants`), the flash stack routines, 8 functions
+  0x03005b10, `codegen::variants`), 8 functions
   with a run-time sp, and the only busy loops calling functions.
 
 ## What the Stage-A lifter should know
@@ -239,8 +266,10 @@ lifter doesn't take run roots yet: `discover_with` is what it would call.
   can't be expressed: the run's call targets (`Run::call_targets`,
   `indirect_calls`) and the RAM copies' ROM sources (`RamRun::rom_src`)
   are the roots to add.
-- The flash library's stack routines are in five of the eight: one
-  stand-in in the hardware library (flash commands) covers them all.
+- The flash library's stack routines (six of the eight call them, five
+  at changing addresses) are `Report::flash`: at each such call into RAM,
+  call the `runtime::hw::flash` function its `Routine::call` names on
+  `Hw::save`, with the routine's arguments (r0-r2) as its slices.
 - Unreached unresolved jumps dominate Minish Cap's and Rogue's counts;
   until coverage reaches them, they are as likely dead as live.
 
@@ -249,12 +278,13 @@ lifter doesn't take run roots yet: `discover_with` is what it would call.
 Filed from this report (see the tracker for their state):
 
 - Discovery takes the run's call targets as function starts (the largest
-  hard class in every game).
+  hard class in every game; done: "With the run's call targets", above).
 - Discovery finds code games copy to RAM themselves (loops, and `CpuSet`
   with arguments it can't fold): the RAM bytes not discovered.
 - Coverage runs past the press script, to reach the unresolved jumps and
   settle each as a table or dead code.
-- A hardware-library stand-in for the flash library's stack routines.
+- A hardware-library stand-in for the flash library's stack routines
+  (done: "The flash library's stack routines", above).
 - Recovery takes a `bx` through a copy of lr as a return (filed after
   the run's call targets, 2026-11-05: m4a's `bx r12`).
 

@@ -49,7 +49,8 @@ says what a recipe or tool does and what it must still pass.
   it), the function summaries, then
   `analysis::holes::classify`. Prints one ranking line (hard holes by
   kind; bytes reached but not discovered; busy loops that call
-  functions) and each list. About a minute a game, capped at 3 GB. The
+  functions; the flash library's stack routines stood in for,
+  `analysis::flash`) and each list. About a minute a game, capped at 3 GB. The
   doc's table is these lines; rerun all eight after changing
   `analysis::holes` or `crates/hole-report` and update it.
 - `just jt-score`: the jump-table check (decision 5c). Builds truth tables
@@ -1625,7 +1626,8 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   certificate, is unused since multiplayer/remove-lockstep-quic and
   still billed until june destroys it: `fly volumes destroy`). `just
   fly-setup` once (billed: a dedicated IPv4; fly serves UDP only on
-  one), `just fly-deploy` after any server change (built by fly's remote
+  one), `just fly-deploy` after any server change (`--ha=false`: rooms
+  live in one process, so the app must have one machine; built by fly's remote
   builder from `deploy/fly/Dockerfile`, the repo root as context,
   `.dockerignore` keeping out builds and data). The address is
   37.16.3.41 (`fly ips list -a gbaa-server`). Players: `gbaa-desktop ROM

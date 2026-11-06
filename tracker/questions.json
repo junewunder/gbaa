@@ -1183,6 +1183,38 @@
         "at": "2026-11-01T19:26:11Z",
         "decision": "d/first-native-game"
       }
+    },
+    {
+      "id": "q/may-lane-scale-fly-s",
+      "title": "May a lane scale fly's gbaa-server down to one machine?",
+      "context": "The rooms-only redeploy is done and checked, but fly made two machines (850d37c4e70228 and 784563db002518, both stopped). Rooms live in one process's memory, so two players could land on different machines and never meet. fly-deploy now passes --ha=false, but removing the extra machine (fly scale count 1 -a gbaa-server) was refused by a lane's permissions as a production deploy. The volume gbaa_data is now detached and still billed: fly volumes destroy vol_vwnozd7kkpjdpz8v.",
+      "options": [
+        {
+          "key": "a",
+          "label": "june runs it",
+          "changes": "june runs fly scale count 1 -a gbaa-server --yes (and destroys the volume); the unit is then recorded done by a lane checking fly machine list"
+        },
+        {
+          "key": "b",
+          "label": "lanes may",
+          "changes": "june adds a permission rule for fly scale count; a lane runs it and checks room-sim"
+        }
+      ],
+      "default": "a",
+      "blocks": ["multiplayer/fly-one-machine"],
+      "asked": {
+        "at": "2026-11-06T04:13:45Z",
+        "by": "a87279be",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "b",
+        "note": "june: lanes may do almost anything with the fly deploy; nobody uses it now and no friend has an up-to-date install, so no users, no harm.",
+        "by": "owner",
+        "via": "1f762505",
+        "at": "2026-11-06T04:23:41Z",
+        "decision": "d/may-lane-scale-fly-s"
+      }
     }
   ]
 }

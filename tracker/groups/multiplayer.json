@@ -509,7 +509,14 @@
       "title": "Redeploy fly's gbaa-server as rooms only, no volume",
       "detail": "{unit:multiplayer/remove-lockstep-quic} changed deploy/fly (rooms alone on 7374, no QUIC on 7373, no [mounts]) but an agent session's permissions refused `just fly-deploy` (a production deploy), so fly still runs the QUIC build; its 7374 rooms are the same protocol, so play works meanwhile. Do: just fly-up; just fly-deploy (if fly refuses because the machine still mounts gbaa_data, destroy the machine and deploy again: the IPv4 is the app's and stays); just room-sim calm --server 37.16.3.41; just fly-down. Then the volume gbaa_data is unused: june's to destroy (fly volumes destroy), it's billed.",
       "check": "recorded",
-      "needs": ["multiplayer/server-version-cutoff"]
+      "needs": ["multiplayer/server-version-cutoff"],
+      "record": {
+        "state": "done",
+        "by": "a87279be",
+        "at": "2026-11-06T04:13:27Z",
+        "evidence": "just fly-up; just fly-deploy refused (old machine mounted gbaa_data), destroyed it, deployed again: logs show 'gbaa-server fly-global-services:7374 --min-version 1', rooms on UDP 7374, no volume, IPv4 37.16.3.41 kept. just room-sim calm --server 37.16.3.41: pass, 10 hashes and the end match on both seats. just fly-down: stopped. Fly made 2 machines (HA); fly-deploy now passes --ha=false; scaling to 1 was refused here, asked june. just check passes.",
+        "host": "quack"
+      }
     },
     {
       "id": "multiplayer/rogue-coop-menus",
@@ -567,6 +574,25 @@
       "id": "multiplayer/four-seats",
       "title": "Netplay rooms for up to four players (Kirby's four)",
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): a third player joining got 'The session ended. The room is full.'; rooms have two seats (room.rs). Kirby & the Amazing Mirror links four GBAs on the multiplayer-mode cable (katam's gKirbys holds four Kirbys), and june wants all four in a room. Let 2 to 4 players join a room (the host starts once everyone's in, or the cable sees whoever is there); confirm runtime::link runs four machines on one bus. Every peer runs every console: measure four Kirbys' frame cost and re-run headroom, interpreted and recompiled, on quack and the Deck, in docs/research/multiplayer.md. Check: three and then four windows in a private cu session through a local gbaa-server get into Kirby's multiplayer, each shows its own seat, all end on one hash; a headless four-peer pingsim run; just check.",
+      "record": {
+        "state": "done",
+        "by": "78de4417",
+        "at": "2026-11-06T04:39:07Z",
+        "evidence": "Private branch's work replayed on public main (71be9531, merge with main after). quack 2026-11-05: room-sim wander --players 4 --console gba and --players 3 pass every seat; private cu session: 3 then 4 Kirby windows via local gbaa-server, titled player 1-4, mark Connected 3/3 and 4/4, each on its own Kirby in Rainbow Route, one hash each (3: 27f2caeb at 3000, 4: 245b958b at 3600); headless 4 peers c894de98 after a CATCH_UP fix for an early goodbye; just check passes after the merge. Frame cost on quack in docs/research/multiplayer.md; Deck runs left for later by june's 2026-11-01 decision (may-lane-ssh-onto-your), in {unit:multiplayer/four-kirbys-deck}.",
+        "branch": "unit/multiplayer/four-seats",
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T04:39:07Z",
+          "by": "78de4417",
+          "host": "quack",
+          "pid": 1417300,
+          "start": "29954434",
+          "beats": true,
+          "session": "78de4417-f0a6-4e19-9efc-2032439ac701",
+          "lane": "quack/1"
+        },
+        "pushed": true
+      },
       "notes": [
         {
           "at": "2026-11-03T03:49:49Z",
@@ -774,6 +800,10 @@
       "title": "Four Kirbys' netplay frame cost on the Deck",
       "detail": "From {unit:multiplayer/four-seats}: quack's numbers for four Kirbys a peer are in docs/research/multiplayer.md, 'Four players'. The Deck's own CPU, a short headless run (docs/machines.md, deck: ask june for a yes first, each time). Copy the recompiled Kirby binary to ~/gbaa, run just rollback-feel's headless four-player command from that section (calm delay 2 and wander delay 0, --interp and not, peers on the Deck) and add the Deck's rows to the table.",
       "needs": ["multiplayer/four-seats"]
+    },
+    {
+      "id": "multiplayer/fly-one-machine",
+      "title": "Scale fly's gbaa-server back to one machine"
     }
   ]
 }

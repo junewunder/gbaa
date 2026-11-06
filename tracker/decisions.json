@@ -939,6 +939,15 @@
       "by": "0def0baa",
       "at": "2026-11-01T21:19:25Z",
       "scope": ["group:native"]
+    },
+    {
+      "id": "d/may-lane-scale-fly-s",
+      "title": "May a lane scale fly's gbaa-server down to one machine: lanes may",
+      "why": "june: lanes may do almost anything with the fly deploy; nobody uses it now and no friend has an up-to-date install, so no users, no harm.",
+      "by": "owner",
+      "at": "2026-11-06T04:23:41Z",
+      "question": "q/may-lane-scale-fly-s",
+      "via": "1f762505"
     }
   ]
 }
