@@ -2229,3 +2229,4 @@
 {"at":"2026-11-06T07:03:58Z","actor":"loop","tag":"40e2fde3","host":"quack","cmd":"claim","id":"native/frame-escape","text":"Stack frames: which slots escape: claimed"}
 {"at":"2026-11-06T07:37:56Z","actor":"loop","tag":"40e2fde3","host":"quack","cmd":"done","id":"native/frame-escape","text":"Stack frames: which slots escape: done, checked by verifier-frame-escape-7c3e"}
 {"at":"2026-11-06T07:38:00Z","actor":"loop","tag":"40e2fde3","host":"quack","cmd":"note","id":"native/frame-locals","text":"Stack slots that don't escape as Rust locals: note: Escape analysis (native/frame.rs) marks only slots at/above an escaping address (a pointer into an object's middle reaching lower isn't followed) and counts a callee's stack-arg bytes from exact sp reads only. Weigh both before turning slots into locals."}
+{"at":"2026-11-06T07:40:57Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/frame-escape","text":"Stack frames: which slots escape: on main"}
