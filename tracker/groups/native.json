@@ -474,15 +474,23 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "40e2fde3",
-        "session": "40e2fde3-1647-4557-937b-41ac16b9aa1a",
-        "host": "quack",
-        "pid": 1418242,
-        "start": "29954965",
-        "at": "2026-11-06T07:03:58Z",
+        "checker": "verifier-frame-escape-7c3e",
+        "at": "2026-11-06T07:37:56Z",
+        "evidence": "Independent verifier (verifier-frame-escape-7c3e): 10 frame unit tests pass (each escape kind plus a non-escaping slot); main.rs byte-identical to main's lifter on all 5 programs; every lift within bars; report's stack-frames line and sp_accesses_local_slot/escaping_slot match docs/native-stage-b.md and sum to load_sp+store_sp; just check exit 0. Its soundness find (stack-argument slots' held addresses) fixed with an 11th test; bars and totals unchanged; just check green after merging main.",
         "branch": "unit/native/frame-escape",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T07:37:56Z",
+          "by": "40e2fde3",
+          "host": "quack",
+          "pid": 1418242,
+          "start": "29954965",
+          "beats": true,
+          "session": "40e2fde3-1647-4557-937b-41ac16b9aa1a",
+          "lane": "quack/2"
+        }
       },
       "round": "2026-11-06T07:03:58Z"
     },
