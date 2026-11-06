@@ -709,15 +709,23 @@
       "needs": ["native/lift-irq-hold"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "75500cb2",
-        "session": "75500cb2-dfaf-4678-bdab-8f6f12e58fca",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T10:25:12Z",
+        "checker": "verifier-75500cb2",
+        "at": "2026-11-06T11:09:20Z",
+        "evidence": "Verifier (fresh context) reran: just mgba-diff native-ime-release 601 matches mGBA (abc7ac7a22ed22b3); gbaa-desktop --timing native same hash (old play build drew 0346a4614af57b13); just lift-check (all 7 programs, after merging main) passed with --ime-at-waits caught at frame 2 EWRAM 0x020000cc; just check passed; diff review found no bugs. lines_prelude 500->508: IME_RELEASE const+doc and io_write16's IME case.",
         "branch": "unit/native/ime-release",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T11:09:20Z",
+          "by": "75500cb2",
+          "host": "quack",
+          "pid": 1417300,
+          "start": "29954434",
+          "beats": true,
+          "session": "75500cb2-dfaf-4678-bdab-8f6f12e58fca",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
