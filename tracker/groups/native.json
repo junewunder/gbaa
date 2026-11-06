@@ -649,7 +649,19 @@
       "check": "independent",
       "needs": ["native/lift-bars"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "ef819a4e",
+        "session": "ef819a4e-07b6-41b4-a33b-b956d450a077",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T09:28:13Z",
+        "branch": "unit/native/lift-modules",
+        "beats": true
+      },
+      "round": "2026-11-06T09:28:13Z"
     },
     {
       "id": "native/lift-packed-layout",
