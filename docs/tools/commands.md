@@ -1219,7 +1219,10 @@ says what a recipe or tool does and what it must still pass.
   analysis bounds it to, else `computed_unknown`; regions `ram`, `io`,
   `rom`, `display`, `sram`, `other`; `const_ram` counts only byte
   accesses, the globals' are `ram_global`, unbarred, with `ram_globals`
-  the count of globals); `call_fn` calls; jumps by value;
+  the count of globals; `computed_ram` likewise, the ones the value
+  sets bound to one global are `ram_object`, unbarred, checked by the
+  prelude's `pin` and `ix` at run time, and `pointer_unexplained` the
+  rest, native/ref-in-object); `call_fn` calls; jumps by value;
   gap targets. `--bars FILE` fails the lift (after writing it) on any
   metric over `[program.NAME.bars]`'s maximum, each named with both
   numbers (`gbaa-lift: affine: load_computed_unknown is 755, over its
