@@ -319,16 +319,32 @@
       "needs": ["native/oracle"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "338023f7",
-        "session": "338023f7-0f12-4931-a685-4327f7b419f5",
-        "host": "quack",
-        "pid": 1418242,
-        "start": "29954965",
-        "at": "2026-11-06T06:19:07Z",
+        "checker": "verifier-a7c3e9",
+        "at": "2026-11-06T06:57:37Z",
+        "evidence": "Verifier reran just native-check: psg-square passes 120 frames with audio the same in 120 frames, no --no-audio, planted wrong sample caught at frame 74 on audio; direct-sound (stands for bios-sound, decision recorded) passes 300 frames with audio the same in all; native-spike still passes. just psg-square and psg-wave-noise match mGBA. Main session also: mgba-audio-diff byte-identical on the 18157 Hz ROM (600) and 10512 Hz ROM (1000), audio-check on both, audio-pace, lift-check pass; just check passes after merging main.",
         "branch": "unit/native/hw-sound",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T06:57:37Z",
+          "by": "338023f7",
+          "host": "quack",
+          "pid": 1418242,
+          "start": "29954965",
+          "beats": true,
+          "session": "338023f7-0f12-4931-a685-4327f7b419f5",
+          "lane": "quack/2"
+        },
+        "pushed": true
       },
+      "notes": [
+        {
+          "at": "2026-11-06T06:57:41Z",
+          "by": "338023f7",
+          "text": "Not yet in hw: H-blank DMA's price on the clock, DMA/FIFO DMA by address via write16 (panics). direct-sound has no planted fault; psg-square's plant covers the audio compare."
+        }
+      ],
       "round": "2026-11-06T06:19:07Z"
     },
     {
