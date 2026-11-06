@@ -782,7 +782,14 @@
       "detail": "docs/native-stage-b.md, piece 3, fnref-flow as built: one pile holds every heap store, so a heap load used as a number marks every function word stored there (32-36 of each agb program's ~55 words). Split the pile by allocation site (agb's allocator's callers) and field offset in crates/codegen/src/native/fnref.rs. Done when: fn_words_not_proven bar lowered to the measured value on every program (it must fall), unit tests for two heap objects kept apart, just lift-check and just check pass.",
       "check": "independent",
       "needs": ["native/fnref-flow"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-06T12:31:54Z",
+          "by": "62031260",
+          "text": "When sets narrow, lower lift-check's call_fn_four_complete (56-60 per program, set by {unit:native/indirect-call-args}): every complete call_fn set today is the pile's 21 address-taken functions."
+        }
+      ]
     },
     {
       "id": "native/lift-bios-calls",
