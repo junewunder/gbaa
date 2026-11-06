@@ -865,6 +865,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-06T13:35:25Z",
+          "by": "1e655045",
+          "text": "Main merged (d08fb7b4); just check, lift-check pass. Join sharing Rc: no gain, dropped. Likely cause of r1-4 full reruns: dirty_mem (any new cell/pile token reruns every fn with a load). Next: per-fn read sets (pile, which cells) for sparse reruns. No perf here."
+        },
+        {
           "at": "2026-11-06T13:26:46Z",
           "by": "1e655045",
           "text": "Branch f02475e3: cached every-cell reads, cap once per load: Metroid settles in 614 s, 11 rounds (was 63 s r0, 534 s r1, unsettled); same counts. Rounds 1-4 rerun ~2600 fns, ~90 s each; values carry the 5270-token pile. Next: join shares Rc if subset; why r2-3 rerun all."
