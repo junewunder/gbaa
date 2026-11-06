@@ -48,7 +48,10 @@
 //! - Function pointers are their keys (ROM or IWRAM address, Thumb bit):
 //!   `call_fn` (prelude) looks them up in `FNS`. Stage A has no dense IDs
 //!   (`--fn-ids rom` only): a literal lift loads pointers from ROM bytes
-//!   and RAM, so it can't renumber them.
+//!   and RAM, so it can't renumber them. [`fnref`] follows every function
+//!   address to its uses and reports the ROM words dense IDs could rewrite
+//!   and each indirect call's callees (unit `native/fnref-flow`; nothing
+//!   printed changes yet).
 //!
 //! **Holes.** A function the lift can't print is a hard hole, named, and
 //! the lift fails (and the crate, which gets a `compile_error!` for it),
@@ -75,6 +78,7 @@ use frame::{Frame, Kind, Local};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
+pub mod fnref;
 pub mod frame;
 pub mod globals;
 pub mod lift_check;
@@ -329,6 +333,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     }
     let globals = Globals::carve(&ram, &ranges, &holes.names);
     let shapes = shapes_of(&codes, &all, holes);
+    let fnrefs = fn_flow(rom, &disc, &overlays, &codes, &all);
     // Each function's text by key, in print order: the modules' contents.
     let mut out: Vec<(u32, String)> = Vec::new();
     let mut report = String::new();
@@ -533,6 +538,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         soft.sp_slots[2],
     )
     .unwrap();
+    report.push_str(&fnrefs.0.report(&fnrefs.1, &fnrefs.2));
+    let fn_proven = fnrefs.1.keys().filter(|w| fnrefs.0.proven(**w)).count();
     writeln!(
         report,
         "stack locals (native/frame-locals): {} slots in {} functions printed as Rust locals, {} loads and stores to them; {} calls write the locals to the frame first",
@@ -599,6 +606,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("sp_accesses_callers_frame", soft.sp_slots[2]);
     m.push("call_fn_calls", n(soft.indirect));
     m.push("jumps_by_value", n(soft.dyn_jumps));
+    m.push("fn_words_proven", n(fn_proven));
+    m.push("fn_words_not_proven", n(fnrefs.1.len() - fn_proven));
     m.push("gap_targets", n(gaps.len()));
     writeln!(
         report,
@@ -731,6 +740,177 @@ fn force_code(rom: &[u8], disc: &mut Discovery, k: u32) {
             }
         }
     }
+}
+
+/// The program's bytes, for [`fnref`].
+struct FnImage<'a> {
+    rom: &'a [u8],
+    all: &'a BTreeSet<u32>,
+    disc: &'a Discovery,
+}
+
+impl fnref::Image for FnImage<'_> {
+    fn is_fn(&self, v: u32) -> bool {
+        self.all.contains(&v)
+    }
+    fn word(&self, a: u32) -> Option<u32> {
+        let o = a.checked_sub(0x0800_0000)? as usize & !3;
+        let b = self.rom.get(o..o + 4)?;
+        Some(u32::from_le_bytes(b.try_into().unwrap()))
+    }
+    fn bound(&self, a: u32) -> u32 {
+        self.disc
+            .code
+            .range(a + 1..)
+            .next()
+            .map_or(0x0800_0000 + self.rom.len() as u32, |(k, _)| *k)
+    }
+}
+
+/// The ROM address of the literal an `ldr rN, [pc, #k]` at `at` reads, if
+/// it is one and the word there is `c`. `src`: where the context's bytes
+/// are in ROM (an IWRAM copy's source).
+fn literal(ctx: &Ctx, src: u32, at: u32, thumb: bool, c: u32) -> Option<u32> {
+    let rd = |a: u32, n: usize| -> Option<u32> {
+        let o = a.checked_sub(ctx.base)? as usize;
+        let b = ctx.rom.get(o..o + n)?;
+        Some(b.iter().rev().fold(0, |x, &y| x << 8 | y as u32))
+    };
+    let a = if thumb {
+        let h = rd(at, 2)?;
+        (h & 0xf800 == 0x4800).then(|| ((at + 4) & !3) + (h & 0xff) * 4)?
+    } else {
+        let w = rd(at, 4)?;
+        let off = w & 0xfff;
+        match w & 0x0fff_0000 {
+            0x059f_0000 => at + 8 + off,
+            0x051f_0000 => (at + 8).wrapping_sub(off),
+            _ => return None,
+        }
+    };
+    (rd(a, 4)? == c).then(|| a - ctx.base + src)
+}
+
+/// [`fnref::follow`] over every context's functions: the flow, every
+/// function word in ROM outside code (its key, and whether a literal pool
+/// read it), and the addresses of the calls printed through `call_fn`.
+#[allow(clippy::type_complexity)]
+fn fn_flow(
+    rom: &[u8],
+    disc: &Discovery,
+    overlays: &[discovery::Overlay],
+    codes: &[Code],
+    all: &BTreeSet<u32>,
+) -> (fnref::Flow, BTreeMap<u32, (u32, bool)>, BTreeSet<u32>) {
+    let mut ins = Vec::new();
+    let mut pools = BTreeSet::new();
+    let mut call_fn = BTreeSet::new();
+    for (ci, c) in codes.iter().enumerate() {
+        let src = match ci {
+            0 => 0x0800_0000,
+            _ => overlays[ci - 1].src,
+        };
+        for f in &c.funcs {
+            let mut blocks = BTreeMap::new();
+            for (&k, gb) in &f.blocks {
+                let insts = &gb.block.insts;
+                let mut exits_of = BTreeMap::new();
+                for x in exits(&c.ctx, gb) {
+                    let e = frame::edge(&c.ctx, f, all, gb, &x);
+                    if matches!(e, frame::Edge::Call { target: None, .. }) {
+                        call_fn.insert(x.at);
+                    }
+                    let via = match x.plan {
+                        Plan::CallVia { reg, .. } => Some(reg.index() as u8),
+                        _ => None,
+                    };
+                    let bios = match insts[x.index].op {
+                        Op::Exit(Exit::Swi { comment, .. }) => {
+                            Some(runtime::bios::number(comment, x.thumb))
+                        }
+                        _ => None,
+                    };
+                    exits_of.insert(
+                        x.index,
+                        fnref::Out {
+                            edge: e,
+                            via,
+                            at: x.at,
+                            bios,
+                        },
+                    );
+                }
+                let mut at = k & !1;
+                let mut lits = BTreeMap::new();
+                let mut hulls = BTreeMap::new();
+                for (i, inst) in insts.iter().enumerate() {
+                    match inst.op {
+                        Op::Insn(a) => at = a,
+                        Op::Load { .. } | Op::Store { .. } => {
+                            if let Some(x) = c.ctx.disc.rec.accesses.get(&at)
+                                && let (false, false, Some(h)) = (x.sp, x.top, x.hull)
+                            {
+                                hulls.insert(i, h);
+                            }
+                        }
+                        Op::Pool(v) => {
+                            if let Some(w) = literal(&c.ctx, src, at, gb.block.thumb, v) {
+                                lits.insert(i, w);
+                                if all.contains(&v) {
+                                    pools.insert(w);
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                blocks.insert(
+                    k,
+                    fnref::FBlock {
+                        insts,
+                        exits: exits_of,
+                        pools: lits,
+                        hulls,
+                    },
+                );
+            }
+            ins.push(fnref::FnIn {
+                entry: f.entry,
+                blocks,
+                frame: c.frames.get(&f.entry),
+            });
+        }
+    }
+    // Every function word in ROM that isn't an instruction (of the ROM's
+    // code, or an IWRAM copy's).
+    let in_code = |d: &Discovery, a: u32| {
+        d.code
+            .range(a.saturating_sub(3)..a + 4)
+            .any(|(&k, c)| k + c.size > a)
+    };
+    let mut words = BTreeMap::new();
+    for (i, b) in rom.as_chunks::<4>().0.iter().enumerate() {
+        let w = 0x0800_0000 + 4 * i as u32;
+        let v = u32::from_le_bytes(*b);
+        if !all.contains(&v) || in_code(disc, w) {
+            continue;
+        }
+        let copied = overlays
+            .iter()
+            .any(|o| (o.src..o.src + o.len).contains(&w) && in_code(&o.disc, o.dst + (w - o.src)));
+        if !copied {
+            words.insert(w, (v, pools.contains(&w)));
+        }
+    }
+    // The start's copies of ROM data (not code) to RAM.
+    let copies: Vec<(u32, u32, u32)> = disc
+        .copies
+        .iter()
+        .copied()
+        .filter(|(src, _, _)| !overlays.iter().any(|o| o.src == *src))
+        .collect();
+    let img = FnImage { rom, all, disc };
+    (fnref::follow(&ins, &img, &copies), words, call_fn)
 }
 
 fn code(ctx: Ctx<'_>) -> Code<'_> {
