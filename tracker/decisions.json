@@ -956,6 +956,14 @@
       "by": "338023f7",
       "at": "2026-11-06T06:52:47Z",
       "scope": ["native/hw-sound"]
+    },
+    {
+      "id": "d/native-timing-releases-an-irq-only-when-ime",
+      "title": "Native timing releases an IRQ only when IME goes 0 to 1",
+      "why": "On the hardware a pending IRQ is taken the moment IME is set again. The native-timing play build acts on that write alone (event IME_ON), not on any IE/IF change, so an IRQ requested between time points with IME on (a DMA end) still waits for the next time point, as the native library does. The recompiler at native timing ends a block after a store that folds to IME, so compiled code and interpreter take it at the same instruction; an unfolded IME store still ticks at its block end.",
+      "by": "75500cb2",
+      "at": "2026-11-06T11:04:28Z",
+      "scope": ["native/*"]
     }
   ]
 }
