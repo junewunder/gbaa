@@ -237,32 +237,33 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "done",
-        "by": "82db0e66",
-        "checker": "a746da90b2d23991c",
-        "at": "2026-11-06T06:34:05Z",
-        "evidence": "Verifier a746da90b2d23991c ran just holes on all eight: 0 RAM bytes undiscovered each (RAM code run, not discovered: 0 runs), flash routines excepted; disc-pret 0.9991/0.9549, disc-agb 1.0/0.9835 and 1.0/0.5789, jt-score 676/676 and 584/617, all exit 0. Its four minor findings fixed; rerun after: ranking unchanged, just check green after merging main. Hard: Metroid 4, WarioWare 8, others as with run roots.",
-        "branch": "unit/native/disc-ram-copies",
+        "state": "claimed",
+        "by": "b58ddd69",
+        "session": "b58ddd69-6643-47c2-8e0c-62a209be6be7",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-06T06:34:05Z",
-          "by": "82db0e66",
-          "host": "quack",
-          "pid": 1417300,
-          "start": "29954434",
-          "beats": true,
-          "session": "82db0e66-b6de-4f36-9df2-d644270c71be",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T06:38:04Z",
+        "branch": "unit/native/disc-ram-copies",
+        "beats": true
       },
       "notes": [
+        {
+          "at": "2026-11-06T06:37:58Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/analysis/src/holes/copies.rs:130-138 (`ram_copies`, the found-copies loop): `region_end` is 0x0204_0000 for EWRAM and 0x0300_8000 for anything else, but `exec` takes all RAM code in 0x0200_0000..0x0400_…"
+        },
         {
           "at": "2026-11-06T06:34:09Z",
           "by": "82db0e66",
           "text": "Copies come from the run (analysis::holes::ram_copies), not static: a lift with no run still lacks them. A static finder (DMA3 stores, copy loops) would be its own unit."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-06T06:37:58Z",
+        "findings": "- crates/analysis/src/holes/copies.rs:130-138 (`ram_copies`, the found-copies loop): `region_end` is 0x0204_0000 for EWRAM and 0x0300_8000 for anything else, but `exec` takes all RAM code in 0x0200_0000..0x0400_0000, including mirror addresses (0x0204_0000 and up, 0x0300_8000 and up). If a run executes code at a mirror (for example, IWRAM code entered through 0x03FFxxxx), `stop` ends up below `dst` and `stop - dst` underflows. That panics in a debug build. In release it wraps to a huge length, and `build` then quietly returns None. Fix: either fold mirror addresses back to their base before grouping, or skip any group whose `dst >= region_end`. Add a unit test with one instruction run at 0x0300_8100 (or 0x0204_0100) that checks `ram_copies` doesn't panic."
+      },
       "round": "2026-11-06T04:42:48Z"
     },
     {
