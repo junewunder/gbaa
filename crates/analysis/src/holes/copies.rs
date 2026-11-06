@@ -127,6 +127,11 @@ pub fn ram_copies(rom: &[u8], disc: &Discovery, run: &Run) -> Vec<RamCopy> {
         } else {
             0x0300_8000
         };
+        // Code run at a mirror (0x0204_0000 and up, 0x0300_8000 and up)
+        // isn't a copy's destination: the copy is at the base address.
+        if dst >= region_end {
+            continue;
+        }
         let mut stop = (end + TAIL)
             .min(region_end)
             .min(ROM_BASE + rom.len() as u32 - src + dst);
