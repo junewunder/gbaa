@@ -627,6 +627,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-06T11:03:29Z",
+          "by": "d543fce8",
+          "text": "Untested/open: a load whose bounds start in ROM but end outside it, or have no bounds, reads no ROM and sets no lost_rom (closed-world assumption). No unit test for the too-wide ROM-bounded read (the test builder has no hulls)."
+        },
+        {
           "at": "2026-11-06T10:18:58Z",
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/native/fnref.rs:719, :1184-1213 and :827 — a call site can be marked as having a complete callee set when it isn't. The card's output is each indirect call's callee set, \"complete or not\", a…"
