@@ -509,7 +509,19 @@
       "title": "Redeploy fly's gbaa-server as rooms only, no volume",
       "detail": "{unit:multiplayer/remove-lockstep-quic} changed deploy/fly (rooms alone on 7374, no QUIC on 7373, no [mounts]) but an agent session's permissions refused `just fly-deploy` (a production deploy), so fly still runs the QUIC build; its 7374 rooms are the same protocol, so play works meanwhile. Do: just fly-up; just fly-deploy (if fly refuses because the machine still mounts gbaa_data, destroy the machine and deploy again: the IPv4 is the app's and stays); just room-sim calm --server 37.16.3.41; just fly-down. Then the volume gbaa_data is unused: june's to destroy (fly volumes destroy), it's billed.",
       "check": "recorded",
-      "needs": ["multiplayer/server-version-cutoff"]
+      "needs": ["multiplayer/server-version-cutoff"],
+      "record": {
+        "state": "claimed",
+        "by": "a87279be",
+        "session": "a87279be-0635-4b70-af88-29989823feda",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T04:04:46Z",
+        "branch": "unit/multiplayer/fly-redeploy-rooms",
+        "beats": true
+      },
+      "round": "2026-11-06T04:04:46Z"
     },
     {
       "id": "multiplayer/rogue-coop-menus",
