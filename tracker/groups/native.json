@@ -237,15 +237,23 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "b58ddd69",
-        "session": "b58ddd69-6643-47c2-8e0c-62a209be6be7",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T06:38:04Z",
+        "checker": "a92953cdff8d9f304",
+        "at": "2026-11-06T06:57:00Z",
+        "evidence": "Review fix made (ae62dec1): ram_copies skips groups at mirror addresses, unit test covers 0x0300_8100 and 0x0204_0100. Merged main (c1f865f5), just check passes. Fresh verifier ran just holes on all eight: 0 RAM bytes undiscovered each; disc-pret 0.9991/0.9549, disc-agb 1.0/0.9835 and 1.0/0.5789, jt-score 676/676, 548/548, 584/617, 726/732, all at their bars.",
         "branch": "unit/native/disc-ram-copies",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T06:57:00Z",
+          "by": "b58ddd69",
+          "host": "quack",
+          "pid": 1417300,
+          "start": "29954434",
+          "beats": true,
+          "session": "b58ddd69-6643-47c2-8e0c-62a209be6be7",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
