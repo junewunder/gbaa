@@ -265,6 +265,13 @@
           "lane": "quack/1"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-06T04:01:25Z",
+          "by": "2e628fae",
+          "text": "Not wired into gbaa-lift yet (no lifted game saves to flash): at a recognised call into RAM, call Routine::call on Hw::save. Hw::save starts as Flash512; a program must set its kind. Exemption is by address only (see holes.rs doc)."
+        }
+      ],
       "round": "2026-11-06T03:01:11Z"
     },
     {
