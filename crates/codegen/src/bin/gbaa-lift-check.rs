@@ -192,6 +192,17 @@ impl Run {
                 }
             }
         }
+        let failed: Vec<&Column> = cols.iter().filter(|c| c.failed.is_some()).collect();
+        for c in &failed {
+            eprintln!(
+                "gbaa-lift-check: {}: {}",
+                c.name,
+                c.failed.as_deref().unwrap_or("")
+            );
+        }
+        if !failed.is_empty() {
+            return ExitCode::FAILURE;
+        }
         if over == 0 {
             ExitCode::SUCCESS
         } else {
@@ -209,7 +220,15 @@ impl Run {
         let mut c = lift(&self.rom(p), &p.name, &out);
         c.args(["--bars", &self.file]).args(&p.lift_flags);
         let log = format!("out/lift-{}.txt", p.name);
-        run(&mut c, Path::new(&log))?;
+        let (ok, out) = run(&mut c, Path::new(&log))?;
+        // A lift fails on more than a metric over its bar (a metric with no
+        // bar, a bar naming no metric), and may still have written its
+        // metrics: keep the log's tail so the table can't hide it.
+        let failed = (!ok).then(|| {
+            let tail: Vec<&str> = out.lines().rev().take(8).collect();
+            let tail: Vec<&str> = tail.into_iter().rev().collect();
+            format!("its lift failed ({log}):\n{}", tail.join("\n"))
+        });
         let m = std::fs::read_to_string(&file)
             .map_err(|e| format!("{}: {e} (the lift's log: {log})", file.display()))
             .and_then(|t| Metrics::from_toml(&t))?;
@@ -217,6 +236,7 @@ impl Run {
             name: p.name.clone(),
             metrics: m,
             bars: metrics::bars(text, &p.name)?,
+            failed,
         })
     }
 
@@ -488,6 +508,8 @@ struct Column {
     name: String,
     metrics: Metrics,
     bars: std::collections::BTreeMap<String, u64>,
+    /// Why its lift exited non-zero, if it did.
+    failed: Option<String>,
 }
 
 /// The table, a row per metric `keep` keeps (in the first program's
@@ -564,6 +586,7 @@ mod tests {
             name: name.into(),
             metrics: Metrics(ms.iter().map(|(n, v)| (n.to_string(), *v)).collect()),
             bars: bs.iter().map(|(n, v)| (n.to_string(), *v)).collect(),
+            failed: None,
         };
         let cols = [
             col(
