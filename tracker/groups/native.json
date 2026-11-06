@@ -628,15 +628,10 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "blocked",
+        "on": "q/heap-pointer-unit-s-bar",
         "by": "76e43878",
-        "session": "76e43878-d5be-4f5a-8400-f42e88106fa2",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T09:23:27Z",
-        "branch": "unit/native/ref-heap",
-        "beats": true
+        "at": "2026-11-06T09:27:43Z"
       },
       "round": "2026-11-06T09:23:27Z"
     },
