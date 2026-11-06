@@ -468,6 +468,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-06T12:31:50Z",
+          "by": "62031260",
+          "text": "Built on the branch (lift + summaries + gbaa-recompile --callee-sets); lift-check, just check pass. Waits on the bar question (measured 56-60, not 0: sets are the heap pile's 21 fns). Emerald part split to {unit:native/indirect-call-args-emerald}."
+        },
+        {
           "at": "2026-11-06T07:50:52Z",
           "by": "5676c8cf",
           "text": "From {unit:native/lift-params}: a_<key> adapters return r1-r3 as passed in (summaries treat them undefined after an indirect call); undefined_reads after indirect calls aren't counted anywhere. Stand-ins call f_08002995-style dispatchers four-reg by name: shaping one breaks the build."
