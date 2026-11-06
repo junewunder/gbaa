@@ -60,9 +60,11 @@ use analysis::discovery::{self, Discovery};
 use analysis::ir::{BinOp, BitOp, Exit, Inst, Op, ValueId};
 use analysis::vsa::func::JumpRes;
 use armv4t::sem::{Flag, ShiftType, Width};
+use frame::{Frame, Kind};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
+pub mod frame;
 pub mod lift_check;
 pub mod metrics;
 pub mod shape;
@@ -185,6 +187,8 @@ struct Code<'a> {
     ctx: Ctx<'a>,
     funcs: Vec<Func>,
     sums: Summaries,
+    /// Each function's stack frame ([`frame`]).
+    frames: BTreeMap<u32, Frame>,
 }
 
 /// Lift `rom` whole. `name` is the program's name for its front end.
@@ -259,6 +263,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 found: Vec::new(),
                 soft: &mut soft,
                 labels: f.blocks.keys().enumerate().map(|(i, &k)| (k, i)).collect(),
+                frame: c.frames.get(&f.entry),
+                cur: f.entry,
             };
             let s = c.sums.get(f.entry);
             let text = p.print(s);
@@ -369,6 +375,39 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     for (f, why) in &soft.unproven {
         writeln!(report, "  f_{f:08x}: {why}").unwrap();
     }
+    // The stack frames of the functions printed (a stand-in's isn't).
+    let frames: Vec<&Frame> = codes
+        .iter()
+        .flat_map(|c| {
+            c.funcs
+                .iter()
+                .filter(|f| !holes.standins.contains_key(&f.entry))
+                .filter_map(|f| c.frames.get(&f.entry))
+        })
+        .collect();
+    let slots: usize = frames.iter().map(|f| f.slots.len()).sum();
+    let escaping: usize = frames.iter().map(|f| f.escaping()).sum();
+    let by_kind = Kind::ALL
+        .iter()
+        .map(|&k| {
+            let n: usize = frames
+                .iter()
+                .flat_map(|f| &f.slots)
+                .filter(|s| s.escapes & k as u8 != 0)
+                .count();
+            format!("{} {n}", k.what())
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    writeln!(
+        report,
+        "stack frames (native/frame.rs): {slots} slots in {} functions with any, {escaping} of them escaping ({by_kind}); {} functions lose sp's offset; sp-relative accesses to slots that don't escape {}, that do {}",
+        frames.iter().filter(|f| !f.slots.is_empty()).count(),
+        frames.iter().filter(|f| f.lost).count(),
+        soft.sp_slots[0],
+        soft.sp_slots[1],
+    )
+    .unwrap();
     let mut m = Metrics::default();
     let n = |x: usize| x as u64;
     // The prelude is hand-written, not lifted: its own metric, which may
@@ -398,6 +437,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("hard_holes", n(hard.len()));
     m.push("blocks", n(blocks));
     m.push_accesses(&soft.access);
+    m.push("sp_accesses_local_slot", soft.sp_slots[0]);
+    m.push("sp_accesses_escaping_slot", soft.sp_slots[1]);
     m.push("call_fn_calls", n(soft.indirect));
     m.push("jumps_by_value", n(soft.dyn_jumps));
     m.push("gap_targets", n(gaps.len()));
@@ -517,13 +558,21 @@ fn force_code(rom: &[u8], disc: &mut Discovery, k: u32) {
 fn code(ctx: Ctx<'_>) -> Code<'_> {
     let funcs: Vec<Func> = ctx.entries.iter().map(|&e| build_func(&ctx, e)).collect();
     let sums = summarize(&ctx, &funcs);
-    Code { ctx, funcs, sums }
+    let frames = frame::of_code(&ctx, &funcs, &sums);
+    Code {
+        ctx,
+        funcs,
+        sums,
+        frames,
+    }
 }
 
 #[derive(Default)]
 struct Soft {
     /// Loads (false) and stores (true) by where their address is.
     access: BTreeMap<(bool, Where), u64>,
+    /// The sp-relative ones to slots that don't escape, and that do.
+    sp_slots: [u64; 2],
     /// Lifted functions whose summary has a hole, or that have none.
     summary_holes: usize,
     /// Lifted functions taking and returning all of r0-r3 whose summary
@@ -554,6 +603,10 @@ struct FnPrinter<'a, 'b> {
     found: Vec<Hole>,
     soft: &'b mut Soft,
     labels: BTreeMap<u32, usize>,
+    /// The function's stack frame.
+    frame: Option<&'a Frame>,
+    /// The block being printed.
+    cur: u32,
 }
 
 fn v(i: ValueId) -> String {
@@ -703,6 +756,7 @@ impl FnPrinter<'_, '_> {
             let label = self.labels[k];
             writeln!(s, "            {label} => {{ // {:#010x}", gb.key).unwrap();
             let xs = exits(self.ctx, gb);
+            self.cur = *k;
             let body = self.block(&gb.block.insts, &xs, gb.block.thumb);
             s.push_str(&body);
             s.push_str("            }\n");
@@ -742,7 +796,7 @@ impl FnPrinter<'_, '_> {
                         Width::Half => ("ld16", " & !1"),
                         Width::Word => ("ld32", " & !3"),
                     };
-                    self.count(insts, addr, at, false);
+                    self.count(insts, addr, at, i, false);
                     let e = format!("{f}(g, {}{m})", v(addr));
                     match &guard {
                         Some(gv) => writeln!(
@@ -760,7 +814,7 @@ impl FnPrinter<'_, '_> {
                         Width::Half => ("st16", " & !1"),
                         Width::Word => ("st32", " & !3"),
                     };
-                    self.count(insts, addr, at, true);
+                    self.count(insts, addr, at, i, true);
                     let plant = if self.holes.plant == Some(at) {
                         ".wrapping_add(1)"
                     } else {
@@ -796,8 +850,9 @@ impl FnPrinter<'_, '_> {
     /// Count an access by the instruction at `at`: a constant address by
     /// its region; else as the value-set analysis knows the instruction's
     /// addresses (code it didn't reach, such as discovery's gaps, is
-    /// unknown).
-    fn count(&mut self, insts: &[Inst], addr: ValueId, at: u32, store: bool) {
+    /// unknown). An sp-relative one also by whether the slot it reaches
+    /// escapes ([`frame`]; one the frame's run didn't place, as escaping).
+    fn count(&mut self, insts: &[Inst], addr: ValueId, at: u32, i: usize, store: bool) {
         let w = match konst(insts, addr) {
             Some(a) => Where::Const(metrics::region(a)),
             None => match self.ctx.disc.rec.accesses.get(&at) {
@@ -810,6 +865,13 @@ impl FnPrinter<'_, '_> {
             },
         };
         *self.soft.access.entry((store, w)).or_default() += 1;
+        if w == Where::Sp {
+            let esc = self
+                .frame
+                .and_then(|f| f.escapes_at(self.cur, i))
+                .unwrap_or(true);
+            self.soft.sp_slots[esc as usize] += 1;
+        }
     }
 
     /// A jump to block or function `k`: a label, or a fall into another

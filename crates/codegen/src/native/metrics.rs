@@ -20,6 +20,11 @@
 //!   entry sp plus a constant);
 //! - `computed`: anything else, by region where the value-set analysis
 //!   bounds it to one, else `computed_unknown`.
+//!
+//! The sp-relative ones are split again by whether the stack slot they
+//! reach escapes (`super::frame`): `sp_accesses_local_slot` and
+//! `sp_accesses_escaping_slot` (one the frame's run didn't place counts as
+//! escaping).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
