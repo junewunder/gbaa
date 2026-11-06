@@ -1193,7 +1193,7 @@ says what a recipe or tool does and what it must still pass.
 - `just lift ROM [OUT] [FLAGS]` (native/lift-stage-a;
   `docs/native-port-design.md`, "The stage-A lifter as built"): the
   stage-A lifter. `gbaa-lift ROM OUT [--name NAME] [--holes FILE]
-  [--bars FILE] [--names DIR] [--layout guest] [--drop-standin KEY]
+  [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY]
   [--plant AT] [--copies N]` (`codegen::native`) writes the whole
   program to OUT (default `out/lift-<name>`) as `src/`: `main.rs` (the
   prelude, RAM, `ENTRY`), `fns.rs` (`FNS`) and the functions in modules
@@ -1204,8 +1204,10 @@ says what a recipe or tool does and what it must still pass.
   function plain Rust over byte RAM (`Game::ram`, EWRAM then IWRAM) and
   `runtime::hw`, a RAM access at a constant address a typed global's
   field (`g.ram.d_020000c0`; `Game::ram` is a `Ram` struct of them at the
-  guest's offsets, `--layout guest`, the only layout yet, which derefs to
-  the bytes; names from DIR's names files for this ROM, default `names/`;
+  guest's offsets, `--layout guest`, the default, which derefs to
+  the bytes; `--layout packed`, the play layout, puts them in the
+  lifter's order with the rest of RAM as `bytes`, and `g.ram[offset]`
+  finds a byte in the field that holds it, native/lift-packed-layout; names from DIR's names files for this ROM, default `names/`;
   native/ram-globals), its registers locals, blocks a `loop { match }` over
   local labels, calls Rust calls; then the recipe builds it into
   `target/recompiled` (`gbaa-native-<name>`, the native programs' headless
@@ -1261,15 +1263,20 @@ says what a recipe or tool does and what it must still pass.
   their `planted_flags` (`--fall-as-tail-call`, the old fall into another
   function; `--irq-at-waits`, the old IRQ run at a wait inside a critical
   section; `--plant-slot=0x08000182`, `fl_keep`'s store to a stack local
-  made one more, native/frame-locals) must be caught too. Passes with
-  `every metric within its bar`, six `pass (60x frames, 0 differences …)`
+  made one more, native/frame-locals) must be caught too. Each program is
+  lifted once more with `--layout packed` (`out/lift-<name>-packed`),
+  passed as `--packed`: it must draw the guest layout's frames and
+  record the same bytes, nothing skipped (native/lift-packed-layout).
+  Passes with
+  `every metric within its bar`, six `pass (60x frames, 0 differences …;
+  the play layout draws the same 60x frames, its records the same …)`
   lines, `planted fault caught (…-planted: frame 2: EWRAM byte 0x020000c0
   …)`, `(…-fall-as-tail-call: frame 1: EWRAM byte 0x020000c4 …)`,
   `(…-plant-slot-0x08000182: frame 1: EWRAM byte 0x020000c4: play 0x61,
   native 0x62 …)` and `(…-irq-at-waits: frame 2: EWRAM byte 0x020000c8:
   play 0x00, native 0x01 …)`, `planted hard hole caught` and `lift-check:
   passed`. Logs in `out/lift-*.txt`. About 10 minutes on quack. Heavy:
-  builds sixteen generated crates.
+  builds twenty-two generated crates.
 
   `gbaa-lift --shadow-locals` (native/frame-locals; by hand, not part of
   the check) keeps every stack local in the frame's bytes too and prints
