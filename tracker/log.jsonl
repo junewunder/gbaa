@@ -2297,3 +2297,4 @@
 {"at":"2026-11-06T12:55:46Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/recovery-saved-lr-return","text":"Recovery takes a bx through a copy of lr as a return: on main"}
 {"at":"2026-11-06T12:56:00Z","actor":"loop","tag":"eb63ac1b","host":"quack","cmd":"claim","id":"native/lift-ram-copies","text":"The lifter lifts the code a game copies to RAM: claimed"}
 {"at":"2026-11-06T12:58:38Z","actor":"loop","tag":"f9620931","host":"quack","cmd":"edit","id":"native/lift-bios-calls","text":"Lifted code makes the BIOS calls games use: edited (min-minutes)"}
+{"at":"2026-11-06T12:58:40Z","actor":"loop","tag":"f9620931","host":"quack","cmd":"unclaim","id":"native/lift-bios-calls","text":"Lifted code makes the BIOS calls games use: handed back by its session, its work kept (1 commit on its branch); ready"}
