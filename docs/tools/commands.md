@@ -43,11 +43,13 @@ says what a recipe or tool does and what it must still pass.
 - `just holes ROM [--frames N] [--press KEY@F-G/E]… [--no-summaries]
   [--show N]`: the hole report (`docs/research/native-holes.md`):
   discovery, a 5,400-frame instant-timing interpreter run with the
-  research press script, the function summaries, then
-  `analysis::holes::classify`. Prints one ranking line (hard holes by
+  research press script, the function summaries, the RAM copies found
+  with the run (`analysis::holes::ram_copies`: BIOS copies given the
+  run's entries, copies by DMA or the game's loops found by their bytes),
+  then `analysis::holes::classify`. Prints one ranking line (hard holes by
   kind; bytes reached but not discovered; busy loops that call
   functions; the flash library's stack routines stood in for,
-  `analysis::flash`) and each list. About a minute a game, capped at 3 GB. The
+  `analysis::flash`) and each list, the RAM copies among them. About a minute a game, capped at 3 GB. The
   doc's table is these lines; rerun all eight after changing
   `analysis::holes` or `crates/hole-report` and update it.
 - `just jt-score`: the jump-table check (decision 5c). Builds truth tables

@@ -6,9 +6,11 @@
 //! (instant timing, no save file) for N frames (default 5,400) with a press
 //! script (default: the one of `docs/research/code-without-rom-addresses.md`,
 //! [`DEFAULT_PRESSES`]), computes the function summaries
-//! (`codegen::saves::summarize`), and prints [`analysis::holes::classify`]'s
-//! report: one ranking line, then the holes by kind (`--show N` of each
-//! list, default 12).
+//! (`codegen::saves::summarize`), finds the RAM copies again with what the
+//! run saw ([`analysis::holes::ram_copies`]: the run's entries into BIOS
+//! copies, and copies made by DMA or the game's own loops), and prints
+//! [`analysis::holes::classify`]'s report over those: one ranking line,
+//! then the holes by kind (`--show N` of each list, default 12).
 //!
 //! What the run records, per instruction executed: the address and
 //! instruction set, its first raw value (and whether a later one differed:
@@ -653,6 +655,48 @@ fn main() -> ExitCode {
             .map(|(&e, s)| (e, s.holes.iter().cloned().collect::<Vec<_>>()))
             .collect::<BTreeMap<u32, Vec<String>>>()
     });
+    // The RAM copies again, now with the run's entries into them and the
+    // copies only the run shows (`analysis::holes::ram_copies`).
+    let t = std::time::Instant::now();
+    let copies = holes::ram_copies(rom, &disc, &run);
+    eprintln!("RAM copies: {:.1} s", t.elapsed().as_secs_f64());
+    let (folded, filled) = (
+        copies.iter().filter(|c| !c.seen).count(),
+        copies.iter().filter(|c| !c.filled.is_empty()).count(),
+    );
+    let mut overlays = Vec::new();
+    let mut copy_lines = Vec::new();
+    for c in copies {
+        let roots = |ks: &[u32]| {
+            let s: Vec<String> = ks.iter().take(4).map(|k| format!("0x{k:08x}")).collect();
+            let more = ks.len().saturating_sub(4);
+            s.join(",")
+                + &if more > 0 {
+                    format!(" (+{more})")
+                } else {
+                    String::new()
+                }
+        };
+        copy_lines.push(format!(
+            "  0x{:08x}..0x{:08x} from ROM 0x{:08x}, {}: {} functions; entered at {}; filled {}",
+            c.overlay.dst,
+            c.overlay.dst + c.overlay.len,
+            c.overlay.src,
+            if c.seen {
+                "seen in the run"
+            } else {
+                "a BIOS copy"
+            },
+            c.overlay.disc.funcs.len(),
+            roots(&c.entered),
+            if c.filled.is_empty() {
+                "none".into()
+            } else {
+                roots(&c.filled)
+            },
+        ));
+        overlays.push(c.overlay);
+    }
     let r = holes::classify(rom, &disc, &overlays, &run, summaries.as_ref());
 
     println!("{}", r.line(&game));
@@ -669,9 +713,10 @@ fn main() -> ExitCode {
         .filter(|j| !matches!(j, analysis::vsa::func::JumpRes::Resolved(_)))
         .count();
     println!(
-        "Recovery: {} indirect jumps, {} not resolved ({} rejected); {} of those reached in the run; overlays {} not resolved",
+        "Recovery: {} indirect jumps, {} not resolved ({} counted at their RAM copy instead; of the rest {} rejected, {} reached in the run); overlays {} not resolved",
         disc.rec.jumps.len(),
         recovery,
+        recovery - r.unresolved.len(),
         r.unresolved.iter().filter(|u| u.rejected).count(),
         r.unresolved.iter().filter(|u| u.reached).count(),
         r.overlay_unresolved.len(),
@@ -718,6 +763,16 @@ fn main() -> ExitCode {
             },
             if h.reached { ", reached" } else { "" },
         );
+    }
+    println!(
+        "RAM copies: {} ({} BIOS copies discovery folded, {} seen in the run); roots filled where the run went further: {}",
+        copy_lines.len(),
+        folded,
+        copy_lines.len() - folded,
+        filled,
+    );
+    for l in copy_lines.iter().take(show) {
+        println!("{l}");
     }
     println!("RAM code that changed: {} runs", r.ram_changed.len());
     for c in r.ram_changed.iter().take(show) {
