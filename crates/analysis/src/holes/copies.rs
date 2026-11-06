@@ -134,7 +134,9 @@ pub fn ram_copies(rom: &[u8], disc: &Discovery, run: &Run) -> Vec<RamCopy> {
             stop = stop.min(n.0);
         }
         for c in &out {
-            if c.overlay.dst >= end {
+            // A BIOS copy past this one's start ends it, even one the
+            // gaps it bridges run over.
+            if c.overlay.dst > dst {
                 stop = stop.min(c.overlay.dst);
             }
         }
@@ -246,7 +248,10 @@ fn sources(rom: &[u8], ins: &[(u32, Seen)]) -> Vec<(u32, u32, u32)> {
         }
         let (dst, last) = (ins[i].0, next(&ins[end - 1]));
         match groups.last_mut() {
-            Some(g) if g.2.wrapping_sub(g.0) == src.wrapping_sub(dst) && dst - g.1 <= JOIN => {
+            Some(g)
+                if g.2.wrapping_sub(g.0) == src.wrapping_sub(dst)
+                    && dst.saturating_sub(g.1) <= JOIN =>
+            {
                 g.1 = last
             }
             _ => groups.push((dst, last, src)),
@@ -283,7 +288,7 @@ fn best(rom: &[u8], ins: &[(u32, Seen)], k: usize) -> Option<(u32, usize)> {
     let first = u16::from_le_bytes([bytes[0], bytes[1]]);
     let start = ins[k].0;
     let mut out: Option<(u32, usize)> = None;
-    for o in ((start & 3) as usize..rom.len().saturating_sub(bytes.len())).step_by(4) {
+    for o in ((start & 3) as usize..(rom.len() + 1).saturating_sub(bytes.len())).step_by(4) {
         if u16::from_le_bytes([rom[o], rom[o + 1]]) != first || rom[o..o + bytes.len()] != bytes[..]
         {
             continue;
@@ -304,7 +309,7 @@ fn agree(rom: &[u8], ins: &[(u32, Seen)], k: usize, src: u32) -> usize {
     let dst = ins[k].0;
     let mut j = k;
     while j < ins.len()
-        && (j == k || ins[j].0 - next(&ins[j - 1]) <= JOIN)
+        && (j == k || ins[j].0.saturating_sub(next(&ins[j - 1])) <= JOIN)
         && rom_read(rom, src + (ins[j].0 - dst), ins[j].1.thumb) == Some(ins[j].1.raw)
     {
         j += 1;

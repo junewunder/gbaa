@@ -556,9 +556,11 @@ pub fn classify(
     for o in overlays {
         r.overlay_unresolved.extend(unres(&o.disc.rec));
         // A ROM source and its RAM copy count once, at the copy: the
-        // copy's analysis of the jump is the one that runs.
+        // copy's analysis of the jump is the one that runs (unless the
+        // run ran the ROM original too).
         r.unresolved.retain(|u| {
-            !(o.src..o.src + o.len).contains(&u.at)
+            u.reached
+                || !(o.src..o.src + o.len).contains(&u.at)
                 || !o.disc.rec.jumps.contains_key(&(o.dst + (u.at - o.src)))
         });
     }
