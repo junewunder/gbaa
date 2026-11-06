@@ -184,6 +184,9 @@ aren't in the ROM (built at run time) stays undiscovered. The report
 lists each copy: where, from where, a BIOS copy or seen in the run, its
 functions, the roots it was entered at and the ones filled in. Over the
 eight: 24 copies, 8 of them BIOS copies, 13 with roots filled in.
+The ones seen in the run are printed again as `[[copy]]` tables, which
+the lift's holes file takes (native/lift-ram-copies; Metroid's five are in
+its private `mods/metroid/holes.toml`).
 `codegen::seen` finds IWRAM copies by running the ROM too, for the play
 build's overlays; it widens each by comparing RAM with the ROM, which
 the hole report's run doesn't keep.

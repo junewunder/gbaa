@@ -923,6 +923,9 @@ fn main() -> ExitCode {
     );
     let mut overlays = Vec::new();
     let mut copy_lines = Vec::new();
+    // The copies only the run shows, as the lift's holes file takes them
+    // (`[[copy]]`, native/lift-ram-copies).
+    let mut copy_toml = String::new();
     for c in copies {
         let roots = |ks: &[u32]| {
             let s: Vec<String> = ks.iter().take(4).map(|k| format!("0x{k:08x}")).collect();
@@ -952,6 +955,21 @@ fn main() -> ExitCode {
                 roots(&c.filled)
             },
         ));
+        if c.seen {
+            let roots: Vec<String> = c
+                .entered
+                .iter()
+                .chain(&c.filled)
+                .map(|k| format!("0x{k:08x}"))
+                .collect();
+            copy_toml.push_str(&format!(
+                "\n[[copy]]\nsrc = 0x{:08x}\ndst = 0x{:08x}\nlen = 0x{:x}\nroots = [{}]\nwhy = \"seen in gbaa-holes' run\"\n",
+                c.overlay.src,
+                c.overlay.dst,
+                c.overlay.len,
+                roots.join(", ")
+            ));
+        }
         overlays.push(c.overlay);
     }
     let r = holes::classify(rom, &disc, &overlays, &run, summaries.as_ref());
@@ -1041,6 +1059,9 @@ fn main() -> ExitCode {
     );
     for l in copy_lines.iter().take(show) {
         println!("{l}");
+    }
+    if !copy_toml.is_empty() {
+        println!("  the ones seen in the run, for the lift's holes file:{copy_toml}");
     }
     println!("RAM code that changed: {} runs", r.ram_changed.len());
     for c in r.ram_changed.iter().take(show) {
