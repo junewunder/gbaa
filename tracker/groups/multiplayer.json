@@ -635,18 +635,22 @@
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): on the Deck, something netplay draws covered the bottom of the Controls page, where the dead zone is ('if you can see the bottom, because the netplay thing'); Athena found tapping the screen hid it. Find what it is (the room bar or the on-screen keyboard's space), and keep the whole menu visible while in a room. Check: a 1280x800 screenshot in a room, Controls page scrolled to its last row, nothing over it; just check.",
       "minMinutes": 25,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "14bc78bb",
-        "session": "14bc78bb-6b07-46da-82a6-5c179483fb6f",
-        "host": "quack",
-        "pid": 1418242,
-        "start": "29954965",
-        "at": "2026-11-06T03:01:21Z",
+        "at": "2026-11-06T03:18:00Z",
+        "evidence": "Cause: the netplay session report box at the screen foot covered the Main page's bottom rows (Controls had no report). Fix 83d96268 lays the report out first and fits the menu above it. 1280x800 cu shots in a room (session ohm1, server+host+headless joiner): Main and Controls last rows clear, nothing over them. Main merged (8438a2d9); just check passed (exit 0) after merge.",
         "branch": "unit/multiplayer/overlay-hides-menu",
-        "resumed": "91aceec8",
-        "prevSession": "91aceec8-3519-4031-888d-a97e8641c07d",
-        "pushed": true,
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T03:18:00Z",
+          "by": "14bc78bb",
+          "host": "quack",
+          "pid": 1418242,
+          "start": "29954965",
+          "beats": true,
+          "session": "14bc78bb-6b07-46da-82a6-5c179483fb6f",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
