@@ -1541,6 +1541,13 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   0.75 s, `room::SHAKY`) or lost (1/2, playing alone). Seen 2026-10-31 in a
   private `cu session` on quack, Kirby through a local `gbaa-server`, the
   joiner stopped with `SIGSTOP`.
+  A desync (the peers' hashes of a frame differ; multiplayer/desync-report)
+  is said when found: a toast and the mark (out of sync, red), a line on
+  the Netplay page, `netplay notice: …` on stdout; the end lines add
+  `netplay desyncs: N …, at frames …` (or `none`), and a headless run
+  with one keeps its report in `$GBAA_DATA/netplay/` too. `--desync-at N`
+  (`--desync-at1/2` in `gbaa-pingsim desktop`) forces one: from frame N
+  this peer runs its own seat holding A (`Rollback::skew`).
   Both peers run both GBAs on one cable (`netplay::gba`), interpreted in
   `gbaa-desktop`; a recompiled game's binary (`gbaa-<game>`) runs them on
   its code (multiplayer/recompiled-netplay; `--interp` forces the
