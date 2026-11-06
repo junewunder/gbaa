@@ -100,7 +100,8 @@ context compares our frame with the test's `.asm`, a `SCENE.md` or GBATEK)
 where mGBA is known wrong, or when a hash is recorded without mGBA.
 - *mechanical*: `just check` passing is enough; the worker records the unit done.
 - *independent*: a context that didn't do the work checks it. In a session,
-  spawn a verifier subagent with a fresh context (give it the unit, its
+  spawn a verifier subagent with a fresh context and wait for it in the
+  same call (`run_in_background: false`; give it the unit, its
   acceptance criteria and where the output is; ask for a verdict with
   evidence; a cheaper model is fine for mechanical checks). In the headless
   loop the next iteration picks up `review` units. The tracker enforces this
