@@ -721,6 +721,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-06T11:09:15Z",
+          "by": "75500cb2",
+          "text": "Untested edge: play build drops IME_ON when I is set at the tick after the IME write, so 'I set, IME on, msr clears I' waits for the next time point (hw lib would take it at the msr). Fixing only the play build would split it from the lift's IRQ wrapper."
+        },
+        {
           "at": "2026-11-03T03:49:30Z",
           "by": "87c063f4",
           "text": "Git move, 2026-11-02: the findings commit is now on unit/native/ime-release (3fc4bde7), on public main; a lane carries on from there. The old t3/ime-release-pending-irq stays in its worktree."
@@ -729,11 +734,6 @@
           "at": "2026-11-01T21:47:22Z",
           "by": "d1f70401",
           "text": "Correction: the branch is t3/ime-release-pending-irq (head 3542e7bd, unpushed, no upstream), not t3/8da29f9a."
-        },
-        {
-          "at": "2026-11-01T21:47:06Z",
-          "by": "d1f70401",
-          "text": "Paused before code. Findings and plan on branch t3/8da29f9a in docs/native-stage-b.md (IME WIP): tick_native ignores event::IRQ; prelude io_write16 must irq_release on IME 0->1 using lifted r13 as sp. Next: both fixes, agb/native-ime-release, flag control, checks."
         }
       ],
       "round": "2026-11-01T21:43:43Z"
