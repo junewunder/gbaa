@@ -237,15 +237,23 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "82db0e66",
-        "session": "82db0e66-b6de-4f36-9df2-d644270c71be",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T04:42:48Z",
+        "checker": "a746da90b2d23991c",
+        "at": "2026-11-06T06:34:05Z",
+        "evidence": "Verifier a746da90b2d23991c ran just holes on all eight: 0 RAM bytes undiscovered each (RAM code run, not discovered: 0 runs), flash routines excepted; disc-pret 0.9991/0.9549, disc-agb 1.0/0.9835 and 1.0/0.5789, jt-score 676/676 and 584/617, all exit 0. Its four minor findings fixed; rerun after: ranking unchanged, just check green after merging main. Hard: Metroid 4, WarioWare 8, others as with run roots.",
         "branch": "unit/native/disc-ram-copies",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T06:34:05Z",
+          "by": "82db0e66",
+          "host": "quack",
+          "pid": 1417300,
+          "start": "29954434",
+          "beats": true,
+          "session": "82db0e66-b6de-4f36-9df2-d644270c71be",
+          "lane": "quack/1"
+        }
       },
       "round": "2026-11-06T04:42:48Z"
     },
