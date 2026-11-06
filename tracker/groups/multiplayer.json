@@ -515,21 +515,8 @@
         "by": "a87279be",
         "at": "2026-11-06T04:13:27Z",
         "evidence": "just fly-up; just fly-deploy refused (old machine mounted gbaa_data), destroyed it, deployed again: logs show 'gbaa-server fly-global-services:7374 --min-version 1', rooms on UDP 7374, no volume, IPv4 37.16.3.41 kept. just room-sim calm --server 37.16.3.41: pass, 10 hashes and the end match on both seats. just fly-down: stopped. Fly made 2 machines (HA); fly-deploy now passes --ha=false; scaling to 1 was refused here, asked june. just check passes.",
-        "branch": "unit/multiplayer/fly-redeploy-rooms",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-06T04:13:27Z",
-          "by": "a87279be",
-          "host": "quack",
-          "pid": 1417300,
-          "start": "29954434",
-          "beats": true,
-          "session": "a87279be-0635-4b70-af88-29989823feda",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-06T04:04:46Z"
+        "host": "quack"
+      }
     },
     {
       "id": "multiplayer/rogue-coop-menus",
