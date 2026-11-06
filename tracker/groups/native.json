@@ -252,19 +252,7 @@
         "checker": "verifier-ac768f4a",
         "at": "2026-11-06T04:01:23Z",
         "evidence": "Fresh verifier subagent ran just holes on Emerald, both Kirbys, Metroid, Rogue: 0 changed RAM runs at 0x03007dxx in each (Rogue's one left is its mixer at 0x030059f0); hard totals 29/21/25/7/80, were 34/29/30/18/86. ReadFlash1/ReadFlash_Core/VerifyFlashSector_Core recognised by analysis::flash, stood in by runtime::hw::flash, checked against agb_flash.c. just check passes after merging main; lift-check --only native-spike passes (Hw gained save).",
-        "branch": "unit/native/flash-stack-standin",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-06T04:01:23Z",
-          "by": "2e628fae",
-          "host": "quack",
-          "pid": 1417300,
-          "start": "29954434",
-          "beats": true,
-          "session": "2e628fae-dffe-4d31-ac94-df1f651f6eeb",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -272,8 +260,7 @@
           "by": "2e628fae",
           "text": "Not wired into gbaa-lift yet (no lifted game saves to flash): at a recognised call into RAM, call Routine::call on Hw::save. Hw::save starts as Flash512; a program must set its kind. Exemption is by address only (see holes.rs doc)."
         }
-      ],
-      "round": "2026-11-06T03:01:11Z"
+      ]
     },
     {
       "id": "native/hw-sound",
