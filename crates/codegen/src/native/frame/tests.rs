@@ -306,6 +306,37 @@ fn a_callees_stack_arguments_escape() {
 }
 
 #[test]
+fn an_address_passed_as_a_stack_argument_escapes() {
+    // `f(1, 2, 3, 4, &x)`: the argument word at sp (-16) holds &x (-12),
+    // and nothing else escapes.
+    let mut b = B::default();
+    b.prologue();
+    let x = b.sp(4);
+    let k = b.k(9);
+    b.st(x, k);
+    let a = b.sp(0);
+    let p = b.sp(4);
+    b.st(a, p);
+    let caller = func(
+        1,
+        vec![(
+            1,
+            b,
+            Edge::Call {
+                target: Some(9),
+                ret: 2,
+            },
+        )],
+    );
+    let mut c = B::default();
+    let a = c.sp(0);
+    c.ld(a);
+    let fs = frames_of(&vec![caller, func(9, vec![(9, c, Edge::Return)])]);
+    assert_eq!(kinds(&fs[&1], -16), vec![Kind::Args]);
+    assert_eq!(kinds(&fs[&1], -12), vec![Kind::Stored]);
+}
+
+#[test]
 fn sp_lost_escapes_every_slot() {
     let mut b = B::default();
     b.prologue();

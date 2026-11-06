@@ -326,10 +326,14 @@ local), so locals need an escape analysis first.
   | native-irq-hold | 866 | 253 | 2,912 | 708 |
 
   On native-spike, by kind: passed to a callee 148, stack argument 232,
-  stored 121, returned 2, arithmetic 69; no function loses sp. The spike's
+  stored 122, returned 2, arithmetic 69; no function loses sp. The spike's
   stack-argument count is high because one function there reads 54 bytes
   above its entry sp, and every indirect call is assumed to call it; the
-  callee sets of `native/fnref-flow` would narrow that.
+  callee sets of `native/fnref-flow` would narrow that. Two gaps the
+  locals unit must weigh: an escaping address marks only the slots at and
+  above it (a pointer into an object's middle reaching below isn't
+  followed), and a callee's stack-argument bytes count only its exact
+  sp-relative reads.
 - **Stack slots that don't escape as Rust locals**
   (`native/frame-locals`). Their loads and stores through sp become locals;
   escaping slots stay IWRAM bytes. Bar: 0 sp-relative accesses to slots

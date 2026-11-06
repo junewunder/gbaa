@@ -393,6 +393,10 @@ impl Run<'_, '_> {
                     V::Const(0) => val(v),
                     _ => V::tainted(val(v).bases()),
                 },
+                Op::Not(a) if matches!(val(a), V::Const(_)) => match val(a) {
+                    V::Const(c) => V::Const(!c),
+                    _ => unreachable!(),
+                },
                 Op::Not(a) | Op::Sext { v: a, .. } | Op::Rrx { v: a, .. } => {
                     V::tainted(val(a).bases())
                 }
@@ -648,6 +652,12 @@ fn resolve(raw: Raw, args: &dyn Fn(Option<u32>) -> u32) -> Frame {
                     s.escapes |= Kind::Args as u8;
                 }
             }
+        }
+    }
+    // What the stack-argument slots hold escapes too (`f(1, 2, 3, 4, &x)`).
+    for s in slots.iter().filter(|s| s.escapes()) {
+        for (_, held) in raw.holds.range(s.lo..s.hi.max(s.lo + 1)) {
+            points.extend(held.iter().map(|&h| (h, Kind::Stored)));
         }
     }
     // Each escaping address and what it reaches, then what escaping slots
