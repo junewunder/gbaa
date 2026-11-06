@@ -812,7 +812,8 @@
         "branch": "unit/native/lift-bios-calls",
         "beats": true,
         "handedBack": "2026-11-06T12:58:40Z",
-        "pushed": true
+        "pushed": true,
+        "ended": "2026-11-06T12:59:01Z"
       },
       "notes": [
         {
