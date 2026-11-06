@@ -762,7 +762,7 @@ and the two shortcuts above at game scale.
   pointers): 8 functions at their RAM keys, two of them stand-ins that
   call their ROM originals (the dispatcher's copy; 0x030016c5, a switch
   whose ROM jump table sends it back into the ROM function's cases).
-  Hard holes stay the 9 BIOS calls; 2,625 functions, 27,751 blocks.
+  Hard holes stay the 9 BIOS calls; 2,624 functions, 27,749 blocks.
 - **Metroid passes the native check on a route**
   (`native/metroid-native-check`). A route `units/metroid-native.toml`
   from boot into gameplay, compared every frame with sound
