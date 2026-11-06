@@ -626,7 +626,19 @@
       "check": "independent",
       "needs": ["native/ref-in-object"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "76e43878",
+        "session": "76e43878-d5be-4f5a-8400-f42e88106fa2",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T09:23:27Z",
+        "branch": "unit/native/ref-heap",
+        "beats": true
+      },
+      "round": "2026-11-06T09:23:27Z"
     },
     {
       "id": "native/lift-modules",
