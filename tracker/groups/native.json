@@ -848,7 +848,19 @@
       "title": "Function-address flow settles on a whole game",
       "detail": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): fnref::follow on Metroid (2,616 functions) took 68 s for round 0 and over 8 min for round 1 on quack (GBAA_FNREF_TRACE=1), so its lift skips it (skip_fn_flow in mods/metroid/holes.toml). It only feeds the report and stage B's fn_words metrics, but dense FnRef IDs need it. Make it settle in minutes on Metroid (per-function summaries, sparse reruns), then drop skip_fn_flow. Done when: Metroid's lift runs it in under 5 minutes and lift-check's bars hold.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "1e655045",
+        "session": "1e655045-e354-400c-a9ca-854c3c4380de",
+        "host": "quack",
+        "pid": 1418242,
+        "start": "29954965",
+        "at": "2026-11-06T12:59:15Z",
+        "branch": "unit/native/fnref-flow-scale",
+        "beats": true
+      },
+      "round": "2026-11-06T12:59:15Z"
     },
     {
       "id": "native/indirect-call-args-emerald",
