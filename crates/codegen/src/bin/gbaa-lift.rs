@@ -1,5 +1,5 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
-//! [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits]`:
+//! [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--plant-slot=AT] [--shadow-locals]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
 //! stage A). Writes the whole program as a Rust crate to OUT (`Cargo.toml`,
 //! `src/main.rs`, a copy of the ROM for its data, `report.txt`), with the
@@ -24,7 +24,16 @@
 //! `--irq-at-waits` runs an IRQ at a wait whatever the CPSR's I bit, as
 //! stage A first did, where the hardware holds it until a critical
 //! section's end, which the native check must catch on
-//! `agb/native-irq-hold` (unit `native/lift-irq-hold`).
+//! `agb/native-irq-hold` (unit `native/lift-irq-hold`); `--plant-slot=AT`
+//! makes the store of the instruction at AT, which must be to a stack slot
+//! printed as a Rust local, store its value plus one, which the native
+//! check must catch on `agb/native-frame-locals` (unit
+//! `native/frame-locals`).
+//!
+//! `--shadow-locals` keeps every stack local in the frame's bytes as well
+//! and prints a `shadow local:` line to stderr wherever a load from a
+//! local differs from them: something the escape analysis didn't see
+//! wrote the frame. A check by hand, not part of the lift check.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -41,7 +50,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--plant-slot=AT] [--shadow-locals]"
         );
         ExitCode::FAILURE
     };
@@ -50,6 +59,7 @@ fn main() -> ExitCode {
     };
     let (mut name, mut holes, mut bars) = (None, None, None);
     let (mut drop, mut plant, mut tail, mut irq_at_waits) = (None, None, false, false);
+    let (mut plant_slot, mut shadow) = (None, false);
     let hex = |s: &str| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok();
     let mut it = rest.iter();
     while let Some(a) = it.next() {
@@ -59,6 +69,18 @@ fn main() -> ExitCode {
         }
         if a == "--irq-at-waits" {
             irq_at_waits = true;
+            continue;
+        }
+        if a == "--shadow-locals" {
+            shadow = true;
+            continue;
+        }
+        // One word, so the lift check's `planted_flags` can name it.
+        if let Some(at) = a.strip_prefix("--plant-slot=") {
+            match hex(at) {
+                Some(at) => plant_slot = Some(at),
+                None => return usage(),
+            }
             continue;
         }
         match (a.as_str(), it.next()) {
@@ -105,6 +127,8 @@ fn main() -> ExitCode {
     holes.plant = plant;
     holes.fall_as_tail_call = tail;
     holes.irq_at_waits = irq_at_waits;
+    holes.plant_slot = plant_slot;
+    holes.shadow_locals = shadow;
     // Read before the lift, so a bad file fails at once.
     let bars = match &bars {
         Some(p) => match std::fs::read_to_string(p)

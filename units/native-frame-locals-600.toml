@@ -1,0 +1,14 @@
+# agb/native-frame-locals for 600 frames with no input: the stack-locals
+# program of the native lifter's check (native/frame-locals; `just
+# lift-check`), its lift (gbaa-lift) against the play build at --timing
+# native by route-check --native. What it draws:
+# agb/native-frame-locals/SCENE.md.
+rom = "$GBAA_DATA/agb/native-frame-locals.gba"
+
+[[checkpoint]]
+name = "native-frame-locals-600"
+frame = 600
+hash = "810ca660f7f77795"
+# Verified: mGBA 0.10.5 (`target/release/mgba-dump ROM --frames 600
+# --hash`) draws this at frame 600, and its pixels are SCENE.md's
+# (2026-11-06).
