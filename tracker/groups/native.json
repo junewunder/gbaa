@@ -337,6 +337,13 @@
           "lane": "quack/2"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-06T06:57:41Z",
+          "by": "338023f7",
+          "text": "Not yet in hw: H-blank DMA's price on the clock, DMA/FIFO DMA by address via write16 (panics). direct-sound has no planted fault; psg-square's plant covers the audio compare."
+        }
+      ],
       "round": "2026-11-06T06:19:07Z"
     },
     {
