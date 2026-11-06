@@ -82,8 +82,8 @@ says what a recipe or tool does and what it must still pass.
   flags (`--frames N`, `--no-summaries`, `--press …`) go to every game;
   `--cover` gives each its coverage file (hours, not minutes). Fails if
   any game's run did. One 3 GB cap, no swap, for the whole run (the games
-  run one at a time). About 9 minutes for the eight: run it with `just
-  long start holes -- just holes-all`. Use it, not a loop over `just
+  run one at a time). About 10 minutes for the eight (9.5 to 11 measured): run it
+  with `just long start holes -- just holes-all`. Use it, not a loop over `just
   holes`, to compare before and after a change: run it on main, then on
   the branch with `--against` the first DIR.
 - `just jt-score`: the jump-table check (decision 5c). Builds truth tables
