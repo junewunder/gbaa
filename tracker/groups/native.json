@@ -803,7 +803,19 @@
       "title": "Lifted code makes the BIOS calls games use",
       "detail": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): the lifter prints only swi 0x02, 0x04-0x06 and 0x0B (native.rs, Plan::Swi); every other call is a hard hole, and gbaa-holes doesn't count them (it reported Metroid's BIOS holes as 0). Metroid needs 0x03 Stop, 0x08 Sqrt, 0x0C CpuFastSet, 0x11/0x12 LZ77UnComp, 0x19 SoundBias, 0x1F MidiKey2Freq, 0x25 MultiBoot; other games more ({unit:bios/swi-survey} lists them). Add them to the prelude over runtime::hw::bios (it has lz77, rl, arctan2), each with an agb test program or lift-check case, and make gbaa-holes count the calls the lifter can't print. lines_prelude may rise (say how many and why). Done when: lift-check green with a case per new call, and gbaa-holes' BIOS count matches the lifter's on the eight games.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "f9620931",
+        "session": "f9620931-58ea-47d3-9d59-3b6e2ab88d05",
+        "host": "quack",
+        "pid": 1418242,
+        "start": "29954965",
+        "at": "2026-11-06T12:46:45Z",
+        "branch": "unit/native/lift-bios-calls",
+        "beats": true
+      },
+      "round": "2026-11-06T12:46:45Z"
     },
     {
       "id": "native/lift-ram-copies",
