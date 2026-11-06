@@ -235,6 +235,23 @@ fn msr_control_rekeys_the_fallthrough() {
 }
 
 #[test]
+fn a_store_to_ime_ends_a_native_block() {
+    // `ldr r1, =0x0400_0208; strh r0, [r1]; nop; bx lr`, the literal after.
+    let words = [0xE59F_1008, 0xE1C1_00B0, 0xE1A0_0000, 0xE12F_FF1E];
+    let (mut rom, d) = program(&words, &[0x0800_0000]);
+    rom.extend(0x0400_0208u32.to_le_bytes());
+    let mut ctx = Ctx::new(&rom, &d);
+    let f = build_func(&ctx, 0x0800_0000);
+    assert_eq!(f.blocks[&0x0800_0000].insns.len(), 4);
+    // Under native timing it ends after the store, so the tick that takes
+    // the IRQ it lets through is the interpreter's (native/ime-release).
+    ctx.cfg.clock = crate::func::Clock::Native;
+    let f = build_func(&ctx, 0x0800_0000);
+    assert_eq!(f.blocks[&0x0800_0000].insns.len(), 2);
+    assert_eq!(f.blocks[&0x0800_0008].insns.len(), 2);
+}
+
+#[test]
 fn a_conditional_instructions_effects_share_one_if() {
     // `movseq r0, r1; bx lr`: N, Z, C and r0 under one guard, the flags
     // as one CPSR write (C rewritten with its old value: `mov` with no

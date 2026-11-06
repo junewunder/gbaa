@@ -64,7 +64,10 @@
 //! hardware does: while it is set, a request waits in `IF` and the waits
 //! wake without running a handler ([`wait_irq`] and [`halt`] return when
 //! one they wait for is requested); the program's write that clears I
-//! calls [`irq_release`], which runs them at once.
+//! calls [`irq_release`], which runs them at once. **`IME`** holds them
+//! the same way: a write that sets it again with one pending (a critical
+//! section that clears `IME`, as agbcc games do) runs it at once, through
+//! [`write_ime`].
 //!
 //! **Stopping.** [`Host::present`] may return [`Exit`]; every call that
 //! can reach a V-blank returns it, and the game passes it up with `?`
@@ -740,6 +743,19 @@ fn dispatch<G: Native>(g: &mut G) {
 /// hardware takes a held IRQ at once. Moves no time.
 pub fn irq_release<G: Native>(g: &mut G) {
     dispatch(g);
+}
+
+/// The program wrote `v` to `IME`. If that set it again (0 to 1), run
+/// the handlers of what's requested and enabled at once, as the hardware
+/// takes a pending IRQ the moment `IME` is written back (unless the CPSR's
+/// I bit holds it). [`Hw::write16`] alone only stores it, as it can't
+/// reach the program. Moves no time.
+pub fn write_ime<G: Native>(g: &mut G, v: u16) {
+    let was = g.hw().irq.master_enable;
+    g.hw().write16(reg::IME, v);
+    if !was && g.hw().irq.master_enable {
+        dispatch(g);
+    }
 }
 
 /// Whether a source in `mask` is requested and enabled while the CPSR's I

@@ -1,6 +1,6 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
 //! [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT]
-//! [--fall-as-tail-call] [--irq-at-waits] [--plant-slot=AT] [--shadow-locals]
+//! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--plant-slot=AT] [--shadow-locals]
 //! [--copies N]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
 //! stage A). Writes the whole program as a Rust crate to OUT (`Cargo.toml`,
@@ -34,7 +34,11 @@
 //! `--irq-at-waits` runs an IRQ at a wait whatever the CPSR's I bit, as
 //! stage A first did, where the hardware holds it until a critical
 //! section's end, which the native check must catch on
-//! `agb/native-irq-hold` (unit `native/lift-irq-hold`); `--plant-slot=AT`
+//! `agb/native-irq-hold` (unit `native/lift-irq-hold`); `--ime-at-waits`
+//! leaves an IRQ pending when a store sets `IME` again to the next wait,
+//! as stage A first did, where the hardware takes it at once, which the
+//! native check must catch on `agb/native-ime-release` (unit
+//! `native/ime-release`); `--plant-slot=AT`
 //! makes the store of the instruction at AT, which must be to a stack slot
 //! printed as a Rust local, store its value plus one, which the native
 //! check must catch on `agb/native-frame-locals` (unit
@@ -67,7 +71,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--plant-slot=AT] [--shadow-locals] [--copies N]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--plant-slot=AT] [--shadow-locals] [--copies N]"
         );
         ExitCode::FAILURE
     };
@@ -76,6 +80,7 @@ fn main() -> ExitCode {
     };
     let (mut name, mut holes, mut bars, mut names) = (None, None, None, None);
     let (mut drop, mut plant, mut tail, mut irq_at_waits) = (None, None, false, false);
+    let mut ime_at_waits = false;
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
     let mut layout = codegen::native::globals::Layout::Guest;
     let hex = |s: &str| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok();
@@ -87,6 +92,10 @@ fn main() -> ExitCode {
         }
         if a == "--irq-at-waits" {
             irq_at_waits = true;
+            continue;
+        }
+        if a == "--ime-at-waits" {
+            ime_at_waits = true;
             continue;
         }
         if a == "--shadow-locals" {
@@ -155,6 +164,7 @@ fn main() -> ExitCode {
     holes.plant = plant;
     holes.fall_as_tail_call = tail;
     holes.irq_at_waits = irq_at_waits;
+    holes.ime_at_waits = ime_at_waits;
     holes.plant_slot = plant_slot;
     holes.shadow_locals = shadow;
     holes.copies = copies;
