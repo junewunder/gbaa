@@ -448,7 +448,7 @@
       "title": "Function pointers as dense FnRef IDs",
       "detail": "docs/native-stage-b.md, piece 3; design section 4. Using {unit:native/fnref-flow}'s proven words: rewrite function-pointer words in the lifter's copy of ROM data and in pool constants to dense IDs; FNS dense from 1 under a new gbaa-lift --fn-ids dense (the flag doesn't exist yet: stage A's IDs are always ROM keys, {d:stage-a-function-pointers-are-rom-keys-no-dense}); ROM keys stay the default for the native check (RAM then holds the play build's numbers). Done when: just lift-check passes with ROM keys; each program's --fn-ids dense build draws the same frames over 600 frames as its ROM-key build (route-check --native ... --packed DENSE_BIN, wired into the lift-check driver); bar: 0 ROM keys left in a dense build; just check passes.",
       "check": "independent",
-      "needs": ["native/fnref-flow"],
+      "needs": ["native/fnref-flow", "native/fnref-heap-sites"],
       "uses": ["heavy"],
       "minMinutes": 120
     },
@@ -703,6 +703,14 @@
       "title": "Recovery takes a bx through a copy of lr as a return",
       "detail": "From {unit:native/disc-run-call-targets}: once discovery has m4a's ply_* routines (run roots), each 'mov r12, lr; ... bx r12' is an unresolved jump, reached: Emerald 11->22, Rogue 50->60, both Kirbys 2->14, Minish Cap 25->34 in just holes. The value-set analysis should know r12 holds the entry lr and call it a return. Done when just holes shows none of these and jt-score, disc-pret and disc-agb keep their bars.",
       "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-heap-sites",
+      "title": "Function flow: the heap by allocation site and field",
+      "detail": "docs/native-stage-b.md, piece 3, fnref-flow as built: one pile holds every heap store, so a heap load used as a number marks every function word stored there (32-36 of each agb program's ~55 words). Split the pile by allocation site (agb's allocator's callers) and field offset in crates/codegen/src/native/fnref.rs. Done when: fn_words_not_proven bar lowered to the measured value on every program (it must fall), unit tests for two heap objects kept apart, just lift-check and just check pass.",
+      "check": "independent",
+      "needs": ["native/fnref-flow"],
       "uses": ["heavy"]
     }
   ]
