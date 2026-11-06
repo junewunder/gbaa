@@ -617,6 +617,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-06T13:20:29Z",
+          "by": "eb63ac1b",
+          "text": "Its branch's commits (holes file from mods/, skip_fn_flow) were merged into {unit:native/lift-ram-copies} and land with it. mods/metroid/holes.toml now has 5 [[copy]] tables and stand-ins at 0x03000c7c, 0x030016c5; lift: 2,624 functions, 9 BIOS holes left."
+        },
+        {
           "at": "2026-11-06T12:12:12Z",
           "by": "f93b1ecd",
           "text": "26 hard holes -> 9: mods/metroid/holes.toml stands in reset, IRQ dispatcher, classic-NES code; skips fnref flow. Left: 9 BIOS calls ({unit:native/lift-bios-calls}). Then just lift ROM out/lift-metroid --name metroid, build, quote numbers (doc has a measurement build)."
@@ -831,17 +836,13 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "eb63ac1b",
-        "session": "eb63ac1b-1ff4-437c-8963-0586d4d3af12",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T12:56:00Z",
-        "branch": "unit/native/lift-ram-copies",
-        "beats": true
-      },
-      "round": "2026-11-06T12:56:00Z"
+        "checker": "verifier-a5468275",
+        "at": "2026-11-06T13:20:18Z",
+        "evidence": "Verifier subagent (fresh context) lifted Metroid with mods/metroid/holes.toml's five [[copy]] tables: functions_iwram 8 (0x03000c7c, 0x030016c5 stand-ins calling their ROM originals, checked against ROM bytes; 0x03003b91/ba0, 0x030041ed/1fc, 0x03004295/2a4 lifted), hard holes only the 9 BIOS calls, none in f_03…; just lift-check passed. just check passes after merging main (and after the review's bounds fix). Branch also merges unit/native/metroid-lifts (holes from mods/, skip_fn_flow).",
+        "host": "quack"
+      }
     },
     {
       "id": "native/fnref-flow-scale",
@@ -860,6 +861,13 @@
         "branch": "unit/native/fnref-flow-scale",
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-06T13:26:46Z",
+          "by": "1e655045",
+          "text": "Branch f02475e3: cached every-cell reads, cap once per load: Metroid settles in 614 s, 11 rounds (was 63 s r0, 534 s r1, unsettled); same counts. Rounds 1-4 rerun ~2600 fns, ~90 s each; values carry the 5270-token pile. Next: join shares Rc if subset; why r2-3 rerun all."
+        }
+      ],
       "round": "2026-11-06T12:59:15Z"
     },
     {
