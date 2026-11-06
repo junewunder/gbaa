@@ -20,9 +20,15 @@ path = "src/bin/check.rs"
 
 [[bin]]
 # agb/psg-square as a native program, for the native check's sound
-# (src/psg_square.rs). Its registers only: the library plays no sound.
+# (src/psg_square.rs): the PSG's square channels and FIFO A.
 name = "native-psg-square"
 path = "src/psg_square.rs"
+
+[[bin]]
+# agb/direct-sound as a native program, for the native check's direct
+# sound (src/direct_sound.rs): both FIFOs by DMA, a timer IRQ's swaps.
+name = "native-direct-sound"
+path = "src/direct_sound.rs"
 
 [dependencies]
 native-host = { path = "../native-host" }
@@ -37,7 +43,8 @@ serde = { version = "1", features = ["derive"] }
 toml = "1"
 
 [features]
-# One planted wrong store in the game (src/game.rs): the check must see it.
+# One planted wrong store in the game (src/game.rs), and one wrong sample
+# in psg-square's wave (src/psg_square.rs): the check must see them.
 plant = []
 # The check layout (docs/native-port-design.md section 7, `--layout
 # guest`): RAM as the ROM's EWRAM and IWRAM, globals at their link
