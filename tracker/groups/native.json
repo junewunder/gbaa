@@ -440,21 +440,8 @@
         "checker": "verifier-forwards",
         "at": "2026-11-06T07:50:45Z",
         "evidence": "Fresh-context verifier (verifier-forwards) reviewed the diff and reran just check (pass) and gbaa-lift --bars on all five programs: four_register_functions_without_summary_hole 0 on each (was 27/22/29/28/29), shaped 27/22/29/28/29, lines unchanged. Its one real finding (demand not following forwards; known calls by value) was fixed with a test. After the final merge of main: just lift-check passed (5 native checks, 600/601 frames, 0 differences, all planted controls caught), just check passed.",
-        "branch": "unit/native/lift-params",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-06T07:50:45Z",
-          "by": "5676c8cf",
-          "host": "quack",
-          "pid": 1417300,
-          "start": "29954434",
-          "beats": true,
-          "session": "5676c8cf-660d-4eec-8079-aa5a1175c958",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-06T07:00:03Z"
+        "host": "quack"
+      }
     },
     {
       "id": "native/fnref-dense",
