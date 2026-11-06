@@ -52,7 +52,11 @@
 //! from the sources above; a number made by arithmetic the run doesn't
 //! follow, or read from I/O, is never one. So an unknown value is never a
 //! function's address, and the whole addresses a target may hold are its
-//! complete callee set (a piece of one called is a hole of its origin).
+//! complete callee set (a piece of one called is a hole of its origin),
+//! unless the run dropped one on the way ([`Val::lost_rom`]): a "from here
+//! on" ROM read cut short at 256 KB, a ROM-bounded read too wide to make,
+//! or a ROM pointer less an unknown. A target that may hold such a value
+//! has an incomplete callee set.
 //! Compiled code keeps that; hand-written code that builds a code address
 //! from parts wouldn't, and its constants would show as not proven (they
 //! are never read as a whole word).
@@ -173,12 +177,23 @@ struct Val {
     mem: bool,
     /// Maybe anything else.
     unk: bool,
+    /// Maybe a function address, or a ROM pointer to some, that the run
+    /// dropped: a ROM read cut short or too wide to make, or arithmetic on
+    /// a ROM pointer it gave up on. A call through it has an incomplete
+    /// callee set, whatever whole addresses it holds besides.
+    lost_rom: bool,
 }
 
 /// More numbers than this in a value: it's unknown.
 const NUMS: usize = 8;
 /// More exact ROM pointers than this: "from the lowest on".
 const ROMS: usize = 16;
+/// The most ROM bytes one read by an unknown index reads (a "from here
+/// on" pointer up to the next code, or a ROM range the value-set analysis
+/// bounds); past it the read is cut short and the value marked
+/// [`Val::lost_rom`]. The agb programs' data runs to about 110 KB; reading
+/// it all costs about a second of each lift.
+const ROM_READ: u32 = 0x4_0000;
 
 impl Val {
     fn unk() -> Val {
@@ -196,7 +211,7 @@ impl Val {
     }
 
     fn join(&mut self, o: &Val) -> bool {
-        let before = (self.toks.len(), self.mem, self.unk);
+        let before = (self.toks.len(), self.mem, self.unk, self.lost_rom);
         if self.toks.is_empty() {
             self.toks = o.toks.clone();
         } else if !o.toks.is_subset(&self.toks) {
@@ -204,8 +219,9 @@ impl Val {
         }
         self.mem |= o.mem;
         self.unk |= o.unk;
+        self.lost_rom |= o.lost_rom;
         self.cap();
-        before != (self.toks.len(), self.mem, self.unk)
+        before != (self.toks.len(), self.mem, self.unk, self.lost_rom)
     }
 
     /// Widen: too many numbers are unknown, too many ROM pointers are
@@ -572,11 +588,17 @@ fn to_mem(v: &Val, w: u8) -> (Vec<(Tok, u8)>, Vec<Form>) {
     if v.unk || v.mem || v.toks.is_empty() {
         out.push((OTHER, w));
     }
+    if v.lost_rom {
+        out.push((LOST, w));
+    }
     (out, bad)
 }
 
 /// In memory: something stored that isn't a function's or ROM address.
 const OTHER: Tok = Tok::Num(0);
+/// In memory: a value with [`Val::lost_rom`] stored (no other number is
+/// kept in memory: [`to_mem`] makes each [`OTHER`]).
+const LOST: Tok = Tok::Num(1);
 
 /// What a load at width `w` reads of memory `m`.
 fn from_mem(m: &Mem, w: u8, into: &mut Val) {
@@ -597,6 +619,11 @@ fn from_mem(m: &Mem, w: u8, into: &mut Val) {
             }
             Tok::Rom(_) | Tok::RomFrom(_) if w == 4 => t,
             _ => {
+                // A mark, not a value: nothing else came of it.
+                if t == LOST {
+                    into.lost_rom = true;
+                    continue;
+                }
                 into.mem = true;
                 continue;
             }
@@ -716,9 +743,14 @@ impl Run<'_, '_> {
             into.join(v);
             return;
         }
-        let end = self.img.bound(a).min(a.saturating_add(0x4000));
+        let bound = self.img.bound(a);
+        let end = bound.min(a.saturating_add(ROM_READ));
         let mut p = a & !3;
-        let mut v = Val::default();
+        let mut v = Val {
+            // Cut short: the words past the cut go unread.
+            lost_rom: end < bound,
+            ..Val::default()
+        };
         while p < end {
             self.rom_read(p, w.min(4), &mut v);
             p += 4;
@@ -772,7 +804,18 @@ impl Run<'_, '_> {
                     R::T(t) => {
                         out.toks.insert(t);
                     }
-                    R::Unk => out.unk = true,
+                    R::Unk => {
+                        out.unk = true;
+                        // A ROM pointer less an unknown: the run gives it
+                        // up (other ops on a pointer make a number, by the
+                        // closed world: an alignment test, a difference).
+                        if op == BinOp::Sub
+                            && matches!(x, Some(Tok::Rom(_) | Tok::RomFrom(_)))
+                            && y.is_none()
+                        {
+                            out.lost_rom = true;
+                        }
+                    }
                     R::Hole(why, num) => {
                         for t in [x, y].into_iter().flatten() {
                             if let Tok::Fn { .. } = t {
@@ -824,7 +867,9 @@ impl Run<'_, '_> {
         // In the closed world nothing unknown is a function's address, so
         // the whole addresses the target may hold are all it can call (a
         // piece of one, called, is a hole of its origin's, above).
-        let complete = !callees.is_empty();
+        // Unless the run dropped one: a ROM read it cut short or couldn't
+        // make, or a ROM pointer it lost.
+        let complete = !callees.is_empty() && !t.lost_rom;
         let site = Site {
             callees: callees.clone(),
             complete,
@@ -974,12 +1019,20 @@ impl Run<'_, '_> {
                                     }
                                 }
                             }
+                            // A ROM pointer through a word load's
+                            // rotation stays one, as a function does.
+                            Tok::Rom(_) | Tok::RomFrom(_)
+                                if n == Some(0) || (kind == ShiftType::Ror && n.is_none()) =>
+                            {
+                                out.toks.insert(t);
+                            }
                             Tok::Num(c) | Tok::Rom(c) => match n {
                                 Some(n) => {
                                     out.toks.insert(num_tok(self.img, shift(kind, c, n)));
                                 }
                                 None => out.unk = true,
                             },
+                            // Shifted, it's no pointer (the closed world).
                             Tok::RomFrom(_) => out.unk = true,
                         }
                     }
@@ -1076,6 +1129,10 @@ impl Run<'_, '_> {
                 }
                 _ => Val::unk(),
             };
+            let mut v = v;
+            if !v.lost_rom && lost_from(&inst.op).iter().any(|x| vals[x.index()].lost_rom) {
+                v.lost_rom = true;
+            }
             if self.trace && self.g.flow.holes.len() != holes_before {
                 let ops: Vec<String> = inst_operands(&inst.op)
                     .into_iter()
@@ -1184,7 +1241,7 @@ impl Run<'_, '_> {
                 Some((lo, hi))
                     if self.img.word(lo).is_some()
                         && self.img.word(hi).is_some()
-                        && hi - lo < 0x4000 =>
+                        && hi - lo < ROM_READ =>
                 {
                     match self.g.rom_hull.get(&(lo, hi, w)) {
                         Some(v) => {
@@ -1203,6 +1260,14 @@ impl Run<'_, '_> {
                     }
                 }
                 _ => {
+                    // Bounded to ROM but too wide to read: its words go
+                    // unread.
+                    if let Some((lo, hi)) = hull
+                        && self.img.word(lo).is_some()
+                        && self.img.word(hi).is_some()
+                    {
+                        out.lost_rom = true;
+                    }
                     self.g.read_pile(w, &mut out);
                     let (lo, hi) = hull.unwrap_or((0, u32::MAX));
                     for (_, c) in self.g.cells.range(lo.saturating_sub(3)..=hi) {
@@ -1351,7 +1416,10 @@ impl Run<'_, '_> {
                 }
                 // CpuSet and CpuFastSet from ROM copy its words to RAM.
                 if matches!(out.bios, Some(0x0B | 0x0C)) {
-                    let mut got = Val::default();
+                    let mut got = Val {
+                        lost_rom: s.regs[0].lost_rom,
+                        ..Val::default()
+                    };
                     for &t in &s.regs[0].toks {
                         match t {
                             Tok::Rom(a) | Tok::RomFrom(a) => self.rom_from(a, 4, &mut got),
@@ -1400,6 +1468,23 @@ impl Run<'_, '_> {
             }
         }
         rets
+    }
+}
+
+/// The operands whose [`Val::lost_rom`] a word-valued op's result takes
+/// (a dropped address through a load or arithmetic may still be one).
+fn lost_from(op: &Op) -> Vec<ValueId> {
+    match *op {
+        Op::Bin(_, a, b)
+        | Op::Adc { a, b, .. }
+        | Op::MulLongLo { a, b, .. }
+        | Op::MulLongHi { a, b, .. }
+        | Op::Select { a, b, .. } => vec![a, b],
+        Op::Not(a) | Op::Shift { v: a, .. } | Op::Rrx { v: a, .. } | Op::Sext { v: a, .. } => {
+            vec![a]
+        }
+        Op::Load { addr, .. } => vec![addr],
+        _ => vec![],
     }
 }
 
