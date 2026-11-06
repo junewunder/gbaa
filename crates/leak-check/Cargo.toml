@@ -8,3 +8,10 @@ publish = false
 # fails if a tracked file, or an unpushed commit's message, holds a private
 # string. The private strings themselves can't be in the repo, so they're
 # in $GBAA_DATA/leak-words.txt (src/lib.rs).
+#
+# Also the docs' line budgets (docs/budgets.toml, src/budgets.rs), the
+# other check on tracked text.
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "1"
