@@ -547,6 +547,37 @@ and the two shortcuts above at game scale.
   (`native/lift-modules`). A literal lift of a real game is about a million
   lines (74,500 per 29 KB of agb code); one `main.rs` that size may not
   build. Split the generated crate into modules, proved on the agb programs.
+
+  Built 2026-11-06 on quack (`codegen::native::modules`). `src/` is
+  `main.rs` (the prelude, RAM's struct, `NAME`, `ENTRY`, and a `mod` and
+  glob `use` per file), `fns.rs` (`FNS`) and `m_<first key>.rs`: the
+  functions in print order (ROM address, then each IWRAM copy), a module
+  closing at the first function that takes it past 4,000 lines (one
+  longer function is a module of its own). Each module starts `use
+  crate::*;`. The point is codegen: rustc gives a module its own codegen
+  unit, so one `main.rs` ran LLVM on one core. The `lines` metric leaves
+  out the wiring (`mod`, `use`, each module's head); the four `use`
+  lines the root lost lowered every program's bar by 5.
+
+  Measured on quack (24 cores, the build lock's `CARGO_BUILD_JOBS=6`, the
+  crate alone rebuilt, deps built; `/usr/bin/time`, maxrss the largest
+  rustc):
+
+  | crate | lines, all files | modules | wall | CPU | peak rustc RSS |
+  |---|---|---|---|---|---|
+  | native-spike, one `main.rs` | 72,320 | 1 | 6.4, 9.7, 8.1 s | 6.5-9.9 s | 0.50 GB |
+  | native-spike, split | 72,439 | 17 (+2) | 4.3, 6.7, 5.5 s | 8.3-9.3 s | 0.55 GB |
+  | spike `--copies 4` | 288,084 | 68 | 18.1 s | 30.2 s | 1.27 GB |
+  | spike `--copies 14` | 1,006,884 | 238 | 54.8 s | 94.0 s | 3.67 GB |
+
+  (Runs of the two spike crates alternated, on a machine with the other
+  lane busy, hence the spread.) Peak RAM grows by about 14 MB per
+  4,000-line module, both from 1 to 4 copies and from 4 to 14: rustc's
+  front end holds the whole crate, so this is the crate's cost spread
+  over its modules, not a module's alone; a million-line game builds in
+  under 4 GB and a minute. `gbaa-lift --copies N` makes the synthetic
+  crate (each copy's functions renamed `f<i>_<key>`, kept by a `#[used]`
+  table of their entries).
 - **Metroid lifts with no hard holes and builds**
   (`native/metroid-lifts`). Needs the discovery units, both shortcuts and
   the module split. The ROM's file name has spaces, so it lifts with
