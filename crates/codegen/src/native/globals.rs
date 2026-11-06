@@ -14,13 +14,17 @@
 //! accesses stay bytes. With no names, accesses that only touch are
 //! globals of their own: nothing says they are one array.
 //!
-//! The globals are the fields of `Ram`, a `#[repr(C)]` struct at the
-//! guest's offsets (`--layout guest`, the only layout yet) with byte
+//! The globals are the fields of `Ram`. At `--layout guest` (the native
+//! check's) it is a `#[repr(C)]` struct at the guest's offsets with byte
 //! padding between, so `Ram` is still the guest's EWRAM and IWRAM byte
 //! for byte: the prelude derefs it to `[u8; EWRAM + IWRAM]`, which every
 //! other access (computed addresses, the stack, the hardware library, the
-//! native check's comparison) uses as before. A field's name is the names
-//! file's for the datum at its start, else `d_<guest address>`.
+//! native check's comparison) uses as before. At `--layout packed` (the
+//! play layout, unit `native/lift-packed-layout`) the fields are in the
+//! lifter's order and the rest of RAM is `bytes`; `g.ram[offset]` finds a
+//! byte in the field that holds it (`prelude_packed.rs`). A field's name
+//! is the names file's for the datum at its start, else `d_<guest
+//! address>`.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -224,8 +228,16 @@ impl Globals {
         })
     }
 
-    /// The `Ram` struct: each global at its offset, bytes between.
-    pub fn ram_struct(&self) -> String {
+    /// The `Ram` struct at `layout`.
+    pub fn ram_struct(&self, layout: Layout) -> String {
+        match layout {
+            Layout::Guest => self.ram_guest(),
+            Layout::Packed => self.ram_packed(),
+        }
+    }
+
+    /// Each global at its offset, bytes between.
+    fn ram_guest(&self) -> String {
         let mut s = String::new();
         s.push_str("/// EWRAM then IWRAM at the guest's offsets (`--layout guest`), each global the\n/// constant-address accesses find a typed field (native/ram-globals), bytes between.\n");
         s.push_str("#[repr(C, align(4))]\npub struct Ram {\n");
@@ -244,6 +256,56 @@ impl Globals {
         s.push_str("}\n");
         s
     }
+
+    /// The globals in the lifter's order, then `bytes` (all of RAM, the
+    /// globals' own bytes there unused), and `RAM_GLOBALS`, which the
+    /// packed prelude (`prelude_packed.rs`) finds a byte's place by. The
+    /// order is the widest element first (no padding between), then from
+    /// the highest guest address down: globals the guest has side by side
+    /// aren't, so an access that strays from its field into the next one
+    /// reads other bytes here than in the guest layout.
+    fn ram_packed(&self) -> String {
+        let mut gs: Vec<&Global> = self.0.values().collect();
+        gs.sort_by_key(|g| (std::cmp::Reverse(g.elem), std::cmp::Reverse(g.lo)));
+        let mut s = String::new();
+        s.push_str("/// EWRAM then IWRAM at the play layout (`--layout packed`): each global the\n/// constant-address accesses find a typed field (native/ram-globals) in the lifter's\n/// order, the rest of RAM `bytes`.\n");
+        s.push_str("#[repr(C, align(4))]\npub struct Ram {\n");
+        for g in &gs {
+            writeln!(s, "    pub {}: {},", g.name, g.ty()).unwrap();
+        }
+        writeln!(s, "    bytes: [u8; {SIZE:#x}],\n}}\n").unwrap();
+        s.push_str(
+            "/// Each global's RAM offset, size and field offset in `Ram`, by RAM offset.\n",
+        );
+        writeln!(
+            s,
+            "const RAM_GLOBALS: [(usize, usize, usize); {}] = [",
+            self.0.len()
+        )
+        .unwrap();
+        for g in self.0.values() {
+            writeln!(
+                s,
+                "    ({:#x}, {}, std::mem::offset_of!(Ram, {})),",
+                g.lo, g.len, g.name
+            )
+            .unwrap();
+        }
+        s.push_str("];\n");
+        s
+    }
+}
+
+/// Where `Ram`'s globals are (`gbaa-lift --layout`; docs/native-port-design.md,
+/// section 7, "The check build").
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Layout {
+    /// At the guest's offsets, bytes between: the native check's layout.
+    #[default]
+    Guest,
+    /// In the lifter's order, the rest of RAM bytes: the play layout,
+    /// which must draw what the guest layout does.
+    Packed,
 }
 
 /// A typed access through a computed address ([`Globals::object`]).
@@ -463,10 +525,28 @@ mod tests {
     #[test]
     fn the_struct_is_the_whole_ram() {
         let g = Globals::carve(&[(0x8, 4), (SIZE - 4, 4)], &[], &BTreeMap::new());
-        let s = g.ram_struct();
+        let s = g.ram_struct(Layout::Guest);
         assert!(s.contains("    _p00000: [u8; 0x8],\n    pub d_02000008: u32,\n"));
         assert!(s.contains("    _p0000c: [u8; 0x47ff0],\n    pub d_03007ffc: u32,\n}"));
-        let s = Globals::default().ram_struct();
+        let s = Globals::default().ram_struct(Layout::Guest);
         assert!(s.contains("    _p00000: [u8; 0x48000],\n}"));
+    }
+
+    #[test]
+    fn the_packed_struct_orders_its_fields_and_places_them() {
+        let g = Globals::carve(
+            &[(0x8, 4), (0xc, 4), (0x20, 2), (0x24, 1)],
+            &[],
+            &BTreeMap::new(),
+        );
+        let s = g.ram_struct(Layout::Packed);
+        // Widest first, then from the highest address down; then bytes.
+        assert!(s.contains(
+            "    pub d_0200000c: u32,\n    pub d_02000008: u32,\n    pub d_02000020: u16,\n    pub d_02000024: u8,\n    bytes: [u8; 0x48000],\n}"
+        ));
+        // The table by RAM offset.
+        assert!(s.contains("[(usize, usize, usize); 4] = [\n    (0x8, 4, std::mem::offset_of!(Ram, d_02000008)),\n    (0xc, 4,"));
+        let s = Globals::default().ram_struct(Layout::Packed);
+        assert!(s.contains("[(usize, usize, usize); 0] = [\n];"));
     }
 }

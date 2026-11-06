@@ -526,6 +526,29 @@ typed pointers, below; until then they are soft holes, counted.
   the lifter's order (no guest offsets) must draw the same frames as the
   guest-layout build (`route-check --native … --packed`).
 
+  As built (2026-11-06): `gbaa-lift --layout packed`
+  (`Globals::ram_struct`, `crates/codegen/src/native/globals.rs`, and
+  `native/prelude_packed.rs`, which takes the place of the prelude's
+  guest-layout `Ram` code). `Ram`'s fields are the globals, widest
+  element first and then from the highest guest address down (so globals
+  the guest has side by side aren't neighbours here), then `bytes`, all
+  of RAM; `RAM_GLOBALS` gives each global's RAM offset, size and
+  `offset_of!` field. Typed accesses are the same code in both layouts;
+  everything else reaches RAM as `g.ram[offset]` (computed addresses,
+  the stack, the BIOS calls, the stand-ins through `ld`/`st`), which the
+  packed `Index` finds in the field holding that byte, else in `bytes`.
+  So the prelude's `ld16`/`ld32`/`st16`/`st32` now go a byte at a time
+  (a word may span two globals, as crt0's `.bss` clear's do): 3 more
+  prelude lines (497 to 500). A packed program records RAM as the guest
+  lays it out (`Ram::image`), and `route-check --packed` now compares its
+  records with the guest build's whole, nothing skipped, after the frame
+  hashes. `gbaa-lift-check` lifts and builds every program once more at
+  `packed` and passes it as `--packed`: all six draw and record the same
+  600 (601) frames. Pointers are still guest addresses in both layouts
+  (no `Ref<T>` until `native/ref-heap`); a packed build with two of the
+  spike's allocator globals swapped in `RAM_GLOBALS` crashed the check,
+  by hand.
+
 Pointer arithmetic the types don't explain (section 6's last hard-hole
 kind for stage B) is measured here for the first time.
 
