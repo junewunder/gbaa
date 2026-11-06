@@ -19,7 +19,11 @@
 //! never returning, and each is run again when a callee's summary grows.
 //! An unknown callee (an indirect call) reads r0–r3 and returns a value in
 //! r0, clobbering r1–r3 and r12; a BIOS call reads and writes what GBATEK
-//! says it does.
+//! says it does. An indirect call whose callee set is known complete
+//! ([`summarize_sets`]; the lifter's `native::fnref`) reads the union of
+//! its callees' parameters and leaves what any of them may leave, like a
+//! direct call to each (decision "Indirect calls pass r0-r3 until their
+//! callee sets are known").
 //!
 //! [`compare`] checks summaries against DWARF prototypes ([`proto_regs`]):
 //! the gate the stage-A lifter's parameter lists and return values rest
@@ -121,9 +125,11 @@ pub struct Summary {
     /// Some path returns to the caller.
     pub returns: bool,
     /// The results: bit `n` for rN, r0–r3, defined on every return and
-    /// read by a caller after a direct call.
+    /// read by a caller after a direct call (or an indirect one whose
+    /// complete callee set has it).
     pub results: u16,
-    /// The registers callers read after a direct call to it (bit `n` for
+    /// The registers callers read after a direct call to it, or an
+    /// indirect call whose complete callee set has it (bit `n` for
     /// rN, r0–r3 and r12), defined or not: with their own instructions,
     /// and by passing them on to a callee that reads them.
     pub read_after: u16,
@@ -152,6 +158,8 @@ pub struct Summary {
     /// callees, and the functions it tail-calls (a jump into another's
     /// entry the run doesn't go on through).
     pub callees: BTreeSet<u32>,
+    /// Its indirect calls, by address (with a complete callee set or not).
+    pub indirect_sites: BTreeSet<u32>,
     pub undefined_reads: BTreeMap<(u32, u8), Option<u32>>,
 }
 
@@ -230,14 +238,20 @@ fn bios(n: u8) -> (u8, u8) {
     }
 }
 
+/// Each indirect call's complete callee set, by the call's address.
+pub type Sets = BTreeMap<u32, BTreeSet<u32>>;
+
 /// A summary's run: the callees' summaries so far, and what it finds.
 pub(super) struct Sum<'a> {
     sums: &'a BTreeMap<u32, Summary>,
     assume: Assume,
+    /// The indirect calls whose callee sets are complete.
+    sets: &'a Sets,
     params: BTreeMap<u8, Cause>,
     /// r0–r3 and r12's origins, joined over every return.
     exit: Option<Vec<Org>>,
-    /// (callee, register): a read after a direct call of what it left,
+    /// (callee, register): a read after a direct call (or one of a
+    /// complete callee set) of what it left,
     /// the first found.
     used: BTreeMap<(u32, u8), Cause>,
     undefined: BTreeMap<(u32, u8), Option<u32>>,
@@ -251,10 +265,11 @@ pub(super) struct Sum<'a> {
 }
 
 impl<'a> Sum<'a> {
-    fn new(sums: &'a BTreeMap<u32, Summary>, assume: Assume) -> Sum<'a> {
+    fn new(sums: &'a BTreeMap<u32, Summary>, assume: Assume, sets: &'a Sets) -> Sum<'a> {
         Sum {
             sums,
             assume,
+            sets,
             params: BTreeMap::new(),
             exit: None,
             used: BTreeMap::new(),
@@ -278,6 +293,42 @@ impl<'a> Sum<'a> {
         }
     }
 
+    /// What the call at `site` to `callee` reads and leaves: an indirect
+    /// one with a complete callee set, the union of its callees'.
+    fn at_site(&self, site: u32, callee: Option<u32>) -> (u8, [Bits; 5]) {
+        let set = match callee {
+            None => self.sets.get(&site),
+            Some(_) => None,
+        };
+        let Some(set) = set else {
+            return self.callee(callee);
+        };
+        let (mut p, mut x) = (0, [Bits::default(); 5]);
+        for &c in set {
+            let (cp, cx) = self.callee(Some(c));
+            p |= cp;
+            for (a, b) in x.iter_mut().zip(cx) {
+                a.entry |= b.entry;
+                a.def |= b.def;
+                a.clob |= b.clob;
+            }
+        }
+        (p, x)
+    }
+
+    /// The functions the call at `site` to `callee` may reach whose
+    /// summaries it uses: its callee, or an indirect call's complete set.
+    fn targets(&self, site: u32, callee: Option<u32>) -> Vec<u32> {
+        match callee {
+            Some(c) => vec![c],
+            None => self
+                .sets
+                .get(&site)
+                .map(|s| s.iter().copied().collect())
+                .unwrap_or_default(),
+        }
+    }
+
     /// No return found, and a hole that may be why.
     fn lost(s: &Summary) -> bool {
         !s.returns && !s.holes.is_empty()
@@ -292,10 +343,10 @@ impl<'a> Sum<'a> {
         }
         for site in &o.sites {
             let callee = self.sites[site];
-            if let Some(c) = callee {
+            for c in self.targets(*site, callee) {
                 self.used.entry((c, r as u8)).or_insert(cause);
             }
-            let (p, x) = self.callee(callee);
+            let (p, x) = self.at_site(*site, callee);
             if defines(p, &x) & 1 << r == 0 {
                 self.undefined.insert((cause.at(), r as u8), callee);
             }
@@ -320,18 +371,25 @@ impl<'a> Sum<'a> {
 
     /// A call at `at` to `callee` (`None`: an indirect one), in `s`.
     pub(super) fn call(&mut self, s: &mut State, callee: Option<u32>, at: u32) {
-        self.refs.extend(callee);
-        if let Some(c) = callee
-            && self.sums.get(&c).is_some_and(Self::lost)
-        {
-            self.holes.insert(format!(
-                "calls 0x{c:08x}, whose summary has holes and no return"
-            ));
+        let targets = self.targets(at, callee);
+        self.refs.extend(targets.iter().copied());
+        for &c in &targets {
+            if self.sums.get(&c).is_some_and(Self::lost) {
+                self.holes.insert(format!(
+                    "calls 0x{c:08x}, whose summary has holes and no return"
+                ));
+            }
         }
-        let (params, exit) = self.callee(callee);
+        let (params, exit) = self.at_site(at, callee);
         for r in 0..4 {
             if params & 1 << r != 0 {
-                let cause = match callee {
+                // An indirect call with a complete callee set passes it
+                // to the first callee that reads it.
+                let reader = targets
+                    .iter()
+                    .copied()
+                    .find(|&c| self.callee(Some(c)).0 & 1 << r != 0);
+                let cause = match reader {
                     Some(c) => Cause::Callee { callee: c, at },
                     None => Cause::Indirect(at),
                 };
@@ -378,7 +436,7 @@ impl<'a> Sum<'a> {
         let mut out: BTreeMap<u8, BTreeSet<u32>> = BTreeMap::new();
         for (i, o) in self.exit.iter().flatten().enumerate() {
             for site in &o.sites {
-                if let Some(c) = self.sites[site] {
+                for c in self.targets(*site, self.sites[site]) {
                     out.entry(SLOTS[i]).or_default().insert(c);
                 }
             }
@@ -397,7 +455,7 @@ impl<'a> Sum<'a> {
         }
         for (i, o) in e.iter().enumerate() {
             for site in &o.sites {
-                let (_, x) = self.callee(self.sites[site]);
+                let (_, x) = self.at_site(*site, self.sites[site]);
                 out[i].def |= x[i].def;
                 out[i].clob |= x[i].clob;
             }
@@ -441,6 +499,14 @@ pub fn summarize(ctx: &Ctx, funcs: &[Func]) -> Summaries {
 
 /// [`summarize`], assuming `assume` of indirect calls.
 pub fn summarize_with(ctx: &Ctx, funcs: &[Func], assume: Assume) -> Summaries {
+    summarize_sets(ctx, funcs, assume, &Sets::new())
+}
+
+/// [`summarize_with`], an indirect call in `sets` (by its address) taken
+/// to call exactly the functions there: it reads their parameters and
+/// leaves what they leave, and what is read after it is read after each.
+/// `assume` holds for the rest.
+pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) -> Summaries {
     let proof = prove(ctx, funcs);
     let by_entry: BTreeMap<u32, &Func> = funcs.iter().map(|f| (f.entry, f)).collect();
     let mut sums: BTreeMap<u32, Summary> =
@@ -465,8 +531,13 @@ pub fn summarize_with(ctx: &Ctx, funcs: &[Func], assume: Assume) -> Summaries {
             }
             break;
         }
-        let w: Walk = walk(ctx, &by_entry, by_entry[&k], Some(Sum::new(&sums, assume)))
-            .expect("a summary's run records what the proof fails on");
+        let w: Walk = walk(
+            ctx,
+            &by_entry,
+            by_entry[&k],
+            Some(Sum::new(&sums, assume, sets)),
+        )
+        .expect("a summary's run records what the proof fails on");
         let sum = w.sum.expect("a summary's run");
         let exit = sum.exit_bits();
         let params = sum.params.keys().fold(0, |m, &r| m | 1 << r);
@@ -485,6 +556,12 @@ pub fn summarize_with(ctx: &Ctx, funcs: &[Func], assume: Assume) -> Summaries {
             holes: sum.holes.clone(),
             stopped: sum.stopped,
             callees: sum.refs.clone(),
+            indirect_sites: sum
+                .sites
+                .iter()
+                .filter(|(_, c)| c.is_none())
+                .map(|(&a, _)| a)
+                .collect(),
             undefined_reads: sum.undefined.clone(),
         };
         for &c in &sum.refs {

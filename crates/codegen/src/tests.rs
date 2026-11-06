@@ -1056,6 +1056,42 @@ fn a_result_returned_unread_is_read_where_its_callers_read_it() {
     assert_eq!((c.read_after, c.forwarded_after, c.results), (0, 1, 1));
 }
 
+/// `c: push {lr}; bl stub; adds r2, r1, #0; pop {r0}; bx r0`, `stub:
+/// bx r3` (a call through r3) and `f: adds r1, r0, #0; bx lr`, in Thumb.
+/// Taken as unknown, the call reads r0-r3 and leaves r1 undefined; with
+/// its callee set {f}, it reads r0 and leaves f's r1, which f returns.
+#[test]
+fn an_indirect_call_with_a_complete_callee_set_reads_its_callees() {
+    use crate::saves::{Assume, Cause, Sets, summarize_sets};
+    let h = [
+        0xB500, 0xF000, 0xF803, 0x1C0A, 0xBC01, 0x4700, // c
+        0x4718, // stub, 0x0c
+        0x1C01, 0x4770, // f, 0x0e
+    ];
+    let sizes = [2, 4, 2, 2, 2, 2, 2, 2];
+    let (c, f) = (0x0800_0001, 0x0800_000f);
+    let (rom, d) = thumb_program(&h, &sizes, &[c, f]);
+    let ctx = Ctx::new(&rom, &d);
+    let funcs = build_all(&ctx).funcs;
+    let plain = crate::saves::summarize(&ctx, &funcs);
+    let at = *plain.by_entry[&c]
+        .indirect_sites
+        .first()
+        .expect("c's call through r3");
+    assert_eq!(plain.by_entry[&c].params, 0xf);
+    assert_eq!(plain.by_entry[&c].causes[&3], Cause::Indirect(at));
+    assert!(!plain.by_entry[&c].undefined_reads.is_empty());
+    assert_eq!(plain.by_entry[&f].results, 0);
+    let sets = Sets::from([(at, [f].into())]);
+    let sums = summarize_sets(&ctx, &funcs, Assume::default(), &sets);
+    let (sc, sf) = (&sums.by_entry[&c], &sums.by_entry[&f]);
+    assert_eq!(sc.params, 0b1);
+    assert_eq!(sc.causes[&0], Cause::Callee { callee: f, at });
+    assert!(sc.undefined_reads.is_empty(), "{:x?}", sc.undefined_reads);
+    assert!(sc.callees.contains(&f));
+    assert_eq!((sf.params, sf.read_after, sf.results), (0b1, 0b10, 0b10));
+}
+
 #[test]
 fn a_typedef_struct_returned_by_value_takes_a_hidden_argument() {
     let sha = crate::names::sha1_hex(b"");

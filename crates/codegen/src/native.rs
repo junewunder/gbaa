@@ -50,8 +50,12 @@
 //!   (`--fn-ids rom` only): a literal lift loads pointers from ROM bytes
 //!   and RAM, so it can't renumber them. [`fnref`] follows every function
 //!   address to its uses and reports the ROM words dense IDs could rewrite
-//!   and each indirect call's callees (unit `native/fnref-flow`; nothing
-//!   printed changes yet).
+//!   and each indirect call's callees (unit `native/fnref-flow`). An
+//!   indirect call whose callee set is complete is summarised as calling
+//!   exactly those (the summaries run again with the sets,
+//!   [`crate::saves::summarize_sets`]), and passes `call_fn` only what
+//!   they read, taking back what they may change ([`call_fn_args`]; unit
+//!   `native/indirect-call-args`); an incomplete one passes all four.
 //!
 //! **Holes.** A function the lift can't print is a hard hole, named, and
 //! the lift fails (and the crate, which gets a `compile_error!` for it),
@@ -69,7 +73,7 @@
 //! ROM read at run time.
 
 use crate::func::{Ctx, ExitInfo, Func, Idle, Plan, build_func, exits, key};
-use crate::saves::{Summaries, Summary, summarize};
+use crate::saves::{Assume, Sets, Summaries, Summary, summarize, summarize_sets};
 use analysis::discovery::{self, Discovery};
 use analysis::ir::{BinOp, BitOp, Exit, Inst, Op, ValueId};
 use analysis::vsa::func::JumpRes;
@@ -326,8 +330,32 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         }
     }
     let globals = Globals::carve(&ram, &ranges, &holes.names);
+    let fnrefs = {
+        let ins: Vec<FlowIn> = codes
+            .iter()
+            .enumerate()
+            .map(|(i, c)| FlowIn {
+                ctx: &c.ctx,
+                src: if i == 0 {
+                    0x0800_0000
+                } else {
+                    overlays[i - 1].src
+                },
+                funcs: &c.funcs,
+                frames: &c.frames,
+            })
+            .collect();
+        fn_flow(rom, &disc, &overlays, &ins, &all)
+    };
+    // The summaries again, each indirect call with a complete callee set
+    // taken as calling exactly those (native/indirect-call-args). The
+    // frames, which the flow read, stay the first summaries'.
+    let sets = complete_sets(&fnrefs.0);
+    for c in &mut codes {
+        c.sums = summarize_sets(&c.ctx, &c.funcs, Assume::default(), &sets);
+    }
     let shapes = shapes_of(&codes, &all, holes);
-    let fnrefs = fn_flow(rom, &disc, &overlays, &codes, &all);
+    let args = call_fn_args(&sets, &codes, &shapes.shaped);
     // Each function's text by key, in print order: the modules' contents.
     let mut out: Vec<(u32, String)> = Vec::new();
     let mut report = String::new();
@@ -373,6 +401,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     .unwrap_or_default(),
                 cur: f.entry,
                 globals: &globals,
+                args: &args,
             };
             let s = c.sums.get(f.entry);
             let text = p.print(s);
@@ -521,6 +550,17 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     )
     .unwrap();
     report.push_str(&fnrefs.0.report(&fnrefs.1, &fnrefs.2));
+    writeln!(
+        report,
+        "indirect call arguments (native/indirect-call-args): {} of {} call_fn calls have a complete callee set, {} of them passing all of r0-r3; of the {} complete sets, {} have callees whose summaries read all four between them, {} a four-register callee (a summary hole, a stand-in)",
+        soft.indirect_complete,
+        soft.indirect,
+        soft.indirect_four_complete,
+        sets.len(),
+        args.union_four,
+        args.four_reg_callee,
+    )
+    .unwrap();
     let fn_proven = fnrefs.1.keys().filter(|w| fnrefs.0.proven(**w)).count();
     writeln!(
         report,
@@ -587,6 +627,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("sp_accesses_escaping_slot", soft.sp_slots[1]);
     m.push("sp_accesses_callers_frame", soft.sp_slots[2]);
     m.push("call_fn_calls", n(soft.indirect));
+    m.push("call_fn_complete", n(soft.indirect_complete));
+    m.push("call_fn_four_complete", n(soft.indirect_four_complete));
     m.push("jumps_by_value", n(soft.dyn_jumps));
     m.push("fn_words_proven", n(fn_proven));
     m.push("fn_words_not_proven", n(fnrefs.1.len() - fn_proven));
@@ -773,6 +815,15 @@ fn literal(ctx: &Ctx, src: u32, at: u32, thumb: bool, c: u32) -> Option<u32> {
     (rd(a, 4)? == c).then(|| a - ctx.base + src)
 }
 
+/// One code context, for [`fn_flow`]: its functions and their frames, and
+/// where its bytes are in ROM (an IWRAM copy's source).
+struct FlowIn<'a> {
+    ctx: &'a Ctx<'a>,
+    src: u32,
+    funcs: &'a [Func],
+    frames: &'a BTreeMap<u32, Frame>,
+}
+
 /// [`fnref::follow`] over every context's functions: the flow, every
 /// function word in ROM outside code (its key, and whether a literal pool
 /// read it), and the addresses of the calls printed through `call_fn`.
@@ -781,24 +832,21 @@ fn fn_flow(
     rom: &[u8],
     disc: &Discovery,
     overlays: &[discovery::Overlay],
-    codes: &[Code],
+    codes: &[FlowIn],
     all: &BTreeSet<u32>,
 ) -> (fnref::Flow, BTreeMap<u32, (u32, bool)>, BTreeSet<u32>) {
     let mut ins = Vec::new();
     let mut pools = BTreeSet::new();
     let mut call_fn = BTreeSet::new();
-    for (ci, c) in codes.iter().enumerate() {
-        let src = match ci {
-            0 => 0x0800_0000,
-            _ => overlays[ci - 1].src,
-        };
-        for f in &c.funcs {
+    for c in codes {
+        let src = c.src;
+        for f in c.funcs {
             let mut blocks = BTreeMap::new();
             for (&k, gb) in &f.blocks {
                 let insts = &gb.block.insts;
                 let mut exits_of = BTreeMap::new();
-                for x in exits(&c.ctx, gb) {
-                    let e = frame::edge(&c.ctx, f, all, gb, &x);
+                for x in exits(c.ctx, gb) {
+                    let e = frame::edge(c.ctx, f, all, gb, &x);
                     if matches!(e, frame::Edge::Call { target: None, .. }) {
                         call_fn.insert(x.at);
                     }
@@ -836,7 +884,7 @@ fn fn_flow(
                             }
                         }
                         Op::Pool(v) => {
-                            if let Some(w) = literal(&c.ctx, src, at, gb.block.thumb, v) {
+                            if let Some(w) = literal(c.ctx, src, at, gb.block.thumb, v) {
                                 lits.insert(i, w);
                                 if all.contains(&v) {
                                     pools.insert(w);
@@ -933,6 +981,10 @@ struct Soft {
     /// callee's run that stopped at a hole ([`Shapes::callee_hole`]).
     callee_holes: usize,
     indirect: usize,
+    /// Those with a complete callee set, and of them those passing all
+    /// of r0-r3 still.
+    indirect_complete: usize,
+    indirect_four_complete: usize,
     dyn_jumps: usize,
     /// Falls and jumps into another function's entry, printed through its
     /// extended entry.
@@ -962,6 +1014,9 @@ struct FnPrinter<'a, 'b> {
     cur: u32,
     /// RAM's typed globals.
     globals: &'a Globals,
+    /// What each `call_fn` call with a complete callee set passes and
+    /// takes back ([`call_fn_args`]), by its address.
+    args: &'a Args,
 }
 
 fn v(i: ValueId) -> String {
@@ -1508,6 +1563,21 @@ impl FnPrinter<'_, '_> {
         format!("{call}\n                    {then}")
     }
 
+    /// An indirect call at `at` to key `k` through `call_fn`: all of
+    /// r0-r3 in and out, or, where its callee set is complete, what its
+    /// callees read in and what they may change out.
+    fn call_fn(&mut self, at: u32, k: &str) -> String {
+        self.soft.indirect += 1;
+        let (pass, back) = self.args.by_site.get(&at).copied().unwrap_or((0xf, 0xf));
+        if self.args.by_site.contains_key(&at) {
+            self.soft.indirect_complete += 1;
+            if pass == 0xf {
+                self.soft.indirect_four_complete += 1;
+            }
+        }
+        call_fn_text(k, pass, back)
+    }
+
     fn exit(&mut self, e: Exit, x: &ExitInfo, thumb: bool) -> String {
         let ind = "                    ";
         let at = x.at;
@@ -1529,10 +1599,10 @@ impl FnPrinter<'_, '_> {
                 writeln!(s, "{ind}{wait}{c}").unwrap();
             }
             Plan::CallVia { reg, ret, .. } => {
-                self.soft.indirect += 1;
                 let r = reg.index();
-                let c = format!(
-                    "[r0, r1, r2, r3] = call_fn(g, if r{r} & 1 != 0 {{ r{r} }} else {{ r{r} & !3 }}, r13, {regs})?;"
+                let c = self.call_fn(
+                    at,
+                    &format!("if r{r} & 1 != 0 {{ r{r} }} else {{ r{r} & !3 }}"),
                 );
                 let c = self.call_then(c, ret, at);
                 writeln!(s, "{ind}{wait}{c}").unwrap();
@@ -1558,10 +1628,7 @@ impl FnPrinter<'_, '_> {
                     // An indirect call.
                     let c = match target {
                         Some(tk) if self.all.contains(&tk) => self.call_stmt(tk),
-                        _ => {
-                            self.soft.indirect += 1;
-                            format!("[r0, r1, r2, r3] = call_fn(g, {k}, r13, {regs})?;")
-                        }
+                        _ => self.call_fn(at, &k),
                     };
                     let c = self.call_then(c, ret, at);
                     writeln!(s, "{ind}{c}").unwrap();
@@ -1727,6 +1794,116 @@ fn dead_addresses(insts: &[Inst], typed: &[Option<Place>]) -> Vec<bool> {
 }
 
 /// Every function's shape ([`shape::shapes`]), over all code contexts.
+/// The callee-set run ([`fnref`]) over one code context, the ROM's,
+/// without a lift: the flow, and each indirect call's complete callee set
+/// ([`complete_sets`]), for [`crate::saves::summarize_sets`]. `sums` are
+/// the summaries the frames need ([`frame::of_code`]); `gbaa-recompile
+/// --summaries` runs it on Emerald. The lift runs it over every context
+/// with the stand-ins' code, so its sets can differ.
+pub fn callee_sets(
+    rom: &[u8],
+    disc: &Discovery,
+    ctx: &Ctx,
+    funcs: &[Func],
+    sums: &Summaries,
+) -> (fnref::Flow, Sets) {
+    let frames = frame::of_code(ctx, funcs, sums);
+    let all: BTreeSet<u32> = funcs.iter().map(|f| f.entry).collect();
+    let overlays = discovery::overlays(rom, disc);
+    let ins = [FlowIn {
+        ctx,
+        src: 0x0800_0000,
+        funcs,
+        frames: &frames,
+    }];
+    let (flow, _, _) = fn_flow(rom, disc, &overlays, &ins, &all);
+    let sets = complete_sets(&flow);
+    (flow, sets)
+}
+
+/// Each indirect call's complete callee set, from the flow: the calls (not
+/// the jumps by value) whose target can hold no other function.
+fn complete_sets(flow: &fnref::Flow) -> Sets {
+    flow.sites
+        .iter()
+        .filter(|(_, s)| s.complete && !s.tail)
+        .map(|(&a, s)| (a, s.callees.clone()))
+        .collect()
+}
+
+/// What each indirect call with a complete callee set passes `call_fn`
+/// and takes back from it (bits for r0-r3), by its address. A shaped
+/// callee's adapter reads its parameters and gives back its results and
+/// the rest as they went in; a four-register one (a summary hole, a
+/// stand-in) reads and gives back all four. So the call takes back what
+/// any callee may change, and passes what any reads, and what one may
+/// change while another leaves it as it came (that one gives back what
+/// was passed).
+/// A `call_fn` call to key `k` passing the registers of `pass` (0 for the
+/// rest) and taking back those of `back` (bits for r0-r3).
+fn call_fn_text(k: &str, pass: u8, back: u8) -> String {
+    let a: Vec<String> = (0..4)
+        .map(|r| {
+            if pass & 1 << r != 0 {
+                format!("r{r}")
+            } else {
+                "0".into()
+            }
+        })
+        .collect();
+    let call = format!("call_fn(g, {k}, r13, [{}])?", a.join(", "));
+    if back == 0xf {
+        return format!("[r0, r1, r2, r3] = {call};");
+    }
+    let set: Vec<String> = shape::regs(back)
+        .map(|r| format!(" r{r} = o[{r}];"))
+        .collect();
+    format!("{{ let o = {call};{} }}", set.concat())
+}
+
+/// [`call_fn_args`] for one callee set: what the call passes and takes
+/// back, given each callee's shape (`None`: four registers).
+fn site_args(cs: &BTreeSet<u32>, shape: impl Fn(u32) -> Option<Shape>) -> (u8, u8) {
+    let (mut reads, mut back, mut kept) = (0u8, 0u8, 0u8);
+    for &c in cs {
+        let (p, r) = shape(c).map_or((0xf, 0xf), |sh| (sh.params, sh.results));
+        reads |= p;
+        back |= r;
+        kept |= !r & 0xf;
+    }
+    (reads | (back & kept), back)
+}
+
+struct Args {
+    by_site: BTreeMap<u32, (u8, u8)>,
+    /// The sites whose callees' summaries (holes or not) read all four
+    /// between them, and those with a four-register callee.
+    union_four: usize,
+    four_reg_callee: usize,
+}
+
+fn call_fn_args(sets: &Sets, codes: &[Code], shaped: &BTreeMap<u32, Shape>) -> Args {
+    let sums: BTreeMap<u32, &Summary> = codes
+        .iter()
+        .flat_map(|c| c.sums.by_entry.iter().map(|(&k, s)| (k, s)))
+        .collect();
+    let mut a = Args {
+        by_site: BTreeMap::new(),
+        union_four: 0,
+        four_reg_callee: 0,
+    };
+    for (&at, cs) in sets {
+        let raw = cs
+            .iter()
+            .fold(0, |m, c| m | sums.get(c).map_or(0xf, |s| s.params));
+        a.union_four += usize::from(raw == 0xf);
+        a.four_reg_callee += usize::from(cs.iter().any(|c| !shaped.contains_key(c)));
+        a.by_site
+            .insert(at, site_args(cs, |c| shaped.get(&c).copied()));
+    }
+    a
+}
+
 fn shapes_of(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> Shapes {
     let mut nodes = BTreeMap::new();
     for (i, c) in codes.iter().enumerate() {
@@ -1998,6 +2175,32 @@ fn expr(op: &Op) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_complete_callee_set_passes_what_its_callees_read() {
+        let sh = |params, results| Some(Shape { params, results });
+        // f reads r0 and gives r0; g reads r1 and gives r0 and r2. The
+        // call passes r0, r1, and r2, which f leaves as it came while g
+        // changes it; it takes back r0 and r2, and r3 stays the caller's.
+        let shapes = |c: u32| match c {
+            1 => sh(0b0001, 0b0001),
+            2 => sh(0b0010, 0b0101),
+            _ => None,
+        };
+        assert_eq!(site_args(&[1, 2].into(), shapes), (0b0111, 0b0101));
+        // Every callee gives r0 back: it isn't passed for that.
+        assert_eq!(site_args(&[1].into(), shapes), (0b0001, 0b0001));
+        // A four-register callee: all four, both ways.
+        assert_eq!(site_args(&[1, 3].into(), shapes), (0xf, 0xf));
+        assert_eq!(
+            call_fn_text("k", 0b0011, 0b0001),
+            "{ let o = call_fn(g, k, r13, [r0, r1, 0, 0])?; r0 = o[0]; }"
+        );
+        assert_eq!(
+            call_fn_text("k", 0xf, 0xf),
+            "[r0, r1, r2, r3] = call_fn(g, k, r13, [r0, r1, r2, r3])?;"
+        );
+    }
 
     #[test]
     fn holes_file_parses_standins_and_jumps() {

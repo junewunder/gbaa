@@ -64,11 +64,15 @@
 //! answer.
 //!
 //! `gbaa-recompile --summaries ROM [--names FILE]... [--names-dir DIR]
-//! [--show N] [KEY...]`: each function's parameters, results and
-//! callee-saves ([`codegen::saves::summarize`]), checked against the map's
-//! DWARF prototypes ([`codegen::saves::compare`]): agree, disagree and
-//! no-prototype counts, the disagreements by category with N of each
-//! (default 10, a sample spread over the list), and each KEY's summary.
+//! [--show N] [--callee-sets] [KEY...]`: each function's parameters,
+//! results and callee-saves ([`codegen::saves::summarize`]), checked
+//! against the map's DWARF prototypes ([`codegen::saves::compare`]):
+//! agree, disagree and no-prototype counts, the disagreements by category
+//! with N of each (default 10, a sample spread over the list), and each
+//! KEY's summary. With `--callee-sets`, an indirect call with a complete
+//! callee set reads and leaves what its callees do
+//! ([`codegen::native::callee_sets`], [`codegen::saves::summarize_sets`];
+//! the function-address flow, which doesn't settle on a whole game yet).
 //!
 //! `gbaa-recompile --snapshots ROM FILE`: write to FILE the smallest
 //! structured function of each shape ([`codegen::snapshot`], `just
@@ -325,7 +329,7 @@ fn usage() -> ! {
          gbaa-recompile --fn-diff ROM OUT [--hand FILE KEYS] [--names-dir DIR] [FUNCS] | \
          gbaa-recompile --print ROM KEY... | \
          gbaa-recompile --saves ROM [KEY...] | \
-         gbaa-recompile --summaries ROM [--names FILE]... [--names-dir DIR] [--show N] [KEY...] | \
+         gbaa-recompile --summaries ROM [--names FILE]... [--names-dir DIR] [--show N] [--callee-sets] [KEY...] | \
          gbaa-recompile --snapshots ROM FILE [--names FILE... | --names-dir DIR] [--readable LIST] | \
          gbaa-recompile --sst OUT [PER_FILE [SEQS]] [--readable]"
     );
@@ -453,9 +457,11 @@ fn saves(rom: &[u8], disc: &Discovery, keys: &[String]) {
 /// ([`codegen::saves::compare`]).
 fn summaries(rom: &[u8], rest: &[String]) {
     let (mut paths, mut dir, mut show, mut keys) = (Vec::new(), None, 10, Vec::new());
+    let mut with_sets = false;
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
+            "--callee-sets" => with_sets = true,
             "--names" => paths.push(PathBuf::from(it.next().unwrap_or_else(|| usage()))),
             "--names-dir" => dir = Some(PathBuf::from(it.next().unwrap_or_else(|| usage()))),
             "--show" => {
@@ -473,7 +479,55 @@ fn summaries(rom: &[u8], rest: &[String]) {
     let disc = discover(rom.to_vec());
     let ctx = Ctx::new(rom, &disc);
     let funcs = codegen::emit::build_all(&ctx).funcs;
-    let sums = codegen::saves::summarize(&ctx, &funcs);
+    // Indirect calls with a complete callee set (native/indirect-call-args)
+    // read and leave what their callees do: the function addresses
+    // followed (codegen::native::fnref), which needs the frames, which
+    // need summaries without them.
+    let plain = codegen::saves::summarize(&ctx, &funcs);
+    let t = std::time::Instant::now();
+    let (flow, sets) = if with_sets {
+        codegen::native::callee_sets(rom, &disc, &ctx, &funcs, &plain)
+    } else {
+        Default::default()
+    };
+    let indirect: std::collections::BTreeSet<u32> = plain
+        .by_entry
+        .values()
+        .flat_map(|s| s.indirect_sites.iter().copied())
+        .collect();
+    let with_set = indirect
+        .iter()
+        .filter(|a| flow.sites.contains_key(a))
+        .count();
+    let complete = indirect.iter().filter(|a| sets.contains_key(a)).count();
+    let callees: usize = indirect
+        .iter()
+        .filter_map(|a| sets.get(a))
+        .map(|s| s.len())
+        .sum();
+    if with_sets {
+        println!(
+            "callee sets (codegen::native::fnref, {:.1} s{}): {} indirect calls, {with_set} with a callee set, {complete} of them complete (on average {:.1} callees)",
+            t.elapsed().as_secs_f64(),
+            if flow.unsettled {
+                ", didn't settle"
+            } else {
+                ""
+            },
+            indirect.len(),
+            callees as f64 / complete.max(1) as f64,
+        );
+    } else {
+        println!(
+            "callee sets: not followed (--callee-sets); {} indirect calls, each taken to read r0-r3",
+            indirect.len()
+        );
+    }
+    let sums = if with_sets {
+        codegen::saves::summarize_sets(&ctx, &funcs, codegen::saves::Assume::default(), &sets)
+    } else {
+        plain.clone()
+    };
     let all = &sums.by_entry;
     let n = |f: &dyn Fn(&codegen::saves::Summary) -> bool| all.values().filter(|s| f(s)).count();
     println!(
@@ -513,6 +567,14 @@ fn summaries(rom: &[u8], rest: &[String]) {
                 .iter()
                 .filter(|v| v.why.iter().any(|(c, _)| *c == cat));
             println!("  {:6}  {}", n.count(), cat.text());
+        }
+        if with_sets {
+            let p = codegen::saves::compare(&plain, m);
+            println!(
+                "dwarf, without callee sets (every indirect call reading r0-r3): {} agree, {} disagree",
+                p.agree.len(),
+                p.disagree.len()
+            );
         }
         let c = codegen::saves::compare(&sums, m);
         println!(
