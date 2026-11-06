@@ -2205,3 +2205,4 @@
 {"at":"2026-11-06T04:17:05Z","actor":"loop","tag":"78de4417","host":"quack","cmd":"claim","id":"multiplayer/four-seats","text":"Netplay rooms for up to four players (Kirby's four): claimed"}
 {"at":"2026-11-06T04:23:41Z","actor":"owner","tag":"1f762505","host":"quack","cmd":"answer","text":"the owner answered \"May a lane scale fly's gbaa-server down to one machine?\": lanes may","q":"q/may-lane-scale-fly-s","d":"d/may-lane-scale-fly-s","via":"1f762505"}
 {"at":"2026-11-06T04:35:11Z","actor":"loop","tag":"db7eff8c","host":"quack","cmd":"add-unit","id":"native/recovery-saved-lr-return","text":"new unit: Recovery takes a bx through a copy of lr as a return"}
+{"at":"2026-11-06T04:39:07Z","actor":"loop","tag":"78de4417","host":"quack","cmd":"done","id":"multiplayer/four-seats","text":"Netplay rooms for up to four players (Kirby's four): done"}
