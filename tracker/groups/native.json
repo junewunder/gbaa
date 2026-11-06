@@ -783,13 +783,25 @@
       "check": "independent",
       "needs": ["native/fnref-flow"],
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "41e1a197",
+        "session": "41e1a197-c4f3-496f-9ea1-6e09ccc945ba",
+        "host": "quack",
+        "pid": 1418242,
+        "start": "29954965",
+        "at": "2026-11-06T12:44:46Z",
+        "branch": "unit/native/fnref-heap-sites",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-06T12:31:54Z",
           "by": "62031260",
           "text": "When sets narrow, lower lift-check's call_fn_four_complete (56-60 per program, set by {unit:native/indirect-call-args}): every complete call_fn set today is the pile's 21 address-taken functions."
         }
-      ]
+      ],
+      "round": "2026-11-06T12:44:46Z"
     },
     {
       "id": "native/lift-bios-calls",
