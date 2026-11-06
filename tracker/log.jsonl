@@ -2194,3 +2194,4 @@
 {"at":"2026-11-06T03:35:16Z","actor":"loop","tag":"493244a8","host":"quack","cmd":"done","id":"multiplayer/server-version-cutoff","text":"Server refuses netplay builds older than a cutoff: done, checked by ada715af"}
 {"at":"2026-11-06T03:38:15Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"multiplayer/server-version-cutoff","text":"Server refuses netplay builds older than a cutoff: on main"}
 {"at":"2026-11-06T03:38:19Z","actor":"loop","tag":"db7eff8c","host":"quack","cmd":"claim","id":"native/disc-run-call-targets","text":"Discovery takes the run's call targets as function starts: claimed"}
+{"at":"2026-11-06T04:01:23Z","actor":"loop","tag":"2e628fae","host":"quack","cmd":"done","id":"native/flash-stack-standin","text":"Hardware library stand-in for the flash save stack routines: done, checked by verifier-ac768f4a"}

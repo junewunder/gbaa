@@ -247,15 +247,23 @@
       "detail": "From {unit:native/hole-report}: five of the eight games (Emerald, both Kirbys, Metroid, Emerald Rogue) copy the agb flash library's routines (ReadFlash_Core and siblings) onto the IWRAM stack at 0x03007dxx and run them; the bytes change between copies, a hard hole each time. One stand-in in the native hardware library (flash reads/writes as library calls), recognised at the copy, covers all five. Done when `just holes` counts 0 changed RAM runs at 0x03007dxx on those five.",
       "check": "independent",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "2e628fae",
-        "session": "2e628fae-dffe-4d31-ac94-df1f651f6eeb",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T03:01:11Z",
+        "checker": "verifier-ac768f4a",
+        "at": "2026-11-06T04:01:23Z",
+        "evidence": "Fresh verifier subagent ran just holes on Emerald, both Kirbys, Metroid, Rogue: 0 changed RAM runs at 0x03007dxx in each (Rogue's one left is its mixer at 0x030059f0); hard totals 29/21/25/7/80, were 34/29/30/18/86. ReadFlash1/ReadFlash_Core/VerifyFlashSector_Core recognised by analysis::flash, stood in by runtime::hw::flash, checked against agb_flash.c. just check passes after merging main; lift-check --only native-spike passes (Hw gained save).",
         "branch": "unit/native/flash-stack-standin",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-06T04:01:23Z",
+          "by": "2e628fae",
+          "host": "quack",
+          "pid": 1417300,
+          "start": "29954434",
+          "beats": true,
+          "session": "2e628fae-dffe-4d31-ac94-df1f651f6eeb",
+          "lane": "quack/1"
+        }
       },
       "round": "2026-11-06T03:01:11Z"
     },
