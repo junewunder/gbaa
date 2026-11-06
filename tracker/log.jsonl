@@ -2199,3 +2199,4 @@
 {"at":"2026-11-06T04:04:36Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/flash-stack-standin","text":"Hardware library stand-in for the flash save stack routines: on main"}
 {"at":"2026-11-06T04:04:46Z","actor":"loop","tag":"a87279be","host":"quack","cmd":"claim","id":"multiplayer/fly-redeploy-rooms","text":"Redeploy fly's gbaa-server as rooms only, no volume: claimed"}
 {"at":"2026-11-06T04:13:27Z","actor":"loop","tag":"a87279be","host":"quack","cmd":"done","id":"multiplayer/fly-redeploy-rooms","text":"Redeploy fly's gbaa-server as rooms only, no volume: done"}
+{"at":"2026-11-06T04:13:43Z","actor":"loop","tag":"a87279be","host":"quack","cmd":"add-unit","id":"multiplayer/fly-one-machine","text":"new unit: Scale fly's gbaa-server back to one machine"}
