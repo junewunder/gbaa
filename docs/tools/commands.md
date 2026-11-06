@@ -1213,7 +1213,7 @@ says what a recipe or tool does and what it must still pass.
   `compile_error!` each). `report.txt` lists the soft holes and ends
   with the metrics as `name value` lines (`codegen::native::metrics`):
   lines; functions (lifted, recognised, unrecognised, replaced, with a
-  summary hole, four-register without one); callee-saves unproven; hard
+  summary hole, four-register without one, bar 0 since `native/lift-params`); callee-saves unproven; hard
   holes; blocks; every load and store by how its address is known
   (`const` by region, `sp`, `computed` by the region the value-set
   analysis bounds it to, else `computed_unknown`; regions `ram`, `io`,
