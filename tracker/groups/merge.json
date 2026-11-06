@@ -176,21 +176,8 @@
         "by": "aba07131",
         "at": "2026-11-06T11:24:20Z",
         "evidence": "Merged origin/main into unit/native/ime-release (4f61b72f): lift-check.toml conflict settled keeping main's fn_words_not_proven bar and the branch's native-ime-release table, its new bar 55 from its first lift. just lift-check passed (all programs, planted faults caught); just check exit 0.",
-        "branch": "unit/native/ime-release",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-06T11:24:20Z",
-          "by": "aba07131",
-          "host": "quack",
-          "pid": 1417300,
-          "start": "29954434",
-          "beats": true,
-          "session": "aba07131-e03d-48f4-96eb-8e525de39c9d",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-06T11:09:56Z"
+        "host": "quack"
+      }
     }
   ]
 }
