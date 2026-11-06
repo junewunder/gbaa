@@ -493,13 +493,25 @@
       "needs": ["native/frame-escape", "native/lift-params"],
       "uses": ["heavy"],
       "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "48c9e983",
+        "session": "48c9e983-8334-4adc-b139-07b0759cc7e5",
+        "host": "quack",
+        "pid": 1417300,
+        "start": "29954434",
+        "at": "2026-11-06T07:54:22Z",
+        "branch": "unit/native/frame-locals",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-06T07:38:00Z",
           "by": "40e2fde3",
           "text": "Escape analysis (native/frame.rs) marks only slots at/above an escaping address (a pointer into an object's middle reaching lower isn't followed) and counts a callee's stack-arg bytes from exact sp reads only. Weigh both before turning slots into locals."
         }
-      ]
+      ],
+      "round": "2026-11-06T07:54:22Z"
     },
     {
       "id": "native/rom-statics",
