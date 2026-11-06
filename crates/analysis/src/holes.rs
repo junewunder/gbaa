@@ -28,7 +28,7 @@
 //!   the run executed at the top level of an IRQ, and the rest of its
 //!   function) and outside boot (code that ran only in the first frame, and
 //!   the rest of its function: crt0 setting up the stacks);
-//! - a BIOS call the library doesn't implement ([`bios_implemented`]);
+//! - a BIOS call the native lifter doesn't print ([`bios_implemented`]);
 //! - a call through a register the run saw land on an address that isn't
 //!   a known function start;
 //! - a function summary whose hole is a return with r4-r11 or sp changed
@@ -138,11 +138,17 @@ pub const RAM_CALL_BYTES: u32 = 64;
 /// `FlagGet` per item: 27) stops sooner.
 pub const BUSY_ITERATIONS: u32 = 64;
 
-/// Whether the runtime's BIOS (`runtime::bios`, decision 12) implements
-/// call `n`: everything up to `SoundGetJumpList` (0x2A) except
-/// `HardReset` (0x26).
+/// The BIOS calls the native lifter prints (`gbaa-lift`'s prelude,
+/// `crates/codegen/src/native/prelude.rs`): `Halt`, `IntrWait`,
+/// `VBlankIntrWait`, `Div` and `CpuSet`. Every other call is a hard hole
+/// in a native build, though the play build's BIOS (`runtime::bios`)
+/// has nearly all of them.
+pub const NATIVE_BIOS: &[u8] = &[0x02, 0x04, 0x05, 0x06, 0x0B];
+
+/// Whether a native build can make BIOS call `n`: the lifter prints it
+/// ([`NATIVE_BIOS`]).
 pub fn bios_implemented(n: u32) -> bool {
-    n <= 0x2A && n != 0x26
+    u8::try_from(n).is_ok_and(|n| NATIVE_BIOS.contains(&n))
 }
 
 /// An indirect jump Recovery doesn't resolve.
