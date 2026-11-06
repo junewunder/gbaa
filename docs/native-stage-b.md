@@ -405,14 +405,16 @@ local), so locals need an escape analysis first.
   it. `--plant-slot=0x08000182` makes `fl_keep`'s local store of `x + 7`
   store one more (the lift fails if the address isn't a store to a local).
 
+  Lines are with `native/ram-globals` merged, which landed alongside.
+
   | program | locals | accesses to them | `load_sp` | `store_sp` | lines |
   |---|---|---|---|---|---|
-  | native-spike | 458 | 2,291 | 2,177 → 669 | 1,351 → 628 | 73,686 → 72,776 |
-  | affine | 597 | 2,907 | 2,232 → 268 | 1,377 → 443 | 73,533 → 72,108 |
-  | mosaic-modes | 362 | 1,151 | 1,202 → 574 | 1,015 → 554 | 50,895 → 50,251 |
-  | native-fallthrough | 597 | 2,892 | 2,221 → 268 | 1,379 → 449 | 72,357 → 70,940 |
-  | native-irq-hold | 606 | 2,923 | 2,227 → 267 | 1,393 → 448 | 73,082 → 71,640 |
-  | native-frame-locals | 603 | 2,904 | 265 | 446 | 71,020 |
+  | native-spike | 458 | 2,291 | 2,177 → 669 | 1,351 → 628 | 72,733 → 71,823 |
+  | affine | 597 | 2,907 | 2,232 → 268 | 1,377 → 443 | 72,638 → 71,213 |
+  | mosaic-modes | 362 | 1,151 | 1,202 → 574 | 1,015 → 554 | 49,882 → 49,238 |
+  | native-fallthrough | 597 | 2,892 | 2,221 → 268 | 1,379 → 449 | 71,520 → 70,103 |
+  | native-irq-hold | 606 | 2,923 | 2,227 → 267 | 1,393 → 448 | 72,204 → 70,762 |
+  | native-frame-locals | 603 | 2,904 | 265 | 446 | 70,185 |
 
 Escaping slots passed as `&mut` (the design's section 1 form 1) come with
 typed pointers, below; until then they are soft holes, counted.
@@ -430,6 +432,39 @@ typed pointers, below; until then they are soft holes, counted.
   typed by access widths, names from a names file where one exists), laid
   out at the guest's offsets under `--layout guest`. Bar: constant-address
   RAM byte accesses at most a tenth of their bar.
+
+  As built (2026-11-06): `crates/codegen/src/native/globals.rs`. Every
+  constant-address RAM access of the functions printed (not stand-ins')
+  is a byte range in `Game::ram`; a names file's datum of known size that
+  one reaches is one too; overlapping ranges are one global, its element
+  the widest access (`u32`, `[u16; N]`), a narrower access inside an
+  element its bits (shift and mask; a store a read-modify-write). Aligned
+  accesses nest, so only a datum of odd size can leave a wide access as
+  bytes. Without names, accesses that only touch are separate globals:
+  nothing says they are one array (the agb programs have no names file,
+  so their globals are all `d_<guest address>` scalars). The globals are
+  the fields of `Ram`, `#[repr(C, align(4))]`, at the guest's offsets
+  with `[u8; N]` padding between; the prelude asserts its size is EWRAM
+  plus IWRAM (so it has no padding of its own) and the target
+  little-endian, allocates it zeroed and derefs it to `[u8; EWRAM +
+  IWRAM]`, which every other access, the stand-ins and the native check
+  use as before. `gbaa-lift --names DIR` (default `names/`) and
+  `--layout guest` (the only value yet). Metrics: `load_const_ram` and
+  `store_const_ram` now count byte accesses only (0 on all five
+  programs, from 27-36 and 5-11); the field accesses are
+  `load_ram_global` and `store_ram_global` and the globals `ram_globals`
+  (23-28), unbarred. The spike's planted wrong store is a field store
+  now, still caught.
+
+  The field accesses don't print their address, so the constant
+  arithmetic only they used isn't printed; nor is a load from a
+  constant ROM address nothing uses. Every constant ROM load was one: a
+  literal pool's, whose word the IR already has as a `Pool` constant.
+  So `load_const_rom` fell to 0 (from 425-514) and `lines` by 830-1,010
+  a program, which pays for `Ram` (one line per global and gap). For
+  `native/rom-statics` that leaves the computed ROM loads as its bar.
+  The prelude grew by 31 lines (439 to 470): `Ram`'s zeroed allocation,
+  its two `Deref` impls and the layout assertion.
 - **Pointers into one object as typed access** (`native/ref-in-object`). A
   computed address whose value set stays in one global (or one local, or
   one ROM static) becomes an indexed, typed access. Bar: computed-address
