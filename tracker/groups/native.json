@@ -291,7 +291,19 @@
       "detail": "Split out of {unit:native/oracle} (2026-11-01): runtime::hw has no mixer, so the native check compares sound registers and wave RAM but not samples, and timers, FIFOs and DMA sound aren't modelled. Split Audio out of runtime::Bus (docs/native-port-design.md section 2), give Hw the play build's mixer, timers and DMA-to-FIFO, so the play build and native programs share one sound path. Done when route-check --native on units/psg-square.toml passes without --no-audio (samples equal every frame), a native bios-sound (direct sound via timer+DMA) passes the same, the play build's audio checks (docs/tools/commands.md audio-*) are unchanged, and just check passes.",
       "check": "independent",
       "needs": ["native/oracle"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "338023f7",
+        "session": "338023f7-0f12-4931-a685-4327f7b419f5",
+        "host": "quack",
+        "pid": 1418242,
+        "start": "29954965",
+        "at": "2026-11-06T06:19:07Z",
+        "branch": "unit/native/hw-sound",
+        "beats": true
+      },
+      "round": "2026-11-06T06:19:07Z"
     },
     {
       "id": "native/lift-bars",

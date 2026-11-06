@@ -2214,3 +2214,4 @@
 {"at":"2026-11-06T05:09:01Z","actor":"loop","tag":"feed14da","host":"quack","cmd":"claim","id":"native/hole-coverage","text":"Coverage past the press script reaches the unresolved jumps: claimed"}
 {"at":"2026-11-06T06:15:38Z","actor":"loop","tag":"feed14da","host":"quack","cmd":"done","id":"native/hole-coverage","text":"Coverage past the press script reaches the unresolved jumps: done, checked by feed14da-verifier"}
 {"at":"2026-11-06T06:18:54Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/hole-coverage","text":"Coverage past the press script reaches the unresolved jumps: on main"}
+{"at":"2026-11-06T06:19:07Z","actor":"loop","tag":"338023f7","host":"quack","cmd":"claim","id":"native/hw-sound","text":"Sound in the hardware library: mixer, timers, FIFOs: claimed"}
