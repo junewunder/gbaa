@@ -796,6 +796,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-06T12:46:23Z",
+          "by": "41e1a197",
+          "text": "agb programs have no names file (lib recognition parked), so name the allocator in holes/<prog>.toml by address ($GBAA_DATA/agb/<prog>.elf has __rust_alloc). Sound shape: Heap(site,off) tokens; a load through one reads its field + the pile; stores to unknown stay in the pile."
+        },
+        {
           "at": "2026-11-06T12:31:54Z",
           "by": "62031260",
           "text": "When sets narrow, lower lift-check's call_fn_four_complete (56-60 per program, set by {unit:native/indirect-call-args}): every complete call_fn set today is the pile's 21 address-taken functions."
