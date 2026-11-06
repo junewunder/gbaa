@@ -617,6 +617,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-06T13:20:29Z",
+          "by": "eb63ac1b",
+          "text": "Its branch's commits (holes file from mods/, skip_fn_flow) were merged into {unit:native/lift-ram-copies} and land with it. mods/metroid/holes.toml now has 5 [[copy]] tables and stand-ins at 0x03000c7c, 0x030016c5; lift: 2,624 functions, 9 BIOS holes left."
+        },
+        {
           "at": "2026-11-06T12:12:12Z",
           "by": "f93b1ecd",
           "text": "26 hard holes -> 9: mods/metroid/holes.toml stands in reset, IRQ dispatcher, classic-NES code; skips fnref flow. Left: 9 BIOS calls ({unit:native/lift-bios-calls}). Then just lift ROM out/lift-metroid --name metroid, build, quote numbers (doc has a measurement build)."
