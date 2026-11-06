@@ -10,6 +10,10 @@ use armv4t::sem::Reg;
 const F: u32 = 0x0800_0201;
 /// Another.
 const H: u32 = 0x0800_0301;
+/// An ARM function's key.
+const A: u32 = 0x0800_0600;
+/// A literal pool word holding `A`.
+const POOL_A: u32 = 0x0800_040c;
 /// A literal pool word holding `F`.
 const POOL: u32 = 0x0800_0400;
 /// A vtable in ROM data: `[0, 0, 0, F]`.
@@ -24,14 +28,14 @@ struct Img {
 impl Img {
     fn new() -> Img {
         Img {
-            words: BTreeMap::from([(POOL, F), (VT + 12, F), (0x0800_0404, H)]),
+            words: BTreeMap::from([(POOL, F), (VT + 12, F), (0x0800_0404, H), (POOL_A, A)]),
         }
     }
 }
 
 impl Image for Img {
     fn is_fn(&self, v: u32) -> bool {
-        v == F || v == H
+        v == F || v == H || v == A
     }
     fn word(&self, a: u32) -> Option<u32> {
         (0x0800_0000..0x0800_1000)
@@ -104,6 +108,11 @@ impl B {
 type Built = (u32, Vec<(u32, (Vec<Inst>, Out, BTreeMap<usize, u32>))>);
 
 fn run(fns: &[Built]) -> Flow {
+    run_with(fns, &BTreeMap::new())
+}
+
+/// With frames: function entry -> its frame.
+fn run_with(fns: &[Built], frames: &BTreeMap<u32, Frame>) -> Flow {
     let ins: Vec<FnIn> = fns
         .iter()
         .map(|(e, bs)| FnIn {
@@ -122,7 +131,7 @@ fn run(fns: &[Built]) -> Flow {
                     )
                 })
                 .collect(),
-            frame: None,
+            frame: frames.get(e),
         })
         .collect();
     follow(&ins, &Img::new(), &[])
@@ -346,4 +355,125 @@ fn a_target_loaded_from_an_unknown_place_is_incomplete() {
     let t = b.get(0);
     let f = run(&[calling(0x0800_1001, b, t)]);
     assert!(!site(&f).complete);
+}
+
+/// A one-block function returning at once.
+fn just(e: u32, b: B) -> Built {
+    (e, vec![(e, b.end(None, Edge::Return))])
+}
+
+#[test]
+fn or_one_on_an_arm_address_is_a_hole() {
+    // `| 1` makes an ARM function's address another one's (a Thumb one).
+    let mut b = B::default();
+    let p = b.pool(POOL_A, A);
+    let one = b.k(1);
+    b.bin(BinOp::Or, p, one);
+    let f = run(&[just(0x0800_1001, b)]);
+    assert!(!f.proven(POOL_A));
+    assert_eq!(f.holes[&Origin::Word(POOL_A)].1, Why::Arithmetic);
+}
+
+#[test]
+fn a_half_joined_with_an_unknown_is_a_hole() {
+    // (F & 0xffff) | r5: r5 isn't F's top half.
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let m = b.k(0xffff);
+    let lo = b.bin(BinOp::And, p, m);
+    let r5 = b.get(5);
+    b.bin(BinOp::Or, lo, r5);
+    let f = run(&[just(0x0800_1001, b)]);
+    assert!(!f.proven(POOL), "{f:?}");
+}
+
+#[test]
+fn a_half_compared_is_a_hole() {
+    // (F >> 16) == 0: the top half of a dense ID is always 0.
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let hi = b.shift(ShiftType::Lsr, p, 16);
+    b.op(Op::IsZero(hi));
+    let f = run(&[just(0x0800_1001, b)]);
+    assert!(!f.proven(POOL), "{f:?}");
+    // And so is a whole address compared with a small constant (it could
+    // be a dense ID).
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let three = b.k(3);
+    let d = b.bin(BinOp::Sub, p, three);
+    b.op(Op::IsZero(d));
+    let f = run(&[just(0x0800_1001, b)]);
+    assert!(!f.proven(POOL), "{f:?}");
+}
+
+#[test]
+fn a_stack_argument_reaches_the_callee() {
+    use super::super::frame::{Kind, Place, Slot};
+    // The caller stores F to its outgoing argument slot (sp - 8, the
+    // callee's sp + 0) and calls g; g loads it and adds 4.
+    let mut a = B::default();
+    let p = a.pool(POOL, F);
+    let sp = a.get(13);
+    a.st(Width::Word, sp, p);
+    let store_at = a.insts.len() - 1;
+    let caller = (
+        0x0800_1001,
+        vec![
+            (
+                0x0800_1001,
+                a.end(
+                    None,
+                    Edge::Call {
+                        target: Some(0x0800_2001),
+                        ret: 0x0800_1011,
+                    },
+                ),
+            ),
+            (0x0800_1011, B::default().end(None, Edge::Return)),
+        ],
+    );
+    let mut b = B::default();
+    let sp = b.get(13);
+    let x = b.ld(Width::Word, sp);
+    let load_at = b.insts.len() - 1;
+    let four = b.k(4);
+    b.bin(BinOp::Add, x, four);
+    let callee = just(0x0800_2001, b);
+    let frames = BTreeMap::from([
+        (
+            0x0800_1001,
+            Frame {
+                slots: vec![Slot {
+                    lo: -8,
+                    hi: -4,
+                    saved: false,
+                    escapes: Kind::Args as u8,
+                }],
+                places: BTreeMap::from([((0x0800_1001, store_at), Place::Exact(-8, 4))]),
+                ..Frame::default()
+            },
+        ),
+        (
+            0x0800_2001,
+            Frame {
+                places: BTreeMap::from([((0x0800_2001, load_at), Place::Exact(0, 4))]),
+                ..Frame::default()
+            },
+        ),
+    ]);
+    let f = run_with(&[caller, callee], &frames);
+    assert!(!f.proven(POOL), "{f:?}");
+    assert_eq!(f.holes[&Origin::Word(POOL)].1, Why::Arithmetic);
+}
+
+#[test]
+fn a_store_outside_ram_is_lost() {
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let io = b.k(0x0400_00d4);
+    b.st(Width::Word, io, p);
+    let f = run(&[just(0x0800_1001, b)]);
+    assert!(!f.proven(POOL));
+    assert_eq!(f.holes[&Origin::Word(POOL)].1, Why::Outside);
 }
