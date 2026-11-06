@@ -703,19 +703,7 @@
         "by": "cb21d00f",
         "at": "2026-11-06T03:27:32Z",
         "evidence": "After merging origin/main, just check passes (exit 0). Forced desync: just rollback-feel wander Kirby --headless --paced --frames 900 --input1/2 start@400 --desync-at2 500. Seat 2 printed 'netplay notice: Out of sync with the other player since frame 540' (the window-state path). Both seats' end lines say 'netplay desyncs: 7 ..., first at frame 540'. The kept report XFKMPJ-p1.txt holds the same line. Menu tests check the Desynced mark and the toast.",
-        "branch": "unit/multiplayer/desync-report",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-06T03:27:32Z",
-          "by": "cb21d00f",
-          "host": "quack",
-          "pid": 1418242,
-          "start": "29954965",
-          "beats": true,
-          "session": "cb21d00f-2fa4-4d48-9491-bba57e9e4d03",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -723,8 +711,7 @@
           "by": "9afcc2dd",
           "text": "Code done on branch (commit unchecked): skew, end line, report, toast/mark. Headless forced desync passes: gbaa-pingsim desktop wander Kirby --headless --paced --frames 900 --input1/2 start@400 --desync-at2 500. Left: just check (fixed a menu test), merge main, done."
         }
-      ],
-      "round": "2026-11-01T01:47:18Z"
+      ]
     },
     {
       "id": "multiplayer/kirby-pause-desync",
