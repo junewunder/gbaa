@@ -313,18 +313,24 @@ build for the host.
   decoding the `ldr [pc]`), loads through a ROM pointer of a word holding
   one, the start's copies of ROM data to RAM, `CpuSet` from ROM. Memory:
   each function's frame words where the frame's run placed the access
-  and the slot doesn't escape (a saved register's slot gives the entry
-  value back), constant RAM addresses one cell each, and one pile for
-  every other store; a load the value-set analysis bounds to ROM reads
-  the words there. A call passes r0-r3 and takes back its callee's
+  and the slot doesn't escape (a saved register's slot reads as the
+  register as it came, unknown; one at or above the entry sp, a stack
+  argument, also reads the pile its caller's store went to), constant
+  RAM addresses one cell each (mirrors folded), and one pile for every
+  other store; memory marks what else was stored, so a cell nothing
+  else reached is exactly what was; a load the value-set analysis bounds
+  to ROM reads the words there. A call passes r0-r3 and takes back its callee's
   returns; a tail call or fall passes every register; an indirect call
   passes them to each function its target may hold. The rule: a function
   value may be called, stored and loaded back (a copy by bytes or halves
-  reassembles it), compared for equality (`== 0` of a difference),
-  split and joined, `| 1` on a Thumb key; anything else (an address,
-  other arithmetic, an ordered compare, a bit test, a piece used as a
-  number, a piece called) marks its origin not proven, and so does a
-  value given to the BIOS. A word is proven when the run read it and no
+  reassembles it), compared for equality as a whole (`== 0` of a
+  difference with another, 0 or an unknown: a small constant could be a
+  dense ID, and a half's top is 0 when dense, so halves aren't
+  compared), split and joined (a half joined only with the other half),
+  `| 1` on a Thumb key; anything else (an address, other arithmetic, an
+  ordered compare, a bit test, a piece used as a number, a piece called)
+  marks its origin not proven, and so does a value given to the BIOS or
+  stored outside RAM (I/O, display memory, SRAM). A word is proven when the run read it and no
   value it entered met any of those. It rests on a closed world: function
   and ROM addresses enter values only from those sources, so an unknown
   value is never one, and a callee set of whole addresses is complete. A
@@ -337,12 +343,12 @@ build for the host.
 
   | program | function words (pools, data) | proven | never read | not allowed | through the pile | code constants proven | `call_fn` sets complete |
   |---|---|---|---|---|---|---|---|
-  | native-spike | 58 (34, 24) | 5 | 16 | 37 | 36 | 11 of 18 | 59 of 59 |
-  | affine | 56 (34, 22) | 4 | 19 | 33 | 32 | 11 of 19 | 57 of 57 |
-  | mosaic-modes | 55 (34, 21) | 4 | 18 | 33 | 32 | 11 of 18 | 57 of 57 |
-  | native-fallthrough | 57 (35, 22) | 4 | 19 | 34 | 32 | 11 of 19 | 58 of 58 |
-  | native-irq-hold | 61 (36, 25) | 6 | 19 | 36 | 35 | 11 of 17 | 61 of 61 |
-  | native-frame-locals | 56 (34, 22) | 4 | 19 | 33 | 32 | 11 of 19 | 57 of 57 |
+  | native-spike | 58 (34, 24) | 5 | 16 | 37 | 36 | 11 of 13 | 59 of 59 |
+  | affine | 56 (34, 22) | 4 | 19 | 33 | 32 | 11 of 13 | 57 of 57 |
+  | mosaic-modes | 55 (34, 21) | 4 | 18 | 33 | 32 | 11 of 14 | 57 of 57 |
+  | native-fallthrough | 57 (35, 22) | 4 | 19 | 34 | 33 | 11 of 13 | 58 of 58 |
+  | native-irq-hold | 61 (36, 25) | 6 | 19 | 36 | 35 | 11 of 13 | 61 of 61 |
+  | native-frame-locals | 56 (34, 22) | 4 | 19 | 33 | 32 | 11 of 13 | 57 of 57 |
 
   ("Not allowed" counts the BIOS too; "through the pile" are the
   not-proven words whose values were stored where the run can't place
@@ -361,7 +367,14 @@ build for the host.
   types never made, or reached by a path the run loses); they stay ROM
   keys. Order matters a little to the widening (more than 8 numbers are
   unknown, more than 16 exact ROM pointers become one "from the lowest
-  on"), so the first reason given per word can move with the code;
+  on"), so the first reason given per word can move with the code. Gaps
+  the review named, kept: a "from here on" read stops after 16 KB and a
+  ROM-bounded read wider than that reads nothing; a ROM pointer less an
+  unknown is unknown; a RAM-to-RAM `CpuSet` isn't followed; `ror` by an
+  unknown amount (a word load's alignment rotation) keeps a function's
+  form. `native/fnref-dense` should know that proofs are per origin,
+  and a pool load folded from a non-pc-relative address gets a
+  code-constant origin, so dense needs per-site constant rewriting.
   `GBAA_FNREF_TRACE=1` prints the run's rounds and each use not allowed.
 - **Function pointers as dense IDs** (`native/fnref-dense`). The proven
   words rewritten in the lifter's copy of ROM data, `FNS` dense from 1

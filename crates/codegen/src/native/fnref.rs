@@ -5,7 +5,10 @@
 //! Dense `FnRef` IDs (`native/fnref-dense`) rewrite each word that holds a
 //! function's address. That is only right where every value the word
 //! enters is used as section 4 allows: called, stored (and loaded back),
-//! compared for equality, split into halves and joined again (`>> 16`,
+//! compared for equality as a whole (with another, 0, or a value the
+//! closed world says is none: never a half, whose top is 0 when dense,
+//! nor a small constant, which may be a dense ID), split into halves and
+//! joined again, each half only with the other (`>> 16`,
 //! `& 0xffff`, `<< 16`, `|`), and `| 1` on a Thumb address, folded. This
 //! module follows them, over the whole program, and says which words it
 //! proved, and each indirect call's callee set.
@@ -30,7 +33,8 @@
 //!
 //! Memory: each function's own frame words, exactly where the frame's run
 //! placed the access ([`super::frame`]) and the slot doesn't escape (a
-//! saved register's slot gives back the entry value); RAM words at
+//! saved register's slot reads as unknown, the register as it came; one
+//! at or above the entry sp, a stack argument, reads the pile too); RAM words at
 //! constant addresses, one cell each; and one pile for every other store
 //! (the heap, escaping frame slots, anything computed). A load reads its
 //! cell and the pile, or, at an address the run can't place, the pile and
@@ -280,13 +284,14 @@ pub enum Why {
     Psr,
     // Lost: not followed.
     Bios,
+    Outside,
     UserBank,
 }
 
 impl Why {
     /// Not a forbidden use: the value went where the run doesn't follow.
     pub fn lost(self) -> bool {
-        matches!(self, Why::Bios | Why::UserBank)
+        matches!(self, Why::Bios | Why::UserBank | Why::Outside)
     }
 
     pub fn what(self) -> &'static str {
@@ -300,6 +305,7 @@ impl Why {
             Why::CalledInPart => "called in part",
             Why::Psr => "written to a PSR",
             Why::Bios => "given to the BIOS (lost)",
+            Why::Outside => "stored outside RAM: I/O, display memory, SRAM (lost)",
             Why::UserBank => "moved to a user-bank register (lost)",
         }
     }
@@ -527,6 +533,15 @@ fn is_ram(a: u32) -> bool {
     (0x0200_0000..0x0400_0000).contains(&a)
 }
 
+/// A RAM address without its mirror: EWRAM repeats every 256 KB, IWRAM
+/// every 32 KB.
+fn ram_canon(a: u32) -> u32 {
+    match a >> 24 {
+        2 => 0x0200_0000 | (a & 0x3_ffff),
+        _ => 0x0300_0000 | (a & 0x7fff),
+    }
+}
+
 /// What a value stored at width `w` leaves in memory, and the forms that
 /// can't be stored.
 fn to_mem(v: &Val, w: u8) -> (Vec<(Tok, u8)>, Vec<Form>) {
@@ -549,15 +564,22 @@ fn to_mem(v: &Val, w: u8) -> (Vec<(Tok, u8)>, Vec<Form>) {
                 }
             }
             Tok::Rom(_) | Tok::RomFrom(_) if w == 4 => out.push((t, 4)),
-            _ => {}
+            _ => out.push((OTHER, w)),
         }
+    }
+    // Anything else stored there, marked (so a load of memory nothing
+    // else was stored to is exactly what was).
+    if v.unk || v.mem || v.toks.is_empty() {
+        out.push((OTHER, w));
     }
     (out, bad)
 }
 
+/// In memory: something stored that isn't a function's or ROM address.
+const OTHER: Tok = Tok::Num(0);
+
 /// What a load at width `w` reads of memory `m`.
 fn from_mem(m: &Mem, w: u8, into: &mut Val) {
-    into.mem = true;
     for &(t, sw) in m {
         let t = match t {
             Tok::Fn { key, origin, form } => {
@@ -573,8 +595,11 @@ fn from_mem(m: &Mem, w: u8, into: &mut Val) {
                 };
                 Tok::Fn { key, origin, form }
             }
-            t if w == 4 => t,
-            _ => continue,
+            Tok::Rom(_) | Tok::RomFrom(_) if w == 4 => t,
+            _ => {
+                into.mem = true;
+                continue;
+            }
         };
         into.toks.insert(t);
     }
@@ -594,6 +619,8 @@ struct Run<'a, 'g> {
     trace: bool,
     /// The functions whose results the run read.
     rets_read: BTreeSet<u32>,
+    /// The instruction being run.
+    at: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -813,6 +840,7 @@ impl Run<'_, '_> {
         let b = &self.f.blocks[&key];
         let mut s = self.ins[&key].clone();
         let mut at = key & !1;
+        self.at = at;
         let mut vals: Vec<Val> = vec![Val::default(); b.insts.len()];
         for (i, inst) in b.insts.iter().enumerate() {
             let site = Origin::Code(key, i as u32);
@@ -822,6 +850,7 @@ impl Run<'_, '_> {
             let v = match inst.op {
                 Op::Insn(a) => {
                     at = a;
+                    self.at = a;
                     Val::default()
                 }
                 Op::Const(c) => Val::of(self.classify(c, site)),
@@ -843,11 +872,20 @@ impl Run<'_, '_> {
                 Op::Adc { a, b, c } => {
                     let (a, b) = (val(a), val(b));
                     if a.fns().next().is_some() || b.fns().next().is_some() {
-                        // A compare (or an add, which is a hole when used).
+                        // A compare `a + !b + 1` (or an add, a hole when
+                        // used): of whole addresses, with each other, 0 or
+                        // an unknown.
                         let mut out = Val::unk();
+                        let other_num = |v: &Val, zero: u32| {
+                            v.toks.iter().any(|t| {
+                                matches!(t, Tok::Num(n) if *n != zero)
+                                    || matches!(t, Tok::Rom(_) | Tok::RomFrom(_))
+                            })
+                        };
+                        let bad = other_num(&b, 0xffff_ffff) || other_num(&a, 0);
                         for v in [&a, &b] {
                             self.g.hole(v, at, Why::Arithmetic, |f| {
-                                !matches!(f, Form::Full | Form::Lo | Form::Hi | Form::Not)
+                                bad || !matches!(f, Form::Full | Form::Not)
                             });
                             for (key, origin, _) in v.fns() {
                                 out.toks.insert(Tok::Fn {
@@ -869,13 +907,11 @@ impl Run<'_, '_> {
                         unk: a.unk || a.mem,
                         ..Val::default()
                     };
-                    self.g.hole(&a, at, Why::Arithmetic, |f| {
-                        !matches!(f, Form::Full | Form::Lo | Form::Hi)
-                    });
+                    self.g.hole(&a, at, Why::Arithmetic, |f| f != Form::Full);
                     for &t in &a.toks {
                         match t {
                             Tok::Fn { key, origin, form } => {
-                                if matches!(form, Form::Full | Form::Lo | Form::Hi) {
+                                if form == Form::Full {
                                     out.toks.insert(Tok::Fn {
                                         key,
                                         origin,
@@ -966,7 +1002,7 @@ impl Run<'_, '_> {
                 }
                 Op::IsZero(a) => {
                     self.g.hole(&val(a), at, Why::Arithmetic, |f| {
-                        !matches!(f, Form::Full | Form::Cmp | Form::Lo | Form::Hi)
+                        !matches!(f, Form::Full | Form::Cmp)
                     });
                     Val::unk()
                 }
@@ -1064,7 +1100,7 @@ impl Run<'_, '_> {
         if let Some(fr) = self.f.frame {
             match fr.places.get(&(key, i)) {
                 Some(super::frame::Place::Exact(o, _)) => {
-                    // A saved register's slot gives it back as it came.
+                    // A saved register's slot: the register as it came, unknown.
                     if fr
                         .slots
                         .iter()
@@ -1075,7 +1111,7 @@ impl Run<'_, '_> {
                     let esc = fr.escapes_at(key, i).unwrap_or(true);
                     match s.frame.get(o) {
                         Some((v, sw)) if *sw == w => {
-                            if !esc {
+                            if !esc && *o < 0 {
                                 return v.clone();
                             }
                             out.join(v);
@@ -1090,8 +1126,11 @@ impl Run<'_, '_> {
                             from_mem(&sp, w, &mut out);
                         }
                     }
-                    if esc {
+                    // At or above the entry sp: the caller's frame (a stack
+                    // argument), which its stores reached through the pile.
+                    if esc || *o >= 0 {
                         self.g.read_pile(w, &mut out);
+                        out.mem = true;
                     }
                     return out;
                 }
@@ -1116,6 +1155,7 @@ impl Run<'_, '_> {
                 Tok::RomFrom(r) => self.rom_from(r, w, &mut out),
                 Tok::Num(c) | Tok::Fn { key: c, .. } => {
                     if is_ram(c) {
+                        let c = ram_canon(c);
                         // The cells the access overlaps.
                         let cell: Mem = self
                             .g
@@ -1195,6 +1235,16 @@ impl Run<'_, '_> {
                     let old = s.frame.get(&o).cloned();
                     s.frame
                         .retain(|&k, (_, kw)| k + *kw as i32 <= o || o + *n as i32 <= k);
+                    // Narrower than a word, what memory would hold (`strh`
+                    // of a function's address is its bottom half).
+                    let x = &if w == 4 {
+                        x.clone()
+                    } else {
+                        let mut v = Val::unk();
+                        v.toks
+                            .extend(toks.iter().filter(|(t, _)| *t != OTHER).map(|(t, _)| *t));
+                        v
+                    };
                     let new = match (guarded, old) {
                         (false, _) => Some((x.clone(), w)),
                         (true, Some((mut ov, ow))) if ow == w => {
@@ -1225,7 +1275,11 @@ impl Run<'_, '_> {
         for &t in &a.toks {
             match t {
                 Tok::Num(c) | Tok::Fn { key: c, .. } if is_ram(c) => {
-                    self.g.store(Store::Cell(c), toks)
+                    self.g.store(Store::Cell(ram_canon(c)), toks)
+                }
+                // I/O, the display memories, SRAM: not followed.
+                Tok::Num(c) | Tok::Fn { key: c, .. } if self.img.word(c).is_none() => {
+                    self.g.hole(x, self.at, Why::Outside, |_| true)
                 }
                 Tok::Num(_) | Tok::Rom(_) | Tok::RomFrom(_) | Tok::Fn { .. } => {}
             }
@@ -1441,7 +1495,10 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> R {
             })
         };
         return match (op, fx, other) {
-            (BinOp::Sub, Full | Lo | Hi, _) => fnt(Cmp),
+            // A compare: of a whole address, with another, 0 or a value
+            // the closed world says is no function's (a small constant
+            // could be a dense ID; a half's top is 0 when dense).
+            (BinOp::Sub, Full, None | Some(Num(0)) | Some(Fn { form: Full, .. })) => fnt(Cmp),
             (BinOp::Or, Full, Some(Num(1))) if kx & 1 == 1 => fnt(Full),
             (BinOp::Or | BinOp::Add, _, Some(Num(0))) | (BinOp::And, _, Some(Num(0xffff_ffff))) => {
                 fnt(fx)
@@ -1461,10 +1518,6 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> R {
                 form: Full,
             }),
             (BinOp::Or | BinOp::Add, Lo, Some(Fn { form: HiUp, .. })) => fnt(Full),
-            // The join's shape with a side the run doesn't know (both
-            // halves read back from RAM): the join, of whatever is there.
-            (BinOp::Or | BinOp::Add, HiUp, None) => R::Unk,
-            (BinOp::Or | BinOp::Add, Lo, None) => fnt(Full),
             _ => hole(Why::Arithmetic),
         };
     }
@@ -1587,6 +1640,7 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
                 work: BTreeSet::new(),
                 trace,
                 rets_read: BTreeSet::new(),
+                at: 0,
             };
             if f.blocks.contains_key(&f.entry) {
                 run.ins.insert(
