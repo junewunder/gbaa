@@ -144,6 +144,33 @@ fn ram_at(a: u32) -> Option<usize> {
     }
 }
 
+/// A pointer the value sets say is always the global at RAM offset `off`
+/// (native/ref-in-object): the lift reads the field, and checks the pointer.
+#[inline(always)]
+#[track_caller]
+pub fn pin(a: u32, off: usize) {
+    if ram_at(a) != Some(off) {
+        unexplained(a, off, 1, 1)
+    }
+}
+
+/// The element `a` points to of the global at RAM offset `off`, `n` of `e`
+/// bytes, which the value sets bound it to (native/ref-in-object), checked.
+#[inline(always)]
+#[track_caller]
+pub fn ix(a: u32, off: usize, e: usize, n: usize) -> usize {
+    match ram_at(a) {
+        Some(o) if o >= off && (o - off) % e == 0 && (o - off) / e < n => (o - off) / e,
+        _ => unexplained(a, off, e, n),
+    }
+}
+
+#[cold]
+#[track_caller]
+fn unexplained(a: u32, off: usize, e: usize, n: usize) -> ! {
+    panic!("pointer {a:#010x} outside its global (RAM offset {off:#x}, {n} of {e} bytes): arithmetic the lift's types don't explain")
+}
+
 /// VRAM's offset for `a`, or `None` in the bitmap modes' dead window (the
 /// play build's `Bus::vram_offset`).
 #[inline(always)]
