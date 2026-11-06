@@ -774,6 +774,13 @@
       "detail": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): gbaa-lift's discovery is static, so Metroid lifts with 0 IWRAM copies, though it runs its IRQ dispatcher from an IWRAM copy of 0x08000104 and calls 0x03003b90-0x03004440 and 0x030016d8 through pointers; natively call_fn panics on those keys. The hole report's run finds them (analysis::holes::ram_copies, {unit:native/disc-ram-copies}'s note). Lift them from that run's copies (or a static finder of copy loops and DMA3), with their stand-ins at RAM keys. Done when: Metroid's lift has its IWRAM copies and lift-check stays green.",
       "check": "independent",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-flow-scale",
+      "title": "Function-address flow settles on a whole game",
+      "detail": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): fnref::follow on Metroid (2,616 functions) took 68 s for round 0 and over 8 min for round 1 on quack (GBAA_FNREF_TRACE=1), so its lift skips it (skip_fn_flow in mods/metroid/holes.toml). It only feeds the report and stage B's fn_words metrics, but dense FnRef IDs need it. Make it settle in minutes on Metroid (per-function summaries, sparse reruns), then drop skip_fn_flow. Done when: Metroid's lift runs it in under 5 minutes and lift-check's bars hold.",
+      "check": "independent",
+      "uses": ["heavy"]
     }
   ]
 }
