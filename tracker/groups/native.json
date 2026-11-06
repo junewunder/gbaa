@@ -514,6 +514,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-06T08:49:27Z",
+          "by": "48c9e983",
+          "text": "Open gaps (docs/native-stage-b.md): escapes don't walk below the escaping address; a callee in another code context (ROM to IWRAM) gets the caller context's most reads; address-taken means ROM words only. gbaa-lift --shadow-locals checks a lift at run time."
+        },
+        {
           "at": "2026-11-06T07:38:00Z",
           "by": "40e2fde3",
           "text": "Escape analysis (native/frame.rs) marks only slots at/above an escaping address (a pointer into an object's middle reaching lower isn't followed) and counts a callee's stack-arg bytes from exact sp reads only. Weigh both before turning slots into locals."
