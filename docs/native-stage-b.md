@@ -754,9 +754,15 @@ and the two shortcuts above at game scale.
   files), 266 modules, the largest 6,175 lines; the crate alone
   rebuilt in release in 31.5 s wall, 64 s CPU, peak 3.99 GB (quack,
   `CARGO_BUILD_JOBS=6`, deps built; `/usr/bin/time`), as the
-  synthetic million-line crate predicted. The lift has no IWRAM copies
-  (discovery is static): `native/lift-ram-copies`, which the native
-  check needs.
+  synthetic million-line crate predicted. Discovery is static, so that
+  lift had no IWRAM copies; since `native/lift-ram-copies` the holes
+  file gives the five the hole report's run sees as `[[copy]]` tables
+  (the IRQ dispatcher's copy at 0x03000c7c, and Thumb code at
+  0x030016c4, 0x03003b90, 0x030041ec and 0x03004294, all called through
+  pointers): 8 functions at their RAM keys, two of them stand-ins that
+  call their ROM originals (the dispatcher's copy; 0x030016c5, a switch
+  whose ROM jump table sends it back into the ROM function's cases).
+  Hard holes stay the 9 BIOS calls; 2,625 functions, 27,751 blocks.
 - **Metroid passes the native check on a route**
   (`native/metroid-native-check`). A route `units/metroid-native.toml`
   from boot into gameplay, compared every frame with sound

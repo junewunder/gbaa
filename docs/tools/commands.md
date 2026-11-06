@@ -52,7 +52,9 @@ says what a recipe or tool does and what it must still pass.
   `analysis::holes::classify`. Prints one ranking line (hard holes by
   kind; bytes reached but not discovered; busy loops that call
   functions; the flash library's stack routines stood in for,
-  `analysis::flash`) and each list, the RAM copies among them. About a minute a game, capped at 3 GB. The
+  `analysis::flash`) and each list, the RAM copies among them (the ones
+  only the run shows also as `[[copy]]` tables for the lift's holes
+  file). About a minute a game, capped at 3 GB. The
   doc's table is these lines; rerun all eight after changing
   `analysis::holes` or `crates/hole-report` and update it.
   `--cover FILE` (`holes/coverage/<game>.toml`, native/hole-coverage)
@@ -1217,7 +1219,11 @@ says what a recipe or tool does and what it must still pass.
   given (a file name with spaces: `just lift "…/Metroid - Zero Mission
   (USA).gba" out/lift-metroid --name metroid`), else the ROM's file name
   lowercased. The file has `[[standin]]` (a function's hand-written Rust,
-  and why), `[[jump]]` (an unresolved jump's targets) and, at the top,
+  and why), `[[jump]]` (an unresolved jump's targets), `[[copy]]` (code
+  the game copies to RAM that discovery's static copies don't have:
+  `src`, `dst`, `len`, `roots` and why, as `just holes` prints its run's
+  copies; lifted at its RAM keys like a static copy, native/lift-ram-copies)
+  and, at the top,
   `skip_fn_flow = "why"` (the function-address flow left out, for a game
   it doesn't settle on). A hard hole no stand-in
   covers (CPU state, an unresolved jump, a BIOS call the prelude lacks, an
