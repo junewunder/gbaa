@@ -725,6 +725,13 @@ cfg-survey rom truth="":
     {{lock}} cargo build -q --release -p codegen --bin gbaa-cfg-survey
     target/release/gbaa-cfg-survey {{quote(join(invocation_directory(), rom))}} {{ if truth == "" { "" } else { quote(join(invocation_directory(), truth)) } }}
 
+# Disassembly (gbaa-dis, armv4t::text: objdump's UAL text): LEN bytes (hex, default 0x40) at ROM address ADDR (hex), one instruction a line, a Thumb bl pair joined; Thumb unless --arm (an odd ADDR is Thumb); --names FILE, a names map for the ROM ($GBAA_DATA/names/<game>.toml), labels named functions and the calls to them. Paths are from where it's run. Light.
+[no-cd]
+[positional-arguments]
+dis rom addr *args:
+    @{{lock}} cargo build -q --release --manifest-path {{quote(justfile_directory() / "Cargo.toml")}} -p codegen --bin gbaa-dis
+    @{{quote(justfile_directory() / "target/release/gbaa-dis")}} "$@"
+
 # Snapshots of structured codegen (structured/emit-structured; step 8 of docs/structured-codegen-design.md): for each shape the printer handles (calls, an if, a loop, nested loops, a jump table, an irreducible region), the smallest structured function of ROM, printed as the generated crate prints it, into FILE (default mods/emerald/snapshots/emerald.rs). Rerun after a printer change and commit the diff.
 snapshots rom=(roms / "Pokemon - Emerald Version.gba") file="mods/emerald/snapshots/emerald.rs":
     {{lock}} cargo build -q --release -p codegen --bin gbaa-recompile
