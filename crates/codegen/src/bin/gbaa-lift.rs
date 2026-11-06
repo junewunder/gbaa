@@ -1,5 +1,5 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
-//! [--names DIR] [--layout guest] [--drop-standin KEY] [--plant AT]
+//! [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT]
 //! [--fall-as-tail-call] [--irq-at-waits] [--plant-slot=AT] [--shadow-locals]
 //! [--copies N]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
@@ -11,9 +11,11 @@
 //!
 //! RAM's globals (`codegen::native::globals`, unit `native/ram-globals`)
 //! take their names from the names files in DIR whose `[map]` names this
-//! ROM (default the repo's `names/`; none is fine). `--layout guest` puts
-//! them at the guest's offsets, the native check's layout and the only
-//! one yet (`native/lift-packed-layout` adds `packed`).
+//! ROM (default the repo's `names/`; none is fine). `--layout guest` (the
+//! default) puts them at the guest's offsets, the native check's layout;
+//! `--layout packed` makes them fields in the lifter's order, the rest of
+//! RAM bytes, the play layout, which must draw the same frames (unit
+//! `native/lift-packed-layout`).
 //!
 //! `--bars FILE` (`crates/codegen/lift-check.toml`, unit
 //! `native/lift-bars`) holds the report's metrics to the maxima of
@@ -65,7 +67,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--plant-slot=AT] [--shadow-locals] [--copies N]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--plant-slot=AT] [--shadow-locals] [--copies N]"
         );
         ExitCode::FAILURE
     };
@@ -75,6 +77,7 @@ fn main() -> ExitCode {
     let (mut name, mut holes, mut bars, mut names) = (None, None, None, None);
     let (mut drop, mut plant, mut tail, mut irq_at_waits) = (None, None, false, false);
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
+    let mut layout = codegen::native::globals::Layout::Guest;
     let hex = |s: &str| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok();
     let mut it = rest.iter();
     while let Some(a) = it.next() {
@@ -103,7 +106,12 @@ fn main() -> ExitCode {
             ("--holes", Some(f)) => holes = Some(PathBuf::from(f)),
             ("--bars", Some(f)) => bars = Some(PathBuf::from(f)),
             ("--names", Some(d)) => names = Some(PathBuf::from(d)),
-            ("--layout", Some(l)) if l == "guest" => {}
+            ("--layout", Some(l)) if l == "guest" => {
+                layout = codegen::native::globals::Layout::Guest
+            }
+            ("--layout", Some(l)) if l == "packed" => {
+                layout = codegen::native::globals::Layout::Packed
+            }
             ("--drop-standin", Some(k)) if hex(k).is_some() => drop = hex(k),
             ("--plant", Some(a)) if hex(a).is_some() => plant = hex(a),
             ("--copies", Some(n)) if n.parse::<usize>().is_ok_and(|n| n >= 1) => {
@@ -150,6 +158,7 @@ fn main() -> ExitCode {
     holes.plant_slot = plant_slot;
     holes.shadow_locals = shadow;
     holes.copies = copies;
+    holes.layout = layout;
     let names = names.unwrap_or_else(|| crates_dir().parent().expect("the repo").join("names"));
     let sha = codegen::names::sha1_hex(&bytes);
     match codegen::names::files_for(&names, &sha)

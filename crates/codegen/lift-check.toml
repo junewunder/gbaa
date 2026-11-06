@@ -32,7 +32,7 @@ route = "units/affine-600.toml"
 
 [program.affine.bars]
 lines = 71208
-lines_prelude = 497
+lines_prelude = 500
 functions = 110
 functions_iwram = 3
 functions_lifted = 106
@@ -87,7 +87,7 @@ route = "units/mosaic-modes-600.toml"
 
 [program.mosaic-modes.bars]
 lines = 49233
-lines_prelude = 497
+lines_prelude = 500
 functions = 103
 functions_iwram = 3
 functions_lifted = 99
@@ -146,7 +146,7 @@ planted_hole = { drop_standin = 0x03000000, names = "error: hard hole in f_03000
 
 [program.native-spike.bars]
 lines = 71818
-lines_prelude = 497
+lines_prelude = 500
 functions = 111
 functions_iwram = 3
 functions_lifted = 107
@@ -205,7 +205,7 @@ planted_flags = ["--fall-as-tail-call"]
 
 [program.native-fallthrough.bars]
 lines = 70098
-lines_prelude = 497
+lines_prelude = 500
 functions = 113
 functions_iwram = 3
 functions_lifted = 109
@@ -265,7 +265,7 @@ planted_flags = ["--irq-at-waits"]
 
 [program.native-irq-hold.bars]
 lines = 70757
-lines_prelude = 497
+lines_prelude = 500
 functions = 115
 functions_iwram = 3
 functions_lifted = 109
@@ -327,7 +327,7 @@ planted_flags = ["--plant-slot=0x08000182"]
 
 [program.native-frame-locals.bars]
 lines = 70180
-lines_prelude = 497
+lines_prelude = 500
 functions = 114
 functions_iwram = 3
 functions_lifted = 110

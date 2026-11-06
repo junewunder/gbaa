@@ -35,7 +35,9 @@
 //!
 //! and fails at the first difference, naming the frame, the region and the
 //! byte (address, play's value, native's). `--packed BIN`: the same
-//! program's play layout must draw NATIVE's frames (frame hashes).
+//! program's play layout must draw NATIVE's frames (frame hashes), and
+//! its records must be NATIVE's, nothing skipped (RAM as the guest lays it
+//! out, which a packed program records).
 //! `--planted BIN` (any number): a build with a planted fault (one wrong
 //! store, or an old behaviour a lifter flag brings back), which must
 //! differ; its first difference is printed. A lowest sp outside IWRAM
@@ -222,7 +224,7 @@ pub fn run(
     let mut parts = vec![format!("{frames} frames, {said}")];
 
     if let Some(p) = &extra.packed {
-        runner(&out, "packed", p, &r, &[], false)?;
+        runner(&out, "packed", p, &r, &[], true)?;
         let (a, b) = (
             read_hashes(&out.join("native-hashes.txt"))?,
             read_hashes(&out.join("packed-hashes.txt"))?,
@@ -235,7 +237,24 @@ pub fn run(
                 b.get(i).map_or("(none)", String::as_str)
             )));
         }
-        parts.push(format!("the play layout draws the same {} frames", a.len()));
+        // Its records too, whole: both are native programs, so nothing is
+        // skipped (a byte the layout moved shows here first).
+        compare(
+            &out.join("native.rec"),
+            &out.join("packed.rec"),
+            &[],
+            frames,
+        )
+        .map_err(|e| match e {
+            Differ::Fail(f) => Fail(format!(
+                "the play layout's record differs from the guest layout's: {f}"
+            )),
+            Differ::Unrun(f) => Unrun(f),
+        })?;
+        parts.push(format!(
+            "the play layout draws the same {} frames, its records the same",
+            a.len()
+        ));
     }
     for (i, p) in extra.planted.iter().enumerate() {
         let run = match i {
