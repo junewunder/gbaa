@@ -42,8 +42,13 @@ in the way of each.
 - **Indirect jumps Recovery leaves unresolved** (2 to 50) lead in Minish
   Cap (25) and Emerald Rogue (50), and almost none were reached in 90
   seconds of play (14 of 109 over all eight), so coverage runs that reach
-  them are what tell real tables from dead code. moonbeam's largest class
-  is 12 functions whose summary returns with sp changed.
+  them are what tell real tables from dead code. With the coverage runs
+  (2026-11-06, [below](#coverage-runs)) 88 of the 165 unresolved since
+  the run's call targets are reached (68 by the press script), each with
+  its targets: m4a's `bx r12` returns, Minish Cap's IWRAM veneers, and
+  real switch tables in Rogue and moonbeam; the other 77 no run reached.
+  moonbeam's largest class is 12 functions whose summary returns with sp
+  changed.
 - **Five games ran code from RAM that changes; one still does.** The
   flash save library copies its routines onto the stack (`ReadFlash_Core`
   and its siblings, at 0x03007dxx; Emerald, both Kirbys, Metroid, Rogue,
@@ -270,6 +275,249 @@ non-entries left are all in RAM, the games' own IWRAM copies: the RAM
 copies unit's work (done since: none is left, "The ranking" above). The lifter doesn't take run roots yet:
 `discover_with` is what it would call.
 
+## Coverage runs
+
+Since 2026-11-06 (unit native/hole-coverage) `gbaa-holes ROM --cover
+holes/coverage/<game>.toml` plays coverage runs after the press script,
+into the same record (`crates/hole-report/src/cover.rs`; command entry in
+`docs/tools/commands.md`). Every run is seeded and repeatable: a random
+walk (a direction or none held 1 to 48 frames, A, B, Start, Select, L, R
+now and then, A tapped every eighth frame) after a short script. The runs,
+per game:
+
+- **walk** (all eight): from reset, Start and A through the title for
+  1,500 frames, then the random walk; four seeds, 9,000 frames each.
+- **saves** and **save-backups** (moonbeam, Kirby & the Amazing Mirror,
+  Rogue; Emerald's one is **save**, with no backups run): the owner's saves
+  in `$GBAA_DATA/saves/<game>/` and their backups, continued, then the
+  walk; 6,000 or 9,000 frames each.
+- **story** and **tas** (Emerald): every other story-point save (`just
+  emerald-story`), continued as the fuzzer does, 3,000 frames; every
+  other state along the living-dex TAS (`just emerald-tas`), 2,000 frames.
+
+`gbaa-fuzz` itself isn't fed in: it is Emerald's and Kirby & the Amazing
+Mirror's only, and its runs aren't kept as states the hole tool could
+replay; its story seeds are (the **story** and **tas** runs).
+
+The run now records, at every indirect jump executed (`bx`, a load or
+data-processing write to pc, `ldm` with pc), the runs that executed it and
+each target (up to 256). Each file's `[[jump]]` list, below its marker, is
+every jump Recovery leaves unresolved, with the runs that reached it
+(none: unreached by every run) and its targets, written with `--update`;
+without it the tool checks the list against the runs and fails on any
+difference (Metroid's and Minish Cap's reruns matched). A game takes 4 to
+25 minutes (Emerald the longest: 107,400 frames, 19 G instructions).
+
+Unresolved jumps reached by any run (by the press script alone), with the
+ranking lines' totals as classified against all runs:
+
+| Game | Unresolved jumps | Reached by any run | By the press script | Frames played |
+|---|---:|---:|---:|---:|
+| Metroid: Zero Mission | 3 | 0 | 0 | 41,400 |
+| WarioWare, Inc. | 4 | 1 | 1 | 41,400 |
+| Kirby & the Amazing Mirror | 14 | 13 | 13 | 77,400 |
+| Kirby: Nightmare in Dream Land | 15 | 14 | 14 | 41,400 |
+| moonbeam | 11 | 5 | 3 | 65,400 |
+| Pokémon Emerald | 22 | 11 | 11 | 107,400 |
+| The Minish Cap | 34 | 26 | 14 | 41,400 |
+| Emerald Rogue | 62 | 18 | 12 | 77,400 |
+| All eight | 165 | 88 | 68 | |
+
+(Rogue has 62, not 60: the runs' extra call targets gave discovery more
+code. Its busy loops that call functions rose from 3 to 15, Emerald's from
+0 to 5: map loads the press script never reached.)
+
+What the reached ones are:
+
+- **m4a's returns through r12** (`mov r12, lr` … `bx r12`: `ply_rept`,
+  `clear_modM`, `MPlayJumpTableCopy`): 11 to 14 a game in Emerald, both
+  Kirbys, Minish Cap and Rogue, each with one target, the return site in
+  `MPlayMain` or `SoundInit`. The Recovery unit for a `bx` through a copy of
+  lr (filed) takes these.
+- **Minish Cap's veneers into its IWRAM code**: 15 two-instruction stubs
+  at 0x0800029e-0x080002f2 (`GetTileType…`, `GetActTile…`,
+  `GetCollisionData…`) and `CheckBits`, `CalcCollisionStaticEntity`, each
+  jumping to one IWRAM address (0x03005780-0x03005ff0): the code the
+  game copies to IWRAM itself. The walk reached 12 of them the press script
+  didn't.
+- **Switch tables the run resolved**: Rogue's 0x0819aa60 (13 targets),
+  0x0819d4be (8), 0x0819de7e (9) and 0x081c3064 (2), reached only from the
+  owner's save; moonbeam's 0x08002bc4 (6), 0x08002be2 (2), 0x08006aee (8),
+  0x08027558 (7) and 0x08020616 (1). These are real tables Recovery
+  misses.
+- **Jumps into RAM code**: WarioWare's 0x080efe76 (four IWRAM targets),
+  Rogue's `SoundMain` into IWRAM (0x03005599), Kirby:
+  Nightmare's IWRAM 0x030010f8 back to ROM.
+
+Unreached by everything include, where named, the GameCube multiboot
+handlers (Emerald, Rogue), `__make_dp` (libc's soft-float, Emerald and
+WarioWare), `IntrMain`'s and `__start`'s tails, and Rogue's 44 others,
+which no save or walk reached; a coverage-guided run, or saves further
+into Rogue, is what would settle them.
+
+### Each game's unresolved jumps
+
+Function names from the public decomps' symbol maps
+(`$GBAA_DATA/names/`: pret's for Emerald, Minish Cap, Metroid and Kirby &
+the Amazing Mirror; xmatch's library names for the others).
+
+#### Metroid: Zero Mission
+
+0 of 3 reached (0 by the press script).
+
+Unreached by every run: 0x08000208 (IntrMain+0x104), 0x087608fc, 0x087d8004.
+
+#### WarioWare, Inc.
+
+1 of 4 reached (1 by the press script).
+
+| Jump | In | Reached by | Targets |
+|---|---|---|---|
+| 0x080efe76 |  | press, walk | 4: 0x03006900, 0x03006a74, 0x03006b04, 0x03006c28 |
+
+Unreached by every run: 0x080001c0, 0x080f56a4 (__make_dp+0x24), 0x083db2e6.
+
+#### Kirby & the Amazing Mirror
+
+13 of 14 reached (13 by the press script).
+
+| Jump | In | Reached by | Targets |
+|---|---|---|---|
+| 0x0814f88c | MPlayJumpTableCopy+0x14 | press, walk, saves, save-backups | 1: 0x0815053b (SoundInit+0xa2) |
+| 0x0814f940 | ply_rept+0x38 | press, walk, saves, save-backups | 1: 0x0814fb8b (MPlayMain+0x102) |
+| 0x0814f956 | ply_rept+0x4e | press, walk, saves, save-backups | 1: 0x0814fb8b (MPlayMain+0x102) |
+| 0x0814f968 | ply_rept+0x60 | press, walk, saves, save-backups | 1: 0x0814fb8b (MPlayMain+0x102) |
+| 0x0814f998 | ply_rept+0x90 | press, walk, saves, save-backups | 1: 0x0814fb8b (MPlayMain+0x102) |
+| 0x0814f9ac | ply_rept+0xa4 | press, walk, saves, save-backups | 1: 0x0814fb8b (MPlayMain+0x102) |
+| 0x0814f9c2 | ply_rept+0xba | press, walk, saves, save-backups | 1: 0x0814fb8b (MPlayMain+0x102) |
+| 0x0814f9d6 | ply_rept+0xce | press, walk, saves, save-backups | 1: 0x0814fb8b (MPlayMain+0x102) |
+| 0x0814f9e8 | ply_rept+0xe0 | press, walk, saves, save-backups | 1: 0x0814fb8b (MPlayMain+0x102) |
+| 0x0814f9f4 | ply_rept+0xec | press, walk, saves, save-backups | 1: 0x0814fb8b (MPlayMain+0x102) |
+| 0x0814fa0e | ply_rept+0x106 | press, walk, saves, save-backups | 1: 0x0814fb8b (MPlayMain+0x102) |
+| 0x0814ffdc | clear_modM+0x38 | press, walk, saves, save-backups | 1: 0x0814fb8b (MPlayMain+0x102) |
+| 0x0814fff0 | clear_modM+0x4c | press, walk, saves, save-backups | 1: 0x0814fb8b (MPlayMain+0x102) |
+
+Unreached by every run: 0x080001bc (__start+0x1bc).
+
+#### Kirby: Nightmare in Dream Land
+
+14 of 15 reached (14 by the press script).
+
+| Jump | In | Reached by | Targets |
+|---|---|---|---|
+| 0x030010f8 |  | press, walk | 1: 0x080010cd |
+| 0x080cdd50 | MPlayJumpTableCopy+0x14 | press, walk | 1: 0x080ce9ff (SoundInit+0xa2) |
+| 0x080cde04 | ply_rept+0x38 | press, walk | 1: 0x080ce04f (MPlayMain+0x102) |
+| 0x080cde1a | ply_rept+0x4e | press, walk | 1: 0x080ce04f (MPlayMain+0x102) |
+| 0x080cde2c | ply_rept+0x60 | press, walk | 1: 0x080ce04f (MPlayMain+0x102) |
+| 0x080cde5c | ply_rept+0x90 | press, walk | 1: 0x080ce04f (MPlayMain+0x102) |
+| 0x080cde70 | ply_rept+0xa4 | press, walk | 1: 0x080ce04f (MPlayMain+0x102) |
+| 0x080cde86 | ply_rept+0xba | press, walk | 1: 0x080ce04f (MPlayMain+0x102) |
+| 0x080cde9a | ply_rept+0xce | press, walk | 1: 0x080ce04f (MPlayMain+0x102) |
+| 0x080cdeac | ply_rept+0xe0 | press, walk | 1: 0x080ce04f (MPlayMain+0x102) |
+| 0x080cdeb8 | ply_rept+0xec | press, walk | 1: 0x080ce04f (MPlayMain+0x102) |
+| 0x080cded2 | ply_rept+0x106 | press, walk | 1: 0x080ce04f (MPlayMain+0x102) |
+| 0x080ce4a0 | clear_modM+0x38 | press, walk | 1: 0x080ce04f (MPlayMain+0x102) |
+| 0x080ce4b4 | clear_modM+0x4c | press, walk | 1: 0x080ce04f (MPlayMain+0x102) |
+
+Unreached by every run: 0x0800474e.
+
+#### moonbeam
+
+5 of 11 reached (3 by the press script).
+
+| Jump | In | Reached by | Targets |
+|---|---|---|---|
+| 0x08002bc4 |  | press, walk, saves, save-backups | 6: 0x0800265b, 0x080026c3, 0x080038d5, 0x08003a13, 0x08005019, 0x08005ab9 |
+| 0x08002be2 |  | saves, save-backups | 2: 0x08004fdd, 0x080059f7 |
+| 0x08006aee |  | saves, save-backups | 8: 0x0800122d, 0x0800125f, 0x08001325, 0x08004b4f, 0x08004d91, 0x080056a1, 0x08005d75, 0x08006155 |
+| 0x08020616 |  | press, walk, saves, save-backups | 1: 0x080206cb |
+| 0x08027558 |  | press, walk, saves, save-backups | 7: 0x0802755b, 0x080277a9, 0x080277b1, 0x080277f1, 0x08027819, 0x0802782d, 0x08027865 |
+
+Unreached by every run: 0x08002d9c, 0x0801ba92, 0x0802dbc0, 0x0803842c, 0x0803846e, 0x08040080.
+
+#### Pokémon Emerald
+
+11 of 22 reached (11 by the press script).
+
+| Jump | In | Reached by | Targets |
+|---|---|---|---|
+| 0x082df860 |  | press, walk, save, story | 1: 0x082e057f (SoundInit+0xa2) |
+| 0x082df92a |  | press, walk, save, story, tas | 1: 0x082dfb5f (MPlayMain+0x102) |
+| 0x082df93c |  | press, walk, save, story, tas | 1: 0x082dfb5f (MPlayMain+0x102) |
+| 0x082df96c |  | press, walk, save, story, tas | 1: 0x082dfb5f (MPlayMain+0x102) |
+| 0x082df980 |  | press, walk, save, story, tas | 1: 0x082dfb5f (MPlayMain+0x102) |
+| 0x082df996 |  | press, walk, save, story, tas | 1: 0x082dfb5f (MPlayMain+0x102) |
+| 0x082df9aa |  | press, walk, save, story, tas | 1: 0x082dfb5f (MPlayMain+0x102) |
+| 0x082df9bc |  | press, walk, save, story, tas | 1: 0x082dfb5f (MPlayMain+0x102) |
+| 0x082df9f6 |  | press, walk, save, tas | 1: 0x082dfb5f (MPlayMain+0x102) |
+| 0x082dffb4 |  | press, walk, save, story, tas | 1: 0x082dfb5f (MPlayMain+0x102) |
+| 0x082dffc8 |  | press, walk, save, story, tas | 1: 0x082dfb5f (MPlayMain+0x102) |
+
+Unreached by every run: 0x08000370 (IntrMain+0x128), 0x082db334, 0x082db596, 0x082db848, 0x082dee74 (GameCubeMultiBoot_Main+0xf0), 0x082dee94 (GameCubeMultiBoot_ExecuteProgram+0x10), 0x082deef6 (GameCubeMultiBoot_HandleSerialInterrupt+0x14), 0x082e89f4 (__make_dp+0x24), 0x0850dbce, 0x08613d08, 0x087f22e8.
+
+#### The Minish Cap
+
+26 of 34 reached (14 by the press script).
+
+| Jump | In | Reached by | Targets |
+|---|---|---|---|
+| 0x0800029e | GetTileTypeRelativeToEntity+0x2 | walk | 1: 0x03005780 |
+| 0x080002a2 | GetTileTypeAtEntity+0x2 | press, walk | 1: 0x0300579c |
+| 0x080002a6 | GetTileTypeAtWorldCoords+0x2 | press, walk | 1: 0x030057a8 |
+| 0x080002aa | GetTileTypeAtRoomCoords+0x2 | walk | 1: 0x030057bc |
+| 0x080002b2 | GetTileTypeAtTilePos+0x2 | press, walk | 1: 0x030057d4 |
+| 0x080002b6 | GetActTileRelativeToEntity+0x2 | walk | 1: 0x03005800 |
+| 0x080002ba | GetActTileAtEntity+0x2 | walk | 1: 0x0300581c |
+| 0x080002ca | GetActTileAtTilePos+0x2 | walk | 1: 0x03005854 |
+| 0x080002ce | GetCollisionDataRelativeTo+0x2 | walk | 1: 0x03005864 |
+| 0x080002d2 | GetCollisionDataAtEntity+0x2 | walk | 1: 0x03005880 |
+| 0x080002e2 | GetCollisionDataAtTilePos+0x2 | walk | 1: 0x030058b8 |
+| 0x080002e6 | GetActTileForTileType+0x2 | walk | 1: 0x030058c8 |
+| 0x080002ee | sub_080B1B84+0x2 | walk | 1: 0x030058f8 |
+| 0x080002f2 | sub_080B1BA4+0x2 | walk | 1: 0x03005918 |
+| 0x08000f12 | CheckBits+0x2 | walk | 1: 0x03005e60 |
+| 0x08004486 | CalcCollisionStaticEntity+0x2 | press, walk | 1: 0x03005ff0 |
+| 0x080af758 | MPlayJumpTableCopy+0x14 | press, walk | 1: 0x080b03f1 (SoundInit+0x80) |
+| 0x080af822 | ply_rept+0x4e | press, walk | 1: 0x080afa15 (MPlayMain+0x10c) |
+| 0x080af834 | ply_rept+0x60 | press, walk | 1: 0x080afa15 (MPlayMain+0x10c) |
+| 0x080af864 | ply_rept+0x90 | press, walk | 1: 0x080afa15 (MPlayMain+0x10c) |
+| 0x080af878 | ply_rept+0xa4 | press, walk | 1: 0x080afa15 (MPlayMain+0x10c) |
+| 0x080af88e | ply_rept+0xba | press, walk | 1: 0x080afa15 (MPlayMain+0x10c) |
+| 0x080af8c0 | ply_rept+0xec | press, walk | 1: 0x080afa15 (MPlayMain+0x10c) |
+| 0x080af8ee | ply_rept+0x11a | press, walk | 1: 0x080afa15 (MPlayMain+0x10c) |
+| 0x080afe84 | clear_modM+0x38 | press, walk | 1: 0x080afa15 (MPlayMain+0x10c) |
+| 0x080afe98 | clear_modM+0x4c | press, walk | 1: 0x080afa15 (MPlayMain+0x10c) |
+
+Unreached by every run: 0x080002be (GetActTileAtWorldCoords+0x2), 0x080002c2 (GetActTileAtRoomCoords+0x2), 0x080002d6 (GetCollisionDataAtWorldCoords+0x2), 0x0800129a (sub_08001290+0xa), 0x080012c4 (EnemyFunctionHandler+0x26), 0x080042aa (UpdateAnimationVariableFrames+0x34), 0x080045c2 (sub_080045B4+0xe), 0x080045d8 (CalculateDirectionTo+0x4).
+
+#### Emerald Rogue
+
+18 of 62 reached (12 by the press script).
+
+| Jump | In | Reached by | Targets |
+|---|---|---|---|
+| 0x0800b7f0 | SoundMain+0x68 | press, walk, saves, save-backups | 1: 0x03005599 |
+| 0x0800c69c | MPlayJumpTableCopy+0x14 | press, walk, saves, save-backups | 1: 0x0800a099 (SoundInit+0x94) |
+| 0x0800c750 | ply_rept+0x38 | save-backups | 1: 0x0800c99b (MPlayMain+0x102) |
+| 0x0800c766 | ply_rept+0x4e | press, walk, saves, save-backups | 1: 0x0800c99b (MPlayMain+0x102) |
+| 0x0800c778 | ply_rept+0x60 | press, walk, saves, save-backups | 1: 0x0800c99b (MPlayMain+0x102) |
+| 0x0800c7a8 | ply_rept+0x90 | press, walk, saves, save-backups | 1: 0x0800c99b (MPlayMain+0x102) |
+| 0x0800c7bc | ply_rept+0xa4 | press, walk, saves, save-backups | 1: 0x0800c99b (MPlayMain+0x102) |
+| 0x0800c7d2 | ply_rept+0xba | press, walk, saves, save-backups | 1: 0x0800c99b (MPlayMain+0x102) |
+| 0x0800c7e6 | ply_rept+0xce | press, walk, saves, save-backups | 1: 0x0800c99b (MPlayMain+0x102) |
+| 0x0800c7f8 | ply_rept+0xe0 | press, walk, saves, save-backups | 1: 0x0800c99b (MPlayMain+0x102) |
+| 0x0800c804 | ply_rept+0xec | save-backups | 1: 0x0800c99b (MPlayMain+0x102) |
+| 0x0800c832 | ply_rept+0x11a | press, walk, saves, save-backups | 1: 0x0800c99b (MPlayMain+0x102) |
+| 0x0800cdf0 | clear_modM+0x38 | press, walk, saves, save-backups | 1: 0x0800c99b (MPlayMain+0x102) |
+| 0x0800ce04 | clear_modM+0x4c | press, walk, saves, save-backups | 1: 0x0800c99b (MPlayMain+0x102) |
+| 0x0819aa60 |  | saves | 13: 0x0819aa63, 0x0819aab7, 0x0819aad9, 0x0819aaeb, 0x0819ab07, 0x0819ab11, 0x0819ab29, 0x0819ab3d, … |
+| 0x0819d4be |  | saves | 8: 0x0819d4c1, 0x0819d4f1, 0x0819d4fd, 0x0819d503, 0x0819d51d, 0x0819d537, 0x0819d541, 0x0819d54b |
+| 0x0819de7e |  | saves | 9: 0x0819de81, 0x0819deb1, 0x0819debd, 0x0819dec3, 0x0819decd, 0x0819ded7, 0x0819dee1, 0x0819deeb, … |
+| 0x081c3064 |  | saves | 2: 0x081c306f, 0x081c30b9 |
+
+Unreached by every run: 0x08000384, 0x0800b5a0 (GameCubeMultiBoot_Main+0xf0), 0x0800b622 (GameCubeMultiBoot_HandleSerialInterrupt+0x14), 0x0800f130, 0x0800f134, 0x0800f138, 0x08022210, 0x080222f0, 0x080287a8, 0x0802d2c2, 0x0802f970, 0x080375c6, 0x0803d1ec, 0x08041c68, 0x0806ae5e, 0x0806c416, 0x0807e002, 0x0808306e, 0x080a4132, 0x080ba13c, 0x080bb454, 0x080bceca, 0x0811ab26, 0x0811dc06, 0x0811dc3a, 0x08120270, 0x0813a1d4, 0x0814c1d0, 0x0814c474, 0x081786cc, 0x0818079c, 0x08184db0, 0x0819e5e4, 0x0819e910, 0x081b2f68, 0x081b305c, 0x081e2676, 0x0822bcf4, 0x08264aaa, 0x0826a946, 0x0826a9c2, 0x0826b184, 0x0826bb32, 0x0826c5fa.
+
 ## Each game's worst holes
 
 Counts as of the flash stand-in (2026-11-05), before discovery took the
@@ -353,7 +601,8 @@ Filed from this report (see the tracker for their state):
   Done from the run ("RAM copies", above); found statically, it would
   serve a lift with no run.
 - Coverage runs past the press script, to reach the unresolved jumps and
-  settle each as a table or dead code.
+  settle each as a table or dead code (done: "Coverage runs", above; 77
+  still unreached).
 - A hardware-library stand-in for the flash library's stack routines
   (done: "The flash library's stack routines", above).
 - Recovery takes a `bx` through a copy of lr as a return (filed after
@@ -361,7 +610,8 @@ Filed from this report (see the tracker for their state):
 
 ## Limits
 
-- One route of 90 seconds per game, from reset, no save file. Code the
+- One route of 90 seconds per game, from reset, no save file (the
+  coverage runs, above, add random walks, saves and Emerald's TAS states). Code the
   route doesn't reach shows only through static finds (Recovery's jumps,
   static return arithmetic, CPU-state instructions).
 - The return-arithmetic rule is a heuristic over the run; its filters

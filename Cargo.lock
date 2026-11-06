@@ -958,6 +958,8 @@ dependencies = [
  "armv4t",
  "codegen",
  "runtime",
+ "serde",
+ "toml",
 ]
 
 [[package]]

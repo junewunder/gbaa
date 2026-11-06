@@ -1,0 +1,88 @@
+# Coverage runs for `gbaa-holes ROM --cover FILE` (native/hole-coverage;
+# docs/research/native-holes.md, "Coverage runs"): start points beyond the
+# press script, each played with seeded random presses, so each jump
+# Recovery leaves unresolved is seen with its targets or shown unreached.
+# Paths are under $GBAA_DATA. The [[jump]] list below the marker is what
+# the runs saw; `just holes ROM --cover FILE` checks it.
+
+# From reset: Start and A through the title, then a random walk.
+[[run]]
+name = "walk"
+frames = 9000
+presses = ["start@300-1500/120", "a@400-1500/30"]
+random_from = 1500
+seeds = 4
+
+# The owner's save and its backup, continued, then a random walk.
+[[run]]
+name = "saves"
+save = "saves/moonbeam"
+frames = 6000
+presses = ["start@300-900/120", "a@400-900/30"]
+random_from = 900
+seeds = 2
+
+[[run]]
+name = "save-backups"
+save = "saves/moonbeam/backups"
+frames = 6000
+presses = ["start@300-900/120", "a@400-900/30"]
+random_from = 900
+seeds = 2
+
+# --- Observed: written by `gbaa-holes ROM --cover FILE --update`; checked without it ---
+
+[[jump]]
+at = 0x08002bc4
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0800265b, 0x080026c3, 0x080038d5, 0x08003a13, 0x08005019, 0x08005ab9]
+
+[[jump]]
+at = 0x08002be2
+runs = ["saves", "save-backups"]
+targets = [0x08004fdd, 0x080059f7]
+
+[[jump]]
+at = 0x08002d9c
+runs = []
+targets = []
+
+[[jump]]
+at = 0x08006aee
+runs = ["saves", "save-backups"]
+targets = [0x0800122d, 0x0800125f, 0x08001325, 0x08004b4f, 0x08004d91, 0x080056a1, 0x08005d75, 0x08006155]
+
+[[jump]]
+at = 0x0801ba92
+runs = []
+targets = []
+
+[[jump]]
+at = 0x08020616
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x080206cb]
+
+[[jump]]
+at = 0x08027558
+runs = ["press", "walk", "saves", "save-backups"]
+targets = [0x0802755b, 0x080277a9, 0x080277b1, 0x080277f1, 0x08027819, 0x0802782d, 0x08027865]
+
+[[jump]]
+at = 0x0802dbc0
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0803842c
+runs = []
+targets = []
+
+[[jump]]
+at = 0x0803846e
+runs = []
+targets = []
+
+[[jump]]
+at = 0x08040080
+runs = []
+targets = []
