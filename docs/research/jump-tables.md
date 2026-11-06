@@ -268,7 +268,14 @@ Its rules:
   `__gnu_thumb1_case` helpers resolve, with no knowledge of them.
 - Values are widened after six visits, only at loop heads (targets of
   backward edges), so a value bounded by a check is never widened before
-  its use. Calls clobber r0–r3, r12 and lr.
+  its use. Calls clobber r0–r3, r12 and lr, except those of r0–r3 and
+  r12 a short callee with no calls of its own never writes (read from its
+  code, up to 64 instructions, following its branches; since 2026-11-06).
+- A jump to lr's entry value, unchanged, is a return wherever it is held:
+  m4a's `ply_*` routines do `mov r12, lr; bl ld_r3_tp_adr_i; ...; bx r12`
+  (native/recovery-saved-lr-return). With the two rules jt-score's
+  unresolved jumps went 38 to 22 (pokeemerald) and 53 to 37 (modern), and
+  nothing else it scores moved.
 - A jump resolves when its target value at the fixpoint is a finite set
   inside ROM. When a jump is reached from several function entries, it
   counts as resolved only if every one of them resolves it.
