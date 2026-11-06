@@ -228,40 +228,44 @@ impl Val {
     /// one "from the lowest on" (a loop walking a table), and a pointer
     /// "from here on" takes in those above it.
     fn cap(&mut self) {
-        if self
-            .toks
-            .iter()
-            .filter(|t| matches!(t, Tok::Num(_)))
-            .count()
-            > NUMS
-        {
+        // One pass to see what needs widening; the set (shared) is only
+        // changed when something does.
+        let (mut nums, mut roms, mut from) = (0, 0, None);
+        for t in self.toks.iter() {
+            match *t {
+                Tok::Num(_) => nums += 1,
+                Tok::Rom(_) => roms += 1,
+                Tok::RomFrom(a) if from.is_none() => from = Some(a),
+                _ => {}
+            }
+        }
+        if nums > NUMS {
             self.unk = true;
         }
         // Unknown takes in every number (so the cap stays monotone).
-        if self.unk {
+        if self.unk && nums > 0 {
             self.toks.retain(|t| !matches!(t, Tok::Num(_)));
         }
-        let roms: Vec<u32> = self
-            .toks
-            .iter()
-            .filter_map(|t| match t {
-                Tok::Rom(a) => Some(*a),
-                _ => None,
-            })
-            .collect();
-        if roms.len() > ROMS {
+        if roms > ROMS {
+            let lo = self
+                .toks
+                .iter()
+                .find_map(|t| match t {
+                    Tok::Rom(a) => Some(*a),
+                    _ => None,
+                })
+                .unwrap();
             self.toks.retain(|t| !matches!(t, Tok::Rom(_)));
-            self.toks.insert(Tok::RomFrom(roms[0]));
+            self.toks.insert(Tok::RomFrom(lo));
+            from = Some(from.map_or(lo, |f: u32| f.min(lo)));
         }
-        let froms: Vec<u32> = self
-            .toks
-            .iter()
-            .filter_map(|t| match t {
-                Tok::RomFrom(a) => Some(*a),
-                _ => None,
-            })
-            .collect();
-        if let Some(&lo) = froms.first() {
+        // A pointer "from here on" takes in those above it.
+        if let Some(lo) = from
+            && self
+                .toks
+                .iter()
+                .any(|t| matches!(*t, Tok::Rom(a) | Tok::RomFrom(a) if a >= lo && *t != Tok::RomFrom(lo)))
+        {
             self.toks.retain(|t| match t {
                 Tok::Rom(a) | Tok::RomFrom(a) => *a < lo,
                 _ => true,
@@ -418,6 +422,8 @@ struct G {
     /// [`G::read_pile`]'s, by width.
     pile_reads: [Option<Val>; 5],
     cells: BTreeMap<u32, Mem>,
+    /// [`G::read_cells`]'s, by width.
+    cell_reads: [Option<Val>; 5],
     spills: BTreeMap<u32, Mem>,
     /// What incomplete callee sets pass.
     loose_args: Vec<Val>,
@@ -471,7 +477,11 @@ impl G {
         m.extend(toks.iter().copied());
         let c = m.len() != n;
         if c {
-            self.pile_reads = Default::default();
+            match to {
+                Store::Pile => self.pile_reads = Default::default(),
+                Store::Cell(_) => self.cell_reads = Default::default(),
+                Store::Spill(_) => {}
+            }
             match to {
                 Store::Spill(f) => {
                     self.dirty_entry.insert(f);
@@ -489,9 +499,26 @@ impl G {
         if self.pile_reads[i].is_none() {
             let mut v = Val::default();
             from_mem(&self.pile, w, &mut v);
+            v.cap();
             self.pile_reads[i] = Some(v);
         }
         into.join(self.pile_reads[i].as_ref().unwrap());
+    }
+
+    /// What a load at width `w` from anywhere reads of the cells (kept
+    /// until a cell changes: reading three thousand of them at each such
+    /// load was most of a large game's run).
+    fn read_cells(&mut self, w: u8, into: &mut Val) {
+        let i = w as usize;
+        if self.cell_reads[i].is_none() {
+            let mut v = Val::default();
+            for m in self.cells.values() {
+                from_mem(m, w, &mut v);
+            }
+            v.cap();
+            self.cell_reads[i] = Some(v);
+        }
+        into.join(self.cell_reads[i].as_ref().unwrap());
     }
 
     fn give(&mut self, f: u32, regs: &[Val]) {
@@ -630,7 +657,6 @@ fn from_mem(m: &Mem, w: u8, into: &mut Val) {
         };
         into.toks.insert(t);
     }
-    into.cap();
 }
 
 struct Run<'a, 'g> {
@@ -1148,7 +1174,23 @@ impl Run<'_, '_> {
         }
     }
 
+    /// What a load at width `w` through `a` reads, widened once
+    /// ([`from_mem`] doesn't: a load may read thousands of cells).
     fn load(
+        &mut self,
+        s: &St,
+        key: u32,
+        i: usize,
+        a: &Val,
+        w: u8,
+        hull: Option<(u32, u32)>,
+    ) -> Val {
+        let mut v = self.load_raw(s, key, i, a, w, hull);
+        v.cap();
+        v
+    }
+
+    fn load_raw(
         &mut self,
         s: &St,
         key: u32,
@@ -1273,9 +1315,13 @@ impl Run<'_, '_> {
                         out.lost_rom = true;
                     }
                     self.g.read_pile(w, &mut out);
-                    let (lo, hi) = hull.unwrap_or((0, u32::MAX));
-                    for (_, c) in self.g.cells.range(lo.saturating_sub(3)..=hi) {
-                        from_mem(c, w, &mut out);
+                    match hull {
+                        Some((lo, hi)) => {
+                            for (_, c) in self.g.cells.range(lo.saturating_sub(3)..=hi) {
+                                from_mem(c, w, &mut out);
+                            }
+                        }
+                        None => self.g.read_cells(w, &mut out),
                     }
                     // An I/O read, too.
                     out.unk = true;
