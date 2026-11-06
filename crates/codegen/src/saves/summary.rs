@@ -143,6 +143,15 @@ pub struct Summary {
     /// each read of a register a callee (`Some`) or a BIOS or indirect
     /// call (`None`) left undefined, by the reading instruction.
     pub holes: BTreeSet<String>,
+    /// A path's run ended at one of the holes (a jump into code it
+    /// doesn't follow, to an unknown place, a mode change, a run that
+    /// didn't settle): reads past it are unseen, so its parameters, and
+    /// what it reads after its calls, may be incomplete.
+    pub stopped: bool,
+    /// The functions whose summaries its run used: its direct calls'
+    /// callees, and the functions it tail-calls (a jump into another's
+    /// entry the run doesn't go on through).
+    pub callees: BTreeSet<u32>,
     pub undefined_reads: BTreeMap<(u32, u8), Option<u32>>,
 }
 
@@ -233,6 +242,8 @@ pub(super) struct Sum<'a> {
     used: BTreeMap<(u32, u8), Cause>,
     undefined: BTreeMap<(u32, u8), Option<u32>>,
     pub(super) holes: BTreeSet<String>,
+    /// A path's run ended at a hole ([`Summary::stopped`]).
+    pub(super) stopped: bool,
     /// Each call site's callee, `None` for an indirect one.
     sites: BTreeMap<u32, Option<u32>>,
     /// The functions whose summaries this run used.
@@ -249,6 +260,7 @@ impl<'a> Sum<'a> {
             used: BTreeMap::new(),
             undefined: BTreeMap::new(),
             holes: BTreeSet::new(),
+            stopped: false,
             sites: BTreeMap::new(),
             refs: BTreeSet::new(),
         }
@@ -448,6 +460,7 @@ pub fn summarize_with(ctx: &Ctx, funcs: &[Func], assume: Assume) -> Summaries {
             for k in std::mem::take(&mut work) {
                 if let Some(s) = sums.get_mut(&k) {
                     s.holes.insert("summaries didn't settle".into());
+                    s.stopped = true;
                 }
             }
             break;
@@ -470,6 +483,8 @@ pub fn summarize_with(ctx: &Ctx, funcs: &[Func], assume: Assume) -> Summaries {
             forwards: sum.forwards(),
             keeps: proof.kept.contains(&k),
             holes: sum.holes.clone(),
+            stopped: sum.stopped,
+            callees: sum.refs.clone(),
             undefined_reads: sum.undefined.clone(),
         };
         for &c in &sum.refs {

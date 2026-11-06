@@ -47,6 +47,11 @@ mod rooms {
     pub const CODE: usize = relay::CODE_LEN;
 }
 
+/// How [`Udp::host`]'s and [`Udp::join`]'s error starts when the rooms
+/// server said no (no such room, full, too old a version); its words
+/// follow.
+pub const REFUSED: &str = "the rooms server says: ";
+
 /// The most of a reliable message one datagram carries: under any path's
 /// MTU, as a real network needs.
 pub const CHUNK: usize = 1200;
@@ -171,18 +176,22 @@ impl Udp {
         Ok(u)
     }
 
-    /// Make a room of `seats` on the rooms server `server` for `build`, say
-    /// its code (`say`), and wait while `go_on` says so for every seat to
-    /// fill. This peer is seat 0.
+    /// Make a room of `seats` (2 to 4) on the rooms server `server` for
+    /// `build`, and wait while `go_on` says so for every seat to fill,
+    /// telling `say` the room's code and how many seats are taken each
+    /// time the server says (every half second, and as each fills). This
+    /// peer is seat 0. The server may refuse, as too old a
+    /// [`crate::VERSION`]: the error is then a [`REFUSED`] one.
     pub fn host(
         server: SocketAddr,
         seats: usize,
         build: &[u8; 32],
-        say: impl FnOnce([u8; rooms::CODE]),
+        say: impl FnMut([u8; rooms::CODE], usize, usize),
         go_on: impl FnMut() -> bool,
     ) -> Result<(Udp, [u8; rooms::CODE]), String> {
         let mut ask = vec![rooms::HOST, seats as u8];
         ask.extend_from_slice(build);
+        ask.extend_from_slice(&crate::VERSION.to_le_bytes());
         Udp::seat(server, &ask, Some(say), go_on)
     }
 
@@ -197,13 +206,14 @@ impl Udp {
         let mut ask = vec![rooms::JOIN];
         ask.extend_from_slice(&code);
         ask.extend_from_slice(build);
-        Udp::seat(server, &ask, None::<fn(_)>, go_on)
+        ask.extend_from_slice(&crate::VERSION.to_le_bytes());
+        Udp::seat(server, &ask, None::<fn(_, _, _)>, go_on)
     }
 
     fn seat(
         server: SocketAddr,
         ask: &[u8],
-        mut say: Option<impl FnOnce([u8; rooms::CODE])>,
+        mut say: Option<impl FnMut([u8; rooms::CODE], usize, usize)>,
         mut go_on: impl FnMut() -> bool,
     ) -> Result<(Udp, [u8; rooms::CODE]), String> {
         let bind = if server.is_ipv4() {
@@ -253,17 +263,14 @@ impl Udp {
             }
             match d.first() {
                 Some(&rooms::ERROR) => {
-                    return Err(format!(
-                        "the rooms server says: {}",
-                        String::from_utf8_lossy(&d[1..])
-                    ));
+                    return Err(format!("{REFUSED}{}", String::from_utf8_lossy(&d[1..])));
                 }
                 Some(&rooms::ROOM) if n == 1 + rooms::CODE + 3 => {
                     heard = true;
                     let code: [u8; rooms::CODE] = d[1..1 + rooms::CODE].try_into().unwrap();
                     let (seat, seats, filled) = (d[7] as usize, d[8] as usize, d[9]);
-                    if let Some(say) = say.take() {
-                        say(code);
+                    if let Some(say) = &mut say {
+                        say(code, filled as usize, seats);
                     }
                     if filled as usize == seats {
                         sock.set_read_timeout(None).map_err(|e| e.to_string())?;

@@ -246,6 +246,34 @@ fn a_masked_wait_wakes_without_dispatch_and_release_runs_it() {
     assert_eq!(g.hw.line(), 170, "a release moves no time");
 }
 
+/// With `IME` clear a V-blank waits in `IF`; writing `IME` back runs it
+/// at once, at the line the beam is on, and a write that leaves `IME` on
+/// runs nothing (native/ime-release).
+#[test]
+fn setting_ime_again_runs_what_is_pending() {
+    let mut g = game(100);
+    g.hw.stat.vblank_irq = true;
+    g.hw.irq.on(irq::VBLANK, on_vblank);
+    write_ime(&mut *g, 0);
+    while g.hw.line() != 170 {
+        idle(&mut *g).unwrap();
+    }
+    assert_eq!((g.ram.vblanks, g.hw.irq.flags), (0, irq::VBLANK));
+    // With I set, IME's return runs nothing yet.
+    g.masked = true;
+    write_ime(&mut *g, 1);
+    assert_eq!(g.ram.vblanks, 0);
+    g.masked = false;
+    write_ime(&mut *g, 0);
+    write_ime(&mut *g, 1);
+    assert_eq!((g.ram.vblanks, g.ram.seen_line), (1, 170));
+    assert_eq!(g.hw.line(), 170, "moves no time");
+    // IME already on: nothing new.
+    g.hw.irq.flags = irq::VBLANK;
+    write_ime(&mut *g, 1);
+    assert_eq!(g.ram.vblanks, 1);
+}
+
 /// `wait_irq` with I set returns when one of its sources is requested
 /// (the CPU wakes), where unmasked it waits for the handler; it must not
 /// hang. `halt` likewise.
@@ -360,8 +388,9 @@ fn idle_and_wait_irq_stop_at_handlers() {
     let mut g = game(100);
     g.hw.stat.hblank_irq = true;
     g.hw.irq.on(irq::HBLANK, on_hblank);
+    // Halt wakes at the first event whose handler runs: line 0's H-blank.
     halt(&mut *g).unwrap();
-    assert_eq!((g.hw.line(), g.ram.hblanks), (1, 1));
+    assert_eq!((g.hw.line(), g.ram.hblanks), (0, 1));
     g.hw.stat.vcount_irq = true;
     g.hw.stat.vcount_line = 100;
     g.hw.irq.on(irq::VCOUNT, on_vcount);
@@ -454,7 +483,7 @@ fn io_writes_by_offset_reach_the_fields() {
 #[should_panic(expected = "isn't modelled")]
 fn unmodelled_registers_are_loud() {
     let mut g = game(100);
-    g.hw.write16(reg::TM0CNT_L, 1);
+    g.hw.write16(reg::DMA0SAD, 1);
 }
 
 /// Polls on each of `DISPSTAT`'s flags finish.
@@ -546,9 +575,11 @@ fn spend_moves_the_beam_by_cycles_through_its_events() {
     // One more cycle reaches it: drawn, its handler run.
     spend(&mut *g, 1).unwrap();
     assert_eq!((g.hw.line(), g.ram.hblanks), (0, 1));
-    // Three lines on, and as many H-blanks.
+    // Three lines on: their H-blanks' requests merge in `IF`, and one
+    // handler runs after them, as the play build takes one IRQ after its
+    // sync.
     spend(&mut *g, 3 * LINE_DOTS).unwrap();
-    assert_eq!((g.hw.line(), g.ram.hblanks), (3, 4));
+    assert_eq!((g.hw.line(), g.ram.hblanks), (3, 2));
     // The play build's CpuSet price: 92 halfwords ROM to EWRAM at reset
     // wait states, as agb's crt0 copies its `.ewram`.
     assert_eq!(bios::cpu_set_cycles(0, 0x0800_0000, 0x0200_0000, 92), 1221);

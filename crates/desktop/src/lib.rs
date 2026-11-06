@@ -243,22 +243,25 @@ usage: gbaa-desktop ROM [options]
                    --scale, --fullscreen, --pad-config, --pad-script
   --input2 PRESSES with --link: player 2's presses, as --input
   --server ADDR    netplay through gbaa-server at ADDR (host:port, its
-                   default port 7374), with --host or --join: the same
-                   two GBAs on one cable as --link, each player in their
-                   own window, maybe on another machine. Both peers run
-                   both GBAs and swap only inputs (and at the start each
-                   player's console, save included); the window shows
-                   your seat, keeps your save as --save keeps it and
-                   discards the other player's. Your save goes to the
-                   other player for the session. Muted; no fast-forward,
+                   default port 7374), with --host or --join: 2 to 4
+                   GBAs on one cable, as --link links two, each player
+                   in their own window, maybe on another machine. Every
+                   peer runs every GBA and they swap only inputs (and at
+                   the start each player's console, save included); the
+                   window shows your seat, keeps your save as --save
+                   keeps it and discards the others'. Your save goes to
+                   the other players for the session. Muted; no fast-forward,
                    rewind, save states or scripts. With --frames, --input,
                    --save, --dump, --hash, --dump-at/--dump-dir (your
                    screen), --scale, --fullscreen, --pad-config,
                    --pad-script
-  --host           netplay: make a two-seat room, print `room CODE` and
-                   wait for the other player (headless, 10 minutes); you
-                   are player 1, the cable's parent
-  --join CODE      netplay: take the other seat in the room CODE.
+  --host           netplay: make a room (--players seats, 2 by default),
+                   print `room CODE` and wait until every seat is taken
+                   (headless, 10 minutes); you are player 1, the
+                   cable's parent
+  --players N      netplay, the host's: seats in the room, 2-4; the
+                   session starts once all N are in
+  --join CODE      netplay: take the next free seat in the room CODE.
                    Netplay is by rollback: your game never waits for the
                    other player's input; it guesses (their last input),
                    and when the real one differs it goes back and runs
@@ -275,6 +278,10 @@ usage: gbaa-desktop ROM [options]
                    left out), frame maybe `from-to/every`, e.g.
                    '600-3000/90+20': your presses let go and the menu's
                    report brought up to date while it's open
+  --desync-at N    netplay, for a check: from frame N on, this peer's
+                   consoles see your seat holding A, while the other
+                   peer gets your real presses: a desync, which the
+                   window, the end lines and the kept report then show
   --rogue ADDR     Emerald Rogue's co-op (Multiplayer Adventures) with
                    Rogue Assistant built in: when the game hosts, listen on
                    ADDR's port; when it joins, connect to ADDR (host[:port],
@@ -467,10 +474,14 @@ pub struct Options {
     pub role: Option<room::Role>,
     /// `--delay`: netplay's input delay, in frames.
     pub delay: Option<u8>,
+    /// `--players`: the seats in the host's room (2-4).
+    pub players: Option<usize>,
     /// `--paced`: headless netplay at the GBA's frame rate, not flat out.
     pub paced: bool,
     /// `--menu`: headless netplay, when the menu is open.
     pub menu: input::Spans,
+    /// `--desync-at`: netplay, a forced desync from this frame on.
+    pub desync_at: Option<u32>,
 }
 
 impl Options {
@@ -619,8 +630,10 @@ impl Options {
             rogue: None,
             role: None,
             delay: None,
+            players: None,
             paced: false,
             menu: input::Spans::default(),
+            desync_at: None,
         };
         let mut args = args.into_iter();
         while let Some(a) = args.next() {
@@ -692,6 +705,19 @@ impl Options {
                 "--rollback" => {}
                 "--paced" => o.paced = true,
                 "--menu" => o.menu = input::Spans::parse(&value("--menu")?)?,
+                "--desync-at" => {
+                    let v = value("--desync-at")?;
+                    o.desync_at = Some(v.parse().map_err(|_| format!("bad frame {v:?}"))?);
+                }
+                "--players" => {
+                    let v = value("--players")?;
+                    o.players = Some(
+                        v.parse()
+                            .ok()
+                            .filter(|n| (2..=room::MAX_SEATS).contains(n))
+                            .ok_or(format!("bad --players {v:?} (2-{})", room::MAX_SEATS))?,
+                    );
+                }
                 "--delay" => {
                     let v = value("--delay")?;
                     o.delay = Some(
@@ -794,8 +820,16 @@ impl Options {
         }
         if o.server.is_some() || o.role.is_some() {
             room::check(&o)?;
-        } else if o.delay.is_some() || o.paced || o.menu != input::Spans::default() {
-            return Err("--delay, --paced and --menu are netplay's, with --server".into());
+        } else if o.delay.is_some()
+            || o.players.is_some()
+            || o.paced
+            || o.menu != input::Spans::default()
+            || o.desync_at.is_some()
+        {
+            return Err(
+                "--delay, --players, --paced, --menu and --desync-at are netplay's, with --server"
+                    .into(),
+            );
         } else if o.link.is_some() {
             link::check(&o)?;
         }
@@ -1409,7 +1443,12 @@ fn run_window(
         if netplay {
             screen.end_session(match &r {
                 Ok(()) => room::State::Ended("You left the room.".into()),
-                Err(e) => room::State::Ended(format!("The session ended: {e}")),
+                // The server turning the game away (too old a build, no
+                // such room) is said as it is: no session began.
+                Err(e) => match e.strip_prefix(netplay::udp::REFUSED) {
+                    Some(why) => room::State::Ended(format!("The server said no: {why}")),
+                    None => room::State::Ended(format!("The session ended: {e}")),
+                },
             });
             if let Err(e) = &r {
                 eprintln!("gbaa-desktop: {e}");
@@ -1424,6 +1463,7 @@ fn run_window(
         o = Options {
             server: None,
             role: None,
+            players: None,
             ..opts.clone()
         };
         let Some(ask) = screen.take_netplay_ask() else {
@@ -1434,6 +1474,7 @@ fn run_window(
         };
         let asked = Options {
             server: Some(ask.server),
+            players: (ask.role == room::Role::Host).then_some(ask.players),
             role: Some(ask.role),
             ..o.clone()
         };

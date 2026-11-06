@@ -2,6 +2,7 @@
 //! and the passes that run on it.
 
 pub mod discovery;
+pub mod flash;
 pub mod holes;
 pub mod idle;
 pub mod ir;
