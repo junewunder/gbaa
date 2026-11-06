@@ -275,6 +275,10 @@ usage: gbaa-desktop ROM [options]
                    left out), frame maybe `from-to/every`, e.g.
                    '600-3000/90+20': your presses let go and the menu's
                    report brought up to date while it's open
+  --desync-at N    netplay, for a check: from frame N on, this peer's
+                   consoles see your seat holding A, while the other
+                   peer gets your real presses: a desync, which the
+                   window, the end lines and the kept report then show
   --rogue ADDR     Emerald Rogue's co-op (Multiplayer Adventures) with
                    Rogue Assistant built in: when the game hosts, listen on
                    ADDR's port; when it joins, connect to ADDR (host[:port],
@@ -471,6 +475,8 @@ pub struct Options {
     pub paced: bool,
     /// `--menu`: headless netplay, when the menu is open.
     pub menu: input::Spans,
+    /// `--desync-at`: netplay, a forced desync from this frame on.
+    pub desync_at: Option<u32>,
 }
 
 impl Options {
@@ -621,6 +627,7 @@ impl Options {
             delay: None,
             paced: false,
             menu: input::Spans::default(),
+            desync_at: None,
         };
         let mut args = args.into_iter();
         while let Some(a) = args.next() {
@@ -692,6 +699,10 @@ impl Options {
                 "--rollback" => {}
                 "--paced" => o.paced = true,
                 "--menu" => o.menu = input::Spans::parse(&value("--menu")?)?,
+                "--desync-at" => {
+                    let v = value("--desync-at")?;
+                    o.desync_at = Some(v.parse().map_err(|_| format!("bad frame {v:?}"))?);
+                }
                 "--delay" => {
                     let v = value("--delay")?;
                     o.delay = Some(
@@ -794,8 +805,14 @@ impl Options {
         }
         if o.server.is_some() || o.role.is_some() {
             room::check(&o)?;
-        } else if o.delay.is_some() || o.paced || o.menu != input::Spans::default() {
-            return Err("--delay, --paced and --menu are netplay's, with --server".into());
+        } else if o.delay.is_some()
+            || o.paced
+            || o.menu != input::Spans::default()
+            || o.desync_at.is_some()
+        {
+            return Err(
+                "--delay, --paced, --menu and --desync-at are netplay's, with --server".into(),
+            );
         } else if o.link.is_some() {
             link::check(&o)?;
         }
