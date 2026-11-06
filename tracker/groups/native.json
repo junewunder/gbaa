@@ -618,7 +618,7 @@
       "title": "Metroid passes the native check on a route",
       "detail": "docs/native-stage-b.md, 'The first game'. Write units/metroid-native.toml: presses from boot through the title screen into gameplay, at least 1,800 frames. Run route-check --native on the lifted Metroid against its --timing native play build: frames, RAM outside stack and copies, Video and audio every frame (audio via {unit:native/hw-sound}). Fix what differs in the lifter or the library. If the first run shows more than one session's worth, write each difference's cause in docs/native-stage-b.md, file a unit per cause, and stop. Done when: route-check --native reports 0 differences over the route; a planted wrong store in Metroid's code (gbaa-lift --plant) is caught, frame and byte named; just check passes.",
       "check": "independent",
-      "needs": ["native/metroid-lifts", "native/hw-sound"],
+      "needs": ["native/metroid-lifts", "native/hw-sound", "native/lift-ram-copies"],
       "uses": ["heavy"],
       "minMinutes": 120
     },
