@@ -531,3 +531,11 @@ fn a_copy_ends_where_another_source_agrees_further() {
     let r = classify(&rom, &Discovery::default(), &overlays, &run, None);
     assert_eq!(r.ram_undiscovered_bytes, 0);
 }
+
+#[test]
+fn ram_code_run_at_a_mirror_isnt_a_copy() {
+    for dst in [0x0300_8100, 0x0204_0100] {
+        let (rom, run) = copied_leaf(dst, true);
+        assert!(ram_copies(&rom, &Discovery::default(), &run).is_empty());
+    }
+}
