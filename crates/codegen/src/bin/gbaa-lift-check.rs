@@ -14,7 +14,10 @@
 //!    `planted_store` is lifted again with the store planted, and one with
 //!    `planted_flags` again with each flag (an old behaviour brought back,
 //!    such as `--fall-as-tail-call`); the native check must catch each
-//!    (`--planted`).
+//!    (`--planted`). Each is lifted once more at the play layout
+//!    (`--layout packed`, unit `native/lift-packed-layout`), which must
+//!    draw the same frames and record the same RAM as the guest layout
+//!    (`--packed`).
 //! 3. **The planted hard hole.** A program with `planted_hole` is lifted
 //!    with that stand-in dropped, from a fresh OUT: the lift and the
 //!    crate's build must both fail, the build naming the hole.
@@ -186,6 +189,25 @@ impl Run {
                 .arg("--planted")
                 .arg(format!("target/recompiled/release/gbaa-native-{n}-{tag}"));
         }
+        // The play layout: the same program with its globals in the
+        // lifter's order must draw the guest layout's frames.
+        let packed = format!("out/lift-{n}-packed");
+        let mut c = lift(&rom, n, &packed);
+        c.args(["--name", &format!("{n}-packed"), "--layout", "packed"])
+            .args(&p.lift_flags);
+        must(
+            &mut c,
+            &log(&format!("lift-{n}-packed.txt")),
+            "the packed layout's lift",
+        )?;
+        must(
+            &mut just(&["build-recompiled", &packed]),
+            &log(&format!("lift-{n}-packed.build.txt")),
+            "the packed layout's build",
+        )?;
+        route
+            .arg("--packed")
+            .arg(format!("target/recompiled/release/gbaa-native-{n}-packed"));
         route.args(&p.route_flags);
         let out = format!("out/lift-{n}");
         must(
