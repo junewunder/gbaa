@@ -27,7 +27,9 @@ fn data() -> PathBuf {
 }
 
 fn lift(bars: &Path, out: &Path) -> (bool, String, String) {
+    // A small agb program, measured: no memory cap needed (analysis::cap).
     let o = Command::new(env!("CARGO_BIN_EXE_gbaa-lift"))
+        .env("GBAA_UNCAPPED", "1")
         .arg(data().join(format!("agb/{PROGRAM}.gba")))
         .arg(out)
         .arg("--holes")

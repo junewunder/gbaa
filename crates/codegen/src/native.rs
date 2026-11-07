@@ -3,6 +3,48 @@
 //! plain Rust over byte RAM and the hardware library, with no `Machine`,
 //! no CPU, no cycles.
 //!
+//! **Map of this file**, in order (search for the names; how a concern
+//! owned elsewhere works is that module's doc):
+//!
+//! 1. The prelude: [`PRELUDE`] (`native/prelude.rs`, hand-written, in
+//!    every lifted crate) and [`prelude`], which swaps in
+//!    `native/prelude_packed.rs` at `--layout packed`; `BIOS`, the
+//!    `swi`s it has.
+//! 2. The holes file and the lift's output: [`Holes`] (stand-ins, jump
+//!    targets, `[[copy]]`s as [`SeenCopy`], names, the planted controls'
+//!    and old behaviours' flags), [`Hole`], [`Lifted`].
+//! 3. [`lift`], the driver, in its order: discovery's gaps decoded
+//!    (`missing`, `force_code`); the overlays and the holes file's copies;
+//!    one `Code` per context (`code`: functions, summaries, frames); RAM
+//!    globals carved (`const_access`, `computed_ram`, then
+//!    [`globals::Globals::carve`]); shapes (`shapes_of`); the
+//!    function-address flow (`fn_flow`, `FnImage`, `literal`); each
+//!    function printed (a stand-in's text, else `FnPrinter::print`);
+//!    `FNS`, `ENTRY`, `Ram` and the split into files
+//!    ([`modules::split`]); the report (hard holes, `Soft`, frames) and
+//!    the [`metrics`].
+//! 4. `FnPrinter`, one function's Rust: `print` (signature, locals, the
+//!    block loop); `block` (a block's IR as statements: memory accesses,
+//!    typed fields via `typed_as`, `g.sp = r13` before I/O stores; `count`
+//!    tallies each access for the metrics; `used` drops what nothing
+//!    printed needs); stack locals (`local`, `declare_locals`, `flush`);
+//!    control flow (`goto`, `fall_into`, `call`, `call_then`, `tail`,
+//!    `ret`, and `exit`: branches, calls by value, `swi`, idle and spin
+//!    loops).
+//! 5. Free helpers: `dyn_targets` (a jump by value's known targets);
+//!    signatures from a [`Shape`] (`plain`, `ret_ty`, `ret_expr`, `tuple`,
+//!    `lhs`, `args`); locals' text (`local_addr`, `local_read`,
+//!    `local_write`); IR to Rust (`expr`, `konst`, `pure`,
+//!    `dead_addresses`, `v`, `flag`, `shift`). Then the tests.
+//!
+//! Elsewhere: what each function's parameters and results are,
+//! [`shape`]; frames, escaping slots and which become locals, [`frame`];
+//! function addresses and callee sets, [`fnref`]; RAM's globals, `pin`
+//! and `ix`, both layouts, [`globals`]; metric names and bars,
+//! [`metrics`]; the crate's files, [`modules`]; `lift-check.toml`'s
+//! programs, [`lift_check`]. A function's blocks and IR come from
+//! [`crate::func`], its summary from [`crate::saves`].
+//!
 //! What each function becomes:
 //!
 //! - `fn f_<key>(g: &mut Game, sp: u32, a0: u32, a1: u32) -> Result<u32, Exit>`:

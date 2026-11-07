@@ -38,7 +38,7 @@ Crates live in `crates/`: `armv4t`, `analysis`, `codegen`, `runtime`
 (`#![no_std]`), `desktop`, `native-spike` (the first native port, by
 hand), `native-host` (the native programs' headless front end), `interp` (the headless `gbaa-interp ROM
 [--frames N] [--test]` runner), `hole-report` (`gbaa-holes`, what blocks a native
-build), and the `disc-check`, `jt-check`, `aw-check` and `mgba-dump` tools.
+build), and the `disc-check`, `jt-check`, `aw-check` and `mgba-dump` tools; `gbaa-dis` (`just dis`) disassembles ROM code.
 `codegen`'s `gbaa-lift` is the stage-A lifter (`just lift`, `just
 lift-check`); `holes/<game>.toml` are its stand-ins (a commercial game's
 are game-derived: `mods/<game>/holes.toml`). Generated code goes in
@@ -61,6 +61,7 @@ are game-derived: `mods/<game>/holes.toml`). Generated code goes in
   `recompile*` and `first-frame`; sound and `audio-*`; `mgba-diff` and
   `mgba-oracle`) is in `docs/tools/commands.md`. Read the entry before
   running or changing one.
+- Comparing across games or programs: `just holes-all`, `just lift-metrics`.
 
 ## Factory
 

@@ -111,6 +111,11 @@ nothing that touches the world rewinds for free. No middle ground for now:
   hardware as a library, time only at waits, function pointers as IDs,
   holes as build errors, the play build as the oracle. Today's mod copies
   (cut functions running on `Machine`) are the older form.
+- **The native port replaces the mod view once it's ready (june,
+  2026-11-06).** Modding a game will mean editing its native port. The
+  mod view's readable form and mod copies are a stopgap until then, so
+  don't extend them past what's needed now. Source maps and names carry
+  over, because the native port takes its names from them.
 - **Settles the stack questions for mods:** no resumable mod functions, no
   replay-from-checkpoint, no held frame hand-off. The guest-RAM record that
   re-runs a lost mod call's block (`rt::modcall::resume`) is unsound under
