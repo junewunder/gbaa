@@ -1052,15 +1052,23 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "1df66a89",
-        "session": "1df66a89-c2f9-4576-a1ec-f0a3f3cd267f",
-        "host": "quack",
-        "pid": 751355,
-        "start": "2170805",
-        "at": "2026-11-07T11:45:16Z",
+        "checker": "a5526cbc",
+        "at": "2026-11-07T13:43:32Z",
+        "evidence": "Verifier a5526cbc (fresh context) reproduced: Emerald lift (skip_fn_flow only) now 15,162 functions, 32 hard holes (was 685,414), 145 gap targets (was 53,095), none in 0x0832xxxx/0x08d3xxxx/0x087f2xxx. On the lift-bios-calls branch with the fix: gbaa-holes 5 BIOS + 0 scanned-only, lifter 5 BIOS holes (without fix 5+6). Disc precision 0.9991->0.9993, recall same; other 10 ROMs' starts identical to main. just check and just lift-check pass on the merged branch.",
         "branch": "unit/native/gap-decoding-runaway",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-07T13:43:32Z",
+          "by": "1df66a89",
+          "host": "quack",
+          "pid": 751355,
+          "start": "2170805",
+          "beats": true,
+          "session": "1df66a89-c2f9-4576-a1ec-f0a3f3cd267f",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
