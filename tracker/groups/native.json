@@ -898,7 +898,14 @@
       "detail": "Split from {unit:native/indirect-call-args} (its lift side is done): run gbaa-recompile --summaries ROM --names $GBAA_DATA/names/pokeemerald.toml --callee-sets on pret's Emerald once the function-address flow settles on a whole game. It didn't finish in 35 min (past 8 GB) on quack, 2026-11-06. Done when: the counts (agree/disagree, the 656 from indirect calls re-measured, how many of the 553 indirect calls have a complete set) and what blocks complete sets (callbacks through RAM globals, e.g. gMain.callback1) are quoted in docs/native-port-design.md section 5, the 'With callee sets' paragraph; measured, no bar; just check passes.",
       "check": "independent",
       "needs": ["native/fnref-flow-scale"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-07T07:49:18Z",
+          "by": "3ab02d00",
+          "text": "complete_sets now gives no sets when the flow didn't settle (fcc59f14), so --callee-sets on Emerald counts 0 complete until the flow settles there ({unit:native/fnref-flow-scale})."
+        }
+      ]
     },
     {
       "id": "native/modern-gcc-jumps",
