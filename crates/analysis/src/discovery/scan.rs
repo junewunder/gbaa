@@ -12,7 +12,8 @@
 //! same instruction set. A body that only runs into a function start
 //! found already validates if code loads the candidate. Undefined instructions, lone halves of a Thumb
 //! `bl`, BIOS calls that don't exist, long runs of one word, instructions
-//! no game runs (user-bank `ldm`), and a first instruction that is
+//! no game runs (user-bank `ldm`), Thumb shifts by 32 (a ROM pointer's
+//! upper half), and a first instruction that is
 //! conditional or pops fail it. An ARM body must be mostly unconditional.
 //! Then the value-set analysis from the candidate must return with sp
 //! where it started: data decoded as code usually pops its caller's frame.
@@ -202,6 +203,27 @@ fn implausible(i: &Instr) -> bool {
         }
         _ => false,
     }
+}
+
+/// Whether `i` is a Thumb `lsrs`/`asrs` by 32 (the shift field's 0): a
+/// compiler writes `movs rd, #0` or `asrs rd, rm, #31` for those, and
+/// `lsrs`'s halfwords 0x0800 to 0x083f are the upper halves of pointers
+/// into ROM's first 4 MB, so a body holding one is most likely a table of
+/// pointers. A word pointing into byte-aligned data (a script, a
+/// string) is odd half the time, and often loaded from a pool.
+fn shift_32(i: &Instr) -> bool {
+    use armv4t::decode::{AluOp, Operand2, Shift};
+    matches!(
+        *i,
+        Instr::Alu {
+            op: AluOp::Mov,
+            op2: Operand2::Reg {
+                shift: Shift::Lsr(32) | Shift::Asr(32),
+                ..
+            },
+            ..
+        }
+    )
 }
 
 /// Whether code found already runs straight into `a`: the instruction
@@ -498,6 +520,7 @@ fn decode(
         || (first && (i.instr.cond() != Cond::Al || pops))
         || repeated(prog, &i)
         || implausible(&i.instr)
+        || (thumb && shift_32(&i.instr))
     {
         return Step::Bad;
     }

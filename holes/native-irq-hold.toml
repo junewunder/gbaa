@@ -48,14 +48,6 @@ pub fn f_03000000(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> 
 }
 '''
 
-[[standin]]
-entry = 0x080241d5
-why = "not code: agb's panic screen's text (WEBSITE, rodata at 0x080242fc) that discovery's scan took for a function; nothing calls it"
-code = '''
-pub fn f_080241d5(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
-    panic!("0x080241d5 is data, not code")
-}
-'''
 
 [[standin]]
 entry = 0x080001c8
