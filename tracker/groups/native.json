@@ -461,15 +461,23 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "3ab02d00",
-        "session": "3ab02d00-6054-4c90-8af0-1a21eaabc92d",
-        "host": "quack",
-        "pid": 751355,
-        "start": "2170805",
-        "at": "2026-11-07T07:12:55Z",
+        "checker": "a4da4b93",
+        "at": "2026-11-07T07:49:14Z",
+        "evidence": "Verifier subagent a4da4b93 (fresh context): PASS. cargo test -p codegen ok (new tests pass); just lift-check exit 0 with call_fn_complete/call_fn_four_complete barred at the measured 56-60 (owner's decision to accept today's values), matching docs/native-stage-b.numbers.md; just check exit 0. Its review found complete_sets used an unsettled flow's sites: fixed (fcc59f14, test added), just check rerun passes. Emerald split to {unit:native/indirect-call-args-emerald}.",
         "branch": "unit/native/indirect-call-args",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-07T07:49:14Z",
+          "by": "3ab02d00",
+          "host": "quack",
+          "pid": 751355,
+          "start": "2170805",
+          "beats": true,
+          "session": "3ab02d00-6054-4c90-8af0-1a21eaabc92d",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
@@ -847,20 +855,31 @@
       "uses": ["heavy"],
       "minMinutes": 90,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "50d72494",
-        "session": "50d72494-d41a-4fa2-86c8-634089cf6329",
-        "host": "quack",
-        "pid": 862066,
-        "start": "2504341",
-        "at": "2026-11-07T06:10:03Z",
+        "checker": "verifier-a8c59d8d",
+        "at": "2026-11-07T07:49:04Z",
+        "evidence": "Verifier subagent a8c59d8d at 0bb7ccd (main merged): mods/metroid/holes.toml has no skip_fn_flow; Metroid lift with GBAA_FNREF_TRACE=1 settles in 12 rounds, 150.8 s (bar 300 s, was ~614 s); report equals the old one but for first-use hole addresses; just lift-check passed with every bar held; just check passed.",
         "branch": "unit/native/fnref-flow-scale",
-        "resumed": "1e655045",
-        "prevSession": "1e655045-e354-400c-a9ca-854c3c4380de",
-        "pushed": true,
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-07T07:49:04Z",
+          "by": "50d72494",
+          "host": "quack",
+          "pid": 862066,
+          "start": "2504341",
+          "beats": true,
+          "session": "50d72494-d41a-4fa2-86c8-634089cf6329",
+          "lane": "quack/2"
+        },
+        "pushed": true
       },
       "notes": [
+        {
+          "at": "2026-11-07T07:49:05Z",
+          "by": "50d72494",
+          "text": "Done at 0bb7ccd: 151 s on Metroid. mods repo commit 08ca12b drops skip_fn_flow (unpushed, its own repo). Harmless quirk: round 0 doesn't set g.loose, so the cached loose results aren't cleared that round; readers rerun next round anyway."
+        },
         {
           "at": "2026-11-06T13:35:25Z",
           "by": "1e655045",
@@ -880,7 +899,14 @@
       "detail": "Split from {unit:native/indirect-call-args} (its lift side is done): run gbaa-recompile --summaries ROM --names $GBAA_DATA/names/pokeemerald.toml --callee-sets on pret's Emerald once the function-address flow settles on a whole game. It didn't finish in 35 min (past 8 GB) on quack, 2026-11-06. Done when: the counts (agree/disagree, the 656 from indirect calls re-measured, how many of the 553 indirect calls have a complete set) and what blocks complete sets (callbacks through RAM globals, e.g. gMain.callback1) are quoted in docs/native-port-design.md section 5, the 'With callee sets' paragraph; measured, no bar; just check passes.",
       "check": "independent",
       "needs": ["native/fnref-flow-scale"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-07T07:49:18Z",
+          "by": "3ab02d00",
+          "text": "complete_sets now gives no sets when the flow didn't settle (fcc59f14), so --callee-sets on Emerald counts 0 complete until the flow settles there ({unit:native/fnref-flow-scale})."
+        }
+      ]
     },
     {
       "id": "native/modern-gcc-jumps",
