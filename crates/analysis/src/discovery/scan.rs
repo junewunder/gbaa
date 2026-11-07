@@ -5,8 +5,10 @@
 //! **Validation** ([`validate`]) decodes forward from the candidate,
 //! following fallthrough and direct branches, as Ghidra's
 //! `checkValidSubroutine` does (`docs/research/discovery-prior-art.md`). It
-//! must reach a return (a pop through sp, `bx lr`, …), or an indirect jump
-//! after a few instructions (a switch whose cases hold the returns),
+//! must reach a return (a pop through sp, `bx lr`, …), an indirect jump
+//! after a few instructions (a switch whose cases hold the returns), or,
+//! after a `push {…, lr}`, loop forever with every path closed (a task run
+//! as a coroutine),
 //! without running into a known literal pool or table, out of ROM, or into
 //! code found already other than at one of its instruction starts in the
 //! same instruction set. A body that only runs into a function start
@@ -343,6 +345,9 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
     let mut halves: HashSet<u32> = HashSet::new();
     // Pool words the body's own pc-relative loads read.
     let mut pools: HashSet<u32> = HashSet::new();
+    // Every path, soft ones too, ended by coming back to an instruction
+    // of the body: no return, jump, bad decode or code found already.
+    let mut closed = true;
     while let Some((a, soft)) = work.pop() {
         if let Some(&(_, s)) = seen.get(&a) {
             if s && !soft {
@@ -360,9 +365,13 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
             // count as reaching a return.
             Step::Known => {
                 into |= !soft && view.funcs.contains(&(a | thumb as u32));
+                closed = false;
                 continue;
             }
-            Step::Bad if soft => continue,
+            Step::Bad if soft => {
+                closed = false;
+                continue;
+            }
             Step::Bad => return None,
             Step::Insn(i) => {
                 seen.insert(a, (i.size, soft));
@@ -375,13 +384,17 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
                 let next = i.next();
                 let cond = i.instr.cond() != Cond::Al;
                 if let Some(t) = i.bl {
-                    if !prog.in_rom(t) && !soft {
-                        return None;
+                    if !prog.in_rom(t) {
+                        if !soft {
+                            return None;
+                        }
+                        closed = false;
                     }
                     work.push((next, true));
                 } else if let Instr::Branch { target, .. } = i.instr {
                     if !prog.in_rom(target) {
                         if soft {
+                            closed = false;
                             continue;
                         }
                         return None;
@@ -391,6 +404,7 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
                         work.push((next, soft));
                     }
                 } else if writes_pc(&i.instr) {
+                    closed = false;
                     // Only a pop through sp counts as returning: `ldm rN,
                     // {…, pc}` is how ARM-decoded text often ends.
                     let pop = !matches!(i.instr, Instr::Block { rn, .. } if rn != Reg::Sp);
@@ -438,8 +452,15 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
         }
     }
     // An indirect jump stands in for a return only after a few
-    // instructions: data has short runs ending in one.
-    let own = ends || (jumps && hard.len() >= JUMP_BODY_MIN);
+    // instructions: data has short runs ending in one. So does a body
+    // that never leaves itself, if it opens with `push {…, lr}`: a task
+    // run as a coroutine (Kirby: Nightmare in Dream Land's game states,
+    // each an endless loop that yields every frame, listed in a table of
+    // pointers).
+    let endless = closed
+        && hard.len() >= JUMP_BODY_MIN
+        && prog.decode(start, thumb).is_some_and(|i| is_push_lr(&i));
+    let own = ends || (jumps && hard.len() >= JUMP_BODY_MIN) || endless;
     (own || into).then_some((hard, own))
 }
 
