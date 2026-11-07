@@ -1005,21 +1005,8 @@
         "checker": "subagent-af2d26c0",
         "at": "2026-11-07T12:09:11Z",
         "evidence": "Fresh verifier: holes-all at HEAD against main aa63a25 (out/holes/kafter2 vs kbase): Nightmare undiscovered 1748->126, Mirror 362->50, every game's hard count unchanged. Coverage runs miss the same (1748, 372), so the misses are all discovery's; six causes with counts are in native-holes.md, What discovery misses. disc-pret 0.9991/0.9553 (bar 0.9987/0.9349), jt-score 676/676 and 584/617 with 0 wrong, disc-agb ok; just check passes. Remainder filed as {unit:native/copy-tail-discovery}.",
-        "branch": "unit/native/kirby-undiscovered",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-07T12:09:11Z",
-          "by": "842df15d",
-          "host": "quack",
-          "pid": 862066,
-          "start": "2504341",
-          "beats": true,
-          "session": "842df15d-3b2f-42bc-a9ed-416544ec972a",
-          "lane": "quack/2"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-07T10:51:33Z"
+        "host": "quack"
+      }
     },
     {
       "id": "native/nightmare-cpu-state",
