@@ -867,6 +867,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-07T07:49:05Z",
+          "by": "50d72494",
+          "text": "Done at 0bb7ccd: 151 s on Metroid. mods repo commit 08ca12b drops skip_fn_flow (unpushed, its own repo). Harmless quirk: round 0 doesn't set g.loose, so the cached loose results aren't cleared that round; readers rerun next round anyway."
+        },
+        {
           "at": "2026-11-06T13:35:25Z",
           "by": "1e655045",
           "text": "Main merged (d08fb7b4); just check, lift-check pass. Join sharing Rc: no gain, dropped. Likely cause of r1-4 full reruns: dirty_mem (any new cell/pile token reruns every fn with a load). Next: per-fn read sets (pile, which cells) for sparse reruns. No perf here."
