@@ -1968,7 +1968,6 @@ fn dead_addresses(insts: &[Inst], typed: &[Option<Place>]) -> Vec<bool> {
     dead
 }
 
-/// Every function's shape ([`shape::shapes`]), over all code contexts.
 /// The callee-set run ([`fnref`]) over one code context, the ROM's,
 /// without a lift: the flow, and each indirect call's complete callee set
 /// ([`complete_sets`]), for [`crate::saves::summarize_sets`]. `sums` are
@@ -1997,8 +1996,13 @@ pub fn callee_sets(
 }
 
 /// Each indirect call's complete callee set, from the flow: the calls (not
-/// the jumps by value) whose target can hold no other function.
+/// the jumps by value) whose target can hold no other function. A flow
+/// that didn't settle (a step cap, the rounds run out) may be missing
+/// callees, so it gives no sets, as it proves no words.
 fn complete_sets(flow: &fnref::Flow) -> Sets {
+    if flow.unsettled {
+        return Sets::new();
+    }
     flow.sites
         .iter()
         .filter(|(_, s)| s.complete && !s.tail)
@@ -2006,14 +2010,6 @@ fn complete_sets(flow: &fnref::Flow) -> Sets {
         .collect()
 }
 
-/// What each indirect call with a complete callee set passes `call_fn`
-/// and takes back from it (bits for r0-r3), by its address. A shaped
-/// callee's adapter reads its parameters and gives back its results and
-/// the rest as they went in; a four-register one (a summary hole, a
-/// stand-in) reads and gives back all four. So the call takes back what
-/// any callee may change, and passes what any reads, and what one may
-/// change while another leaves it as it came (that one gives back what
-/// was passed).
 /// A `call_fn` call to key `k` passing the registers of `pass` (0 for the
 /// rest) and taking back those of `back` (bits for r0-r3).
 fn call_fn_text(k: &str, pass: u8, back: u8) -> String {
@@ -2057,6 +2053,14 @@ struct Args {
     four_reg_callee: usize,
 }
 
+/// What each indirect call with a complete callee set passes `call_fn`
+/// and takes back from it (bits for r0-r3), by its address. A shaped
+/// callee's adapter reads its parameters and gives back its results and
+/// the rest as they went in; a four-register one (a summary hole, a
+/// stand-in) reads and gives back all four. So the call takes back what
+/// any callee may change, and passes what any reads, and what one may
+/// change while another leaves it as it came (that one gives back what
+/// was passed).
 fn call_fn_args(sets: &Sets, codes: &[Code], shaped: &BTreeMap<u32, Shape>) -> Args {
     let sums: BTreeMap<u32, &Summary> = codes
         .iter()
@@ -2079,6 +2083,7 @@ fn call_fn_args(sets: &Sets, codes: &[Code], shaped: &BTreeMap<u32, Shape>) -> A
     a
 }
 
+/// Every function's shape ([`shape::shapes`]), over all code contexts.
 fn shapes_of(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> Shapes {
     let mut nodes = BTreeMap::new();
     for (i, c) in codes.iter().enumerate() {
@@ -2350,6 +2355,22 @@ fn expr(op: &Op) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_flow_that_did_not_settle_gives_no_callee_sets() {
+        let mut flow = fnref::Flow::default();
+        flow.sites.insert(
+            0x0800_0100,
+            fnref::Site {
+                callees: [0x0800_0201].into(),
+                complete: true,
+                tail: false,
+            },
+        );
+        assert_eq!(complete_sets(&flow).len(), 1);
+        flow.unsettled = true;
+        assert!(complete_sets(&flow).is_empty());
+    }
 
     #[test]
     fn a_complete_callee_set_passes_what_its_callees_read() {
