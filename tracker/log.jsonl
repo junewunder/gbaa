@@ -2344,3 +2344,4 @@
 {"at":"2026-11-07T07:53:37Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/indirect-call-args","text":"Indirect calls pass what their callees read: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-07T07:53:42Z","actor":"loop","tag":"ba79cd96","host":"quack","cmd":"claim","id":"native/indirect-call-args","text":"Indirect calls pass what their callees read: claimed"}
 {"at":"2026-11-07T07:59:05Z","actor":"loop","tag":"ba79cd96","host":"quack","cmd":"add-unit","id":"native/fnref-flow-emerald","text":"new unit: Function-address flow settles on Emerald"}
+{"at":"2026-11-07T07:59:20Z","actor":"loop","tag":"ba79cd96","host":"quack","cmd":"edit","id":"native/fnref-flow-emerald","text":"Function-address flow settles on Emerald: edited (check, detail)"}

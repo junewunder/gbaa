@@ -949,6 +949,8 @@
     {
       "id": "native/fnref-flow-emerald",
       "title": "Function-address flow settles on Emerald",
+      "detail": "After {unit:native/fnref-flow-scale} (Metroid in 151 s), the flow on pret's Emerald (15,158 fns) through gbaa-recompile --summaries --callee-sets was still killed at a 14G cap after 5 min (quack, 2026-11-07). Make it settle under about 8 GB. Done when: that command finishes on Emerald under 8 GB (time and peak quoted) and just lift-check's bars hold.",
+      "check": "independent",
       "uses": ["heavy"]
     }
   ]
