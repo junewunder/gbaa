@@ -2340,3 +2340,4 @@
 {"at":"2026-11-07T07:49:14Z","actor":"loop","tag":"3ab02d00","host":"quack","cmd":"done","id":"native/indirect-call-args","text":"Indirect calls pass what their callees read: done, checked by a4da4b93"}
 {"at":"2026-11-07T07:49:18Z","actor":"loop","tag":"3ab02d00","host":"quack","cmd":"note","id":"native/indirect-call-args-emerald","text":"Emerald's summaries re-measured with callee sets: note: complete_sets now gives no sets when the flow didn't settle (fcc59f14), so --callee-sets on Emerald counts 0 complete until the flow settles there ({unit:native/fnref-flow-scale})."}
 {"at":"2026-11-07T07:53:14Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/fnref-flow-scale","text":"Function-address flow settles on a whole game: on main"}
+{"at":"2026-11-07T07:53:17Z","actor":"loop","tag":"ed43d9d3","host":"quack","cmd":"claim","id":"native/ref-heap","text":"Heap pointers as Ref<T>: claimed"}
