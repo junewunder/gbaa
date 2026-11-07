@@ -173,12 +173,14 @@ jt-score:
     set -u
     {{lock}} cargo build -q --release -p jt-check || exit 1
     status=0
-    # The modern build's two subsets were checked by hand: both tables have
-    # a dead entry 0 (Cmd_drawlvlupbox, AddPointsOnFainting).
+    # The modern build's four subsets were checked by hand: two tables have
+    # a dead entry 0 (Cmd_drawlvlupbox, AddPointsOnFainting), and
+    # LoadBattlePyramidObjectEventTemplates' two switch on a field of a
+    # const ROM table whose values pick 4 of 5 cases and 1 of 5.
     # The far-jump bars (decision 5a): the research reached 547/548 and
     # 721/732; keeping a probe's answer when it reaches no return (#25)
     # and the agb rules (#30) reach these.
-    for build in "pokeemerald 676 0 548" "pokeemerald_modern 584 2 726"; do
+    for build in "pokeemerald 676 0 548" "pokeemerald_modern 610 4 726"; do
         set -- $build
         target/release/jt-check {{quote(gbaa_data / "src/pokeemerald")}}/$1.elf --expect $2 --max-subset $3 --expect-far $4 || status=1
     done
