@@ -468,6 +468,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-07T08:02:52Z",
+          "by": "ba79cd96",
+          "text": "2026-11-07: main merged (62d12983), just check passes. Emerald --callee-sets retried after fnref-flow-scale: killed at 14G cap in 5 min, so not measured. Filed {unit:native/fnref-flow-emerald}. Waits on the owner (land without Emerald?). Don't retry Emerald under 14G."
+        },
+        {
           "at": "2026-11-07T07:53:37Z",
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - The Emerald re-measurement the card requires was not done, and the owner never agreed to move it out. The card's Done when asks for Emerald's summaries to be re-measured with callee sets, with the counts and w…"
@@ -476,11 +481,6 @@
           "at": "2026-11-06T12:31:50Z",
           "by": "62031260",
           "text": "Built on the branch (lift + summaries + gbaa-recompile --callee-sets); lift-check, just check pass. Waits on the bar question (measured 56-60, not 0: sets are the heap pile's 21 fns). Emerald part split to {unit:native/indirect-call-args-emerald}."
-        },
-        {
-          "at": "2026-11-06T07:50:52Z",
-          "by": "5676c8cf",
-          "text": "From {unit:native/lift-params}: a_<key> adapters return r1-r3 as passed in (summaries treat them undefined after an indirect call); undefined_reads after indirect calls aren't counted anywhere. Stand-ins call f_08002995-style dispatchers four-reg by name: shaping one breaks the build."
         }
       ],
       "review": {
