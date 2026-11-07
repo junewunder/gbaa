@@ -536,7 +536,9 @@ impl DOp {
             return Dom::from_vals(e.into_iter().map(|x| self.eval(x)).collect());
         }
         match (self, d) {
-            (DOp::Lsl(n) | DOp::LslExact(n), &Dom::Si { s, lo, hi }) if (hi as u64) << n <= u32::MAX as u64 => {
+            (DOp::Lsl(n) | DOp::LslExact(n), &Dom::Si { s, lo, hi })
+                if (hi as u64) << n <= u32::MAX as u64 =>
+            {
                 Dom::si(s << n, lo << n, hi << n)
             }
             (DOp::Lsr(n), &Dom::Si { lo, hi, .. }) => Dom::si(1, lo >> n, hi >> n),

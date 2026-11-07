@@ -1384,7 +1384,7 @@ holes rom *args:
     {{lock}} cargo build -q --release -p hole-report
     {{cap}} MemoryMax=3G target/release/gbaa-holes "$@"
 
-# The hole report over the corpus (holes/corpus.toml; crates/hole-report/src/corpus.rs): every game in turn, each report in OUT/<name>.txt, then one table of the ranking lines' numbers, saved as OUT/summary.toml. ARGS: --out DIR (default out/holes/<git short hash>[-dirty]), --against DIR2 (changes from DIR2's summary in brackets), --only NAME (repeatable), --cover (each game's coverage runs: hours), --write-doc FILE (the table as a generated numbers file: docs/research/native-holes.numbers.md), --from DIR (run nothing: render DIR's summary.toml), and any `just holes` flag for every game. About 10 minutes for the eight (9.5 to 11 measured); run it with `just long`. The games run one at a time under one 3 GB cap, no swap.
+# The hole report over the corpus (holes/corpus.toml; crates/hole-report/src/corpus.rs): every game in turn, each report in OUT/<name>.txt, then one table of the ranking lines' numbers, saved as OUT/summary.toml. ARGS: --out DIR (default out/holes/<git short hash>[-dirty]), --against DIR2 (changes from DIR2's summary in brackets), --only NAME (repeatable), --cover (each game's coverage runs: hours), --write-doc FILE (the table as a generated numbers file: docs/research/native-holes.numbers.md), --from DIR (run nothing: render DIR's summary.toml), and any `just holes` flag for every game. About 12 minutes for the nine (Imperium the longest, 3 minutes); run it with `just long`. The games run one at a time under one 3 GB cap, no swap.
 [positional-arguments]
 holes-all *args:
     {{lock}} cargo build -q --release -p hole-report
