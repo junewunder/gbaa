@@ -691,17 +691,31 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "ed43d9d3",
-        "session": "ed43d9d3-ea1e-42f7-ba83-edf0733b00f1",
-        "host": "quack",
-        "pid": 862066,
-        "start": "2504341",
-        "at": "2026-11-07T07:53:17Z",
+        "checker": "verifier-7c3e91a4",
+        "at": "2026-11-07T08:49:46Z",
+        "evidence": "just lift-check passed on all 7 programs after merging main (600/601 frames, 0 differences, packed layout same, planted controls caught); just check passed. Owner's bar (what moves): ref_accesses 11-16 a program, load/store_computed_unknown down by exactly those (e.g. spike 762/382 -> 755/373), store_computed_ram unchanged, lines down; ref_unexplained new soft hole barred 34-93; lines_prelude 508->581 (+73: Ref, Plain, Game::at/at_mut, obj_at, span in both layouts). Types agb's InterruptInner the IRQ handler walks. Verifier reran just check and lift-check --only native-spike: pass.",
         "branch": "unit/native/ref-heap",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-07T08:49:46Z",
+          "by": "ed43d9d3",
+          "host": "quack",
+          "pid": 862066,
+          "start": "2504341",
+          "beats": true,
+          "session": "ed43d9d3-ea1e-42f7-ba83-edf0733b00f1",
+          "lane": "quack/2"
+        },
+        "pushed": true
       },
       "notes": [
+        {
+          "at": "2026-11-07T08:49:56Z",
+          "by": "ed43d9d3",
+          "text": "Metroid: heap run settles in 22 rounds, types 1246 accesses; its crate build fails only on the known BIOS-call hard holes, so Ref code there isn't type-checked yet. Allocator replacement waits: the free list holds pointers the run can't follow."
+        },
         {
           "at": "2026-11-06T09:27:51Z",
           "by": "76e43878",
