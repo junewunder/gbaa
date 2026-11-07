@@ -1382,7 +1382,13 @@
         "host": "quack",
         "unit": "native/indirect-call-args"
       },
-      "answer": null
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "ed09cc1f",
+        "at": "2026-11-07T15:08:18Z",
+        "decision": "d/land-indirect-call-callee-sets"
+      }
     },
     {
       "id": "q/land-bios-calls-unit-emerald",

@@ -460,12 +460,6 @@
       "needs": ["native/fnref-flow"],
       "uses": ["heavy"],
       "minMinutes": 120,
-      "record": {
-        "state": "blocked",
-        "on": "q/land-indirect-call-callee-sets",
-        "by": "ba79cd96",
-        "at": "2026-11-07T08:02:43Z"
-      },
       "notes": [
         {
           "at": "2026-11-07T08:02:52Z",

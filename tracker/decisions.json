@@ -1017,6 +1017,15 @@
       "at": "2026-11-07T04:31:07Z",
       "scope": ["*"],
       "replaces": "d/headless-lane-ssh-onto-your"
+    },
+    {
+      "id": "d/land-indirect-call-callee-sets",
+      "title": "Land indirect-call callee sets before Emerald is measured: Land it now",
+      "why": "The lift and summaries work merges today; the Emerald numbers go in the design doc later, from the measurement unit once the flow fits on Emerald",
+      "by": "owner",
+      "at": "2026-11-07T15:08:18Z",
+      "question": "q/land-indirect-call-callee-sets",
+      "via": "ed09cc1f"
     }
   ]
 }
