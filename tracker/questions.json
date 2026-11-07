@@ -1349,7 +1349,14 @@
         "by": "17508d61",
         "host": "quack"
       },
-      "answer": null
+      "answer": {
+        "key": "b",
+        "note": "june: stop asking; she'll ask a Claude herself when she wants the Deck used",
+        "by": "owner",
+        "via": "8f498bd1",
+        "at": "2026-11-07T04:31:03Z",
+        "decision": "d/may-lane-ssh-onto-your-2"
+      }
     }
   ]
 }
