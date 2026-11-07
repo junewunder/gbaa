@@ -1044,6 +1044,13 @@
         "branch": "unit/native/nightmare-task-switch",
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-07T11:44:49Z",
+          "by": "ccb35e7f",
+          "text": "Split 2026-11-07: Nightmare's lift (skip_fn_flow) stops at 15 other hard holes, 9 BIOS; and the lifter doesn't flag the 3 stack switches. Now needs {unit:native/nightmare-lifts} and the shared facility {unit:native/task-coroutines}; then only the stand-in and route are left here."
+        }
+      ],
       "round": "2026-11-07T11:32:04Z"
     },
     {
