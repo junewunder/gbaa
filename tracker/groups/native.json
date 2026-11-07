@@ -861,19 +861,7 @@
         "checker": "verifier-a8c59d8d",
         "at": "2026-11-07T07:49:04Z",
         "evidence": "Verifier subagent a8c59d8d at 0bb7ccd (main merged): mods/metroid/holes.toml has no skip_fn_flow; Metroid lift with GBAA_FNREF_TRACE=1 settles in 12 rounds, 150.8 s (bar 300 s, was ~614 s); report equals the old one but for first-use hole addresses; just lift-check passed with every bar held; just check passed.",
-        "branch": "unit/native/fnref-flow-scale",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-07T07:49:04Z",
-          "by": "50d72494",
-          "host": "quack",
-          "pid": 862066,
-          "start": "2504341",
-          "beats": true,
-          "session": "50d72494-d41a-4fa2-86c8-634089cf6329",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -891,8 +879,7 @@
           "by": "1e655045",
           "text": "Branch f02475e3: cached every-cell reads, cap once per load: Metroid settles in 614 s, 11 rounds (was 63 s r0, 534 s r1, unsettled); same counts. Rounds 1-4 rerun ~2600 fns, ~90 s each; values carry the 5270-token pile. Next: join shares Rc if subset; why r2-3 rerun all."
         }
-      ],
-      "round": "2026-11-06T12:59:15Z"
+      ]
     },
     {
       "id": "native/indirect-call-args-emerald",
