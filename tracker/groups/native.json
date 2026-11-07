@@ -1031,6 +1031,13 @@
       "round": "2026-11-07T11:07:58Z"
     },
     {
+      "id": "native/nightmare-task-switch",
+      "title": "Kirby - Nightmare's task switcher as host coroutines",
+      "detail": "Nightmare's 3 CPU-state holes are its object-task switcher (resume 0x08000244, yield 0x08000278, exit 0x08000298; docs/research/native-holes.md, 'Kirby: Nightmare's task switcher'). Write a stand-in in mods/kirby-nightmare/holes.toml (or a runtime facility if the lifter needs one) that runs each task's lifted code on a stackful coroutine (corosensei, as crates/desktop/src/coro.rs): resume starts or resumes the task keyed by its saved sp, yield/exit suspend with the values the scheduler reads. Done when: just holes counts the 3 as covered/not hard (or the lift's stand-ins cover them), the lift builds, and the native check matches the interpreter on a route through task-heavy play; just check passes.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
       "id": "native/gap-decoding-runaway",
       "title": "Lifter's gap decoding walks through Emerald's data",
       "detail": "Found by {unit:native/lift-bios-calls}: gbaa-lift on Pokemon Emerald (no holes file, skip_fn_flow only) lifts 14,089 functions, 685,414 hard holes, descending from 53,095 gap targets. Two 'functions', f_08320560 and f_08d3467c, hold 33,163 BIOS-call holes (Thumb 0xDFxx halfwords in data decoded as swi) and most of the rest; gbaa-holes, over discovery's code, counts 5 BIOS sites, the same 5 the lifter has in real code (0x082e707c-0x082e70b8). Find why gap decoding enters those regions (a scanned function in data? a gap target from a pool word?) and stop it. Done when: Emerald's lift has no hard hole in 0x08320560 or 0x08d3467c's runs and its BIOS holes equal gbaa-holes' count plus its scanned-only BIOS count; lift-check unchanged.",
