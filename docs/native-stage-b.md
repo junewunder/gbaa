@@ -245,9 +245,11 @@ and the shortcuts above at game scale.
   `--name metroid`; its holes file is `mods/metroid/holes.toml` (private:
   its stand-ins port the game's own code). Where it stands: the stand-ins
   (the reset, the IRQ dispatcher, the classic NES Metroid the ROM carries)
-  and five IWRAM copies (`[[copy]]`, `native/lift-ram-copies`) leave 9
-  hard holes, all BIOS calls the prelude lacks (`native/lift-bios-calls`).
-  The function-address flow is skipped (`skip_fn_flow`) until it settles
+  and five IWRAM copies (`[[copy]]`, `native/lift-ram-copies`) left 9
+  hard holes, all BIOS calls the prelude lacked; with them in the prelude
+  (`native/lift-bios-calls`: `Stop`, `Sqrt`, `ArcTan2`, `CpuFastSet`,
+  LZ77, RL, `SoundBias`, `MidiKey2Freq`, `MultiBoot`, program
+  `agb/native-bios-calls`) the lift has none (2026-11-07). The function-address flow is skipped (`skip_fn_flow`) until it settles
   on a whole game (`native/fnref-flow-scale`). A measurement build with
   the BIOS calls stood in by panics (2026-11-06, quack): about 957,000
   lines in 266 modules, the crate alone rebuilt in release in 31.5 s

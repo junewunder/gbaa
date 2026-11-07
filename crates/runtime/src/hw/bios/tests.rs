@@ -210,6 +210,10 @@ fn midi_key2freq_is_the_play_builds() {
         let mut r = [0; 15];
         (r[0], r[1], r[2]) = (EWRAM, key, fine);
         crate::bios::math::midi_key2freq(&mut bus, &mut r);
-        assert_eq!(midi_key2freq(freq, key, fine), r[0], "{freq:#x} {key} {fine}");
+        assert_eq!(
+            midi_key2freq(freq, key, fine),
+            r[0],
+            "{freq:#x} {key} {fine}"
+        );
     }
 }
