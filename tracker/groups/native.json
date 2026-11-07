@@ -461,37 +461,33 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "done",
-        "by": "3ab02d00",
-        "checker": "a4da4b93",
-        "at": "2026-11-07T07:49:14Z",
-        "evidence": "Verifier subagent a4da4b93 (fresh context): PASS. cargo test -p codegen ok (new tests pass); just lift-check exit 0 with call_fn_complete/call_fn_four_complete barred at the measured 56-60 (owner's decision to accept today's values), matching docs/native-stage-b.numbers.md; just check exit 0. Its review found complete_sets used an unsettled flow's sites: fixed (fcc59f14, test added), just check rerun passes. Emerald split to {unit:native/indirect-call-args-emerald}.",
-        "branch": "unit/native/indirect-call-args",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-07T07:49:14Z",
-          "by": "3ab02d00",
-          "host": "quack",
-          "pid": 751355,
-          "start": "2170805",
-          "beats": true,
-          "session": "3ab02d00-6054-4c90-8af0-1a21eaabc92d",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "state": "blocked",
+        "on": "q/land-indirect-call-callee-sets",
+        "by": "ba79cd96",
+        "at": "2026-11-07T08:02:43Z"
       },
       "notes": [
+        {
+          "at": "2026-11-07T08:02:52Z",
+          "by": "ba79cd96",
+          "text": "2026-11-07: main merged (62d12983), just check passes. Emerald --callee-sets retried after fnref-flow-scale: killed at 14G cap in 5 min, so not measured. Filed {unit:native/fnref-flow-emerald}. Waits on the owner (land without Emerald?). Don't retry Emerald under 14G."
+        },
+        {
+          "at": "2026-11-07T07:53:37Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - The Emerald re-measurement the card requires was not done, and the owner never agreed to move it out. The card's Done when asks for Emerald's summaries to be re-measured with callee sets, with the counts and w…"
+        },
         {
           "at": "2026-11-06T12:31:50Z",
           "by": "62031260",
           "text": "Built on the branch (lift + summaries + gbaa-recompile --callee-sets); lift-check, just check pass. Waits on the bar question (measured 56-60, not 0: sets are the heap pile's 21 fns). Emerald part split to {unit:native/indirect-call-args-emerald}."
-        },
-        {
-          "at": "2026-11-06T07:50:52Z",
-          "by": "5676c8cf",
-          "text": "From {unit:native/lift-params}: a_<key> adapters return r1-r3 as passed in (summaries treat them undefined after an indirect call); undefined_reads after indirect calls aren't counted anywhere. Stand-ins call f_08002995-style dispatchers four-reg by name: shaping one breaks the build."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-07T07:53:37Z",
+        "findings": "- The Emerald re-measurement the card requires was not done, and the owner never agreed to move it out. The card's Done when asks for Emerald's summaries to be re-measured with callee sets, with the counts and what blocks complete sets (callbacks stored through RAM globals such as gMain.callback1) quoted in the design doc. The Evidence says this part was moved to a new unit, 'Emerald's summaries re-measured with callee sets' ({unit:native/indirect-call-args-emerald}). The new paragraph at docs/native-port-design.md:573-582 says plainly that it was not measured: the flow didn't finish on Emerald in 35 minutes (past 8 GB). The owner's question (q/accept-indirect-call-bar-today) covered only lowering the bar from 0 to the measured 56-60. It never mentioned dropping the Emerald part, so the answer 'a' doesn't cover it. The split also wasn't forced by the ~3-hour rule: the unit was split about 1.5 hours after it was claimed. What to do: ask the owner with `just ask`. Say that the Emerald measurement can't run until the work to make the flow finish on a whole game ({unit:native/fnref-flow-scale}) lands, because the flow doesn't finish there today. Offer two choices: (a) land this unit now, with the Emerald numbers left to the new unit, or (b) keep this unit open until the flow finishes on Emerald and the counts are in the design doc. Leave the branch unmerged until they answer. Alternatively, finish the measurement on this branch if the flow can be made to finish."
+      },
       "round": "2026-11-06T11:08:08Z"
     },
     {
@@ -801,10 +797,29 @@
       "title": "Function flow: the heap by allocation site and field",
       "detail": "docs/native-stage-b.md, piece 3, fnref-flow as built: one pile holds every heap store, so a heap load used as a number marks every function word stored there (32-36 of each agb program's ~55 words). Split the pile by allocation site (agb's allocator's callers) and field offset in crates/codegen/src/native/fnref.rs. Done when: fn_words_not_proven bar lowered to the measured value on every program (it must fall), unit tests for two heap objects kept apart, just lift-check and just check pass.",
       "check": "independent",
-      "needs": ["native/fnref-flow"],
+      "needs": ["native/fnref-flow", "native/fnref-context"],
       "uses": ["heavy"],
       "minMinutes": 180,
+      "record": {
+        "state": "claimed",
+        "by": "ad1eaf05",
+        "session": "ad1eaf05-61d6-4c38-b911-2dfa23da168e",
+        "host": "quack",
+        "pid": 751355,
+        "start": "2170805",
+        "at": "2026-11-07T08:03:16Z",
+        "branch": "unit/native/fnref-heap-sites",
+        "beats": true,
+        "handedBack": "2026-11-07T08:33:24Z",
+        "pushed": true,
+        "ended": "2026-11-07T08:33:41Z"
+      },
       "notes": [
+        {
+          "at": "2026-11-07T08:30:05Z",
+          "by": "ad1eaf05",
+          "text": "Built on this branch (0868fc7e): frames+alloc sites as objects, tests pass. Bar unmoved on all 7 programs, also with no pile at all: limit is context-insensitive joins ({unit:native/fnref-context}, now needed). Spike: odd &str ptr 0x08024c49 taken as a Thumb fn, 10 holes."
+        },
         {
           "at": "2026-11-06T12:46:23Z",
           "by": "41e1a197",
@@ -825,6 +840,17 @@
       "check": "independent",
       "uses": ["heavy"],
       "minMinutes": 180,
+      "record": {
+        "state": "claimed",
+        "by": "49894b1d",
+        "session": "49894b1d-d961-439e-81a2-73fc835779ae",
+        "host": "quack",
+        "pid": 751355,
+        "start": "2170805",
+        "at": "2026-11-07T08:33:52Z",
+        "branch": "unit/native/lift-bios-calls",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-07T07:12:43Z",
@@ -897,7 +923,7 @@
       "title": "Emerald's summaries re-measured with callee sets",
       "detail": "Split from {unit:native/indirect-call-args} (its lift side is done): run gbaa-recompile --summaries ROM --names $GBAA_DATA/names/pokeemerald.toml --callee-sets on pret's Emerald once the function-address flow settles on a whole game. It didn't finish in 35 min (past 8 GB) on quack, 2026-11-06. Done when: the counts (agree/disagree, the 656 from indirect calls re-measured, how many of the 553 indirect calls have a complete set) and what blocks complete sets (callbacks through RAM globals, e.g. gMain.callback1) are quoted in docs/native-port-design.md section 5, the 'With callee sets' paragraph; measured, no bar; just check passes.",
       "check": "independent",
-      "needs": ["native/fnref-flow-scale"],
+      "needs": ["native/fnref-flow-scale", "native/fnref-flow-emerald"],
       "uses": ["heavy"],
       "notes": [
         {
@@ -944,6 +970,20 @@
           "text": "gbaa-holes also lists 6 scanned-only BIOS sites on Emerald (survey: ARM 0x42/0x54/0x64/0x73/0xb7/0x27 near 0x087f2250) that the lifter shows only inside the two runaway functions; after the fix, check they appear on their own."
         }
       ]
+    },
+    {
+      "id": "native/fnref-flow-emerald",
+      "title": "Function-address flow settles on Emerald",
+      "detail": "After {unit:native/fnref-flow-scale} (Metroid in 151 s), the flow on pret's Emerald (15,158 fns) through gbaa-recompile --summaries --callee-sets was still killed at a 14G cap after 5 min (quack, 2026-11-07). Make it settle under about 8 GB. Done when: that command finishes on Emerald under 8 GB (time and peak quoted) and just lift-check's bars hold.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-context",
+      "title": "Function flow: callees' values kept apart by call site",
+      "detail": "docs/native-stage-b.md piece 3. Measured by {unit:native/fnref-heap-sites} (its branch, commit 0868fc7e, splits the pile into frame and allocation-site objects): fn_words_not_proven doesn't move on any agb program, even with the pile dropped altogether. The run joins every caller's r0-r3 and sp at a callee's entry, and every call_fn set is all ~21 address-taken functions, so a shared function's pointer parameters (memcpy, fmt, qrcodegen's encoders) reach dozens of frames, anywhere in each, and one read through them gives every function address stored in any. Give the run call-site context (a callee's entry and results per call site, or per caller, for callees small or shared enough; k=1 to start), on top of the object split. Done when: fn_words_not_proven falls on every agb program (bars lowered to the measured values), a unit test where two callers pass one callee two objects and the callee's read of the first gives only what the first caller stored, just lift-check and just check pass.",
+      "check": "independent",
+      "uses": ["heavy"]
     }
   ]
 }

@@ -1357,6 +1357,32 @@
         "at": "2026-11-07T04:31:03Z",
         "decision": "d/may-lane-ssh-onto-your-2"
       }
+    },
+    {
+      "id": "q/land-indirect-call-callee-sets",
+      "title": "Land indirect-call callee sets before Emerald is measured?",
+      "context": "{unit:native/indirect-call-args} is built and checked: indirect calls with a complete callee set pass only what their callees read, on the lift and in gbaa-recompile --summaries. Its card also asks for Emerald's summaries re-measured with callee sets. That can't run yet: even after {unit:native/fnref-flow-scale} (Metroid now settles in 151 s), the function-address flow on Emerald was killed at a 14 GB memory cap after 5 minutes today. Making it fit is new work, filed as {unit:native/fnref-flow-emerald}; the measurement itself is filed as {unit:native/indirect-call-args-emerald}, which waits on it. Your earlier answer covered only the bar (56-60, not 0), not dropping the Emerald part.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Land it now",
+          "changes": "The lift and summaries work merges today; the Emerald numbers go in the design doc later, from the measurement unit once the flow fits on Emerald"
+        },
+        {
+          "key": "b",
+          "label": "Keep it open",
+          "changes": "The branch stays unmerged until the flow fits on Emerald and the counts are in the design doc; later stage-B work on this branch's code waits too"
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/indirect-call-args"],
+      "asked": {
+        "at": "2026-11-07T08:02:43Z",
+        "by": "ba79cd96",
+        "host": "quack",
+        "unit": "native/indirect-call-args"
+      },
+      "answer": null
     }
   ]
 }
