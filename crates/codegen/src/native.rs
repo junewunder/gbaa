@@ -59,8 +59,10 @@
 //!   `f_<key>(g, sp, a: [u32; 4]) -> Result<[u32; 4], Exit>`, with the
 //!   summary printed above it.
 //! - Registers and NZCV are Rust locals; each block's IR values are `let`s.
-//!   r4-r11 outlive a call because callees keep them (the summaries' proof,
-//!   `keeps`; a function that returns without it is a hard hole).
+//!   r4-r11 outlive a call because callees keep them, or change only
+//!   what no caller reads (the summaries' `keeps` and `changes`; a
+//!   function that breaks that, `analysis::holes::SUMMARY_HARD`, is a
+//!   hard hole).
 //! - Two entries: `x_<key>(g, Regs)` takes every register and flag, and
 //!   `f_<key>` above is a call into it with r4-r12 and the flags zero and
 //!   `lr` [`RET`]. A fall or jump into another function's entry (or a
@@ -1267,12 +1269,13 @@ impl FnPrinter<'_, '_> {
                 s.push_str("/// Never returns.\n");
             }
             // Callers keep r4-r11 and sp in their own locals, so a callee
-            // can't change them; only one that really returns them changed
-            // (`analysis::holes`' rule) is lifted wrongly.
+            // can't change them; only a function that returns sp changed,
+            // or reads r4-r11 a callee changed or as they came
+            // (`analysis::holes::SUMMARY_HARD`), is lifted wrongly.
             if let Some(h) = sum
                 .holes
                 .iter()
-                .find(|h| h.contains("returns with r4-r11 or sp changed"))
+                .find(|h| analysis::holes::summary_hard(&analysis::holes::summary_kind(h)))
             {
                 self.hole(f.entry, format!("summary: {h}"));
             } else if sum.returns && !sum.keeps {

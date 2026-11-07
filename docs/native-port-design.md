@@ -1005,7 +1005,10 @@ with the native check and no replaced-library list.
   caller's, so the lift is exact for any callee that follows AAPCS,
   whatever the summary proof says. The summary is printed above each
   function (`/// Reads {r0, r1}; returns {r0}`), and a function whose
-  summary says it really returns r4-r11 or sp changed is a hard hole.
+  summary breaks that (`analysis::holes::SUMMARY_HARD`: it returns sp
+  changed, reads r4-r11 a callee changed, or changes them and reads one
+  as it came, a register parameter) is a hard hole. One that only uses
+  r4-r11 as scratch, where no caller reads them after, is lifted as is.
   The 47-50 functions per program whose proof fails for other reasons
   (an indirect call, a callee that never returns) are listed in the
   report as soft.
