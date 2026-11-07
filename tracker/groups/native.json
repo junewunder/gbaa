@@ -935,15 +935,10 @@
       "detail": "Indirect jumps that discovery leaves unresolved are hard holes for a native build, though only a speed cost in the play build (which is why {unit:discovery/jt-modern-misses} was dropped: it profiled only the play build's fallback time). Measured 2026-11-06 with gbaa-holes: Emerald Imperium (modern GCC) 71 unresolved jumps of 750, 88 hard holes; Emerald Rogue 46; Minish Cap 23; Emerald (agbcc) 9. First add Imperium to holes/corpus.toml (name imperium, ROM 'Emerald Imperium.gba'). Then sort Imperium's and Rogue's unresolved jumps by kind (switch tables with a narrowed index, the bound on a zero-extended copy, which needs backward refinement; the conservative frame rule; jumps through a register that are not tables) with counts, in docs/research/native-holes.md, and fix the largest kinds in analysis. Done when: Imperium is in the corpus; just holes-all --against a run on main shows unresolved jumps falling on imperium and emerald-rogue, every game's hard count no higher, and the sorted counts quoted; jt-score's modern-GCC bar raised to the measured value (it must not fall from 584/617, agbcc stays 676/676, 0 wrong targets); just check passes.",
       "check": "independent",
       "record": {
-        "state": "claimed",
+        "state": "blocked",
+        "on": "q/may-load-sp-sp-accesses",
         "by": "30aebd47",
-        "session": "30aebd47-5b38-4838-94d4-74bfb78a071f",
-        "host": "quack",
-        "pid": 751355,
-        "start": "2170805",
-        "at": "2026-11-07T08:53:17Z",
-        "branch": "unit/native/modern-gcc-jumps",
-        "beats": true
+        "at": "2026-11-07T10:09:34Z"
       },
       "round": "2026-11-07T08:53:17Z"
     },
