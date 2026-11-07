@@ -1,5 +1,5 @@
 //! `gbaa-holes ROM [--frames N] [--press KEY@F | KEY@F-G/E]… [--cover FILE [--update]] [--no-summaries]
-//! [--no-run-roots] [--show N]`: what blocks a native build of ROM
+//! [--no-run-roots] [--show N] [--line FILE]`: what blocks a native build of ROM
 //! (`docs/native-port-design.md`, section 6; `docs/research/native-holes.md`).
 //!
 //! Discovers the ROM and its IWRAM overlays, runs it in the interpreter
@@ -22,6 +22,10 @@
 //! and checks that against the file's list (fails on a difference), or
 //! with `--update` rewrites the list.
 //!
+//! `--line FILE` also writes the ranking line's numbers to FILE as TOML
+//! ([`corpus::Line`]). `gbaa-holes --corpus FILE …` runs every game of a
+//! corpus file and prints one table ([`corpus`], `just holes-all`).
+//!
 //! What the run records, per instruction executed: the address and
 //! instruction set, its first raw value (and whether a later one differed:
 //! RAM code that changed), whether it ran at the top level of an IRQ (the
@@ -36,6 +40,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::ExitCode;
 
+mod corpus;
 mod cover;
 
 use analysis::holes::{self, CpuWhere, RetArith, Run, STACK_SWITCH, Seen};
@@ -699,10 +704,14 @@ fn run(rec: &mut Rec, m: &mut Machine<Script>, frames: u32, boot: bool) -> Resul
 }
 
 fn main() -> ExitCode {
+    analysis::cap::require_cap("gbaa-holes");
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|a| a == "--corpus") {
+        return corpus::main(&args[1..]);
+    }
     let (mut rom_path, mut frames, mut presses) = (None, 5400u32, Vec::new());
     let (mut sums, mut show, mut run_roots) = (true, 12usize, true);
-    let (mut cover_path, mut update) = (None, false);
+    let (mut cover_path, mut update, mut line_path) = (None, false, None);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -720,6 +729,10 @@ fn main() -> ExitCode {
             },
             "--cover" => match it.next() {
                 Some(p) => cover_path = Some(p.clone()),
+                None => return usage(),
+            },
+            "--line" => match it.next() {
+                Some(p) => line_path = Some(p.clone()),
                 None => return usage(),
             },
             "--update" => update = true,
@@ -973,6 +986,12 @@ fn main() -> ExitCode {
         overlays.push(c.overlay);
     }
     let r = holes::classify(rom, &disc, &overlays, &run, summaries.as_ref());
+    if let Some(p) = &line_path
+        && let Err(e) = corpus::write_line(p, &r)
+    {
+        eprintln!("{e}");
+        return ExitCode::FAILURE;
+    }
 
     println!("{}", r.line(&game));
     println!(
@@ -1262,7 +1281,7 @@ fn main() -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: gbaa-holes ROM [--frames N] [--press KEY@F | KEY@F-G/E]... [--cover FILE [--update]] [--no-summaries] [--no-run-roots] [--show N]"
+        "usage: gbaa-holes ROM [--frames N] [--press KEY@F | KEY@F-G/E]... [--cover FILE [--update]] [--no-summaries] [--no-run-roots] [--show N] [--line FILE]\n       gbaa-holes --corpus FILE --roms DIR [--out DIR] [--against DIR] [--only NAME]... [--cover] [--write-doc FILE] [flags above...]\n       gbaa-holes --corpus FILE --from DIR [--write-doc FILE]"
     );
     ExitCode::from(2)
 }

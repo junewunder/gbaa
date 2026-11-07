@@ -1244,7 +1244,14 @@
         "by": "76e43878",
         "host": "quack"
       },
-      "answer": null
+      "answer": {
+        "key": "a",
+        "note": "june delegated the call to the agent: a measurement target, not a correctness question",
+        "by": "owner",
+        "via": "8f498bd1",
+        "at": "2026-11-07T04:20:44Z",
+        "decision": "d/heap-pointer-unit-s-bar"
+      }
     },
     {
       "id": "q/accept-indirect-call-bar-today",
@@ -1269,7 +1276,13 @@
         "by": "62031260",
         "host": "quack"
       },
-      "answer": null
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "8f498bd1",
+        "at": "2026-11-07T04:27:11Z",
+        "decision": "d/accept-indirect-call-bar-today"
+      }
     },
     {
       "id": "q/covered-controls-page-your-deck",
@@ -1299,7 +1312,51 @@
         "by": "31168110",
         "host": "quack"
       },
-      "answer": null
+      "answer": {
+        "key": "c",
+        "note": "june: a custom keyboard on an un-updated Steam Deck, not gbaa. Closed for good; don't refile.",
+        "by": "owner",
+        "via": "8f498bd1",
+        "at": "2026-11-07T04:29:43Z",
+        "decision": "d/covered-controls-page-your-deck"
+      }
+    },
+    {
+      "id": "q/may-lane-ssh-onto-your-2",
+      "title": "May a lane SSH onto your Deck to time four Kirbys' netplay now?",
+      "context": "Quack's frame cost for four Kirby peers is in docs/research/multiplayer.md, 'Four players'. The Deck's row is the open follow-up: copy the recompiled Kirby binary to ~/gbaa on the Deck and run rollback-feel's headless four-player command (calm delay 2, wander delay 0, with and without --interp), a few minutes of CPU, no window. You said 'leave it for later' on 2026-11-01, to run whenever you next say yes; the Deck rules need a fresh yes each time.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Yes, once",
+          "changes": "A lane SSHes onto the Deck for this one run, adds the Deck rows to the table and records the unit done."
+        },
+        {
+          "key": "b",
+          "label": "Not yet",
+          "changes": "The unit stays waiting; the four-player rooms stay judged on quack's numbers alone."
+        },
+        {
+          "key": "c",
+          "label": "Drop it",
+          "changes": "The Deck timing is dropped; quack's numbers stand as the only four-player measurement."
+        }
+      ],
+      "default": "b",
+      "blocks": ["multiplayer/four-kirbys-deck"],
+      "asked": {
+        "at": "2026-11-06T13:31:55Z",
+        "by": "17508d61",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "b",
+        "note": "june: stop asking; she'll ask a Claude herself when she wants the Deck used",
+        "by": "owner",
+        "via": "8f498bd1",
+        "at": "2026-11-07T04:31:03Z",
+        "decision": "d/may-lane-ssh-onto-your-2"
+      }
     }
   ]
 }

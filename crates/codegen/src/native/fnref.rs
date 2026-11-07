@@ -81,8 +81,8 @@
 //! proven (barred) and proven. `GBAA_FNREF_TRACE=1` prints each round of
 //! the run and each use not allowed, with its operands.
 //!
-//! Precision: the one pile is the limit (`docs/native-stage-b.md`, piece
-//! 3, as built). agb keeps closures and trait objects on its heap, so a
+//! Precision: the one pile is the limit (`docs/native-stage-b.md`, "Known
+//! gaps", the pile). agb keeps closures and trait objects on its heap, so a
 //! load through any heap pointer may give every function address stored
 //! there, and one such load used as a number marks them all.
 

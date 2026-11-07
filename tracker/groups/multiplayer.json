@@ -642,12 +642,6 @@
       "title": "Netplay: the overlay hides the bottom of the menu",
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): on the Deck, something netplay draws covered the bottom of the Controls page, where the dead zone is ('if you can see the bottom, because the netplay thing'); Athena found tapping the screen hid it. Find what it is (the room bar or the on-screen keyboard's space), and keep the whole menu visible while in a room. Check: a 1280x800 screenshot in a room, Controls page scrolled to its last row, nothing over it; just check.",
       "minMinutes": 25,
-      "record": {
-        "state": "blocked",
-        "on": "q/covered-controls-page-your-deck",
-        "by": "31168110",
-        "at": "2026-11-06T13:27:10Z"
-      },
       "notes": [
         {
           "at": "2026-11-06T13:27:21Z",
@@ -787,11 +781,25 @@
       "id": "multiplayer/four-kirbys-deck",
       "title": "Four Kirbys' netplay frame cost on the Deck",
       "detail": "From {unit:multiplayer/four-seats}: quack's numbers for four Kirbys a peer are in docs/research/multiplayer.md, 'Four players'. The Deck's own CPU, a short headless run (docs/machines.md, deck: ask june for a yes first, each time). Copy the recompiled Kirby binary to ~/gbaa, run just rollback-feel's headless four-player command from that section (calm delay 2 and wander delay 0, --interp and not, peers on the Deck) and add the Deck's rows to the table.",
-      "needs": ["multiplayer/four-seats"]
+      "needs": ["multiplayer/four-seats"],
+      "record": {
+        "state": "parked",
+        "why": "Deck-only; june will ask for Deck SSH herself when she wants it",
+        "by": "8f498bd1",
+        "at": "2026-11-07T04:31:12Z"
+      },
+      "round": "2026-11-06T13:31:13Z"
     },
     {
       "id": "multiplayer/fly-one-machine",
-      "title": "Scale fly's gbaa-server back to one machine"
+      "title": "Scale fly's gbaa-server back to one machine",
+      "record": {
+        "state": "done",
+        "by": "178b8ae4",
+        "at": "2026-11-06T13:33:47Z",
+        "evidence": "Owner allowed it (d/may-lane-scale-fly-s). fly scale count 1 -a gbaa-server --region ewr destroyed 850d37c4e70228; fly machines list now shows one machine, 784563db002518 (ewr, shared-cpu-1x). just fly-up; just room-sim calm --server 37.16.3.41: pass, 10 hashes and the end match on both seats; just fly-down: stopped. IPv4 37.16.3.41 kept. No repo change (fly-deploy already passes --ha=false); branch equals origin/main, so just check not rerun.",
+        "host": "quack"
+      }
     }
   ]
 }
