@@ -1044,6 +1044,15 @@
       "at": "2026-11-07T15:08:22Z",
       "question": "q/may-load-sp-sp-accesses",
       "via": "ed09cc1f"
+    },
+    {
+      "id": "d/may-ref-unexplained-rise-for-true-data",
+      "title": "May two lift bars rise because a false function start is gone: Accept the measured values",
+      "why": "the two bars are set to what the lift measures now on the seven agb programs; this unit is checked and lands; a new unit bounds that ROM read by the table, not the next code, and lowers them again",
+      "by": "owner",
+      "at": "2026-11-07T15:08:24Z",
+      "question": "q/may-ref-unexplained-rise-for-true-data",
+      "via": "ed09cc1f"
     }
   ]
 }
