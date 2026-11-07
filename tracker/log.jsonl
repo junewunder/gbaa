@@ -2319,3 +2319,4 @@
 {"at":"2026-11-07T04:13:55Z","actor":"session","tag":"5155ec83","host":"quack","cmd":"add-unit","id":"native/modern-gcc-jumps","text":"new unit: Modern-GCC games' unresolved jumps, for native builds"}
 {"at":"2026-11-07T04:15:57Z","actor":"session","tag":"5155ec83","host":"quack","cmd":"add-unit","id":"native/callee-save-breaks","text":"new unit: Functions that return with r4-r11 or sp changed"}
 {"at":"2026-11-07T04:16:02Z","actor":"session","tag":"5155ec83","host":"quack","cmd":"add-unit","id":"native/kirby-undiscovered","text":"new unit: Find the Kirby code discovery misses, for native builds"}
+{"at":"2026-11-07T04:16:08Z","actor":"session","tag":"5155ec83","host":"quack","cmd":"add-unit","id":"native/nightmare-cpu-state","text":"new unit: Kirby - Nightmare in Dream Land's three CPU-state holes"}
