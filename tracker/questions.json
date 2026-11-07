@@ -1447,7 +1447,13 @@
         "host": "quack",
         "unit": "native/modern-gcc-jumps"
       },
-      "answer": null
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "ed09cc1f",
+        "at": "2026-11-07T15:08:22Z",
+        "decision": "d/may-load-sp-sp-accesses"
+      }
     },
     {
       "id": "q/may-ref-unexplained-rise-for-true-data",

@@ -1035,6 +1035,15 @@
       "at": "2026-11-07T15:08:20Z",
       "question": "q/land-bios-calls-unit-emerald",
       "via": "ed09cc1f"
+    },
+    {
+      "id": "d/may-load-sp-sp-accesses",
+      "title": "May load_sp and sp_accesses_escaping_slot rise by 1 for a better frame rule: Accept the +1",
+      "why": "load_sp and sp_accesses_escaping_slot bars go up by 1 in those four programs, as one access moved out of computed_unknown; the unit lands with them",
+      "by": "owner",
+      "at": "2026-11-07T15:08:22Z",
+      "question": "q/may-load-sp-sp-accesses",
+      "via": "ed09cc1f"
     }
   ]
 }
