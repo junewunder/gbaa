@@ -19,6 +19,17 @@ impl Ram {
         }
     }
 
+    /// Where `n` bytes from RAM offset `o` are in `Ram`, if in one piece:
+    /// inside one global, or in `bytes` between them.
+    #[inline(always)]
+    fn span(o: usize, n: usize) -> Option<usize> {
+        let i = RAM_GLOBALS.partition_point(|&(lo, _, _)| lo < o + n);
+        match i.checked_sub(1).map(|i| RAM_GLOBALS[i]) {
+            Some((lo, len, f)) if lo + len > o => (lo <= o && o + n <= lo + len).then(|| f + (o - lo)),
+            _ => Some(std::mem::offset_of!(Ram, bytes) + o),
+        }
+    }
+
     /// EWRAM then IWRAM as the guest lays them out: what the native check
     /// records.
     fn image(&self) -> Vec<u8> {

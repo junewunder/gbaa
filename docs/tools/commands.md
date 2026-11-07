@@ -1289,7 +1289,10 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   the count of globals; `computed_ram` likewise, the ones the value
   sets bound to one global are `ram_object`, unbarred, checked by the
   prelude's `pin` and `ix` at run time, and `pointer_unexplained` the
-  rest, native/ref-in-object); `call_fn` calls; jumps by value;
+  rest, native/ref-in-object; one the value sets don't bound that the
+  heap's run types is a heap object's field through `Ref<T>`, counted in
+  `ref_accesses` and `ref_types`, unbarred, and `ref_unexplained` those
+  through an object's pointer no type explains, native/ref-heap); `call_fn` calls; jumps by value;
   gap targets. `--bars FILE` fails the lift (after writing it) on any
   metric over `[program.NAME.bars]`'s maximum, each named with both
   numbers (`gbaa-lift: affine: load_computed_unknown is 755, over its
