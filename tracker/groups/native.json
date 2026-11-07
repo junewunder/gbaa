@@ -1095,6 +1095,13 @@
         "beats": true,
         "handedBack": "2026-11-07T12:41:23Z"
       },
+      "notes": [
+        {
+          "at": "2026-11-07T12:41:33Z",
+          "by": "8898da77",
+          "text": "2026-11-07: measured, not fixed. Round 0 alone passes 10 GB: entries hold 100-180M tokens, copies of successive 30k-token pile reads; UnkUtil_Run's ~10k callees add 2-3 GB. Join sharing, 2-level set: not enough. Next: chunked sets or symbolic pile token (memory/ file)"
+        }
+      ],
       "round": "2026-11-07T12:12:38Z"
     },
     {
