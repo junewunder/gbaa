@@ -849,6 +849,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-07T13:43:43Z",
+          "by": "1df66a89",
+          "text": "Emerald's runaway is fixed by {unit:native/gap-decoding-runaway}: with that diff applied to this branch, gbaa-holes gives 5 BIOS + 0 scanned-only and gbaa-lift 5 BIOS holes on Emerald (skip_fn_flow only), so the eight-game match holds once both land."
+        },
+        {
           "at": "2026-11-07T07:12:43Z",
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - The card says it's done only when gbaa-holes' BIOS count matches the lifter's on all eight games, but the Evidence shows they don't match on Emerald. It says \"Emerald's 5 real sites match, the rest is runaway …"
