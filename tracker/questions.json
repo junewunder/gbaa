@@ -1312,7 +1312,14 @@
         "by": "31168110",
         "host": "quack"
       },
-      "answer": null
+      "answer": {
+        "key": "c",
+        "note": "june: a custom keyboard on an un-updated Steam Deck, not gbaa. Closed for good; don't refile.",
+        "by": "owner",
+        "via": "8f498bd1",
+        "at": "2026-11-07T04:29:43Z",
+        "decision": "d/covered-controls-page-your-deck"
+      }
     },
     {
       "id": "q/may-lane-ssh-onto-your-2",

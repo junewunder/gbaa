@@ -642,12 +642,6 @@
       "title": "Netplay: the overlay hides the bottom of the menu",
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): on the Deck, something netplay draws covered the bottom of the Controls page, where the dead zone is ('if you can see the bottom, because the netplay thing'); Athena found tapping the screen hid it. Find what it is (the room bar or the on-screen keyboard's space), and keep the whole menu visible while in a room. Check: a 1280x800 screenshot in a room, Controls page scrolled to its last row, nothing over it; just check.",
       "minMinutes": 25,
-      "record": {
-        "state": "blocked",
-        "on": "q/covered-controls-page-your-deck",
-        "by": "31168110",
-        "at": "2026-11-06T13:27:10Z"
-      },
       "notes": [
         {
           "at": "2026-11-06T13:27:21Z",
