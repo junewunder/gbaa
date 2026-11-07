@@ -460,6 +460,17 @@
       "needs": ["native/fnref-flow"],
       "uses": ["heavy"],
       "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "3ab02d00",
+        "session": "3ab02d00-6054-4c90-8af0-1a21eaabc92d",
+        "host": "quack",
+        "pid": 751355,
+        "start": "2170805",
+        "at": "2026-11-07T07:12:55Z",
+        "branch": "unit/native/indirect-call-args",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-06T12:31:50Z",
