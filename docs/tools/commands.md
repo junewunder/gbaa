@@ -77,7 +77,9 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   functions; the flash library's stack routines stood in for,
   `analysis::flash`) and each list, the RAM copies among them (the ones
   only the run shows also as `[[copy]]` tables for the lift's holes
-  file). About a minute a game, capped at 3 GB. The
+  file), and last the runs of ROM code run but not discovered, with what
+  discovery has around each (code before it, data over it). About a
+  minute a game, capped at 3 GB. The
   doc's table is these lines; rerun all eight after changing
   `analysis::holes` or `crates/hole-report` and update it.
   `--cover FILE` (`holes/coverage/<game>.toml`, native/hole-coverage)

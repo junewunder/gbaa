@@ -265,6 +265,9 @@ pub struct Report {
     pub flash: Vec<FlashCall>,
     /// RAM code the run executed that no overlay discovered.
     pub ram_undiscovered: Vec<RamRun>,
+    /// ROM code the run executed that discovery didn't find, as runs
+    /// (`rom_src` is `None`).
+    pub rom_undiscovered: Vec<RamRun>,
     pub cpu: Vec<CpuHole>,
     /// `swi`s the library doesn't implement: (address, number).
     pub bios: Vec<(u32, u32)>,
@@ -621,6 +624,7 @@ pub fn classify(
             }
         }
     }
+    let mut rom_missed: Vec<(u32, &Seen)> = Vec::new();
     for (&a, s) in &run.code {
         let size = if s.thumb { 2 } else { 4 };
         let k = known.entry(a).or_insert(Known {
@@ -651,8 +655,12 @@ pub fn classify(
             r.ram_undiscovered_bytes += new;
         } else {
             r.rom_undiscovered_bytes += new;
+            if new > 0 {
+                rom_missed.push((a, s));
+            }
         }
     }
+    r.rom_undiscovered = runs(rom_missed.into_iter(), |_| None);
 
     // Function starts, for grouping: discovered, overlays', run's call
     // targets and IRQ handlers.
