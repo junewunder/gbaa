@@ -696,19 +696,7 @@
         "checker": "verifier-7c3e91a4",
         "at": "2026-11-07T08:49:46Z",
         "evidence": "just lift-check passed on all 7 programs after merging main (600/601 frames, 0 differences, packed layout same, planted controls caught); just check passed. Owner's bar (what moves): ref_accesses 11-16 a program, load/store_computed_unknown down by exactly those (e.g. spike 762/382 -> 755/373), store_computed_ram unchanged, lines down; ref_unexplained new soft hole barred 34-93; lines_prelude 508->581 (+73: Ref, Plain, Game::at/at_mut, obj_at, span in both layouts). Types agb's InterruptInner the IRQ handler walks. Verifier reran just check and lift-check --only native-spike: pass.",
-        "branch": "unit/native/ref-heap",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-07T08:49:46Z",
-          "by": "ed43d9d3",
-          "host": "quack",
-          "pid": 862066,
-          "start": "2504341",
-          "beats": true,
-          "session": "ed43d9d3-ea1e-42f7-ba83-edf0733b00f1",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -721,8 +709,7 @@
           "by": "76e43878",
           "text": "Measured (scratch, not committed): #[track_caller] on the prelude's ld/st in a copy of the native-spike lift, 600 frames headless: 21 of 162 sites run touch the heap (>=0x020000c8): x_08002789's IRQ list walk, x_080001ad init, x_03000170 copy. Bar asked of the owner."
         }
-      ],
-      "round": "2026-11-06T09:23:27Z"
+      ]
     },
     {
       "id": "native/lift-modules",
