@@ -2327,3 +2327,4 @@
 {"at":"2026-11-07T04:31:07Z","actor":"session","tag":"8f498bd1","host":"quack","cmd":"decide","text":"decided: Never ask to SSH onto the Deck; june asks when she wants it","d":"d/never-ask-to-ssh-onto-the-deck-june-asks-when"}
 {"at":"2026-11-07T04:31:12Z","actor":"session","tag":"8f498bd1","host":"quack","cmd":"park","id":"multiplayer/four-kirbys-deck","text":"Four Kirbys' netplay frame cost on the Deck: parked: Deck-only; june will ask for Deck SSH herself when she wants it"}
 {"at":"2026-11-07T05:14:06Z","actor":"session","tag":"c7110ccd","host":"quack","cmd":"overseer","text":"overseer 423e03 on quack attached, replacing 9b3221 on quack"}
+{"at":"2026-11-07T05:14:42Z","actor":"loop","tag":"4485059c","host":"quack","cmd":"claim","id":"native/lift-bios-calls","text":"Lifted code makes the BIOS calls games use: claimed (picking up after f9620931)"}

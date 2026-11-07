@@ -796,17 +796,17 @@
       "minMinutes": 180,
       "record": {
         "state": "claimed",
-        "by": "f9620931",
-        "session": "f9620931-58ea-47d3-9d59-3b6e2ab88d05",
+        "by": "4485059c",
+        "session": "4485059c-1f08-4c6f-89b5-cdddbe4f096b",
         "host": "quack",
-        "pid": 1418242,
-        "start": "29954965",
-        "at": "2026-11-06T12:46:45Z",
+        "pid": 751355,
+        "start": "2170805",
+        "at": "2026-11-07T05:14:42Z",
         "branch": "unit/native/lift-bios-calls",
-        "beats": true,
-        "handedBack": "2026-11-06T12:58:40Z",
+        "resumed": "f9620931",
+        "prevSession": "f9620931-58ea-47d3-9d59-3b6e2ab88d05",
         "pushed": true,
-        "ended": "2026-11-06T12:59:01Z"
+        "beats": true
       },
       "notes": [
         {
