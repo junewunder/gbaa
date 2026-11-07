@@ -1136,6 +1136,16 @@
       "detail": "{unit:native/kirby-undiscovered} left two kinds of ROM code inside a BIOS copy's source undiscovered on purpose (docs/research/native-holes.md, What discovery misses): m4a's SoundMainRAM copy ends in the bx r3 stub SoundMain calls in ROM, hiding SoundMain's tail (38 bytes, every m4a game), and Nightmare's crt0 copy runs into its coroutine switch at 0x08000234, entered by a veneer's ARM b (36 bytes, and 44 after calls into it). Extending discovery::copy_cuts to them (stub targets, b targets) finds it but each game's hard count rises by the jumps found there: SoundMain's constant jump into its IWRAM copy (needs a holes-file entry in the lift) and the switch's bx r1. Decide whether a constant jump to a discovered overlay entry should be resolved (Recovery and the lifter's dyn_targets) so it isn't a hole, then extend the cut. Done when: those bytes are discovered in just holes-all --against main, no hard count higher (or the rise explained and agreed), disc-* bars hold, just check passes.",
       "check": "independent",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/nightmare-cover-list",
+      "title": "Refresh Nightmare's coverage jump list",
+      "detail": "On main at aa63a25 (2026-11-07), just holes-all --only kirby-nightmare --cover fails: holes/coverage/kirby-nightmare-in-dream-land.toml lists 13 jumps (0x080cdeac, 0x080ce4a0 and others) that are no longer unresolved, resolved by units since. Rerun with --update (about 10 minutes) and commit the file.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just holes-all --only kirby-nightmare --cover --out out/holes/nightmare-cover"
+      },
+      "uses": ["heavy"]
     }
   ]
 }

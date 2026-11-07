@@ -2388,3 +2388,4 @@
 {"at":"2026-11-07T11:44:53Z","actor":"loop","tag":"ccb35e7f","host":"quack","cmd":"unclaim","id":"native/nightmare-task-switch","text":"Kirby - Nightmare's task switcher as host coroutines: given back unstarted","unstarted":true}
 {"at":"2026-11-07T11:45:16Z","actor":"loop","tag":"1df66a89","host":"quack","cmd":"claim","id":"native/gap-decoding-runaway","text":"Lifter's gap decoding walks through Emerald's data: claimed"}
 {"at":"2026-11-07T11:57:12Z","actor":"loop","tag":"842df15d","host":"quack","cmd":"add-unit","id":"native/copy-tail-discovery","text":"new unit: Discover code past m4a's and Nightmare's copy sources"}
+{"at":"2026-11-07T11:57:30Z","actor":"loop","tag":"842df15d","host":"quack","cmd":"add-unit","id":"native/nightmare-cover-list","text":"new unit: Refresh Nightmare's coverage jump list"}
