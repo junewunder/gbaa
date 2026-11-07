@@ -1016,7 +1016,19 @@
       "id": "native/nightmare-cpu-state",
       "title": "Kirby - Nightmare in Dream Land's three CPU-state holes",
       "detail": "Kirby - Nightmare in Dream Land is the only corpus game with CPU-state hard holes in gbaa-holes (3, measured 2026-11-06; every other game 0), so something in it is specific. Find what each is (just holes on it lists them), say in docs/research/native-holes.md what code does it and whether other games could do the same, and fix it in analysis or the lifter if small; if not small, write up what fixing it needs and file that as its own unit. Done when: the three are explained in the doc; either Nightmare's CPU-state count is 0 in just holes-all --against a run on main (no game's hard count higher) or the follow-up unit is filed; just check passes.",
-      "check": "independent"
+      "check": "independent",
+      "record": {
+        "state": "claimed",
+        "by": "fcc04f74",
+        "session": "fcc04f74-f90e-469c-8513-8bbae46f6f91",
+        "host": "quack",
+        "pid": 751355,
+        "start": "2170805",
+        "at": "2026-11-07T11:07:58Z",
+        "branch": "unit/native/nightmare-cpu-state",
+        "beats": true
+      },
+      "round": "2026-11-07T11:07:58Z"
     },
     {
       "id": "native/gap-decoding-runaway",
