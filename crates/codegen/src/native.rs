@@ -480,15 +480,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let (ins, pools, call_fn) = fn_ins(&overlays, &codes, &all);
     let fnrefs = match &holes.skip_fn_flow {
         None => {
-            let (flow, words) = fn_flow(
-                rom,
-                &disc,
-                &overlays,
-                &ins,
-                &pools,
-                &all,
-                &holes.allocators,
-            );
+            let (flow, words) =
+                fn_flow(rom, &disc, &overlays, &ins, &pools, &all, &holes.allocators);
             Some((flow, words, call_fn))
         }
         Some(_) => None,
@@ -1053,7 +1046,15 @@ fn fn_flow(
         .filter(|(src, _, _)| !overlays.iter().any(|o| o.src == *src))
         .collect();
     let img = FnImage { rom, all, disc };
-    (fnref::follow(ins, &img, &copies, allocs), words)
+    // Call-site context is off unless asked for (`GBAA_FNREF_CTX_BLOCKS`:
+    // the largest function, in blocks, run once per call site): it proved
+    // no more words on the agb programs and cost 4-90 times the time
+    // (`native/fnref-context`).
+    let ctx_blocks = std::env::var("GBAA_FNREF_CTX_BLOCKS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    (fnref::follow(ins, &img, &copies, allocs, ctx_blocks), words)
 }
 
 /// Every context's functions as the flows take them ([`fnref::FnIn`]),
