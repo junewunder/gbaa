@@ -2377,3 +2377,4 @@
 {"at":"2026-11-07T11:07:58Z","actor":"loop","tag":"fcc04f74","host":"quack","cmd":"claim","id":"native/nightmare-cpu-state","text":"Kirby - Nightmare in Dream Land's three CPU-state holes: claimed"}
 {"at":"2026-11-07T11:12:32Z","actor":"loop","tag":"fcc04f74","host":"quack","cmd":"add-unit","id":"native/nightmare-task-switch","text":"new unit: Kirby - Nightmare's task switcher as host coroutines"}
 {"at":"2026-11-07T11:26:36Z","actor":"loop","tag":"fcc04f74","host":"quack","cmd":"done","id":"native/nightmare-cpu-state","text":"Kirby - Nightmare in Dream Land's three CPU-state holes: done, checked by verifier-7c3e"}
+{"at":"2026-11-07T11:31:59Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/nightmare-cpu-state","text":"Kirby - Nightmare in Dream Land's three CPU-state holes: on main"}

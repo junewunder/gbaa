@@ -1023,21 +1023,8 @@
         "checker": "verifier-7c3e",
         "at": "2026-11-07T11:26:36Z",
         "evidence": "verifier-7c3e PASS: just holes on Nightmare lists CPU state 3 hard at 0x08000244/0x08000278/0x08000298, one object-task switcher (resume/yield/exit), checked against disassembly and recounted callers (1/11063/232); doc section in native-holes.md; follow-up {unit:native/nightmare-task-switch} filed (stackful coroutine stand-in); just check exit 0 after merging main.",
-        "branch": "unit/native/nightmare-cpu-state",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-07T11:26:36Z",
-          "by": "fcc04f74",
-          "host": "quack",
-          "pid": 751355,
-          "start": "2170805",
-          "beats": true,
-          "session": "fcc04f74-f90e-469c-8513-8bbae46f6f91",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-07T11:07:58Z"
+        "host": "quack"
+      }
     },
     {
       "id": "native/nightmare-task-switch",
