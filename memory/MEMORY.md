@@ -19,3 +19,5 @@ Made from each file's frontmatter (`title`, `hook`, `open: true`) by `just memor
 
 Unsettled investigations, one per file with `open: true` and the next step in its hook.
 Drop the flag in the session that settles it.
+
+- [Why the function-address flow runs out of memory on Emerald](fnref-flow-emerald-memory.md) — round 0 alone passes 10 GB: callee entries each copy 30k-token pile reads; next, chunked sets or a symbolic pile token (2026-11-07)
