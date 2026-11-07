@@ -477,7 +477,8 @@
           "beats": true,
           "session": "3ab02d00-6054-4c90-8af0-1a21eaabc92d",
           "lane": "quack/1"
-        }
+        },
+        "pushed": true
       },
       "notes": [
         {
