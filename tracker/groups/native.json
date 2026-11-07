@@ -966,6 +966,13 @@
         "by": "7cd800aa",
         "at": "2026-11-07T11:07:00Z"
       },
+      "notes": [
+        {
+          "at": "2026-11-07T11:07:28Z",
+          "by": "7cd800aa",
+          "text": "Branch c2dd06fe: scan rejects Thumb lsr/asr #32. holes-all vs out/holes/base-74f20b1b; Imperium via just holes (not in main's corpus). Answer a: set the 2 bars to measured, just check, verifier. On landing drop mods/metroid/holes.toml stand-in 0x087603d9 (data, not a start now)."
+        }
+      ],
       "round": "2026-11-07T10:19:05Z"
     },
     {
