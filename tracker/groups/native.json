@@ -942,6 +942,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-07T10:18:49Z",
+          "by": "30aebd47",
+          "text": "just check: all green but codegen lift_bars, which fails only on the two bars the question holds (load_sp, sp_accesses_escaping_slot +1 in affine, native-fallthrough, native-irq-hold, native-frame-locals). Answer a: set them to measured, rerun check."
+        },
+        {
           "at": "2026-11-07T10:10:09Z",
           "by": "30aebd47",
           "text": "On the branch: holes final Imperium jumps 71->27, Rogue 46->20, no game up; jt-score modern 610/617 (bar set), 4 subsets checked. Only lift bars load_sp/sp_accesses_escaping_slot +1 (4 progs) wait on q/may-load-sp-sp-accesses; then just check, lift-metrics --write-doc, verifier."
