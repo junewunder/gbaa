@@ -1170,6 +1170,12 @@ fn main() -> ExitCode {
                     kind,
                     if k.hard { " (hard)" } else { "" }
                 );
+                // A hard kind's functions, each with its holes of the kind.
+                for f in k.funcs.iter().filter(|_| k.hard) {
+                    for h in s[f].iter().filter(|h| holes::summary_kind(h) == **kind) {
+                        println!("        0x{f:08x}  {h}");
+                    }
+                }
             }
         }
         None => println!("summaries: not measured (--no-summaries)"),
