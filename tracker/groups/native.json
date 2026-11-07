@@ -461,26 +461,22 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "done",
-        "by": "3ab02d00",
-        "checker": "a4da4b93",
-        "at": "2026-11-07T07:49:14Z",
-        "evidence": "Verifier subagent a4da4b93 (fresh context): PASS. cargo test -p codegen ok (new tests pass); just lift-check exit 0 with call_fn_complete/call_fn_four_complete barred at the measured 56-60 (owner's decision to accept today's values), matching docs/native-stage-b.numbers.md; just check exit 0. Its review found complete_sets used an unsettled flow's sites: fixed (fcc59f14, test added), just check rerun passes. Emerald split to {unit:native/indirect-call-args-emerald}.",
-        "branch": "unit/native/indirect-call-args",
+        "state": "claimed",
+        "by": "ba79cd96",
+        "session": "ba79cd96-757d-4ba4-bf4f-08dbb8208e37",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-07T07:49:14Z",
-          "by": "3ab02d00",
-          "host": "quack",
-          "pid": 751355,
-          "start": "2170805",
-          "beats": true,
-          "session": "3ab02d00-6054-4c90-8af0-1a21eaabc92d",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "pid": 751355,
+        "start": "2170805",
+        "at": "2026-11-07T07:53:42Z",
+        "branch": "unit/native/indirect-call-args",
+        "beats": true
       },
       "notes": [
+        {
+          "at": "2026-11-07T07:53:37Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - The Emerald re-measurement the card requires was not done, and the owner never agreed to move it out. The card's Done when asks for Emerald's summaries to be re-measured with callee sets, with the counts and w…"
+        },
         {
           "at": "2026-11-06T12:31:50Z",
           "by": "62031260",
@@ -492,6 +488,11 @@
           "text": "From {unit:native/lift-params}: a_<key> adapters return r1-r3 as passed in (summaries treat them undefined after an indirect call); undefined_reads after indirect calls aren't counted anywhere. Stand-ins call f_08002995-style dispatchers four-reg by name: shaping one breaks the build."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-07T07:53:37Z",
+        "findings": "- The Emerald re-measurement the card requires was not done, and the owner never agreed to move it out. The card's Done when asks for Emerald's summaries to be re-measured with callee sets, with the counts and what blocks complete sets (callbacks stored through RAM globals such as gMain.callback1) quoted in the design doc. The Evidence says this part was moved to a new unit, 'Emerald's summaries re-measured with callee sets' ({unit:native/indirect-call-args-emerald}). The new paragraph at docs/native-port-design.md:573-582 says plainly that it was not measured: the flow didn't finish on Emerald in 35 minutes (past 8 GB). The owner's question (q/accept-indirect-call-bar-today) covered only lowering the bar from 0 to the measured 56-60. It never mentioned dropping the Emerald part, so the answer 'a' doesn't cover it. The split also wasn't forced by the ~3-hour rule: the unit was split about 1.5 hours after it was claimed. What to do: ask the owner with `just ask`. Say that the Emerald measurement can't run until the work to make the flow finish on a whole game ({unit:native/fnref-flow-scale}) lands, because the flow doesn't finish there today. Offer two choices: (a) land this unit now, with the Emerald numbers left to the new unit, or (b) keep this unit open until the flow finishes on Emerald and the counts are in the design doc. Leave the branch unmerged until they answer. Alternatively, finish the measurement on this branch if the flow can be made to finish."
+      },
       "round": "2026-11-06T11:08:08Z"
     },
     {
@@ -694,6 +695,17 @@
       "needs": ["native/ref-in-object"],
       "uses": ["heavy"],
       "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "ed43d9d3",
+        "session": "ed43d9d3-ea1e-42f7-ba83-edf0733b00f1",
+        "host": "quack",
+        "pid": 862066,
+        "start": "2504341",
+        "at": "2026-11-07T07:53:17Z",
+        "branch": "unit/native/ref-heap",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-06T09:27:51Z",
@@ -861,19 +873,7 @@
         "checker": "verifier-a8c59d8d",
         "at": "2026-11-07T07:49:04Z",
         "evidence": "Verifier subagent a8c59d8d at 0bb7ccd (main merged): mods/metroid/holes.toml has no skip_fn_flow; Metroid lift with GBAA_FNREF_TRACE=1 settles in 12 rounds, 150.8 s (bar 300 s, was ~614 s); report equals the old one but for first-use hole addresses; just lift-check passed with every bar held; just check passed.",
-        "branch": "unit/native/fnref-flow-scale",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-07T07:49:04Z",
-          "by": "50d72494",
-          "host": "quack",
-          "pid": 862066,
-          "start": "2504341",
-          "beats": true,
-          "session": "50d72494-d41a-4fa2-86c8-634089cf6329",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -891,8 +891,7 @@
           "by": "1e655045",
           "text": "Branch f02475e3: cached every-cell reads, cap once per load: Metroid settles in 614 s, 11 rounds (was 63 s r0, 534 s r1, unsettled); same counts. Rounds 1-4 rerun ~2600 fns, ~90 s each; values carry the 5270-token pile. Next: join shares Rc if subset; why r2-3 rerun all."
         }
-      ],
-      "round": "2026-11-06T12:59:15Z"
+      ]
     },
     {
       "id": "native/indirect-call-args-emerald",
