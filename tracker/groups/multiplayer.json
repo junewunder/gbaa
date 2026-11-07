@@ -644,6 +644,11 @@
       "minMinutes": 25,
       "notes": [
         {
+          "at": "2026-11-06T13:27:21Z",
+          "by": "31168110",
+          "text": "Not our overlays: Controls draws no report/mark at its foot. Suspect Steam's floating OSK: SDL x11 opens steam://open/keyboard on text_input.start (window.rs:1105, no rect for Netplay fields); a tap outside closes it. Asked owner for a Deck test. Main merged (62910042)."
+        },
+        {
           "at": "2026-11-06T03:21:25Z",
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - crates/desktop/src/menu.rs:1017-1034: the fix doesn't touch the problem the card reports. The card says something covered the bottom of the Controls page, where the dead zone rows are. Those rows are the DEADZ…"
@@ -652,11 +657,6 @@
           "at": "2026-11-01T01:50:51Z",
           "by": "d86c5e5f",
           "text": "main merged into branch (merge commit on top of 57fcb251), no conflicts. just check started but cut by stop time again (tests were passing). Left: just check (~10+ min, start early), then done with the cu-shot evidence."
-        },
-        {
-          "at": "2026-11-01T01:49:12Z",
-          "by": "c52caa3f",
-          "text": "Fix committed on branch (57fcb251): netplay report box covered Main page's bottom rows; now menu fits above it. 1280x800 cu shots in a room: Main + Controls last rows clear. Left: just check (cut by stop), merge main, done. Steam OSK not seen here."
         }
       ],
       "review": {
@@ -781,11 +781,25 @@
       "id": "multiplayer/four-kirbys-deck",
       "title": "Four Kirbys' netplay frame cost on the Deck",
       "detail": "From {unit:multiplayer/four-seats}: quack's numbers for four Kirbys a peer are in docs/research/multiplayer.md, 'Four players'. The Deck's own CPU, a short headless run (docs/machines.md, deck: ask june for a yes first, each time). Copy the recompiled Kirby binary to ~/gbaa, run just rollback-feel's headless four-player command from that section (calm delay 2 and wander delay 0, --interp and not, peers on the Deck) and add the Deck's rows to the table.",
-      "needs": ["multiplayer/four-seats"]
+      "needs": ["multiplayer/four-seats"],
+      "record": {
+        "state": "parked",
+        "why": "Deck-only; june will ask for Deck SSH herself when she wants it",
+        "by": "8f498bd1",
+        "at": "2026-11-07T04:31:12Z"
+      },
+      "round": "2026-11-06T13:31:13Z"
     },
     {
       "id": "multiplayer/fly-one-machine",
-      "title": "Scale fly's gbaa-server back to one machine"
+      "title": "Scale fly's gbaa-server back to one machine",
+      "record": {
+        "state": "done",
+        "by": "178b8ae4",
+        "at": "2026-11-06T13:33:47Z",
+        "evidence": "Owner allowed it (d/may-lane-scale-fly-s). fly scale count 1 -a gbaa-server --region ewr destroyed 850d37c4e70228; fly machines list now shows one machine, 784563db002518 (ewr, shared-cpu-1x). just fly-up; just room-sim calm --server 37.16.3.41: pass, 10 hashes and the end match on both seats; just fly-down: stopped. IPv4 37.16.3.41 kept. No repo change (fly-deploy already passes --ha=false); branch equals origin/main, so just check not rerun.",
+        "host": "quack"
+      }
     }
   ]
 }

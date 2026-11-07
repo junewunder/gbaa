@@ -462,16 +462,21 @@
       "minMinutes": 120,
       "record": {
         "state": "claimed",
-        "by": "62031260",
-        "session": "62031260-5636-4dad-9863-cc39f80d7abf",
+        "by": "3ab02d00",
+        "session": "3ab02d00-6054-4c90-8af0-1a21eaabc92d",
         "host": "quack",
-        "pid": 1418242,
-        "start": "29954965",
-        "at": "2026-11-06T11:08:08Z",
+        "pid": 751355,
+        "start": "2170805",
+        "at": "2026-11-07T07:12:55Z",
         "branch": "unit/native/indirect-call-args",
         "beats": true
       },
       "notes": [
+        {
+          "at": "2026-11-06T12:31:50Z",
+          "by": "62031260",
+          "text": "Built on the branch (lift + summaries + gbaa-recompile --callee-sets); lift-check, just check pass. Waits on the bar question (measured 56-60, not 0: sets are the heap pile's 21 fns). Emerald part split to {unit:native/indirect-call-args-emerald}."
+        },
         {
           "at": "2026-11-06T07:50:52Z",
           "by": "5676c8cf",
@@ -617,6 +622,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-06T13:20:29Z",
+          "by": "eb63ac1b",
+          "text": "Its branch's commits (holes file from mods/, skip_fn_flow) were merged into {unit:native/lift-ram-copies} and land with it. mods/metroid/holes.toml now has 5 [[copy]] tables and stand-ins at 0x03000c7c, 0x030016c5; lift: 2,624 functions, 9 BIOS holes left."
+        },
+        {
           "at": "2026-11-06T12:12:12Z",
           "by": "f93b1ecd",
           "text": "26 hard holes -> 9: mods/metroid/holes.toml stands in reset, IRQ dispatcher, classic-NES code; skips fnref flow. Left: 9 BIOS calls ({unit:native/lift-bios-calls}). Then just lift ROM out/lift-metroid --name metroid, build, quote numbers (doc has a measurement build)."
@@ -675,12 +685,6 @@
       "needs": ["native/ref-in-object"],
       "uses": ["heavy"],
       "minMinutes": 120,
-      "record": {
-        "state": "blocked",
-        "on": "q/heap-pointer-unit-s-bar",
-        "by": "76e43878",
-        "at": "2026-11-06T09:27:43Z"
-      },
       "notes": [
         {
           "at": "2026-11-06T09:27:51Z",
@@ -764,17 +768,13 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "8ec58597",
-        "session": "8ec58597-d49b-446a-b426-08be5f75aaf9",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T12:12:53Z",
-        "branch": "unit/native/recovery-saved-lr-return",
-        "beats": true
-      },
-      "round": "2026-11-06T12:12:53Z"
+        "checker": "verifier-7c3e91a4",
+        "at": "2026-11-06T12:51:20Z",
+        "evidence": "VSA takes a jump to lr's entry value as a return; bl keeps r0-r3/r12 a short call-free callee never writes. just holes unresolved ROM jumps: Emerald 21->9, Rogue 59->46, Kirby AM 13->0, Kirby NiDL 14->1, Minish 34->23, none in m4a ply_* (verifier checked Emerald, Kirby AM). jt-score, disc-pret, disc-agb exit 0 (jt unresolved 38->22, 53->37, nothing else moved); just check and just lift-check pass; 2 new unit tests.",
+        "host": "quack"
+      }
     },
     {
       "id": "native/fnref-heap-sites",
@@ -782,28 +782,97 @@
       "detail": "docs/native-stage-b.md, piece 3, fnref-flow as built: one pile holds every heap store, so a heap load used as a number marks every function word stored there (32-36 of each agb program's ~55 words). Split the pile by allocation site (agb's allocator's callers) and field offset in crates/codegen/src/native/fnref.rs. Done when: fn_words_not_proven bar lowered to the measured value on every program (it must fall), unit tests for two heap objects kept apart, just lift-check and just check pass.",
       "check": "independent",
       "needs": ["native/fnref-flow"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "minMinutes": 180,
+      "notes": [
+        {
+          "at": "2026-11-06T12:46:23Z",
+          "by": "41e1a197",
+          "text": "agb programs have no names file (lib recognition parked), so name the allocator in holes/<prog>.toml by address ($GBAA_DATA/agb/<prog>.elf has __rust_alloc). Sound shape: Heap(site,off) tokens; a load through one reads its field + the pile; stores to unknown stay in the pile."
+        },
+        {
+          "at": "2026-11-06T12:31:54Z",
+          "by": "62031260",
+          "text": "When sets narrow, lower lift-check's call_fn_four_complete (56-60 per program, set by {unit:native/indirect-call-args}): every complete call_fn set today is the pile's 21 address-taken functions."
+        }
+      ],
+      "round": "2026-11-06T12:44:46Z"
     },
     {
       "id": "native/lift-bios-calls",
       "title": "Lifted code makes the BIOS calls games use",
       "detail": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): the lifter prints only swi 0x02, 0x04-0x06 and 0x0B (native.rs, Plan::Swi); every other call is a hard hole, and gbaa-holes doesn't count them (it reported Metroid's BIOS holes as 0). Metroid needs 0x03 Stop, 0x08 Sqrt, 0x0C CpuFastSet, 0x11/0x12 LZ77UnComp, 0x19 SoundBias, 0x1F MidiKey2Freq, 0x25 MultiBoot; other games more ({unit:bios/swi-survey} lists them). Add them to the prelude over runtime::hw::bios (it has lz77, rl, arctan2), each with an agb test program or lift-check case, and make gbaa-holes count the calls the lifter can't print. lines_prelude may rise (say how many and why). Done when: lift-check green with a case per new call, and gbaa-holes' BIOS count matches the lifter's on the eight games.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "minMinutes": 180,
+      "notes": [
+        {
+          "at": "2026-11-07T07:12:43Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - The card says it's done only when gbaa-holes' BIOS count matches the lifter's on all eight games, but the Evidence shows they don't match on Emerald. It says \"Emerald's 5 real sites match, the rest is runaway …"
+        },
+        {
+          "at": "2026-11-06T12:58:47Z",
+          "by": "f9620931",
+          "text": "Branch has the gbaa-holes half: analysis::holes::NATIVE_BIOS is the lifter's list and bios_implemented's. Left: prelude fns (reuse runtime::bios math/decomp logic over ld/st, as cpu_set does), one agb program calling each swi + its lift-check table and route, 8-game compare."
+        }
+      ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-07T07:12:43Z",
+        "findings": "- The card says it's done only when gbaa-holes' BIOS count matches the lifter's on all eight games, but the Evidence shows they don't match on Emerald. It says \"Emerald's 5 real sites match, the rest is runaway gap decoding filed as {unit:native/gap-decoding-runaway}\". This session filed that unit itself (tracker/log.jsonl:2332) and left a note on it (tracker/log.jsonl:2335) that the lifter shows 6 BIOS sites near 0x087f2250 only inside two runaway functions. So one game of the eight was split off into a unit the card didn't ask for. The code in the diff itself looks right: the prelude's CpuFastSet, LZ77, RL, SoundBias, ArcTan2 and MultiBoot leave registers and memory as the play build's do (runtime::bios, bios/math.rs). Two ways to fix it. Either fix the runaway gap decoding in this unit, then rerun `just holes-all` and the lifter on Emerald and show the counts match. Or use `just ask` to get the owner to agree to narrowing the done-when to the seven games plus Emerald's real call sites, with the Emerald comparison waiting on the gap-decoding fix (the lifter's gap decoding walks through Emerald's data, {unit:native/gap-decoding-runaway}). Then record that decision in the evidence."
+      },
+      "round": "2026-11-06T12:46:45Z"
     },
     {
       "id": "native/lift-ram-copies",
       "title": "The lifter lifts the code a game copies to RAM",
       "detail": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): gbaa-lift's discovery is static, so Metroid lifts with 0 IWRAM copies, though it runs its IRQ dispatcher from an IWRAM copy of 0x08000104 and calls 0x03003b90-0x03004440 and 0x030016d8 through pointers; natively call_fn panics on those keys. The hole report's run finds them (analysis::holes::ram_copies, {unit:native/disc-ram-copies}'s note). Lift them from that run's copies (or a static finder of copy loops and DMA3), with their stand-ins at RAM keys. Done when: Metroid's lift has its IWRAM copies and lift-check stays green.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "eb63ac1b",
+        "checker": "verifier-a5468275",
+        "at": "2026-11-06T13:20:18Z",
+        "evidence": "Verifier subagent (fresh context) lifted Metroid with mods/metroid/holes.toml's five [[copy]] tables: functions_iwram 8 (0x03000c7c, 0x030016c5 stand-ins calling their ROM originals, checked against ROM bytes; 0x03003b91/ba0, 0x030041ed/1fc, 0x03004295/2a4 lifted), hard holes only the 9 BIOS calls, none in f_03…; just lift-check passed. just check passes after merging main (and after the review's bounds fix). Branch also merges unit/native/metroid-lifts (holes from mods/, skip_fn_flow).",
+        "host": "quack"
+      }
     },
     {
       "id": "native/fnref-flow-scale",
       "title": "Function-address flow settles on a whole game",
       "detail": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): fnref::follow on Metroid (2,616 functions) took 68 s for round 0 and over 8 min for round 1 on quack (GBAA_FNREF_TRACE=1), so its lift skips it (skip_fn_flow in mods/metroid/holes.toml). It only feeds the report and stage B's fn_words metrics, but dense FnRef IDs need it. Make it settle in minutes on Metroid (per-function summaries, sparse reruns), then drop skip_fn_flow. Done when: Metroid's lift runs it in under 5 minutes and lift-check's bars hold.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "minMinutes": 90,
+      "record": {
+        "state": "claimed",
+        "by": "50d72494",
+        "session": "50d72494-d41a-4fa2-86c8-634089cf6329",
+        "host": "quack",
+        "pid": 862066,
+        "start": "2504341",
+        "at": "2026-11-07T06:10:03Z",
+        "branch": "unit/native/fnref-flow-scale",
+        "resumed": "1e655045",
+        "prevSession": "1e655045-e354-400c-a9ca-854c3c4380de",
+        "pushed": true,
+        "beats": true
+      },
+      "notes": [
+        {
+          "at": "2026-11-06T13:35:25Z",
+          "by": "1e655045",
+          "text": "Main merged (d08fb7b4); just check, lift-check pass. Join sharing Rc: no gain, dropped. Likely cause of r1-4 full reruns: dirty_mem (any new cell/pile token reruns every fn with a load). Next: per-fn read sets (pile, which cells) for sparse reruns. No perf here."
+        },
+        {
+          "at": "2026-11-06T13:26:46Z",
+          "by": "1e655045",
+          "text": "Branch f02475e3: cached every-cell reads, cap once per load: Metroid settles in 614 s, 11 rounds (was 63 s r0, 534 s r1, unsettled); same counts. Rounds 1-4 rerun ~2600 fns, ~90 s each; values carry the 5270-token pile. Next: join shares Rc if subset; why r2-3 rerun all."
+        }
+      ],
+      "round": "2026-11-06T12:59:15Z"
     },
     {
       "id": "native/indirect-call-args-emerald",
@@ -812,6 +881,44 @@
       "check": "independent",
       "needs": ["native/fnref-flow-scale"],
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/modern-gcc-jumps",
+      "title": "Modern-GCC games' unresolved jumps, for native builds",
+      "detail": "Indirect jumps that discovery leaves unresolved are hard holes for a native build, though only a speed cost in the play build (which is why {unit:discovery/jt-modern-misses} was dropped: it profiled only the play build's fallback time). Measured 2026-11-06 with gbaa-holes: Emerald Imperium (modern GCC) 71 unresolved jumps of 750, 88 hard holes; Emerald Rogue 46; Minish Cap 23; Emerald (agbcc) 9. First add Imperium to holes/corpus.toml (name imperium, ROM 'Emerald Imperium.gba'). Then sort Imperium's and Rogue's unresolved jumps by kind (switch tables with a narrowed index, the bound on a zero-extended copy, which needs backward refinement; the conservative frame rule; jumps through a register that are not tables) with counts, in docs/research/native-holes.md, and fix the largest kinds in analysis. Done when: Imperium is in the corpus; just holes-all --against a run on main shows unresolved jumps falling on imperium and emerald-rogue, every game's hard count no higher, and the sorted counts quoted; jt-score's modern-GCC bar raised to the measured value (it must not fall from 584/617, agbcc stays 676/676, 0 wrong targets); just check passes.",
+      "check": "independent"
+    },
+    {
+      "id": "native/callee-save-breaks",
+      "title": "Functions that return with r4-r11 or sp changed",
+      "detail": "gbaa-holes counts a return with r4-r11 or sp changed as a hard hole (its 'summaries' column): measured 2026-11-06 at moonbeam 12, Emerald Imperium 15, Emerald Rogue 8, Minish Cap 6, Emerald 2, WarioWare 2, Kirby & the Amazing Mirror 1, 31 in the corpus. No unit lowers it. First sort every one on the corpus by cause, with counts, in docs/research/native-holes.md: a real convention break (hand-written assembly, a library routine), a value the summary can't follow (spilled and reloaded through a computed address, a loop), or the analysis being too cautious; on Emerald name each by pret's map and check it against pret's source. Then fix the cautious kinds in codegen::saves, and for real breaks give the lift a way to say so (a stand-in in holes/ or a summary the lift trusts) so they stop being hard. Done when: the sorted counts are in the doc; just holes-all --against a run on main shows the summaries column falling, no game's hard count higher; just lift-check's bars hold; just check passes.",
+      "check": "independent"
+    },
+    {
+      "id": "native/kirby-undiscovered",
+      "title": "Find the Kirby code discovery misses, for native builds",
+      "detail": "A native build needs every byte of code found. Measured 2026-11-06 with gbaa-holes' default run: Kirby - Nightmare in Dream Land 1748 bytes run but not discovered, Kirby & The Amazing Mirror 362, every other corpus game 52 or fewer. No unit covers it ({unit:assets/kirby-fuzz-last-misses} is graphics, {unit:multiplayer/kirby-ram-code} is RAM overlays for speed). First rerun both with their coverage files (just holes-all --only kirby-nightmare --only kirby-mirror --cover) and see how much of the miss is the run, how much discovery; then sort what discovery misses by why (code reached only through a pointer table, a jump into the middle of a function, Thumb/ARM mode, data the scan rejects) with counts, in docs/research/native-holes.md, and fix the largest kinds in analysis. Done when: the sorted counts are in the doc; both games' undiscovered bytes fall in just holes-all --against a run on main, no game's hard count higher; disc-* checks' bars hold; just check passes.",
+      "check": "independent"
+    },
+    {
+      "id": "native/nightmare-cpu-state",
+      "title": "Kirby - Nightmare in Dream Land's three CPU-state holes",
+      "detail": "Kirby - Nightmare in Dream Land is the only corpus game with CPU-state hard holes in gbaa-holes (3, measured 2026-11-06; every other game 0), so something in it is specific. Find what each is (just holes on it lists them), say in docs/research/native-holes.md what code does it and whether other games could do the same, and fix it in analysis or the lifter if small; if not small, write up what fixing it needs and file that as its own unit. Done when: the three are explained in the doc; either Nightmare's CPU-state count is 0 in just holes-all --against a run on main (no game's hard count higher) or the follow-up unit is filed; just check passes.",
+      "check": "independent"
+    },
+    {
+      "id": "native/gap-decoding-runaway",
+      "title": "Lifter's gap decoding walks through Emerald's data",
+      "detail": "Found by {unit:native/lift-bios-calls}: gbaa-lift on Pokemon Emerald (no holes file, skip_fn_flow only) lifts 14,089 functions, 685,414 hard holes, descending from 53,095 gap targets. Two 'functions', f_08320560 and f_08d3467c, hold 33,163 BIOS-call holes (Thumb 0xDFxx halfwords in data decoded as swi) and most of the rest; gbaa-holes, over discovery's code, counts 5 BIOS sites, the same 5 the lifter has in real code (0x082e707c-0x082e70b8). Find why gap decoding enters those regions (a scanned function in data? a gap target from a pool word?) and stop it. Done when: Emerald's lift has no hard hole in 0x08320560 or 0x08d3467c's runs and its BIOS holes equal gbaa-holes' count plus its scanned-only BIOS count; lift-check unchanged.",
+      "check": "independent",
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-07T07:08:08Z",
+          "by": "4485059c",
+          "text": "gbaa-holes also lists 6 scanned-only BIOS sites on Emerald (survey: ARM 0x42/0x54/0x64/0x73/0xb7/0x27 near 0x087f2250) that the lifter shows only inside the two runaway functions; after the fix, check they appear on their own."
+        }
+      ]
     }
   ]
 }

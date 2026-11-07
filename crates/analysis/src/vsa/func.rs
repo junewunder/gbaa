@@ -23,6 +23,11 @@ pub const STEP_CAP: u64 = 2_000_000;
 const INNER_TRIES: u32 = 4;
 /// The longest straight-line callee run inline at its call.
 const LEAF_MAX: usize = 24;
+/// The most instructions [`Analysis::kept`] reads of a callee.
+const KEPT_MAX: usize = 64;
+/// The registers a call may change under the AAPCS that [`Analysis::kept`]
+/// can keep: r0-r3 and r12.
+const CALLER_SAVED: u16 = 0b1_0000_0000_1111;
 
 /// How control leaves an instruction that writes pc indirectly.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -367,7 +372,9 @@ fn fixpoint<'p, 'f>(
         prog,
         thumb,
         sp0: State::sp0(entry),
+        lr0: State::lr0(entry),
         decoded: HashMap::new(),
+        kept: HashMap::new(),
         far,
         inner,
         record: false,
@@ -421,7 +428,11 @@ struct Analysis<'p, 'f> {
     prog: &'p Program,
     thumb: bool,
     sp0: Sym,
+    /// lr's value on entry: a jump to it unchanged is a return.
+    lr0: Sym,
     decoded: HashMap<u32, Option<Insn>>,
+    /// [`Analysis::kept`]'s answers, with the bytes each read.
+    kept: HashMap<u32, (u16, Vec<(u32, u32)>)>,
     far: &'f mut dyn FnMut(u32, bool) -> Bl,
     /// `bl` targets the function reaches by itself: jumps.
     inner: BTreeSet<u32>,
@@ -515,7 +526,19 @@ impl Analysis<'_, '_> {
                 if self.record {
                     self.res.reads.push((insn.addr.wrapping_sub(4), insn.addr));
                 }
-                match classify(self.prog, insn) {
+                let ctl = match classify(self.prog, insn) {
+                    // A jump through a copy of the entry lr (m4a's `mov
+                    // r12, lr; ... bx r12`) is a return.
+                    Ctl::Jump
+                        if target
+                            .as_ref()
+                            .is_some_and(|v| v.sym == self.lr0 && v.off == 0) =>
+                    {
+                        Ctl::Return
+                    }
+                    c => c,
+                };
+                match ctl {
                     Ctl::Return => {
                         if self.record {
                             self.res.ret_sp.push(state.sp_offset(self.sp0));
@@ -692,9 +715,94 @@ impl Analysis<'_, '_> {
                 return out;
             }
         }
+        let kept = self.kept(target);
+        // A kept value may be one this call made last time round a loop:
+        // renamed first, as clobber_call does.
+        st.retire(insn.addr, 0);
+        let old = st.clone();
         st.clobber_call(insn.addr, 0);
+        for r in 0..15 {
+            if kept & 1 << r != 0 {
+                st.regs[r] = old.regs[r].clone();
+            }
+        }
         out.push((next, st));
         out
+    }
+
+    /// The caller-saved registers (r0-r3, r12) a callee at `t` never
+    /// writes, as a mask: what a `bl` to it keeps (m4a's `ply_*` hold the
+    /// return address in r12 across `bl ld_r3_tp_adr_i`). Read from the
+    /// callee's own code, up to [`KEPT_MAX`] instructions following
+    /// branches to its returns; none where it calls, jumps through a
+    /// register, traps or runs longer.
+    fn kept(&mut self, t: u32) -> u16 {
+        if !self.kept.contains_key(&t) {
+            let mut reads = Vec::new();
+            let mask = self
+                .callee_writes(t, &mut reads)
+                .map_or(0, |w| CALLER_SAVED & !w);
+            self.kept.insert(t, (mask, reads));
+        }
+        let (mask, reads) = &self.kept[&t];
+        if self.record {
+            self.res.reads.extend_from_slice(reads);
+        }
+        *mask
+    }
+
+    /// The registers the code at `t` may write before it returns, if it is
+    /// a short callee with no calls (see [`Analysis::kept`]).
+    fn callee_writes(&self, t: u32, reads: &mut Vec<(u32, u32)>) -> Option<u16> {
+        let sp0 = State::sp0(t);
+        let entry = State::entry(t);
+        let mut seen = BTreeSet::new();
+        let mut work = vec![t];
+        let mut written = 0u16;
+        while let Some(a) = work.pop() {
+            if !seen.insert(a) {
+                continue;
+            }
+            if seen.len() > KEPT_MAX {
+                return None;
+            }
+            reads.push((a, a.wrapping_add(4)));
+            let i = self.prog.decode(a, self.thumb)?;
+            if i.bl.is_some()
+                || matches!(
+                    i.instr,
+                    Instr::Undefined { .. } | Instr::Swi { .. } | Instr::ThumbBlLo { .. }
+                )
+            {
+                return None;
+            }
+            let s = exec::step(self.prog, sp0, 0, &i, entry.clone());
+            let states = s.fall.iter().chain(s.exits.iter().map(|e| &e.state));
+            for st in states {
+                for r in 0..15 {
+                    if st.regs[r] != entry.regs[r] {
+                        written |= 1 << r;
+                    }
+                }
+            }
+            if s.fall.is_some() {
+                work.push(i.next());
+            }
+            for e in &s.exits {
+                match i.instr {
+                    Instr::Branch { target, .. } => work.push(target),
+                    _ if e.kind == ExitKind::ExceptionReturn => return None,
+                    _ => {
+                        // classify reads the instruction before.
+                        reads.push((a.wrapping_sub(4), a));
+                        if classify(self.prog, &i) != Ctl::Return {
+                            return None;
+                        }
+                    }
+                }
+            }
+        }
+        Some(written)
     }
 
     /// Record what a `bl` to `target` calls: the target, or, if it is a

@@ -1244,7 +1244,119 @@
         "by": "76e43878",
         "host": "quack"
       },
-      "answer": null
+      "answer": {
+        "key": "a",
+        "note": "june delegated the call to the agent: a measurement target, not a correctness question",
+        "by": "owner",
+        "via": "8f498bd1",
+        "at": "2026-11-07T04:20:44Z",
+        "decision": "d/heap-pointer-unit-s-bar"
+      }
+    },
+    {
+      "id": "q/accept-indirect-call-bar-today",
+      "title": "Accept the indirect-call bar at today's values, not 0?",
+      "context": "{unit:native/indirect-call-args} asked for a lift-check bar of 0 on indirect calls that still pass all four registers despite a complete callee set. Built and measured: every complete set on the agb programs is the same 21 address-taken functions (fnref's one heap pile), and their summaries read all four registers between them, so 56-60 calls per program still pass four. Only splitting the heap by allocation site ({unit:native/fnref-heap-sites}) narrows the sets. The work is committed with the bar at the measured values; lift-check and just check pass.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Accept the measured bars",
+          "changes": "call_fn_four_complete stays barred at 56-60; the unit is checked and lands now; the heap-site unit is noted to lower the bar when its sets narrow"
+        },
+        {
+          "key": "b",
+          "label": "Hold out for 0",
+          "changes": "the unit stays open and unmerged until the heap split narrows the sets and the bar reaches 0"
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/indirect-call-args"],
+      "asked": {
+        "at": "2026-11-06T12:31:40Z",
+        "by": "62031260",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "8f498bd1",
+        "at": "2026-11-07T04:27:11Z",
+        "decision": "d/accept-indirect-call-bar-today"
+      }
+    },
+    {
+      "id": "q/covered-controls-page-your-deck",
+      "title": "What covered the Controls page on your Deck in the Kirby room?",
+      "context": "From the Kirby playtest: something covered the bottom of Controls (the dead zone rows) while in a room, and tapping the screen made it go away. Nothing gbaa draws can reach those rows: the netplay report is on the Main page only (now moved above it), and the corner mark sits top right. The likely cause is Steam's floating on-screen keyboard. Under gamescope, SDL opens it (steam://open/keyboard) when you type in a Netplay field, Steam puts it at the bottom of the screen, and a tap outside closes it. On quack it never shows, so only the Deck can confirm it. Main-page fix is on the branch.",
+      "options": [
+        {
+          "key": "a",
+          "label": "You test it on the Deck",
+          "changes": "Join a room by typing a code, leave Netplay, open Controls, scroll to the dead zones, and say whether Steam's keyboard (or anything else) is over them. If it is, the next session makes the menu close it when typing ends."
+        },
+        {
+          "key": "b",
+          "label": "A lane may SSH onto the Deck once for this",
+          "changes": "A lane runs the same steps over SSH and takes a gamescope screenshot; you say yes to this one use."
+        },
+        {
+          "key": "c",
+          "label": "Land the Main-page fix and close this",
+          "changes": "The cover goes unexplained; file it again if it comes back in a playtest."
+        }
+      ],
+      "default": "a",
+      "blocks": ["multiplayer/overlay-hides-menu"],
+      "asked": {
+        "at": "2026-11-06T13:27:10Z",
+        "by": "31168110",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "c",
+        "note": "june: a custom keyboard on an un-updated Steam Deck, not gbaa. Closed for good; don't refile.",
+        "by": "owner",
+        "via": "8f498bd1",
+        "at": "2026-11-07T04:29:43Z",
+        "decision": "d/covered-controls-page-your-deck"
+      }
+    },
+    {
+      "id": "q/may-lane-ssh-onto-your-2",
+      "title": "May a lane SSH onto your Deck to time four Kirbys' netplay now?",
+      "context": "Quack's frame cost for four Kirby peers is in docs/research/multiplayer.md, 'Four players'. The Deck's row is the open follow-up: copy the recompiled Kirby binary to ~/gbaa on the Deck and run rollback-feel's headless four-player command (calm delay 2, wander delay 0, with and without --interp), a few minutes of CPU, no window. You said 'leave it for later' on 2026-11-01, to run whenever you next say yes; the Deck rules need a fresh yes each time.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Yes, once",
+          "changes": "A lane SSHes onto the Deck for this one run, adds the Deck rows to the table and records the unit done."
+        },
+        {
+          "key": "b",
+          "label": "Not yet",
+          "changes": "The unit stays waiting; the four-player rooms stay judged on quack's numbers alone."
+        },
+        {
+          "key": "c",
+          "label": "Drop it",
+          "changes": "The Deck timing is dropped; quack's numbers stand as the only four-player measurement."
+        }
+      ],
+      "default": "b",
+      "blocks": ["multiplayer/four-kirbys-deck"],
+      "asked": {
+        "at": "2026-11-06T13:31:55Z",
+        "by": "17508d61",
+        "host": "quack"
+      },
+      "answer": {
+        "key": "b",
+        "note": "june: stop asking; she'll ask a Claude herself when she wants the Deck used",
+        "by": "owner",
+        "via": "8f498bd1",
+        "at": "2026-11-07T04:31:03Z",
+        "decision": "d/may-lane-ssh-onto-your-2"
+      }
     }
   ]
 }
