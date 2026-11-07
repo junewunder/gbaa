@@ -849,6 +849,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-07T13:43:43Z",
+          "by": "1df66a89",
+          "text": "Emerald's runaway is fixed by {unit:native/gap-decoding-runaway}: with that diff applied to this branch, gbaa-holes gives 5 BIOS + 0 scanned-only and gbaa-lift 5 BIOS holes on Emerald (skip_fn_flow only), so the eight-game match holds once both land."
+        },
+        {
           "at": "2026-11-07T07:12:43Z",
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - The card says it's done only when gbaa-holes' BIOS count matches the lifter's on all eight games, but the Evidence shows they don't match on Emerald. It says \"Emerald's 5 real sites match, the rest is runaway …"
@@ -1052,15 +1057,24 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "1df66a89",
-        "session": "1df66a89-c2f9-4576-a1ec-f0a3f3cd267f",
-        "host": "quack",
-        "pid": 751355,
-        "start": "2170805",
-        "at": "2026-11-07T11:45:16Z",
+        "checker": "a5526cbc",
+        "at": "2026-11-07T13:43:32Z",
+        "evidence": "Verifier a5526cbc (fresh context) reproduced: Emerald lift (skip_fn_flow only) now 15,162 functions, 32 hard holes (was 685,414), 145 gap targets (was 53,095), none in 0x0832xxxx/0x08d3xxxx/0x087f2xxx. On the lift-bios-calls branch with the fix: gbaa-holes 5 BIOS + 0 scanned-only, lifter 5 BIOS holes (without fix 5+6). Disc precision 0.9991->0.9993, recall same; other 10 ROMs' starts identical to main. just check and just lift-check pass on the merged branch.",
         "branch": "unit/native/gap-decoding-runaway",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-07T13:43:32Z",
+          "by": "1df66a89",
+          "host": "quack",
+          "pid": 751355,
+          "start": "2170805",
+          "beats": true,
+          "session": "1df66a89-c2f9-4576-a1ec-f0a3f3cd267f",
+          "lane": "quack/1"
+        },
+        "pushed": true
       },
       "notes": [
         {
