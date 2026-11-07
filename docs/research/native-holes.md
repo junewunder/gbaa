@@ -48,7 +48,7 @@ tracker evidence has the before and after (`just show <id> --full`).
   Emerald's unresolved-jump count is Recovery's.
 - **Kirby: Nightmare in Dream Land switches stacks** (three sites,
   0x08000244, 0x08000278 and 0x08000298, in code at
-  0x08000234-0x080002a0: `str sp, [r3]; mov sp, r2` and back, a
+  0x08000234-0x080002a4: `str sp, [r3]; mov sp, r2` and back, a
   coroutine: its object tasks, each on its own stack); a native program
   can only express it as a stand-in that runs each task on a stackful
   coroutine ("Kirby: Nightmare's task switcher", below).
@@ -293,7 +293,7 @@ has its own IWRAM stack and is run once a frame:
 
 - **Resume** (0x08000244, `mov sp, r2`), called only by the scheduler
   (0x08005364), r1 the task's resume address, r2 its saved sp: saves lr,
-  r4-r11 and the main sp (0x03004c94), takes the task's sp, pops its
+  r4-r11, stores the main sp at 0x03004c94, takes the task's sp, pops its
   r4-r11, `bx r1`.
 - **Yield** (0x08000278, `ldr sp, [r3]`), r0 the frames to wait: pushes
   r4-r11, stores the task's sp, lr (its resume address) and r0, takes the
