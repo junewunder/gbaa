@@ -1000,17 +1000,13 @@
       "detail": "A native build needs every byte of code found. Measured 2026-11-06 with gbaa-holes' default run: Kirby - Nightmare in Dream Land 1748 bytes run but not discovered, Kirby & The Amazing Mirror 362, every other corpus game 52 or fewer. No unit covers it ({unit:assets/kirby-fuzz-last-misses} is graphics, {unit:multiplayer/kirby-ram-code} is RAM overlays for speed). First rerun both with their coverage files (just holes-all --only kirby-nightmare --only kirby-mirror --cover) and see how much of the miss is the run, how much discovery; then sort what discovery misses by why (code reached only through a pointer table, a jump into the middle of a function, Thumb/ARM mode, data the scan rejects) with counts, in docs/research/native-holes.md, and fix the largest kinds in analysis. Done when: the sorted counts are in the doc; both games' undiscovered bytes fall in just holes-all --against a run on main, no game's hard count higher; disc-* checks' bars hold; just check passes.",
       "check": "independent",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "842df15d",
-        "session": "842df15d-3b2f-42bc-a9ed-416544ec972a",
-        "host": "quack",
-        "pid": 862066,
-        "start": "2504341",
-        "at": "2026-11-07T10:51:33Z",
-        "branch": "unit/native/kirby-undiscovered",
-        "beats": true
-      },
-      "round": "2026-11-07T10:51:33Z"
+        "checker": "subagent-af2d26c0",
+        "at": "2026-11-07T12:09:11Z",
+        "evidence": "Fresh verifier: holes-all at HEAD against main aa63a25 (out/holes/kafter2 vs kbase): Nightmare undiscovered 1748->126, Mirror 362->50, every game's hard count unchanged. Coverage runs miss the same (1748, 372), so the misses are all discovery's; six causes with counts are in native-holes.md, What discovery misses. disc-pret 0.9991/0.9553 (bar 0.9987/0.9349), jt-score 676/676 and 584/617 with 0 wrong, disc-agb ok; just check passes. Remainder filed as {unit:native/copy-tail-discovery}.",
+        "host": "quack"
+      }
     },
     {
       "id": "native/nightmare-cpu-state",
@@ -1024,7 +1020,14 @@
         "at": "2026-11-07T11:26:36Z",
         "evidence": "verifier-7c3e PASS: just holes on Nightmare lists CPU state 3 hard at 0x08000244/0x08000278/0x08000298, one object-task switcher (resume/yield/exit), checked against disassembly and recounted callers (1/11063/232); doc section in native-holes.md; follow-up {unit:native/nightmare-task-switch} filed (stackful coroutine stand-in); just check exit 0 after merging main.",
         "host": "quack"
-      }
+      },
+      "notes": [
+        {
+          "at": "2026-11-07T11:57:40Z",
+          "by": "842df15d",
+          "text": "From {unit:native/kirby-undiscovered}: discovery leaves the coroutine start 0x08000234-0x08000258 as data (crt0's copy from 0x08000108 is 0x140 bytes, past it); {unit:native/copy-tail-discovery} would discover it, adding its bx r1 at 0x08000254 as a hard jump."
+        }
+      ]
     },
     {
       "id": "native/nightmare-task-switch",
@@ -1078,14 +1081,49 @@
       "title": "Function-address flow settles on Emerald",
       "detail": "After {unit:native/fnref-flow-scale} (Metroid in 151 s), the flow on pret's Emerald (15,158 fns) through gbaa-recompile --summaries --callee-sets was still killed at a 14G cap after 5 min (quack, 2026-11-07). Make it settle under about 8 GB. Done when: that command finishes on Emerald under 8 GB (time and peak quoted) and just lift-check's bars hold.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "minMinutes": 150,
+      "record": {
+        "state": "claimed",
+        "by": "8898da77",
+        "session": "8898da77-3409-4343-b387-337a68538af5",
+        "host": "quack",
+        "pid": 862066,
+        "start": "2504341",
+        "at": "2026-11-07T12:12:38Z",
+        "branch": "unit/native/fnref-flow-emerald",
+        "beats": true,
+        "handedBack": "2026-11-07T12:41:23Z",
+        "pushed": true,
+        "ended": "2026-11-07T12:41:51Z"
+      },
+      "notes": [
+        {
+          "at": "2026-11-07T12:41:33Z",
+          "by": "8898da77",
+          "text": "2026-11-07: measured, not fixed. Round 0 alone passes 10 GB: entries hold 100-180M tokens, copies of successive 30k-token pile reads; UnkUtil_Run's ~10k callees add 2-3 GB. Join sharing, 2-level set: not enough. Next: chunked sets or symbolic pile token (memory/ file)"
+        }
+      ],
+      "round": "2026-11-07T12:12:38Z"
     },
     {
       "id": "native/fnref-context",
       "title": "Function flow: callees' values kept apart by call site",
       "detail": "docs/native-stage-b.md piece 3. Measured by {unit:native/fnref-heap-sites} (its branch, commit 0868fc7e, splits the pile into frame and allocation-site objects): fn_words_not_proven doesn't move on any agb program, even with the pile dropped altogether. The run joins every caller's r0-r3 and sp at a callee's entry, and every call_fn set is all ~21 address-taken functions, so a shared function's pointer parameters (memcpy, fmt, qrcodegen's encoders) reach dozens of frames, anywhere in each, and one read through them gives every function address stored in any. Give the run call-site context (a callee's entry and results per call site, or per caller, for callees small or shared enough; k=1 to start), on top of the object split. Done when: fn_words_not_proven falls on every agb program (bars lowered to the measured values), a unit test where two callers pass one callee two objects and the callee's read of the first gives only what the first caller stored, just lift-check and just check pass.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "3cbbe3ed",
+        "session": "3cbbe3ed-7764-4494-a58c-2c4701440c8c",
+        "host": "quack",
+        "pid": 862066,
+        "start": "2504341",
+        "at": "2026-11-07T12:42:01Z",
+        "branch": "unit/native/fnref-context",
+        "beats": true
+      },
+      "round": "2026-11-07T12:42:01Z"
     },
     {
       "id": "native/libgcc-df-standins",
@@ -1128,6 +1166,23 @@
       "title": "Lifted task switchers run tasks on host coroutines",
       "detail": "Shared code for {unit:native/nightmare-task-switch} (docs/research/native-holes.md, 'Kirby: Nightmare's task switcher'). The lifter doesn't count a stack switch (mov sp, rN; ldr sp, [rN]) as a hard hole: on Nightmare it lifts 0x08000244/0x08000278/0x08000298 silently, though gbaa-holes counts them. Make it hard there too, and give stand-ins a prelude facility: run a task's lifted code on a stackful coroutine (corosensei, as crates/desktop/src/coro.rs; the generated crate's Cargo.toml gains it), keyed by the guest sp it saved; resume starts or resumes, yield/exit suspend with the values the scheduler reads. Test it on an agb program with a small ARM switcher of that shape (resume, yield with a frame count, exit) and 3+ tasks, as a lift-check case with a stand-in and a planted control. Done when: lift-check green with the case, its bars set; just check passes.",
       "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/copy-tail-discovery",
+      "title": "Discover code past m4a's and Nightmare's copy sources",
+      "detail": "{unit:native/kirby-undiscovered} left two kinds of ROM code inside a BIOS copy's source undiscovered on purpose (docs/research/native-holes.md, What discovery misses): m4a's SoundMainRAM copy ends in the bx r3 stub SoundMain calls in ROM, hiding SoundMain's tail (38 bytes, every m4a game), and Nightmare's crt0 copy runs into its coroutine switch at 0x08000234, entered by a veneer's ARM b (36 bytes, and 44 after calls into it). Extending discovery::copy_cuts to them (stub targets, b targets) finds it but each game's hard count rises by the jumps found there: SoundMain's constant jump into its IWRAM copy (needs a holes-file entry in the lift) and the switch's bx r1. Decide whether a constant jump to a discovered overlay entry should be resolved (Recovery and the lifter's dyn_targets) so it isn't a hole, then extend the cut. Done when: those bytes are discovered in just holes-all --against main, no hard count higher (or the rise explained and agreed), disc-* bars hold, just check passes.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/nightmare-cover-list",
+      "title": "Refresh Nightmare's coverage jump list",
+      "detail": "On main at aa63a25 (2026-11-07), just holes-all --only kirby-nightmare --cover fails: holes/coverage/kirby-nightmare-in-dream-land.toml lists 13 jumps (0x080cdeac, 0x080ce4a0 and others) that are no longer unresolved, resolved by units since. Rerun with --update (about 10 minutes) and commit the file.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just holes-all --only kirby-nightmare --cover --out out/holes/nightmare-cover"
+      },
       "uses": ["heavy"]
     }
   ]

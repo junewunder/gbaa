@@ -61,26 +61,15 @@ tracker evidence has the before and after (`just show <id> --full`).
 
 ## The tool
 
-`just holes ROM` (`crates/hole-report`, binary `gbaa-holes`; command
-entry in `docs/tools/commands.md`) runs, for one ROM:
-
-1. discovery and its IWRAM overlays (`analysis::discovery::{discover,
-   overlays}`);
-2. a 5,400-frame interpreter run, instant timing, no save file, with the
-   research press script: `start@300-5400/120 a@400-5400/30
-   b@2500-5400/45 right@2000-2999 up@3000-3999 left@4000-5400` (Start every
-   2 s from frame 300, A every half second from 400, B every 0.75 s from
-   2500, right, up and left held for 1,000 frames each from 2000);
-3. discovery again with the run's call targets as starts ("With the
-   run's call targets", below);
-4. the function summaries (`codegen::saves::summarize`);
-5. the RAM copies again, with what the run saw
-   (`analysis::holes::ram_copies`, "RAM copies" below);
-6. the classification, `analysis::holes::classify` (in the analysis crate
-   so the lifter reuses it), and prints one ranking line and each list.
-
-About a minute a game. `just holes-all` runs the corpus and prints one
-table (about 10 minutes).
+`just holes ROM` (`crates/hole-report`, `gbaa-holes`; its steps are in
+the command entry, `docs/tools/commands.md`): discovery and its IWRAM
+overlays, a 5,400-frame instant-timing run with the research press
+script (Start, A and B tapped, then right, up and left held 1,000 frames
+each from frame 2000), discovery again with the run's call targets
+("With the run's call targets"), the summaries, the RAM copies with the
+run ("RAM copies"), then `analysis::holes::classify` (in the analysis
+crate so the lifter reuses it). About a minute a game; `just holes-all`
+runs the corpus into one table (about 10 minutes).
 
 ### What counts as a hard hole
 
@@ -107,31 +96,22 @@ never ran aren't counted (Emerald's 0x087f22xx: data that decodes as
 unknown jump, a mode change, RAM code) or aren't holes for a native build
 (an indirect call is an `FnRef`), and are printed but not counted.
 
-**The BIOS count is the interpreter's, not the lifter's.** "BIOS call
-outside the library" is against `runtime::bios`; the lifter prints fewer
-calls than that, so a lift has more hard holes than the report says
-(Metroid's lift found 9 BIOS calls the report counts as 0;
-`native/lift-bios-calls` makes the report count them).
-
-**Not discovered** is the bytes of code the run executed that discovery
-(or an overlay's) didn't find, ROM and RAM.
+**The BIOS count is the interpreter's, not the lifter's** (against
+`runtime::bios`; Metroid's lift found 9 the report counts as 0;
+`native/lift-bios-calls`). **Not discovered** is the bytes of code the
+run executed that discovery (or an overlay's) didn't find, ROM and RAM.
 
 ### The flash library's stack routines
 
 Nintendo's `AgbFlash` (pret's `agb_flash.c`) copies three tiny routines
-into a buffer in its caller's frame and calls them there: `ReadFlash1`
-(a byte: the chip's ID and status), `ReadFlash_Core` (a sector into RAM)
-and `VerifyFlashSector_Core` (RAM against a sector). The run keeps the
-64 bytes at each call into RAM (`Run::ram_calls`); a target whose every
-version is a routine `analysis::flash` recognises (its code's length and
-hash: agbcc's three, modern GCC's `ReadFlash_Core` and
-`VerifyFlashSector_Core`) is a call of `runtime::hw::flash::{read_byte,
-read, verify}` on the hardware library's save chip (`Hw::save`), listed in
-the report and in the ranking line ("flash library stand-ins", routines),
-and the RAM it ran is neither changed code, undiscovered code nor a
-non-entry. Six of the eight call them (all but moonbeam and Minish Cap).
-The lifter doesn't call them yet: no stage-A build lifts a game that
-saves to flash.
+(`ReadFlash1`, `ReadFlash_Core`, `VerifyFlashSector_Core`) into its
+caller's frame and calls them there. The run keeps the 64 bytes at each
+call into RAM (`Run::ram_calls`); a target whose every version is one
+`analysis::flash` recognises (length and hash: agbcc's three, modern
+GCC's two) is a call of `runtime::hw::flash::{read_byte, read, verify}`
+on `Hw::save`, listed as a "flash library stand-in", and its RAM isn't
+changed code, undiscovered code nor a non-entry. Six of the eight call
+them (not moonbeam, Minish Cap); no stage-A build lifts one yet.
 
 ### RAM copies
 
@@ -160,13 +140,11 @@ evidence:
 Code that changed while it ran (a hole of its own) and the flash
 routines (the hardware library's) are left out, and code whose bytes
 aren't in the ROM (built at run time) stays undiscovered. The report
-lists each copy: where, from where, a BIOS copy or seen in the run, its
-functions, the roots it was entered at and the ones filled in. The ones
-seen in the run are printed again as `[[copy]]` tables, which the lift's
-holes file takes (`native/lift-ram-copies`). `codegen::seen` finds IWRAM
-copies by running the ROM too, for the play build's overlays; it widens
-each by comparing RAM with the ROM, which the hole report's run doesn't
-keep.
+lists each copy (where, from where, how found, its functions, the roots
+it was entered at and filled in); the ones seen in the run again as
+`[[copy]]` tables for the lift's holes file (`native/lift-ram-copies`).
+`codegen::seen` finds IWRAM copies by running the ROM too, for the play
+build's overlays, widening each by comparing RAM with the ROM.
 
 ### Busy loops that call functions
 
@@ -257,6 +235,31 @@ WarioWare), `IntrMain`'s and `__start`'s tails, and most of Rogue's; a
 coverage-guided run, or saves further into Rogue, is what would settle
 them.
 
+## What discovery misses
+
+Bytes run but not discovered, listed at the report's end with what
+discovery has around each run (`native/kirby-undiscovered`, 2026-11-07).
+The coverage runs reach more but miss no more (Nightmare 1,748 bytes,
+as the press script; Mirror 372, 362): discovery's misses, none a jump
+into a function's middle or the wrong instruction set. Bytes, Nightmare
+/ Mirror:
+
+| Cause | Before | After |
+|---|---|---|
+| a task run as a coroutine (`push {…, lr}`, then an endless loop that yields each frame), reached only from a table of (kind, task) words: the scan wanted a return; five tasks and the function only one calls | 1,622 / 0 | 0 / 0 |
+| a BIOS copy whose length reads on into ROM code a `bl` calls (Mirror: 0x1c0 bytes from 0x08158f14 over its heap allocator), and the code after the calls | 0 / 312 | 0 / 0 |
+| m4a's `SoundMainRAM` copy ends in the `bx r3` that `SoundMain` calls in ROM (a stub), so `SoundMain`'s tail after the call (every m4a game: Emerald and Minish Cap too) | 38 / 38 | 38 / 38 |
+| the return from the scheduler's call to resume ("Kirby: Nightmare's task switcher", below: it comes back through a yield) | 44 / 0 | 44 / 0 |
+| crt0's copy (0x08000108, 0x140 bytes) reads on into the switcher, which a veneer's ARM `b` enters | 36 / 0 | 36 / 0 |
+| agbcc's `_call_via_rN` stubs: a `bl` to one calls rN, and the stub isn't kept as code | 8 / 12 | 8 / 12 |
+
+The fixes: the scan takes a body that opens with `push {…, lr}` and
+whose every path loops back into it; a BIOS copy's source ends at a `bl`
+target inside it called from outside (`discovery::copy_cuts`). Not at
+the stub or the `b`: the code there adds a real hard hole each
+(`SoundMain`'s constant jump into its IWRAM copy, which the lift needs
+in the holes file; resume's `bx r1`): `native/copy-tail-discovery`.
+
 ## Each game's worst holes
 
 The counts are the numbers file's; what they are, beyond the summary's:
@@ -271,8 +274,8 @@ The counts are the numbers file's; what they are, beyond the summary's:
   One hand-written stand-in covers both.
 - **Kirby & the Amazing Mirror.** The fewest hard holes: most of what it
   had were m4a's routines called through tables and its returns through
-  r12. **Kirby: Nightmare** has the coroutine switch and the most ROM
-  bytes run but not discovered.
+  r12. **Kirby: Nightmare** has the coroutine switch, and with it the
+  ROM bytes run but not discovered (above).
 - **Pokémon Emerald.** Unresolved jumps, none of m4a's now; `IntrMain`'s
   jump through its table counts at its copy (reached).
 - **The Minish Cap.** Unresolved jumps, the veneers into its IWRAM code
@@ -366,8 +369,8 @@ and `__divdf3` as Rust's `f64` operations, the others as written.
   call into RAM, call the `runtime::hw::flash` function its
   `Routine::call` names on `Hw::save`, with the routine's arguments
   (r0-r2) as its slices.
-- Unreached unresolved jumps dominate Minish Cap's and Rogue's counts;
-  until coverage reaches them, they are as likely dead as live.
+- Unreached unresolved jumps (most of Minish Cap's and Rogue's) are as
+  likely dead as live until coverage reaches them.
 
 ## Limits
 
@@ -376,15 +379,12 @@ and `__divdf3` as Rust's `f64` operations, the others as written.
   the route doesn't reach shows only through static finds (Recovery's
   jumps, static return arithmetic, CPU-state instructions).
 - The return-arithmetic rule is a heuristic over the run; its filters
-  removed every false positive seen (a long-call veneer, a switch inside
-  the callee, a RAM copy of a switch jumping to its ROM original), and
-  kept both WarioWare helpers.
-- The run's calls are what lr_numbers counts plus jumps through a
-  register right after lr is set nearby (`mov lr, pc; bx r0`, pret's
-  `adr lr, …; bx r0` in `IntrMain`). lr_numbers itself misses those.
-- The busy-loop rule is a heuristic too (above); it doesn't see a wait
-  that makes stores each time round (a counter), or one the route doesn't
-  reach.
+  removed every false positive seen (a long-call veneer, a switch in the
+  callee, a RAM switch jumping to its ROM original).
+- The run's calls are lr_numbers' plus jumps through a register just
+  after lr is set (`mov lr, pc; bx r0`; `adr lr, …; bx r0` in `IntrMain`).
+- The busy-loop rule is a heuristic too: it misses a wait that stores
+  each time round (a counter), or one the route doesn't reach.
 - **Not measured here:** pointer arithmetic or casts the types don't
   explain (stage B measures it: it needs the typed lift), and behaviour
   that depends on cycle timing (the native-timing play build's to find).

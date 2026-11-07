@@ -491,6 +491,71 @@ fn extra_starts_are_confirmed_and_cut_a_copy_source() {
 }
 
 #[test]
+fn a_bl_into_a_copy_source_cuts_it() {
+    let mut a = Asm::new();
+    // crt0_copies_and_jumps_over_its_pool's crt0, copying 4 words from
+    // 0x300, and main calls 0x308 in ROM: the copy's length reads on into
+    // ROM code (Kirby & the Amazing Mirror's heap allocator).
+    a.w(0x00, 0xe59f_0010)
+        .w(0x04, 0xe59f_1010)
+        .w(0x08, 0xe59f_2010)
+        .w(0x0c, 0xef0b_0000)
+        .w(0x10, 0xe59f_300c)
+        .w(0x14, 0xe12f_ff13)
+        .w(0x18, B + 0x300)
+        .w(0x1c, 0x0300_0000)
+        .w(0x20, 0x0400_0004)
+        .w(0x24, thumb(0x100))
+        // main: push {lr}; bl 0x308; pop {pc}
+        .h(0x100, 0xb500)
+        .bl(0x102, 0x308)
+        .h(0x106, 0xbd00)
+        .h(0x308, 0x2001) // movs r0, #1
+        .h(0x30a, 0x4770); // bx lr
+    let d = a.run();
+    assert_eq!(d.funcs.get(&thumb(0x308)), Some(&Evidence::Confirmed));
+    assert!(d.code.contains_key(&(B + 0x106)), "the call returns");
+    assert!(d.code.contains_key(&(B + 0x30a)));
+    assert!(d.data.contains(&(B + 0x300, B + 0x308)), "{:x?}", d.data);
+    assert!(!d.code.contains_key(&(B + 0x300)));
+    assert_eq!(
+        d.copies.iter().copied().collect::<Vec<_>>(),
+        [(B + 0x300, 0x0300_0000, 16)]
+    );
+}
+
+#[test]
+fn pointer_scan_takes_an_endless_task() {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        .h(0x100, 0x4770) // main: bx lr
+        // A task run as a coroutine: push {lr}; loop: bl yield; b loop.
+        .h(0x300, 0xb500)
+        .h(0x302, 0x2000) // movs r0, #0
+        .h(0x304, 0x2101) // movs r1, #1
+        .bl(0x306, 0x380)
+        .h(0x30a, 0xe7fc) // b 0x306
+        .h(0x380, 0x4770) // yield: bx lr
+        // The same loop without the push: not taken.
+        .h(0x340, 0x2000)
+        .h(0x342, 0x2101)
+        .bl(0x344, 0x380)
+        .h(0x348, 0xe7fc) // b 0x344
+        // One word points at each, beside nothing found (Kirby: Nightmare
+        // in Dream Land's table of (kind, task) pairs); the second sits
+        // next to main's start.
+        .w(0x400, 0)
+        .w(0x404, thumb(0x300))
+        .w(0x408, 0)
+        .w(0x40c, thumb(0x100))
+        .w(0x410, thumb(0x340));
+    let d = a.run();
+    assert_eq!(d.funcs.get(&thumb(0x300)), Some(&Evidence::Scanned));
+    assert!(d.code.contains_key(&(B + 0x30a)));
+    assert!(!d.funcs.contains_key(&thumb(0x340)));
+}
+
+#[test]
 fn a_leaf_inside_the_callers_span_is_still_called() {
     let mut a = Asm::new();
     a.entry(0x100)
