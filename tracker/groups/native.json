@@ -847,18 +847,23 @@
       "uses": ["heavy"],
       "minMinutes": 90,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "50d72494",
-        "session": "50d72494-d41a-4fa2-86c8-634089cf6329",
-        "host": "quack",
-        "pid": 862066,
-        "start": "2504341",
-        "at": "2026-11-07T06:10:03Z",
+        "checker": "verifier-a8c59d8d",
+        "at": "2026-11-07T07:49:04Z",
+        "evidence": "Verifier subagent a8c59d8d at 0bb7ccd (main merged): mods/metroid/holes.toml has no skip_fn_flow; Metroid lift with GBAA_FNREF_TRACE=1 settles in 12 rounds, 150.8 s (bar 300 s, was ~614 s); report equals the old one but for first-use hole addresses; just lift-check passed with every bar held; just check passed.",
         "branch": "unit/native/fnref-flow-scale",
-        "resumed": "1e655045",
-        "prevSession": "1e655045-e354-400c-a9ca-854c3c4380de",
-        "pushed": true,
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-07T07:49:04Z",
+          "by": "50d72494",
+          "host": "quack",
+          "pid": 862066,
+          "start": "2504341",
+          "beats": true,
+          "session": "50d72494-d41a-4fa2-86c8-634089cf6329",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
