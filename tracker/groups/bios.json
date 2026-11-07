@@ -166,6 +166,13 @@
         "beats": true,
         "handedBack": "2026-11-07T13:40:51Z"
       },
+      "notes": [
+        {
+          "at": "2026-11-07T13:41:00Z",
+          "by": "2f1ce0d0",
+          "text": "Settled: the SWI dispatcher pushes/pops r2 around every call (real BIOS 0x164/0x170, mGBA hle-bios.s), so r2 stays as given. Branch 746bc86 fixes runtime::bios::decomp (check, gba-tests pass). Left: same in the prelude, move the checkpoint, after {unit:native/lift-bios-calls}."
+        }
+      ],
       "round": "2026-11-07T13:32:14Z"
     }
   ]
