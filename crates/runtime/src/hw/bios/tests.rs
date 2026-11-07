@@ -148,3 +148,68 @@ fn arithmetic_is_the_play_builds() {
     assert_eq!(m, [0x100, 0, 0, 0x100]);
     assert_eq!((x, y), ((10 << 8) - 120 * 0x100, (20 << 8) - 80 * 0x100));
 }
+
+#[test]
+fn lz77_cycles_are_the_play_builds() {
+    let mut rng = Rng(0x0BAD_F00D);
+    for len in [1, 2, 3, 7, 64, 255, 1000, 4097] {
+        let src = lz77_stream(&mut rng, len);
+        for (vram, dst) in [(false, DST), (true, VRAM)] {
+            let mut bus = Box::new(Bus::new(&[]));
+            for (i, &b) in src.iter().enumerate() {
+                bus.write8(EWRAM + i as u32, b);
+            }
+            let mut r = [0; 15];
+            r[0] = EWRAM;
+            r[1] = dst;
+            let want = decomp::lz77(&mut bus, &mut r, vram, 0);
+            let got = lz77_cycles(0, 0, true, EWRAM, dst, vram, |a| src[(a - EWRAM) as usize]);
+            assert_eq!(got, want, "length {len}, vram {vram}");
+            // Called from ROM with the prefetch buffer on (agb's WAITCNT),
+            // the buffer empty: the play build's `pc` is the swi's plus 4.
+            let mut bus = Box::new(Bus::new(&[]));
+            bus.waits.set_waitcnt(0x4317);
+            for (i, &b) in src.iter().enumerate() {
+                bus.write8(EWRAM + i as u32, b);
+            }
+            (r[0], r[1]) = (EWRAM, dst);
+            let swi = 0x0800_1234;
+            bus.prefetched = swi + 2;
+            let want = decomp::lz77(&mut bus, &mut r, vram, swi + 4);
+            let got = lz77_cycles(0x4317, swi, true, EWRAM, dst, vram, |a| {
+                src[(a - EWRAM) as usize]
+            });
+            assert_eq!(got, want, "prefetch, length {len}, vram {vram}");
+        }
+    }
+}
+
+#[test]
+fn cpu_fast_set_cycles_are_the_play_builds() {
+    for (src, dst) in [(0x0800_0000, EWRAM), (EWRAM, VRAM), (0x0300_0000, DST)] {
+        for ctl in [0, 1, 8, 9, 100, 1 << 24 | 16, 1 << 24 | 3] {
+            for waitcnt in [0, 0x4317] {
+                let mut bus = Box::new(Bus::new(&[]));
+                bus.waits.set_waitcnt(waitcnt);
+                let mut r = [0; 15];
+                (r[0], r[1], r[2]) = (src, dst, ctl);
+                let want = decomp::cpu_fast_set(&mut bus, &mut r);
+                assert_eq!(cpu_fast_set_cycles(waitcnt, src, dst, ctl), want);
+            }
+        }
+    }
+}
+
+#[test]
+fn midi_key2freq_is_the_play_builds() {
+    let mut rng = Rng(0x2545_F491);
+    for _ in 0..200 {
+        let (freq, key, fine) = (rng.next(), rng.next() % 200, rng.next() % 256);
+        let mut bus = Box::new(Bus::new(&[]));
+        bus.write32(EWRAM + 4, freq);
+        let mut r = [0; 15];
+        (r[0], r[1], r[2]) = (EWRAM, key, fine);
+        crate::bios::math::midi_key2freq(&mut bus, &mut r);
+        assert_eq!(midi_key2freq(freq, key, fine), r[0], "{freq:#x} {key} {fine}");
+    }
+}
