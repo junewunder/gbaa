@@ -1184,6 +1184,11 @@
         "cmd": "just holes-all --only kirby-nightmare --cover --out out/holes/nightmare-cover"
       },
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-unknown-addrs",
+      "title": "Function flow: loads through unknown addresses",
+      "uses": ["heavy"]
     }
   ]
 }
