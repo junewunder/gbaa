@@ -284,9 +284,13 @@ pub struct Report {
     /// not counted as hard until the owner decides how a native program
     /// lets time pass in them.
     pub busy_loops: Vec<(u32, u32)>,
-    /// CPU-state instructions and unimplemented `swi`s left out because
-    /// only the pointer scan found their code and the run never ran it.
+    /// CPU-state instructions left out because only the pointer scan
+    /// found their code and the run never ran it.
     pub scanned_skipped: usize,
+    /// BIOS calls the lifter doesn't print left out the same way: the
+    /// lifter lifts that code, so its BIOS holes are [`Report::bios`]
+    /// and these.
+    pub scanned_bios: usize,
     /// Bytes of ROM code executed that discovery didn't find.
     pub rom_undiscovered_bytes: u32,
     /// Bytes of RAM code executed that no overlay discovered.
@@ -765,7 +769,7 @@ pub fn classify(
             };
             if bios_implemented(n) {
             } else if skip {
-                r.scanned_skipped += 1;
+                r.scanned_bios += 1;
             } else {
                 r.bios.push((a, n));
             }

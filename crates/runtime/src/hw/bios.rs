@@ -3,7 +3,9 @@
 //! addresses. The arithmetic is the play build's own ([`crate::bios`]'s
 //! `math`, refactored to values); the decompressors here decode as the
 //! play build's do, byte for byte, without its cycle counts (a test runs
-//! both on the same data).
+//! both on the same data). The copies' and LZ77's cycle counts are
+//! functions of their own ([`cpu_set_cycles`], [`cpu_fast_set_cycles`],
+//! [`lz77_cycles`]), the prices the stage-A prelude spends.
 //!
 //! `CpuSet` and `CpuFastSet` are copies and fills (`copy_from_slice`,
 //! `fill`, [`crate::video::Video::copy_vram16`]); the waits are
@@ -66,7 +68,9 @@ pub fn lz77_cycles(
             w.stall(r, pc, &mut last, wait as i32)
         }
     };
-    let header = (0..4).fold(0u32, |h, i| h | (byte(src.wrapping_add(i)) as u32) << (8 * i));
+    let header = (0..4).fold(0u32, |h, i| {
+        h | (byte(src.wrapping_add(i)) as u32) << (8 * i)
+    });
     let mut remaining = header >> 8;
     let mut cycles = 20 + stalled(src, 1 + acc(src, true));
     let mut s = src.wrapping_add(4);
