@@ -2360,3 +2360,4 @@
 {"at":"2026-11-07T08:52:55Z","actor":"loop","tag":"49894b1d","host":"quack","cmd":"ask","text":"asked the owner: Land the BIOS-calls unit with Emerald's runaway compared later?","q":"q/land-bios-calls-unit-emerald"}
 {"at":"2026-11-07T08:53:15Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/ref-heap","text":"Heap pointers as Ref<T>: on main"}
 {"at":"2026-11-07T08:53:17Z","actor":"loop","tag":"30aebd47","host":"quack","cmd":"claim","id":"native/modern-gcc-jumps","text":"Modern-GCC games' unresolved jumps, for native builds: claimed"}
+{"at":"2026-11-07T08:53:21Z","actor":"loop","tag":"4a42dfc5","host":"quack","cmd":"claim","id":"native/callee-save-breaks","text":"Functions that return with r4-r11 or sp changed: claimed"}
