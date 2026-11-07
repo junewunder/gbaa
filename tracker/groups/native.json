@@ -1042,6 +1042,13 @@
       "detail": "libgcc's ieee754-df.S __muldf3 and __divdf3 call their denormal paths (Lml_s, Ldv_s) by bleq, which return r4/r5 changed: a real register-convention break, hard holes in moonbeam (6) and Emerald Rogue (3) after {unit:native/callee-save-breaks} (docs/research/native-holes.md, 'Functions that change r4-r11 or sp'). Write each as a stand-in (Rust f64 mul/div, bit-exact on the soft-float's results), found by its code the way analysis::flash recognises routines, so every game with them gets it. Done when: gbaa-holes counts none of them hard on moonbeam and Rogue (the report must learn the stand-ins), a test pins the f64 results against the interpreter on edge cases (denormals, NaN, inf, rounding), just check passes.",
       "check": "independent",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/entry-read-masking",
+      "title": "Tell masked entry reads of r4-r11 from parameters",
+      "detail": "After {unit:native/callee-save-breaks}, a function that keeps r4-r11 and reads one as it came is soft ('reads r4-r11 at entry and keeps them'): mostly agbcc building a word byte by byte in an unset register, every old bit masked away, but TMC's sub_080086D8 takes r8/r11 from player.s as parameters (Minish 0x08060ba1 derefs entry r5 too), which the lift gets wrong (Regs::call zeroes r4-r12). Track which bits of an entry value survive (and/orr masks, uses as address or callee argument, hi-reg mov then pass-on); make a surviving read hard. Done when: the soft kind holds only fully-masked reads (doc lists the corpus's), holes-all --against shows the new hard ones named, just check passes.",
+      "check": "independent",
+      "uses": ["heavy"]
     }
   ]
 }
