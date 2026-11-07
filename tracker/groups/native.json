@@ -461,15 +461,23 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "3ab02d00",
-        "session": "3ab02d00-6054-4c90-8af0-1a21eaabc92d",
-        "host": "quack",
-        "pid": 751355,
-        "start": "2170805",
-        "at": "2026-11-07T07:12:55Z",
+        "checker": "a4da4b93",
+        "at": "2026-11-07T07:49:14Z",
+        "evidence": "Verifier subagent a4da4b93 (fresh context): PASS. cargo test -p codegen ok (new tests pass); just lift-check exit 0 with call_fn_complete/call_fn_four_complete barred at the measured 56-60 (owner's decision to accept today's values), matching docs/native-stage-b.numbers.md; just check exit 0. Its review found complete_sets used an unsettled flow's sites: fixed (fcc59f14, test added), just check rerun passes. Emerald split to {unit:native/indirect-call-args-emerald}.",
         "branch": "unit/native/indirect-call-args",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-07T07:49:14Z",
+          "by": "3ab02d00",
+          "host": "quack",
+          "pid": 751355,
+          "start": "2170805",
+          "beats": true,
+          "session": "3ab02d00-6054-4c90-8af0-1a21eaabc92d",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
