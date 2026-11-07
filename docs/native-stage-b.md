@@ -220,7 +220,7 @@ typed pointers, below; until then they are soft holes, counted.
   unknown, one object type (union-find over the sites that meet) at one
   aligned offset prints as `g.at(Ref::<H_…>::new(p)).f_8` (or `at_mut`),
   through the pointer the address adds a constant to, so that addition
-  isn't printed; `H_<site>` is a `#[repr(C)]` struct of the fields seen
+  isn't printed; `H_<site>` is a `#[repr(C, packed)]` struct of the fields seen
   through it, one line each. The prelude's `Ref<T>` keeps the guest
   address; `Game::at` checks it is RAM, the object fits its region (and,
   packed, one piece of `Ram`) and is aligned, else stops naming it. On
