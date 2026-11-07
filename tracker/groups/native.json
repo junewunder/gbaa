@@ -1111,6 +1111,7 @@
       "title": "Function flow: callees' values kept apart by call site",
       "detail": "docs/native-stage-b.md piece 3. Measured by {unit:native/fnref-heap-sites} (its branch, commit 0868fc7e, splits the pile into frame and allocation-site objects): fn_words_not_proven doesn't move on any agb program, even with the pile dropped altogether. The run joins every caller's r0-r3 and sp at a callee's entry, and every call_fn set is all ~21 address-taken functions, so a shared function's pointer parameters (memcpy, fmt, qrcodegen's encoders) reach dozens of frames, anywhere in each, and one read through them gives every function address stored in any. Give the run call-site context (a callee's entry and results per call site, or per caller, for callees small or shared enough; k=1 to start), on top of the object split. Done when: fn_words_not_proven falls on every agb program (bars lowered to the measured values), a unit test where two callers pass one callee two objects and the callee's read of the first gives only what the first caller stored, just lift-check and just check pass.",
       "check": "independent",
+      "needs": ["native/fnref-unknown-addrs"],
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
@@ -1121,8 +1122,18 @@
         "start": "2504341",
         "at": "2026-11-07T12:42:01Z",
         "branch": "unit/native/fnref-context",
-        "beats": true
+        "beats": true,
+        "handedBack": "2026-11-07T13:31:57Z",
+        "pushed": true,
+        "ended": "2026-11-07T13:32:08Z"
       },
+      "notes": [
+        {
+          "at": "2026-11-07T13:31:55Z",
+          "by": "3cbbe3ed",
+          "text": "2026-11-07: built on this branch (e81168f, heap-sites merged in): k=1 context, test passes; off by default (GBAA_FNREF_CTX_BLOCKS). Bar unmoved on all 7, affine 5s->445s. Real limit: unknown-address loads read everything, {unit:native/fnref-unknown-addrs} (now needed)."
+        }
+      ],
       "round": "2026-11-07T12:42:01Z"
     },
     {
@@ -1183,6 +1194,12 @@
       "probe": {
         "cmd": "just holes-all --only kirby-nightmare --cover --out out/holes/nightmare-cover"
       },
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-unknown-addrs",
+      "title": "Function flow: loads through unknown addresses",
+      "detail": "docs/native-stage-b.md piece 3. Measured on {unit:native/fnref-context}'s branch (commit e81168f; it holds the object split and call-site context): fn_words_not_proven unmoved by either. ~640 of affine's load sites (spike 644) have an address that may be unknown (Val::unk), and each reads the pile and every RAM cell (Run::load_at's anywhere arm), so e.g. the IRQ vector word's f_03000000 is in nearly every hole. Not the cause (tried, no change): naming the allocator, dropping the pile from constant-address loads, dropping the I/O unk flag, NUMS 8->256. A seen source: main's inlined free-list walk at 0x080001a8 (affine) loads GLOBAL_ALLOC fields holding allocator-made pointers. Find where the unknown comes from (GBAA_FNREF_TRACE; print each anywhere load) and fix the first big source. Done when: fn_words_not_proven falls on every agb program, bars lowered, a unit test, just lift-check and just check pass.",
       "uses": ["heavy"]
     }
   ]
