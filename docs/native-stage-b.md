@@ -254,8 +254,10 @@ and the shortcuts above at game scale.
   (the reset, the IRQ dispatcher, the classic NES Metroid the ROM carries)
   and five IWRAM copies (`[[copy]]`, `native/lift-ram-copies`) leave 9
   hard holes, all BIOS calls the prelude lacks (`native/lift-bios-calls`).
-  The function-address flow is skipped (`skip_fn_flow`) until it settles
-  on a whole game (`native/fnref-flow-scale`). A measurement build with
+  The function-address flow settles in 12 rounds, about 150 s
+  (`native/fnref-flow-scale`: sparse reruns, memory reads kept, large
+  callee sets given only what's new), so the lift follows it again: 2 min
+  44 s, 2.06 GB, 805 function words, 6 proven. A measurement build with
   the BIOS calls stood in by panics (2026-11-06, quack): about 957,000
   lines in 266 modules, the crate alone rebuilt in release in 31.5 s
   wall, peak 3.99 GB, as the synthetic crate predicted.
