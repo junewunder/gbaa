@@ -909,7 +909,14 @@
       "title": "Lifter's gap decoding walks through Emerald's data",
       "detail": "Found by {unit:native/lift-bios-calls}: gbaa-lift on Pokemon Emerald (no holes file, skip_fn_flow only) lifts 14,089 functions, 685,414 hard holes, descending from 53,095 gap targets. Two 'functions', f_08320560 and f_08d3467c, hold 33,163 BIOS-call holes (Thumb 0xDFxx halfwords in data decoded as swi) and most of the rest; gbaa-holes, over discovery's code, counts 5 BIOS sites, the same 5 the lifter has in real code (0x082e707c-0x082e70b8). Find why gap decoding enters those regions (a scanned function in data? a gap target from a pool word?) and stop it. Done when: Emerald's lift has no hard hole in 0x08320560 or 0x08d3467c's runs and its BIOS holes equal gbaa-holes' count plus its scanned-only BIOS count; lift-check unchanged.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-07T07:08:08Z",
+          "by": "4485059c",
+          "text": "gbaa-holes also lists 6 scanned-only BIOS sites on Emerald (survey: ARM 0x42/0x54/0x64/0x73/0xb7/0x27 near 0x087f2250) that the lifter shows only inside the two runaway functions; after the fix, check they appear on their own."
+        }
+      ]
     }
   ]
 }
