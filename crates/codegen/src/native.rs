@@ -234,12 +234,19 @@ pub struct Holes {
     /// stage B's metrics, and on a game it doesn't settle in a session
     /// (Metroid: 68 s a round, rounds growing). `None`: followed.
     pub skip_fn_flow: Option<String>,
+    /// The heap's allocators (`allocators = [0x…]` in the holes file, by
+    /// key): each direct call to one returns a new object, which the
+    /// function-address flow follows apart from every other
+    /// ([`fnref::follow`], `native/fnref-heap-sites`). The agb programs
+    /// have no names file, so each names agb's
+    /// `BlockAllocatorInner::alloc` by its address (`nm` of the ELF).
+    pub allocators: BTreeSet<u32>,
 }
 
 impl Holes {
     /// Parse a holes file: `[[standin]] entry = 0x…, why = "…", code =
     /// '''…'''`, `[[jump]] at = 0x…, targets = [0x…], why = "…"`, and at
-    /// the top, `skip_fn_flow = "why"`.
+    /// the top, `skip_fn_flow = "why"` and `allocators = [0x…]`.
     pub fn parse(text: &str) -> Result<Holes, String> {
         let t: toml::Table = text.parse().map_err(|e| format!("{e}"))?;
         let mut h = Holes::default();
@@ -258,6 +265,13 @@ impl Holes {
             if k == "skip_fn_flow" {
                 let why = v.as_str().ok_or("skip_fn_flow: not a string (why)")?;
                 h.skip_fn_flow = Some(why.to_string());
+                continue;
+            }
+            if k == "allocators" {
+                let list = v.as_array().ok_or("allocators: not a list")?;
+                for a in list {
+                    h.allocators.insert(int(a, "allocators")?);
+                }
                 continue;
             }
             let list = v.as_array().ok_or(format!("{k}: not a list of tables"))?;
@@ -466,7 +480,15 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let (ins, pools, call_fn) = fn_ins(&overlays, &codes, &all);
     let fnrefs = match &holes.skip_fn_flow {
         None => {
-            let (flow, words) = fn_flow(rom, &disc, &overlays, &ins, &pools, &all);
+            let (flow, words) = fn_flow(
+                rom,
+                &disc,
+                &overlays,
+                &ins,
+                &pools,
+                &all,
+                &holes.allocators,
+            );
             Some((flow, words, call_fn))
         }
         Some(_) => None,
@@ -1000,6 +1022,7 @@ fn fn_flow(
     ins: &[fnref::FnIn],
     pools: &BTreeSet<u32>,
     all: &BTreeSet<u32>,
+    allocs: &BTreeSet<u32>,
 ) -> (fnref::Flow, BTreeMap<u32, (u32, bool)>) {
     // Every function word in ROM that isn't an instruction (of the ROM's
     // code, or an IWRAM copy's).
@@ -1030,7 +1053,7 @@ fn fn_flow(
         .filter(|(src, _, _)| !overlays.iter().any(|o| o.src == *src))
         .collect();
     let img = FnImage { rom, all, disc };
-    (fnref::follow(ins, &img, &copies), words)
+    (fnref::follow(ins, &img, &copies, allocs), words)
 }
 
 /// Every context's functions as the flows take them ([`fnref::FnIn`]),
