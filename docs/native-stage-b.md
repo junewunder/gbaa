@@ -745,9 +745,13 @@ and the two shortcuts above at game scale.
   Metroid the ROM carries (an embedded GBA image, `NES METROID`, at
   0x087d8000, and its launcher), panics: no coverage run reached them.
   The function-address flow (`fnref::follow`) took 68 s for its first
-  round and over 8 minutes for its second, so the holes file skips it
-  (`skip_fn_flow`; `native/fnref-flow-scale`); the lift then takes 7 s
-  and 0.23 GB. Left: 9 BIOS calls the prelude lacks (Stop, Sqrt,
+  round and over 8 minutes for its second, so the holes file skipped it
+  (`skip_fn_flow`); without it the lift takes 7 s and 0.23 GB. Since
+  `native/fnref-flow-scale` (sparse reruns by what each function read,
+  memory reads kept, calls through large callee sets given only what's
+  new) it settles in 12 rounds, about 150 s, and the holes file follows
+  it again: the lift takes 2 min 44 s and 2.06 GB (quack), its counts
+  as before (805 function words, 6 proven). Left: 9 BIOS calls the prelude lacks (Stop, Sqrt,
   CpuFastSet, both LZ77s, SoundBias, MidiKey2Freq, MultiBoot), shared
   work (`native/lift-bios-calls`). With those 9 stood in by panics, a
   measurement only: 956,792 lines (report's `lines`; 959,153 in all
