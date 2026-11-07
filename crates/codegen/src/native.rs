@@ -482,7 +482,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // taken as calling exactly those (native/indirect-call-args). The
     // frames, which the flow read, stay the first summaries'. With the
     // flow skipped there are no sets, and the first summaries stand.
-    let sets = fnrefs.as_ref().map(|f| complete_sets(&f.0)).unwrap_or_default();
+    let sets = fnrefs
+        .as_ref()
+        .map(|f| complete_sets(&f.0))
+        .unwrap_or_default();
     if !sets.is_empty() {
         for c in &mut codes {
             c.sums = summarize_sets(&c.ctx, &c.funcs, Assume::default(), &sets);
