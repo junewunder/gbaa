@@ -2379,3 +2379,4 @@
 {"at":"2026-11-07T11:26:36Z","actor":"loop","tag":"fcc04f74","host":"quack","cmd":"done","id":"native/nightmare-cpu-state","text":"Kirby - Nightmare in Dream Land's three CPU-state holes: done, checked by verifier-7c3e"}
 {"at":"2026-11-07T11:31:59Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/nightmare-cpu-state","text":"Kirby - Nightmare in Dream Land's three CPU-state holes: on main"}
 {"at":"2026-11-07T11:32:04Z","actor":"loop","tag":"ccb35e7f","host":"quack","cmd":"claim","id":"native/nightmare-task-switch","text":"Kirby - Nightmare's task switcher as host coroutines: claimed"}
+{"at":"2026-11-07T11:42:48Z","actor":"oversee","tag":"c7110ccd","host":"quack","cmd":"add-unit","id":"native/whole-lift-memory","text":"new unit: Whole-game lifts of Minish Cap and Kirby Nightmare fit"}
