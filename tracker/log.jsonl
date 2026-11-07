@@ -2369,3 +2369,4 @@
 {"at":"2026-11-07T10:21:36Z","actor":"loop","tag":"4a42dfc5","host":"quack","cmd":"add-unit","id":"native/libgcc-df-standins","text":"new unit: Stand-ins for libgcc's double multiply and divide"}
 {"at":"2026-11-07T10:45:05Z","actor":"loop","tag":"4a42dfc5","host":"quack","cmd":"add-unit","id":"native/entry-read-masking","text":"new unit: Tell masked entry reads of r4-r11 from parameters"}
 {"at":"2026-11-07T10:47:52Z","actor":"loop","tag":"4a42dfc5","host":"quack","cmd":"done","id":"native/callee-save-breaks","text":"Functions that return with r4-r11 or sp changed: done, checked by verifier subagent"}
+{"at":"2026-11-07T10:51:24Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/callee-save-breaks","text":"Functions that return with r4-r11 or sp changed: on main"}
