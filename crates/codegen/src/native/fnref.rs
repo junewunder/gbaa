@@ -95,11 +95,16 @@
 //!
 //! Precision (`docs/native-stage-b.md`, "Known gaps"): splitting the
 //! pile into objects proved no more words on the agb programs (measured
-//! with no pile at all, too): the run joins every caller's values at a
-//! function's entry, and each `call_fn` set is every address-taken
-//! function, so a shared function's pointer parameters reach dozens of
-//! frames, anywhere in each, and a read through them gives every function
-//! address stored in any.
+//! with no pile at all, too), nor did running each function once per
+//! call site (`native/fnref-context`, k = 1, [`Ix`]; on affine 5 s
+//! became 21 s with direct calls only, 445 s with each `call_fn`
+//! callee's too). What holds them: a load whose address may be unknown
+//! (affine: about 640 load sites, the same with the allocator named, the
+//! pile left out of constant-address loads, or the I/O flag left off)
+//! reads the pile and every RAM cell, so the IRQ vector's handler
+//! address, among others, reaches almost every hole. Pointers the agb
+//! allocator makes by arithmetic (its free list in `GLOBAL_ALLOC`) are
+//! unknown.
 
 use super::frame::{Edge, Frame};
 use analysis::ir::{BinOp, Exit, Inst, Op, ValueId};
@@ -158,8 +163,8 @@ enum Tok {
 /// What an [`Tok::Obj`] points into.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum ObjId {
-    /// A function's frame (by its entry): offsets from its entry sp.
-    Frame(u32),
+    /// A function instance's frame ([`Ix`]): offsets from its entry sp.
+    Frame(Ix),
     /// What an allocator's call at this instruction returns.
     Heap(u32),
 }
@@ -556,10 +561,31 @@ impl Flow {
 
 type Mem = BTreeSet<(Tok, u8)>;
 
+/// A function instance (`native/fnref-context`): its entry in the low
+/// half, its context in the high: the call (direct, or each callee of an
+/// indirect one) it is that call's callee for (k = 1), or 0 for every
+/// other caller (an incomplete set, a function the run can't see called).
+/// A fall or a tail jump keeps its caller's context. `k as Ix` is `k`'s
+/// instance 0. Each instance has its own frame object and spills.
+type Ix = u64;
+
+fn ix(entry: u32, ctx: u32) -> Ix {
+    (ctx as Ix) << 32 | entry as Ix
+}
+
+fn entry_of(i: Ix) -> u32 {
+    i as u32
+}
+
+fn ctx_of(i: Ix) -> u32 {
+    (i >> 32) as u32
+}
+
 #[derive(Default)]
 struct G {
-    entry: BTreeMap<u32, Vec<Val>>,
-    ret: BTreeMap<u32, Vec<Val>>,
+    /// Each instance's entry registers and results.
+    entry: BTreeMap<Ix, Vec<Val>>,
+    ret: BTreeMap<Ix, Vec<Val>>,
     /// Every store the run can't place (the heap, escaping frame slots).
     pile: Mem,
     /// [`G::read_pile`]'s, by width: uncapped (grown at each store), and
@@ -580,10 +606,12 @@ struct G {
     obj_ix: std::collections::HashMap<ObjId, u32, Fx>,
     /// The allocators: a direct call to one returns a new object.
     allocs: BTreeSet<u32>,
-    spills: BTreeMap<u32, Mem>,
+    /// The functions run once per call site ([`Ix`]).
+    by_site: BTreeSet<u32>,
+    spills: BTreeMap<Ix, Mem>,
     /// What a load at a width reads of a function's spills, and of the
     /// cells at an address (kept until they change).
-    spill_reads: std::collections::HashMap<(u32, u8), Val, Fx>,
+    spill_reads: std::collections::HashMap<(Ix, u8), Val, Fx>,
     cell_at_reads: std::collections::HashMap<(u32, u8), Val, Fx>,
     /// The origins in [`Flow::holes`], to look up fast.
     holed: std::collections::HashSet<Origin, Fx>,
@@ -603,21 +631,21 @@ struct G {
     flow: Flow,
     changed: bool,
     /// What changed since the functions last ran, to rerun what reads it.
-    dirty_entry: BTreeSet<u32>,
-    dirty_ret: BTreeSet<u32>,
+    dirty_entry: BTreeSet<Ix>,
+    dirty_ret: BTreeSet<Ix>,
     dirty_loose: bool,
     /// The functions incomplete callee sets reach this round, and what
     /// their results join to (kept until one of them changes).
-    loose: BTreeSet<u32>,
+    loose: BTreeSet<Ix>,
     loose_rets: Option<Vec<Val>>,
     /// When each function's results last changed (a count of changes).
-    ret_stamp: BTreeMap<u32, u64>,
+    ret_stamp: BTreeMap<Ix, u64>,
     stamp: u64,
     /// Each call by value's last callees, arguments and results, by
     /// function, address and whether a tail call: a large callee set given
     /// the same arguments again changes nothing, and its results only
     /// when a callee's did.
-    by_value: std::collections::HashMap<(u32, u32, bool), ByValue>,
+    by_value: std::collections::HashMap<(Ix, u32, bool), ByValue>,
     /// The cells changed this round, and whether the pile did.
     cells_changed: BTreeSet<u32>,
     pile_changed: bool,
@@ -687,6 +715,16 @@ struct Rd {
 }
 
 impl G {
+    /// The instance of `k` a direct call (or a fall) with context `ctx`
+    /// enters.
+    fn ix_call(&self, k: u32, ctx: u32) -> Ix {
+        if self.by_site.contains(&k) {
+            ix(k, ctx)
+        } else {
+            k as Ix
+        }
+    }
+
     fn mark(&mut self, c: bool) {
         self.changed |= c;
     }
@@ -779,7 +817,7 @@ impl G {
     }
 
     /// What a load at width `w` reads of function `f`'s spills.
-    fn read_spill(&mut self, f: u32, w: u8, into: &mut Val) {
+    fn read_spill(&mut self, f: Ix, w: u8, into: &mut Val) {
         let v = self.spill_reads.entry((f, w)).or_insert_with(|| {
             let mut v = Val::default();
             if let Some(m) = self.spills.get(&f) {
@@ -909,7 +947,7 @@ impl G {
         into.join(self.cell_reads[i].as_ref().unwrap());
     }
 
-    fn give(&mut self, f: u32, regs: &[Val]) {
+    fn give(&mut self, f: Ix, regs: &[Val]) {
         let e = self
             .entry
             .entry(f)
@@ -924,7 +962,7 @@ impl G {
         self.mark(c);
     }
 
-    fn give_ret(&mut self, f: u32, regs: &[Val]) {
+    fn give_ret(&mut self, f: Ix, regs: &[Val]) {
         let e = self.ret.entry(f).or_insert_with(|| vec![Val::default(); 4]);
         let mut c = false;
         for (a, b) in e.iter_mut().zip(regs) {
@@ -954,7 +992,7 @@ impl G {
 enum Store {
     Pile,
     Cell(u32),
-    Spill(u32),
+    Spill(Ix),
 }
 
 fn bytes(w: Width) -> u8 {
@@ -1081,14 +1119,16 @@ struct Run<'a, 'g> {
     img: &'a dyn Image,
     g: &'g mut G,
     /// Functions any incomplete callee set may reach.
-    loose: &'a BTreeSet<u32>,
+    loose: &'a BTreeSet<Ix>,
     ins: BTreeMap<u32, St>,
     /// Blocks to run, lowest address first (near enough reverse
     /// postorder for compiled code, so loops settle in fewer passes).
     work: BTreeSet<u32>,
     trace: bool,
     /// The functions whose results the run read.
-    rets_read: BTreeSet<u32>,
+    rets_read: BTreeSet<Ix>,
+    /// The instance being run.
+    ix: Ix,
     /// The instruction being run.
     at: u32,
     /// Its own frame's object (`None`: past [`OBJ_MAX`], the pile).
@@ -1333,7 +1373,7 @@ impl Run<'_, '_> {
     }
 
     /// What a call to a known function gives back in r0-r3.
-    fn ret_of(&mut self, k: u32) -> Vec<Val> {
+    fn ret_of(&mut self, k: Ix) -> Vec<Val> {
         self.rets_read.insert(k);
         self.g
             .ret
@@ -1696,7 +1736,7 @@ impl Run<'_, '_> {
                             }
                             out.join(v);
                         }
-                        _ => self.g.read_spill(self.f.entry, w, &mut out),
+                        _ => self.g.read_spill(self.ix, w, &mut out),
                     }
                     if o >= 0 {
                         // At or above the entry sp: the caller's frame (a
@@ -1712,7 +1752,7 @@ impl Run<'_, '_> {
                     return out;
                 }
                 Some(super::frame::Place::Through(os)) => {
-                    self.g.read_spill(self.f.entry, w, &mut out);
+                    self.g.read_spill(self.ix, w, &mut out);
                     self.own_read(OBJ_ANY, w, &mut out);
                     if os.iter().any(|o| *o >= 0) {
                         let at = offset(&self.sp_in, None);
@@ -1883,7 +1923,7 @@ impl Run<'_, '_> {
                         _ => None,
                     };
                     s.frame.extend(new.map(|v| (o, v)));
-                    self.g.store(Store::Spill(self.f.entry), toks);
+                    self.g.store(Store::Spill(self.ix), toks);
                     if o >= 0 {
                         // The caller's frame, through the sp it called with.
                         let at = offset(&self.sp_in, Some(o as i64));
@@ -1895,7 +1935,7 @@ impl Run<'_, '_> {
                     return;
                 }
                 Some(super::frame::Place::Through(os)) => {
-                    self.g.store(Store::Spill(self.f.entry), toks);
+                    self.g.store(Store::Spill(self.ix), toks);
                     let c = self.own_cell(OBJ_ANY);
                     self.g.store(c, toks);
                     if os.iter().any(|o| *o >= 0) {
@@ -1952,7 +1992,7 @@ impl Run<'_, '_> {
     }
 
     fn exit(&mut self, out: &Out, t: Option<Val>, s: &St) {
-        let me = self.f.entry;
+        let me = self.ix;
         match &out.edge {
             Edge::Goto(ks) => {
                 for &k in ks {
@@ -1963,8 +2003,9 @@ impl Run<'_, '_> {
                 let args = &call_args(s);
                 let rets = match target {
                     Some(k) => {
-                        self.g.give(*k, args);
-                        let mut r = self.ret_of(*k);
+                        let ki = self.g.ix_call(*k, out.at);
+                        self.g.give(ki, args);
+                        let mut r = self.ret_of(ki);
                         // An allocator's call: a new object.
                         if self.g.allocs.contains(k) {
                             r[0] = self.g.obj(ObjId::Heap(out.at), 0);
@@ -1995,8 +2036,10 @@ impl Run<'_, '_> {
                 }
             }
             Edge::Tail(Some(k)) => {
-                self.g.give(*k, &s.regs);
-                let mut r = self.ret_of(*k);
+                // A fall or tail jump keeps the caller's context.
+                let ki = self.g.ix_call(*k, ctx_of(me));
+                self.g.give(ki, &s.regs);
+                let mut r = self.ret_of(ki);
                 if self.g.allocs.contains(k) {
                     r[0] = self.g.obj(ObjId::Heap(out.at), 0);
                 }
@@ -2058,7 +2101,10 @@ impl Run<'_, '_> {
         // A large callee set is given only what it wasn't given before
         // (the entries hold that already: they only grow), and its results
         // are joined again only from the callees whose results changed.
-        let key = (self.f.entry, at, tail);
+        let key = (self.ix, at, tail);
+        // Each callee's instance: this call's, or for a jump, the caller's
+        // context.
+        let ctx = if tail { ctx_of(self.ix) } else { at };
         let memo = self
             .g
             .by_value
@@ -2088,6 +2134,7 @@ impl Run<'_, '_> {
                     .any(|d| !d.toks.is_empty() || d.mem || d.unk || d.lost_rom || d.lost_obj)
                 {
                     for &k in &callees {
+                        let k = self.g.ix_call(k, ctx);
                         self.g.give(k, &delta);
                     }
                     for (o, a) in m.args.iter_mut().zip(args) {
@@ -2095,6 +2142,7 @@ impl Run<'_, '_> {
                     }
                 }
                 for &k in &callees {
+                    let k = self.g.ix_call(k, ctx);
                     self.rets_read.insert(k);
                     if self.g.ret_stamp.get(&k).is_some_and(|&s| s > m.stamp) {
                         for (a, b) in m.rets.iter_mut().zip(&self.g.ret[&k]) {
@@ -2110,6 +2158,7 @@ impl Run<'_, '_> {
             None => {
                 let mut rets = vec![Val::default(); 4];
                 for &k in &callees {
+                    let k = self.g.ix_call(k, ctx);
                     self.g.give(k, args);
                     for (a, b) in rets.iter_mut().zip(self.ret_of(k)) {
                         a.join(&b);
@@ -2394,6 +2443,7 @@ pub fn follow(
     img: &dyn Image,
     copies: &[(u32, u32, u32)],
     allocs: &BTreeSet<u32>,
+    ctx_blocks: usize,
 ) -> Flow {
     let mut g = G {
         loose_args: vec![Val::default(); 16],
@@ -2418,6 +2468,14 @@ pub fn follow(
             }
         }
     }
+    // The functions run once per call site: those of at most
+    // `ctx_blocks` blocks (an allocator's calls are objects already).
+    g.by_site = fns
+        .iter()
+        .filter(|f| !allocs.contains(&f.entry))
+        .filter(|f| f.blocks.len() <= ctx_blocks)
+        .map(|f| f.entry)
+        .collect();
     // The start's copies.
     for &(src, dst, len) in copies {
         let mut p = src & !3;
@@ -2441,9 +2499,10 @@ pub fn follow(
     // sets pass, the functions they reach). Memory by what a load gives:
     // the pile and every cell by width (compared with what they gave at
     // the round's start), the cells by address.
-    let mut reads: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
-    let mut rds: BTreeMap<u32, Rd> = BTreeMap::new();
-    let mut dirty: BTreeSet<u32> = fns.iter().map(|f| f.entry).collect();
+    let mut reads: BTreeMap<Ix, BTreeSet<Ix>> = BTreeMap::new();
+    let mut rds: BTreeMap<Ix, Rd> = BTreeMap::new();
+    let mut dirty: BTreeSet<Ix> = fns.iter().map(|f| f.entry as Ix).collect();
+    let by_entry: BTreeMap<u32, &FnIn> = fns.iter().map(|f| (f.entry, f)).collect();
     let trace = std::env::var_os("GBAA_FNREF_TRACE").is_some();
     let snap = |g: &mut G| -> Vec<Val> {
         let mut v = Vec::new();
@@ -2461,7 +2520,7 @@ pub fn follow(
     let mut snapped = snap(&mut g);
     g.cells_changed.clear();
     g.pile_changed = false;
-    let mut loose: BTreeSet<u32> = BTreeSet::new();
+    let mut loose: BTreeSet<Ix> = BTreeSet::new();
     for round in 0..=256 {
         g.changed = false;
         let was = std::mem::replace(
@@ -2469,6 +2528,7 @@ pub fn follow(
             fns.iter()
                 .map(|f| f.entry)
                 .filter(|k| !direct.contains(k) || g.taken.contains(k))
+                .map(|k| k as Ix)
                 .collect(),
         );
         if round > 0 {
@@ -2492,13 +2552,16 @@ pub fn follow(
         if round == 256 {
             break;
         }
-        for f in fns.iter().filter(|f| dirty.contains(&f.entry)) {
+        for &i in &dirty {
+            let Some(&f) = by_entry.get(&entry_of(i)) else {
+                continue;
+            };
             let mut entry = g
                 .entry
-                .get(&f.entry)
+                .get(&i)
                 .cloned()
                 .unwrap_or_else(|| vec![Val::default(); 16]);
-            if loose.contains(&f.entry) {
+            if loose.contains(&i) {
                 for (a, b) in entry.iter_mut().zip(&g.loose_args) {
                     a.join(b);
                 }
@@ -2514,7 +2577,7 @@ pub fn follow(
             for r in &mut entry[4..] {
                 r.unk = true;
             }
-            let me = g.obj(ObjId::Frame(f.entry), 0);
+            let me = g.obj(ObjId::Frame(i), 0);
             let me = me.toks.iter().next().map(|t| match *t {
                 Tok::Obj(i, _) => i,
                 _ => unreachable!(),
@@ -2532,6 +2595,7 @@ pub fn follow(
                 work: BTreeSet::new(),
                 trace,
                 rets_read: BTreeSet::new(),
+                ix: i,
                 at: 0,
                 me,
                 sp_in,
@@ -2557,8 +2621,8 @@ pub fn follow(
                 run.block(k);
             }
             let r = std::mem::take(&mut run.rets_read);
-            reads.insert(f.entry, r);
-            rds.insert(f.entry, std::mem::take(&mut g.rd));
+            reads.insert(i, r);
+            rds.insert(i, std::mem::take(&mut g.rd));
         }
         // What every value held as a function's whole address: taken
         // (each shared set once).

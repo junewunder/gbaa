@@ -151,7 +151,7 @@ fn run_allocs(
             frame: frames.get(e),
         })
         .collect();
-    follow(&ins, img, &[], allocs)
+    follow(&ins, img, &[], allocs, usize::MAX)
 }
 
 /// A function at `e` of two blocks: `b` ending in an indirect call
@@ -692,4 +692,78 @@ fn a_pointer_into_an_object_through_an_add_of_an_unknown_reads_all_of_it() {
     let f = run(&[(0x0800_1001, vec![(0x0800_1001, b.end(None, Edge::Return))])]);
     assert!(!f.proven(POOL), "{f:?}");
     assert_eq!(f.holes[&Origin::Word(POOL)].1, Why::Arithmetic);
+}
+
+/// Two callers pass one callee a pointer each into their own frames
+/// (`native/fnref-context`): one stored F there, the other 5. The callee
+/// returns what its pointer reads; run per call site, the first caller
+/// gets back only F (and calls it), the second only 5 (and adds to it),
+/// so F's word is proven. Joined at the callee's entry, the add would be
+/// a hole of F's word.
+#[test]
+fn a_callee_s_values_are_kept_apart_by_call_site() {
+    let (x, y, c) = (0x0800_1001, 0x0800_2001, 0x0800_3001);
+    let at = |mut b: (Vec<Inst>, Out, BTreeMap<usize, u32>), at: u32| {
+        b.1.at = at;
+        b
+    };
+    let call = |b: B, ret: u32, site: u32| {
+        at(
+            b.end(
+                None,
+                Edge::Call {
+                    target: Some(c),
+                    ret,
+                },
+            ),
+            site,
+        )
+    };
+    // A caller: its frame's word at sp - 8 holds `v`, r0 points to it.
+    let pass = |v: &dyn Fn(&mut B) -> ValueId| {
+        let mut b = B::default();
+        let sp = b.get(13);
+        let eight = b.k(8);
+        let a = b.bin(BinOp::Sub, sp, eight);
+        let v = v(&mut b);
+        b.st(Width::Word, a, v);
+        b.set(0, a);
+        b
+    };
+    let mut use_x = B::default();
+    let r = use_x.get(0);
+    let fx = vec![
+        (x, call(pass(&|b| b.pool(POOL, F)), x + 0x10, 0x0800_1100)),
+        (
+            x + 0x10,
+            at(
+                use_x.end(
+                    Some(r),
+                    Edge::Call {
+                        target: None,
+                        ret: x + 0x20,
+                    },
+                ),
+                0x0800_1110,
+            ),
+        ),
+        (x + 0x20, B::default().end(None, Edge::Return)),
+    ];
+    let mut use_y = B::default();
+    let r = use_y.get(0);
+    let four = use_y.k(4);
+    use_y.bin(BinOp::Add, r, four);
+    let fy = vec![
+        (y, call(pass(&|b| b.k(5)), y + 0x10, 0x0800_2100)),
+        (y + 0x10, use_y.end(None, Edge::Return)),
+    ];
+    let mut body = B::default();
+    let a = body.get(0);
+    let n = body.ld(Width::Word, a);
+    body.set(0, n);
+    let fc = vec![(c, body.end(None, Edge::Return))];
+    let f = run(&[(x, fx), (y, fy), (c, fc)]);
+    assert!(f.proven(POOL), "{f:?}");
+    assert_eq!(f.sites[&0x0800_1110].callees, BTreeSet::from([F]));
+    assert!(f.sites[&0x0800_1110].complete);
 }

@@ -349,7 +349,11 @@ What the done pieces left open, for the units that come next.
   address-taken function (17 on the spike). Splitting the pile by the
   value-set bounds on each store proved nothing more (agb's heap stores
   aren't bounded) and was nine times slower; the heap by allocation site
-  and field (`native/fnref-heap-sites`) is what dense IDs need.
+  and field (`native/fnref-heap-sites`) is what dense IDs need. Measured
+  on its branch with call-site context on top (`native/fnref-context`,
+  k = 1), neither moved a word: about 640 of affine's load sites have an
+  address that may be unknown (pointers the allocator makes by
+  arithmetic among them), and each reads the pile and every RAM cell.
 - **Function-address flow, smaller gaps** (for `native/fnref-dense`).
   Proofs are per origin, and a pool load folded from a non-pc-relative
   address gets a code-constant origin, so dense needs per-site constant
