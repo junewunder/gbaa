@@ -1031,6 +1031,7 @@
       "title": "Kirby - Nightmare's task switcher as host coroutines",
       "detail": "Nightmare's 3 CPU-state holes are its object-task switcher (resume 0x08000244, yield 0x08000278, exit 0x08000298; docs/research/native-holes.md, 'Kirby: Nightmare's task switcher'). Write a stand-in in mods/kirby-nightmare/holes.toml (or a runtime facility if the lifter needs one) that runs each task's lifted code on a stackful coroutine (corosensei, as crates/desktop/src/coro.rs): resume starts or resumes the task keyed by its saved sp, yield/exit suspend with the values the scheduler reads. Done when: just holes counts the 3 as covered/not hard (or the lift's stand-ins cover them), the lift builds, and the native check matches the interpreter on a route through task-heavy play; just check passes.",
       "check": "independent",
+      "needs": ["native/nightmare-lifts", "native/task-coroutines"],
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
