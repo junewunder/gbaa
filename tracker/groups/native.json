@@ -1000,15 +1000,24 @@
       "detail": "A native build needs every byte of code found. Measured 2026-11-06 with gbaa-holes' default run: Kirby - Nightmare in Dream Land 1748 bytes run but not discovered, Kirby & The Amazing Mirror 362, every other corpus game 52 or fewer. No unit covers it ({unit:assets/kirby-fuzz-last-misses} is graphics, {unit:multiplayer/kirby-ram-code} is RAM overlays for speed). First rerun both with their coverage files (just holes-all --only kirby-nightmare --only kirby-mirror --cover) and see how much of the miss is the run, how much discovery; then sort what discovery misses by why (code reached only through a pointer table, a jump into the middle of a function, Thumb/ARM mode, data the scan rejects) with counts, in docs/research/native-holes.md, and fix the largest kinds in analysis. Done when: the sorted counts are in the doc; both games' undiscovered bytes fall in just holes-all --against a run on main, no game's hard count higher; disc-* checks' bars hold; just check passes.",
       "check": "independent",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "842df15d",
-        "session": "842df15d-3b2f-42bc-a9ed-416544ec972a",
-        "host": "quack",
-        "pid": 862066,
-        "start": "2504341",
-        "at": "2026-11-07T10:51:33Z",
+        "checker": "subagent-af2d26c0",
+        "at": "2026-11-07T12:09:11Z",
+        "evidence": "Fresh verifier: holes-all at HEAD against main aa63a25 (out/holes/kafter2 vs kbase): Nightmare undiscovered 1748->126, Mirror 362->50, every game's hard count unchanged. Coverage runs miss the same (1748, 372), so the misses are all discovery's; six causes with counts are in native-holes.md, What discovery misses. disc-pret 0.9991/0.9553 (bar 0.9987/0.9349), jt-score 676/676 and 584/617 with 0 wrong, disc-agb ok; just check passes. Remainder filed as {unit:native/copy-tail-discovery}.",
         "branch": "unit/native/kirby-undiscovered",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-07T12:09:11Z",
+          "by": "842df15d",
+          "host": "quack",
+          "pid": 862066,
+          "start": "2504341",
+          "beats": true,
+          "session": "842df15d-3b2f-42bc-a9ed-416544ec972a",
+          "lane": "quack/2"
+        },
+        "pushed": true
       },
       "round": "2026-11-07T10:51:33Z"
     },
