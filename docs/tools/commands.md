@@ -78,7 +78,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `analysis::flash`) and each list, the RAM copies among them (the ones
   only the run shows also as `[[copy]]` tables for the lift's holes
   file). About a minute a game, capped at 3 GB. The
-  doc's table is these lines; rerun all eight after changing
+  doc's table is these lines; rerun the corpus after changing
   `analysis::holes` or `crates/hole-report` and update it.
   `--cover FILE` (`holes/coverage/<game>.toml`, native/hole-coverage)
   adds the file's coverage runs after the press script (reset, the
@@ -105,7 +105,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   flags (`--frames N`, `--no-summaries`, `--press …`) go to every game;
   `--cover` gives each its coverage file (hours, not minutes). Fails if
   any game's run did. One 3 GB cap, no swap, for the whole run (the games
-  run one at a time). About 10 minutes for the eight (9.5 to 11 measured): run it
+  run one at a time). About 12 minutes for the nine (Imperium the longest, 3 minutes): run it
   with `just long start holes -- just holes-all`. Use it, not a loop over `just
   holes`, to compare before and after a change: run it on main, then on
   the branch with `--against` the first DIR. `--write-doc

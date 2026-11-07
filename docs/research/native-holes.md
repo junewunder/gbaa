@@ -2,7 +2,8 @@
 
 research/native-holes (unit native/hole-report), 2026-11-01. For the
 Stage-A lifter and for june: of the eight games of
-`docs/research/code-without-rom-addresses.md`, which is closest to a
+`docs/research/code-without-rom-addresses.md`, and Emerald Imperium
+(modern GCC, added by `native/modern-gcc-jumps`), which is closest to a
 native build (`docs/native-port-design.md`, section 6), and what stands
 in the way of each.
 
@@ -276,10 +277,45 @@ The counts are the numbers file's; what they are, beyond the summary's:
   most of the reached ones. That code is a BIOS copy (0x0300404c from
   0x080af3a4, entered only by a jump) and a copy only the run shows
   (0x030056f0-0x030068a4 from 0x080b197c), both discovered now.
-- **Emerald Rogue.** The most unresolved jumps, mostly unreached; its
+- **Emerald Rogue and Imperium.** Unresolved jumps, mostly unreached and
+  most not tables now (below); Rogue's
   mixer's template stamping (0x030059f0-0x03005b10,
   `codegen::variants`); 8 functions with a run-time sp; and the busy
   loops calling functions.
+
+## Modern GCC's unresolved jumps, by kind
+
+`native/modern-gcc-jumps`, 2026-11-07: every unresolved ROM jump of
+Imperium and Rogue (`just holes ROM --show 200`), sorted by the code
+before it (`just dis`), then the largest kinds fixed in
+`analysis::vsa::exec`. Imperium / Rogue, before and after:
+
+| Kind | Before | After |
+|---|---|---|
+| Switch on a narrowed copy: `lsls r3, r0, #16; lsrs r3, r3, #16; cmp r3, #7; bhi`, indexed with r0 (an `ldrsh`'s `s16`) | 34 / 23 | 2 / 2 |
+| The frame rule: a table's base or index in a stack slot a call forgot (the frame had escaped), or the saved lr a `pop {r3}; bx r3` returns through | 13 / 8 | 1 / 3 |
+| Other tables: a far-jump default (`bls; bl`) the probe missed, a base kept in a high register round a loop, one not looked into | 2 / 2 | 2 / 2 |
+| Data decoded as code (pointer tables at 0x0828xxxx and 0x0826xxxx) | 14 / 6 | 14 / 6 |
+| libgcc's `_call_via_r0`-`r2` (`bx rN` stubs, calls by `bl`) | 3 / 3 | 3 / 3 |
+| Veneers into RAM code (`ldr r3, =ram; bx r3`, ARM `ldr pc, [pc, #-4]`) | 3 / 2 | 3 / 2 |
+| Through a function pointer (an argument, a pointer loaded from RAM) | 2 / 2 | 2 / 2 |
+| Total | 71 / 46 | 27 / 20 |
+
+The fixes: a sign extension is a derivation (`DOp::Sext`), a `lsl` by
+`32 - w` of a sign-extended `w`-bit value or of a value that fits loses
+nothing (`DOp::LslExact`), and a `lsr` by the same amount gives the same
+unknown back, so the copy's bound narrows the halfword and, through the
+derivation, the original (halfword loads are taken as aligned, and give
+0..0xffff). A call or a store through an unknown pointer forgets the
+frame only from the lowest escaped local up, keeping the slots that hold
+a saved register; a slot read when unknown keeps what was read, so a
+local reloaded after its bound keeps it. Every game's hard count fell or
+held (WarioWare 8 to 7, moonbeam 19 to 15, Emerald 12 to 11); `jt-score`'s
+modern build went from 584 to 610 of 617 exact (agbcc 676/676, 0 wrong),
+and `disc-pret`'s modern-build tables from 532 to 560. What's left is
+mostly not tables: the data isn't code (by eye: `lsrs r0, r5, #32`,
+`movs r0, r0` runs), a discovery false positive, and the stubs and
+veneers are calls a native build could make through `FnRef`.
 
 ## What the Stage-A lifter should know
 
