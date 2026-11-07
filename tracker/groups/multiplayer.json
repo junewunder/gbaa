@@ -782,6 +782,12 @@
       "title": "Four Kirbys' netplay frame cost on the Deck",
       "detail": "From {unit:multiplayer/four-seats}: quack's numbers for four Kirbys a peer are in docs/research/multiplayer.md, 'Four players'. The Deck's own CPU, a short headless run (docs/machines.md, deck: ask june for a yes first, each time). Copy the recompiled Kirby binary to ~/gbaa, run just rollback-feel's headless four-player command from that section (calm delay 2 and wander delay 0, --interp and not, peers on the Deck) and add the Deck's rows to the table.",
       "needs": ["multiplayer/four-seats"],
+      "record": {
+        "state": "parked",
+        "why": "Deck-only; june will ask for Deck SSH herself when she wants it",
+        "by": "8f498bd1",
+        "at": "2026-11-07T04:31:12Z"
+      },
       "round": "2026-11-06T13:31:13Z"
     },
     {
