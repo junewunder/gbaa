@@ -1409,6 +1409,32 @@
         "unit": "native/lift-bios-calls"
       },
       "answer": null
+    },
+    {
+      "id": "q/may-load-sp-sp-accesses",
+      "title": "May load_sp and sp_accesses_escaping_slot rise by 1 for a better frame rule?",
+      "context": "The jump-table work for modern-GCC games ({unit:native/modern-gcc-jumps}) makes the value-set analysis forget less of a stack frame when a local's address escapes: only from the lowest escaped local up, keeping saved registers. That cut Imperium's unresolved jumps 71 to 27 and Rogue's 46 to 20. As a side effect, in four agb programs (affine, native-fallthrough, native-irq-hold, native-frame-locals) one load the lift counted as an unknown computed address is now known to be sp-relative: load_computed_unknown falls by 31-32 while load_sp rises by 1 and sp_accesses_escaping_slot rises by 1. The bar decision only lets computed_<region> bars rise; any other raise is yours. Total computed loads still fall in every program.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Accept the +1",
+          "changes": "load_sp and sp_accesses_escaping_slot bars go up by 1 in those four programs, as one access moved out of computed_unknown; the unit lands with them"
+        },
+        {
+          "key": "b",
+          "label": "Keep the bars",
+          "changes": "the unit stays open until the frame rule is changed so no load becomes sp-relative (likely means dropping the frame rule, losing about 20 of the 75 jumps it fixed)"
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/modern-gcc-jumps"],
+      "asked": {
+        "at": "2026-11-07T10:09:34Z",
+        "by": "30aebd47",
+        "host": "quack",
+        "unit": "native/modern-gcc-jumps"
+      },
+      "answer": null
     }
   ]
 }
