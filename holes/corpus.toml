@@ -44,3 +44,7 @@ cover = "holes/coverage/minish-cap.toml"
 name = "emerald-rogue"
 rom = "Emerald Rogue.gba"
 cover = "holes/coverage/emerald-rogue.toml"
+
+[[game]]
+name = "imperium"
+rom = "Emerald Imperium.gba"
