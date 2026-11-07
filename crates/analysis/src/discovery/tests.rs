@@ -137,6 +137,28 @@ fn pointer_scan_rejects_an_unbalanced_body() {
 }
 
 #[test]
+fn pointer_scan_rejects_a_shift_by_32() {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        .h(0x100, 0x4770)
+        // movs r0, #1; lsrs r0, r5, #32 (a ROM pointer's upper half); bx lr.
+        .h(0x300, 0x2001)
+        .h(0x302, 0x0828)
+        .h(0x304, 0x4770)
+        // The same with a real shift: lsrs r0, r5, #1.
+        .h(0x340, 0x2001)
+        .h(0x342, 0x0868)
+        .h(0x344, 0x4770)
+        // Both beside a function found already.
+        .w(0x400, thumb(0x300))
+        .w(0x404, thumb(0x100))
+        .w(0x408, thumb(0x340));
+    let d = a.run();
+    assert!(!d.funcs.contains_key(&thumb(0x300)));
+    assert_eq!(d.funcs.get(&thumb(0x340)), Some(&Evidence::Scanned));
+}
+
+#[test]
 fn far_jump_bl_is_not_a_call() {
     let mut a = Asm::new();
     a.entry(0x100)
