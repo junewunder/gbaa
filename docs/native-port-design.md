@@ -1047,8 +1047,11 @@ with the native check and no replaced-library list.
   spends `cpu_set_cycles`; `Div`. Idle edges get `hw::idle`, spin edges
   `hw::spin` (`ExitInfo::idle`, the play build's own marks). IRQs go
   through the word at `0x0300_7FFC`, as the BIOS's stub calls it.
-- **Holes.** `holes/<game>.toml` gives stand-ins (`[[standin]]`, Rust
-  for one function, with why) and unresolved jumps' targets (`[[jump]]`).
+- **Holes.** `holes/<game>.toml` (a commercial game's in the private
+  `mods/<game>/holes.toml`) gives stand-ins (`[[standin]]`, Rust
+  for one function, with why), unresolved jumps' targets (`[[jump]]`)
+  and code the game copies to RAM that only a run shows (`[[copy]]`, as
+  `just holes` prints it; lifted at its RAM keys, native/lift-ram-copies).
   Every agb program needs four stand-ins: portable_atomic's
   `interrupt::disable` and `restore` (`mrs`/`msr cpsr_c`, a critical
   section: `Game::cpsr`), agb's `InterruptHandler` (the IRQ wrapper's

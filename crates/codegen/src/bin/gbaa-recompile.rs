@@ -114,6 +114,7 @@ fn crates_dir() -> PathBuf {
 }
 
 fn main() {
+    analysis::cap::require_cap("gbaa-recompile");
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.as_slice() {
         [flag, out, rest @ ..] if flag == "--sst" => {
