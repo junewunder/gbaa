@@ -158,7 +158,14 @@ pub fn batch(
             }
         }
         if log {
-            eprintln!("scan: take 0x{w:08x}, score {score}, body {}", body.len());
+            let c = cands[&w];
+            eprintln!(
+                "scan: take 0x{w:08x}, score {score}, body {}, refs {} pooled {} table {}",
+                body.len(),
+                c.refs,
+                c.pooled,
+                c.table
+            );
         }
         out.push(w);
     }
