@@ -855,15 +855,10 @@
       "uses": ["heavy"],
       "minMinutes": 180,
       "record": {
-        "state": "claimed",
+        "state": "blocked",
+        "on": "q/land-bios-calls-unit-emerald",
         "by": "49894b1d",
-        "session": "49894b1d-d961-439e-81a2-73fc835779ae",
-        "host": "quack",
-        "pid": 751355,
-        "start": "2170805",
-        "at": "2026-11-07T08:33:52Z",
-        "branch": "unit/native/lift-bios-calls",
-        "beats": true
+        "at": "2026-11-07T08:52:55Z"
       },
       "notes": [
         {
@@ -978,6 +973,11 @@
       "check": "independent",
       "uses": ["heavy"],
       "notes": [
+        {
+          "at": "2026-11-07T08:52:42Z",
+          "by": "49894b1d",
+          "text": "Cause: discovery's pointer scan takes 0x08320560 (a data table: andeq, blmi, undefined) as an ARM entry; its blmi makes f_08d3467c; gaps from those grow 146->12k a round over all 64 rounds. Other round-0 gaps are real code. Idea: drop scanned entries reaching an undefined insn."
+        },
         {
           "at": "2026-11-07T07:08:08Z",
           "by": "4485059c",

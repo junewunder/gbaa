@@ -1383,6 +1383,32 @@
         "unit": "native/indirect-call-args"
       },
       "answer": null
+    },
+    {
+      "id": "q/land-bios-calls-unit-emerald",
+      "title": "Land the BIOS-calls unit with Emerald's runaway compared later?",
+      "context": "{unit:native/lift-bios-calls} is done but for one clause: gbaa-holes' BIOS count should match the lifter's on all eight games. Seven match. On Emerald the 5 real BIOS call sites match, but the lifter also counts 33,163 'BIOS calls' inside two functions that are really data: discovery's pointer scan takes a data table at 0x08320560 for ARM code, and the lifter's gap decoding walks on through data from there. Fixing that is its own filed unit, {unit:native/gap-decoding-runaway}, which already checks Emerald's BIOS counts once fixed.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Narrow it: seven games plus Emerald's real sites",
+          "changes": "the BIOS-calls unit lands now; the Emerald count comparison is done by {unit:native/gap-decoding-runaway}, whose done-when already asks for it"
+        },
+        {
+          "key": "b",
+          "label": "Keep all eight",
+          "changes": "the BIOS-calls unit waits until the runaway fix lands (or a session folds that fix into it), then compares Emerald again"
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/lift-bios-calls"],
+      "asked": {
+        "at": "2026-11-07T08:52:55Z",
+        "by": "49894b1d",
+        "host": "quack",
+        "unit": "native/lift-bios-calls"
+      },
+      "answer": null
     }
   ]
 }
