@@ -208,9 +208,30 @@ typed pointers, below; until then they are soft holes, counted.
   run time, so a wrong value set stops the program naming it. Computed
   RAM byte accesses fell to 0-1; the new soft hole `pointer_unexplained`
   counts the rest (crt0's `.bss` clear).
-- **Heap pointers as `Ref<T>`** (`native/ref-heap`). What agb's allocator
-  returns, typed by the accesses through it; the allocator can be replaced
-  after this. Same kind of bar.
+- **Heap pointers as `Ref<T>`** (`native/ref-heap`). Done
+  (`crates/codegen/src/native/heap.rs`): a whole-program run of pointer
+  tokens (a RAM address, `off` bytes into an object, unknown) through
+  registers, RAM cells at constant addresses, objects' word fields and
+  frame words that don't escape, across calls and the callee sets of
+  `native/fnref-flow`. An object is made where a pointer is added to an
+  amount the run doesn't know: agb's allocator, inlined where
+  `Box::new` is, adds the alignment's padding to its cursor. An access
+  the value sets don't bound whose address is, but for nulls and the
+  unknown, one object type (union-find over the sites that meet) at one
+  aligned offset prints as `g.at(Ref::<H_…>::new(p)).f_8` (or `at_mut`),
+  through the pointer the address adds a constant to, so that addition
+  isn't printed; `H_<site>` is a `#[repr(C, packed)]` struct of the fields seen
+  through it, one line each. The prelude's `Ref<T>` keeps the guest
+  address; `Game::at` checks it is RAM, the object fits its region (and,
+  packed, one piece of `Ram`) and is aligned, else stops naming it. On
+  the agb programs it finds `InterruptInner` (next, root, closure,
+  vtable: the IRQ list `__RUST_INTERRUPT_HANDLER` walks every V-blank)
+  and two others; 11-16 accesses a program typed (`ref_accesses`, no
+  bar), `computed_unknown` down as much (the owner's bar: what moves),
+  `ref_unexplained` the soft hole (34-93: several offsets, a byte loop
+  through an object, `Any`). The allocator stays lifted: its free list
+  holds pointers the run can't follow (a freed pointer comes from an
+  escaping slot), so replacing it waits on frame escapes narrowing.
 - **Lifted programs at the packed layout draw the same**
   (`native/lift-packed-layout`). Done: `gbaa-lift --layout packed`
   (`Globals::ram_struct`, `native/prelude_packed.rs`) orders `Ram`'s
@@ -357,5 +378,13 @@ What the done pieces left open, for the units that come next.
   parameters from callers the analysis can't see and the heap's
   pointers, `native/ref-heap`'s. Escaping stack slots and ROM statics
   aren't pointed into yet. Pointers are guest addresses in both layouts
-  until `native/ref-heap`, and the packed prelude's `ld16`/`st32` go a
-  byte at a time (a word may span two globals).
+  (a `Ref<T>` too: its value is the guest's address), and the packed
+  prelude's `ld16`/`st32` go a byte at a time (a word may span two
+  globals).
+- **Heap types** (piece 5, `native/ref-heap`). The run isn't sound for
+  memory: a store through an address it can't place isn't followed, and
+  the unknown part of an address doesn't stop it being typed. The type
+  changes no bytes read (the field is at the access's address), so what
+  `Game::at` checks at run time is all a wrong type can break: a non-RAM
+  pointer in the unknown part stops the program. A word load through a
+  `Ref` still prints its rotation (by `addr & 3`, always 0 there).
