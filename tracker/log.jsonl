@@ -2393,3 +2393,4 @@
 {"at":"2026-11-07T12:09:11Z","actor":"loop","tag":"842df15d","host":"quack","cmd":"done","id":"native/kirby-undiscovered","text":"Find the Kirby code discovery misses, for native builds: done, checked by subagent-af2d26c0"}
 {"at":"2026-11-07T12:12:34Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/kirby-undiscovered","text":"Find the Kirby code discovery misses, for native builds: on main"}
 {"at":"2026-11-07T12:12:38Z","actor":"loop","tag":"8898da77","host":"quack","cmd":"claim","id":"native/fnref-flow-emerald","text":"Function-address flow settles on Emerald: claimed"}
+{"at":"2026-11-07T12:41:19Z","actor":"loop","tag":"8898da77","host":"quack","cmd":"edit","id":"native/fnref-flow-emerald","text":"Function-address flow settles on Emerald: edited (min-minutes)"}
