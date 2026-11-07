@@ -1276,7 +1276,13 @@
         "by": "62031260",
         "host": "quack"
       },
-      "answer": null
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "8f498bd1",
+        "at": "2026-11-07T04:27:11Z",
+        "decision": "d/accept-indirect-call-bar-today"
+      }
     },
     {
       "id": "q/covered-controls-page-your-deck",

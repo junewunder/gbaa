@@ -460,12 +460,6 @@
       "needs": ["native/fnref-flow"],
       "uses": ["heavy"],
       "minMinutes": 120,
-      "record": {
-        "state": "blocked",
-        "on": "q/accept-indirect-call-bar-today",
-        "by": "62031260",
-        "at": "2026-11-06T12:31:40Z"
-      },
       "notes": [
         {
           "at": "2026-11-06T12:31:50Z",

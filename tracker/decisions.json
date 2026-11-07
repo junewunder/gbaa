@@ -981,6 +981,15 @@
       "at": "2026-11-07T04:20:44Z",
       "question": "q/heap-pointer-unit-s-bar",
       "via": "8f498bd1"
+    },
+    {
+      "id": "d/accept-indirect-call-bar-today",
+      "title": "Accept the indirect-call bar at today's values, not 0: Accept the measured bars",
+      "why": "call_fn_four_complete stays barred at 56-60; the unit is checked and lands now; the heap-site unit is noted to lower the bar when its sets narrow",
+      "by": "owner",
+      "at": "2026-11-07T04:27:11Z",
+      "question": "q/accept-indirect-call-bar-today",
+      "via": "8f498bd1"
     }
   ]
 }
