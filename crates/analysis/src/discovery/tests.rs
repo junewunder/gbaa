@@ -137,6 +137,48 @@ fn pointer_scan_rejects_an_unbalanced_body() {
 }
 
 #[test]
+fn scanned_code_reaching_an_undefined_insn_is_data() {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        // main: push {lr}; bl trap; pop {pc}. A confirmed function may
+        // hold a trap.
+        .h(0x100, 0xb500)
+        .bl(0x102, 0x180)
+        .h(0x106, 0xbd00)
+        // trap: udf
+        .h(0x180, 0xde00)
+        // A scanned candidate that jumps into ARM-decoded data: movs r1,
+        // #0; movs r2, #0; ldr r0, =data; bx r0.
+        .h(0x300, 0x2100)
+        .h(0x302, 0x2200)
+        .h(0x304, 0x4801)
+        .h(0x306, 0x4700)
+        .w(0x30c, B + 0x340)
+        // data: mov r0, #1; then an undefined word that isn't a trap.
+        .w(0x340, 0xe3a0_0001)
+        .w(0x344, 0xe600_0010)
+        // A scanned candidate calling a function that never returns into
+        // data: push {lr}; bl stop; pop {pc}. stop: movs r0, #1; udf.
+        .h(0x380, 0xb500)
+        .bl(0x382, 0x3c0)
+        .h(0x386, 0xbd00)
+        .h(0x3c0, 0x2001)
+        .h(0x3c2, 0xde00)
+        .w(0x400, thumb(0x100))
+        .w(0x404, thumb(0x300))
+        .w(0x408, thumb(0x380));
+    let d = a.run();
+    assert_eq!(d.funcs.get(&thumb(0x180)), Some(&Evidence::Confirmed));
+    assert!(!d.funcs.contains_key(&thumb(0x300)));
+    assert!(!d.funcs.contains_key(&(B + 0x340)) && !d.entries.contains_key(&(B + 0x340)));
+    assert!(!d.code.contains_key(&(B + 0x344)));
+    assert_eq!(d.undefined, 2);
+    // What a function calls is a function, whatever follows its call.
+    assert_eq!(d.funcs.get(&thumb(0x380)), Some(&Evidence::Scanned));
+    assert_eq!(d.funcs.get(&thumb(0x3c0)), Some(&Evidence::Scanned));
+}
+
+#[test]
 fn far_jump_bl_is_not_a_call() {
     let mut a = Asm::new();
     a.entry(0x100)
