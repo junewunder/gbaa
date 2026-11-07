@@ -607,7 +607,9 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   (`codegen::saves::summarize_sets`; unit `native/indirect-call-args`),
   printing the counts without the sets too. About 5 s on an agb program;
   on Emerald the flow didn't finish in 35 minutes (killed at 6 GB, then
-  stopped at 8 GB under a 16 GB cap), `native/fnref-flow-scale`'s work.
+  stopped at 8 GB under a 16 GB cap), and after `native/fnref-flow-scale`
+  it was killed at a 14 GB cap in 5 minutes (2026-11-07):
+  `native/fnref-flow-emerald`'s work.
   fn-diff's summary line gives the same count and
   how many picks call a proven function. Emerald, `just fn-diff ROM 2000
   --exact` (2026-10-27): every entered function picked, 270, 591 states,
