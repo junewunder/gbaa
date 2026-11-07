@@ -972,6 +972,51 @@
       "by": "f93b1ecd",
       "at": "2026-11-06T11:56:43Z",
       "scope": ["native/*"]
+    },
+    {
+      "id": "d/heap-pointer-unit-s-bar",
+      "title": "What should the heap-pointer unit's bar measure: Bar on what moves",
+      "why": "june delegated the call to the agent: a measurement target, not a correctness question",
+      "by": "owner",
+      "at": "2026-11-07T04:20:44Z",
+      "question": "q/heap-pointer-unit-s-bar",
+      "via": "8f498bd1"
+    },
+    {
+      "id": "d/accept-indirect-call-bar-today",
+      "title": "Accept the indirect-call bar at today's values, not 0: Accept the measured bars",
+      "why": "call_fn_four_complete stays barred at 56-60; the unit is checked and lands now; the heap-site unit is noted to lower the bar when its sets narrow",
+      "by": "owner",
+      "at": "2026-11-07T04:27:11Z",
+      "question": "q/accept-indirect-call-bar-today",
+      "via": "8f498bd1"
+    },
+    {
+      "id": "d/covered-controls-page-your-deck",
+      "title": "What covered the Controls page on your Deck in the Kirby room: Land the Main-page fix and close this",
+      "why": "june: a custom keyboard on an un-updated Steam Deck, not gbaa. Closed for good; don't refile.",
+      "by": "owner",
+      "at": "2026-11-07T04:29:43Z",
+      "question": "q/covered-controls-page-your-deck",
+      "via": "8f498bd1"
+    },
+    {
+      "id": "d/may-lane-ssh-onto-your-2",
+      "title": "May a lane SSH onto your Deck to time four Kirbys' netplay now: Not yet",
+      "why": "june: stop asking; she'll ask a Claude herself when she wants the Deck used",
+      "by": "owner",
+      "at": "2026-11-07T04:31:03Z",
+      "question": "q/may-lane-ssh-onto-your-2",
+      "via": "8f498bd1"
+    },
+    {
+      "id": "d/never-ask-to-ssh-onto-the-deck-june-asks-when",
+      "title": "Never ask to SSH onto the Deck; june asks when she wants it",
+      "why": "june 2026-11-06: stop asking to ssh into the Steam Deck. She will ask a Claude herself when she wants it. No lane or agent files a question about Deck SSH; Deck-only work is parked.",
+      "by": "owner",
+      "at": "2026-11-07T04:31:07Z",
+      "scope": ["*"],
+      "replaces": "d/headless-lane-ssh-onto-your"
     }
   ]
 }

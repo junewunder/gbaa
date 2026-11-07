@@ -4,7 +4,8 @@
 //! [--copies N]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
 //! stage A). Writes the whole program as a Rust crate to OUT (`Cargo.toml`,
-//! `src/`, a copy of the ROM for its data, `report.txt`), with the
+//! `src/`, a copy of the ROM for its data, `report.txt`, and its metrics
+//! as TOML, `metrics.toml`), with the
 //! stand-ins and jump targets the holes file gives. Fails, naming each, if
 //! a hard hole is left: the crate then has a `compile_error!` for each and
 //! won't build.
@@ -68,6 +69,7 @@ fn crates_dir() -> PathBuf {
 }
 
 fn main() -> ExitCode {
+    analysis::cap::require_cap("gbaa-lift");
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
@@ -255,7 +257,13 @@ fn main() -> ExitCode {
         })
         .and_then(|_| stale(&src))
         .and_then(|_| write(&out.join("rom.gba"), &bytes))
-        .and_then(|_| write(&out.join("report.txt"), lifted.report.as_bytes()));
+        .and_then(|_| write(&out.join("report.txt"), lifted.report.as_bytes()))
+        .and_then(|_| {
+            write(
+                &out.join("metrics.toml"),
+                lifted.metrics.to_toml().as_bytes(),
+            )
+        });
     if let Err(e) = r {
         eprintln!("gbaa-lift: {}: {e}", out.display());
         return ExitCode::FAILURE;
