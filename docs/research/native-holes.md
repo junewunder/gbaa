@@ -32,8 +32,10 @@ tracker evidence has the before and after (`just show <id> --full`).
   coverage runs (`native/hole-coverage`, "Coverage runs" below) tell real
   tables from dead code. The reached ones are Minish Cap's ROM-to-IWRAM
   veneers, jumps into RAM code, and a few real switch tables Recovery
-  misses (Rogue's, moonbeam's). moonbeam's largest class is 12 functions
-  whose summary returns with sp changed.
+  misses (Rogue's, moonbeam's). The summaries' holes were mostly the
+  analysis being too cautious ("Functions that change r4-r11 or sp",
+  below; `native/callee-save-breaks`): 31 then, 14 now, all real
+  convention breaks in hand-written code or data taken for code.
 - **The flash library's stack routines are hardware-library calls, not
   holes** (`native/flash-stack-standin`; below). Five games ran code from
   RAM that changes; only Emerald Rogue's mixer, stamping templates into
@@ -89,7 +91,7 @@ table (about 10 minutes).
 | CPU state | `msr`, `mrs`, `ldm`/`stm` with the S bit, `s` writes to pc, stack switches (sp moved 4 KiB or more by one instruction other than sp-relative arithmetic) | outside the IRQ wrapper (code run at the top level of an IRQ, and the rest of its function; for a copy made by the game's loop, at the RAM address) and boot (code run only in the first frame, and its function) |
 | BIOS call outside the library | `swi` numbers `runtime::bios` doesn't implement (HardReset, above 0x2A) | each site |
 | Call to a non-entry | the run: a call through a register (`mov lr, pc` or `adr lr, …` then `bx rN`, or a `bl` to a `bx rN` stub other than `bx pc`) to an address not a discovered function start or RAM entry | each target |
-| Summary hole | `returns with r4-r11 or sp changed` (sp moved by a run-time amount, as a variable-length array does) | each function |
+| Summary hole | `analysis::holes::SUMMARY_HARD`: a return with sp changed (moved by a run-time amount, as a variable-length array does), a read of r4-r11 a callee changed or that came in as a parameter, a function that changes r4-r11 whose key is a word in the ROM (below) | each function, once |
 
 A place can be counted under two kinds: a routine copied onto the stack
 that isn't recognised would be RAM code that changed and, at each entry,
@@ -278,8 +280,42 @@ The counts are the numbers file's; what they are, beyond the summary's:
   (0x030056f0-0x030068a4 from 0x080b197c), both discovered now.
 - **Emerald Rogue.** The most unresolved jumps, mostly unreached; its
   mixer's template stamping (0x030059f0-0x03005b10,
-  `codegen::variants`); 8 functions with a run-time sp; and the busy
-  loops calling functions.
+  `codegen::variants`); libgcc's soft-float division helper (below); and
+  the busy loops calling functions.
+
+## Functions that change r4-r11 or sp
+
+`codegen::saves` runs each function abstractly; the lift keeps every
+caller's r4-r11 and sp in its own locals and passes only r0-r3
+(`Regs::call` zeroes the rest). On 2026-11-06 the report counted 31
+functions returning with r4-r11 or sp changed. By cause, each read from
+the disassembly (Emerald's by pret's map and source):
+
+| Cause | Kind | Emer. | Kirby M. | Wario | moon | Minish | Rogue |
+|---|---|---|---|---|---|---|---|
+| a pop and return under one condition (`ldmhi sp!, {r4, r5, lr}; bxhi lr`, libgcc's `RETLDM`; `ldmdbeq r11, {r11, sp, lr}` in `IntrSIO32`, librfu_intr.c) | too cautious | 1 | | | 10 | | 4 |
+| an ARM `ldr r4, [sp], #4` (newlib's `strcmp`): the load's rotation by the address's low bits wasn't known to be 0 | too cautious | | | | | | 2 |
+| a loop counter's first value reaching past the loop (modern GCC's `strh` at sp + counter + 18) and killing two save slots | a value it couldn't follow | | | | | | 1 |
+| hand-written scratch use, every caller saving r4-r11 round the call (TMC's `player.s`) | real, unobserved | | | | | 5 | |
+| register parameters and results: TMC's `ClampPlayerVelocity` (r4, r5 from `AddPlayerVelocity`), WarioWare's copy loop 0x080efe51 and ARM mixer 0x080f0ab0 (r4-r7 in), libgcc ieee754-df.S's denormal paths entered by `bleq` (r4, r5 out to `__muldf3`, `__divdf3`) | real | | | 2 | 2 | 1 | 1 |
+| data the pointer scan decoded as Thumb (`sDodrioHeadToColumnMap`, `sAreaMapScreenSizes`) | not code | 1 | 1 | | | | |
+
+The fixes: the run keeps, per guard, a state where it holds and one
+where it doesn't, and a guarded exit leaves with the first; the entry sp
+is word-aligned and a pure op of constants folds; blocks run lowest
+address first. A return with r4-r11 changed is no longer hard: the
+summary records what it changes (`Summary::changes`), its callers take
+those registers as changed, and the hard holes are the reads that see
+it: a caller reading one before writing it, a function that changes
+them reading one as it came (other than to save it), and one whose key
+is a word in the ROM (called through a pointer, callers unknown). A
+function that keeps them and reads one as it came is agbcc building a
+word byte by byte in an unset register (`ands r4, r0; orrs r4, r1`,
+`ply_xwave`): soft. After: 14, the six real ones, the six callers of
+moonbeam's and Rogue's that read the r4 the helper returns, and the two
+data. Each real one is the lift's stand-in to write (`[[standin]]` in
+the game's holes file covers a function's holes): libgcc's `__muldf3`
+and `__divdf3` as Rust's `f64` operations, the others as written.
 
 ## What the Stage-A lifter should know
 
