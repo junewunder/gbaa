@@ -898,6 +898,13 @@
       "title": "Kirby - Nightmare in Dream Land's three CPU-state holes",
       "detail": "Kirby - Nightmare in Dream Land is the only corpus game with CPU-state hard holes in gbaa-holes (3, measured 2026-11-06; every other game 0), so something in it is specific. Find what each is (just holes on it lists them), say in docs/research/native-holes.md what code does it and whether other games could do the same, and fix it in analysis or the lifter if small; if not small, write up what fixing it needs and file that as its own unit. Done when: the three are explained in the doc; either Nightmare's CPU-state count is 0 in just holes-all --against a run on main (no game's hard count higher) or the follow-up unit is filed; just check passes.",
       "check": "independent"
+    },
+    {
+      "id": "native/gap-decoding-runaway",
+      "title": "Lifter's gap decoding walks through Emerald's data",
+      "detail": "Found by {unit:native/lift-bios-calls}: gbaa-lift on Pokemon Emerald (no holes file, skip_fn_flow only) lifts 14,089 functions, 685,414 hard holes, descending from 53,095 gap targets. Two 'functions', f_08320560 and f_08d3467c, hold 33,163 BIOS-call holes (Thumb 0xDFxx halfwords in data decoded as swi) and most of the rest; gbaa-holes, over discovery's code, counts 5 BIOS sites, the same 5 the lifter has in real code (0x082e707c-0x082e70b8). Find why gap decoding enters those regions (a scanned function in data? a gap target from a pool word?) and stop it. Done when: Emerald's lift has no hard hole in 0x08320560 or 0x08d3467c's runs and its BIOS holes equal gbaa-holes' count plus its scanned-only BIOS count; lift-check unchanged.",
+      "check": "independent",
+      "uses": ["heavy"]
     }
   ]
 }

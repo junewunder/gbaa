@@ -2329,3 +2329,4 @@
 {"at":"2026-11-07T05:14:06Z","actor":"session","tag":"c7110ccd","host":"quack","cmd":"overseer","text":"overseer 423e03 on quack attached, replacing 9b3221 on quack"}
 {"at":"2026-11-07T05:14:42Z","actor":"loop","tag":"4485059c","host":"quack","cmd":"claim","id":"native/lift-bios-calls","text":"Lifted code makes the BIOS calls games use: claimed (picking up after f9620931)"}
 {"at":"2026-11-07T06:10:03Z","actor":"loop","tag":"50d72494","host":"quack","cmd":"claim","id":"native/fnref-flow-scale","text":"Function-address flow settles on a whole game: claimed (picking up after 1e655045)"}
+{"at":"2026-11-07T06:20:10Z","actor":"loop","tag":"4485059c","host":"quack","cmd":"add-unit","id":"native/gap-decoding-runaway","text":"new unit: Lifter's gap decoding walks through Emerald's data"}
