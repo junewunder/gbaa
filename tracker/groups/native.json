@@ -1111,6 +1111,7 @@
       "title": "Function flow: callees' values kept apart by call site",
       "detail": "docs/native-stage-b.md piece 3. Measured by {unit:native/fnref-heap-sites} (its branch, commit 0868fc7e, splits the pile into frame and allocation-site objects): fn_words_not_proven doesn't move on any agb program, even with the pile dropped altogether. The run joins every caller's r0-r3 and sp at a callee's entry, and every call_fn set is all ~21 address-taken functions, so a shared function's pointer parameters (memcpy, fmt, qrcodegen's encoders) reach dozens of frames, anywhere in each, and one read through them gives every function address stored in any. Give the run call-site context (a callee's entry and results per call site, or per caller, for callees small or shared enough; k=1 to start), on top of the object split. Done when: fn_words_not_proven falls on every agb program (bars lowered to the measured values), a unit test where two callers pass one callee two objects and the callee's read of the first gives only what the first caller stored, just lift-check and just check pass.",
       "check": "independent",
+      "needs": ["native/fnref-unknown-addrs"],
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
