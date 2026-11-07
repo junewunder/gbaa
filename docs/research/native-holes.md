@@ -249,17 +249,16 @@ into a function's middle or the wrong instruction set. Bytes, Nightmare
 | a task run as a coroutine (`push {…, lr}`, then an endless loop that yields each frame), reached only from a table of (kind, task) words: the scan wanted a return; five tasks and the function only one calls | 1,622 / 0 | 0 / 0 |
 | a BIOS copy whose length reads on into ROM code a `bl` calls (Mirror: 0x1c0 bytes from 0x08158f14 over its heap allocator), and the code after the calls | 0 / 312 | 0 / 0 |
 | m4a's `SoundMainRAM` copy ends in the `bx r3` that `SoundMain` calls in ROM (a stub), so `SoundMain`'s tail after the call (every m4a game: Emerald and Minish Cap too) | 38 / 38 | 38 / 38 |
-| the return from a call into the coroutine switch (it comes back on the task's stack) | 44 / 0 | 44 / 0 |
-| crt0's copy (0x08000108, 0x140 bytes) reads on into that switch, which a veneer's ARM `b` enters | 36 / 0 | 36 / 0 |
+| the return from the scheduler's call to resume ("Kirby: Nightmare's task switcher", below: it comes back through a yield) | 44 / 0 | 44 / 0 |
+| crt0's copy (0x08000108, 0x140 bytes) reads on into the switcher, which a veneer's ARM `b` enters | 36 / 0 | 36 / 0 |
 | agbcc's `_call_via_rN` stubs: a `bl` to one calls rN, and the stub isn't kept as code | 8 / 12 | 8 / 12 |
 
 The fixes: the scan takes a body that opens with `push {…, lr}` and
-whose every path loops back into it; a BIOS copy's source ends at a
-`bl` target inside it called from outside (`discovery::copy_cuts`,
-discovery run again). The stub and the `b` are left out: the code they
-lead to adds a real hard hole each (`SoundMain`'s jump to its IWRAM copy,
-a constant RAM target the lift needs in the holes file; the switch's
-`bx r1` to its task), so finding it is its own unit.
+whose every path loops back into it; a BIOS copy's source ends at a `bl`
+target inside it called from outside (`discovery::copy_cuts`). Not at
+the stub or the `b`: the code there adds a real hard hole each
+(`SoundMain`'s constant jump into its IWRAM copy, which the lift needs
+in the holes file; resume's `bx r1`): `native/copy-tail-discovery`.
 
 ## Each game's worst holes
 
