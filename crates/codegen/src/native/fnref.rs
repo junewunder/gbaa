@@ -33,13 +33,25 @@
 //!
 //! Memory: each function's own frame words, exactly where the frame's run
 //! placed the access ([`super::frame`]) and the slot doesn't escape (a
-//! saved register's slot reads as unknown, the register as it came; one
-//! at or above the entry sp, a stack argument, reads the pile too); RAM words at
-//! constant addresses, one cell each; and one pile for every other store
-//! (the heap, escaping frame slots, anything computed). A load reads its
-//! cell and the pile, or, at an address the run can't place, the pile and
-//! every cell, or, where the value-set analysis bounds it to ROM, the
-//! words there. Interprocedural: a call passes r0-r3 to its callee's entry
+//! saved register's slot reads as unknown, the register as it came);
+//! RAM words at constant addresses, one cell each; **objects**
+//! (`native/fnref-heap-sites`): each function's frame (its sp at entry
+//! is a pointer to it, [`Tok::Obj`]) and what each call of a named
+//! allocator returns (`allocators` in the holes file), each with a cell
+//! per offset and one for anywhere in it; and one pile for every store
+//! the run can't place. An escaping slot is its frame's cell; a stack
+//! argument is the caller's, through the sp it called with. A pointer
+//! into an object stays one through `+`/`-` (an unknown index: anywhere
+//! in it), `|`, `^`, a mask down to an alignment and its pieces (bytes,
+//! halves); any other op makes a number of it (the closed world, as for
+//! ROM pointers), so an address the run doesn't know is no object's,
+//! unless a pointer into one was dropped ([`Val::lost_obj`]: then every
+//! object). A load through a pointer into an object reads its cell there,
+//! its anywhere cell and what lost pointers stored; one at a constant
+//! address its cell and the pile; one the run can't place, the pile and
+//! every RAM cell (every object's too, if lost), or, where the value-set
+//! analysis bounds it to ROM, the words there. An object doesn't overlap
+//! a constant address the code reads (the stack, the heap). Interprocedural: a call passes r0-r3 to its callee's entry
 //! and takes back what its returns hold; a tail call or a fall passes
 //! every register. An indirect call passes them to each function whose
 //! whole address its target may hold. A call whose target holds none is
@@ -81,10 +93,13 @@
 //! proven (barred) and proven. `GBAA_FNREF_TRACE=1` prints each round of
 //! the run and each use not allowed, with its operands.
 //!
-//! Precision: the one pile is the limit (`docs/native-stage-b.md`, "Known
-//! gaps", the pile). agb keeps closures and trait objects on its heap, so a
-//! load through any heap pointer may give every function address stored
-//! there, and one such load used as a number marks them all.
+//! Precision (`docs/native-stage-b.md`, "Known gaps"): splitting the
+//! pile into objects proved no more words on the agb programs (measured
+//! with no pile at all, too): the run joins every caller's values at a
+//! function's entry, and each `call_fn` set is every address-taken
+//! function, so a shared function's pointer parameters reach dozens of
+//! frames, anywhere in each, and a read through them gives every function
+//! address stored in any.
 
 use super::frame::{Edge, Frame};
 use analysis::ir::{BinOp, Exit, Inst, Op, ValueId};
@@ -135,6 +150,53 @@ enum Tok {
     Rom(u32),
     /// Somewhere in ROM from here on.
     RomFrom(u32),
+    /// A pointer into an object ([`ObjId`], by its index in
+    /// [`G::objs`]) at this offset, or anywhere in it ([`OBJ_ANY`]).
+    Obj(u32, i32),
+}
+
+/// What an [`Tok::Obj`] points into.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum ObjId {
+    /// A function's frame (by its entry): offsets from its entry sp.
+    Frame(u32),
+    /// What an allocator's call at this instruction returns.
+    Heap(u32),
+}
+
+/// An offset somewhere in the object.
+const OBJ_ANY: i32 = i32::MAX;
+/// Offsets kept exact: further from 0 is anywhere in the object.
+const OBJ_WIN: i32 = 0x7ff0;
+/// More exact offsets than this into one object: anywhere in it.
+const OBJ_OFFS: usize = 8;
+/// Where the objects' cells are kept, among RAM's: each object a 64 KB
+/// window above here (no RAM address, nor any the program makes).
+const OBJ_BASE: u32 = 0x1000_0000;
+/// The cell of stores through a lost pointer into an object
+/// ([`Val::lost_obj`]): every object's load reads it, as does every load
+/// from RAM the run can't place ([`G::read_cells`]).
+const LOST_CELL: u32 = OBJ_BASE - 0x10;
+/// The most objects: past it, a new one's pointers are lost.
+const OBJ_MAX: u32 = 0x6000;
+
+/// The cell an object's offset is kept at.
+fn obj_addr(i: u32, off: i32) -> u32 {
+    let at = if off == OBJ_ANY {
+        0xfff8
+    } else {
+        (off + 0x8000) as u32
+    };
+    OBJ_BASE + (i << 16) + at
+}
+
+/// An exact offset, or anywhere if out of the window.
+fn obj_off(off: i64) -> i32 {
+    if off.abs() < OBJ_WIN as i64 {
+        off as i32
+    } else {
+        OBJ_ANY
+    }
 }
 
 /// A token set, shared until changed (values are copied at every
@@ -189,6 +251,10 @@ struct Val {
     /// a ROM pointer it gave up on. A call through it has an incomplete
     /// callee set, whatever whole addresses it holds besides.
     lost_rom: bool,
+    /// Maybe a pointer into an object the run dropped (arithmetic it
+    /// doesn't follow, a pointer stored in pieces): used as an address,
+    /// it may reach every object. Set only with [`Val::unk`].
+    lost_obj: bool,
 }
 
 /// More numbers than this in a value: it's unknown.
@@ -210,6 +276,19 @@ impl Val {
         }
     }
 
+    /// Unknown, maybe a pointer into any object.
+    fn lost() -> Val {
+        Val {
+            unk: true,
+            lost_obj: true,
+            ..Val::default()
+        }
+    }
+
+    fn has_obj(&self) -> bool {
+        self.lost_obj || self.toks.range(Tok::Obj(0, i32::MIN)..).next().is_some()
+    }
+
     fn of(t: Tok) -> Val {
         Val {
             toks: [t].into_iter().collect(),
@@ -227,10 +306,17 @@ impl Val {
         self.mem |= o.mem;
         self.unk |= o.unk;
         self.lost_rom |= o.lost_rom;
+        self.lost_obj |= o.lost_obj;
     }
 
     fn join(&mut self, o: &Val) -> bool {
-        let before = (self.toks.len(), self.mem, self.unk, self.lost_rom);
+        let before = (
+            self.toks.len(),
+            self.mem,
+            self.unk,
+            self.lost_rom,
+            self.lost_obj,
+        );
         if self.toks.is_empty() {
             self.toks = o.toks.clone();
         } else if !std::rc::Rc::ptr_eq(&self.toks.0, &o.toks.0) && !o.toks.is_subset(&self.toks) {
@@ -239,8 +325,16 @@ impl Val {
         self.mem |= o.mem;
         self.unk |= o.unk;
         self.lost_rom |= o.lost_rom;
+        self.lost_obj |= o.lost_obj;
         self.cap();
-        before != (self.toks.len(), self.mem, self.unk, self.lost_rom)
+        before
+            != (
+                self.toks.len(),
+                self.mem,
+                self.unk,
+                self.lost_rom,
+                self.lost_obj,
+            )
     }
 
     /// Widen: too many numbers are unknown, too many ROM pointers are
@@ -250,14 +344,32 @@ impl Val {
         // One pass to see what needs widening; the set (shared) is only
         // changed when something does.
         let (mut nums, mut roms, mut from) = (0, 0, None);
+        // Objects with an offset anywhere and more exact ones, or too many.
+        let mut wide: Vec<u32> = Vec::new();
+        let mut obj: Option<(u32, usize, bool)> = None;
         // Functions' tokens sort first: only those after them count.
         for t in self.toks.range(Tok::Num(0)..) {
             match *t {
                 Tok::Num(_) => nums += 1,
                 Tok::Rom(_) => roms += 1,
                 Tok::RomFrom(a) if from.is_none() => from = Some(a),
+                Tok::Obj(i, off) => {
+                    let (n, any) = match obj {
+                        Some((j, n, any)) if j == i => (n + 1, any || off == OBJ_ANY),
+                        _ => (1, off == OBJ_ANY),
+                    };
+                    // Sorted by offset, anywhere last.
+                    if ((any && n > 1) || n > OBJ_OFFS) && wide.last() != Some(&i) {
+                        wide.push(i);
+                    }
+                    obj = Some((i, n, any));
+                }
                 _ => {}
             }
+        }
+        for i in wide {
+            self.drop_range(Tok::Obj(i, i32::MIN)..=Tok::Obj(i, OBJ_ANY));
+            self.toks.insert(Tok::Obj(i, OBJ_ANY));
         }
         if nums > NUMS {
             self.unk = true;
@@ -428,7 +540,8 @@ pub struct Flow {
     /// Each indirect call's (by its instruction's address) and each jump
     /// by value's that may take a function's address.
     pub sites: BTreeMap<u32, Site>,
-    /// The origins stored where the run can't place them (the pile).
+    /// The origins stored where the run can't place them (the pile: not a
+    /// constant address, nor a pointer into an object).
     pub piled: BTreeSet<Origin>,
     /// The run didn't settle: nothing is proven.
     pub unsettled: bool,
@@ -453,10 +566,20 @@ struct G {
     /// capped (made again when the first changes).
     pile_raw: [Val; 5],
     pile_reads: [Option<Val>; 5],
+    /// RAM words at constant addresses, and the objects' cells (above
+    /// [`OBJ_BASE`]).
     cells: BTreeMap<u32, Mem>,
-    /// [`G::read_cells`]'s, by width, the same way.
+    /// [`G::read_cells`]'s, by width, the same way (RAM's cells only).
     cell_raw: [Val; 5],
     cell_reads: [Option<Val>; 5],
+    /// [`G::read_objs`]'s, by width, the same way (the objects' cells).
+    obj_raw: [Val; 5],
+    obj_reads: [Option<Val>; 5],
+    /// The objects, by index in [`Tok::Obj`], and back.
+    objs: Vec<ObjId>,
+    obj_ix: std::collections::HashMap<ObjId, u32, Fx>,
+    /// The allocators: a direct call to one returns a new object.
+    allocs: BTreeSet<u32>,
     spills: BTreeMap<u32, Mem>,
     /// What a load at a width reads of a function's spills, and of the
     /// cells at an address (kept until they change).
@@ -556,6 +679,7 @@ struct ByValue {
 struct Rd {
     pile: u8,
     all_cells: u8,
+    all_objs: u8,
     ranges: Vec<(u32, u32)>,
     /// It made a call whose callee set is incomplete (it reads every
     /// loose function's results).
@@ -565,6 +689,66 @@ struct Rd {
 impl G {
     fn mark(&mut self, c: bool) {
         self.changed |= c;
+    }
+
+    /// A pointer to object `o` at `off`; past [`OBJ_MAX`] objects, lost.
+    fn obj(&mut self, o: ObjId, off: i32) -> Val {
+        let i = match self.obj_ix.get(&o) {
+            Some(&i) => i,
+            None if (self.objs.len() as u32) < OBJ_MAX => {
+                let i = self.objs.len() as u32;
+                self.objs.push(o);
+                self.obj_ix.insert(o, i);
+                i
+            }
+            None => return Val::lost(),
+        };
+        Val::of(Tok::Obj(i, off))
+    }
+
+    /// A pointer the run follows into the frame of the function it is
+    /// in at or above the entry sp: the caller's frame, where it can't
+    /// say which (only a function's own sp-relative accesses there are
+    /// followed, [`Run::sp_in`]).
+    fn obj_up(&self, i: u32, off: i32) -> bool {
+        matches!(self.objs[i as usize], ObjId::Frame(_)) && off != OBJ_ANY && off >= 0
+    }
+
+    /// What a load at width `w` through object `i` at `off` reads: its
+    /// cell there and its cell for anywhere (or, anywhere, all its
+    /// cells), and what stores through lost pointers left. Not the pile:
+    /// by the closed world, an address the run doesn't know is no
+    /// object's unless it is a lost pointer into one.
+    fn read_obj(&mut self, i: u32, off: i32, w: u8, into: &mut Val) {
+        if off == OBJ_ANY {
+            let (lo, hi) = (obj_addr(i, -OBJ_WIN), obj_addr(i, OBJ_ANY) + 3);
+            self.rd.ranges.push((lo, hi));
+            for (_, c) in self.cells.range(lo..=hi) {
+                from_mem(c, w, into);
+            }
+        } else {
+            let c = obj_addr(i, off);
+            self.rd.ranges.push((c.saturating_sub(3), c + w as u32 - 1));
+            self.read_cell(c, w, into);
+            let a = obj_addr(i, OBJ_ANY);
+            self.rd.ranges.push((a, a));
+            self.read_cell(a, w, into);
+        }
+        self.rd.ranges.push((LOST_CELL, LOST_CELL));
+        self.read_cell(LOST_CELL, w, into);
+    }
+
+    /// What a load at width `w` reads of every object's cells (kept as
+    /// [`G::read_cells`] keeps RAM's).
+    fn read_objs(&mut self, w: u8, into: &mut Val) {
+        let i = w as usize;
+        self.rd.all_objs |= 1 << w;
+        if self.obj_reads[i].is_none() {
+            let mut v = self.obj_raw[i].clone();
+            v.cap();
+            self.obj_reads[i] = Some(v);
+        }
+        into.join(self.obj_reads[i].as_ref().unwrap());
     }
 
     fn hole(&mut self, v: &Val, at: u32, why: Why, only: impl Fn(Form) -> bool) {
@@ -650,7 +834,12 @@ impl G {
                     Some(&mut self.pile_raw)
                 }
                 Store::Cell(a) => {
-                    self.cell_reads = Default::default();
+                    let objs = a >= OBJ_BASE;
+                    if objs {
+                        self.obj_reads = Default::default();
+                    } else {
+                        self.cell_reads = Default::default();
+                    }
                     // The kept reads of the addresses this cell overlaps.
                     for c in a.saturating_sub(4)..=a + 3 {
                         for w in [1u8, 2, 4] {
@@ -664,7 +853,11 @@ impl G {
                         }
                     }
                     self.cells_changed.insert(a);
-                    Some(&mut self.cell_raw)
+                    Some(if objs {
+                        &mut self.obj_raw
+                    } else {
+                        &mut self.cell_raw
+                    })
                 }
                 Store::Spill(f) => {
                     self.dirty_entry.insert(f);
@@ -806,7 +999,9 @@ fn to_mem(v: &Val, w: u8) -> (Vec<(Tok, u8)>, Vec<Form>) {
                     None => bad.push(form),
                 }
             }
-            Tok::Rom(_) | Tok::RomFrom(_) if w == 4 => out.push((t, 4)),
+            Tok::Rom(_) | Tok::RomFrom(_) | Tok::Obj(..) if w == 4 => out.push((t, 4)),
+            // A piece of a pointer into an object: of the object still.
+            Tok::Obj(i, _) => out.push((Tok::Obj(i, OBJ_ANY), w)),
             _ => out.push((OTHER, w)),
         }
     }
@@ -818,6 +1013,9 @@ fn to_mem(v: &Val, w: u8) -> (Vec<(Tok, u8)>, Vec<Form>) {
     if v.lost_rom {
         out.push((LOST, w));
     }
+    if v.lost_obj {
+        out.push((LOST_OBJ, w));
+    }
     (out, bad)
 }
 
@@ -826,6 +1024,9 @@ const OTHER: Tok = Tok::Num(0);
 /// In memory: a value with [`Val::lost_rom`] stored (no other number is
 /// kept in memory: [`to_mem`] makes each [`OTHER`]).
 const LOST: Tok = Tok::Num(1);
+/// In memory: a value with [`Val::lost_obj`] stored, or a piece of a
+/// pointer into an object.
+const LOST_OBJ: Tok = Tok::Num(2);
 
 /// What a load at width `w` reads of memory `m`.
 fn from_mem(m: &Mem, w: u8, into: &mut Val) {
@@ -850,11 +1051,22 @@ fn from_mem_one(t: Tok, sw: u8, w: u8, into: &mut Val) {
             };
             Tok::Fn { key, origin, form }
         }
-        Tok::Rom(_) | Tok::RomFrom(_) if w == 4 => t,
+        Tok::Rom(_) | Tok::RomFrom(_) | Tok::Obj(..) if w == 4 && sw == 4 => t,
+        // A piece of a pointer into an object, or pieces of one read as a
+        // word: of the object still.
+        Tok::Obj(i, _) => {
+            into.unk = true;
+            Tok::Obj(i, OBJ_ANY)
+        }
         _ => {
             // A mark, not a value: nothing else came of it.
             if t == LOST {
                 into.lost_rom = true;
+                return;
+            }
+            if t == LOST_OBJ {
+                into.lost_obj = true;
+                into.unk = true;
                 return;
             }
             into.mem = true;
@@ -879,6 +1091,19 @@ struct Run<'a, 'g> {
     rets_read: BTreeSet<u32>,
     /// The instruction being run.
     at: u32,
+    /// Its own frame's object (`None`: past [`OBJ_MAX`], the pile).
+    me: Option<u32>,
+    /// The sp its callers called it with (unknown for one the run can't
+    /// see called).
+    sp_in: Val,
+}
+
+/// What a call passes: r0-r3 and sp (where its stack arguments are).
+fn call_args(s: &St) -> Vec<Val> {
+    let mut v = s.regs[..4].to_vec();
+    v.resize(16, Val::default());
+    v[13] = s.regs[13].clone();
+    v
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1006,8 +1231,30 @@ impl Run<'_, '_> {
                 .collect()
         };
         for (x, y) in pairs {
+            // A pointer into an object stays one, anywhere in it, through
+            // anything but a difference with another (a number).
+            let r = bin_tok(self.img, op, x, y);
+            // A pointer into an object stays one, anywhere in it, joined
+            // or tagged (`|`, `^`, `+` with another), masked down to an
+            // alignment, or cut to a byte or half (a piece copied); any
+            // other op makes a number of it (the closed world: an
+            // alignment test, a difference, a hash).
+            let keeps = match (op, x, y) {
+                (BinOp::Or | BinOp::Xor | BinOp::Add, _, _) => true,
+                (BinOp::And, _, Some(Tok::Num(m))) | (BinOp::And, Some(Tok::Num(m)), _) => {
+                    piece_mask(m)
+                }
+                _ => false,
+            };
+            if keeps && !matches!(r, R::T(Tok::Obj(..))) {
+                for t in [x, y] {
+                    if let Some(Tok::Obj(i, _)) = t {
+                        out.toks.insert(Tok::Obj(i, OBJ_ANY));
+                    }
+                }
+            }
             {
-                match bin_tok(self.img, op, x, y) {
+                match r {
                     R::T(Tok::Num(c)) => {
                         let t = self.classify(c, site);
                         out.toks.insert(t);
@@ -1148,6 +1395,8 @@ impl Run<'_, '_> {
                 }
                 Op::Bit(x) => Val::of(Tok::Num(x as u32)),
                 Op::GetReg(r) => s.regs[r.index()].clone(),
+                // What a user-bank register holds isn't followed.
+                Op::GetUserReg(_) => Val::lost(),
                 Op::Bin(op, a, b) => self.bin(op, &val(a), &val(b), site, at),
                 Op::Adc { a, b, c } => {
                     let (a, b) = (val(a), val(b));
@@ -1205,6 +1454,8 @@ impl Run<'_, '_> {
                                 out.toks.insert(num_tok(self.img, !c));
                             }
                             Tok::RomFrom(_) => out.unk = true,
+                            // `!` of a pointer is a number (the closed world).
+                            Tok::Obj(..) => out.unk = true,
                         }
                     }
                     out.cap();
@@ -1256,10 +1507,19 @@ impl Run<'_, '_> {
                             }
                             // A ROM pointer through a word load's
                             // rotation stays one, as a function does.
-                            Tok::Rom(_) | Tok::RomFrom(_)
+                            Tok::Rom(_) | Tok::RomFrom(_) | Tok::Obj(..)
                                 if n == Some(0) || (kind == ShiftType::Ror && n.is_none()) =>
                             {
                                 out.toks.insert(t);
+                            }
+                            // Shifted by bytes, a pointer into an object is a
+                            // piece of one (of the object still); by
+                            // anything else, a number.
+                            Tok::Obj(i, _) => {
+                                out.unk = true;
+                                if matches!(n, Some(8 | 16 | 24)) {
+                                    out.toks.insert(Tok::Obj(i, OBJ_ANY));
+                                }
                             }
                             Tok::Num(c) | Tok::Rom(c) => match n {
                                 Some(n) => {
@@ -1331,6 +1591,9 @@ impl Run<'_, '_> {
                     let a = val(addr);
                     self.g.hole(&a, at, Why::Address, |_| true);
                     let mut out = self.load(&s, key, i, &a, w, b.hulls.get(&i).copied());
+                    if self.trace && out.lost_obj && !a.lost_obj {
+                        eprintln!("  obj lost by load at {at:#010x} w{w} through {a:?}");
+                    }
                     if guarded {
                         out.unk = true;
                     }
@@ -1367,6 +1630,14 @@ impl Run<'_, '_> {
             let mut v = v;
             if !v.lost_rom && lost_from(&inst.op).iter().any(|x| vals[x.index()].lost_rom) {
                 v.lost_rom = true;
+            }
+            // What a word op makes of a lost pointer is lost.
+            if !v.lost_obj
+                && !matches!(inst.op, Op::Load { .. })
+                && lost_from(&inst.op).iter().any(|x| vals[x.index()].lost_obj)
+            {
+                v.unk = true;
+                v.lost_obj = true;
             }
             if self.trace && self.g.flow.holes.len() != holes_before {
                 let ops: Vec<String> = inst_operands(&inst.op)
@@ -1408,45 +1679,92 @@ impl Run<'_, '_> {
         if let Some(fr) = self.f.frame {
             match fr.places.get(&(key, i)) {
                 Some(super::frame::Place::Exact(o, _)) => {
+                    let o = *o;
                     // A saved register's slot: the register as it came, unknown.
                     if fr
                         .slots
                         .iter()
-                        .any(|sl| sl.saved && sl.lo <= *o && *o < sl.hi)
+                        .any(|sl| sl.saved && sl.lo <= o && o < sl.hi)
                     {
                         return Val::unk();
                     }
                     let esc = fr.escapes_at(key, i).unwrap_or(true);
-                    match s.frame.get(o) {
+                    match s.frame.get(&o) {
                         Some((v, sw)) if *sw == w => {
-                            if !esc && *o < 0 {
+                            if !esc && o < 0 {
                                 return v.clone();
                             }
                             out.join(v);
                         }
                         _ => self.g.read_spill(self.f.entry, w, &mut out),
                     }
-                    // At or above the entry sp: the caller's frame (a stack
-                    // argument), which its stores reached through the pile.
-                    if esc || *o >= 0 {
-                        self.g.read_pile(w, &mut out);
-                        out.mem = true;
+                    if o >= 0 {
+                        // At or above the entry sp: the caller's frame (a
+                        // stack argument), through the sp it called with.
+                        let at = offset(&self.sp_in, Some(o as i64));
+                        let v = self.load_at(&at, w, None);
+                        out.join(&v);
+                    } else if esc {
+                        // An escaping slot: its cell, and what stores
+                        // through pointers to it left.
+                        self.own_read(o, w, &mut out);
                     }
                     return out;
                 }
-                Some(super::frame::Place::Through(_)) => {
+                Some(super::frame::Place::Through(os)) => {
                     self.g.read_spill(self.f.entry, w, &mut out);
-                    self.g.read_pile(w, &mut out);
+                    self.own_read(OBJ_ANY, w, &mut out);
+                    if os.iter().any(|o| *o >= 0) {
+                        let at = offset(&self.sp_in, None);
+                        let v = self.load_at(&at, w, None);
+                        out.join(&v);
+                    }
                     return out;
                 }
                 _ => {}
             }
         }
+        let v = self.load_at(a, w, hull);
+        out.join(&v);
+        out
+    }
+
+    /// What a load at width `w` reads of the function's own frame at
+    /// `off` (its cells, or the pile if it has no object).
+    fn own_read(&mut self, off: i32, w: u8, into: &mut Val) {
+        match self.me {
+            Some(me) => self.g.read_obj(me, off, w, into),
+            None => {
+                self.g.read_pile(w, into);
+                into.mem = true;
+            }
+        }
+    }
+
+    /// Where a store to the function's own frame at `off` goes.
+    fn own_cell(&self, off: i32) -> Store {
+        match self.me {
+            Some(me) => Store::Cell(obj_addr(me, off)),
+            None => Store::Pile,
+        }
+    }
+
+    /// What a load at width `w` through address `a` reads (the access
+    /// not in the function's own frame, or not placed there).
+    fn load_at(&mut self, a: &Val, w: u8, hull: Option<(u32, u32)>) -> Val {
+        let mut out = Val::default();
         let mut anywhere = a.unk || a.mem;
+        // Every object too: a pointer into one may be among the unknown.
+        let mut objs = a.lost_obj || a.toks.is_empty();
         for &t in &a.toks {
             match t {
                 Tok::Rom(r) => self.rom_read(r, w, &mut out),
                 Tok::RomFrom(r) => self.rom_from(r, w, &mut out),
+                Tok::Obj(o, off) if self.g.obj_up(o, off) => {
+                    anywhere = true;
+                    objs = true;
+                }
+                Tok::Obj(o, off) => self.g.read_obj(o, off, w, &mut out),
                 Tok::Num(c) | Tok::Fn { key: c, .. } => {
                     if is_ram(c) {
                         let c = ram_canon(c);
@@ -1511,6 +1829,9 @@ impl Run<'_, '_> {
                         }
                         None => self.g.read_cells(w, &mut out),
                     }
+                    if objs {
+                        self.g.read_objs(w, &mut out);
+                    }
                     // An I/O read, too.
                     out.unk = true;
                 }
@@ -1546,10 +1867,11 @@ impl Run<'_, '_> {
                         let mut v = Val::unk();
                         v.toks.extend(
                             toks.iter()
-                                .filter(|(t, _)| *t != OTHER && *t != LOST)
+                                .filter(|(t, _)| *t != OTHER && *t != LOST && *t != LOST_OBJ)
                                 .map(|(t, _)| *t),
                         );
                         v.lost_rom = x.lost_rom;
+                        v.lost_obj = x.lost_obj;
                         v
                     };
                     let new = match (guarded, old) {
@@ -1562,14 +1884,24 @@ impl Run<'_, '_> {
                     };
                     s.frame.extend(new.map(|v| (o, v)));
                     self.g.store(Store::Spill(self.f.entry), toks);
-                    if fr.escapes_at(key, i).unwrap_or(true) {
-                        self.g.store(Store::Pile, toks);
+                    if o >= 0 {
+                        // The caller's frame, through the sp it called with.
+                        let at = offset(&self.sp_in, Some(o as i64));
+                        self.store_at(&at, toks);
+                    } else if fr.escapes_at(key, i).unwrap_or(true) {
+                        let c = self.own_cell(o);
+                        self.g.store(c, toks);
                     }
                     return;
                 }
-                Some(super::frame::Place::Through(_)) => {
+                Some(super::frame::Place::Through(os)) => {
                     self.g.store(Store::Spill(self.f.entry), toks);
-                    self.g.store(Store::Pile, toks);
+                    let c = self.own_cell(OBJ_ANY);
+                    self.g.store(c, toks);
+                    if os.iter().any(|o| *o >= 0) {
+                        let at = offset(&self.sp_in, None);
+                        self.store_at(&at, toks);
+                    }
                     return;
                 }
                 _ => {}
@@ -1578,23 +1910,43 @@ impl Run<'_, '_> {
         if toks.is_empty() {
             return;
         }
+        for &t in &a.toks {
+            // I/O, the display memories, SRAM: not followed.
+            if let Tok::Num(c) | Tok::Fn { key: c, .. } = t
+                && !is_ram(c)
+                && self.img.word(c).is_none()
+            {
+                self.g.hole(x, self.at, Why::Outside, |_| true)
+            }
+        }
+        self.store_at(a, toks);
+    }
+
+    /// A store of `toks` through address `a` (not to a place in the
+    /// function's own frame).
+    fn store_at(&mut self, a: &Val, toks: &[(Tok, u8)]) {
         let mut anywhere = a.unk || a.mem || a.toks.is_empty();
         for &t in &a.toks {
             match t {
                 Tok::Num(c) | Tok::Fn { key: c, .. } if is_ram(c) => {
                     self.g.store(Store::Cell(ram_canon(c)), toks)
                 }
-                // I/O, the display memories, SRAM: not followed.
-                Tok::Num(c) | Tok::Fn { key: c, .. } if self.img.word(c).is_none() => {
-                    self.g.hole(x, self.at, Why::Outside, |_| true)
-                }
-                Tok::Num(_) | Tok::Rom(_) | Tok::RomFrom(_) | Tok::Fn { .. } => {}
-            }
-            if matches!(t, Tok::RomFrom(_)) {
-                anywhere = true;
+                Tok::Obj(o, off) if self.g.obj_up(o, off) => anywhere = true,
+                Tok::Obj(o, off) => self.g.store(Store::Cell(obj_addr(o, off)), toks),
+                Tok::RomFrom(_) => anywhere = true,
+                Tok::Num(_) | Tok::Rom(_) | Tok::Fn { .. } => {}
             }
         }
+        // A lost pointer into an object: every object.
+        if a.lost_obj {
+            self.g.store(Store::Cell(LOST_CELL), toks);
+        }
+        // Somewhere the run can't place: the pile, which every load from
+        // RAM reads.
         if anywhere {
+            if self.trace && toks.iter().any(|(t, _)| matches!(t, Tok::Fn { .. })) {
+                eprintln!("  piled at {:#010x} through {a:?}", self.at);
+            }
             self.g.store(Store::Pile, toks);
         }
     }
@@ -1608,11 +1960,16 @@ impl Run<'_, '_> {
                 }
             }
             Edge::Call { target, ret } => {
-                let args = &s.regs[..4];
+                let args = &call_args(s);
                 let rets = match target {
                     Some(k) => {
                         self.g.give(*k, args);
-                        self.ret_of(*k)
+                        let mut r = self.ret_of(*k);
+                        // An allocator's call: a new object.
+                        if self.g.allocs.contains(k) {
+                            r[0] = self.g.obj(ObjId::Heap(out.at), 0);
+                        }
+                        r
                     }
                     None => {
                         let t = match out.via {
@@ -1639,7 +1996,10 @@ impl Run<'_, '_> {
             }
             Edge::Tail(Some(k)) => {
                 self.g.give(*k, &s.regs);
-                let r = self.ret_of(*k);
+                let mut r = self.ret_of(*k);
+                if self.g.allocs.contains(k) {
+                    r[0] = self.g.obj(ObjId::Heap(out.at), 0);
+                }
                 self.g.give_ret(me, &r);
             }
             Edge::Tail(None) | Edge::TailOr(_) => {
@@ -1670,6 +2030,16 @@ impl Run<'_, '_> {
                     }
                     let (toks, _) = to_mem(&got, 4);
                     self.g.store(Store::Pile, &toks);
+                    let dst = offset(&s.regs[1], None);
+                    self.store_at(&dst, &toks);
+                }
+                // The BIOS may write numbers through a pointer into an
+                // object.
+                for r in &s.regs[..4] {
+                    if r.has_obj() {
+                        let a = offset(r, None);
+                        self.store_at(&a, &[(OTHER, 1), (OTHER, 2), (OTHER, 4)]);
+                    }
                 }
                 let mut after = s.clone();
                 for r in &mut after.regs[..4] {
@@ -1704,6 +2074,7 @@ impl Run<'_, '_> {
                             mem: a.mem && !o.mem,
                             unk: a.unk && !o.unk,
                             lost_rom: a.lost_rom && !o.lost_rom,
+                            lost_obj: a.lost_obj && !o.lost_obj,
                             ..Val::default()
                         };
                         if !std::rc::Rc::ptr_eq(&a.toks.0, &o.toks.0) {
@@ -1714,7 +2085,7 @@ impl Run<'_, '_> {
                     .collect();
                 if delta
                     .iter()
-                    .any(|d| !d.toks.is_empty() || d.mem || d.unk || d.lost_rom)
+                    .any(|d| !d.toks.is_empty() || d.mem || d.unk || d.lost_rom || d.lost_obj)
                 {
                     for &k in &callees {
                         self.g.give(k, &delta);
@@ -1828,6 +2199,33 @@ fn inst_operands(op: &Op) -> Vec<ValueId> {
     }
 }
 
+/// `v` plus `d` (`None`: an offset not known), as an address: a pointer
+/// into an object moved in it, a number by it, anything else unknown.
+fn offset(v: &Val, d: Option<i64>) -> Val {
+    let mut out = Val {
+        unk: v.unk,
+        mem: v.mem,
+        lost_obj: v.lost_obj,
+        ..Val::default()
+    };
+    for &t in &v.toks {
+        match (t, d) {
+            (Tok::Obj(i, k), Some(d)) => {
+                out.toks.insert(Tok::Obj(i, obj_move(k, d)));
+            }
+            (Tok::Obj(i, _), None) => {
+                out.toks.insert(Tok::Obj(i, OBJ_ANY));
+            }
+            (Tok::Num(c), Some(d)) => {
+                out.toks.insert(Tok::Num(c.wrapping_add(d as u32)));
+            }
+            _ => out.unk = true,
+        }
+    }
+    out.cap();
+    out
+}
+
 fn shift(kind: ShiftType, x: u32, n: u32) -> u32 {
     match kind {
         ShiftType::Lsl => x.checked_shl(n).unwrap_or(0),
@@ -1838,6 +2236,21 @@ fn shift(kind: ShiftType, x: u32, n: u32) -> u32 {
 }
 
 /// A number: a ROM pointer if it is in ROM.
+/// A mask that keeps a pointer one (down to an alignment) or a piece of
+/// one (a byte or half of it).
+fn piece_mask(m: u32) -> bool {
+    m >= 0xffff_0000 || [0xff, 0xff00, 0xff_0000, 0xff00_0000, 0xffff].contains(&m)
+}
+
+/// An object's offset `k` moved by `d`.
+fn obj_move(k: i32, d: i64) -> i32 {
+    if k == OBJ_ANY {
+        OBJ_ANY
+    } else {
+        obj_off(k as i64 + d)
+    }
+}
+
 fn num(img: &dyn Image, c: u32) -> Tok {
     if img.word(c).is_some() && !img.is_fn(c) {
         Tok::Rom(c)
@@ -1929,6 +2342,22 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> R {
             _ => hole(Why::Arithmetic),
         };
     }
+    // A pointer into an object plus or less a number stays in it (the
+    // offset known or not); two pointers' difference is a number. Any
+    // other op keeps it anywhere in the object ([`Run::bin`]).
+    match (op, x, y) {
+        (BinOp::Add, Some(Obj(i, k)), Some(Num(c)))
+        | (BinOp::Add, Some(Num(c)), Some(Obj(i, k))) => {
+            return R::T(Obj(i, obj_move(k, c as i32 as i64)));
+        }
+        (BinOp::Sub, Some(Obj(i, k)), Some(Num(c))) => {
+            return R::T(Obj(i, obj_move(k, -(c as i32 as i64))));
+        }
+        (BinOp::Add | BinOp::Sub, Some(Obj(i, _)), None) | (BinOp::Add, None, Some(Obj(i, _))) => {
+            return R::T(Obj(i, OBJ_ANY));
+        }
+        _ => {}
+    }
     let (x, y) = match (x, y) {
         (Some(x), Some(y)) => (x, y),
         (Some(Rom(a)), None) | (None, Some(Rom(a))) if op == BinOp::Add => return R::T(RomFrom(a)),
@@ -1960,9 +2389,15 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> R {
 /// Follow every function address in `fns` (all the program's functions,
 /// over every code context) from its sources to its uses. `copies`: the
 /// program start's copies of ROM data to RAM (source, destination, bytes).
-pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow {
+pub fn follow(
+    fns: &[FnIn],
+    img: &dyn Image,
+    copies: &[(u32, u32, u32)],
+    allocs: &BTreeSet<u32>,
+) -> Flow {
     let mut g = G {
-        loose_args: vec![Val::default(); 4],
+        loose_args: vec![Val::default(); 16],
+        allocs: allocs.clone(),
         ..G::default()
     };
     // Functions some exit enters directly; the rest have callers the run
@@ -2013,11 +2448,13 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
     let snap = |g: &mut G| -> Vec<Val> {
         let mut v = Vec::new();
         for w in [1, 2, 4] {
-            let (mut p, mut c) = (Val::default(), Val::default());
+            let (mut p, mut c, mut o) = (Val::default(), Val::default(), Val::default());
             g.read_pile(w, &mut p);
             g.read_cells(w, &mut c);
+            g.read_objs(w, &mut o);
             v.push(p);
             v.push(c);
+            v.push(o);
         }
         v
     };
@@ -2045,6 +2482,11 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
             }
         }
         if dirty.is_empty() {
+            if trace {
+                for (i, o) in g.objs.iter().enumerate() {
+                    eprintln!("obj {i}: {o:x?}");
+                }
+            }
             return g.flow;
         }
         if round == 256 {
@@ -2064,9 +2506,23 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
                     r.unk = true;
                 }
             }
+            // The sp it was called with; its own is its frame's start.
+            let mut sp_in = std::mem::take(&mut entry[13]);
+            if sp_in.toks.is_empty() {
+                sp_in.unk = true;
+            }
             for r in &mut entry[4..] {
                 r.unk = true;
             }
+            let me = g.obj(ObjId::Frame(f.entry), 0);
+            let me = me.toks.iter().next().map(|t| match *t {
+                Tok::Obj(i, _) => i,
+                _ => unreachable!(),
+            });
+            entry[13] = match me {
+                Some(i) => Val::of(Tok::Obj(i, 0)),
+                None => Val::lost(),
+            };
             let mut run = Run {
                 f,
                 img,
@@ -2077,6 +2533,8 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
                 trace,
                 rets_read: BTreeSet::new(),
                 at: 0,
+                me,
+                sp_in,
             };
             if f.blocks.contains_key(&f.entry) {
                 run.ins.insert(
@@ -2151,15 +2609,19 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
         // the cells that did.
         let mut pile_w = 0u8;
         let mut cells_w = 0u8;
+        let mut objs_w = 0u8;
         let cells = std::mem::take(&mut g.cells_changed);
         if std::mem::take(&mut g.pile_changed) || !cells.is_empty() {
             let now = snap(&mut g);
             for (i, w) in [1u8, 2, 4].into_iter().enumerate() {
-                if now[2 * i] != snapped[2 * i] {
+                if now[3 * i] != snapped[3 * i] {
                     pile_w |= 1 << w;
                 }
-                if now[2 * i + 1] != snapped[2 * i + 1] {
+                if now[3 * i + 1] != snapped[3 * i + 1] {
                     cells_w |= 1 << w;
+                }
+                if now[3 * i + 2] != snapped[3 * i + 2] {
+                    objs_w |= 1 << w;
                 }
             }
             snapped = now;
@@ -2169,6 +2631,7 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
                 .filter(|(_, r)| {
                     r.pile & pile_w != 0
                         || r.all_cells & cells_w != 0
+                        || r.all_objs & objs_w != 0
                         || r.ranges
                             .iter()
                             .any(|&(lo, hi)| cells.range(lo..=hi).next().is_some())
@@ -2219,7 +2682,7 @@ impl Flow {
         let complete = calls.iter().filter(|(_, s)| s.complete).count();
         writeln!(
             s,
-            "function addresses (native/fnref.rs){}: {} function words in ROM ({pools} in literal pools, {} other data), {proven} proven, {} not: {unread} never read{} ({piled} of the {} not proven stored where the run can't place them, the heap's pile); {} code constants, {} proven; {} call_fn calls with a callee set, {complete} of them complete; {} other jumps by value to a function",
+            "function addresses (native/fnref.rs){}: {} function words in ROM ({pools} in literal pools, {} other data), {proven} proven, {} not: {unread} never read{} ({piled} of the {} not proven stored where the run can't place them, the pile); {} code constants, {} proven; {} call_fn calls with a callee set, {complete} of them complete; {} other jumps by value to a function",
             if self.unsettled { " (didn't settle: nothing proven)" } else { "" },
             words.len(),
             words.len() - pools,
