@@ -797,7 +797,7 @@
       "title": "Function flow: the heap by allocation site and field",
       "detail": "docs/native-stage-b.md, piece 3, fnref-flow as built: one pile holds every heap store, so a heap load used as a number marks every function word stored there (32-36 of each agb program's ~55 words). Split the pile by allocation site (agb's allocator's callers) and field offset in crates/codegen/src/native/fnref.rs. Done when: fn_words_not_proven bar lowered to the measured value on every program (it must fall), unit tests for two heap objects kept apart, just lift-check and just check pass.",
       "check": "independent",
-      "needs": ["native/fnref-flow"],
+      "needs": ["native/fnref-flow", "native/fnref-context"],
       "uses": ["heavy"],
       "minMinutes": 180,
       "record": {
