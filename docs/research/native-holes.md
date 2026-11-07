@@ -296,7 +296,7 @@ the disassembly (Emerald's by pret's map and source):
 | a pop and return under one condition (`ldmhi sp!, {r4, r5, lr}; bxhi lr`, libgcc's `RETLDM`; `ldmdbeq r11, {r11, sp, lr}` in `IntrSIO32`, librfu_intr.c) | too cautious | 1 | | | 10 | | 4 |
 | an ARM `ldr r4, [sp], #4` (newlib's `strcmp`): the load's rotation by the address's low bits wasn't known to be 0 | too cautious | | | | | | 2 |
 | a loop counter's first value reaching past the loop (modern GCC's `strh` at sp + counter + 18) and killing two save slots | a value it couldn't follow | | | | | | 1 |
-| hand-written scratch use, every caller saving r4-r11 round the call (TMC's `player.s`) | real, unobserved | | | | | 5 | |
+| hand-written scratch use, every caller saving r4-r11 round the call (TMC's `player.s`; its r8/r11 parameters to `sub_080086D8` are the soft kind below) | real, unobserved | | | | | 5 | |
 | register parameters and results: TMC's `ClampPlayerVelocity` (r4, r5 from `AddPlayerVelocity`), WarioWare's copy loop 0x080efe51 and ARM mixer 0x080f0ab0 (r4-r7 in), libgcc ieee754-df.S's denormal paths entered by `bleq` (r4, r5 out to `__muldf3`, `__divdf3`) | real | | | 2 | 2 | 1 | 1 |
 | data the pointer scan decoded as Thumb (`sDodrioHeadToColumnMap`, `sAreaMapScreenSizes`) | not code | 1 | 1 | | | | |
 
@@ -309,9 +309,12 @@ those registers as changed, and the hard holes are the reads that see
 it: a caller reading one before writing it, a function that changes
 them reading one as it came (other than to save it), and one whose key
 is a word in the ROM (called through a pointer, callers unknown). A
-function that keeps them and reads one as it came is agbcc building a
-word byte by byte in an unset register (`ands r4, r0; orrs r4, r1`,
-`ply_xwave`): soft. After: 14, the six real ones, the six callers of
+function that keeps them and reads one as it came is mostly agbcc
+building a word byte by byte in an unset register (`ands r4, r0; orrs
+r4, r1`, `ply_xwave`), but not always: TMC's `sub_080086D8` keeps them
+and takes r8 and r11 from its `player.s` callers as parameters. That
+kind is soft, as before (main never looked), and not proven safe; the
+run would have to follow which bits survive (`native/entry-read-masking`). After: 14, the six real ones, the six callers of
 moonbeam's and Rogue's that read the r4 the helper returns, and the two
 data. Each real one is the lift's stand-in to write (`[[standin]]` in
 the game's holes file covers a function's holes): libgcc's `__muldf3`

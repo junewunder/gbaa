@@ -400,10 +400,13 @@ impl<'a> Sum<'a> {
     /// one of r4–r11 as it came, other than to copy it to a register or
     /// store it on the stack (saving it). In a function that changes
     /// r4–r11 (one with a convention of its own: hand-written code) it is
-    /// a register parameter the lift doesn't pass, a hard hole; in one
-    /// that keeps them it is what compiled C does with a local it never
-    /// set (agbcc builds a word byte by byte in a register, `ands r4, r0;
-    /// orrs r4, r1`, every bit of the old value masked away), soft.
+    /// a register parameter the lift doesn't pass, a hard hole. In one
+    /// that keeps them it is most often compiled C's local it never set
+    /// (agbcc builds a word byte by byte in a register, `ands r4, r0;
+    /// orrs r4, r1`, every bit of the old value masked away), but it can
+    /// be a register parameter too (TMC's `sub_080086D8` takes r8 and r11
+    /// from its hand-written callers): soft, as main never looked, until
+    /// the run tells the masked bits apart (`native/entry-read-masking`).
     pub(super) fn entry_uses(&mut self, insts: &[Inst], i: usize, at: u32, vals: &[V]) {
         let op = insts[i].op;
         // `vals[i]` is the inst's own value: an op that passes its
