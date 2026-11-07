@@ -48,9 +48,10 @@ tracker evidence has the before and after (`just show <id> --full`).
   Emerald's unresolved-jump count is Recovery's.
 - **Kirby: Nightmare in Dream Land switches stacks** (three sites,
   0x08000244, 0x08000278 and 0x08000298, in code at
-  0x08000234-0x080002a0: `str sp, [r3]; mov sp, r2` and back, a
-  coroutine); a native program can only express it as a hand-written
-  stand-in (threads or a state machine).
+  0x08000234-0x080002a4: `str sp, [r3]; mov sp, r2` and back, a
+  coroutine: its object tasks, each on its own stack); a native program
+  can only express it as a stand-in that runs each task on a stackful
+  coroutine ("Kirby: Nightmare's task switcher", below).
 - **Busy-wait loops that call functions** (Emerald's `DoMapLoadLoop`
   case, an open question to june): with the press script, found only in
   Emerald Rogue, three, in `LoadMapInStepsLocal`,
@@ -286,6 +287,36 @@ The counts are the numbers file's; what they are, beyond the summary's:
   mixer's template stamping (0x030059f0-0x03005b10,
   `codegen::variants`); libgcc's soft-float division helper (below); and
   the busy loops calling functions.
+
+### Kirby: Nightmare's task switcher
+
+Nightmare's three CPU-state holes (2026-11-07) are its object-task
+switcher, ARM routines at 0x08000234-0x080002a4 reached from Thumb by
+`bx pc` veneers (0x080cfdc4, 0x080cfdcc, 0x080cfdd4). Each object's task
+has its own IWRAM stack and is run once a frame:
+
+- **Resume** (0x08000244, `mov sp, r2`), called only by the scheduler
+  (0x08005364), r1 the task's resume address, r2 its saved sp: saves lr,
+  r4-r11, stores the main sp at 0x03004c94, takes the task's sp, pops its
+  r4-r11, `bx r1`.
+- **Yield** (0x08000278, `ldr sp, [r3]`), r0 the frames to wait: pushes
+  r4-r11, stores the task's sp, lr (its resume address) and r0, takes the
+  main sp back and returns to the scheduler after its resume call.
+- **Exit** (0x08000298, `ldr sp, [r3]`): frees the task (0x08005655),
+  then returns to the scheduler the same way.
+
+A byte scan finds 11,063 Thumb `bl`s to yield and 232 to exit (not
+checked against discovery); a typical task is `loop { update();
+yield(1) }` (0x080093fc). sp is already a parameter and the stacks IWRAM
+bytes, so the guest side is a store and a load; the host stack is the
+hole, since a yield must keep the task's frames while the scheduler goes
+on. The fix is a stand-in running each task's lifted code on a stackful
+coroutine (`corosensei`, as `crates/desktop/src/coro.rs`), keyed by its
+saved sp; a new task starts with the r4-r11 the game put on its stack.
+A state machine would split functions at 11,063 sites. Filed as
+`native/nightmare-task-switch`. No other corpus game switches stacks
+(Amazing Mirror doesn't); a game with a per-task-stack scheduler would
+show the same holes, and the rule finds it anywhere.
 
 ## Functions that change r4-r11 or sp
 
