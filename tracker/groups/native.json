@@ -855,15 +855,10 @@
       "uses": ["heavy"],
       "minMinutes": 180,
       "record": {
-        "state": "claimed",
+        "state": "blocked",
+        "on": "q/land-bios-calls-unit-emerald",
         "by": "49894b1d",
-        "session": "49894b1d-d961-439e-81a2-73fc835779ae",
-        "host": "quack",
-        "pid": 751355,
-        "start": "2170805",
-        "at": "2026-11-07T08:33:52Z",
-        "branch": "unit/native/lift-bios-calls",
-        "beats": true
+        "at": "2026-11-07T08:52:55Z"
       },
       "notes": [
         {
