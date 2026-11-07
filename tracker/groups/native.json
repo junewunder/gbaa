@@ -1033,17 +1033,6 @@
       "check": "independent",
       "needs": ["native/nightmare-lifts", "native/task-coroutines"],
       "uses": ["heavy"],
-      "record": {
-        "state": "claimed",
-        "by": "ccb35e7f",
-        "session": "ccb35e7f-8b44-43f8-b108-dc8c413ec40a",
-        "host": "quack",
-        "pid": 751355,
-        "start": "2170805",
-        "at": "2026-11-07T11:32:04Z",
-        "branch": "unit/native/nightmare-task-switch",
-        "beats": true
-      },
       "notes": [
         {
           "at": "2026-11-07T11:44:49Z",
