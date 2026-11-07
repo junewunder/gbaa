@@ -680,12 +680,6 @@
       "needs": ["native/ref-in-object"],
       "uses": ["heavy"],
       "minMinutes": 120,
-      "record": {
-        "state": "blocked",
-        "on": "q/heap-pointer-unit-s-bar",
-        "by": "76e43878",
-        "at": "2026-11-06T09:27:43Z"
-      },
       "notes": [
         {
           "at": "2026-11-06T09:27:51Z",

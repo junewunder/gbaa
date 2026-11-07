@@ -972,6 +972,15 @@
       "by": "f93b1ecd",
       "at": "2026-11-06T11:56:43Z",
       "scope": ["native/*"]
+    },
+    {
+      "id": "d/heap-pointer-unit-s-bar",
+      "title": "What should the heap-pointer unit's bar measure: Bar on what moves",
+      "why": "june delegated the call to the agent: a measurement target, not a correctness question",
+      "by": "owner",
+      "at": "2026-11-07T04:20:44Z",
+      "question": "q/heap-pointer-unit-s-bar",
+      "via": "8f498bd1"
     }
   ]
 }
