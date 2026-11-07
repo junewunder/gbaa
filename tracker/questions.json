@@ -1435,6 +1435,32 @@
         "unit": "native/modern-gcc-jumps"
       },
       "answer": null
+    },
+    {
+      "id": "q/may-ref-unexplained-rise-for-true-data",
+      "title": "May two lift bars rise because a false function start is gone?",
+      "context": "{unit:native/modern-gcc-data-as-code} stops the pointer scan taking data for Thumb code: a Thumb lsrs/asrs by 32 (a ROM pointer's upper half, which no compiler emits) now fails a candidate. Imperium's 14 data-as-code jumps all go (hard 88 to 74), Rogue 4 of 6, Emerald 4 more; no game's hard count rises; disc-pret recall unchanged, precision up on both builds. But in every agb program it also removes a false start in agb's panic text (affine 0x08024555, which a stand-in already called data). That fake code was the 'next code' that bounded fnref's from-here-on ROM read at 0x08000af2; now the read runs on into agb's vtables, so ref_unexplained rises (affine 35 to 97, ime-release/irq-hold 93 to 164) and fn_words_not_proven by 4 or 5. The old values rested on a false function. The work is committed on the branch, with the bars that fell lowered.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Accept the measured values",
+          "changes": "the two bars are set to what the lift measures now on the seven agb programs; this unit is checked and lands; a new unit bounds that ROM read by the table, not the next code, and lowers them again"
+        },
+        {
+          "key": "b",
+          "label": "Keep the bars",
+          "changes": "this unit waits until a unit first bounds the from-here-on ROM read some other way, bringing both metrics back under today's bars; then it lands"
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/modern-gcc-data-as-code"],
+      "asked": {
+        "at": "2026-11-07T11:07:00Z",
+        "by": "7cd800aa",
+        "host": "quack",
+        "unit": "native/modern-gcc-data-as-code"
+      },
+      "answer": null
     }
   ]
 }

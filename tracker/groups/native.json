@@ -961,15 +961,10 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "blocked",
+        "on": "q/may-ref-unexplained-rise-for-true-data",
         "by": "7cd800aa",
-        "session": "7cd800aa-2290-425e-be85-fb59ed25e84c",
-        "host": "quack",
-        "pid": 751355,
-        "start": "2170805",
-        "at": "2026-11-07T10:19:05Z",
-        "branch": "unit/native/modern-gcc-data-as-code",
-        "beats": true
+        "at": "2026-11-07T11:07:00Z"
       },
       "round": "2026-11-07T10:19:05Z"
     },
