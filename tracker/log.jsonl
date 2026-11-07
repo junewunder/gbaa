@@ -2342,3 +2342,4 @@
 {"at":"2026-11-07T07:53:14Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/fnref-flow-scale","text":"Function-address flow settles on a whole game: on main"}
 {"at":"2026-11-07T07:53:17Z","actor":"loop","tag":"ed43d9d3","host":"quack","cmd":"claim","id":"native/ref-heap","text":"Heap pointers as Ref<T>: claimed"}
 {"at":"2026-11-07T07:53:37Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/indirect-call-args","text":"Indirect calls pass what their callees read: back to ready: the loop's review asked for fixes"}
+{"at":"2026-11-07T07:53:42Z","actor":"loop","tag":"ba79cd96","host":"quack","cmd":"claim","id":"native/indirect-call-args","text":"Indirect calls pass what their callees read: claimed"}
