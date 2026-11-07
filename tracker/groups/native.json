@@ -945,6 +945,11 @@
           "text": "gbaa-holes also lists 6 scanned-only BIOS sites on Emerald (survey: ARM 0x42/0x54/0x64/0x73/0xb7/0x27 near 0x087f2250) that the lifter shows only inside the two runaway functions; after the fix, check they appear on their own."
         }
       ]
+    },
+    {
+      "id": "native/fnref-flow-emerald",
+      "title": "Function-address flow settles on Emerald",
+      "uses": ["heavy"]
     }
   ]
 }
