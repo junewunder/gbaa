@@ -2346,3 +2346,4 @@
 {"at":"2026-11-07T07:59:05Z","actor":"loop","tag":"ba79cd96","host":"quack","cmd":"add-unit","id":"native/fnref-flow-emerald","text":"new unit: Function-address flow settles on Emerald"}
 {"at":"2026-11-07T07:59:20Z","actor":"loop","tag":"ba79cd96","host":"quack","cmd":"edit","id":"native/fnref-flow-emerald","text":"Function-address flow settles on Emerald: edited (check, detail)"}
 {"at":"2026-11-07T07:59:22Z","actor":"loop","tag":"ba79cd96","host":"quack","cmd":"edit","id":"native/indirect-call-args-emerald","text":"Emerald's summaries re-measured with callee sets: edited (add-needs)"}
+{"at":"2026-11-07T08:02:43Z","actor":"loop","tag":"ba79cd96","host":"quack","cmd":"ask","text":"asked the owner: Land indirect-call callee sets before Emerald is measured?","q":"q/land-indirect-call-callee-sets"}
