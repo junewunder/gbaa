@@ -1671,6 +1671,23 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   (2026-10-25: 6201 transfers in 4000 frames). About a minute. `--input0`
   and `--input1` replace a player's presses (`a@900`, `a@1400-3400/60`,
   `+held`), `--dump DIR --dump-at N,N` writes both players' frames.
+- The wireless adapter's check (multiplayer/wireless-adapter-local,
+  `runtime::link::rfu`): `just emerald-wireless [ROM] [ARGS]` runs
+  alice.sav and bob.sav as two Emeralds, each with an emulated wireless
+  adapter in one radio, in the interpreter. Both continue, walk to
+  Oldale's Union Room attendant (down two, left four, up two: the
+  counter's posts block row 3) and go in (about frame 3500). BOB
+  registers his Torchic at the room's attendant wanting WATER; ALICE
+  checks the trading board, offers her Mudkip, BOB accepts, and the
+  trade and its save run (back in the room by about 10200). It prints
+  each player's map, `gMain.callback2`, the adapter's state and ID,
+  position and broadcast as they change, and each adapter's commands;
+  runs it all twice and passes when both were in the Union Room, the
+  first Pokémon swapped, and the two runs printed the same and ended in
+  the same machine states (2026-11-08: 10500 frames, about 2 minutes a
+  run). `--once` skips the second run; `--input0`/`--input1` replace a
+  player's presses; `--dump DIR --dump-at` takes frames as `N,N` or
+  `FROM-TO/EVERY`.
 - Linked play: `gbaa-desktop ROM --link B.sav` runs a second GBA on the
   same ROM, on one cable with the first (`runtime::link`;
   `crates/desktop/src/link.rs`), the two screens side by side in one
