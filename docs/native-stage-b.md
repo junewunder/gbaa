@@ -290,6 +290,51 @@ and the shortcuts above at game scale.
   from boot into gameplay, compared every frame with sound
   (`native/hw-sound`). If the first run shows more than a session's worth
   of differences, the unit files one unit per cause and stops.
+  The route (2026-11-08): Start past the intro, Start at the title, a new
+  game in file A on Normal, A past the opening text, then the first room
+  (run, jump, shoot), 2,700 frames; its four checkpoints are mGBA's
+  hashes, which our exact interpreter draws too. The first run (`route-check --native
+  target/recompiled/release/gbaa-native-metroid
+  target/recompiled/release/gbaa-metroid units/metroid-native.toml`, the
+  lift and `out/metroid` at `--timing native`) stopped at the native
+  program's first panic. The lift had also lost a stand-in: discovery no
+  longer takes 0x087603d9 (classic NES code) for a function, so its
+  stand-in in `mods/metroid/holes.toml` was a hard hole, now removed. Patching
+  each cause by hand in the generated `main.rs` (scratch, not kept) gave
+  the next, until the run finished; each is a unit the check needs:
+  - **DMA by its registers** (`native/hw-dma-registers`). The first
+    store to `0x040000C4` (m4a's `SoundInit` at 0x080028f5: DMA1's and
+    DMA2's control, `0x84400004`) panics in `Hw::write16`. The scratch
+    patch ran immediate, V-blank and FIFO (special) starts through the
+    prelude's loads and stores, priced as the play build does; no
+    H-blank start came on the route.
+  - **The save chip on the lift's bus** (`native/lift-save-memory`).
+    The prelude's loads and stores have no arm for 0x0D-0x0F (a byte
+    store at 0x0E007F80 panics), and `Game::new` leaves `Hw::save` the
+    512 Kbit flash chip, where the play build detects SRAM
+    (`SRAM_V113`).
+  - **The save library's stack routines** (`native/lift-flash-routines`).
+    Metroid's SRAM library copies its read and verify routines onto the
+    stack and calls them (0x03007d39); the bytes are `analysis::flash`'s
+    agbcc signatures, so `runtime::hw::flash` stands in, but the lifter
+    doesn't call it yet (`call_fn` panics: no function's entry).
+  - **The BIOS region** (`native/lift-bios-region`). m4a's `SoundInit`
+    starts an immediate DMA1 with its addresses still 0: it reads the
+    BIOS (the play build gives its open-bus latch, `Bus::bios_latch`)
+    and writes to 0 (ignored); the prelude panics on both.
+  - **The play build strays from its own interpreter**
+    (`native/play-native-metroid-interp`). With the four above patched,
+    the native program runs all 2,700 frames, but the play build's
+    compiled code and its `--interp` run (the check's gate) differ at
+    frame 1: EWRAM 0x02038000 on, 32,651 bytes, the compiled run ahead,
+    its pictures different in 983 frames. The native program agrees with the
+    interpreter there; against it, the first difference is `VCOUNT` in
+    frame 1's record (interpreter 159, native 160), and the pictures differ
+    in 241 frames (181-203 and from 876 on).
+  - **Code copies from the holes file** (`native/check-holes-copies`).
+    The check skips the destinations of `Discovery::copies` only;
+    Metroid's five IWRAM copies are the holes file's `[[copy]]`s, which
+    the native program runs as Rust and never writes.
 
 Emerald comes after typed RAM and pointers, typed from pret's DWARF (the
 gaps Emerald's ten listed: fills, bitfields, retyping from access widths,
