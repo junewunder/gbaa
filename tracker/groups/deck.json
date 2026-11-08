@@ -618,24 +618,17 @@
       "id": "deck/even-presents",
       "title": "Single-player window: hand frames to the display evenly",
       "detail": "The netplay feel sim (2026-11-08, {unit:multiplayer/rollback-feel-sim}) found a frame handed to the window when done meets the 60 Hz display unevenly: each finish that crosses a refresh makes a doubled and a skipped frame. Netplay now presents 8 ms into the turn (gbaa-desktop --present-ms). The single-player loop still hands frames over when done; its costs vary less, so measure first (the window's present gaps, or a sim like netplay::feel's), then do the same if it shows. docs/research/multiplayer.md, Feel.",
-      "record": {
-        "state": "done",
-        "by": "06d5ab83",
-        "at": "2026-11-08T21:17:01Z",
-        "evidence": "Measured first: gbaa-present-sim on --frame-times traces (Kirby, Emerald, Metroid, Minish, quack 2026-11-08): presenting when done adds 2-15 skipped/min over the 16/min beat (Kirby interp 32 doubled). Fix: present::Hold holds each frame to the slowest of the last 60 +0.5 ms (max 8): 17-18 doubled/min, ~1 ms more lag. Real window in a cu session, Kirby, before/after x2: full speed, present p99 19.8/21.2 -> 18.9/20.8 ms. Sim tests in just check; just check passes after merging main. Table in docs/sound-design.md.",
-        "branch": "unit/deck/even-presents",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T21:17:01Z",
-          "by": "06d5ab83",
-          "host": "quack",
-          "pid": 686555,
-          "start": "16007050",
-          "beats": true,
-          "session": "06d5ab83-7e3d-4253-af7c-9c8762b647de",
-          "lane": "quack/4"
-        },
-        "pushed": true
+      "notes": [
+        {
+          "at": "2026-11-08T21:21:22Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/desktop/src/present.rs, test `the_window_holds_a_quick_frame_as_long_as_a_slow_one`: this test depends on wall-clock timing and can fail at random in `just check`. The assertion `second >= 3ms` only hol…"
+        }
+      ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-08T21:21:22Z",
+        "findings": "- crates/desktop/src/present.rs, test `the_window_holds_a_quick_frame_as_long_as_a_slow_one`: this test depends on wall-clock timing and can fail at random in `just check`. The assertion `second >= 3ms` only holds if fewer than about 0.5 ms pass between `h.started()` and the next `h.before_show()`. The hold is (the slowest cost, at least 3 ms, plus the 0.5 ms margin) minus this frame's cost. If the thread gets preempted while other tests run in parallel, or other lanes are building, this frame's cost goes above 0.5 ms and the sleep drops below 3 ms. Fix: make the bound not depend on scheduling. One way is to check that the frame is released at least 3 ms after its start, i.e. that `second` plus this frame's measured cost is at least 3 ms (time `started()` to after `before_show()` with an `Instant` in the test). The other is to check that `second` is at least 3 ms minus a generous slack (for example 2 ms). Either still shows a quick frame is held about as long as a slow one.\n- Two docs disagree on the scale factor for the Deck. crates/desktop/src/bin/present_sim.rs:5 says `2.2 for the Deck`, but docs/tools/commands.md (the new `gbaa-present-sim` entry) says `1.5 for the Deck's`, and docs/sound-design.md's 'slower than 8 ms' example uses Kirby x1.5. Pick the measured figure and use it in all three places. If the two numbers mean different things (interpreted vs recompiled on the Deck), say which is which."
       },
       "round": "2026-11-08T20:53:19Z"
     }
