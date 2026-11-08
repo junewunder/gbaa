@@ -251,7 +251,11 @@ usage: gbaa-desktop ROM [options]
                    window shows your seat, keeps your save as --save
                    keeps it and discards the others'. Your save goes to
                    the other players for the session. Muted; no fast-forward,
-                   rewind, save states or scripts. With --frames, --input,
+                   rewind, save states or scripts. Your console starts
+                   where your game is: the window's, as it was when you
+                   asked for the room (and after the session the game
+                   alone goes on from where the session left it), or
+                   --state's. With --frames, --input, --state,
                    --save, --dump, --hash, --dump-at/--dump-dir (your
                    screen), --scale, --fullscreen, --pad-config,
                    --pad-script
@@ -1151,7 +1155,7 @@ pub fn main(code: Option<&'static Code>, rom: Option<Embedded>) -> ExitCode {
         }
     }
     let result = if opts.headless {
-        game_thread(move || run(&opts, code, None))
+        game_thread(move || run(&opts, code, None, &mut None))
             .join()
             .unwrap_or_else(|_| Err("the run thread panicked".into()))
     } else {
@@ -1429,16 +1433,20 @@ fn asset_overrides(
 /// Run in the window `screen` as `opts` says; then, while the window is
 /// open, each netplay session its menu asks for, and the game alone again
 /// after it. `--frames` bounds each run, and the window closes at a
-/// session's end.
+/// session's end. Each run starts where the one before it ended, as a GBA
+/// does when its cable goes in or out (multiplayer/join-without-restart):
+/// a session's seat from the game alone's state, and the game alone after
+/// it from that seat's.
 fn run_window(
     opts: &Options,
     code: Option<&'static Code>,
     screen: window::Screen,
 ) -> Result<(), String> {
     let mut o = opts.clone();
+    let mut carry = None;
     loop {
         let netplay = o.server.is_some();
-        let r = run(&o, code, Some(screen.clone()));
+        let r = run(&o, code, Some(screen.clone()), &mut carry);
         let ended = r.is_ok();
         if netplay {
             screen.end_session(match &r {
@@ -1453,6 +1461,8 @@ fn run_window(
             if let Err(e) = &r {
                 eprintln!("gbaa-desktop: {e}");
             }
+            // The game alone goes on: the room's title goes.
+            screen.set_title("gbaa");
         } else {
             r?;
         }
@@ -1497,11 +1507,15 @@ pub fn spin_list(rom: &[u8]) -> &'static [u32] {
 }
 
 /// Load the ROM, run it as `opts` says (in the window `screen`, unless
-/// headless), and write what it asks for at the end.
+/// headless), and write what it asks for at the end. `carry`: the
+/// machine's state to start from, if any (taken: the window's last run's,
+/// [`run_window`]); a window's run leaves the state it ended in there,
+/// for the next.
 pub fn run(
     opts: &Options,
     code: Option<&'static Code>,
     screen: Option<window::Screen>,
+    carry: &mut Option<Vec<u8>>,
 ) -> Result<(), String> {
     let timing = opts.timing(code);
     // Native timing's generated code ticks nothing and its interpreter
@@ -1519,7 +1533,7 @@ pub fn run(
         return link::run(opts, timing, screen);
     }
     if opts.server.is_some() {
-        return room::run(opts, code.filter(|_| !opts.interp), timing, screen);
+        return room::run(opts, code.filter(|_| !opts.interp), timing, screen, carry);
     }
     #[cfg(feature = "timing-lab")]
     timing_lab::install()?;
@@ -1588,6 +1602,13 @@ pub fn run(
     if let Some(path) = &opts.state {
         slots::load(&mut m, path)?;
     }
+    // Where the window's last run (a netplay session's seat) ended. Its
+    // cartridge save is the one just flushed to the .sav, read above.
+    let carried = carry.take();
+    if let Some(s) = &carried {
+        m.load_state(s)
+            .map_err(|e| format!("the game's state as the session left it: {e}"))?;
+    }
     // A state from another ROM just loaded, put back if it faults
     // ([`slots::watch`]).
     let mut trial = None;
@@ -1601,6 +1622,7 @@ pub fn run(
     .map(|on| resume::Auto::new(&opts.states, on));
     if auto.as_ref().is_some_and(|_| m.platform.resume_on())
         && opts.state.is_none()
+        && carried.is_none()
         && !opts.no_resume
         && let Some(said) = resume::load(&mut m, &opts.states, opts.save.as_deref(), &mut trial)
     {
@@ -2166,6 +2188,10 @@ pub fn run(
         for (i, r) in c.r.iter().enumerate() {
             print!("r{i}={r:08x}{}", if i % 5 == 4 { "\n" } else { " " });
         }
+    }
+    // The next run in the window (a netplay session) starts from here.
+    if !opts.headless && m.fault.is_none() {
+        *carry = Some(slots::state(&mut m));
     }
     match (m.fault, pace) {
         (Some(fault), _) => Err(format!("stopped after {frames} frames: {fault}")),
