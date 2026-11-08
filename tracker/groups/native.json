@@ -846,6 +846,17 @@
       "check": "independent",
       "uses": ["heavy"],
       "minMinutes": 180,
+      "record": {
+        "state": "claimed",
+        "by": "f6eb8639",
+        "session": "f6eb8639-6ea9-4888-b4a3-e4d4402236f3",
+        "host": "quack",
+        "pid": 3349722,
+        "start": "14823514",
+        "at": "2026-11-08T16:23:34Z",
+        "branch": "unit/native/lift-bios-calls",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-07T13:43:43Z",
