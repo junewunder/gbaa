@@ -980,6 +980,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-08T17:52:01Z",
+          "by": "aed48009",
+          "text": "Bars set to measured after merging main (d88d454), just check green. mods/metroid/holes.toml stand-in 0x087603d9 still there (mods is shared with main): drop it after landing, once main's discovery no longer starts a function there."
+        },
+        {
           "at": "2026-11-07T11:07:32Z",
           "by": "7cd800aa",
           "text": "Rogue's last 2 (0x0826a9c2, 0x0826c5fa) are short data bodies with no shift-32: bx r1 where r1 is a shift result. A rule would need the jump register's last write; left for a later unit."
