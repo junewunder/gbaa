@@ -853,21 +853,8 @@
         "by": "954f0eb1",
         "at": "2026-11-08T21:50:22Z",
         "evidence": "just emerald-wireless (runtime::link::rfu, crates/emerald-save/src/bin/emerald-wireless.rs) after merging main at 51b5017: alice.sav and bob.sav both in Oldale's Union Room (frames 3529, 3479); BOB registers Torchic at the trading board, ALICE offers Mudkip, BOB accepts, trade and save run; first Pokémon swapped (1a2b3c4d <-> 9a8b7c6d); second run identical (states 0ddcc166e736c0ae 566c499d6b8d9e67, 228071 transfers in 10500 frames). just check passes. New unit tests cover the NINTENDO handshake against afska's log, a command and a wait event on the port, host/child packets.",
-        "branch": "unit/multiplayer/wireless-adapter-local",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T21:50:22Z",
-          "by": "954f0eb1",
-          "host": "quack",
-          "pid": 3349722,
-          "start": "14823514",
-          "beats": true,
-          "session": "954f0eb1-8b50-45a5-9f0e-1a0408fed293",
-          "lane": "quack/3"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-08T20:38:54Z"
+        "host": "quack"
+      }
     },
     {
       "id": "multiplayer/single-pak-multiboot",
