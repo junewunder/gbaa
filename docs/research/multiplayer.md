@@ -996,6 +996,40 @@ there: june decided on 2026-11-01 to leave the Deck's runs for later
 Deck for later), so they are their own unit (multiplayer/four-kirbys-deck),
 run whenever june next says yes.
 
+### The other players' sound (multiplayer/other-seat-sound)
+
+From june's Kirby playtest (2026-10-29, through fly): her friend couldn't
+hear june's Kirby. The window plays its own seat's console, as your own
+GBA would, and rollback runs frames again quietly (`Pad::quiet`), so
+either Kirby doesn't sound the other Kirbys, or rollback drops them.
+**It's the game: Kirby & the Amazing Mirror's console plays only its own
+Kirby's sounds**, even with the other Kirby on screen; rollback drops
+none.
+
+Measured 2026-11-08 on quack by `crates/netplay/tests/seat_sound.rs`
+(ignored: it needs the ROM and its save; `cargo test --release -p
+netplay --test seat_sound -- --ignored --nocapture`, about 3 minutes):
+two GBAs on a cable in the interpreter, both on the same save, the menu
+presses of the runs above, then from frame 2400 seat 1 jumps in place (A
+for 10 frames every 60) or stands still, seat 0 idle throughout:
+
+- **Straight** (no rollback, as two GBAs on a real cable): seat 1's own
+  sound differs on 258 of the 1200 frames (each jump, 9 frames, and its
+  landing, 3-4), and seat 0's picture differs (on 1180 frames; 598 pixels
+  20 frames in, the yellow Kirby in the air beside the red one), but seat
+  0's sound is the same on every frame, sample for sample.
+- **Rollback** (60 ± 40 ms one way, 2% loss; 52 rollbacks, 293 frames run
+  again on seat 0's peer): what seat 0's speaker heard is the straight
+  run's seat 0 sound on all 3600 frames, and the end hash is the straight
+  run's.
+
+So there's nothing to make play: the other player's jumps make no sound
+on your GBA either, and the netplay window is as faithful as a cable.
+Hearing the others would be a mod (mixing in another seat's sound, or
+the game's), not a fix. Rollback can still cut the start of a sound in a
+game where your console does sound the other players: a sound started on
+a frame run again plays from where the re-run left it.
+
 ## Playing a friend (the play gate)
 
 What june needs for multiplayer/play-gate, from what's built (2026-10-25):
