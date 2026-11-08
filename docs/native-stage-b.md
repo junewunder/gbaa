@@ -270,45 +270,23 @@ and the shortcuts above at game scale.
   synthetic million-line crate (`gbaa-lift --copies 14`) builds in under
   a minute and 4 GB.
 - **Metroid lifts with no hard holes and builds**
-  (`native/metroid-lifts`). Needs the discovery units, the shortcuts and
-  the module split. The ROM's file name has spaces, so it lifts with
-  `--name metroid`; its holes file is `mods/metroid/holes.toml` (private:
-  its stand-ins port the game's own code). Done (2026-11-08, quack): the
-  stand-ins (the reset, the IRQ dispatcher, the classic NES Metroid the
-  ROM carries), five IWRAM copies (`[[copy]]`, `native/lift-ram-copies`)
-  and the BIOS calls the prelude makes (`native/lift-bios-calls`) leave
-  no hard hole, and `just lift` exits 0: 2,624 functions (8 from IWRAM
-  copies), 27,749 blocks, 8 stand-ins, 105 gap targets decoded. The
-  function-address flow settles in 12 rounds (`native/fnref-flow-scale`),
-  so the lift takes 3 min 6 s wall at a peak of 2.06 GB (805 function
-  words, 6 proven). The crate is 960,068 lines (the prelude's 724 left
-  out) in 266 modules; a clean release build of it alone (dependencies
-  built) takes 32.4 s wall (63 s CPU), rustc peaking at 3.95 GB, as the
-  synthetic crate predicted.
+  (`native/metroid-lifts`). Done (2026-11-08, quack): `--name metroid`
+  (the file name has spaces), `mods/metroid/holes.toml` (private: its
+  stand-ins port the game's code), five IWRAM copies (`[[copy]]`) and the
+  prelude's BIOS calls; 2,624 functions, 960,068 lines in 266 modules,
+  the lift 3 min 6 s at 2.06 GB (the flow settles in 12 rounds), the
+  crate alone builds in 32.4 s, rustc 3.95 GB, as the synthetic crate
+  predicted.
 - **Metroid passes the native check on a route**
   (`native/metroid-native-check`). A route `units/metroid-native.toml`
   from boot into gameplay, compared every frame with sound
   (`native/hw-sound`). If the first run shows more than a session's worth
   of differences, the unit files one unit per cause and stops.
 - **Kirby Nightmare lifts with no hard holes and builds**
-  (`native/nightmare-lifts`). Done (2026-11-08, quack): `just lift ROM
-  out/lift-kirby-nightmare --name kirby-nightmare` with
-  `mods/kirby-nightmare/holes.toml`: `skip_fn_flow` (the flow doesn't
-  settle under 16 GB, `native/whole-lift-memory`), stand-ins for the
-  reset, the IWRAM IRQ dispatcher (0x03001030, which moves an IRQ taken
-  on a task's stack to the main one) and three SDK BIOS stubs the prelude
-  lacks (HuffUnComp ported, SoundDriverVSyncOff a no-op as in the play
-  build, SoftReset a panic; `native/lift-bios-more` puts them in the
-  prelude), and the five cases of a switch Recovery leaves unresolved
-  (0x0800474e). The lifter now follows a `[[jump]]`'s targets as a
-  table's cases and decodes them where discovery has none
-  (`Ctx::with_jumps`). 5,176 functions (2 from IWRAM copies), 49,194
-  blocks, 5 stand-ins, 109 gap targets decoded; the lift takes 48 s wall
-  at a peak of 0.38 GB. The crate is 1,552,382 lines (the prelude's 724
-  left out) in 428 modules; a clean release build of it alone
-  (dependencies built) takes 80 s wall (171 s CPU), rustc peaking at
-  6.78 GB. The task switcher's three stack switches aren't flagged by the
-  lifter; they are `native/nightmare-task-switch`'s.
+  (`native/nightmare-lifts`). Done (2026-11-08, quack;
+  `mods/kirby-nightmare/holes.toml`, `skip_fn_flow`; a `[[jump]]`'s
+  targets are now followed and decoded): 1,552,382 lines in 428 modules,
+  lift 48 s at 0.38 GB, the crate alone builds in 80 s, rustc 6.78 GB.
 
 Emerald comes after typed RAM and pointers, typed from pret's DWARF (the
 gaps Emerald's ten listed: fills, bitfields, retyping from access widths,
