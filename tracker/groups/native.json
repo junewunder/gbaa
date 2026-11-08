@@ -1202,32 +1202,23 @@
       "detail": "After {unit:native/callee-save-breaks}, a function that keeps r4-r11 and reads one as it came is soft ('reads r4-r11 at entry and keeps them'): mostly agbcc building a word byte by byte in an unset register, every old bit masked away, but TMC's sub_080086D8 takes r8/r11 from player.s as parameters (Minish 0x08060ba1 derefs entry r5 too), which the lift gets wrong (Regs::call zeroes r4-r12). Track which bits of an entry value survive (and/orr masks, uses as address or callee argument, hi-reg mov then pass-on); make a surviving read hard. Done when: the soft kind holds only fully-masked reads (doc lists the corpus's), holes-all --against shows the new hard ones named, just check passes.",
       "check": "independent",
       "uses": ["heavy"],
-      "record": {
-        "state": "review",
-        "by": "71b3ef7c",
-        "at": "2026-11-08T23:08:30Z",
-        "evidence": "just check passes after merging main (67e15d7). just lift-metrics: every agb program within its bars, 0 hard holes. just holes-all --against out/holes/erm-base (base = main before the change): summary hard 3 -> 36, total hard 106 -> 139, each named and sorted by cause in docs/research/native-holes.md 'Entry reads of r4-r11, by the bits that survive', with the corpus's fully masked reads listed. Unit tests: masked soft, address/condition/store/callee argument/read return hard, jumped-only soft. Reports: out/holes/erm-new3.",
-        "branch": "unit/native/entry-read-masking",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T23:08:30Z",
-          "by": "71b3ef7c",
-          "host": "quack",
-          "pid": 3349268,
-          "start": "14822772",
-          "beats": true,
-          "session": "71b3ef7c-8885-4bbe-b9b9-e52b241115bb",
-          "lane": "quack/2"
-        },
-        "pushed": true
-      },
       "notes": [
+        {
+          "at": "2026-11-08T23:12:49Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/saves/summary.rs:733-777 and :919-952 (the `bl` map and the `readers.difference(&called)` relabel to `JUMPED_READ`): tail calls are left out on purpose (`.filter_map(|(&at, &c)| c.filter(|&c…"
+        },
         {
           "at": "2026-11-08T23:08:44Z",
           "by": "71b3ef7c",
           "text": "Rules settled by corpus reruns: a merge of entry bits with anything else is unknown (else LLVM paths go hard); returned entry bits count only if a caller's own instruction reads them (agbcc pop {r3}; mov r8, r3). 7 of the 36 hard not looked into (doc)."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-08T23:12:49Z",
+        "findings": "- crates/codegen/src/saves/summary.rs:733-777 and :919-952 (the `bl` map and the `readers.difference(&called)` relabel to `JUMPED_READ`): tail calls are left out on purpose (`.filter_map(|(&at, &c)| c.filter(|&c| c != at))`). So a function reached only by a tail call or a fall is marked `reads r4-r11 at entry, only jumped into` (soft). The reason given, \"takes every register through its extended entry\", is only true if the function that jumps in had real r4-r11 itself. In saves.rs:384-396 a tail call needs `s.kept()`, so the callee gets the tail-caller's own entry r4-r11. The lift's `fall_into` (native.rs:1886) passes the caller's locals r4..r11. If that caller was entered by a `bl` or a pointer, `Regs::call` zeroed those locals, so the callee reads 0 where the game has a real value. Nothing reports this: the tail-caller's walk (`sum.call(&mut after, Some(to), to)`) passes on only r0-r3 parameters, not the callee's entry reads of r4-r11. That is the silent wrong lift this unit exists to catch. Fix: decide 'only jumped into' over all the ways in. Keep a function's entry reads soft only if every function that tail-calls it or falls into it is itself only jumped into (a fixpoint over tail-call sites, `c == at` in `sum.sites`, and over falls). Otherwise keep them hard. The simplest version is to count tail-call targets and fall targets as `called`. Add a test: `g` is reached by a pointer in the ROM, `g` tail-calls `f` with `b`, and `f` reads its entry r5 (`ldr r0, [r5]`). It should give a hard `reads r4-r11 at entry` hole. Then rerun `just holes-all --against` and update the counts and lists in docs/research/native-holes.md (the 36 hard ones and the 'Only jumped into' list: Rogue's 13 fragments, Nightmare 0x0804c489, moonbeam 0x08038310), since some of those may now be hard."
+      },
       "round": "2026-11-08T21:00:00Z"
     },
     {
