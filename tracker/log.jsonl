@@ -2431,3 +2431,4 @@
 {"at":"2026-11-08T18:06:57Z","actor":"loop","tag":"f6eb8639","host":"quack","cmd":"done","id":"native/lift-bios-calls","text":"Lifted code makes the BIOS calls games use: done, checked by verifier-3b9e61d4"}
 {"at":"2026-11-08T18:07:08Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane3-native-lift-bios-calls","text":"new unit: Merge main on quack lane 3"}
 {"at":"2026-11-08T18:07:13Z","actor":"loop","tag":"62ef447a","host":"quack","cmd":"claim","id":"merge/quack-lane3-native-lift-bios-calls","text":"Merge main on quack lane 3: claimed"}
+{"at":"2026-11-08T18:26:52Z","actor":"loop","tag":"c06275d9","host":"quack","cmd":"add-unit","id":"native/fnref-emerald-speed","text":"new unit: Function-address flow on Emerald fast enough to finish"}
