@@ -721,19 +721,7 @@
         "by": "694a54e9",
         "at": "2026-11-08T20:44:26Z",
         "evidence": "Section 'The cable over the internet: modes, timing, games' in docs/research/multiplayer.md (modes table with transfer times and link-error timeouts, why every peer runs every console, hub coverage, popular games by mode). Tried through two local pingsim peers 2026-11-08: Emerald trade calm pass (end 35d6b1be, trade in both saves), wander 1 pass 1 split under load; Kirby AM wander 3000f both 47204b2e no desync; Nightmare Quick Draw wander 7000f both 24d71dde no desync. Units filed: {unit:multiplayer/wireless-adapter-local}, {unit:multiplayer/single-pak-multiboot}, {unit:multiplayer/wander-split-under-load}. just check passes after merging main.",
-        "branch": "unit/multiplayer/link-cable-survey",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T20:44:26Z",
-          "by": "694a54e9",
-          "host": "quack",
-          "pid": 3349068,
-          "start": "14822266",
-          "beats": true,
-          "session": "694a54e9-a4e1-4400-bd52-5bfa387f485c",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -741,8 +729,7 @@
           "by": "3013558b",
           "text": "Hub: runtime/src/link.rs, multiplayer mode only. Peers: just rollback-feel calm ROM --headless --paced --frames N --input1/2; end line counts transfers. --dump-dir goes to both seats (collides): add --dump-dir1/2 in gbaa-pingsim desktop(). quack: Emerald, Kirby AM, Kirby NiDL."
         }
-      ],
-      "round": "2026-11-01T01:46:07Z"
+      ]
     },
     {
       "id": "multiplayer/desync-report",
