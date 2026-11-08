@@ -1171,7 +1171,19 @@
       "title": "Stand-ins for libgcc's double multiply and divide",
       "detail": "libgcc's ieee754-df.S __muldf3 and __divdf3 call their denormal paths (Lml_s, Ldv_s) by bleq, which return r4/r5 changed: a real register-convention break, hard holes in moonbeam (6) and Emerald Rogue (3) after {unit:native/callee-save-breaks} (docs/research/native-holes.md, 'Functions that change r4-r11 or sp'). Write each as a stand-in (Rust f64 mul/div, bit-exact on the soft-float's results), found by its code the way analysis::flash recognises routines, so every game with them gets it. Done when: gbaa-holes counts none of them hard on moonbeam and Rogue (the report must learn the stand-ins), a test pins the f64 results against the interpreter on edge cases (denormals, NaN, inf, rounding), just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "9c7ffd35",
+        "session": "9c7ffd35-8623-4cb6-a52d-d2e121669618",
+        "host": "quack",
+        "pid": 3349068,
+        "start": "14822266",
+        "at": "2026-11-08T18:34:45Z",
+        "branch": "unit/native/libgcc-df-standins",
+        "beats": true
+      },
+      "round": "2026-11-08T18:34:45Z"
     },
     {
       "id": "native/entry-read-masking",
