@@ -2416,3 +2416,4 @@
 {"at":"2026-11-07T15:08:24Z","actor":"owner","tag":"ed09cc1f","host":"quack","cmd":"answer","text":"the owner answered \"May two lift bars rise because a false function start is gone?\": Accept the measured values","q":"q/may-ref-unexplained-rise-for-true-data","d":"d/may-ref-unexplained-rise-for-true-data","via":"ed09cc1f"}
 {"at":"2026-11-08T16:22:36Z","actor":"session","tag":"d06a24f2","host":"quack","cmd":"overseer","text":"overseer 408c3e on quack attached, replacing 423e03 on quack"}
 {"at":"2026-11-08T16:23:16Z","actor":"loop","tag":"c06275d9","host":"quack","cmd":"claim","id":"native/fnref-flow-emerald","text":"Function-address flow settles on Emerald: claimed (picking up after 8898da77)"}
+{"at":"2026-11-08T16:23:25Z","actor":"loop","tag":"0fb3d637","host":"quack","cmd":"claim","id":"native/indirect-call-args","text":"Indirect calls pass what their callees read: claimed"}
