@@ -658,6 +658,13 @@
         "beats": true,
         "handedBack": "2026-11-08T21:25:42Z"
       },
+      "notes": [
+        {
+          "at": "2026-11-08T21:25:50Z",
+          "by": "a98172f6",
+          "text": "Route written (units/metroid-native.toml, 2700 frames). First run: 6 causes filed as needs (doc: The first game). Lift: just lift ROM out/lift-metroid --name metroid; play: just recompile ROM out/metroid --timing native; then route-check --native. Planted store not tried yet."
+        }
+      ],
       "round": "2026-11-08T20:48:18Z"
     },
     {
