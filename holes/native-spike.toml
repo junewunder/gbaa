@@ -46,12 +46,3 @@ pub fn f_03000000(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> 
     Ok([0x0400_0000, a[1], ime, ie_if])
 }
 '''
-
-[[standin]]
-entry = 0x08024c49
-why = "not code: agb's panic screen's text (WEBSITE, rodata at 0x08024d70) that discovery's scan took for a function; nothing calls it"
-code = '''
-pub fn f_08024c49(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
-    panic!("0x08024c49 is data, not code")
-}
-'''

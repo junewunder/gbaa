@@ -2455,3 +2455,5 @@
 {"at":"2026-11-08T19:46:48Z","actor":"loop","tag":"aed48009","host":"quack","cmd":"add-unit","id":"native/metroid-drop-nes-standin","text":"new unit: Metroid's holes file drops a stand-in that is data now"}
 {"at":"2026-11-08T19:46:55Z","actor":"loop","tag":"aed48009","host":"quack","cmd":"done","id":"native/modern-gcc-data-as-code","text":"Modern-GCC data discovery decodes as code, for native builds: done, checked by verifier-a5cbc15f"}
 {"at":"2026-11-08T19:50:20Z","actor":"loop","tag":"aad03dc9","host":"quack","cmd":"done","id":"multiplayer/overlay-hides-menu","text":"Netplay: the overlay hides the bottom of the menu: done"}
+{"at":"2026-11-08T19:50:57Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/modern-gcc-data-as-code","text":"Modern-GCC data discovery decodes as code, for native builds: on main"}
+{"at":"2026-11-08T19:51:02Z","actor":"loop","tag":"29ee78be","host":"quack","cmd":"claim","id":"multiplayer/rollback-feel-sim","text":"Rollback: a sim test of what players feel, then fix it: claimed"}

@@ -46,12 +46,3 @@ pub fn f_03000000(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> 
     Ok([0x0400_0000, a[1], ime, ie_if])
 }
 '''
-
-[[standin]]
-entry = 0x080244b1
-why = "not code: rodata, the text 'too large allocation' (agb's allocator's panic message, at 0x080244b0), that discovery's scan took for a function; pool words point at it as data, nothing calls it"
-code = '''
-pub fn f_080244b1(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
-    panic!("0x080244b1 is data, not code")
-}
-'''
