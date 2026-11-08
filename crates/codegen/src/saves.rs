@@ -62,6 +62,15 @@ pub const KEPT: u16 = 0x2ff0;
 enum V {
     /// Register `n`'s value at entry (r4–r11, lr).
     Entry(u8),
+    /// A value some of whose bits may depend on r4–r11's entry values:
+    /// `regs` names them (bit `n - 4` for rN), `bits` the value's bits
+    /// that may (an `and` with a constant clears some, a shift moves
+    /// them, an `add` carries them up). The rest are unknown. Never empty
+    /// ([`V::part`]).
+    Part {
+        regs: u8,
+        bits: u32,
+    },
     /// The entry sp plus this.
     Sp(i32),
     Const(u32),
@@ -69,8 +78,39 @@ enum V {
 }
 
 impl V {
+    /// Two values paths may hold: equal, else, where both hold bits of
+    /// r4–r11's entry values, whatever bits either may. Where only one
+    /// does, unknown: a register set on one path and not on another is
+    /// most often a path that can't happen (or a local C never set, whose
+    /// value doesn't matter there), as the summaries took it before they
+    /// followed bits (`native/entry-read-masking`).
     fn join(self, o: V) -> V {
-        if self == o { self } else { V::Other }
+        if self == o {
+            return self;
+        }
+        match (self.taint(), o.taint()) {
+            (Some((ra, ba)), Some((rb, bb))) => V::part(ra | rb, ba | bb),
+            _ => V::Other,
+        }
+    }
+
+    /// The entry values of r4–r11 it may hold bits of (bit `n - 4` for
+    /// rN), and which of its bits.
+    fn taint(self) -> Option<(u8, u32)> {
+        match self {
+            V::Entry(r @ 4..=11) => Some((1 << (r - 4), !0)),
+            V::Part { regs, bits } => Some((regs, bits)),
+            _ => None,
+        }
+    }
+
+    /// `bits` of the entry values of `regs`: [`V::Other`] if none.
+    fn part(regs: u8, bits: u32) -> V {
+        if regs == 0 || bits == 0 {
+            V::Other
+        } else {
+            V::Part { regs, bits }
+        }
     }
 }
 
@@ -84,6 +124,9 @@ struct State {
     /// For each of r4–r11, a callee that may have changed it
     /// ([`Summary::changes`]), or 0; all 0 in the proof.
     chg: [u32; 8],
+    /// N, Z, C and V, as bits (only whether they hold bits of r4–r11's
+    /// entry values matters).
+    flags: [V; 4],
 }
 
 impl State {
@@ -100,6 +143,7 @@ impl State {
             slots: BTreeMap::new(),
             org: Vec::new(),
             chg: [0; 8],
+            flags: [V::Other; 4],
         }
     }
 
@@ -131,6 +175,7 @@ impl State {
                     o.chg[i]
                 }
             }),
+            flags: std::array::from_fn(|i| self.flags[i].join(o.flags[i])),
         }
     }
 
@@ -152,6 +197,7 @@ impl State {
             }
             let held = match v {
                 V::Entry(n) => format!("r{n}'s entry value"),
+                V::Part { .. } => "bits of r4-r11's entry values".into(),
                 V::Sp(k) => format!("entry sp{k:+}"),
                 V::Const(c) => format!("constant {c:#x}"),
                 V::Other => "unknown".into(),
@@ -173,6 +219,7 @@ impl State {
         for i in [0, 1, 2, 3, 12, 14] {
             self.regs[i] = V::Other;
         }
+        self.flags = [V::Other; 4];
         match self.regs[13] {
             V::Sp(sp) => self.slots.retain(|&k, _| k >= sp),
             _ => self.slots.clear(),
@@ -343,7 +390,8 @@ impl Walk<'_> {
                     // A call, then a return.
                     let mut after = s.clone();
                     sum.call(&mut after, Some(to), to);
-                    sum.ret(&after);
+                    after.called();
+                    sum.ret(&after, to);
                 }
                 return Ok(());
             }
@@ -430,6 +478,15 @@ impl Walk<'_> {
                     V::Sp(o) => s.slots.get(&o).copied().unwrap_or(V::Other),
                     _ => V::Other,
                 },
+                // A byte or halfword of a stack word holding bits of
+                // r4-r11's entry values may hold them too.
+                Op::Load { width, addr } => match val(addr) {
+                    V::Sp(o) => match s.slots.get(&(o & !3)).and_then(|v| v.taint()) {
+                        Some((regs, _)) => V::part(regs, width_mask(width)),
+                        None => V::Other,
+                    },
+                    _ => V::Other,
+                },
                 Op::Store { width, addr, value } => {
                     let (addr, value) = (val(addr), val(value));
                     store(&mut s, width, addr, value, guard.is_some());
@@ -446,7 +503,8 @@ impl Walk<'_> {
                 Op::SetReg(r, x) => {
                     let (r, x) = (r.index(), val(x));
                     let guarded = guard.is_some();
-                    if let Some(sum) = &self.sum {
+                    if let Some(sum) = &mut self.sum {
+                        sum.frame_record(&s, r, x);
                         sum.set(&mut s, r, guarded);
                     }
                     set(&mut s, r, x, guarded);
@@ -459,6 +517,24 @@ impl Walk<'_> {
                                 sum.set(st, r, maybe);
                             }
                             set(st, r, x, maybe);
+                        }
+                    }
+                    V::Other
+                }
+                Op::GetFlag(f) => s.flags[f as usize],
+                Op::SetFlag(f, x) => {
+                    let x = val(x);
+                    let flag = |st: &mut State, maybe: bool| {
+                        let old = &mut st.flags[f as usize];
+                        *old = if maybe { old.join(x) } else { x };
+                    };
+                    flag(&mut s, guard.is_some());
+                    for (c, yes, no) in &mut cond {
+                        let this = guard.is_some_and(|g| same(insts, *c, g));
+                        let maybe = guard.is_some() && !this;
+                        flag(yes, maybe);
+                        if !this {
+                            flag(no, maybe);
                         }
                     }
                     V::Other
@@ -547,6 +623,7 @@ impl Walk<'_> {
                 for r in &mut after.regs[..4] {
                     *r = V::Other;
                 }
+                after.flags = [V::Other; 4];
                 self.flow(next, &after)
             }
             Plan::Dynamic {
@@ -569,7 +646,7 @@ impl Walk<'_> {
                     ))?;
                 }
                 if let Some(sum) = &mut self.sum {
-                    sum.ret(s);
+                    sum.ret(s, at);
                 }
                 Ok(())
             }
@@ -697,10 +774,125 @@ fn set(s: &mut State, r: usize, x: V, maybe: bool) {
     }
 }
 
+/// The bits a load or store of `width` moves.
+fn width_mask(width: Width) -> u32 {
+    match width {
+        Width::Byte => 0xff,
+        Width::Half => 0xffff,
+        Width::Word => !0,
+    }
+}
+
 /// The value of a pure op, from its operands' values, where each of
 /// `falses` is false (a select on one is its second arm); `None` for the
-/// rest.
+/// rest. One it knows nothing more of whose operands hold bits of
+/// r4–r11's entry values holds the bits of them that survive it
+/// ([`spread`]).
 fn pure(insts: &[Inst], op: Op, vals: &[V], falses: &[ValueId]) -> Option<V> {
+    let known = pure_known(insts, op, vals, falses);
+    if matches!(known, None | Some(V::Other))
+        && let Some(v) = spread(op, vals)
+    {
+        return Some(v);
+    }
+    known
+}
+
+/// Bits whose dependence an add, a subtract or a multiply carries up:
+/// every bit from the lowest of `bits`.
+fn up(bits: u32) -> u32 {
+    if bits == 0 {
+        0
+    } else {
+        !0 << bits.trailing_zeros()
+    }
+}
+
+/// What bits of r4–r11's entry values pure op `op` passes on, if an
+/// operand holds some: [`V::Other`] where none survive (an `and` with a
+/// constant that clears every one, as agbcc's `ands r4, r0; orrs r4, r1`
+/// building a word byte by byte in an unset register comes to). `None`
+/// if no operand holds any, or `op` isn't pure.
+fn spread(op: Op, vals: &[V]) -> Option<V> {
+    let val = |v: ValueId| vals[v.index()];
+    let t = |v: ValueId| val(v).taint().unwrap_or((0, 0));
+    let konst = |v: ValueId| match val(v) {
+        V::Const(c) => Some(c),
+        _ => None,
+    };
+    // A bit-valued op of any: a bit that may depend on them.
+    let bit = |vs: &[ValueId]| {
+        let regs = vs.iter().fold(0, |m, &v| m | t(v).0);
+        V::part(regs, 1)
+    };
+    let ops = op.operands();
+    if ops.iter().all(|&v| val(v).taint().is_none()) {
+        return None;
+    }
+    let all = ops
+        .iter()
+        .fold((0, 0), |(r, b), &v| (r | t(v).0, b | t(v).1));
+    Some(match op {
+        Op::Bin(k, a, b) => {
+            let (ra, ba) = t(a);
+            let (rb, bb) = t(b);
+            let regs = ra | rb;
+            // An operand's bits a constant other operand lets through.
+            let masked = |keep: &dyn Fn(u32) -> u32| match (konst(a), konst(b)) {
+                (Some(c), _) => bb & keep(c),
+                (_, Some(c)) => ba & keep(c),
+                _ => ba | bb,
+            };
+            let bits = match k {
+                BinOp::And => masked(&|c| c),
+                BinOp::Or => masked(&|c| !c),
+                BinOp::Xor => ba | bb,
+                BinOp::Add | BinOp::Sub => up(ba | bb),
+                // A multiple of 2^k: the low k bits are clear.
+                BinOp::Mul => match (konst(a), konst(b)) {
+                    (Some(0), _) | (_, Some(0)) => 0,
+                    (Some(c), _) | (_, Some(c)) => up(ba | bb) << c.trailing_zeros(),
+                    _ => up(ba | bb),
+                },
+            };
+            V::part(regs, bits)
+        }
+        Op::Not(a) => V::part(t(a).0, t(a).1),
+        Op::Adc { .. } => V::part(all.0, up(all.1)),
+        Op::MulLongLo { .. } | Op::MulLongHi { .. } => V::part(all.0, !0),
+        Op::Shift { kind, v, amount } => match (konst(amount), val(v).taint()) {
+            (Some(n), Some((regs, bits))) => {
+                V::part(regs, armv4t::sem::prim::shift(kind, bits, n, false).0)
+            }
+            // Shifted by an amount that may depend on them, or by an
+            // unknown one.
+            _ => V::part(all.0, !0),
+        },
+        Op::Rrx { v, carry_in } => {
+            let (rv, bv) = t(v);
+            let (rc, bc) = t(carry_in);
+            V::part(rv | rc, armv4t::sem::prim::rrx(bv, bc != 0).0)
+        }
+        Op::Sext { v, bits } => {
+            let (regs, b) = t(v);
+            V::part(regs, armv4t::sem::prim::sext(b, bits))
+        }
+        Op::BitToWord(v) => V::part(t(v).0, 1),
+        Op::TestBit { v, n } => V::part(t(v).0, t(v).1.checked_shr(n).unwrap_or(0) & 1),
+        Op::IsZero(_)
+        | Op::AdcCarry { .. }
+        | Op::AdcOverflow { .. }
+        | Op::MulCarry { .. }
+        | Op::ShiftCarry { .. }
+        | Op::BNot(_)
+        | Op::BBin(..)
+        | Op::BSelect { .. } => bit(&ops),
+        _ => return None,
+    })
+}
+
+/// [`pure`] without [`spread`].
+fn pure_known(insts: &[Inst], op: Op, vals: &[V], falses: &[ValueId]) -> Option<V> {
     let val = |v: ValueId| vals[v.index()];
     Some(match op {
         Op::Const(c) | Op::Pool(c) => V::Const(c),
