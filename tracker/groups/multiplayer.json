@@ -295,6 +295,11 @@
       "priority": 3,
       "notes": [
         {
+          "at": "2026-11-08T20:55:07Z",
+          "by": "29ee78be",
+          "text": "Feel sim (2026-11-08): before that day's fixes a window with sound undid time sync's holds, so one seat held back ~1 frame in 12 all session (each a doubled then skipped frame). A playtest report from an older build showing hundreds 'held back' is that; fixed since."
+        },
+        {
           "at": "2026-10-29T03:35:08Z",
           "by": "600a9d3e",
           "text": "june 2026-10-28: this was meant to run AFTER netplay moved onto recompiled code. The 23:00 run measured the interpreter build; redo it on the v1 recompiled build (both peers), at delay 0, once the Mac half lands."
@@ -678,16 +683,17 @@
       "title": "Rollback: a sim test of what players feel, then fix it",
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): both players noticed small stutters ('a little framey sometimes', 'skipped frames'); it played well otherwise. ping-sim checks hashes, not feel. Build a sim that plays Kirby two-player (four with {unit:multiplayer/four-seats}) through ping-sim profiles like home Wi-Fi to fly, and measures what each window shows: frames presented late, doubled or skipped, rollback depth, frames run again, time-sync holds, the other Kirby's jumps. Put budgets on them in a test, then fix the worst offenders. Beside {unit:multiplayer/lag-report}, which needs a real session's numbers. june's view: rollback of whole consoles has a ceiling; the real fix for this game is a multiplayer mod on its decomp (docs/ideas.md). Check: before and after numbers in docs/research/multiplayer.md; the budget test in just check.",
       "minMinutes": 150,
-      "record": {
-        "state": "claimed",
-        "by": "29ee78be",
-        "session": "29ee78be-f7f7-4b33-9049-fe8ed023a471",
-        "host": "quack",
-        "pid": 3349268,
-        "start": "14822772",
-        "at": "2026-11-08T19:51:02Z",
-        "branch": "unit/multiplayer/rollback-feel-sim",
-        "beats": true
+      "notes": [
+        {
+          "at": "2026-11-08T20:59:55Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - justfile:1356 (the comment above `rollback-feel-sim`): it says that with `--rom ROM` the sim runs \"a session of interpreted GBAs on ROM, each turn's measured time\". That is the wall-time approach that docs/res…"
+        }
+      ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-08T20:59:55Z",
+        "findings": "- justfile:1356 (the comment above `rollback-feel-sim`): it says that with `--rom ROM` the sim runs \"a session of interpreted GBAs on ROM, each turn's measured time\". That is the wall-time approach that docs/research/multiplayer.md (\"Feel\") says was tried and dropped. What the code actually does (`measure` in crates/netplay/src/bin/gbaa-pingsim.rs) is time the ROM once, straight, on the thread's CPU clock, writing a `feel::Trace`, and then run the toy session on those costs. Reword the comment to say that, and add the missing `--trace F` / `--trace-out F` options to its ARGS list and to the feel-sim entry in docs/tools/commands.md (around line 1865), which also leaves them out.\n- crates/netplay/src/feel.rs, the doc comment on `pub fn toy`: it calls this \"`gbaa-pingsim feel --console toy`'s run\", but `feel` has no `--console` option and rejects it as `unknown option`. Change it to \"`gbaa-pingsim feel`'s run\"."
       },
       "round": "2026-11-01T01:44:42Z"
     },
@@ -717,15 +723,11 @@
       "detail": "june's question (2026-10-29): can netplay be a generic network replacement for any game's link cable, and does the cable assume no lag? Write up for june, in docs/research/multiplayer.md: each SIO mode, its timing (how fast a transfer completes, how many frames a game waits before it calls it a link error), why we run every console on every peer instead of sending cable bytes, and which modes runtime::link covers today (multiplayer mode; normal 8/32-bit, multiboot single-pak, UART, JOY bus, the wireless adapter). Then list popular link games by mode (Four Swords, Mario Kart Super Circuit, Pokemon, Bomberman, single-pak multiboot games), run the ones june has ROMs for through two local peers headless, and say which work. File a unit for each gap worth closing. Check: the section, the table of games tried, the units.",
       "minMinutes": 150,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "694a54e9",
-        "session": "694a54e9-a4e1-4400-bd52-5bfa387f485c",
-        "host": "quack",
-        "pid": 3349068,
-        "start": "14822266",
-        "at": "2026-11-08T20:14:36Z",
-        "branch": "unit/multiplayer/link-cable-survey",
-        "beats": true
+        "at": "2026-11-08T20:44:26Z",
+        "evidence": "Section 'The cable over the internet: modes, timing, games' in docs/research/multiplayer.md (modes table with transfer times and link-error timeouts, why every peer runs every console, hub coverage, popular games by mode). Tried through two local pingsim peers 2026-11-08: Emerald trade calm pass (end 35d6b1be, trade in both saves), wander 1 pass 1 split under load; Kirby AM wander 3000f both 47204b2e no desync; Nightmare Quick Draw wander 7000f both 24d71dde no desync. Units filed: {unit:multiplayer/wireless-adapter-local}, {unit:multiplayer/single-pak-multiboot}, {unit:multiplayer/wander-split-under-load}. just check passes after merging main.",
+        "host": "quack"
       },
       "notes": [
         {
@@ -733,8 +735,7 @@
           "by": "3013558b",
           "text": "Hub: runtime/src/link.rs, multiplayer mode only. Peers: just rollback-feel calm ROM --headless --paced --frames N --input1/2; end line counts transfers. --dump-dir goes to both seats (collides): add --dump-dir1/2 in gbaa-pingsim desktop(). quack: Emerald, Kirby AM, Kirby NiDL."
         }
-      ],
-      "round": "2026-11-01T01:46:07Z"
+      ]
     },
     {
       "id": "multiplayer/desync-report",
@@ -799,15 +800,12 @@
       "check": "independent",
       "minMinutes": 60,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "7bc14b37",
-        "session": "7bc14b37-cd80-4dfa-8b40-bd509199b6a1",
-        "host": "quack",
-        "pid": 686555,
-        "start": "16007050",
-        "at": "2026-11-08T20:22:08Z",
-        "branch": "unit/multiplayer/timing-in-build-id",
-        "beats": true
+        "checker": "verifier-3e9a71",
+        "at": "2026-11-08T20:46:38Z",
+        "evidence": "Code.timing (codegen fills it) hashed in code_id; test timing_is_part_of_the_build_id passes. Instant Kirby v1 (out/katam-v1i) through rollback-feel wander --headless, delay 0, 3600 frames: both peers end 2c3e09810f89c089, 69.6% compiled, p50 3.88/3.97 ms, no desyncs; row in multiplayer.md. just check passes after merging main.",
+        "host": "quack"
       },
       "notes": [
         {
@@ -820,8 +818,7 @@
           "by": "b9540f68",
           "text": "Code part done on branch t3/5f15b0aa: Code.timing (codegen fills it), hashed in code_id, build byte 29 = the interpreter's timing; test timing_is_part_of_the_build_id. Left: the instant Kirby v1 rollback-feel run and its multiplayer.md rows."
         }
-      ],
-      "round": "2026-11-01T01:57:22Z"
+      ]
     },
     {
       "id": "multiplayer/four-kirbys-deck",
