@@ -2439,3 +2439,5 @@
 {"at":"2026-11-08T18:34:29Z","actor":"loop","tag":"c06275d9","host":"quack","cmd":"unclaim","id":"native/fnref-flow-emerald","text":"Function-address flow settles on Emerald: handed back by its session, its work kept (4 commits on its branch); can't start until Function-address flow on Emerald fast enough to finish (native/fnref-emerald-speed) is done"}
 {"at":"2026-11-08T18:34:45Z","actor":"loop","tag":"9c7ffd35","host":"quack","cmd":"claim","id":"native/libgcc-df-standins","text":"Stand-ins for libgcc's double multiply and divide: claimed"}
 {"at":"2026-11-08T18:37:11Z","actor":"loop","tag":"62ef447a","host":"quack","cmd":"done","id":"merge/quack-lane3-native-lift-bios-calls","text":"Merge main on quack lane 3: done"}
+{"at":"2026-11-08T18:40:56Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane3-native-lift-bios-calls","text":"Merge main on quack lane 3: on main"}
+{"at":"2026-11-08T18:40:56Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-bios-calls","text":"Lifted code makes the BIOS calls games use: on main"}
