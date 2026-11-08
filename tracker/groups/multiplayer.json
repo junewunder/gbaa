@@ -697,15 +697,11 @@
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): Athena couldn't hear june's Kirby. The window plays your own console's sound, as your own GBA would, so whether the other Kirbys make sound is the game's choice. But frames run again are muted (netplay::gba quiet), and those are just the frames where the other player's input arrived late, so sounds the other player caused may be dropped while yours play. Find out: in a two-GBA run with no rollback (the local link window, or mGBA's), does Kirby play the other Kirby's sounds when it's on screen? Then in netplay, count sounds lost to frames run again. If they're lost, make them play; if the game is silent there too, record that. Check: the answer with evidence in docs/research/multiplayer.md, and the fix's test if any; just check.",
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "9d98d236",
-        "session": "9d98d236-71f3-4ec3-b234-4a1bdb04b71c",
-        "host": "quack",
-        "pid": 3349722,
-        "start": "14823514",
-        "at": "2026-11-08T19:58:43Z",
-        "branch": "unit/multiplayer/other-seat-sound",
-        "beats": true
+        "at": "2026-11-08T20:25:34Z",
+        "evidence": "The game, not rollback: crates/netplay/tests/seat_sound.rs (--ignored, release, passed 2026-11-08 on quack). Straight two-GBA Kirby run, seat 1 jumping vs idle: seat 1's sound differs on 258 frames, seat 0's picture shows the jumping Kirby (598 px at frame 2420), seat 0's sound identical on all frames. Rollback (60±40 ms, 2% loss, 52 rollbacks, 293 re-run): seat 0 heard the straight run's sound on all 3600 frames, same end hash. Nothing to fix. Written up in docs/research/multiplayer.md, 'The other players' sound'. just check passed after merging main.",
+        "host": "quack"
       },
       "notes": [
         {
@@ -713,8 +709,7 @@
           "by": "61fe8d7b",
           "text": "Start: crates/netplay/src/gba.rs Pad::quiet mutes re-run frames; rollback.rs ~line 337. Measure in a test: gba() console, two seats, Speaker on seat 0, menu presses from docs/research/multiplayer.md (Kirby rollback-feel inputs), seat 2 jumps vs idle; compare seat 0 audio."
         }
-      ],
-      "round": "2026-11-01T01:45:09Z"
+      ]
     },
     {
       "id": "multiplayer/link-cable-survey",
@@ -851,6 +846,33 @@
         "evidence": "Owner allowed it (d/may-lane-scale-fly-s). fly scale count 1 -a gbaa-server --region ewr destroyed 850d37c4e70228; fly machines list now shows one machine, 784563db002518 (ewr, shared-cpu-1x). just fly-up; just room-sim calm --server 37.16.3.41: pass, 10 hashes and the end match on both seats; just fly-down: stopped. IPv4 37.16.3.41 kept. No repo change (fly-deploy already passes --ha=false); branch equals origin/main, so just check not rerun.",
         "host": "quack"
       }
+    },
+    {
+      "id": "multiplayer/wireless-adapter-local",
+      "title": "Emerald's Union Room over an emulated wireless adapter",
+      "detail": "From the link-cable survey (docs/research/multiplayer.md, 'The cable over the internet'): the wireless adapter is the one link gap that matters for june's games (Emerald's Union Room, wireless trades, Berry Crush). Emulate the adapter on the link hub, both consoles in one process first: normal 32-bit mode on runtime::link, librfu's STWI commands (afska's gba-link-connection docs), and the adapter's radio between machines. Check: two Emeralds from alice.sav and bob.sav meet in the Union Room and trade, identically twice; just check. Networking it (each player runs only their own console, the server as the radio) is later work.",
+      "record": {
+        "state": "claimed",
+        "by": "954f0eb1",
+        "session": "954f0eb1-8b50-45a5-9f0e-1a0408fed293",
+        "host": "quack",
+        "pid": 3349722,
+        "start": "14823514",
+        "at": "2026-11-08T20:38:54Z",
+        "branch": "unit/multiplayer/wireless-adapter-local",
+        "beats": true
+      },
+      "round": "2026-11-08T20:38:54Z"
+    },
+    {
+      "id": "multiplayer/single-pak-multiboot",
+      "title": "Single-pak link: a seat with no cartridge boots by MultiBoot",
+      "detail": "From the link-cable survey (docs/research/multiplayer.md, 'The cable over the internet'): single-pak games (Mario Kart Super Circuit's single-pak mode, Bomberman Tournament, the Mario Bros. Classic games) send a program over the cable to GBAs with no cartridge. Our HLE BIOS MultiBoot (SWI 0x25) always fails (runtime/src/bios.rs) and a machine can't start without a ROM. Add: a cartridge-less machine that runs the BIOS's boot-time MultiBoot receive over runtime::link and boots what it gets from EWRAM, and MultiBoot on the parent over the hub. Check: a homebrew single-pak sender (written here, or an agb/libtonc example) boots a client on a cartless seat through two local netplay peers, same end hash; just check. No ROM june has needs it."
+    },
+    {
+      "id": "multiplayer/wander-split-under-load",
+      "title": "Emerald's netplay trade split once on wander, under load",
+      "detail": "From the link-cable survey (2026-11-08, quack, load average 18 from other lanes): just emerald-netplay-trade wander failed once: player 1 saw player 2 leave at frame 1119, player 2 left at 1144 (its max frame 3400 ms, round trip up to 3439 ms), each played on alone and the end hashes differed. The rerun and calm passed. Find why a 3.4 s stall ended the session (the stopped-answering timeouts are 5 s freeze plus 15 s), and make a stalled peer catch up instead. Check: just emerald-netplay-trade wander passes 5 times in a row with a peer SIGSTOPped for 4 s mid-run; just check."
     }
   ]
 }
