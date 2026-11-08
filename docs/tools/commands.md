@@ -1472,16 +1472,13 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   [FRAMES]` (heavy) needs identical audio hashes interpreted and recompiled,
   no dropped samples, and 280896/period samples a frame from frame 10;
   passes on agb ROMs at 18157 Hz (304) and 10512 Hz (176).
-- `gbaa-present-sim [--scale X]… TIMES…` (deck/even-presents,
-  `desktop::present`): what a 60 Hz display shows of a single-player
-  game's frames. TIMES are `gbaa-desktop --headless --frame-times` files
-  (take the least of two runs per frame on a busy machine); each
-  `--scale` multiplies the costs (0.7 for a recompiled build, 2.2 for
-  the Deck: estimated from its 2-2.5x quack's cost, not measured there). Prints a minute's doubled, skipped and late frames and
-  the display lag, sound-paced and muted, for frames handed over when
-  done, 8 ms in (netplay's) and after the slowest recent frame (the
-  window's). Numbers: `docs/sound-design.md`, "When a frame goes to the
-  window".
+- `gbaa-present-sim [--scale X]… TIMES…` (deck/even-presents): what a
+  60 Hz display shows of a single game's frames. TIMES: `gbaa-desktop
+  --headless --frame-times` files (least of two runs on a busy machine);
+  `--scale` multiplies costs (0.7 recompiled; 2.2 the Deck, estimated
+  from its 2-2.5x quack's, not measured). Prints doubled, skipped, late
+  and lag for frames handed over when done, 8 ms in, and after the
+  slowest recent frame. Numbers: `docs/sound-design.md`, "When a frame…".
 - mGBA oracle (#55, milestone 3): `just mgba-diff ROM FRAMES [INPUT]` runs
   ROM in mGBA (`crates/mgba-dump`, over a static libmgba that
   `scripts/fetch-mgba.sh` builds once into `$GBAA_DATA/tools/mgba/`, under
