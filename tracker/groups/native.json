@@ -1162,6 +1162,13 @@
           "lane": "quack/1"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-08T20:02:50Z",
+          "by": "9c7ffd35",
+          "text": "saves::prove/summarize apply ctx.library() on any Ctx, but only the lift and gbaa-holes call with_library; gbaa-recompile and native-fn-diff see routines as kept leaves while veneers still hold their code (conservative, not wrong). Stand-in returns r2/r3 as given."
+        }
+      ],
       "round": "2026-11-08T18:34:45Z"
     },
     {
