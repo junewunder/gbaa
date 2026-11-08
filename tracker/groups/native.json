@@ -655,8 +655,18 @@
         "start": "14822266",
         "at": "2026-11-08T20:48:18Z",
         "branch": "unit/native/metroid-native-check",
-        "beats": true
+        "beats": true,
+        "handedBack": "2026-11-08T21:25:42Z",
+        "pushed": true,
+        "ended": "2026-11-08T21:26:07Z"
       },
+      "notes": [
+        {
+          "at": "2026-11-08T21:25:50Z",
+          "by": "a98172f6",
+          "text": "Route written (units/metroid-native.toml, 2700 frames). First run: 6 causes filed as needs (doc: The first game). Lift: just lift ROM out/lift-metroid --name metroid; play: just recompile ROM out/metroid --timing native; then route-check --native. Planted store not tried yet."
+        }
+      ],
       "round": "2026-11-08T20:48:18Z"
     },
     {
@@ -1232,7 +1242,19 @@
       "detail": "gbaa-lift on Nightmare (--name kirby-nightmare, a holes file with only skip_fn_flow; without it the fn flow hits 16G: {unit:native/whole-lift-memory}) ran in 1 min, 474M peak, 2026-11-07: 4899 functions, 15 hard holes. Write mods/kirby-nightmare/holes.toml as mods/metroid/holes.toml does: skip_fn_flow; stand-ins for the reset 0x08000000 (2 msr) and the IWRAM IRQ wrapper f_03001030 (mrs 0x03001040, 0x030010b4, msr 0x030010c0); targets for the jump at 0x0800474e (the run, holes/coverage/kirby-nightmare-in-dream-land.toml). The 9 BIOS calls (swi 0x00 0x01 0x0a 0x0c 0x11 0x12 0x13 0x25 0x28 in the stubs at 0x080cfa50-0x080cfa92) wait on {unit:native/lift-bios-calls}. Done when: the lift exits 0 and its crate builds in release under just long; lines, build time and peak RAM quoted in docs/native-stage-b.md; just check passes.",
       "check": "independent",
       "needs": ["native/lift-bios-calls"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "f66d452c",
+        "session": "f66d452c-fc79-480d-b54c-1a0f2849c6aa",
+        "host": "quack",
+        "pid": 3349068,
+        "start": "14822266",
+        "at": "2026-11-08T21:26:13Z",
+        "branch": "unit/native/nightmare-lifts",
+        "beats": true
+      },
+      "round": "2026-11-08T21:26:13Z"
     },
     {
       "id": "native/task-coroutines",
@@ -1358,6 +1380,13 @@
       "id": "native/check-holes-copies",
       "title": "The native check skips the holes file's RAM code copies",
       "detail": "docs/native-stage-b.md, 'The first game': route-check --native skips the destinations of Discovery::copies only; a commercial game's IWRAM copies come from its holes file's [[copy]] entries (Metroid's five, mods/metroid/holes.toml), which the native program runs as Rust and never writes, so they would differ. Skip them too (the lifter's holes file, given to route-check or found by the game's name). Done when: Metroid's route-check --native prints those ranges as not compared, a unit test covers it, and just check passes.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-bios-more",
+      "title": "Lifted code makes SoftReset, RegisterRamReset and HuffUnComp",
+      "detail": "Left out of {unit:native/lift-bios-calls}: the lifter's prelude (NATIVE_BIOS) has no swi 0x00 SoftReset, 0x01 RegisterRamReset, 0x13 HuffUnComp, 0x28 SoundDriverVSyncOff. 0x00/0x01 are reached in Nightmare, Rogue, Imperium, Emerald, Mariomon (docs/research/bios-calls.md); SoftReset needs a way for a native program to restart (no Exit for it today). Nightmare stands in for the stubs in mods/kirby-nightmare/holes.toml (Huffman ported, VSyncOff a no-op, SoftReset panics); drop those stand-ins after. Done when: the lifter prints all four (over runtime::bios's logic as lz77/rl do), lift-check green with a case per call, Nightmare lifts without the three stand-ins; just check passes.",
       "check": "independent",
       "uses": ["heavy"]
     }
