@@ -185,7 +185,19 @@
       "detail": "Branch `unit/native/lift-bios-calls` holds {unit:native/lift-bios-calls}, finished but not on main: merging main conflicts in docs/native-stage-b.numbers.md docs/research/native-holes.numbers.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
       "check": "recorded",
       "lane": "quack/3",
-      "branch": "unit/native/lift-bios-calls"
+      "branch": "unit/native/lift-bios-calls",
+      "record": {
+        "state": "claimed",
+        "by": "62ef447a",
+        "session": "62ef447a-017e-4a31-905a-ae3406e9eda1",
+        "host": "quack",
+        "pid": 3349722,
+        "start": "14823514",
+        "at": "2026-11-08T18:07:13Z",
+        "branch": "unit/native/lift-bios-calls",
+        "beats": true
+      },
+      "round": "2026-11-08T18:07:13Z"
     }
   ]
 }
