@@ -4,13 +4,10 @@ hook: big reads (pile, every cell, ROM tables) are now one Tok::Ref; round 0 hol
 open: true
 ---
 
-**How to measure** (quack). `--callee-sets` exists only on the
-indirect-call-args branch; `fnref.rs` there equals main's, so a worktree of
-that branch with `crates/codegen/src/native/fnref.rs` symlinked to the lane's
-copy measures the lane's change:
-`git worktree add --detach /tmp/fe-ica origin/unit/native/indirect-call-args`,
-symlink, then build with `CARGO_TARGET_DIR=<lane>/target` and copy the binary
-out (a running binary can't be overwritten: "Text file busy"). Run it as
+**How to measure** (quack). `--callee-sets` is on main since 2026-11-08
+(indirect-call-args landed): `just long start … --mem 9G -- bash -c
+'target/release/gbaa-recompile --summaries ROM --callee-sets …'` (copy the
+binary out first if you'll rebuild while it runs: "Text file busy"). Run it as
 `just long start … --mem 9G -- bash -c '… > /tmp/x.out 2> /tmp/x.log'`
 (write to files: a piped grep loses its buffer when the cap kills it).
 `GBAA_FNREF_TRACE=` (empty) still turns tracing on: use `env -u`.
