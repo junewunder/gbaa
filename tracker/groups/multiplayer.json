@@ -870,6 +870,13 @@
       "id": "multiplayer/wander-split-under-load",
       "title": "Emerald's netplay trade split once on wander, under load",
       "detail": "From the link-cable survey (2026-11-08, quack, load average 18 from other lanes): just emerald-netplay-trade wander failed once: player 1 saw player 2 leave at frame 1119, player 2 left at 1144 (its max frame 3400 ms, round trip up to 3439 ms), each played on alone and the end hashes differed. The rerun and calm passed. Find why a 3.4 s stall ended the session (the stopped-answering timeouts are 5 s freeze plus 15 s), and make a stalled peer catch up instead. Check: just emerald-netplay-trade wander passes 5 times in a row with a peer SIGSTOPped for 4 s mid-run; just check."
+    },
+    {
+      "id": "multiplayer/wireless-radio-netplay",
+      "title": "Emerald's Union Room with the radio on the server",
+      "detail": "After {unit:multiplayer/wireless-adapter-local}: runtime::link::rfu's radio (hosts, searches, connections, packets) moves onto gbaa-server so each player runs only their own Emerald and adapter (docs/research/multiplayer.md option F, 'The wireless adapter, locally'). Measure how much latency librfu's timeouts and the Union Room's host/search switching allow, through the variable-ping simulator. Check: two Emerald processes (alice.sav, bob.sav) trade in the Union Room through a local server under the 'calm' profile; just check.",
+      "check": "recorded",
+      "needs": ["multiplayer/wireless-adapter-local"]
     }
   ]
 }
