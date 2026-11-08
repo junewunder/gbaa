@@ -11,10 +11,14 @@
 path = "docs/native-stage-b.md"
 max_lines = 400
 
-# The hole report's method and findings, cut from 667 lines on 2026-11-06.
+# The hole report's method and findings, cut from 667 lines on 2026-11-06;
+# 390 after native/nightmare-cpu-state added Nightmare's task switcher
+# (31 lines: what each of its three CPU-state holes is, the card asked);
+# 420 after native/modern-gcc-jumps added Imperium's and Rogue's
+# unresolved jumps sorted by kind (30 lines: the card asks for them here).
 [[doc]]
 path = "docs/research/native-holes.md"
-max_lines = 360
+max_lines = 420
 
 [[doc]]
 path = "docs/tools/commands.md"

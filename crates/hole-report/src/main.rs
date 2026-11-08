@@ -1170,6 +1170,12 @@ fn main() -> ExitCode {
                     kind,
                     if k.hard { " (hard)" } else { "" }
                 );
+                // A hard kind's functions, each with its holes of the kind.
+                for f in k.funcs.iter().filter(|_| k.hard) {
+                    for h in s[f].iter().filter(|h| holes::summary_kind(h) == **kind) {
+                        println!("        0x{f:08x}  {h}");
+                    }
+                }
             }
         }
         None => println!("summaries: not measured (--no-summaries)"),
@@ -1197,6 +1203,18 @@ fn main() -> ExitCode {
         "ROM: {} bytes reached, {} not discovered",
         r.rom_reached_bytes, r.rom_undiscovered_bytes
     );
+    let mut rom = r.rom_undiscovered.clone();
+    rom.sort_by_key(|c| std::cmp::Reverse(c.end - c.start));
+    for c in rom.iter().take(show) {
+        let thumb = run.code.get(&c.start).is_some_and(|s| s.thumb);
+        println!(
+            "  0x{:08x}..0x{:08x} {}{}",
+            c.start,
+            c.end,
+            if thumb { "Thumb" } else { "ARM" },
+            why_missed(&disc, c.start, c.end, thumb)
+        );
+    }
     let Some((text, file)) = cover else {
         return ExitCode::SUCCESS;
     };
@@ -1284,4 +1302,27 @@ fn usage() -> ExitCode {
         "usage: gbaa-holes ROM [--frames N] [--press KEY@F | KEY@F-G/E]... [--cover FILE [--update]] [--no-summaries] [--no-run-roots] [--show N] [--line FILE]\n       gbaa-holes --corpus FILE --roms DIR [--out DIR] [--against DIR] [--only NAME]... [--cover] [--write-doc FILE] [flags above...]\n       gbaa-holes --corpus FILE --from DIR [--write-doc FILE]"
     );
     ExitCode::from(2)
+}
+
+/// What discovery has around an undiscovered ROM run: the code before it
+/// (its instruction set), and data over it.
+fn why_missed(disc: &analysis::discovery::Discovery, start: u32, end: u32, thumb: bool) -> String {
+    let mut out = String::new();
+    if let Some((&a, c)) = disc.code.range(..start).next_back()
+        && a + c.size == start
+    {
+        out += if c.thumb == thumb {
+            ", after discovered code"
+        } else {
+            ", after discovered code in the other set"
+        };
+    }
+    let other = disc.code.range(start..end).next().map(|(a, _)| *a);
+    if let Some(a) = other {
+        out += &format!(", discovered code inside at 0x{a:08x}");
+    }
+    if let Some(&(s, e)) = disc.data.iter().find(|&&(s, e)| s < end && e > start) {
+        out += &format!(", data 0x{s:08x}..0x{e:08x}");
+    }
+    out
 }

@@ -957,7 +957,10 @@ fn a_push_pop_callee_keeps_its_registers_and_the_loop_skips_their_reload() {
 fn saves_fail_an_unbalanced_frame_and_an_unknown_jump() {
     // sub sp, #4; bx lr: sp is 4 lower. bx r1: anywhere.
     for (h, why) in [
-        (&[0xB081u16, 0x4770][..], "r4-r11 or sp changed"),
+        (
+            &[0xB081u16, 0x4770][..],
+            "returns with sp changed: sp = entry sp-4",
+        ),
         (&[0x4708][..], "unknown place"),
     ] {
         let sizes: Vec<u32> = h.iter().map(|_| 2).collect();
@@ -979,12 +982,118 @@ fn a_summary_of_a_function_that_clobbers_r4_fails_its_proof() {
         assert_eq!((caller.keeps, f.keeps), (keeps, keeps));
         assert_eq!(f.holes.is_empty(), keeps, "{:?}", f.holes);
         if !keeps {
-            assert!(f.holes.iter().any(|h| h.contains("r4-r11 or sp changed")));
+            assert!(
+                f.holes
+                    .iter()
+                    .any(|h| h.contains("returns with r4-r11 changed: r4 = constant 0x1")),
+                "{:?}",
+                f.holes
+            );
+            assert_eq!(f.changes, 1 << 4);
             assert!(caller.holes.iter().any(|h| h.contains("doesn't keep them")));
+            // The loop reads the r4 it changed: the caller's hole is hard.
+            assert!(
+                caller
+                    .holes
+                    .contains("0x08000008: reads r4-r11 a callee changed: r4, by 0x08000015"),
+                "{:?}",
+                caller.holes
+            );
         }
         // Neither reads an argument.
         assert_eq!((caller.params, f.params), (0, 0));
     }
+}
+
+/// The summary holes of `f` of `sums` that are hard.
+fn hard_holes(sums: &crate::saves::Summaries, f: u32) -> Vec<String> {
+    use analysis::holes::{summary_hard, summary_kind};
+    sums.by_entry[&f]
+        .holes
+        .iter()
+        .filter(|h| summary_hard(&summary_kind(h)))
+        .cloned()
+        .collect()
+}
+
+#[test]
+fn a_conditional_pop_and_return_keeps_the_registers() {
+    // libgcc's `RETLDM "r4, r5" hi`: the pop and the return share a
+    // condition, so the return has them back.
+    let (rom, d) = program(
+        &[
+            0xE92D_4030, // push {r4, r5, lr}
+            0xE3A0_4001, // mov r4, #1
+            0xE350_0000, // cmp r0, #0
+            0x88BD_4030, // pophi {r4, r5, lr}
+            0x812F_FF1E, // bxhi lr
+            0xE3A0_5002, // mov r5, #2
+            0xE8BD_4030, // pop {r4, r5, lr}
+            0xE12F_FF1E, // bx lr
+        ],
+        &[ROM_BASE],
+    );
+    let ctx = Ctx::new(&rom, &d);
+    let funcs = build_all(&ctx).funcs;
+    let proof = crate::saves::prove(&ctx, &funcs);
+    assert!(proof.kept.contains(&ROM_BASE), "{:?}", proof.why);
+    let sums = crate::saves::summarize(&ctx, &funcs);
+    assert_eq!(
+        sums.by_entry[&ROM_BASE].holes,
+        std::collections::BTreeSet::new()
+    );
+}
+
+/// `w: push {r4, lr}; bl s; pop {r4}; pop {r0}; bx r0` and `s`, which uses
+/// r4 and r5 as scratch: `movs r4, #1; movs r5, #2; bx lr`, or (`param`)
+/// reads r4 as a parameter: `adds r0, r4, #0; movs r4, #1; bx lr`.
+fn scratch_callee(param: bool) -> (Vec<u8>, Discovery) {
+    let mut h = vec![
+        0xB510, // 0x00 push {r4, lr}
+        0xF000, 0xF804, // 0x02 bl 0x0e
+        0xBC10, // 0x06 pop {r4}
+        0xBC01, // 0x08 pop {r0}
+        0x4700, // 0x0a bx r0
+        0x46C0, // 0x0c nop
+    ];
+    let s: &[u16] = if param {
+        &[0x1C20, 0x2401, 0x4770]
+    } else {
+        &[0x2401, 0x2502, 0x4770]
+    };
+    h.extend(s);
+    let mut sizes = vec![2, 4, 2, 2, 2, 2];
+    sizes.extend(s.iter().map(|_| 2));
+    thumb_program(&h, &sizes, &[0x0800_0001, 0x0800_000f])
+}
+
+#[test]
+fn scratch_r4_r11_no_caller_reads_is_soft_and_a_register_parameter_hard() {
+    for param in [false, true] {
+        let (rom, d) = scratch_callee(param);
+        let ctx = Ctx::new(&rom, &d);
+        let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+        let s = &sums.by_entry[&0x0800_000f];
+        assert_eq!(s.changes, if param { 1 << 4 } else { 0b11 << 4 });
+        // The wrapper pops r4 back: it keeps them, and reads nothing s
+        // changed.
+        assert_eq!(hard_holes(&sums, 0x0800_0001), Vec::<String>::new());
+        let want: Vec<String> = if param {
+            vec!["0x0800000e: reads r4-r11 at entry: r4".into()]
+        } else {
+            vec![]
+        };
+        assert_eq!(hard_holes(&sums, 0x0800_000f), want, "{:?}", s.holes);
+    }
+    // A pointer to the scratch function in the ROM: callers unknown.
+    let (mut rom, d) = scratch_callee(false);
+    rom.extend(0x0800_000fu32.to_le_bytes());
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    assert_eq!(
+        hard_holes(&sums, 0x0800_000f),
+        vec!["0x0800000f: changes r4-r11 and may be called through a pointer".to_string()]
+    );
 }
 
 /// `c: push {lr}; movs r1, #5; bl f; adds r2, r0, #0; pop {r0}; bx r0`,
@@ -1071,6 +1180,42 @@ fn a_result_returned_unread_is_read_where_its_callers_read_it() {
     let (b, c) = (&sums.by_entry[&0x0800_000d], &sums.by_entry[&0x0800_0015]);
     assert_eq!((b.read_after, b.results), (1, 1));
     assert_eq!((c.read_after, c.forwarded_after, c.results), (0, 1, 1));
+}
+
+/// `c: push {lr}; bl stub; adds r2, r1, #0; pop {r0}; bx r0`, `stub:
+/// bx r3` (a call through r3) and `f: adds r1, r0, #0; bx lr`, in Thumb.
+/// Taken as unknown, the call reads r0-r3 and leaves r1 undefined; with
+/// its callee set {f}, it reads r0 and leaves f's r1, which f returns.
+#[test]
+fn an_indirect_call_with_a_complete_callee_set_reads_its_callees() {
+    use crate::saves::{Assume, Cause, Sets, summarize_sets};
+    let h = [
+        0xB500, 0xF000, 0xF803, 0x1C0A, 0xBC01, 0x4700, // c
+        0x4718, // stub, 0x0c
+        0x1C01, 0x4770, // f, 0x0e
+    ];
+    let sizes = [2, 4, 2, 2, 2, 2, 2, 2];
+    let (c, f) = (0x0800_0001, 0x0800_000f);
+    let (rom, d) = thumb_program(&h, &sizes, &[c, f]);
+    let ctx = Ctx::new(&rom, &d);
+    let funcs = build_all(&ctx).funcs;
+    let plain = crate::saves::summarize(&ctx, &funcs);
+    let at = *plain.by_entry[&c]
+        .indirect_sites
+        .first()
+        .expect("c's call through r3");
+    assert_eq!(plain.by_entry[&c].params, 0xf);
+    assert_eq!(plain.by_entry[&c].causes[&3], Cause::Indirect(at));
+    assert!(!plain.by_entry[&c].undefined_reads.is_empty());
+    assert_eq!(plain.by_entry[&f].results, 0);
+    let sets = Sets::from([(at, [f].into())]);
+    let sums = summarize_sets(&ctx, &funcs, Assume::default(), &sets);
+    let (sc, sf) = (&sums.by_entry[&c], &sums.by_entry[&f]);
+    assert_eq!(sc.params, 0b1);
+    assert_eq!(sc.causes[&0], Cause::Callee { callee: f, at });
+    assert!(sc.undefined_reads.is_empty(), "{:x?}", sc.undefined_reads);
+    assert!(sc.callees.contains(&f));
+    assert_eq!((sf.params, sf.read_after, sf.results), (0b1, 0b10, 0b10));
 }
 
 #[test]
@@ -1774,4 +1919,24 @@ fn a_function_that_never_returns_stays_v1() {
     // Every block of it is a key, so a restore resumes it compiled.
     let r = build_all(&ctx);
     assert!(main.blocks.keys().all(|k| r.table.contains_key(k)));
+}
+
+#[test]
+fn an_arm_ldr_pop_of_r4_restores_it() {
+    // newlib's strcmp: `str r4, [sp, #-4]!` ... `ldr r4, [sp], #4`. A
+    // single `ldr` rotates by its address's low bits, which are 0 at sp.
+    let (rom, d) = program(
+        &[
+            0xE52D_4004, // str r4, [sp, #-4]!
+            0xE3A0_4001, // mov r4, #1
+            0xE49D_4004, // ldr r4, [sp], #4
+            0xE12F_FF1E, // bx lr
+        ],
+        &[ROM_BASE],
+    );
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    let s = &sums.by_entry[&ROM_BASE];
+    assert_eq!(s.holes, std::collections::BTreeSet::new());
+    assert!(s.keeps);
 }

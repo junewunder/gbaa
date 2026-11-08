@@ -29,7 +29,12 @@
 //!   are [`Evidence::Scanned`], kept apart from what descent from the entry
 //!   confirmed. A scanned start that another root's code runs straight
 //!   into isn't a start ([`Driver::demote`]): a stray word pointing past
-//!   the true start doesn't cut the function.
+//!   the true start doesn't cut the function. A scanned root that reaches
+//!   an undefined instruction (not a trap) and that nothing else calls,
+//!   or that jumps to such a root, is data ([`Driver::undef`]) and
+//!   dropped, as one that hits the step cap is: otherwise the lifter
+//!   decodes on from where it leads, through whole tables (Emerald's
+//!   species data, 2026-11-07).
 //!
 //! Function extents come from the starts found so far (each runs to the
 //! next start), and every literal pool and table read is data, which ends
@@ -113,6 +118,9 @@ pub struct Discovery {
     pub rounds: usize,
     /// Scanned roots dropped because their analysis hit [`STEP_CAP`].
     pub dropped: usize,
+    /// Scanned roots dropped as data: they reach an undefined instruction,
+    /// or jump to a root that does ([`Driver::undef`]).
+    pub undefined: usize,
     pub scan: scan::Stats,
 }
 
@@ -155,13 +163,71 @@ pub fn discover(rom: Vec<u8>) -> Discovery {
 /// through its table in RAM, code reached only through computed
 /// pointers). They join the ROM entry in the first descent, so what they
 /// lead to is [`Evidence::Confirmed`] and the pointer scan works around
-/// them. Starts outside ROM are ignored.
+/// them. Starts outside ROM are ignored. A BIOS copy whose source reads
+/// on into ROM code ([`copy_cuts`]) ends there too, and discovery runs
+/// again; the code there is found from its calls and branches (a `bl` to
+/// a `bx rN` stub calls rN, and the stub stays out).
 pub fn discover_with(rom: Vec<u8>, roots: &[u32]) -> Discovery {
+    let mut cuts = BTreeSet::new();
+    loop {
+        let d = discover_once(rom.clone(), roots, &cuts);
+        let n = cuts.len();
+        cuts.extend(copy_cuts(&rom, &d));
+        if cuts.len() == n {
+            return d;
+        }
+    }
+}
+
+/// Starts inside a BIOS copy's source (still data) that code outside it
+/// calls with a `bl`: ROM code the copy's length reads on into (Kirby &
+/// the Amazing Mirror's 0x1c0-byte copy runs into its heap allocator).
+/// Code in ROM doesn't call a copy's ROM source, which runs at the
+/// destination. Not a `bl` to a `bx rN` stub (m4a's `SoundMainRAM` copy
+/// ends in the `bx r3` `SoundMain` calls in ROM), nor a `b` (Kirby:
+/// Nightmare in Dream Land's crt0 copy runs into its coroutine switch):
+/// the code they lead to has jumps the hole report would count
+/// (`docs/research/native-holes.md`, "What discovery misses"). Aligned.
+fn copy_cuts(rom: &[u8], d: &Discovery) -> BTreeSet<u32> {
+    let prog = Program::new(rom.to_vec(), Vec::new(), Vec::new());
+    let in_data = |a: u32| {
+        let i = d.data.partition_point(|r| r.0 <= a);
+        i > 0 && a < d.data[i - 1].1
+    };
+    let mut out = BTreeSet::new();
+    for (&a, c) in &d.code {
+        let Some(i) = prog.decode(a, c.thumb) else {
+            continue;
+        };
+        let Some(t) = i.bl else { continue };
+        // A `bl` to a lone `bx rN` calls rN, not the stub.
+        let stub = prog.decode(t, c.thumb).is_some_and(|s| {
+            matches!(s.instr, Instr::Bx { rm, cond: Cond::Al }
+                if rm != armv4t::decode::Reg::Lr && rm != armv4t::decode::Reg::Pc)
+        });
+        if stub {
+            continue;
+        }
+        let src = d
+            .copies
+            .iter()
+            .any(|&(s, _, n)| (s..s + n).contains(&t) && !(s..s + n).contains(&a));
+        if src && in_data(t) && !d.code.contains_key(&t) {
+            out.insert(t & !1);
+        }
+    }
+    out
+}
+
+/// [`discover_with`] once, with each BIOS copy's source ending at the
+/// first of `cuts` inside it, as at an extra start.
+fn discover_once(rom: Vec<u8>, roots: &[u32], cuts: &BTreeSet<u32>) -> Discovery {
     // The cartridge header starts with an ARM branch to the entry code.
     let mut entry = vec![ROM_BASE];
     entry.extend(roots.iter().copied().filter(|&a| a != ROM_BASE));
     let mut d = Driver::new(Program::new(rom, Vec::new(), Vec::new()), entry.clone());
     d.extra = roots.iter().map(|a| a & !1).collect();
+    d.extra.extend(cuts);
     d.descend(entry.into_iter().map(|a| (a, Kind::Func)).collect());
     // Descent from the entry is done: what it found is confirmed, and the
     // starts and pools the scan finds from here on don't change it.
@@ -251,8 +317,9 @@ struct Driver {
     prog: Program,
     /// What descent starts from: the confirmed code is what they lead to.
     entry: Vec<u32>,
-    /// The extra starts of [`discover_with`], aligned: code in ROM even
-    /// where a BIOS copy reads them as its source.
+    /// The extra starts of [`discover_with`] and its copy cuts, aligned:
+    /// code in ROM even where a BIOS copy reads them as its source, so the
+    /// source ends at the first inside it. Only the starts are roots.
     extra: BTreeSet<u32>,
     eng: Engine,
     roots: BTreeMap<Key, Kind>,
@@ -260,6 +327,9 @@ struct Driver {
     data: BTreeSet<(u32, u32)>,
     /// Roots whose analysis hit the step cap.
     capped: HashSet<Key>,
+    /// Scanned roots taken for data ([`Driver::undef`]): treated as a
+    /// capped one is.
+    bad: HashSet<Key>,
     /// Scanned function roots that another root's code runs straight
     /// into ([`Driver::demote`]): analysed, but not function starts.
     demoted: HashSet<Key>,
@@ -321,6 +391,7 @@ impl Driver {
             roots: BTreeMap::new(),
             data: BTreeSet::new(),
             capped: HashSet::new(),
+            bad: HashSet::new(),
             demoted: HashSet::new(),
             starts: BTreeSet::new(),
             rounds: 0,
@@ -359,6 +430,7 @@ impl Driver {
                     self.capped.insert(*k);
                 }
             }
+            self.undef();
             self.demote();
             let funcs = self.extents();
             let now: BTreeSet<u32> = funcs.iter().map(|f| f.start).collect();
@@ -419,7 +491,10 @@ impl Driver {
             .roots
             .iter()
             .filter(|(k, kind)| {
-                **kind == Kind::Func && !self.capped.contains(k) && !self.demoted.contains(k)
+                **kind == Kind::Func
+                    && !self.capped.contains(k)
+                    && !self.bad.contains(k)
+                    && !self.demoted.contains(k)
             })
             .map(|(k, _)| *k)
             .collect();
@@ -453,7 +528,7 @@ impl Driver {
             .map(|(k, _)| *k)
             .collect();
         for (k, r) in &self.eng.results {
-            if r.capped || !self.roots.contains_key(k) {
+            if self.dead(k) || !self.roots.contains_key(k) {
                 continue;
             }
             for &(a, n) in &r.insns {
@@ -475,14 +550,86 @@ impl Driver {
         }
     }
 
+    /// Whether a root's analysis counts for nothing: it hit the step cap,
+    /// or it is [`bad`](Driver::bad).
+    fn dead(&self, k: &Key) -> bool {
+        self.eng.results[k].capped || self.bad.contains(k)
+    }
+
+    /// Find the scanned roots that reach an undefined instruction (not a
+    /// trap: [`crate::vsa::func::deliberate`]) and that no other root calls
+    /// but one so found, or that jump to one: data the scan took for code
+    /// (a word in Emerald's species table pointing at a run of `movs r0,
+    /// r0` whose `bx` lands on ARM-decoded data). Descent from the entry
+    /// is never judged so. Once found, a root stays found.
+    fn undef(&mut self) {
+        if self.eng.kept.is_empty() {
+            return;
+        }
+        let res = |k: &Key| self.eng.results.get(k).filter(|r| !r.capped);
+        let judged = |k: &Key| !self.eng.kept.contains(k) && res(k).is_some();
+        // `set` and every judged root that jumps to one in it. Only a
+        // jump: a call's constant target is often the analysis'
+        // imprecision, and a real function would go with it.
+        let up = |mut set: HashSet<Key>| {
+            let mut grew = true;
+            while grew {
+                grew = false;
+                for k in self.roots.keys() {
+                    if set.contains(k) || !judged(k) {
+                        continue;
+                    }
+                    if res(k).is_some_and(|r| r.exits.iter().any(|&(_, t)| set.contains(&key(t)))) {
+                        set.insert(*k);
+                        grew = true;
+                    }
+                }
+            }
+            set
+        };
+        let reach: HashSet<Key> = self
+            .roots
+            .keys()
+            .filter(|k| judged(k) && res(k).is_some_and(|r| r.undefined.is_some()))
+            .copied()
+            .collect();
+        let tainted = up(reach.iter().chain(&self.bad).copied().collect());
+        // What an untainted root calls is a function, whatever runs after
+        // a call of its that never returns: Metroid starts its embedded NES
+        // image at the image's first word, a `bl` before the header.
+        let called: HashSet<Key> = self
+            .roots
+            .keys()
+            .filter(|k| !tainted.contains(k))
+            .filter_map(res)
+            .flat_map(|r| r.calls.iter().map(|&t| key(t)))
+            .collect();
+        let seeds = reach
+            .iter()
+            .filter(|k| !called.contains(k))
+            .chain(&self.bad)
+            .copied()
+            .collect();
+        let bad = up(seeds);
+        if self.log {
+            for k in bad.difference(&self.bad) {
+                match res(k).and_then(|r| r.undefined) {
+                    Some(u) => eprintln!("undefined: drop {:#010x}, reaches {u:#010x}", iw(*k)),
+                    None => eprintln!("undefined: drop {:#010x}, jumps to one", iw(*k)),
+                }
+            }
+        }
+        self.bad = bad;
+    }
+
     /// The roots the analyses lead to, and data not seen before.
     fn gather(&mut self, new: &mut Vec<(u32, Kind)>, new_data: &mut Vec<(u32, u32)>) {
         for k in self.roots.keys() {
             let r = &self.eng.results[k];
-            // A capped analysis has run into data: nothing it found counts.
-            // A kept one was gathered against the extents it was analysed
-            // with; the current ones may hold scanned starts.
-            if r.capped || self.eng.kept.contains(k) {
+            // A capped or bad analysis has run into data: nothing it found
+            // counts. A kept one was gathered against the extents it was
+            // analysed with; the current ones may hold scanned starts.
+            if self.dead(k) || self.eng.kept.contains(k) {
                 continue;
             }
             new.extend(r.calls.iter().map(|&t| (t, Kind::Func)));
@@ -531,7 +678,7 @@ impl Driver {
         let mut code: Vec<(u32, u32, bool)> = self
             .roots
             .keys()
-            .filter(|k| !self.eng.results[k].capped)
+            .filter(|k| !self.dead(k))
             .flat_map(|k| self.eng.results[k].insns.iter().map(|&(a, n)| (a, n, k.1)))
             .collect();
         code.sort_unstable();
@@ -540,7 +687,7 @@ impl Driver {
         let mut tables = Vec::new();
         for k in self.roots.keys() {
             let r = &self.eng.results[k];
-            if r.capped {
+            if self.dead(k) {
                 continue;
             }
             for &(a, _) in &r.pools {
@@ -561,9 +708,7 @@ impl Driver {
                 .roots
                 .iter()
                 .filter(|(k, kind)| {
-                    **kind == Kind::Func
-                        && !self.eng.results[*k].capped
-                        && !self.demoted.contains(k)
+                    **kind == Kind::Func && !self.dead(k) && !self.demoted.contains(k)
                 })
                 .map(|(&k, _)| iw(k))
                 .collect(),
@@ -595,8 +740,11 @@ impl Driver {
                 Evidence::Scanned
             }
         };
-        // A scanned root whose analysis hit the cap has run into data.
-        let dropped = |k: &Key| self.eng.results[k].capped && ev(k) == Evidence::Scanned;
+        // A scanned root whose analysis hit the cap, or that reaches an
+        // undefined instruction, has run into data.
+        let dropped = |k: &Key| {
+            ev(k) == Evidence::Scanned && (self.eng.results[k].capped || self.bad.contains(k))
+        };
         let mut d = Discovery {
             rounds: self.rounds,
             rec: self
@@ -606,7 +754,11 @@ impl Driver {
         };
         for (k, kind) in &self.roots {
             if dropped(k) {
-                d.dropped += 1;
+                if self.eng.results[k].capped {
+                    d.dropped += 1;
+                } else {
+                    d.undefined += 1;
+                }
                 continue;
             }
             let capped = self.eng.results[k].capped;

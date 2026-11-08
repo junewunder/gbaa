@@ -232,6 +232,12 @@ pub trait Sem: Sized {
     // in the semantic functions, not here.
 
     fn load(&mut self, w: Width, addr: Self::V) -> Self::V;
+    /// `addr & mask`: the low bits a misaligned load rotates or shifts by.
+    /// A static analysis may answer 0, taking compiled code's loads as
+    /// aligned.
+    fn low_addr_bits(&mut self, addr: Self::V, mask: Self::V) -> Self::V {
+        self.and(addr, mask)
+    }
     fn store(&mut self, w: Width, addr: Self::V, v: Self::V);
 
     // Control.
