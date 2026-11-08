@@ -799,19 +799,7 @@
         "checker": "verifier-3e9a71",
         "at": "2026-11-08T20:46:38Z",
         "evidence": "Code.timing (codegen fills it) hashed in code_id; test timing_is_part_of_the_build_id passes. Instant Kirby v1 (out/katam-v1i) through rollback-feel wander --headless, delay 0, 3600 frames: both peers end 2c3e09810f89c089, 69.6% compiled, p50 3.88/3.97 ms, no desyncs; row in multiplayer.md. just check passes after merging main.",
-        "branch": "unit/multiplayer/timing-in-build-id",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T20:46:38Z",
-          "by": "7bc14b37",
-          "host": "quack",
-          "pid": 686555,
-          "start": "16007050",
-          "beats": true,
-          "session": "7bc14b37-cd80-4dfa-8b40-bd509199b6a1",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -824,8 +812,7 @@
           "by": "b9540f68",
           "text": "Code part done on branch t3/5f15b0aa: Code.timing (codegen fills it), hashed in code_id, build byte 29 = the interpreter's timing; test timing_is_part_of_the_build_id. Left: the instant Kirby v1 rollback-feel run and its multiplayer.md rows."
         }
-      ],
-      "round": "2026-11-01T01:57:22Z"
+      ]
     },
     {
       "id": "multiplayer/four-kirbys-deck",
