@@ -850,7 +850,19 @@
     {
       "id": "multiplayer/wireless-adapter-local",
       "title": "Emerald's Union Room over an emulated wireless adapter",
-      "detail": "From the link-cable survey (docs/research/multiplayer.md, 'The cable over the internet'): the wireless adapter is the one link gap that matters for june's games (Emerald's Union Room, wireless trades, Berry Crush). Emulate the adapter on the link hub, both consoles in one process first: normal 32-bit mode on runtime::link, librfu's STWI commands (afska's gba-link-connection docs), and the adapter's radio between machines. Check: two Emeralds from alice.sav and bob.sav meet in the Union Room and trade, identically twice; just check. Networking it (each player runs only their own console, the server as the radio) is later work."
+      "detail": "From the link-cable survey (docs/research/multiplayer.md, 'The cable over the internet'): the wireless adapter is the one link gap that matters for june's games (Emerald's Union Room, wireless trades, Berry Crush). Emulate the adapter on the link hub, both consoles in one process first: normal 32-bit mode on runtime::link, librfu's STWI commands (afska's gba-link-connection docs), and the adapter's radio between machines. Check: two Emeralds from alice.sav and bob.sav meet in the Union Room and trade, identically twice; just check. Networking it (each player runs only their own console, the server as the radio) is later work.",
+      "record": {
+        "state": "claimed",
+        "by": "954f0eb1",
+        "session": "954f0eb1-8b50-45a5-9f0e-1a0408fed293",
+        "host": "quack",
+        "pid": 3349722,
+        "start": "14823514",
+        "at": "2026-11-08T20:38:54Z",
+        "branch": "unit/multiplayer/wireless-adapter-local",
+        "beats": true
+      },
+      "round": "2026-11-08T20:38:54Z"
     },
     {
       "id": "multiplayer/single-pak-multiboot",
