@@ -31,10 +31,10 @@ IRQ. Nothing is cleared, so by frame 600 rows 0-12 hold frames 360-599
 and the VRAM bands every slot. The rest of the frame buffer is what agb's
 start-up left in VRAM, the same every run.
 
-Frame 600's hash is `7d3db3b8854e494a` in our interpreter at `--timing
+Frame 600's hash is `a2d7b94fedf1bbab` in our interpreter at `--timing
 exact` and `--timing native` (2026-11-08). mGBA 0.10.5 (`mgba-dump ROM
---frames 600 --hash`) draws `e5c3533e9bf7cdeb`: rows 3, 4 and 12 differ
-because its HLE `CpuFastSet` leaves r2 as given where the play build
-leaves `r1 + 4 * count`, and row 11 because its `MultiBoot` leaves r0 as
-given where the play build returns 1 (GBATEK's failure, no cable). Every
-other row and both VRAM bands are mGBA's.
+--frames 600 --hash`) draws `e5c3533e9bf7cdeb`: only row 11 differs,
+because its `MultiBoot` leaves r0 as given where the play build returns 1
+(GBATEK's failure, no cable). Every other row, `CpuFastSet`'s r2 (rows 3,
+4, 12, left as given: the SWI dispatcher restores it) included, and both
+VRAM bands are mGBA's.
