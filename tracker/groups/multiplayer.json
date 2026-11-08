@@ -621,19 +621,7 @@
         "by": "b61b4529",
         "at": "2026-11-08T20:07:28Z",
         "evidence": "Fixed: the window's running state now goes into the session (this seat's console starts from it; the session's start sends it to the others) and the game alone goes on from the seat's state afterwards. Private cu session on quack, two Kirby windows mid-game at game select (cursor moved since their --state, so the live state was what carried): join didn't reset either, P2 left and played on in Rainbow Route, P1 rehosted from its cable screen, a new P2 joined, the cable screen saw P1+P2, both reached Rainbow Route, 1860 frames, 16156 transfers, desyncs none. Headless after merging main: gbaa-pingsim desktop calm, --state1/--state2 at game select, 1800 frames exact, both in multiplayer Rainbow Route, both end cdc7b0d19082c3a6, no desync. just check passes after the merge.",
-        "branch": "unit/multiplayer/join-without-restart",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T20:07:28Z",
-          "by": "b61b4529",
-          "host": "quack",
-          "pid": 686555,
-          "start": "16007050",
-          "beats": true,
-          "session": "b61b4529-bc61-4060-9402-fc6d27ecb674",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -641,8 +629,7 @@
           "by": "6f480fa6",
           "text": "Cause: lib.rs run_window ends the solo run() and room::run builds Gba::with_code(rom, &[None; SEATS]..) fresh: no start state. Fix: solo run hands back its machine state; pass it as this seat's Some(state) to Gba::with_code (and resume alone from the session's end state)."
         }
-      ],
-      "round": "2026-11-01T01:34:24Z"
+      ]
     },
     {
       "id": "multiplayer/connected-mark",
