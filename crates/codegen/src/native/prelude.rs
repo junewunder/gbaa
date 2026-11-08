@@ -538,7 +538,7 @@ pub fn div(r: &mut [u32; 4]) {
 
 /// `CpuFastSet` (r0 source, r1 destination, r2 word count and fill), as
 /// the play build's: eight words at a time, its registers as it leaves
-/// them, and its time.
+/// them (r2 as given: the SWI dispatcher restores it), and its time.
 pub fn cpu_fast_set(g: &mut Game, sp: u32, r: &mut [u32; 4]) -> Result<(), Exit> {
     if r[0] < 0x0200_0000 {
         return Ok(());
@@ -546,11 +546,11 @@ pub fn cpu_fast_set(g: &mut Game, sp: u32, r: &mut [u32; 4]) -> Result<(), Exit>
     let fill = r[2] & 1 << 24 != 0;
     let cycles = hw::bios::cpu_fast_set_cycles(g.hw.waitcnt, r[0], r[1], r[2]);
     r[3] = r[2] << 12;
-    r[2] = r[1].wrapping_add((r[2] & 0x1F_FFFF) * 4);
+    let end = r[1].wrapping_add((r[2] & 0x1F_FFFF) * 4);
     if fill {
         r[3] = ld32(g, r[0] & !3);
     }
-    while (r[1] as i32) < (r[2] as i32) {
+    while (r[1] as i32) < (end as i32) {
         for k in 0..8 {
             if !fill {
                 let v = ld32(g, r[0] & !3);
