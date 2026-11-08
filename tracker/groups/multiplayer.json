@@ -295,6 +295,11 @@
       "priority": 3,
       "notes": [
         {
+          "at": "2026-11-08T20:55:07Z",
+          "by": "29ee78be",
+          "text": "Feel sim (2026-11-08): before that day's fixes a window with sound undid time sync's holds, so one seat held back ~1 frame in 12 all session (each a doubled then skipped frame). A playtest report from an older build showing hundreds 'held back' is that; fixed since."
+        },
+        {
           "at": "2026-10-29T03:35:08Z",
           "by": "600a9d3e",
           "text": "june 2026-10-28: this was meant to run AFTER netplay moved onto recompiled code. The 23:00 run measured the interpreter build; redo it on the v1 recompiled build (both peers), at delay 0, once the Mac half lands."
