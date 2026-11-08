@@ -1322,11 +1322,14 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `planted_store`, `planted_hole`, `planted_flags`) and its bars,
   `[program.<name>.bars]`. Today `agb/native-spike`, `agb/affine`,
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
-  `agb/native-frame-locals` and `agb/native-ime-release` (`just
-  agb-tests`) on `units/native-spike.toml`, `units/affine-600.toml`,
+  `agb/native-frame-locals`, `agb/native-ime-release` and
+  `agb/native-bios-calls` (`just agb-tests`) on
+  `units/native-spike.toml`, `units/affine-600.toml`,
   `units/mosaic-modes-600.toml`, `units/native-fallthrough-600.toml`,
-  `units/native-irq-hold-601.toml`, `units/native-frame-locals-600.toml`
-  and `units/native-ime-release-601.toml`. First every
+  `units/native-irq-hold-601.toml`, `units/native-frame-locals-600.toml`,
+  `units/native-ime-release-601.toml` and
+  `units/native-bios-calls-600.toml` (each BIOS call the prelude has
+  past the waits, `Div` and `CpuSet`, native/lift-bios-calls). First every
   program is lifted with `--bars` (seconds), failing before any build on
   a metric over its bar; then each lift and its play build
   (`--timing native`) are built and `route-check --native` runs them for
@@ -1347,7 +1350,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   passed as `--packed`: it must draw the guest layout's frames and
   record the same bytes, nothing skipped (native/lift-packed-layout).
   Passes with
-  `every metric within its bar`, seven `pass (60x frames, 0 differences …;
+  `every metric within its bar`, eight `pass (60x frames, 0 differences …;
   the play layout draws the same 60x frames, its records the same …)`
   lines, `planted fault caught (…-planted: frame 2: EWRAM byte 0x020000c0
   …)`, `(…-fall-as-tail-call: frame 1: EWRAM byte 0x020000c4 …)`,
@@ -1356,7 +1359,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   play 0x00, native 0x01 …)`, `(…-ime-at-waits: frame 2: EWRAM byte
   0x020000cc: play 0x01, native 0x00 …)`, `planted hard hole caught` and
   `lift-check: passed`. Logs in `out/lift-*.txt`. About 10 minutes on
-  quack. Heavy: builds twenty-six generated crates; gbaa-lift-check runs capped at 8 GB (its lifts in its scope; route-check in a 3 GB scope and the builds in their own).
+  quack. Heavy: builds twenty-nine generated crates; gbaa-lift-check runs capped at 8 GB (its lifts in its scope; route-check in a 3 GB scope and the builds in their own).
 
   `gbaa-lift --shadow-locals` (native/frame-locals; by hand, not part of
   the check) keeps every stack local in the frame's bytes too and prints

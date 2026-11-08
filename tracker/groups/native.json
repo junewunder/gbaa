@@ -609,17 +609,17 @@
       "minMinutes": 120,
       "record": {
         "state": "claimed",
-        "by": "f93b1ecd",
-        "session": "f93b1ecd-f104-48fc-9e5b-29cfd643d68a",
+        "by": "88b731c4",
+        "session": "88b731c4-cdf1-422a-bb0d-49a820fdacf8",
         "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T11:28:38Z",
+        "pid": 3349722,
+        "start": "14823514",
+        "at": "2026-11-08T18:41:05Z",
         "branch": "unit/native/metroid-lifts",
-        "beats": true,
-        "handedBack": "2026-11-06T12:12:16Z",
+        "resumed": "f93b1ecd",
+        "prevSession": "f93b1ecd-f104-48fc-9e5b-29cfd643d68a",
         "pushed": true,
-        "ended": "2026-11-06T12:12:36Z"
+        "beats": true
       },
       "notes": [
         {
@@ -838,15 +838,12 @@
       "uses": ["heavy"],
       "minMinutes": 180,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "f6eb8639",
-        "session": "f6eb8639-6ea9-4888-b4a3-e4d4402236f3",
-        "host": "quack",
-        "pid": 3349722,
-        "start": "14823514",
-        "at": "2026-11-08T16:23:34Z",
-        "branch": "unit/native/lift-bios-calls",
-        "beats": true
+        "checker": "verifier-3b9e61d4",
+        "at": "2026-11-08T18:06:57Z",
+        "evidence": "After merging main (the runaway fix {unit:native/gap-decoding-runaway}, ref-heap, indirect-call-args), owner's 'Keep all eight' answer met: gbaa-holes BIOS counted+scanned-only = gbaa-lift BIOS holes on all eight: metroid 0, warioware 0, kirby-mirror 0+2=2, kirby-nightmare 4, moonbeam 0, emerald 5, minish-cap 5, emerald-rogue 5+1=6 (verifier re-ran four). Full just lift-check passed (native-bios-calls-600: 0 differences, packed too), just check green. lines_prelude 581->724: +143 prelude lines (cpu_fast_set, lz77, rl, sound_bias, unpack_put). Program colours from a returned copy since ref-heap broke its packed build: filed {unit:native/ref-heap-static-arrays}; route hash 7d3db3b8854e494a, mgba_hash added.",
+        "host": "quack"
       },
       "notes": [
         {
@@ -864,13 +861,7 @@
           "by": "f9620931",
           "text": "Branch has the gbaa-holes half: analysis::holes::NATIVE_BIOS is the lifter's list and bios_implemented's. Left: prelude fns (reuse runtime::bios math/decomp logic over ld/st, as cpu_set does), one agb program calling each swi + its lift-check table and route, 8-game compare."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-07T07:12:43Z",
-        "findings": "- The card says it's done only when gbaa-holes' BIOS count matches the lifter's on all eight games, but the Evidence shows they don't match on Emerald. It says \"Emerald's 5 real sites match, the rest is runaway gap decoding filed as {unit:native/gap-decoding-runaway}\". This session filed that unit itself (tracker/log.jsonl:2332) and left a note on it (tracker/log.jsonl:2335) that the lifter shows 6 BIOS sites near 0x087f2250 only inside two runaway functions. So one game of the eight was split off into a unit the card didn't ask for. The code in the diff itself looks right: the prelude's CpuFastSet, LZ77, RL, SoundBias, ArcTan2 and MultiBoot leave registers and memory as the play build's do (runtime::bios, bios/math.rs). Two ways to fix it. Either fix the runaway gap decoding in this unit, then rerun `just holes-all` and the lifter on Emerald and show the counts match. Or use `just ask` to get the owner to agree to narrowing the done-when to the seven games plus Emerald's real call sites, with the Emerald comparison waiting on the gap-decoding fix (the lifter's gap decoding walks through Emerald's data, {unit:native/gap-decoding-runaway}). Then record that decision in the evidence."
-      },
-      "round": "2026-11-06T12:46:45Z"
+      ]
     },
     {
       "id": "native/lift-ram-copies",
@@ -979,6 +970,11 @@
         "beats": true
       },
       "notes": [
+        {
+          "at": "2026-11-08T17:52:01Z",
+          "by": "aed48009",
+          "text": "Bars set to measured after merging main (d88d454), just check green. mods/metroid/holes.toml stand-in 0x087603d9 still there (mods is shared with main): drop it after landing, once main's discovery no longer starts a function there."
+        },
         {
           "at": "2026-11-07T11:07:32Z",
           "by": "7cd800aa",
@@ -1089,6 +1085,7 @@
       "title": "Function-address flow settles on Emerald",
       "detail": "After {unit:native/fnref-flow-scale} (Metroid in 151 s), the flow on pret's Emerald (15,158 fns) through gbaa-recompile --summaries --callee-sets was still killed at a 14G cap after 5 min (quack, 2026-11-07). Make it settle under about 8 GB. Done when: that command finishes on Emerald under 8 GB (time and peak quoted) and just lift-check's bars hold.",
       "check": "independent",
+      "needs": ["native/fnref-emerald-speed"],
       "uses": ["heavy"],
       "minMinutes": 150,
       "record": {
@@ -1103,9 +1100,16 @@
         "resumed": "8898da77",
         "prevSession": "8898da77-3409-4343-b387-337a68538af5",
         "pushed": true,
-        "beats": true
+        "beats": true,
+        "handedBack": "2026-11-08T18:34:29Z",
+        "ended": "2026-11-08T18:34:40Z"
       },
       "notes": [
+        {
+          "at": "2026-11-08T18:27:27Z",
+          "by": "c06275d9",
+          "text": "2026-11-08: Refs (b6d5ed3f) fixed memory: Emerald round 0 flat at 1.5 GB (was >10 GB), entries 5.6M tokens. Not done: too slow to finish (~60 s/500 fns). Split: {unit:native/fnref-emerald-speed} (needed); widening gap {unit:native/fnref-romfrom-absorb}. memory/ file says how to measure."
+        },
         {
           "at": "2026-11-07T12:41:33Z",
           "by": "8898da77",
@@ -1149,7 +1153,19 @@
       "title": "Stand-ins for libgcc's double multiply and divide",
       "detail": "libgcc's ieee754-df.S __muldf3 and __divdf3 call their denormal paths (Lml_s, Ldv_s) by bleq, which return r4/r5 changed: a real register-convention break, hard holes in moonbeam (6) and Emerald Rogue (3) after {unit:native/callee-save-breaks} (docs/research/native-holes.md, 'Functions that change r4-r11 or sp'). Write each as a stand-in (Rust f64 mul/div, bit-exact on the soft-float's results), found by its code the way analysis::flash recognises routines, so every game with them gets it. Done when: gbaa-holes counts none of them hard on moonbeam and Rogue (the report must learn the stand-ins), a test pins the f64 results against the interpreter on edge cases (denormals, NaN, inf, rounding), just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "9c7ffd35",
+        "session": "9c7ffd35-8623-4cb6-a52d-d2e121669618",
+        "host": "quack",
+        "pid": 3349068,
+        "start": "14822266",
+        "at": "2026-11-08T18:34:45Z",
+        "branch": "unit/native/libgcc-df-standins",
+        "beats": true
+      },
+      "round": "2026-11-08T18:34:45Z"
     },
     {
       "id": "native/entry-read-masking",
@@ -1216,6 +1232,32 @@
       "detail": "Found by {unit:native/lift-bios-calls}: heap.rs makes an object where a RAM base meets an unknown index, so an element of a static array (agb/native-bios-calls 4ee88ac's OUT.regs[k], 16 bytes at 0x020000b8) prints as g.at(Ref::<H_..>). The same words are also constant-address globals, which --layout packed places apart (in the lifter's order), so Ram::span fails and the packed build panics: 'pointer 0x020000b8 to 16 bytes isn't in RAM in one piece'. The guest layout passes. Repro: build agb/native-bios-calls at 4ee88ac (its main loop colours from o.regs.iter()) and run just lift-check --only native-bios-calls. The program now colours from a returned copy to avoid it; any game indexing a static array its code also touches by constant address hits it. Fix in the lifter (keep such globals contiguous in packed, or leave objects whose base is a global's region as bytes). Done when: the 4ee88ac loop shape (as a lift-check program or test) passes the packed native check; lift-check and just check pass.",
       "check": "independent",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-rom-read-bound",
+      "title": "Function flow bounds a ROM read by its table, not next code",
+      "detail": "fnref's from-here-on ROM read (affine at 0x08000af2) ran to the next code; once {unit:native/modern-gcc-data-as-code} removed a false start in agb's panic text, it runs into agb's vtables: ref_unexplained rose 35->97 (93->164 ime-release/irq-hold), fn_words_not_proven +4/5. Bound the read by the table it indexes (its length or a bounds check) and lower both lift-check bars on the seven agb programs. Owner's answer (a) to the bar question.",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-emerald-speed",
+      "title": "Function-address flow on Emerald fast enough to finish",
+      "detail": "After {unit:native/fnref-flow-emerald} made large reads one Ref token (b6d5ed3f), Emerald's flow (gbaa-recompile --summaries --callee-sets, from the indirect-call-args branch with this fnref.rs) holds RSS at 1.5 GB through round 0, but round 0 alone runs about 60 s per 500 functions (542 s at 8,500 of 15,158). Profile it (likely per-op scans of 30k-token Refs: split_refs' rest, cmp_refs' difference, hole() on fresh expansions, ref_make after each store) and make the whole run finish. Done when: that command finishes on Emerald under 8 GB with time and peak quoted, and just lift-metrics shows no bar over.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-08T18:34:25Z",
+          "by": "c06275d9",
+          "text": "--callee-sets is on main now (indirect-call-args landed 2026-11-08): no worktree needed; plain gbaa-recompile --summaries ROM --callee-sets under just long --mem 9G. Ref code: b6d5ed3f on {unit:native/fnref-flow-emerald}'s branch."
+        }
+      ]
+    },
+    {
+      "id": "native/fnref-romfrom-absorb",
+      "title": "Flow's ROM from-here-on widening keeps pointers it reads",
+      "detail": "Val::cap lets RomFrom(lo) absorb Rom(a) for any a >= lo, but rom_from(lo) reads only up to the next code, so a pointer past it is never read and a call through it may get a complete callee set missing callees. Seen in mosaic-modes (found by {unit:native/fnref-flow-emerald}): fn 0x080037f1 (core::fmt pad) r0 widens to RomFrom(0x08000100), absorbing vtable Rom(0x08024c50); word 0x08024c5c (f_08002ee1) was read only transiently before. Make the widening keep such pointers (mark lost_rom, or don't absorb past bound) with a unit test; just lift-metrics bars hold (lower any that drop).",
+      "check": "recorded"
     }
   ]
 }
