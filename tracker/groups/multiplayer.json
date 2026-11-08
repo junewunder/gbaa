@@ -803,6 +803,17 @@
       "detail": "Since play builds default to --timing instant ({d:play-builds-use-timing-instant-checks-pass}; docs/decisions.md 11), an instant and an exact build of one ROM likely get the same netplay build ID: netplay::gba's code_id (crates/netplay/src/gba.rs) hashes keys, overlays, inner starts and folded ranges, and runtime::Code doesn't record the timing mode. Two such peers would share a room and split from the first frame, silently. The version cutoff ({unit:multiplayer/server-version-cutoff}) doesn't catch it: both can be the same version. Record the mode in Code (codegen fills it), hash it into code_id. Check: a test that two Codes differing only in timing get different build IDs; an instant Kirby v1 build through just rollback-feel wander --headless (both peers one hash; note p50 and compiled share beside the exact rows in docs/research/multiplayer.md 'On recompiled code'); just check.",
       "check": "independent",
       "minMinutes": 60,
+      "record": {
+        "state": "claimed",
+        "by": "7bc14b37",
+        "session": "7bc14b37-cd80-4dfa-8b40-bd509199b6a1",
+        "host": "quack",
+        "pid": 686555,
+        "start": "16007050",
+        "at": "2026-11-08T20:22:08Z",
+        "branch": "unit/multiplayer/timing-in-build-id",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-01T01:57:43Z",

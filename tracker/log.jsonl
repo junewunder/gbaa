@@ -2465,3 +2465,4 @@
 {"at":"2026-11-08T20:14:23Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/libgcc-df-standins","text":"Stand-ins for libgcc's double multiply and divide: on main"}
 {"at":"2026-11-08T20:14:36Z","actor":"loop","tag":"694a54e9","host":"quack","cmd":"claim","id":"multiplayer/link-cable-survey","text":"How the link cable works, and which games netplay covers: claimed"}
 {"at":"2026-11-08T20:22:04Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"multiplayer/join-without-restart","text":"Join netplay without restarting the game: on main"}
+{"at":"2026-11-08T20:22:08Z","actor":"loop","tag":"7bc14b37","host":"quack","cmd":"claim","id":"multiplayer/timing-in-build-id","text":"Netplay build ID tells instant timing from exact: claimed"}
