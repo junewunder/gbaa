@@ -1331,6 +1331,13 @@
       "detail": "docs/native-stage-b.md, 'The first game': out/metroid recompiled at --timing native, on units/metroid-native.toml: its compiled code and its --interp run differ at frame 1 (EWRAM 0x02038000 on, 32,651 bytes, the compiled run ahead; pictures differ in 983 of 2,700 frames). route-check --native gates on these agreeing. The compiled run interprets 45% of its cycles (1.6M instructions in the fallback). Also: the interpreter's frame-1 record has VCOUNT 159 where the native program has 160. Find why and fix it in the recompiler or runtime. Done when: route-check --native's play-against-interp step passes on the route, and just check passes.",
       "check": "independent",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/check-holes-copies",
+      "title": "The native check skips the holes file's RAM code copies",
+      "detail": "docs/native-stage-b.md, 'The first game': route-check --native skips the destinations of Discovery::copies only; a commercial game's IWRAM copies come from its holes file's [[copy]] entries (Metroid's five, mods/metroid/holes.toml), which the native program runs as Rust and never writes, so they would differ. Skip them too (the lifter's holes file, given to route-check or found by the game's name). Done when: Metroid's route-check --native prints those ranges as not compared, a unit test covers it, and just check passes.",
+      "check": "independent",
+      "uses": ["heavy"]
     }
   ]
 }
