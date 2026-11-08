@@ -591,7 +591,7 @@ mod tests {
         ))
         .unwrap();
         let c: CorpusFile = toml::from_str(&t).unwrap();
-        assert_eq!(c.game.len(), 8);
+        assert_eq!(c.game.len(), 9);
         for g in &c.game {
             if let Some(f) = &g.cover {
                 let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../../").to_string() + f;

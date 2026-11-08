@@ -153,17 +153,28 @@
       "title": "CpuFastSet leaves r2 as mGBA does",
       "detail": "Found by {unit:native/lift-bios-calls} (agb/native-bios-calls, SCENE.md): after CpuFastSet mGBA 0.10.5 leaves r2 as given (count and fill bit), where runtime::bios::decomp::cpu_fast_set sets r2 = r1 + 4 * count (its doc says that is mGBA's HLE BIOS). Frame 600 of units/native-bios-calls-600.toml differs from mGBA in rows 3, 4 and 12 only for this (row 11 is MultiBoot's r0, documented). Settle what hardware and mGBA leave (mGBA's source, GBATEK), fix the play build and the stage-A prelude's cpu_fast_set alike, and move the checkpoint. Done when: mgba-dump and our interpreter agree on rows 3, 4 and 12 at frame 600, lift-check passes, just check passes.",
       "check": "recorded",
+      "needs": ["native/lift-bios-calls"],
       "record": {
         "state": "claimed",
-        "by": "2f1ce0d0",
-        "session": "2f1ce0d0-912a-4a5c-b8a7-b766a57728db",
+        "by": "4da39b0a",
+        "session": "4da39b0a-7dd3-4a38-88a0-118cd6dd5615",
         "host": "quack",
-        "pid": 862066,
-        "start": "2504341",
-        "at": "2026-11-07T13:32:14Z",
+        "pid": 3349722,
+        "start": "14823514",
+        "at": "2026-11-08T19:20:45Z",
         "branch": "unit/bios/fast-set-r2",
+        "resumed": "2f1ce0d0",
+        "prevSession": "2f1ce0d0-912a-4a5c-b8a7-b766a57728db",
+        "pushed": true,
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-07T13:41:00Z",
+          "by": "2f1ce0d0",
+          "text": "Settled: the SWI dispatcher pushes/pops r2 around every call (real BIOS 0x164/0x170, mGBA hle-bios.s), so r2 stays as given. Branch 746bc86 fixes runtime::bios::decomp (check, gba-tests pass). Left: same in the prelude, move the checkpoint, after {unit:native/lift-bios-calls}."
+        }
+      ],
       "round": "2026-11-07T13:32:14Z"
     }
   ]

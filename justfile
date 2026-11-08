@@ -173,12 +173,14 @@ jt-score:
     set -u
     {{lock}} cargo build -q --release -p jt-check || exit 1
     status=0
-    # The modern build's two subsets were checked by hand: both tables have
-    # a dead entry 0 (Cmd_drawlvlupbox, AddPointsOnFainting).
+    # The modern build's four subsets were checked by hand: two tables have
+    # a dead entry 0 (Cmd_drawlvlupbox, AddPointsOnFainting), and
+    # LoadBattlePyramidObjectEventTemplates' two switch on a field of a
+    # const ROM table whose values pick 4 of 5 cases and 1 of 5.
     # The far-jump bars (decision 5a): the research reached 547/548 and
     # 721/732; keeping a probe's answer when it reaches no return (#25)
     # and the agb rules (#30) reach these.
-    for build in "pokeemerald 676 0 548" "pokeemerald_modern 584 2 726"; do
+    for build in "pokeemerald 676 0 548" "pokeemerald_modern 610 4 726"; do
         set -- $build
         target/release/jt-check {{quote(gbaa_data / "src/pokeemerald")}}/$1.elf --expect $2 --max-subset $3 --expect-far $4 || status=1
     done
@@ -938,7 +940,7 @@ lift rom out="" *flags:
     just build-recompiled "$out"
     exit $lifted
 
-# The stage-A lifter's check (native/lift-stage-a, native/lift-bars; docs/native-stage-b.md, "How every piece is checked"): gbaa-lift-check runs the programs of crates/codegen/lift-check.toml (one table each: ROM under $GBAA_DATA, route, flags, bars; today agb/native-spike, agb/affine, agb/mosaic-modes, agb/native-fallthrough, agb/native-irq-hold, agb/native-frame-locals and agb/native-ime-release from `just agb-tests`). First each is lifted with `--bars`, failing on any metric over its bar, named with both numbers; then each lift and its play build (--timing native) are built and route-check --native compares them for the route's 600 frames (601 for native-irq-hold and native-ime-release) with no replaced-library list: pictures, RAM outside the stack and code copies, I/O, display memories. Controls from the file: the spike lifted with a planted wrong store (planted_store, the V-blank handler's frame count) must be caught, and with its IRQ wrapper's stand-in dropped (planted_hole) the lift and the crate's build must fail naming f_03000000's mrs; native-fallthrough, native-irq-hold, native-frame-locals and native-ime-release lifted with each of their planted_flags (--fall-as-tail-call: the old fall into another function as a tail call; --irq-at-waits: the old IRQ at a wait inside a critical section; --plant-slot=0x08000182: a store to a stack local, fl_keep's x + 7, made one more; --ime-at-waits: the old IRQ held past the store that sets IME again) must be caught by the native check. Each program is also lifted at the play layout (--layout packed: globals in the lifter's order; native/lift-packed-layout), which route-check --packed holds to the guest layout's frames and records. ARGS: --only NAME. Writes out/lift-*. Heavy: builds twenty-six generated crates (about 10 minutes).
+# The stage-A lifter's check (native/lift-stage-a, native/lift-bars; docs/native-stage-b.md, "How every piece is checked"): gbaa-lift-check runs the programs of crates/codegen/lift-check.toml (one table each: ROM under $GBAA_DATA, route, flags, bars; today agb/native-spike, agb/affine, agb/mosaic-modes, agb/native-fallthrough, agb/native-irq-hold, agb/native-frame-locals, agb/native-ime-release and agb/native-bios-calls from `just agb-tests`). First each is lifted with `--bars`, failing on any metric over its bar, named with both numbers; then each lift and its play build (--timing native) are built and route-check --native compares them for the route's 600 frames (601 for native-irq-hold and native-ime-release) with no replaced-library list: pictures, RAM outside the stack and code copies, I/O, display memories. Controls from the file: the spike lifted with a planted wrong store (planted_store, the V-blank handler's frame count) must be caught, and with its IRQ wrapper's stand-in dropped (planted_hole) the lift and the crate's build must fail naming f_03000000's mrs; native-fallthrough, native-irq-hold, native-frame-locals and native-ime-release lifted with each of their planted_flags (--fall-as-tail-call: the old fall into another function as a tail call; --irq-at-waits: the old IRQ at a wait inside a critical section; --plant-slot=0x08000182: a store to a stack local, fl_keep's x + 7, made one more; --ime-at-waits: the old IRQ held past the store that sets IME again) must be caught by the native check. Each program is also lifted at the play layout (--layout packed: globals in the lifter's order; native/lift-packed-layout), which route-check --packed holds to the guest layout's frames and records. ARGS: --only NAME. Writes out/lift-*. Heavy: builds twenty-nine generated crates (about 11 minutes).
 lift-check *args:
     {{lock}} cargo build -q --release -p route-check
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift --bin gbaa-lift-check
@@ -1382,7 +1384,7 @@ holes rom *args:
     {{lock}} cargo build -q --release -p hole-report
     {{cap}} MemoryMax=3G target/release/gbaa-holes "$@"
 
-# The hole report over the corpus (holes/corpus.toml; crates/hole-report/src/corpus.rs): every game in turn, each report in OUT/<name>.txt, then one table of the ranking lines' numbers, saved as OUT/summary.toml. ARGS: --out DIR (default out/holes/<git short hash>[-dirty]), --against DIR2 (changes from DIR2's summary in brackets), --only NAME (repeatable), --cover (each game's coverage runs: hours), --write-doc FILE (the table as a generated numbers file: docs/research/native-holes.numbers.md), --from DIR (run nothing: render DIR's summary.toml), and any `just holes` flag for every game. About 10 minutes for the eight (9.5 to 11 measured); run it with `just long`. The games run one at a time under one 3 GB cap, no swap.
+# The hole report over the corpus (holes/corpus.toml; crates/hole-report/src/corpus.rs): every game in turn, each report in OUT/<name>.txt, then one table of the ranking lines' numbers, saved as OUT/summary.toml. ARGS: --out DIR (default out/holes/<git short hash>[-dirty]), --against DIR2 (changes from DIR2's summary in brackets), --only NAME (repeatable), --cover (each game's coverage runs: hours), --write-doc FILE (the table as a generated numbers file: docs/research/native-holes.numbers.md), --from DIR (run nothing: render DIR's summary.toml), and any `just holes` flag for every game. About 12 minutes for the nine (Imperium the longest, 3 minutes); run it with `just long`. The games run one at a time under one 3 GB cap, no swap.
 [positional-arguments]
 holes-all *args:
     {{lock}} cargo build -q --release -p hole-report

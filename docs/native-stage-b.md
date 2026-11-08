@@ -154,15 +154,24 @@ build for the host.
   --native … --packed`); bar: 0 ROM keys left in a dense build. Waits on
   the heap split by allocation site (`native/fnref-heap-sites`).
 - **Indirect calls pass what their callees read**
-  (`native/indirect-call-args`). With the points-to from the dense IDs,
-  an indirect call whose callee set is complete passes the union of its
-  callees' parameters; an incomplete set keeps all four. The analysis
-  goes where `codegen::saves::summarize` can use it too, so it shows on
-  Emerald without lifting it (its 656 disagreements from indirect calls,
-  re-measured; no bar there, since Emerald's callbacks go through RAM
-  globals whose callee sets may stay incomplete). Bar on the agb
-  programs: no indirect call with a complete callee set still passing
-  all four.
+  (`native/indirect-call-args`). Done: a call (not a jump by value)
+  whose `native/fnref-flow` callee set is complete reads the union of
+  its callees' parameters and takes back what any may change
+  (`codegen::saves::summarize_sets`; the lift summarises twice, plainly
+  for the frames, then with the sets). `call_fn` passes only those:
+  `{ let o = call_fn(g, k, r13, [r0, r1, 0, 0])?; r0 = o[0]; }`; an
+  incomplete set keeps all four. `native::callee_sets` gives
+  `gbaa-recompile --summaries --callee-sets` the sets without a lift.
+  Metrics `call_fn_complete` (meant to rise, so unbarred) and
+  `call_fn_four_complete`. The latter's bar is the values measured
+  (56-60 per program, the owner's call), not 0:
+  every complete set is the pile's ~21 address-taken functions, whose
+  summaries read all four between them; it falls when
+  `native/fnref-heap-sites` narrows the sets. Emerald (656
+  disagreements from indirect calls without sets) is re-measured in
+  `native/indirect-call-args-emerald`, once the flow settles on
+  Emerald (`native/fnref-flow-emerald`; `native/fnref-flow-scale`
+  landed and wasn't enough), the owner's call to land this first.
 
 ### 4. The stack
 
@@ -264,17 +273,18 @@ and the shortcuts above at game scale.
   (`native/metroid-lifts`). Needs the discovery units, the shortcuts and
   the module split. The ROM's file name has spaces, so it lifts with
   `--name metroid`; its holes file is `mods/metroid/holes.toml` (private:
-  its stand-ins port the game's own code). Where it stands: the stand-ins
-  (the reset, the IRQ dispatcher, the classic NES Metroid the ROM carries)
-  and five IWRAM copies (`[[copy]]`, `native/lift-ram-copies`) leave 9
-  hard holes, all BIOS calls the prelude lacks (`native/lift-bios-calls`).
-  The function-address flow settles in 12 rounds, about 150 s
-  (`native/fnref-flow-scale`: sparse reruns, memory reads kept, large
-  callee sets given only what's new), so the lift follows it again: 2 min
-  44 s, 2.06 GB, 805 function words, 6 proven. A measurement build with
-  the BIOS calls stood in by panics (2026-11-06, quack): about 957,000
-  lines in 266 modules, the crate alone rebuilt in release in 31.5 s
-  wall, peak 3.99 GB, as the synthetic crate predicted.
+  its stand-ins port the game's own code). Done (2026-11-08, quack): the
+  stand-ins (the reset, the IRQ dispatcher, the classic NES Metroid the
+  ROM carries), five IWRAM copies (`[[copy]]`, `native/lift-ram-copies`)
+  and the BIOS calls the prelude makes (`native/lift-bios-calls`) leave
+  no hard hole, and `just lift` exits 0: 2,624 functions (8 from IWRAM
+  copies), 27,749 blocks, 8 stand-ins, 105 gap targets decoded. The
+  function-address flow settles in 12 rounds (`native/fnref-flow-scale`),
+  so the lift takes 3 min 6 s wall at a peak of 2.06 GB (805 function
+  words, 6 proven). The crate is 960,068 lines (the prelude's 724 left
+  out) in 266 modules; a clean release build of it alone (dependencies
+  built) takes 32.4 s wall (63 s CPU), rustc peaking at 3.95 GB, as the
+  synthetic crate predicted.
 - **Metroid passes the native check on a route**
   (`native/metroid-native-check`). A route `units/metroid-native.toml`
   from boot into gameplay, compared every frame with sound

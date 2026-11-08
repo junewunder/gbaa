@@ -461,10 +461,12 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "blocked",
-        "on": "q/land-indirect-call-callee-sets",
-        "by": "ba79cd96",
-        "at": "2026-11-07T08:02:43Z"
+        "state": "done",
+        "by": "0fb3d637",
+        "checker": "verifier-7c3e91",
+        "at": "2026-11-08T16:50:48Z",
+        "evidence": "Main merged (ref-heap conflicts settled: fn_ins takes FlowIn views; summaries rerun with sets after the heap run, before shapes). just check and just lift-check pass on 33a0b07; call_fn_four_complete barred at the measured 56-60 (owner's call); Emerald numbers left to {unit:native/indirect-call-args-emerald} (owner: land it now). Checker verifier-7c3e91: PASS on logic, merge, bars, docs, logs; its fixes made: call_fn_complete unbarred, doc lines.",
+        "host": "quack"
       },
       "notes": [
         {
@@ -482,13 +484,7 @@
           "by": "62031260",
           "text": "Built on the branch (lift + summaries + gbaa-recompile --callee-sets); lift-check, just check pass. Waits on the bar question (measured 56-60, not 0: sets are the heap pile's 21 fns). Emerald part split to {unit:native/indirect-call-args-emerald}."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-07T07:53:37Z",
-        "findings": "- The Emerald re-measurement the card requires was not done, and the owner never agreed to move it out. The card's Done when asks for Emerald's summaries to be re-measured with callee sets, with the counts and what blocks complete sets (callbacks stored through RAM globals such as gMain.callback1) quoted in the design doc. The Evidence says this part was moved to a new unit, 'Emerald's summaries re-measured with callee sets' ({unit:native/indirect-call-args-emerald}). The new paragraph at docs/native-port-design.md:573-582 says plainly that it was not measured: the flow didn't finish on Emerald in 35 minutes (past 8 GB). The owner's question (q/accept-indirect-call-bar-today) covered only lowering the bar from 0 to the measured 56-60. It never mentioned dropping the Emerald part, so the answer 'a' doesn't cover it. The split also wasn't forced by the ~3-hour rule: the unit was split about 1.5 hours after it was claimed. What to do: ask the owner with `just ask`. Say that the Emerald measurement can't run until the work to make the flow finish on a whole game ({unit:native/fnref-flow-scale}) lands, because the flow doesn't finish there today. Offer two choices: (a) land this unit now, with the Emerald numbers left to the new unit, or (b) keep this unit open until the flow finishes on Emerald and the counts are in the design doc. Leave the branch unmerged until they answer. Alternatively, finish the measurement on this branch if the flow can be made to finish."
-      },
-      "round": "2026-11-06T11:08:08Z"
+      ]
     },
     {
       "id": "native/frame-escape",
@@ -612,18 +608,12 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
-        "by": "f93b1ecd",
-        "session": "f93b1ecd-f104-48fc-9e5b-29cfd643d68a",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T11:28:38Z",
-        "branch": "unit/native/metroid-lifts",
-        "beats": true,
-        "handedBack": "2026-11-06T12:12:16Z",
-        "pushed": true,
-        "ended": "2026-11-06T12:12:36Z"
+        "state": "done",
+        "by": "88b731c4",
+        "checker": "verifier-a5d3f318",
+        "at": "2026-11-08T19:05:50Z",
+        "evidence": "Fresh verifier subagent reran just lift on Metroid --name metroid: exit 0, report 0 hard holes, 2624 fns, 8 stand-ins; metrics lines 960068, hard_holes 0; crate built in release (recipe's build-recompiled). Clean release build timed 32.4 s, rustc peak 3.95 GB (/usr/bin/time -v); lift 3m06s, 2.06 GB. Numbers in docs/native-stage-b.md; just check exit 0 after merging main.",
+        "host": "quack"
       },
       "notes": [
         {
@@ -636,8 +626,7 @@
           "by": "f93b1ecd",
           "text": "26 hard holes -> 9: mods/metroid/holes.toml stands in reset, IRQ dispatcher, classic-NES code; skips fnref flow. Left: 9 BIOS calls ({unit:native/lift-bios-calls}). Then just lift ROM out/lift-metroid --name metroid, build, quote numbers (doc has a measurement build)."
         }
-      ],
-      "round": "2026-11-06T11:28:38Z"
+      ]
     },
     {
       "id": "native/metroid-native-check",
@@ -842,12 +831,19 @@
       "uses": ["heavy"],
       "minMinutes": 180,
       "record": {
-        "state": "blocked",
-        "on": "q/land-bios-calls-unit-emerald",
-        "by": "49894b1d",
-        "at": "2026-11-07T08:52:55Z"
+        "state": "done",
+        "by": "f6eb8639",
+        "checker": "verifier-3b9e61d4",
+        "at": "2026-11-08T18:06:57Z",
+        "evidence": "After merging main (the runaway fix {unit:native/gap-decoding-runaway}, ref-heap, indirect-call-args), owner's 'Keep all eight' answer met: gbaa-holes BIOS counted+scanned-only = gbaa-lift BIOS holes on all eight: metroid 0, warioware 0, kirby-mirror 0+2=2, kirby-nightmare 4, moonbeam 0, emerald 5, minish-cap 5, emerald-rogue 5+1=6 (verifier re-ran four). Full just lift-check passed (native-bios-calls-600: 0 differences, packed too), just check green. lines_prelude 581->724: +143 prelude lines (cpu_fast_set, lz77, rl, sound_bias, unpack_put). Program colours from a returned copy since ref-heap broke its packed build: filed {unit:native/ref-heap-static-arrays}; route hash 7d3db3b8854e494a, mgba_hash added.",
+        "host": "quack"
       },
       "notes": [
+        {
+          "at": "2026-11-07T13:43:43Z",
+          "by": "1df66a89",
+          "text": "Emerald's runaway is fixed by {unit:native/gap-decoding-runaway}: with that diff applied to this branch, gbaa-holes gives 5 BIOS + 0 scanned-only and gbaa-lift 5 BIOS holes on Emerald (skip_fn_flow only), so the eight-game match holds once both land."
+        },
         {
           "at": "2026-11-07T07:12:43Z",
           "by": "manual",
@@ -858,13 +854,7 @@
           "by": "f9620931",
           "text": "Branch has the gbaa-holes half: analysis::holes::NATIVE_BIOS is the lifter's list and bios_implemented's. Left: prelude fns (reuse runtime::bios math/decomp logic over ld/st, as cpu_set does), one agb program calling each swi + its lift-check table and route, 8-game compare."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-07T07:12:43Z",
-        "findings": "- The card says it's done only when gbaa-holes' BIOS count matches the lifter's on all eight games, but the Evidence shows they don't match on Emerald. It says \"Emerald's 5 real sites match, the rest is runaway gap decoding filed as {unit:native/gap-decoding-runaway}\". This session filed that unit itself (tracker/log.jsonl:2332) and left a note on it (tracker/log.jsonl:2335) that the lifter shows 6 BIOS sites near 0x087f2250 only inside two runaway functions. So one game of the eight was split off into a unit the card didn't ask for. The code in the diff itself looks right: the prelude's CpuFastSet, LZ77, RL, SoundBias, ArcTan2 and MultiBoot leave registers and memory as the play build's do (runtime::bios, bios/math.rs). Two ways to fix it. Either fix the runaway gap decoding in this unit, then rerun `just holes-all` and the lifter on Emerald and show the counts match. Or use `just ask` to get the owner to agree to narrowing the done-when to the seven games plus Emerald's real call sites, with the Emerald comparison waiting on the gap-decoding fix (the lifter's gap decoding walks through Emerald's data, {unit:native/gap-decoding-runaway}). Then record that decision in the evidence."
-      },
-      "round": "2026-11-06T12:46:45Z"
+      ]
     },
     {
       "id": "native/lift-ram-copies",
@@ -935,10 +925,12 @@
       "detail": "Indirect jumps that discovery leaves unresolved are hard holes for a native build, though only a speed cost in the play build (which is why {unit:discovery/jt-modern-misses} was dropped: it profiled only the play build's fallback time). Measured 2026-11-06 with gbaa-holes: Emerald Imperium (modern GCC) 71 unresolved jumps of 750, 88 hard holes; Emerald Rogue 46; Minish Cap 23; Emerald (agbcc) 9. First add Imperium to holes/corpus.toml (name imperium, ROM 'Emerald Imperium.gba'). Then sort Imperium's and Rogue's unresolved jumps by kind (switch tables with a narrowed index, the bound on a zero-extended copy, which needs backward refinement; the conservative frame rule; jumps through a register that are not tables) with counts, in docs/research/native-holes.md, and fix the largest kinds in analysis. Done when: Imperium is in the corpus; just holes-all --against a run on main shows unresolved jumps falling on imperium and emerald-rogue, every game's hard count no higher, and the sorted counts quoted; jt-score's modern-GCC bar raised to the measured value (it must not fall from 584/617, agbcc stays 676/676, 0 wrong targets); just check passes.",
       "check": "independent",
       "record": {
-        "state": "blocked",
-        "on": "q/may-load-sp-sp-accesses",
-        "by": "30aebd47",
-        "at": "2026-11-07T10:09:34Z"
+        "state": "done",
+        "by": "05517a38",
+        "checker": "verifier-7c3e",
+        "at": "2026-11-08T17:41:26Z",
+        "evidence": "Verifier verifier-7c3e: imperium in holes/corpus.toml; holes-all --against a main run (f6b507e, same corpus): imperium jumps 71->27 hard 79->35, emerald-rogue jumps 46->20 hard 51->25, warioware/moonbeam/emerald down, no game's hard up. By-kind counts in docs/research/native-holes.md (sums check). jt-score run: agbcc 676/676, modern 610/617 (bar 610, from 584), 0 wrong, 4 hand-checked subsets. Owner-accepted +1 load_sp bars set; just check passes at ffa16e0 after merging main.",
+        "host": "quack"
       },
       "notes": [
         {
@@ -951,8 +943,7 @@
           "by": "30aebd47",
           "text": "On the branch: holes final Imperium jumps 71->27, Rogue 46->20, no game up; jt-score modern 610/617 (bar set), 4 subsets checked. Only lift bars load_sp/sp_accesses_escaping_slot +1 (4 progs) wait on q/may-load-sp-sp-accesses; then just check, lift-metrics --write-doc, verifier."
         }
-      ],
-      "round": "2026-11-07T08:53:17Z"
+      ]
     },
     {
       "id": "native/modern-gcc-data-as-code",
@@ -961,12 +952,22 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "blocked",
-        "on": "q/may-ref-unexplained-rise-for-true-data",
-        "by": "7cd800aa",
-        "at": "2026-11-07T11:07:00Z"
+        "state": "claimed",
+        "by": "aed48009",
+        "session": "aed48009-a3c2-4600-aebd-bb908b7c8339",
+        "host": "quack",
+        "pid": 3349268,
+        "start": "14822772",
+        "at": "2026-11-08T17:45:53Z",
+        "branch": "unit/native/modern-gcc-data-as-code",
+        "beats": true
       },
       "notes": [
+        {
+          "at": "2026-11-08T17:52:01Z",
+          "by": "aed48009",
+          "text": "Bars set to measured after merging main (d88d454), just check green. mods/metroid/holes.toml stand-in 0x087603d9 still there (mods is shared with main): drop it after landing, once main's discovery no longer starts a function there."
+        },
         {
           "at": "2026-11-07T11:07:32Z",
           "by": "7cd800aa",
@@ -1052,15 +1053,12 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "1df66a89",
-        "session": "1df66a89-c2f9-4576-a1ec-f0a3f3cd267f",
-        "host": "quack",
-        "pid": 751355,
-        "start": "2170805",
-        "at": "2026-11-07T11:45:16Z",
-        "branch": "unit/native/gap-decoding-runaway",
-        "beats": true
+        "checker": "a5526cbc",
+        "at": "2026-11-07T13:43:32Z",
+        "evidence": "Verifier a5526cbc (fresh context) reproduced: Emerald lift (skip_fn_flow only) now 15,162 functions, 32 hard holes (was 685,414), 145 gap targets (was 53,095), none in 0x0832xxxx/0x08d3xxxx/0x087f2xxx. On the lift-bios-calls branch with the fix: gbaa-holes 5 BIOS + 0 scanned-only, lifter 5 BIOS holes (without fix 5+6). Disc precision 0.9991->0.9993, recall same; other 10 ROMs' starts identical to main. just check and just lift-check pass on the merged branch.",
+        "host": "quack"
       },
       "notes": [
         {
@@ -1073,31 +1071,38 @@
           "by": "4485059c",
           "text": "gbaa-holes also lists 6 scanned-only BIOS sites on Emerald (survey: ARM 0x42/0x54/0x64/0x73/0xb7/0x27 near 0x087f2250) that the lifter shows only inside the two runaway functions; after the fix, check they appear on their own."
         }
-      ],
-      "round": "2026-11-07T11:45:16Z"
+      ]
     },
     {
       "id": "native/fnref-flow-emerald",
       "title": "Function-address flow settles on Emerald",
       "detail": "After {unit:native/fnref-flow-scale} (Metroid in 151 s), the flow on pret's Emerald (15,158 fns) through gbaa-recompile --summaries --callee-sets was still killed at a 14G cap after 5 min (quack, 2026-11-07). Make it settle under about 8 GB. Done when: that command finishes on Emerald under 8 GB (time and peak quoted) and just lift-check's bars hold.",
       "check": "independent",
+      "needs": ["native/fnref-emerald-speed"],
       "uses": ["heavy"],
       "minMinutes": 150,
       "record": {
         "state": "claimed",
-        "by": "8898da77",
-        "session": "8898da77-3409-4343-b387-337a68538af5",
+        "by": "c06275d9",
+        "session": "c06275d9-b496-4ead-9bf1-0085c8ece768",
         "host": "quack",
-        "pid": 862066,
-        "start": "2504341",
-        "at": "2026-11-07T12:12:38Z",
+        "pid": 3349068,
+        "start": "14822266",
+        "at": "2026-11-08T16:23:16Z",
         "branch": "unit/native/fnref-flow-emerald",
-        "beats": true,
-        "handedBack": "2026-11-07T12:41:23Z",
+        "resumed": "8898da77",
+        "prevSession": "8898da77-3409-4343-b387-337a68538af5",
         "pushed": true,
-        "ended": "2026-11-07T12:41:51Z"
+        "beats": true,
+        "handedBack": "2026-11-08T18:34:29Z",
+        "ended": "2026-11-08T18:34:40Z"
       },
       "notes": [
+        {
+          "at": "2026-11-08T18:27:27Z",
+          "by": "c06275d9",
+          "text": "2026-11-08: Refs (b6d5ed3f) fixed memory: Emerald round 0 flat at 1.5 GB (was >10 GB), entries 5.6M tokens. Not done: too slow to finish (~60 s/500 fns). Split: {unit:native/fnref-emerald-speed} (needed); widening gap {unit:native/fnref-romfrom-absorb}. memory/ file says how to measure."
+        },
         {
           "at": "2026-11-07T12:41:33Z",
           "by": "8898da77",
@@ -1141,7 +1146,19 @@
       "title": "Stand-ins for libgcc's double multiply and divide",
       "detail": "libgcc's ieee754-df.S __muldf3 and __divdf3 call their denormal paths (Lml_s, Ldv_s) by bleq, which return r4/r5 changed: a real register-convention break, hard holes in moonbeam (6) and Emerald Rogue (3) after {unit:native/callee-save-breaks} (docs/research/native-holes.md, 'Functions that change r4-r11 or sp'). Write each as a stand-in (Rust f64 mul/div, bit-exact on the soft-float's results), found by its code the way analysis::flash recognises routines, so every game with them gets it. Done when: gbaa-holes counts none of them hard on moonbeam and Rogue (the report must learn the stand-ins), a test pins the f64 results against the interpreter on edge cases (denormals, NaN, inf, rounding), just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "9c7ffd35",
+        "session": "9c7ffd35-8623-4cb6-a52d-d2e121669618",
+        "host": "quack",
+        "pid": 3349068,
+        "start": "14822266",
+        "at": "2026-11-08T18:34:45Z",
+        "branch": "unit/native/libgcc-df-standins",
+        "beats": true
+      },
+      "round": "2026-11-08T18:34:45Z"
     },
     {
       "id": "native/entry-read-masking",
@@ -1201,6 +1218,53 @@
       "title": "Function flow: loads through unknown addresses",
       "detail": "docs/native-stage-b.md piece 3. Measured on {unit:native/fnref-context}'s branch (commit e81168f; it holds the object split and call-site context): fn_words_not_proven unmoved by either. ~640 of affine's load sites (spike 644) have an address that may be unknown (Val::unk), and each reads the pile and every RAM cell (Run::load_at's anywhere arm), so e.g. the IRQ vector word's f_03000000 is in nearly every hole. Not the cause (tried, no change): naming the allocator, dropping the pile from constant-address loads, dropping the I/O unk flag, NUMS 8->256. A seen source: main's inlined free-list walk at 0x080001a8 (affine) loads GLOBAL_ALLOC fields holding allocator-made pointers. Find where the unknown comes from (GBAA_FNREF_TRACE; print each anywhere load) and fix the first big source. Done when: fn_words_not_proven falls on every agb program, bars lowered, a unit test, just lift-check and just check pass.",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/ref-heap-static-arrays",
+      "title": "Ref<T> objects in static arrays fit the packed layout",
+      "detail": "Found by {unit:native/lift-bios-calls}: heap.rs makes an object where a RAM base meets an unknown index, so an element of a static array (agb/native-bios-calls 4ee88ac's OUT.regs[k], 16 bytes at 0x020000b8) prints as g.at(Ref::<H_..>). The same words are also constant-address globals, which --layout packed places apart (in the lifter's order), so Ram::span fails and the packed build panics: 'pointer 0x020000b8 to 16 bytes isn't in RAM in one piece'. The guest layout passes. Repro: build agb/native-bios-calls at 4ee88ac (its main loop colours from o.regs.iter()) and run just lift-check --only native-bios-calls. The program now colours from a returned copy to avoid it; any game indexing a static array its code also touches by constant address hits it. Fix in the lifter (keep such globals contiguous in packed, or leave objects whose base is a global's region as bytes). Done when: the 4ee88ac loop shape (as a lift-check program or test) passes the packed native check; lift-check and just check pass.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-rom-read-bound",
+      "title": "Function flow bounds a ROM read by its table, not next code",
+      "detail": "fnref's from-here-on ROM read (affine at 0x08000af2) ran to the next code; once {unit:native/modern-gcc-data-as-code} removed a false start in agb's panic text, it runs into agb's vtables: ref_unexplained rose 35->97 (93->164 ime-release/irq-hold), fn_words_not_proven +4/5. Bound the read by the table it indexes (its length or a bounds check) and lower both lift-check bars on the seven agb programs. Owner's answer (a) to the bar question.",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-emerald-speed",
+      "title": "Function-address flow on Emerald fast enough to finish",
+      "detail": "After {unit:native/fnref-flow-emerald} made large reads one Ref token (b6d5ed3f), Emerald's flow (gbaa-recompile --summaries --callee-sets, from the indirect-call-args branch with this fnref.rs) holds RSS at 1.5 GB through round 0, but round 0 alone runs about 60 s per 500 functions (542 s at 8,500 of 15,158). Profile it (likely per-op scans of 30k-token Refs: split_refs' rest, cmp_refs' difference, hole() on fresh expansions, ref_make after each store) and make the whole run finish. Done when: that command finishes on Emerald under 8 GB with time and peak quoted, and just lift-metrics shows no bar over.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-08T18:34:25Z",
+          "by": "c06275d9",
+          "text": "--callee-sets is on main now (indirect-call-args landed 2026-11-08): no worktree needed; plain gbaa-recompile --summaries ROM --callee-sets under just long --mem 9G. Ref code: b6d5ed3f on {unit:native/fnref-flow-emerald}'s branch."
+        }
+      ]
+    },
+    {
+      "id": "native/fnref-romfrom-absorb",
+      "title": "Flow's ROM from-here-on widening keeps pointers it reads",
+      "detail": "Val::cap lets RomFrom(lo) absorb Rom(a) for any a >= lo, but rom_from(lo) reads only up to the next code, so a pointer past it is never read and a call through it may get a complete callee set missing callees. Seen in mosaic-modes (found by {unit:native/fnref-flow-emerald}): fn 0x080037f1 (core::fmt pad) r0 widens to RomFrom(0x08000100), absorbing vtable Rom(0x08024c50); word 0x08024c5c (f_08002ee1) was read only transiently before. Make the widening keep such pointers (mark lost_rom, or don't absorb past bound) with a unit test; just lift-metrics bars hold (lower any that drop).",
+      "check": "recorded",
+      "record": {
+        "state": "blocked",
+        "on": "q/raise-lift-bars-rom-widening",
+        "by": "b9262a93",
+        "at": "2026-11-08T19:20:26Z"
+      },
+      "notes": [
+        {
+          "at": "2026-11-08T19:20:32Z",
+          "by": "b9262a93",
+          "text": "Fix committed on branch (a1683db): cap absorbs only up to bound(lo) via a run-scoped thread-local of code addrs; ROMS widening per data run. 2 tests. If owner says raise: set bars to new values (just lift-metrics shows them), merge main, just check, done."
+        }
+      ],
+      "round": "2026-11-08T19:11:58Z"
     }
   ]
 }

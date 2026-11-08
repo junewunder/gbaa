@@ -28,7 +28,7 @@
 //!   the run executed at the top level of an IRQ, and the rest of its
 //!   function) and outside boot (code that ran only in the first frame, and
 //!   the rest of its function: crt0 setting up the stacks);
-//! - a BIOS call the library doesn't implement ([`bios_implemented`]);
+//! - a BIOS call the native lifter doesn't print ([`bios_implemented`]);
 //! - a call through a register the run saw land on an address that isn't
 //!   a known function start;
 //! - a function summary whose hole breaks the lift's calling convention
@@ -140,11 +140,20 @@ pub const RAM_CALL_BYTES: u32 = 64;
 /// `FlagGet` per item: 27) stops sooner.
 pub const BUSY_ITERATIONS: u32 = 64;
 
-/// Whether the runtime's BIOS (`runtime::bios`, decision 12) implements
-/// call `n`: everything up to `SoundGetJumpList` (0x2A) except
-/// `HardReset` (0x26).
+/// The BIOS calls the native lifter prints (`gbaa-lift`'s prelude,
+/// `crates/codegen/src/native/prelude.rs`): `Halt`, `Stop`, `IntrWait`,
+/// `VBlankIntrWait`, `Div`, `Sqrt`, `ArcTan2`, `CpuSet`, `CpuFastSet`,
+/// the LZ77 and RL decompressors, `SoundBias`, `MidiKey2Freq` and
+/// `MultiBoot`. Every other call is a hard hole in a native build, though
+/// the play build's BIOS (`runtime::bios`) has nearly all of them.
+pub const NATIVE_BIOS: &[u8] = &[
+    0x02, 0x03, 0x04, 0x05, 0x06, 0x08, 0x0A, 0x0B, 0x0C, 0x11, 0x12, 0x14, 0x15, 0x19, 0x1F, 0x25,
+];
+
+/// Whether a native build can make BIOS call `n`: the lifter prints it
+/// ([`NATIVE_BIOS`]).
 pub fn bios_implemented(n: u32) -> bool {
-    n <= 0x2A && n != 0x26
+    u8::try_from(n).is_ok_and(|n| NATIVE_BIOS.contains(&n))
 }
 
 /// An indirect jump Recovery doesn't resolve.
@@ -280,9 +289,13 @@ pub struct Report {
     /// not counted as hard until the owner decides how a native program
     /// lets time pass in them.
     pub busy_loops: Vec<(u32, u32)>,
-    /// CPU-state instructions and unimplemented `swi`s left out because
-    /// only the pointer scan found their code and the run never ran it.
+    /// CPU-state instructions left out because only the pointer scan
+    /// found their code and the run never ran it.
     pub scanned_skipped: usize,
+    /// BIOS calls the lifter doesn't print left out the same way: the
+    /// lifter lifts that code, so its BIOS holes are [`Report::bios`]
+    /// and these.
+    pub scanned_bios: usize,
     /// Bytes of ROM code executed that discovery didn't find.
     pub rom_undiscovered_bytes: u32,
     /// Bytes of RAM code executed that no overlay discovered.
@@ -787,7 +800,7 @@ pub fn classify(
             };
             if bios_implemented(n) {
             } else if skip {
-                r.scanned_skipped += 1;
+                r.scanned_bios += 1;
             } else {
                 r.bios.push((a, n));
             }
