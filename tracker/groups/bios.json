@@ -159,19 +159,7 @@
         "by": "4da39b0a",
         "at": "2026-11-08T19:42:35Z",
         "evidence": "SWI dispatcher restores r2 (BIOS 0x164/0x170, mGBA hle-bios.s); play build and prelude cpu_fast_set keep r2. Frame 600: interp exact=native a2d7b94fedf1bbab; vs mgba-dump frame only row 11 (MultiBoot, documented) differs, rows 3,4,12 agree. Checkpoint moved. lift-check (all programs) passed; just check passed; main merged (tracker only).",
-        "branch": "unit/bios/fast-set-r2",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T19:42:35Z",
-          "by": "4da39b0a",
-          "host": "quack",
-          "pid": 3349722,
-          "start": "14823514",
-          "beats": true,
-          "session": "4da39b0a-7dd3-4a38-88a0-118cd6dd5615",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -179,8 +167,7 @@
           "by": "2f1ce0d0",
           "text": "Settled: the SWI dispatcher pushes/pops r2 around every call (real BIOS 0x164/0x170, mGBA hle-bios.s), so r2 stays as given. Branch 746bc86 fixes runtime::bios::decomp (check, gba-tests pass). Left: same in the prelude, move the checkpoint, after {unit:native/lift-bios-calls}."
         }
-      ],
-      "round": "2026-11-07T13:32:14Z"
+      ]
     }
   ]
 }

@@ -2450,3 +2450,4 @@
 {"at":"2026-11-08T19:20:45Z","actor":"loop","tag":"4da39b0a","host":"quack","cmd":"claim","id":"bios/fast-set-r2","text":"CpuFastSet leaves r2 as mGBA does: claimed (picking up after 2f1ce0d0)"}
 {"at":"2026-11-08T19:40:30Z","actor":"loop","tag":"b61b4529","host":"quack","cmd":"claim","id":"multiplayer/join-without-restart","text":"Join netplay without restarting the game: claimed"}
 {"at":"2026-11-08T19:42:35Z","actor":"loop","tag":"4da39b0a","host":"quack","cmd":"done","id":"bios/fast-set-r2","text":"CpuFastSet leaves r2 as mGBA does: done"}
+{"at":"2026-11-08T19:46:22Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"bios/fast-set-r2","text":"CpuFastSet leaves r2 as mGBA does: on main"}
