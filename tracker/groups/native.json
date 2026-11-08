@@ -838,15 +838,24 @@
       "uses": ["heavy"],
       "minMinutes": 180,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "f6eb8639",
-        "session": "f6eb8639-6ea9-4888-b4a3-e4d4402236f3",
-        "host": "quack",
-        "pid": 3349722,
-        "start": "14823514",
-        "at": "2026-11-08T16:23:34Z",
+        "checker": "verifier-3b9e61d4",
+        "at": "2026-11-08T18:06:57Z",
+        "evidence": "After merging main (the runaway fix {unit:native/gap-decoding-runaway}, ref-heap, indirect-call-args), owner's 'Keep all eight' answer met: gbaa-holes BIOS counted+scanned-only = gbaa-lift BIOS holes on all eight: metroid 0, warioware 0, kirby-mirror 0+2=2, kirby-nightmare 4, moonbeam 0, emerald 5, minish-cap 5, emerald-rogue 5+1=6 (verifier re-ran four). Full just lift-check passed (native-bios-calls-600: 0 differences, packed too), just check green. lines_prelude 581->724: +143 prelude lines (cpu_fast_set, lz77, rl, sound_bias, unpack_put). Program colours from a returned copy since ref-heap broke its packed build: filed {unit:native/ref-heap-static-arrays}; route hash 7d3db3b8854e494a, mgba_hash added.",
         "branch": "unit/native/lift-bios-calls",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-08T18:06:57Z",
+          "by": "f6eb8639",
+          "host": "quack",
+          "pid": 3349722,
+          "start": "14823514",
+          "beats": true,
+          "session": "f6eb8639-6ea9-4888-b4a3-e4d4402236f3",
+          "lane": "quack/3"
+        },
+        "pushed": true
       },
       "notes": [
         {
@@ -946,19 +955,7 @@
         "checker": "verifier-7c3e",
         "at": "2026-11-08T17:41:26Z",
         "evidence": "Verifier verifier-7c3e: imperium in holes/corpus.toml; holes-all --against a main run (f6b507e, same corpus): imperium jumps 71->27 hard 79->35, emerald-rogue jumps 46->20 hard 51->25, warioware/moonbeam/emerald down, no game's hard up. By-kind counts in docs/research/native-holes.md (sums check). jt-score run: agbcc 676/676, modern 610/617 (bar 610, from 584), 0 wrong, 4 hand-checked subsets. Owner-accepted +1 load_sp bars set; just check passes at ffa16e0 after merging main.",
-        "branch": "unit/native/modern-gcc-jumps",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T17:41:26Z",
-          "by": "05517a38",
-          "host": "quack",
-          "pid": 3349268,
-          "start": "14822772",
-          "beats": true,
-          "session": "05517a38-fef4-40a0-9a05-70ab7278ccd1",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -971,8 +968,7 @@
           "by": "30aebd47",
           "text": "On the branch: holes final Imperium jumps 71->27, Rogue 46->20, no game up; jt-score modern 610/617 (bar set), 4 subsets checked. Only lift bars load_sp/sp_accesses_escaping_slot +1 (4 progs) wait on q/may-load-sp-sp-accesses; then just check, lift-metrics --write-doc, verifier."
         }
-      ],
-      "round": "2026-11-07T08:53:17Z"
+      ]
     },
     {
       "id": "native/modern-gcc-data-as-code",
@@ -980,7 +976,23 @@
       "detail": "After {unit:native/modern-gcc-jumps}, 20 of the 47 unresolved jumps left in Imperium (14, at 0x0828xxxx and 0x0850c8da) and Rogue (6, at 0x0826xxxx) are bx/mov pc inside data discovery took as Thumb code (runs of lsrs r0, r5, #32 and movs r0, r0: pointer tables). Find which discovery rule takes them (the pointer scan, by GBAA_DISC_LOG=1), stop it there, and show the jumps go with no loss: disc-pret both builds keep precision/recall, jt-score keeps 610/617, just holes-all --against main shows unresolved jumps falling on imperium and emerald-rogue and no game's hard count higher.",
       "check": "independent",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "aed48009",
+        "session": "aed48009-a3c2-4600-aebd-bb908b7c8339",
+        "host": "quack",
+        "pid": 3349268,
+        "start": "14822772",
+        "at": "2026-11-08T17:45:53Z",
+        "branch": "unit/native/modern-gcc-data-as-code",
+        "beats": true
+      },
       "notes": [
+        {
+          "at": "2026-11-08T17:52:01Z",
+          "by": "aed48009",
+          "text": "Bars set to measured after merging main (d88d454), just check green. mods/metroid/holes.toml stand-in 0x087603d9 still there (mods is shared with main): drop it after landing, once main's discovery no longer starts a function there."
+        },
         {
           "at": "2026-11-07T11:07:32Z",
           "by": "7cd800aa",
@@ -1217,6 +1229,12 @@
       "title": "Ref<T> objects in static arrays fit the packed layout",
       "detail": "Found by {unit:native/lift-bios-calls}: heap.rs makes an object where a RAM base meets an unknown index, so an element of a static array (agb/native-bios-calls 4ee88ac's OUT.regs[k], 16 bytes at 0x020000b8) prints as g.at(Ref::<H_..>). The same words are also constant-address globals, which --layout packed places apart (in the lifter's order), so Ram::span fails and the packed build panics: 'pointer 0x020000b8 to 16 bytes isn't in RAM in one piece'. The guest layout passes. Repro: build agb/native-bios-calls at 4ee88ac (its main loop colours from o.regs.iter()) and run just lift-check --only native-bios-calls. The program now colours from a returned copy to avoid it; any game indexing a static array its code also touches by constant address hits it. Fix in the lifter (keep such globals contiguous in packed, or leave objects whose base is a global's region as bytes). Done when: the 4ee88ac loop shape (as a lift-check program or test) passes the packed native check; lift-check and just check pass.",
       "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-rom-read-bound",
+      "title": "Function flow bounds a ROM read by its table, not next code",
+      "detail": "fnref's from-here-on ROM read (affine at 0x08000af2) ran to the next code; once {unit:native/modern-gcc-data-as-code} removed a false start in agb's panic text, it runs into agb's vtables: ref_unexplained rose 35->97 (93->164 ime-release/irq-hold), fn_words_not_proven +4/5. Bound the read by the table it indexes (its length or a bounds check) and lower both lift-check bars on the seven agb programs. Owner's answer (a) to the bar question.",
       "uses": ["heavy"]
     }
   ]
