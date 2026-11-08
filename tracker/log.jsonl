@@ -2493,3 +2493,4 @@
 {"at":"2026-11-08T21:20:08Z","actor":"loop","tag":"a98172f6","host":"quack","cmd":"add-unit","id":"native/check-holes-copies","text":"new unit: The native check skips the holes file's RAM code copies"}
 {"at":"2026-11-08T21:20:15Z","actor":"loop","tag":"a98172f6","host":"quack","cmd":"edit","id":"native/metroid-native-check","text":"Metroid passes the native check on a route: edited (add-needs)"}
 {"at":"2026-11-08T21:21:22Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"deck/even-presents","text":"Single-player window: hand frames to the display evenly: back to ready: the loop's review asked for fixes"}
+{"at":"2026-11-08T21:21:34Z","actor":"loop","tag":"9e61b577","host":"quack","cmd":"claim","id":"native/whole-lift-memory","text":"Whole-game lifts of Minish Cap and Kirby Nightmare fit: claimed"}

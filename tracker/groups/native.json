@@ -1206,13 +1206,25 @@
       "detail": "gbaa-lift on a whole game was killed at its cap three times on quack, 2026-11-07: Minish Cap at 8G, 8G and 15G (verifier of {unit:native/callee-save-breaks}), Kirby - Nightmare in Dream Land at 16G ({unit:native/nightmare-task-switch}); Metroid peaks about 1.7G. Find what grows (gap decoding through data as in {unit:native/gap-decoding-runaway}, the function-address flow, or other) and fix it. Done when: both lift under 8 GB through just long start, time and peak quoted; just lift-check's bars hold; just check passes.",
       "check": "independent",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "9e61b577",
+        "session": "9e61b577-b803-4951-8314-b5dd648966d3",
+        "host": "quack",
+        "pid": 686555,
+        "start": "16007050",
+        "at": "2026-11-08T21:21:34Z",
+        "branch": "unit/native/whole-lift-memory",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-07T11:44:09Z",
           "by": "ccb35e7f",
           "text": "Nightmare: the same lift with skip_fn_flow in a holes file ran in 1 min, peak 474M (just long, 2026-11-07), so its 16G kill is the function-address flow, not gap decoding. Minish Cap untested that way."
         }
-      ]
+      ],
+      "round": "2026-11-08T21:21:34Z"
     },
     {
       "id": "native/nightmare-lifts",
