@@ -791,6 +791,12 @@ the 2026-10-29 table's. Instant, they don't: a structured build and its
 v1 build tick on different clocks there. That splits no session, since
 the build ID refuses a peer on another build.
 
+Rerun 2026-11-08 (multiplayer/timing-in-build-id, the build ID's timing
+byte and code hash on main; `just recompile ROM OUT --no-structured`,
+instant by default; two other lanes' heavy jobs beside it): v1, instant,
+wander at delay 0, 69.6% compiled, frame p50 3.9-4.0 ms, p99 36 ms,
+both peers `2c3e0981…`, the hash above.
+
 Before that, Kirby two-player, both peers on quack, 2026-10-29 (lane 1 running judge
 jobs beside it, so ±0.3 ms): `just rollback-feel PROFILE ROM --exe BIN
 --headless --paced --frames 3600 --delay D --input1
