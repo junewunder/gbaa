@@ -717,15 +717,22 @@
       "detail": "june's question (2026-10-29): can netplay be a generic network replacement for any game's link cable, and does the cable assume no lag? Write up for june, in docs/research/multiplayer.md: each SIO mode, its timing (how fast a transfer completes, how many frames a game waits before it calls it a link error), why we run every console on every peer instead of sending cable bytes, and which modes runtime::link covers today (multiplayer mode; normal 8/32-bit, multiboot single-pak, UART, JOY bus, the wireless adapter). Then list popular link games by mode (Four Swords, Mario Kart Super Circuit, Pokemon, Bomberman, single-pak multiboot games), run the ones june has ROMs for through two local peers headless, and say which work. File a unit for each gap worth closing. Check: the section, the table of games tried, the units.",
       "minMinutes": 150,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "694a54e9",
-        "session": "694a54e9-a4e1-4400-bd52-5bfa387f485c",
-        "host": "quack",
-        "pid": 3349068,
-        "start": "14822266",
-        "at": "2026-11-08T20:14:36Z",
+        "at": "2026-11-08T20:44:26Z",
+        "evidence": "Section 'The cable over the internet: modes, timing, games' in docs/research/multiplayer.md (modes table with transfer times and link-error timeouts, why every peer runs every console, hub coverage, popular games by mode). Tried through two local pingsim peers 2026-11-08: Emerald trade calm pass (end 35d6b1be, trade in both saves), wander 1 pass 1 split under load; Kirby AM wander 3000f both 47204b2e no desync; Nightmare Quick Draw wander 7000f both 24d71dde no desync. Units filed: {unit:multiplayer/wireless-adapter-local}, {unit:multiplayer/single-pak-multiboot}, {unit:multiplayer/wander-split-under-load}. just check passes after merging main.",
         "branch": "unit/multiplayer/link-cable-survey",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-08T20:44:26Z",
+          "by": "694a54e9",
+          "host": "quack",
+          "pid": 3349068,
+          "start": "14822266",
+          "beats": true,
+          "session": "694a54e9-a4e1-4400-bd52-5bfa387f485c",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
