@@ -1211,7 +1211,6 @@ the game's), not a fix. Rollback can still cut the start of a sound in a
 game where your console does sound the other players: a sound started on
 a frame run again plays from where the re-run left it.
 
-
 ## Playing a friend (the play gate)
 
 What june needs for multiplayer/play-gate, from what's built (2026-10-25):
