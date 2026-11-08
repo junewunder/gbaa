@@ -191,6 +191,54 @@ struct Val {
     lost_rom: bool,
 }
 
+thread_local! {
+    /// The code addresses of the run's image, sorted, for [`bound`]
+    /// (empty outside [`follow`]: every address is then one run of data).
+    static CODE: std::cell::RefCell<std::rc::Rc<Vec<u32>>> = std::cell::RefCell::default();
+}
+
+/// Where a read "from here on" at `a` stops: [`Image::bound`] of the run's
+/// image, for [`Val::cap`], which has no image at hand.
+fn bound(a: u32) -> u32 {
+    CODE.with(|c| {
+        let c = c.borrow();
+        if c.is_empty() {
+            return u32::MAX;
+        }
+        c.get(c.partition_point(|&k| k <= a))
+            .copied()
+            .unwrap_or(u32::MAX)
+    })
+}
+
+/// Sets [`CODE`] for a run; the one before comes back when it's dropped.
+struct CodeGuard(std::rc::Rc<Vec<u32>>);
+
+impl CodeGuard {
+    fn set(img: &dyn Image) -> CodeGuard {
+        // Every code address after the start of ROM, by stepping the
+        // image's bound (up to its last, past which `bound` is the end).
+        let mut v = Vec::new();
+        let mut a = 0x0800_0000u32;
+        loop {
+            let b = img.bound(a);
+            if b <= a || img.word(b).is_none() {
+                v.push(b);
+                break;
+            }
+            v.push(b);
+            a = b;
+        }
+        CodeGuard(CODE.with(|c| c.replace(std::rc::Rc::new(v))))
+    }
+}
+
+impl Drop for CodeGuard {
+    fn drop(&mut self) {
+        CODE.with(|c| *c.borrow_mut() = self.0.clone());
+    }
+}
+
 /// More numbers than this in a value: it's unknown.
 const NUMS: usize = 8;
 /// More exact ROM pointers than this: "from the lowest on".
@@ -244,18 +292,21 @@ impl Val {
     }
 
     /// Widen: too many numbers are unknown, too many ROM pointers are
-    /// one "from the lowest on" (a loop walking a table), and a pointer
-    /// "from here on" takes in those above it.
+    /// one "from the lowest on" per run of data (a loop walking a table),
+    /// and a pointer "from here on" takes in those above it in its run of
+    /// data. A read "from here on" stops at the next code
+    /// ([`Image::bound`]), so a pointer past it stays its own (else the
+    /// words it reads would go unread: `native/fnref-romfrom-absorb`).
     fn cap(&mut self) {
         // One pass to see what needs widening; the set (shared) is only
         // changed when something does.
-        let (mut nums, mut roms, mut from) = (0, 0, None);
+        let (mut nums, mut roms, mut froms) = (0, 0, false);
         // Functions' tokens sort first: only those after them count.
         for t in self.toks.range(Tok::Num(0)..) {
             match *t {
                 Tok::Num(_) => nums += 1,
                 Tok::Rom(_) => roms += 1,
-                Tok::RomFrom(a) if from.is_none() => from = Some(a),
+                Tok::RomFrom(_) => froms = true,
                 _ => {}
             }
         }
@@ -267,28 +318,52 @@ impl Val {
             self.drop_range(Tok::Num(0)..=Tok::Num(u32::MAX));
         }
         if roms > ROMS {
-            let lo = self
-                .toks
-                .range(Tok::Rom(0)..)
-                .find_map(|t| match t {
-                    Tok::Rom(a) => Some(*a),
-                    _ => None,
-                })
-                .unwrap();
+            // The lowest of each run of data.
+            let mut los: Vec<u32> = Vec::new();
+            let mut end = 0;
+            for t in self.toks.range(Tok::Rom(0)..=Tok::Rom(u32::MAX)) {
+                if let Tok::Rom(a) = *t
+                    && a >= end
+                {
+                    los.push(a);
+                    end = bound(a);
+                }
+            }
             self.drop_range(Tok::Rom(0)..=Tok::Rom(u32::MAX));
-            self.toks.insert(Tok::RomFrom(lo));
-            from = Some(from.map_or(lo, |f: u32| f.min(lo)));
+            for lo in los {
+                self.toks.insert(Tok::RomFrom(lo));
+            }
+            froms = true;
         }
-        // A pointer "from here on" takes in those above it.
-        if let Some(lo) = from
-            && self
-                .toks
-                .range(Tok::Rom(0)..)
-                .any(|t| matches!(*t, Tok::Rom(a) | Tok::RomFrom(a) if a >= lo && *t != Tok::RomFrom(lo)))
-        {
-            self.drop_range(Tok::Rom(lo)..=Tok::Rom(u32::MAX));
-            self.drop_range(Tok::RomFrom(lo)..);
-            self.toks.insert(Tok::RomFrom(lo));
+        if !froms {
+            return;
+        }
+        // A pointer "from here on" takes in those above it, up to the end
+        // of its run of data.
+        let los: Vec<u32> = self
+            .toks
+            .range(Tok::RomFrom(0)..)
+            .filter_map(|t| match *t {
+                Tok::RomFrom(a) => Some(a),
+                _ => None,
+            })
+            .collect();
+        let mut covered = 0;
+        for lo in los {
+            if lo < covered {
+                continue;
+            }
+            let end = bound(lo);
+            covered = end;
+            let hi = Tok::Rom(lo)..Tok::Rom(end);
+            let hf = Tok::RomFrom(lo.saturating_add(1))..Tok::RomFrom(end);
+            if end > lo
+                && (self.toks.range(hi.clone()).next().is_some()
+                    || self.toks.range(hf.clone()).next().is_some())
+            {
+                self.drop_range(hi);
+                self.drop_range(hf);
+            }
         }
     }
 
@@ -1961,6 +2036,7 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> R {
 /// over every code context) from its sources to its uses. `copies`: the
 /// program start's copies of ROM data to RAM (source, destination, bytes).
 pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow {
+    let _code = CodeGuard::set(img);
     let mut g = G {
         loose_args: vec![Val::default(); 4],
         ..G::default()
