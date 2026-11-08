@@ -1316,6 +1316,11 @@
       "uses": ["heavy"],
       "notes": [
         {
+          "at": "2026-11-08T22:44:22Z",
+          "by": "9e61b577",
+          "text": "main now has a 48M-token bound in fnref::follow (stops unsettled) and G::give_all (shared joins across a by-value call's callees) from {unit:native/whole-lift-memory}; expect a merge in fnref.rs with b6d5ed3f; raise TOKENS if Emerald needs it."
+        },
+        {
           "at": "2026-11-08T18:34:25Z",
           "by": "c06275d9",
           "text": "--callee-sets is on main now (indirect-call-args landed 2026-11-08): no worktree needed; plain gbaa-recompile --summaries ROM --callee-sets under just long --mem 9G. Ref code: b6d5ed3f on {unit:native/fnref-flow-emerald}'s branch."
