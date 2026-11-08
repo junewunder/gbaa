@@ -77,7 +77,9 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   functions; the flash library's stack routines stood in for,
   `analysis::flash`) and each list, the RAM copies among them (the ones
   only the run shows also as `[[copy]]` tables for the lift's holes
-  file). About a minute a game, capped at 3 GB. The
+  file), and last the runs of ROM code run but not discovered, with what
+  discovery has around each (code before it, data over it). About a
+  minute a game, capped at 3 GB. The
   doc's table is these lines; rerun all eight after changing
   `analysis::holes` or `crates/hole-report` and update it.
   `--cover FILE` (`holes/coverage/<game>.toml`, native/hole-coverage)
@@ -1289,7 +1291,10 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   the count of globals; `computed_ram` likewise, the ones the value
   sets bound to one global are `ram_object`, unbarred, checked by the
   prelude's `pin` and `ix` at run time, and `pointer_unexplained` the
-  rest, native/ref-in-object); `call_fn` calls; jumps by value;
+  rest, native/ref-in-object; one the value sets don't bound that the
+  heap's run types is a heap object's field through `Ref<T>`, counted in
+  `ref_accesses` and `ref_types`, unbarred, and `ref_unexplained` those
+  through an object's pointer no type explains, native/ref-heap); `call_fn` calls; jumps by value;
   gap targets. `--bars FILE` fails the lift (after writing it) on any
   metric over `[program.NAME.bars]`'s maximum, each named with both
   numbers (`gbaa-lift: affine: load_computed_unknown is 755, over its

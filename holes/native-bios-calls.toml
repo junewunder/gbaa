@@ -4,10 +4,10 @@
 # addresses (`nm agb/native-bios-calls.elf`).
 
 [[standin]]
-entry = 0x08002704
+entry = 0x080027cc
 why = "portable_atomic's interrupt::disable (ARM): `mrs r0, cpsr; orr r1, r0, #0x80; msr cpsr_c, r1`, a critical section's start. The program's CPSR is Game::cpsr; while its I bit is set the waits hold IRQs (Native::irq_masked)"
 code = '''
-pub fn f_08002704(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+pub fn f_080027cc(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
     let r0 = g.cpsr;
     g.cpsr = r0 | 0x80;
     Ok([r0, r0 | 0x80, a[2], a[3]])
@@ -15,10 +15,10 @@ pub fn f_08002704(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> 
 '''
 
 [[standin]]
-entry = 0x08002720
+entry = 0x080027e8
 why = "portable_atomic's interrupt::restore (ARM): `msr cpsr_c, r0`, a critical section's end: clearing I runs the IRQs it held (msr_cpsr_c)"
 code = '''
-pub fn f_08002720(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+pub fn f_080027e8(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
     msr_cpsr_c(g, sp, a[0]);
     Ok(a)
 }
@@ -39,7 +39,7 @@ pub fn f_03000000(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> 
     let ime = ld32(g, 0x0400_0208); // swp: IME off
     st32(g, 0x0400_0208, 0);
     // System mode: `push {lr}`, then __RUST_INTERRUPT_HANDLER(due).
-    f_08002765(g, g.sp.wrapping_sub(4), [due, 0x08002765, ime, ie_if])?;
+    f_0800282d(g, g.sp.wrapping_sub(4), [due, 0x0800282d, ime, ie_if])?;
     st32(g, 0x0400_0208, 0x0400_0000); // IME's low half 0
     st32(g, 0x0400_0208, ime); // IME as it was
     st16(g, 0x0400_0200, ie_if); // IE as it was
@@ -48,10 +48,10 @@ pub fn f_03000000(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> 
 '''
 
 [[standin]]
-entry = 0x080243e9
-why = "not code: agb's panic screen's text (WEBSITE, rodata at 0x08024510) that discovery's scan took for a function; nothing calls it"
+entry = 0x080244b1
+why = "not code: rodata, the text 'too large allocation' (agb's allocator's panic message, at 0x080244b0), that discovery's scan took for a function; pool words point at it as data, nothing calls it"
 code = '''
-pub fn f_080243e9(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
-    panic!("0x080243e9 is data, not code")
+pub fn f_080244b1(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+    panic!("0x080244b1 is data, not code")
 }
 '''

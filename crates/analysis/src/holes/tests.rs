@@ -286,19 +286,38 @@ fn bios_and_summaries() {
     assert!(!bios_implemented(0x01) && !bios_implemented(0x13) && !bios_implemented(0x0e));
     assert!(!bios_implemented(0x26) && !bios_implemented(0x2b) && !bios_implemented(0x102));
     assert_eq!(
-        summary_kind("callee-saves: 0x08001234: returns with r4-r11 or sp changed"),
-        "returns with r4-r11 or sp changed"
+        summary_kind("callee-saves: 0x08001234: returns with sp changed: sp = unknown"),
+        "returns with sp changed"
+    );
+    assert_eq!(
+        summary_kind("0x08001234: reads r4-r11 at entry: r5"),
+        "reads r4-r11 at entry"
     );
     assert!(summary_hard(&summary_kind(
-        "0x08001234: returns with r4-r11 or sp changed"
+        "0x08001234: returns with sp changed: r4 = unknown, sp = entry sp-4"
+    )));
+    assert!(summary_hard(&summary_kind(
+        "0x08001234: reads r4-r11 a callee changed: r4"
+    )));
+    // Scratch r4-r11 alone is soft: the reads are the holes.
+    assert!(!summary_hard(&summary_kind(
+        "0x08001234: returns with r4-r11 changed: r4 = constant 0x3"
     )));
     assert!(!summary_hard("an indirect call"));
     let mut sums = BTreeMap::new();
     sums.insert(
         B,
-        vec!["0x08000010: returns with r4-r11 or sp changed".to_string()],
+        vec!["0x08000010: returns with sp changed: sp = unknown".to_string()],
     );
     sums.insert(B + 0x40, vec!["0x08000050: an indirect call".to_string()]);
+    // Two hard kinds in one function count it once.
+    sums.insert(
+        B + 0x80,
+        vec![
+            "0x08000080: reads r4-r11 at entry: r4".to_string(),
+            "0x08000081: changes r4-r11 and may be called through a pointer".to_string(),
+        ],
+    );
     let r = classify(
         &[0u8; 4],
         &Discovery::default(),
@@ -306,8 +325,8 @@ fn bios_and_summaries() {
         &Run::default(),
         Some(&sums),
     );
-    assert_eq!(r.hard_summary(), 1);
-    assert_eq!(r.summary.len(), 2);
+    assert_eq!(r.hard_summary(), 2);
+    assert_eq!(r.summary.len(), 4);
 }
 
 #[test]

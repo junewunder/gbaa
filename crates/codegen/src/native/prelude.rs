@@ -120,6 +120,14 @@ impl std::ops::DerefMut for Ram {
     }
 }
 
+impl Ram {
+    /// Where `n` bytes from RAM offset `o` are in `Ram`: in one piece here.
+    #[inline(always)]
+    fn span(o: usize, _n: usize) -> Option<usize> {
+        Some(o)
+    }
+}
+
 fn record(g: &mut Game) {
     native_host::record(&g.hw, &g.ram[..]);
 }
@@ -176,6 +184,71 @@ pub fn ix(a: u32, off: usize, e: usize, n: usize) -> usize {
 #[track_caller]
 fn unexplained(a: u32, off: usize, e: usize, n: usize) -> ! {
     panic!("pointer {a:#010x} outside its global (RAM offset {off:#x}, {n} of {e} bytes): arithmetic the lift's types don't explain")
+}
+
+/// A pointer to a `T` in RAM (native/ref-heap): what the lift types a heap
+/// pointer as, `T` a struct of the fields seen through it. Its value is
+/// the guest's address; [`Game::at`] and [`Game::at_mut`] find the `T`.
+#[repr(transparent)]
+pub struct Ref<T>(pub u32, std::marker::PhantomData<T>);
+
+impl<T> Ref<T> {
+    #[inline(always)]
+    pub fn new(a: u32) -> Ref<T> {
+        Ref(a, std::marker::PhantomData)
+    }
+
+    /// The object whose field at offset `off` is at `a`.
+    #[inline(always)]
+    pub fn to(a: u32, off: u32) -> Ref<T> {
+        Ref(a.wrapping_sub(off), std::marker::PhantomData)
+    }
+}
+
+/// A struct the lift made of integer fields and byte padding only, packed
+/// (so any bytes, anywhere, are one), and the alignment its objects have
+/// in the guest.
+pub unsafe trait Plain {
+    const ALIGN: u32;
+}
+
+impl Game {
+    /// The `T` at `r`: checked to be in EWRAM or IWRAM, not running past
+    /// it, in one piece of `Ram`, and aligned in the guest as `T` is.
+    #[inline(always)]
+    #[track_caller]
+    pub fn at<T: Plain>(&self, r: Ref<T>) -> &T {
+        let o = obj_at::<T>(r.0);
+        // SAFETY: `obj_at` checked `T`'s bytes are in `Ram`, and any bytes
+        // are a `T` (`Plain`: packed, integers).
+        unsafe { &*(&*self.ram as *const Ram).cast::<u8>().add(o).cast::<T>() }
+    }
+
+    #[inline(always)]
+    #[track_caller]
+    pub fn at_mut<T: Plain>(&mut self, r: Ref<T>) -> &mut T {
+        let o = obj_at::<T>(r.0);
+        // SAFETY: as `at`; any bytes written leave valid integers.
+        unsafe { &mut *(&mut *self.ram as *mut Ram).cast::<u8>().add(o).cast::<T>() }
+    }
+}
+
+/// Where in `Ram` the `T` at guest address `a` is.
+#[inline(always)]
+#[track_caller]
+fn obj_at<T: Plain>(a: u32) -> usize {
+    let n = size_of::<T>();
+    let end = |o: usize| if o < EWRAM { EWRAM } else { EWRAM + IWRAM };
+    match ram_at(a).filter(|&o| o + n <= end(o) && a % T::ALIGN == 0) {
+        Some(o) => Ram::span(o, n).unwrap_or_else(|| bad_ref(a, n, T::ALIGN)),
+        None => bad_ref(a, n, T::ALIGN),
+    }
+}
+
+#[cold]
+#[track_caller]
+fn bad_ref(a: u32, n: usize, al: u32) -> ! {
+    panic!("pointer {a:#010x} to {n} bytes isn't in RAM in one piece, aligned to {al}: an object the lift's heap types don't explain")
 }
 
 /// VRAM's offset for `a`, or `None` in the bitmap modes' dead window (the
