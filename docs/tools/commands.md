@@ -115,6 +115,18 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   generated numbers file (header, date, commit); `--from DIR` runs
   nothing and renders DIR's saved `summary.toml` (with `--write-doc`, the
   file), for a run already made at the commit wanted.
+- `just softfloat-check ROM [--cases N] [--pins]`
+  (`gbaa-softfloat-check`, `crates/hole-report/src/bin/softfloat_check.rs`):
+  the runtime's stand-ins for libgcc's `__muldf3` and `__divdf3`
+  (`runtime::softfloat`) against the ROM's own copies, found by
+  `analysis::softfloat::scan` and run in the interpreter: every pair of an
+  edge grid (zeros, denormals, the normal range's ends, infinities, quiet
+  and signalling NaNs), then N (default 50,000) random pairs of each kind
+  (any bits, results near the denormals, near overflow, short mantissas).
+  Prints each copy's count of differences and the first few; fails on
+  any, or on a ROM with neither. `--pins` prints a smaller grid's results
+  as `runtime::softfloat`'s test table holds them. About 2 s a ROM
+  (moonbeam, Emerald Rogue and Imperium have them). Light.
 - `just jt-score`: the jump-table check (decision 5c). Builds truth tables
   from `$GBAA_DATA/src/pokeemerald/pokeemerald{,_modern}.elf` and the ROMs
   beside them, runs `analysis::jumptable` over each ELF's code map, and

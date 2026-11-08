@@ -12,6 +12,10 @@ publish = false
 name = "gbaa-holes"
 path = "src/main.rs"
 
+[[bin]]
+name = "gbaa-softfloat-check"
+path = "src/bin/softfloat_check.rs"
+
 [dependencies]
 analysis = { path = "../analysis" }
 armv4t = { path = "../armv4t" }
