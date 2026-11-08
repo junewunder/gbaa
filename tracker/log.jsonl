@@ -2504,3 +2504,4 @@
 {"at":"2026-11-08T21:54:23Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"multiplayer/wireless-adapter-local","text":"Emerald's Union Room over an emulated wireless adapter: on main"}
 {"at":"2026-11-08T21:54:36Z","actor":"loop","tag":"bc2eeaad","host":"quack","cmd":"claim","id":"deck/even-presents","text":"Single-player window: hand frames to the display evenly: claimed"}
 {"at":"2026-11-08T22:11:37Z","actor":"loop","tag":"bc2eeaad","host":"quack","cmd":"done","id":"deck/even-presents","text":"Single-player window: hand frames to the display evenly: done"}
+{"at":"2026-11-08T22:15:23Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"deck/even-presents","text":"Single-player window: hand frames to the display evenly: on main"}
