@@ -1,5 +1,5 @@
 # The hole report's corpus (`just holes-all`; `gbaa-holes --corpus`,
-# crates/hole-report/src/corpus.rs): the eight games the ranking in
+# crates/hole-report/src/corpus.rs): the nine games the ranking in
 # docs/research/native-holes.md is over, in its order.
 #   name    the short name: the report is DIR/<name>.txt, `--only NAME` picks it
 #   rom     the ROM's file name in the ROM directory (the justfile's `roms`)
@@ -44,3 +44,7 @@ cover = "holes/coverage/minish-cap.toml"
 name = "emerald-rogue"
 rom = "Emerald Rogue.gba"
 cover = "holes/coverage/emerald-rogue.toml"
+
+[[game]]
+name = "imperium"
+rom = "Emerald Imperium.gba"

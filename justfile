@@ -173,12 +173,14 @@ jt-score:
     set -u
     {{lock}} cargo build -q --release -p jt-check || exit 1
     status=0
-    # The modern build's two subsets were checked by hand: both tables have
-    # a dead entry 0 (Cmd_drawlvlupbox, AddPointsOnFainting).
+    # The modern build's four subsets were checked by hand: two tables have
+    # a dead entry 0 (Cmd_drawlvlupbox, AddPointsOnFainting), and
+    # LoadBattlePyramidObjectEventTemplates' two switch on a field of a
+    # const ROM table whose values pick 4 of 5 cases and 1 of 5.
     # The far-jump bars (decision 5a): the research reached 547/548 and
     # 721/732; keeping a probe's answer when it reaches no return (#25)
     # and the agb rules (#30) reach these.
-    for build in "pokeemerald 676 0 548" "pokeemerald_modern 584 2 726"; do
+    for build in "pokeemerald 676 0 548" "pokeemerald_modern 610 4 726"; do
         set -- $build
         target/release/jt-check {{quote(gbaa_data / "src/pokeemerald")}}/$1.elf --expect $2 --max-subset $3 --expect-far $4 || status=1
     done
@@ -1382,7 +1384,7 @@ holes rom *args:
     {{lock}} cargo build -q --release -p hole-report
     {{cap}} MemoryMax=3G target/release/gbaa-holes "$@"
 
-# The hole report over the corpus (holes/corpus.toml; crates/hole-report/src/corpus.rs): every game in turn, each report in OUT/<name>.txt, then one table of the ranking lines' numbers, saved as OUT/summary.toml. ARGS: --out DIR (default out/holes/<git short hash>[-dirty]), --against DIR2 (changes from DIR2's summary in brackets), --only NAME (repeatable), --cover (each game's coverage runs: hours), --write-doc FILE (the table as a generated numbers file: docs/research/native-holes.numbers.md), --from DIR (run nothing: render DIR's summary.toml), and any `just holes` flag for every game. About 10 minutes for the eight (9.5 to 11 measured); run it with `just long`. The games run one at a time under one 3 GB cap, no swap.
+# The hole report over the corpus (holes/corpus.toml; crates/hole-report/src/corpus.rs): every game in turn, each report in OUT/<name>.txt, then one table of the ranking lines' numbers, saved as OUT/summary.toml. ARGS: --out DIR (default out/holes/<git short hash>[-dirty]), --against DIR2 (changes from DIR2's summary in brackets), --only NAME (repeatable), --cover (each game's coverage runs: hours), --write-doc FILE (the table as a generated numbers file: docs/research/native-holes.numbers.md), --from DIR (run nothing: render DIR's summary.toml), and any `just holes` flag for every game. About 12 minutes for the nine (Imperium the longest, 3 minutes); run it with `just long`. The games run one at a time under one 3 GB cap, no swap.
 [positional-arguments]
 holes-all *args:
     {{lock}} cargo build -q --release -p hole-report
