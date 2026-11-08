@@ -80,7 +80,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   file), and last the runs of ROM code run but not discovered, with what
   discovery has around each (code before it, data over it). About a
   minute a game, capped at 3 GB. The
-  doc's table is these lines; rerun all eight after changing
+  doc's table is these lines; rerun the corpus after changing
   `analysis::holes` or `crates/hole-report` and update it.
   `--cover FILE` (`holes/coverage/<game>.toml`, native/hole-coverage)
   adds the file's coverage runs after the press script (reset, the
@@ -107,7 +107,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   flags (`--frames N`, `--no-summaries`, `--press …`) go to every game;
   `--cover` gives each its coverage file (hours, not minutes). Fails if
   any game's run did. One 3 GB cap, no swap, for the whole run (the games
-  run one at a time). About 10 minutes for the eight (9.5 to 11 measured): run it
+  run one at a time). About 12 minutes for the nine (Imperium the longest, 3 minutes): run it
   with `just long start holes -- just holes-all`. Use it, not a loop over `just
   holes`, to compare before and after a change: run it on main, then on
   the branch with `--against` the first DIR. `--write-doc
@@ -118,9 +118,9 @@ by hand through `just capped`, `just long start` or that systemd-run line;
 - `just jt-score`: the jump-table check (decision 5c). Builds truth tables
   from `$GBAA_DATA/src/pokeemerald/pokeemerald{,_modern}.elf` and the ROMs
   beside them, runs `analysis::jumptable` over each ELF's code map, and
-  prints exact/subset/wrong/missed. Fails below 676/676 (agbcc) or 584/617
-  (modern GCC) exact, on any wrong target, or on a subset beyond the two
-  checked by hand. It also scores the far-jump `bl` rule (5a) on every
+  prints exact/subset/wrong/missed. Fails below 676/676 (agbcc) or 610/617
+  (modern GCC) exact, on any wrong target, or on a subset beyond the four
+  checked by hand (the justfile names them). It also scores the far-jump `bl` rule (5a) on every
   Thumb `bl`, failing below 548/548 or 726/732 or on any false one.
   `jt-check ELF --trace ADDR` prints the value-set states around an address
   and `--dump FILE` every jump's result, for debugging.
