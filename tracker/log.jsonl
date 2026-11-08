@@ -2451,3 +2451,4 @@
 {"at":"2026-11-08T19:40:30Z","actor":"loop","tag":"b61b4529","host":"quack","cmd":"claim","id":"multiplayer/join-without-restart","text":"Join netplay without restarting the game: claimed"}
 {"at":"2026-11-08T19:42:35Z","actor":"loop","tag":"4da39b0a","host":"quack","cmd":"done","id":"bios/fast-set-r2","text":"CpuFastSet leaves r2 as mGBA does: done"}
 {"at":"2026-11-08T19:46:22Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"bios/fast-set-r2","text":"CpuFastSet leaves r2 as mGBA does: on main"}
+{"at":"2026-11-08T19:46:34Z","actor":"loop","tag":"aad03dc9","host":"quack","cmd":"claim","id":"multiplayer/overlay-hides-menu","text":"Netplay: the overlay hides the bottom of the menu: claimed"}
