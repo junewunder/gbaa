@@ -851,6 +851,11 @@
       "id": "multiplayer/wireless-adapter-local",
       "title": "Emerald's Union Room over an emulated wireless adapter",
       "detail": "From the link-cable survey (docs/research/multiplayer.md, 'The cable over the internet'): the wireless adapter is the one link gap that matters for june's games (Emerald's Union Room, wireless trades, Berry Crush). Emulate the adapter on the link hub, both consoles in one process first: normal 32-bit mode on runtime::link, librfu's STWI commands (afska's gba-link-connection docs), and the adapter's radio between machines. Check: two Emeralds from alice.sav and bob.sav meet in the Union Room and trade, identically twice; just check. Networking it (each player runs only their own console, the server as the radio) is later work."
+    },
+    {
+      "id": "multiplayer/single-pak-multiboot",
+      "title": "Single-pak link: a seat with no cartridge boots by MultiBoot",
+      "detail": "From the link-cable survey (docs/research/multiplayer.md, 'The cable over the internet'): single-pak games (Mario Kart Super Circuit's single-pak mode, Bomberman Tournament, the Mario Bros. Classic games) send a program over the cable to GBAs with no cartridge. Our HLE BIOS MultiBoot (SWI 0x25) always fails (runtime/src/bios.rs) and a machine can't start without a ROM. Add: a cartridge-less machine that runs the BIOS's boot-time MultiBoot receive over runtime::link and boots what it gets from EWRAM, and MultiBoot on the parent over the hub. Check: a homebrew single-pak sender (written here, or an agb/libtonc example) boots a client on a cartless seat through two local netplay peers, same end hash; just check. No ROM june has needs it."
     }
   ]
 }
