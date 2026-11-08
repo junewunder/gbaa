@@ -1220,6 +1220,7 @@
     {
       "id": "native/fnref-rom-read-bound",
       "title": "Function flow bounds a ROM read by its table, not next code",
+      "detail": "fnref's from-here-on ROM read (affine at 0x08000af2) ran to the next code; once {unit:native/modern-gcc-data-as-code} removed a false start in agb's panic text, it runs into agb's vtables: ref_unexplained rose 35->97 (93->164 ime-release/irq-hold), fn_words_not_proven +4/5. Bound the read by the table it indexes (its length or a bounds check) and lower both lift-check bars on the seven agb programs. Owner's answer (a) to the bar question.",
       "uses": ["heavy"]
     }
   ]
