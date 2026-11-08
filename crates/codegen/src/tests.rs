@@ -210,6 +210,32 @@ fn table_under_a_bl_pairs_first_half() {
 }
 
 #[test]
+fn holes_file_targets_follow_an_unresolved_jump() {
+    // `mov pc, r0` Recovery left unresolved; the holes file's targets
+    // (`[[jump]]`, Ctx::with_jumps) are its cases, as a table's would be.
+    let (rom, mut d) = program(
+        &[
+            0xE1A0_F000, // 0x08000000 mov pc, r0
+            0xE280_0001, // 0x08000004 add r0, r0, #1
+            0xE12F_FF1E, // 0x08000008 bx lr
+            0xE12F_FF1E, // 0x0800000C bx lr
+        ],
+        &[0x0800_0000],
+    );
+    d.rec.jumps.insert(0x0800_0000, JumpRes::Unresolved);
+    let ctx = Ctx::new(&rom, &d);
+    assert_eq!(ctx.table_targets(0x0800_0000, false), None);
+    let f = build_func(&ctx, 0x0800_0000);
+    assert_eq!(f.blocks.keys().copied().collect::<Vec<_>>(), [0x0800_0000]);
+    let given = [0x0800_0004, 0x0800_000C];
+    let ctx = Ctx::new(&rom, &d).with_jumps([(0x0800_0000, &given[..])]);
+    assert_eq!(ctx.table_targets(0x0800_0000, false), Some(given.to_vec()));
+    let f = build_func(&ctx, 0x0800_0000);
+    let starts: Vec<u32> = f.blocks.keys().copied().collect();
+    assert_eq!(starts, [0x0800_0000, 0x0800_0004, 0x0800_000C]);
+}
+
+#[test]
 fn entry_without_code_in_its_mode_is_skipped() {
     // ARM code, with a Thumb root at the same address.
     let (rom, d) = program(&[0xE1A0_0000], &[0x0800_0000, 0x0800_0001]);

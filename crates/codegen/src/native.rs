@@ -373,11 +373,20 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // literal pool). Each such target is decoded as code from there, and
     // again from what that reaches, so the lift has the code the play
     // build would hand to its interpreter. Listed in the report.
+    // The holes file's targets for jumps Recovery left unresolved are
+    // followed as a table's cases, and decoded the same way if discovery
+    // has no code there.
+    let given = || holes.jumps.iter().map(|(&a, (ts, _))| (a, ts.as_slice()));
     let mut gaps = BTreeSet::new();
     for _ in 0..64 {
-        let ctx = Ctx::new(rom, &disc).with_library();
+        let ctx = Ctx::new(rom, &disc).with_library().with_jumps(given());
         let funcs: Vec<Func> = ctx.entries.iter().map(|&e| build_func(&ctx, e)).collect();
-        let missing = missing(&ctx, &funcs);
+        let mut missing = missing(&ctx, &funcs);
+        missing.extend(
+            given()
+                .flat_map(|(_, ts)| ts.iter().copied())
+                .filter(|&k| (0x0800_0000..0x0A00_0000).contains(&(k & !1)) && !ctx.is_code(k)),
+        );
         if missing.is_empty() {
             break;
         }
@@ -425,10 +434,16 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         });
     }
     let overlays = overlays;
-    let mut codes = vec![code(Ctx::new(rom, &disc).with_library())];
+    let mut codes = vec![code(
+        Ctx::new(rom, &disc).with_library().with_jumps(given()),
+    )];
     for o in &overlays {
         let o_rom = &rom[(o.src - 0x0800_0000) as usize..][..o.len as usize];
-        codes.push(code(Ctx::at(o.dst, o_rom, &o.disc).with_library()));
+        codes.push(code(
+            Ctx::at(o.dst, o_rom, &o.disc)
+                .with_library()
+                .with_jumps(given()),
+        ));
     }
     let holes = &library_standins(holes, &codes);
     // Every function, by key, over all contexts.
@@ -505,8 +520,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             })
             .unwrap_or(0)
     };
+    // A flow that didn't settle (its rounds or its token bound ran out:
+    // native/whole-lift-memory) gives the heap what a skipped one does:
+    // its sites and taken functions may be missing some.
+    let settled = fnrefs.as_ref().filter(|(f, _, _)| !f.unsettled);
     let no_sites = BTreeMap::new();
-    let taken: Option<BTreeSet<u32>> = fnrefs.as_ref().map(|(f, words, _)| {
+    let taken: Option<BTreeSet<u32>> = settled.map(|(f, words, _)| {
         f.consts
             .values()
             .chain(words.values().map(|(k, _)| k))
@@ -515,7 +534,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     });
     let heap = heap::follow(
         &ins,
-        fnrefs.as_ref().map_or(&no_sites, |(f, _, _)| &f.sites),
+        settled.map_or(&no_sites, |(f, _, _)| &f.sites),
         taken.as_ref(),
         &ram_init,
     );
