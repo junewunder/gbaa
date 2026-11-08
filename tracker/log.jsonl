@@ -2423,3 +2423,4 @@
 {"at":"2026-11-08T16:54:19Z","actor":"loop","tag":"05517a38","host":"quack","cmd":"claim","id":"native/modern-gcc-jumps","text":"Modern-GCC games' unresolved jumps, for native builds: claimed"}
 {"at":"2026-11-08T17:23:51Z","actor":"loop","tag":"f6eb8639","host":"quack","cmd":"add-unit","id":"native/ref-heap-static-arrays","text":"new unit: Ref<T> objects in static arrays fit the packed layout"}
 {"at":"2026-11-08T17:41:26Z","actor":"loop","tag":"05517a38","host":"quack","cmd":"done","id":"native/modern-gcc-jumps","text":"Modern-GCC games' unresolved jumps, for native builds: done, checked by verifier-7c3e"}
+{"at":"2026-11-08T17:45:41Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/modern-gcc-jumps","text":"Modern-GCC games' unresolved jumps, for native builds: on main"}

@@ -946,19 +946,7 @@
         "checker": "verifier-7c3e",
         "at": "2026-11-08T17:41:26Z",
         "evidence": "Verifier verifier-7c3e: imperium in holes/corpus.toml; holes-all --against a main run (f6b507e, same corpus): imperium jumps 71->27 hard 79->35, emerald-rogue jumps 46->20 hard 51->25, warioware/moonbeam/emerald down, no game's hard up. By-kind counts in docs/research/native-holes.md (sums check). jt-score run: agbcc 676/676, modern 610/617 (bar 610, from 584), 0 wrong, 4 hand-checked subsets. Owner-accepted +1 load_sp bars set; just check passes at ffa16e0 after merging main.",
-        "branch": "unit/native/modern-gcc-jumps",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T17:41:26Z",
-          "by": "05517a38",
-          "host": "quack",
-          "pid": 3349268,
-          "start": "14822772",
-          "beats": true,
-          "session": "05517a38-fef4-40a0-9a05-70ab7278ccd1",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -971,8 +959,7 @@
           "by": "30aebd47",
           "text": "On the branch: holes final Imperium jumps 71->27, Rogue 46->20, no game up; jt-score modern 610/617 (bar set), 4 subsets checked. Only lift bars load_sp/sp_accesses_escaping_slot +1 (4 progs) wait on q/may-load-sp-sp-accesses; then just check, lift-metrics --write-doc, verifier."
         }
-      ],
-      "round": "2026-11-07T08:53:17Z"
+      ]
     },
     {
       "id": "native/modern-gcc-data-as-code",
