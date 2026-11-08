@@ -281,8 +281,10 @@ fn flash_stack_routines_are_library_calls() {
 
 #[test]
 fn bios_and_summaries() {
-    assert!(bios_implemented(0x0b) && bios_implemented(0x2a));
-    assert!(!bios_implemented(0x26) && !bios_implemented(0x2b));
+    assert!(bios_implemented(0x0b) && bios_implemented(0x05) && bios_implemented(0x11));
+    // In the play build's BIOS but not the lifter's prelude: counted.
+    assert!(!bios_implemented(0x01) && !bios_implemented(0x13) && !bios_implemented(0x0e));
+    assert!(!bios_implemented(0x26) && !bios_implemented(0x2b) && !bios_implemented(0x102));
     assert_eq!(
         summary_kind("callee-saves: 0x08001234: returns with sp changed: sp = unknown"),
         "returns with sp changed"
