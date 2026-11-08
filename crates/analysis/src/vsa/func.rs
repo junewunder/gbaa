@@ -120,6 +120,29 @@ pub enum JumpRes {
     Rejected(Jump),
 }
 
+/// Whether code may hold the undefined instruction `insn` on purpose, so
+/// that it doesn't make the code data ([`FuncResult::undefined`]): a
+/// compiler's trap (`__builtin_trap`, a Rust abort: Thumb `udf #255`
+/// from GCC or `udf #254` from LLVM, ARM 0xe7ffdefe from LLVM or
+/// 0xe7f000f0 from GCC), or the word after an unconditional `bl`, which
+/// may be a call that never returns (Super Mariomon's assert ends in
+/// 0xefff after its print).
+pub fn deliberate(prog: &Program, insn: &Insn) -> bool {
+    let trap = if insn.thumb {
+        matches!(prog.read(insn.addr, 2), Some(0xdeff | 0xdefe))
+    } else {
+        matches!(prog.read(insn.addr, 4), Some(0xe7ff_defe | 0xe7f0_00f0))
+    };
+    let before = insn.addr.checked_sub(4);
+    trap || before
+        .and_then(|p| prog.decode(p, insn.thumb))
+        .is_some_and(|b| {
+            b.next() == insn.addr
+                && b.instr.cond() == armv4t::decode::Cond::Al
+                && (b.bl.is_some() || matches!(b.instr, Instr::Branch { link: true, .. }))
+        })
+}
+
 #[derive(Debug, Default)]
 pub struct FuncResult {
     /// Instructions reached.
@@ -136,6 +159,10 @@ pub struct FuncResult {
     /// Some path ran into data, an undefined instruction or bytes that
     /// don't decode.
     pub stopped: bool,
+    /// An undefined instruction some path reached, other than a trap
+    /// ([`deliberate`]), the lowest. Code doesn't hold one; data decoded as
+    /// code often does, so discovery drops a scanned root that reaches one.
+    pub undefined: Option<u32>,
     /// Hit the step cap ([`STEP_CAP`] by default); the results aren't a
     /// fixpoint.
     pub capped: bool,
@@ -507,7 +534,13 @@ impl Analysis<'_, '_> {
             mut state,
         } = e;
         match kind {
-            ExitKind::Undefined => self.res.stopped = true,
+            ExitKind::Undefined => {
+                self.res.stopped = true;
+                if !deliberate(self.prog, insn) {
+                    let u = self.res.undefined.get_or_insert(insn.addr);
+                    *u = (*u).min(insn.addr);
+                }
+            }
             // BIOS calls return, clobbering r0 to r3.
             ExitKind::Swi => {
                 if self.record

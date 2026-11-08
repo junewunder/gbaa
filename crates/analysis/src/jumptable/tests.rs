@@ -531,3 +531,123 @@ fn a_call_keeps_registers_its_callee_never_writes() {
         }
     }
 }
+
+/// Modern GCC's narrowed index (`AnimTask_SetGrayscaleOrOriginalPal`): an
+/// `s16` is zero-extended into a copy, the copy bounded, and the table
+/// indexed with the original. The bound on the copy bounds the halfword,
+/// and so the sign-extended original.
+#[test]
+fn narrowed_copy_bounds_the_index() {
+    let mut a = Asm::new();
+    a.h(0x00, 0x2300) // movs r3, #0
+        .h(0x02, 0x5ee0) // ldrsh r0, [r4, r3]
+        .h(0x04, 0x0403) // lsls r3, r0, #16
+        .h(0x06, 0x0c1b) // lsrs r3, r3, #16
+        .h(0x08, 0x2b03) // cmp r3, #3
+        .bcond(0x0a, 8, 0x40) // bhi default
+        .h(0x0c, 0x4a01) // ldr r2, [pc, #4] (the pool word)
+        .h(0x0e, 0x0083) // lsls r3, r0, #2
+        .h(0x10, 0x58d3) // ldr r3, [r2, r3]
+        .h(0x12, 0x469f) // mov pc, r3
+        .w(0x14, ROM_BASE + 0x100);
+    for k in 0..4 {
+        a.w(0x100 + 4 * k, ROM_BASE + 0x30 + 4 * k);
+    }
+    a.cases(0x30, 4).h(0x40, 0x2000).h(0x42, 0x4770);
+    let rec = recover(&a.program(0x44));
+    let j = resolved(&rec, 0x12);
+    assert_eq!(j.targets, thumb([0x30, 0x34, 0x38, 0x3c]));
+    assert_eq!(j.table, word_table(0x100, 4));
+}
+
+/// `get: push {lr}; movs r1, #2; str r1, [r0]; bl nothing; pop {pc}` at
+/// 0x60 and `nothing: bx lr` at 0x70.
+fn getter(a: &mut Asm) {
+    a.h(0x60, 0xb500)
+        .h(0x62, 0x2102)
+        .h(0x64, 0x6001)
+        .bl(0x66, 0x70)
+        .h(0x6a, 0xbd00)
+        .h(0x70, 0x4770);
+}
+
+/// A table base spilled below the local whose address a call gets: the
+/// call can write the local and up, not the spill slot under it.
+#[test]
+fn spill_below_an_escaped_local_survives_a_call() {
+    let mut a = Asm::new();
+    a.h(0x00, 0xb500) // push {lr}
+        .h(0x02, 0xb082) // sub sp, #8
+        .h(0x04, 0x4907) // ldr r1, [pc, #28] (the pool word at 0x24)
+        .h(0x06, 0x9100) // str r1, [sp, #0]
+        .h(0x08, 0xa801) // add r0, sp, #4
+        .bl(0x0a, 0x60) // bl get
+        .h(0x0e, 0x2c03) // cmp r4, #3
+        .bcond(0x10, 8, 0x50) // bhi default
+        .h(0x12, 0x00a4) // lsls r4, r4, #2
+        .h(0x14, 0x9a00) // ldr r2, [sp, #0]
+        .h(0x16, 0x5913) // ldr r3, [r2, r4]
+        .h(0x18, 0x469f) // mov pc, r3
+        .w(0x24, ROM_BASE + 0x100);
+    for k in 0..4 {
+        a.w(0x100 + 4 * k, ROM_BASE + 0x30 + 4 * k);
+    }
+    a.cases(0x30, 4).h(0x50, 0x2000).h(0x52, 0x4770);
+    getter(&mut a);
+    let p = a.funcs(0x72, true, &[(0, 0x54), (0x60, 0x6c), (0x70, 0x72)]);
+    let rec = recover(&p);
+    assert_eq!(
+        resolved(&rec, 0x18).targets,
+        thumb([0x30, 0x34, 0x38, 0x3c])
+    );
+}
+
+/// The lr a prologue saved survives a call that gets a local's address,
+/// so `pop {r3}; bx r3` is a return, not an unresolved jump.
+#[test]
+fn saved_lr_survives_an_escaped_local() {
+    let mut a = Asm::new();
+    a.h(0x00, 0xb510) // push {r4, lr}
+        .h(0x02, 0xb081) // sub sp, #4
+        .h(0x04, 0x4668) // mov r0, sp
+        .bl(0x06, 0x60) // bl get
+        .h(0x0a, 0xb001) // add sp, #4
+        .h(0x0c, 0xbc10) // pop {r4}
+        .h(0x0e, 0xbc08) // pop {r3}
+        .h(0x10, 0x4718); // bx r3
+    getter(&mut a);
+    let p = a.funcs(0x72, true, &[(0, 0x12), (0x60, 0x6c), (0x70, 0x72)]);
+    let rec = recover(&p);
+    assert_eq!(rec.jumps.get(&(ROM_BASE + 0x10)), None);
+}
+
+/// A local a call may have written, bounded and then loaded again: both
+/// loads read the same unknown, so the bound holds at the second.
+#[test]
+fn local_reloaded_after_its_bounds_check() {
+    let mut a = Asm::new();
+    a.h(0x00, 0xb500) // push {lr}
+        .h(0x02, 0xb081) // sub sp, #4
+        .h(0x04, 0x4668) // mov r0, sp
+        .bl(0x06, 0x60) // bl get
+        .h(0x0a, 0x9b00) // ldr r3, [sp, #0]
+        .h(0x0c, 0x2b03) // cmp r3, #3
+        .bcond(0x0e, 8, 0x50) // bhi default
+        .h(0x10, 0x9b00) // ldr r3, [sp, #0]
+        .h(0x12, 0x4a02) // ldr r2, [pc, #8] (the pool word at 0x1c)
+        .h(0x14, 0x009b) // lsls r3, r3, #2
+        .h(0x16, 0x58d3) // ldr r3, [r2, r3]
+        .h(0x18, 0x469f) // mov pc, r3
+        .w(0x1c, ROM_BASE + 0x100);
+    for k in 0..4 {
+        a.w(0x100 + 4 * k, ROM_BASE + 0x30 + 4 * k);
+    }
+    a.cases(0x30, 4).h(0x50, 0x2000).h(0x52, 0x4770);
+    getter(&mut a);
+    let p = a.funcs(0x72, true, &[(0, 0x54), (0x60, 0x6c), (0x70, 0x72)]);
+    let rec = recover(&p);
+    assert_eq!(
+        resolved(&rec, 0x18).targets,
+        thumb([0x30, 0x34, 0x38, 0x3c])
+    );
+}

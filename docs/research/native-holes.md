@@ -2,7 +2,8 @@
 
 research/native-holes (unit native/hole-report), 2026-11-01. For the
 Stage-A lifter and for june: of the eight games of
-`docs/research/code-without-rom-addresses.md`, which is closest to a
+`docs/research/code-without-rom-addresses.md`, and Emerald Imperium
+(modern GCC, added by `native/modern-gcc-jumps`), which is closest to a
 native build (`docs/native-port-design.md`, section 6), and what stands
 in the way of each.
 
@@ -79,7 +80,7 @@ runs the corpus into one table (about 10 minutes).
 | Return-address arithmetic | the run: a return (`bx`, `pop {pc}`, `mov pc, lr`, `ldr pc, [sp]`) landing 64 bytes before to 1 KiB after the innermost open call's return site, not on it, not on another call's return site, not on a function start, not inside the callee's own function; statically: a function doing arithmetic on lr, or loading through it, before writing lr | where Recovery doesn't resolve the call site as a jump |
 | RAM code that changed | the run: an address run again with different bytes or instruction set | each run of addresses (gaps up to 16 bytes) |
 | CPU state | `msr`, `mrs`, `ldm`/`stm` with the S bit, `s` writes to pc, stack switches (sp moved 4 KiB or more by one instruction other than sp-relative arithmetic) | outside the IRQ wrapper (code run at the top level of an IRQ, and the rest of its function; for a copy made by the game's loop, at the RAM address) and boot (code run only in the first frame, and its function) |
-| BIOS call outside the library | `swi` numbers `runtime::bios` doesn't implement (HardReset, above 0x2A) | each site |
+| BIOS call outside the library | `swi` numbers the native lifter doesn't print (the ones not in `analysis::holes::NATIVE_BIOS`) | each site |
 | Call to a non-entry | the run: a call through a register (`mov lr, pc` or `adr lr, …` then `bx rN`, or a `bl` to a `bx rN` stub other than `bx pc`) to an address not a discovered function start or RAM entry | each target |
 | Summary hole | `analysis::holes::SUMMARY_HARD`: a return with sp changed (moved by a run-time amount, as a variable-length array does), a read of r4-r11 a callee changed or that came in as a parameter, a function that changes r4-r11 whose key is a word in the ROM (below) | each function, once |
 
@@ -282,7 +283,8 @@ The counts are the numbers file's; what they are, beyond the summary's:
   most of the reached ones. That code is a BIOS copy (0x0300404c from
   0x080af3a4, entered only by a jump) and a copy only the run shows
   (0x030056f0-0x030068a4 from 0x080b197c), both discovered now.
-- **Emerald Rogue.** The most unresolved jumps, mostly unreached; its
+- **Emerald Rogue and Imperium.** Unresolved jumps, mostly unreached and
+  most not tables now (below); Rogue's
   mixer's template stamping (0x030059f0-0x03005b10,
   `codegen::variants`); libgcc's soft-float division helper (below); and
   the busy loops calling functions.
@@ -353,6 +355,34 @@ moonbeam's and Rogue's that read the r4 the helper returns, and the two
 data. Each real one is the lift's stand-in to write (`[[standin]]` in
 the game's holes file covers a function's holes): libgcc's `__muldf3`
 and `__divdf3` as Rust's `f64` operations, the others as written.
+
+## Modern GCC's unresolved jumps, by kind
+
+`native/modern-gcc-jumps`, 2026-11-07: every unresolved ROM jump of
+Imperium and Rogue (`just holes ROM --show 200`), sorted by the code
+before it (`just dis`), then the largest kinds fixed in
+`analysis::vsa::exec`. Imperium / Rogue, before and after:
+
+| Kind | Before | After |
+|---|---|---|
+| Switch on a narrowed copy: `lsls r3, r0, #16; lsrs r3, r3, #16; cmp r3, #7; bhi`, indexed with r0 (an `ldrsh`'s `s16`) | 34 / 23 | 2 / 2 |
+| The frame rule: a table's base or index in a stack slot a call forgot (the frame had escaped), or the saved lr a `pop {r3}; bx r3` returns through | 13 / 8 | 1 / 3 |
+| Other tables: a far-jump default (`bls; bl`) the probe missed, a base kept in a high register round a loop, one not looked into | 2 / 2 | 2 / 2 |
+| Data decoded as code (pointer tables at 0x0828xxxx and 0x0826xxxx) | 14 / 6 | 14 / 6 |
+| libgcc's `_call_via_r0`-`r2` (`bx rN` stubs, calls by `bl`) | 3 / 3 | 3 / 3 |
+| Veneers into RAM code (`ldr r3, =ram; bx r3`, ARM `ldr pc, [pc, #-4]`) | 3 / 2 | 3 / 2 |
+| Through a function pointer (an argument, a pointer loaded from RAM) | 2 / 2 | 2 / 2 |
+| Total | 71 / 46 | 27 / 20 |
+
+The fixes (`analysis::vsa`): a sign extension is a derivation
+(`DOp::Sext`) and a `lsl`/`lsr` pair by `32 - w` over a value that fits
+gives it back, so the copy's bound narrows the original; a call or a
+store through an unknown pointer forgets the frame only from the lowest
+escaped local up, keeping saved registers, and a reloaded local keeps
+its bound. No game's hard count rose; `jt-score`'s modern build went
+from 584 to 610 of 617 (agbcc 676/676, 0 wrong). What's left is mostly
+not tables: data decoded as code, and stubs and veneers a native build
+could call through `FnRef`.
 
 ## What the Stage-A lifter should know
 
