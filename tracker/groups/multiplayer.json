@@ -856,6 +856,11 @@
       "id": "multiplayer/single-pak-multiboot",
       "title": "Single-pak link: a seat with no cartridge boots by MultiBoot",
       "detail": "From the link-cable survey (docs/research/multiplayer.md, 'The cable over the internet'): single-pak games (Mario Kart Super Circuit's single-pak mode, Bomberman Tournament, the Mario Bros. Classic games) send a program over the cable to GBAs with no cartridge. Our HLE BIOS MultiBoot (SWI 0x25) always fails (runtime/src/bios.rs) and a machine can't start without a ROM. Add: a cartridge-less machine that runs the BIOS's boot-time MultiBoot receive over runtime::link and boots what it gets from EWRAM, and MultiBoot on the parent over the hub. Check: a homebrew single-pak sender (written here, or an agb/libtonc example) boots a client on a cartless seat through two local netplay peers, same end hash; just check. No ROM june has needs it."
+    },
+    {
+      "id": "multiplayer/wander-split-under-load",
+      "title": "Emerald's netplay trade split once on wander, under load",
+      "detail": "From the link-cable survey (2026-11-08, quack, load average 18 from other lanes): just emerald-netplay-trade wander failed once: player 1 saw player 2 leave at frame 1119, player 2 left at 1144 (its max frame 3400 ms, round trip up to 3439 ms), each played on alone and the end hashes differed. The rerun and calm passed. Find why a 3.4 s stall ended the session (the stopped-answering timeouts are 5 s freeze plus 15 s), and make a stalled peer catch up instead. Check: just emerald-netplay-trade wander passes 5 times in a row with a peer SIGSTOPped for 4 s mid-run; just check."
     }
   ]
 }
