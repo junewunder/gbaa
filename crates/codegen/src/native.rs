@@ -520,8 +520,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             })
             .unwrap_or(0)
     };
+    // A flow that didn't settle (its rounds or its token bound ran out:
+    // native/whole-lift-memory) gives the heap what a skipped one does:
+    // its sites and taken functions may be missing some.
+    let settled = fnrefs.as_ref().filter(|(f, _, _)| !f.unsettled);
     let no_sites = BTreeMap::new();
-    let taken: Option<BTreeSet<u32>> = fnrefs.as_ref().map(|(f, words, _)| {
+    let taken: Option<BTreeSet<u32>> = settled.map(|(f, words, _)| {
         f.consts
             .values()
             .chain(words.values().map(|(k, _)| k))
@@ -530,7 +534,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     });
     let heap = heap::follow(
         &ins,
-        fnrefs.as_ref().map_or(&no_sites, |(f, _, _)| &f.sites),
+        settled.map_or(&no_sites, |(f, _, _)| &f.sites),
         taken.as_ref(),
         &ram_init,
     );

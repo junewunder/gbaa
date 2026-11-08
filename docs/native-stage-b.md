@@ -367,8 +367,8 @@ What the done pieces left open, for the units that come next.
   outside it, or have none, reads no ROM and flags nothing (the closed
   world); a ROM-bounded read wider than 256 KB reads nothing (flagged); a
   RAM-to-RAM `CpuSet` isn't followed; `ror` by an unknown amount keeps a
-  function's form. On a whole game the run doesn't settle in minutes yet
-  (`native/fnref-flow-scale`).
+  function's form. Past 48M tokens held it stops unsettled, proving
+  nothing (`native/whole-lift-memory`; Metroid settles at about 30M).
 - **Escape analysis** (piece 4). An escaping address marks only the
   slots at and above it; walking down too would leave about three times
   the accesses in memory, so it stays open and `--shadow-locals` checks
