@@ -559,6 +559,30 @@ impl Summaries {
     }
 }
 
+/// A library routine's summary (`Ctx::library`: libgcc's `__muldf3`,
+/// `__divdf3`): two doubles in r0-r3, one back in r0 and r1, r2, r3 and
+/// r12 left as nothing defines; r4-r11 and sp kept.
+fn library_summary(k: u32) -> Summary {
+    let def = Bits {
+        entry: false,
+        def: true,
+        clob: false,
+    };
+    let clob = Bits {
+        entry: false,
+        def: false,
+        clob: true,
+    };
+    Summary {
+        params: 0xf,
+        causes: (0..4).map(|r| (r, Cause::Reads(k))).collect(),
+        exit: [def, def, clob, clob, clob],
+        returns: true,
+        keeps: true,
+        ..Summary::default()
+    }
+}
+
 /// The summaries of `funcs`, which should be every function `ctx` has.
 pub fn summarize(ctx: &Ctx, funcs: &[Func]) -> Summaries {
     summarize_with(ctx, funcs, Assume::default())
@@ -578,10 +602,21 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
     let by_entry: BTreeMap<u32, &Func> = funcs.iter().map(|f| (f.entry, f)).collect();
     let mut sums: BTreeMap<u32, Summary> =
         by_entry.keys().map(|&k| (k, Summary::default())).collect();
+    // The library routines the runtime stands in for are leaves of a
+    // known convention, never run; the functions inside their code aren't
+    // either (a call into one is a hole of its caller's, `Walk`).
+    let lib = ctx.library();
+    for &k in lib.routines.keys() {
+        sums.insert(k, library_summary(k));
+    }
     let mut used: BTreeMap<u32, BTreeMap<(u32, u8), Cause>> = BTreeMap::new();
     let mut callers: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
-    let mut work: VecDeque<u32> = by_entry.keys().copied().collect();
-    let mut queued: BTreeSet<u32> = by_entry.keys().copied().collect();
+    let mut work: VecDeque<u32> = by_entry
+        .keys()
+        .copied()
+        .filter(|&k| !lib.inside(k))
+        .collect();
+    let mut queued: BTreeSet<u32> = work.iter().copied().collect();
     let mut runs = 0;
     // A run cut short ("didn't settle") isn't monotone in its callees, so
     // in principle two could re-queue each other: a guard.
