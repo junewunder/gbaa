@@ -23,6 +23,11 @@
 //!   undefined instruction, `SoftReset` or `HardReset`);
 //! - runs from IWRAM, where its code may change.
 //!
+//! A library routine the runtime stands in for (`Ctx::library`: libgcc's
+//! `__muldf3` and `__divdf3`) keeps them, as its code does on the whole;
+//! the functions inside its code (its special-case paths, which return
+//! r4 and r5 changed) are neither proven nor summarised.
+//!
 //! A conditional instruction's writes are kept apart per condition, so a
 //! pop and return under one condition (libgcc's `ldmhi sp!, {r4, r5, lr};
 //! bxhi lr`) returns with what it popped ([`Walk::block`]).
@@ -188,7 +193,14 @@ pub fn prove(ctx: &Ctx, funcs: &[Func]) -> Proof {
     let by_entry: BTreeMap<u32, &Func> = funcs.iter().map(|f| (f.entry, f)).collect();
     let mut callees: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
     let mut why = BTreeMap::new();
-    for f in funcs {
+    // A library routine the runtime stands in for keeps them (its
+    // special-case paths, which don't, are inside it); the functions
+    // inside its code aren't run.
+    let lib = ctx.library();
+    for &k in lib.routines.keys() {
+        callees.insert(k, BTreeSet::new());
+    }
+    for f in funcs.iter().filter(|f| !lib.inside(f.entry)) {
         match local(ctx, &by_entry, f) {
             Ok(c) => {
                 callees.insert(f.entry, c);
@@ -308,11 +320,23 @@ impl Walk<'_> {
         self.fail(why)
     }
 
+    /// `k` is in a library routine's code but not its entry: a path of
+    /// the routine's own, which its stand-in doesn't have
+    /// ([`crate::func::Library`]).
+    fn inner(&self, k: u32) -> bool {
+        let lib = self.ctx.library();
+        lib.inside(k) && !lib.routines.contains_key(&k)
+    }
+
     /// Go on at `to` with `s`.
     fn flow(&mut self, to: u32, s: &State) -> Result<(), String> {
         if !self.blocks.contains_key(&to) {
+            if self.inner(to) {
+                return self.stop(format!("0x{to:08x}: jumps into a library routine's code"));
+            }
             // A tail call: the callee returns to our caller.
-            let func = self.ctx.disc.funcs.contains_key(&to) && self.ctx.entries.contains(&to);
+            let func = self.ctx.disc.funcs.contains_key(&to) && self.ctx.entries.contains(&to)
+                || self.ctx.library().routines.contains_key(&to);
             if func && s.kept() && s.regs[14] == V::Entry(14) {
                 self.callees.insert(to);
                 if let Some(sum) = &mut self.sum {
@@ -489,6 +513,11 @@ impl Walk<'_> {
         match x.plan {
             Plan::Static(k) => self.flow(k, s),
             Plan::Call { target, ret } => {
+                if self.inner(target) {
+                    return self.stop(format!(
+                        "0x{at:08x}: calls into a library routine's code, 0x{target:08x}"
+                    ));
+                }
                 // The callee's own proof is checked in `prove`.
                 self.callees.insert(target);
                 let mut after = s.clone();

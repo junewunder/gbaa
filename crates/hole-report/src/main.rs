@@ -915,7 +915,9 @@ fn main() -> ExitCode {
     };
     let summaries = sums.then(|| {
         let t = std::time::Instant::now();
-        let ctx = codegen::func::Ctx::new(rom, &disc);
+        // libgcc's double multiply and divide are the runtime's stand-ins
+        // (`analysis::softfloat`), as in the lift.
+        let ctx = codegen::func::Ctx::new(rom, &disc).with_library();
         let funcs = codegen::emit::build_all(&ctx).funcs;
         let s = codegen::saves::summarize(&ctx, &funcs);
         eprintln!("summaries: {:.1} s", t.elapsed().as_secs_f64());
