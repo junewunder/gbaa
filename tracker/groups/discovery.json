@@ -103,6 +103,11 @@
           "text": "just run-recompiled passes its args unquoted ({{args}}), so a ROM path with a space (Emerald Rogue.gba) splits; ran target/recompiled/release/gbaa-emerald-rogue directly. Wait states doubled Rogue's running cycles: old 5400-frame cycle lines aren't comparable."
         }
       ]
+    },
+    {
+      "id": "discovery/gcc-far-jump-bl",
+      "title": "Modern GCC's far-jump bl into a caller's fragment",
+      "uses": ["heavy"]
     }
   ]
 }
