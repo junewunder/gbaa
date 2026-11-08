@@ -187,15 +187,22 @@
       "lane": "quack/3",
       "branch": "unit/native/lift-bios-calls",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "62ef447a",
-        "session": "62ef447a-017e-4a31-905a-ae3406e9eda1",
-        "host": "quack",
-        "pid": 3349722,
-        "start": "14823514",
-        "at": "2026-11-08T18:07:13Z",
+        "at": "2026-11-08T18:37:11Z",
+        "evidence": "Merged origin/main (6b6ddcc). Conflicts were in both generated numbers docs: regenerated them (lift-metrics --write-doc: 0 over/under bars after moving native-bios-calls bars the way main moved the others'; holes-all --write-doc over nine games). just check exit 0.",
         "branch": "unit/native/lift-bios-calls",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-08T18:37:11Z",
+          "by": "62ef447a",
+          "host": "quack",
+          "pid": 3349722,
+          "start": "14823514",
+          "beats": true,
+          "session": "62ef447a-017e-4a31-905a-ae3406e9eda1",
+          "lane": "quack/3"
+        }
       },
       "round": "2026-11-08T18:07:13Z"
     }
