@@ -1296,7 +1296,9 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   copies; lifted at its RAM keys like a static copy, native/lift-ram-copies)
   and, at the top,
   `skip_fn_flow = "why"` (the function-address flow left out, for a game
-  it doesn't settle on). A hard hole no stand-in
+  it doesn't settle on; a flow that holds more than its bound of tokens
+  stops on its own, unsettled, so a game needs it only to save the
+  minute or two the flow takes before then). A hard hole no stand-in
   covers (CPU state, an unresolved jump, a BIOS call the prelude lacks, an
   undefined instruction, a jump to no code, a summary that returns r4-r11
   or sp changed) fails the lift, naming each, and the build (a

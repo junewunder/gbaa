@@ -371,7 +371,10 @@ What the done pieces left open, for the units that come next.
   world); a ROM-bounded read wider than 256 KB reads nothing (flagged); a
   RAM-to-RAM `CpuSet` isn't followed; `ror` by an unknown amount keeps a
   function's form. On a whole game the run doesn't settle in minutes yet
-  (`native/fnref-flow-scale`).
+  (`native/fnref-flow-scale`); past 48 million tokens held (Metroid
+  settles holding about 30 million) it stops, unsettled, proving
+  nothing, so Nightmare's and Minish Cap's lifts finish in about 3 and
+  1 minutes at 2.1 and 2.4 GB (`native/whole-lift-memory`).
 - **Escape analysis** (piece 4). An escaping address marks only the
   slots at and above it; walking down too would leave about three times
   the accesses in memory, so it stays open and `--shadow-locals` checks
