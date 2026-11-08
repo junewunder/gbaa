@@ -85,9 +85,11 @@
 //!   accessed whole, else bytes (unit `native/frame-locals`); escaping
 //!   slots stay IWRAM bytes, and sp is still passed. A value nothing
 //!   printed uses (the address of an access to a local) isn't printed.
-//! - BIOS calls are the library's: the waits (`IntrWait`, `VBlankIntrWait`
-//!   as `hw::halt` until the game's handler sets the flag), `CpuSet` with
-//!   its time (`hw::spend`), `Div`.
+//! - BIOS calls are the library's ([`BIOS`] lists them): the waits
+//!   (`IntrWait`, `VBlankIntrWait` as `hw::halt` until the game's handler
+//!   sets the flag; `Halt`, `Stop`), `CpuSet`, `CpuFastSet` and LZ77 with
+//!   their time (`hw::spend`), RL, `Div`, `Sqrt`, `ArcTan2`, `SoundBias`,
+//!   `MidiKey2Freq`, `MultiBoot` (unit `native/lift-bios-calls`).
 //! - An idle loop's back edge calls `hw::idle`, a spin loop's `hw::spin`
 //!   (`analysis::idle`, `runtime::spins`, as the play build's
 //!   `--timing native` marks them).
@@ -166,8 +168,9 @@ pub fn prelude(layout: Layout) -> String {
     }
 }
 
-/// The BIOS calls the prelude has.
-const BIOS: &[u8] = &[0x02, 0x04, 0x05, 0x06, 0x0B];
+/// The BIOS calls the prelude has, the list `gbaa-holes` counts the rest
+/// by.
+use analysis::holes::NATIVE_BIOS as BIOS;
 
 /// What the game's holes file (`holes/<game>.toml`) gives: hand-written
 /// stand-ins for functions, and targets for unresolved jumps.
@@ -2008,13 +2011,32 @@ impl FnPrinter<'_, '_> {
                 };
                 let n = runtime::bios::number(comment, thumb);
                 let call = match n {
-                    0x02 => "g.sp = r13; hw::halt(g)?;".to_string(),
+                    // `Stop` is a halt, as in the play build.
+                    0x02 | 0x03 => "g.sp = r13; hw::halt(g)?;".to_string(),
                     0x04 => "r0 = intr_wait(g, r13, r0 != 0, r1)?;".to_string(),
                     0x05 => "r0 = intr_wait(g, r13, true, 1)?; r1 = 1;".to_string(),
                     0x06 => {
                         "let mut r = [r0, r1, r2, r3]; div(&mut r); [r0, r1, r2, r3] = r;".to_string()
                     }
+                    0x08 => "r0 = hw::bios::sqrt(r0);".to_string(),
+                    0x0A => "let (a, t) = hw::bios::arc_tan2_of(r0 as i32, r1 as i32); \
+                        r0 = a as u32; r1 = t.map_or(r1, |t| t as u32); r3 = 0x170;"
+                        .to_string(),
                     0x0B => "let mut r = [r0, r1, r2, r3]; cpu_set(g, r13, &mut r)?; [r0, r1, r2, r3] = r;".to_string(),
+                    0x0C => "let mut r = [r0, r1, r2, r3]; cpu_fast_set(g, r13, &mut r)?; [r0, r1, r2, r3] = r;".to_string(),
+                    0x11 | 0x12 => format!(
+                        "let mut r = [r0, r1, r2, r3]; lz77(g, r13, &mut r, {}, {at:#010x}, {thumb})?; [r0, r1, r2, r3] = r;",
+                        n == 0x12
+                    ),
+                    0x14 | 0x15 => format!(
+                        "let mut r = [r0, r1, r2, r3]; rl(g, &mut r, {}); [r0, r1, r2, r3] = r;",
+                        n == 0x15
+                    ),
+                    0x19 => "sound_bias(g, r0);".to_string(),
+                    0x1F => "r0 = hw::bios::midi_key2freq(ld32(g, r0.wrapping_add(4) & !3), r1, r2);"
+                        .to_string(),
+                    // No link cable: no client answers (the play build's).
+                    0x25 => "r0 = 1;".to_string(),
                     _ => {
                         debug_assert!(!BIOS.contains(&n));
                         self.hole(at, format!("BIOS call {n:#04x}, which the library doesn't have"));
