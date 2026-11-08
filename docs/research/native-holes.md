@@ -374,21 +374,15 @@ before it (`just dis`), then the largest kinds fixed in
 | Through a function pointer (an argument, a pointer loaded from RAM) | 2 / 2 | 2 / 2 |
 | Total | 71 / 46 | 27 / 20 |
 
-The fixes: a sign extension is a derivation (`DOp::Sext`), a `lsl` by
-`32 - w` of a sign-extended `w`-bit value or of a value that fits loses
-nothing (`DOp::LslExact`), and a `lsr` by the same amount gives the same
-unknown back, so the copy's bound narrows the halfword and, through the
-derivation, the original (halfword loads are taken as aligned, and give
-0..0xffff). A call or a store through an unknown pointer forgets the
-frame only from the lowest escaped local up, keeping the slots that hold
-a saved register; a slot read when unknown keeps what was read, so a
-local reloaded after its bound keeps it. Every game's hard count fell or
-held (WarioWare 8 to 7, moonbeam 19 to 15, Emerald 12 to 11); `jt-score`'s
-modern build went from 584 to 610 of 617 exact (agbcc 676/676, 0 wrong),
-and `disc-pret`'s modern-build tables from 532 to 560. What's left is
-mostly not tables: the data isn't code (by eye: `lsrs r0, r5, #32`,
-`movs r0, r0` runs), a discovery false positive, and the stubs and
-veneers are calls a native build could make through `FnRef`.
+The fixes (`analysis::vsa`): a sign extension is a derivation
+(`DOp::Sext`) and a `lsl`/`lsr` pair by `32 - w` over a value that fits
+gives it back, so the copy's bound narrows the original; a call or a
+store through an unknown pointer forgets the frame only from the lowest
+escaped local up, keeping saved registers, and a reloaded local keeps
+its bound. No game's hard count rose; `jt-score`'s modern build went
+from 584 to 610 of 617 (agbcc 676/676, 0 wrong). What's left is mostly
+not tables: data decoded as code, and stubs and veneers a native build
+could call through `FnRef`.
 
 ## What the Stage-A lifter should know
 
