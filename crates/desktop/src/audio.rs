@@ -421,6 +421,21 @@ impl Player {
         }
     }
 
+    /// Netplay's time sync held a frame back: a frame of silence (a ramp
+    /// to 0, as a silent frame's) is queued in its place, so the pacer
+    /// lets the next frame run a frame later, as if this one had run.
+    /// Without it the pacer, finding the queue a frame short, would run
+    /// the next frame at once and undo the hold.
+    pub fn hold(&mut self) {
+        let span = FRAME_CYCLES as f64;
+        self.resampler
+            .push([0.0; 2], span, self.step, &mut self.pending);
+        self.records = 0;
+        if self.blocking {
+            self.flush();
+        }
+    }
+
     /// A fast-forwarded frame: its sound is dropped, not queued.
     pub fn drop_frame(&mut self) {
         self.records = 0;
