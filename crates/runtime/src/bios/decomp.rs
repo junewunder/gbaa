@@ -100,8 +100,10 @@ pub fn cpu_set_cycles(w: &waits::Waits, src: u32, dst: u32, ctl: u32) -> u32 {
 /// `CpuFastSet` (r0: source, r1: destination, r2: word count in bits 0-20,
 /// bit 24 fill). Words move eight at a time, so the count rounds up to a
 /// multiple of 8. Registers end as in mGBA's HLE BIOS: r1 (and r0 for a
-/// copy) past the data, r2 = r1 + count * 4 as it was on entry, r3 the
-/// last word loaded.
+/// copy) past the data, r2 as given, r3 the last word loaded. The routine
+/// puts its end address in r2, but the SWI dispatcher saves and restores
+/// r2 around every call (`stmfd sp!, {r2, lr}`: the real BIOS at 0x164,
+/// mGBA's `hle-bios.s` alike).
 ///
 /// Time: mGBA's loop, `cmp; ldmltia {r3-r10}; stmltia {r3-r10}; blt` (no
 /// `ldm` for a fill), and about 30 cycles around it.
@@ -112,11 +114,11 @@ pub fn cpu_fast_set(bus: &mut Bus, r: &mut [u32; 15]) -> u32 {
     let fill = r[2] & 1 << 24 != 0;
     let cycles = cpu_fast_set_cycles(&bus.waits, r[0], r[1], r[2]);
     r[3] = r[2] << 12;
-    r[2] = r[1].wrapping_add((r[2] & 0x1F_FFFF) * 4);
+    let end = r[1].wrapping_add((r[2] & 0x1F_FFFF) * 4);
     if fill {
         r[3] = bus.read32(r[0]);
     }
-    while (r[1] as i32) < (r[2] as i32) {
+    while (r[1] as i32) < (end as i32) {
         for k in 0..8 {
             if !fill {
                 let v = bus.read32(r[0]);

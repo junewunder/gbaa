@@ -257,10 +257,8 @@ fn cpu_fast_set() {
         assert_eq!(m.bus.read32(EWRAM + 0x100 + 4 * i), i + 1);
     }
     assert_eq!(m.bus.read32(EWRAM + 0x140), 0);
-    assert_eq!(
-        m.cpu.r[..4],
-        [EWRAM + 0x40, EWRAM + 0x140, EWRAM + 0x128, 9]
-    );
+    // r2 as given: the SWI dispatcher restores it.
+    assert_eq!(m.cpu.r[..4], [EWRAM + 0x40, EWRAM + 0x140, 10, 9]);
     // A fill of 3 writes 8.
     regs(&mut m, &[EWRAM + 8, EWRAM + 0x200, 1 << 24 | 3]);
     call(&mut m, call::CPU_FAST_SET);
@@ -1128,7 +1126,7 @@ fn cpu_fast_set_of_nothing() {
     regs(&mut m, &[EWRAM, EWRAM + 0x100, 1 << 24]);
     call(&mut m, call::CPU_FAST_SET);
     assert_eq!(m.bus.read32(EWRAM + 0x100), 0);
-    assert_eq!(m.cpu.r[..3], [EWRAM, EWRAM + 0x100, EWRAM + 0x100]);
+    assert_eq!(m.cpu.r[..3], [EWRAM, EWRAM + 0x100, 1 << 24]);
 }
 
 #[test]
