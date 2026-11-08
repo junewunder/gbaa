@@ -2425,3 +2425,4 @@
 {"at":"2026-11-08T17:41:26Z","actor":"loop","tag":"05517a38","host":"quack","cmd":"done","id":"native/modern-gcc-jumps","text":"Modern-GCC games' unresolved jumps, for native builds: done, checked by verifier-7c3e"}
 {"at":"2026-11-08T17:45:41Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/modern-gcc-jumps","text":"Modern-GCC games' unresolved jumps, for native builds: on main"}
 {"at":"2026-11-08T17:45:53Z","actor":"loop","tag":"aed48009","host":"quack","cmd":"claim","id":"native/modern-gcc-data-as-code","text":"Modern-GCC data discovery decodes as code, for native builds: claimed"}
+{"at":"2026-11-08T17:51:47Z","actor":"loop","tag":"aed48009","host":"quack","cmd":"add-unit","id":"native/fnref-rom-read-bound","text":"new unit: Function flow bounds a ROM read by its table, not next code"}
