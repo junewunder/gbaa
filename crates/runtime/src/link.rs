@@ -23,12 +23,15 @@
 //! a transfer is in flight (always, on a child): SI is 0 on the parent of
 //! a linked group and 1 elsewhere; SD is 1 when every player is in
 //! multiplayer mode. Normal, UART and JOY bus modes aren't linked yet: a
-//! machine in one of them sees no partner, as with no cable.
+//! machine in one of them sees no partner, as with no cable. The wireless
+//! adapter, which speaks normal 32-bit mode, is [`rfu`]'s own hub.
 //!
 //! Hub time is cycles since [`Link::new`], the same on every machine at a
 //! turn's end; each machine's own clock is offset from it by where it was
 //! then. The hub's own state (hub time, a transfer in flight) isn't in the
 //! machines' save states.
+
+pub mod rfu;
 
 use crate::io::{Io, irq, reg};
 use crate::machine::Machine;
