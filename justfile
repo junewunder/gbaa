@@ -1389,6 +1389,12 @@ holes rom *args:
     {{lock}} cargo build -q --release -p hole-report
     {{cap}} MemoryMax=3G target/release/gbaa-holes "$@"
 
+# libgcc's double multiply and divide against their stand-ins (runtime::softfloat; native/libgcc-df-standins): the ROM's own copies (analysis::softfloat::scan) run in the interpreter on an edge grid and random pairs (--cases N of each kind, default 50000); fails on any difference. --pins prints the test table's grid. About 2 s. Light.
+[positional-arguments]
+softfloat-check rom *args:
+    {{lock}} cargo build -q --release -p hole-report --bin gbaa-softfloat-check
+    target/release/gbaa-softfloat-check "$@"
+
 # The hole report over the corpus (holes/corpus.toml; crates/hole-report/src/corpus.rs): every game in turn, each report in OUT/<name>.txt, then one table of the ranking lines' numbers, saved as OUT/summary.toml. ARGS: --out DIR (default out/holes/<git short hash>[-dirty]), --against DIR2 (changes from DIR2's summary in brackets), --only NAME (repeatable), --cover (each game's coverage runs: hours), --write-doc FILE (the table as a generated numbers file: docs/research/native-holes.numbers.md), --from DIR (run nothing: render DIR's summary.toml), and any `just holes` flag for every game. About 12 minutes for the nine (Imperium the longest, 3 minutes); run it with `just long`. The games run one at a time under one 3 GB cap, no swap.
 [positional-arguments]
 holes-all *args:

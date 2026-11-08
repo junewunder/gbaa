@@ -466,6 +466,7 @@ pub fn check_rom(
             readable: plain.readable,
             pointed: plain.pointed.clone(),
             spins: plain.spins.clone(),
+            library: plain.library.clone(),
         };
         for f in funcs {
             rep.funcs += 1;

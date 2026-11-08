@@ -32,6 +32,8 @@
 //!   whole trip between host and joiner). DESKTOP_ARGS go to all
 //!   (`--headless --paced --frames N`, ...); `--input1 S` to `--input4 S`
 //!   among them go to one each as `--input`, `--save1 F`.. as `--save`,
+//!   `--state1 F`.. as `--state` (the seat starts from that state, as a
+//!   window's game goes on into its session, not from reset),
 //!   `--menu1 S`.. as `--menu` (when the seat's menu is open; `--menu S`
 //!   goes to all), `--dump-dir1 D`.. as `--dump-dir`, `--desync-at1 N`..
 //!   as `--desync-at` (a forced desync); `--delay D` and `--players N` to
@@ -579,12 +581,19 @@ fn desktop(profile_path: &Path, rom: &str, extra: &[&str]) -> Result<(), String>
             Ok(())
         };
         // `--input3`: seat 3's (from 1) `--input`, and so on.
-        let numbered = ["--input", "--save", "--menu", "--dump-dir", "--desync-at"]
-            .into_iter()
-            .find_map(|f| {
-                let n: usize = a.strip_prefix(f)?.parse().ok()?;
-                (1..=MAX).contains(&n).then_some((f, n - 1))
-            });
+        let numbered = [
+            "--input",
+            "--save",
+            "--state",
+            "--menu",
+            "--dump-dir",
+            "--desync-at",
+        ]
+        .into_iter()
+        .find_map(|f| {
+            let n: usize = a.strip_prefix(f)?.parse().ok()?;
+            (1..=MAX).contains(&n).then_some((f, n - 1))
+        });
         match a {
             _ if numbered.is_some() => {
                 let (flag, seat) = numbered.unwrap();
