@@ -15,10 +15,10 @@
 //!   `forwarded_after`: its direct callers, and indirect ones whose
 //!   complete callee set has it; the summary's `results` are these it
 //!   defines);
-//! - r0, which an indirect call's caller reads where the callee set is
-//!   incomplete (the summaries take such a callee to define r0 and leave
-//!   r1-r3 undefined), and which a call through `call_fn` gets back from
-//!   the function's adapter;
+//! - r0, always: an indirect call's caller reads it where the callee set
+//!   is incomplete (the summaries take such a callee to define r0 and
+//!   leave r1-r3 undefined), and a call through `call_fn` gets it back
+//!   from the function's adapter; every function's demand includes it;
 //! - all of r0-r3 where a caller's reads aren't known: a direct caller
 //!   whose run stopped at a hole (what it reads past the hole is unseen),
 //!   one in another code context (the ROM and an IWRAM copy are

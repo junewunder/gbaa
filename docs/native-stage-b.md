@@ -162,14 +162,16 @@ build for the host.
   `{ let o = call_fn(g, k, r13, [r0, r1, 0, 0])?; r0 = o[0]; }`; an
   incomplete set keeps all four. `native::callee_sets` gives
   `gbaa-recompile --summaries --callee-sets` the sets without a lift.
-  Metrics `call_fn_complete` and `call_fn_four_complete`. The bar is
-  the values measured (56-60 per program, the owner's call), not 0:
+  Metrics `call_fn_complete` (meant to rise, so unbarred) and
+  `call_fn_four_complete`. The latter's bar is the values measured
+  (56-60 per program, the owner's call), not 0:
   every complete set is the pile's ~21 address-taken functions, whose
   summaries read all four between them; it falls when
   `native/fnref-heap-sites` narrows the sets. Emerald (656
   disagreements from indirect calls without sets) is re-measured in
-  `native/indirect-call-args-emerald`, once the flow scales
-  (`native/fnref-flow-scale`).
+  `native/indirect-call-args-emerald`, once the flow settles on
+  Emerald (`native/fnref-flow-emerald`; `native/fnref-flow-scale`
+  landed and wasn't enough), the owner's call to land this first.
 
 ### 4. The stack
 
