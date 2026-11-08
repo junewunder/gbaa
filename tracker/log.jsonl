@@ -2485,3 +2485,4 @@
 {"at":"2026-11-08T20:59:55Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"multiplayer/rollback-feel-sim","text":"Rollback: a sim test of what players feel, then fix it: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-08T21:00:00Z","actor":"loop","tag":"71b3ef7c","host":"quack","cmd":"claim","id":"native/entry-read-masking","text":"Tell masked entry reads of r4-r11 from parameters: claimed"}
 {"at":"2026-11-08T21:17:01Z","actor":"loop","tag":"06d5ab83","host":"quack","cmd":"done","id":"deck/even-presents","text":"Single-player window: hand frames to the display evenly: done"}
+{"at":"2026-11-08T21:19:27Z","actor":"loop","tag":"a98172f6","host":"quack","cmd":"add-unit","id":"native/hw-dma-registers","text":"new unit: DMA by its registers in the hardware library"}
