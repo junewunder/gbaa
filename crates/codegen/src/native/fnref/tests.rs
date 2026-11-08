@@ -25,6 +25,8 @@ struct Img {
     words: BTreeMap<u32, u32>,
     /// Where ROM, and its data, ends.
     top: u32,
+    /// Code in ROM, where a run of data ends (none: it runs to `top`).
+    code: BTreeSet<u32>,
 }
 
 impl Img {
@@ -32,6 +34,7 @@ impl Img {
         Img {
             words: BTreeMap::from([(POOL, F), (VT + 12, F), (0x0800_0404, H), (POOL_A, A)]),
             top: 0x0800_1000,
+            code: BTreeSet::new(),
         }
     }
 }
@@ -45,8 +48,8 @@ impl Image for Img {
             .contains(&a)
             .then(|| self.words.get(&(a & !3)).copied().unwrap_or(0))
     }
-    fn bound(&self, _: u32) -> u32 {
-        self.top
+    fn bound(&self, a: u32) -> u32 {
+        self.code.range(a + 1..).next().copied().unwrap_or(self.top)
     }
 }
 
@@ -379,6 +382,59 @@ fn a_table_read_past_what_the_run_reads_is_incomplete() {
     let f = run_img(&[calling(0x0800_1001, b, t)], &BTreeMap::new(), &img);
     assert_eq!(site(&f).callees, BTreeSet::from([F]));
     assert!(!site(&f).complete, "{f:?}");
+}
+
+#[test]
+fn a_rom_pointer_past_the_next_code_is_not_taken_in_by_one_from_below() {
+    // r0 is VT + r1 (r1 unknown: "from VT on", read up to the code at
+    // 0x0800_0580) or a second vtable past that code, whose word is H.
+    // Widening must keep the second: a read from VT on never reaches it.
+    let vt2 = 0x0800_0700;
+    let mut img = Img::new();
+    img.code.insert(0x0800_0580);
+    img.words.insert(vt2, H);
+    let mut b = B::default();
+    let vt = b.pool(0x0800_0408, VT);
+    let i = b.get(1);
+    let a = b.bin(BinOp::Add, vt, i);
+    let p2 = b.pool(0x0800_0410, vt2);
+    let sel = b.op(Op::Select { c: i, a, b: p2 });
+    let t = b.ld(Width::Word, sel);
+    let f = run_img(&[calling(0x0800_1001, b, t)], &BTreeMap::new(), &img);
+    assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
+    assert!(site(&f).complete, "{f:?}");
+}
+
+#[test]
+fn widening_takes_in_rom_pointers_only_up_to_the_next_code() {
+    let mut img = Img::new();
+    img.code.insert(0x0800_0580);
+    let _code = CodeGuard::set(&img);
+    // From VT on takes in a pointer above it before the code, not past it.
+    let mut v = Val::of(Tok::RomFrom(VT));
+    v.join(&Val::of(Tok::Rom(VT + 0x10)));
+    v.join(&Val::of(Tok::Rom(0x0800_0700)));
+    let want: Toks = [Tok::RomFrom(VT), Tok::Rom(0x0800_0700)]
+        .into_iter()
+        .collect();
+    assert_eq!(v.toks, want);
+    // One from past the code takes in those above it there.
+    v.join(&Val::of(Tok::RomFrom(0x0800_0600)));
+    let want: Toks = [Tok::RomFrom(VT), Tok::RomFrom(0x0800_0600)]
+        .into_iter()
+        .collect();
+    assert_eq!(v.toks, want);
+    // Too many exact pointers: one "from the lowest on" per run of data.
+    let mut v = Val::default();
+    v.join(&Val::of(Tok::Rom(0x0800_0640)));
+    v.join(&Val::of(Tok::Rom(0x0800_0700)));
+    for k in 0..=ROMS as u32 {
+        v.join(&Val::of(Tok::Rom(VT + 4 * k)));
+    }
+    let want: Toks = [Tok::RomFrom(VT), Tok::RomFrom(0x0800_0640)]
+        .into_iter()
+        .collect();
+    assert_eq!(v.toks, want);
 }
 
 #[test]
