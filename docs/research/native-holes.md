@@ -349,12 +349,60 @@ function that keeps them and reads one as it came is mostly agbcc
 building a word byte by byte in an unset register (`ands r4, r0; orrs
 r4, r1`, `ply_xwave`), but not always: TMC's `sub_080086D8` keeps them
 and takes r8 and r11 from its `player.s` callers as parameters. That
-kind is soft, as before (main never looked), and not proven safe; the
-run would have to follow which bits survive (`native/entry-read-masking`). After: 14, the six real ones, the six callers of
+kind was soft, as main never looked; the next section follows the bits. After: 14, the six real ones, the six callers of
 moonbeam's and Rogue's that read the r4 the helper returns, and the two
 data. Each real one is the lift's stand-in to write (`[[standin]]` in
 the game's holes file), the others as written. libgcc's `__muldf3` and
 `__divdf3` are every game's: `runtime::softfloat`, found by its code.
+
+## Entry reads of r4-r11, by the bits that survive
+
+`native/entry-read-masking`, 2026-11-08. The summary's run
+(`codegen::saves`) now follows which bits of each value may hold r4-r11's
+entry values (`V::Part`): an `and` or `orr` with a constant clears bits, a
+shift moves them, an add carries them up, a copy to a register, a flag or
+a stack word keeps them. A use is an address, a value stored elsewhere, a
+condition, a callee's or BIOS call's argument (`mov r0, r8; bl`), or a
+value returned in r0-r3 that a caller's own instruction reads (agbcc's
+`pop {r3}; mov r8, r3` leaves the entry r8 in r3, unread). The kinds:
+
+- `reads r4-r11 at entry` (hard): a use, in a function entered by a call
+  (`bl`, a complete indirect set, or a pointer: the key as a ROM word),
+  whose `Regs::call` zeroes r4-r12.
+- `masks away r4-r11's entry bits` (soft): every bit cleared before any
+  use, agbcc's word built byte by byte in an unset register.
+- `reads r4-r11 at entry, only jumped into` (soft): nothing calls it;
+  jumps and falls pass every register (its extended entry).
+- `reads the caller's frame pointer` (soft): agb's backtrace walking r7
+  from a frame record (`add r7, sp, #12` at the saved r7); natively the
+  walk finds no frames. Only the agb programs have it.
+
+A value that holds entry bits on one path and not another is unknown at
+the merge, as before (a path that can't happen, or a C local never set):
+counting those made LLVM's paths in agb hard.
+
+Summary holes that are hard, before and after (`just holes-all --against`):
+3 and 36; hard over the corpus 106 and 139. The 36, from the report:
+
+| Cause | Functions |
+|---|---|
+| libgcc ieee754-df.S's denormal paths, r4 and r5 in (ARM) | Emerald 0x082dfd09, Rogue 0x0800cb45, Imperium 0x08003879, Kirby M. 0x0814fd35, Nightmare 0x080ce1f9, Minish 0x080afbd1 |
+| hand-written register parameters | Minish 0x080086d9 (`sub_080086D8`, r8 and r11), 0x08060ba1 (derefs r5), 0x08008a89 (r5, `ClampPlayerVelocity`'s kind); WarioWare 0x080efe51, 0x080f0ab0 |
+| modern GCC's far jump by `bl` into a fragment of the caller's, taken for a call | moonbeam 0x0801a081 and six more, Rogue 0x0820c629, Imperium 0x0821e331 (not looked into one by one) |
+| agbcc's partly built word stored with the unset register's other bits (a struct's padding) | Emerald 0x080852d5, Kirby M. 0x08132889, WarioWare 0x080abfa5, Metroid 0x08073ce5 |
+| an unset register used as an index (`lsls r1, r4, #2; ldr`) | Minish 0x08037c3d |
+| data decoded as code | Emerald 0x0850dbaf, 0x085ef6a1; Metroid 0x087d8000; WarioWare 0x083db2d7 |
+| not looked into | Nightmare 0x08064759, 0x080647fd, 0x0806b411, 0x0806b671; Rogue 0x081b42e1, 0x0826c5e7; moonbeam 0x0800019b |
+
+The fully masked reads (soft), by function and the op that clears the
+last bit: Emerald 0x082e14f5 (0x082e151a), 0x082e1629 (0x082e164e),
+0x082e8a3d (0x082e8adc); Kirby M. 0x0815149d (0x081514c2); Nightmare
+0x080cf961 (0x080cf986); Metroid 0x08073ce5 (0x08073cfe, r8); Minish
+0x08037c3d, 0x080622f5, 0x0806252d, 0x08068319, 0x08068579, 0x080b13d5;
+moonbeam 0x0801a081 (r7, four); WarioWare 0x0807f6e5, 0x0808e325,
+0x080afab9, 0x080d19b9, 0x080d355d, 0x080dffe5, 0x080efe51, 0x080f56ed.
+Only jumped into: Rogue's 0x080ba12b-0x080bbfff fragments (13), Nightmare
+0x0804c489, moonbeam 0x08038310.
 
 ## Modern GCC's unresolved jumps, by kind
 

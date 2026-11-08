@@ -304,6 +304,19 @@ fn bios_and_summaries() {
         "0x08001234: returns with r4-r11 changed: r4 = constant 0x3"
     )));
     assert!(!summary_hard("an indirect call"));
+    // A read whose bits survive is hard, passed on or not; one masked
+    // away, the caller's frame pointer and a function only jumped into
+    // are soft (codegen::saves).
+    assert!(summary_hard(&summary_kind(
+        "0x08001234: reads r4-r11 at entry: r8, passed in r0"
+    )));
+    for soft in [
+        "0x08001234: masks away r4-r11's entry bits: r4",
+        "0x08001234: reads the caller's frame pointer: r7",
+        "0x08001234: reads r4-r11 at entry, only jumped into: r6, passed in r1",
+    ] {
+        assert!(!summary_hard(&summary_kind(soft)), "{soft}");
+    }
     let mut sums = BTreeMap::new();
     sums.insert(
         B,
