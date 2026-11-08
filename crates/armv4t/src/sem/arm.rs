@@ -394,7 +394,7 @@ pub fn load_word_rotated<S: Sem>(s: &mut S, addr: S::V) -> S::V {
 fn rotate_by_low_bits<S: Sem>(s: &mut S, v: S::V, addr: S::V, mask: u32) -> S::V {
     let three = s.imm(3);
     let mask = if mask == 3 { three } else { s.imm(mask) };
-    let low = s.and(addr, mask);
+    let low = s.low_addr_bits(addr, mask);
     let no_carry = s.bit(false);
     let (bits, _) = s.shift(ShiftType::Lsl, low, three, no_carry);
     s.shift(ShiftType::Ror, v, bits, no_carry).0
@@ -421,7 +421,7 @@ pub fn load<S: Sem>(s: &mut S, at: u32, base: u32, size: MemSize, rd: Reg, a: de
             let v = s.load(Width::Half, addr);
             let v = s.sext(v, 16);
             let one = s.imm(1);
-            let odd = s.and(addr, one);
+            let odd = s.low_addr_bits(addr, one);
             let three = s.imm(3);
             let no_carry = s.bit(false);
             let (bits, _) = s.shift(ShiftType::Lsl, odd, three, no_carry);

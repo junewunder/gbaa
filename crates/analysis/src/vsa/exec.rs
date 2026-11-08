@@ -26,10 +26,13 @@ pub struct State {
     pub regs: [AbsVal; 15],
     pub flags: [Bit; 4],
     pub stack: BTreeMap<i32, AbsVal>,
-    /// A pointer into the frame may have escaped: a value made from sp went
-    /// somewhere other than sp (another register, memory, an operation that
-    /// loses track of it). From then on a call may write the frame.
-    pub escaped: bool,
+    /// The lowest frame offset a pointer into the frame may have escaped
+    /// at: a value made from sp went somewhere other than sp (another
+    /// register, memory; an operation that loses track of it escapes
+    /// `i32::MIN`). From then on a call, or a store through an unknown
+    /// pointer, may write the frame from there up (see
+    /// [`State::forget_frame`]).
+    pub escaped: Option<i32>,
 }
 
 impl State {
@@ -40,7 +43,7 @@ impl State {
             regs: std::array::from_fn(|r| AbsVal::top(Sym::new(ENTRY, entry, 0, r as u32))),
             flags: std::array::from_fn(|_| Bit::Top),
             stack: BTreeMap::new(),
-            escaped: false,
+            escaped: None,
         }
     }
 
@@ -78,9 +81,22 @@ impl State {
             self.regs[r] = AbsVal::top(Sym::new(CLOBBER, at, salt, r as u32));
         }
         self.flags = std::array::from_fn(|_| Bit::Top);
-        if self.escaped {
-            self.stack.clear();
-        }
+        self.forget_frame();
+    }
+
+    /// What a write through a pointer that may be into the frame does: the
+    /// slots from the lowest escaped offset up are forgotten, but for the
+    /// ones still holding a callee-saved register or lr as it was on
+    /// entry. An escaped pointer is to a local (`int x; get(&x)`), and C
+    /// can't reach the frame below the lowest one or the registers the
+    /// prologue saved above the locals; forgetting those lost the base of
+    /// a table kept in a spill slot, and the saved lr a `pop {r3}; bx r3`
+    /// returns through.
+    pub fn forget_frame(&mut self) {
+        let Some(lo) = self.escaped else { return };
+        self.stack.retain(|&k, v| {
+            k < lo || (v.off == 0 && v.sym.kind() == ENTRY && matches!(v.sym.index(), 4..=11 | 14))
+        });
     }
 
     /// The locations that hold values: registers 0 to 14 (by number) and
@@ -247,7 +263,10 @@ impl State {
             regs,
             flags: std::array::from_fn(flag),
             stack,
-            escaped: self.escaped || o.escaped,
+            escaped: match (self.escaped, o.escaped) {
+                (Some(a), Some(b)) => Some(a.min(b)),
+                (a, b) => a.or(b),
+            },
         }
     }
 
@@ -530,10 +549,22 @@ impl<'p> Exec<'p> {
     /// Note that an operation used a value made from sp in a way that loses
     /// track of it.
     fn escape(&mut self, vs: &[V]) {
-        if vs.iter().any(|&v| self.val(v).sym == self.sp0)
+        self.escape_at(vs, false);
+    }
+
+    /// As [`Exec::escape`]; `exact` when the value itself escapes (a copy
+    /// into a register, a store), so the lowest offset is its own.
+    fn escape_at(&mut self, vs: &[V], exact: bool) {
+        let lo = vs
+            .iter()
+            .map(|&v| self.val(v))
+            .filter(|x| x.sym == self.sp0)
+            .map(|x| if exact { x.off as i32 } else { i32::MIN })
+            .min();
+        if let Some(lo) = lo
             && let Some(st) = self.cur.as_mut()
         {
-            st.escaped = true;
+            st.escaped = Some(st.escaped.map_or(lo, |e| e.min(lo)));
         }
     }
 
@@ -610,12 +641,62 @@ impl<'p> Exec<'p> {
         });
     }
 
+    /// Record how the shift `r` of `x` by `n` relates to `x`. Through
+    /// zero- and sign-extension (GCC narrows an `s16` with `lsls r3, r0,
+    /// #16; lsrs r3, r3, #16`, then bounds the copy and indexes with r0):
+    ///
+    /// - `x << n` of an `x` that fits in `32 - n` bits loses nothing
+    ///   ([`DOp::LslExact`]), and so does `sext_w(y) << n` for
+    ///   `n = 32 - w`, of `y` itself: the sign bits are shifted out.
+    /// - `lsr` by the same `n` of such a value is `x` (or `y`) again, the
+    ///   same unknown, so a bound on the copy bounds `x`, and through
+    ///   [`DOp::Sext`] the value sign-extended from it; `asr` by `n` is
+    ///   its sign extension.
+    fn relate_shift(&mut self, r: V, x: &AbsVal, kind: ShiftType, n: Option<u32>) {
+        let op = n.and_then(|n| Self::shift_op(kind, n & 0xff));
+        let base = |d: Derived| AbsVal {
+            off: d.off,
+            ..AbsVal::top(d.sym)
+        };
+        match (op, x.derived) {
+            (Some(DOp::Lsl(n)), Some(d)) if d.op == DOp::Sext(32 - n) => {
+                self.derive(r, &base(d), Some(DOp::LslExact(n)));
+            }
+            (Some(DOp::Lsl(n)), _) if (x.dom.max() as u64) < 1 << (32 - n) => {
+                self.derive(r, x, Some(DOp::LslExact(n)));
+            }
+            (Some(DOp::Lsr(n)), Some(d)) if d.op == DOp::LslExact(n) => {
+                let v = &mut self.vals[r.0 as usize];
+                (v.sym, v.off, v.src, v.derived) = (d.sym, d.off, None, None);
+            }
+            (Some(DOp::Asr(n)), Some(d)) if d.op == DOp::LslExact(n) => {
+                self.derive(r, &base(d), Some(DOp::Sext(32 - n)));
+            }
+            _ => self.derive(r, x, op),
+        }
+    }
+
     fn load_dom(&mut self, w: Width, addr: &AbsVal) -> AbsVal {
         let sym = self.fresh();
-        let top = AbsVal::top(sym);
+        // Loads zero-extend.
+        let top = match w {
+            Width::Byte => AbsVal::new(Dom::si(1, 0, 0xff), sym),
+            Width::Half => AbsVal::new(Dom::si(1, 0, 0xffff), sym),
+            Width::Word => AbsVal::top(sym),
+        };
         if addr.sym == self.sp0 {
-            return match self.state().stack.get(&(addr.off as i32)) {
+            let off = addr.off as i32;
+            let stack = &mut self.state().stack;
+            return match stack.get(&off) {
                 Some(v) if w == Width::Word => v.clone(),
+                // A slot not known (a call forgot it): what is read is
+                // what the next read gets, so a local reloaded after its
+                // bounds check (`ldr r3, [sp]; cmp r3, #26; bhi; ldr r3,
+                // [sp]`) keeps the bound.
+                None if w == Width::Word && off & 3 == 0 && slot_tracked(off) => {
+                    stack.insert(off, top.clone());
+                    top
+                }
                 _ => top,
             };
         }
@@ -850,7 +931,7 @@ impl Sem for Exec<'_> {
                 Bit::Top
             };
             let r = self.binop(v, amount, d, false);
-            self.derive(r, &x, n.and_then(|n| Self::shift_op(kind, n & 0xff)));
+            self.relate_shift(r, &x, kind, n);
             return (r, self.put_bit(carry));
         }
         let d = match n {
@@ -858,7 +939,7 @@ impl Sem for Exec<'_> {
             None => Dom::Top,
         };
         let r = self.binop(v, amount, d, false);
-        self.derive(r, &x, n.and_then(|n| Self::shift_op(kind, n & 0xff)));
+        self.relate_shift(r, &x, kind, n);
         (r, self.put_bit(Bit::Top))
     }
 
@@ -890,8 +971,12 @@ impl Sem for Exec<'_> {
             None => Dom::Top,
         };
         let src = x.src;
+        let x = x.clone();
         let r = self.put_dom(d);
         self.vals[r.0 as usize].src = src;
+        if (x.dom.max() as u64) < 1 << from_bits {
+            self.derive(r, &x, Some(DOp::Sext(from_bits as u8)));
+        }
         r
     }
 
@@ -967,7 +1052,7 @@ impl Sem for Exec<'_> {
 
     fn set_reg(&mut self, r: Reg, v: V) {
         if r != Reg::SP {
-            self.escape(&[v]);
+            self.escape_at(&[v], true);
         }
         let v = self.val(v).clone();
         self.state().set_reg(r, v);
@@ -1015,8 +1100,18 @@ impl Sem for Exec<'_> {
         self.put(v)
     }
 
+    /// Halfword loads are taken as aligned: a misaligned `ldrsh` would
+    /// shift the sign-extended value by 8, losing its relation to the
+    /// halfword.
+    fn low_addr_bits(&mut self, addr: V, mask: V) -> V {
+        if self.val(mask).dom.konst() == Some(1) {
+            return self.imm(0);
+        }
+        self.and(addr, mask)
+    }
+
     fn store(&mut self, w: Width, addr: V, v: V) {
-        self.escape(&[v]);
+        self.escape_at(&[v], true);
         // Stores outside the stack aren't tracked (the analysis ignores
         // writes through unknown pointers).
         let a = self.val(addr).clone();
@@ -1035,8 +1130,8 @@ impl Sem for Exec<'_> {
                 .dom
                 .elems()
                 .is_some_and(|e| e.iter().all(|&x| !(0x0300_0000..0x0400_0000).contains(&x)));
-            if self.state().escaped && !off_stack {
-                self.state().stack.clear();
+            if !off_stack {
+                self.state().forget_frame();
             }
             return;
         }

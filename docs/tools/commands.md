@@ -80,7 +80,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   file), and last the runs of ROM code run but not discovered, with what
   discovery has around each (code before it, data over it). About a
   minute a game, capped at 3 GB. The
-  doc's table is these lines; rerun all eight after changing
+  doc's table is these lines; rerun the corpus after changing
   `analysis::holes` or `crates/hole-report` and update it.
   `--cover FILE` (`holes/coverage/<game>.toml`, native/hole-coverage)
   adds the file's coverage runs after the press script (reset, the
@@ -107,7 +107,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   flags (`--frames N`, `--no-summaries`, `--press …`) go to every game;
   `--cover` gives each its coverage file (hours, not minutes). Fails if
   any game's run did. One 3 GB cap, no swap, for the whole run (the games
-  run one at a time). About 10 minutes for the eight (9.5 to 11 measured): run it
+  run one at a time). About 12 minutes for the nine (Imperium the longest, 3 minutes): run it
   with `just long start holes -- just holes-all`. Use it, not a loop over `just
   holes`, to compare before and after a change: run it on main, then on
   the branch with `--against` the first DIR. `--write-doc
@@ -118,9 +118,9 @@ by hand through `just capped`, `just long start` or that systemd-run line;
 - `just jt-score`: the jump-table check (decision 5c). Builds truth tables
   from `$GBAA_DATA/src/pokeemerald/pokeemerald{,_modern}.elf` and the ROMs
   beside them, runs `analysis::jumptable` over each ELF's code map, and
-  prints exact/subset/wrong/missed. Fails below 676/676 (agbcc) or 584/617
-  (modern GCC) exact, on any wrong target, or on a subset beyond the two
-  checked by hand. It also scores the far-jump `bl` rule (5a) on every
+  prints exact/subset/wrong/missed. Fails below 676/676 (agbcc) or 610/617
+  (modern GCC) exact, on any wrong target, or on a subset beyond the four
+  checked by hand (the justfile names them). It also scores the far-jump `bl` rule (5a) on every
   Thumb `bl`, failing below 548/548 or 726/732 or on any false one.
   `jt-check ELF --trace ADDR` prints the value-set states around an address
   and `--dump FILE` every jump's result, for debugging.
@@ -593,7 +593,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `codegen::saves` proves keep r4-r11 and sp, groups why the rest don't,
   and answers for each KEY (20 s, 300 MB on Emerald: 8,894 of 15,158).
   `gbaa-recompile --summaries ROM [--names FILE]... [--names-dir DIR]
-  [--show N] [KEY...]` gives every function's summary
+  [--show N] [--callee-sets] [KEY...]` gives every function's summary
   (`codegen::saves::summarize`: parameters r0-r3, results, callee-saves,
   holes) and, with a map, checks it against the DWARF prototypes
   (`codegen::saves::compare`): agree, disagree and no-prototype counts,
@@ -602,7 +602,16 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   trusting indirect calls to read nothing, and each KEY's summary. No
   bar: it measures. Emerald (`--names $GBAA_DATA/names/pokeemerald.toml`,
   25 s, 430 MB): the counts and what each category is are in
-  `docs/native-port-design.md` section 5.
+  `docs/native-port-design.md` section 5. `--callee-sets` first follows
+  function addresses (`codegen::native::callee_sets`, the lifter's
+  `fnref` flow, over the ROM's code) and takes each indirect call with a
+  complete callee set as calling exactly those
+  (`codegen::saves::summarize_sets`; unit `native/indirect-call-args`),
+  printing the counts without the sets too. About 5 s on an agb program;
+  on Emerald the flow didn't finish in 35 minutes (killed at 6 GB, then
+  stopped at 8 GB under a 16 GB cap), and after `native/fnref-flow-scale`
+  it was killed at a 14 GB cap in 5 minutes (2026-11-07):
+  `native/fnref-flow-emerald`'s work.
   fn-diff's summary line gives the same count and
   how many picks call a proven function. Emerald, `just fn-diff ROM 2000
   --exact` (2026-10-27): every entered function picked, 270, 591 states,
