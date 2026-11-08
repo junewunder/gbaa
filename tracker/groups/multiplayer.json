@@ -653,6 +653,13 @@
       "title": "Netplay: the overlay hides the bottom of the menu",
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): on the Deck, something netplay draws covered the bottom of the Controls page, where the dead zone is ('if you can see the bottom, because the netplay thing'); Athena found tapping the screen hid it. Find what it is (the room bar or the on-screen keyboard's space), and keep the whole menu visible while in a room. Check: a 1280x800 screenshot in a room, Controls page scrolled to its last row, nothing over it; just check.",
       "minMinutes": 25,
+      "record": {
+        "state": "done",
+        "by": "aad03dc9",
+        "at": "2026-11-08T19:50:20Z",
+        "evidence": "Cause: per the owner's answer (decision d/covered-controls-page-your-deck, 2026-11-07), the cover on the Deck's Controls page was a custom keyboard on an un-updated Steam Deck, not gbaa; she said land the Main-page fix and close. Branch keeps the Main page laid out above the netplay report (menu.rs). Latest main merged; just check passed (exit 0) after the merge.",
+        "host": "quack"
+      },
       "notes": [
         {
           "at": "2026-11-06T13:27:21Z",
@@ -669,19 +676,24 @@
           "by": "d86c5e5f",
           "text": "main merged into branch (merge commit on top of 57fcb251), no conflicts. just check started but cut by stop time again (tests were passing). Left: just check (~10+ min, start early), then done with the cu-shot evidence."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-06T03:21:25Z",
-        "findings": "- crates/desktop/src/menu.rs:1017-1034: the fix doesn't touch the problem the card reports. The card says something covered the bottom of the Controls page, where the dead zone rows are. Those rows are the DEADZONES section in menu/controls.rs:351, shown under Page::Remap. The report box is drawn only when `page == Page::Main`. The Evidence admits this ('Controls had no report'), so the box it moved could never have covered the Controls page. Moving it is a real fix for the Main page and can stay, but the card's 'Find what it is' is still unanswered for the Controls page. The playtest clue was that tapping the screen hid the cover, which points at something outside this menu: the Steam on-screen keyboard (for example, left open after typing a room code on the Netplay page), or another Steam/gamescope overlay. Next session: find out what draws over the Controls page on the Deck while in a room. Check whether the room-code entry raises the Deck's on-screen keyboard and whether it stays up after leaving the Netplay page. Then fix that or keep the Controls page clear of it, and record the cause in the Evidence.\n- Evidence (tracker multiplayer.json:641): the card's check was a 1280x800 shot in a room with the Controls page scrolled to its last row and nothing over it. The shots were taken in a cu session on quack, which never had whatever covered the Controls page. The earlier note says 'Steam OSK not seen here'. So a clear Controls page in cu proves nothing about the bug reported from the Deck. To meet the card, the shot has to come from a setup where the cover actually showed up: the Deck in gamescope/Steam, in a room, after joining by code. If only the owner's Deck can show it, the next session should ask the owner to run that check on the Deck: join a room, open Controls, scroll to the dead zone rows, and say whether anything covers them."
-      },
-      "round": "2026-11-01T01:40:21Z"
+      ]
     },
     {
       "id": "multiplayer/rollback-feel-sim",
       "title": "Rollback: a sim test of what players feel, then fix it",
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): both players noticed small stutters ('a little framey sometimes', 'skipped frames'); it played well otherwise. ping-sim checks hashes, not feel. Build a sim that plays Kirby two-player (four with {unit:multiplayer/four-seats}) through ping-sim profiles like home Wi-Fi to fly, and measures what each window shows: frames presented late, doubled or skipped, rollback depth, frames run again, time-sync holds, the other Kirby's jumps. Put budgets on them in a test, then fix the worst offenders. Beside {unit:multiplayer/lag-report}, which needs a real session's numbers. june's view: rollback of whole consoles has a ceiling; the real fix for this game is a multiplayer mod on its decomp (docs/ideas.md). Check: before and after numbers in docs/research/multiplayer.md; the budget test in just check.",
       "minMinutes": 150,
+      "record": {
+        "state": "claimed",
+        "by": "29ee78be",
+        "session": "29ee78be-f7f7-4b33-9049-fe8ed023a471",
+        "host": "quack",
+        "pid": 3349268,
+        "start": "14822772",
+        "at": "2026-11-08T19:51:02Z",
+        "branch": "unit/multiplayer/rollback-feel-sim",
+        "beats": true
+      },
       "round": "2026-11-01T01:44:42Z"
     },
     {
@@ -689,6 +701,17 @@
       "title": "Kirby netplay: should you hear the other Kirbys?",
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): Athena couldn't hear june's Kirby. The window plays your own console's sound, as your own GBA would, so whether the other Kirbys make sound is the game's choice. But frames run again are muted (netplay::gba quiet), and those are just the frames where the other player's input arrived late, so sounds the other player caused may be dropped while yours play. Find out: in a two-GBA run with no rollback (the local link window, or mGBA's), does Kirby play the other Kirby's sounds when it's on screen? Then in netplay, count sounds lost to frames run again. If they're lost, make them play; if the game is silent there too, record that. Check: the answer with evidence in docs/research/multiplayer.md, and the fix's test if any; just check.",
       "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "9d98d236",
+        "session": "9d98d236-71f3-4ec3-b234-4a1bdb04b71c",
+        "host": "quack",
+        "pid": 3349722,
+        "start": "14823514",
+        "at": "2026-11-08T19:58:43Z",
+        "branch": "unit/multiplayer/other-seat-sound",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-01T01:45:53Z",
