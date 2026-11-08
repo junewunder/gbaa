@@ -2475,3 +2475,4 @@
 {"at":"2026-11-08T20:44:26Z","actor":"loop","tag":"694a54e9","host":"quack","cmd":"done","id":"multiplayer/link-cable-survey","text":"How the link cable works, and which games netplay covers: done"}
 {"at":"2026-11-08T20:46:38Z","actor":"loop","tag":"7bc14b37","host":"quack","cmd":"done","id":"multiplayer/timing-in-build-id","text":"Netplay build ID tells instant timing from exact: done, checked by verifier-3e9a71"}
 {"at":"2026-11-08T20:48:07Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"multiplayer/link-cable-survey","text":"How the link cable works, and which games netplay covers: on main"}
+{"at":"2026-11-08T20:48:18Z","actor":"loop","tag":"a98172f6","host":"quack","cmd":"claim","id":"native/metroid-native-check","text":"Metroid passes the native check on a route: claimed"}

@@ -635,7 +635,19 @@
       "check": "independent",
       "needs": ["native/metroid-lifts", "native/hw-sound", "native/lift-ram-copies"],
       "uses": ["heavy"],
-      "minMinutes": 120
+      "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "a98172f6",
+        "session": "a98172f6-c1f5-413f-8331-45de7648b568",
+        "host": "quack",
+        "pid": 3349068,
+        "start": "14822266",
+        "at": "2026-11-08T20:48:18Z",
+        "branch": "unit/native/metroid-native-check",
+        "beats": true
+      },
+      "round": "2026-11-08T20:48:18Z"
     },
     {
       "id": "native/fnref-flow",
