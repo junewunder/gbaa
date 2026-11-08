@@ -1227,19 +1227,7 @@
         "checker": "verifier-wlm-1",
         "at": "2026-11-08T22:44:15Z",
         "evidence": "Function-address flow: callees of a call by value share joined entry sets; flow stops unsettled past 48M tokens held (heap then gets no sites). just long start, /usr/bin/time: Kirby Nightmare lift 2:46, peak 2.05 GB; Minish Cap 1:07, peak 2.35 GB (both fail only on hard holes, other units). Metroid output byte-identical to before, peak 2.06->1.35 GB. just lift-check passed, every bar held; just check passes after merging main. Verifier verifier-wlm-1 checked runs and reviewed give_all.",
-        "branch": "unit/native/whole-lift-memory",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T22:44:15Z",
-          "by": "9e61b577",
-          "host": "quack",
-          "pid": 686555,
-          "start": "16007050",
-          "beats": true,
-          "session": "9e61b577-b803-4951-8314-b5dd648966d3",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -1247,8 +1235,7 @@
           "by": "ccb35e7f",
           "text": "Nightmare: the same lift with skip_fn_flow in a holes file ran in 1 min, peak 474M (just long, 2026-11-07), so its 16G kill is the function-address flow, not gap decoding. Minish Cap untested that way."
         }
-      ],
-      "round": "2026-11-08T21:21:34Z"
+      ]
     },
     {
       "id": "native/nightmare-lifts",
