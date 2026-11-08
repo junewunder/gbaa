@@ -608,18 +608,12 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "88b731c4",
-        "session": "88b731c4-cdf1-422a-bb0d-49a820fdacf8",
-        "host": "quack",
-        "pid": 3349722,
-        "start": "14823514",
-        "at": "2026-11-08T18:41:05Z",
-        "branch": "unit/native/metroid-lifts",
-        "resumed": "f93b1ecd",
-        "prevSession": "f93b1ecd-f104-48fc-9e5b-29cfd643d68a",
-        "pushed": true,
-        "beats": true
+        "checker": "verifier-a5d3f318",
+        "at": "2026-11-08T19:05:50Z",
+        "evidence": "Fresh verifier subagent reran just lift on Metroid --name metroid: exit 0, report 0 hard holes, 2624 fns, 8 stand-ins; metrics lines 960068, hard_holes 0; crate built in release (recipe's build-recompiled). Clean release build timed 32.4 s, rustc peak 3.95 GB (/usr/bin/time -v); lift 3m06s, 2.06 GB. Numbers in docs/native-stage-b.md; just check exit 0 after merging main.",
+        "host": "quack"
       },
       "notes": [
         {
@@ -632,8 +626,7 @@
           "by": "f93b1ecd",
           "text": "26 hard holes -> 9: mods/metroid/holes.toml stands in reset, IRQ dispatcher, classic-NES code; skips fnref flow. Left: 9 BIOS calls ({unit:native/lift-bios-calls}). Then just lift ROM out/lift-metroid --name metroid, build, quote numbers (doc has a measurement build)."
         }
-      ],
-      "round": "2026-11-06T11:28:38Z"
+      ]
     },
     {
       "id": "native/metroid-native-check",
@@ -1257,7 +1250,21 @@
       "id": "native/fnref-romfrom-absorb",
       "title": "Flow's ROM from-here-on widening keeps pointers it reads",
       "detail": "Val::cap lets RomFrom(lo) absorb Rom(a) for any a >= lo, but rom_from(lo) reads only up to the next code, so a pointer past it is never read and a call through it may get a complete callee set missing callees. Seen in mosaic-modes (found by {unit:native/fnref-flow-emerald}): fn 0x080037f1 (core::fmt pad) r0 widens to RomFrom(0x08000100), absorbing vtable Rom(0x08024c50); word 0x08024c5c (f_08002ee1) was read only transiently before. Make the widening keep such pointers (mark lost_rom, or don't absorb past bound) with a unit test; just lift-metrics bars hold (lower any that drop).",
-      "check": "recorded"
+      "check": "recorded",
+      "record": {
+        "state": "blocked",
+        "on": "q/raise-lift-bars-rom-widening",
+        "by": "b9262a93",
+        "at": "2026-11-08T19:20:26Z"
+      },
+      "notes": [
+        {
+          "at": "2026-11-08T19:20:32Z",
+          "by": "b9262a93",
+          "text": "Fix committed on branch (a1683db): cap absorbs only up to bound(lo) via a run-scoped thread-local of code addrs; ROMS widening per data run. 2 tests. If owner says raise: set bars to new values (just lift-metrics shows them), merge main, just check, done."
+        }
+      ],
+      "round": "2026-11-08T19:11:58Z"
     }
   ]
 }

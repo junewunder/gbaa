@@ -273,18 +273,18 @@ and the shortcuts above at game scale.
   (`native/metroid-lifts`). Needs the discovery units, the shortcuts and
   the module split. The ROM's file name has spaces, so it lifts with
   `--name metroid`; its holes file is `mods/metroid/holes.toml` (private:
-  its stand-ins port the game's own code). Where it stands: the stand-ins
-  (the reset, the IRQ dispatcher, the classic NES Metroid the ROM carries)
-  and five IWRAM copies (`[[copy]]`, `native/lift-ram-copies`) left 9
-  hard holes, BIOS calls the prelude now makes (`native/lift-bios-calls`,
-  program `agb/native-bios-calls`): the lift has none (2026-11-07).
-  The function-address flow settles in 12 rounds, about 150 s
-  (`native/fnref-flow-scale`: sparse reruns, memory reads kept, large
-  callee sets given only what's new), so the lift follows it again: 2 min
-  44 s, 2.06 GB, 805 function words, 6 proven. A measurement build with
-  the BIOS calls stood in by panics (2026-11-06, quack): about 957,000
-  lines in 266 modules, the crate alone rebuilt in release in 31.5 s
-  wall, peak 3.99 GB, as the synthetic crate predicted.
+  its stand-ins port the game's own code). Done (2026-11-08, quack): the
+  stand-ins (the reset, the IRQ dispatcher, the classic NES Metroid the
+  ROM carries), five IWRAM copies (`[[copy]]`, `native/lift-ram-copies`)
+  and the BIOS calls the prelude makes (`native/lift-bios-calls`) leave
+  no hard hole, and `just lift` exits 0: 2,624 functions (8 from IWRAM
+  copies), 27,749 blocks, 8 stand-ins, 105 gap targets decoded. The
+  function-address flow settles in 12 rounds (`native/fnref-flow-scale`),
+  so the lift takes 3 min 6 s wall at a peak of 2.06 GB (805 function
+  words, 6 proven). The crate is 960,068 lines (the prelude's 724 left
+  out) in 266 modules; a clean release build of it alone (dependencies
+  built) takes 32.4 s wall (63 s CPU), rustc peaking at 3.95 GB, as the
+  synthetic crate predicted.
 - **Metroid passes the native check on a route**
   (`native/metroid-native-check`). A route `units/metroid-native.toml`
   from boot into gameplay, compared every frame with sound
