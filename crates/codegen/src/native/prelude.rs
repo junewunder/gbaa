@@ -536,6 +536,149 @@ pub fn div(r: &mut [u32; 4]) {
     r[3] = a;
 }
 
+/// `CpuFastSet` (r0 source, r1 destination, r2 word count and fill), as
+/// the play build's: eight words at a time, its registers as it leaves
+/// them, and its time.
+pub fn cpu_fast_set(g: &mut Game, sp: u32, r: &mut [u32; 4]) -> Result<(), Exit> {
+    if r[0] < 0x0200_0000 {
+        return Ok(());
+    }
+    let fill = r[2] & 1 << 24 != 0;
+    let cycles = hw::bios::cpu_fast_set_cycles(g.hw.waitcnt, r[0], r[1], r[2]);
+    r[3] = r[2] << 12;
+    r[2] = r[1].wrapping_add((r[2] & 0x1F_FFFF) * 4);
+    if fill {
+        r[3] = ld32(g, r[0] & !3);
+    }
+    while (r[1] as i32) < (r[2] as i32) {
+        for k in 0..8 {
+            if !fill {
+                let v = ld32(g, r[0] & !3);
+                r[0] = r[0].wrapping_add(4);
+                if k == 0 {
+                    r[3] = v;
+                }
+                st32(g, r[1] & !3, v);
+            } else {
+                st32(g, r[1] & !3, r[3]);
+            }
+            r[1] = r[1].wrapping_add(4);
+        }
+    }
+    g.sp = sp;
+    hw::spend(g, cycles)
+}
+
+/// A decompressor's byte out at `*d`: stored (WRAM), or held until its
+/// odd partner comes and the two stored as a halfword (VRAM).
+fn unpack_put(g: &mut Game, d: &mut u32, half: &mut u32, b: u32, vram: bool) {
+    if !vram {
+        st8(g, *d, b);
+    } else if *d & 1 != 0 {
+        st16(g, *d ^ 1, *half | b << 8);
+    } else {
+        *half = b;
+    }
+    *d = d.wrapping_add(1);
+}
+
+/// `LZ77UnCompWram` (`vram` false) or `Vram` (r0 source, r1
+/// destination), as the play build's: a back-reference reads the output
+/// as it stands; r0 and r1 end past the data, r3 0; and its time, which
+/// the prefetch buffer makes depend on where the `swi` is (`at`, Thumb if
+/// `thumb`).
+pub fn lz77(
+    g: &mut Game,
+    sp: u32,
+    r: &mut [u32; 4],
+    vram: bool,
+    at: u32,
+    thumb: bool,
+) -> Result<(), Exit> {
+    if r[0] & 0x0E00_0000 == 0 {
+        return Ok(());
+    }
+    let w = g.hw.waitcnt;
+    let cycles = hw::bios::lz77_cycles(w, at, thumb, r[0], r[1], vram, |a| ld8(g, a) as u8);
+    let mut remaining = ld32(g, r[0] & !3) >> 8;
+    let (mut s, mut d, mut half) = (r[0].wrapping_add(4), r[1], 0);
+    'blocks: while remaining > 0 {
+        let flags = ld8(g, s);
+        s = s.wrapping_add(1);
+        for bit in (0..8).rev() {
+            if remaining == 0 {
+                break 'blocks;
+            }
+            if flags >> bit & 1 != 0 {
+                let block = ld8(g, s) << 8 | ld8(g, s.wrapping_add(1));
+                s = s.wrapping_add(2);
+                let mut from = d.wrapping_sub((block & 0xFFF) + 1);
+                for _ in 0..(block >> 12) + 3 {
+                    let b = ld8(g, from);
+                    unpack_put(g, &mut d, &mut half, b, vram);
+                    from = from.wrapping_add(1);
+                    remaining = remaining.saturating_sub(1);
+                }
+            } else {
+                let b = ld8(g, s);
+                s = s.wrapping_add(1);
+                unpack_put(g, &mut d, &mut half, b, vram);
+                remaining -= 1;
+            }
+        }
+    }
+    (r[0], r[1], r[3]) = (s, d, 0);
+    g.sp = sp;
+    hw::spend(g, cycles)
+}
+
+/// `RLUnCompWram` (`vram` false) or `Vram` (r0 source, r1 destination),
+/// as the play build's: padded with zeros to a multiple of 4 bytes; r0
+/// and r1 end past the data. It takes no time (the play build's stalls
+/// are the copies' and LZ77's).
+pub fn rl(g: &mut Game, r: &mut [u32; 4], vram: bool) {
+    if r[0] & 0x0E00_0000 == 0 {
+        return;
+    }
+    let mut remaining = ld32(g, r[0] & !3) >> 8;
+    let mut padding = (4u32.wrapping_sub(remaining) & 3) as i32;
+    let (mut s, mut d, mut half) = (r[0].wrapping_add(4), r[1], 0);
+    while remaining > 0 {
+        let flag = ld8(g, s);
+        s = s.wrapping_add(1);
+        let (run, n) = match flag & 0x80 != 0 {
+            true => (Some(ld8(g, s)), (flag & 0x7F) + 3),
+            false => (None, flag + 1),
+        };
+        s = s.wrapping_add(run.is_some() as u32);
+        for _ in 0..n.min(remaining) {
+            let b = run.unwrap_or_else(|| ld8(g, s));
+            s = s.wrapping_add(run.is_none() as u32);
+            unpack_put(g, &mut d, &mut half, b, vram);
+            remaining -= 1;
+        }
+    }
+    if vram && d & 1 != 0 {
+        padding -= 1;
+        d = d.wrapping_add(1);
+    }
+    while padding > 0 {
+        let n = if vram { 2 } else { 1 };
+        if vram { st16(g, d, 0) } else { st8(g, d, 0) }
+        padding -= n;
+        d = d.wrapping_add(n as u32);
+    }
+    (r[0], r[1]) = (s, d);
+}
+
+/// `SoundBias` (r0: 0 for level 0, else 0x200), as the play build's: the
+/// level (`SOUNDBIAS` bits 0-9) set at once, the upper bits kept.
+pub fn sound_bias(g: &mut Game, level: u32) {
+    const SOUNDBIAS: u32 = 0x0400_0000 + runtime::io::reg::SOUNDBIAS;
+    let old = ld16(g, SOUNDBIAS);
+    st16(g, SOUNDBIAS, old & !0x3FF | if level == 0 { 0 } else { 0x200 });
+}
+
 /// A function pointer's call: `k` is the function's key (its ROM or IWRAM
 /// address, bit 0 for Thumb), the ID of every function in stage A
 /// (`--fn-ids rom`).

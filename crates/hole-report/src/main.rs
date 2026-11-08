@@ -1127,7 +1127,11 @@ fn main() -> ExitCode {
         e.0 += 1;
         e.1 += c.reached as usize;
     }
-    println!("CPU state: {} hard", r.hard_cpu());
+    println!(
+        "CPU state: {} hard (and {} in scanned code nothing ran, not counted)",
+        r.hard_cpu(),
+        r.scanned_skipped
+    );
     for ((p, k), (n, reached)) in &cpu {
         println!("  {:?} {}: {n} ({reached} reached)", p, k.text());
     }
@@ -1145,9 +1149,9 @@ fn main() -> ExitCode {
         );
     }
     println!(
-        "BIOS calls the library doesn't implement: {} (and {} CPU-state or BIOS items in scanned code nothing ran, not counted)",
+        "BIOS calls the native lifter doesn't print: {} (and {} in scanned code nothing ran, not counted; the lifter lifts that code, so it has both)",
         r.bios.len(),
-        r.scanned_skipped
+        r.scanned_bios
     );
     for (a, n) in r.bios.iter().take(show) {
         println!("  0x{a:08x} swi 0x{n:02x}");

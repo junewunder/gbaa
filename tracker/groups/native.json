@@ -608,18 +608,12 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
-        "by": "f93b1ecd",
-        "session": "f93b1ecd-f104-48fc-9e5b-29cfd643d68a",
-        "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T11:28:38Z",
-        "branch": "unit/native/metroid-lifts",
-        "beats": true,
-        "handedBack": "2026-11-06T12:12:16Z",
-        "pushed": true,
-        "ended": "2026-11-06T12:12:36Z"
+        "state": "done",
+        "by": "88b731c4",
+        "checker": "verifier-a5d3f318",
+        "at": "2026-11-08T19:05:50Z",
+        "evidence": "Fresh verifier subagent reran just lift on Metroid --name metroid: exit 0, report 0 hard holes, 2624 fns, 8 stand-ins; metrics lines 960068, hard_holes 0; crate built in release (recipe's build-recompiled). Clean release build timed 32.4 s, rustc peak 3.95 GB (/usr/bin/time -v); lift 3m06s, 2.06 GB. Numbers in docs/native-stage-b.md; just check exit 0 after merging main.",
+        "host": "quack"
       },
       "notes": [
         {
@@ -632,8 +626,7 @@
           "by": "f93b1ecd",
           "text": "26 hard holes -> 9: mods/metroid/holes.toml stands in reset, IRQ dispatcher, classic-NES code; skips fnref flow. Left: 9 BIOS calls ({unit:native/lift-bios-calls}). Then just lift ROM out/lift-metroid --name metroid, build, quote numbers (doc has a measurement build)."
         }
-      ],
-      "round": "2026-11-06T11:28:38Z"
+      ]
     },
     {
       "id": "native/metroid-native-check",
@@ -843,19 +836,7 @@
         "checker": "verifier-3b9e61d4",
         "at": "2026-11-08T18:06:57Z",
         "evidence": "After merging main (the runaway fix {unit:native/gap-decoding-runaway}, ref-heap, indirect-call-args), owner's 'Keep all eight' answer met: gbaa-holes BIOS counted+scanned-only = gbaa-lift BIOS holes on all eight: metroid 0, warioware 0, kirby-mirror 0+2=2, kirby-nightmare 4, moonbeam 0, emerald 5, minish-cap 5, emerald-rogue 5+1=6 (verifier re-ran four). Full just lift-check passed (native-bios-calls-600: 0 differences, packed too), just check green. lines_prelude 581->724: +143 prelude lines (cpu_fast_set, lz77, rl, sound_bias, unpack_put). Program colours from a returned copy since ref-heap broke its packed build: filed {unit:native/ref-heap-static-arrays}; route hash 7d3db3b8854e494a, mgba_hash added.",
-        "branch": "unit/native/lift-bios-calls",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T18:06:57Z",
-          "by": "f6eb8639",
-          "host": "quack",
-          "pid": 3349722,
-          "start": "14823514",
-          "beats": true,
-          "session": "f6eb8639-6ea9-4888-b4a3-e4d4402236f3",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -873,13 +854,7 @@
           "by": "f9620931",
           "text": "Branch has the gbaa-holes half: analysis::holes::NATIVE_BIOS is the lifter's list and bios_implemented's. Left: prelude fns (reuse runtime::bios math/decomp logic over ld/st, as cpu_set does), one agb program calling each swi + its lift-check table and route, 8-game compare."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-07T07:12:43Z",
-        "findings": "- The card says it's done only when gbaa-holes' BIOS count matches the lifter's on all eight games, but the Evidence shows they don't match on Emerald. It says \"Emerald's 5 real sites match, the rest is runaway gap decoding filed as {unit:native/gap-decoding-runaway}\". This session filed that unit itself (tracker/log.jsonl:2332) and left a note on it (tracker/log.jsonl:2335) that the lifter shows 6 BIOS sites near 0x087f2250 only inside two runaway functions. So one game of the eight was split off into a unit the card didn't ask for. The code in the diff itself looks right: the prelude's CpuFastSet, LZ77, RL, SoundBias, ArcTan2 and MultiBoot leave registers and memory as the play build's do (runtime::bios, bios/math.rs). Two ways to fix it. Either fix the runaway gap decoding in this unit, then rerun `just holes-all` and the lifter on Emerald and show the counts match. Or use `just ask` to get the owner to agree to narrowing the done-when to the seven games plus Emerald's real call sites, with the Emerald comparison waiting on the gap-decoding fix (the lifter's gap decoding walks through Emerald's data, {unit:native/gap-decoding-runaway}). Then record that decision in the evidence."
-      },
-      "round": "2026-11-06T12:46:45Z"
+      ]
     },
     {
       "id": "native/lift-ram-copies",
@@ -1275,7 +1250,21 @@
       "id": "native/fnref-romfrom-absorb",
       "title": "Flow's ROM from-here-on widening keeps pointers it reads",
       "detail": "Val::cap lets RomFrom(lo) absorb Rom(a) for any a >= lo, but rom_from(lo) reads only up to the next code, so a pointer past it is never read and a call through it may get a complete callee set missing callees. Seen in mosaic-modes (found by {unit:native/fnref-flow-emerald}): fn 0x080037f1 (core::fmt pad) r0 widens to RomFrom(0x08000100), absorbing vtable Rom(0x08024c50); word 0x08024c5c (f_08002ee1) was read only transiently before. Make the widening keep such pointers (mark lost_rom, or don't absorb past bound) with a unit test; just lift-metrics bars hold (lower any that drop).",
-      "check": "recorded"
+      "check": "recorded",
+      "record": {
+        "state": "blocked",
+        "on": "q/raise-lift-bars-rom-widening",
+        "by": "b9262a93",
+        "at": "2026-11-08T19:20:26Z"
+      },
+      "notes": [
+        {
+          "at": "2026-11-08T19:20:32Z",
+          "by": "b9262a93",
+          "text": "Fix committed on branch (a1683db): cap absorbs only up to bound(lo) via a run-scoped thread-local of code addrs; ROMS widening per data run. 2 tests. If owner says raise: set bars to new values (just lift-metrics shows them), merge main, just check, done."
+        }
+      ],
+      "round": "2026-11-08T19:11:58Z"
     }
   ]
 }

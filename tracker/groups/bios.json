@@ -156,17 +156,17 @@
       "needs": ["native/lift-bios-calls"],
       "record": {
         "state": "claimed",
-        "by": "2f1ce0d0",
-        "session": "2f1ce0d0-912a-4a5c-b8a7-b766a57728db",
+        "by": "4da39b0a",
+        "session": "4da39b0a-7dd3-4a38-88a0-118cd6dd5615",
         "host": "quack",
-        "pid": 862066,
-        "start": "2504341",
-        "at": "2026-11-07T13:32:14Z",
+        "pid": 3349722,
+        "start": "14823514",
+        "at": "2026-11-08T19:20:45Z",
         "branch": "unit/bios/fast-set-r2",
-        "beats": true,
-        "handedBack": "2026-11-07T13:40:51Z",
+        "resumed": "2f1ce0d0",
+        "prevSession": "2f1ce0d0-912a-4a5c-b8a7-b766a57728db",
         "pushed": true,
-        "ended": "2026-11-07T13:41:16Z"
+        "beats": true
       },
       "notes": [
         {
