@@ -203,6 +203,7 @@ pub const UNBARRED: &[&str] = &[
     "load_ram_global",
     "store_ram_global",
     "fn_words_proven",
+    "call_fn_complete",
     "load_ram_object",
     "store_ram_object",
     "ref_accesses",
