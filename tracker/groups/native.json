@@ -656,7 +656,8 @@
         "at": "2026-11-08T20:48:18Z",
         "branch": "unit/native/metroid-native-check",
         "beats": true,
-        "handedBack": "2026-11-08T21:25:42Z"
+        "handedBack": "2026-11-08T21:25:42Z",
+        "pushed": true
       },
       "notes": [
         {
