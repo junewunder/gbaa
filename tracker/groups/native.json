@@ -1302,6 +1302,13 @@
       "detail": "docs/native-stage-b.md, 'The first game': a lifted program's store to a DMA register (0x0B0-0x0DF) panics in Hw::write16 (Metroid's m4a SoundInit, DMA1/2CNT = 0x84400004). Keep the channels' registers in Hw (read16/raw16), latch on enable as runtime::dma::control_written, run immediate transfers through the program's memory (a Native hook, as FifoDma's read), price them on the clock as the play build's io_write (io.now += cycles, no sync), repeat at V-blank and H-blank, a special start aimed at a FIFO as Hw::fifo_dma, the IRQ at the end; the prelude's io_write16/io_read16 route them. Done when: an agb program setting up each start by address passes just lift-check (a planted wrong control word caught), and just check passes.",
       "check": "independent",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-save-memory",
+      "title": "Lifted code reads and writes the save chip",
+      "detail": "docs/native-stage-b.md, 'The first game': the stage-A prelude's ld8/16/32 and st8/16/32 have no arm for 0x0D-0x0F, so Metroid's byte store at 0x0E007F80 panics; and Game::new leaves Hw::save the 512 Kbit flash chip where the play build detects the kind (save::Kind::detect: Metroid is SRAM_V113). Map them to Hw::save as runtime::bus does (byte lanes, the EEPROM at 0x0D), set the kind from ROM. Done when: a lift-check program that writes and reads its SRAM passes (a planted wrong store caught), and just check passes.",
+      "check": "independent",
+      "uses": ["heavy"]
     }
   ]
 }
