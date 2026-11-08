@@ -1382,7 +1382,13 @@
         "host": "quack",
         "unit": "native/indirect-call-args"
       },
-      "answer": null
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "ed09cc1f",
+        "at": "2026-11-07T15:08:18Z",
+        "decision": "d/land-indirect-call-callee-sets"
+      }
     },
     {
       "id": "q/land-bios-calls-unit-emerald",
@@ -1408,7 +1414,14 @@
         "host": "quack",
         "unit": "native/lift-bios-calls"
       },
-      "answer": null
+      "answer": {
+        "key": "b",
+        "note": "The runaway fix is on main now (b565bece): merge main, re-compare Emerald, land.",
+        "by": "owner",
+        "via": "ed09cc1f",
+        "at": "2026-11-07T15:08:20Z",
+        "decision": "d/land-bios-calls-unit-emerald"
+      }
     },
     {
       "id": "q/may-load-sp-sp-accesses",
@@ -1434,7 +1447,13 @@
         "host": "quack",
         "unit": "native/modern-gcc-jumps"
       },
-      "answer": null
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "ed09cc1f",
+        "at": "2026-11-07T15:08:22Z",
+        "decision": "d/may-load-sp-sp-accesses"
+      }
     },
     {
       "id": "q/may-ref-unexplained-rise-for-true-data",
@@ -1460,7 +1479,13 @@
         "host": "quack",
         "unit": "native/modern-gcc-data-as-code"
       },
-      "answer": null
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "ed09cc1f",
+        "at": "2026-11-07T15:08:24Z",
+        "decision": "d/may-ref-unexplained-rise-for-true-data"
+      }
     }
   ]
 }
