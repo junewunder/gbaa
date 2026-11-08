@@ -1333,6 +1333,11 @@ emerald-link rom=(roms / "Pokemon - Emerald Version.gba") *args:
     {{lock}} cargo build -q --release -p emerald-save
     target/release/emerald-link {{quote(rom)}} {{quote(gbaa_data / "saves/emerald")}} {{args}}
 
+# The wireless adapter's check (multiplayer/wireless-adapter-local): the two saves (just emerald-saves) as two Emeralds, each with an emulated wireless adapter in one radio (runtime::link::rfu), in the interpreter, into Oldale's Union Room, where BOB registers his Torchic at the trading board and ALICE trades her Mudkip for it; passes when both were in the Union Room, the first Pokémon swapped, identically twice (crates/emerald-save/src/bin/emerald-wireless.rs). About 4 minutes. ARGS: --frames, --once, --input0/--input1, --dump DIR --dump-at N,N or FROM-TO/EVERY.
+emerald-wireless rom=(roms / "Pokemon - Emerald Version.gba") *args:
+    {{lock}} cargo build -q --release -p emerald-save
+    target/release/emerald-wireless {{quote(rom)}} {{quote(gbaa_data / "saves/emerald")}} {{args}}
+
 # The netplay session core's check (multiplayer/session-core): the two saves as two linked Emeralds walking into the Trade Center, straight and as a two-peer rollback session at no input delay over a simulated network (40 ms, +30 ms jitter, 10% loss); passes when both peers' hashes every 60 frames and at the end are the straight run's, with no desync (crates/emerald-save/src/bin/emerald-netplay.rs). About 90 s. ARGS: --delay, --latency, --jitter, --loss, --seed, --frames.
 emerald-netplay rom=(roms / "Pokemon - Emerald Version.gba") *args:
     {{lock}} cargo build -q --release -p emerald-save
