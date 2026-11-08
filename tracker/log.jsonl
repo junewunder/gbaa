@@ -2445,3 +2445,4 @@
 {"at":"2026-11-08T19:05:50Z","actor":"loop","tag":"88b731c4","host":"quack","cmd":"done","id":"native/metroid-lifts","text":"Metroid lifts with no hard holes and builds: done, checked by verifier-a5d3f318"}
 {"at":"2026-11-08T19:11:49Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/metroid-lifts","text":"Metroid lifts with no hard holes and builds: on main"}
 {"at":"2026-11-08T19:11:58Z","actor":"loop","tag":"b9262a93","host":"quack","cmd":"claim","id":"native/fnref-romfrom-absorb","text":"Flow's ROM from-here-on widening keeps pointers it reads: claimed"}
+{"at":"2026-11-08T19:20:26Z","actor":"loop","tag":"b9262a93","host":"quack","cmd":"ask","text":"asked the owner: Raise lift bars for the ROM-widening fix's honest rise?","q":"q/raise-lift-bars-rom-widening"}
