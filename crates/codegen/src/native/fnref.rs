@@ -51,9 +51,13 @@
 //! or every cell at a width, compared with what it gave at the round's
 //! start; the cells at the addresses they read). The memory reads are
 //! kept and grown store by store, and a call through a large callee set
-//! gives only what it hadn't before. On Metroid (2,616 functions) the run
+//! gives only what it hadn't before, the callees that held the same set
+//! sharing what it joins to. On Metroid (2,616 functions) the run
 //! settles in 12 rounds, about 150 s on quack
-//! (`native/fnref-flow-scale`).
+//! (`native/fnref-flow-scale`), holding about 30 million tokens at a
+//! peak of 1.35 GB. A run that holds more than [`TOKENS`] stops,
+//! unsettled (Kirby - Nightmare in Dream Land and Minish Cap, at about
+//! 3,000 functions run: `native/whole-lift-memory`).
 //!
 //! **The closed world.** Function and ROM addresses enter values only
 //! from the sources above; a number made by arithmetic the run doesn't
@@ -190,6 +194,14 @@ struct Val {
     /// callee set, whatever whole addresses it holds besides.
     lost_rom: bool,
 }
+
+/// The most tokens the run holds (each distinct set once, and memory's)
+/// before it stops, unsettled, as when its rounds run out: proving
+/// nothing then, as a lift without the flow (`skip_fn_flow`). Metroid
+/// settles holding about 30 million at a peak of 1.4 GB; Kirby -
+/// Nightmare in Dream Land and Minish Cap held over 100 million in a
+/// round and a half, past 15 GB, before (`native/whole-lift-memory`).
+const TOKENS: usize = 48_000_000;
 
 /// More numbers than this in a value: it's unknown.
 const NUMS: usize = 8;
@@ -432,6 +444,9 @@ pub struct Flow {
     pub piled: BTreeSet<Origin>,
     /// The run didn't settle: nothing is proven.
     pub unsettled: bool,
+    /// It stopped at [`TOKENS`]: the tokens it held, after how many
+    /// functions run.
+    pub over: Option<(usize, usize)>,
 }
 
 impl Flow {
@@ -729,6 +744,105 @@ impl G {
             self.dirty_entry.insert(f);
         }
         self.mark(c);
+    }
+
+    /// [`G::give`] the same registers to each of `ks` (a call by value's
+    /// callees). Callees whose entry register held the same set before
+    /// share the set it joins to: a join per callee made each its own copy
+    /// of a large set, thousands of them on a large game (Minish Cap and
+    /// Nightmare ran past 15 GB; `native/whole-lift-memory`).
+    fn give_all(&mut self, ks: &BTreeSet<u32>, regs: &[Val]) {
+        if ks.len() < 2 {
+            for &k in ks {
+                self.give(k, regs);
+            }
+            return;
+        }
+        // By register and the set it held (kept alive here, so its
+        // address isn't reused) with its flags: what it joined to.
+        #[allow(clippy::type_complexity)]
+        let mut memo: std::collections::HashMap<
+            (usize, *const BTreeSet<Tok>, bool, bool, bool),
+            (Toks, Val),
+            Fx,
+        > = Default::default();
+        let mut c_any = false;
+        for &f in ks {
+            let e = self
+                .entry
+                .entry(f)
+                .or_insert_with(|| vec![Val::default(); 16]);
+            let mut c = false;
+            for (i, (a, b)) in e.iter_mut().zip(regs).enumerate() {
+                if a.toks.is_empty() {
+                    c |= a.join(b);
+                    continue;
+                }
+                let key = (i, std::rc::Rc::as_ptr(&a.toks.0), a.mem, a.unk, a.lost_rom);
+                let before = (a.toks.len(), a.mem, a.unk, a.lost_rom);
+                match memo.get(&key) {
+                    Some((_, v)) => *a = v.clone(),
+                    None => {
+                        let old = a.toks.clone();
+                        a.join(b);
+                        memo.insert(key, (old, a.clone()));
+                    }
+                }
+                c |= before != (a.toks.len(), a.mem, a.unk, a.lost_rom);
+            }
+            if c {
+                self.dirty_entry.insert(f);
+            }
+            c_any |= c;
+        }
+        self.mark(c_any);
+    }
+
+    /// The tokens the run holds, by store: each distinct set once (as the
+    /// trace prints them, and [`TOKENS`] bounds their sum), and the
+    /// memory's (the pile, cells and spills).
+    fn held(&self) -> Vec<(&'static str, usize, usize)> {
+        let mut seen = std::collections::HashSet::new();
+        let mut count = |name, vs: &mut dyn Iterator<Item = &Toks>| {
+            let (mut n, mut t) = (0usize, 0usize);
+            for v in vs {
+                if seen.insert(std::rc::Rc::as_ptr(&v.0)) {
+                    n += 1;
+                    t += v.len();
+                }
+            }
+            (name, n, t)
+        };
+        let mems: usize = self
+            .cells
+            .values()
+            .chain(self.spills.values())
+            .map(|m| m.len())
+            .sum();
+        vec![
+            count("entry", &mut self.entry.values().flatten().map(|v| &v.toks)),
+            count("ret", &mut self.ret.values().flatten().map(|v| &v.toks)),
+            count("rom_from", &mut self.rom_from.values().map(|v| &v.toks)),
+            count("rom_hull", &mut self.rom_hull.values().map(|v| &v.toks)),
+            count(
+                "by_value",
+                &mut self
+                    .by_value
+                    .values()
+                    .flat_map(|b| b.args.iter().chain(&b.rets))
+                    .map(|v| &v.toks),
+            ),
+            count(
+                "spill_reads",
+                &mut self.spill_reads.values().map(|v| &v.toks),
+            ),
+            count(
+                "cell_at_reads",
+                &mut self.cell_at_reads.values().map(|v| &v.toks),
+            ),
+            count("all_holed", &mut self.all_holed.values()),
+            ("memory", 0, self.pile.len() + mems),
+        ]
     }
 
     fn give_ret(&mut self, f: u32, regs: &[Val]) {
@@ -1716,9 +1830,7 @@ impl Run<'_, '_> {
                     .iter()
                     .any(|d| !d.toks.is_empty() || d.mem || d.unk || d.lost_rom)
                 {
-                    for &k in &callees {
-                        self.g.give(k, &delta);
-                    }
+                    self.g.give_all(&callees, &delta);
                     for (o, a) in m.args.iter_mut().zip(args) {
                         o.union(a);
                     }
@@ -1738,8 +1850,8 @@ impl Run<'_, '_> {
             }
             None => {
                 let mut rets = vec![Val::default(); 4];
+                self.g.give_all(&callees, args);
                 for &k in &callees {
-                    self.g.give(k, args);
                     for (a, b) in rets.iter_mut().zip(self.ret_of(k)) {
                         a.join(&b);
                     }
@@ -2025,6 +2137,7 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
     g.cells_changed.clear();
     g.pile_changed = false;
     let mut loose: BTreeSet<u32> = BTreeSet::new();
+    let mut ran = 0usize;
     for round in 0..=256 {
         g.changed = false;
         let was = std::mem::replace(
@@ -2101,6 +2214,28 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
             let r = std::mem::take(&mut run.rets_read);
             reads.insert(f.entry, r);
             rds.insert(f.entry, std::mem::take(&mut g.rd));
+            // The memory bound, every 64 functions run.
+            ran += 1;
+            if ran.is_multiple_of(64) {
+                let held = g.held();
+                let total: usize = held.iter().map(|h| h.2).sum();
+                if trace && ran.is_multiple_of(256) {
+                    let by: Vec<String> = held
+                        .iter()
+                        .map(|(k, n, t)| format!("{k} {n}/{t}"))
+                        .collect();
+                    eprintln!(
+                        "fnref {ran} functions run, {:?}: {total} tokens held (sets/tokens: {})",
+                        t0.elapsed(),
+                        by.join(", ")
+                    );
+                }
+                if total > TOKENS {
+                    g.flow.unsettled = true;
+                    g.flow.over = Some((total, ran));
+                    return g.flow;
+                }
+            }
         }
         // What every value held as a function's whole address: taken
         // (each shared set once).
@@ -2220,7 +2355,13 @@ impl Flow {
         writeln!(
             s,
             "function addresses (native/fnref.rs){}: {} function words in ROM ({pools} in literal pools, {} other data), {proven} proven, {} not: {unread} never read{} ({piled} of the {} not proven stored where the run can't place them, the heap's pile); {} code constants, {} proven; {} call_fn calls with a callee set, {complete} of them complete; {} other jumps by value to a function",
-            if self.unsettled { " (didn't settle: nothing proven)" } else { "" },
+            match (self.unsettled, self.over) {
+                (true, Some((t, n))) => format!(
+                    " (stopped holding {t} tokens, over its bound of {TOKENS}, after {n} functions run: nothing proven)"
+                ),
+                (true, None) => " (didn't settle: nothing proven)".to_string(),
+                _ => String::new(),
+            },
             words.len(),
             words.len() - pools,
             words.len() - proven,

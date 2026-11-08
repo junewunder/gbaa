@@ -565,3 +565,38 @@ fn a_store_outside_ram_is_lost() {
     assert!(!f.proven(POOL));
     assert_eq!(f.holes[&Origin::Word(POOL)].1, Why::Outside);
 }
+
+#[test]
+fn callees_that_shared_an_entry_share_what_a_call_by_value_gives() {
+    let fn_tok = |key| Tok::Fn {
+        key,
+        origin: Origin::Word(key),
+        form: Form::Full,
+    };
+    let shared = Val {
+        toks: [fn_tok(1), fn_tok(2)].into_iter().collect(),
+        ..Val::default()
+    };
+    let own = Val::of(fn_tok(3));
+    let mut g = G::default();
+    for k in [10, 11] {
+        g.entry.insert(k, vec![shared.clone(); 16]);
+    }
+    g.entry.insert(12, vec![own; 16]);
+    let args = vec![Val::of(fn_tok(4)); 4];
+    g.give_all(&BTreeSet::from([10, 11, 12, 13]), &args);
+    let r0 = |k: u32| g.entry[&k][0].clone();
+    assert!(std::rc::Rc::ptr_eq(&r0(10).toks.0, &r0(11).toks.0));
+    let toks = |v: Val| v.toks.iter().copied().collect::<Vec<_>>();
+    assert_eq!(toks(r0(10)), [fn_tok(1), fn_tok(2), fn_tok(4)]);
+    assert_eq!(toks(r0(12)), [fn_tok(3), fn_tok(4)]);
+    assert_eq!(toks(r0(13)), [fn_tok(4)]);
+    // Registers past the arguments are as they were.
+    assert_eq!(toks(g.entry[&10][4].clone()), [fn_tok(1), fn_tok(2)]);
+    assert_eq!(g.dirty_entry, BTreeSet::from([10, 11, 12, 13]));
+    assert!(g.changed);
+    // The same again changes nothing.
+    g.changed = false;
+    g.give_all(&BTreeSet::from([10, 11, 12, 13]), &args);
+    assert!(!g.changed);
+}
