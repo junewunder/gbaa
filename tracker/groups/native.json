@@ -1248,7 +1248,14 @@
       "title": "Function-address flow on Emerald fast enough to finish",
       "detail": "After {unit:native/fnref-flow-emerald} made large reads one Ref token (b6d5ed3f), Emerald's flow (gbaa-recompile --summaries --callee-sets, from the indirect-call-args branch with this fnref.rs) holds RSS at 1.5 GB through round 0, but round 0 alone runs about 60 s per 500 functions (542 s at 8,500 of 15,158). Profile it (likely per-op scans of 30k-token Refs: split_refs' rest, cmp_refs' difference, hole() on fresh expansions, ref_make after each store) and make the whole run finish. Done when: that command finishes on Emerald under 8 GB with time and peak quoted, and just lift-metrics shows no bar over.",
       "check": "recorded",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-08T18:34:25Z",
+          "by": "c06275d9",
+          "text": "--callee-sets is on main now (indirect-call-args landed 2026-11-08): no worktree needed; plain gbaa-recompile --summaries ROM --callee-sets under just long --mem 9G. Ref code: b6d5ed3f on {unit:native/fnref-flow-emerald}'s branch."
+        }
+      ]
     },
     {
       "id": "native/fnref-romfrom-absorb",
