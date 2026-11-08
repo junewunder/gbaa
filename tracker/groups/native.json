@@ -952,15 +952,23 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "aed48009",
-        "session": "aed48009-a3c2-4600-aebd-bb908b7c8339",
-        "host": "quack",
-        "pid": 3349268,
-        "start": "14822772",
-        "at": "2026-11-08T17:45:53Z",
+        "checker": "verifier-a5cbc15f",
+        "at": "2026-11-08T19:46:55Z",
+        "evidence": "Fresh verifier (agent a5cbc15f) vs main 0751c7b: disc-pret pokeemerald precision 0.9993->0.9996, modern 0.9994->0.9995, recall same (0.9553/0.7802); jt-score modern 610/617, agbcc 676/676; holes-all --against main: imperium jumps 27->13 hard 35->21, emerald-rogue jumps 20->16 hard 25->21, no game higher (total hard 121->97); scan.rs diff reviewed, no bugs. Owner answer (a): ref_unexplained/fn_words_not_proven bars set to measured. Merged main twice after (native-bios-calls' panic stand-in dropped, its bars set likewise): just check and just lift-check pass (8 programs). Known: Metroid lift now 1 hard hole (stale stand-in 0x087603d9 in mods), filed {unit:native/metroid-drop-nes-standin}.",
         "branch": "unit/native/modern-gcc-data-as-code",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-08T19:46:55Z",
+          "by": "aed48009",
+          "host": "quack",
+          "pid": 3349268,
+          "start": "14822772",
+          "beats": true,
+          "session": "aed48009-a3c2-4600-aebd-bb908b7c8339",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
