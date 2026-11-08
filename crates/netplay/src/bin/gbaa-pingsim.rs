@@ -42,6 +42,20 @@
 //!   windows: how it
 //!   feels.
 //!
+//! - `gbaa-pingsim feel PROFILE [FEEL_OPTIONS]`: the feel sim
+//!   ([`netplay::feel`]): every peer in this process, in simulated time,
+//!   through the profile, each driven as the desktop's window drives it,
+//!   and what each window shows, one line a seat, for the desktop's loop
+//!   before this unit's fixes and after. FEEL_OPTIONS: `--players N` (2),
+//!   `--frames N` (3600), `--pacing audio|muted|paced` (audio),
+//!   `--version before|after|both` (both), `--present-ms L` (after's
+//!   presentation lag), `--input1 S`.. (each seat's presses; the lag
+//!   report's play by default, [`netplay::feel::PLAY`]), and the cost of a
+//!   turn: modelled on two recompiled Kirbys, or, with `--rom ROM`, ROM's
+//!   own frame by frame, measured first on interpreted GBAs running the
+//!   same presses straight (a [`netplay::feel::Trace`]; `--trace-out F`
+//!   keeps it, `--trace F` reuses one); either times `--scale K` (1).
+//!
 //! OPTIONS: `--console toy|gba` (the toy console, or GBAs on a cable
 //! running a tiny ROM that reads the keys; toy), `--players N` (seats, 2
 //! to 4, `room` only; 2), `--frames N`
@@ -68,6 +82,7 @@ const USAGE: &str = "usage: gbaa-pingsim run PROFILE [OPTIONS]
        gbaa-pingsim room-peer SEAT ADDR [CODE] [OPTIONS]
        gbaa-pingsim straight [OPTIONS]
        gbaa-pingsim desktop PROFILE ROM [-- DESKTOP_ARGS]
+       gbaa-pingsim feel PROFILE [FEEL_OPTIONS]
 OPTIONS: --console toy|gba, --players N, --frames N, --delay D, --fps F, --linger-ms M";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -670,6 +685,9 @@ fn desktop(profile_path: &Path, rom: &str, extra: &[&str]) -> Result<(), String>
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = (|| {
+        if args.first().is_some_and(|a| a == "feel") {
+            return feel(&args[1..]);
+        }
         // `desktop`'s arguments are the desktop's own, after `--`.
         let (args, desk) = match args.iter().position(|a| a == "--") {
             Some(i) if args.first().is_some_and(|a| a == "desktop") => {
@@ -726,4 +744,188 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// This thread's CPU time, µs: what a step costs, whatever else the
+/// machine is doing, short of sharing its core.
+fn cpu_us() -> f64 {
+    let mut ts = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: `ts` is a valid timespec for the call to fill.
+    unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut ts) };
+    ts.tv_sec as f64 * 1e6 + ts.tv_nsec as f64 / 1e3
+}
+
+/// A game's costs frame by frame ([`netplay::feel::Trace`]): its consoles
+/// run straight on the scripts, each frame timed three ways from the
+/// same snapshot (every picture drawn, seat 0's, none), so the three
+/// share whatever the machine was doing then.
+fn measure(
+    rom: &'static [u8],
+    scripts: &[netplay::script::Script],
+    frames: u32,
+) -> netplay::feel::Trace {
+    let seats = scripts.len();
+    let mut g = netplay::gba::Gba::new(rom, &vec![None; seats]);
+    g.set_clock(Config::default().clock);
+    let mut snap = netplay::gba::Snap::default();
+    let mut t = netplay::feel::Trace::default();
+    let (mut snaps, mut restores) = (0.0, 0.0);
+    let step = |g: &mut netplay::gba::Gba, inputs: &[u16]| {
+        let t0 = cpu_us();
+        g.step(inputs).expect("the game runs");
+        cpu_us() - t0
+    };
+    for f in 0..frames {
+        let inputs: Vec<u16> = scripts.iter().map(|s| s.keys(f as u64)).collect();
+        let t0 = cpu_us();
+        g.snapshot(&mut snap);
+        snaps += cpu_us() - t0;
+        g.show_only(None);
+        t.all.push(step(&mut g, &inputs));
+        let t0 = cpu_us();
+        g.restore(&snap).expect("a restore");
+        restores += cpu_us() - t0;
+        g.show_only(Some(0));
+        t.shown.push(step(&mut g, &inputs));
+        g.restore(&snap).expect("a restore");
+        g.quiet(true);
+        t.undrawn.push(step(&mut g, &inputs));
+        g.quiet(false);
+    }
+    t.snapshot_us = snaps / frames as f64;
+    t.restore_us = restores / frames as f64;
+    t
+}
+
+/// `gbaa-pingsim feel`: the feel sim's numbers.
+fn feel(args: &[String]) -> Result<(), String> {
+    use netplay::feel::{self, Cost, Costs, Pacing, Version, Window};
+    use netplay::script::Script;
+    let mut profile = None;
+    let mut players = 2usize;
+    let mut frames = 3600u32;
+    let mut pacing = Pacing::Audio;
+    let mut versions = vec![Version::Before, Version::After];
+    let mut present: Option<f64> = None;
+    let mut rom: Option<String> = None;
+    let mut trace_in: Option<String> = None;
+    let mut trace_out: Option<String> = None;
+    let mut scale = 1.0f64;
+    let mut inputs: Vec<Option<String>> = vec![None; 4];
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        if !a.starts_with("--") {
+            if profile.replace(a.clone()).is_some() {
+                return Err(format!("one profile, not {a} too"));
+            }
+            continue;
+        }
+        let v = it.next().ok_or(format!("{a} needs a value"))?;
+        let bad = || format!("{a} {v}?");
+        match a.as_str() {
+            "--players" => players = v.parse().map_err(|_| bad())?,
+            "--frames" => frames = v.parse().map_err(|_| bad())?,
+            "--pacing" => {
+                pacing = match v.as_str() {
+                    "audio" => Pacing::Audio,
+                    "muted" => Pacing::Muted,
+                    "paced" => Pacing::Paced,
+                    _ => return Err(bad()),
+                }
+            }
+            "--version" => {
+                versions = match v.as_str() {
+                    "before" => vec![Version::Before],
+                    "after" => vec![Version::After],
+                    "both" => vec![Version::Before, Version::After],
+                    _ => return Err(bad()),
+                }
+            }
+            "--present-ms" => present = Some(v.parse::<f64>().map_err(|_| bad())? * 1e3),
+            "--rom" => rom = Some(v.clone()),
+            "--trace" => trace_in = Some(v.clone()),
+            "--trace-out" => trace_out = Some(v.clone()),
+            "--scale" => scale = v.parse().map_err(|_| bad())?,
+            a if a.starts_with("--input") => {
+                let n: usize = a["--input".len()..].parse().map_err(|_| bad())?;
+                if !(1..=4).contains(&n) {
+                    return Err(bad());
+                }
+                inputs[n - 1] = Some(v.clone());
+            }
+            _ => return Err(format!("unknown option {a}")),
+        }
+    }
+    let profile = profile.ok_or("feel PROFILE [FEEL_OPTIONS]")?;
+    let profile = Profile::load(Path::new(&profile))?;
+    if !(2..=runtime::link::MAX_PLAYERS).contains(&players) {
+        return Err(format!("--players 2 to {}", runtime::link::MAX_PLAYERS));
+    }
+    let scripts: Vec<Script> = (0..players)
+        .map(|s| Script::parse(inputs[s].as_deref().unwrap_or(feel::PLAY[s])))
+        .collect::<Result<_, _>>()?;
+    let trace = match (rom, trace_in) {
+        (Some(path), None) => {
+            let rom: &'static [u8] = std::fs::read(&path)
+                .map_err(|e| format!("{path}: {e}"))?
+                .leak();
+            let started = Instant::now();
+            let t = measure(rom, &scripts, frames);
+            let p50 = |v: &[f64]| {
+                let mut v = v.to_vec();
+                v.sort_by(f64::total_cmp);
+                v[v.len() / 2] / 1e3
+            };
+            println!(
+                "trace of {path} ({:.1} s): a frame p50 {:.2} ms drawn, {:.2} every seat drawn, \
+                 {:.2} undrawn; a snapshot {:.2} ms, a restore {:.2}",
+                started.elapsed().as_secs_f64(),
+                p50(&t.shown),
+                p50(&t.all),
+                p50(&t.undrawn),
+                t.snapshot_us / 1e3,
+                t.restore_us / 1e3
+            );
+            if let Some(out) = &trace_out {
+                std::fs::write(out, t.write()).map_err(|e| format!("{out}: {e}"))?;
+            }
+            Some(t)
+        }
+        (None, Some(path)) => {
+            let text = std::fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))?;
+            Some(feel::Trace::read(&text).map_err(|e| format!("{path}: {e}"))?)
+        }
+        (None, None) => None,
+        (Some(_), Some(_)) => return Err("--rom or --trace, not both".into()),
+    };
+    for version in versions {
+        let window = |s: usize| {
+            let mut w = Window::new(pacing, version, s);
+            if version == Version::After && present.is_some() {
+                w.present_us = present;
+            }
+            w
+        };
+        let started = Instant::now();
+        let cost = match &trace {
+            Some(t) => Cost::Trace(t, scale),
+            None => Cost::Model(Costs::KIRBY_TWO.scaled(scale * players as f64 / 2.0)),
+        };
+        let feels =
+            feel::toy(&profile, &scripts, window, cost, frames).map_err(|e| e.to_string())?;
+        println!(
+            "{version:?}, {pacing:?} ({:.1} s):",
+            started.elapsed().as_secs_f64()
+        );
+        for f in &feels {
+            println!("  {}", f.line());
+        }
+        if feels.iter().any(|f| f.end != feels[0].end) {
+            return Err("the peers ended apart".into());
+        }
+    }
+    Ok(())
 }

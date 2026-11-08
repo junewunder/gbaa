@@ -1835,6 +1835,25 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   The pieces alone: `gbaa-pingsim proxy PROFILE A_ADDR B_ADDR`, `peer
   SEAT ADDR`, `straight`. `cargo test -p netplay --test ping_sim` runs
   every profile (and `rough` with GBAs), about 20 s of wall time.
+- The feel sim (multiplayer/rollback-feel-sim, `netplay::feel`):
+  `just rollback-feel-sim [PROFILE] [ARGS]` runs `gbaa-pingsim feel`:
+  every peer of a rollback session in one process, in simulated time,
+  joined by a network whose every path follows the profile (the proxy's
+  own delay model, `netplay::proxy::Line`), each driven as `gbaa-desktop`'s
+  netplay loop drives it (`--pacing audio` a window with sound, `muted`,
+  `paced` headless) and its frames handed to a 60 Hz display. Prints a
+  line a seat: frames late, doubled (and how many the display's 60 Hz
+  against the GBA's 59.73 makes anyway), skipped, rollbacks, depth,
+  holds, stalls, underruns, the other player's jumps, how long after
+  due a frame reaches the screen, turn costs; for the window's loop
+  before 2026-11-08's fixes and after (`--version`). Turn costs are a
+  model of two recompiled Kirbys on quack (`--scale K` times it), which
+  repeats exactly and takes milliseconds, or with `--rom ROM` measured on
+  interpreted GBAs running ROM (about 90 s for 5400 Kirby frames, and
+  only as steady as the machine). `--players N`, `--frames N` (3600),
+  `--present-ms L`, `--input1 S`.. (default `netplay::feel::PLAY`, the
+  lag report's play). `cargo test -p netplay feel` holds the budgets
+  (`docs/research/multiplayer.md`, "Feel").
 - The server (multiplayer/relay-server, then multiplayer/remove-lockstep-quic,
   `crates/relay`): `gbaa-server [ADDR] [--min-version N]` serves
   plain-UDP rooms (`relay::rooms`, default `0.0.0.0:7374`): it seats the
