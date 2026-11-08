@@ -1122,6 +1122,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-08T18:27:27Z",
+          "by": "c06275d9",
+          "text": "2026-11-08: Refs (b6d5ed3f) fixed memory: Emerald round 0 flat at 1.5 GB (was >10 GB), entries 5.6M tokens. Not done: too slow to finish (~60 s/500 fns). Split: {unit:native/fnref-emerald-speed} (needed); widening gap {unit:native/fnref-romfrom-absorb}. memory/ file says how to measure."
+        },
+        {
           "at": "2026-11-07T12:41:33Z",
           "by": "8898da77",
           "text": "2026-11-07: measured, not fixed. Round 0 alone passes 10 GB: entries hold 100-180M tokens, copies of successive 30k-token pile reads; UnkUtil_Run's ~10k callees add 2-3 GB. Join sharing, 2-level set: not enough. Next: chunked sets or symbolic pile token (memory/ file)"
