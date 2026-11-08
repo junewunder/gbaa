@@ -10,4 +10,5 @@ pub mod ir;
 pub mod jumptable;
 pub mod numbers_doc;
 pub mod program;
+pub mod softfloat;
 pub mod vsa;

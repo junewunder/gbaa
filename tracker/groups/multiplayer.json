@@ -734,6 +734,17 @@
       "title": "How the link cable works, and which games netplay covers",
       "detail": "june's question (2026-10-29): can netplay be a generic network replacement for any game's link cable, and does the cable assume no lag? Write up for june, in docs/research/multiplayer.md: each SIO mode, its timing (how fast a transfer completes, how many frames a game waits before it calls it a link error), why we run every console on every peer instead of sending cable bytes, and which modes runtime::link covers today (multiplayer mode; normal 8/32-bit, multiboot single-pak, UART, JOY bus, the wireless adapter). Then list popular link games by mode (Four Swords, Mario Kart Super Circuit, Pokemon, Bomberman, single-pak multiboot games), run the ones june has ROMs for through two local peers headless, and say which work. File a unit for each gap worth closing. Check: the section, the table of games tried, the units.",
       "minMinutes": 150,
+      "record": {
+        "state": "claimed",
+        "by": "694a54e9",
+        "session": "694a54e9-a4e1-4400-bd52-5bfa387f485c",
+        "host": "quack",
+        "pid": 3349068,
+        "start": "14822266",
+        "at": "2026-11-08T20:14:36Z",
+        "branch": "unit/multiplayer/link-cable-survey",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-01T01:47:03Z",

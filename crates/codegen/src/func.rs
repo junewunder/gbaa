@@ -59,6 +59,31 @@ pub struct Ctx<'a> {
     /// [`crate::spins`]),
     /// worked out on first use: ROM code only.
     pub spins: std::sync::OnceLock<Vec<u32>>,
+    /// libgcc's soft-float routines in the code, found on first use
+    /// ([`Ctx::library`]).
+    pub library: std::sync::OnceLock<Library>,
+}
+
+/// The library routines the runtime stands in for that a context's code
+/// has (`analysis::softfloat`: libgcc's `__muldf3` and `__divdf3`): each
+/// is taken as a leaf call of its stand-in, and the functions discovery
+/// found inside their code (their special-case paths, called only from
+/// them) are never run.
+#[derive(Clone, Debug, Default)]
+pub struct Library {
+    /// By entry (an ARM key).
+    pub routines: BTreeMap<u32, analysis::softfloat::Routine>,
+    /// The code their signatures cover, `start..end`.
+    pub regions: Vec<(u32, u32)>,
+}
+
+impl Library {
+    /// Whether `k` (a key) is in a routine's code.
+    pub fn inside(&self, k: u32) -> bool {
+        self.regions
+            .iter()
+            .any(|&(s, e)| (s..e).contains(&(k & !1)))
+    }
 }
 
 /// The transformations codegen makes, each of which can be turned off, so
@@ -205,6 +230,7 @@ impl<'a> Ctx<'a> {
             readable: None,
             pointed: std::sync::OnceLock::new(),
             spins: std::sync::OnceLock::new(),
+            library: std::sync::OnceLock::new(),
         };
         // An entry discovery found no code at in its mode (a root whose
         // analysis hit the step cap, or one also a root in the other mode)
@@ -218,6 +244,32 @@ impl<'a> Ctx<'a> {
             .filter(|&k| ctx.is_code(k))
             .collect();
         ctx
+    }
+
+    /// This context with the library routines' entries as function
+    /// entries ([`Library`]), for a build that stands in for them (the
+    /// native lift, its hole report): a jump into one (a `bx pc` veneer's
+    /// `b __divdf3`) is then a tail call, not a copy of its code in the
+    /// jumper. The play build leaves them as discovery found them.
+    pub fn with_library(mut self) -> Ctx<'a> {
+        let ks: Vec<u32> = (self.library().routines.keys())
+            .copied()
+            .filter(|&k| self.is_code(k))
+            .collect();
+        self.entries.extend(ks);
+        self
+    }
+
+    /// The library routines in the code ([`Library`]).
+    pub fn library(&self) -> &Library {
+        self.library.get_or_init(|| {
+            let mut l = Library::default();
+            for f in analysis::softfloat::scan(self.rom, self.base) {
+                l.routines.insert(f.entry, f.routine);
+                l.regions.push((f.start, f.end));
+            }
+            l
+        })
     }
 
     /// The addresses in the cartridge that a word of a literal pool holds
