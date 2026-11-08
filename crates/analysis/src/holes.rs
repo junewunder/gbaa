@@ -31,8 +31,10 @@
 //! - a BIOS call the library doesn't implement ([`bios_implemented`]);
 //! - a call through a register the run saw land on an address that isn't
 //!   a known function start;
-//! - a function summary whose hole is a return with r4-r11 or sp changed
-//!   (a run-time sp adjustment: a variable-length array).
+//! - a function summary whose hole breaks the lift's calling convention
+//!   ([`SUMMARY_HARD`]): a return with sp changed (a run-time sp
+//!   adjustment: a variable-length array), a read of r4-r11 a callee
+//!   changed or that came in as a parameter.
 //!
 //! The flash save library's stack routines ([`crate::flash`]) are none of
 //! these: a call into RAM whose target held a recognised routine every time
@@ -263,6 +265,9 @@ pub struct Report {
     pub flash: Vec<FlashCall>,
     /// RAM code the run executed that no overlay discovered.
     pub ram_undiscovered: Vec<RamRun>,
+    /// ROM code the run executed that discovery didn't find, as runs
+    /// (`rom_src` is `None`).
+    pub rom_undiscovered: Vec<RamRun>,
     pub cpu: Vec<CpuHole>,
     /// `swi`s the library doesn't implement: (address, number).
     pub bios: Vec<(u32, u32)>,
@@ -306,12 +311,15 @@ impl Report {
             .count()
     }
 
+    /// The functions with a hard summary hole, each once whatever kinds
+    /// it has.
     pub fn hard_summary(&self) -> usize {
         self.summary
             .values()
             .filter(|k| k.hard)
-            .map(|k| k.funcs.len())
-            .sum()
+            .flat_map(|k| &k.funcs)
+            .collect::<BTreeSet<_>>()
+            .len()
     }
 
     /// Every hard hole, counted once per site of each kind (a function,
@@ -461,25 +469,43 @@ fn cpu_kind(i: &Instr) -> Option<CpuKind> {
     }
 }
 
-/// The text of a summary hole with its addresses taken out, for grouping.
-/// The callee-saves proof's holes (`callee-saves: …`) group with the
-/// summary's own of the same kind.
+/// The text of a summary hole with its addresses and detail taken out,
+/// for grouping: `0x08001234: returns with r4-r11 changed: r4 = unknown`
+/// is `returns with r4-r11 changed`. The callee-saves proof's holes
+/// (`callee-saves: …`) group with the summary's own of the same kind.
 pub fn summary_kind(hole: &str) -> String {
     let hole = hole.strip_prefix("callee-saves: ").unwrap_or(hole);
     let words: Vec<&str> = hole
         .split_whitespace()
         .filter(|w| !w.starts_with("0x"))
         .collect();
-    words.join(" ").trim_end_matches(',').to_string()
+    let kind = words.join(" ");
+    let kind = kind.split_once(": ").map_or(kind.as_str(), |(k, _)| k);
+    kind.trim_end_matches(',').to_string()
 }
 
-/// Whether a summary hole of this kind is hard: a return with r4-r11 or
-/// sp changed (sp moved by a run-time amount, as a variable-length array
-/// does). The other kinds are counted under other holes (an unknown jump,
-/// a mode change, RAM code) or aren't holes for a native build (an
-/// indirect call is an `FnRef`).
+/// The summary hole kinds that are hard (`codegen::saves`): the lift keeps
+/// each caller's r4-r11 and sp in its own locals and passes only r0-r3,
+/// so it is wrong where a function returns with sp moved (by a run-time
+/// amount, as a variable-length array does), where a caller reads one of
+/// r4-r11 that a callee changed, where a function reads one of r4-r11 as
+/// it came other than to save it (a register parameter), or where a
+/// function that changes them may be called through a pointer. A return
+/// with r4-r11 changed (hand-written code's scratch registers) is not
+/// itself hard: the reads are. The other kinds are counted under other
+/// holes (an unknown jump, a mode change, RAM code) or aren't holes for a
+/// native build (an indirect call is an `FnRef`).
+pub const SUMMARY_HARD: [&str; 4] = [
+    "returns with sp changed",
+    "reads r4-r11 a callee changed",
+    "reads r4-r11 at entry",
+    "changes r4-r11 and may be called through a pointer",
+];
+
+/// Whether a summary hole of this kind ([`summary_kind`]) is hard
+/// ([`SUMMARY_HARD`]).
 pub fn summary_hard(kind: &str) -> bool {
-    kind.contains("returns with r4-r11 or sp changed")
+    SUMMARY_HARD.contains(&kind)
 }
 
 /// One instruction known from any source.
@@ -598,6 +624,7 @@ pub fn classify(
             }
         }
     }
+    let mut rom_missed: Vec<(u32, &Seen)> = Vec::new();
     for (&a, s) in &run.code {
         let size = if s.thumb { 2 } else { 4 };
         let k = known.entry(a).or_insert(Known {
@@ -628,8 +655,12 @@ pub fn classify(
             r.ram_undiscovered_bytes += new;
         } else {
             r.rom_undiscovered_bytes += new;
+            if new > 0 {
+                rom_missed.push((a, s));
+            }
         }
     }
+    r.rom_undiscovered = runs(rom_missed.into_iter(), |_| None);
 
     // Function starts, for grouping: discovered, overlays', run's call
     // targets and IRQ handlers.
