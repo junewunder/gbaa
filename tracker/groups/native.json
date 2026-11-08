@@ -1176,7 +1176,19 @@
       "title": "Tell masked entry reads of r4-r11 from parameters",
       "detail": "After {unit:native/callee-save-breaks}, a function that keeps r4-r11 and reads one as it came is soft ('reads r4-r11 at entry and keeps them'): mostly agbcc building a word byte by byte in an unset register, every old bit masked away, but TMC's sub_080086D8 takes r8/r11 from player.s as parameters (Minish 0x08060ba1 derefs entry r5 too), which the lift gets wrong (Regs::call zeroes r4-r12). Track which bits of an entry value survive (and/orr masks, uses as address or callee argument, hi-reg mov then pass-on); make a surviving read hard. Done when: the soft kind holds only fully-masked reads (doc lists the corpus's), holes-all --against shows the new hard ones named, just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "71b3ef7c",
+        "session": "71b3ef7c-8885-4bbe-b9b9-e52b241115bb",
+        "host": "quack",
+        "pid": 3349268,
+        "start": "14822772",
+        "at": "2026-11-08T21:00:00Z",
+        "branch": "unit/native/entry-read-masking",
+        "beats": true
+      },
+      "round": "2026-11-08T21:00:00Z"
     },
     {
       "id": "native/whole-lift-memory",

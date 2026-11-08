@@ -295,6 +295,11 @@
       "priority": 3,
       "notes": [
         {
+          "at": "2026-11-08T20:55:07Z",
+          "by": "29ee78be",
+          "text": "Feel sim (2026-11-08): before that day's fixes a window with sound undid time sync's holds, so one seat held back ~1 frame in 12 all session (each a doubled then skipped frame). A playtest report from an older build showing hundreds 'held back' is that; fixed since."
+        },
+        {
           "at": "2026-10-29T03:35:08Z",
           "by": "600a9d3e",
           "text": "june 2026-10-28: this was meant to run AFTER netplay moved onto recompiled code. The 23:00 run measured the interpreter build; redo it on the v1 recompiled build (both peers), at delay 0, once the Mac half lands."
@@ -678,16 +683,17 @@
       "title": "Rollback: a sim test of what players feel, then fix it",
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): both players noticed small stutters ('a little framey sometimes', 'skipped frames'); it played well otherwise. ping-sim checks hashes, not feel. Build a sim that plays Kirby two-player (four with {unit:multiplayer/four-seats}) through ping-sim profiles like home Wi-Fi to fly, and measures what each window shows: frames presented late, doubled or skipped, rollback depth, frames run again, time-sync holds, the other Kirby's jumps. Put budgets on them in a test, then fix the worst offenders. Beside {unit:multiplayer/lag-report}, which needs a real session's numbers. june's view: rollback of whole consoles has a ceiling; the real fix for this game is a multiplayer mod on its decomp (docs/ideas.md). Check: before and after numbers in docs/research/multiplayer.md; the budget test in just check.",
       "minMinutes": 150,
-      "record": {
-        "state": "claimed",
-        "by": "29ee78be",
-        "session": "29ee78be-f7f7-4b33-9049-fe8ed023a471",
-        "host": "quack",
-        "pid": 3349268,
-        "start": "14822772",
-        "at": "2026-11-08T19:51:02Z",
-        "branch": "unit/multiplayer/rollback-feel-sim",
-        "beats": true
+      "notes": [
+        {
+          "at": "2026-11-08T20:59:55Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - justfile:1356 (the comment above `rollback-feel-sim`): it says that with `--rom ROM` the sim runs \"a session of interpreted GBAs on ROM, each turn's measured time\". That is the wall-time approach that docs/res…"
+        }
+      ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-08T20:59:55Z",
+        "findings": "- justfile:1356 (the comment above `rollback-feel-sim`): it says that with `--rom ROM` the sim runs \"a session of interpreted GBAs on ROM, each turn's measured time\". That is the wall-time approach that docs/research/multiplayer.md (\"Feel\") says was tried and dropped. What the code actually does (`measure` in crates/netplay/src/bin/gbaa-pingsim.rs) is time the ROM once, straight, on the thread's CPU clock, writing a `feel::Trace`, and then run the toy session on those costs. Reword the comment to say that, and add the missing `--trace F` / `--trace-out F` options to its ARGS list and to the feel-sim entry in docs/tools/commands.md (around line 1865), which also leaves them out.\n- crates/netplay/src/feel.rs, the doc comment on `pub fn toy`: it calls this \"`gbaa-pingsim feel --console toy`'s run\", but `feel` has no `--console` option and rejects it as `unknown option`. Change it to \"`gbaa-pingsim feel`'s run\"."
       },
       "round": "2026-11-01T01:44:42Z"
     },
