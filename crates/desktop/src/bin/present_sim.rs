@@ -2,7 +2,8 @@
 //! single-player game's frames (deck/even-presents; `desktop::present`).
 //! Each TIMES is a `gbaa-desktop --headless --frame-times` file; each
 //! frame's cost is scaled by every `--scale` given (1 if none: e.g. 0.7
-//! for a recompiled build, 2.2 for the Deck). For each, paced by the sound
+//! for a recompiled build, 2.2 for the Deck: an estimate from its
+//! 2-2.5x quack's cost, not measured there). For each, paced by the sound
 //! and by the muted clock, prints a minute's doubled, skipped and late
 //! frames and the display lag for frames handed over when done, 8 ms into
 //! their turn (netplay's) and after the slowest recent frame (the

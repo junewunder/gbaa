@@ -331,11 +331,14 @@ mod tests {
             first <= Duration::from_micros(MARGIN_US as u64),
             "{first:?}"
         );
+        let start = std::time::Instant::now();
         h.started();
         h.before_show();
-        // The 3 ms frame's cost and the margin, less what this one took.
+        // Held until the 3 ms frame's cost (and the margin) has passed
+        // since its start, however long this one took to get there.
+        let held_until = start.elapsed();
         let second = h.slept - first;
-        assert!(second >= Duration::from_millis(3), "{second:?}");
+        assert!(held_until >= Duration::from_millis(3), "{held_until:?}");
         h.reset();
         h.before_show();
         assert_eq!(h.slept, first + second);

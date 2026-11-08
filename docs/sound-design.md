@@ -624,8 +624,9 @@ a frame takes nearly all of it off. A fixed 8 ms costs up to 6 ms of
 display lag on a fast game, so the window holds a frame instead until
 the slowest of the last 60 frames would have finished, plus 0.5 ms, at
 most 8 ms (`present::Hold`, in `Platform::present` and `--link`'s
-window): about 1 ms of lag. Frames slower than 8 ms (Kirby x1.5, 43
-doubled a minute) go when done, as before; there the cost's own swings
+window): about 1 ms of lag. Frames slower than 8 ms (Kirby interpreted
+x1.5, 43 doubled a minute; interpreted on the Deck, an estimated x2.2,
+is slower still) go when done, as before; there the cost's own swings
 are bigger than a hold would fix cheaply. Fast-forward, rewind and a
 pause start the hold afresh. In a real window (a `cu session`, sound to
 its silent sink, Kirby interpreted, 1800 frames, before and after

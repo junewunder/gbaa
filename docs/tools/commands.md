@@ -1476,8 +1476,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `desktop::present`): what a 60 Hz display shows of a single-player
   game's frames. TIMES are `gbaa-desktop --headless --frame-times` files
   (take the least of two runs per frame on a busy machine); each
-  `--scale` multiplies the costs (0.7 for a recompiled build, 1.5 for
-  the Deck's). Prints a minute's doubled, skipped and late frames and
+  `--scale` multiplies the costs (0.7 for a recompiled build, 2.2 for
+  the Deck: estimated from its 2-2.5x quack's cost, not measured there). Prints a minute's doubled, skipped and late frames and
   the display lag, sound-paced and muted, for frames handed over when
   done, 8 ms in (netplay's) and after the slowest recent frame (the
   window's). Numbers: `docs/sound-design.md`, "When a frame goes to the
