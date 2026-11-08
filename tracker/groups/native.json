@@ -941,15 +941,24 @@
       "detail": "Indirect jumps that discovery leaves unresolved are hard holes for a native build, though only a speed cost in the play build (which is why {unit:discovery/jt-modern-misses} was dropped: it profiled only the play build's fallback time). Measured 2026-11-06 with gbaa-holes: Emerald Imperium (modern GCC) 71 unresolved jumps of 750, 88 hard holes; Emerald Rogue 46; Minish Cap 23; Emerald (agbcc) 9. First add Imperium to holes/corpus.toml (name imperium, ROM 'Emerald Imperium.gba'). Then sort Imperium's and Rogue's unresolved jumps by kind (switch tables with a narrowed index, the bound on a zero-extended copy, which needs backward refinement; the conservative frame rule; jumps through a register that are not tables) with counts, in docs/research/native-holes.md, and fix the largest kinds in analysis. Done when: Imperium is in the corpus; just holes-all --against a run on main shows unresolved jumps falling on imperium and emerald-rogue, every game's hard count no higher, and the sorted counts quoted; jt-score's modern-GCC bar raised to the measured value (it must not fall from 584/617, agbcc stays 676/676, 0 wrong targets); just check passes.",
       "check": "independent",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "05517a38",
-        "session": "05517a38-fef4-40a0-9a05-70ab7278ccd1",
-        "host": "quack",
-        "pid": 3349268,
-        "start": "14822772",
-        "at": "2026-11-08T16:54:19Z",
+        "checker": "verifier-7c3e",
+        "at": "2026-11-08T17:41:26Z",
+        "evidence": "Verifier verifier-7c3e: imperium in holes/corpus.toml; holes-all --against a main run (f6b507e, same corpus): imperium jumps 71->27 hard 79->35, emerald-rogue jumps 46->20 hard 51->25, warioware/moonbeam/emerald down, no game's hard up. By-kind counts in docs/research/native-holes.md (sums check). jt-score run: agbcc 676/676, modern 610/617 (bar 610, from 584), 0 wrong, 4 hand-checked subsets. Owner-accepted +1 load_sp bars set; just check passes at ffa16e0 after merging main.",
         "branch": "unit/native/modern-gcc-jumps",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-08T17:41:26Z",
+          "by": "05517a38",
+          "host": "quack",
+          "pid": 3349268,
+          "start": "14822772",
+          "beats": true,
+          "session": "05517a38-fef4-40a0-9a05-70ab7278ccd1",
+          "lane": "quack/2"
+        },
+        "pushed": true
       },
       "notes": [
         {
@@ -1201,6 +1210,13 @@
       "id": "native/fnref-unknown-addrs",
       "title": "Function flow: loads through unknown addresses",
       "detail": "docs/native-stage-b.md piece 3. Measured on {unit:native/fnref-context}'s branch (commit e81168f; it holds the object split and call-site context): fn_words_not_proven unmoved by either. ~640 of affine's load sites (spike 644) have an address that may be unknown (Val::unk), and each reads the pile and every RAM cell (Run::load_at's anywhere arm), so e.g. the IRQ vector word's f_03000000 is in nearly every hole. Not the cause (tried, no change): naming the allocator, dropping the pile from constant-address loads, dropping the I/O unk flag, NUMS 8->256. A seen source: main's inlined free-list walk at 0x080001a8 (affine) loads GLOBAL_ALLOC fields holding allocator-made pointers. Find where the unknown comes from (GBAA_FNREF_TRACE; print each anywhere load) and fix the first big source. Done when: fn_words_not_proven falls on every agb program, bars lowered, a unit test, just lift-check and just check pass.",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/ref-heap-static-arrays",
+      "title": "Ref<T> objects in static arrays fit the packed layout",
+      "detail": "Found by {unit:native/lift-bios-calls}: heap.rs makes an object where a RAM base meets an unknown index, so an element of a static array (agb/native-bios-calls 4ee88ac's OUT.regs[k], 16 bytes at 0x020000b8) prints as g.at(Ref::<H_..>). The same words are also constant-address globals, which --layout packed places apart (in the lifter's order), so Ram::span fails and the packed build panics: 'pointer 0x020000b8 to 16 bytes isn't in RAM in one piece'. The guest layout passes. Repro: build agb/native-bios-calls at 4ee88ac (its main loop colours from o.regs.iter()) and run just lift-check --only native-bios-calls. The program now colours from a returned copy to avoid it; any game indexing a static array its code also touches by constant address hits it. Fix in the lifter (keep such globals contiguous in packed, or leave objects whose base is a global's region as bytes). Done when: the 4ee88ac loop shape (as a lift-check program or test) passes the packed native check; lift-check and just check pass.",
+      "check": "independent",
       "uses": ["heavy"]
     }
   ]
