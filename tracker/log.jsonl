@@ -2468,3 +2468,4 @@
 {"at":"2026-11-08T20:22:08Z","actor":"loop","tag":"7bc14b37","host":"quack","cmd":"claim","id":"multiplayer/timing-in-build-id","text":"Netplay build ID tells instant timing from exact: claimed"}
 {"at":"2026-11-08T20:25:34Z","actor":"loop","tag":"9d98d236","host":"quack","cmd":"done","id":"multiplayer/other-seat-sound","text":"Kirby netplay: should you hear the other Kirbys?: done"}
 {"at":"2026-11-08T20:30:29Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"multiplayer/other-seat-sound","text":"Kirby netplay: should you hear the other Kirbys?: on main"}
+{"at":"2026-11-08T20:35:56Z","actor":"loop","tag":"694a54e9","host":"quack","cmd":"add-unit","id":"multiplayer/wireless-adapter-local","text":"new unit: Emerald's Union Room over an emulated wireless adapter"}
