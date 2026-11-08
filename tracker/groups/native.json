@@ -1254,21 +1254,8 @@
         "checker": "verifier-a6f0d849",
         "at": "2026-11-08T22:24:11Z",
         "evidence": "Verifier reran the lift: exit 0, 5176 functions, 0 hard holes, 5 stand-ins (mods/kirby-nightmare/holes.toml), 1,552,382 lines in 428 modules, identical to the built crate. Crate built in release under just long (nmbuild): alone 80 s, rustc 6.78 GB; lift 48 s at 0.38 GB; quoted in docs/native-stage-b.md. Lifter now follows [[jump]] targets (Ctx::with_jumps, tested). just check exit 0 after merging main. Stand-ins checked against the ROM's disassembly.",
-        "branch": "unit/native/nightmare-lifts",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T22:24:11Z",
-          "by": "f66d452c",
-          "host": "quack",
-          "pid": 3349068,
-          "start": "14822266",
-          "beats": true,
-          "session": "f66d452c-fc79-480d-b54c-1a0f2849c6aa",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-08T21:26:13Z"
+        "host": "quack"
+      }
     },
     {
       "id": "native/task-coroutines",
