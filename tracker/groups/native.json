@@ -1062,17 +1062,17 @@
       "minMinutes": 150,
       "record": {
         "state": "claimed",
-        "by": "8898da77",
-        "session": "8898da77-3409-4343-b387-337a68538af5",
+        "by": "c06275d9",
+        "session": "c06275d9-b496-4ead-9bf1-0085c8ece768",
         "host": "quack",
-        "pid": 862066,
-        "start": "2504341",
-        "at": "2026-11-07T12:12:38Z",
+        "pid": 3349068,
+        "start": "14822266",
+        "at": "2026-11-08T16:23:16Z",
         "branch": "unit/native/fnref-flow-emerald",
-        "beats": true,
-        "handedBack": "2026-11-07T12:41:23Z",
+        "resumed": "8898da77",
+        "prevSession": "8898da77-3409-4343-b387-337a68538af5",
         "pushed": true,
-        "ended": "2026-11-07T12:41:51Z"
+        "beats": true
       },
       "notes": [
         {
