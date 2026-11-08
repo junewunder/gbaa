@@ -1756,7 +1756,7 @@ fn rewound_runs() {
             rom.display(),
             out.display()
         );
-        run(&parse(&args).unwrap(), None, None).unwrap();
+        run(&parse(&args).unwrap(), None, None, &mut None).unwrap();
         let text = std::fs::read_to_string(out).unwrap();
         text.lines().map(String::from).collect::<Vec<_>>()
     };
@@ -1957,6 +1957,12 @@ fn netplay_options() {
     assert_eq!((o.role, o.delay), (Some(room::Role::Host), Some(5)));
     let o = parse("g.gba --headless --server s --host --players 4").unwrap();
     assert_eq!(o.players, Some(4));
+    // A seat may start from a state, as a window's game goes on into its
+    // session (multiplayer/join-without-restart); --state-out stays out.
+    let o = parse("g.gba --headless --server s --join abcdef --state p2.state").unwrap();
+    assert_eq!(o.state.as_deref(), Some(Path::new("p2.state")));
+    let e = parse("g.gba --headless --server s --host --state-out x").unwrap_err();
+    assert!(e.contains("--state-out"), "{e}");
     for (args, why) in [
         ("--server s --host --players 5", "--players"),
         ("--server s --host --players 1", "--players"),
