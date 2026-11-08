@@ -1017,6 +1017,42 @@
       "at": "2026-11-07T04:31:07Z",
       "scope": ["*"],
       "replaces": "d/headless-lane-ssh-onto-your"
+    },
+    {
+      "id": "d/land-indirect-call-callee-sets",
+      "title": "Land indirect-call callee sets before Emerald is measured: Land it now",
+      "why": "The lift and summaries work merges today; the Emerald numbers go in the design doc later, from the measurement unit once the flow fits on Emerald",
+      "by": "owner",
+      "at": "2026-11-07T15:08:18Z",
+      "question": "q/land-indirect-call-callee-sets",
+      "via": "ed09cc1f"
+    },
+    {
+      "id": "d/land-bios-calls-unit-emerald",
+      "title": "Land the BIOS-calls unit with Emerald's runaway compared later: Keep all eight",
+      "why": "The runaway fix is on main now (b565bece): merge main, re-compare Emerald, land.",
+      "by": "owner",
+      "at": "2026-11-07T15:08:20Z",
+      "question": "q/land-bios-calls-unit-emerald",
+      "via": "ed09cc1f"
+    },
+    {
+      "id": "d/may-load-sp-sp-accesses",
+      "title": "May load_sp and sp_accesses_escaping_slot rise by 1 for a better frame rule: Accept the +1",
+      "why": "load_sp and sp_accesses_escaping_slot bars go up by 1 in those four programs, as one access moved out of computed_unknown; the unit lands with them",
+      "by": "owner",
+      "at": "2026-11-07T15:08:22Z",
+      "question": "q/may-load-sp-sp-accesses",
+      "via": "ed09cc1f"
+    },
+    {
+      "id": "d/may-ref-unexplained-rise-for-true-data",
+      "title": "May two lift bars rise because a false function start is gone: Accept the measured values",
+      "why": "the two bars are set to what the lift measures now on the seven agb programs; this unit is checked and lands; a new unit bounds that ROM read by the table, not the next code, and lowers them again",
+      "by": "owner",
+      "at": "2026-11-07T15:08:24Z",
+      "question": "q/may-ref-unexplained-rise-for-true-data",
+      "via": "ed09cc1f"
     }
   ]
 }

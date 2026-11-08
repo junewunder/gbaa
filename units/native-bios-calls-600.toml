@@ -7,10 +7,12 @@ rom = "$GBAA_DATA/agb/native-bios-calls.gba"
 [[checkpoint]]
 name = "native-bios-calls-600"
 frame = 600
-hash = "76987cdfac2acb3e"
-# Our interpreter at --timing exact and --timing native (2026-11-07).
+hash = "7d3db3b8854e494a"
+mgba_hash = "e5c3533e9bf7cdeb"
+mgba_why = "its HLE CpuFastSet leaves r2 as given where the play build leaves r1 + count * 4 (rows 3, 4, 12), and its MultiBoot leaves r0 as given where the play build returns 1, GBATEK's failure (row 11)"
+# Our interpreter at --timing exact and --timing native (2026-11-08, after the colour loop moved off `o.regs`).
 # Known mGBA mismatch: mGBA 0.10.5 (`mgba-dump ROM --frames 600 --hash`)
-# draws 044e17b1f64c1e53, rows 3, 4, 11 and 12 only. Its HLE CpuFastSet
+# draws e5c3533e9bf7cdeb, rows 3, 4, 11 and 12 only. Its HLE CpuFastSet
 # leaves r2 as given, where the play build (runtime::bios::decomp) leaves
 # r1 + count * 4 (rows 3, 4, 12); its MultiBoot leaves r0 as given, where
 # the play build returns 1, GBATEK's failure (row 11). Every other row, the

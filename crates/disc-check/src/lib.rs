@@ -462,8 +462,13 @@ pub fn discovery_report(d: &analysis::discovery::Discovery) -> String {
     .unwrap();
     writeln!(
         out,
-        "  pointer scan: {} batches, {} candidates, {} valid, {} taken, {} dropped (capped)",
-        d.scan.batches, d.scan.candidates, d.scan.valid, d.scan.accepted, d.dropped
+        "  pointer scan: {} batches, {} candidates, {} valid, {} taken, {} dropped (capped), {} dropped (undefined)",
+        d.scan.batches,
+        d.scan.candidates,
+        d.scan.valid,
+        d.scan.accepted,
+        d.dropped,
+        d.undefined
     )
     .unwrap();
     for &(src, dst, n) in &d.copies {
