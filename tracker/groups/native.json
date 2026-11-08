@@ -1317,6 +1317,13 @@
       "check": "independent",
       "needs": ["native/lift-save-memory"],
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-bios-region",
+      "title": "Lifted loads from the BIOS read the play build's latch",
+      "detail": "docs/native-stage-b.md, 'The first game': m4a's SoundInit starts an immediate DMA1 with its addresses 0, reading the BIOS (the play build gives Bus::bios_latch: after a call, in and after an IRQ, after boot) and writing to 0 (ignored). The prelude panics on loads and stores below 0x02000000. Keep the latch in the lift as the play build's BIOS moves it (its BIOS calls and IRQ entry), loads give it, stores go nowhere. Done when: a lift-check program reading the BIOS region passes, and just check passes.",
+      "check": "independent",
+      "uses": ["heavy"]
     }
   ]
 }
