@@ -5,8 +5,9 @@
 //! and show their console ([`crate::console`], drawn in the same egui
 //! pass), host or join a netplay room (its Netplay page), close it, or
 //! quit. In netplay it reports how the session has gone ([`Menu::report`])
-//! at the screen's foot. It opens on a pad with Start and Select held
-//! together, or F10 on the keyboard.
+//! at the screen's foot, under the Main page, which fits above it. It
+//! opens on a pad with Start and Select held together, or F10 on the
+//! keyboard.
 //!
 //! With it shut, the volume keys ([`SoundKey`]) step the volume and mute
 //! it as its rows do, and a toast shows the level for [`TOAST_TIME`].
@@ -1040,6 +1041,24 @@ impl Menu {
         ui.painter()
             .rect_filled(screen, 0.0, egui::Color32::from_black_alpha(140));
         let page = self.page;
+        // In netplay the Main page has the session's report at the
+        // screen's foot: it's laid out first, and the box fits above it,
+        // so it never covers the bottom rows.
+        let mut room = screen;
+        if page == Page::Main && !self.report.is_empty() {
+            let report = egui::Area::new(egui::Id::unique("report"))
+                .anchor(egui::Align2::CENTER_BOTTOM, [0.0, -EDGE])
+                .interactable(false)
+                .show(ui.ctx(), |ui| {
+                    egui::Frame::popup(ui.style()).show(ui, |ui| {
+                        ui.set_max_width(screen.width() - 40.0);
+                        for l in &self.report {
+                            ui.label(egui::RichText::new(l).small());
+                        }
+                    });
+                });
+            room.max.y = report.response.rect.top().max(screen.top() + ROW_HEIGHT);
+        }
         // Every page is the same box, so turning one doesn't move or
         // resize it: the title stays put, the hints stay at the foot.
         let frame = egui::Frame::window(ui.style()).inner_margin(MARGIN);
@@ -1051,8 +1070,8 @@ impl Menu {
             PAGE_WIDTH
         };
         let size = egui::vec2(
-            width.min(screen.width() - edge),
-            PAGE_HEIGHT.min(screen.height() - edge),
+            width.min(room.width() - edge),
+            PAGE_HEIGHT.min(room.height() - edge),
         )
         .max(egui::vec2(ROW_HEIGHT, ROW_HEIGHT));
         egui::Window::new("menu")
@@ -1060,7 +1079,7 @@ impl Menu {
             .collapsible(false)
             .resizable(false)
             .frame(frame)
-            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .anchor(egui::Align2::CENTER_CENTER, room.center() - screen.center())
             .show(ui.ctx(), |ui| {
                 ui.set_width(size.x);
                 ui.set_height(size.y);
@@ -1082,19 +1101,6 @@ impl Menu {
                 }
                 self.shown = rows.shown;
             });
-        if page == Page::Main && !self.report.is_empty() {
-            egui::Area::new(egui::Id::unique("report"))
-                .anchor(egui::Align2::CENTER_BOTTOM, [0.0, -8.0])
-                .interactable(false)
-                .show(ui.ctx(), |ui| {
-                    egui::Frame::popup(ui.style()).show(ui, |ui| {
-                        ui.set_max_width(screen.width() - 40.0);
-                        for l in &self.report {
-                            ui.label(egui::RichText::new(l).small());
-                        }
-                    });
-                });
-        }
     }
 
     fn main_page(&mut self, ui: &mut egui::Ui, rows: &mut Rows) {
@@ -2532,6 +2538,17 @@ mod tests {
         assert!(!texts(&mut m).iter().any(|t| t == line));
         m.nav(Nav::Toggle);
         assert!(texts(&mut m).iter().any(|t| t == line));
+        // Below the box, not over its bottom rows (multiplayer/overlay-
+        // hides-menu: on the Deck it covered them), even when it's long.
+        m.report = vec![line.repeat(4); 4];
+        texts(&mut m);
+        let rect = |id| m.ctx.memory(|mem| mem.area_rect(id)).unwrap();
+        let menu = rect(egui::Id::unique(Some("menu")));
+        let report = rect(egui::Id::unique("report"));
+        assert!(
+            menu.bottom() <= report.top() && menu.top() >= 0.0,
+            "{menu:?} over {report:?}"
+        );
         // Not over the remap screen.
         go(
             &mut m,
