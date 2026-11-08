@@ -26,7 +26,13 @@
 //!   bound to one typed global (`super::globals::Obj`) is `ram_object`
 //!   instead (no bar: it should rise), and `pointer_unexplained` counts
 //!   the computed RAM accesses that aren't (native/ref-in-object: they
-//!   reach several globals, or one at a width not its element's).
+//!   reach several globals, or one at a width not its element's). One
+//!   the value sets don't bound but the heap's run types
+//!   (`super::heap`, native/ref-heap) is a field through a `Ref<T>`,
+//!   counted in `ref_accesses` (no bar: it should rise) with `ref_types`
+//!   the types; `ref_unexplained` counts those through an object's
+//!   pointer the types don't explain (left as bytes, in
+//!   `computed_unknown` too).
 //!
 //! The sp-relative ones are split again by whether the stack slot they
 //! reach escapes (`super::frame`): `sp_accesses_local_slot` and
@@ -76,6 +82,9 @@ pub enum Where {
     /// Computed, into one typed global (`super::globals::Obj`): not a
     /// byte access.
     Object,
+    /// Computed, a field of a heap object's type through its `Ref<T>`
+    /// (`super::heap`): not a byte access.
+    Ref,
     /// sp-relative.
     Sp,
     /// Computed, bounded to this region.
@@ -196,6 +205,8 @@ pub const UNBARRED: &[&str] = &[
     "fn_words_proven",
     "load_ram_object",
     "store_ram_object",
+    "ref_accesses",
+    "ref_types",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each

@@ -29,9 +29,10 @@
 //! the gate the stage-A lifter's parameter lists and return values rest
 //! on.
 
-use super::{State, Walk, prove, walk};
+use super::{State, V, Walk, prove, walk};
 use crate::func::{Ctx, Func};
 use crate::names::SourceMap;
+use analysis::ir::{Inst, Op};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 /// The registers a summary tracks, by slot: r0–r3 and r12.
@@ -145,6 +146,14 @@ pub struct Summary {
     pub forwards: BTreeMap<u8, BTreeSet<u32>>,
     /// r4–r11 and sp proven kept ([`super::prove`]).
     pub keeps: bool,
+    /// The registers of r4–r11 (bit `n` for rN) some return may leave
+    /// other than they came: hand-written code's scratch registers. The
+    /// lift keeps its callers' r4–r11 in their own locals, so that is
+    /// sound only where no caller reads one before writing it (a hole at
+    /// the reader, as is one of the function's own reading one of r4–r11
+    /// as it came, other than to save it), and nothing calls it through a
+    /// pointer, where callers aren't known.
+    pub changes: u16,
     /// Why the summary may be incomplete: what the proof fails on, and
     /// each read of a register a callee (`Some`) or a BIOS or indirect
     /// call (`None`) left undefined, by the reading instruction.
@@ -262,6 +271,11 @@ pub(super) struct Sum<'a> {
     sites: BTreeMap<u32, Option<u32>>,
     /// The functions whose summaries this run used.
     refs: BTreeSet<u32>,
+    /// r4–r11 not as they came, over every return ([`Summary::changes`]).
+    changes: u16,
+    /// Reads of r4–r11 as they came, other than to save them: (the
+    /// instruction, the register).
+    entry_reads: BTreeSet<(u32, u8)>,
 }
 
 impl<'a> Sum<'a> {
@@ -278,6 +292,8 @@ impl<'a> Sum<'a> {
             stopped: false,
             sites: BTreeMap::new(),
             refs: BTreeSet::new(),
+            changes: 0,
+            entry_reads: BTreeSet::new(),
         }
     }
 
@@ -336,6 +352,14 @@ impl<'a> Sum<'a> {
 
     /// Register `r` read in state `s`, for `cause`.
     pub(super) fn read(&mut self, s: &State, r: usize, cause: Cause) {
+        if let Some(&c) = s.chg.get(r.wrapping_sub(4))
+            && c != 0
+        {
+            self.holes.insert(format!(
+                "0x{:08x}: reads r4-r11 a callee changed: r{r}, by 0x{c:08x}",
+                cause.at()
+            ));
+        }
         let Some(i) = slot(r) else { return };
         let o = &s.org[i];
         if o.entry && r < 4 {
@@ -397,6 +421,13 @@ impl<'a> Sum<'a> {
             }
         }
         self.sites.insert(at, callee);
+        let changes = callee
+            .and_then(|c| self.sums.get(&c))
+            .map_or(0, |c| c.changes);
+        for r in (4..12).filter(|r| changes & 1 << r != 0) {
+            s.regs[r] = V::Other;
+            s.chg[r - 4] = callee.expect("a direct call");
+        }
         for (o, x) in s.org.iter_mut().zip(exit) {
             let mut n = if x.entry { o.clone() } else { Org::default() };
             if x.def || x.clob {
@@ -423,8 +454,44 @@ impl<'a> Sum<'a> {
         }
     }
 
+    /// Inst `i` (of instruction `at`), with the values up to its own: a use of
+    /// one of r4–r11 as it came, other than to copy it to a register or
+    /// store it on the stack (saving it). In a function that changes
+    /// r4–r11 (one with a convention of its own: hand-written code) it is
+    /// a register parameter the lift doesn't pass, a hard hole. In one
+    /// that keeps them it is most often compiled C's local it never set
+    /// (agbcc builds a word byte by byte in a register, `ands r4, r0;
+    /// orrs r4, r1`, every bit of the old value masked away), but it can
+    /// be a register parameter too (TMC's `sub_080086D8` takes r8 and r11
+    /// from its hand-written callers): soft, as main never looked, until
+    /// the run tells the masked bits apart (`native/entry-read-masking`).
+    pub(super) fn entry_uses(&mut self, insts: &[Inst], i: usize, at: u32, vals: &[V]) {
+        let op = insts[i].op;
+        // `vals[i]` is the inst's own value: an op that passes its
+        // operand on (a select of it, a shift by 0) is the copy's use.
+        let saves = |v: analysis::ir::ValueId| match op {
+            Op::Store { addr, value, .. } => v == value && matches!(vals[addr.index()], V::Sp(_)),
+            Op::SetReg(_, x) => v == x,
+            // The builder's merge of a register written under a guard.
+            Op::Select { a, b, .. } => v == a || v == b,
+            _ => vals[i] == vals[v.index()],
+        };
+        for v in op.operands().into_iter().chain(insts[i].guard) {
+            if let V::Entry(r @ 4..=11) = vals[v.index()]
+                && !saves(v)
+            {
+                self.entry_reads.insert((at, r));
+            }
+        }
+    }
+
     /// A return to the caller with `s`.
     pub(super) fn ret(&mut self, s: &State) {
+        for r in 4..12 {
+            if s.regs[r] != V::Entry(r as u8) {
+                self.changes |= 1 << r;
+            }
+        }
         self.exit = Some(match self.exit.take() {
             Some(e) => e.iter().zip(&s.org).map(|(a, b)| a.join(b)).collect(),
             None => s.org.clone(),
@@ -538,7 +605,14 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
             Some(Sum::new(&sums, assume, sets)),
         )
         .expect("a summary's run records what the proof fails on");
-        let sum = w.sum.expect("a summary's run");
+        let mut sum = w.sum.expect("a summary's run");
+        for &(at, r) in &sum.entry_reads {
+            sum.holes.insert(if sum.changes != 0 {
+                format!("0x{at:08x}: reads r4-r11 at entry: r{r}")
+            } else {
+                format!("0x{at:08x}: reads r4-r11 at entry and keeps them: r{r}")
+            });
+        }
         let exit = sum.exit_bits();
         let params = sum.params.keys().fold(0, |m, &r| m | 1 << r);
         let new = Summary {
@@ -553,6 +627,7 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
             forwarded_after: 0,
             forwards: sum.forwards(),
             keeps: proof.kept.contains(&k),
+            changes: sum.changes,
             holes: sum.holes.clone(),
             stopped: sum.stopped,
             callees: sum.refs.clone(),
@@ -569,8 +644,10 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
         }
         used.insert(k, sum.used);
         let old = &sums[&k];
-        let grew =
-            old.params != new.params || old.exit != new.exit || Sum::lost(old) != Sum::lost(&new);
+        let grew = old.params != new.params
+            || old.exit != new.exit
+            || old.changes != new.changes
+            || Sum::lost(old) != Sum::lost(&new);
         sums.insert(k, new);
         if grew {
             for &c in callers.get(&k).into_iter().flatten() {
@@ -624,6 +701,33 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
     for s in sums.values_mut() {
         let read = s.read_after | s.passed_after | s.forwarded_after;
         s.results = s.defines() & read & 0xf;
+    }
+    // A function that changes r4–r11 and may be called through a pointer:
+    // its callers aren't all known, so none can be trusted not to read
+    // them. A pointer is the key as a word anywhere in the ROM.
+    let words: BTreeSet<u32> = sums
+        .iter()
+        .filter(|(_, s)| s.changes != 0)
+        .map(|(&k, _)| k)
+        .collect();
+    if !words.is_empty() {
+        // Code not in the ROM (a RAM copy's context): any pointer may.
+        let found: BTreeSet<u32> = if ctx.base == analysis::program::ROM_BASE {
+            ctx.rom
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|&w| u32::from_le_bytes(w))
+                .filter(|w| words.contains(w))
+                .collect()
+        } else {
+            words
+        };
+        for k in found {
+            sums.get_mut(&k).expect("a summary").holes.insert(format!(
+                "0x{k:08x}: changes r4-r11 and may be called through a pointer"
+            ));
+        }
     }
     for (k, why) in &proof.why {
         if let Some(s) = sums.get_mut(k) {
