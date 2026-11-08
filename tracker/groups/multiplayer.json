@@ -849,15 +849,22 @@
       "title": "Emerald's Union Room over an emulated wireless adapter",
       "detail": "From the link-cable survey (docs/research/multiplayer.md, 'The cable over the internet'): the wireless adapter is the one link gap that matters for june's games (Emerald's Union Room, wireless trades, Berry Crush). Emulate the adapter on the link hub, both consoles in one process first: normal 32-bit mode on runtime::link, librfu's STWI commands (afska's gba-link-connection docs), and the adapter's radio between machines. Check: two Emeralds from alice.sav and bob.sav meet in the Union Room and trade, identically twice; just check. Networking it (each player runs only their own console, the server as the radio) is later work.",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "954f0eb1",
-        "session": "954f0eb1-8b50-45a5-9f0e-1a0408fed293",
-        "host": "quack",
-        "pid": 3349722,
-        "start": "14823514",
-        "at": "2026-11-08T20:38:54Z",
+        "at": "2026-11-08T21:50:22Z",
+        "evidence": "just emerald-wireless (runtime::link::rfu, crates/emerald-save/src/bin/emerald-wireless.rs) after merging main at 51b5017: alice.sav and bob.sav both in Oldale's Union Room (frames 3529, 3479); BOB registers Torchic at the trading board, ALICE offers Mudkip, BOB accepts, trade and save run; first Pokémon swapped (1a2b3c4d <-> 9a8b7c6d); second run identical (states 0ddcc166e736c0ae 566c499d6b8d9e67, 228071 transfers in 10500 frames). just check passes. New unit tests cover the NINTENDO handshake against afska's log, a command and a wait event on the port, host/child packets.",
         "branch": "unit/multiplayer/wireless-adapter-local",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-08T21:50:22Z",
+          "by": "954f0eb1",
+          "host": "quack",
+          "pid": 3349722,
+          "start": "14823514",
+          "beats": true,
+          "session": "954f0eb1-8b50-45a5-9f0e-1a0408fed293",
+          "lane": "quack/3"
+        }
       },
       "round": "2026-11-08T20:38:54Z"
     },
