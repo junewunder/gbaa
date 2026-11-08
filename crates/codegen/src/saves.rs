@@ -23,7 +23,12 @@
 //!   undefined instruction, `SoftReset` or `HardReset`);
 //! - runs from IWRAM, where its code may change.
 //!
-//! Two things it assumes, which every function compiled from C relies on:
+//! A conditional instruction's writes are kept apart per condition, so a
+//! pop and return under one condition (libgcc's `ldmhi sp!, {r4, r5, lr};
+//! bxhi lr`) returns with what it popped ([`Walk::block`]).
+//!
+//! Three things it assumes, which every function compiled from C relies on:
+//! the entry sp is word-aligned;
 //! a store through an address it can't place (not the entry sp plus a
 //! constant), or above the entry sp, doesn't hit the slots a prologue
 //! (this function's or a caller's) saved registers in, and
@@ -32,14 +37,14 @@
 //! reference on recorded states.
 
 use crate::func::{Ctx, ExitInfo, Func, GBlock, Plan, exits, successors};
-use analysis::ir::{BinOp, Exit, Op, ValueId};
+use analysis::ir::{BinOp, Exit, Inst, Op, ValueId};
 use armv4t::sem::Width;
 use std::collections::{BTreeMap, BTreeSet};
 
 mod summary;
 pub use summary::{
-    Assume, Bits, Category, Cause, Comparison, Summaries, Summary, Verdict, compare, proto_regs,
-    summarize, summarize_with,
+    Assume, Bits, Category, Cause, Comparison, Sets, Summaries, Summary, Verdict, compare,
+    proto_regs, summarize, summarize_sets, summarize_with,
 };
 use summary::{Org, Sum};
 
@@ -71,6 +76,9 @@ struct State {
     slots: BTreeMap<i32, V>,
     /// Where r0-r3 and r12 came from ([`summary`]); empty in the proof.
     org: Vec<Org>,
+    /// For each of r4–r11, a callee that may have changed it
+    /// ([`Summary::changes`]), or 0; all 0 in the proof.
+    chg: [u32; 8],
 }
 
 impl State {
@@ -86,6 +94,7 @@ impl State {
             regs,
             slots: BTreeMap::new(),
             org: Vec::new(),
+            chg: [0; 8],
         }
     }
 
@@ -106,7 +115,18 @@ impl State {
             .zip(&o.org)
             .map(|(a, b)| a.join(b))
             .collect();
-        State { regs, slots, org }
+        State {
+            regs,
+            slots,
+            org,
+            chg: std::array::from_fn(|i| {
+                if self.chg[i] != 0 {
+                    self.chg[i]
+                } else {
+                    o.chg[i]
+                }
+            }),
+        }
     }
 
     /// r4–r11 and sp as they came.
@@ -114,6 +134,31 @@ impl State {
         (0..16)
             .filter(|i| KEPT & 1 << i != 0)
             .all(|i| self.regs[i] == if i == 13 { V::Sp(0) } else { V::Entry(i as u8) })
+    }
+
+    /// The registers of [`KEPT`] not as they came, and what each holds.
+    fn changed(&self) -> String {
+        let mut out = Vec::new();
+        for i in (0..16).filter(|i| KEPT & 1 << i != 0) {
+            let want = if i == 13 { V::Sp(0) } else { V::Entry(i as u8) };
+            let v = self.regs[i];
+            if v == want {
+                continue;
+            }
+            let held = match v {
+                V::Entry(n) => format!("r{n}'s entry value"),
+                V::Sp(k) => format!("entry sp{k:+}"),
+                V::Const(c) => format!("constant {c:#x}"),
+                V::Other => "unknown".into(),
+            };
+            let name = if i == 13 {
+                "sp".into()
+            } else {
+                format!("r{i}")
+            };
+            out.push(format!("{name} = {held}"));
+        }
+        out.join(", ")
     }
 
     /// After a call into code that keeps r4–r11 and sp: the rest are
@@ -198,7 +243,7 @@ fn walk<'a>(
         funcs,
         blocks: f.blocks.iter().map(|(&k, b)| (k, b)).collect(),
         ins: BTreeMap::from([(f.entry, entry)]),
-        work: vec![f.entry],
+        work: BTreeSet::from([f.entry]),
         callees: BTreeSet::new(),
         sum,
     };
@@ -208,7 +253,7 @@ fn walk<'a>(
     // Each block's in-state only loses facts (a summary's origins only
     // grow), so this ends; the cap is a guard.
     let mut steps = 0;
-    while let Some(k) = w.work.pop() {
+    while let Some(k) = w.work.pop_first() {
         steps += 1;
         if steps > 64 * w.blocks.len() + 64 {
             w.stop("didn't settle".into())?;
@@ -229,7 +274,12 @@ struct Walk<'a> {
     blocks: BTreeMap<u32, &'a GBlock>,
     /// Each block's state at its start, so far.
     ins: BTreeMap<u32, State>,
-    work: Vec<u32>,
+    /// The blocks to run again, lowest address first: a loop's head
+    /// (behind its exit, as compiled code lays loops out) settles before
+    /// the code after the loop runs, so a value the loop's first pass had
+    /// (a counter's first constant) doesn't reach past it and lose stack
+    /// slots a store at it seemed to hit.
+    work: BTreeSet<u32>,
     callees: BTreeSet<u32>,
     /// A summary's run: its callees' summaries so far and what it finds.
     sum: Option<Sum<'a>>,
@@ -291,38 +341,56 @@ impl Walk<'_> {
         };
         if self.ins.get(&to) != Some(&next) {
             self.ins.insert(to, next);
-            self.work.push(to);
+            self.work.insert(to);
         }
         Ok(())
     }
 
     /// Run block `k` from its in-state.
+    ///
+    /// Besides the block's state, which joins each guarded write with what
+    /// was there, the run keeps two states per guard seen (`cond`): what
+    /// holds where that guard is true, its writes made outright, and where
+    /// it is false, its writes not made. A guarded exit leaves with its
+    /// guard's true state and the block goes on in its false one, so
+    /// `ldmhi sp!, {r4, r5, lr}; bxhi lr` returns with r4, r5 and sp
+    /// restored, not "maybe", and the code after it still has its frame.
     fn block(&mut self, k: u32) -> Result<(), String> {
         let gb = self.blocks[&k];
+        let insts = &gb.block.insts;
         let mut s = self.ins[&k].clone();
-        let mut vals = vec![V::Other; gb.block.insts.len()];
+        let mut cond: Vec<(ValueId, State, State)> = Vec::new();
+        // The guards known false here (after an exit under each).
+        let mut falses: Vec<ValueId> = Vec::new();
+        let mut vals = vec![V::Other; insts.len()];
         let xs = exits(self.ctx, gb);
         // The values something uses: a read whose value nothing uses
         // reads nothing.
         let used: BTreeSet<ValueId> = match self.sum {
-            Some(_) => gb
-                .block
-                .insts
+            Some(_) => insts
                 .iter()
                 .flat_map(|i| i.op.operands().into_iter().chain(i.guard))
                 .collect(),
             None => BTreeSet::new(),
         };
         let mut at = gb.block.start;
-        for (i, inst) in gb.block.insts.iter().enumerate() {
+        for (i, inst) in insts.iter().enumerate() {
             let val = |v: ValueId| vals[v.index()];
-            let guarded = inst.guard.is_some();
+            let guard = inst.guard;
+            if let Some(g) = guard
+                && matches!(inst.op, Op::Store { .. } | Op::SetReg(..))
+                && !cond.iter().any(|(c, ..)| same(insts, *c, g))
+            {
+                cond.push((g, s.clone(), s.clone()));
+            }
             let v = match inst.op {
                 Op::Insn(a) => {
                     at = a;
                     V::Other
                 }
-                Op::Const(c) | Op::Pool(c) => V::Const(c),
+                op if pure(insts, op, &vals, &falses).is_some() => {
+                    pure(insts, op, &vals, &falses).expect("a pure value")
+                }
                 Op::GetReg(r) => {
                     if let Some(sum) = &mut self.sum
                         && used.contains(&ValueId(i as u32))
@@ -331,14 +399,6 @@ impl Walk<'_> {
                     }
                     s.regs[r.index()]
                 }
-                Op::Bit(b) => V::Const(b as u32),
-                Op::Bin(op, a, b) => bin(op, val(a), val(b)),
-                // `sub sp, #4` is `sp + !4 + 1`.
-                Op::Adc { a, b, c } => {
-                    let ab = bin(BinOp::Add, val(a), val(b));
-                    bin(BinOp::Add, ab, val(c))
-                }
-                Op::Select { a, b, .. } => val(a).join(val(b)),
                 Op::Load {
                     width: Width::Word,
                     addr,
@@ -347,33 +407,36 @@ impl Walk<'_> {
                     _ => V::Other,
                 },
                 Op::Store { width, addr, value } => {
-                    if let V::Sp(o) = val(addr) {
-                        let n = match width {
-                            Width::Byte => 1,
-                            Width::Half => 2,
-                            Width::Word => 4,
-                        };
-                        let old = s.slots.get(&o).copied();
-                        s.slots.retain(|&k, _| k + 4 <= o || o + n <= k);
-                        let new = match (n, guarded, old) {
-                            (4, false, _) => Some(val(value)),
-                            (4, true, Some(old)) => Some(old.join(val(value))),
-                            _ => None,
-                        };
-                        s.slots.extend(new.map(|v| (o, v)));
+                    let (addr, value) = (val(addr), val(value));
+                    store(&mut s, width, addr, value, guard.is_some());
+                    for (c, yes, no) in &mut cond {
+                        let this = guard.is_some_and(|g| same(insts, *c, g));
+                        let maybe = guard.is_some() && !this;
+                        store(yes, width, addr, value, maybe);
+                        if !this {
+                            store(no, width, addr, value, maybe);
+                        }
                     }
                     V::Other
                 }
                 Op::SetReg(r, x) => {
-                    let r = r.index();
+                    let (r, x) = (r.index(), val(x));
+                    let guarded = guard.is_some();
                     if let Some(sum) = &self.sum {
                         sum.set(&mut s, r, guarded);
                     }
-                    s.regs[r] = if guarded {
-                        s.regs[r].join(val(x))
-                    } else {
-                        val(x)
-                    };
+                    set(&mut s, r, x, guarded);
+                    for (c, yes, no) in &mut cond {
+                        let this = guard.is_some_and(|g| same(insts, *c, g));
+                        let maybe = guarded && !this;
+                        let states = if this { vec![yes] } else { vec![yes, no] };
+                        for st in states {
+                            if let Some(sum) = &self.sum {
+                                sum.set(st, r, maybe);
+                            }
+                            set(st, r, x, maybe);
+                        }
+                    }
                     V::Other
                 }
                 Op::SetUserReg(..) | Op::SetCpsr { .. } | Op::SetSpsr { .. } => {
@@ -382,16 +445,38 @@ impl Walk<'_> {
                 }
                 Op::Exit(e) => {
                     let x = xs.iter().find(|x| x.index == i).expect("an exit's info");
-                    let t = match e {
-                        Exit::Jump(t) | Exit::JumpExchange(t) => val(t),
-                        _ => V::Other,
-                    };
-                    self.exit(x, e, t, &s)?;
+                    // Under a guard: where it holds, and the target as it
+                    // is there.
+                    let found =
+                        guard.and_then(|g| cond.iter().position(|(c, ..)| same(insts, *c, g)));
+                    match found {
+                        Some(j) => {
+                            let (g, yes, no) = cond[j].clone();
+                            let t = under(insts, g, e).map_or(V::Other, val);
+                            self.exit(x, e, t, &yes)?;
+                            // The block goes on where the guard is false,
+                            // and so do the values chosen by it.
+                            s = no;
+                            falses.push(g);
+                            for j in 0..i {
+                                if let Some(v) = pure(insts, insts[j].op, &vals, &falses) {
+                                    vals[j] = v;
+                                }
+                            }
+                        }
+                        None => {
+                            let t = jump_target(e).map_or(V::Other, val);
+                            self.exit(x, e, t, &s)?;
+                        }
+                    }
                     V::Other
                 }
                 _ => V::Other,
             };
             vals[i] = v;
+            if let Some(sum) = &mut self.sum {
+                sum.entry_uses(insts, i, at, &vals);
+            }
         }
         Ok(())
     }
@@ -444,7 +529,15 @@ impl Walk<'_> {
                     return self.stop(format!("0x{at:08x}: a jump to an unknown place"));
                 }
                 if !s.kept() {
-                    self.fail(format!("0x{at:08x}: returns with r4-r11 or sp changed"))?;
+                    let what = if s.regs[13] == V::Sp(0) {
+                        "r4-r11"
+                    } else {
+                        "sp"
+                    };
+                    self.fail(format!(
+                        "0x{at:08x}: returns with {what} changed: {}",
+                        s.changed()
+                    ))?;
                 }
                 if let Some(sum) = &mut self.sum {
                     sum.ret(s);
@@ -482,6 +575,11 @@ fn bin(op: BinOp, a: V, b: V) -> V {
             Sp(k.wrapping_add(c as i32))
         }
         (BinOp::Sub, Sp(k), Const(c)) => Sp(k.wrapping_sub(c as i32)),
+        // The entry sp is word-aligned, as the ARM procedure call standard
+        // keeps it: an address's low bits, for an `ldr`'s rotation.
+        (BinOp::And, Sp(k), Const(c)) | (BinOp::And, Const(c), Sp(k)) if c <= 3 => {
+            Const(k as u32 & c)
+        }
         // A `pop {pc}` or `ldm {.., pc}` clears the return address's low
         // bits. Returning elsewhere than lr is still safe: the caller drops
         // its reloads only when control comes back to its return site.
@@ -498,4 +596,121 @@ fn bin(op: BinOp, a: V, b: V) -> V {
         }),
         _ => Other,
     }
+}
+
+/// Exit `e`'s target, if it jumps.
+fn jump_target(e: Exit) -> Option<ValueId> {
+    match e {
+        Exit::Jump(t) | Exit::JumpExchange(t) => Some(t),
+        _ => None,
+    }
+}
+
+/// Exit `e`'s target where guard `g` holds: a select on `g` is its first
+/// arm (a register written under `g`, then a jump to it under `g`).
+fn under(insts: &[Inst], g: ValueId, e: Exit) -> Option<ValueId> {
+    let mut t = jump_target(e)?;
+    while let Op::Select { c, a, .. } = insts[t.index()].op {
+        if !same(insts, c, g) {
+            break;
+        }
+        t = a;
+    }
+    Some(t)
+}
+
+/// Whether bits `a` and `b` are the same condition: one value, or the
+/// same pure bit op of the same operands (each conditional instruction
+/// builds its condition anew from the flags).
+fn same(insts: &[Inst], a: ValueId, b: ValueId) -> bool {
+    if a == b {
+        return true;
+    }
+    let (x, y) = (&insts[a.index()], &insts[b.index()]);
+    if x.guard.is_some() || y.guard.is_some() || !x.op.is_pure_bit() || !y.op.is_pure_bit() {
+        return false;
+    }
+    let (xs, ys) = (x.op.operands(), y.op.operands());
+    if xs.len() != ys.len() || !xs.iter().zip(&ys).all(|(&p, &q)| same(insts, p, q)) {
+        return false;
+    }
+    // The ops with their operands taken out.
+    let (mut x, mut y) = (x.op, y.op);
+    for v in x.operands_mut().into_iter().chain(y.operands_mut()) {
+        *v = ValueId(0);
+    }
+    x == y
+}
+
+/// A store of `value` at `addr`, in every case or (`maybe`) only maybe.
+fn store(s: &mut State, width: Width, addr: V, value: V, maybe: bool) {
+    let V::Sp(o) = addr else { return };
+    let n = match width {
+        Width::Byte => 1,
+        Width::Half => 2,
+        Width::Word => 4,
+    };
+    let old = s.slots.get(&o).copied();
+    s.slots.retain(|&k, _| k + 4 <= o || o + n <= k);
+    let new = match (n, maybe, old) {
+        (4, false, _) => Some(value),
+        (4, true, Some(old)) => Some(old.join(value)),
+        _ => None,
+    };
+    s.slots.extend(new.map(|v| (o, v)));
+}
+
+/// Register `r` set to `x`, in every case or (`maybe`) only maybe.
+fn set(s: &mut State, r: usize, x: V, maybe: bool) {
+    s.regs[r] = if maybe { s.regs[r].join(x) } else { x };
+    if !maybe && (4..12).contains(&r) {
+        s.chg[r - 4] = 0;
+    }
+}
+
+/// The value of a pure op, from its operands' values, where each of
+/// `falses` is false (a select on one is its second arm); `None` for the
+/// rest.
+fn pure(insts: &[Inst], op: Op, vals: &[V], falses: &[ValueId]) -> Option<V> {
+    let val = |v: ValueId| vals[v.index()];
+    Some(match op {
+        Op::Const(c) | Op::Pool(c) => V::Const(c),
+        Op::Bit(b) => V::Const(b as u32),
+        Op::Bin(op, a, b) => bin(op, val(a), val(b)),
+        // `sub sp, #4` is `sp + !4 + 1`.
+        Op::Adc { a, b, c } => {
+            let ab = bin(BinOp::Add, val(a), val(b));
+            bin(BinOp::Add, ab, val(c))
+        }
+        Op::Select { c, a, b } => {
+            if falses.iter().any(|&g| same(insts, g, c)) {
+                val(b)
+            } else {
+                val(a).join(val(b))
+            }
+        }
+        // An ARM `ldr` rotates by its address's low bits, none at sp plus
+        // a multiple of 4: a shift by 0 leaves the value.
+        Op::Shift { v, amount, .. } if val(amount) == V::Const(0) => val(v),
+        op => {
+            // Any other pure op of constants: its value.
+            let consts: Option<Vec<u32>> = op
+                .operands()
+                .into_iter()
+                .map(|v| match val(v) {
+                    V::Const(c) => Some(c),
+                    _ => None,
+                })
+                .collect();
+            let consts = consts?;
+            if consts.is_empty() {
+                return None;
+            }
+            let c = |v: ValueId| match val(v) {
+                V::Const(c) => c,
+                _ => 0,
+            };
+            V::Const(op.eval_pure(c, |v| c(v) != 0)?)
+        }
+    })
 }
