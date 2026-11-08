@@ -2491,3 +2491,4 @@
 {"at":"2026-11-08T21:19:54Z","actor":"loop","tag":"a98172f6","host":"quack","cmd":"add-unit","id":"native/lift-bios-region","text":"new unit: Lifted loads from the BIOS read the play build's latch"}
 {"at":"2026-11-08T21:20:04Z","actor":"loop","tag":"a98172f6","host":"quack","cmd":"add-unit","id":"native/play-native-metroid-interp","text":"new unit: Metroid's native-timing play build strays from its interp"}
 {"at":"2026-11-08T21:20:08Z","actor":"loop","tag":"a98172f6","host":"quack","cmd":"add-unit","id":"native/check-holes-copies","text":"new unit: The native check skips the holes file's RAM code copies"}
+{"at":"2026-11-08T21:20:15Z","actor":"loop","tag":"a98172f6","host":"quack","cmd":"edit","id":"native/metroid-native-check","text":"Metroid passes the native check on a route: edited (add-needs)"}
