@@ -658,19 +658,7 @@
         "by": "aad03dc9",
         "at": "2026-11-08T19:50:20Z",
         "evidence": "Cause: per the owner's answer (decision d/covered-controls-page-your-deck, 2026-11-07), the cover on the Deck's Controls page was a custom keyboard on an un-updated Steam Deck, not gbaa; she said land the Main-page fix and close. Branch keeps the Main page laid out above the netplay report (menu.rs). Latest main merged; just check passed (exit 0) after the merge.",
-        "branch": "unit/multiplayer/overlay-hides-menu",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T19:50:20Z",
-          "by": "aad03dc9",
-          "host": "quack",
-          "pid": 3349722,
-          "start": "14823514",
-          "beats": true,
-          "session": "aad03dc9-e315-4dfb-b75f-9c89e108a88a",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -688,13 +676,7 @@
           "by": "d86c5e5f",
           "text": "main merged into branch (merge commit on top of 57fcb251), no conflicts. just check started but cut by stop time again (tests were passing). Left: just check (~10+ min, start early), then done with the cu-shot evidence."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-06T03:21:25Z",
-        "findings": "- crates/desktop/src/menu.rs:1017-1034: the fix doesn't touch the problem the card reports. The card says something covered the bottom of the Controls page, where the dead zone rows are. Those rows are the DEADZONES section in menu/controls.rs:351, shown under Page::Remap. The report box is drawn only when `page == Page::Main`. The Evidence admits this ('Controls had no report'), so the box it moved could never have covered the Controls page. Moving it is a real fix for the Main page and can stay, but the card's 'Find what it is' is still unanswered for the Controls page. The playtest clue was that tapping the screen hid the cover, which points at something outside this menu: the Steam on-screen keyboard (for example, left open after typing a room code on the Netplay page), or another Steam/gamescope overlay. Next session: find out what draws over the Controls page on the Deck while in a room. Check whether the room-code entry raises the Deck's on-screen keyboard and whether it stays up after leaving the Netplay page. Then fix that or keep the Controls page clear of it, and record the cause in the Evidence.\n- Evidence (tracker multiplayer.json:641): the card's check was a 1280x800 shot in a room with the Controls page scrolled to its last row and nothing over it. The shots were taken in a cu session on quack, which never had whatever covered the Controls page. The earlier note says 'Steam OSK not seen here'. So a clear Controls page in cu proves nothing about the bug reported from the Deck. To meet the card, the shot has to come from a setup where the cover actually showed up: the Deck in gamescope/Steam, in a room, after joining by code. If only the owner's Deck can show it, the next session should ask the owner to run that check on the Deck: join a room, open Controls, scroll to the dead zone rows, and say whether anything covers them."
-      },
-      "round": "2026-11-01T01:40:21Z"
+      ]
     },
     {
       "id": "multiplayer/rollback-feel-sim",
