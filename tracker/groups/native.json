@@ -1324,6 +1324,13 @@
       "detail": "docs/native-stage-b.md, 'The first game': m4a's SoundInit starts an immediate DMA1 with its addresses 0, reading the BIOS (the play build gives Bus::bios_latch: after a call, in and after an IRQ, after boot) and writing to 0 (ignored). The prelude panics on loads and stores below 0x02000000. Keep the latch in the lift as the play build's BIOS moves it (its BIOS calls and IRQ entry), loads give it, stores go nowhere. Done when: a lift-check program reading the BIOS region passes, and just check passes.",
       "check": "independent",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/play-native-metroid-interp",
+      "title": "Metroid's native-timing play build strays from its interp",
+      "detail": "docs/native-stage-b.md, 'The first game': out/metroid recompiled at --timing native, on units/metroid-native.toml: its compiled code and its --interp run differ at frame 1 (EWRAM 0x02038000 on, 32,651 bytes, the compiled run ahead; pictures differ in 983 of 2,700 frames). route-check --native gates on these agreeing. The compiled run interprets 45% of its cycles (1.6M instructions in the fallback). Also: the interpreter's frame-1 record has VCOUNT 159 where the native program has 160. Find why and fix it in the recompiler or runtime. Done when: route-check --native's play-against-interp step passes on the route, and just check passes.",
+      "check": "independent",
+      "uses": ["heavy"]
     }
   ]
 }
