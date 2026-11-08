@@ -619,15 +619,23 @@
       "title": "Single-player window: hand frames to the display evenly",
       "detail": "The netplay feel sim (2026-11-08, {unit:multiplayer/rollback-feel-sim}) found a frame handed to the window when done meets the 60 Hz display unevenly: each finish that crosses a refresh makes a doubled and a skipped frame. Netplay now presents 8 ms into the turn (gbaa-desktop --present-ms). The single-player loop still hands frames over when done; its costs vary less, so measure first (the window's present gaps, or a sim like netplay::feel's), then do the same if it shows. docs/research/multiplayer.md, Feel.",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "bc2eeaad",
-        "session": "bc2eeaad-aac4-4ad5-b434-719444f2ee7e",
-        "host": "quack",
-        "pid": 3349722,
-        "start": "14823514",
-        "at": "2026-11-08T21:54:36Z",
+        "at": "2026-11-08T22:11:37Z",
+        "evidence": "Review fixes made: hold test now checks release >=3 ms after the frame's start (timed in test, scheduling-independent); Deck scale 2.2 (estimate from 2-2.5x quack) in present_sim.rs, commands.md, sound-design.md. Sim results unchanged in docs/sound-design.md 'When a frame goes to the window'. just check passes after merging main.",
         "branch": "unit/deck/even-presents",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-08T22:11:37Z",
+          "by": "bc2eeaad",
+          "host": "quack",
+          "pid": 3349722,
+          "start": "14823514",
+          "beats": true,
+          "session": "bc2eeaad-aac4-4ad5-b434-719444f2ee7e",
+          "lane": "quack/3"
+        },
+        "pushed": true
       },
       "notes": [
         {
