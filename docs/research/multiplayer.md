@@ -35,7 +35,10 @@ the web (sources at the end).
   in packets, with radio-sized delays built in, and the Union Room gathers
   more players than one peer should simulate. For wireless the recommended
   shape is the opposite: each player runs only their own console, and the
-  adapter is emulated as a device whose "radio" is the server. Later work.
+  adapter is emulated as a device whose "radio" is the server. The device
+  runs locally (2026-11-08, multiplayer/wireless-adapter-local,
+  `runtime::link::rfu`): two Emeralds in one process meet in the Union
+  Room and trade. Putting the radio on the server is the next step.
 - **A relay server first, on a machine june runs.** Clients make only
   outbound connections, so there is no NAT traversal to do. Rooms with a
   short code are the matchmaking. Plain UDP for transport (QUIC, the
@@ -289,7 +292,7 @@ state; the battle presses A every 30 frames from its state.
  ───────────────────────────────────────────────────────────────────
  console adapter (per console)      trait Console
    GBA: runtime::link hub (no_std) — N Machines, one serial bus,
-        multiplayer and normal modes; later the wireless adapter device
+        multiplayer mode; the wireless adapter device (runtime::link::rfu)
  ───────────────────────────────────────────────────────────────────
  gbaa-server (std, console-neutral): rooms, codes, relay of opaque payloads
 ```
@@ -1175,7 +1178,8 @@ built here would be the cheap check.
   after constant I/O stores", only for the link hub's machines.
 - **The wireless adapter** is undocumented hardware with timeouts we
   haven't measured; Union Room could turn out to need option C-style
-  hooks after all.
+  hooks after all. Locally (no latency) it needs none: see "The wireless
+  adapter, locally" below.
 - **Test saves.** The cable club needs a save past the first Pokémon
   Center. None is on quack for Emerald, so `just emerald-saves` crafts
   two (docs/tools/commands.md): the game's own new-game save blocks,
@@ -1222,9 +1226,48 @@ the 3-hour cap.
 8. **june trades and battles with a friend over the internet**: the play
    gate (recorded by june).
 9. Later, each its own research or unit when wanted: the wireless adapter
-   locally, then networked (Union Room); rollback; spectating in the UI;
+   locally (done 2026-11-08), then networked (Union Room); rollback; spectating in the UI;
    shared overworld presence (after the Lua research); what Rogue
    Assistant talks to; two different games in one session.
+
+## The wireless adapter, locally
+
+multiplayer/wireless-adapter-local (2026-11-08): `runtime::link::rfu`
+emulates the adapter on each console's port and the radio between them,
+in one process, from librfu's game side (pret's `librfu_stwi.c`,
+`librfu_intr.c`, `librfu_rfu.c`) and afska's `wireless_adapter.md`:
+
+- **The port.** Normal 32-bit mode. The "NINTENDO" handshake at 256 kHz
+  after each reset (`RCNT` in GPIO mode pulls SD high), then commands at
+  2 MHz with the SI/SO handshake between words: after a GBA-clocked word
+  the adapter raises SI until the GBA raises SO; while the adapter
+  clocks (after `0x25`, `0x27`, `0x35`, `0x37`) SI follows SO. Each
+  `SIOCNT` write is a sync point for a console with an adapter
+  (`Io::sio_wireless`), so busy-waits on SI see the answer at once.
+- **The radio.** Hosts, searches, connections, `SendData` and
+  `ReceiveData` as afska describes them: a child's packet waits for the
+  host's next `SendData`; a host hears `0x28` at once after its own; a
+  waiting child hears it when the host's packet comes. IDs count up from
+  `0x2001` instead of being random, so runs repeat.
+- **One guess beyond the docs:** a searching adapter keeps listing a host
+  it heard for 3 seconds, across searches. Emerald's Union Room switches
+  each console between hosting and searching every second or so; with
+  only what's open at the instant of each poll, BOB's trading-board offer
+  reached ALICE too rarely to check the board (2026-11-08). afska's note
+  that a vanished host drops off after 3 s is the basis; whether a real
+  adapter keeps the list across `0x1C`-`0x1E` rounds is unmeasured.
+- **Timing.** A word takes 256 cycles at 2 MHz, 2048 at 256 kHz; the
+  adapter clocks a word 700 cycles after the GBA arms. librfu's own
+  timeouts (80 to 130 ms a word) never come near. A wait times out after
+  `Setup`'s frames (Emerald: 32).
+- **The check:** `just emerald-wireless` (`docs/tools/commands.md`):
+  ALICE and BOB walk into Oldale's Union Room, BOB registers his Torchic
+  at the trading board, ALICE offers her Mudkip, BOB accepts, and the
+  trade and its save complete, identically twice.
+
+Not done: the radio across the network (each player runs only their own
+console), Berry Crush and the other wireless games, a check with more
+than two adapters, and the adapter's state in save states.
 
 ## Questions for june
 
