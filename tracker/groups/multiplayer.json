@@ -654,15 +654,23 @@
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): on the Deck, something netplay draws covered the bottom of the Controls page, where the dead zone is ('if you can see the bottom, because the netplay thing'); Athena found tapping the screen hid it. Find what it is (the room bar or the on-screen keyboard's space), and keep the whole menu visible while in a room. Check: a 1280x800 screenshot in a room, Controls page scrolled to its last row, nothing over it; just check.",
       "minMinutes": 25,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "aad03dc9",
-        "session": "aad03dc9-e315-4dfb-b75f-9c89e108a88a",
-        "host": "quack",
-        "pid": 3349722,
-        "start": "14823514",
-        "at": "2026-11-08T19:46:34Z",
+        "at": "2026-11-08T19:50:20Z",
+        "evidence": "Cause: per the owner's answer (decision d/covered-controls-page-your-deck, 2026-11-07), the cover on the Deck's Controls page was a custom keyboard on an un-updated Steam Deck, not gbaa; she said land the Main-page fix and close. Branch keeps the Main page laid out above the netplay report (menu.rs). Latest main merged; just check passed (exit 0) after the merge.",
         "branch": "unit/multiplayer/overlay-hides-menu",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-08T19:50:20Z",
+          "by": "aad03dc9",
+          "host": "quack",
+          "pid": 3349722,
+          "start": "14823514",
+          "beats": true,
+          "session": "aad03dc9-e315-4dfb-b75f-9c89e108a88a",
+          "lane": "quack/3"
+        },
+        "pushed": true
       },
       "notes": [
         {
