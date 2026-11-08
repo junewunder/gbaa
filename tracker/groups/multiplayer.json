@@ -701,19 +701,7 @@
         "by": "9d98d236",
         "at": "2026-11-08T20:25:34Z",
         "evidence": "The game, not rollback: crates/netplay/tests/seat_sound.rs (--ignored, release, passed 2026-11-08 on quack). Straight two-GBA Kirby run, seat 1 jumping vs idle: seat 1's sound differs on 258 frames, seat 0's picture shows the jumping Kirby (598 px at frame 2420), seat 0's sound identical on all frames. Rollback (60±40 ms, 2% loss, 52 rollbacks, 293 re-run): seat 0 heard the straight run's sound on all 3600 frames, same end hash. Nothing to fix. Written up in docs/research/multiplayer.md, 'The other players' sound'. just check passed after merging main.",
-        "branch": "unit/multiplayer/other-seat-sound",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T20:25:34Z",
-          "by": "9d98d236",
-          "host": "quack",
-          "pid": 3349722,
-          "start": "14823514",
-          "beats": true,
-          "session": "9d98d236-71f3-4ec3-b234-4a1bdb04b71c",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -721,8 +709,7 @@
           "by": "61fe8d7b",
           "text": "Start: crates/netplay/src/gba.rs Pad::quiet mutes re-run frames; rollback.rs ~line 337. Measure in a test: gba() console, two seats, Speaker on seat 0, menu presses from docs/research/multiplayer.md (Kirby rollback-feel inputs), seat 2 jumps vs idle; compare seat 0 audio."
         }
-      ],
-      "round": "2026-11-01T01:45:09Z"
+      ]
     },
     {
       "id": "multiplayer/link-cable-survey",
