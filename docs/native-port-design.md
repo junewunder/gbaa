@@ -570,6 +570,19 @@ one), `defines()`, `keeps` and `holes` (a call to a callee whose run lost
 its returns to a hole is one, and takes it to leave r0–r3 unknown);
 `Summaries::root` follows a pass-on chain.
 
+**With callee sets** (`native/indirect-call-args`, 2026-11-06):
+`gbaa-recompile --summaries --callee-sets` takes an indirect call whose
+callee set the function-address flow proves complete
+(`codegen::native::fnref`) as calling exactly those
+(`codegen::saves::summarize_sets`). Not measured on Emerald yet: of its
+553 indirect calls, none has a set, because the flow didn't finish on
+its 15,158 functions in 35 minutes (past 8 GB and growing). With
+`native/fnref-flow-scale` landed (Metroid settles in 151 s) it still
+didn't: killed at a 14 GB cap after 5 minutes (2026-11-07). Making it
+settle on Emerald is `native/fnref-flow-emerald`; the re-measurement
+of the 656, and what keeps sets incomplete (callbacks stored through RAM
+globals such as `gMain.callback1`), is `native/indirect-call-args-emerald`.
+
 ## 6. Holes
 
 There is no interpreter to run what the lift doesn't cover, so every gap
