@@ -1309,6 +1309,14 @@
       "detail": "docs/native-stage-b.md, 'The first game': the stage-A prelude's ld8/16/32 and st8/16/32 have no arm for 0x0D-0x0F, so Metroid's byte store at 0x0E007F80 panics; and Game::new leaves Hw::save the 512 Kbit flash chip where the play build detects the kind (save::Kind::detect: Metroid is SRAM_V113). Map them to Hw::save as runtime::bus does (byte lanes, the EEPROM at 0x0D), set the kind from ROM. Done when: a lift-check program that writes and reads its SRAM passes (a planted wrong store caught), and just check passes.",
       "check": "independent",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-flash-routines",
+      "title": "The lifter calls hw::flash for the save stack routines",
+      "detail": "docs/native-stage-b.md, 'The first game': the save libraries copy their read and verify routines onto the stack and call them (Metroid's SRAM library at 0x03007d39); the bytes are analysis::flash's agbcc signatures (Read, Verify) and runtime::hw::flash stands in ({unit:native/flash-stack-standin}), but gbaa-lift doesn't call it: call_fn panics, no function's entry. At a call into RAM, recognise the routine and call hw::flash on Hw::save. Done when: a lifted program calling a copied routine runs it as hw::flash (a lift-check program or Metroid's route past its save read), and just check passes.",
+      "check": "independent",
+      "needs": ["native/lift-save-memory"],
+      "uses": ["heavy"]
     }
   ]
 }
