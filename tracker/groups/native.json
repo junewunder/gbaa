@@ -967,6 +967,17 @@
       "detail": "After {unit:native/modern-gcc-jumps}, 20 of the 47 unresolved jumps left in Imperium (14, at 0x0828xxxx and 0x0850c8da) and Rogue (6, at 0x0826xxxx) are bx/mov pc inside data discovery took as Thumb code (runs of lsrs r0, r5, #32 and movs r0, r0: pointer tables). Find which discovery rule takes them (the pointer scan, by GBAA_DISC_LOG=1), stop it there, and show the jumps go with no loss: disc-pret both builds keep precision/recall, jt-score keeps 610/617, just holes-all --against main shows unresolved jumps falling on imperium and emerald-rogue and no game's hard count higher.",
       "check": "independent",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "aed48009",
+        "session": "aed48009-a3c2-4600-aebd-bb908b7c8339",
+        "host": "quack",
+        "pid": 3349268,
+        "start": "14822772",
+        "at": "2026-11-08T17:45:53Z",
+        "branch": "unit/native/modern-gcc-data-as-code",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-07T11:07:32Z",
