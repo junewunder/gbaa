@@ -613,19 +613,7 @@
         "checker": "verifier-a5d3f318",
         "at": "2026-11-08T19:05:50Z",
         "evidence": "Fresh verifier subagent reran just lift on Metroid --name metroid: exit 0, report 0 hard holes, 2624 fns, 8 stand-ins; metrics lines 960068, hard_holes 0; crate built in release (recipe's build-recompiled). Clean release build timed 32.4 s, rustc peak 3.95 GB (/usr/bin/time -v); lift 3m06s, 2.06 GB. Numbers in docs/native-stage-b.md; just check exit 0 after merging main.",
-        "branch": "unit/native/metroid-lifts",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T19:05:50Z",
-          "by": "88b731c4",
-          "host": "quack",
-          "pid": 3349722,
-          "start": "14823514",
-          "beats": true,
-          "session": "88b731c4-cdf1-422a-bb0d-49a820fdacf8",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -638,8 +626,7 @@
           "by": "f93b1ecd",
           "text": "26 hard holes -> 9: mods/metroid/holes.toml stands in reset, IRQ dispatcher, classic-NES code; skips fnref flow. Left: 9 BIOS calls ({unit:native/lift-bios-calls}). Then just lift ROM out/lift-metroid --name metroid, build, quote numbers (doc has a measurement build)."
         }
-      ],
-      "round": "2026-11-06T11:28:38Z"
+      ]
     },
     {
       "id": "native/metroid-native-check",

@@ -2443,3 +2443,4 @@
 {"at":"2026-11-08T18:40:56Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-bios-calls","text":"Lifted code makes the BIOS calls games use: on main"}
 {"at":"2026-11-08T18:41:05Z","actor":"loop","tag":"88b731c4","host":"quack","cmd":"claim","id":"native/metroid-lifts","text":"Metroid lifts with no hard holes and builds: claimed (picking up after f93b1ecd)"}
 {"at":"2026-11-08T19:05:50Z","actor":"loop","tag":"88b731c4","host":"quack","cmd":"done","id":"native/metroid-lifts","text":"Metroid lifts with no hard holes and builds: done, checked by verifier-a5d3f318"}
+{"at":"2026-11-08T19:11:49Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/metroid-lifts","text":"Metroid lifts with no hard holes and builds: on main"}
