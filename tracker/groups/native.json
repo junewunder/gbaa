@@ -608,18 +608,23 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "88b731c4",
-        "session": "88b731c4-cdf1-422a-bb0d-49a820fdacf8",
-        "host": "quack",
-        "pid": 3349722,
-        "start": "14823514",
-        "at": "2026-11-08T18:41:05Z",
+        "checker": "verifier-a5d3f318",
+        "at": "2026-11-08T19:05:50Z",
+        "evidence": "Fresh verifier subagent reran just lift on Metroid --name metroid: exit 0, report 0 hard holes, 2624 fns, 8 stand-ins; metrics lines 960068, hard_holes 0; crate built in release (recipe's build-recompiled). Clean release build timed 32.4 s, rustc peak 3.95 GB (/usr/bin/time -v); lift 3m06s, 2.06 GB. Numbers in docs/native-stage-b.md; just check exit 0 after merging main.",
         "branch": "unit/native/metroid-lifts",
-        "resumed": "f93b1ecd",
-        "prevSession": "f93b1ecd-f104-48fc-9e5b-29cfd643d68a",
-        "pushed": true,
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-08T19:05:50Z",
+          "by": "88b731c4",
+          "host": "quack",
+          "pid": 3349722,
+          "start": "14823514",
+          "beats": true,
+          "session": "88b731c4-cdf1-422a-bb0d-49a820fdacf8",
+          "lane": "quack/3"
+        }
       },
       "notes": [
         {
