@@ -1257,6 +1257,13 @@
         "by": "b9262a93",
         "at": "2026-11-08T19:20:26Z"
       },
+      "notes": [
+        {
+          "at": "2026-11-08T19:20:32Z",
+          "by": "b9262a93",
+          "text": "Fix committed on branch (a1683db): cap absorbs only up to bound(lo) via a run-scoped thread-local of code addrs; ROMS widening per data run. 2 tests. If owner says raise: set bars to new values (just lift-metrics shows them), merge main, just check, done."
+        }
+      ],
       "round": "2026-11-08T19:11:58Z"
     }
   ]
