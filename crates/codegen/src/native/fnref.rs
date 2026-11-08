@@ -2216,10 +2216,10 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
             rds.insert(f.entry, std::mem::take(&mut g.rd));
             // The memory bound, every 64 functions run.
             ran += 1;
-            if ran % 64 == 0 {
+            if ran.is_multiple_of(64) {
                 let held = g.held();
                 let total: usize = held.iter().map(|h| h.2).sum();
-                if trace && ran % 256 == 0 {
+                if trace && ran.is_multiple_of(256) {
                     let by: Vec<String> = held
                         .iter()
                         .map(|(k, n, t)| format!("{k} {n}/{t}"))
