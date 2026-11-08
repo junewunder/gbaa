@@ -1144,16 +1144,32 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "9c7ffd35",
-        "session": "9c7ffd35-8623-4cb6-a52d-d2e121669618",
-        "host": "quack",
-        "pid": 3349068,
-        "start": "14822266",
-        "at": "2026-11-08T18:34:45Z",
+        "checker": "verifier-ab9519dc",
+        "at": "2026-11-08T20:02:42Z",
+        "evidence": "Verifier (fresh context) ran gbaa-holes: moonbeam summaries hard 6->0 (hard 3), Emerald Rogue 3->0; holes-all on merged tree: corpus hard 145->130, Imperium 6->0 too, no other game moved. just softfloat-check: ROMs' own __muldf3/__divdf3 in the interpreter vs runtime::softfloat, ~176k pairs each (denormal results, ties, NaN payloads), 0 differ on moonbeam, Rogue, Imperium; runtime test pins a 12x12 edge grid from the interpreter. Verifier read NaN/inf/zero rules against the disassembly: match. just check passes after merging main.",
         "branch": "unit/native/libgcc-df-standins",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-08T20:02:42Z",
+          "by": "9c7ffd35",
+          "host": "quack",
+          "pid": 3349068,
+          "start": "14822266",
+          "beats": true,
+          "session": "9c7ffd35-8623-4cb6-a52d-d2e121669618",
+          "lane": "quack/1"
+        },
+        "pushed": true
       },
+      "notes": [
+        {
+          "at": "2026-11-08T20:02:50Z",
+          "by": "9c7ffd35",
+          "text": "saves::prove/summarize apply ctx.library() on any Ctx, but only the lift and gbaa-holes call with_library; gbaa-recompile and native-fn-diff see routines as kept leaves while veneers still hold their code (conservative, not wrong). Stand-in returns r2/r3 as given."
+        }
+      ],
       "round": "2026-11-08T18:34:45Z"
     },
     {
