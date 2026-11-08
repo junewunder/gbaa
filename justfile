@@ -3,6 +3,9 @@ import 'factory/factory.just'
 # The machine's build lock: every compile takes it, at 6 jobs, so lanes take turns. Recipes take it around the compile only, so running a built binary never waits; never run `just` under it (a recipe taking it under a caller that holds it deadlocks).
 lock := "env CARGO_BUILD_JOBS=6 flock /tmp/gbaa-build.lock"
 
+# A memory cap for a heavy tool: `{{cap}} MemoryMax=8G <cmd>` runs it in a systemd scope of its own with that cap and no swap. gbaa-lift, gbaa-recompile, gbaa-holes, gbaa-lift-check and route-check (but its --args and --missing) refuse to run without one (crates/analysis/src/cap.rs; GBAA_UNCAPPED=1 skips that). Inside a factory job (`just capped`, `just long start`: FACTORY_CAPPED_IN is set) it makes no scope, so the tool stays in the job's, under its cap and in its peak (a `systemd-run --scope` would leave it); off Linux there is no systemd. Either way `env MemoryMax=…` just runs the command.
+cap := if env("FACTORY_CAPPED_IN", "") != "" { "env" } else if os() != "linux" { "env" } else { "systemd-run --user --scope -q -p MemorySwapMax=0 -p" }
+
 # Lists the recipes.
 default:
     @just --list
@@ -170,12 +173,14 @@ jt-score:
     set -u
     {{lock}} cargo build -q --release -p jt-check || exit 1
     status=0
-    # The modern build's two subsets were checked by hand: both tables have
-    # a dead entry 0 (Cmd_drawlvlupbox, AddPointsOnFainting).
+    # The modern build's four subsets were checked by hand: two tables have
+    # a dead entry 0 (Cmd_drawlvlupbox, AddPointsOnFainting), and
+    # LoadBattlePyramidObjectEventTemplates' two switch on a field of a
+    # const ROM table whose values pick 4 of 5 cases and 1 of 5.
     # The far-jump bars (decision 5a): the research reached 547/548 and
     # 721/732; keeping a probe's answer when it reaches no return (#25)
     # and the agb rules (#30) reach these.
-    for build in "pokeemerald 676 0 548" "pokeemerald_modern 584 2 726"; do
+    for build in "pokeemerald 676 0 548" "pokeemerald_modern 610 4 726"; do
         set -- $build
         target/release/jt-check {{quote(gbaa_data / "src/pokeemerald")}}/$1.elf --expect $2 --max-subset $3 --expect-far $4 || status=1
     done
@@ -365,7 +370,7 @@ recompile rom out="" *flags:
     [ -n "$2" ] || out=()
     shift 2
     {{lock}} cargo build -q --release -p codegen --bin gbaa-recompile
-    target/release/gbaa-recompile "$rom" "${out[@]}" "$@" --names-dir {{quote(gbaa_data / "names")}}
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile "$rom" "${out[@]}" "$@" --names-dir {{quote(gbaa_data / "names")}}
 
 # Per-function differential runs (structured/validation; "Validation" in docs/structured-codegen-design.md): picks up to FUNCS of ROM's functions entered in its first 600 interpreted frames, records their entry states, and builds out/fn-diff-<name>/ with them compiled in every configuration (the reference, each transformation off, the readable form of the picks, named and typed from the source maps in $GBAA_DATA/names/ that name ROM, and the reference with one byte of one function changed). Runs each state under 22 mutations in every form to the function's return or first yield; fails unless every configuration matches the reference (bus trace, ticks, full state) and the fault is caught. ARGS: --exact also counts the CPSR's flags at a yield. Heavy: builds a generated crate.
 fn-diff rom funcs="200" *args:
@@ -375,7 +380,7 @@ fn-diff rom funcs="200" *args:
     name=$(basename "$rom" .gba | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')
     out=out/fn-diff-"$name"
     {{lock}} cargo build -q --release -p codegen --bin gbaa-recompile
-    target/release/gbaa-recompile --fn-diff "$rom" "$out" --names-dir {{quote(gbaa_data / "names")}} {{funcs}}
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile --fn-diff "$rom" "$out" --names-dir {{quote(gbaa_data / "names")}} {{funcs}}
     just build-recompiled "$out"
     systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 \
         target/recompiled/release/gbaa-fn-diff-"$name" "$rom" {{args}}
@@ -388,12 +393,12 @@ liveness-states rom +args:
     name=$(basename "$rom" .gba | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')
     {{lock}} cargo build -q --release -p codegen --bin gbaa-recompile
     {{lock}} cargo build -q --release -p route-check
-    target/release/gbaa-recompile "$rom" out/"$name"-liveness --timing exact > /dev/null
-    target/release/gbaa-recompile "$rom" out/"$name"-no-liveness --timing exact --no-flag-liveness > /dev/null
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile "$rom" out/"$name"-liveness --timing exact > /dev/null
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile "$rom" out/"$name"-no-liveness --timing exact --no-flag-liveness > /dev/null
     just build-recompiled out/"$name"-liveness
     just build-recompiled out/"$name"-no-liveness
     bin=target/recompiled/release/gbaa-"$name"
-    GBAA_DATA={{quote(gbaa_data)}} target/release/route-check --same-states "$bin"-liveness "$bin"-no-liveness {{args}}
+    GBAA_DATA={{quote(gbaa_data)}} {{cap}} MemoryMax=8G target/release/route-check --same-states "$bin"-liveness "$bin"-no-liveness {{args}}
 
 # The CPU suites with every function readable (mod/readable-exact): readable-states, unnamed, with every function readable (mods/emerald/readable/all.list, `*`), on jsmolka's arm, thumb, memory, nes and bios tests and both armwrestler builds, each along its route (units/jsmolka-*.toml, units/armwrestler-*.toml) with ARGS (--every N). Fails if any fails. Heavy: builds fourteen small generated crates. Needs `just fetch-tests`.
 readable-suites *args:
@@ -438,23 +443,23 @@ names-states rom names +args:
     name=$(basename "$rom" .gba | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')
     {{lock}} cargo build -q --release -p codegen --bin gbaa-recompile
     {{lock}} cargo build -q --release -p route-check
-    target/release/gbaa-recompile --names-check "$rom" --names "$names"
-    target/release/gbaa-recompile "$rom" out/"$name"-unnamed --timing exact > /dev/null
-    target/release/gbaa-recompile "$rom" out/"$name"-named --timing exact --names "$names" > /dev/null
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile --names-check "$rom" --names "$names"
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile "$rom" out/"$name"-unnamed --timing exact > /dev/null
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile "$rom" out/"$name"-named --timing exact --names "$names" > /dev/null
     just build-recompiled out/"$name"-unnamed
     just build-recompiled out/"$name"-named
     bin=target/recompiled/release/gbaa-"$name"
-    GBAA_DATA={{quote(gbaa_data)}} target/release/route-check --same-states "$bin"-unnamed "$bin"-named {{args}}
+    GBAA_DATA={{quote(gbaa_data)}} {{cap}} MemoryMax=8G target/release/route-check --same-states "$bin"-unnamed "$bin"-named {{args}}
 
 # A mod copy's cut (mod/mod-copy; docs/mod-view-design.md, "A mod copy"): prints FUNCS (pret names or keys) readable and named from the source map NAMES (NAMES "": the maps in $GBAA_DATA/names that name ROM by sha1) into the mod at DIR (mods/<game>/<mod>/: mod.toml, src/<Name>.rs to edit, orig/<Name>.rs as cut); a re-cut three-way merges an edited src/ file. About 20 s on Emerald, not heavy.
 mod-cut rom names dir +funcs:
     {{lock}} cargo build -q --release -p codegen --bin gbaa-recompile
-    target/release/gbaa-recompile {{quote(rom)}} {{ if names == "" { "--names-dir " + quote(gbaa_data / "names") } else { "--names " + quote(names) } }} --cut {{quote(dir)}} {{funcs}}
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile {{quote(rom)}} {{ if names == "" { "--names-dir " + quote(gbaa_data / "names") } else { "--names " + quote(names) } }} --cut {{quote(dir)}} {{funcs}}
 
 # What to cut for a change to a struct field (mod/mod-find; docs/tools/commands.md): prints every function of ROM readable and named from the source map NAMES (NAMES "": the maps in $GBAA_DATA/names that name ROM by sha1) and lists those whose print reads or writes FIELD (e.g. optionsTextSpeed), writers and readers apart, by pret file:line. About 30 s on Emerald, not heavy.
 mod-find rom names field:
     {{lock}} cargo build -q --release -p codegen --bin gbaa-recompile
-    target/release/gbaa-recompile --find {{quote(rom)}} {{quote(field)}} {{ if names == "" { "--names-dir " + quote(gbaa_data / "names") } else { "--names " + quote(names) } }}
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile --find {{quote(rom)}} {{quote(field)}} {{ if names == "" { "--names-dir " + quote(gbaa_data / "names") } else { "--names " + quote(names) } }}
 
 # A mod copy built in (mod/mod-copy; docs/mod-view-design.md, "A mod copy"): recompiles ROM named with NAMES (out/<game>-named) and with the mod at DIR built in (out/<game>-mod, `--mod DIR`), builds both and runs route-check --same-states with ARGS ([--every N] ROUTE…), which fails unless each pair of exact states is byte-identical and prints the modded build's resumes inside modded functions. An unedited cut must pass. Heavy: builds two generated crates.
 mod-states rom names dir +args:
@@ -466,12 +471,12 @@ mod-states rom names dir +args:
     name=$(basename "$rom" .gba | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')
     {{lock}} cargo build -q --release -p codegen --bin gbaa-recompile
     {{lock}} cargo build -q --release -p route-check
-    target/release/gbaa-recompile "$rom" out/"$name"-named --timing exact --names "$names" > /dev/null
-    target/release/gbaa-recompile "$rom" out/"$name"-mod --timing exact --names "$names" --mod "$dir" | grep '^mod '
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile "$rom" out/"$name"-named --timing exact --names "$names" > /dev/null
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile "$rom" out/"$name"-mod --timing exact --names "$names" --mod "$dir" | grep '^mod '
     just build-recompiled out/"$name"-named
     just build-recompiled out/"$name"-mod
     bin=target/recompiled/release/gbaa-"$name"
-    GBAA_DATA={{quote(gbaa_data)}} target/release/route-check --same-states "$bin"-named "$bin"-mod {{args}}
+    GBAA_DATA={{quote(gbaa_data)}} {{cap}} MemoryMax=8G target/release/route-check --same-states "$bin"-named "$bin"-mod {{args}}
 
 # A mod's frames beside stock's (mod/mod-run; docs/research/agent-first-mod.md, item 3): recompiles ROM as stock (out/<game>-named: named with NAMES; NAMES "" names it from the maps in $GBAA_DATA/names that name ROM by sha1) and, named the same way, with the mod at DIR built in (out/<game>-mod), builds both, runs both along ROUTE and dumps the frames --dump-at names (default the route's checkpoints). Says which pairs are the same; for each that differs writes out/mod-run/<route>/side-N.png: stock, the mod, and where they differ in red. Heavy: builds two generated crates (about 4 min each when cold).
 mod-run rom names dir +args:
@@ -483,12 +488,12 @@ mod-run rom names dir +args:
     name=$(basename "$rom" .gba | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')
     {{lock}} cargo build -q --release -p codegen --bin gbaa-recompile
     {{lock}} cargo build -q --release -p route-check
-    target/release/gbaa-recompile "$rom" out/"$name"-named --timing exact "${names[@]}" > /dev/null
-    target/release/gbaa-recompile "$rom" out/"$name"-mod --timing exact "${names[@]}" --mod "$dir" | grep '^mod '
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile "$rom" out/"$name"-named --timing exact "${names[@]}" > /dev/null
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile "$rom" out/"$name"-mod --timing exact "${names[@]}" --mod "$dir" | grep '^mod '
     just build-recompiled out/"$name"-named
     just build-recompiled out/"$name"-mod
     bin=target/recompiled/release/gbaa-"$name"
-    GBAA_DATA={{quote(gbaa_data)}} target/release/route-check --mod-run "$bin"-named "$bin"-mod {{args}}
+    GBAA_DATA={{quote(gbaa_data)}} {{cap}} MemoryMax=8G target/release/route-check --mod-run "$bin"-named "$bin"-mod {{args}}
 
 # The readable form on a whole game (mod/readable-emerald; docs/mod-view-design.md, "The readable form", its check): recompiles ROM named with NAMES (out/<game>-named, the play view) and with the readable list LIST as well (out/<game>-readable, `--readable LIST`; a line `*` is every function); NAMES "" leaves the play view unnamed and names the readable one from the maps in $GBAA_DATA/names that name ROM by sha1, builds both and runs route-check --same-states with ARGS ([--every N] ROUTE…), which fails unless each pair of exact states is byte-identical. Heavy: builds two generated crates, the readable one bigger.
 readable-states rom names list +args:
@@ -501,12 +506,12 @@ readable-states rom names list +args:
     named=(--names-dir {{quote(gbaa_data / "names")}}); [ -z "$names" ] || named=(--names "$names")
     {{lock}} cargo build -q --release -p codegen --bin gbaa-recompile
     {{lock}} cargo build -q --release -p route-check
-    target/release/gbaa-recompile "$rom" out/"$name"-named --timing exact "${named[@]}" > /dev/null
-    target/release/gbaa-recompile "$rom" out/"$name"-readable --timing exact "${named[@]}" --readable "$list" | grep '^readable'
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile "$rom" out/"$name"-named --timing exact "${named[@]}" > /dev/null
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile "$rom" out/"$name"-readable --timing exact "${named[@]}" --readable "$list" | grep '^readable'
     just build-recompiled out/"$name"-named
     just build-recompiled out/"$name"-readable
     bin=target/recompiled/release/gbaa-"$name"
-    GBAA_DATA={{quote(gbaa_data)}} target/release/route-check --same-states "$bin"-named "$bin"-readable {{args}}
+    GBAA_DATA={{quote(gbaa_data)}} {{cap}} MemoryMax=8G target/release/route-check --same-states "$bin"-named "$bin"-readable {{args}}
 
 # The block-timed interpreter as a full-state reference (structured/block-timed-interp; validation item 1 of docs/structured-codegen-design.md): recompiles ROM into out/<game>, builds it and runs route-check --same-states with the build and the same binary with --interp-blocks (the interpreter over the compiled blocks, ticking once at each block's exit as compiled code does) and ARGS ([--every N] ROUTE…, units/*.toml on ROM); fails unless their exact states are byte-identical at every checkpoint (and every Nth frame). Heavy: builds a generated crate.
 block-timed-states rom +args:
@@ -518,7 +523,7 @@ block-timed-states rom +args:
     just recompile "$rom" out/"$name" --timing exact > /dev/null
     just build-recompiled out/"$name"
     bin=target/recompiled/release/gbaa-"$name"
-    GBAA_DATA={{quote(gbaa_data)}} target/release/route-check --same-states "$bin" "$bin --interp-blocks" {{args}}
+    GBAA_DATA={{quote(gbaa_data)}} {{cap}} MemoryMax=8G target/release/route-check --same-states "$bin" "$bin --interp-blocks" {{args}}
 
 # Asset overrides (assets/overrides, docs/asset-extraction-design.md, Overrides): after `just assets-graphics`, every exported file encoded back to its blob's bytes (`gbaa-assets check-overrides round-trip`, writing OUT/overrides/unedited/mod.toml with them all), and OUT/overrides/edited/, Brendan's walking sprite (Aseprite) and the truck's tileset (PNG) edited. Then per RUNNER (interp, recompiled or both) the new-game route three times, plain, with the unedited mod and with the edited one (`gbaa-desktop --assets-mod`), into OUT/overrides/runs/; fails unless the unedited run draws every frame as the plain one and the edited one differs at the naming screen and the truck (frames 3800 and 5400). The recompiled runner recompiles Emerald into RECOMPILED and builds it (heavy: build-recompiled's RAM check).
 assets-check-overrides runner="both" out="out/assets/emerald" recompiled="out/pokemon-emerald-version":
@@ -647,7 +652,7 @@ kirby-assets rom=(roms / "Kirby & The Amazing Mirror.gba") out="out/assets/kirby
     # Whole frames from the game's own sprite tables: every animation plain Kirby's AnimInfo table uses, in the pink palette.
     target/release/gbaa-assets sprite-tables "$rom" "$out" --tables 0x083B909C --anim-info 0x0834C5D4:185 \
         --palette 0x084BB12C --labels scripts/kirby/anims.toml
-    target/release/gbaa-recompile "$rom" --names names/kirby-amazing-mirror.toml --cut "$out/controller" \
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile "$rom" --names names/kirby-amazing-mirror.toml --cut "$out/controller" \
         KirbyTask KirbyReadInput KirbyGroundAccel KirbyGroundFriction KirbyWalk KirbyJumpRise KirbyFall KirbyFloatFlap KirbySlide SpawnSlideAttack SpawnAirPuff
 
 # Why GBA timing can't be baked in (research/why-timing-is-runtime, docs/research/why-timing-is-runtime.md): Kirby & the Amazing Mirror from reset along a fixed input (menu presses to the first room, then walks, runs, jumps, floats, puffs, slides and inhales; after frame 3000, floats over the cloud wall into ground the first 3000 frames never saw) in gbaa-desktop's timing-lab build (target/timing-lab). First TRAIN frames with every prefetch stall's real cost logged (OUT/train.tsv); then FRAMES frames, once logged (OUT/base.tsv, the real run) and once for each wrong timing: no-prefetch (the buffer never helps), zero (no stall: the data accesses free), baked (each site's most common cost in train.tsv) and table (train.tsv's most common cost per site, buffer lead and WAITCNT, without the address). Each run writes OUT/NAME.out (scripts/kirby/timing.lua: frame count, RNG, lag, Kirby's position), NAME.hashes, NAME.wav and NAME/frame-N.png; then `gbaa-timing-report` writes OUT/report.txt (and NAME/diff-N.png). About a minute and a half once built.
@@ -722,15 +727,22 @@ cfg-survey rom truth="":
     {{lock}} cargo build -q --release -p codegen --bin gbaa-cfg-survey
     target/release/gbaa-cfg-survey {{quote(join(invocation_directory(), rom))}} {{ if truth == "" { "" } else { quote(join(invocation_directory(), truth)) } }}
 
+# Disassembly (gbaa-dis, armv4t::text: objdump's UAL text): LEN bytes (hex, default 0x40) at ROM address ADDR (hex), one instruction a line, a Thumb bl pair joined; Thumb unless --arm (an odd ADDR is Thumb); --names FILE, a names map for the ROM ($GBAA_DATA/names/<game>.toml), labels named functions and the calls to them. Paths are from where it's run. Light.
+[no-cd]
+[positional-arguments]
+dis rom addr *args:
+    @{{lock}} cargo build -q --release --manifest-path {{quote(justfile_directory() / "Cargo.toml")}} -p codegen --bin gbaa-dis
+    @{{quote(justfile_directory() / "target/release/gbaa-dis")}} "$@"
+
 # Snapshots of structured codegen (structured/emit-structured; step 8 of docs/structured-codegen-design.md): for each shape the printer handles (calls, an if, a loop, nested loops, a jump table, an irreducible region), the smallest structured function of ROM, printed as the generated crate prints it, into FILE (default mods/emerald/snapshots/emerald.rs). Rerun after a printer change and commit the diff.
 snapshots rom=(roms / "Pokemon - Emerald Version.gba") file="mods/emerald/snapshots/emerald.rs":
     {{lock}} cargo build -q --release -p codegen --bin gbaa-recompile
-    target/release/gbaa-recompile --snapshots {{quote(rom)}} {{quote(file)}}
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile --snapshots {{quote(rom)}} {{quote(file)}}
 
 # The readable form's snapshot (mod/readable-print; docs/mod-view-design.md, "The check"): the functions LIST names (by pret name or key), printed readable and named from the source map NAMES, into FILE (default mods/emerald/snapshots/emerald-readable.rs). Rerun after a printer change and commit the diff.
 snapshots-readable rom=(roms / "Pokemon - Emerald Version.gba") names=(gbaa_data / "names/pokeemerald.toml") list="mods/emerald/snapshots/emerald-readable.list" file="mods/emerald/snapshots/emerald-readable.rs":
     {{lock}} cargo build -q --release -p codegen --bin gbaa-recompile
-    target/release/gbaa-recompile --snapshots {{quote(rom)}} {{quote(file)}} --names {{quote(names)}} --readable {{quote(list)}}
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile --snapshots {{quote(rom)}} {{quote(file)}} --names {{quote(names)}} --readable {{quote(list)}}
 
 # Builds a recompiled crate in release (heavy: refuses unless `free -g` shows NEED_GB + 3 available; GBAA_GEN_NEED_GB, default 4) into target/recompiled, capped at available - 3 GB with no swap.
 build-recompiled out:
@@ -781,7 +793,7 @@ macos-app rom icon="" *flags:
     rom={{quote(join(invocation_directory(), rom))}}
     name=$(basename "$rom" .gba | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')
     cargo build -q --release -p codegen --bin gbaa-recompile
-    target/release/gbaa-recompile "$rom" out/"$name" {{flags}} | grep -v '^  uncovered'
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile "$rom" out/"$name" {{flags}} | grep -v '^  uncovered'
     rustup target add aarch64-apple-darwin
     # Stripped at link, so the linker's ad hoc signature stays valid.
     MACOSX_DEPLOYMENT_TARGET=11.0 CARGO_PROFILE_RELEASE_STRIP=symbols \
@@ -825,7 +837,7 @@ windows-check name through="":
     just windows-image
     {{lock}} cargo build -q --release -p route-check
     through=(); [ -z {{quote(through)}} ] || through=(--through {{quote(through)}})
-    GBAA_DATA={{quote(gbaa_data)}} target/release/route-check --windows units/{{quote(name)}}.toml "${through[@]}"
+    GBAA_DATA={{quote(gbaa_data)}} {{cap}} MemoryMax=8G target/release/route-check --windows units/{{quote(name)}}.toml "${through[@]}"
 
 # The Windows build's container (scripts/windows.Containerfile): MinGW-w64, Rust and Wine. Cached after the first build.
 windows-image:
@@ -895,13 +907,13 @@ native-check:
     {{lock}} cargo build -q --release -p native-spike --features guest-layout --bin native-spike --bin native-psg-square --bin native-direct-sound
     cp target/release/native-spike target/release/native-spike-guest
     {{lock}} cargo build -q --release -p native-spike --bin native-spike
-    target/release/route-check --native target/release/native-spike-guest target/recompiled/release/gbaa-native-spike \
+    {{cap}} MemoryMax=8G target/release/route-check --native target/release/native-spike-guest target/recompiled/release/gbaa-native-spike \
         units/native-spike.toml --replaced crates/native-spike/check/native-spike.replaced.toml \
         --packed target/release/native-spike --planted target/release/native-spike-planted-guest
-    target/release/route-check --native target/release/native-psg-square target/recompiled/release/gbaa-psg-square \
+    {{cap}} MemoryMax=8G target/release/route-check --native target/release/native-psg-square target/recompiled/release/gbaa-psg-square \
         units/psg-square.toml --replaced crates/native-spike/check/psg-square.replaced.toml \
         --planted target/release/native-psg-square-planted-guest
-    target/release/route-check --native target/release/native-direct-sound target/recompiled/release/gbaa-direct-sound \
+    {{cap}} MemoryMax=8G target/release/route-check --native target/release/native-direct-sound target/recompiled/release/gbaa-direct-sound \
         units/direct-sound.toml --replaced crates/native-spike/check/direct-sound.replaced.toml
 
 # The stage-A lifter (native/lift-stage-a; docs/native-port-design.md, "The stage-A lifter as built"; docs/tools/commands.md): gbaa-lift writes ROM whole as plain Rust over byte RAM and runtime::hw to OUT (default out/lift-<name>), with the stand-ins of holes/<name>.toml if there is one, else of mods/<name>/holes.toml (a commercial game's, game-derived and private) (<name> is --name NAME's if given, else the ROM's file name lowercased), then builds it into target/recompiled. FLAGS go to gbaa-lift (--name, --holes, --bars, --drop-standin, --plant). Fails, naming each, on a hard hole no stand-in covers. Heavy: builds a generated crate.
@@ -924,15 +936,21 @@ lift rom out="" *flags:
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift
     # A hard hole fails the lift, and the build too (a compile_error! names each).
     lifted=0
-    target/release/gbaa-lift "$rom" "$out" "${holes[@]}" "$@" || lifted=$?
+    {{cap}} MemoryMax=16G target/release/gbaa-lift "$rom" "$out" "${holes[@]}" "$@" || lifted=$?
     just build-recompiled "$out"
     exit $lifted
 
-# The stage-A lifter's check (native/lift-stage-a, native/lift-bars; docs/native-stage-b.md, "How every piece is checked"): gbaa-lift-check runs the programs of crates/codegen/lift-check.toml (one table each: ROM under $GBAA_DATA, route, flags, bars; today agb/native-spike, agb/affine, agb/mosaic-modes, agb/native-fallthrough, agb/native-irq-hold, agb/native-frame-locals and agb/native-ime-release from `just agb-tests`). First each is lifted with `--bars`, failing on any metric over its bar, named with both numbers; then each lift and its play build (--timing native) are built and route-check --native compares them for the route's 600 frames (601 for native-irq-hold and native-ime-release) with no replaced-library list: pictures, RAM outside the stack and code copies, I/O, display memories. Controls from the file: the spike lifted with a planted wrong store (planted_store, the V-blank handler's frame count) must be caught, and with its IRQ wrapper's stand-in dropped (planted_hole) the lift and the crate's build must fail naming f_03000000's mrs; native-fallthrough, native-irq-hold, native-frame-locals and native-ime-release lifted with each of their planted_flags (--fall-as-tail-call: the old fall into another function as a tail call; --irq-at-waits: the old IRQ at a wait inside a critical section; --plant-slot=0x08000182: a store to a stack local, fl_keep's x + 7, made one more; --ime-at-waits: the old IRQ held past the store that sets IME again) must be caught by the native check. Each program is also lifted at the play layout (--layout packed: globals in the lifter's order; native/lift-packed-layout), which route-check --packed holds to the guest layout's frames and records. ARGS: --only NAME. Writes out/lift-*. Heavy: builds twenty-six generated crates (about 10 minutes).
+# The stage-A lifter's check (native/lift-stage-a, native/lift-bars; docs/native-stage-b.md, "How every piece is checked"): gbaa-lift-check runs the programs of crates/codegen/lift-check.toml (one table each: ROM under $GBAA_DATA, route, flags, bars; today agb/native-spike, agb/affine, agb/mosaic-modes, agb/native-fallthrough, agb/native-irq-hold, agb/native-frame-locals, agb/native-ime-release and agb/native-bios-calls from `just agb-tests`). First each is lifted with `--bars`, failing on any metric over its bar, named with both numbers; then each lift and its play build (--timing native) are built and route-check --native compares them for the route's 600 frames (601 for native-irq-hold and native-ime-release) with no replaced-library list: pictures, RAM outside the stack and code copies, I/O, display memories. Controls from the file: the spike lifted with a planted wrong store (planted_store, the V-blank handler's frame count) must be caught, and with its IRQ wrapper's stand-in dropped (planted_hole) the lift and the crate's build must fail naming f_03000000's mrs; native-fallthrough, native-irq-hold, native-frame-locals and native-ime-release lifted with each of their planted_flags (--fall-as-tail-call: the old fall into another function as a tail call; --irq-at-waits: the old IRQ at a wait inside a critical section; --plant-slot=0x08000182: a store to a stack local, fl_keep's x + 7, made one more; --ime-at-waits: the old IRQ held past the store that sets IME again) must be caught by the native check. Each program is also lifted at the play layout (--layout packed: globals in the lifter's order; native/lift-packed-layout), which route-check --packed holds to the guest layout's frames and records. ARGS: --only NAME. Writes out/lift-*. Heavy: builds twenty-nine generated crates (about 11 minutes).
 lift-check *args:
     {{lock}} cargo build -q --release -p route-check
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift --bin gbaa-lift-check
-    target/release/gbaa-lift-check crates/codegen/lift-check.toml --data {{quote(gbaa_data)}} {{args}}
+    {{cap}} MemoryMax=8G target/release/gbaa-lift-check crates/codegen/lift-check.toml --data {{quote(gbaa_data)}} {{args}}
+
+# The lift's metrics against their bars (gbaa-lift-check --metrics-only; native/lift-bars): every program of crates/codegen/lift-check.toml lifted with its flags and --bars, nothing built, no route or planted control run; prints a table of metric by program, each bar beside its value (v<b under, v>b! over). ARGS: --only NAME (repeatable), --metric REGEX, --lower-bars (rewrites lift-check.toml with each bar shown that is over its metric lowered to it; never raises one), --write-doc FILE (the table as a generated numbers file: docs/native-stage-b.numbers.md). Fails on a metric over its bar. About 15 seconds (the lifts run at once).
+[positional-arguments]
+lift-metrics *args:
+    {{lock}} cargo build -q --release -p codegen --bin gbaa-lift --bin gbaa-lift-check
+    {{cap}} MemoryMax=4G target/release/gbaa-lift-check crates/codegen/lift-check.toml --data {{quote(gbaa_data)}} --metrics-only "$@"
 
 # Milestone 2's pass check (#32): `recompile-check` (at TIMING, exact unless told), then the two frame dumps (out/<name>/{interp,recompiled}.png) must be byte-identical. Prints the guest-cycle split between recompiled code and the interpreter fallback (decision 1). Heavy: builds a generated crate.
 first-frame rom frames="60" timing="exact":
@@ -1021,7 +1039,7 @@ audio-window rom frames="600":
 # SingleStepTests through generated Rust: PER_FILE cases from each file, one generated fn each, against the expected state and the interpreter; then SEQS random blocks (2 to 6 opcodes) and short functions with branches, against the interpreter: registers, bus accesses, timing calls and each tick's cycles (armv4t::cycles). ARGS: --readable prints each in the readable form (mod/readable-print). Needs `just fetch-tests`; builds a generated crate (heavy, same RAM check).
 sst-gen per_file="500" seqs="4000" *args:
     {{lock}} cargo build -q --release -p codegen --bin gbaa-recompile
-    target/release/gbaa-recompile --sst out/sst-gen {{per_file}} {{seqs}} {{args}}
+    {{cap}} MemoryMax=8G target/release/gbaa-recompile --sst out/sst-gen {{per_file}} {{seqs}} {{args}}
     just run-recompiled out/sst-gen
 
 # Milestone 3's oracle (#55): runs ROM for FRAMES frames in mGBA (`mgba-dump`) and in our interpreter, with optional --input presses, and fails unless the last frames' hashes match. On a mismatch writes mgba.png, ours.png and diff.png (differing pixels in red) to out/mgba-diff/<name>/ and prints the count. A ROM in crates/mgba-dump/known-mismatches.tsv passes on a mismatch while both frames keep the hashes listed there, and fails once it matches until its line is removed. Builds libmgba once (scripts/fetch-mgba.sh).
@@ -1171,7 +1189,7 @@ unit name through="":
     {{lock}} cargo build -q --release -p mgba-dump -p desktop -p route-check \
         || { echo "unit {{name}}: could not run: building the runners failed"; exit 75; }
     through=(); [ -z {{quote(through)}} ] || through=(--through {{quote(through)}})
-    GBAA_DATA={{quote(gbaa_data)}} target/release/route-check units/{{quote(name)}}.toml "${through[@]}"
+    GBAA_DATA={{quote(gbaa_data)}} {{cap}} MemoryMax=8G target/release/route-check units/{{quote(name)}}.toml "${through[@]}"
 
 # Our own save states (runtime::snap): runs ROM N+K frames with INPUT (whose presses must end by frame N), saving our state after frame N, then K frames from that state; fails unless frames N+1..N+K hash the same both ways, in the interpreter and the recompiled build. FLAGS go to gbaa-recompile ("--readable mods/emerald/readable/all.list": every function readable, mod/readable-exact), building out/<game>-<flags>. Writes out/own-state-check/<game>[-<flags>]-<n>/. Heavy: builds the game's crate.
 own-state-check rom n k input="" flags="":
@@ -1364,7 +1382,13 @@ emerald-netplay-trade profile="calm" rom=(roms / "Pokemon - Emerald Version.gba"
 [positional-arguments]
 holes rom *args:
     {{lock}} cargo build -q --release -p hole-report
-    systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 target/release/gbaa-holes "$@"
+    {{cap}} MemoryMax=3G target/release/gbaa-holes "$@"
+
+# The hole report over the corpus (holes/corpus.toml; crates/hole-report/src/corpus.rs): every game in turn, each report in OUT/<name>.txt, then one table of the ranking lines' numbers, saved as OUT/summary.toml. ARGS: --out DIR (default out/holes/<git short hash>[-dirty]), --against DIR2 (changes from DIR2's summary in brackets), --only NAME (repeatable), --cover (each game's coverage runs: hours), --write-doc FILE (the table as a generated numbers file: docs/research/native-holes.numbers.md), --from DIR (run nothing: render DIR's summary.toml), and any `just holes` flag for every game. About 12 minutes for the nine (Imperium the longest, 3 minutes); run it with `just long`. The games run one at a time under one 3 GB cap, no swap.
+[positional-arguments]
+holes-all *args:
+    {{lock}} cargo build -q --release -p hole-report
+    {{cap}} MemoryMax=3G target/release/gbaa-holes --corpus holes/corpus.toml --roms {{quote(roms)}} "$@"
 
 # Emerald's ten native functions against the play build (native/emerald-ten; scores in docs/native-port-design.md, "Emerald's ten"): the hand-lifted Rust in mods/emerald/native-ten/ run by crates/native-fn-diff from 600 no-input frames' entry states (borrowed for functions not entered) in 96 variants each, against the interpreter untimed; then one byte of Random's literal pool changed must be caught. Fails unless it prints `native 0 of 10 differ` and the fault is caught. ROM defaults to pret's build. About 30 s (the function summaries are most of it), capped at 3 GB of RAM and no swap. Private: mods/ isn't in the public mirror.
 [positional-arguments]

@@ -3,6 +3,18 @@
 Moved out of AGENTS.md to keep it under the factory's line cap. Each entry
 says what a recipe or tool does and what it must still pass.
 
+`gbaa-lift`, `gbaa-recompile`, `gbaa-holes`, `gbaa-lift-check` and
+`route-check` (but `--args` and `--missing`) refuse to run, exit 2, unless
+under a memory cap of their own: the recipes cap each run with the
+justfile's `cap` (`{{cap}} MemoryMax=8G …`, a systemd scope with no swap;
+gbaa-lift 16G, gbaa-holes 3G); inside a factory job (`just capped`,
+`just long start`) `cap` makes no scope, so the tool stays under the
+job's cap and in its peak. A child spawned with `Command` runs in its
+parent's scope. Run one
+by hand through `just capped`, `just long start` or that systemd-run line;
+`GBAA_UNCAPPED=1` skips the check, for a small input you've measured
+(`analysis::cap`).
+
 - `just sst` / `just sst-ir`: SingleStepTests against the interpreter, and
   through the IR builder and evaluator (also against the interpreter). Both
   print the per-file table and fail on any change from `EXPECTED` in
@@ -22,6 +34,17 @@ says what a recipe or tool does and what it must still pass.
   `$GBAA_DATA/truth/<name>.funcs.tsv` from any ELF (default the pokeemerald
   one), then scores a discovered-starts file against a truth file (default
   Emerald's). `just check` doesn't need them.
+- `just dis ROM ADDR [LEN] [--arm] [--names FILE]`: the disassembler,
+  `gbaa-dis` (`crates/codegen/src/bin/gbaa-dis.rs`). LEN bytes (hex,
+  default 0x40) at ROM address ADDR (hex, 0x08000000 and up), one
+  instruction a line as `080004c6: f00a ffa1  bl 0x0800b40c`, in
+  `armv4t::text`'s objdump UAL form (`just insn-text` checks it); a
+  Thumb `bl` pair is one line. Thumb unless `--arm`; an odd ADDR is
+  Thumb, the bit stripped. `--names FILE`, a names map for this ROM
+  (`$GBAA_DATA/names/<game>.toml`, loaded as `codegen::names` does, so
+  its `rom_sha1` must match), prints `<name>:` at each named function's
+  start and `<name>` after a branch to one. Paths are from where it's run;
+  ROM only (no save states). Light: no cap.
 - `just insn-text`: the check of `armv4t::text`, the assembly
   `gbaa-recompile --asm-text` prints in `insn!` and `--asm-comments` as
   `// 0x0805_9810 push {r4, lr}` (`Config::insn`; the readable form prints
@@ -54,8 +77,10 @@ says what a recipe or tool does and what it must still pass.
   functions; the flash library's stack routines stood in for,
   `analysis::flash`) and each list, the RAM copies among them (the ones
   only the run shows also as `[[copy]]` tables for the lift's holes
-  file). About a minute a game, capped at 3 GB. The
-  doc's table is these lines; rerun all eight after changing
+  file), and last the runs of ROM code run but not discovered, with what
+  discovery has around each (code before it, data over it). About a
+  minute a game, capped at 3 GB. The
+  doc's table is these lines; rerun the corpus after changing
   `analysis::holes` or `crates/hole-report` and update it.
   `--cover FILE` (`holes/coverage/<game>.toml`, native/hole-coverage)
   adds the file's coverage runs after the press script (reset, the
@@ -65,12 +90,37 @@ says what a recipe or tool does and what it must still pass.
   that reached it, its targets) against what they saw, failing on a
   difference; `--update` rewrites the list instead. Deterministic, so a
   rerun matches. 10 to 30 minutes a game: run it as a long job.
+  `--line FILE` writes the ranking line's numbers to FILE as TOML.
+- `just holes-all [--out DIR] [--against DIR2] [--only NAME]… [--cover]
+  [--write-doc FILE] [holes flags…]`: the hole report over the corpus, `holes/corpus.toml`
+  (each game's short name, ROM file name under the justfile's `roms`,
+  coverage file), `gbaa-holes --corpus` (`crates/hole-report/src/corpus.rs`).
+  Runs each game in turn as its own `gbaa-holes ROM … --line`, writing
+  `DIR/<name>.txt` (the report), `DIR/<name>.log` (its timings), then
+  prints one table, a row per game and a total: hard holes, ROM and
+  overlay jumps, return arithmetic, RAM code changed, CPU state, BIOS,
+  calls to non-entries, summaries, bytes not discovered, seconds. The
+  numbers come from the report's own counts, saved in `DIR/summary.toml`
+  (`[[game]]` each). `--against DIR2` reads DIR2's `summary.toml` and
+  shows each change in brackets, `4 (-3)`, `10 (0)`. DIR defaults to
+  `out/holes/<git short hash>` (`-dirty` with tracked changes). Other
+  flags (`--frames N`, `--no-summaries`, `--press …`) go to every game;
+  `--cover` gives each its coverage file (hours, not minutes). Fails if
+  any game's run did. One 3 GB cap, no swap, for the whole run (the games
+  run one at a time). About 12 minutes for the nine (Imperium the longest, 3 minutes): run it
+  with `just long start holes -- just holes-all`. Use it, not a loop over `just
+  holes`, to compare before and after a change: run it on main, then on
+  the branch with `--against` the first DIR. `--write-doc
+  docs/research/native-holes.numbers.md` also writes the table as that
+  generated numbers file (header, date, commit); `--from DIR` runs
+  nothing and renders DIR's saved `summary.toml` (with `--write-doc`, the
+  file), for a run already made at the commit wanted.
 - `just jt-score`: the jump-table check (decision 5c). Builds truth tables
   from `$GBAA_DATA/src/pokeemerald/pokeemerald{,_modern}.elf` and the ROMs
   beside them, runs `analysis::jumptable` over each ELF's code map, and
-  prints exact/subset/wrong/missed. Fails below 676/676 (agbcc) or 584/617
-  (modern GCC) exact, on any wrong target, or on a subset beyond the two
-  checked by hand. It also scores the far-jump `bl` rule (5a) on every
+  prints exact/subset/wrong/missed. Fails below 676/676 (agbcc) or 610/617
+  (modern GCC) exact, on any wrong target, or on a subset beyond the four
+  checked by hand (the justfile names them). It also scores the far-jump `bl` rule (5a) on every
   Thumb `bl`, failing below 548/548 or 726/732 or on any false one.
   `jt-check ELF --trace ADDR` prints the value-set states around an address
   and `--dump FILE` every jump's result, for debugging.
@@ -543,7 +593,7 @@ says what a recipe or tool does and what it must still pass.
   `codegen::saves` proves keep r4-r11 and sp, groups why the rest don't,
   and answers for each KEY (20 s, 300 MB on Emerald: 8,894 of 15,158).
   `gbaa-recompile --summaries ROM [--names FILE]... [--names-dir DIR]
-  [--show N] [KEY...]` gives every function's summary
+  [--show N] [--callee-sets] [KEY...]` gives every function's summary
   (`codegen::saves::summarize`: parameters r0-r3, results, callee-saves,
   holes) and, with a map, checks it against the DWARF prototypes
   (`codegen::saves::compare`): agree, disagree and no-prototype counts,
@@ -552,7 +602,16 @@ says what a recipe or tool does and what it must still pass.
   trusting indirect calls to read nothing, and each KEY's summary. No
   bar: it measures. Emerald (`--names $GBAA_DATA/names/pokeemerald.toml`,
   25 s, 430 MB): the counts and what each category is are in
-  `docs/native-port-design.md` section 5.
+  `docs/native-port-design.md` section 5. `--callee-sets` first follows
+  function addresses (`codegen::native::callee_sets`, the lifter's
+  `fnref` flow, over the ROM's code) and takes each indirect call with a
+  complete callee set as calling exactly those
+  (`codegen::saves::summarize_sets`; unit `native/indirect-call-args`),
+  printing the counts without the sets too. About 5 s on an agb program;
+  on Emerald the flow didn't finish in 35 minutes (killed at 6 GB, then
+  stopped at 8 GB under a 16 GB cap), and after `native/fnref-flow-scale`
+  it was killed at a 14 GB cap in 5 minutes (2026-11-07):
+  `native/fnref-flow-emerald`'s work.
   fn-diff's summary line gives the same count and
   how many picks call a proven function. Emerald, `just fn-diff ROM 2000
   --exact` (2026-10-27): every entered function picked, 270, 591 states,
@@ -1241,7 +1300,10 @@ says what a recipe or tool does and what it must still pass.
   the count of globals; `computed_ram` likewise, the ones the value
   sets bound to one global are `ram_object`, unbarred, checked by the
   prelude's `pin` and `ix` at run time, and `pointer_unexplained` the
-  rest, native/ref-in-object); `call_fn` calls; jumps by value;
+  rest, native/ref-in-object; one the value sets don't bound that the
+  heap's run types is a heap object's field through `Ref<T>`, counted in
+  `ref_accesses` and `ref_types`, unbarred, and `ref_unexplained` those
+  through an object's pointer no type explains, native/ref-heap); `call_fn` calls; jumps by value;
   gap targets. `--bars FILE` fails the lift (after writing it) on any
   metric over `[program.NAME.bars]`'s maximum, each named with both
   numbers (`gbaa-lift: affine: load_computed_unknown is 755, over its
@@ -1252,6 +1314,7 @@ says what a recipe or tool does and what it must still pass.
   hard hole and wrong store; `--fall-as-tail-call` prints a fall into
   another function's entry as the old tail call (r4-r12 and the flags
   zeroed, native/lift-fallthrough), the fallthrough control. About 6 s to lift, 15 s-2 min to build.
+  The lift runs capped at 16 GB, no swap (a commercial game's needs several).
 - `just lift-check [--only NAME]` (native/lift-stage-a, native/lift-bars):
   the lifter's check, `gbaa-lift-check` driven by
   `crates/codegen/lift-check.toml`: one table per program (`rom` under
@@ -1259,11 +1322,14 @@ says what a recipe or tool does and what it must still pass.
   `planted_store`, `planted_hole`, `planted_flags`) and its bars,
   `[program.<name>.bars]`. Today `agb/native-spike`, `agb/affine`,
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
-  `agb/native-frame-locals` and `agb/native-ime-release` (`just
-  agb-tests`) on `units/native-spike.toml`, `units/affine-600.toml`,
+  `agb/native-frame-locals`, `agb/native-ime-release` and
+  `agb/native-bios-calls` (`just agb-tests`) on
+  `units/native-spike.toml`, `units/affine-600.toml`,
   `units/mosaic-modes-600.toml`, `units/native-fallthrough-600.toml`,
-  `units/native-irq-hold-601.toml`, `units/native-frame-locals-600.toml`
-  and `units/native-ime-release-601.toml`. First every
+  `units/native-irq-hold-601.toml`, `units/native-frame-locals-600.toml`,
+  `units/native-ime-release-601.toml` and
+  `units/native-bios-calls-600.toml` (each BIOS call the prelude has
+  past the waits, `Div` and `CpuSet`, native/lift-bios-calls). First every
   program is lifted with `--bars` (seconds), failing before any build on
   a metric over its bar; then each lift and its play build
   (`--timing native`) are built and `route-check --native` runs them for
@@ -1284,7 +1350,7 @@ says what a recipe or tool does and what it must still pass.
   passed as `--packed`: it must draw the guest layout's frames and
   record the same bytes, nothing skipped (native/lift-packed-layout).
   Passes with
-  `every metric within its bar`, seven `pass (60x frames, 0 differences …;
+  `every metric within its bar`, eight `pass (60x frames, 0 differences …;
   the play layout draws the same 60x frames, its records the same …)`
   lines, `planted fault caught (…-planted: frame 2: EWRAM byte 0x020000c0
   …)`, `(…-fall-as-tail-call: frame 1: EWRAM byte 0x020000c4 …)`,
@@ -1293,7 +1359,7 @@ says what a recipe or tool does and what it must still pass.
   play 0x00, native 0x01 …)`, `(…-ime-at-waits: frame 2: EWRAM byte
   0x020000cc: play 0x01, native 0x00 …)`, `planted hard hole caught` and
   `lift-check: passed`. Logs in `out/lift-*.txt`. About 10 minutes on
-  quack. Heavy: builds twenty-six generated crates.
+  quack. Heavy: builds twenty-nine generated crates; gbaa-lift-check runs capped at 8 GB (its lifts in its scope; route-check in a 3 GB scope and the builds in their own).
 
   `gbaa-lift --shadow-locals` (native/frame-locals; by hand, not part of
   the check) keeps every stack local in the frame's bytes too and prints
@@ -1303,9 +1369,10 @@ says what a recipe or tool does and what it must still pass.
   `target/recompiled/release/gbaa-native-<name>-shadow --headless --frames
   601` and grep its stderr.
 
-  **Lowering a bar** (every stage-B unit's check): change the one
-  `metric = N` line in the program's bars table and run `just lift-check`
-  (or `--only NAME`). Bars are only lowered; raising one is changing the
+  **Lowering a bar** (every stage-B unit's check): `just lift-metrics
+  --lower-bars` (`--metric`, `--only` to lower only some), or change the
+  one `metric = N` line in the program's bars table, and run `just
+  lift-check` (or `--only NAME`). Bars are only lowered; raising one is changing the
   oracle (ask june). The exception is `lines_prelude`, the hand-written
   prelude every lift starts with: it may rise when a unit adds prelude
   code, the evidence saying how many lines and why; `lines` is the rest
@@ -1313,6 +1380,27 @@ says what a recipe or tool does and what it must still pass.
   fails on a metric with none); a new program is a new table, its bars
   at the values its first lift reports. `cargo test -p codegen --test
   lift_bars` shows a lowered bar failing the lift by name.
+- `just lift-metrics [--only NAME]… [--metric REGEX] [--lower-bars] [--write-doc FILE]`
+  (native/lift-bars): `gbaa-lift-check --metrics-only`, step 1 of `just
+  lift-check` alone. Lifts every program of
+  `crates/codegen/lift-check.toml` (the file is the list; a new table is a
+  new column) with its `lift_flags` and `--bars`, into the same
+  `out/lift-<name>` as the check, and reads each lift's
+  `metrics.toml` (gbaa-lift writes it beside `report.txt`). Prints a
+  table, a row per metric, a column per program: `v` at its bar, `v<b`
+  under bar b, `v>b!` over it, `v` alone for a metric with no bar.
+  `--metric REGEX` keeps the metrics whose names match, `--only` the
+  programs. `--lower-bars` rewrites `lift-check.toml` (comments and
+  order kept, `toml_edit`) with every shown bar that is over its metric
+  lowered to the metric, and prints each `program: metric old -> new`;
+  it never raises a bar (that stays a hand edit with a reason). It builds
+  no crate and runs no route check and none of the planted controls, so
+  it isn't the check: run `just lift-check` before calling a unit done.
+  Fails on a metric over its bar. About 15 seconds (the lifts run at
+  once).
+  `--write-doc docs/native-stage-b.numbers.md` also writes the table as
+  that generated numbers file (header, date, commit): rerun it when a
+  unit changes the metrics, rather than copying numbers into the plan.
 - `just native-ten [ROM]` (native/emerald-ten; scores in
   `docs/native-port-design.md`, "Emerald's ten, scored"): fn-diff for
   native functions (`crates/native-fn-diff`). Emerald's ten, lifted by

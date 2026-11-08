@@ -3,6 +3,50 @@
 //! plain Rust over byte RAM and the hardware library, with no `Machine`,
 //! no CPU, no cycles.
 //!
+//! **Map of this file**, in order (search for the names; how a concern
+//! owned elsewhere works is that module's doc):
+//!
+//! 1. The prelude: [`PRELUDE`] (`native/prelude.rs`, hand-written, in
+//!    every lifted crate) and [`prelude`], which swaps in
+//!    `native/prelude_packed.rs` at `--layout packed`; `BIOS`, the
+//!    `swi`s it has.
+//! 2. The holes file and the lift's output: [`Holes`] (stand-ins, jump
+//!    targets, `[[copy]]`s as [`SeenCopy`], names, the planted controls'
+//!    and old behaviours' flags), [`Hole`], [`Lifted`].
+//! 3. [`lift`], the driver, in its order: discovery's gaps decoded
+//!    (`missing`, `force_code`); the overlays and the holes file's copies;
+//!    one `Code` per context (`code`: functions, summaries, frames); RAM
+//!    globals carved (`const_access`, `computed_ram`, then
+//!    [`globals::Globals::carve`]); shapes (`shapes_of`); the
+//!    function-address flow (`fn_ins`, `fn_flow`, `FnImage`, `literal`)
+//!    and the heap's ([`heap::follow`]); each
+//!    function printed (a stand-in's text, else `FnPrinter::print`);
+//!    `FNS`, `ENTRY`, `Ram` and the split into files
+//!    ([`modules::split`]); the report (hard holes, `Soft`, frames) and
+//!    the [`metrics`].
+//! 4. `FnPrinter`, one function's Rust: `print` (signature, locals, the
+//!    block loop); `block` (a block's IR as statements: memory accesses,
+//!    typed fields via `typed_as`, `g.sp = r13` before I/O stores; `count`
+//!    tallies each access for the metrics; `used` drops what nothing
+//!    printed needs); stack locals (`local`, `declare_locals`, `flush`);
+//!    control flow (`goto`, `fall_into`, `call`, `call_then`, `tail`,
+//!    `ret`, and `exit`: branches, calls by value, `swi`, idle and spin
+//!    loops).
+//! 5. Free helpers: `dyn_targets` (a jump by value's known targets);
+//!    signatures from a [`Shape`] (`plain`, `ret_ty`, `ret_expr`, `tuple`,
+//!    `lhs`, `args`); locals' text (`local_addr`, `local_read`,
+//!    `local_write`); IR to Rust (`expr`, `konst`, `pure`,
+//!    `dead_addresses`, `v`, `flag`, `shift`). Then the tests.
+//!
+//! Elsewhere: what each function's parameters and results are,
+//! [`shape`]; frames, escaping slots and which become locals, [`frame`];
+//! function addresses and callee sets, [`fnref`]; RAM's globals, `pin`
+//! and `ix`, both layouts, [`globals`]; heap pointers as `Ref<T>`, the
+//! prelude's `Game::at`, [`heap`]; metric names and bars,
+//! [`metrics`]; the crate's files, [`modules`]; `lift-check.toml`'s
+//! programs, [`lift_check`]. A function's blocks and IR come from
+//! [`crate::func`], its summary from [`crate::saves`].
+//!
 //! What each function becomes:
 //!
 //! - `fn f_<key>(g: &mut Game, sp: u32, a0: u32, a1: u32) -> Result<u32, Exit>`:
@@ -15,8 +59,10 @@
 //!   `f_<key>(g, sp, a: [u32; 4]) -> Result<[u32; 4], Exit>`, with the
 //!   summary printed above it.
 //! - Registers and NZCV are Rust locals; each block's IR values are `let`s.
-//!   r4-r11 outlive a call because callees keep them (the summaries' proof,
-//!   `keeps`; a function that returns without it is a hard hole).
+//!   r4-r11 outlive a call because callees keep them, or change only
+//!   what no caller reads (the summaries' `keeps` and `changes`; a
+//!   function that breaks that, `analysis::holes::SUMMARY_HARD`, is a
+//!   hard hole).
 //! - Two entries: `x_<key>(g, Regs)` takes every register and flag, and
 //!   `f_<key>` above is a call into it with r4-r12 and the flags zero and
 //!   `lr` [`RET`]. A fall or jump into another function's entry (or a
@@ -39,9 +85,11 @@
 //!   accessed whole, else bytes (unit `native/frame-locals`); escaping
 //!   slots stay IWRAM bytes, and sp is still passed. A value nothing
 //!   printed uses (the address of an access to a local) isn't printed.
-//! - BIOS calls are the library's: the waits (`IntrWait`, `VBlankIntrWait`
-//!   as `hw::halt` until the game's handler sets the flag), `CpuSet` with
-//!   its time (`hw::spend`), `Div`.
+//! - BIOS calls are the library's ([`BIOS`] lists them): the waits
+//!   (`IntrWait`, `VBlankIntrWait` as `hw::halt` until the game's handler
+//!   sets the flag; `Halt`, `Stop`), `CpuSet`, `CpuFastSet` and LZ77 with
+//!   their time (`hw::spend`), RL, `Div`, `Sqrt`, `ArcTan2`, `SoundBias`,
+//!   `MidiKey2Freq`, `MultiBoot` (unit `native/lift-bios-calls`).
 //! - An idle loop's back edge calls `hw::idle`, a spin loop's `hw::spin`
 //!   (`analysis::idle`, `runtime::spins`, as the play build's
 //!   `--timing native` marks them).
@@ -50,8 +98,12 @@
 //!   (`--fn-ids rom` only): a literal lift loads pointers from ROM bytes
 //!   and RAM, so it can't renumber them. [`fnref`] follows every function
 //!   address to its uses and reports the ROM words dense IDs could rewrite
-//!   and each indirect call's callees (unit `native/fnref-flow`; nothing
-//!   printed changes yet).
+//!   and each indirect call's callees (unit `native/fnref-flow`). An
+//!   indirect call whose callee set is complete is summarised as calling
+//!   exactly those (the summaries run again with the sets,
+//!   [`crate::saves::summarize_sets`]), and passes `call_fn` only what
+//!   they read, taking back what they may change ([`call_fn_args`]; unit
+//!   `native/indirect-call-args`); an incomplete one passes all four.
 //!
 //! **Holes.** A function the lift can't print is a hard hole, named, and
 //! the lift fails (and the crate, which gets a `compile_error!` for it),
@@ -69,7 +121,7 @@
 //! ROM read at run time.
 
 use crate::func::{Ctx, ExitInfo, Func, Idle, Plan, build_func, exits, key};
-use crate::saves::{Summaries, Summary, summarize};
+use crate::saves::{Assume, Sets, Summaries, Summary, summarize, summarize_sets};
 use analysis::discovery::{self, Discovery};
 use analysis::ir::{BinOp, BitOp, Exit, Inst, Op, ValueId};
 use analysis::vsa::func::JumpRes;
@@ -81,6 +133,7 @@ use std::fmt::Write as _;
 pub mod fnref;
 pub mod frame;
 pub mod globals;
+pub mod heap;
 pub mod lift_check;
 pub mod metrics;
 pub mod modules;
@@ -115,8 +168,9 @@ pub fn prelude(layout: Layout) -> String {
     }
 }
 
-/// The BIOS calls the prelude has.
-const BIOS: &[u8] = &[0x02, 0x04, 0x05, 0x06, 0x0B];
+/// The BIOS calls the prelude has, the list `gbaa-holes` counts the rest
+/// by.
+use analysis::holes::NATIVE_BIOS as BIOS;
 
 /// What the game's holes file (`holes/<game>.toml`) gives: hand-written
 /// stand-ins for functions, and targets for unresolved jumps.
@@ -415,11 +469,72 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         }
     }
     let globals = Globals::carve(&ram, &ranges, &holes.names);
-    let shapes = shapes_of(&codes, &all, holes);
+    let flow_ins: Vec<FlowIn> = codes
+        .iter()
+        .enumerate()
+        .map(|(i, c)| FlowIn {
+            ctx: &c.ctx,
+            src: if i == 0 {
+                0x0800_0000
+            } else {
+                overlays[i - 1].src
+            },
+            funcs: &c.funcs,
+            frames: &c.frames,
+        })
+        .collect();
+    let (ins, pools, call_fn) = fn_ins(&flow_ins, &all);
     let fnrefs = match &holes.skip_fn_flow {
-        None => Some(fn_flow(rom, &disc, &overlays, &codes, &all)),
+        None => {
+            let (flow, words) = fn_flow(rom, &disc, &overlays, &ins, &pools, &all);
+            Some((flow, words, call_fn))
+        }
         Some(_) => None,
     };
+    // Heap pointers as `Ref<T>` (native/ref-heap): RAM at the start is
+    // the program start's copies, else 0.
+    let ram_init = |a: u32| -> u32 {
+        disc.copies
+            .iter()
+            .find(|&&(_, dst, len)| (dst..dst + len).contains(&a) && a + 4 <= dst + len)
+            .and_then(|&(src, dst, _)| {
+                let o = (src + (a - dst)).checked_sub(0x0800_0000)? as usize;
+                rom.get(o..o + 4)
+                    .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+            })
+            .unwrap_or(0)
+    };
+    let no_sites = BTreeMap::new();
+    let taken: Option<BTreeSet<u32>> = fnrefs.as_ref().map(|(f, words, _)| {
+        f.consts
+            .values()
+            .chain(words.values().map(|(k, _)| k))
+            .copied()
+            .collect()
+    });
+    let heap = heap::follow(
+        &ins,
+        fnrefs.as_ref().map_or(&no_sites, |(f, _, _)| &f.sites),
+        taken.as_ref(),
+        &ram_init,
+    );
+    drop(ins);
+    drop(flow_ins);
+    // The summaries again, each indirect call with a complete callee set
+    // taken as calling exactly those (native/indirect-call-args). The
+    // frames, which the flows read, stay the first summaries'. With the
+    // flow skipped there are no sets, and the first summaries stand.
+    let sets = fnrefs
+        .as_ref()
+        .map(|f| complete_sets(&f.0))
+        .unwrap_or_default();
+    if !sets.is_empty() {
+        for c in &mut codes {
+            c.sums = summarize_sets(&c.ctx, &c.funcs, Assume::default(), &sets);
+        }
+    }
+    let shapes = shapes_of(&codes, &all, holes);
+    let args = call_fn_args(&sets, &codes, &shapes.shaped);
     // Each function's text by key, in print order: the modules' contents.
     let mut out: Vec<(u32, String)> = Vec::new();
     let mut report = String::new();
@@ -465,6 +580,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     .unwrap_or_default(),
                 cur: f.entry,
                 globals: &globals,
+                args: &args,
+                heap: &heap,
             };
             let s = c.sums.get(f.entry);
             let text = p.print(s);
@@ -502,7 +619,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let n_funcs = fns.len();
     let mut main = String::new();
     main.push_str("// Generated by gbaa-lift (crates/codegen/src/native.rs). Don't edit; rerun `just lift`.\n");
-    main.push_str("#![allow(unused_mut, unused_parens, unused_variables, unused_imports, unused_assignments, unreachable_code, non_snake_case, clippy::all)]\n\n");
+    main.push_str("#![allow(unused_mut, unused_parens, unused_variables, unused_imports, unused_assignments, unreachable_code, non_snake_case, dead_code, clippy::all)]\n\n");
     let mut pre = prelude(holes.layout);
     for (on, flag) in [
         (holes.irq_at_waits, "IRQ_HOLD"),
@@ -517,6 +634,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     main.push_str(&pre);
     main.push('\n');
     main.push_str(&globals.ram_struct(holes.layout));
+    for &t in &soft.ref_tys {
+        main.push_str(&heap.types[t].decl());
+    }
     writeln!(main, "\npub const NAME: &str = {name:?};").unwrap();
     writeln!(
         main,
@@ -635,6 +755,17 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     }
     writeln!(
         report,
+        "indirect call arguments (native/indirect-call-args): {} of {} call_fn calls have a complete callee set, {} of them passing all of r0-r3; of the {} complete sets, {} have callees whose summaries read all four between them, {} a four-register callee (a summary hole, a stand-in)",
+        soft.indirect_complete,
+        soft.indirect,
+        soft.indirect_four_complete,
+        sets.len(),
+        args.union_four,
+        args.four_reg_callee,
+    )
+    .unwrap();
+    writeln!(
+        report,
         "stack locals (native/frame-locals): {} slots in {} functions printed as Rust locals, {} loads and stores to them; {} calls write the locals to the frame first",
         soft.local_slots,
         soft.local_fns,
@@ -649,6 +780,19 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         objs(false),
         objs(true),
         soft.unexplained,
+    )
+    .unwrap();
+    let refs = |st| soft.access.get(&(st, Where::Ref)).copied().unwrap_or(0);
+    writeln!(
+        report,
+        "heap pointers (native/ref-heap): {} loads and {} stores through a Ref<T>, {} types; {} accesses through an object's pointer no type explains (left as bytes); the run took {} rounds, {:.1} s{}",
+        refs(false),
+        refs(true),
+        soft.ref_tys.len(),
+        soft.ref_unexplained,
+        heap.rounds,
+        heap.secs,
+        if heap.unsettled { " and didn't settle: nothing typed" } else { "" },
     )
     .unwrap();
     if let Some(at) = holes.plant_slot
@@ -694,10 +838,19 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push_accesses(&soft.access);
     m.push("ram_globals", n(globals.0.len()));
     m.push("pointer_unexplained", soft.unexplained);
+    m.push(
+        "ref_accesses",
+        soft.access.get(&(false, Where::Ref)).copied().unwrap_or(0)
+            + soft.access.get(&(true, Where::Ref)).copied().unwrap_or(0),
+    );
+    m.push("ref_types", n(soft.ref_tys.len()));
+    m.push("ref_unexplained", soft.ref_unexplained);
     m.push("sp_accesses_local_slot", soft.sp_slots[0]);
     m.push("sp_accesses_escaping_slot", soft.sp_slots[1]);
     m.push("sp_accesses_callers_frame", soft.sp_slots[2]);
     m.push("call_fn_calls", n(soft.indirect));
+    m.push("call_fn_complete", n(soft.indirect_complete));
+    m.push("call_fn_four_complete", n(soft.indirect_four_complete));
     m.push("jumps_by_value", n(soft.dyn_jumps));
     if let Some(f) = &fnrefs {
         let fn_proven = f.1.keys().filter(|w| f.0.proven(**w)).count();
@@ -887,6 +1040,15 @@ fn literal(ctx: &Ctx, src: u32, at: u32, thumb: bool, c: u32) -> Option<u32> {
     (rd(a, 4)? == c).then(|| a - ctx.base + src)
 }
 
+/// One code context, for [`fn_flow`]: its functions and their frames, and
+/// where its bytes are in ROM (an IWRAM copy's source).
+struct FlowIn<'a> {
+    ctx: &'a Ctx<'a>,
+    src: u32,
+    funcs: &'a [Func],
+    frames: &'a BTreeMap<u32, Frame>,
+}
+
 /// [`fnref::follow`] over every context's functions: the flow, every
 /// function word in ROM outside code (its key, and whether a literal pool
 /// read it), and the addresses of the calls printed through `call_fn`.
@@ -895,24 +1057,62 @@ fn fn_flow(
     rom: &[u8],
     disc: &Discovery,
     overlays: &[discovery::Overlay],
-    codes: &[Code],
+    ins: &[fnref::FnIn],
+    pools: &BTreeSet<u32>,
     all: &BTreeSet<u32>,
-) -> (fnref::Flow, BTreeMap<u32, (u32, bool)>, BTreeSet<u32>) {
+) -> (fnref::Flow, BTreeMap<u32, (u32, bool)>) {
+    // Every function word in ROM that isn't an instruction (of the ROM's
+    // code, or an IWRAM copy's).
+    let in_code = |d: &Discovery, a: u32| {
+        d.code
+            .range(a.saturating_sub(3)..a + 4)
+            .any(|(&k, c)| k + c.size > a)
+    };
+    let mut words = BTreeMap::new();
+    for (i, b) in rom.as_chunks::<4>().0.iter().enumerate() {
+        let w = 0x0800_0000 + 4 * i as u32;
+        let v = u32::from_le_bytes(*b);
+        if !all.contains(&v) || in_code(disc, w) {
+            continue;
+        }
+        let copied = overlays
+            .iter()
+            .any(|o| (o.src..o.src + o.len).contains(&w) && in_code(&o.disc, o.dst + (w - o.src)));
+        if !copied {
+            words.insert(w, (v, pools.contains(&w)));
+        }
+    }
+    // The start's copies of ROM data (not code) to RAM.
+    let copies: Vec<(u32, u32, u32)> = disc
+        .copies
+        .iter()
+        .copied()
+        .filter(|(src, _, _)| !overlays.iter().any(|o| o.src == *src))
+        .collect();
+    let img = FnImage { rom, all, disc };
+    (fnref::follow(ins, &img, &copies), words)
+}
+
+/// Every context's functions as the flows take them ([`fnref::FnIn`]),
+/// the ROM words literal pools read that hold a function's key, and the
+/// addresses of the calls printed through `call_fn`.
+#[allow(clippy::type_complexity)]
+fn fn_ins<'a>(
+    codes: &[FlowIn<'a>],
+    all: &BTreeSet<u32>,
+) -> (Vec<fnref::FnIn<'a>>, BTreeSet<u32>, BTreeSet<u32>) {
     let mut ins = Vec::new();
     let mut pools = BTreeSet::new();
     let mut call_fn = BTreeSet::new();
-    for (ci, c) in codes.iter().enumerate() {
-        let src = match ci {
-            0 => 0x0800_0000,
-            _ => overlays[ci - 1].src,
-        };
-        for f in &c.funcs {
+    for c in codes {
+        let src = c.src;
+        for f in c.funcs {
             let mut blocks = BTreeMap::new();
             for (&k, gb) in &f.blocks {
                 let insts = &gb.block.insts;
                 let mut exits_of = BTreeMap::new();
-                for x in exits(&c.ctx, gb) {
-                    let e = frame::edge(&c.ctx, f, all, gb, &x);
+                for x in exits(c.ctx, gb) {
+                    let e = frame::edge(c.ctx, f, all, gb, &x);
                     if matches!(e, frame::Edge::Call { target: None, .. }) {
                         call_fn.insert(x.at);
                     }
@@ -950,7 +1150,7 @@ fn fn_flow(
                             }
                         }
                         Op::Pool(v) => {
-                            if let Some(w) = literal(&c.ctx, src, at, gb.block.thumb, v) {
+                            if let Some(w) = literal(c.ctx, src, at, gb.block.thumb, v) {
                                 lits.insert(i, w);
                                 if all.contains(&v) {
                                     pools.insert(w);
@@ -977,36 +1177,7 @@ fn fn_flow(
             });
         }
     }
-    // Every function word in ROM that isn't an instruction (of the ROM's
-    // code, or an IWRAM copy's).
-    let in_code = |d: &Discovery, a: u32| {
-        d.code
-            .range(a.saturating_sub(3)..a + 4)
-            .any(|(&k, c)| k + c.size > a)
-    };
-    let mut words = BTreeMap::new();
-    for (i, b) in rom.as_chunks::<4>().0.iter().enumerate() {
-        let w = 0x0800_0000 + 4 * i as u32;
-        let v = u32::from_le_bytes(*b);
-        if !all.contains(&v) || in_code(disc, w) {
-            continue;
-        }
-        let copied = overlays
-            .iter()
-            .any(|o| (o.src..o.src + o.len).contains(&w) && in_code(&o.disc, o.dst + (w - o.src)));
-        if !copied {
-            words.insert(w, (v, pools.contains(&w)));
-        }
-    }
-    // The start's copies of ROM data (not code) to RAM.
-    let copies: Vec<(u32, u32, u32)> = disc
-        .copies
-        .iter()
-        .copied()
-        .filter(|(src, _, _)| !overlays.iter().any(|o| o.src == *src))
-        .collect();
-    let img = FnImage { rom, all, disc };
-    (fnref::follow(&ins, &img, &copies), words, call_fn)
+    (ins, pools, call_fn)
 }
 
 fn code(ctx: Ctx<'_>) -> Code<'_> {
@@ -1033,6 +1204,11 @@ struct Soft {
     locals: u64,
     /// Computed RAM accesses no one global explains (native/ref-in-object).
     unexplained: u64,
+    /// Accesses through a heap object's pointer no type explains
+    /// (native/ref-heap).
+    ref_unexplained: u64,
+    /// The heap's types the printed accesses use.
+    ref_tys: BTreeSet<usize>,
     /// Stack locals, and the functions with any.
     local_slots: usize,
     local_fns: usize,
@@ -1047,6 +1223,10 @@ struct Soft {
     /// callee's run that stopped at a hole ([`Shapes::callee_hole`]).
     callee_holes: usize,
     indirect: usize,
+    /// Those with a complete callee set, and of them those passing all
+    /// of r0-r3 still.
+    indirect_complete: usize,
+    indirect_four_complete: usize,
     dyn_jumps: usize,
     /// Falls and jumps into another function's entry, printed through its
     /// extended entry.
@@ -1076,6 +1256,11 @@ struct FnPrinter<'a, 'b> {
     cur: u32,
     /// RAM's typed globals.
     globals: &'a Globals,
+    /// What each `call_fn` call with a complete callee set passes and
+    /// takes back ([`call_fn_args`]), by its address.
+    args: &'a Args,
+    /// The heap's types and the accesses through them.
+    heap: &'a heap::Heap,
 }
 
 fn v(i: ValueId) -> String {
@@ -1147,12 +1332,13 @@ impl FnPrinter<'_, '_> {
                 s.push_str("/// Never returns.\n");
             }
             // Callers keep r4-r11 and sp in their own locals, so a callee
-            // can't change them; only one that really returns them changed
-            // (`analysis::holes`' rule) is lifted wrongly.
+            // can't change them; only a function that returns sp changed,
+            // or reads r4-r11 a callee changed or as they came
+            // (`analysis::holes::SUMMARY_HARD`), is lifted wrongly.
             if let Some(h) = sum
                 .holes
                 .iter()
-                .find(|h| h.contains("returns with r4-r11 or sp changed"))
+                .find(|h| analysis::holes::summary_hard(&analysis::holes::summary_kind(h)))
             {
                 self.hole(f.entry, format!("summary: {h}"));
             } else if sum.returns && !sum.keeps {
@@ -1266,8 +1452,47 @@ impl FnPrinter<'_, '_> {
                     .object(globals::guest(lo), globals::guest(hi), w)
             })
             .collect();
+        // The accesses the value sets don't bound that the heap's run
+        // types (native/ref-heap): a field through a `Ref<T>`, which
+        // prints its address too.
+        let mut pc = 0;
+        let refs: Vec<Option<HeapRef>> = insts
+            .iter()
+            .enumerate()
+            .map(|(i, inst)| {
+                if let Op::Insn(a) = inst.op {
+                    pc = a;
+                }
+                let (Op::Load { addr, .. } | Op::Store { addr, .. }) = inst.op else {
+                    return None;
+                };
+                if typed[i].is_some()
+                    || objs[i].is_some()
+                    || self.vsa_where(insts, addr, pc) != Where::Unknown
+                {
+                    return None;
+                }
+                let f = *self.heap.access.get(&(self.f.entry, self.cur, i))?;
+                // Through the pointer the address adds a constant to, if
+                // that's in the object: the addition isn't printed.
+                let base = match insts[addr.index()].op {
+                    Op::Bin(BinOp::Add, x, y) if konst(insts, addr).is_none() => {
+                        match (konst(insts, x), konst(insts, y)) {
+                            (None, Some(c)) if c <= f.off => Some((x, c)),
+                            (Some(c), None) if c <= f.off => Some((y, c)),
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                };
+                Some(HeapRef { f, base })
+            })
+            .collect();
+        self.soft
+            .ref_tys
+            .extend(refs.iter().flatten().map(|r| r.f.ty));
         let dead = dead_addresses(insts, &typed);
-        let used = self.used(insts, &typed);
+        let used = self.used(insts, &typed, &refs);
         for (i, inst) in insts.iter().enumerate() {
             let id = ValueId(i as u32);
             if dead[i] || (pure(&inst.op) && !used[i]) {
@@ -1298,10 +1523,14 @@ impl FnPrinter<'_, '_> {
                         Width::Half => ("ld16", " & !1"),
                         Width::Word => ("ld32", " & !3"),
                     };
-                    let mem = match (&typed[i], &objs[i]) {
-                        (Some(p), _) => globals::load(p, bytes(width)),
-                        (None, Some(o)) => o.load(&format!("{}{m}", v(addr)), bytes(width)),
-                        (None, None) => format!("{f}(g, {}{m})", v(addr)),
+                    let mem = match (&typed[i], &objs[i], refs[i]) {
+                        (Some(p), _, _) => globals::load(p, bytes(width)),
+                        (None, Some(o), _) => o.load(&format!("{}{m}", v(addr)), bytes(width)),
+                        (None, None, Some(r)) => match r.base {
+                            Some((b, c)) => self.heap.load(r.f, &v(b), r.f.off - c),
+                            None => self.heap.load(r.f, &v(addr), r.f.off),
+                        },
+                        (None, None, None) => format!("{f}(g, {}{m})", v(addr)),
                     };
                     let e = match self.local(i) {
                         Some((l, d, n)) => {
@@ -1316,7 +1545,14 @@ impl FnPrinter<'_, '_> {
                             }
                         }
                         None => {
-                            self.count(insts, addr, at, i, false, typed_as(&typed[i], &objs[i]));
+                            self.count(
+                                insts,
+                                addr,
+                                at,
+                                i,
+                                false,
+                                typed_as(&typed[i], &objs[i], refs[i].is_some()),
+                            );
                             mem
                         }
                     };
@@ -1346,10 +1582,16 @@ impl FnPrinter<'_, '_> {
                         ""
                     };
                     let val = format!("{}{plant}", v(value));
-                    let mem = match (&typed[i], &objs[i]) {
-                        (Some(p), _) => globals::store(p, bytes(width), &val),
-                        (None, Some(o)) => o.store(&format!("{}{m}", v(addr)), bytes(width), &val),
-                        (None, None) => format!("{f}(g, {}{m}, {val});", v(addr)),
+                    let mem = match (&typed[i], &objs[i], refs[i]) {
+                        (Some(p), _, _) => globals::store(p, bytes(width), &val),
+                        (None, Some(o), _) => {
+                            o.store(&format!("{}{m}", v(addr)), bytes(width), &val)
+                        }
+                        (None, None, Some(r)) => match r.base {
+                            Some((b, c)) => self.heap.store(r.f, &v(b), r.f.off - c, &val),
+                            None => self.heap.store(r.f, &v(addr), r.f.off, &val),
+                        },
+                        (None, None, None) => format!("{f}(g, {}{m}, {val});", v(addr)),
                     };
                     let body = match local {
                         Some((l, d, n)) => {
@@ -1361,13 +1603,20 @@ impl FnPrinter<'_, '_> {
                             }
                         }
                         None => {
-                            let w =
-                                self.count(insts, addr, at, i, true, typed_as(&typed[i], &objs[i]));
+                            let w = self.count(
+                                insts,
+                                addr,
+                                at,
+                                i,
+                                true,
+                                typed_as(&typed[i], &objs[i], refs[i].is_some()),
+                            );
                             // A store that may reach I/O may set `IME` again,
                             // which runs a pending IRQ's handler on the
                             // current stack.
                             let io = typed[i].is_none()
                                 && objs[i].is_none()
+                                && refs[i].is_none()
                                 && match w {
                                     Where::Sp => false,
                                     Where::Const(r) => metrics::REGIONS[r] == "io",
@@ -1419,19 +1668,11 @@ impl FnPrinter<'_, '_> {
         store: bool,
         typed: Option<Where>,
     ) -> Where {
-        let w = match konst(insts, addr) {
-            _ if typed.is_some() => typed.unwrap(),
-            Some(a) => Where::Const(metrics::region(a)),
-            None => match self.ctx.disc.rec.accesses.get(&at) {
-                Some(x) if x.stack_only() => Where::Sp,
-                Some(x) if !x.sp && !x.top => x
-                    .hull
-                    .and_then(|(lo, hi)| metrics::region_of(lo, hi))
-                    .map_or(Where::Unknown, Where::Computed),
-                _ => Where::Unknown,
-            },
-        };
+        let w = typed.unwrap_or_else(|| self.vsa_where(insts, addr, at));
         *self.soft.access.entry((store, w)).or_default() += 1;
+        self.soft.ref_unexplained += (w == Where::Unknown
+            && self.heap.unexplained.contains(&(self.f.entry, self.cur, i)))
+            as u64;
         self.soft.unexplained += (w == Where::Computed(0)) as u64;
         if w == Where::Sp {
             let esc = self
@@ -1449,12 +1690,29 @@ impl FnPrinter<'_, '_> {
         w
     }
 
+    /// Where an access by the instruction at `at` is, untyped: a constant
+    /// address by its region; else as the value-set analysis knows the
+    /// instruction's addresses.
+    fn vsa_where(&self, insts: &[Inst], addr: ValueId, at: u32) -> Where {
+        match konst(insts, addr) {
+            Some(a) => Where::Const(metrics::region(a)),
+            None => match self.ctx.disc.rec.accesses.get(&at) {
+                Some(x) if x.stack_only() => Where::Sp,
+                Some(x) if !x.sp && !x.top => x
+                    .hull
+                    .and_then(|(lo, hi)| metrics::region_of(lo, hi))
+                    .map_or(Where::Unknown, Where::Computed),
+                _ => Where::Unknown,
+            },
+        }
+    }
+
     /// Which of a block's values something printed uses. An access
     /// printed as a stack local's (unless `--shadow-locals` reads the
     /// frame's bytes too) or a typed global's (`typed`) doesn't use its
     /// address, so the arithmetic only the address needed isn't printed
     /// ([`pure`]).
-    fn used(&self, insts: &[Inst], typed: &[Option<Place>]) -> Vec<bool> {
+    fn used(&self, insts: &[Inst], typed: &[Option<Place>], refs: &[Option<HeapRef>]) -> Vec<bool> {
         let mut used = vec![false; insts.len()];
         for (i, inst) in insts.iter().enumerate().rev() {
             if pure(&inst.op) && !used[i] {
@@ -1465,9 +1723,14 @@ impl FnPrinter<'_, '_> {
                     .frame
                     .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
             let field = typed[i].is_some();
+            let base = refs[i].and_then(|r| r.base).map(|(b, _)| b);
             let ops = match inst.op {
                 Op::Load { .. } if local || field => Vec::new(),
                 Op::Store { value, .. } if local || field => vec![value],
+                Op::Load { .. } if base.is_some() => base.into_iter().collect(),
+                Op::Store { value, .. } if base.is_some() => {
+                    base.into_iter().chain([value]).collect()
+                }
                 ref op => op.operands(),
             };
             for x in ops.into_iter().chain(inst.guard) {
@@ -1638,6 +1901,21 @@ impl FnPrinter<'_, '_> {
         format!("{call}\n                    {then}")
     }
 
+    /// An indirect call at `at` to key `k` through `call_fn`: all of
+    /// r0-r3 in and out, or, where its callee set is complete, what its
+    /// callees read in and what they may change out.
+    fn call_fn(&mut self, at: u32, k: &str) -> String {
+        self.soft.indirect += 1;
+        let (pass, back) = self.args.by_site.get(&at).copied().unwrap_or((0xf, 0xf));
+        if self.args.by_site.contains_key(&at) {
+            self.soft.indirect_complete += 1;
+            if pass == 0xf {
+                self.soft.indirect_four_complete += 1;
+            }
+        }
+        call_fn_text(k, pass, back)
+    }
+
     fn exit(&mut self, e: Exit, x: &ExitInfo, thumb: bool) -> String {
         let ind = "                    ";
         let at = x.at;
@@ -1659,10 +1937,10 @@ impl FnPrinter<'_, '_> {
                 writeln!(s, "{ind}{wait}{c}").unwrap();
             }
             Plan::CallVia { reg, ret, .. } => {
-                self.soft.indirect += 1;
                 let r = reg.index();
-                let c = format!(
-                    "[r0, r1, r2, r3] = call_fn(g, if r{r} & 1 != 0 {{ r{r} }} else {{ r{r} & !3 }}, r13, {regs})?;"
+                let c = self.call_fn(
+                    at,
+                    &format!("if r{r} & 1 != 0 {{ r{r} }} else {{ r{r} & !3 }}"),
                 );
                 let c = self.call_then(c, ret, at);
                 writeln!(s, "{ind}{wait}{c}").unwrap();
@@ -1688,10 +1966,7 @@ impl FnPrinter<'_, '_> {
                     // An indirect call.
                     let c = match target {
                         Some(tk) if self.all.contains(&tk) => self.call_stmt(tk),
-                        _ => {
-                            self.soft.indirect += 1;
-                            format!("[r0, r1, r2, r3] = call_fn(g, {k}, r13, {regs})?;")
-                        }
+                        _ => self.call_fn(at, &k),
                     };
                     let c = self.call_then(c, ret, at);
                     writeln!(s, "{ind}{c}").unwrap();
@@ -1736,13 +2011,32 @@ impl FnPrinter<'_, '_> {
                 };
                 let n = runtime::bios::number(comment, thumb);
                 let call = match n {
-                    0x02 => "g.sp = r13; hw::halt(g)?;".to_string(),
+                    // `Stop` is a halt, as in the play build.
+                    0x02 | 0x03 => "g.sp = r13; hw::halt(g)?;".to_string(),
                     0x04 => "r0 = intr_wait(g, r13, r0 != 0, r1)?;".to_string(),
                     0x05 => "r0 = intr_wait(g, r13, true, 1)?; r1 = 1;".to_string(),
                     0x06 => {
                         "let mut r = [r0, r1, r2, r3]; div(&mut r); [r0, r1, r2, r3] = r;".to_string()
                     }
+                    0x08 => "r0 = hw::bios::sqrt(r0);".to_string(),
+                    0x0A => "let (a, t) = hw::bios::arc_tan2_of(r0 as i32, r1 as i32); \
+                        r0 = a as u32; r1 = t.map_or(r1, |t| t as u32); r3 = 0x170;"
+                        .to_string(),
                     0x0B => "let mut r = [r0, r1, r2, r3]; cpu_set(g, r13, &mut r)?; [r0, r1, r2, r3] = r;".to_string(),
+                    0x0C => "let mut r = [r0, r1, r2, r3]; cpu_fast_set(g, r13, &mut r)?; [r0, r1, r2, r3] = r;".to_string(),
+                    0x11 | 0x12 => format!(
+                        "let mut r = [r0, r1, r2, r3]; lz77(g, r13, &mut r, {}, {at:#010x}, {thumb})?; [r0, r1, r2, r3] = r;",
+                        n == 0x12
+                    ),
+                    0x14 | 0x15 => format!(
+                        "let mut r = [r0, r1, r2, r3]; rl(g, &mut r, {}); [r0, r1, r2, r3] = r;",
+                        n == 0x15
+                    ),
+                    0x19 => "sound_bias(g, r0);".to_string(),
+                    0x1F => "r0 = hw::bios::midi_key2freq(ld32(g, r0.wrapping_add(4) & !3), r1, r2);"
+                        .to_string(),
+                    // No link cable: no client answers (the play build's).
+                    0x25 => "r0 = 1;".to_string(),
                     _ => {
                         debug_assert!(!BIOS.contains(&n));
                         self.hole(at, format!("BIOS call {n:#04x}, which the library doesn't have"));
@@ -1759,13 +2053,24 @@ impl FnPrinter<'_, '_> {
 }
 
 /// How an access printed typed is counted: a constant address's field
-/// (`Global`) or a computed one's (`Object`).
-fn typed_as(field: &Option<Place>, obj: &Option<Obj>) -> Option<Where> {
-    match (field, obj) {
-        (Some(_), _) => Some(Where::Global),
-        (None, Some(_)) => Some(Where::Object),
-        (None, None) => None,
+/// (`Global`), a computed one's (`Object`), or a heap object's through
+/// its `Ref<T>` (`Ref`).
+fn typed_as(field: &Option<Place>, obj: &Option<Obj>, r: bool) -> Option<Where> {
+    match (field, obj, r) {
+        (Some(_), _, _) => Some(Where::Global),
+        (None, Some(_), _) => Some(Where::Object),
+        (None, None, true) => Some(Where::Ref),
+        (None, None, false) => None,
     }
+}
+
+/// An access printed as a heap object's field (native/ref-heap): the
+/// field, and the pointer it goes through if not its address: a value
+/// the address adds a constant to.
+#[derive(Clone, Copy)]
+struct HeapRef {
+    f: heap::Field,
+    base: Option<(ValueId, u32)>,
 }
 
 fn bytes(w: Width) -> u32 {
@@ -1854,6 +2159,122 @@ fn dead_addresses(insts: &[Inst], typed: &[Option<Place>]) -> Vec<bool> {
         }
     }
     dead
+}
+
+/// The callee-set run ([`fnref`]) over one code context, the ROM's,
+/// without a lift: the flow, and each indirect call's complete callee set
+/// ([`complete_sets`]), for [`crate::saves::summarize_sets`]. `sums` are
+/// the summaries the frames need ([`frame::of_code`]); `gbaa-recompile
+/// --summaries` runs it on Emerald. The lift runs it over every context
+/// with the stand-ins' code, so its sets can differ.
+pub fn callee_sets(
+    rom: &[u8],
+    disc: &Discovery,
+    ctx: &Ctx,
+    funcs: &[Func],
+    sums: &Summaries,
+) -> (fnref::Flow, Sets) {
+    let frames = frame::of_code(ctx, funcs, sums);
+    let all: BTreeSet<u32> = funcs.iter().map(|f| f.entry).collect();
+    let overlays = discovery::overlays(rom, disc);
+    let ins = [FlowIn {
+        ctx,
+        src: 0x0800_0000,
+        funcs,
+        frames: &frames,
+    }];
+    let (ins, pools, _) = fn_ins(&ins, &all);
+    let (flow, _) = fn_flow(rom, disc, &overlays, &ins, &pools, &all);
+    let sets = complete_sets(&flow);
+    (flow, sets)
+}
+
+/// Each indirect call's complete callee set, from the flow: the calls (not
+/// the jumps by value) whose target can hold no other function. A flow
+/// that didn't settle (a step cap, the rounds run out) may be missing
+/// callees, so it gives no sets, as it proves no words.
+fn complete_sets(flow: &fnref::Flow) -> Sets {
+    if flow.unsettled {
+        return Sets::new();
+    }
+    flow.sites
+        .iter()
+        .filter(|(_, s)| s.complete && !s.tail)
+        .map(|(&a, s)| (a, s.callees.clone()))
+        .collect()
+}
+
+/// A `call_fn` call to key `k` passing the registers of `pass` (0 for the
+/// rest) and taking back those of `back` (bits for r0-r3).
+fn call_fn_text(k: &str, pass: u8, back: u8) -> String {
+    let a: Vec<String> = (0..4)
+        .map(|r| {
+            if pass & 1 << r != 0 {
+                format!("r{r}")
+            } else {
+                "0".into()
+            }
+        })
+        .collect();
+    let call = format!("call_fn(g, {k}, r13, [{}])?", a.join(", "));
+    if back == 0xf {
+        return format!("[r0, r1, r2, r3] = {call};");
+    }
+    let set: Vec<String> = shape::regs(back)
+        .map(|r| format!(" r{r} = o[{r}];"))
+        .collect();
+    format!("{{ let o = {call};{} }}", set.concat())
+}
+
+/// [`call_fn_args`] for one callee set: what the call passes and takes
+/// back, given each callee's shape (`None`: four registers).
+fn site_args(cs: &BTreeSet<u32>, shape: impl Fn(u32) -> Option<Shape>) -> (u8, u8) {
+    let (mut reads, mut back, mut kept) = (0u8, 0u8, 0u8);
+    for &c in cs {
+        let (p, r) = shape(c).map_or((0xf, 0xf), |sh| (sh.params, sh.results));
+        reads |= p;
+        back |= r;
+        kept |= !r & 0xf;
+    }
+    (reads | (back & kept), back)
+}
+
+struct Args {
+    by_site: BTreeMap<u32, (u8, u8)>,
+    /// The sites whose callees' summaries (holes or not) read all four
+    /// between them, and those with a four-register callee.
+    union_four: usize,
+    four_reg_callee: usize,
+}
+
+/// What each indirect call with a complete callee set passes `call_fn`
+/// and takes back from it (bits for r0-r3), by its address. A shaped
+/// callee's adapter reads its parameters and gives back its results and
+/// the rest as they went in; a four-register one (a summary hole, a
+/// stand-in) reads and gives back all four. So the call takes back what
+/// any callee may change, and passes what any reads, and what one may
+/// change while another leaves it as it came (that one gives back what
+/// was passed).
+fn call_fn_args(sets: &Sets, codes: &[Code], shaped: &BTreeMap<u32, Shape>) -> Args {
+    let sums: BTreeMap<u32, &Summary> = codes
+        .iter()
+        .flat_map(|c| c.sums.by_entry.iter().map(|(&k, s)| (k, s)))
+        .collect();
+    let mut a = Args {
+        by_site: BTreeMap::new(),
+        union_four: 0,
+        four_reg_callee: 0,
+    };
+    for (&at, cs) in sets {
+        let raw = cs
+            .iter()
+            .fold(0, |m, c| m | sums.get(c).map_or(0xf, |s| s.params));
+        a.union_four += usize::from(raw == 0xf);
+        a.four_reg_callee += usize::from(cs.iter().any(|c| !shaped.contains_key(c)));
+        a.by_site
+            .insert(at, site_args(cs, |c| shaped.get(&c).copied()));
+    }
+    a
 }
 
 /// Every function's shape ([`shape::shapes`]), over all code contexts.
@@ -2128,6 +2549,48 @@ fn expr(op: &Op) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_flow_that_did_not_settle_gives_no_callee_sets() {
+        let mut flow = fnref::Flow::default();
+        flow.sites.insert(
+            0x0800_0100,
+            fnref::Site {
+                callees: [0x0800_0201].into(),
+                complete: true,
+                tail: false,
+            },
+        );
+        assert_eq!(complete_sets(&flow).len(), 1);
+        flow.unsettled = true;
+        assert!(complete_sets(&flow).is_empty());
+    }
+
+    #[test]
+    fn a_complete_callee_set_passes_what_its_callees_read() {
+        let sh = |params, results| Some(Shape { params, results });
+        // f reads r0 and gives r0; g reads r1 and gives r0 and r2. The
+        // call passes r0, r1, and r2, which f leaves as it came while g
+        // changes it; it takes back r0 and r2, and r3 stays the caller's.
+        let shapes = |c: u32| match c {
+            1 => sh(0b0001, 0b0001),
+            2 => sh(0b0010, 0b0101),
+            _ => None,
+        };
+        assert_eq!(site_args(&[1, 2].into(), shapes), (0b0111, 0b0101));
+        // Every callee gives r0 back: it isn't passed for that.
+        assert_eq!(site_args(&[1].into(), shapes), (0b0001, 0b0001));
+        // A four-register callee: all four, both ways.
+        assert_eq!(site_args(&[1, 3].into(), shapes), (0xf, 0xf));
+        assert_eq!(
+            call_fn_text("k", 0b0011, 0b0001),
+            "{ let o = call_fn(g, k, r13, [r0, r1, 0, 0])?; r0 = o[0]; }"
+        );
+        assert_eq!(
+            call_fn_text("k", 0xf, 0xf),
+            "[r0, r1, r2, r3] = call_fn(g, k, r13, [r0, r1, r2, r3])?;"
+        );
+    }
 
     #[test]
     fn holes_file_parses_standins_and_jumps() {

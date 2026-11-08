@@ -178,6 +178,21 @@
         "evidence": "Merged origin/main into unit/native/ime-release (4f61b72f): lift-check.toml conflict settled keeping main's fn_words_not_proven bar and the branch's native-ime-release table, its new bar 55 from its first lift. just lift-check passed (all programs, planted faults caught); just check exit 0.",
         "host": "quack"
       }
+    },
+    {
+      "id": "merge/quack-lane3-native-lift-bios-calls",
+      "title": "Merge main on quack lane 3",
+      "detail": "Branch `unit/native/lift-bios-calls` holds {unit:native/lift-bios-calls}, finished but not on main: merging main conflicts in docs/native-stage-b.numbers.md docs/research/native-holes.numbers.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/3",
+      "branch": "unit/native/lift-bios-calls",
+      "record": {
+        "state": "done",
+        "by": "62ef447a",
+        "at": "2026-11-08T18:37:11Z",
+        "evidence": "Merged origin/main (6b6ddcc). Conflicts were in both generated numbers docs: regenerated them (lift-metrics --write-doc: 0 over/under bars after moving native-bios-calls bars the way main moved the others'; holes-all --write-doc over nine games). just check exit 0.",
+        "host": "quack"
+      }
     }
   ]
 }

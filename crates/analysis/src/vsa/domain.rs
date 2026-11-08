@@ -52,6 +52,11 @@ impl Sym {
         (self.0 >> 60) as u8
     }
 
+    /// The `n` it was made with (for [`ENTRY`], the register).
+    pub fn index(self) -> u32 {
+        (self.0 >> 48) as u32 & 0xfff
+    }
+
     /// Whether this names a value the instruction at `addr`, run with
     /// `salt`, makes.
     pub fn made_by(self, addr: u32, salt: u32) -> bool {
@@ -502,18 +507,26 @@ impl Bit {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum DOp {
     Lsl(u8),
+    /// `x << n` of an `x` below `1 << (32 - n)`: no bits lost, so a
+    /// `lsr` by the same `n` gives `x` back (GCC's zero-extending
+    /// `lsls r3, r0, #16; lsrs r3, r3, #16`).
+    LslExact(u8),
     Lsr(u8),
     Asr(u8),
     Mul(u32),
+    /// Sign-extending the low `w` bits of an `x` below `1 << w` (an
+    /// `ldrsh`'s halfword, an `ldrsb`'s byte).
+    Sext(u8),
 }
 
 impl DOp {
     pub fn eval(self, x: u32) -> u32 {
         match self {
-            DOp::Lsl(n) => x << n,
+            DOp::Lsl(n) | DOp::LslExact(n) => x << n,
             DOp::Lsr(n) => x >> n,
             DOp::Asr(n) => ((x as i32) >> n) as u32,
             DOp::Mul(k) => x.wrapping_mul(k),
+            DOp::Sext(w) => armv4t::sem::prim::sext(x, w as u32),
         }
     }
 
@@ -523,7 +536,9 @@ impl DOp {
             return Dom::from_vals(e.into_iter().map(|x| self.eval(x)).collect());
         }
         match (self, d) {
-            (DOp::Lsl(n), &Dom::Si { s, lo, hi }) if (hi as u64) << n <= u32::MAX as u64 => {
+            (DOp::Lsl(n) | DOp::LslExact(n), &Dom::Si { s, lo, hi })
+                if (hi as u64) << n <= u32::MAX as u64 =>
+            {
                 Dom::si(s << n, lo << n, hi << n)
             }
             (DOp::Lsr(n), &Dom::Si { lo, hi, .. }) => Dom::si(1, lo >> n, hi >> n),
@@ -536,6 +551,8 @@ impl DOp {
             {
                 Dom::si(s * k, lo * k, hi * k)
             }
+            // Nothing to extend below the sign bit.
+            (DOp::Sext(w), Dom::Si { hi, .. }) if (*hi as u64) < 1 << (w - 1) => d.clone(),
             _ => Dom::Top,
         }
     }

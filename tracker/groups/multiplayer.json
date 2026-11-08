@@ -616,6 +616,17 @@
       "title": "Join netplay without restarting the game",
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): joining a room restarted the game ('it has to restart the game'), and june wants it fixed (2026-10-29). A GBA restarts nothing: you plug the cable in and pick multiplayer in the game, so this one is ours. room.rs already sends each player's own console state at the start: find why the session boots fresh rather than starting from each window's running state (link port state, RTC, save, build ID?), and start from the running states. If something truly stands in the way, ask june with what it would take rather than dropping it. Check: two windows each mid-game join a room, neither resets, both reach Kirby's multiplayer, both end on one hash; just check.",
       "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "b61b4529",
+        "session": "b61b4529-bc61-4060-9402-fc6d27ecb674",
+        "host": "quack",
+        "pid": 686555,
+        "start": "16007050",
+        "at": "2026-11-08T19:40:30Z",
+        "branch": "unit/multiplayer/join-without-restart",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-01T01:35:00Z",
@@ -644,16 +655,21 @@
       "minMinutes": 25,
       "record": {
         "state": "claimed",
-        "by": "31168110",
-        "session": "31168110-59b0-412e-9723-af09371d6a8b",
+        "by": "aad03dc9",
+        "session": "aad03dc9-e315-4dfb-b75f-9c89e108a88a",
         "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T13:24:33Z",
+        "pid": 3349722,
+        "start": "14823514",
+        "at": "2026-11-08T19:46:34Z",
         "branch": "unit/multiplayer/overlay-hides-menu",
         "beats": true
       },
       "notes": [
+        {
+          "at": "2026-11-06T13:27:21Z",
+          "by": "31168110",
+          "text": "Not our overlays: Controls draws no report/mark at its foot. Suspect Steam's floating OSK: SDL x11 opens steam://open/keyboard on text_input.start (window.rs:1105, no rect for Netplay fields); a tap outside closes it. Asked owner for a Deck test. Main merged (62910042)."
+        },
         {
           "at": "2026-11-06T03:21:25Z",
           "by": "manual",
@@ -663,11 +679,6 @@
           "at": "2026-11-01T01:50:51Z",
           "by": "d86c5e5f",
           "text": "main merged into branch (merge commit on top of 57fcb251), no conflicts. just check started but cut by stop time again (tests were passing). Left: just check (~10+ min, start early), then done with the cu-shot evidence."
-        },
-        {
-          "at": "2026-11-01T01:49:12Z",
-          "by": "c52caa3f",
-          "text": "Fix committed on branch (57fcb251): netplay report box covered Main page's bottom rows; now menu fits above it. 1280x800 cu shots in a room: Main + Controls last rows clear. Left: just check (cut by stop), merge main, done. Steam OSK not seen here."
         }
       ],
       "review": {
@@ -792,11 +803,25 @@
       "id": "multiplayer/four-kirbys-deck",
       "title": "Four Kirbys' netplay frame cost on the Deck",
       "detail": "From {unit:multiplayer/four-seats}: quack's numbers for four Kirbys a peer are in docs/research/multiplayer.md, 'Four players'. The Deck's own CPU, a short headless run (docs/machines.md, deck: ask june for a yes first, each time). Copy the recompiled Kirby binary to ~/gbaa, run just rollback-feel's headless four-player command from that section (calm delay 2 and wander delay 0, --interp and not, peers on the Deck) and add the Deck's rows to the table.",
-      "needs": ["multiplayer/four-seats"]
+      "needs": ["multiplayer/four-seats"],
+      "record": {
+        "state": "parked",
+        "why": "Deck-only; june will ask for Deck SSH herself when she wants it",
+        "by": "8f498bd1",
+        "at": "2026-11-07T04:31:12Z"
+      },
+      "round": "2026-11-06T13:31:13Z"
     },
     {
       "id": "multiplayer/fly-one-machine",
-      "title": "Scale fly's gbaa-server back to one machine"
+      "title": "Scale fly's gbaa-server back to one machine",
+      "record": {
+        "state": "done",
+        "by": "178b8ae4",
+        "at": "2026-11-06T13:33:47Z",
+        "evidence": "Owner allowed it (d/may-lane-scale-fly-s). fly scale count 1 -a gbaa-server --region ewr destroyed 850d37c4e70228; fly machines list now shows one machine, 784563db002518 (ewr, shared-cpu-1x). just fly-up; just room-sim calm --server 37.16.3.41: pass, 10 hashes and the end match on both seats; just fly-down: stopped. IPv4 37.16.3.41 kept. No repo change (fly-deploy already passes --ha=false); branch equals origin/main, so just check not rerun.",
+        "host": "quack"
+      }
     }
   ]
 }

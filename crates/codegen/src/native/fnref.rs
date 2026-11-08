@@ -46,7 +46,14 @@
 //! an incomplete callee set: its arguments go to every function that may
 //! be called that way (one with no direct caller, or whose address is
 //! taken), and its results come back from all of them. Functions rerun
-//! (a worklist) until nothing they read changes.
+//! (a worklist, by rounds) until nothing they read changes: their entry,
+//! a callee's results, and of memory only what their loads gave (the pile
+//! or every cell at a width, compared with what it gave at the round's
+//! start; the cells at the addresses they read). The memory reads are
+//! kept and grown store by store, and a call through a large callee set
+//! gives only what it hadn't before. On Metroid (2,616 functions) the run
+//! settles in 12 rounds, about 150 s on quack
+//! (`native/fnref-flow-scale`).
 //!
 //! **The closed world.** Function and ROM addresses enter values only
 //! from the sources above; a number made by arithmetic the run doesn't
@@ -74,8 +81,8 @@
 //! proven (barred) and proven. `GBAA_FNREF_TRACE=1` prints each round of
 //! the run and each use not allowed, with its operands.
 //!
-//! Precision: the one pile is the limit (`docs/native-stage-b.md`, piece
-//! 3, as built). agb keeps closures and trait objects on its heap, so a
+//! Precision: the one pile is the limit (`docs/native-stage-b.md`, "Known
+//! gaps", the pile). agb keeps closures and trait objects on its heap, so a
 //! load through any heap pointer may give every function address stored
 //! there, and one such load used as a number marks them all.
 
@@ -210,11 +217,23 @@ impl Val {
         }
     }
 
+    /// Join without widening (as tokens read from memory one by one).
+    fn union(&mut self, o: &Val) {
+        if self.toks.is_empty() {
+            self.toks = o.toks.clone();
+        } else if !std::rc::Rc::ptr_eq(&self.toks.0, &o.toks.0) && !o.toks.is_subset(&self.toks) {
+            self.toks.extend(o.toks.iter().copied());
+        }
+        self.mem |= o.mem;
+        self.unk |= o.unk;
+        self.lost_rom |= o.lost_rom;
+    }
+
     fn join(&mut self, o: &Val) -> bool {
         let before = (self.toks.len(), self.mem, self.unk, self.lost_rom);
         if self.toks.is_empty() {
             self.toks = o.toks.clone();
-        } else if !o.toks.is_subset(&self.toks) {
+        } else if !std::rc::Rc::ptr_eq(&self.toks.0, &o.toks.0) && !o.toks.is_subset(&self.toks) {
             self.toks.extend(o.toks.iter().copied());
         }
         self.mem |= o.mem;
@@ -228,45 +247,60 @@ impl Val {
     /// one "from the lowest on" (a loop walking a table), and a pointer
     /// "from here on" takes in those above it.
     fn cap(&mut self) {
-        if self
-            .toks
-            .iter()
-            .filter(|t| matches!(t, Tok::Num(_)))
-            .count()
-            > NUMS
-        {
+        // One pass to see what needs widening; the set (shared) is only
+        // changed when something does.
+        let (mut nums, mut roms, mut from) = (0, 0, None);
+        // Functions' tokens sort first: only those after them count.
+        for t in self.toks.range(Tok::Num(0)..) {
+            match *t {
+                Tok::Num(_) => nums += 1,
+                Tok::Rom(_) => roms += 1,
+                Tok::RomFrom(a) if from.is_none() => from = Some(a),
+                _ => {}
+            }
+        }
+        if nums > NUMS {
             self.unk = true;
         }
         // Unknown takes in every number (so the cap stays monotone).
-        if self.unk {
-            self.toks.retain(|t| !matches!(t, Tok::Num(_)));
+        if self.unk && nums > 0 {
+            self.drop_range(Tok::Num(0)..=Tok::Num(u32::MAX));
         }
-        let roms: Vec<u32> = self
-            .toks
-            .iter()
-            .filter_map(|t| match t {
-                Tok::Rom(a) => Some(*a),
-                _ => None,
-            })
-            .collect();
-        if roms.len() > ROMS {
-            self.toks.retain(|t| !matches!(t, Tok::Rom(_)));
-            self.toks.insert(Tok::RomFrom(roms[0]));
-        }
-        let froms: Vec<u32> = self
-            .toks
-            .iter()
-            .filter_map(|t| match t {
-                Tok::RomFrom(a) => Some(*a),
-                _ => None,
-            })
-            .collect();
-        if let Some(&lo) = froms.first() {
-            self.toks.retain(|t| match t {
-                Tok::Rom(a) | Tok::RomFrom(a) => *a < lo,
-                _ => true,
-            });
+        if roms > ROMS {
+            let lo = self
+                .toks
+                .range(Tok::Rom(0)..)
+                .find_map(|t| match t {
+                    Tok::Rom(a) => Some(*a),
+                    _ => None,
+                })
+                .unwrap();
+            self.drop_range(Tok::Rom(0)..=Tok::Rom(u32::MAX));
             self.toks.insert(Tok::RomFrom(lo));
+            from = Some(from.map_or(lo, |f: u32| f.min(lo)));
+        }
+        // A pointer "from here on" takes in those above it.
+        if let Some(lo) = from
+            && self
+                .toks
+                .range(Tok::Rom(0)..)
+                .any(|t| matches!(*t, Tok::Rom(a) | Tok::RomFrom(a) if a >= lo && *t != Tok::RomFrom(lo)))
+        {
+            self.drop_range(Tok::Rom(lo)..=Tok::Rom(u32::MAX));
+            self.drop_range(Tok::RomFrom(lo)..);
+            self.toks.insert(Tok::RomFrom(lo));
+        }
+    }
+
+    /// Take out the tokens in `r` (the functions' tokens, sorted first,
+    /// are most of a large set: a `retain` over them all at each cap was
+    /// most of a large game's run).
+    fn drop_range(&mut self, r: impl std::ops::RangeBounds<Tok>) {
+        let ts: Vec<Tok> = self.toks.range(r).copied().collect();
+        if !ts.is_empty() {
+            for t in ts {
+                self.toks.remove(&t);
+            }
         }
     }
 
@@ -415,10 +449,25 @@ struct G {
     ret: BTreeMap<u32, Vec<Val>>,
     /// Every store the run can't place (the heap, escaping frame slots).
     pile: Mem,
-    /// [`G::read_pile`]'s, by width.
+    /// [`G::read_pile`]'s, by width: uncapped (grown at each store), and
+    /// capped (made again when the first changes).
+    pile_raw: [Val; 5],
     pile_reads: [Option<Val>; 5],
     cells: BTreeMap<u32, Mem>,
+    /// [`G::read_cells`]'s, by width, the same way.
+    cell_raw: [Val; 5],
+    cell_reads: [Option<Val>; 5],
     spills: BTreeMap<u32, Mem>,
+    /// What a load at a width reads of a function's spills, and of the
+    /// cells at an address (kept until they change).
+    spill_reads: std::collections::HashMap<(u32, u8), Val, Fx>,
+    cell_at_reads: std::collections::HashMap<(u32, u8), Val, Fx>,
+    /// The origins in [`Flow::holes`], to look up fast.
+    holed: std::collections::HashSet<Origin, Fx>,
+    /// Large token sets whose every origin is in [`Flow::holes`], by
+    /// address (each kept, so the address isn't reused): a hole of one
+    /// again adds nothing.
+    all_holed: std::collections::HashMap<*const BTreeSet<Tok>, Toks, Fx>,
     /// What incomplete callee sets pass.
     loose_args: Vec<Val>,
     /// Functions whose address is taken.
@@ -433,8 +482,84 @@ struct G {
     /// What changed since the functions last ran, to rerun what reads it.
     dirty_entry: BTreeSet<u32>,
     dirty_ret: BTreeSet<u32>,
-    dirty_mem: bool,
     dirty_loose: bool,
+    /// The functions incomplete callee sets reach this round, and what
+    /// their results join to (kept until one of them changes).
+    loose: BTreeSet<u32>,
+    loose_rets: Option<Vec<Val>>,
+    /// When each function's results last changed (a count of changes).
+    ret_stamp: BTreeMap<u32, u64>,
+    stamp: u64,
+    /// Each call by value's last callees, arguments and results, by
+    /// function, address and whether a tail call: a large callee set given
+    /// the same arguments again changes nothing, and its results only
+    /// when a callee's did.
+    by_value: std::collections::HashMap<(u32, u32, bool), ByValue>,
+    /// The cells changed this round, and whether the pile did.
+    cells_changed: BTreeSet<u32>,
+    pile_changed: bool,
+    /// What the running function read of memory.
+    rd: Rd,
+}
+
+/// A fast hash for the run's small keys (the standard one was a tenth of
+/// a large game's run).
+#[derive(Clone, Copy, Default)]
+struct Fx;
+
+struct FxHasher(u64);
+
+impl std::hash::BuildHasher for Fx {
+    type Hasher = FxHasher;
+    fn build_hasher(&self) -> FxHasher {
+        FxHasher(0)
+    }
+}
+
+impl std::hash::Hasher for FxHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.write_u64(b as u64);
+        }
+    }
+    fn write_u8(&mut self, n: u8) {
+        self.write_u64(n as u64);
+    }
+    fn write_u32(&mut self, n: u32) {
+        self.write_u64(n as u64);
+    }
+    fn write_usize(&mut self, n: usize) {
+        self.write_u64(n as u64);
+    }
+    fn write_isize(&mut self, n: isize) {
+        self.write_u64(n as u64);
+    }
+    fn write_u64(&mut self, n: u64) {
+        self.0 = (self.0.rotate_left(5) ^ n).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+}
+
+struct ByValue {
+    callees: BTreeSet<u32>,
+    args: Vec<Val>,
+    rets: Vec<Val>,
+    stamp: u64,
+}
+
+/// What a function's run read of memory, to rerun it only when that
+/// changed: the pile and every cell at some widths (bit `w`), and cells
+/// in ranges (inclusive).
+#[derive(Default)]
+struct Rd {
+    pile: u8,
+    all_cells: u8,
+    ranges: Vec<(u32, u32)>,
+    /// It made a call whose callee set is incomplete (it reads every
+    /// loose function's results).
+    incomplete: bool,
 }
 
 impl G {
@@ -443,11 +568,59 @@ impl G {
     }
 
     fn hole(&mut self, v: &Val, at: u32, why: Why, only: impl Fn(Form) -> bool) {
-        let os: Vec<Origin> = v.fns().filter(|f| only(f.2)).map(|f| f.1).collect();
-        for o in os {
-            // An output only: nothing the run reads.
-            self.flow.holes.entry(o).or_insert((at, why));
+        let big = v.toks.len() >= 64;
+        let p = std::rc::Rc::as_ptr(&v.toks.0);
+        if big && self.all_holed.contains_key(&p) {
+            return;
         }
+        let mut all = true;
+        for (_, o, form) in v.fns() {
+            if self.holed.contains(&o) {
+                continue;
+            }
+            // An output only: nothing the run reads.
+            if only(form) {
+                self.holed.insert(o);
+                self.flow.holes.insert(o, (at, why));
+            } else {
+                all = false;
+            }
+        }
+        if big && all {
+            if self.all_holed.len() >= 1024 {
+                self.all_holed.clear();
+            }
+            self.all_holed.insert(p, v.toks.clone());
+        }
+    }
+
+    /// What a load at width `w` reads of function `f`'s spills.
+    fn read_spill(&mut self, f: u32, w: u8, into: &mut Val) {
+        let v = self.spill_reads.entry((f, w)).or_insert_with(|| {
+            let mut v = Val::default();
+            if let Some(m) = self.spills.get(&f) {
+                from_mem(m, w, &mut v);
+            }
+            v
+        });
+        into.union(v);
+    }
+
+    /// What a load at width `w` from RAM address `c` reads of the cells
+    /// it overlaps.
+    fn read_cell(&mut self, c: u32, w: u8, into: &mut Val) {
+        let v = self.cell_at_reads.entry((c, w)).or_insert_with(|| {
+            let mut v = Val::default();
+            for (&a, m) in self.cells.range(c.saturating_sub(3)..c + w as u32) {
+                for &(t, sw) in m {
+                    if c < a + sw as u32 {
+                        from_mem_one(t, sw, w, &mut v);
+                    }
+                }
+            }
+            v
+        });
+        into.union(v);
     }
 
     fn store(&mut self, to: Store, toks: &[(Tok, u8)]) {
@@ -467,16 +640,50 @@ impl G {
             Store::Cell(a) => self.cells.entry(a).or_default(),
             Store::Spill(f) => self.spills.entry(f).or_default(),
         };
-        let n = m.len();
-        m.extend(toks.iter().copied());
-        let c = m.len() != n;
+        let new: Vec<(Tok, u8)> = toks.iter().copied().filter(|t| m.insert(*t)).collect();
+        let c = !new.is_empty();
         if c {
-            self.pile_reads = Default::default();
-            match to {
+            let raw = match to {
+                Store::Pile => {
+                    self.pile_reads = Default::default();
+                    self.pile_changed = true;
+                    Some(&mut self.pile_raw)
+                }
+                Store::Cell(a) => {
+                    self.cell_reads = Default::default();
+                    // The kept reads of the addresses this cell overlaps.
+                    for c in a.saturating_sub(4)..=a + 3 {
+                        for w in [1u8, 2, 4] {
+                            if let Some(v) = self.cell_at_reads.get_mut(&(c, w)) {
+                                for &(t, sw) in &new {
+                                    if a + 3 >= c && a < c + w as u32 && c < a + sw as u32 {
+                                        from_mem_one(t, sw, w, v);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    self.cells_changed.insert(a);
+                    Some(&mut self.cell_raw)
+                }
                 Store::Spill(f) => {
                     self.dirty_entry.insert(f);
+                    for w in [1, 2, 4] {
+                        if let Some(v) = self.spill_reads.get_mut(&(f, w)) {
+                            for &(t, sw) in &new {
+                                from_mem_one(t, sw, w, v);
+                            }
+                        }
+                    }
+                    None
                 }
-                _ => self.dirty_mem = true,
+            };
+            if let Some(raw) = raw {
+                for w in [1, 2, 4] {
+                    for &(t, sw) in &new {
+                        from_mem_one(t, sw, w, &mut raw[w as usize]);
+                    }
+                }
             }
         }
         self.mark(c);
@@ -486,12 +693,27 @@ impl G {
     /// changes).
     fn read_pile(&mut self, w: u8, into: &mut Val) {
         let i = w as usize;
+        self.rd.pile |= 1 << w;
         if self.pile_reads[i].is_none() {
-            let mut v = Val::default();
-            from_mem(&self.pile, w, &mut v);
+            let mut v = self.pile_raw[i].clone();
+            v.cap();
             self.pile_reads[i] = Some(v);
         }
         into.join(self.pile_reads[i].as_ref().unwrap());
+    }
+
+    /// What a load at width `w` from anywhere reads of the cells (kept
+    /// until a cell changes: reading three thousand of them at each such
+    /// load was most of a large game's run).
+    fn read_cells(&mut self, w: u8, into: &mut Val) {
+        let i = w as usize;
+        self.rd.all_cells |= 1 << w;
+        if self.cell_reads[i].is_none() {
+            let mut v = self.cell_raw[i].clone();
+            v.cap();
+            self.cell_reads[i] = Some(v);
+        }
+        into.join(self.cell_reads[i].as_ref().unwrap());
     }
 
     fn give(&mut self, f: u32, regs: &[Val]) {
@@ -517,6 +739,11 @@ impl G {
         }
         if c {
             self.dirty_ret.insert(f);
+            self.stamp += 1;
+            self.ret_stamp.insert(f, self.stamp);
+            if self.loose.contains(&f) {
+                self.loose_rets = None;
+            }
         }
         self.mark(c);
     }
@@ -603,34 +830,38 @@ const LOST: Tok = Tok::Num(1);
 /// What a load at width `w` reads of memory `m`.
 fn from_mem(m: &Mem, w: u8, into: &mut Val) {
     for &(t, sw) in m {
-        let t = match t {
-            Tok::Fn { key, origin, form } => {
-                // Read at the width it was stored at, it is what was
-                // stored; pieces read as a word are a copy reassembled
-                // (`memcpy` by bytes or halves); anything else, a piece.
-                let form = if sw == w {
-                    form
-                } else if w == 4 && sw < 4 {
-                    Form::Full
-                } else {
-                    Form::Part
-                };
-                Tok::Fn { key, origin, form }
-            }
-            Tok::Rom(_) | Tok::RomFrom(_) if w == 4 => t,
-            _ => {
-                // A mark, not a value: nothing else came of it.
-                if t == LOST {
-                    into.lost_rom = true;
-                    continue;
-                }
-                into.mem = true;
-                continue;
-            }
-        };
-        into.toks.insert(t);
+        from_mem_one(t, sw, w, into);
     }
-    into.cap();
+}
+
+/// What a load at width `w` reads of token `t` stored at width `sw`.
+fn from_mem_one(t: Tok, sw: u8, w: u8, into: &mut Val) {
+    let t = match t {
+        Tok::Fn { key, origin, form } => {
+            // Read at the width it was stored at, it is what was
+            // stored; pieces read as a word are a copy reassembled
+            // (`memcpy` by bytes or halves); anything else, a piece.
+            let form = if sw == w {
+                form
+            } else if w == 4 && sw < 4 {
+                Form::Full
+            } else {
+                Form::Part
+            };
+            Tok::Fn { key, origin, form }
+        }
+        Tok::Rom(_) | Tok::RomFrom(_) if w == 4 => t,
+        _ => {
+            // A mark, not a value: nothing else came of it.
+            if t == LOST {
+                into.lost_rom = true;
+                return;
+            }
+            into.mem = true;
+            return;
+        }
+    };
+    into.toks.insert(t);
 }
 
 struct Run<'a, 'g> {
@@ -1148,7 +1379,23 @@ impl Run<'_, '_> {
         }
     }
 
+    /// What a load at width `w` through `a` reads, widened once
+    /// ([`from_mem`] doesn't: a load may read thousands of cells).
     fn load(
+        &mut self,
+        s: &St,
+        key: u32,
+        i: usize,
+        a: &Val,
+        w: u8,
+        hull: Option<(u32, u32)>,
+    ) -> Val {
+        let mut v = self.load_raw(s, key, i, a, w, hull);
+        v.cap();
+        v
+    }
+
+    fn load_raw(
         &mut self,
         s: &St,
         key: u32,
@@ -1177,15 +1424,7 @@ impl Run<'_, '_> {
                             }
                             out.join(v);
                         }
-                        _ => {
-                            let sp = self
-                                .g
-                                .spills
-                                .get(&self.f.entry)
-                                .cloned()
-                                .unwrap_or_default();
-                            from_mem(&sp, w, &mut out);
-                        }
+                        _ => self.g.read_spill(self.f.entry, w, &mut out),
                     }
                     // At or above the entry sp: the caller's frame (a stack
                     // argument), which its stores reached through the pile.
@@ -1196,13 +1435,7 @@ impl Run<'_, '_> {
                     return out;
                 }
                 Some(super::frame::Place::Through(_)) => {
-                    let sp = self
-                        .g
-                        .spills
-                        .get(&self.f.entry)
-                        .cloned()
-                        .unwrap_or_default();
-                    from_mem(&sp, w, &mut out);
+                    self.g.read_spill(self.f.entry, w, &mut out);
                     self.g.read_pile(w, &mut out);
                     return out;
                 }
@@ -1217,16 +1450,12 @@ impl Run<'_, '_> {
                 Tok::Num(c) | Tok::Fn { key: c, .. } => {
                     if is_ram(c) {
                         let c = ram_canon(c);
+                        self.g
+                            .rd
+                            .ranges
+                            .push((c.saturating_sub(3), c + w as u32 - 1));
                         // The cells the access overlaps.
-                        let cell: Mem = self
-                            .g
-                            .cells
-                            .range(c.saturating_sub(3)..c + w as u32)
-                            .flat_map(|(&a, m)| {
-                                m.iter().filter(move |(_, sw)| c < a + *sw as u32).copied()
-                            })
-                            .collect();
-                        from_mem(&cell, w, &mut out);
+                        self.g.read_cell(c, w, &mut out);
                         self.g.read_pile(w, &mut out);
                     } else if self.img.word(c).is_some() {
                         self.rom_read(c, w, &mut out);
@@ -1273,9 +1502,14 @@ impl Run<'_, '_> {
                         out.lost_rom = true;
                     }
                     self.g.read_pile(w, &mut out);
-                    let (lo, hi) = hull.unwrap_or((0, u32::MAX));
-                    for (_, c) in self.g.cells.range(lo.saturating_sub(3)..=hi) {
-                        from_mem(c, w, &mut out);
+                    match hull {
+                        Some((lo, hi)) => {
+                            self.g.rd.ranges.push((lo.saturating_sub(3), hi));
+                            for (_, c) in self.g.cells.range(lo.saturating_sub(3)..=hi) {
+                                from_mem(c, w, &mut out);
+                            }
+                        }
+                        None => self.g.read_cells(w, &mut out),
                     }
                     // An I/O read, too.
                     out.unk = true;
@@ -1451,25 +1685,106 @@ impl Run<'_, '_> {
     /// what comes back.
     fn call_by_value(&mut self, t: &Val, at: u32, args: &[Val], tail: bool) -> Vec<Val> {
         let (callees, complete) = self.callees(t, at, tail);
-        let mut rets = vec![Val::default(); 4];
-        for &k in &callees {
-            self.g.give(k, args);
-            for (a, b) in rets.iter_mut().zip(self.ret_of(k)) {
-                a.join(&b);
+        // A large callee set is given only what it wasn't given before
+        // (the entries hold that already: they only grow), and its results
+        // are joined again only from the callees whose results changed.
+        let key = (self.f.entry, at, tail);
+        let memo = self
+            .g
+            .by_value
+            .remove(&key)
+            .filter(|m| m.callees == callees && callees.len() > 1);
+        let rets = match memo {
+            Some(mut m) => {
+                let delta: Vec<Val> = args
+                    .iter()
+                    .zip(&m.args)
+                    .map(|(a, o)| {
+                        let mut d = Val {
+                            mem: a.mem && !o.mem,
+                            unk: a.unk && !o.unk,
+                            lost_rom: a.lost_rom && !o.lost_rom,
+                            ..Val::default()
+                        };
+                        if !std::rc::Rc::ptr_eq(&a.toks.0, &o.toks.0) {
+                            d.toks = a.toks.difference(&o.toks).copied().collect();
+                        }
+                        d
+                    })
+                    .collect();
+                if delta
+                    .iter()
+                    .any(|d| !d.toks.is_empty() || d.mem || d.unk || d.lost_rom)
+                {
+                    for &k in &callees {
+                        self.g.give(k, &delta);
+                    }
+                    for (o, a) in m.args.iter_mut().zip(args) {
+                        o.union(a);
+                    }
+                }
+                for &k in &callees {
+                    self.rets_read.insert(k);
+                    if self.g.ret_stamp.get(&k).is_some_and(|&s| s > m.stamp) {
+                        for (a, b) in m.rets.iter_mut().zip(&self.g.ret[&k]) {
+                            a.join(b);
+                        }
+                    }
+                }
+                m.stamp = self.g.stamp;
+                let rets = m.rets.clone();
+                self.g.by_value.insert(key, m);
+                rets
             }
-        }
+            None => {
+                let mut rets = vec![Val::default(); 4];
+                for &k in &callees {
+                    self.g.give(k, args);
+                    for (a, b) in rets.iter_mut().zip(self.ret_of(k)) {
+                        a.join(&b);
+                    }
+                }
+                if callees.len() > 1 {
+                    self.g.by_value.insert(
+                        key,
+                        ByValue {
+                            callees: callees.clone(),
+                            args: args.to_vec(),
+                            rets: rets.clone(),
+                            stamp: self.g.stamp,
+                        },
+                    );
+                }
+                rets
+            }
+        };
+        let mut rets = rets;
         if !complete {
+            self.g.rd.incomplete = true;
             let mut c = false;
             for (a, b) in self.g.loose_args.iter_mut().zip(args) {
                 c |= a.join(b);
             }
             self.g.dirty_loose |= c;
             self.g.mark(c);
-            let loose: Vec<u32> = self.loose.iter().copied().collect();
-            for k in loose {
-                for (a, b) in rets.iter_mut().zip(self.ret_of(k)) {
-                    a.join(&b);
+            let lr = match &self.g.loose_rets {
+                Some(v) => v.clone(),
+                None => {
+                    let mut v = vec![Val::default(); 4];
+                    for k in self.loose {
+                        if let Some(r) = self.g.ret.get(k) {
+                            for (a, b) in v.iter_mut().zip(r) {
+                                a.join(b);
+                            }
+                        }
+                    }
+                    self.g.loose_rets = Some(v.clone());
+                    v
                 }
+            };
+            self.rets_read.extend(self.loose.iter().copied());
+            for (a, b) in rets.iter_mut().zip(&lr) {
+                a.join(b);
             }
             for r in &mut rets {
                 r.unk = true;
@@ -1687,26 +2002,54 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
     }
     let t0 = std::time::Instant::now();
     // A worklist of functions: each reruns when what it reads changed
-    // (its entry, a callee's results, memory, what incomplete sets pass).
-    let loads: BTreeSet<u32> = fns
-        .iter()
-        .filter(|f| {
-            f.blocks
-                .values()
-                .any(|b| b.insts.iter().any(|i| matches!(i.op, Op::Load { .. })))
-        })
-        .map(|f| f.entry)
-        .collect();
+    // (its entry, a callee's results, the memory it read, what incomplete
+    // sets pass, the functions they reach). Memory by what a load gives:
+    // the pile and every cell by width (compared with what they gave at
+    // the round's start), the cells by address.
     let mut reads: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
+    let mut rds: BTreeMap<u32, Rd> = BTreeMap::new();
     let mut dirty: BTreeSet<u32> = fns.iter().map(|f| f.entry).collect();
     let trace = std::env::var_os("GBAA_FNREF_TRACE").is_some();
-    for round in 0..256 {
+    let snap = |g: &mut G| -> Vec<Val> {
+        let mut v = Vec::new();
+        for w in [1, 2, 4] {
+            let (mut p, mut c) = (Val::default(), Val::default());
+            g.read_pile(w, &mut p);
+            g.read_cells(w, &mut c);
+            v.push(p);
+            v.push(c);
+        }
+        v
+    };
+    let mut snapped = snap(&mut g);
+    g.cells_changed.clear();
+    g.pile_changed = false;
+    let mut loose: BTreeSet<u32> = BTreeSet::new();
+    for round in 0..=256 {
         g.changed = false;
-        let loose: BTreeSet<u32> = fns
-            .iter()
-            .map(|f| f.entry)
-            .filter(|k| !direct.contains(k) || g.taken.contains(k))
-            .collect();
+        let was = std::mem::replace(
+            &mut loose,
+            fns.iter()
+                .map(|f| f.entry)
+                .filter(|k| !direct.contains(k) || g.taken.contains(k))
+                .collect(),
+        );
+        if round > 0 {
+            // New loose functions take what incomplete sets pass, and each
+            // incomplete set reads their results.
+            dirty.extend(loose.difference(&was).copied());
+            g.loose = loose.clone();
+            g.loose_rets = None;
+            if loose != was {
+                dirty.extend(rds.iter().filter(|(_, r)| r.incomplete).map(|(f, _)| *f));
+            }
+        }
+        if dirty.is_empty() {
+            return g.flow;
+        }
+        if round == 256 {
+            break;
+        }
         for f in fns.iter().filter(|f| dirty.contains(&f.entry)) {
             let mut entry = g
                 .entry
@@ -1745,6 +2088,7 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
                 );
                 run.work.insert(f.entry);
             }
+            run.g.rd = Rd::default();
             let mut steps = 0;
             while let Some(k) = run.work.pop_first() {
                 steps += 1;
@@ -1756,14 +2100,17 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
             }
             let r = std::mem::take(&mut run.rets_read);
             reads.insert(f.entry, r);
+            rds.insert(f.entry, std::mem::take(&mut g.rd));
         }
-        // What every value held as a function's whole address: taken.
-        let before = g.taken.len();
+        // What every value held as a function's whole address: taken
+        // (each shared set once).
+        let mut seen = std::collections::HashSet::new();
         let held: Vec<Val> = g
             .entry
             .values()
             .chain(g.ret.values())
             .flatten()
+            .filter(|v| seen.insert(std::rc::Rc::as_ptr(&v.toks.0)))
             .cloned()
             .chain(std::iter::once(Val {
                 toks: g
@@ -1787,40 +2134,58 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
         for k in called {
             g.taken.insert(k);
         }
-        let taken_changed = g.taken.len() != before;
         dirty = std::mem::take(&mut g.dirty_entry);
         let rets = std::mem::take(&mut g.dirty_ret);
+        let n_entry = dirty.len();
+        let n_rets = rets.len();
         dirty.extend(
             reads
                 .iter()
                 .filter(|(_, r)| !r.is_disjoint(&rets))
                 .map(|(f, _)| *f),
         );
-        if std::mem::take(&mut g.dirty_mem) {
-            dirty.extend(loads.iter().copied());
+        if std::mem::take(&mut g.dirty_loose) {
+            dirty.extend(loose.iter().copied());
         }
-        if std::mem::take(&mut g.dirty_loose) || taken_changed {
-            dirty.extend(fns.iter().map(|f| f.entry).filter(|k| {
-                loose.contains(k) || reads.get(k).is_some_and(|r| !r.is_disjoint(&loose))
-            }));
+        // Memory: the widths whose pile or every-cell read changed, and
+        // the cells that did.
+        let mut pile_w = 0u8;
+        let mut cells_w = 0u8;
+        let cells = std::mem::take(&mut g.cells_changed);
+        if std::mem::take(&mut g.pile_changed) || !cells.is_empty() {
+            let now = snap(&mut g);
+            for (i, w) in [1u8, 2, 4].into_iter().enumerate() {
+                if now[2 * i] != snapped[2 * i] {
+                    pile_w |= 1 << w;
+                }
+                if now[2 * i + 1] != snapped[2 * i + 1] {
+                    cells_w |= 1 << w;
+                }
+            }
+            snapped = now;
         }
-        if taken_changed {
-            // The loose set grew: every function may see new callees.
-            dirty.extend(fns.iter().map(|f| f.entry));
-        }
+        dirty.extend(
+            rds.iter()
+                .filter(|(_, r)| {
+                    r.pile & pile_w != 0
+                        || r.all_cells & cells_w != 0
+                        || r.ranges
+                            .iter()
+                            .any(|&(lo, hi)| cells.range(lo..=hi).next().is_some())
+                })
+                .map(|(f, _)| *f),
+        );
         if trace {
             eprintln!(
-                "fnref round {round}: {:?}; {} to rerun; pile {}, cells {}, taken {}, holes {}",
+                "fnref round {round}: {:?}; {} to rerun ({n_entry} entries changed, {n_rets} results; pile widths {pile_w:#x}, every-cell widths {cells_w:#x}, {} cells changed); pile {}, cells {}, taken {}, holes {}",
                 t0.elapsed(),
                 dirty.len(),
+                cells.len(),
                 g.pile.len(),
                 g.cells.len(),
                 g.taken.len(),
                 g.flow.holes.len()
             );
-        }
-        if dirty.is_empty() {
-            return g.flow;
         }
     }
     g.flow.unsettled = true;

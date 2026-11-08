@@ -1,5 +1,5 @@
 //! `gbaa-holes ROM [--frames N] [--press KEY@F | KEY@F-G/E]… [--cover FILE [--update]] [--no-summaries]
-//! [--no-run-roots] [--show N]`: what blocks a native build of ROM
+//! [--no-run-roots] [--show N] [--line FILE]`: what blocks a native build of ROM
 //! (`docs/native-port-design.md`, section 6; `docs/research/native-holes.md`).
 //!
 //! Discovers the ROM and its IWRAM overlays, runs it in the interpreter
@@ -22,6 +22,10 @@
 //! and checks that against the file's list (fails on a difference), or
 //! with `--update` rewrites the list.
 //!
+//! `--line FILE` also writes the ranking line's numbers to FILE as TOML
+//! ([`corpus::Line`]). `gbaa-holes --corpus FILE …` runs every game of a
+//! corpus file and prints one table ([`corpus`], `just holes-all`).
+//!
 //! What the run records, per instruction executed: the address and
 //! instruction set, its first raw value (and whether a later one differed:
 //! RAM code that changed), whether it ran at the top level of an IRQ (the
@@ -36,6 +40,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::ExitCode;
 
+mod corpus;
 mod cover;
 
 use analysis::holes::{self, CpuWhere, RetArith, Run, STACK_SWITCH, Seen};
@@ -699,10 +704,14 @@ fn run(rec: &mut Rec, m: &mut Machine<Script>, frames: u32, boot: bool) -> Resul
 }
 
 fn main() -> ExitCode {
+    analysis::cap::require_cap("gbaa-holes");
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|a| a == "--corpus") {
+        return corpus::main(&args[1..]);
+    }
     let (mut rom_path, mut frames, mut presses) = (None, 5400u32, Vec::new());
     let (mut sums, mut show, mut run_roots) = (true, 12usize, true);
-    let (mut cover_path, mut update) = (None, false);
+    let (mut cover_path, mut update, mut line_path) = (None, false, None);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -720,6 +729,10 @@ fn main() -> ExitCode {
             },
             "--cover" => match it.next() {
                 Some(p) => cover_path = Some(p.clone()),
+                None => return usage(),
+            },
+            "--line" => match it.next() {
+                Some(p) => line_path = Some(p.clone()),
                 None => return usage(),
             },
             "--update" => update = true,
@@ -973,6 +986,12 @@ fn main() -> ExitCode {
         overlays.push(c.overlay);
     }
     let r = holes::classify(rom, &disc, &overlays, &run, summaries.as_ref());
+    if let Some(p) = &line_path
+        && let Err(e) = corpus::write_line(p, &r)
+    {
+        eprintln!("{e}");
+        return ExitCode::FAILURE;
+    }
 
     println!("{}", r.line(&game));
     println!(
@@ -1106,7 +1125,11 @@ fn main() -> ExitCode {
         e.0 += 1;
         e.1 += c.reached as usize;
     }
-    println!("CPU state: {} hard", r.hard_cpu());
+    println!(
+        "CPU state: {} hard (and {} in scanned code nothing ran, not counted)",
+        r.hard_cpu(),
+        r.scanned_skipped
+    );
     for ((p, k), (n, reached)) in &cpu {
         println!("  {:?} {}: {n} ({reached} reached)", p, k.text());
     }
@@ -1124,9 +1147,9 @@ fn main() -> ExitCode {
         );
     }
     println!(
-        "BIOS calls the library doesn't implement: {} (and {} CPU-state or BIOS items in scanned code nothing ran, not counted)",
+        "BIOS calls the native lifter doesn't print: {} (and {} in scanned code nothing ran, not counted; the lifter lifts that code, so it has both)",
         r.bios.len(),
-        r.scanned_skipped
+        r.scanned_bios
     );
     for (a, n) in r.bios.iter().take(show) {
         println!("  0x{a:08x} swi 0x{n:02x}");
@@ -1151,6 +1174,12 @@ fn main() -> ExitCode {
                     kind,
                     if k.hard { " (hard)" } else { "" }
                 );
+                // A hard kind's functions, each with its holes of the kind.
+                for f in k.funcs.iter().filter(|_| k.hard) {
+                    for h in s[f].iter().filter(|h| holes::summary_kind(h) == **kind) {
+                        println!("        0x{f:08x}  {h}");
+                    }
+                }
             }
         }
         None => println!("summaries: not measured (--no-summaries)"),
@@ -1178,6 +1207,18 @@ fn main() -> ExitCode {
         "ROM: {} bytes reached, {} not discovered",
         r.rom_reached_bytes, r.rom_undiscovered_bytes
     );
+    let mut rom = r.rom_undiscovered.clone();
+    rom.sort_by_key(|c| std::cmp::Reverse(c.end - c.start));
+    for c in rom.iter().take(show) {
+        let thumb = run.code.get(&c.start).is_some_and(|s| s.thumb);
+        println!(
+            "  0x{:08x}..0x{:08x} {}{}",
+            c.start,
+            c.end,
+            if thumb { "Thumb" } else { "ARM" },
+            why_missed(&disc, c.start, c.end, thumb)
+        );
+    }
     let Some((text, file)) = cover else {
         return ExitCode::SUCCESS;
     };
@@ -1262,7 +1303,30 @@ fn main() -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: gbaa-holes ROM [--frames N] [--press KEY@F | KEY@F-G/E]... [--cover FILE [--update]] [--no-summaries] [--no-run-roots] [--show N]"
+        "usage: gbaa-holes ROM [--frames N] [--press KEY@F | KEY@F-G/E]... [--cover FILE [--update]] [--no-summaries] [--no-run-roots] [--show N] [--line FILE]\n       gbaa-holes --corpus FILE --roms DIR [--out DIR] [--against DIR] [--only NAME]... [--cover] [--write-doc FILE] [flags above...]\n       gbaa-holes --corpus FILE --from DIR [--write-doc FILE]"
     );
     ExitCode::from(2)
+}
+
+/// What discovery has around an undiscovered ROM run: the code before it
+/// (its instruction set), and data over it.
+fn why_missed(disc: &analysis::discovery::Discovery, start: u32, end: u32, thumb: bool) -> String {
+    let mut out = String::new();
+    if let Some((&a, c)) = disc.code.range(..start).next_back()
+        && a + c.size == start
+    {
+        out += if c.thumb == thumb {
+            ", after discovered code"
+        } else {
+            ", after discovered code in the other set"
+        };
+    }
+    let other = disc.code.range(start..end).next().map(|(a, _)| *a);
+    if let Some(a) = other {
+        out += &format!(", discovered code inside at 0x{a:08x}");
+    }
+    if let Some(&(s, e)) = disc.data.iter().find(|&&(s, e)| s < end && e > start) {
+        out += &format!(", data 0x{s:08x}..0x{e:08x}");
+    }
+    out
 }
