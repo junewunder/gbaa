@@ -1202,6 +1202,13 @@
       "title": "Function flow: loads through unknown addresses",
       "detail": "docs/native-stage-b.md piece 3. Measured on {unit:native/fnref-context}'s branch (commit e81168f; it holds the object split and call-site context): fn_words_not_proven unmoved by either. ~640 of affine's load sites (spike 644) have an address that may be unknown (Val::unk), and each reads the pile and every RAM cell (Run::load_at's anywhere arm), so e.g. the IRQ vector word's f_03000000 is in nearly every hole. Not the cause (tried, no change): naming the allocator, dropping the pile from constant-address loads, dropping the I/O unk flag, NUMS 8->256. A seen source: main's inlined free-list walk at 0x080001a8 (affine) loads GLOBAL_ALLOC fields holding allocator-made pointers. Find where the unknown comes from (GBAA_FNREF_TRACE; print each anywhere load) and fix the first big source. Done when: fn_words_not_proven falls on every agb program, bars lowered, a unit test, just lift-check and just check pass.",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/ref-heap-static-arrays",
+      "title": "Ref<T> objects in static arrays fit the packed layout",
+      "detail": "Found by {unit:native/lift-bios-calls}: heap.rs makes an object where a RAM base meets an unknown index, so an element of a static array (agb/native-bios-calls 4ee88ac's OUT.regs[k], 16 bytes at 0x020000b8) prints as g.at(Ref::<H_..>). The same words are also constant-address globals, which --layout packed places apart (in the lifter's order), so Ram::span fails and the packed build panics: 'pointer 0x020000b8 to 16 bytes isn't in RAM in one piece'. The guest layout passes. Repro: build agb/native-bios-calls at 4ee88ac (its main loop colours from o.regs.iter()) and run just lift-check --only native-bios-calls. The program now colours from a returned copy to avoid it; any game indexing a static array its code also touches by constant address hits it. Fix in the lifter (keep such globals contiguous in packed, or leave objects whose base is a global's region as bytes). Done when: the 4ee88ac loop shape (as a lift-check program or test) passes the packed native check; lift-check and just check pass.",
+      "check": "independent",
+      "uses": ["heavy"]
     }
   ]
 }
