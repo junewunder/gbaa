@@ -701,6 +701,17 @@
       "title": "Kirby netplay: should you hear the other Kirbys?",
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): Athena couldn't hear june's Kirby. The window plays your own console's sound, as your own GBA would, so whether the other Kirbys make sound is the game's choice. But frames run again are muted (netplay::gba quiet), and those are just the frames where the other player's input arrived late, so sounds the other player caused may be dropped while yours play. Find out: in a two-GBA run with no rollback (the local link window, or mGBA's), does Kirby play the other Kirby's sounds when it's on screen? Then in netplay, count sounds lost to frames run again. If they're lost, make them play; if the game is silent there too, record that. Check: the answer with evidence in docs/research/multiplayer.md, and the fix's test if any; just check.",
       "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "9d98d236",
+        "session": "9d98d236-71f3-4ec3-b234-4a1bdb04b71c",
+        "host": "quack",
+        "pid": 3349722,
+        "start": "14823514",
+        "at": "2026-11-08T19:58:43Z",
+        "branch": "unit/multiplayer/other-seat-sound",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-01T01:45:53Z",
