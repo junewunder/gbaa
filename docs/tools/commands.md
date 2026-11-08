@@ -1290,7 +1290,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   given (a file name with spaces: `just lift "…/Metroid - Zero Mission
   (USA).gba" out/lift-metroid --name metroid`), else the ROM's file name
   lowercased. The file has `[[standin]]` (a function's hand-written Rust,
-  and why), `[[jump]]` (an unresolved jump's targets), `[[copy]]` (code
+  and why), `[[jump]]` (an unresolved jump's targets as keys, its cases), `[[copy]]` (code
   the game copies to RAM that discovery's static copies don't have:
   `src`, `dst`, `len`, `roots` and why, as `just holes` prints its run's
   copies; lifted at its RAM keys like a static copy, native/lift-ram-copies)
