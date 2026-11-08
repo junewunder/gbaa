@@ -16,6 +16,7 @@ use crate::capture::Capture;
 use crate::fast::{self, Clock, DrawPacer, FastForward};
 use crate::gamepad::{self, Pads};
 use crate::input::Script;
+use crate::present::Hold;
 use crate::slots::Slots;
 use crate::window::Screen;
 use netplay::gba::{Pad, Seat};
@@ -47,6 +48,9 @@ pub struct Desktop {
     fast_clock: Clock,
     /// When fast-forward next redraws the window.
     draws: DrawPacer,
+    /// How long a frame waits before going to the window, so frames reach
+    /// the display evenly ([`crate::present`]).
+    hold: Hold,
     /// The save-state slots' controls.
     pub slots: Slots,
     /// F6 asked for `--extract`'s export since the frame loop last looked
@@ -84,6 +88,7 @@ impl Desktop {
             fast_was: false,
             fast_clock: Clock::default(),
             draws: DrawPacer::default(),
+            hold: Hold::default(),
             slots: Slots::default(),
             export: false,
             rewind: false,
@@ -257,6 +262,7 @@ impl Desktop {
     pub fn paced(&self) -> Duration {
         self.clock.as_ref().map_or(Duration::ZERO, |c| c.slept)
             + self.fast_clock.slept
+            + self.hold.slept
             + self.player.as_ref().map_or(Duration::ZERO, |p| p.waited)
     }
 
@@ -336,6 +342,7 @@ impl Platform for Desktop {
             }
             self.fast_clock.reset();
             self.draws.reset();
+            self.hold.reset();
         }
         if let Some(c) = &mut self.capture {
             c.end_frame();
@@ -346,6 +353,13 @@ impl Platform for Desktop {
             } else {
                 p.end_frame();
             }
+        }
+        // At normal speed a frame goes to the window on the pacer's even
+        // beat, not when done: a frame whose finish crossed a refresh the
+        // one before didn't would be doubled and the next skipped
+        // (deck/even-presents).
+        if !fast && self.window.is_some() {
+            self.hold.before_show();
         }
         if !fast || self.draws.due(Instant::now()) {
             self.draw(frame, fast);
@@ -361,6 +375,7 @@ impl Platform for Desktop {
             if let Some(c) = &mut self.clock {
                 c.wait(fast::frame());
             }
+            self.hold.started();
         }
     }
 
