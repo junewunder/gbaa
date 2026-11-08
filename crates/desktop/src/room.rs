@@ -189,7 +189,13 @@ pub fn check(o: &Options) -> Result<(), String> {
     if o.players.is_some() && o.role != Some(Role::Host) {
         return Err("--players is the host's to set".into());
     }
-    crate::link::check(o).map_err(|e| e.replace("linked play (--link)", "netplay"))
+    // `--state` starts this seat from a state, as the window's game hands
+    // its own to the session.
+    let o = Options {
+        state: None,
+        ..o.clone()
+    };
+    crate::link::check(&o).map_err(|e| e.replace("linked play (--link)", "netplay"))
 }
 
 impl Speaker for Player {
@@ -230,12 +236,16 @@ fn address(v: &str) -> Result<SocketAddr, String> {
 
 /// Play this player's seat in a room, as `opts` says, in the window
 /// `screen` or headless, on `code` if given, the interpreter timed by
-/// `timing`.
+/// `timing`. The seat starts from `carry` if it holds a state (the
+/// window's game as it was when its player asked for the room), else from
+/// `--state` if given, else from reset; when the session ends `carry`
+/// holds the seat's state, for the game alone to go on from.
 pub fn run(
     opts: &Options,
     code: Option<&'static Code>,
     timing: Timing,
     screen: Option<Screen>,
+    carry: &mut Option<Vec<u8>>,
 ) -> Result<(), String> {
     let (Some(server), Some(role)) = (&opts.server, &opts.role) else {
         return Err("netplay needs --server and --host or --join".into());
@@ -331,7 +341,7 @@ pub fn run(
     if net.seats() != gba.seats() {
         gba = make(net.seats());
     }
-    play(opts, screen, gba, seat, code, delay, net)
+    play(opts, screen, gba, seat, code, delay, net, carry)
 }
 
 /// How long another player may send nothing before this peer takes
@@ -360,7 +370,9 @@ pub fn left_note(who: usize, how: netplay::udp::Gone) -> String {
     }
 }
 
-/// Play seat `seat` of room `code` over `net`.
+/// Play seat `seat` of room `code` over `net`, from `carry`'s state or
+/// `--state`'s if there is one ([`run`]).
+#[allow(clippy::too_many_arguments)]
 fn play(
     opts: &Options,
     screen: Option<Screen>,
@@ -369,6 +381,7 @@ fn play(
     code: [u8; relay::CODE_LEN],
     delay: u8,
     net: Udp,
+    carry: &mut Option<Vec<u8>>,
 ) -> Result<(), String> {
     let title = |t: &str| {
         if let Some(s) = &screen {
@@ -398,6 +411,22 @@ fn play(
         )?),
         None => None,
     };
+    // A GBA restarts nothing when its cable goes in: this seat goes on from
+    // where its game was (its state, cartridge save and all, after the .sav
+    // as a state loaded alone goes), and the others from their owners'
+    // states, which the session sends at the start ([`Rollback::new`]).
+    // Until the session ends, `carry` keeps the state from before it, for
+    // the game alone to go back to if the session fails.
+    let m = &mut *gba.machines_mut()[seat];
+    match (carry.as_deref(), &opts.state) {
+        (Some(s), _) => m
+            .load_state(s)
+            .map_err(|e| format!("this window's game state: {e}"))?,
+        (None, Some(path)) => {
+            crate::slots::load(m, path)?;
+        }
+        (None, None) => {}
+    }
     let host = (seat == 0).then(|| Config {
         delay,
         // The window's clock is the host's wall clock; headless, the
@@ -598,6 +627,11 @@ fn play(
         open = i.open && !i.leave;
         held = i.keys | i.pads;
     }
+    // The game alone goes on from this seat's console, as a GBA does when
+    // its cable is pulled.
+    *carry = Some(crate::slots::state(
+        &mut s.console_mut().machines_mut()[seat],
+    ));
     // Headless, or at --frames' end: the other peers still need what they
     // lack to end where this one does. A slower one (four consoles a peer
     // can run behind real time) may be seconds behind, and a goodbye

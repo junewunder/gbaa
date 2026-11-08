@@ -621,19 +621,7 @@
         "by": "b61b4529",
         "at": "2026-11-08T20:07:28Z",
         "evidence": "Fixed: the window's running state now goes into the session (this seat's console starts from it; the session's start sends it to the others) and the game alone goes on from the seat's state afterwards. Private cu session on quack, two Kirby windows mid-game at game select (cursor moved since their --state, so the live state was what carried): join didn't reset either, P2 left and played on in Rainbow Route, P1 rehosted from its cable screen, a new P2 joined, the cable screen saw P1+P2, both reached Rainbow Route, 1860 frames, 16156 transfers, desyncs none. Headless after merging main: gbaa-pingsim desktop calm, --state1/--state2 at game select, 1800 frames exact, both in multiplayer Rainbow Route, both end cdc7b0d19082c3a6, no desync. just check passes after the merge.",
-        "branch": "unit/multiplayer/join-without-restart",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T20:07:28Z",
-          "by": "b61b4529",
-          "host": "quack",
-          "pid": 686555,
-          "start": "16007050",
-          "beats": true,
-          "session": "b61b4529-bc61-4060-9402-fc6d27ecb674",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -641,8 +629,7 @@
           "by": "6f480fa6",
           "text": "Cause: lib.rs run_window ends the solo run() and room::run builds Gba::with_code(rom, &[None; SEATS]..) fresh: no start state. Fix: solo run hands back its machine state; pass it as this seat's Some(state) to Gba::with_code (and resume alone from the session's end state)."
         }
-      ],
-      "round": "2026-11-01T01:34:24Z"
+      ]
     },
     {
       "id": "multiplayer/connected-mark",
@@ -710,15 +697,23 @@
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): Athena couldn't hear june's Kirby. The window plays your own console's sound, as your own GBA would, so whether the other Kirbys make sound is the game's choice. But frames run again are muted (netplay::gba quiet), and those are just the frames where the other player's input arrived late, so sounds the other player caused may be dropped while yours play. Find out: in a two-GBA run with no rollback (the local link window, or mGBA's), does Kirby play the other Kirby's sounds when it's on screen? Then in netplay, count sounds lost to frames run again. If they're lost, make them play; if the game is silent there too, record that. Check: the answer with evidence in docs/research/multiplayer.md, and the fix's test if any; just check.",
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "9d98d236",
-        "session": "9d98d236-71f3-4ec3-b234-4a1bdb04b71c",
-        "host": "quack",
-        "pid": 3349722,
-        "start": "14823514",
-        "at": "2026-11-08T19:58:43Z",
+        "at": "2026-11-08T20:25:34Z",
+        "evidence": "The game, not rollback: crates/netplay/tests/seat_sound.rs (--ignored, release, passed 2026-11-08 on quack). Straight two-GBA Kirby run, seat 1 jumping vs idle: seat 1's sound differs on 258 frames, seat 0's picture shows the jumping Kirby (598 px at frame 2420), seat 0's sound identical on all frames. Rollback (60±40 ms, 2% loss, 52 rollbacks, 293 re-run): seat 0 heard the straight run's sound on all 3600 frames, same end hash. Nothing to fix. Written up in docs/research/multiplayer.md, 'The other players' sound'. just check passed after merging main.",
         "branch": "unit/multiplayer/other-seat-sound",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-08T20:25:34Z",
+          "by": "9d98d236",
+          "host": "quack",
+          "pid": 3349722,
+          "start": "14823514",
+          "beats": true,
+          "session": "9d98d236-71f3-4ec3-b234-4a1bdb04b71c",
+          "lane": "quack/3"
+        },
+        "pushed": true
       },
       "notes": [
         {
@@ -816,6 +811,17 @@
       "detail": "Since play builds default to --timing instant ({d:play-builds-use-timing-instant-checks-pass}; docs/decisions.md 11), an instant and an exact build of one ROM likely get the same netplay build ID: netplay::gba's code_id (crates/netplay/src/gba.rs) hashes keys, overlays, inner starts and folded ranges, and runtime::Code doesn't record the timing mode. Two such peers would share a room and split from the first frame, silently. The version cutoff ({unit:multiplayer/server-version-cutoff}) doesn't catch it: both can be the same version. Record the mode in Code (codegen fills it), hash it into code_id. Check: a test that two Codes differing only in timing get different build IDs; an instant Kirby v1 build through just rollback-feel wander --headless (both peers one hash; note p50 and compiled share beside the exact rows in docs/research/multiplayer.md 'On recompiled code'); just check.",
       "check": "independent",
       "minMinutes": 60,
+      "record": {
+        "state": "claimed",
+        "by": "7bc14b37",
+        "session": "7bc14b37-cd80-4dfa-8b40-bd509199b6a1",
+        "host": "quack",
+        "pid": 686555,
+        "start": "16007050",
+        "at": "2026-11-08T20:22:08Z",
+        "branch": "unit/multiplayer/timing-in-build-id",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-01T01:57:43Z",
