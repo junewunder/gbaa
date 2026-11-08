@@ -1250,7 +1250,19 @@
       "id": "native/fnref-romfrom-absorb",
       "title": "Flow's ROM from-here-on widening keeps pointers it reads",
       "detail": "Val::cap lets RomFrom(lo) absorb Rom(a) for any a >= lo, but rom_from(lo) reads only up to the next code, so a pointer past it is never read and a call through it may get a complete callee set missing callees. Seen in mosaic-modes (found by {unit:native/fnref-flow-emerald}): fn 0x080037f1 (core::fmt pad) r0 widens to RomFrom(0x08000100), absorbing vtable Rom(0x08024c50); word 0x08024c5c (f_08002ee1) was read only transiently before. Make the widening keep such pointers (mark lost_rom, or don't absorb past bound) with a unit test; just lift-metrics bars hold (lower any that drop).",
-      "check": "recorded"
+      "check": "recorded",
+      "record": {
+        "state": "claimed",
+        "by": "b9262a93",
+        "session": "b9262a93-e60b-4a3c-bc7c-b85669d8ea5d",
+        "host": "quack",
+        "pid": 3349722,
+        "start": "14823514",
+        "at": "2026-11-08T19:11:58Z",
+        "branch": "unit/native/fnref-romfrom-absorb",
+        "beats": true
+      },
+      "round": "2026-11-08T19:11:58Z"
     }
   ]
 }
