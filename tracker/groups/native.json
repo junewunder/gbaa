@@ -461,15 +461,24 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "0fb3d637",
-        "session": "0fb3d637-d046-4154-8440-427780e8476d",
-        "host": "quack",
-        "pid": 3349268,
-        "start": "14822772",
-        "at": "2026-11-08T16:23:25Z",
+        "checker": "verifier-7c3e91",
+        "at": "2026-11-08T16:50:48Z",
+        "evidence": "Main merged (ref-heap conflicts settled: fn_ins takes FlowIn views; summaries rerun with sets after the heap run, before shapes). just check and just lift-check pass on 33a0b07; call_fn_four_complete barred at the measured 56-60 (owner's call); Emerald numbers left to {unit:native/indirect-call-args-emerald} (owner: land it now). Checker verifier-7c3e91: PASS on logic, merge, bars, docs, logs; its fixes made: call_fn_complete unbarred, doc lines.",
         "branch": "unit/native/indirect-call-args",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-08T16:50:48Z",
+          "by": "0fb3d637",
+          "host": "quack",
+          "pid": 3349268,
+          "start": "14822772",
+          "beats": true,
+          "session": "0fb3d637-d046-4154-8440-427780e8476d",
+          "lane": "quack/2"
+        },
+        "pushed": true
       },
       "notes": [
         {
