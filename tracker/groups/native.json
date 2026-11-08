@@ -466,19 +466,7 @@
         "checker": "verifier-7c3e91",
         "at": "2026-11-08T16:50:48Z",
         "evidence": "Main merged (ref-heap conflicts settled: fn_ins takes FlowIn views; summaries rerun with sets after the heap run, before shapes). just check and just lift-check pass on 33a0b07; call_fn_four_complete barred at the measured 56-60 (owner's call); Emerald numbers left to {unit:native/indirect-call-args-emerald} (owner: land it now). Checker verifier-7c3e91: PASS on logic, merge, bars, docs, logs; its fixes made: call_fn_complete unbarred, doc lines.",
-        "branch": "unit/native/indirect-call-args",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T16:50:48Z",
-          "by": "0fb3d637",
-          "host": "quack",
-          "pid": 3349268,
-          "start": "14822772",
-          "beats": true,
-          "session": "0fb3d637-d046-4154-8440-427780e8476d",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -496,13 +484,7 @@
           "by": "62031260",
           "text": "Built on the branch (lift + summaries + gbaa-recompile --callee-sets); lift-check, just check pass. Waits on the bar question (measured 56-60, not 0: sets are the heap pile's 21 fns). Emerald part split to {unit:native/indirect-call-args-emerald}."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-07T07:53:37Z",
-        "findings": "- The Emerald re-measurement the card requires was not done, and the owner never agreed to move it out. The card's Done when asks for Emerald's summaries to be re-measured with callee sets, with the counts and what blocks complete sets (callbacks stored through RAM globals such as gMain.callback1) quoted in the design doc. The Evidence says this part was moved to a new unit, 'Emerald's summaries re-measured with callee sets' ({unit:native/indirect-call-args-emerald}). The new paragraph at docs/native-port-design.md:573-582 says plainly that it was not measured: the flow didn't finish on Emerald in 35 minutes (past 8 GB). The owner's question (q/accept-indirect-call-bar-today) covered only lowering the bar from 0 to the measured 56-60. It never mentioned dropping the Emerald part, so the answer 'a' doesn't cover it. The split also wasn't forced by the ~3-hour rule: the unit was split about 1.5 hours after it was claimed. What to do: ask the owner with `just ask`. Say that the Emerald measurement can't run until the work to make the flow finish on a whole game ({unit:native/fnref-flow-scale}) lands, because the flow doesn't finish there today. Offer two choices: (a) land this unit now, with the Emerald numbers left to the new unit, or (b) keep this unit open until the flow finishes on Emerald and the counts are in the design doc. Leave the branch unmerged until they answer. Alternatively, finish the measurement on this branch if the flow can be made to finish."
-      },
-      "round": "2026-11-06T11:08:08Z"
+      ]
     },
     {
       "id": "native/frame-escape",

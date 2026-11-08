@@ -2419,3 +2419,4 @@
 {"at":"2026-11-08T16:23:25Z","actor":"loop","tag":"0fb3d637","host":"quack","cmd":"claim","id":"native/indirect-call-args","text":"Indirect calls pass what their callees read: claimed"}
 {"at":"2026-11-08T16:23:34Z","actor":"loop","tag":"f6eb8639","host":"quack","cmd":"claim","id":"native/lift-bios-calls","text":"Lifted code makes the BIOS calls games use: claimed"}
 {"at":"2026-11-08T16:50:48Z","actor":"loop","tag":"0fb3d637","host":"quack","cmd":"done","id":"native/indirect-call-args","text":"Indirect calls pass what their callees read: done, checked by verifier-7c3e91"}
+{"at":"2026-11-08T16:54:06Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/indirect-call-args","text":"Indirect calls pass what their callees read: on main"}
