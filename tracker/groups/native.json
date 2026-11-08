@@ -1203,15 +1203,22 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "review",
         "by": "71b3ef7c",
-        "session": "71b3ef7c-8885-4bbe-b9b9-e52b241115bb",
-        "host": "quack",
-        "pid": 3349268,
-        "start": "14822772",
-        "at": "2026-11-08T21:00:00Z",
+        "at": "2026-11-08T23:08:30Z",
+        "evidence": "just check passes after merging main (67e15d7). just lift-metrics: every agb program within its bars, 0 hard holes. just holes-all --against out/holes/erm-base (base = main before the change): summary hard 3 -> 36, total hard 106 -> 139, each named and sorted by cause in docs/research/native-holes.md 'Entry reads of r4-r11, by the bits that survive', with the corpus's fully masked reads listed. Unit tests: masked soft, address/condition/store/callee argument/read return hard, jumped-only soft. Reports: out/holes/erm-new3.",
         "branch": "unit/native/entry-read-masking",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-08T23:08:30Z",
+          "by": "71b3ef7c",
+          "host": "quack",
+          "pid": 3349268,
+          "start": "14822772",
+          "beats": true,
+          "session": "71b3ef7c-8885-4bbe-b9b9-e52b241115bb",
+          "lane": "quack/2"
+        }
       },
       "round": "2026-11-08T21:00:00Z"
     },
