@@ -115,6 +115,18 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   generated numbers file (header, date, commit); `--from DIR` runs
   nothing and renders DIR's saved `summary.toml` (with `--write-doc`, the
   file), for a run already made at the commit wanted.
+- `just softfloat-check ROM [--cases N] [--pins]`
+  (`gbaa-softfloat-check`, `crates/hole-report/src/bin/softfloat_check.rs`):
+  the runtime's stand-ins for libgcc's `__muldf3` and `__divdf3`
+  (`runtime::softfloat`) against the ROM's own copies, found by
+  `analysis::softfloat::scan` and run in the interpreter: every pair of an
+  edge grid (zeros, denormals, the normal range's ends, infinities, quiet
+  and signalling NaNs), then N (default 50,000) random pairs of each kind
+  (any bits, results near the denormals, near overflow, short mantissas).
+  Prints each copy's count of differences and the first few; fails on
+  any, or on a ROM with neither. `--pins` prints a smaller grid's results
+  as `runtime::softfloat`'s test table holds them. About 2 s a ROM
+  (moonbeam, Emerald Rogue and Imperium have them). Light.
 - `just jt-score`: the jump-table check (decision 5c). Builds truth tables
   from `$GBAA_DATA/src/pokeemerald/pokeemerald{,_modern}.elf` and the ROMs
   beside them, runs `analysis::jumptable` over each ELF's code map, and
@@ -1684,7 +1696,16 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   typed on the keyboard or a pad (up/down step a letter), Leave the room;
   in a session it shows the seats, round trip, lead, rollbacks and frames
   run again. The game alone stops for the session and comes back after
-  it. With `--frames N` each run stops at N frames, and the window closes
+  it, and neither restarts it, as a GBA doesn't when its cable goes in
+  or out (multiplayer/join-without-restart): your seat starts from the
+  game as it was when you asked for the room (or from `--state`), and
+  the game alone goes on from where your seat left off. Checked
+  2026-11-08 on quack, two Kirby windows in a private `cu session`, each
+  at game select with a cursor moved since its `--state`: the session
+  began on each window's own screen, player 2 left and played on in
+  Rainbow Route, player 1 hosted again from its cable screen, and a new
+  player 2 joined: Kirby's cable screen saw P1 and P2, both reached
+  Rainbow Route, no desync in 1860 frames. With `--frames N` each run stops at N frames, and the window closes
   when a session ends there. Checked 2026-10-29 on quack: two Kirby
   windows in a private `cu session`, through a local `gbaa-server`, hosted
   and joined from the menus alone, both ending 3600 frames on one hash.
@@ -1767,6 +1788,12 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   `just build-recompiled`, in `target/recompiled/release/`).
   Kirby's multiplayer from reset: `start@400,start@700,a@800,a@950,
   down@1050,a@1100` on both, then `a@1820,a@1950,a@2100` on player 1.
+  `--state1 F`.. start a seat from a state (as a window's game goes into
+  its session): Kirby from game select, player 1 at frame 1000 and
+  player 2 at 1500 of the presses above, `--input1
+  'down@50,a@100,a@820,a@950,a@1100,right@1200-1800/18+9' --input2
+  'down@30,a@80,left@1200-1800/18+9' --frames 1800 --timing exact` on
+  calm reach Rainbow Route on one end hash (`cdc7b0d1…`, 2026-11-08).
   `--menu1 SPANS` and `--menu2 SPANS` (headless) open each seat's menu
   over those frames as a player would (`gbaa-desktop --menu`: the
   seat's presses let go, the menu's report refreshed), the check of

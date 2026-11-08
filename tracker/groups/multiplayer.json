@@ -617,15 +617,11 @@
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): joining a room restarted the game ('it has to restart the game'), and june wants it fixed (2026-10-29). A GBA restarts nothing: you plug the cable in and pick multiplayer in the game, so this one is ours. room.rs already sends each player's own console state at the start: find why the session boots fresh rather than starting from each window's running state (link port state, RTC, save, build ID?), and start from the running states. If something truly stands in the way, ask june with what it would take rather than dropping it. Check: two windows each mid-game join a room, neither resets, both reach Kirby's multiplayer, both end on one hash; just check.",
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "b61b4529",
-        "session": "b61b4529-bc61-4060-9402-fc6d27ecb674",
-        "host": "quack",
-        "pid": 686555,
-        "start": "16007050",
-        "at": "2026-11-08T19:40:30Z",
-        "branch": "unit/multiplayer/join-without-restart",
-        "beats": true
+        "at": "2026-11-08T20:07:28Z",
+        "evidence": "Fixed: the window's running state now goes into the session (this seat's console starts from it; the session's start sends it to the others) and the game alone goes on from the seat's state afterwards. Private cu session on quack, two Kirby windows mid-game at game select (cursor moved since their --state, so the live state was what carried): join didn't reset either, P2 left and played on in Rainbow Route, P1 rehosted from its cable screen, a new P2 joined, the cable screen saw P1+P2, both reached Rainbow Route, 1860 frames, 16156 transfers, desyncs none. Headless after merging main: gbaa-pingsim desktop calm, --state1/--state2 at game select, 1800 frames exact, both in multiplayer Rainbow Route, both end cdc7b0d19082c3a6, no desync. just check passes after the merge.",
+        "host": "quack"
       },
       "notes": [
         {
@@ -633,8 +629,7 @@
           "by": "6f480fa6",
           "text": "Cause: lib.rs run_window ends the solo run() and room::run builds Gba::with_code(rom, &[None; SEATS]..) fresh: no start state. Fix: solo run hands back its machine state; pass it as this seat's Some(state) to Gba::with_code (and resume alone from the session's end state)."
         }
-      ],
-      "round": "2026-11-01T01:34:24Z"
+      ]
     },
     {
       "id": "multiplayer/connected-mark",
@@ -658,19 +653,7 @@
         "by": "aad03dc9",
         "at": "2026-11-08T19:50:20Z",
         "evidence": "Cause: per the owner's answer (decision d/covered-controls-page-your-deck, 2026-11-07), the cover on the Deck's Controls page was a custom keyboard on an un-updated Steam Deck, not gbaa; she said land the Main-page fix and close. Branch keeps the Main page laid out above the netplay report (menu.rs). Latest main merged; just check passed (exit 0) after the merge.",
-        "branch": "unit/multiplayer/overlay-hides-menu",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-08T19:50:20Z",
-          "by": "aad03dc9",
-          "host": "quack",
-          "pid": 3349722,
-          "start": "14823514",
-          "beats": true,
-          "session": "aad03dc9-e315-4dfb-b75f-9c89e108a88a",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -688,13 +671,7 @@
           "by": "d86c5e5f",
           "text": "main merged into branch (merge commit on top of 57fcb251), no conflicts. just check started but cut by stop time again (tests were passing). Left: just check (~10+ min, start early), then done with the cu-shot evidence."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-06T03:21:25Z",
-        "findings": "- crates/desktop/src/menu.rs:1017-1034: the fix doesn't touch the problem the card reports. The card says something covered the bottom of the Controls page, where the dead zone rows are. Those rows are the DEADZONES section in menu/controls.rs:351, shown under Page::Remap. The report box is drawn only when `page == Page::Main`. The Evidence admits this ('Controls had no report'), so the box it moved could never have covered the Controls page. Moving it is a real fix for the Main page and can stay, but the card's 'Find what it is' is still unanswered for the Controls page. The playtest clue was that tapping the screen hid the cover, which points at something outside this menu: the Steam on-screen keyboard (for example, left open after typing a room code on the Netplay page), or another Steam/gamescope overlay. Next session: find out what draws over the Controls page on the Deck while in a room. Check whether the room-code entry raises the Deck's on-screen keyboard and whether it stays up after leaving the Netplay page. Then fix that or keep the Controls page clear of it, and record the cause in the Evidence.\n- Evidence (tracker multiplayer.json:641): the card's check was a 1280x800 shot in a room with the Controls page scrolled to its last row and nothing over it. The shots were taken in a cu session on quack, which never had whatever covered the Controls page. The earlier note says 'Steam OSK not seen here'. So a clear Controls page in cu proves nothing about the bug reported from the Deck. To meet the card, the shot has to come from a setup where the cover actually showed up: the Deck in gamescope/Steam, in a room, after joining by code. If only the owner's Deck can show it, the next session should ask the owner to run that check on the Deck: join a room, open Controls, scroll to the dead zone rows, and say whether anything covers them."
-      },
-      "round": "2026-11-01T01:40:21Z"
+      ]
     },
     {
       "id": "multiplayer/rollback-feel-sim",
@@ -719,28 +696,40 @@
       "title": "Kirby netplay: should you hear the other Kirbys?",
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): Athena couldn't hear june's Kirby. The window plays your own console's sound, as your own GBA would, so whether the other Kirbys make sound is the game's choice. But frames run again are muted (netplay::gba quiet), and those are just the frames where the other player's input arrived late, so sounds the other player caused may be dropped while yours play. Find out: in a two-GBA run with no rollback (the local link window, or mGBA's), does Kirby play the other Kirby's sounds when it's on screen? Then in netplay, count sounds lost to frames run again. If they're lost, make them play; if the game is silent there too, record that. Check: the answer with evidence in docs/research/multiplayer.md, and the fix's test if any; just check.",
       "minMinutes": 120,
+      "record": {
+        "state": "done",
+        "by": "9d98d236",
+        "at": "2026-11-08T20:25:34Z",
+        "evidence": "The game, not rollback: crates/netplay/tests/seat_sound.rs (--ignored, release, passed 2026-11-08 on quack). Straight two-GBA Kirby run, seat 1 jumping vs idle: seat 1's sound differs on 258 frames, seat 0's picture shows the jumping Kirby (598 px at frame 2420), seat 0's sound identical on all frames. Rollback (60±40 ms, 2% loss, 52 rollbacks, 293 re-run): seat 0 heard the straight run's sound on all 3600 frames, same end hash. Nothing to fix. Written up in docs/research/multiplayer.md, 'The other players' sound'. just check passed after merging main.",
+        "host": "quack"
+      },
       "notes": [
         {
           "at": "2026-11-01T01:45:53Z",
           "by": "61fe8d7b",
           "text": "Start: crates/netplay/src/gba.rs Pad::quiet mutes re-run frames; rollback.rs ~line 337. Measure in a test: gba() console, two seats, Speaker on seat 0, menu presses from docs/research/multiplayer.md (Kirby rollback-feel inputs), seat 2 jumps vs idle; compare seat 0 audio."
         }
-      ],
-      "round": "2026-11-01T01:45:09Z"
+      ]
     },
     {
       "id": "multiplayer/link-cable-survey",
       "title": "How the link cable works, and which games netplay covers",
       "detail": "june's question (2026-10-29): can netplay be a generic network replacement for any game's link cable, and does the cable assume no lag? Write up for june, in docs/research/multiplayer.md: each SIO mode, its timing (how fast a transfer completes, how many frames a game waits before it calls it a link error), why we run every console on every peer instead of sending cable bytes, and which modes runtime::link covers today (multiplayer mode; normal 8/32-bit, multiboot single-pak, UART, JOY bus, the wireless adapter). Then list popular link games by mode (Four Swords, Mario Kart Super Circuit, Pokemon, Bomberman, single-pak multiboot games), run the ones june has ROMs for through two local peers headless, and say which work. File a unit for each gap worth closing. Check: the section, the table of games tried, the units.",
       "minMinutes": 150,
+      "record": {
+        "state": "done",
+        "by": "694a54e9",
+        "at": "2026-11-08T20:44:26Z",
+        "evidence": "Section 'The cable over the internet: modes, timing, games' in docs/research/multiplayer.md (modes table with transfer times and link-error timeouts, why every peer runs every console, hub coverage, popular games by mode). Tried through two local pingsim peers 2026-11-08: Emerald trade calm pass (end 35d6b1be, trade in both saves), wander 1 pass 1 split under load; Kirby AM wander 3000f both 47204b2e no desync; Nightmare Quick Draw wander 7000f both 24d71dde no desync. Units filed: {unit:multiplayer/wireless-adapter-local}, {unit:multiplayer/single-pak-multiboot}, {unit:multiplayer/wander-split-under-load}. just check passes after merging main.",
+        "host": "quack"
+      },
       "notes": [
         {
           "at": "2026-11-01T01:47:03Z",
           "by": "3013558b",
           "text": "Hub: runtime/src/link.rs, multiplayer mode only. Peers: just rollback-feel calm ROM --headless --paced --frames N --input1/2; end line counts transfers. --dump-dir goes to both seats (collides): add --dump-dir1/2 in gbaa-pingsim desktop(). quack: Emerald, Kirby AM, Kirby NiDL."
         }
-      ],
-      "round": "2026-11-01T01:46:07Z"
+      ]
     },
     {
       "id": "multiplayer/desync-report",
@@ -804,6 +793,26 @@
       "detail": "Since play builds default to --timing instant ({d:play-builds-use-timing-instant-checks-pass}; docs/decisions.md 11), an instant and an exact build of one ROM likely get the same netplay build ID: netplay::gba's code_id (crates/netplay/src/gba.rs) hashes keys, overlays, inner starts and folded ranges, and runtime::Code doesn't record the timing mode. Two such peers would share a room and split from the first frame, silently. The version cutoff ({unit:multiplayer/server-version-cutoff}) doesn't catch it: both can be the same version. Record the mode in Code (codegen fills it), hash it into code_id. Check: a test that two Codes differing only in timing get different build IDs; an instant Kirby v1 build through just rollback-feel wander --headless (both peers one hash; note p50 and compiled share beside the exact rows in docs/research/multiplayer.md 'On recompiled code'); just check.",
       "check": "independent",
       "minMinutes": 60,
+      "record": {
+        "state": "done",
+        "by": "7bc14b37",
+        "checker": "verifier-3e9a71",
+        "at": "2026-11-08T20:46:38Z",
+        "evidence": "Code.timing (codegen fills it) hashed in code_id; test timing_is_part_of_the_build_id passes. Instant Kirby v1 (out/katam-v1i) through rollback-feel wander --headless, delay 0, 3600 frames: both peers end 2c3e09810f89c089, 69.6% compiled, p50 3.88/3.97 ms, no desyncs; row in multiplayer.md. just check passes after merging main.",
+        "branch": "unit/multiplayer/timing-in-build-id",
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-08T20:46:38Z",
+          "by": "7bc14b37",
+          "host": "quack",
+          "pid": 686555,
+          "start": "16007050",
+          "beats": true,
+          "session": "7bc14b37-cd80-4dfa-8b40-bd509199b6a1",
+          "lane": "quack/4"
+        },
+        "pushed": true
+      },
       "notes": [
         {
           "at": "2026-11-01T01:57:43Z",
@@ -841,6 +850,33 @@
         "evidence": "Owner allowed it (d/may-lane-scale-fly-s). fly scale count 1 -a gbaa-server --region ewr destroyed 850d37c4e70228; fly machines list now shows one machine, 784563db002518 (ewr, shared-cpu-1x). just fly-up; just room-sim calm --server 37.16.3.41: pass, 10 hashes and the end match on both seats; just fly-down: stopped. IPv4 37.16.3.41 kept. No repo change (fly-deploy already passes --ha=false); branch equals origin/main, so just check not rerun.",
         "host": "quack"
       }
+    },
+    {
+      "id": "multiplayer/wireless-adapter-local",
+      "title": "Emerald's Union Room over an emulated wireless adapter",
+      "detail": "From the link-cable survey (docs/research/multiplayer.md, 'The cable over the internet'): the wireless adapter is the one link gap that matters for june's games (Emerald's Union Room, wireless trades, Berry Crush). Emulate the adapter on the link hub, both consoles in one process first: normal 32-bit mode on runtime::link, librfu's STWI commands (afska's gba-link-connection docs), and the adapter's radio between machines. Check: two Emeralds from alice.sav and bob.sav meet in the Union Room and trade, identically twice; just check. Networking it (each player runs only their own console, the server as the radio) is later work.",
+      "record": {
+        "state": "claimed",
+        "by": "954f0eb1",
+        "session": "954f0eb1-8b50-45a5-9f0e-1a0408fed293",
+        "host": "quack",
+        "pid": 3349722,
+        "start": "14823514",
+        "at": "2026-11-08T20:38:54Z",
+        "branch": "unit/multiplayer/wireless-adapter-local",
+        "beats": true
+      },
+      "round": "2026-11-08T20:38:54Z"
+    },
+    {
+      "id": "multiplayer/single-pak-multiboot",
+      "title": "Single-pak link: a seat with no cartridge boots by MultiBoot",
+      "detail": "From the link-cable survey (docs/research/multiplayer.md, 'The cable over the internet'): single-pak games (Mario Kart Super Circuit's single-pak mode, Bomberman Tournament, the Mario Bros. Classic games) send a program over the cable to GBAs with no cartridge. Our HLE BIOS MultiBoot (SWI 0x25) always fails (runtime/src/bios.rs) and a machine can't start without a ROM. Add: a cartridge-less machine that runs the BIOS's boot-time MultiBoot receive over runtime::link and boots what it gets from EWRAM, and MultiBoot on the parent over the hub. Check: a homebrew single-pak sender (written here, or an agb/libtonc example) boots a client on a cartless seat through two local netplay peers, same end hash; just check. No ROM june has needs it."
+    },
+    {
+      "id": "multiplayer/wander-split-under-load",
+      "title": "Emerald's netplay trade split once on wander, under load",
+      "detail": "From the link-cable survey (2026-11-08, quack, load average 18 from other lanes): just emerald-netplay-trade wander failed once: player 1 saw player 2 leave at frame 1119, player 2 left at 1144 (its max frame 3400 ms, round trip up to 3439 ms), each played on alone and the end hashes differed. The rerun and calm passed. Find why a 3.4 s stall ended the session (the stopped-answering timeouts are 5 s freeze plus 15 s), and make a stalled peer catch up instead. Check: just emerald-netplay-trade wander passes 5 times in a row with a peer SIGSTOPped for 4 s mid-run; just check."
     }
   ]
 }

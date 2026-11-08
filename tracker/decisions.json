@@ -1053,6 +1053,14 @@
       "at": "2026-11-07T15:08:24Z",
       "question": "q/may-ref-unexplained-rise-for-true-data",
       "via": "ed09cc1f"
+    },
+    {
+      "id": "d/netplay-frames-go-to-the-window-8-ms-into-their",
+      "title": "Netplay frames go to the window 8 ms into their turn",
+      "why": "Feel sim, 2026-11-08 ({unit:multiplayer/rollback-feel-sim}): a frame handed to the window when done meets the 60 Hz display unevenly, about 200 doubled+skipped frames a minute on calm with none late. Handing it over 8 ms after its turn began cuts that to about 70 (16 a minute is the 60 vs 59.73 Hz beat) for about 4 ms more display lag (13.7 to 17.5 ms after due). Not input delay: a press still reaches the console the next frame. gbaa-desktop --present-ms N changes it (0: the old way); the owner may prefer another trade.",
+      "by": "29ee78be",
+      "at": "2026-11-08T20:49:34Z",
+      "scope": ["multiplayer/*"]
     }
   ]
 }
