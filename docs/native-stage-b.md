@@ -290,6 +290,25 @@ and the shortcuts above at game scale.
   from boot into gameplay, compared every frame with sound
   (`native/hw-sound`). If the first run shows more than a session's worth
   of differences, the unit files one unit per cause and stops.
+- **Kirby Nightmare lifts with no hard holes and builds**
+  (`native/nightmare-lifts`). Done (2026-11-08, quack): `just lift ROM
+  out/lift-kirby-nightmare --name kirby-nightmare` with
+  `mods/kirby-nightmare/holes.toml`: `skip_fn_flow` (the flow doesn't
+  settle under 16 GB, `native/whole-lift-memory`), stand-ins for the
+  reset, the IWRAM IRQ dispatcher (0x03001030, which moves an IRQ taken
+  on a task's stack to the main one) and three SDK BIOS stubs the prelude
+  lacks (HuffUnComp ported, SoundDriverVSyncOff a no-op as in the play
+  build, SoftReset a panic; `native/lift-bios-more` puts them in the
+  prelude), and the five cases of a switch Recovery leaves unresolved
+  (0x0800474e). The lifter now follows a `[[jump]]`'s targets as a
+  table's cases and decodes them where discovery has none
+  (`Ctx::with_jumps`). 5,176 functions (2 from IWRAM copies), 49,194
+  blocks, 5 stand-ins, 109 gap targets decoded; the lift takes 48 s wall
+  at a peak of 0.38 GB. The crate is 1,552,382 lines (the prelude's 724
+  left out) in 428 modules; a clean release build of it alone
+  (dependencies built) takes 80 s wall (171 s CPU), rustc peaking at
+  6.78 GB. The task switcher's three stack switches aren't flagged by the
+  lifter; they are `native/nightmare-task-switch`'s.
 
 Emerald comes after typed RAM and pointers, typed from pret's DWARF (the
 gaps Emerald's ten listed: fills, bitfields, retyping from access widths,
