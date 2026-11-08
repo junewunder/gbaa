@@ -2441,3 +2441,4 @@
 {"at":"2026-11-08T18:37:11Z","actor":"loop","tag":"62ef447a","host":"quack","cmd":"done","id":"merge/quack-lane3-native-lift-bios-calls","text":"Merge main on quack lane 3: done"}
 {"at":"2026-11-08T18:40:56Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane3-native-lift-bios-calls","text":"Merge main on quack lane 3: on main"}
 {"at":"2026-11-08T18:40:56Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-bios-calls","text":"Lifted code makes the BIOS calls games use: on main"}
+{"at":"2026-11-08T18:41:05Z","actor":"loop","tag":"88b731c4","host":"quack","cmd":"claim","id":"native/metroid-lifts","text":"Metroid lifts with no hard holes and builds: claimed (picking up after f93b1ecd)"}

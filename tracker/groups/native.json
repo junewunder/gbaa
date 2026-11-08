@@ -609,17 +609,17 @@
       "minMinutes": 120,
       "record": {
         "state": "claimed",
-        "by": "f93b1ecd",
-        "session": "f93b1ecd-f104-48fc-9e5b-29cfd643d68a",
+        "by": "88b731c4",
+        "session": "88b731c4-cdf1-422a-bb0d-49a820fdacf8",
         "host": "quack",
-        "pid": 1417300,
-        "start": "29954434",
-        "at": "2026-11-06T11:28:38Z",
+        "pid": 3349722,
+        "start": "14823514",
+        "at": "2026-11-08T18:41:05Z",
         "branch": "unit/native/metroid-lifts",
-        "beats": true,
-        "handedBack": "2026-11-06T12:12:16Z",
+        "resumed": "f93b1ecd",
+        "prevSession": "f93b1ecd-f104-48fc-9e5b-29cfd643d68a",
         "pushed": true,
-        "ended": "2026-11-06T12:12:36Z"
+        "beats": true
       },
       "notes": [
         {
