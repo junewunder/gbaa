@@ -2521,3 +2521,4 @@
 {"at":"2026-11-11T15:47:01Z","actor":"session","tag":"6a8b662c","host":"quack","cmd":"add-unit","id":"native/lift-psr-boot-irq","text":"new unit: The lifter handles reset and IRQ-wrapper msr/mrs itself"}
 {"at":"2026-11-11T15:47:20Z","actor":"session","tag":"6a8b662c","host":"quack","cmd":"add-unit","id":"native/lift-bios-affine","text":"new unit: Lifted code makes BgAffineSet and ObjAffineSet"}
 {"at":"2026-11-11T15:47:22Z","actor":"session","tag":"6a8b662c","host":"quack","cmd":"add-unit","id":"native/lift-undefined-insns","text":"new unit: Find why moonbeam's and Rogue's lifts decode data as code"}
+{"at":"2026-11-11T15:47:24Z","actor":"session","tag":"6a8b662c","host":"quack","cmd":"add-unit","id":"native/holes-match-lift","text":"new unit: The hole report counts what the lifter counts"}
