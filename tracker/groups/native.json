@@ -1419,6 +1419,14 @@
       "detail": "From the overnight run (2026-11-11): gbaa-holes' hard count and gbaa-lift's disagree on every game (out/holes/overnight-2026-11-10/summary.toml against runs/long/overnight-lift.log: Minish Cap 30 against 53, Rogue 23 against 55, moonbeam 3 against 28, Imperium 20 against 30). Known gaps: gbaa-holes doesn't count undefined instructions, takes Boot/Wrapper msr/mrs as recognised where the lifter doesn't (until {unit:native/lift-psr-boot-irq}), and finds RAM copies with a run where the lifter needs [[copy]] in the holes file. Make gbaa-holes report the lifter's hard holes, by kind, from the same code (or list each difference and why it is right), so 'what blocks a native build' has one answer. Done when: on the nine corpus games gbaa-holes' hard count per kind equals the lift's (holes files applied), or each remaining difference is named in docs/research/native-holes.md; just check passes.",
       "check": "independent",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/mirror-lifts",
+      "title": "Kirby Amazing Mirror lifts with no hard holes and builds",
+      "detail": "As {unit:native/metroid-lifts} and {unit:native/nightmare-lifts}. The overnight lift (2026-11-11, just lift --name kirby-mirror, runs/long/overnight-lift.log) gave 5613 functions and 5 hard holes: 2 msr in the reset (0x080000c4, 0x080000d0; gone with {unit:native/lift-psr-boot-irq}), swi 0x01 and 0x00 at 0x08159326/0x08159328 (gone with {unit:native/lift-bios-more}), and an unresolved jump at 0x080001bc in f_080000fc. Write mods/kirby-mirror/holes.toml with that jump's targets from a run (holes/coverage) and skip_fn_flow if the fn flow needs it. Done when: the lift exits 0 and its crate builds in release under just long; lines, build time and peak RAM quoted in docs/native-stage-b.md; just check passes.",
+      "check": "independent",
+      "needs": ["native/lift-bios-more", "native/lift-psr-boot-irq"],
+      "uses": ["heavy"]
     }
   ]
 }
