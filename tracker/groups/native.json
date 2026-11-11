@@ -1391,6 +1391,13 @@
       "detail": "Left out of {unit:native/lift-bios-calls}: the lifter's prelude (NATIVE_BIOS) has no swi 0x00 SoftReset, 0x01 RegisterRamReset, 0x13 HuffUnComp, 0x28 SoundDriverVSyncOff. 0x00/0x01 are reached in Nightmare, Rogue, Imperium, Emerald, Mariomon (docs/research/bios-calls.md); SoftReset needs a way for a native program to restart (no Exit for it today). Nightmare stands in for the stubs in mods/kirby-nightmare/holes.toml (Huffman ported, VSyncOff a no-op, SoftReset panics); drop those stand-ins after. Done when: the lifter prints all four (over runtime::bios's logic as lz77/rl do), lift-check green with a case per call, Nightmare lifts without the three stand-ins; just check passes.",
       "check": "independent",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-psr-boot-irq",
+      "title": "The lifter handles reset and IRQ-wrapper msr/mrs itself",
+      "detail": "From the overnight lift (2026-11-11, runs/long/overnight-lift.log): every one of the seven games that failed to lift has 2-5 msr/mrs hard holes, nearly all in the reset code at 0x08000000 and the IRQ wrapper. analysis::holes::classify already returns these as CpuWhere::Boot and CpuWhere::Wrapper (recognised, not holes; docs/research/native-holes.md, What the Stage-A lifter should know), but the lifter still makes them hard, and Metroid and Kirby Nightmare get past them only by hand stand-ins in mods/<game>/holes.toml. Have the lifter print the reset's mode switches and stack setup as the program's start and the IRQ wrapper's PSR saves as runtime::hw IRQ entry/exit (keep The native-timing play build takes an IRQ the I bit held as soon as an msr clears I), so no game needs these stand-ins; msr/mrs anywhere else stay hard. Done when: no Boot/Wrapper msr/mrs is a hard hole on the corpus (just holes-all --against main, the lift's counts), Metroid and Nightmare still lift and build with their reset and IRQ-wrapper stand-ins removed (or the reason one stays written down), lift-check green, just check passes.",
+      "check": "independent",
+      "uses": ["heavy"]
     }
   ]
 }
