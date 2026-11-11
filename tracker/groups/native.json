@@ -1405,6 +1405,13 @@
       "detail": "From the overnight lift of the nine corpus games (2026-11-11, runs/long/overnight-lift.log): swi 0x0E BgAffineSet and 0x0F ObjAffineSet aren't in analysis::holes::NATIVE_BIOS, so each is a hard hole in Minish Cap, Emerald, Emerald Rogue and Imperium (docs/research/bios-calls.md lists the callers). Add both to the lifter's prelude over runtime::bios's math, as {unit:native/lift-bios-calls} did for its calls, with a lift-check case each (an agb test program calling them). lines_prelude may rise (say how many and why). Done when: lift-check green with a case per call, gbaa-holes and gbaa-lift both stop counting 0x0E/0x0F on those four games (just holes-all --against main), just check passes.",
       "check": "independent",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-undefined-insns",
+      "title": "Find why moonbeam's and Rogue's lifts decode data as code",
+      "detail": "From the overnight lift (2026-11-11, runs/long/overnight-lift.log): gbaa-lift reports 21 'an undefined instruction' hard holes in moonbeam (e.g. f_08006731 at 0x08006966, f_08017a91 at 0x08017b7e), 24 in Emerald Rogue and 2 in Imperium. {unit:native/modern-gcc-data-as-code} fixed discovery's own case, and gbaa-holes doesn't count undefined instructions at all, so these likely come from the lifter's gap decoding (decision: The lifter decodes discovery's gaps itself and lists them) or a function run on past its end. Find which rule takes each, stop it there without losing real code. Done when: the cause of each kind is written in docs/research/native-holes.md, the undefined-instruction holes fall on moonbeam and Rogue with no other hard count higher (just holes-all --against main and the lifts' counts), disc-* bars hold, just check passes.",
+      "check": "independent",
+      "uses": ["heavy"]
     }
   ]
 }
