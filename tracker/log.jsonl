@@ -2519,3 +2519,4 @@
 {"at":"2026-11-08T23:12:51Z","actor":"loop","tag":"manual","host":"quack","cmd":"lanes-stopped","text":"quack: the last lane stopped and tidied up; the machine may sleep now"}
 {"at":"2026-11-08T23:18:08Z","actor":"owner","tag":"d06a24f2","host":"quack","cmd":"answer","text":"the owner answered \"Raise lift bars for the ROM-widening fix's honest rise?\": Raise the bars to the new values","q":"q/raise-lift-bars-rom-widening","d":"d/raise-lift-bars-rom-widening","via":"d06a24f2"}
 {"at":"2026-11-11T15:47:01Z","actor":"session","tag":"6a8b662c","host":"quack","cmd":"add-unit","id":"native/lift-psr-boot-irq","text":"new unit: The lifter handles reset and IRQ-wrapper msr/mrs itself"}
+{"at":"2026-11-11T15:47:20Z","actor":"session","tag":"6a8b662c","host":"quack","cmd":"add-unit","id":"native/lift-bios-affine","text":"new unit: Lifted code makes BgAffineSet and ObjAffineSet"}

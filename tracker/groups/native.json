@@ -1398,6 +1398,13 @@
       "detail": "From the overnight lift (2026-11-11, runs/long/overnight-lift.log): every one of the seven games that failed to lift has 2-5 msr/mrs hard holes, nearly all in the reset code at 0x08000000 and the IRQ wrapper. analysis::holes::classify already returns these as CpuWhere::Boot and CpuWhere::Wrapper (recognised, not holes; docs/research/native-holes.md, What the Stage-A lifter should know), but the lifter still makes them hard, and Metroid and Kirby Nightmare get past them only by hand stand-ins in mods/<game>/holes.toml. Have the lifter print the reset's mode switches and stack setup as the program's start and the IRQ wrapper's PSR saves as runtime::hw IRQ entry/exit (keep The native-timing play build takes an IRQ the I bit held as soon as an msr clears I), so no game needs these stand-ins; msr/mrs anywhere else stay hard. Done when: no Boot/Wrapper msr/mrs is a hard hole on the corpus (just holes-all --against main, the lift's counts), Metroid and Nightmare still lift and build with their reset and IRQ-wrapper stand-ins removed (or the reason one stays written down), lift-check green, just check passes.",
       "check": "independent",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-bios-affine",
+      "title": "Lifted code makes BgAffineSet and ObjAffineSet",
+      "detail": "From the overnight lift of the nine corpus games (2026-11-11, runs/long/overnight-lift.log): swi 0x0E BgAffineSet and 0x0F ObjAffineSet aren't in analysis::holes::NATIVE_BIOS, so each is a hard hole in Minish Cap, Emerald, Emerald Rogue and Imperium (docs/research/bios-calls.md lists the callers). Add both to the lifter's prelude over runtime::bios's math, as {unit:native/lift-bios-calls} did for its calls, with a lift-check case each (an agb test program calling them). lines_prelude may rise (say how many and why). Done when: lift-check green with a case per call, gbaa-holes and gbaa-lift both stop counting 0x0E/0x0F on those four games (just holes-all --against main), just check passes.",
+      "check": "independent",
+      "uses": ["heavy"]
     }
   ]
 }
