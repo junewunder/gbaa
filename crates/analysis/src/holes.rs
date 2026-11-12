@@ -266,6 +266,10 @@ pub struct Report {
     pub unresolved: Vec<Unresolved>,
     /// The overlays' Recovery.
     pub overlay_unresolved: Vec<Unresolved>,
+    /// Jumps to one constant RAM address ([`JumpRes::Ram`]) where an
+    /// overlay discovered a function: resolved, a tail call into it (m4a's
+    /// `SoundMain` into its IWRAM copy). Not holes.
+    pub ram_jumps: Vec<(u32, u32)>,
     pub ret: Vec<RetHole>,
     /// RAM code that changed while it ran, but for the flash routines'.
     pub ram_changed: Vec<RamRun>,
@@ -577,13 +581,16 @@ pub fn classify(
     let flash_targets: BTreeSet<u32> = flash.iter().map(|f| f.target).collect();
     let in_flash = |a: u32| in_flash(&flash, a);
 
-    // Indirect jumps.
+    // Indirect jumps. One to a constant RAM address an overlay has a
+    // function at is a tail call into it.
+    let overlay_func = |t: u32| overlays.iter().any(|o| o.disc.funcs.contains_key(&t));
     let unres = |rec: &crate::jumptable::Recovery| -> Vec<Unresolved> {
         rec.jumps
             .iter()
             .filter_map(|(&at, j)| match j {
                 JumpRes::Resolved(_) => None,
-                JumpRes::Unresolved => Some(Unresolved {
+                JumpRes::Ram(t) if overlay_func(*t) => None,
+                JumpRes::Unresolved | JumpRes::Ram(_) => Some(Unresolved {
                     at,
                     rejected: false,
                     reached: reached(at),
@@ -597,7 +604,18 @@ pub fn classify(
             .collect()
     };
     r.unresolved = unres(&disc.rec);
+    let ram_jumps = |rec: &crate::jumptable::Recovery| -> Vec<(u32, u32)> {
+        rec.jumps
+            .iter()
+            .filter_map(|(&at, j)| match j {
+                JumpRes::Ram(t) if overlay_func(*t) => Some((at, *t)),
+                _ => None,
+            })
+            .collect()
+    };
+    r.ram_jumps = ram_jumps(&disc.rec);
     for o in overlays {
+        r.ram_jumps.extend(ram_jumps(&o.disc.rec));
         r.overlay_unresolved.extend(unres(&o.disc.rec));
         // A ROM source and its RAM copy count once, at the copy: the
         // copy's analysis of the jump is the one that runs (unless the

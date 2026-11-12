@@ -1019,15 +1019,25 @@ fn main() -> ExitCode {
         .values()
         .filter(|j| !matches!(j, analysis::vsa::func::JumpRes::Resolved(_)))
         .count();
+    let ram_jumps = r
+        .ram_jumps
+        .iter()
+        .filter(|(at, _)| disc.rec.jumps.contains_key(at))
+        .count();
+    let recovery = recovery - ram_jumps;
     println!(
-        "Recovery: {} indirect jumps, {} not resolved ({} counted at their RAM copy instead; of the rest {} rejected, {} reached in the run); overlays {} not resolved",
+        "Recovery: {} indirect jumps, {} not resolved ({} counted at their RAM copy instead; of the rest {} rejected, {} reached in the run); overlays {} not resolved; {} jumps into a RAM copy's function, resolved",
         disc.rec.jumps.len(),
         recovery,
         recovery - r.unresolved.len(),
         r.unresolved.iter().filter(|u| u.rejected).count(),
         r.unresolved.iter().filter(|u| u.reached).count(),
         r.overlay_unresolved.len(),
+        r.ram_jumps.len(),
     );
+    for (at, t) in &r.ram_jumps {
+        println!("  jump 0x{at:08x} to 0x{t:08x} (resolved: a RAM copy's function)");
+    }
     let mut unres: Vec<_> = r.unresolved.iter().chain(&r.overlay_unresolved).collect();
     unres.sort_by_key(|u| (!u.reached, u.at));
     for u in unres.iter().take(show) {
