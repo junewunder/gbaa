@@ -1414,19 +1414,7 @@
         "by": "a14298c2",
         "at": "2026-11-12T09:45:37Z",
         "evidence": "A ROM read by index now stops at its object's end (next ROM data address a ROM word holds, not inside a handler run), meets its value-set bounds; BIOS copies read their length. ref_unexplained bars lowered: 97->35 affine/fallthrough/frame-locals, 96->34 mosaic, 98->36 spike, 101->39 bios-calls, 164->48 irq-hold/ime-release; native-tasks fn_words_not_proven 61->57. fn_words_not_proven doesn't fall on the other seven: the +4 was the false start's words becoming data (25 vtable words now never read), not a read bound. After merging main: just lift-check --only each program but native-spike passes (8 routes, 0 differences, planted faults caught); native-spike's lift has the hard hole its own unit fixes. just check passes; 3 new fnref unit tests.",
-        "branch": "unit/native/fnref-rom-read-bound",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T09:45:37Z",
-          "by": "a14298c2",
-          "host": "quack",
-          "pid": 2489918,
-          "start": "10657789",
-          "beats": true,
-          "session": "a14298c2-17fa-4b77-8ced-af626dfddecf",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -1434,8 +1422,7 @@
           "by": "3454f93a",
           "text": "From {unit:native/fnref-unknown-addrs}'s branch: a from-here-on ROM read intersected with its load's value-set bounds fixes affine 0x08000af2 (hull 0x080160a4-0x0801f900); next, 0x08000bba's hull is 115 KB and false pointers in font data (0x080075f8) read to next code."
         }
-      ],
-      "round": "2026-11-12T08:39:52Z"
+      ]
     },
     {
       "id": "native/fnref-emerald-speed",
