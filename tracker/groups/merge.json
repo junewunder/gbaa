@@ -243,26 +243,28 @@
     {
       "id": "merge/quack-lane2-native-lift-bios-affine",
       "title": "Merge main on quack lane 2",
-      "detail": "Branch `unit/native/lift-bios-affine` holds {unit:native/lift-bios-affine}, finished but not on main: merging main conflicts in crates/analysis/src/holes.rs crates/analysis/src/holes/tests.rs crates/codegen/lift-check.toml docs/tools/commands.md justfile. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "detail": "Branch `unit/native/lift-bios-affine` holds {unit:native/lift-bios-affine}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
       "check": "recorded",
       "lane": "quack/2",
       "branch": "unit/native/lift-bios-affine",
       "minMinutes": 40,
       "record": {
         "state": "claimed",
-        "by": "e610b9cf",
-        "session": "e610b9cf-2c66-4b47-a657-583f71674716",
+        "by": "eae1c8a3",
+        "session": "eae1c8a3-81b6-4774-b682-105c8bd914f9",
         "host": "quack",
         "pid": 2489427,
         "start": "10657408",
-        "at": "2026-11-12T13:52:59Z",
+        "at": "2026-11-12T13:59:12Z",
         "branch": "unit/native/lift-bios-affine",
-        "resumed": "aa3b6b9a",
-        "prevSession": "aa3b6b9a-6084-4cc5-85af-c3ef173585c2",
-        "pushed": true,
         "beats": true
       },
       "notes": [
+        {
+          "at": "2026-11-12T13:58:59Z",
+          "by": "manual",
+          "text": "Merging failed again: merging main conflicts in crates/codegen/lift-check.toml"
+        },
         {
           "at": "2026-11-12T13:52:40Z",
           "by": "aa3b6b9a",
@@ -272,11 +274,6 @@
           "at": "2026-11-12T13:50:47Z",
           "by": "7fe4f8d3",
           "text": "merged main again (tracker/ only, clean, 4758003). Loop still handed this out at 08:49 despite min-minutes 25 (loop bug?); just check cut off a 4th time. Raised to 40. Next: run just check early in a run, then record done."
-        },
-        {
-          "at": "2026-11-12T13:47:04Z",
-          "by": "538fc492",
-          "text": "merged latest main again (only tracker/ changes came in, no conflicts). just check cut off by the 09:00 stop after ~1 min, mid-tests. Next session: rerun just check (needs ~10+ min before stop), then record done."
         }
       ],
       "round": "2026-11-12T13:43:18Z"
