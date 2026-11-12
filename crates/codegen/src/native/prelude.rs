@@ -40,6 +40,11 @@ pub struct Game {
     /// reads or writes the CPSR (holes files; [`msr_cpsr_c`]). While I is
     /// set the waits run no handler ([`Native::irq_masked`]).
     pub cpsr: u32,
+    /// The return address of the last call of a stand-in that reads it
+    /// (`lr = true` in its holes file): the caller's `bl` sets it.
+    pub lr: u32,
+    /// The tasks a game's task switcher runs ([`task_resume`]).
+    pub tasks: Tasks,
 }
 
 impl Native for Game {
@@ -80,6 +85,8 @@ impl Game {
             hw: Hw::new(host),
             sp: 0x0300_7F00,
             cpsr: 0x1F,
+            lr: RET,
+            tasks: Tasks::default(),
         });
         g.hw.irq.set_handler(irq_entry);
         g.hw.on_frame_end(record);
@@ -711,6 +718,125 @@ impl Regs {
         r[14] = RET;
         Regs { r, f: [false; 4] }
     }
+}
+
+// Tasks on host coroutines (native/task-coroutines): a scheduler that runs
+// each task on a stack of its own (Kirby - Nightmare's object tasks)
+// switches sp, so a task's frames stay on its stack while the scheduler
+// goes on. Natively a task's lifted frames are on the host stack instead,
+// so each task runs on a stackful coroutine (`corosensei`), kept while it
+// waits under the guest sp it saved. The stand-ins for the switcher's
+// resume, yield and exit (holes files) do the guest's stores and call
+// these. The task's code keeps the `&mut Game` it started with across its
+// suspensions, as crates/desktop/src/coro.rs's guest does: while a task is
+// suspended only the scheduler's reference is used, and while it runs
+// only the task's.
+
+type TaskCo = corosensei::Coroutine<
+    (*mut Game, [u32; 4]),
+    (TaskStop, [u32; 4]),
+    Result<[u32; 4], Exit>,
+    corosensei::stack::DefaultStack,
+>;
+type TaskBack = corosensei::Yielder<(*mut Game, [u32; 4]), (TaskStop, [u32; 4])>;
+
+/// A task coroutine's host stack: lifted frames are large.
+pub const TASK_STACK: usize = 1 << 20;
+
+/// Why a task's coroutine handed back to its resume.
+enum TaskStop {
+    /// [`task_yield`]: kept under this key, resumed through this yielder.
+    Yield(u32, *const TaskBack),
+    /// [`task_exit`]: over.
+    Exit,
+}
+
+/// The tasks waiting to be resumed, by the guest sp each saved.
+#[derive(Default)]
+pub struct Tasks {
+    waiting: std::collections::BTreeMap<u32, (TaskCo, *const TaskBack)>,
+    /// The running task's way back to its resume; null outside a task.
+    back: Option<*const TaskBack>,
+    /// Stacks exited tasks left.
+    spare: Vec<corosensei::stack::DefaultStack>,
+}
+
+impl Drop for Tasks {
+    fn drop(&mut self) {
+        for (co, _) in self.waiting.values_mut() {
+            // SAFETY: a task's frames own nothing to drop (lifted code
+            // holds integers, and `&mut Game`).
+            unsafe { co.force_reset() };
+        }
+    }
+}
+
+/// Run the task that saved guest sp `key` until it yields or exits, or, if
+/// none did, start one: function `start` (a key) on guest stack `sp` with
+/// `a` in r0-r3. The task gets `a` back from its yield when one resumes it.
+/// Gives what the yield or exit handed back: the registers the guest's
+/// scheduler has after its call of resume.
+pub fn task_resume(g: &mut Game, key: u32, start: u32, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+    assert!(g.tasks.back.is_none(), "a task resumed from inside a task");
+    let (mut co, back) = match g.tasks.waiting.remove(&key) {
+        Some((co, back)) => (co, back),
+        None => {
+            let stack = match g.tasks.spare.pop() {
+                Some(s) => s,
+                None => corosensei::stack::DefaultStack::new(TASK_STACK).expect("a task stack"),
+            };
+            let co = TaskCo::with_stack(stack, move |y: &TaskBack, (p, a): (*mut Game, [u32; 4])| {
+                // SAFETY: the resume's game, which outlives the task (see above).
+                let g = unsafe { &mut *p };
+                g.tasks.back = Some(y as *const TaskBack);
+                call_fn(g, start, sp, a)
+            });
+            (co, std::ptr::null())
+        }
+    };
+    // A new task sets its own on its first run.
+    g.tasks.back = (!back.is_null()).then_some(back);
+    let r = co.resume((g as *mut Game, a));
+    g.tasks.back = None;
+    match r {
+        corosensei::CoroutineResult::Yield((TaskStop::Yield(k, back), out)) => {
+            if let Some((mut old, _)) = g.tasks.waiting.insert(k, (co, back)) {
+                // A task left waiting under the same sp: its stack was reused.
+                // SAFETY: as Tasks::drop's.
+                unsafe { old.force_reset() };
+            }
+            Ok(out)
+        }
+        corosensei::CoroutineResult::Yield((TaskStop::Exit, out)) => {
+            // SAFETY: as Tasks::drop's.
+            unsafe { co.force_reset() };
+            g.tasks.spare.push(co.into_stack());
+            Ok(out)
+        }
+        corosensei::CoroutineResult::Return(Err(e)) => Err(e),
+        corosensei::CoroutineResult::Return(Ok(_)) => {
+            panic!("task {start:#010x} returned: its switcher has no frame to return to")
+        }
+    }
+}
+
+/// From inside a task: suspend it under `key` (the guest sp it saved),
+/// handing `out` to its resume as the scheduler's registers. Gives the
+/// registers the next [`task_resume`] of `key` passes.
+pub fn task_yield(g: &mut Game, key: u32, out: [u32; 4]) -> [u32; 4] {
+    let back = g.tasks.back.take().expect("a yield outside a task");
+    // SAFETY: the running task's yielder, on its coroutine's stack.
+    let (_, a) = unsafe { (*back).suspend((TaskStop::Yield(key, back), out)) };
+    a
+}
+
+/// From inside a task: end it, handing `out` to its resume as the
+/// scheduler's registers. Its frames are discarded.
+pub fn task_exit(g: &mut Game, out: [u32; 4]) -> ! {
+    let back = g.tasks.back.take().expect("an exit outside a task");
+    // SAFETY: as task_yield's.
+    unsafe { (*back).suspend((TaskStop::Exit, out)) };
+    unreachable!("an exited task resumed")
 }
 
 fn main() -> std::process::ExitCode {
