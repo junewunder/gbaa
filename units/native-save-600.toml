@@ -1,0 +1,19 @@
+# agb/native-save for 600 frames with no input: the save program of the native
+# lifter's check (native/lift-save-memory; `just lift-check`), its lift
+# (gbaa-lift) against the play build at --timing native by route-check
+# --native. What it draws: agb/native-save/SCENE.md.
+rom = "$GBAA_DATA/agb/native-save.gba"
+
+[[checkpoint]]
+name = "native-save-600"
+frame = 600
+hash = "545740032aa48b22"
+mgba_hash = "8e12e78d9070cb55"
+mgba_why = "mGBA 0.10.5 drops an unaligned SRAM strh or str, where the play build's bus stores the addressed byte lane (rows 0-3)"
+# Our interpreter at --timing exact and --timing native (2026-11-12).
+# Known mGBA mismatch: mGBA 0.10.5 (`mgba-dump ROM --frames 600 --hash`)
+# draws 8e12e78d9070cb55. Its GBAStore16 and STORE_SRAM log an unaligned
+# SRAM store and drop it; runtime::bus stores the addressed byte lane at the
+# unaligned address. With the program's two lane stores taken out, our
+# interpreter draws mGBA's 8e12e78d9070cb55 exactly (2026-11-12), so they
+# are the whole difference.
