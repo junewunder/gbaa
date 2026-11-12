@@ -33,16 +33,16 @@ pub struct Seat {
     /// Scripted presses, on top of what the window holds.
     script: Script,
     /// What the window's keyboard and pad hold for this player.
-    held: u16,
+    pub(crate) held: u16,
     /// Frames presented.
     shown: u64,
     /// The last frame presented.
     pub frame: Box<Frame>,
-    player: Option<Player>,
+    pub(crate) player: Option<Player>,
 }
 
 impl Seat {
-    fn new(script: Script, player: Option<Player>) -> Seat {
+    pub(crate) fn new(script: Script, player: Option<Player>) -> Seat {
         Seat {
             script,
             held: 0,

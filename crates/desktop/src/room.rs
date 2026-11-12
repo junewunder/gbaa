@@ -220,7 +220,7 @@ fn player(gba: &mut Gba, seat: usize) -> Option<&mut Player> {
 
 /// The server's address: a host name or IP, and a port (default 7374,
 /// `gbaa-server`'s).
-fn address(v: &str) -> Result<SocketAddr, String> {
+pub(crate) fn address(v: &str) -> Result<SocketAddr, String> {
     let with_port;
     let a = if v.contains(':') {
         v
