@@ -1662,7 +1662,19 @@
       "title": "Lifted code makes SoftReset, RegisterRamReset and HuffUnComp",
       "detail": "Left out of {unit:native/lift-bios-calls}: the lifter's prelude (NATIVE_BIOS) has no swi 0x00 SoftReset, 0x01 RegisterRamReset, 0x13 HuffUnComp, 0x28 SoundDriverVSyncOff. 0x00/0x01 are reached in Nightmare, Rogue, Imperium, Emerald, Mariomon (docs/research/bios-calls.md); SoftReset needs a way for a native program to restart (no Exit for it today). Nightmare stands in for the stubs in mods/kirby-nightmare/holes.toml (Huffman ported, VSyncOff a no-op, SoftReset panics); drop those stand-ins after. Done when: the lifter prints all four (over runtime::bios's logic as lz77/rl do), lift-check green with a case per call, Nightmare lifts without the three stand-ins; just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "3402e3f4",
+        "session": "3402e3f4-9509-490a-811b-8f126aa4b75b",
+        "host": "quack",
+        "pid": 2489252,
+        "start": "10657014",
+        "at": "2026-11-12T11:27:23Z",
+        "branch": "unit/native/lift-bios-more",
+        "beats": true
+      },
+      "round": "2026-11-12T11:27:23Z"
     },
     {
       "id": "native/lift-psr-boot-irq",
