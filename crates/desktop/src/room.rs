@@ -64,7 +64,7 @@ use runtime::{AudioChunk, Timing};
 
 use crate::audio::Player;
 use crate::dump::{pixels_hash, write_png};
-use crate::fast::{self, Clock};
+use crate::fast::{self, Pacer};
 use crate::window::Screen;
 use crate::{Code, Desktop, Options, dump_at_path, sav_file};
 
@@ -452,7 +452,17 @@ fn play(
         }
     }
     // Muted, the window keeps time by a frame clock.
-    let mut clock = (screen.is_some() && player(&mut gba, seat).is_none()).then(Clock::default);
+    let mut clock = (screen.is_some() && player(&mut gba, seat).is_none()).then(Pacer::default);
+    // The others' pictures are never shown here: only this seat's is drawn.
+    gba.show_only(Some(seat));
+    // How long after its turn began a frame goes to the window: frames then
+    // reach the display on the pacer's even beat, not their costs' uneven
+    // one, which a 60 Hz display shows as doubled and skipped frames
+    // (multiplayer/rollback-feel-sim; docs/research/multiplayer.md, "Feel").
+    let present = Duration::from_secs_f64(
+        opts.present_ms
+            .map_or(netplay::feel::PRESENT_US / 1e6, |ms| ms / 1e3),
+    );
     let mut s = Rollback::new(gba, net, seat, host, rollback::WINDOW);
     if let Some(f) = opts.desync_at {
         eprintln!("gbaa-desktop: forcing a desync: from frame {f} on, this peer runs A held");
@@ -487,7 +497,7 @@ fn play(
     let mut waits = 0u64;
     let mut waiting: Option<Instant> = None;
     // Headless --paced keeps the window's time without one.
-    let mut pace = (screen.is_none() && opts.paced).then(Clock::default);
+    let mut pace = (screen.is_none() && opts.paced).then(Pacer::default);
     let mut report = Report::default();
     let e = |e: netplay::Error| e.to_string();
     // Frames run: the session's, then those run alone.
@@ -501,6 +511,7 @@ fn play(
             false => opts.input.keys(n),
         };
         let local = (script | held) & key::ALL;
+        let turn = Instant::now();
         let status = if left.is_some() {
             let mut keys = vec![0; s.console().seats()];
             keys[seat] = local;
@@ -577,6 +588,9 @@ fn play(
             report.freezes.add(w.elapsed(), s.frame());
         }
         if let Some(c) = &mut pace {
+            if !stepped {
+                c.hold(fast::frame());
+            }
             c.wait(fast::frame());
         }
         let n = frames(&s, solo);
@@ -614,13 +628,29 @@ fn play(
         let Some(sc) = &screen else {
             continue;
         };
+        if stepped {
+            let at = turn + present;
+            let now = Instant::now();
+            if at > now {
+                std::thread::sleep(at - now);
+            }
+        }
         sc.show(&m.ppu.frame, false);
-        // A frame held back made no sound to wait on: the clock paces it.
-        match player(s.console_mut(), seat) {
-            Some(p) if stepped => p.wait(),
-            _ => std::thread::sleep(fast::frame()),
+        // A frame held back goes into the pacing as a frame of silence (or
+        // the clock's frame), so the next runs a frame later: held back.
+        // Until 2026-11-08 it slept a frame and the sound's pacing then
+        // ran the next at once, undoing the hold; and a muted window
+        // slept a frame after every frame on top of its clock.
+        if let Some(p) = player(s.console_mut(), seat) {
+            if !stepped {
+                p.hold();
+            }
+            p.wait();
         }
         if let Some(c) = &mut clock {
+            if !stepped {
+                c.hold(fast::frame());
+            }
             c.wait(fast::frame());
         }
         let i = sc.input();
