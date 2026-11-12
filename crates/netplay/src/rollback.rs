@@ -103,6 +103,13 @@ pub struct Rollback<C: Snapshot, T: Transport> {
 /// Frames between two held back.
 const SKIP_EVERY: u32 = 12;
 
+/// In a rollback, how many frames run again between two sends of this
+/// seat's inputs: a deep one (hundreds of frames, seconds on a loaded
+/// machine) would otherwise send nothing while it runs, and the other
+/// peers would take this one to have gone quiet
+/// (multiplayer/wander-split-under-load: 3.4 s under load).
+pub const KEEP_ALIVE: u32 = 16;
+
 impl<C: Snapshot, T: Transport> Rollback<C, T> {
     /// Join as `seat`, `console` holding this seat's own state (the others'
     /// arrive). Seat 0 gives the session's settings in `host`; `window` is W.
@@ -365,6 +372,9 @@ impl<C: Snapshot, T: Transport> Rollback<C, T> {
             let i = (g - self.base) as usize;
             if g > f {
                 self.console.snapshot(&mut self.snaps[i]);
+                if (g - f) % KEEP_ALIVE == 0 {
+                    self.send_inputs();
+                }
             }
             self.used[i] = self.guess(g);
             r = self.console.step(&self.used[i]);

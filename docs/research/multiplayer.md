@@ -1187,6 +1187,37 @@ fails), and the loop before this unit's fixes must break them on fly:
 The sim models the desktop's loop; it doesn't run it. When `room.rs`'s
 pacing or presenting changes, change `feel::run` to match.
 
+### A stall isn't a goodbye (multiplayer/wander-split-under-load)
+
+The link-cable survey's Emerald trade on wander (2026-11-08, quack at load
+average 18) split once: player 1 took player 2 to have left at frame 1119,
+and player 2, hearing its goodbye, left at 1144; each played on alone and
+the end hashes differed. Two things together:
+
+- **The quiet timeout was 3 s** (`room::QUIET`), not the "5 s freeze
+  plus 15 s" of the old lockstep days; player 2 had sent nothing for 3.4 s.
+- **A deep rollback sent nothing.** Headless runs aren't paced, so time
+  sync's holding back costs no time and the faster peer runs to the
+  window's edge (300 frames ahead); each changed input of the slower one
+  is then a rollback of up to 300 frames of two Emeralds, 1.1 s calm and
+  3.7 s on a loaded quack, with no datagram out until it ends. That was
+  player 2's 3.4 s frame.
+
+Fixed: a rollback sends this seat's inputs every 16 frames it runs again
+(`rollback::KEEP_ALIVE`; `a_deep_rollback_keeps_sending_while_it_runs`:
+1 send in a 200-frame rollback before, 13 after), and `QUIET` is 8 s, so a
+machine stopped a few seconds catches up (past the 5 s window the others
+wait for it; someone truly gone costs them 3 s frozen). `emerald-trade
+--stop SEAT@SECS+DUR` SIGSTOPs one player's desktop mid-run, and the check
+now also fails on a `left player` line. Before: `--stop 2@20+4` on wander
+split (each took the other to have left). After, 2026-11-12 on quack:
+five in a row, player 2 or 1 stopped 4 s at 20 s, every one passing on
+`35d6b1be…`, 104-135 s each; the longest frames 2.3-6.2 s (the stop, or a
+300-frame rollback) and the longest freeze 4.7 s, with nobody taken to
+have left. A paced peer back from a stall still trails by the stall
+(time sync holds the one ahead back a frame in 13):
+multiplayer/stall-catch-up-paced.
+
 ### The other players' sound (multiplayer/other-seat-sound)
 
 From june's Kirby playtest (2026-10-29, through fly): her friend couldn't

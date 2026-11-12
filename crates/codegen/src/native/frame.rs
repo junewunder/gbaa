@@ -153,6 +153,9 @@ pub struct Frame {
     /// argument), and the frame is done with after it (the callee never
     /// returns, or it is a tail call).
     pub flush: BTreeSet<(u32, usize)>,
+    /// Its stack switches ([`switches`](Frame::switches)): the
+    /// instructions that set sp to a value not made from the frame's.
+    pub switches: BTreeSet<u32>,
 }
 
 impl Frame {
@@ -440,6 +443,11 @@ struct Raw {
     /// Whether every store to a word is a saved register, by offset.
     saves: BTreeMap<i32, bool>,
     lost: bool,
+    /// Stack switches, by instruction: sp, made from the frame's sp until
+    /// then, set to a value made from no frame address (`mov sp, r2` with
+    /// r2 a parameter, `ldr sp, [r3]` from a global). A mode change's own
+    /// sp isn't one: the `msr` is a hole of its own.
+    switches: BTreeSet<u32>,
 }
 
 struct Run<'a, 'e> {
@@ -496,10 +504,19 @@ impl Run<'_, '_> {
             self.raw.lost = true;
         }
         let mut vals: Vec<V> = vec![V::Other; b.insts.len()];
+        // The instruction each value was made in.
+        let mut born: Vec<u32> = vec![key & !1; b.insts.len()];
+        let mut at = key & !1;
         for (i, inst) in b.insts.iter().enumerate() {
+            born[i] = at;
             let val = |x: ValueId| vals[x.index()].clone();
             let guarded = inst.guard.is_some();
             let v = match inst.op {
+                Op::Insn(a) => {
+                    at = a;
+                    born[i] = a;
+                    V::Other
+                }
                 Op::Const(c) | Op::Pool(c) => V::Const(c),
                 Op::Bit(x) => V::Const(x as u32),
                 Op::GetReg(r) => s.regs[r.index()].clone(),
@@ -582,9 +599,19 @@ impl Run<'_, '_> {
                     }
                     V::Other
                 }
-                Op::SetReg(r, x) => {
+                Op::SetReg(r, id) => {
                     let r = r.index();
-                    let x = val(x);
+                    let x = val(id);
+                    let framed = |v: &V| matches!(v, V::Sp(_)) || !v.bases().is_empty();
+                    // Loaded through a frame address: a saved sp restored
+                    // (APCS's `ldmdb r11, {r11, sp, lr}`), where the run
+                    // lost what the word holds.
+                    let root = origin(b.insts, id);
+                    let restored = matches!(b.insts[root.index()].op,
+                        Op::Load { addr, .. } if framed(&vals[addr.index()]));
+                    if r == 13 && framed(&s.regs[13]) && !framed(&x) && !restored {
+                        self.raw.switches.insert(born[root.index()]);
+                    }
                     s.regs[r] = if guarded { s.regs[r].join(&x) } else { x };
                     if r == 13 && !matches!(s.regs[13], V::Sp(_)) {
                         self.raw.lost = true;
@@ -650,9 +677,25 @@ impl Run<'_, '_> {
     }
 }
 
+/// The value a new sp `x` is made from: past adds and subtracts of
+/// constants (a `pop` after `mov sp, r2`, which the IR folds into one
+/// write of sp), its base, made at the `mov` or the `ldr sp`.
+fn origin(insts: &[Inst], mut x: ValueId) -> ValueId {
+    let konst = |v: ValueId| matches!(insts[v.index()].op, Op::Const(_) | Op::Pool(_));
+    loop {
+        match insts[x.index()].op {
+            Op::Bin(BinOp::Add | BinOp::Sub, a, c) if konst(c) => x = a,
+            Op::Bin(BinOp::Add, c, a) if konst(c) => x = a,
+            Op::Adc { a, b, c } if konst(b) && konst(c) => x = a,
+            _ => return x,
+        }
+    }
+}
+
 /// One function's run, from `entry` over `blocks`.
 fn run(entry: u32, blocks: &BTreeMap<u32, FBlock>, env: &dyn Env) -> Raw {
     let mut held = BTreeMap::new();
+    let mut switches = BTreeSet::new();
     // Each pass's `holds` only grows, and feeds the next: rerun until it
     // stops.
     for _ in 0..8 {
@@ -681,13 +724,14 @@ fn run(entry: u32, blocks: &BTreeMap<u32, FBlock>, env: &dyn Env) -> Raw {
             return r.raw;
         }
         held = std::mem::take(&mut r.raw.holds);
+        switches = std::mem::take(&mut r.raw.switches);
     }
-    let mut raw = Raw {
+    Raw {
         lost: true,
+        holds: held,
+        switches,
         ..Raw::default()
-    };
-    raw.holds = held;
-    raw
+    }
 }
 
 impl Raw {
@@ -880,6 +924,7 @@ fn resolve(raw: Raw, reads: &dyn Fn(Option<u32>) -> Reads, env: &dyn Env) -> Fra
         lost: raw.lost,
         places: raw.places,
         flush,
+        switches: raw.switches,
     }
 }
 

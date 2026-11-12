@@ -634,6 +634,7 @@ checksum = "e73ce90f54750be8672c02be0743fe47530e6f251e066f0ee2869b59eb297af5"
 name = "emerald-save"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "netplay",
  "png",
  "relay",

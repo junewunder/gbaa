@@ -1334,14 +1334,13 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `planted_store`, `planted_hole`, `planted_flags`) and its bars,
   `[program.<name>.bars]`. Today `agb/native-spike`, `agb/affine`,
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
-  `agb/native-frame-locals`, `agb/native-ime-release` and
-  `agb/native-bios-calls` (`just agb-tests`) on
+  `agb/native-frame-locals`, `agb/native-ime-release`,
+  `agb/native-bios-calls`, `agb/native-tasks` (`just agb-tests`) on
   `units/native-spike.toml`, `units/affine-600.toml`,
   `units/mosaic-modes-600.toml`, `units/native-fallthrough-600.toml`,
   `units/native-irq-hold-601.toml`, `units/native-frame-locals-600.toml`,
-  `units/native-ime-release-601.toml` and
-  `units/native-bios-calls-600.toml` (each BIOS call the prelude has
-  past the waits, `Div` and `CpuSet`, native/lift-bios-calls). First every
+  `units/native-ime-release-601.toml`, `units/native-bios-calls-600.toml`
+  (native/lift-bios-calls), `units/native-tasks-600.toml`. First every
   program is lifted with `--bars` (seconds), failing before any build on
   a metric over its bar; then each lift and its play build
   (`--timing native`) are built and `route-check --native` runs them for
@@ -1349,7 +1348,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   the stack and the code copies is compared. The spike lifted with its
   `planted_store` (0x08000186, the V-blank handler's frame count) must be
   caught, and with its `planted_hole` (agb's IRQ wrapper's stand-in
-  dropped) the lift and the build must fail naming `f_03000000`'s `mrs`.
+  dropped) the lift and the build must fail naming `f_03000000`'s `mrs`;
+  native-tasks likewise (a task's store; its yield's stack switch).
   native-fallthrough, native-irq-hold, native-frame-locals and
   native-ime-release lifted with their `planted_flags`
   (`--fall-as-tail-call`, the old fall into another function;
@@ -1746,8 +1746,8 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   only netplay since multiplayer/remove-lockstep-quic (2026-10-28).
   `--delay N` is the host's input delay (default 0).
   A player who quits or leaves the room says goodbye; one who sends
-  nothing for 3 s (a crash, a lost link, `SIGSTOP`) is taken to have left
-  (multiplayer/peer-leaves). The other window then says so (a toast over
+  nothing for 8 s (`room::QUIET`: a crash, a lost link, a long `SIGSTOP`)
+  is taken to have left (multiplayer/peer-leaves). The other window then says so (a toast over
   the game, the Netplay page, the title; `left player N at frame F` on
   stdout), leaves the room, and plays on alone with the cable unplugged
   (`Gba::unplug`), so the game shows its own link error.
@@ -1789,15 +1789,15 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   the host's wall clock, headless the fixed one. Headless it stops at
   `--frames`, answers 2 s more, and prints `netplay: room …, end HASH, …`
   (both consoles' hash: every peer's must match). `just emerald-netplay-trade
-  [PROFILE] [ROM] [--keep DIR]` is its check, by rollback at delay 0:
-  `emerald-trade --netplay --profile`, the linked trade with Alice's
-  desktop hosting and Bob's joining through a server's plain-UDP rooms
-  started in-process (`relay::rooms::serve`), each path to it through the
-  ping simulator's PROFILE (default calm); the presses land on the frames
-  they name, as in the linked run. Passes when both saves hold the trade
-  and both players end on one hash with no desync (2026-10-28,
-  quack, multiplayer/rollback-trade-check: calm 160 s, rough 128 s with
-  ~20% lost, both end 35d6b1be…). Seen in a private
+  [PROFILE] [ROM] [--keep DIR] [--stop SEAT@SECS+DUR]` is its check, by
+  rollback at delay 0: `emerald-trade --netplay --profile`, the linked
+  trade with Alice's desktop hosting and Bob's joining through a server's
+  plain-UDP rooms started in-process (`relay::rooms::serve`), each path
+  through the ping simulator's PROFILE (default calm); the presses land
+  on the frames they name. Passes when both saves hold the trade
+  and both players end on one hash, no desync, neither taken to have left
+  (`--stop 2@20+4`: player 2 SIGSTOPped 20 s in for 4 s). Calm 160 s,
+  rough 128 s with ~20% lost, both end 35d6b1be… (2026-10-28, quack). Seen in a private
   `cu session` too: two windows through a real `gbaa-server`, each its
   own seat, 60 fps with 10 waits, the trade in both. With sound
   (multiplayer/netplay-sound, 2026-10-25, quack): the host's window in a
