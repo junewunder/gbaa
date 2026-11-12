@@ -2614,3 +2614,4 @@
 {"at":"2026-11-12T09:50:12Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/fnref-rom-read-bound","text":"Function flow bounds a ROM read by its table, not next code: on main"}
 {"at":"2026-11-12T09:50:22Z","actor":"loop","tag":"9dc0f7d7","host":"quack","cmd":"claim","id":"multiplayer/menu-wireless-room","text":"Host or join a wireless room from the window's menu: claimed"}
 {"at":"2026-11-12T09:54:19Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"multiplayer/desktop-wireless-radio","text":"Union Room from the desktop: a wireless seat on the server: on main"}
+{"at":"2026-11-12T09:54:28Z","actor":"loop","tag":"00024cba","host":"quack","cmd":"claim","id":"native/lift-save-memory","text":"Lifted code reads and writes the save chip: claimed"}
