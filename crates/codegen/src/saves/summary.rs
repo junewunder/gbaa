@@ -390,6 +390,15 @@ impl<'a> Sum<'a> {
         }
     }
 
+    /// `callee`'s summary so far finds no return, and no path of its run
+    /// ended at a hole, which may have hidden one ([`Summary::stopped`]):
+    /// a call to it doesn't come back.
+    pub(super) fn never_returns(&self, callee: u32) -> bool {
+        self.sums
+            .get(&callee)
+            .is_some_and(|s| !s.returns && !s.stopped)
+    }
+
     /// No return found, and a hole that may be why.
     fn lost(s: &Summary) -> bool {
         !s.returns && !s.holes.is_empty()
@@ -841,6 +850,7 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
         let grew = old.params != new.params
             || old.exit != new.exit
             || old.changes != new.changes
+            || old.returns != new.returns
             || Sum::lost(old) != Sum::lost(&new);
         sums.insert(k, new);
         if grew {
