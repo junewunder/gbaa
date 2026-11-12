@@ -2555,3 +2555,4 @@
 {"at":"2026-11-12T06:46:12Z","actor":"loop","tag":"21ac895a","host":"quack","cmd":"add-unit","id":"native/spike-entry-read-hole","text":"new unit: native-spike lifts again after entry-read masking"}
 {"at":"2026-11-12T06:52:54Z","actor":"loop","tag":"18d209b3","host":"quack","cmd":"done","id":"multiplayer/wander-split-under-load","text":"Emerald's netplay trade split once on wander, under load: done"}
 {"at":"2026-11-12T06:57:06Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"multiplayer/wander-split-under-load","text":"Emerald's netplay trade split once on wander, under load: on main"}
+{"at":"2026-11-12T06:58:14Z","actor":"loop","tag":"b67b3cd7","host":"quack","cmd":"review","id":"native/copy-tail-discovery","text":"Discover code past m4a's and Nightmare's copy sources: waiting for a second check"}

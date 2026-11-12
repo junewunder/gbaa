@@ -1297,15 +1297,22 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "review",
         "by": "b67b3cd7",
-        "session": "b67b3cd7-bb29-4ef9-8053-574c0e6d691c",
-        "host": "quack",
-        "pid": 2489918,
-        "start": "10657789",
-        "at": "2026-11-12T04:53:37Z",
+        "at": "2026-11-12T06:58:14Z",
+        "evidence": "Branch cc18acf, merged with main as b9f25c8. holes-all against main 92dc9e1 (out/holes/base vs out/holes/classify): hard 106 -> 103 (Minish Cap -2, Rogue -1, Imperium -1; Nightmare +1 = resume's bx r1 at 0x08000254, a real jump now found, decided as d/a-constant-jump-to-a-ram-copy-s-function-is), undiscovered 832 -> 608 (m4a tails, Nightmare's resume and its return site all discovered; only bx rN stubs left). disc-pret 15150 -> 15153 found, false starts 6 -> 5 (modern 12433 -> 12436); jt-score 676/676, 610/617; disc-agb pass; lift-check passed; just check passed before and after the merge. Not yet run: holes-all on the merged branch against main at b9f25c8's parent (main's summary rework raises hard counts by itself).",
         "branch": "unit/native/copy-tail-discovery",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T06:58:14Z",
+          "by": "b67b3cd7",
+          "host": "quack",
+          "pid": 2489918,
+          "start": "10657789",
+          "beats": true,
+          "session": "b67b3cd7-bb29-4ef9-8053-574c0e6d691c",
+          "lane": "quack/3"
+        }
       },
       "round": "2026-11-12T04:53:37Z"
     },
