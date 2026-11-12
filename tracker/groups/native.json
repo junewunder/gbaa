@@ -1441,18 +1441,10 @@
       "check": "recorded",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "blocked",
+        "on": "q/raise-native-tasks-unproven-function",
         "by": "d258b190",
-        "session": "d258b190-7fbc-4544-b0d3-69f7ab7ebcf7",
-        "host": "quack",
-        "pid": 2489427,
-        "start": "10657408",
-        "at": "2026-11-12T10:57:25Z",
-        "branch": "unit/native/fnref-emerald-speed",
-        "resumed": "5cf6c823",
-        "prevSession": "5cf6c823-3eeb-4734-8c09-a83340a43640",
-        "pushed": true,
-        "beats": true
+        "at": "2026-11-12T11:23:37Z"
       },
       "notes": [
         {
