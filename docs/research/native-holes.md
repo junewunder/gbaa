@@ -316,8 +316,8 @@ coroutine (`corosensei`, as `crates/desktop/src/coro.rs`), keyed by its
 saved sp; a new task starts with the r4-r11 the game put on its stack.
 A state machine would split functions at 11,063 sites. Filed as
 `native/nightmare-task-switch`. No other corpus game switches stacks
-(Amazing Mirror doesn't); a game with a per-task-stack scheduler would
-show the same holes, and the rule finds it anywhere.
+(Amazing Mirror doesn't); the rule finds one anywhere. The lifter flags
+them too, and has the coroutines (`native/task-coroutines`).
 
 ## Functions that change r4-r11 or sp
 
