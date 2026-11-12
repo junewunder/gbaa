@@ -1479,15 +1479,10 @@
       "needs": ["native/modern-gcc-data-as-code"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "dropped",
+        "why": "The stand-in at 0x087603d9 was already dropped by mods commit 6b0d0cd (for {unit:native/metroid-native-check}). Rerun 2026-11-12: just lift Metroid --name metroid has no hole there; its 1 hard hole is f_08073ce5 reading entry r9 (entry-read masking), a different cause filed as {unit:native/metroid-entry-reads}.",
         "by": "fade7f76",
-        "session": "fade7f76-8e07-446c-b276-7bf80da1f43c",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T08:48:57Z",
-        "branch": "unit/native/metroid-drop-nes-standin",
-        "beats": true
+        "at": "2026-11-12T09:05:22Z"
       },
       "round": "2026-11-12T08:48:57Z"
     },
