@@ -549,7 +549,8 @@ we can make; real-Windows confirmation is june's.
 
 With sound on, the audio device's consumption paces the emulator.
 The window (SDL3, on the main thread) never paces: it draws each frame
-the game thread hands it as it arrives. With sound off
+the game thread hands it as it arrives (the game thread holds it back a
+little first, below). With sound off
 (`--mute`, or no device found) a frame clock paces at the GBA's 59.73 Hz
 (`desktop/src/fast.rs`). Headless runs never open a device and aren't
 paced. Fast-forward sets both pacers aside: frames run unthrottled or on
@@ -589,6 +590,50 @@ refills to its target before playing at normal speed again.
   rest. When the device pulls again, that stale queue is dropped and
   refilled to the target before playing. A device that only pulls now and
   then would flip between the two, costing 200 ms each time.
+
+### When a frame goes to the window (deck/even-presents)
+
+The pacer starts each frame on an even 59.73 Hz beat, but a frame handed
+to the window the moment it's done reaches the display at its start plus
+its cost, so its time against the 60 Hz refresh moves with the cost: a
+frame whose finish crosses a refresh the one before didn't makes a
+doubled frame (a refresh with nothing new) and the next a skipped one.
+Netplay's rollback turns vary a lot, and it now hands a frame over 8 ms
+into its turn (multiplayer/rollback-feel-sim). A single game's frames
+vary much less, so this was measured first: `gbaa-present-sim`
+(`desktop::present::sim`, docs/tools/commands.md) on each frame's cost
+from `--frame-times`, the least of two headless interpreted runs on
+quack (2026-11-08, 3600 frames: Kirby & the Amazing Mirror's menus,
+Emerald walking from a save state, Metroid Zero Mission's and Minish
+Cap's attract modes; their frame-to-frame change averages 199, 127, 74
+and 36 µs). A minute, sound-paced (the muted clock's numbers match),
+averaged over 16 display phases; 16 doubled a minute is the beat (60
+against 59.73 Hz) whatever happens:
+
+| game, cost | when done: doubled, skipped, lag | 8 ms: doubled, skipped, lag | slowest: doubled, skipped, lag |
+|---|---|---|---|
+| Kirby, interpreted (5.9 ms) | 32, 15, 14.9 ms | 17, 0, 17.3 ms | 18, 1, 16.3 ms |
+| Kirby, x0.7 (recompiled) | 25, 9, 13.3 ms | 16, 0, 17.3 ms | 17, 1, 14.4 ms |
+| Emerald, x0.7 | 22, 5, 15.0 ms | 16, 0, 17.3 ms | 17, 1, 16.1 ms |
+| Metroid, interpreted | 21, 4, 11.6 ms | 17, 0, 17.3 ms | 18, 1, 12.7 ms |
+| Minish Cap, interpreted | 18, 2, 11.0 ms | 16, 0, 17.3 ms | 17, 1, 11.8 ms |
+
+(lag: from a frame's start to its first refresh on screen.) So it shows,
+far less than netplay's (2 to 15 skipped a minute, not 185), and holding
+a frame takes nearly all of it off. A fixed 8 ms costs up to 6 ms of
+display lag on a fast game, so the window holds a frame instead until
+the slowest of the last 60 frames would have finished, plus 0.5 ms, at
+most 8 ms (`present::Hold`, in `Platform::present` and `--link`'s
+window): about 1 ms of lag. Frames slower than 8 ms (Kirby interpreted
+x1.5, 43 doubled a minute; interpreted on the Deck, an estimated x2.2,
+is slower still) go when done, as before; there the cost's own swings
+are bigger than a hold would fix cheaply. Fast-forward, rewind and a
+pause start the hold afresh. In a real window (a `cu session`, sound to
+its silent sink, Kirby interpreted, 1800 frames, before and after
+alternating, twice each) the window's present gaps were p99 19.8 and
+21.2 ms before, 18.9 and 20.8 after, every run at full speed (mean 16.7
+ms); those gaps are the window's draws, not the display's refreshes, so
+the sim's counts are the measure.
 
 **Why the device, not the frame clock.** Two clocks (a display's 60 Hz and
 the device's sample clock) drift apart, and one of them has to give: with

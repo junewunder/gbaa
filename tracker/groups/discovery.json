@@ -103,6 +103,18 @@
           "text": "just run-recompiled passes its args unquoted ({{args}}), so a ROM path with a space (Emerald Rogue.gba) splits; ran target/recompiled/release/gbaa-emerald-rogue directly. Wait states doubled Rogue's running cycles: old 5400-frame cycle lines aren't comparable."
         }
       ]
+    },
+    {
+      "id": "discovery/gcc-far-jump-bl",
+      "title": "Modern GCC's far-jump bl into a caller's fragment",
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-08T23:08:26Z",
+          "by": "71b3ef7c",
+          "text": "From {unit:native/entry-read-masking}: moonbeam's 0x0801a080 (bl from 0x08019886, 0x0801aa16...), Rogue 0x0820c629, Imperium 0x0821e331 are fragments of a huge function reached by bl that never returns; far_jumps misses them, so the lift calls them with r4-r12 zeroed (hard entry reads)."
+        }
+      ]
     }
   ]
 }

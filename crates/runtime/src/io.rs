@@ -274,6 +274,10 @@ pub struct Io {
     /// The `SIOCNT` bits the link hub owns (the terminals, the player ID,
     /// a busy flag), which the CPU's writes leave alone. 0 off a link.
     pub sio_owned: u16,
+    /// The machine's link port holds a wireless adapter
+    /// ([`crate::link::rfu`]): every `SIOCNT` write is a sync point, as
+    /// the adapter answers the terminals the CPU sets. Not guest state.
+    pub sio_wireless: bool,
 }
 
 impl Default for Io {
@@ -294,6 +298,7 @@ impl Io {
             now: 0,
             sio_linked: false,
             sio_owned: 0,
+            sio_wireless: false,
         };
         io.set_keys(0);
         for (o, v) in [
@@ -482,4 +487,4 @@ crate::snap::snap!(Io {
     events,
     timers,
     now
-}; skip sio_linked, sio_owned);
+}; skip sio_linked, sio_owned, sio_wireless);

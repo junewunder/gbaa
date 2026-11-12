@@ -1486,6 +1486,39 @@
         "at": "2026-11-07T15:08:24Z",
         "decision": "d/may-ref-unexplained-rise-for-true-data"
       }
+    },
+    {
+      "id": "q/raise-lift-bars-rom-widening",
+      "title": "Raise lift bars for the ROM-widening fix's honest rise?",
+      "context": "{unit:native/fnref-romfrom-absorb} is done on its branch (commit a1683db): the flow no longer drops ROM pointers past the next code when widening. It was unsound: on mosaic-modes the call in core::fmt pad was 'complete' with 18 callees and now has 30. Following those real callees makes ref_unexplained (object-pointer accesses no type explains) rise on every program: affine 35->92, mosaic-modes 34->91, native-spike 39->97, native-fallthrough/frame-locals/bios-calls 35->92, irq-hold/ime-release 93->155 (packed variants alike); native-spike fn_words_not_proven 53->54 (a word was 'proven' only because a path was missed). No bar can be lowered to pass; bars rise only with your OK.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Raise the bars to the new values",
+          "changes": "the fix lands; the ref_unexplained and native-spike fn_words_not_proven bars go up to what the sound run measures, and later heap units lower them from there"
+        },
+        {
+          "key": "b",
+          "label": "Not yet",
+          "changes": "the fix stays on its branch unmerged; callee sets stay unsound (missing callees) until you decide",
+          "parks": true
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/fnref-romfrom-absorb"],
+      "asked": {
+        "at": "2026-11-08T19:20:26Z",
+        "by": "b9262a93",
+        "host": "quack",
+        "unit": "native/fnref-romfrom-absorb"
+      },
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "d06a24f2",
+        "at": "2026-11-08T23:18:08Z",
+        "decision": "d/raise-lift-bars-rom-widening"
+      }
     }
   ]
 }

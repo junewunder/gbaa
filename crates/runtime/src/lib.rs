@@ -29,6 +29,7 @@ pub mod save;
 pub mod sched;
 pub mod sha1;
 pub mod snap;
+pub mod softfloat;
 pub mod sound;
 pub mod spins;
 pub mod state;

@@ -274,6 +274,14 @@ g.hw.sound.fifo_a.stream(Ref::of(&g.gSoundInfo.pcmBuffer));
   (`ReadFlash1`, `ReadFlash_Core`, `VerifyFlashSector_Core`; recognised at
   the call by `analysis::flash`) are `hw::flash::{read_byte, read,
   verify}` over it.
+- **Library code with its own convention is the runtime's.** libgcc's
+  soft-float `__muldf3` and `__divdf3` (modern GCC's games: moonbeam,
+  Emerald Rogue, Imperium) call their special-case paths with r4 and r5
+  coming back changed, which the lift's calling convention can't carry.
+  `analysis::softfloat` recognises them by their code, and every lift
+  prints each as a call of `runtime::softfloat::{muldf3, divdf3}`,
+  bit-exact on libgcc's results (native/libgcc-df-standins;
+  `just softfloat-check ROM` pins them against the game's own copy).
 
 **Prior art.** The PC ports of Super Mario 64 (`sm64-port`, `sm64ex`) and
 Ocarina of Time (Ship of Harkinian, on `libultraship`) compile the

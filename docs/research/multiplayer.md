@@ -31,11 +31,19 @@ the web (sources at the end).
   has, the fix is speed (recompiled code for netplay, no drawing on
   re-run frames), not delay. Build it, play it, find what's bad, fix
   that. The older lockstep reasoning below is kept as history.
+- **Which games netplay covers:** every game that links in multiplayer
+  mode, with nothing per game. The cable assumes no lag, so its bytes
+  can't cross the internet; inputs can. Normal mode, single-pak MultiBoot,
+  UART, JOY bus and the wireless adapter aren't emulated yet. See "The
+  cable over the internet: modes, timing, games" (2026-11-08).
 - **The wireless adapter is the exception.** Its games talk to the adapter
   in packets, with radio-sized delays built in, and the Union Room gathers
   more players than one peer should simulate. For wireless the recommended
   shape is the opposite: each player runs only their own console, and the
-  adapter is emulated as a device whose "radio" is the server. Later work.
+  adapter is emulated as a device whose "radio" is the server. The device
+  runs locally (2026-11-08, multiplayer/wireless-adapter-local,
+  `runtime::link::rfu`): two Emeralds in one process meet in the Union
+  Room and trade. Putting the radio on the server is the next step.
 - **A relay server first, on a machine june runs.** Clients make only
   outbound connections, so there is no NAT traversal to do. Rooms with a
   short code are the matchmaking. Plain UDP for transport (QUIC, the
@@ -289,7 +297,7 @@ state; the battle presses A every 30 frames from its state.
  ───────────────────────────────────────────────────────────────────
  console adapter (per console)      trait Console
    GBA: runtime::link hub (no_std) — N Machines, one serial bus,
-        multiplayer and normal modes; later the wireless adapter device
+        multiplayer mode; the wireless adapter device (runtime::link::rfu)
  ───────────────────────────────────────────────────────────────────
  gbaa-server (std, console-neutral): rooms, codes, relay of opaque payloads
 ```
@@ -791,6 +799,12 @@ the 2026-10-29 table's. Instant, they don't: a structured build and its
 v1 build tick on different clocks there. That splits no session, since
 the build ID refuses a peer on another build.
 
+Rerun 2026-11-08 (multiplayer/timing-in-build-id, the build ID's timing
+byte and code hash on main; `just recompile ROM OUT --no-structured`,
+instant by default; two other lanes' heavy jobs beside it): v1, instant,
+wander at delay 0, 69.6% compiled, frame p50 3.9-4.0 ms, p99 36 ms,
+both peers `2c3e0981…`, the hash above.
+
 Before that, Kirby two-player, both peers on quack, 2026-10-29 (lane 1 running judge
 jobs beside it, so ±0.3 ms): `just rollback-feel PROFILE ROM --exe BIN
 --headless --paced --frames 3600 --delay D --input1
@@ -991,6 +1005,40 @@ there: june decided on 2026-11-01 to leave the Deck's runs for later
 Deck for later), so they are their own unit (multiplayer/four-kirbys-deck),
 run whenever june next says yes.
 
+### The other players' sound (multiplayer/other-seat-sound)
+
+From june's Kirby playtest (2026-10-29, through fly): her friend couldn't
+hear june's Kirby. The window plays its own seat's console, as your own
+GBA would, and rollback runs frames again quietly (`Pad::quiet`), so
+either Kirby doesn't sound the other Kirbys, or rollback drops them.
+**It's the game: Kirby & the Amazing Mirror's console plays only its own
+Kirby's sounds**, even with the other Kirby on screen; rollback drops
+none.
+
+Measured 2026-11-08 on quack by `crates/netplay/tests/seat_sound.rs`
+(ignored: it needs the ROM and its save; `cargo test --release -p
+netplay --test seat_sound -- --ignored --nocapture`, about 3 minutes):
+two GBAs on a cable in the interpreter, both on the same save, the menu
+presses of the runs above, then from frame 2400 seat 1 jumps in place (A
+for 10 frames every 60) or stands still, seat 0 idle throughout:
+
+- **Straight** (no rollback, as two GBAs on a real cable): seat 1's own
+  sound differs on 258 of the 1200 frames (each jump, 9 frames, and its
+  landing, 3-4), and seat 0's picture differs (on 1180 frames; 598 pixels
+  20 frames in, the yellow Kirby in the air beside the red one), but seat
+  0's sound is the same on every frame, sample for sample.
+- **Rollback** (60 ± 40 ms one way, 2% loss; 52 rollbacks, 293 frames run
+  again on seat 0's peer): what seat 0's speaker heard is the straight
+  run's seat 0 sound on all 3600 frames, and the end hash is the straight
+  run's.
+
+So there's nothing to make play: the other player's jumps make no sound
+on your GBA either, and the netplay window is as faithful as a cable.
+Hearing the others would be a mod (mixing in another seat's sound, or
+the game's), not a fix. Rollback can still cut the start of a sound in a
+game where your console does sound the other players: a sound started on
+a frame run again plays from where the re-run left it.
+
 ## Playing a friend (the play gate)
 
 What june needs for multiplayer/play-gate, from what's built (2026-10-25):
@@ -1121,6 +1169,118 @@ numbers, sizes and packet flags above match. Not yet tried against a real
 mGBA with the assistant (Windows only): a run against C ENet 1.3.17
 built here would be the cheap check.
 
+## The cable over the internet: modes, timing, games (multiplayer/link-cable-survey)
+
+june's question (2026-10-29): can netplay stand in for any game's link
+cable, and does the cable assume no lag? Short answers, worked out on
+quack on 2026-11-08:
+
+- **The cable assumes no lag.** A transfer finishes in microseconds,
+  and the games' protocols are built on that: Emerald's parent flags a
+  link error in the very frame it gets fewer than 9 of its serial
+  interrupts back. Sending the cable's bytes over the internet can't
+  work. What netplay sends instead is button presses, and every peer
+  runs every console, so each peer has the whole cable in its own
+  process, with no lag (see Summary).
+- **So netplay covers any game that uses a mode the link hub emulates,
+  and nothing else is per game.** Today that is multiplayer mode, the
+  mode of almost every GBA-to-GBA cable game. Normal mode, UART, JOY
+  bus and the wireless adapter aren't emulated: a game that uses one of
+  them sees no partner, just as with no cable plugged in.
+- **Tried through two local peers** (`gbaa-pingsim desktop`, headless,
+  paced): Emerald's trade, Kirby & the Amazing Mirror's multiplayer and
+  Nightmare in Dream Land's Quick Draw all work, with both seats on one
+  end hash and no desyncs.
+
+### Each mode, and how fast it is
+
+A frame is 280,896 cycles (16.74 ms). Transfer times are for one
+transfer, from GBATEK and mGBA's `src/gba/sio.c`; the "link error"
+column is what a game does when transfers stop coming.
+
+| mode | how a transfer works | one transfer takes | when the game calls it a link error | `runtime::link` |
+|------|---------------------|-------------------|-------------------------------------|-----------------|
+| Multiplayer (16-bit, 2–4 GBAs) | the parent starts it; every console's halfword reaches every console at once | 3,194 cycles (190 µs) for 2 players at 115,200 bps, 11,863 (707 µs) for 4; 8.5 ms for 4 at 9,600 bps | Emerald (`src/link.c`, `LinkVSync`): the parent in the frame its V-blank sees fewer than 9 serial IRQs (`LAG_MASTER`), a child after 10 V-blanks with none (`LAG_SLAVE`), a player-data exchange after 600 frames. Not measured in the others | **yes** (2026-10-25; 2–4 players, 2026-10-31) |
+| Normal 8-bit / 32-bit | one side clocks a shift register, the other is clocked | internal clock 256 kHz: 524 cycles (8-bit), 2,097 (32-bit); 2 MHz: 67 and 268 | the hardware waits forever for an outside clock; any timeout is the game's | no: no partner |
+| MultiBoot (single-pak) | BIOS `MultiBoot` (SWI 0x25) sends a program of up to 256 KB to children that have no cartridge, over multiplayer mode at 115,200 bps or normal 32-bit mode; a child boots it from RAM | in multiplayer mode a halfword per transfer, about 190 µs, so 256 KB would take about 25 s; real single-pak programs are smaller and send in a few seconds (from memory) | the BIOS's handshake retries, and the game's own screen times out | no: our HLE `MultiBoot` always fails (`runtime/src/bios.rs`), and a seat can't start without a cartridge. Games that send their own program (Nightmare in Dream Land) work if both seats have the cartridge |
+| UART | RS-232-style bytes, a 4-byte FIFO, CTS flow control | 10 bits a byte: 87 µs at 115,200 bps | the game's | no: no partner |
+| JOY bus | a GameCube polls; the GBA's hardware answers reset, status, read and write commands | a few hundred µs per command, clocked by the GameCube (from memory, not checked) | the GameCube game's | no; needs a GameCube on the other end, which we don't run |
+| General purpose | the four pins as plain I/O | — | — | not linking |
+| Wireless adapter | a small computer on the port; the game sends it commands over normal 32-bit mode (librfu's "STWI"), and the adapter does the radio | each command is a few 32-bit transfers at 2 MHz; the adapter answers within a frame or so (afska's `gba-link-connection` docs) | librfu's per-command timeouts, then the game's (not measured) | no: no adapter answers, so games say none is attached |
+
+Why every peer runs every console, in one line each:
+
+- **Forwarding the cable's bytes needs a round trip per transfer.**
+  Emerald does 8 a frame, each needing every console's halfword. Even a
+  20 ms ping is more than a whole frame per transfer, and Emerald's
+  parent gives up the first frame it falls short. mGBA's maintainer says
+  the same of naive network link, and it is why VBA-M's network link
+  times out.
+- **Inputs are a few bytes a frame and can arrive late.** Rollback
+  re-runs the frames a late press changed (see "Rollback"), so each
+  console sees a cable with no lag. What the network's lag costs is the
+  other players' Kirbys and trainers jumping into place, never a link
+  error.
+- **The same hub serves every multiplayer-mode game.** Nothing in the
+  hub or the netplay session knows which game it runs: Nightmare in Dream
+  Land's Quick Draw worked through two peers on its first try. Most
+  link games use multiplayer mode, so netplay is a generic replacement
+  for those. Each other mode needs its own emulation in the hub, once,
+  and then it works for every game that uses that mode.
+- **Not a fit for the wireless adapter.** Its Union Room gathers more
+  players than one peer should run (see Summary), so the wireless
+  adapter would have each player run only their own console, with the
+  server as the adapter's radio.
+
+### Popular link games, by mode
+
+From memory and from each game's manual text; not checked against the
+ROMs unless the game is in the table of games tried below.
+
+| game | mode | what it needs that we lack |
+|------|------|----------------------------|
+| Pokémon Ruby, Sapphire, FireRed, LeafGreen, Emerald | multiplayer mode (trades, battles, Record Mixing, Berry Blender, contests); FireRed, LeafGreen and Emerald also the wireless adapter (Union Room); JOY bus to Colosseum, XD and Box | the adapter; JOY bus means a GameCube |
+| The Legend of Zelda: Four Swords (with A Link to the Past) | multiplayer mode, 2–4, every player needs a cartridge | nothing, in principle (not tried: no ROM) |
+| Mario Kart: Super Circuit | multiplayer mode with every player's cartridge (all tracks); single-pak MultiBoot (fewer tracks) | the multi-pak game: nothing (not tried); single-pak: MultiBoot |
+| Bomberman Tournament, Bomberman Max 2 | multiplayer mode, multi-pak; Tournament also single-pak | single-pak: MultiBoot |
+| Super Mario Advance 1–4 (Mario Bros. Classic), many puzzle games (Puyo Pop, Tetris Worlds) | single-pak MultiBoot, 2–4 | MultiBoot |
+| Kirby & the Amazing Mirror | multiplayer mode, 2–4, every player needs a cartridge | nothing: works |
+| Kirby: Nightmare in Dream Land (sub-games) | multiplayer mode; the parent sends the sub-game ("Transmitting…") | nothing when every seat has the cartridge: works |
+| Final Fantasy Crystal Chronicles, Four Swords Adventures, Metroid Fusion with Prime, Wind Waker's Tingle Tuner | JOY bus, a GBA as a GameCube controller or screen | a GameCube; out of scope |
+
+### Games tried through two local peers
+
+On quack, 2026-11-08, through `gbaa-pingsim desktop PROFILE ROM --
+--headless --paced`, both peers interpreted on one machine (loaded:
+other lanes' jobs, load average 10–18). The serial mode is what
+`SIOCNT` read each frame (an mGBA Lua script, run unlinked: `--script`
+isn't for `--link`).
+
+| game | mode seen | run | result |
+|------|-----------|-----|--------|
+| Pokémon Emerald | multiplayer, 115,200 bps (`src/link.c`) | `just emerald-netplay-trade calm`, then `wander` twice: alice.sav and bob.sav through the cable club to a trade, 8,400 frames | **works.** calm: both end `35d6b1be…`, 43,960 transfers, the trade in both saves. wander: once the same pass, once the peers split at frame 1,119 (a 3.4 s stall on one, then each played on alone), on a loaded machine; filed as its own unit |
+| Kirby & the Amazing Mirror | multiplayer, 115,200 bps (`SIOCNT` 0x6003 at the cable screen) | wander, 3,000 frames, the menu presses from "Four players", then left and right | **works.** both end `47204b2e…`, 18,186 transfers, no desync, p50 7.0 ms a frame |
+| Kirby: Nightmare in Dream Land | multiplayer, 115,200 bps (`SIOCNT` 0x6003 at "Transmitting…") | wander, 7,000 frames: `start@300,a@1000,a@1300,down@1500,a@1600,a@1900,down@2100,a@2200` on both (file 1, Sub-Games, Quick Draw, Multiplayer), `a@3700` on player 1 ("OK?"), then A presses through the duel | **works.** both end `24d71dde…`, 17,937 transfers, no desync; the duel's screen shows both Kirbys on each seat. p50 23 ms a frame, interpreted, on the loaded machine: slower than real time. On one local hub (`--link`) the same presses reach Quick Draw's title |
+| Emerald Rogue, Emerald Imperium | Emerald's cable code (hacks of it) | not tried: they need saves standing at a cable club. Rogue's own multiplayer goes through Rogue Assistant, not the cable (see "Rogue Assistant") | — |
+| Minish Cap, Metroid Zero Mission, WarioWare | no GBA-to-GBA link play | — | — |
+
+Gaps filed as units, each with what it changes:
+
+- **The wireless adapter** (multiplayer/wireless-adapter-local): Emerald's
+  Union Room, first with both consoles in one process. This is the gap
+  that matters for june's games. It also needs normal 32-bit mode on the
+  hub.
+- **Single-pak MultiBoot** (multiplayer/single-pak-multiboot): a seat
+  with no cartridge that boots the program the parent sends (the BIOS's
+  `MultiBoot` over the hub). For Mario Kart's and Bomberman's single-pak
+  modes and the Mario Bros. Classic games. None of june's ROMs need it.
+- **Emerald's netplay trade splitting on wander under load**
+  (multiplayer/wander-split-under-load): the one failure above.
+
+Not filed: plain normal-mode GBA-to-GBA play (we found no popular game
+that uses it, and the adapter unit covers its 32-bit form), UART (no
+games), and JOY bus (it needs a recompiled GameCube on the other end).
+
 ## Risks
 
 - **Determinism.** Anything that differs between peers desyncs: the build,
@@ -1141,7 +1301,8 @@ built here would be the cheap check.
   after constant I/O stores", only for the link hub's machines.
 - **The wireless adapter** is undocumented hardware with timeouts we
   haven't measured; Union Room could turn out to need option C-style
-  hooks after all.
+  hooks after all. Locally (no latency) it needs none: see "The wireless
+  adapter, locally" below.
 - **Test saves.** The cable club needs a save past the first Pokémon
   Center. None is on quack for Emerald, so `just emerald-saves` crafts
   two (docs/tools/commands.md): the game's own new-game save blocks,
@@ -1188,9 +1349,48 @@ the 3-hour cap.
 8. **june trades and battles with a friend over the internet**: the play
    gate (recorded by june).
 9. Later, each its own research or unit when wanted: the wireless adapter
-   locally, then networked (Union Room); rollback; spectating in the UI;
+   locally (done 2026-11-08), then networked (Union Room); rollback; spectating in the UI;
    shared overworld presence (after the Lua research); what Rogue
    Assistant talks to; two different games in one session.
+
+## The wireless adapter, locally
+
+multiplayer/wireless-adapter-local (2026-11-08): `runtime::link::rfu`
+emulates the adapter on each console's port and the radio between them,
+in one process, from librfu's game side (pret's `librfu_stwi.c`,
+`librfu_intr.c`, `librfu_rfu.c`) and afska's `wireless_adapter.md`:
+
+- **The port.** Normal 32-bit mode. The "NINTENDO" handshake at 256 kHz
+  after each reset (`RCNT` in GPIO mode pulls SD high), then commands at
+  2 MHz with the SI/SO handshake between words: after a GBA-clocked word
+  the adapter raises SI until the GBA raises SO; while the adapter
+  clocks (after `0x25`, `0x27`, `0x35`, `0x37`) SI follows SO. Each
+  `SIOCNT` write is a sync point for a console with an adapter
+  (`Io::sio_wireless`), so busy-waits on SI see the answer at once.
+- **The radio.** Hosts, searches, connections, `SendData` and
+  `ReceiveData` as afska describes them: a child's packet waits for the
+  host's next `SendData`; a host hears `0x28` at once after its own; a
+  waiting child hears it when the host's packet comes. IDs count up from
+  `0x2001` instead of being random, so runs repeat.
+- **One guess beyond the docs:** a searching adapter keeps listing a host
+  it heard for 3 seconds, across searches. Emerald's Union Room switches
+  each console between hosting and searching every second or so; with
+  only what's open at the instant of each poll, BOB's trading-board offer
+  reached ALICE too rarely to check the board (2026-11-08). afska's note
+  that a vanished host drops off after 3 s is the basis; whether a real
+  adapter keeps the list across `0x1C`-`0x1E` rounds is unmeasured.
+- **Timing.** A word takes 256 cycles at 2 MHz, 2048 at 256 kHz; the
+  adapter clocks a word 700 cycles after the GBA arms. librfu's own
+  timeouts (80 to 130 ms a word) never come near. A wait times out after
+  `Setup`'s frames (Emerald: 32).
+- **The check:** `just emerald-wireless` (`docs/tools/commands.md`):
+  ALICE and BOB walk into Oldale's Union Room, BOB registers his Torchic
+  at the trading board, ALICE offers her Mudkip, BOB accepts, and the
+  trade and its save complete, identically twice.
+
+Not done: the radio across the network (each player runs only their own
+console), Berry Crush and the other wireless games, a check with more
+than two adapters, and the adapter's state in save states.
 
 ## Questions for june
 

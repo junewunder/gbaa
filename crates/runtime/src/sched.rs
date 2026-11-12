@@ -309,8 +309,11 @@ impl<P: Platform> Machine<P> {
             // STOP is treated as halt; nothing here powers down.
             self.halt();
         }
-        if events & event::SERIAL != 0 && crate::link::start_requested(&self.bus.io) {
-            // The hub starts the transfer between turns: end this one.
+        if events & event::SERIAL != 0
+            && (self.bus.io.sio_wireless || crate::link::start_requested(&self.bus.io))
+        {
+            // The hub starts the transfer, or answers the wireless
+            // adapter's terminals, between turns: end this one.
             self.sched.deadline = 0;
         }
     }

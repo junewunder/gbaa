@@ -1333,6 +1333,11 @@ emerald-link rom=(roms / "Pokemon - Emerald Version.gba") *args:
     {{lock}} cargo build -q --release -p emerald-save
     target/release/emerald-link {{quote(rom)}} {{quote(gbaa_data / "saves/emerald")}} {{args}}
 
+# The wireless adapter's check (multiplayer/wireless-adapter-local): the two saves (just emerald-saves) as two Emeralds, each with an emulated wireless adapter in one radio (runtime::link::rfu), in the interpreter, into Oldale's Union Room, where BOB registers his Torchic at the trading board and ALICE trades her Mudkip for it; passes when both were in the Union Room, the first Pokémon swapped, identically twice (crates/emerald-save/src/bin/emerald-wireless.rs). About 4 minutes. ARGS: --frames, --once, --input0/--input1, --dump DIR --dump-at N,N or FROM-TO/EVERY.
+emerald-wireless rom=(roms / "Pokemon - Emerald Version.gba") *args:
+    {{lock}} cargo build -q --release -p emerald-save
+    target/release/emerald-wireless {{quote(rom)}} {{quote(gbaa_data / "saves/emerald")}} {{args}}
+
 # The netplay session core's check (multiplayer/session-core): the two saves as two linked Emeralds walking into the Trade Center, straight and as a two-peer rollback session at no input delay over a simulated network (40 ms, +30 ms jitter, 10% loss); passes when both peers' hashes every 60 frames and at the end are the straight run's, with no desync (crates/emerald-save/src/bin/emerald-netplay.rs). About 90 s. ARGS: --delay, --latency, --jitter, --loss, --seed, --frames.
 emerald-netplay rom=(roms / "Pokemon - Emerald Version.gba") *args:
     {{lock}} cargo build -q --release -p emerald-save
@@ -1383,6 +1388,12 @@ emerald-netplay-trade profile="calm" rom=(roms / "Pokemon - Emerald Version.gba"
 holes rom *args:
     {{lock}} cargo build -q --release -p hole-report
     {{cap}} MemoryMax=3G target/release/gbaa-holes "$@"
+
+# libgcc's double multiply and divide against their stand-ins (runtime::softfloat; native/libgcc-df-standins): the ROM's own copies (analysis::softfloat::scan) run in the interpreter on an edge grid and random pairs (--cases N of each kind, default 50000); fails on any difference. --pins prints the test table's grid. About 2 s. Light.
+[positional-arguments]
+softfloat-check rom *args:
+    {{lock}} cargo build -q --release -p hole-report --bin gbaa-softfloat-check
+    target/release/gbaa-softfloat-check "$@"
 
 # The hole report over the corpus (holes/corpus.toml; crates/hole-report/src/corpus.rs): every game in turn, each report in OUT/<name>.txt, then one table of the ranking lines' numbers, saved as OUT/summary.toml. ARGS: --out DIR (default out/holes/<git short hash>[-dirty]), --against DIR2 (changes from DIR2's summary in brackets), --only NAME (repeatable), --cover (each game's coverage runs: hours), --write-doc FILE (the table as a generated numbers file: docs/research/native-holes.numbers.md), --from DIR (run nothing: render DIR's summary.toml), and any `just holes` flag for every game. About 12 minutes for the nine (Imperium the longest, 3 minutes); run it with `just long`. The games run one at a time under one 3 GB cap, no swap.
 [positional-arguments]

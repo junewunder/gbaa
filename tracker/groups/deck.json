@@ -613,6 +613,25 @@
           "text": "From {unit:deck/state-across-versions}: pokeemerald modern's state from the original ROM loads, then jumps to 0 in frame 1. On an other-ROM load that faults within a few frames, restore the machine as before the load and say why; .bak stays. Data-only revisions play fine."
         }
       ]
+    },
+    {
+      "id": "deck/even-presents",
+      "title": "Single-player window: hand frames to the display evenly",
+      "detail": "The netplay feel sim (2026-11-08, {unit:multiplayer/rollback-feel-sim}) found a frame handed to the window when done meets the 60 Hz display unevenly: each finish that crosses a refresh makes a doubled and a skipped frame. Netplay now presents 8 ms into the turn (gbaa-desktop --present-ms). The single-player loop still hands frames over when done; its costs vary less, so measure first (the window's present gaps, or a sim like netplay::feel's), then do the same if it shows. docs/research/multiplayer.md, Feel.",
+      "record": {
+        "state": "done",
+        "by": "bc2eeaad",
+        "at": "2026-11-08T22:11:37Z",
+        "evidence": "Review fixes made: hold test now checks release >=3 ms after the frame's start (timed in test, scheduling-independent); Deck scale 2.2 (estimate from 2-2.5x quack) in present_sim.rs, commands.md, sound-design.md. Sim results unchanged in docs/sound-design.md 'When a frame goes to the window'. just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-11-08T21:21:22Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/desktop/src/present.rs, test `the_window_holds_a_quick_frame_as_long_as_a_slow_one`: this test depends on wall-clock timing and can fail at random in `just check`. The assertion `second >= 3ms` only hol…"
+        }
+      ]
     }
   ]
 }
