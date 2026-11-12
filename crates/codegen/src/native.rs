@@ -1445,6 +1445,17 @@ impl FnPrinter<'_, '_> {
                 "CPU state: a stack switch (sp set to a value not made from the frame's)",
             );
         }
+        // sp set to a constant (a fresh stack, the SDK's `SoftReset`) is
+        // the guest's bytes from there on, as lifted; only a return could
+        // reach the frames left behind.
+        if sum.is_none_or(|s| s.returns) {
+            for &at in self.frame.map(|fr| &fr.fresh).into_iter().flatten() {
+                self.hole(
+                    at,
+                    "CPU state: a stack switch (sp set to a constant in a function that returns)",
+                );
+            }
+        }
         // The plain entry, for calls, and the extended one, for a fall or
         // jump from another function, which passes its registers and flags.
         // A shaped function's plain entry takes its parameters and gives
@@ -2112,6 +2123,9 @@ impl FnPrinter<'_, '_> {
                 };
                 let n = runtime::bios::number(comment, thumb);
                 let call = match n {
+                    // The restart is `main`'s (the prelude's `soft_reset`).
+                    0x00 => "soft_reset(g)?;".to_string(),
+                    0x01 => "register_ram_reset(g, r0);".to_string(),
                     // `Stop` is a halt, as in the play build.
                     0x02 | 0x03 => "g.sp = r13; hw::halt(g)?;".to_string(),
                     0x04 => "r0 = intr_wait(g, r13, r0 != 0, r1)?;".to_string(),
@@ -2129,6 +2143,8 @@ impl FnPrinter<'_, '_> {
                         "let mut r = [r0, r1, r2, r3]; lz77(g, r13, &mut r, {}, {at:#010x}, {thumb})?; [r0, r1, r2, r3] = r;",
                         n == 0x12
                     ),
+                    0x13 => "let mut r = [r0, r1, r2, r3]; huff(g, &mut r); [r0, r1, r2, r3] = r;"
+                        .to_string(),
                     0x14 | 0x15 => format!(
                         "let mut r = [r0, r1, r2, r3]; rl(g, &mut r, {}); [r0, r1, r2, r3] = r;",
                         n == 0x15
@@ -2138,6 +2154,9 @@ impl FnPrinter<'_, '_> {
                         .to_string(),
                     // No link cable: no client answers (the play build's).
                     0x25 => "r0 = 1;".to_string(),
+                    // `SoundDriverVSyncOff`: the play build's BIOS has no
+                    // sound driver, so does nothing.
+                    0x28 => String::new(),
                     _ => {
                         debug_assert!(!BIOS.contains(&n));
                         self.hole(at, format!("BIOS call {n:#04x}, which the library doesn't have"));
