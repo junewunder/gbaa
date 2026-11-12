@@ -226,24 +226,24 @@ typed pointers, below; until then they are soft holes, counted.
   registers, RAM cells at constant addresses, objects' word fields and
   frame words that don't escape, across calls and the callee sets of
   `native/fnref-flow`. An object is made where a pointer is added to an
-  amount the run doesn't know: agb's allocator, inlined where
-  `Box::new` is, adds the alignment's padding to its cursor. An access
-  the value sets don't bound whose address is, but for nulls and the
-  unknown, one object type (union-find over the sites that meet) at one
-  aligned offset prints as `g.at(Ref::<H_…>::new(p)).f_8` (or `at_mut`),
-  through the pointer the address adds a constant to, so that addition
-  isn't printed; `H_<site>` is a `#[repr(C, packed)]` struct of the fields seen
-  through it, one line each. The prelude's `Ref<T>` keeps the guest
+  amount the run doesn't know: agb's allocator, inlined where `Box::new`
+  is, adds the alignment's padding to its cursor. An access the value
+  sets don't bound whose address is, but for nulls and the unknown, one
+  object type (union-find over the sites that meet) at one aligned
+  offset prints as `g.at(Ref::<H_…>::new(p)).f_8` (or `at_mut`), through
+  the pointer the address adds a constant to, so that addition isn't
+  printed; `H_<site>` is a `#[repr(C, packed)]` struct of the fields
+  seen through it, one line each. The prelude's `Ref<T>` keeps the guest
   address; `Game::at` checks it is RAM, the object fits its region (and,
-  packed, one piece of `Ram`) and is aligned, else stops naming it. On
-  the agb programs it finds `InterruptInner` (next, root, closure,
-  vtable: the IRQ list `__RUST_INTERRUPT_HANDLER` walks every V-blank)
-  and two others; 11-16 accesses a program typed (`ref_accesses`, no
-  bar), `computed_unknown` down as much (the owner's bar: what moves),
-  `ref_unexplained` the soft hole (34-93: several offsets, a byte loop
-  through an object, `Any`). The allocator stays lifted: its free list
-  holds pointers the run can't follow (a freed pointer comes from an
-  escaping slot), so replacing it waits on frame escapes narrowing.
+  packed, one piece of `Ram`) and is aligned, else stops naming it. A
+  static array's element stays bytes (`native/ref-heap-static-arrays`:
+  packed, the globals in it are apart). On the agb programs it finds
+  `InterruptInner` (the IRQ list `__RUST_INTERRUPT_HANDLER` walks) and
+  two others; 11-16 accesses a program typed (`ref_accesses`, no bar),
+  `computed_unknown` down as much, `ref_unexplained` the soft hole
+  (several offsets, a byte loop, `Any`, a static array). The allocator
+  stays lifted: its free list holds pointers the run can't follow, so
+  replacing it waits on frame escapes narrowing.
 - **Lifted programs at the packed layout draw the same**
   (`native/lift-packed-layout`). Done: `gbaa-lift --layout packed`
   (`Globals::ram_struct`, `native/prelude_packed.rs`) orders `Ram`'s

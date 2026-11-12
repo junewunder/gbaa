@@ -1384,17 +1384,20 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "f336c3b0",
-        "session": "f336c3b0-9a14-4fc7-a992-a88f313d5fbf",
-        "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T08:31:49Z",
-        "branch": "unit/native/ref-heap-static-arrays",
-        "beats": true
+        "checker": "verifier-aa82f59c",
+        "at": "2026-11-12T09:09:21Z",
+        "evidence": "Verifier subagent aa82f59c: lift-check --only native-bios-calls passed with the 4ee88ac loop (o.regs.iter()) restored: 600 frames, packed layout draws the same; just check passed. Control without fix: packed panics 'pointer 0x020000b8 to 16 bytes isn't in RAM in one piece'. Its Sub gap fixed; rerun both pass, all 9 programs' metrics within bars.",
+        "host": "quack"
       },
-      "round": "2026-11-12T08:31:49Z"
+      "notes": [
+        {
+          "at": "2026-11-12T09:09:25Z",
+          "by": "f336c3b0",
+          "text": "Shared $GBAA_DATA/agb/native-bios-calls.gba was rebuilt from this branch (holes moved to 0x08002704/0x08002720/0x08002765); until merge, main's holes file doesn't match it."
+        }
+      ]
     },
     {
       "id": "native/fnref-rom-read-bound",
@@ -1614,6 +1617,11 @@
       "uses": ["heavy"],
       "notes": [
         {
+          "at": "2026-11-12T09:30:23Z",
+          "by": "d12ab564",
+          "text": "2026-11-12: agb/native-dma (new, {unit:native/hw-dma-registers}) hits the same hole, a gap in qrcodegen's draw_format_bits (f_08006d23 reads r6); holes/native-dma.toml stands it in with unreachable!. Drop that stand-in when this lands."
+        },
+        {
           "at": "2026-11-12T08:33:14Z",
           "by": "eb7b70bf",
           "text": "Kirby - Nightmare has 5 more hard entry-read holes from the same change ({unit:native/nightmare-entry-reads}); a fix to the rule may cover both."
@@ -1639,6 +1647,18 @@
       "title": "Metroid lifts again after entry-read masking",
       "detail": "Since {unit:native/entry-read-masking} landed, gbaa-lift on Metroid has 1 hard hole: f_08073ce5, summary 0x08073f08 reads entry r9. agbcc builds a word in r6 = entry r9 byte by byte (ands ffffff00, ands ffff00ff), so r9's top 16 bits are stored to RAM at [r4+0x244+4]; the lift zeroes r4-r12 at a call, the game keeps the caller's r9. Real, not over-hard. Fix: a stand-in (caller's r9 is likely a constant or garbage; check callers), or the lifter passing r9. Done when: just lift ROM out/lift-metroid --name metroid reports 0 hard holes and the crate builds; just check passes.",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/native-check-spike-packed",
+      "title": "just native-check passes again: the spike's packed record",
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-12T09:30:14Z",
+          "by": "d12ab564",
+          "text": "just native-check fails at the spike: --packed target/release/native-spike is built without guest-layout, and route-check now passes it --native-record (since {unit:native/lift-packed-layout}), which native-host refuses. psg-square, direct-sound and the spike without --packed pass."
+        }
+      ]
     }
   ]
 }

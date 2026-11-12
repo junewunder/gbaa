@@ -930,7 +930,38 @@
       "id": "multiplayer/desktop-wireless-radio",
       "title": "Union Room from the desktop: a wireless seat on the server",
       "detail": "gbaa-desktop has no wireless adapter yet. Give it a networked one (Wireless::networked + netplay::radio::Radio, as emerald-wireless --seat does): --server ADDR --wireless host/join, each window runs only its own Emerald, real time. Check: two windows in a private cu session through a local gbaa-server trade in the Union Room. The fly server needs a redeploy for W datagrams.",
-      "needs": ["multiplayer/wireless-radio-netplay"]
+      "needs": ["multiplayer/wireless-radio-netplay"],
+      "record": {
+        "state": "done",
+        "by": "2be79df9",
+        "at": "2026-11-12T09:36:04Z",
+        "evidence": "gbaa-desktop --server ADDR --wireless --host/--join (crates/desktop/src/wireless.rs). Card's check ran 2026-11-12 on quack: two windows in a private cu session (wl4) through a local gbaa-server, alice.sav/bob.sav with emerald-wireless's presses as --input: Union Room offer, then 'BOB sent over TORCHIC' / 'ALICE sent over MUDKIP' in both windows; 10600 frames in 179.5 s, 0 late, ~6640 radio datagrams in each, 0 resent. Headless the same: trade screens, 177.8 s. just check passed (merge of main brought only tracker files). Fly needs just fly-deploy for W datagrams: the desktop now warns when the radio is silent 10 s.",
+        "branch": "unit/multiplayer/desktop-wireless-radio",
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T09:36:04Z",
+          "by": "2be79df9",
+          "host": "quack",
+          "pid": 2490379,
+          "start": "10658170",
+          "beats": true,
+          "session": "2be79df9-742f-4acc-971c-f31dbf757d15",
+          "lane": "quack/4"
+        },
+        "pushed": true
+      },
+      "round": "2026-11-12T09:13:28Z"
+    },
+    {
+      "id": "multiplayer/menu-wireless-room",
+      "title": "Host or join a wireless room from the window's menu",
+      "notes": [
+        {
+          "at": "2026-11-12T09:36:15Z",
+          "by": "2be79df9",
+          "text": "gbaa-desktop --wireless works from the command line only ({unit:multiplayer/desktop-wireless-radio}); the Netplay page's Ask has no wireless choice. Fly's server still needs just fly-deploy before W datagrams reach it."
+        }
+      ]
     }
   ]
 }
