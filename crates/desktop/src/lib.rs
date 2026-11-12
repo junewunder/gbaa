@@ -301,7 +301,7 @@ usage: gbaa-desktop ROM [options]
                    --input, --save, --dump, --hash, --dump-at/--dump-dir,
                    --mute, --scale, --fullscreen, --pad-config,
                    --pad-script
-  --rogue ADDR    Emerald Rogue's co-op (Multiplayer Adventures) with
+  --rogue ADDR     Emerald Rogue's co-op (Multiplayer Adventures) with
                    Rogue Assistant built in: when the game hosts, listen on
                    ADDR's port; when it joins, connect to ADDR (host[:port],
                    port 30025 if left out). ENet as the assistant speaks
