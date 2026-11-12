@@ -2565,3 +2565,4 @@
 {"at":"2026-11-12T07:03:26Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/task-coroutines","text":"Lifted task switchers run tasks on host coroutines: on main"}
 {"at":"2026-11-12T07:28:22Z","actor":"loop","tag":"2ad4dbaa","host":"quack","cmd":"claim","id":"native/task-coroutines","text":"Lifted task switchers run tasks on host coroutines: claimed to check 21ac895a's work"}
 {"at":"2026-11-12T07:42:04Z","actor":"loop","tag":"8f376444","host":"quack","cmd":"decide","text":"decided: A networked adapter lists only the hosts the server says are open","d":"d/a-networked-adapter-lists-only-the-hosts-the"}
+{"at":"2026-11-12T07:42:22Z","actor":"loop","tag":"8f376444","host":"quack","cmd":"add-unit","id":"multiplayer/desktop-wireless-radio","text":"new unit: Union Room from the desktop: a wireless seat on the server"}

@@ -920,6 +920,12 @@
       "detail": "From Emerald's netplay trade split once on wander, under load ({unit:multiplayer/wander-split-under-load}): a stall now survives (room::QUIET 8 s), but a paced peer back from a 4 s stall stays ~240 frames behind; time sync holds the one ahead back one frame in 13, so ~50 s at that gap, each changed input a ~240-frame rollback on it (3.7 s under load). Make the gap close in a few seconds (the behind peer running unpaced frames, or holding back harder far ahead), without hurting rollback-feel's budgets. Check: just rollback-feel wander headless --paced with a peer SIGSTOPped 4 s: lead back under 10 frames within 10 s; the feel budget test; just check.",
       "check": "recorded",
       "uses": ["heavy"]
+    },
+    {
+      "id": "multiplayer/desktop-wireless-radio",
+      "title": "Union Room from the desktop: a wireless seat on the server",
+      "detail": "gbaa-desktop has no wireless adapter yet. Give it a networked one (Wireless::networked + netplay::radio::Radio, as emerald-wireless --seat does): --server ADDR --wireless host/join, each window runs only its own Emerald, real time. Check: two windows in a private cu session through a local gbaa-server trade in the Union Room. The fly server needs a redeploy for W datagrams.",
+      "needs": ["multiplayer/wireless-radio-netplay"]
     }
   ]
 }
