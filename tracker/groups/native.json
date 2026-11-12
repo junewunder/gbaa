@@ -1067,6 +1067,11 @@
       "uses": ["heavy"],
       "notes": [
         {
+          "at": "2026-11-12T06:58:38Z",
+          "by": "21ac895a",
+          "text": "Facility in {unit:native/task-coroutines}: prelude task_resume/task_yield/task_exit; stand-in lr = true gives Game::lr; holes/native-tasks.toml is a worked example. Lifter flags f_080cfdc8/d0/d8. The scheduler's resume call (0x08005364) is still taken never to return."
+        },
+        {
           "at": "2026-11-12T06:37:54Z",
           "by": "b67b3cd7",
           "text": "From {unit:native/copy-tail-discovery}: discovery now finds resume (0x08000234, entered by the veneer 0x080cfdc5's ARM part f_080cfdc8 via b); its bx r1 at 0x08000254 is a hard hole in the lift, which stops there until a stand-in for 0x080cfdc8 covers it."
@@ -1075,11 +1080,6 @@
           "at": "2026-11-08T22:24:15Z",
           "by": "f66d452c",
           "text": "Nightmare now lifts with 0 hard holes (mods/kirby-nightmare/holes.toml); the IRQ dispatcher stand-in 0x03001030 moves an IRQ on a task stack (sp<0x03007b80) to 0x03007c80. The lifter doesn't flag the 3 stack switches. SoftReset stand-in panics until {unit:native/lift-bios-more}."
-        },
-        {
-          "at": "2026-11-07T11:44:49Z",
-          "by": "ccb35e7f",
-          "text": "Split 2026-11-07: Nightmare's lift (skip_fn_flow) stops at 15 other hard holes, 9 BIOS; and the lifter doesn't flag the 3 stack switches. Now needs {unit:native/nightmare-lifts} and the shared facility {unit:native/task-coroutines}; then only the stand-in and route are left here."
         }
       ],
       "round": "2026-11-07T11:32:04Z"
