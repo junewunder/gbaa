@@ -1635,21 +1635,8 @@
         "checker": "ae19d9e3",
         "at": "2026-11-12T11:21:43Z",
         "evidence": "Verifier subagent ae19d9e3 rebuilt out/metroid at --timing native from this branch: route-check --native on units/metroid-native.toml (2700 frames) passes the play-against-interp step, play.rec and interp.rec byte-identical (was frame 1, EWRAM 0x02038000). Cause: an idle loop's conditional branch mid-block got no rt::idle_exit; build_block now splits after it. Unit test added; just check passes after merging main.",
-        "branch": "unit/native/play-native-metroid-interp",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T11:21:43Z",
-          "by": "ba1a464f",
-          "host": "quack",
-          "pid": 2489252,
-          "start": "10657014",
-          "beats": true,
-          "session": "ba1a464f-09a6-40f0-b263-fabbb9594de4",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-12T10:44:40Z"
+        "host": "quack"
+      }
     },
     {
       "id": "native/check-holes-copies",
