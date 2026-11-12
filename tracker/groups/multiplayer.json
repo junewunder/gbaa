@@ -894,32 +894,23 @@
       "detail": "After {unit:multiplayer/wireless-adapter-local}: runtime::link::rfu's radio (hosts, searches, connections, packets) moves onto gbaa-server so each player runs only their own Emerald and adapter (docs/research/multiplayer.md option F, 'The wireless adapter, locally'). Measure how much latency librfu's timeouts and the Union Room's host/search switching allow, through the variable-ping simulator. Check: two Emerald processes (alice.sav, bob.sav) trade in the Union Room through a local server under the 'calm' profile; just check.",
       "check": "recorded",
       "needs": ["multiplayer/wireless-adapter-local"],
-      "record": {
-        "state": "done",
-        "by": "8f376444",
-        "at": "2026-11-12T07:42:32Z",
-        "evidence": "just emerald-radio (calm, two Emerald processes, alice.sav/bob.sav, local gbaa-server room holding the radio) passed after merging main: connected frame 6718, trade on screen 7920, Mudkip/Torchic swapped, 0 resends. Latency via emerald-wireless --sim-ms: trades up to 200 ms each way; the Union Room gives up the connection from 250; 400 no lasting link (docs/research/multiplayer.md). just check passes; local emerald-wireless unchanged (same end states, identical twice).",
-        "branch": "unit/multiplayer/wireless-radio-netplay",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T07:42:32Z",
-          "by": "8f376444",
-          "host": "quack",
-          "pid": 2490379,
-          "start": "10658170",
-          "beats": true,
-          "session": "8f376444-9b26-4bb9-bc1e-903dc68ee5e5",
-          "lane": "quack/4"
-        },
-        "pushed": true
-      },
       "notes": [
+        {
+          "at": "2026-11-12T07:47:47Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - docs/research/multiplayer.md, \"The radio on the server\" latency table (diff.patch lines ~2671-2684): this table is the card's \"measure how much latency librfu's timeouts and the Union Room's host/search switch…"
+        },
         {
           "at": "2026-11-08T21:50:27Z",
           "by": "954f0eb1",
           "text": "The local adapter's one guess beyond afska's docs: a searching adapter lists a host it heard for 3 s across searches (Adapter::heard); without it BOB's board offer rarely reached ALICE. Check whether the networked radio still needs it."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-12T07:47:47Z",
+        "findings": "- docs/research/multiplayer.md, \"The radio on the server\" latency table (diff.patch lines ~2671-2684): this table is the card's \"measure how much latency librfu's timeouts and the Union Room's host/search switching allow\", but (a) the 400 ms row says \"never (4660 without)\", i.e. that without the 3 s memory the Connect completed at frame 4660, earlier than the 0 ms run's 6714 and every other row's ~6714-6845. That is almost certainly a typo or a misread log. (b) The footnote says the table was run \"with the 3 s memory but for the two marked\", yet three cells are marked, and the 3 s memory (HEARD_FOR) is what this branch turns off by default for a networked adapter. So the rows that set the limit (250, 300 and 400 ms: 'between 200 and 250 ms each way') were measured only on a setting that doesn't ship. Fix: rerun `just emerald-wireless ROM --sim-ms N` with the default (no --heard-ms) at least at 250, 300 and 400 ms (ideally 100 and 150 too), correct the 400 ms cell, make the footnote match which cells used which setting, and restate the latency limit for the networked adapter as it ships."
+      },
       "round": "2026-11-12T06:30:40Z"
     },
     {
