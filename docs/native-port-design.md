@@ -411,7 +411,8 @@ mode and calling `gIntrTable[n]`), agb's handler, or a game's own.
   hardware. Elsewhere an `msr` or `mrs` is a hole. agb's
   `InterruptHandler` lifts so and passes the native check, but keeps its
   stand-in: its lifted accesses would raise eight bars per program.
-- **No nesting.** Handlers run to completion at the points above (and
+- **No nesting** (but a lifted wrapper's own `msr` that clears I nests,
+  as built above). Handlers run to completion at the points above (and
   when a library copy's cost crosses an event, section 7), never
   inside another handler or inside game code. A real GBA can take the
   V-blank IRQ while the main loop is still mid-frame (a lag frame) or
