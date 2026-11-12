@@ -1389,19 +1389,7 @@
         "checker": "verifier-aa82f59c",
         "at": "2026-11-12T09:09:21Z",
         "evidence": "Verifier subagent aa82f59c: lift-check --only native-bios-calls passed with the 4ee88ac loop (o.regs.iter()) restored: 600 frames, packed layout draws the same; just check passed. Control without fix: packed panics 'pointer 0x020000b8 to 16 bytes isn't in RAM in one piece'. Its Sub gap fixed; rerun both pass, all 9 programs' metrics within bars.",
-        "branch": "unit/native/ref-heap-static-arrays",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T09:09:21Z",
-          "by": "f336c3b0",
-          "host": "quack",
-          "pid": 2490379,
-          "start": "10658170",
-          "beats": true,
-          "session": "f336c3b0-9a14-4fc7-a992-a88f313d5fbf",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -1409,8 +1397,7 @@
           "by": "f336c3b0",
           "text": "Shared $GBAA_DATA/agb/native-bios-calls.gba was rebuilt from this branch (holes moved to 0x08002704/0x08002720/0x08002765); until merge, main's holes file doesn't match it."
         }
-      ],
-      "round": "2026-11-12T08:31:49Z"
+      ]
     },
     {
       "id": "native/fnref-rom-read-bound",
