@@ -1357,16 +1357,23 @@
       "detail": "docs/native-stage-b.md piece 3. Measured on {unit:native/fnref-context}'s branch (commit e81168f; it holds the object split and call-site context): fn_words_not_proven unmoved by either. ~640 of affine's load sites (spike 644) have an address that may be unknown (Val::unk), and each reads the pile and every RAM cell (Run::load_at's anywhere arm), so e.g. the IRQ vector word's f_03000000 is in nearly every hole. Not the cause (tried, no change): naming the allocator, dropping the pile from constant-address loads, dropping the I/O unk flag, NUMS 8->256. A seen source: main's inlined free-list walk at 0x080001a8 (affine) loads GLOBAL_ALLOC fields holding allocator-made pointers. Find where the unknown comes from (GBAA_FNREF_TRACE; print each anywhere load) and fix the first big source. Done when: fn_words_not_proven falls on every agb program, bars lowered, a unit test, just lift-check and just check pass.",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "blocked",
+        "on": "q/unknown-address-step-land-without",
         "by": "3454f93a",
-        "session": "3454f93a-c5b2-49fa-ab4a-bcd1d4efe225",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T07:01:25Z",
-        "branch": "unit/native/fnref-unknown-addrs",
-        "beats": true
+        "at": "2026-11-12T08:30:17Z"
       },
+      "notes": [
+        {
+          "at": "2026-11-12T08:30:33Z",
+          "by": "3454f93a",
+          "text": "Measured: roots' r0-r3 as lost brings all 623 back (reset->main); RAMS 8 too few (font data 100-200 RAM-looking words); naming affine's allocator 0x08002055 or skipping the pile: no fall. Context (GBAA_FNREF_CTX_BLOCKS=6) takes 70s, -1 word."
+        },
+        {
+          "at": "2026-11-12T08:30:29Z",
+          "by": "3454f93a",
+          "text": "Branch eb76aa55 (fnref-context merged in): RamFrom tokens + lost_ptr closed world; affine anywhere loads 623->8, fn_words unmoved. Costs: spike/ime/irq-hold +1-3 not_proven, irq-hold ref_accesses 16->0 (heap.rs reads callee sets). GBAA_FNREF_TRACE prints 'load anywhere'."
+        }
+      ],
       "round": "2026-11-12T07:01:25Z"
     },
     {
@@ -1380,7 +1387,14 @@
       "id": "native/fnref-rom-read-bound",
       "title": "Function flow bounds a ROM read by its table, not next code",
       "detail": "fnref's from-here-on ROM read (affine at 0x08000af2) ran to the next code; once {unit:native/modern-gcc-data-as-code} removed a false start in agb's panic text, it runs into agb's vtables: ref_unexplained rose 35->97 (93->164 ime-release/irq-hold), fn_words_not_proven +4/5. Bound the read by the table it indexes (its length or a bounds check) and lower both lift-check bars on the seven agb programs. Owner's answer (a) to the bar question.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-12T08:30:41Z",
+          "by": "3454f93a",
+          "text": "From {unit:native/fnref-unknown-addrs}'s branch: a from-here-on ROM read intersected with its load's value-set bounds fixes affine 0x08000af2 (hull 0x080160a4-0x0801f900); next, 0x08000bba's hull is 115 KB and false pointers in font data (0x080075f8) read to next code."
+        }
+      ]
     },
     {
       "id": "native/fnref-emerald-speed",
