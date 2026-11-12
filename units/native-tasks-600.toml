@@ -1,0 +1,12 @@
+# agb/native-tasks for 600 frames with no input: the task-switcher program of
+# the native lifter's check (native/task-coroutines; `just lift-check`), its
+# lift (gbaa-lift) against the play build at --timing native by route-check
+# --native. What it draws: agb/native-tasks/SCENE.md.
+rom = "$GBAA_DATA/agb/native-tasks.gba"
+
+[[checkpoint]]
+name = "native-tasks-600"
+frame = 600
+hash = "ec4286836efdf369"
+# Verified: mGBA 0.10.5 (`just mgba-diff ROM 600`) draws this at frame 600,
+# as our interpreter does at --timing exact (2026-11-12).
