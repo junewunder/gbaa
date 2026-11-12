@@ -68,6 +68,17 @@ fn rough_with_linked_gbas() {
     run("rough.toml", GBA);
 }
 
+/// Single-pak link play (multiplayer/single-pak-multiboot): the homebrew
+/// sender in seat 0 boots seat 1, which has no cartridge, by `MultiBoot`
+/// (about 20 frames in), and both play on; paced as `GBA`.
+#[test]
+fn rough_single_pak() {
+    run(
+        "rough.toml",
+        &["--console", "single-pak", "--frames", "240", "--fps", "20"],
+    );
+}
+
 #[test]
 fn room_calm() {
     room("calm.toml", &["--frames", "360"]);

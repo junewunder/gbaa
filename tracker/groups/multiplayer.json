@@ -683,19 +683,20 @@
       "title": "Rollback: a sim test of what players feel, then fix it",
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): both players noticed small stutters ('a little framey sometimes', 'skipped frames'); it played well otherwise. ping-sim checks hashes, not feel. Build a sim that plays Kirby two-player (four with {unit:multiplayer/four-seats}) through ping-sim profiles like home Wi-Fi to fly, and measures what each window shows: frames presented late, doubled or skipped, rollback depth, frames run again, time-sync holds, the other Kirby's jumps. Put budgets on them in a test, then fix the worst offenders. Beside {unit:multiplayer/lag-report}, which needs a real session's numbers. june's view: rollback of whole consoles has a ceiling; the real fix for this game is a multiplayer mod on its decomp (docs/ideas.md). Check: before and after numbers in docs/research/multiplayer.md; the budget test in just check.",
       "minMinutes": 150,
+      "record": {
+        "state": "done",
+        "by": "7ac5db9e",
+        "at": "2026-11-12T05:54:23Z",
+        "evidence": "Review fixes made: justfile comment and commands.md entry now describe --rom as a straight CPU-clock trace then the session on its costs, and list --trace/--trace-out; feel::toy doc drops --console. Before/after numbers in docs/research/multiplayer.md (Feel); budget test cargo test -p netplay feel runs in just check, which passed after merging main (commands.md budget raised to 1962 with a reason).",
+        "host": "quack"
+      },
       "notes": [
         {
           "at": "2026-11-08T20:59:55Z",
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - justfile:1356 (the comment above `rollback-feel-sim`): it says that with `--rom ROM` the sim runs \"a session of interpreted GBAs on ROM, each turn's measured time\". That is the wall-time approach that docs/res…"
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-08T20:59:55Z",
-        "findings": "- justfile:1356 (the comment above `rollback-feel-sim`): it says that with `--rom ROM` the sim runs \"a session of interpreted GBAs on ROM, each turn's measured time\". That is the wall-time approach that docs/research/multiplayer.md (\"Feel\") says was tried and dropped. What the code actually does (`measure` in crates/netplay/src/bin/gbaa-pingsim.rs) is time the ROM once, straight, on the thread's CPU clock, writing a `feel::Trace`, and then run the toy session on those costs. Reword the comment to say that, and add the missing `--trace F` / `--trace-out F` options to its ARGS list and to the feel-sim entry in docs/tools/commands.md (around line 1865), which also leaves them out.\n- crates/netplay/src/feel.rs, the doc comment on `pub fn toy`: it calls this \"`gbaa-pingsim feel --console toy`'s run\", but `feel` has no `--console` option and rejects it as `unknown option`. Change it to \"`gbaa-pingsim feel`'s run\"."
-      },
-      "round": "2026-11-01T01:44:42Z"
+      ]
     },
     {
       "id": "multiplayer/other-seat-sound",
@@ -859,12 +860,38 @@
     {
       "id": "multiplayer/single-pak-multiboot",
       "title": "Single-pak link: a seat with no cartridge boots by MultiBoot",
-      "detail": "From the link-cable survey (docs/research/multiplayer.md, 'The cable over the internet'): single-pak games (Mario Kart Super Circuit's single-pak mode, Bomberman Tournament, the Mario Bros. Classic games) send a program over the cable to GBAs with no cartridge. Our HLE BIOS MultiBoot (SWI 0x25) always fails (runtime/src/bios.rs) and a machine can't start without a ROM. Add: a cartridge-less machine that runs the BIOS's boot-time MultiBoot receive over runtime::link and boots what it gets from EWRAM, and MultiBoot on the parent over the hub. Check: a homebrew single-pak sender (written here, or an agb/libtonc example) boots a client on a cartless seat through two local netplay peers, same end hash; just check. No ROM june has needs it."
+      "detail": "From the link-cable survey (docs/research/multiplayer.md, 'The cable over the internet'): single-pak games (Mario Kart Super Circuit's single-pak mode, Bomberman Tournament, the Mario Bros. Classic games) send a program over the cable to GBAs with no cartridge. Our HLE BIOS MultiBoot (SWI 0x25) always fails (runtime/src/bios.rs) and a machine can't start without a ROM. Add: a cartridge-less machine that runs the BIOS's boot-time MultiBoot receive over runtime::link and boots what it gets from EWRAM, and MultiBoot on the parent over the hub. Check: a homebrew single-pak sender (written here, or an agb/libtonc example) boots a client on a cartless seat through two local netplay peers, same end hash; just check. No ROM june has needs it.",
+      "record": {
+        "state": "done",
+        "by": "a897fc66",
+        "at": "2026-11-12T06:25:44Z",
+        "evidence": "Homebrew single-pak sender (netplay::demo::single_pak_sender: GBATEK handshake, then SWI 0x25) boots a cartless seat 1 through two local netplay peers: just ping-sim rough --console single-pak passes (10 hashes and end match the straight run on both seats; calm and wander pass too), after merging main. Unit tests: a_cartless_seat_boots_what_the_sender_sends (child at 0x020000C0+, mark written, header/program copied, boot mode 3, ID 1, MultiBoot r0=0; boots ~frame 18 after 237 transfers), a_single_pak_session_rolls_back_to_the_straight_run (in-process rollback over a lossy net), ping_sim::rough_single_pak, runtime link tests for the failing paths and cartless HardReset; snap v4 with a pinned v3 state. just check passes on the merged branch (1c68875).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-11-12T06:25:48Z",
+          "by": "a897fc66",
+          "text": "Not done: the desktop has no cartless seat (netplay::gba::Gba::single_pak and runtime::bios::multiboot::boot_cartless are there to use); normal-mode MultiBoot (r1=0/2) still fails; no commercial single-pak game tried (none of june's)."
+        }
+      ]
     },
     {
       "id": "multiplayer/wander-split-under-load",
       "title": "Emerald's netplay trade split once on wander, under load",
-      "detail": "From the link-cable survey (2026-11-08, quack, load average 18 from other lanes): just emerald-netplay-trade wander failed once: player 1 saw player 2 leave at frame 1119, player 2 left at 1144 (its max frame 3400 ms, round trip up to 3439 ms), each played on alone and the end hashes differed. The rerun and calm passed. Find why a 3.4 s stall ended the session (the stopped-answering timeouts are 5 s freeze plus 15 s), and make a stalled peer catch up instead. Check: just emerald-netplay-trade wander passes 5 times in a row with a peer SIGSTOPped for 4 s mid-run; just check."
+      "detail": "From the link-cable survey (2026-11-08, quack, load average 18 from other lanes): just emerald-netplay-trade wander failed once: player 1 saw player 2 leave at frame 1119, player 2 left at 1144 (its max frame 3400 ms, round trip up to 3439 ms), each played on alone and the end hashes differed. The rerun and calm passed. Find why a 3.4 s stall ended the session (the stopped-answering timeouts are 5 s freeze plus 15 s), and make a stalled peer catch up instead. Check: just emerald-netplay-trade wander passes 5 times in a row with a peer SIGSTOPped for 4 s mid-run; just check.",
+      "record": {
+        "state": "claimed",
+        "by": "18d209b3",
+        "session": "18d209b3-06f2-421f-8061-da4ac3c8552e",
+        "host": "quack",
+        "pid": 2489252,
+        "start": "10657014",
+        "at": "2026-11-12T06:02:10Z",
+        "branch": "unit/multiplayer/wander-split-under-load",
+        "beats": true
+      },
+      "round": "2026-11-12T06:02:10Z"
     },
     {
       "id": "multiplayer/wireless-radio-netplay",
@@ -872,13 +899,32 @@
       "detail": "After {unit:multiplayer/wireless-adapter-local}: runtime::link::rfu's radio (hosts, searches, connections, packets) moves onto gbaa-server so each player runs only their own Emerald and adapter (docs/research/multiplayer.md option F, 'The wireless adapter, locally'). Measure how much latency librfu's timeouts and the Union Room's host/search switching allow, through the variable-ping simulator. Check: two Emerald processes (alice.sav, bob.sav) trade in the Union Room through a local server under the 'calm' profile; just check.",
       "check": "recorded",
       "needs": ["multiplayer/wireless-adapter-local"],
+      "record": {
+        "state": "claimed",
+        "by": "8f376444",
+        "session": "8f376444-9b26-4bb9-bc1e-903dc68ee5e5",
+        "host": "quack",
+        "pid": 2490379,
+        "start": "10658170",
+        "at": "2026-11-12T06:30:40Z",
+        "branch": "unit/multiplayer/wireless-radio-netplay",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-08T21:50:27Z",
           "by": "954f0eb1",
           "text": "The local adapter's one guess beyond afska's docs: a searching adapter lists a host it heard for 3 s across searches (Adapter::heard); without it BOB's board offer rarely reached ALICE. Check whether the networked radio still needs it."
         }
-      ]
+      ],
+      "round": "2026-11-12T06:30:40Z"
+    },
+    {
+      "id": "multiplayer/stall-catch-up-paced",
+      "title": "Netplay: a peer back from a stall catches up in seconds",
+      "detail": "From Emerald's netplay trade split once on wander, under load ({unit:multiplayer/wander-split-under-load}): a stall now survives (room::QUIET 8 s), but a paced peer back from a 4 s stall stays ~240 frames behind; time sync holds the one ahead back one frame in 13, so ~50 s at that gap, each changed input a ~240-frame rollback on it (3.7 s under load). Make the gap close in a few seconds (the behind peer running unpaced frames, or holding back harder far ahead), without hurting rollback-feel's budgets. Check: just rollback-feel wander headless --paced with a peer SIGSTOPped 4 s: lead back under 10 frames within 10 s; the feel budget test; just check.",
+      "check": "recorded",
+      "uses": ["heavy"]
     }
   ]
 }

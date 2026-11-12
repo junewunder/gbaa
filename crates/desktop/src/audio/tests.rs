@@ -338,3 +338,17 @@ fn the_gain_scales_what_plays() {
         assert_eq!(*d, [w[0] * 0.5, w[1] * 0.5]);
     }
 }
+
+/// Netplay's hold queues a frame's worth of silence, as a silent frame
+/// does, so the pacer waits a frame for it instead of catching up.
+#[test]
+fn a_held_frame_queues_a_frame_of_silence() {
+    let mut p = Player::undrained(48000);
+    p.hold();
+    let frame = 48000.0 * FRAME_CYCLES as f64 / CLOCK_HZ as f64;
+    let len = p.queue().len() as f64;
+    assert!(
+        (len - frame).abs() <= 2.0,
+        "{len} queued, a frame is {frame}"
+    );
+}
