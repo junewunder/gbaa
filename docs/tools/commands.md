@@ -1335,9 +1335,10 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `[program.<name>.bars]`. Today `agb/native-spike`, `agb/affine`,
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
   `agb/native-frame-locals`, `agb/native-ime-release`,
-  `agb/native-bios-calls`, `agb/native-tasks`, `agb/native-dma`,
-  `agb/native-save` (SRAM; `just agb-tests`; native-bios-calls is
-  native/lift-bios-calls) on `units/<name>-600.toml` (the spike's is
+  `agb/native-bios-calls`, `agb/native-bios-more`, `agb/native-tasks`,
+  `agb/native-dma`, `agb/native-save` (SRAM; `just agb-tests`;
+  native-bios-calls is native/lift-bios-calls, native-bios-more
+  native/lift-bios-more: SoftReset's restart included) on `units/<name>-600.toml` (the spike's is
   `units/native-spike.toml`, native-irq-hold's and native-ime-release's
   `-601`). First every program is lifted with `--bars`
   (seconds), failing before any build on a metric over its bar; then each
