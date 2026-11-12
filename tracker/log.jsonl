@@ -2530,3 +2530,4 @@
 {"at":"2026-11-12T04:53:30Z","actor":"loop","tag":"b3d0fb3e","host":"quack","cmd":"claim","id":"native/entry-read-masking","text":"Tell masked entry reads of r4-r11 from parameters: claimed"}
 {"at":"2026-11-12T04:53:34Z","actor":"loop","tag":"21ac895a","host":"quack","cmd":"claim","id":"native/task-coroutines","text":"Lifted task switchers run tasks on host coroutines: claimed"}
 {"at":"2026-11-12T04:53:37Z","actor":"loop","tag":"b67b3cd7","host":"quack","cmd":"claim","id":"native/copy-tail-discovery","text":"Discover code past m4a's and Nightmare's copy sources: claimed"}
+{"at":"2026-11-12T04:53:41Z","actor":"loop","tag":"6f486280","host":"quack","cmd":"claim","id":"native/nightmare-cover-list","text":"Refresh Nightmare's coverage jump list: claimed"}

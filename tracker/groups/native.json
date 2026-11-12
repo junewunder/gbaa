@@ -1316,7 +1316,19 @@
       "probe": {
         "cmd": "just holes-all --only kirby-nightmare --cover --out out/holes/nightmare-cover"
       },
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "6f486280",
+        "session": "6f486280-7bc1-4e0a-ac81-c4fb6f851535",
+        "host": "quack",
+        "pid": 2490379,
+        "start": "10658170",
+        "at": "2026-11-12T04:53:41Z",
+        "branch": "unit/native/nightmare-cover-list",
+        "beats": true
+      },
+      "round": "2026-11-12T04:53:41Z"
     },
     {
       "id": "native/fnref-unknown-addrs",
