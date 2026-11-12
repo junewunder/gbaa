@@ -123,6 +123,16 @@ fn run_with(fns: &[Built], frames: &BTreeMap<u32, Frame>) -> Flow {
 }
 
 fn run_img(fns: &[Built], frames: &BTreeMap<u32, Frame>, img: &Img) -> Flow {
+    run_allocs(fns, frames, img, &BTreeSet::new())
+}
+
+/// With allocators named.
+fn run_allocs(
+    fns: &[Built],
+    frames: &BTreeMap<u32, Frame>,
+    img: &Img,
+    allocs: &BTreeSet<u32>,
+) -> Flow {
     let ins: Vec<FnIn> = fns
         .iter()
         .map(|(e, bs)| FnIn {
@@ -144,7 +154,7 @@ fn run_img(fns: &[Built], frames: &BTreeMap<u32, Frame>, img: &Img) -> Flow {
             frame: frames.get(e),
         })
         .collect();
-    follow(&ins, img, &[])
+    follow(&ins, img, &[], allocs, usize::MAX)
 }
 
 /// A function at `e` of two blocks: `b` ending in an indirect call
@@ -641,7 +651,7 @@ fn callees_that_shared_an_entry_share_what_a_call_by_value_gives() {
     g.entry.insert(12, vec![own; 16]);
     let args = vec![Val::of(fn_tok(4)); 4];
     g.give_all(&BTreeSet::from([10, 11, 12, 13]), &args);
-    let r0 = |k: u32| g.entry[&k][0].clone();
+    let r0 = |k: Ix| g.entry[&k][0].clone();
     assert!(std::rc::Rc::ptr_eq(&r0(10).toks.0, &r0(11).toks.0));
     let toks = |v: Val| v.toks.iter().copied().collect::<Vec<_>>();
     assert_eq!(toks(r0(10)), [fn_tok(1), fn_tok(2), fn_tok(4)]);
@@ -655,4 +665,196 @@ fn callees_that_shared_an_entry_share_what_a_call_by_value_gives() {
     g.changed = false;
     g.give_all(&BTreeSet::from([10, 11, 12, 13]), &args);
     assert!(!g.changed);
+}
+
+/// An allocator: returns (what it returns is the call's new object).
+const ALLOC: u32 = 0x0800_3001;
+
+/// Two objects from two allocator calls: F stored in the first, a number
+/// in the second, the second's word read and used as a number, the
+/// first's called. With the allocator named the objects are apart, so F
+/// is proven and the call's set is it; unnamed, both pointers are
+/// unknown, the stores go to the pile, and the number read is F too.
+#[test]
+fn two_heap_objects_are_kept_apart() {
+    let e = 0x0800_1001;
+    let call_at = |b: B, ret: u32, at: u32| {
+        let mut x = b.end(
+            None,
+            Edge::Call {
+                target: Some(ALLOC),
+                ret,
+            },
+        );
+        x.1.at = at;
+        x
+    };
+    let mut keep = B::default();
+    let a = keep.get(0);
+    keep.set(4, a);
+    let mut c = B::default();
+    let a = c.get(4);
+    let b = c.get(0);
+    let p = c.pool(POOL, F);
+    c.st(Width::Word, a, p);
+    let five = c.k(5);
+    c.st(Width::Word, b, five);
+    let n = c.ld(Width::Word, b);
+    let four = c.k(4);
+    c.bin(BinOp::Add, n, four);
+    let t = c.ld(Width::Word, a);
+    let f = vec![
+        (e, call_at(B::default(), e + 0x10, 0x0800_1100)),
+        (e + 0x10, call_at(keep, e + 0x20, 0x0800_1110)),
+        (
+            e + 0x20,
+            c.end(
+                Some(t),
+                Edge::Call {
+                    target: None,
+                    ret: e + 0x30,
+                },
+            ),
+        ),
+        (e + 0x30, B::default().end(None, Edge::Return)),
+    ];
+    let alloc = (ALLOC, vec![(ALLOC, B::default().end(None, Edge::Return))]);
+    let fns = [(e, f), alloc];
+    let named = run_allocs(
+        &fns,
+        &BTreeMap::new(),
+        &Img::new(),
+        &BTreeSet::from([ALLOC]),
+    );
+    assert!(named.proven(POOL), "{named:?}");
+    assert_eq!(site(&named).callees, BTreeSet::from([F]));
+    assert!(site(&named).complete);
+    assert!(named.piled.is_empty(), "{named:?}");
+    let unnamed = run(&fns);
+    assert!(!unnamed.proven(POOL));
+    assert_eq!(unnamed.holes[&Origin::Word(POOL)].1, Why::Arithmetic);
+}
+
+/// Two words of a function's frame reached through sp-relative
+/// addresses the frame's run didn't place: each is its own cell of the
+/// frame's object, so the number read from one isn't F stored in the
+/// other.
+#[test]
+fn two_frame_words_are_kept_apart() {
+    let mut b = B::default();
+    let sp = b.get(13);
+    let eight = b.k(8);
+    let a = b.bin(BinOp::Sub, sp, eight);
+    let sixteen = b.k(16);
+    let c = b.bin(BinOp::Sub, sp, sixteen);
+    let p = b.pool(POOL, F);
+    b.st(Width::Word, a, p);
+    let five = b.k(5);
+    b.st(Width::Word, c, five);
+    let n = b.ld(Width::Word, c);
+    let four = b.k(4);
+    b.bin(BinOp::Add, n, four);
+    let t = b.ld(Width::Word, a);
+    let f = run(&[calling(0x0800_1001, b, t)]);
+    assert!(f.proven(POOL), "{f:?}");
+    assert_eq!(site(&f).callees, BTreeSet::from([F]));
+    assert!(site(&f).complete);
+}
+
+/// A pointer into a frame plus an index the run doesn't know may reach
+/// any word of the frame: the load reads F's word too, and the number
+/// made of it is F's hole.
+#[test]
+fn a_pointer_into_an_object_through_an_add_of_an_unknown_reads_all_of_it() {
+    let mut b = B::default();
+    let sp = b.get(13);
+    let eight = b.k(8);
+    let a = b.bin(BinOp::Sub, sp, eight);
+    let p = b.pool(POOL, F);
+    b.st(Width::Word, a, p);
+    // sp - 16 + an unknown index: anywhere in the frame, F's word too.
+    let sixteen = b.k(16);
+    let c = b.bin(BinOp::Sub, sp, sixteen);
+    let i = b.get(1);
+    let ci = b.bin(BinOp::Add, c, i);
+    let n = b.ld(Width::Word, ci);
+    let four = b.k(4);
+    b.bin(BinOp::Add, n, four);
+    let f = run(&[(0x0800_1001, vec![(0x0800_1001, b.end(None, Edge::Return))])]);
+    assert!(!f.proven(POOL), "{f:?}");
+    assert_eq!(f.holes[&Origin::Word(POOL)].1, Why::Arithmetic);
+}
+
+/// Two callers pass one callee a pointer each into their own frames
+/// (`native/fnref-context`): one stored F there, the other 5. The callee
+/// returns what its pointer reads; run per call site, the first caller
+/// gets back only F (and calls it), the second only 5 (and adds to it),
+/// so F's word is proven. Joined at the callee's entry, the add would be
+/// a hole of F's word.
+#[test]
+fn a_callee_s_values_are_kept_apart_by_call_site() {
+    let (x, y, c) = (0x0800_1001, 0x0800_2001, 0x0800_3001);
+    let at = |mut b: (Vec<Inst>, Out, BTreeMap<usize, u32>), at: u32| {
+        b.1.at = at;
+        b
+    };
+    let call = |b: B, ret: u32, site: u32| {
+        at(
+            b.end(
+                None,
+                Edge::Call {
+                    target: Some(c),
+                    ret,
+                },
+            ),
+            site,
+        )
+    };
+    // A caller: its frame's word at sp - 8 holds `v`, r0 points to it.
+    let pass = |v: &dyn Fn(&mut B) -> ValueId| {
+        let mut b = B::default();
+        let sp = b.get(13);
+        let eight = b.k(8);
+        let a = b.bin(BinOp::Sub, sp, eight);
+        let v = v(&mut b);
+        b.st(Width::Word, a, v);
+        b.set(0, a);
+        b
+    };
+    let mut use_x = B::default();
+    let r = use_x.get(0);
+    let fx = vec![
+        (x, call(pass(&|b| b.pool(POOL, F)), x + 0x10, 0x0800_1100)),
+        (
+            x + 0x10,
+            at(
+                use_x.end(
+                    Some(r),
+                    Edge::Call {
+                        target: None,
+                        ret: x + 0x20,
+                    },
+                ),
+                0x0800_1110,
+            ),
+        ),
+        (x + 0x20, B::default().end(None, Edge::Return)),
+    ];
+    let mut use_y = B::default();
+    let r = use_y.get(0);
+    let four = use_y.k(4);
+    use_y.bin(BinOp::Add, r, four);
+    let fy = vec![
+        (y, call(pass(&|b| b.k(5)), y + 0x10, 0x0800_2100)),
+        (y + 0x10, use_y.end(None, Edge::Return)),
+    ];
+    let mut body = B::default();
+    let a = body.get(0);
+    let n = body.ld(Width::Word, a);
+    body.set(0, n);
+    let fc = vec![(c, body.end(None, Edge::Return))];
+    let f = run(&[(x, fx), (y, fy), (c, fc)]);
+    assert!(f.proven(POOL), "{f:?}");
+    assert_eq!(f.sites[&0x0800_1110].callees, BTreeSet::from([F]));
+    assert!(f.sites[&0x0800_1110].complete);
 }
