@@ -1496,17 +1496,31 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "d12ab564",
-        "session": "d12ab564-753c-4c27-9539-9b83303ebf20",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T09:05:41Z",
+        "checker": "verifier-3e91c7",
+        "at": "2026-11-12T09:56:48Z",
+        "evidence": "Verifier ran just lift-check --only native-dma after the merge with main: agb/native-dma (DMA0 H-blank, DMA1 FIFO special, DMA2 V-blank, DMA3 immediate, all by address) passes 600 frames with 0 differences, audio equal, packed layout equal, planted DMAxCNT store (0x08000180) caught at frame 1. runtime hw:: tests 32 pass; just check passes after its two fixes. Prelude bar 850->861 (11 lines of DMA hooks).",
         "branch": "unit/native/hw-dma-registers",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T09:56:48Z",
+          "by": "d12ab564",
+          "host": "quack",
+          "pid": 2489252,
+          "start": "10657014",
+          "beats": true,
+          "session": "d12ab564-753c-4c27-9539-9b83303ebf20",
+          "lane": "quack/1"
+        },
+        "pushed": true
       },
       "notes": [
+        {
+          "at": "2026-11-12T09:56:55Z",
+          "by": "d12ab564",
+          "text": "Landed: Metroid (DMA3SAD) and Nightmare (DMA0CNT_H) should get past their first-frame panics now; rerun both native builds headless to find the next stop ({unit:native/native-first-stop})."
+        },
         {
           "at": "2026-11-11T15:50:55Z",
           "by": "6a8b662c",
@@ -1628,6 +1642,11 @@
       "check": "recorded",
       "uses": ["heavy"],
       "notes": [
+        {
+          "at": "2026-11-12T10:05:09Z",
+          "by": "fd902c34",
+          "text": "Seen 2026-11-12: native-spike's hard hole (f_08006d47, r6 read at 0x08006d76, passed in r1) is on origin/main and before the fnref-rom-read-bound merge (1c09d57c^1), so full just lift-check / lift-metrics fail on main until this lands."
+        },
         {
           "at": "2026-11-12T09:30:23Z",
           "by": "d12ab564",

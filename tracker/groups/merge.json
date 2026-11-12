@@ -193,6 +193,33 @@
         "evidence": "Merged origin/main (6b6ddcc). Conflicts were in both generated numbers docs: regenerated them (lift-metrics --write-doc: 0 over/under bars after moving native-bios-calls bars the way main moved the others'; holes-all --write-doc over nine games). just check exit 0.",
         "host": "quack"
       }
+    },
+    {
+      "id": "merge/quack-lane1-native-hw-dma-registers",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/native/hw-dma-registers` holds {unit:native/hw-dma-registers}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/native/hw-dma-registers",
+      "record": {
+        "state": "done",
+        "by": "fd902c34",
+        "at": "2026-11-12T10:05:05Z",
+        "evidence": "Merged origin/main (4b80ea23): lift-check.toml kept main's fn_words_not_proven=57 plus the branch's native-dma table, its ref_unexplained bar lowered 105->43. just check exit 0; just lift-check --only native-dma passed (600 frames, planted fault caught).",
+        "branch": "unit/native/hw-dma-registers",
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T10:05:05Z",
+          "by": "fd902c34",
+          "host": "quack",
+          "pid": 2489252,
+          "start": "10657014",
+          "beats": true,
+          "session": "fd902c34-a5f4-4319-b983-92ca2208e9b9",
+          "lane": "quack/1"
+        }
+      },
+      "round": "2026-11-12T09:57:13Z"
     }
   ]
 }
