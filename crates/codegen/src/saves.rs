@@ -672,7 +672,11 @@ impl Walk<'_> {
                 Ok(())
             }
             Plan::Rekey(_) => self.stop(format!("0x{at:08x}: changes mode")),
-            Plan::Undefined => self.fail(format!("0x{at:08x}: an undefined instruction")),
+            // A compiler's trap stops the game: the path never returns.
+            Plan::Undefined { trap: true } => Ok(()),
+            Plan::Undefined { trap: false } => {
+                self.fail(format!("0x{at:08x}: an undefined instruction"))
+            }
         }
     }
 }

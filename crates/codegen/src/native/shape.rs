@@ -113,8 +113,9 @@ pub fn edges(
                     }
                     e.by_value.insert(x.at);
                 }
+                Plan::Swi { .. } if crate::func::no_return_swi(ctx, &x) => {}
                 Plan::Swi { next } => jump(&mut e, next),
-                Plan::Undefined => {}
+                Plan::Undefined { .. } => {}
             }
         }
     }
