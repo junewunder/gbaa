@@ -1519,6 +1519,32 @@
         "at": "2026-11-08T23:18:08Z",
         "decision": "d/raise-lift-bars-rom-widening"
       }
+    },
+    {
+      "id": "q/unknown-address-step-land-without",
+      "title": "Should the unknown-address step land without the fall it was to show?",
+      "context": "On its branch, Function flow: loads through unknown addresses ({unit:native/fnref-unknown-addrs}) makes RAM pointers followable: affine's loads that read everything fell from 623 sites to 8. Its check, fn_words_not_proven falling on every agb program, did not move: the flow now stops at ROM reads that run past a table into the vtables ({unit:native/fnref-rom-read-bound}) and at shared helpers like memcpy without call-site context ({unit:native/fnref-context}). Measured: each fix alone moves affine by 0-1 word. As it stands the branch also costs three IRQ test programs 1-3 proven words and native-irq-hold its 16 typed heap accesses, so either way it must hold every bar before it lands.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Land the step",
+          "changes": "This unit is done when its loads-that-read-everything count falls on every agb program (a new metric, barred) with every other bar held; the fn_words fall becomes the check of the ROM-read-bound unit and the call-site context unit after it"
+        },
+        {
+          "key": "b",
+          "label": "Keep the check",
+          "changes": "This unit waits until the ROM-read-bound unit is done, then carries on, on its branch, until fn_words_not_proven falls; the work can't land before then"
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/fnref-unknown-addrs"],
+      "asked": {
+        "at": "2026-11-12T08:30:17Z",
+        "by": "3454f93a",
+        "host": "quack",
+        "unit": "native/fnref-unknown-addrs"
+      },
+      "answer": null
     }
   ]
 }

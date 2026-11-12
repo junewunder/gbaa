@@ -217,7 +217,9 @@ fn main() -> ExitCode {
          [dependencies]\n\
          armv4t = {{ path = \"{c}/armv4t\" }}\n\
          runtime = {{ path = \"{c}/runtime\" }}\n\
-         native-host = {{ path = \"{c}/native-host\" }}\n\n\
+         native-host = {{ path = \"{c}/native-host\" }}\n\
+         # The prelude's task coroutines (task_resume).\n\
+         corosensei = \"0.3.4\"\n\n\
          [profile.release]\ndebug = false\nincremental = false\n",
         c = crates.display()
     );

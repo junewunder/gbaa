@@ -1065,6 +1065,17 @@
       "check": "independent",
       "needs": ["native/nightmare-lifts", "native/task-coroutines"],
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "eb7b70bf",
+        "session": "eb7b70bf-9977-437b-b8b6-70931ce0b89b",
+        "host": "quack",
+        "pid": 2489427,
+        "start": "10657408",
+        "at": "2026-11-12T08:00:34Z",
+        "branch": "unit/native/nightmare-task-switch",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-12T06:58:38Z",
@@ -1278,25 +1289,13 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "review",
+        "state": "done",
         "by": "21ac895a",
-        "at": "2026-11-12T06:58:26Z",
-        "evidence": "After merging origin/main (ea60907, bar fix 67cc5eb): just check passes; just lift-check --only native-tasks passes (600 frames 0 differences; planted store caught at EWRAM 0x020000d0; planted hole caught: f_080001a4 at 0x080001c0 stack switch); lift-check on the 7 other agb programs except native-spike passes. native-spike fails on pure origin/main 12b2053 too (f_08006d47 summary hole), filed as {unit:native/spike-entry-read-hole}. Nightmare's lift now has exactly its 3 holes 0x08000244/0x08000278/0x08000298; other corpus games gain only SDK soft-reset and Moonbeam's longjmp switches. lines_prelude 724->850 (task facility). Test ROM matches mGBA at frame 600 (ec4286836efdf369).",
-        "branch": "unit/native/task-coroutines",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T06:58:26Z",
-          "by": "21ac895a",
-          "host": "quack",
-          "pid": 2489427,
-          "start": "10657408",
-          "beats": true,
-          "session": "21ac895a-0051-45ec-874a-3fad33b396f8",
-          "lane": "quack/2"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-12T04:53:34Z"
+        "checker": "2ad4dbaa",
+        "at": "2026-11-12T07:43:46Z",
+        "evidence": "Checked on main c36eb9e (work d710e0f) by session 2ad4dbaa, fresh context: just check passes; just lift-check --only native-tasks passes (600 frames 0 differences, play layout same; planted store caught at EWRAM 0x020000d0; planted hole caught: f_080001a4 at 0x080001c0 stack switch). Nightmare lifted with no stand-ins: stack-switch hard holes at 0x08000244/0x08000278/0x08000298 plus the SDK soft-reset's at 0x080cfa8c (a real switch, as in the other SDK games).",
+        "host": "quack"
+      }
     },
     {
       "id": "native/copy-tail-discovery",
@@ -1305,31 +1304,33 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "review",
-        "by": "b67b3cd7",
-        "at": "2026-11-12T06:58:14Z",
-        "evidence": "Branch cc18acf, merged with main as b9f25c8. holes-all against main 92dc9e1 (out/holes/base vs out/holes/classify): hard 106 -> 103 (Minish Cap -2, Rogue -1, Imperium -1; Nightmare +1 = resume's bx r1 at 0x08000254, a real jump now found, decided as d/a-constant-jump-to-a-ram-copy-s-function-is), undiscovered 832 -> 608 (m4a tails, Nightmare's resume and its return site all discovered; only bx rN stubs left). disc-pret 15150 -> 15153 found, false starts 6 -> 5 (modern 12433 -> 12436); jt-score 676/676, 610/617; disc-agb pass; lift-check passed; just check passed before and after the merge. Not yet run: holes-all on the merged branch against main at b9f25c8's parent (main's summary rework raises hard counts by itself).",
-        "branch": "unit/native/copy-tail-discovery",
+        "state": "claimed",
+        "by": "51cae3e4",
+        "session": "51cae3e4-5c5f-4c22-8ab6-a591f23922e4",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-12T06:58:14Z",
-          "by": "b67b3cd7",
-          "host": "quack",
-          "pid": 2489918,
-          "start": "10657789",
-          "beats": true,
-          "session": "b67b3cd7-bb29-4ef9-8053-574c0e6d691c",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "pid": 2489918,
+        "start": "10657789",
+        "at": "2026-11-12T07:02:58Z",
+        "branch": "unit/native/copy-tail-discovery",
+        "beats": true
       },
       "notes": [
+        {
+          "at": "2026-11-12T07:02:46Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - Card check not run on the merged branch (tracker/groups/native.json:1310, the Evidence). The card's Done-when needs `just holes-all --against main` to show the copy-tail bytes discovered and no hard count high…"
+        },
         {
           "at": "2026-11-12T06:58:23Z",
           "by": "b67b3cd7",
           "text": "Verifier: run holes-all on origin/main (merged as b9f25c8^2) and on this branch, --against the first; main's summary rework raises hard counts itself (Nightmare 15, moonbeam 11 at b9f25c8). Nightmare's lift now stops at 0x08000254 until its switcher stand-in."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-12T07:02:46Z",
+        "findings": "- Card check not run on the merged branch (tracker/groups/native.json:1310, the Evidence). The card's Done-when needs `just holes-all --against main` to show the copy-tail bytes discovered and no hard count higher. The session ran that only on the pre-merge branch cc18acf against main 92dc9e1, where the hard total went from 106 to 103. Its Evidence says the run on the merged branch (b9f25c8) has not been done yet. Main's summary rework, merged in since, raises hard counts on its own (Nightmare 15, moonbeam 11), so nobody has checked what will actually land. The session's note hands this run to the verifier, but the reviewer has no shell. The next session should run two things: `just holes-all` on main at b9f25c8^1 (origin/main as merged), and `just holes-all --against <that output>` on this branch's head. It should confirm three things: the m4a SoundMain tails and Nightmare's resume and its return site are still discovered; no game's hard count rises except Nightmare's +1 (resume's bx r1 at 0x08000254, explained in d/a-constant-jump-to-a-ram-copy-s-function-is); and the total still falls by about 3. Then it should rerun `just lift-check` and the disc-* bars on the merged head and record the numbers with `just done native/copy-tail-discovery --evidence …`."
+      },
       "round": "2026-11-12T04:53:37Z"
     },
     {
@@ -1356,16 +1357,23 @@
       "detail": "docs/native-stage-b.md piece 3. Measured on {unit:native/fnref-context}'s branch (commit e81168f; it holds the object split and call-site context): fn_words_not_proven unmoved by either. ~640 of affine's load sites (spike 644) have an address that may be unknown (Val::unk), and each reads the pile and every RAM cell (Run::load_at's anywhere arm), so e.g. the IRQ vector word's f_03000000 is in nearly every hole. Not the cause (tried, no change): naming the allocator, dropping the pile from constant-address loads, dropping the I/O unk flag, NUMS 8->256. A seen source: main's inlined free-list walk at 0x080001a8 (affine) loads GLOBAL_ALLOC fields holding allocator-made pointers. Find where the unknown comes from (GBAA_FNREF_TRACE; print each anywhere load) and fix the first big source. Done when: fn_words_not_proven falls on every agb program, bars lowered, a unit test, just lift-check and just check pass.",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "blocked",
+        "on": "q/unknown-address-step-land-without",
         "by": "3454f93a",
-        "session": "3454f93a-c5b2-49fa-ab4a-bcd1d4efe225",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T07:01:25Z",
-        "branch": "unit/native/fnref-unknown-addrs",
-        "beats": true
+        "at": "2026-11-12T08:30:17Z"
       },
+      "notes": [
+        {
+          "at": "2026-11-12T08:30:33Z",
+          "by": "3454f93a",
+          "text": "Measured: roots' r0-r3 as lost brings all 623 back (reset->main); RAMS 8 too few (font data 100-200 RAM-looking words); naming affine's allocator 0x08002055 or skipping the pile: no fall. Context (GBAA_FNREF_CTX_BLOCKS=6) takes 70s, -1 word."
+        },
+        {
+          "at": "2026-11-12T08:30:29Z",
+          "by": "3454f93a",
+          "text": "Branch eb76aa55 (fnref-context merged in): RamFrom tokens + lost_ptr closed world; affine anywhere loads 623->8, fn_words unmoved. Costs: spike/ime/irq-hold +1-3 not_proven, irq-hold ref_accesses 16->0 (heap.rs reads callee sets). GBAA_FNREF_TRACE prints 'load anywhere'."
+        }
+      ],
       "round": "2026-11-12T07:01:25Z"
     },
     {
@@ -1379,7 +1387,14 @@
       "id": "native/fnref-rom-read-bound",
       "title": "Function flow bounds a ROM read by its table, not next code",
       "detail": "fnref's from-here-on ROM read (affine at 0x08000af2) ran to the next code; once {unit:native/modern-gcc-data-as-code} removed a false start in agb's panic text, it runs into agb's vtables: ref_unexplained rose 35->97 (93->164 ime-release/irq-hold), fn_words_not_proven +4/5. Bound the read by the table it indexes (its length or a bounds check) and lower both lift-check bars on the seven agb programs. Owner's answer (a) to the bar question.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-12T08:30:41Z",
+          "by": "3454f93a",
+          "text": "From {unit:native/fnref-unknown-addrs}'s branch: a from-here-on ROM read intersected with its load's value-set bounds fixes affine 0x08000af2 (hull 0x080160a4-0x0801f900); next, 0x08000bba's hull is 115 KB and false pointers in font data (0x080075f8) read to next code."
+        }
+      ]
     },
     {
       "id": "native/fnref-emerald-speed",

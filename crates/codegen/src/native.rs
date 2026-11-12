@@ -110,7 +110,9 @@
 //! unless the game's holes file gives a stand-in or, for an unresolved
 //! jump, its targets ([`Holes`]):
 //!
-//! - CPU state: `mrs`, `msr`, user-bank transfers, exception returns;
+//! - CPU state: `mrs`, `msr`, user-bank transfers, exception returns,
+//!   stack switches ([`Frame::switches`]: a task switcher's, which a stand-in
+//!   runs on the prelude's host coroutines, `task_resume`);
 //! - an indirect jump Recovery didn't resolve;
 //! - a BIOS call the prelude doesn't have;
 //! - an undefined instruction, a jump to no code;
@@ -179,6 +181,10 @@ pub struct Holes {
     /// By function key: the Rust that replaces it (a `pub fn f_<key>` of
     /// the lifted signature), and why.
     pub standins: BTreeMap<u32, (String, String)>,
+    /// The stand-ins that read their caller's return address (`lr =
+    /// true`): each call sets `Game::lr` to it (the `bl`'s `r14`) first,
+    /// as a task switcher's yield stores it for the task's resume.
+    pub lr: BTreeSet<u32>,
     /// By the jump's instruction address: its targets (keys), and why.
     pub jumps: BTreeMap<u32, (Vec<u32>, String)>,
     /// Code the game copies to RAM itself that discovery's static copies
@@ -252,8 +258,9 @@ pub struct Holes {
 
 impl Holes {
     /// Parse a holes file: `[[standin]] entry = 0x…, why = "…", code =
-    /// '''…'''`, `[[jump]] at = 0x…, targets = [0x…], why = "…"`, and at
-    /// the top, `skip_fn_flow = "why"` and `allocators = [0x…]`.
+    /// '''…'''` (and `lr = true` for [`Holes::lr`]), `[[jump]] at = 0x…,
+    /// targets = [0x…], why = "…"`, and at the top, `skip_fn_flow = "why"`
+    /// and `allocators = [0x…]`.
     pub fn parse(text: &str) -> Result<Holes, String> {
         let t: toml::Table = text.parse().map_err(|e| format!("{e}"))?;
         let mut h = Holes::default();
@@ -289,6 +296,16 @@ impl Holes {
                         let entry = int(e.get("entry").ok_or("standin: missing entry")?, "entry")?;
                         h.standins
                             .insert(entry, (str_of(e, "code")?, str_of(e, "why")?));
+                        match e.get("lr") {
+                            None => {}
+                            Some(v) => match v.as_bool() {
+                                Some(true) => {
+                                    h.lr.insert(entry);
+                                }
+                                Some(false) => {}
+                                None => return Err("standin: lr: not a bool".into()),
+                            },
+                        }
                     }
                     "jump" => {
                         let at = int(e.get("at").ok_or("jump: missing at")?, "at")?;
@@ -1428,6 +1445,16 @@ impl FnPrinter<'_, '_> {
                 ));
             }
         }
+        // A stack switch (a task switcher's): sp is the frame's own
+        // natively, so the frames the guest left on the stack it leaves
+        // would be lost. A stand-in runs such code on host coroutines
+        // (the prelude's `task_resume`, `task_yield`, `task_exit`).
+        for &at in self.frame.map(|fr| &fr.switches).into_iter().flatten() {
+            self.hole(
+                at,
+                "CPU state: a stack switch (sp set to a value not made from the frame's)",
+            );
+        }
         // The plain entry, for calls, and the extended one, for a fall or
         // jump from another function, which passes its registers and flags.
         // A shaped function's plain entry takes its parameters and gives
@@ -1935,6 +1962,10 @@ impl FnPrinter<'_, '_> {
     /// assigns its results to, and the call (without `?`).
     fn call(&self, k: u32) -> (String, String) {
         match self.shape(k) {
+            None if self.holes.lr.contains(&k) => (
+                "[r0, r1, r2, r3] = ".into(),
+                format!("{{ g.lr = r14; f_{k:08x}(g, r13, [r0, r1, r2, r3]) }}"),
+            ),
             None => (
                 "[r0, r1, r2, r3] = ".into(),
                 format!("f_{k:08x}(g, r13, [r0, r1, r2, r3])"),
@@ -2692,7 +2723,12 @@ why = "a table"
         .unwrap();
         assert_eq!(h.standins[&0x0300_0000].1, "the IRQ wrapper");
         assert!(h.standins[&0x0300_0000].0.contains("f_03000000"));
+        assert!(h.lr.is_empty());
         assert_eq!(h.jumps[&0x0800_1234].0, vec![0x0800_1240, 0x0800_1251]);
+        let yield_ = "[[standin]]\nentry = 0x080001a1\nwhy = \"a yield\"\ncode = \"\"\nlr = ";
+        let h = Holes::parse(&format!("{yield_}true\n")).unwrap();
+        assert_eq!(h.lr, BTreeSet::from([0x0800_01a1]));
+        assert!(Holes::parse(&format!("{yield_}1\n")).is_err());
         let h = Holes::parse(
             "[[copy]]\nsrc = 0x08000104\ndst = 0x03000c7c\nlen = 0x230\nroots = [0x03000c7c, 0x03000d84]\nwhy = \"seen\"\n",
         )
