@@ -1278,15 +1278,22 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "review",
         "by": "21ac895a",
-        "session": "21ac895a-0051-45ec-874a-3fad33b396f8",
-        "host": "quack",
-        "pid": 2489427,
-        "start": "10657408",
-        "at": "2026-11-12T04:53:34Z",
+        "at": "2026-11-12T06:58:26Z",
+        "evidence": "After merging origin/main (ea60907, bar fix 67cc5eb): just check passes; just lift-check --only native-tasks passes (600 frames 0 differences; planted store caught at EWRAM 0x020000d0; planted hole caught: f_080001a4 at 0x080001c0 stack switch); lift-check on the 7 other agb programs except native-spike passes. native-spike fails on pure origin/main 12b2053 too (f_08006d47 summary hole), filed as {unit:native/spike-entry-read-hole}. Nightmare's lift now has exactly its 3 holes 0x08000244/0x08000278/0x08000298; other corpus games gain only SDK soft-reset and Moonbeam's longjmp switches. lines_prelude 724->850 (task facility). Test ROM matches mGBA at frame 600 (ec4286836efdf369).",
         "branch": "unit/native/task-coroutines",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T06:58:26Z",
+          "by": "21ac895a",
+          "host": "quack",
+          "pid": 2489427,
+          "start": "10657408",
+          "beats": true,
+          "session": "21ac895a-0051-45ec-874a-3fad33b396f8",
+          "lane": "quack/2"
+        }
       },
       "round": "2026-11-12T04:53:34Z"
     },
@@ -1297,16 +1304,31 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "review",
         "by": "b67b3cd7",
-        "session": "b67b3cd7-bb29-4ef9-8053-574c0e6d691c",
-        "host": "quack",
-        "pid": 2489918,
-        "start": "10657789",
-        "at": "2026-11-12T04:53:37Z",
+        "at": "2026-11-12T06:58:14Z",
+        "evidence": "Branch cc18acf, merged with main as b9f25c8. holes-all against main 92dc9e1 (out/holes/base vs out/holes/classify): hard 106 -> 103 (Minish Cap -2, Rogue -1, Imperium -1; Nightmare +1 = resume's bx r1 at 0x08000254, a real jump now found, decided as d/a-constant-jump-to-a-ram-copy-s-function-is), undiscovered 832 -> 608 (m4a tails, Nightmare's resume and its return site all discovered; only bx rN stubs left). disc-pret 15150 -> 15153 found, false starts 6 -> 5 (modern 12433 -> 12436); jt-score 676/676, 610/617; disc-agb pass; lift-check passed; just check passed before and after the merge. Not yet run: holes-all on the merged branch against main at b9f25c8's parent (main's summary rework raises hard counts by itself).",
         "branch": "unit/native/copy-tail-discovery",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T06:58:14Z",
+          "by": "b67b3cd7",
+          "host": "quack",
+          "pid": 2489918,
+          "start": "10657789",
+          "beats": true,
+          "session": "b67b3cd7-bb29-4ef9-8053-574c0e6d691c",
+          "lane": "quack/3"
+        },
+        "pushed": true
       },
+      "notes": [
+        {
+          "at": "2026-11-12T06:58:23Z",
+          "by": "b67b3cd7",
+          "text": "Verifier: run holes-all on origin/main (merged as b9f25c8^2) and on this branch, --against the first; main's summary rework raises hard counts itself (Nightmare 15, moonbeam 11 at b9f25c8). Nightmare's lift now stops at 0x08000254 until its switcher stand-in."
+        }
+      ],
       "round": "2026-11-12T04:53:37Z"
     },
     {
@@ -1498,6 +1520,13 @@
       "detail": "The 2026-11-11 overnight run (hole report, gameplay and readable builds, and gbaa-lift of all nine games in holes/corpus.toml, about 3 hours on quack) was a throwaway shell script. Make it a recipe driven by holes/corpus.toml in Rust (no bash logic): per game the hole report, the play build, the lift with its holes file (corpus.toml gains each game's --name for lift), the build, and {unit:native/native-first-stop}'s headless run; one game failing doesn't stop the rest; run under just long with the build lock and MemoryMax. Write out/nightly/<date>/summary.toml and a short summary.txt per game (hard holes by kind, built or not, frames run and stop) with what changed against the previous night's. Done when: one full run on quack writes both files and a second run's diff names a change made between them; docs/tools/commands.md has the entry; just check passes.",
       "check": "independent",
       "needs": ["native/native-first-stop"],
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/spike-entry-read-hole",
+      "title": "native-spike lifts again after entry-read masking",
+      "detail": "Since {unit:native/entry-read-masking} landed (origin/main 12b2053), gbaa-lift on agb/native-spike stops at: hard hole in f_08006d47 at 0x08006d47: summary: 0x08006d76: reads r4-r11 at entry: r6, passed in r1. So just lift-check fails on native-spike on main (lift-metrics: hard_holes 1>0). Find whether the read is real or the new fall/tail-call rule is over-hard there; fix the rule or give a stand-in. Done when: just lift-check passes on every program; just check passes.",
+      "check": "recorded",
       "uses": ["heavy"]
     }
   ]
