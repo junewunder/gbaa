@@ -1366,15 +1366,22 @@
       "detail": "Val::cap lets RomFrom(lo) absorb Rom(a) for any a >= lo, but rom_from(lo) reads only up to the next code, so a pointer past it is never read and a call through it may get a complete callee set missing callees. Seen in mosaic-modes (found by {unit:native/fnref-flow-emerald}): fn 0x080037f1 (core::fmt pad) r0 widens to RomFrom(0x08000100), absorbing vtable Rom(0x08024c50); word 0x08024c5c (f_08002ee1) was read only transiently before. Make the widening keep such pointers (mark lost_rom, or don't absorb past bound) with a unit test; just lift-metrics bars hold (lower any that drop).",
       "check": "recorded",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "5fa61def",
-        "session": "5fa61def-e288-4e25-907a-003e0a082568",
-        "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T05:45:44Z",
+        "at": "2026-11-12T05:51:22Z",
+        "evidence": "Val::cap absorbs into RomFrom(lo) only pointers before the next code (run-scoped code-address list), ROMS widening per data run; 2 unit tests fail on old code, 24 fnref tests pass. Merged main (1d4a34d): just lift-metrics 0 over/0 under at main's bars (owner's raise already covered), just check green.",
         "branch": "unit/native/fnref-romfrom-absorb",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T05:51:22Z",
+          "by": "5fa61def",
+          "host": "quack",
+          "pid": 2490379,
+          "start": "10658170",
+          "beats": true,
+          "session": "5fa61def-e288-4e25-907a-003e0a082568",
+          "lane": "quack/4"
+        }
       },
       "notes": [
         {
