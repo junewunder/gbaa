@@ -663,6 +663,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T11:45:45Z",
+          "by": "598b2669",
+          "text": "route-check --native now skips the holes file's [[copy]] ranges: pass --name metroid (the ROM's file name doesn't match mods/metroid/), or --holes mods/metroid/holes.toml."
+        },
+        {
           "at": "2026-11-12T11:21:46Z",
           "by": "ba1a464f",
           "text": "Play build now syncs where an idle loop's cond branch isn't taken (rt::idle_exit; DMA waits). The lifter (Exact clock) has no Idle::Exit counterpart (native.rs emits hw::idle/spin only): if lift vs play differs after a DMA-wait loop, look there."
@@ -1561,15 +1566,24 @@
       "needs": ["native/lift-save-memory"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "928c9e05",
-        "session": "928c9e05-48b6-4898-9ac3-844e8633b1c0",
-        "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T11:13:32Z",
+        "checker": "verifier-3e91c7",
+        "at": "2026-11-12T11:52:30Z",
+        "evidence": "Prelude call_fn: RAM target with no function whose bytes match a flash/SRAM stack routine calls runtime::hw::flash (signatures moved to runtime). Metroid lift (scratch-patched for the filed entry-read hole and BIOS region) runs all 2700 route frames: 33 Read/Verify calls, Verify all 0, frames 350/700 hash as mGBA's checkpoints. lift-check --only native-save, native-bios-region pass; just check passes after merging main. lines_prelude 917->961 (+44, flash_call). Verifier reproduced the run and reran just check.",
         "branch": "unit/native/lift-flash-routines",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T11:52:30Z",
+          "by": "928c9e05",
+          "host": "quack",
+          "pid": 2490379,
+          "start": "10658170",
+          "beats": true,
+          "session": "928c9e05-48b6-4898-9ac3-844e8633b1c0",
+          "lane": "quack/4"
+        },
+        "pushed": true
       },
       "round": "2026-11-12T11:13:32Z"
     },
@@ -1627,17 +1641,13 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "598b2669",
-        "session": "598b2669-ad9d-445e-93b5-80339472ed46",
-        "host": "quack",
-        "pid": 2489427,
-        "start": "10657408",
-        "at": "2026-11-12T11:24:07Z",
-        "branch": "unit/native/check-holes-copies",
-        "beats": true
-      },
-      "round": "2026-11-12T11:24:07Z"
+        "checker": "a0568327",
+        "at": "2026-11-12T11:45:41Z",
+        "evidence": "Verifier subagent a0568327 (fresh context): diff reviewed, no bugs; cargo test -p route-check 12 passed incl. native::tests::skips_the_holes_files_copies and finds_the_holes_file_by_name; Metroid's route (units/metroid-native.toml from its unit branch) with --name metroid prints all five mods/metroid/holes.toml [[copy]] ranges as not compared (0x03000c7c..0x03000eac, 0x030016c4..0x030017da, 0x03003b90..0x030041ec, 0x030041ec..0x03004294, 0x03004294..0x03004440), then fails on the known play-vs-interp stray. just check exit 0 after merging main.",
+        "host": "quack"
+      }
     },
     {
       "id": "native/lift-bios-more",
@@ -1682,7 +1692,19 @@
       "title": "Lifted code makes BgAffineSet and ObjAffineSet",
       "detail": "From the overnight lift of the nine corpus games (2026-11-11, runs/long/overnight-lift.log): swi 0x0E BgAffineSet and 0x0F ObjAffineSet aren't in analysis::holes::NATIVE_BIOS, so each is a hard hole in Minish Cap, Emerald, Emerald Rogue and Imperium (docs/research/bios-calls.md lists the callers). Add both to the lifter's prelude over runtime::bios's math, as {unit:native/lift-bios-calls} did for its calls, with a lift-check case each (an agb test program calling them). lines_prelude may rise (say how many and why). Done when: lift-check green with a case per call, gbaa-holes and gbaa-lift both stop counting 0x0E/0x0F on those four games (just holes-all --against main), just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "7492320f",
+        "session": "7492320f-6704-408b-9f75-751df2d10449",
+        "host": "quack",
+        "pid": 2489427,
+        "start": "10657408",
+        "at": "2026-11-12T11:49:58Z",
+        "branch": "unit/native/lift-bios-affine",
+        "beats": true
+      },
+      "round": "2026-11-12T11:49:58Z"
     },
     {
       "id": "native/lift-undefined-insns",
