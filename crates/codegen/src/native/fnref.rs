@@ -27,7 +27,10 @@
 //!   [pc]`);
 //! - a load through a ROM pointer, of a word holding a function's key
 //!   (agb's vtables, tables of handlers); a load "from here on" reads
-//!   every word up to the next code ([`Image::bound`]);
+//!   the words of the object it points into: up to the next code
+//!   ([`Image::bound`]) or the next ROM data address a ROM word holds
+//!   ([`objects`]), and only those the value-set analysis bounds the
+//!   load to (`native/fnref-rom-read-bound`);
 //! - the program start's copies of ROM data to RAM (`Discovery::copies`
 //!   that aren't code) and `CpuSet` from ROM.
 //!
@@ -261,6 +264,51 @@ const ROMS: usize = 16;
 /// [`Val::lost_rom`]. The agb programs' data runs to about 110 KB; reading
 /// it all costs about a second of each lift.
 const ROM_READ: u32 = 0x4_0000;
+
+/// The most bytes a `CpuSet` (or, `fast`, `CpuFastSet`) with `r2` as its
+/// length and mode reads, if `r2` holds only numbers: a fill reads one
+/// unit, a copy its count of halfwords or words (`CpuFastSet` in blocks
+/// of eight words).
+fn copy_len(fast: bool, r2: &Val) -> Option<u32> {
+    if r2.unk || r2.mem || r2.toks.is_empty() {
+        return None;
+    }
+    let mut most = 0;
+    for &t in &r2.toks {
+        let Tok::Num(m) = t else { return None };
+        let unit = if fast || m & 1 << 26 != 0 { 4 } else { 2 };
+        let count = if m & 1 << 24 != 0 {
+            1
+        } else if fast {
+            (m & 0x1f_ffff).div_ceil(8) * 8
+        } else {
+            m & 0x1f_ffff
+        };
+        most = most.max(count * unit);
+    }
+    Some(most)
+}
+
+/// The objects in ROM data, by start: every ROM data address (not a
+/// function's key) that an aligned ROM word holds, a pool literal's or a
+/// pointer field's. A read "from here on" stays in the object it starts
+/// in, so it stops at the next of these: the next glyph, string, slice
+/// or vtable. Without it, affine's reads through its font's glyph
+/// records and strings ran 110 KB to the next code, into agb's vtables
+/// (`native/fnref-rom-read-bound`). Font bytes that look like pointers
+/// add starts too; only cutting a table of handlers short would be
+/// wrong, so [`Run::object_end`] doesn't stop between function words.
+fn objects(img: &dyn Image) -> BTreeSet<u32> {
+    let mut o = BTreeSet::new();
+    let mut p = 0x0800_0000u32;
+    while let Some(x) = img.word(p) {
+        if x & 0xff00_0000 == 0x0800_0000 && img.word(x).is_some() && !img.is_fn(x) {
+            o.insert(x);
+        }
+        p = p.wrapping_add(4);
+    }
+    o
+}
 
 impl Val {
     fn unk() -> Val {
@@ -562,8 +610,10 @@ struct G {
     loose_args: Vec<Val>,
     /// Functions whose address is taken.
     taken: BTreeSet<u32>,
-    /// What a read from ROM "from here on" gives, by (address, width).
-    rom_from: BTreeMap<(u32, u8), Val>,
+    /// What a read from ROM "from here on" gives, by (start, end, width).
+    rom_from: BTreeMap<(u32, u32, u8), Val>,
+    /// The objects in ROM data ([`objects`]).
+    objects: BTreeSet<u32>,
     /// What a read the value-set analysis bounds to ROM gives, by bounds
     /// and width.
     rom_hull: BTreeMap<(u32, u32, u8), Val>,
@@ -1158,17 +1208,60 @@ impl Run<'_, '_> {
         into.cap();
     }
 
-    fn rom_from(&mut self, a: u32, w: u8, into: &mut Val) {
-        if let Some(v) = self.g.rom_from.get(&(a, w)) {
+    /// Where the object a read "from here on" at `a` is in ends, before
+    /// `hi`: the next object start ([`objects`]) past `a` that isn't
+    /// inside a table of handlers (function words in the 16 bytes before
+    /// it and the 16 from it on), or `hi`.
+    fn object_end(&self, a: u32, hi: u32) -> u32 {
+        let img = self.img;
+        let fns_in = |lo: u32, hi: u32| {
+            (lo & !3..hi)
+                .step_by(4)
+                .any(|p| img.word(p).is_some_and(|x| img.is_fn(x)))
+        };
+        self.g
+            .objects
+            .range(a.saturating_add(1)..hi)
+            .copied()
+            .find(|&c| !(fns_in(c.saturating_sub(16), c) && fns_in(c, c.saturating_add(16))))
+            .unwrap_or(hi)
+    }
+
+    /// A read "from here on" at `a` (`native/fnref-rom-read-bound`): the
+    /// words of its object ([`Self::object_end`]), or, a BIOS copy's
+    /// whose length the run knows, those `len` bytes; and of those only
+    /// the ones in the load's value-set bounds (`hull`, in ROM, inclusive)
+    /// where they meet.
+    fn rom_from(
+        &mut self,
+        a: u32,
+        w: u8,
+        hull: Option<(u32, u32)>,
+        len: Option<u32>,
+        into: &mut Val,
+    ) {
+        let bound = self.img.bound(a);
+        let (mut lo, mut hi) = match len {
+            Some(n) => (a, bound.min(a.saturating_add(n))),
+            None => (a, self.object_end(a, bound)),
+        };
+        if let Some((l, h)) = hull
+            && self.img.word(l).is_some()
+            && self.img.word(h).is_some()
+            && l.max(lo) < hi.min(h.saturating_add(1))
+        {
+            lo = l.max(lo);
+            hi = hi.min(h.saturating_add(1));
+        }
+        let end = hi.min(lo.saturating_add(ROM_READ));
+        if let Some(v) = self.g.rom_from.get(&(lo, end, w)) {
             into.join(v);
             return;
         }
-        let bound = self.img.bound(a);
-        let end = bound.min(a.saturating_add(ROM_READ));
-        let mut p = a & !3;
+        let mut p = lo & !3;
         let mut v = Val {
             // Cut short: the words past the cut go unread.
-            lost_rom: end < bound,
+            lost_rom: end < hi,
             ..Val::default()
         };
         while p < end {
@@ -1176,7 +1269,7 @@ impl Run<'_, '_> {
             p += 4;
         }
         into.join(&v);
-        self.g.rom_from.insert((a, w), v);
+        self.g.rom_from.insert((lo, end, w), v);
     }
 
     fn bin(&mut self, op: BinOp, a: &Val, b: &Val, site: Origin, at: u32) -> Val {
@@ -1635,7 +1728,7 @@ impl Run<'_, '_> {
         for &t in &a.toks {
             match t {
                 Tok::Rom(r) => self.rom_read(r, w, &mut out),
-                Tok::RomFrom(r) => self.rom_from(r, w, &mut out),
+                Tok::RomFrom(r) => self.rom_from(r, w, hull, None, &mut out),
                 Tok::Num(c) | Tok::Fn { key: c, .. } => {
                     if is_ram(c) {
                         let c = ram_canon(c);
@@ -1845,15 +1938,18 @@ impl Run<'_, '_> {
                 for r in &s.regs[..4] {
                     self.g.hole(r, out.at, Why::Bios, |_| true);
                 }
-                // CpuSet and CpuFastSet from ROM copy its words to RAM.
+                // CpuSet and CpuFastSet from ROM copy its words to RAM: their
+                // length's, or the source object's.
                 if matches!(out.bios, Some(0x0B | 0x0C)) {
                     let mut got = Val {
                         lost_rom: s.regs[0].lost_rom,
                         ..Val::default()
                     };
+                    let n = copy_len(out.bios == Some(0x0C), &s.regs[2]);
                     for &t in &s.regs[0].toks {
                         match t {
-                            Tok::Rom(a) | Tok::RomFrom(a) => self.rom_from(a, 4, &mut got),
+                            Tok::Rom(a) => self.rom_from(a, 4, None, n, &mut got),
+                            Tok::RomFrom(a) => self.rom_from(a, 4, None, None, &mut got),
                             _ => {}
                         }
                     }
@@ -2151,6 +2247,7 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
     let _code = CodeGuard::set(img);
     let mut g = G {
         loose_args: vec![Val::default(); 4],
+        objects: objects(img),
         ..G::default()
     };
     // Functions some exit enters directly; the rest have callers the run
