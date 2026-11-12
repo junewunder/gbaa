@@ -1767,6 +1767,17 @@
       "detail": "Since {unit:native/entry-read-masking} landed (origin/main 12b2053), gbaa-lift on agb/native-spike stops at: hard hole in f_08006d47 at 0x08006d47: summary: 0x08006d76: reads r4-r11 at entry: r6, passed in r1. So just lift-check fails on native-spike on main (lift-metrics: hard_holes 1>0). Find whether the read is real or the new fall/tail-call rule is over-hard there; fix the rule or give a stand-in. Done when: just lift-check passes on every program; just check passes.",
       "check": "recorded",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "695902dc",
+        "session": "695902dc-510f-4cba-b66c-c882d4c0132f",
+        "host": "quack",
+        "pid": 2489918,
+        "start": "10657789",
+        "at": "2026-11-12T13:08:36Z",
+        "branch": "unit/native/spike-entry-read-hole",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-12T10:05:09Z",
@@ -1783,7 +1794,8 @@
           "by": "eb7b70bf",
           "text": "Kirby - Nightmare has 5 more hard entry-read holes from the same change ({unit:native/nightmare-entry-reads}); a fix to the rule may cover both."
         }
-      ]
+      ],
+      "round": "2026-11-12T13:08:36Z"
     },
     {
       "id": "native/nightmare-entry-reads",

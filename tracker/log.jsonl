@@ -2685,3 +2685,4 @@
 {"at":"2026-11-12T13:07:54Z","actor":"loop","tag":"5b8af8c2","host":"quack","cmd":"claim","id":"native/native-first-stop","text":"Each built native game runs headless; report where it stops: claimed"}
 {"at":"2026-11-12T13:08:11Z","actor":"loop","tag":"5b8af8c2","host":"quack","cmd":"edit","id":"native/native-first-stop","text":"Each built native game runs headless; report where it stops: edited (min-minutes)"}
 {"at":"2026-11-12T13:08:15Z","actor":"loop","tag":"5b8af8c2","host":"quack","cmd":"unclaim","id":"native/native-first-stop","text":"Each built native game runs headless; report where it stops: given back unstarted","unstarted":true}
+{"at":"2026-11-12T13:08:36Z","actor":"loop","tag":"695902dc","host":"quack","cmd":"claim","id":"native/spike-entry-read-hole","text":"native-spike lifts again after entry-read masking: claimed"}
