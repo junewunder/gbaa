@@ -1,0 +1,17 @@
+# agb/native-bios-region for 601 frames with no input: the BIOS-region
+# program of the stage-A lifter's check (native/lift-bios-region; `just
+# lift-check`), its lift (gbaa-lift) against the play build at --timing
+# native by route-check --native. What it draws:
+# agb/native-bios-region/SCENE.md. Frame 601, not 600: a pass draws about
+# every frame and a half, and at frame 600 our exact interpreter has drawn
+# one pass more than mGBA (only the last row's quotient and frame pixels
+# differ); at 598 and 601 the two agree.
+rom = "$GBAA_DATA/agb/native-bios-region.gba"
+
+[[checkpoint]]
+name = "native-bios-region-601"
+frame = 601
+hash = "39dbbbb064134435"
+# Verified: mGBA 0.10.5 (`just mgba-diff`) draws the same at frame 601
+# (2026-11-12): its BIOS reads the same latch after a call, in and after
+# an IRQ.

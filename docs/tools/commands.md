@@ -1335,12 +1335,13 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `[program.<name>.bars]`. Today `agb/native-spike`, `agb/affine`,
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
   `agb/native-frame-locals`, `agb/native-ime-release`,
-  `agb/native-bios-calls`, `agb/native-tasks` (`just agb-tests`) on
+  `agb/native-bios-calls`, `agb/native-tasks`, `agb/native-bios-region` on
   `units/native-spike.toml`, `units/affine-600.toml`,
   `units/mosaic-modes-600.toml`, `units/native-fallthrough-600.toml`,
   `units/native-irq-hold-601.toml`, `units/native-frame-locals-600.toml`,
   `units/native-ime-release-601.toml`, `units/native-bios-calls-600.toml`
-  (native/lift-bios-calls), `units/native-tasks-600.toml`. First every
+  (native/lift-bios-calls), `units/native-tasks-600.toml`,
+  `units/native-bios-region-601.toml` (the BIOS latch). First every
   program is lifted with `--bars` (seconds), failing before any build on
   a metric over its bar; then each lift and its play build
   (`--timing native`) are built and `route-check --native` runs them for
@@ -1361,10 +1362,9 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   lifted once more with `--layout packed` (`out/lift-<name>-packed`),
   passed as `--packed`: it must draw the guest layout's frames and
   record the same bytes, nothing skipped (native/lift-packed-layout).
-  Passes with
-  `every metric within its bar`, eight `pass (60x frames, 0 differences …;
+  Passes with `every metric within its bar`, a `pass (60x frames, 0 differences …;
   the play layout draws the same 60x frames, its records the same …)`
-  lines, `planted fault caught (…-planted: frame 2: EWRAM byte 0x020000c0
+  line per program, `planted fault caught (…-planted: frame 2: EWRAM byte 0x020000c0
   …)`, `(…-fall-as-tail-call: frame 1: EWRAM byte 0x020000c4 …)`,
   `(…-plant-slot-0x08000182: frame 1: EWRAM byte 0x020000c4: play 0x61,
   native 0x62 …)` and `(…-irq-at-waits: frame 2: EWRAM byte 0x020000c8:
