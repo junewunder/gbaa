@@ -548,11 +548,22 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             .copied()
             .collect()
     });
+    // Whether a global ends past a guest RAM address in its region: an
+    // object an unknown index makes from there may share bytes with it
+    // (native/ref-heap-static-arrays).
+    let global_from = |a: u32| -> bool {
+        let Some(o) = globals::ram_at(a) else {
+            return false;
+        };
+        let end = if o < 0x4_0000 { 0x4_0000 } else { 0x4_8000 };
+        globals.0.range(..end).any(|(_, g)| g.lo + g.len > o)
+    };
     let heap = heap::follow(
         &ins,
         settled.map_or(&no_sites, |(f, _, _)| &f.sites),
         taken.as_ref(),
         &ram_init,
+        &global_from,
     );
     drop(ins);
     drop(flow_ins);
@@ -818,11 +829,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let refs = |st| soft.access.get(&(st, Where::Ref)).copied().unwrap_or(0);
     writeln!(
         report,
-        "heap pointers (native/ref-heap): {} loads and {} stores through a Ref<T>, {} types; {} accesses through an object's pointer no type explains (left as bytes); the run took {} rounds, {:.1} s{}",
+        "heap pointers (native/ref-heap): {} loads and {} stores through a Ref<T>, {} types; {} accesses through an object's pointer no type explains (left as bytes; {} sites' objects may be in a static array); the run took {} rounds, {:.1} s{}",
         refs(false),
         refs(true),
         soft.ref_tys.len(),
         soft.ref_unexplained,
+        heap.statics.len(),
         heap.rounds,
         heap.secs,
         if heap.unsettled { " and didn't settle: nothing typed" } else { "" },

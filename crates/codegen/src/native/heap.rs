@@ -37,7 +37,10 @@
 //! sites are one type (union-find over the sites that meet in an
 //! access), the field its offset and width. Fields of one type that
 //! overlap at different widths or offsets leave those accesses as bytes,
-//! counted (`ref_unexplained`).
+//! counted (`ref_unexplained`), as do a type's whose objects may be in a
+//! static array ([`statics`]: made by an index into RAM some global, a
+//! constant-address access's, ends past), which the packed layout can't
+//! hand out in one piece (native/ref-heap-static-arrays).
 //!
 //! **Checked at run time.** The printed field reads the same bytes the
 //! byte access did (`Ref::to(addr, off)` is the address less the field's
@@ -365,6 +368,9 @@ struct G {
     why: Vec<String>,
     /// The last pass's addresses, by (function, block, inst index).
     record: Option<Record>,
+    /// The last pass's bases, by site: each pointer an unknown amount
+    /// was added to there, making the site's object.
+    bases: BTreeMap<u32, BTreeSet<T>>,
 }
 
 impl G {
@@ -422,6 +428,21 @@ struct Run<'a> {
 }
 
 impl Run<'_> {
+    /// At the last pass, what `add(a, b, at)` makes an object of: the
+    /// pointers on one side when the other is unknown, as `add`'s `fresh`.
+    fn base(&mut self, a: &V, b: &V, at: u32) {
+        if self.g.record.is_none() {
+            return;
+        }
+        for (x, y) in [(a, b), (b, a)] {
+            if y.unk {
+                for &t in x.t.iter().filter(|t| t.ptr()) {
+                    self.g.bases.entry(at).or_default().insert(t);
+                }
+            }
+        }
+    }
+
     fn cell(&mut self, c: u32) -> V {
         let init = self.init;
         self.g
@@ -568,7 +589,10 @@ impl Run<'_> {
                 Op::Bin(op, x, y) => {
                     let (x, y) = (val(x), val(y));
                     match op {
-                        BinOp::Add => add(&x, &y, at),
+                        BinOp::Add => {
+                            self.base(&x, &y, at);
+                            add(&x, &y, at)
+                        }
                         BinOp::Sub => add(&x, &neg(&y), at),
                         BinOp::And => and(&x, &y),
                         BinOp::Or => num2(&x, &y, |p, q| p | q),
@@ -577,8 +601,11 @@ impl Run<'_> {
                     }
                 }
                 Op::Adc { a, b, c } => {
-                    let ab = add(&val(a), &val(b), at);
-                    add(&ab, &val(c), at)
+                    let (a, b, c) = (val(a), val(b), val(c));
+                    self.base(&a, &b, at);
+                    let ab = add(&a, &b, at);
+                    self.base(&ab, &c, at);
+                    add(&ab, &c, at)
                 }
                 Op::Not(a) => not(&val(a)),
                 Op::Shift { kind, v, amount } => {
@@ -821,6 +848,9 @@ pub struct Heap {
     pub secs: f64,
     /// The run didn't settle in [`ROUNDS`]: nothing is typed.
     pub unsettled: bool,
+    /// The sites whose objects may be in a static array, left as bytes
+    /// ([`statics`]).
+    pub statics: BTreeSet<u32>,
 }
 
 impl Heap {
@@ -854,6 +884,33 @@ impl Heap {
     }
 }
 
+/// The sites whose objects may be in a static array
+/// (native/ref-heap-static-arrays): where an unknown amount is added to a
+/// RAM address that some global (a constant-address access's) ends past
+/// in its region, to somewhere in RAM the run didn't place, or to a
+/// pointer into such a site's object. An index into an array the program
+/// also reaches by constant address makes one; an allocator's cursor,
+/// past every global in its region, doesn't.
+fn statics(bases: &BTreeMap<u32, BTreeSet<T>>, global_from: &dyn Fn(u32) -> bool) -> BTreeSet<u32> {
+    let mut out = BTreeSet::new();
+    loop {
+        let n = out.len();
+        for (&s, b) in bases {
+            if b.iter().any(|&t| match t {
+                T::Ram(c) => global_from(c),
+                T::RamAny => true,
+                T::Obj(x, _) | T::Any(x) => out.contains(&x),
+                _ => false,
+            }) {
+                out.insert(s);
+            }
+        }
+        if out.len() == n {
+            return out;
+        }
+    }
+}
+
 fn find(p: &mut BTreeMap<u32, u32>, x: u32) -> u32 {
     let mut r = x;
     while let Some(&q) = p.get(&r) {
@@ -870,12 +927,15 @@ fn find(p: &mut BTreeMap<u32, u32>, x: u32) -> u32 {
 /// indirect calls reaching `sites`' callees, `taken` the functions whose
 /// address the program takes (`None`: the function-address flow didn't
 /// run, so neither is known); `init` is RAM's word at an address when the
-/// program starts (0 where nothing is copied).
+/// program starts (0 where nothing is copied); `global_from` says whether
+/// a RAM global ends past a guest address in its region (EWRAM or IWRAM),
+/// so an object there could reach one (see [`statics`]).
 pub fn follow(
     fns: &[FnIn],
     sites: &BTreeMap<u32, Site>,
     taken: Option<&BTreeSet<u32>>,
     init: &dyn Fn(u32) -> u32,
+    global_from: &dyn Fn(u32) -> bool,
 ) -> Heap {
     let keys: BTreeSet<u32> = fns.iter().map(|f| f.entry).collect();
     let mut direct = BTreeSet::new();
@@ -976,6 +1036,9 @@ pub fn follow(
         for (c, v) in &g.fields {
             eprintln!("  field {c:x?}: {v:?}");
         }
+        for (s, b) in &g.bases {
+            eprintln!("  site {s:#010x}'s bases: {b:x?}");
+        }
         for ((f, b, i), (v, w)) in &rec {
             if v.t.iter().any(|t| t.ptr()) {
                 eprintln!("  {f:#010x} {b:#010x}.{i} w{w}: {v:?}");
@@ -1007,6 +1070,8 @@ pub fn follow(
             }
         }
     }
+    h.statics = statics(&g.bases, global_from);
+    let static_roots: BTreeSet<u32> = h.statics.iter().map(|&s| find(&mut uf, s)).collect();
     // Each candidate: its class's root, offset and width.
     let mut cand = BTreeMap::new();
     for (&k, (v, w)) in &rec {
@@ -1024,6 +1089,13 @@ pub fn follow(
             continue;
         }
         let root = find(&mut uf, os[0].0);
+        // An element of a static array (or an object in one) stays bytes:
+        // the packed layout places the globals it may share bytes with
+        // apart, so it isn't one piece of `Ram` there.
+        if static_roots.contains(&root) {
+            h.unexplained.insert(k);
+            continue;
+        }
         let off = o as u32;
         cand.insert(k, (root, off, *w));
     }
@@ -1104,6 +1176,30 @@ mod tests {
             many.join(&V::of(T::Obj(5, 4 * o)));
         }
         assert_eq!(many, V::of(T::Any(5)));
+    }
+
+    #[test]
+    fn static_array_sites() {
+        // 0x080003da indexes OUT.regs (a global ends past 0x020000b8);
+        // 0x080001ca bumps the allocator's cursor, past every EWRAM
+        // global; 0x080001d6 indexes an array in an allocated object,
+        // 0x08000560 one in the static one; 0x08002996 adds to RAM the
+        // run didn't place.
+        let globals = |c: u32| c < 0x0200_03ac;
+        let bases = BTreeMap::from([
+            (0x0800_03da, BTreeSet::from([T::Ram(0x0200_00b8)])),
+            (
+                0x0800_01ca,
+                BTreeSet::from([T::Ram(0x0200_03ac), T::Obj(0x0800_01ca, 0x10)]),
+            ),
+            (0x0800_01d6, BTreeSet::from([T::Obj(0x0800_01ca, 0x10)])),
+            (0x0800_0560, BTreeSet::from([T::Any(0x0800_03da)])),
+            (0x0800_2996, BTreeSet::from([T::RamAny])),
+        ]);
+        assert_eq!(
+            statics(&bases, &globals),
+            BTreeSet::from([0x0800_03da, 0x0800_0560, 0x0800_2996])
+        );
     }
 
     #[test]
