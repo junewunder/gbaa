@@ -1833,6 +1833,11 @@
       "uses": ["heavy"],
       "notes": [
         {
+          "at": "2026-11-12T13:49:40Z",
+          "by": "695902dc",
+          "text": "2026-11-12: the summary now stops after a direct call to a callee that never returns ({unit:native/spike-entry-read-hole}). Nightmare's 5 holes weren't rerun against it; they look like other causes, but a lift on main will say."
+        },
+        {
           "at": "2026-11-12T12:50:09Z",
           "by": "a7b7e9d7",
           "text": "Once the dispatcher 0x03001030 is lifted, not stood in ({unit:native/drop-psr-standins}), 5 more entry-read holes appear in IWRAM m4a code: 0x03007151 (r4), 0x0300715c (r4), 0x030071df (r8), 0x030072e8 (r4), 0x030074d1 (r4)."
