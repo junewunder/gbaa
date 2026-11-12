@@ -879,6 +879,13 @@
           "lane": "quack/4"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-12T06:25:48Z",
+          "by": "a897fc66",
+          "text": "Not done: the desktop has no cartless seat (netplay::gba::Gba::single_pak and runtime::bios::multiboot::boot_cartless are there to use); normal-mode MultiBoot (r1=0/2) still fails; no commercial single-pak game tried (none of june's)."
+        }
+      ],
       "round": "2026-11-12T05:56:52Z"
     },
     {
