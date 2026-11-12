@@ -1603,6 +1603,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T11:15:32Z",
+          "by": "9fcf9764",
+          "text": "Review's Halt fix was wrong: play build's irq_return finishes Halt's pending call and sets AFTER_SWI; mGBA agrees (test slot 10). Separately, native-spike has a hard hole on main (filed: {unit:native/spike-entry-read-hole}); numbers doc shows it."
+        },
+        {
           "at": "2026-11-12T10:43:25Z",
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/native.rs:2146: the lift appends `swi_done(g)` after every BIOS call. That's wrong for Halt/Stop (`0x02 | 0x03` => `g.sp = r13; hw::halt(g)?;`). hw::halt (crates/runtime/src/hw.rs:988) runs …"
