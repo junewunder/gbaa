@@ -1728,6 +1728,13 @@
         "branch": "unit/native/lift-undefined-insns",
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-12T13:42:55Z",
+          "by": "74679aef",
+          "text": "Code on branch (48b1f0e): traps (udf #255) lift as panic!, SoftReset ends paths. Unverified: moonbeam's gbaa-lift then ran >10 min at 100% CPU, 0.6 GB (overnight <3 min with build); first check whether main's lifter is as slow, then lifts' counts, holes-all, just check."
+        }
+      ],
       "round": "2026-11-12T13:02:46Z"
     },
     {
