@@ -1714,7 +1714,19 @@
       "title": "Find why moonbeam's and Rogue's lifts decode data as code",
       "detail": "From the overnight lift (2026-11-11, runs/long/overnight-lift.log): gbaa-lift reports 21 'an undefined instruction' hard holes in moonbeam (e.g. f_08006731 at 0x08006966, f_08017a91 at 0x08017b7e), 24 in Emerald Rogue and 2 in Imperium. {unit:native/modern-gcc-data-as-code} fixed discovery's own case, and gbaa-holes doesn't count undefined instructions at all, so these likely come from the lifter's gap decoding (decision: The lifter decodes discovery's gaps itself and lists them) or a function run on past its end. Find which rule takes each, stop it there without losing real code. Done when: the cause of each kind is written in docs/research/native-holes.md, the undefined-instruction holes fall on moonbeam and Rogue with no other hard count higher (just holes-all --against main and the lifts' counts), disc-* bars hold, just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "74679aef",
+        "session": "74679aef-e087-4107-ae60-ffc062168b01",
+        "host": "quack",
+        "pid": 2490379,
+        "start": "10658170",
+        "at": "2026-11-12T13:02:46Z",
+        "branch": "unit/native/lift-undefined-insns",
+        "beats": true
+      },
+      "round": "2026-11-12T13:02:46Z"
     },
     {
       "id": "native/holes-match-lift",
