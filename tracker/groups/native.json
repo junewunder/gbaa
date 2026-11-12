@@ -642,7 +642,8 @@
         "native/lift-flash-routines",
         "native/lift-bios-region",
         "native/play-native-metroid-interp",
-        "native/check-holes-copies"
+        "native/check-holes-copies",
+        "native/metroid-entry-reads"
       ],
       "uses": ["heavy"],
       "minMinutes": 120,
