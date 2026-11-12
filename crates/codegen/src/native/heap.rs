@@ -593,7 +593,11 @@ impl Run<'_> {
                             self.base(&x, &y, at);
                             add(&x, &y, at)
                         }
-                        BinOp::Sub => add(&x, &neg(&y), at),
+                        BinOp::Sub => {
+                            let y = neg(&y);
+                            self.base(&x, &y, at);
+                            add(&x, &y, at)
+                        }
                         BinOp::And => and(&x, &y),
                         BinOp::Or => num2(&x, &y, |p, q| p | q),
                         BinOp::Xor => num2(&x, &y, |p, q| p ^ q),
