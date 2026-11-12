@@ -361,17 +361,17 @@ What the done pieces left open, for the units that come next.
   aren't bounded) and was nine times slower; the heap by allocation site
   and field (`native/fnref-heap-sites`) is what dense IDs need.
 - **Function-address flow, smaller gaps** (for `native/fnref-dense`).
-  Proofs are per origin, and a pool load folded from a non-pc-relative
-  address gets a code-constant origin, so dense needs per-site constant
-  rewriting. Words no tracked load reaches ("never read") stay ROM keys.
-  The widening (more than 8 numbers are unknown, more than 16 exact ROM
-  pointers become one "from the lowest on") makes the first reason given
-  per word move with the code. A load whose bounds start in ROM and end
-  outside it, or have none, reads no ROM and flags nothing (the closed
-  world); a ROM-bounded read wider than 256 KB reads nothing (flagged); a
-  RAM-to-RAM `CpuSet` isn't followed; `ror` by an unknown amount keeps a
-  function's form. Past 48M tokens held it stops unsettled, proving
-  nothing (`native/whole-lift-memory`; Metroid settles at about 30M).
+  Proofs are per origin; a pool load folded from a non-pc-relative
+  address gets a code-constant origin (dense needs per-site constant
+  rewriting); "never read" words stay ROM keys. The widening (over 8
+  numbers: unknown; over 16 exact ROM pointers: one "from the lowest
+  on") moves each word's first reason with the code. A load bounded from
+  ROM to outside it, or unbounded, reads no ROM (the closed world); a
+  ROM-bounded read over 256 KB reads nothing (flagged); RAM-to-RAM
+  `CpuSet` isn't followed; `ror` by an unknown keeps a form. A read
+  "from here on" stops at the next object (a ROM data address a ROM word
+  holds), assuming no index runs past one (`native/fnref-rom-read-bound`).
+  Past 48M tokens it stops, proving nothing (`native/whole-lift-memory`).
 - **Escape analysis** (piece 4). An escaping address marks only the
   slots at and above it; walking down too would leave about three times
   the accesses in memory, so it stays open and `--shadow-locals` checks
