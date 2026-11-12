@@ -953,7 +953,14 @@
     },
     {
       "id": "multiplayer/menu-wireless-room",
-      "title": "Host or join a wireless room from the window's menu"
+      "title": "Host or join a wireless room from the window's menu",
+      "notes": [
+        {
+          "at": "2026-11-12T09:36:15Z",
+          "by": "2be79df9",
+          "text": "gbaa-desktop --wireless works from the command line only ({unit:multiplayer/desktop-wireless-radio}); the Netplay page's Ask has no wireless choice. Fly's server still needs just fly-deploy before W datagrams reach it."
+        }
+      ]
     }
   ]
 }
