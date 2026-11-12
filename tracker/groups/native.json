@@ -1275,7 +1275,19 @@
       "title": "Lifted task switchers run tasks on host coroutines",
       "detail": "Shared code for {unit:native/nightmare-task-switch} (docs/research/native-holes.md, 'Kirby: Nightmare's task switcher'). The lifter doesn't count a stack switch (mov sp, rN; ldr sp, [rN]) as a hard hole: on Nightmare it lifts 0x08000244/0x08000278/0x08000298 silently, though gbaa-holes counts them. Make it hard there too, and give stand-ins a prelude facility: run a task's lifted code on a stackful coroutine (corosensei, as crates/desktop/src/coro.rs; the generated crate's Cargo.toml gains it), keyed by the guest sp it saved; resume starts or resumes, yield/exit suspend with the values the scheduler reads. Test it on an agb program with a small ARM switcher of that shape (resume, yield with a frame count, exit) and 3+ tasks, as a lift-check case with a stand-in and a planted control. Done when: lift-check green with the case, its bars set; just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "21ac895a",
+        "session": "21ac895a-0051-45ec-874a-3fad33b396f8",
+        "host": "quack",
+        "pid": 2489427,
+        "start": "10657408",
+        "at": "2026-11-12T04:53:34Z",
+        "branch": "unit/native/task-coroutines",
+        "beats": true
+      },
+      "round": "2026-11-12T04:53:34Z"
     },
     {
       "id": "native/copy-tail-discovery",
