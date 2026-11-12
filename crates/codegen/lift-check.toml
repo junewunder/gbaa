@@ -32,7 +32,7 @@ route = "units/affine-600.toml"
 
 [program.affine.bars]
 lines = 71199
-lines_prelude = 1098
+lines_prelude = 1131
 functions = 109
 functions_iwram = 3
 functions_lifted = 106
@@ -89,7 +89,7 @@ route = "units/mosaic-modes-600.toml"
 
 [program.mosaic-modes.bars]
 lines = 49224
-lines_prelude = 1098
+lines_prelude = 1131
 functions = 102
 functions_iwram = 3
 functions_lifted = 99
@@ -150,7 +150,7 @@ planted_hole = { drop_standin = 0x03000000, names = "error: hard hole in f_03000
 
 [program.native-spike.bars]
 lines = 71803
-lines_prelude = 1098
+lines_prelude = 1131
 functions = 110
 functions_iwram = 3
 functions_lifted = 107
@@ -211,7 +211,7 @@ planted_flags = ["--fall-as-tail-call"]
 
 [program.native-fallthrough.bars]
 lines = 70089
-lines_prelude = 1098
+lines_prelude = 1131
 functions = 112
 functions_iwram = 3
 functions_lifted = 109
@@ -273,7 +273,7 @@ planted_flags = ["--irq-at-waits"]
 
 [program.native-irq-hold.bars]
 lines = 70742
-lines_prelude = 1098
+lines_prelude = 1131
 functions = 114
 functions_iwram = 3
 functions_lifted = 109
@@ -337,7 +337,7 @@ planted_flags = ["--plant-slot=0x08000182"]
 
 [program.native-frame-locals.bars]
 lines = 70171
-lines_prelude = 1098
+lines_prelude = 1131
 functions = 113
 functions_iwram = 3
 functions_lifted = 110
@@ -398,7 +398,7 @@ planted_flags = ["--ime-at-waits"]
 
 [program.native-ime-release.bars]
 lines = 70732
-lines_prelude = 1098
+lines_prelude = 1131
 functions = 113
 functions_iwram = 3
 functions_lifted = 110
@@ -463,7 +463,7 @@ route = "units/native-bios-calls-600.toml"
 
 [program.native-bios-calls.bars]
 lines = 71189
-lines_prelude = 1098
+lines_prelude = 1131
 functions = 109
 functions_iwram = 3
 functions_lifted = 106
@@ -528,7 +528,7 @@ route = "units/native-bios-more-600.toml"
 
 [program.native-bios-more.bars]
 lines = 70163
-lines_prelude = 1098
+lines_prelude = 1131
 functions = 104
 functions_iwram = 3
 functions_lifted = 101
@@ -596,7 +596,7 @@ planted_hole = { drop_standin = 0x080001a4, names = "error: hard hole in f_08000
 
 [program.native-tasks.bars]
 lines = 71522
-lines_prelude = 1098
+lines_prelude = 1131
 functions = 122
 functions_iwram = 3
 functions_lifted = 113
@@ -657,7 +657,7 @@ planted_store = 0x08000180
 
 [program.native-dma.bars]
 lines = 48430
-lines_prelude = 1098
+lines_prelude = 1131
 functions = 107
 functions_iwram = 3
 functions_lifted = 104
@@ -721,7 +721,7 @@ planted_store = 0x080002ac
 
 [program.native-save.bars]
 lines = 70847
-lines_prelude = 1098
+lines_prelude = 1131
 functions = 112
 functions_iwram = 3
 functions_lifted = 109
@@ -783,7 +783,7 @@ route = "units/native-bios-region-601.toml"
 
 [program.native-bios-region.bars]
 lines = 70533
-lines_prelude = 1098
+lines_prelude = 1131
 functions = 114
 functions_iwram = 3
 functions_lifted = 111
@@ -833,3 +833,66 @@ call_fn_four_complete = 58
 jumps_by_value = 8
 fn_words_not_proven = 59
 gap_targets = 11
+
+[program.native-bios-affine]
+rom = "agb/native-bios-affine.gba"
+route = "units/native-bios-affine-600.toml"
+# The affine BIOS calls (native/lift-bios-affine): BgAffineSet into RAM from
+# RAM and from ROM and into BG2's own registers, ObjAffineSet into RAM
+# (stride 2) and OAM (stride 8), and BgAffineSet with a count of 0 every
+# other frame, each once a frame on arguments that change with the frame,
+# their registers and output drawn and kept in a global;
+# agb/native-bios-affine/src/main.rs.
+
+[program.native-bios-affine.bars]
+lines = 71576
+lines_prelude = 1131
+functions = 110
+functions_iwram = 3
+functions_lifted = 106
+functions_unrecognised = 110
+functions_replaced = 4
+standins = 4
+functions_summary_hole = 79
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 50
+hard_holes = 0
+blocks = 1725
+load_const_ram = 0
+load_const_io = 12
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 263
+load_computed_ram = 1
+load_computed_io = 6
+load_computed_rom = 70
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 716
+store_const_ram = 0
+store_const_io = 25
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 448
+store_computed_ram = 1
+store_computed_io = 6
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 346
+pointer_unexplained = 2
+ref_unexplained = 35
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 704
+sp_accesses_callers_frame = 7
+call_fn_calls = 61
+call_fn_four_complete = 56
+jumps_by_value = 9
+fn_words_not_proven = 57
+gap_targets = 5

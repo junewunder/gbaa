@@ -1335,10 +1335,10 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `planted_store`, `planted_hole`, `planted_flags`) and its bars,
   `[program.<name>.bars]`. Today `agb/native-spike`, `agb/affine`,
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
-  `agb/native-frame-locals`, `agb/native-ime-release`,
-  `agb/native-bios-calls`, `agb/native-bios-more` (SoftReset too),
-  `agb/native-tasks`, `agb/native-dma`, `agb/native-save` (SRAM),
-  `agb/native-bios-region` (the BIOS latch; `just agb-tests`) on
+  `agb/native-frame-locals`, `agb/native-ime-release`, `agb/native-bios-calls`,
+  `agb/native-bios-more` (SoftReset too), `agb/native-tasks`, `agb/native-dma`, `agb/native-save` (SRAM),
+  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`
+  (`just agb-tests`; units native/lift-bios-calls, -bios-affine) on
   `units/<name>-600.toml` (the spike's is `units/native-spike.toml`,
   native-irq-hold's, native-ime-release's and native-bios-region's
   `-601`). First every program is lifted with `--bars`

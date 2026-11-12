@@ -89,7 +89,8 @@
 //!   (`IntrWait`, `VBlankIntrWait` as `hw::halt` until the game's handler
 //!   sets the flag; `Halt`, `Stop`), `CpuSet`, `CpuFastSet` and LZ77 with
 //!   their time (`hw::spend`), RL, `Div`, `Sqrt`, `ArcTan2`, `SoundBias`,
-//!   `MidiKey2Freq`, `MultiBoot` (unit `native/lift-bios-calls`).
+//!   `MidiKey2Freq`, `MultiBoot` (unit `native/lift-bios-calls`),
+//!   `BgAffineSet`, `ObjAffineSet` (unit `native/lift-bios-affine`).
 //! - An idle loop's back edge calls `hw::idle`, a spin loop's `hw::spin`
 //!   (`analysis::idle`, `runtime::spins`, as the play build's
 //!   `--timing native` marks them).
@@ -2139,6 +2140,10 @@ impl FnPrinter<'_, '_> {
                         .to_string(),
                     0x0B => "let mut r = [r0, r1, r2, r3]; cpu_set(g, r13, &mut r)?; [r0, r1, r2, r3] = r;".to_string(),
                     0x0C => "let mut r = [r0, r1, r2, r3]; cpu_fast_set(g, r13, &mut r)?; [r0, r1, r2, r3] = r;".to_string(),
+                    0x0E | 0x0F => format!(
+                        "let mut r = [r0, r1, r2, r3]; affine_set(g, &mut r, {}); [r0, r1, r2, r3] = r;",
+                        n == 0x0E
+                    ),
                     0x11 | 0x12 => format!(
                         "let mut r = [r0, r1, r2, r3]; lz77(g, r13, &mut r, {}, {at:#010x}, {thumb})?; [r0, r1, r2, r3] = r;",
                         n == 0x12

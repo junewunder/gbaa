@@ -618,6 +618,39 @@ pub fn div(r: &mut [u32; 4]) {
     r[3] = a;
 }
 
+/// `BgAffineSet` (r0: 20-byte sources, r1: 16-byte destinations, r2:
+/// count; `bg`) or `ObjAffineSet` (r0: 8-byte sources, r1: destination,
+/// r2: count, r3: the stride between pa-pd), as the play build's: r0 and
+/// r1 past the last entry, r2 -1 or one less than a negative count.
+pub fn affine_set(g: &mut Game, r: &mut [u32; 4], bg: bool) {
+    let h = |g: &mut Game, a: u32| ld16(g, a & !1) as i16 as i32;
+    let (mut src, mut dst) = (r[0], r[1]);
+    for _ in 0..(r[2] as i32).max(0) {
+        if bg {
+            let (ox, oy) = (ld32(g, src & !3) as i32, ld32(g, src.wrapping_add(4) & !3) as i32);
+            let [cx, cy, sx, sy] = [8, 10, 12, 14].map(|o| h(g, src.wrapping_add(o)));
+            let angle = h(g, src.wrapping_add(16)) as u16;
+            let (m, x, y) = hw::bios::bg_affine(ox, oy, cx, cy, sx, sy, angle);
+            for (k, v) in m.into_iter().enumerate() {
+                st16(g, dst.wrapping_add(2 * k as u32) & !1, v as u16 as u32);
+            }
+            st32(g, dst.wrapping_add(8) & !3, x as u32);
+            st32(g, dst.wrapping_add(12) & !3, y as u32);
+            (src, dst) = (src.wrapping_add(20), dst.wrapping_add(16));
+        } else {
+            let [sx, sy, angle] = [0, 2, 4].map(|o| h(g, src.wrapping_add(o)));
+            for v in hw::bios::obj_affine(sx, sy, angle as u16) {
+                st16(g, dst & !1, v as u16 as u32);
+                dst = dst.wrapping_add(r[3]);
+            }
+            src = src.wrapping_add(8);
+        }
+    }
+    r[0] = src;
+    r[1] = dst;
+    r[2] = (r[2] as i32).min(0).wrapping_sub(1) as u32;
+}
+
 /// `CpuFastSet` (r0 source, r1 destination, r2 word count and fill), as
 /// the play build's: eight words at a time, its registers as it leaves
 /// them (r2 as given: the SWI dispatcher restores it), and its time.
