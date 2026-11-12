@@ -878,7 +878,19 @@
     {
       "id": "multiplayer/single-pak-multiboot",
       "title": "Single-pak link: a seat with no cartridge boots by MultiBoot",
-      "detail": "From the link-cable survey (docs/research/multiplayer.md, 'The cable over the internet'): single-pak games (Mario Kart Super Circuit's single-pak mode, Bomberman Tournament, the Mario Bros. Classic games) send a program over the cable to GBAs with no cartridge. Our HLE BIOS MultiBoot (SWI 0x25) always fails (runtime/src/bios.rs) and a machine can't start without a ROM. Add: a cartridge-less machine that runs the BIOS's boot-time MultiBoot receive over runtime::link and boots what it gets from EWRAM, and MultiBoot on the parent over the hub. Check: a homebrew single-pak sender (written here, or an agb/libtonc example) boots a client on a cartless seat through two local netplay peers, same end hash; just check. No ROM june has needs it."
+      "detail": "From the link-cable survey (docs/research/multiplayer.md, 'The cable over the internet'): single-pak games (Mario Kart Super Circuit's single-pak mode, Bomberman Tournament, the Mario Bros. Classic games) send a program over the cable to GBAs with no cartridge. Our HLE BIOS MultiBoot (SWI 0x25) always fails (runtime/src/bios.rs) and a machine can't start without a ROM. Add: a cartridge-less machine that runs the BIOS's boot-time MultiBoot receive over runtime::link and boots what it gets from EWRAM, and MultiBoot on the parent over the hub. Check: a homebrew single-pak sender (written here, or an agb/libtonc example) boots a client on a cartless seat through two local netplay peers, same end hash; just check. No ROM june has needs it.",
+      "record": {
+        "state": "claimed",
+        "by": "a897fc66",
+        "session": "a897fc66-b4e2-4e72-b83a-9a5982cf7e3b",
+        "host": "quack",
+        "pid": 2490379,
+        "start": "10658170",
+        "at": "2026-11-12T05:56:52Z",
+        "branch": "unit/multiplayer/single-pak-multiboot",
+        "beats": true
+      },
+      "round": "2026-11-12T05:56:52Z"
     },
     {
       "id": "multiplayer/wander-split-under-load",
