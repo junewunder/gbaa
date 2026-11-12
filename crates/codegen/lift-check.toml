@@ -577,4 +577,4 @@ call_fn_calls = 61
 call_fn_four_complete = 0
 jumps_by_value = 8
 gap_targets = 5
-fn_words_not_proven = 59
+fn_words_not_proven = 61
