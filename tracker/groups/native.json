@@ -663,6 +663,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T11:45:45Z",
+          "by": "598b2669",
+          "text": "route-check --native now skips the holes file's [[copy]] ranges: pass --name metroid (the ROM's file name doesn't match mods/metroid/), or --holes mods/metroid/holes.toml."
+        },
+        {
           "at": "2026-11-12T11:21:46Z",
           "by": "ba1a464f",
           "text": "Play build now syncs where an idle loop's cond branch isn't taken (rt::idle_exit; DMA waits). The lifter (Exact clock) has no Idle::Exit counterpart (native.rs emits hw::idle/spin only): if lift vs play differs after a DMA-wait loop, look there."
