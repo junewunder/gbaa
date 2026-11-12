@@ -94,7 +94,10 @@
 //!   (`analysis::idle`, `runtime::spins`, as the play build's
 //!   `--timing native` marks them).
 //! - Function pointers are their keys (ROM or IWRAM address, Thumb bit):
-//!   `call_fn` (prelude) looks them up in `FNS`. Stage A has no dense IDs
+//!   `call_fn` (prelude) looks them up in `FNS`; a RAM key that isn't
+//!   there but holds one of the flash save library's stack routines is
+//!   that routine's `hw::flash` call (unit `native/lift-flash-routines`).
+//!   Stage A has no dense IDs
 //!   (`--fn-ids rom` only): a literal lift loads pointers from ROM bytes
 //!   and RAM, so it can't renumber them. [`fnref`] follows every function
 //!   address to its uses and reports the ROM words dense IDs could rewrite
@@ -2160,7 +2163,13 @@ impl FnPrinter<'_, '_> {
                         return s;
                     }
                 };
-                let c = self.call_then(call, next, at);
+                // The BIOS region then reads the opcode after the call's
+                // return, as the play build's (`swi_done`). After a halt too:
+                // the IRQ that wakes it returns into the BIOS's Halt, which
+                // then returns from the call (the play build finishes its
+                // pending call there; mGBA agrees, agb/native-bios-region's
+                // slot 10).
+                let c = self.call_then(format!("{call} swi_done(g);"), next, at);
                 writeln!(s, "{ind}{c}").unwrap();
             }
             Plan::Undefined => self.hole(at, "an undefined instruction"),
