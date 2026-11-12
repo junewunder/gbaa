@@ -1362,6 +1362,13 @@
         "by": "3454f93a",
         "at": "2026-11-12T08:30:17Z"
       },
+      "notes": [
+        {
+          "at": "2026-11-12T08:30:29Z",
+          "by": "3454f93a",
+          "text": "Branch eb76aa55 (fnref-context merged in): RamFrom tokens + lost_ptr closed world; affine anywhere loads 623->8, fn_words unmoved. Costs: spike/ime/irq-hold +1-3 not_proven, irq-hold ref_accesses 16->0 (heap.rs reads callee sets). GBAA_FNREF_TRACE prints 'load anywhere'."
+        }
+      ],
       "round": "2026-11-12T07:01:25Z"
     },
     {
