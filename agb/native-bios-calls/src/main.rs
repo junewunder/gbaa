@@ -149,8 +149,8 @@ fn addr<T>(p: *const T) -> u32 {
     p as u32
 }
 
-/// One frame's calls, into `o`; returns their registers (`o.regs` too).
-fn calls(f: u32, o: &mut Out) -> [Regs; CALLS] {
+/// One frame's calls, into `o`.
+fn calls(f: u32, o: &mut Out) {
     let mut rs = [[0u32; 4]; CALLS];
     // Sqrt: r0.
     rs[0] = [f.wrapping_mul(0x0009_E377).wrapping_add(f * f), 1, 2, 3];
@@ -194,7 +194,6 @@ fn calls(f: u32, o: &mut Out) -> [Regs; CALLS] {
     rs[12] = [addr(&LZ), addr(&o.lz_src), 9, 0];
     swi!("0x0C", &mut rs[12]);
     o.regs = rs;
-    rs
 }
 
 /// A call's registers folded into a BGR555 colour.
@@ -212,11 +211,11 @@ fn main(_gba: agb::Gba) -> ! {
     loop {
         // SAFETY: OUT is ours (see its Sync).
         let o = unsafe { &mut *OUT.0.get() };
-        // The pixels come from the returned copy, not `o.regs`: an index
-        // into a static array makes a heap object the packed layout can't
-        // place (native/ref-heap-static-arrays).
-        let rs = calls(f, o);
-        for (k, r) in rs.iter().enumerate() {
+        calls(f, o);
+        // An index into a static array the program also reaches by
+        // constant address (`o.regs = rs`): its element stays bytes in
+        // the lift (native/ref-heap-static-arrays).
+        for (k, r) in o.regs.iter().enumerate() {
             let px = VRAM + ((k as u32) * 240 + f % 240) * 2;
             // SAFETY: a pixel of mode 3's frame buffer, rows 0-12.
             unsafe { write_volatile(px as *mut u16, colour(r)) };
