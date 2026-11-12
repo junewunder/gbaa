@@ -253,6 +253,13 @@ impl Engine {
                     (Some(JumpRes::Resolved(old)), JumpRes::Resolved(new)) => {
                         JumpRes::Resolved(union(old, new))
                     }
+                    // One RAM target in every context so far.
+                    (Some(JumpRes::Ram(a)), JumpRes::Ram(b)) if a == *b => JumpRes::Ram(a),
+                    // A RAM target beside another: the jump isn't resolved.
+                    (Some(JumpRes::Ram(_)), JumpRes::Rejected(j)) => JumpRes::Rejected(j.clone()),
+                    (Some(JumpRes::Ram(_)), _) | (Some(JumpRes::Resolved(_)), JumpRes::Ram(_)) => {
+                        JumpRes::Unresolved
+                    }
                     // Some context failed: the jump isn't resolved.
                     (Some(JumpRes::Resolved(_)), r) => r.clone(),
                     (Some(failed), _) => failed,

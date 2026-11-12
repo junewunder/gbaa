@@ -546,6 +546,76 @@ fn a_bl_into_a_copy_source_cuts_it() {
     );
 }
 
+/// crt0_copies_and_jumps_over_its_pool's crt0, copying 4 words from 0x300
+/// to IWRAM; main at 0x100.
+fn copy_crt0(a: &mut Asm) -> &mut Asm {
+    a.w(0x00, 0xe59f_0010)
+        .w(0x04, 0xe59f_1010)
+        .w(0x08, 0xe59f_2010)
+        .w(0x0c, 0xef0b_0000)
+        .w(0x10, 0xe59f_300c)
+        .w(0x14, 0xe12f_ff13)
+        .w(0x18, B + 0x300)
+        .w(0x1c, 0x0300_0000)
+        .w(0x20, 0x0400_0004)
+        .w(0x24, thumb(0x100))
+}
+
+#[test]
+fn a_bl_to_a_stub_in_a_copy_source_returns() {
+    let mut a = Asm::new();
+    // m4a's SoundMain: a `bl` to the `bx r3` stub its SoundMainRAM copy
+    // ends in, then a constant jump into the copy.
+    copy_crt0(&mut a)
+        // main: push {lr}; ldr r3, =callee; bl stub; ldr r3, =0x03000001; bx r3
+        .h(0x100, 0xb500)
+        .h(0x102, 0x4b02) // ldr r3, [pc, #8] -> 0x10c
+        .bl(0x104, 0x30c)
+        .h(0x108, 0x4b01) // ldr r3, [pc, #4] -> 0x110
+        .h(0x10a, 0x4718) // bx r3
+        .w(0x10c, thumb(0x200))
+        .w(0x110, 0x0300_0001)
+        .h(0x200, 0x4770) // callee: bx lr
+        .h(0x300, 0x4770) // the copy's code: bx lr
+        .h(0x30c, 0x4718); // stub: bx r3
+    let d = a.run();
+    assert!(d.code.contains_key(&(B + 0x10a)), "the call returns");
+    assert_eq!(
+        d.rec.jumps.get(&(B + 0x10a)),
+        Some(&JumpRes::Ram(0x0300_0001))
+    );
+    assert!(d.funcs.contains_key(&thumb(0x200)), "the stub calls r3");
+    assert!(!d.funcs.contains_key(&thumb(0x30c)), "the stub stays out");
+    assert!(d.data.contains(&(B + 0x300, B + 0x30c)), "{:x?}", d.data);
+    assert!(d.ram_entries.contains(&0x0300_0001));
+    let ov = overlays(&a.0, &d);
+    assert!(ov[0].disc.funcs.contains_key(&0x0300_0001));
+}
+
+#[test]
+fn a_veneers_b_into_a_copy_source_cuts_it() {
+    let mut a = Asm::new();
+    // Kirby: Nightmare in Dream Land: main calls a veneer (bx pc; nop; b)
+    // into ARM code the copy's length reads on into. The function before
+    // the veneer ends in `pop {pc}`, which isn't the veneer's return.
+    copy_crt0(&mut a)
+        // main: push {lr}; bl veneer; pop {pc}
+        .h(0x100, 0xb500)
+        .bl(0x102, 0x180)
+        .h(0x106, 0xbd00)
+        .h(0x17e, 0xbd00) // pop {pc}
+        .h(0x180, 0x4778) // veneer: bx pc
+        .h(0x182, 0x46c0) // nop
+        .w(0x184, 0xea00_005f) // b 0x308
+        .w(0x308, 0xe12f_ff1e); // bx lr
+    let d = a.run();
+    assert!(d.code.contains_key(&(B + 0x106)), "the call returns");
+    assert!(d.code.contains_key(&(B + 0x184)));
+    assert!(d.code.contains_key(&(B + 0x308)));
+    assert!(!d.code[&(B + 0x308)].thumb);
+    assert!(d.data.contains(&(B + 0x300, B + 0x308)), "{:x?}", d.data);
+}
+
 #[test]
 fn pointer_scan_takes_an_endless_task() {
     let mut a = Asm::new();
