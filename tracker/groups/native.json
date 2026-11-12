@@ -1067,6 +1067,11 @@
       "uses": ["heavy"],
       "notes": [
         {
+          "at": "2026-11-12T06:37:54Z",
+          "by": "b67b3cd7",
+          "text": "From {unit:native/copy-tail-discovery}: discovery now finds resume (0x08000234, entered by the veneer 0x080cfdc5's ARM part f_080cfdc8 via b); its bx r1 at 0x08000254 is a hard hole in the lift, which stops there until a stand-in for 0x080cfdc8 covers it."
+        },
+        {
           "at": "2026-11-08T22:24:15Z",
           "by": "f66d452c",
           "text": "Nightmare now lifts with 0 hard holes (mods/kirby-nightmare/holes.toml); the IRQ dispatcher stand-in 0x03001030 moves an IRQ on a task stack (sp<0x03007b80) to 0x03007c80. The lifter doesn't flag the 3 stack switches. SoftReset stand-in panics until {unit:native/lift-bios-more}."
@@ -1203,17 +1208,19 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "b3d0fb3e",
-        "session": "b3d0fb3e-b920-4e56-a4e2-460218715578",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T04:53:30Z",
-        "branch": "unit/native/entry-read-masking",
-        "beats": true
+        "checker": "a64859a25a26ba9d2",
+        "at": "2026-11-12T05:44:14Z",
+        "evidence": "Verifier (fresh context) PASS: just check exit 0 after merging main; holes-all --against out/holes/2359ecdd-dirty (out/holes/tailcall) names 36 hard entry-read functions, matching the doc's table; soft kinds hold only fully-masked reads and only-jumped ones (Rogue 15, Nightmare 1, moonbeam 1). Review fix: tail calls/falls from called functions count as calls, with a test.",
+        "host": "quack"
       },
       "notes": [
+        {
+          "at": "2026-11-12T05:44:18Z",
+          "by": "b3d0fb3e",
+          "text": "No test covers the falls edge (saves.rs sum.falls) or a chain of jumps through the fixpoint; tail-call edge is tested. A fall after the jumper changed r4-r11 is labelled hard (over-hard, safe)."
+        },
         {
           "at": "2026-11-08T23:12:49Z",
           "by": "manual",
@@ -1224,13 +1231,7 @@
           "by": "71b3ef7c",
           "text": "Rules settled by corpus reruns: a merge of entry bits with anything else is unknown (else LLVM paths go hard); returned entry bits count only if a caller's own instruction reads them (agbcc pop {r3}; mov r8, r3). 7 of the 36 hard not looked into (doc)."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-08T23:12:49Z",
-        "findings": "- crates/codegen/src/saves/summary.rs:733-777 and :919-952 (the `bl` map and the `readers.difference(&called)` relabel to `JUMPED_READ`): tail calls are left out on purpose (`.filter_map(|(&at, &c)| c.filter(|&c| c != at))`). So a function reached only by a tail call or a fall is marked `reads r4-r11 at entry, only jumped into` (soft). The reason given, \"takes every register through its extended entry\", is only true if the function that jumps in had real r4-r11 itself. In saves.rs:384-396 a tail call needs `s.kept()`, so the callee gets the tail-caller's own entry r4-r11. The lift's `fall_into` (native.rs:1886) passes the caller's locals r4..r11. If that caller was entered by a `bl` or a pointer, `Regs::call` zeroed those locals, so the callee reads 0 where the game has a real value. Nothing reports this: the tail-caller's walk (`sum.call(&mut after, Some(to), to)`) passes on only r0-r3 parameters, not the callee's entry reads of r4-r11. That is the silent wrong lift this unit exists to catch. Fix: decide 'only jumped into' over all the ways in. Keep a function's entry reads soft only if every function that tail-calls it or falls into it is itself only jumped into (a fixpoint over tail-call sites, `c == at` in `sum.sites`, and over falls). Otherwise keep them hard. The simplest version is to count tail-call targets and fall targets as `called`. Add a test: `g` is reached by a pointer in the ROM, `g` tail-calls `f` with `b`, and `f` reads its entry r5 (`ldr r0, [r5]`). It should give a hard `reads r4-r11 at entry` hole. Then rerun `just holes-all --against` and update the counts and lists in docs/research/native-holes.md (the 36 hard ones and the 'Only jumped into' list: Rogue's 13 fragments, Nightmare 0x0804c489, moonbeam 0x08038310), since some of those may now be hard."
-      },
-      "round": "2026-11-08T21:00:00Z"
+      ]
     },
     {
       "id": "native/whole-lift-memory",
@@ -1316,7 +1317,15 @@
       "probe": {
         "cmd": "just holes-all --only kirby-nightmare --cover --out out/holes/nightmare-cover"
       },
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "check",
+        "worker": "6f486280",
+        "at": "2026-11-12T05:33:11Z",
+        "evidence": "gbaa-holes: kirby-nightmare: hard 9, 426 s",
+        "host": "quack"
+      }
     },
     {
       "id": "native/fnref-unknown-addrs",
@@ -1361,14 +1370,20 @@
       "title": "Flow's ROM from-here-on widening keeps pointers it reads",
       "detail": "Val::cap lets RomFrom(lo) absorb Rom(a) for any a >= lo, but rom_from(lo) reads only up to the next code, so a pointer past it is never read and a call through it may get a complete callee set missing callees. Seen in mosaic-modes (found by {unit:native/fnref-flow-emerald}): fn 0x080037f1 (core::fmt pad) r0 widens to RomFrom(0x08000100), absorbing vtable Rom(0x08024c50); word 0x08024c5c (f_08002ee1) was read only transiently before. Make the widening keep such pointers (mark lost_rom, or don't absorb past bound) with a unit test; just lift-metrics bars hold (lower any that drop).",
       "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "5fa61def",
+        "at": "2026-11-12T05:51:22Z",
+        "evidence": "Val::cap absorbs into RomFrom(lo) only pointers before the next code (run-scoped code-address list), ROMS widening per data run; 2 unit tests fail on old code, 24 fnref tests pass. Merged main (1d4a34d): just lift-metrics 0 over/0 under at main's bars (owner's raise already covered), just check green.",
+        "host": "quack"
+      },
       "notes": [
         {
           "at": "2026-11-08T19:20:32Z",
           "by": "b9262a93",
           "text": "Fix committed on branch (a1683db): cap absorbs only up to bound(lo) via a run-scoped thread-local of code addrs; ROMS widening per data run. 2 tests. If owner says raise: set bars to new values (just lift-metrics shows them), merge main, just check, done."
         }
-      ],
-      "round": "2026-11-08T19:11:58Z"
+      ]
     },
     {
       "id": "native/metroid-drop-nes-standin",

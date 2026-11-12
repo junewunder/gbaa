@@ -1370,6 +1370,7 @@ dependencies = [
 name = "netplay"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "relay",
  "runtime",
  "serde",
