@@ -894,6 +894,17 @@
       "detail": "After {unit:multiplayer/wireless-adapter-local}: runtime::link::rfu's radio (hosts, searches, connections, packets) moves onto gbaa-server so each player runs only their own Emerald and adapter (docs/research/multiplayer.md option F, 'The wireless adapter, locally'). Measure how much latency librfu's timeouts and the Union Room's host/search switching allow, through the variable-ping simulator. Check: two Emerald processes (alice.sav, bob.sav) trade in the Union Room through a local server under the 'calm' profile; just check.",
       "check": "recorded",
       "needs": ["multiplayer/wireless-adapter-local"],
+      "record": {
+        "state": "claimed",
+        "by": "4d69fe66",
+        "session": "4d69fe66-e9f8-495d-a27d-ed2db80a85f4",
+        "host": "quack",
+        "pid": 2490379,
+        "start": "10658170",
+        "at": "2026-11-12T07:47:59Z",
+        "branch": "unit/multiplayer/wireless-radio-netplay",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-12T07:47:47Z",

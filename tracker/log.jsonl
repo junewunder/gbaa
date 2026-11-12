@@ -2570,3 +2570,4 @@
 {"at":"2026-11-12T07:43:46Z","actor":"loop","tag":"2ad4dbaa","host":"quack","cmd":"done","id":"native/task-coroutines","text":"Lifted task switchers run tasks on host coroutines: done, checked by 2ad4dbaa"}
 {"at":"2026-11-12T07:43:59Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/task-coroutines","text":"Lifted task switchers run tasks on host coroutines: on main"}
 {"at":"2026-11-12T07:47:47Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"multiplayer/wireless-radio-netplay","text":"Emerald's Union Room with the radio on the server: back to ready: the loop's review asked for fixes"}
+{"at":"2026-11-12T07:47:59Z","actor":"loop","tag":"4d69fe66","host":"quack","cmd":"claim","id":"multiplayer/wireless-radio-netplay","text":"Emerald's Union Room with the radio on the server: claimed"}
