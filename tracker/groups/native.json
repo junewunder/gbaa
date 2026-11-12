@@ -1223,6 +1223,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T05:44:18Z",
+          "by": "b3d0fb3e",
+          "text": "No test covers the falls edge (saves.rs sum.falls) or a chain of jumps through the fixpoint; tail-call edge is tested. A fall after the jumper changed r4-r11 is labelled hard (over-hard, safe)."
+        },
+        {
           "at": "2026-11-08T23:12:49Z",
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/saves/summary.rs:733-777 and :919-952 (the `bl` map and the `readers.difference(&called)` relabel to `JUMPED_READ`): tail calls are left out on purpose (`.filter_map(|(&at, &c)| c.filter(|&c…"
