@@ -1129,7 +1129,13 @@
       "by": "owner",
       "at": "2026-11-12T18:55:59Z",
       "scope": ["group:native"],
-      "replaces": "d/a-bar-may-rise-only-when-accesses-move-out-of"
+      "replaces": "d/a-bar-may-rise-only-when-accesses-move-out-of",
+      "retired": {
+        "kind": "merged",
+        "at": "2026-11-12T18:56:10Z",
+        "by": "625afd3a",
+        "other": "d/lift-bars-agents-may-raise-a-count-with-the"
+      }
     }
   ]
 }
