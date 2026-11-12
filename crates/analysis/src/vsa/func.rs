@@ -56,6 +56,12 @@ pub fn classify(prog: &Program, insn: &Insn) -> Ctl {
     );
     match insn.instr {
         Instr::Bx { rm: DReg::Lr, .. } => Ctl::Return,
+        // Thumb's `bx pc` (an interworking veneer into the ARM code after
+        // it) is a jump, whatever comes before: after a `pop {pc}`, the
+        // rule below would take it for `pop {rN}; bx rN` (Kirby -
+        // Nightmare's task switcher: the scheduler's call of resume's
+        // veneer, run as a leaf, became a jump to its ARM half).
+        Instr::Bx { rm: DReg::Pc, .. } => Ctl::Jump,
         Instr::Bx { rm, .. } => match p {
             Some(Insn {
                 instr:
