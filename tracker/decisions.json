@@ -1086,6 +1086,14 @@
       "by": "b67b3cd7",
       "at": "2026-11-12T06:37:44Z",
       "scope": ["group:native"]
+    },
+    {
+      "id": "d/a-networked-adapter-lists-only-the-hosts-the",
+      "title": "A networked adapter lists only the hosts the server says are open",
+      "why": "From {unit:multiplayer/wireless-radio-netplay}: the local radio's 3 s host memory (a guess beyond afska's docs) sent the first Connect to a host's ID from before it reopened; without it the sim trade connects first try at 22 and 200 ms each way, and calm passes. --heard-ms N brings it back.",
+      "by": "8f376444",
+      "at": "2026-11-12T07:42:04Z",
+      "scope": ["multiplayer/wireless-*"]
     }
   ]
 }

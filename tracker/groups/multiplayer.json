@@ -895,15 +895,23 @@
       "check": "recorded",
       "needs": ["multiplayer/wireless-adapter-local"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "8f376444",
-        "session": "8f376444-9b26-4bb9-bc1e-903dc68ee5e5",
-        "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T06:30:40Z",
+        "at": "2026-11-12T07:42:32Z",
+        "evidence": "just emerald-radio (calm, two Emerald processes, alice.sav/bob.sav, local gbaa-server room holding the radio) passed after merging main: connected frame 6718, trade on screen 7920, Mudkip/Torchic swapped, 0 resends. Latency via emerald-wireless --sim-ms: trades up to 200 ms each way; the Union Room gives up the connection from 250; 400 no lasting link (docs/research/multiplayer.md). just check passes; local emerald-wireless unchanged (same end states, identical twice).",
         "branch": "unit/multiplayer/wireless-radio-netplay",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T07:42:32Z",
+          "by": "8f376444",
+          "host": "quack",
+          "pid": 2490379,
+          "start": "10658170",
+          "beats": true,
+          "session": "8f376444-9b26-4bb9-bc1e-903dc68ee5e5",
+          "lane": "quack/4"
+        },
+        "pushed": true
       },
       "notes": [
         {
@@ -920,6 +928,12 @@
       "detail": "From Emerald's netplay trade split once on wander, under load ({unit:multiplayer/wander-split-under-load}): a stall now survives (room::QUIET 8 s), but a paced peer back from a 4 s stall stays ~240 frames behind; time sync holds the one ahead back one frame in 13, so ~50 s at that gap, each changed input a ~240-frame rollback on it (3.7 s under load). Make the gap close in a few seconds (the behind peer running unpaced frames, or holding back harder far ahead), without hurting rollback-feel's budgets. Check: just rollback-feel wander headless --paced with a peer SIGSTOPped 4 s: lead back under 10 frames within 10 s; the feel budget test; just check.",
       "check": "recorded",
       "uses": ["heavy"]
+    },
+    {
+      "id": "multiplayer/desktop-wireless-radio",
+      "title": "Union Room from the desktop: a wireless seat on the server",
+      "detail": "gbaa-desktop has no wireless adapter yet. Give it a networked one (Wireless::networked + netplay::radio::Radio, as emerald-wireless --seat does): --server ADDR --wireless host/join, each window runs only its own Emerald, real time. Check: two windows in a private cu session through a local gbaa-server trade in the Union Room. The fly server needs a redeploy for W datagrams.",
+      "needs": ["multiplayer/wireless-radio-netplay"]
     }
   ]
 }
