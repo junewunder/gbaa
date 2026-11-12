@@ -2586,3 +2586,4 @@
 {"at":"2026-11-12T08:33:26Z","actor":"loop","tag":"eb7b70bf","host":"quack","cmd":"add-unit","id":"native/hw-serial-registers","text":"new unit: Serial registers kept in the hardware library"}
 {"at":"2026-11-12T08:33:29Z","actor":"loop","tag":"eb7b70bf","host":"quack","cmd":"edit","id":"native/nightmare-task-switch","text":"Kirby - Nightmare's task switcher as host coroutines: edited (add-needs)"}
 {"at":"2026-11-12T08:35:07Z","actor":"loop","tag":"51cae3e4","host":"quack","cmd":"done","id":"native/copy-tail-discovery","text":"Discover code past m4a's and Nightmare's copy sources: done, checked by verifier-copy-tail-merged"}
+{"at":"2026-11-12T08:39:43Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/copy-tail-discovery","text":"Discover code past m4a's and Nightmare's copy sources: on main"}

@@ -1315,19 +1315,7 @@
         "checker": "verifier-copy-tail-merged",
         "at": "2026-11-12T08:35:07Z",
         "evidence": "Merged head bd11b32 (main 878cf4a merged in). holes-all on main 878cf4a vs this head: hard 139 to 136; only Nightmare rises, 14 to 15 (resume bx r1 0x08000254, agreed); minish 34-32, rogue 27-26, imperium 22-21. Undiscovered: SoundMain tails gone (emerald/mirror 50-14, minish 52-16), Nightmare 126-10 (0x08000234..58 and return site 0x08005368 discovered). disc-pret 0.9997/0.9555, disc-agb 1.0/0.9835 and 1.0/0.5789: bars hold. just check exit 0. lift-check: 8 programs pass; native-spike's 1 hard hole identical on main 6119e7b (filed as {unit:native/spike-entry-read-hole}). Verifier read the diff: no bugs; doc counts fixed in 89aad85.",
-        "branch": "unit/native/copy-tail-discovery",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T08:35:07Z",
-          "by": "51cae3e4",
-          "host": "quack",
-          "pid": 2489918,
-          "start": "10657789",
-          "beats": true,
-          "session": "51cae3e4-5c5f-4c22-8ab6-a591f23922e4",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -1340,13 +1328,7 @@
           "by": "b67b3cd7",
           "text": "Verifier: run holes-all on origin/main (merged as b9f25c8^2) and on this branch, --against the first; main's summary rework raises hard counts itself (Nightmare 15, moonbeam 11 at b9f25c8). Nightmare's lift now stops at 0x08000254 until its switcher stand-in."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-12T07:02:46Z",
-        "findings": "- Card check not run on the merged branch (tracker/groups/native.json:1310, the Evidence). The card's Done-when needs `just holes-all --against main` to show the copy-tail bytes discovered and no hard count higher. The session ran that only on the pre-merge branch cc18acf against main 92dc9e1, where the hard total went from 106 to 103. Its Evidence says the run on the merged branch (b9f25c8) has not been done yet. Main's summary rework, merged in since, raises hard counts on its own (Nightmare 15, moonbeam 11), so nobody has checked what will actually land. The session's note hands this run to the verifier, but the reviewer has no shell. The next session should run two things: `just holes-all` on main at b9f25c8^1 (origin/main as merged), and `just holes-all --against <that output>` on this branch's head. It should confirm three things: the m4a SoundMain tails and Nightmare's resume and its return site are still discovered; no game's hard count rises except Nightmare's +1 (resume's bx r1 at 0x08000254, explained in d/a-constant-jump-to-a-ram-copy-s-function-is); and the total still falls by about 3. Then it should rerun `just lift-check` and the disc-* bars on the merged head and record the numbers with `just done native/copy-tail-discovery --evidence …`."
-      },
-      "round": "2026-11-12T04:53:37Z"
+      ]
     },
     {
       "id": "native/nightmare-cover-list",
