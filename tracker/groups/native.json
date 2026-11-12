@@ -1568,6 +1568,13 @@
       "detail": "Since {unit:native/entry-read-masking} landed (origin/main 12b2053), gbaa-lift on agb/native-spike stops at: hard hole in f_08006d47 at 0x08006d47: summary: 0x08006d76: reads r4-r11 at entry: r6, passed in r1. So just lift-check fails on native-spike on main (lift-metrics: hard_holes 1>0). Find whether the read is real or the new fall/tail-call rule is over-hard there; fix the rule or give a stand-in. Done when: just lift-check passes on every program; just check passes.",
       "check": "recorded",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/nightmare-entry-reads",
+      "title": "Nightmare lifts again after entry-read masking",
+      "detail": "Since {unit:native/entry-read-masking} landed, gbaa-lift on Kirby - Nightmare has 5 hard summary holes (reads r4-r11 at entry), so the lift's crate doesn't build: 0x08064759 (r8 at 0x080647d0), 0x080647fd (r8 at 0x08064874), 0x0806b411 (r8 at 0x0806b5e8), 0x0806b671 (r9 at 0x0806b782), 0x080ce1f9 (r4: m4a's ChnVolSetAsm, r4 the channel and r5 the track passed in registers by its m4a callers; docs/research/native-holes.md had it under libgcc, now corrected). 0x08064759's read looks path-infeasible (r6 = entry r8 is compared only after r5 != -1, which sets r6 first). Fix the rule where it's over-hard, or give stand-ins (ChnVolSetAsm needs its callers' r4/r5: a stand-in per caller, or the lifter passing r4/r5 to it). Done when: just lift ROM out/lift-kirby-nightmare --name kirby-nightmare reports 0 hard holes and the crate builds; just check passes.",
+      "check": "recorded",
+      "uses": ["heavy"]
     }
   ]
 }
