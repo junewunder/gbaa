@@ -23,6 +23,10 @@
 //!   player has left. A goodbye sent while this player wasn't reading
 //!   (its machine stopped, its buffer full) may be lost; this isn't, as
 //!   the next datagram for that seat asks again.
+//! - `W` channel-datagram: the wireless adapter's radio
+//!   ([`crate::radio`]), each way between a seated player and the room's
+//!   radio on the server: the player's adapter says what it does, the
+//!   radio what it hears. A room has a radio from its first `W`.
 //! - `Q`, player to server: how many rooms are open; the answer is `Q`
 //!   rooms[u32 LE] players[u32 LE] (`gbaa-server --rooms ADDR` asks). The
 //!   codes aren't given: a code is what lets a player in.
@@ -46,6 +50,9 @@ use std::io::ErrorKind;
 use std::net::{SocketAddr, UdpSocket};
 use std::time::{Duration, Instant};
 
+use runtime::link::rfu::air::{Air, Down, MAX_MSG, Up};
+
+use crate::radio::Channel;
 use crate::{CODE_ALPHABET, CODE_LEN};
 
 pub const HOST: u8 = b'H';
@@ -57,6 +64,7 @@ pub const KEEP: u8 = b'K';
 pub const LEAVE: u8 = b'L';
 pub const QUERY: u8 = b'Q';
 pub const GONE: u8 = b'G';
+pub const RADIO: u8 = b'W';
 
 /// How long a player may send nothing before its seat is freed. Seated
 /// players send every frame, and waiting ones ask again twice a second.
@@ -70,6 +78,39 @@ struct Room {
     seats: Vec<Option<(SocketAddr, Instant)>>,
     /// Every seat has filled: the game is on, and a freed seat stays empty.
     began: bool,
+    /// The wireless radio, once a player speaks to it.
+    radio: Option<Radio>,
+}
+
+/// A room's radio, and each seat's channel to it (once that seat has
+/// spoken).
+#[derive(Default)]
+struct Radio {
+    air: Air,
+    chans: Vec<Option<Channel>>,
+}
+
+impl Radio {
+    /// Queue what the air said to each seat.
+    fn tell(&mut self, downs: Vec<(usize, Down)>) {
+        let mut b = [0u8; MAX_MSG];
+        for (s, d) in downs {
+            if let Some(Some(c)) = self.chans.get_mut(s) {
+                let n = d.encode(&mut b);
+                c.send(&b[..n]);
+            }
+        }
+    }
+
+    /// Seat `seat` (whose player is gone) is out of the radio.
+    fn gone(&mut self, seat: usize) {
+        let mut downs = Vec::new();
+        self.air.gone(seat, &mut |s, d| downs.push((s, d)));
+        if let Some(c) = self.chans.get_mut(seat) {
+            *c = None;
+        }
+        self.tell(downs);
+    }
 }
 
 impl Room {
@@ -209,6 +250,7 @@ impl Rooms {
                                 build: build.try_into().unwrap(),
                                 seats: s,
                                 began: false,
+                                radio: None,
                             },
                         );
                         self.players.insert(from, (code, 0));
@@ -283,6 +325,35 @@ impl Rooms {
                 self.passed += 1;
                 vec![(addr, m)]
             }
+            RADIO => {
+                let Some(&(code, seat)) = self.players.get(&from) else {
+                    return Vec::new();
+                };
+                self.heard(from, now);
+                let Some(room) = self.rooms.get_mut(&code) else {
+                    return Vec::new();
+                };
+                let seats = room.seats.len();
+                let r = room.radio.get_or_insert_with(|| Radio {
+                    air: Air::new(),
+                    chans: (0..seats).map(|_| None).collect(),
+                });
+                let seat = seat as usize;
+                let mut downs = Vec::new();
+                if r.chans[seat].is_none() {
+                    r.chans[seat] = Some(Channel::new());
+                    r.air.hello(seat, &mut |s, d| downs.push((s, d)));
+                }
+                let msgs = r.chans[seat].as_mut().unwrap().take(rest, now);
+                for m in msgs {
+                    if let Some(up) = Up::decode(&m) {
+                        r.air.take(seat, up, &mut |s, d| downs.push((s, d)));
+                    }
+                }
+                r.tell(downs);
+                self.passed += 1;
+                Self::flush(room, now)
+            }
             KEEP => {
                 self.heard(from, now);
                 Vec::new()
@@ -312,6 +383,9 @@ impl Rooms {
         };
         if room.seats[seat as usize].is_some_and(|(a, _)| a == who) {
             room.seats[seat as usize] = None;
+            if let Some(r) = &mut room.radio {
+                r.gone(seat as usize);
+            }
         }
         self.log.push(format!(
             "room {}: player {} {why}",
@@ -323,6 +397,34 @@ impl Rooms {
             self.log
                 .push(format!("room {} closed: every player gone", show(&code)));
         }
+    }
+
+    /// A room's radio datagrams due now, to each seat that has spoken to it.
+    fn flush(room: &mut Room, now: Instant) -> Vec<(SocketAddr, Vec<u8>)> {
+        let mut out = Vec::new();
+        let Some(r) = &mut room.radio else {
+            return out;
+        };
+        for (s, c) in r.chans.iter_mut().enumerate() {
+            let (Some(c), Some(Some((addr, _)))) = (c, room.seats.get(s)) else {
+                continue;
+            };
+            for d in c.flush(now) {
+                let mut m = Vec::with_capacity(d.len() + 1);
+                m.push(RADIO);
+                m.extend_from_slice(&d);
+                out.push((*addr, m));
+            }
+        }
+        out
+    }
+
+    /// What every room's radio has to send or send again now.
+    pub fn tick(&mut self, now: Instant) -> Vec<(SocketAddr, Vec<u8>)> {
+        self.rooms
+            .values_mut()
+            .flat_map(|r| Self::flush(r, now))
+            .collect()
     }
 
     /// Free the seats of players who have sent nothing for [`IDLE`], and
@@ -398,7 +500,8 @@ pub fn query(server: SocketAddr) -> std::io::Result<(u32, u32)> {
 /// netplay version `min_version` (0 refuses none), saying on stderr as
 /// rooms open and close.
 pub fn serve(sock: UdpSocket, min_version: u32) -> std::io::Result<()> {
-    sock.set_read_timeout(Some(Duration::from_secs(1)))?;
+    // Often enough for the radio's resends.
+    sock.set_read_timeout(Some(Duration::from_millis(10)))?;
     let mut rooms = Rooms::new(min_version);
     let mut buf = vec![0u8; 65536];
     let mut swept = Instant::now();
@@ -418,6 +521,9 @@ pub fn serve(sock: UdpSocket, min_version: u32) -> std::io::Result<()> {
                     ErrorKind::ConnectionRefused | ErrorKind::ConnectionReset
                 ) => {}
             Err(e) => return Err(e),
+        }
+        for (to, m) in rooms.tick(Instant::now()) {
+            let _ = sock.send_to(&m, to);
         }
         if swept.elapsed() >= Duration::from_secs(1) {
             swept = Instant::now();
