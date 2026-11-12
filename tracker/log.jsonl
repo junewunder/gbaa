@@ -2582,3 +2582,4 @@
 {"at":"2026-11-12T08:31:40Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"multiplayer/wireless-radio-netplay","text":"Emerald's Union Room with the radio on the server: on main"}
 {"at":"2026-11-12T08:31:49Z","actor":"loop","tag":"f336c3b0","host":"quack","cmd":"claim","id":"native/ref-heap-static-arrays","text":"Ref<T> objects in static arrays fit the packed layout: claimed"}
 {"at":"2026-11-12T08:33:05Z","actor":"loop","tag":"eb7b70bf","host":"quack","cmd":"add-unit","id":"native/nightmare-entry-reads","text":"new unit: Nightmare lifts again after entry-read masking"}
+{"at":"2026-11-12T08:33:14Z","actor":"loop","tag":"eb7b70bf","host":"quack","cmd":"note","id":"native/spike-entry-read-hole","text":"native-spike lifts again after entry-read masking: note: Kirby - Nightmare has 5 more hard entry-read holes from the same change ({unit:native/nightmare-entry-reads}); a fix to the rule may cover both."}
