@@ -1314,6 +1314,13 @@
           "lane": "quack/3"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-12T06:58:23Z",
+          "by": "b67b3cd7",
+          "text": "Verifier: run holes-all on origin/main (merged as b9f25c8^2) and on this branch, --against the first; main's summary rework raises hard counts itself (Nightmare 15, moonbeam 11 at b9f25c8). Nightmare's lift now stops at 0x08000254 until its switcher stand-in."
+        }
+      ],
       "round": "2026-11-12T04:53:37Z"
     },
     {
