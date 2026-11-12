@@ -249,18 +249,22 @@
       "branch": "unit/native/lift-bios-affine",
       "minMinutes": 40,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "e610b9cf",
-        "session": "e610b9cf-2c66-4b47-a657-583f71674716",
-        "host": "quack",
-        "pid": 2489427,
-        "start": "10657408",
-        "at": "2026-11-12T13:52:59Z",
+        "at": "2026-11-12T13:58:35Z",
+        "evidence": "Merged latest origin/main (clean, tracker/ only). just check failed docs line budget (commands.md 1982/1981); reflowed a list to fit, commit ab5e54e; just check then passed in full (exit 0).",
         "branch": "unit/native/lift-bios-affine",
-        "resumed": "aa3b6b9a",
-        "prevSession": "aa3b6b9a-6084-4cc5-85af-c3ef173585c2",
-        "pushed": true,
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T13:58:35Z",
+          "by": "e610b9cf",
+          "host": "quack",
+          "pid": 2489427,
+          "start": "10657408",
+          "beats": true,
+          "session": "e610b9cf-2c66-4b47-a657-583f71674716",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
