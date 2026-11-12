@@ -434,6 +434,35 @@ from 584 to 610 of 617 (agbcc 676/676, 0 wrong). What's left is mostly
 not tables: data decoded as code, and stubs and veneers a native build
 could call through `FnRef`.
 
+## The lift's undefined instructions, by kind
+
+`native/lift-undefined-insns`, 2026-11-12: the overnight lift of
+2026-11-11 had 21 "an undefined instruction" hard holes in moonbeam, 24
+in Emerald Rogue and 2 in Imperium (`gbaa-holes` counts none: it doesn't
+count undefined instructions). Each one's halfword and the instructions
+before it (`just dis`):
+
+| Kind | moonbeam / Rogue / Imperium |
+|---|---|
+| GCC's trap after a load through a register proved null (`movs r3, #0; ldr r3, [r3, #k]; udf #255`: `-fisolate-erroneous-paths-dereference`, on by default at `-O2`) | 16 / 20 / 2 |
+| GCC's trap reached by a branch, after a store, or with the null pointer already in a register (the same isolation, laid out apart) | 5 / 2 / 0 |
+| GCC's trap after a call that doesn't return (`bl` to an abort) | 0 / 1 / 0 |
+| Run on past `SoftReset`: Rogue's reset routine ends `svc 1; svc 0`, and the lift went on through its literal pool into the ARM code after it (`e92d`, an ARM `push`'s high half) | 0 / 1 / 0 |
+
+So none was data decoded as code by gap decoding: 46 of the 47 are real
+code, GCC's `udf #255` (Thumb 0xdeff) ending a path that can only crash.
+Discovery already took these encodings as deliberate
+(`analysis::vsa::func::deliberate`); the lifter didn't. Now it plans one
+(`analysis::vsa::func::is_trap`: Thumb `udf #255`/`#254`, ARM 0xe7ffdefe
+and 0xe7f000f0) as `Plan::Undefined { trap: true }`, printed as a
+`panic!` naming the address (the game stops there, as on the GBA, where
+the BIOS's undefined-instruction handler takes it), and the summaries
+end the path there instead of failing it. Any other undefined
+instruction is still a hard hole. `SoftReset` (0x00) and `HardReset`
+(0x26) have no successor (`func::no_return_swi`), so nothing after them
+is decoded as the function's; the `svc` itself stays a hard hole (the
+library has neither call).
+
 ## What the Stage-A lifter should know
 
 - Take holes from `analysis::holes::classify`; its `Report` lists each

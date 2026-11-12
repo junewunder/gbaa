@@ -118,7 +118,9 @@
 //!   runs on the prelude's host coroutines, `task_resume`);
 //! - an indirect jump Recovery didn't resolve;
 //! - a BIOS call the prelude doesn't have;
-//! - an undefined instruction, a jump to no code;
+//! - an undefined instruction, a jump to no code (but a compiler's trap,
+//!   `udf #255` and the like, which the lift prints as a `panic!`: modern
+//!   GCC ends a path it proved dereferences null with one);
 //! - a function that returns without keeping r4-r11 and sp.
 //!
 //! Soft holes (counted in the report): every RAM access but the globals'
@@ -2153,7 +2155,15 @@ impl FnPrinter<'_, '_> {
                 let c = self.call_then(format!("{call} swi_done(g);"), next, at);
                 writeln!(s, "{ind}{c}").unwrap();
             }
-            Plan::Undefined => self.hole(at, "an undefined instruction"),
+            // A compiler's trap: the game stops there (on the GBA, the
+            // BIOS's undefined-instruction handler), as `call_fn` does on
+            // a call to no function.
+            Plan::Undefined { trap: true } => writeln!(
+                s,
+                "{ind}panic!(\"{at:#010x}: a compiler's trap (undefined instruction), which stops the game\");"
+            )
+            .unwrap(),
+            Plan::Undefined { trap: false } => self.hole(at, "an undefined instruction"),
         }
         s
     }

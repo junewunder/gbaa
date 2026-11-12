@@ -1035,8 +1035,9 @@ pub fn edge(ctx: &Ctx, f: &Func, all: &BTreeSet<u32>, gb: &GBlock, x: &ExitInfo)
                 Edge::Goto(own)
             }
         }
+        Plan::Swi { .. } if crate::func::no_return_swi(ctx, x) => Edge::Stop,
         Plan::Swi { next } => Edge::Swi(next),
-        Plan::Undefined => Edge::Stop,
+        Plan::Undefined { .. } => Edge::Stop,
     }
 }
 

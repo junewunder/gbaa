@@ -131,6 +131,19 @@ pub enum JumpRes {
     Rejected(Jump),
 }
 
+/// Whether `word` (a halfword in Thumb) is a compiler's trap: Thumb
+/// `udf #255` from GCC or `udf #254` from LLVM, ARM 0xe7ffdefe from LLVM
+/// or 0xe7f000f0 from GCC. Modern GCC ends a path it proved dereferences
+/// null (`-fisolate-erroneous-paths-dereference`) or reaches
+/// `__builtin_unreachable` with one, so it is real code, never data.
+pub fn is_trap(word: u32, thumb: bool) -> bool {
+    if thumb {
+        matches!(word, 0xdeff | 0xdefe)
+    } else {
+        matches!(word, 0xe7ff_defe | 0xe7f0_00f0)
+    }
+}
+
 /// Whether code may hold the undefined instruction `insn` on purpose, so
 /// that it doesn't make the code data ([`FuncResult::undefined`]): a
 /// compiler's trap (`__builtin_trap`, a Rust abort: Thumb `udf #255`
@@ -139,11 +152,9 @@ pub enum JumpRes {
 /// may be a call that never returns (Super Mariomon's assert ends in
 /// 0xefff after its print).
 pub fn deliberate(prog: &Program, insn: &Insn) -> bool {
-    let trap = if insn.thumb {
-        matches!(prog.read(insn.addr, 2), Some(0xdeff | 0xdefe))
-    } else {
-        matches!(prog.read(insn.addr, 4), Some(0xe7ff_defe | 0xe7f0_00f0))
-    };
+    let trap = prog
+        .read(insn.addr, if insn.thumb { 2 } else { 4 })
+        .is_some_and(|w| is_trap(w, insn.thumb));
     let before = insn.addr.checked_sub(4);
     trap || before
         .and_then(|p| prog.decode(p, insn.thumb))
