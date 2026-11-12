@@ -1594,6 +1594,13 @@
           "lane": "quack/3"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-12T10:38:25Z",
+          "by": "dd145eb8",
+          "text": "Lift has no m4a NopCall (BIOS 0x1B0, play build sets NOP_CALL_LATCH 0xE3A0C301): call_fn panics there. Whoever lifts m4a's jump list must set g.bios_latch to that too. Open bus past 0x4000 still panics in the lift."
+        }
+      ],
       "round": "2026-11-12T10:07:23Z"
     },
     {
