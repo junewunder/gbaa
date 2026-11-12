@@ -1880,12 +1880,12 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   one-way latency, jitter, a sine wander, random spikes, loss, reordering
   and duplicates (fields: `netplay::proxy::Profile`). Passes when both
   peers' hashes every 60 frames and at the end are a straight run's, with
-  no desync; prints the proxy's counts. `--console gba` plays two GBAs on
-  a cable running a tiny key-reading ROM instead of the toy console;
-  `--frames N` (600), `--delay D` (0), `--fps F` (60), `--linger-ms M`.
-  The pieces alone: `gbaa-pingsim proxy PROFILE A_ADDR B_ADDR`, `peer
-  SEAT ADDR`, `straight`. `cargo test -p netplay --test ping_sim` runs
-  every profile (and `rough` with GBAs), about 20 s of wall time.
+  no desync; prints the proxy's counts. `--console gba` plays two GBAs on a
+  cable running a tiny key-reading ROM, `single-pak` homebrew booting a
+  cartless seat by `MultiBoot`; `--frames N` (600), `--delay D` (0), `--fps
+  F` (60), `--linger-ms M`. The pieces alone: `gbaa-pingsim proxy PROFILE
+  A_ADDR B_ADDR`, `peer SEAT ADDR`, `straight`. `cargo test -p netplay
+  --test ping_sim` runs every profile (GBAs, single-pak on `rough`), 20 s.
 - The feel sim (multiplayer/rollback-feel-sim, `netplay::feel`):
   `just rollback-feel-sim [PROFILE] [ARGS]` runs `gbaa-pingsim feel`:
   every peer in one process, in simulated time, through the profile's
