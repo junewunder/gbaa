@@ -1751,17 +1751,6 @@
       "check": "independent",
       "uses": ["heavy"],
       "minMinutes": 150,
-      "record": {
-        "state": "claimed",
-        "by": "5b8af8c2",
-        "session": "5b8af8c2-68b1-4795-b3e7-a66ede4b4d34",
-        "host": "quack",
-        "pid": 2489918,
-        "start": "10657789",
-        "at": "2026-11-12T13:07:54Z",
-        "branch": "unit/native/native-first-stop",
-        "beats": true
-      },
       "round": "2026-11-12T13:07:54Z"
     },
     {
