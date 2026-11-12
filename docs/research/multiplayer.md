@@ -370,7 +370,8 @@ broadcast, parent and child slots, packets. Each peer runs only its own
 console, so a Union Room can hold many players. Needs the device emulated
 first locally (two machines in one hub, adapter to adapter), then the
 radio moved onto the network, then a measurement of how much latency
-librfu's timeouts allow.
+librfu's timeouts allow. All three done (2026-11-08, 2026-11-12; "The
+wireless adapter, locally", "The radio on the server").
 
 **Presence, later.** A shared overworld is not a link feature. Each game
 reports where its player is (map, coordinates, facing, sprite) by reading
@@ -1604,9 +1605,108 @@ in one process, from librfu's game side (pret's `librfu_stwi.c`,
   at the trading board, ALICE offers her Mudkip, BOB accepts, and the
   trade and its save complete, identically twice.
 
-Not done: the radio across the network (each player runs only their own
-console), Berry Crush and the other wireless games, a check with more
-than two adapters, and the adapter's state in save states.
+Not done: Berry Crush and the other wireless games, a check with more
+than two adapters, and the adapter's state in save states. The radio
+across the network is the next section.
+
+## The radio on the server
+
+multiplayer/wireless-radio-netplay (2026-11-12): each player runs only
+their own Emerald and adapter (`Wireless::networked`), and the radio
+is a `gbaa-server` room's (option F):
+
+- **Who decides.** The server's `runtime::link::rfu::air::Air` (no_std,
+  so the server and any test share it) is the one place that says who
+  hosts with which broadcast, who is whose child in which slot, and
+  where packets go. Each adapter tells it what it does (`Up`: host,
+  leave, connect, kick, a packet) and keeps a view of what it heard
+  (`Down`: the open hosts, joined or refused, a host's children,
+  dropped, a packet), from which it answers its GBA at once, as a real
+  adapter answers from what it last heard. A `Connect` is pending
+  (`IsConnectionComplete` gives status 1, which `AgbRfu_LinkManager.c`
+  polls until its `connect_period` runs out) until the server answers.
+  Host IDs are the adapter's own, `0x1000 * (seat + 1)` counting up, so
+  no two seats collide without asking; a child's ID is the server's,
+  from `0x8001`.
+- **The wire.** Rooms' `W` datagrams (`relay::rooms`), each a
+  `relay::radio::Channel` datagram: reliable and in order (a number per
+  message, a cumulative ack, resent after twice the smoothed round
+  trip), so a lost `Connect` or packet costs a resend, never a radio out
+  of step. The player's side is `netplay::radio::Radio`, pumped four
+  times a frame and while the frame waits for its turn.
+- **Packets.** A host's packet goes to every child and a child's to its
+  host as each is sent, queued (eight deep) and read one per
+  `ReceiveData`. The local radio's rhythm, a child's packet waiting for
+  the host's next, lost packets here: the host numbers its children's
+  packets (`link_rfu_2.c`, `childRecvIds`, three bits) and calls five
+  out of turn in a row a link error (`0x8100`, F_RFU_ERROR_8 | 1), and
+  under calm's jitter a child often sent twice before the host's next
+  packet came, the first overwritten.
+- **The guess beyond afska's docs** (a search lists a host it heard
+  within 3 s, `HEARD_FOR`): the networked radio still needs it, and
+  keeps it (`--heard-ms 0` turns it off). Without it, at 100 and 120 ms
+  each way BOB's offer never showed on ALICE's board (her presses found
+  it empty; nothing connected), though 0-80 and 150-200 ms passed: a
+  host is open only part of the time, between searches of its own, and
+  whether ALICE's board reads it while the server last said "open"
+  depends on the delay. With it every latency to 200 ms trades. Its
+  cost: the first `Connect` can go to the host's ID from before it last
+  reopened (each `StartHost` takes a new one) and be refused, so the
+  trade connects one retry later (22 ms: frame 6812, not 6718).
+  Remembered hosts are kept one per adapter (the ID's top four bits),
+  as the local radio's index does.
+- **The check:** `just emerald-radio` (`docs/tools/commands.md`): two
+  processes through a server in the check's, each path through the ping
+  simulator's calm (20-25 ms each way). 2026-11-12: connected at frame
+  6812, the trade on screen at 7981 (the local radio: 6715 and 7883),
+  back in the room by 10284; about 3300 messages each way, none resent,
+  no frame late.
+
+How much latency it takes (`emerald-wireless --sim-ms N`: the same two
+consoles and the server's `Air` in one process on simulated time, N ms
+each way between each console and the server, so twice that between
+the consoles; no jitter or loss; 20000 frames, both pressing A every
+second from 9400 so a late trade can finish). Rerun 2026-11-12 with the
+adapter as it ships (the 3 s memory); the last column is the same run
+with `--heard-ms 0`:
+
+| each way | connected | trade on screen | back in the room | without the memory |
+|---|---|---|---|---|
+| 0 ms | 6714 | 7882 | 10166 | the same |
+| 22 ms | 6812 | 7909 | 10215 | traded (connected 6718) |
+| 45 ms | 6815 | 7999 | 10330 | traded |
+| 60 ms | 6816 | 7955 | 10304 | traded |
+| 80 ms | 6819 | 8039 | 10428 | traded |
+| 100 ms | 6821 | 9752 | 12178 | no: BOB's offer never on ALICE's board |
+| 120 ms | 6824 | 9778 | 12245 | no: the same |
+| 150 ms | 6827 | 9810 | 12326 | traded |
+| 175 ms | 6830 | 9962 | 12525 | traded |
+| 200 ms | 6833 | 9992 | 12600 | traded |
+| 250 ms | 6839 | no | no: BOB's side gave the connection up at 7080 | no: the same (connected 6772) |
+| 300 ms | 6845 | no | no: both gave it up at 7086 | no: the same (connected 6784) |
+| 400 ms | no | no | no: BOB's walk blocked, see below | the same |
+
+(Frames are each player's own, which start together in the sim; no run
+had a link error. "Connected" is ALICE's adapter becoming BOB's child.)
+
+At 400 ms the fixed presses no longer fit at all: ALICE's avatar comes
+into the room at a different moment and stands in BOB's path (he stops
+at 3,6, not 3,3, short of the attendant), so his presses talk to her
+instead of registering. Without the memory that talk connected (BOB
+ALICE's child at frame 4660, dropped at 4901), which is the "4660" an
+earlier version of this table showed; it is not the trade's connection.
+So 400 ms says nothing about the link, only about the script.
+
+So librfu's own timeouts are not what limits it: the link held at 200
+ms each way (about 800 ms round trip between the consoles) with no
+error. What gives out first is the Union Room's handshake after
+connecting: between 200 and 250 ms each way, with the adapter as it
+ships, the connection made but given up within about 4 seconds, with
+no link error. From 100 ms on, every exchange in the room takes longer
+(the trade screen 30 seconds later), so the check's fixed presses no
+longer fit and the trade finishes on the later presses. Real paths add
+jitter and loss, which the sim leaves out; calm's (5 ms) passed in real
+time.
 
 ## Questions for june
 
