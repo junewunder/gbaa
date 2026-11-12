@@ -249,16 +249,10 @@
       "branch": "unit/native/lift-bios-affine",
       "minMinutes": 40,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "625afd3a",
-        "session": "625afd3a-88ca-4d8e-b948-b204f5cc6e89",
-        "host": "quack",
-        "pid": 4142206,
-        "start": "14910976",
-        "at": "2026-11-12T16:44:30Z",
-        "resumed": "eae1c8a3",
-        "prevSession": "eae1c8a3-81b6-4774-b682-105c8bd914f9",
-        "pushed": true
+        "at": "2026-11-12T16:48:38Z",
+        "evidence": "Merged origin/main (8013955) into unit/native/lift-bios-affine at 377762c: clean, only tracker/ and docs/machines.md since the settled merge 957d9f4. Full just check passed on 377762c (check-nostd, rebuildable, fmt, clippy -D warnings, workspace tests: exit 0), run by hand in lane 2's clone outside a lane run so the stop time couldn't cut it off."
       },
       "notes": [
         {
