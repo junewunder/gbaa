@@ -1536,6 +1536,17 @@
       "detail": "docs/native-stage-b.md, 'The first game': the stage-A prelude's ld8/16/32 and st8/16/32 have no arm for 0x0D-0x0F, so Metroid's byte store at 0x0E007F80 panics; and Game::new leaves Hw::save the 512 Kbit flash chip where the play build detects the kind (save::Kind::detect: Metroid is SRAM_V113). Map them to Hw::save as runtime::bus does (byte lanes, the EEPROM at 0x0D), set the kind from ROM. Done when: a lift-check program that writes and reads its SRAM passes (a planted wrong store caught), and just check passes.",
       "check": "independent",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "28dc0a51",
+        "session": "28dc0a51-8c19-468a-a7a7-97e6b429929c",
+        "host": "quack",
+        "pid": 2490379,
+        "start": "10658170",
+        "at": "2026-11-12T10:28:21Z",
+        "branch": "unit/native/lift-save-memory",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-12T10:28:09Z",
