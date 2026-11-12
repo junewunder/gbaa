@@ -2660,3 +2660,5 @@
 {"at":"2026-11-12T11:23:37Z","actor":"loop","tag":"d258b190","host":"quack","cmd":"ask","text":"asked the owner: Raise native-tasks' unproven-function-words bar 57 to 59?","q":"q/raise-native-tasks-unproven-function"}
 {"at":"2026-11-12T11:24:07Z","actor":"loop","tag":"598b2669","host":"quack","cmd":"claim","id":"native/check-holes-copies","text":"The native check skips the holes file's RAM code copies: claimed"}
 {"at":"2026-11-12T11:24:18Z","actor":"loop","tag":"391251bf","host":"quack","cmd":"done","id":"merge/quack-lane3-native-lift-bios-region","text":"Merge main on quack lane 3: done"}
+{"at":"2026-11-12T11:27:18Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/play-native-metroid-interp","text":"Metroid's native-timing play build strays from its interp: on main"}
+{"at":"2026-11-12T11:27:23Z","actor":"loop","tag":"3402e3f4","host":"quack","cmd":"claim","id":"native/lift-bios-more","text":"Lifted code makes SoftReset, RegisterRamReset and HuffUnComp: claimed"}

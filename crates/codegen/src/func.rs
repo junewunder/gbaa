@@ -743,16 +743,49 @@ pub fn successors(ctx: &Ctx, x: &ExitInfo) -> Vec<u32> {
 /// block too: an IRQ it lets through is taken at the tick after it, so the
 /// compiled code takes it at the same instruction as the interpreter, which
 /// ticks after each one (native/ime-release). Elsewhere the store's tick
-/// would only be later by a block, as any I/O write's is.
+/// would only be later by a block, as any I/O write's is. So does an idle
+/// loop's conditional branch: where it isn't taken the loop is left, and
+/// the interpreter syncs there ([`Idle::Exit`], `rt::idle_exit`, which
+/// brings up a clock a DMA in the loop moved); in the block's middle the
+/// not-taken path would have no exit to sync at
+/// (native/play-native-metroid-interp).
 fn build_block(ctx: &Ctx, k: u32, stops: &BTreeSet<u32>) -> GBlock {
     let gb = build_block_until(ctx, k, stops, None);
-    if ctx.cfg.clock == Clock::Native
-        && let Some(at) = ime_store(&gb.block)
-        && gb.insns.last().is_some_and(|&(last, _)| last != at)
-    {
-        return build_block_until(ctx, k, stops, Some(at));
+    if ctx.cfg.clock == Clock::Native {
+        let split = [ime_store(&gb.block), idle_branch(ctx, &gb)]
+            .into_iter()
+            .flatten()
+            .min();
+        if let Some(at) = split
+            && gb.insns.last().is_some_and(|&(last, _)| last != at)
+        {
+            return build_block_until(ctx, k, stops, Some(at));
+        }
     }
     gb
+}
+
+/// The address of the first conditional branch in `gb` that is an idle
+/// loop's back edge, as [`exits`] finds one (ROM code only).
+fn idle_branch(ctx: &Ctx, gb: &GBlock) -> Option<u32> {
+    if ctx.base != ROM_BASE {
+        return None;
+    }
+    let size = if gb.block.thumb { 2 } else { 4 };
+    let fetch = |a: u32| ctx.read(a, size);
+    gb.insns.iter().find_map(|&(at, instr)| match instr {
+        Instr::Branch {
+            link: false,
+            target,
+            cond,
+        } if cond != Cond::Al
+            && runtime::machine::is_rom(at)
+            && analysis::idle::is_idle_edge(fetch, at, target, gb.block.thumb) =>
+        {
+            Some(at)
+        }
+        _ => None,
+    })
 }
 
 /// The address of the first instruction in `b` that stores to `IME`.
