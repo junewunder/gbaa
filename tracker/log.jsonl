@@ -2728,3 +2728,4 @@
 {"at":"2026-11-12T16:48:59Z","actor":"session","tag":"625afd3a","host":"quack","cmd":"merged","id":"native/lift-bios-affine","text":"Lifted code makes BgAffineSet and ObjAffineSet: on main"}
 {"at":"2026-11-12T18:55:48Z","actor":"session","tag":"625afd3a","host":"quack","cmd":"decide","text":"decided: Lift bars: agents may raise a count, with the cause named","d":"d/lift-bars-agents-may-raise-a-count-with-the"}
 {"at":"2026-11-12T18:55:57Z","actor":"owner","tag":"625afd3a","host":"quack","cmd":"answer","text":"the owner answered \"Raise native-tasks' unproven-function-words bar 57 to 59?\": Raise it to 59","q":"q/raise-native-tasks-unproven-function","d":"d/raise-native-tasks-unproven-function","via":"625afd3a"}
+{"at":"2026-11-12T18:55:59Z","actor":"session","tag":"625afd3a","host":"quack","cmd":"decide","text":"decided: Lift bars: agents may raise a count, with the cause named","d":"d/lift-bars-agents-may-raise-a-count-with-the-2"}
