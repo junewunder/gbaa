@@ -1700,6 +1700,9 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   wireless adapter whose radio is the server room's, as `emerald-wireless
   --seat`; its own GBA only, interpreted, real time, from reset. A radio
   silent for 10 s is said (a server older than the radio, as fly's was).
+  From the window (multiplayer/menu-wireless-room): the Netplay page's
+  Link row, on Wireless, makes Host a room and Join wireless; the game
+  alone after it goes on from the seat's state.
 - Linked play: `gbaa-desktop ROM --link B.sav` runs a second GBA on the
   same ROM, on one cable with the first (`runtime::link`;
   `crates/desktop/src/link.rs`), the two screens side by side in one
