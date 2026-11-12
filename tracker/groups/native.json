@@ -1278,15 +1278,22 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "review",
         "by": "21ac895a",
-        "session": "21ac895a-0051-45ec-874a-3fad33b396f8",
-        "host": "quack",
-        "pid": 2489427,
-        "start": "10657408",
-        "at": "2026-11-12T04:53:34Z",
+        "at": "2026-11-12T06:58:26Z",
+        "evidence": "After merging origin/main (ea60907, bar fix 67cc5eb): just check passes; just lift-check --only native-tasks passes (600 frames 0 differences; planted store caught at EWRAM 0x020000d0; planted hole caught: f_080001a4 at 0x080001c0 stack switch); lift-check on the 7 other agb programs except native-spike passes. native-spike fails on pure origin/main 12b2053 too (f_08006d47 summary hole), filed as {unit:native/spike-entry-read-hole}. Nightmare's lift now has exactly its 3 holes 0x08000244/0x08000278/0x08000298; other corpus games gain only SDK soft-reset and Moonbeam's longjmp switches. lines_prelude 724->850 (task facility). Test ROM matches mGBA at frame 600 (ec4286836efdf369).",
         "branch": "unit/native/task-coroutines",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T06:58:26Z",
+          "by": "21ac895a",
+          "host": "quack",
+          "pid": 2489427,
+          "start": "10657408",
+          "beats": true,
+          "session": "21ac895a-0051-45ec-874a-3fad33b396f8",
+          "lane": "quack/2"
+        }
       },
       "round": "2026-11-12T04:53:34Z"
     },
