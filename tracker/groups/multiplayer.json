@@ -950,15 +950,22 @@
       "id": "multiplayer/menu-wireless-room",
       "title": "Host or join a wireless room from the window's menu",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "9dc0f7d7",
-        "session": "9dc0f7d7-5af1-4f5f-9d65-f69dfd184568",
-        "host": "quack",
-        "pid": 2489918,
-        "start": "10657789",
-        "at": "2026-11-12T09:50:22Z",
+        "at": "2026-11-12T10:03:08Z",
+        "evidence": "Checked 2026-11-12 on quack in a private cu session: two Emerald windows (alice.sav, bob.sav copies) through a local gbaa-server, from the menus alone. Netplay page, Link row set to Wireless, Host a room: page showed code 8RQ96J big, title 'wireless room 8RQ96J, 1 of 2 players in'. Other window typed the server and code, Join: titles 'player 1' / 'player 2'. In-room page listed radio datagrams and 12 adapter transfers. Leave the room ended the joiner ('wireless: 1170 frames in 19.6 s, 0 late, 12 transfers'; server 'player 2 left'), page said 'You left the room.' The menu unit test covers Link toggling into Ask.wireless for host and join. just check passes after merging main. Built on {unit:multiplayer/desktop-wireless-radio}'s branch, merged in, which isn't on main yet.",
         "branch": "unit/multiplayer/menu-wireless-room",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T10:03:08Z",
+          "by": "9dc0f7d7",
+          "host": "quack",
+          "pid": 2489918,
+          "start": "10657789",
+          "beats": true,
+          "session": "9dc0f7d7-5af1-4f5f-9d65-f69dfd184568",
+          "lane": "quack/3"
+        }
       },
       "notes": [
         {
