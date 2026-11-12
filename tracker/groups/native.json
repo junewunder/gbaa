@@ -1370,19 +1370,7 @@
         "by": "5fa61def",
         "at": "2026-11-12T05:51:22Z",
         "evidence": "Val::cap absorbs into RomFrom(lo) only pointers before the next code (run-scoped code-address list), ROMS widening per data run; 2 unit tests fail on old code, 24 fnref tests pass. Merged main (1d4a34d): just lift-metrics 0 over/0 under at main's bars (owner's raise already covered), just check green.",
-        "branch": "unit/native/fnref-romfrom-absorb",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T05:51:22Z",
-          "by": "5fa61def",
-          "host": "quack",
-          "pid": 2490379,
-          "start": "10658170",
-          "beats": true,
-          "session": "5fa61def-e288-4e25-907a-003e0a082568",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -1390,8 +1378,7 @@
           "by": "b9262a93",
           "text": "Fix committed on branch (a1683db): cap absorbs only up to bound(lo) via a run-scoped thread-local of code addrs; ROMS widening per data run. 2 tests. If owner says raise: set bars to new values (just lift-metrics shows them), merge main, just check, done."
         }
-      ],
-      "round": "2026-11-08T19:11:58Z"
+      ]
     },
     {
       "id": "native/metroid-drop-nes-standin",
