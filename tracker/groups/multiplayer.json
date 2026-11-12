@@ -881,15 +881,22 @@
       "title": "Emerald's netplay trade split once on wander, under load",
       "detail": "From the link-cable survey (2026-11-08, quack, load average 18 from other lanes): just emerald-netplay-trade wander failed once: player 1 saw player 2 leave at frame 1119, player 2 left at 1144 (its max frame 3400 ms, round trip up to 3439 ms), each played on alone and the end hashes differed. The rerun and calm passed. Find why a 3.4 s stall ended the session (the stopped-answering timeouts are 5 s freeze plus 15 s), and make a stalled peer catch up instead. Check: just emerald-netplay-trade wander passes 5 times in a row with a peer SIGSTOPped for 4 s mid-run; just check.",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "18d209b3",
-        "session": "18d209b3-06f2-421f-8061-da4ac3c8552e",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T06:02:10Z",
+        "at": "2026-11-12T06:52:54Z",
+        "evidence": "Cause: room::QUIET was 3 s and a deep rollback (up to 300 frames) sent nothing while it ran, 3.4 s under load. Fix: rollback sends inputs every 16 rerun frames (rollback::KEEP_ALIVE, test a_deep_rollback_keeps_sending_while_it_runs: 1 send before, 13 after), QUIET 8 s. New emerald-trade --stop SEAT@SECS+DUR SIGSTOPs a player. Before: just emerald-netplay-trade wander --stop 2@20+4 split (each took the other to have left). After, quack 2026-11-12: 5 in a row passed (stopping players 2,1,2,1,2 for 4 s at 20 s), all ending 35d6b1be; after merging main once more, passed on f57d24ba. just check passes before and after the merge.",
         "branch": "unit/multiplayer/wander-split-under-load",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T06:52:54Z",
+          "by": "18d209b3",
+          "host": "quack",
+          "pid": 2489252,
+          "start": "10657014",
+          "beats": true,
+          "session": "18d209b3-06f2-421f-8061-da4ac3c8552e",
+          "lane": "quack/1"
+        }
       },
       "round": "2026-11-12T06:02:10Z"
     },
