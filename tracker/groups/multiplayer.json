@@ -895,17 +895,30 @@
       "check": "recorded",
       "needs": ["multiplayer/wireless-adapter-local"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "4d69fe66",
-        "session": "4d69fe66-e9f8-495d-a27d-ed2db80a85f4",
-        "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T07:47:59Z",
+        "at": "2026-11-12T08:26:28Z",
+        "evidence": "Review fixes: latency sweep rerun (emerald-wireless --sim-ms 0-400) on the shipped adapter, which now keeps the 3 s host memory (without it 100/120 ms lost BOB's offer; with it 0-200 ms trade, 250+ handshake gives up; 400 ms is the script blocked, the old 4660 explained). just emerald-radio calm after merging main: pass (traded, 0 resent); just check passes.",
         "branch": "unit/multiplayer/wireless-radio-netplay",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T08:26:28Z",
+          "by": "4d69fe66",
+          "host": "quack",
+          "pid": 2490379,
+          "start": "10658170",
+          "beats": true,
+          "session": "4d69fe66-e9f8-495d-a27d-ed2db80a85f4",
+          "lane": "quack/4"
+        },
+        "pushed": true
       },
       "notes": [
+        {
+          "at": "2026-11-12T08:26:32Z",
+          "by": "4d69fe66",
+          "text": "Networked adapter keeps HEARD_FOR by default now: without it the sim lost BOB's offer at 100/120 ms. Sim log prints positions; at 400 ms ALICE's avatar blocks BOB's scripted walk at 3,6."
+        },
         {
           "at": "2026-11-12T07:47:47Z",
           "by": "manual",
