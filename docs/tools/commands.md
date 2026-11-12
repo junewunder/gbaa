@@ -1346,9 +1346,10 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   --native` runs them for 600 frames, capped at 3 GB, with no `--replaced`
   list: everything but the stack and the code copies is compared. The
   spike lifted with its `planted_store` (0x08000186, the V-blank handler's
-  frame count) must be caught, and with its `planted_hole` (agb's IRQ
-  wrapper's stand-in dropped) the lift and the build must fail naming
-  `f_03000000`'s `mrs`; native-tasks likewise (a task's store; its yield's
+  frame count) must be caught, and with its `planted_hole` (portable_atomic's
+  `interrupt::disable` stand-in dropped) the lift and the build must fail
+  naming `f_08002728`'s `mrs`, a critical section's, which the lifter
+  leaves hard (it prints only the reset's and the IRQ wrapper's); native-tasks likewise (a task's store; its yield's
   stack switch); native-dma's (0x08000180, `dma_set`'s `DMAxCNT`, a unit
   more) and native-save's (0x080002ac, an SRAM `strb`) too.
   native-fallthrough, native-irq-hold, native-frame-locals and
