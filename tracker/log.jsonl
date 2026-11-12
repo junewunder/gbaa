@@ -2636,3 +2636,4 @@
 {"at":"2026-11-12T10:43:25Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-bios-region","text":"Lifted loads from the BIOS read the play build's latch: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-12T10:43:38Z","actor":"loop","tag":"9fcf9764","host":"quack","cmd":"claim","id":"native/lift-bios-region","text":"Lifted loads from the BIOS read the play build's latch: claimed"}
 {"at":"2026-11-12T10:44:35Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/hw-dma-registers","text":"DMA by its registers in the hardware library: on main"}
+{"at":"2026-11-12T10:44:40Z","actor":"loop","tag":"ba1a464f","host":"quack","cmd":"claim","id":"native/play-native-metroid-interp","text":"Metroid's native-timing play build strays from its interp: claimed"}
