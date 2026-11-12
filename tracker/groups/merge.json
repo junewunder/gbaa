@@ -261,6 +261,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T14:01:26Z",
+          "by": "eae1c8a3",
+          "text": "main conflicted again in lift-check.toml (native-bios-more, native-dma bars); settled: lines from main, lines_prelude 1131 from branch; lift-metrics 0 over/0 under; merge commit 957d9f4. Handed out at 08:59 again; just check cut off a 6th time. Next: just check, then done."
+        },
+        {
           "at": "2026-11-12T13:58:59Z",
           "by": "manual",
           "text": "Merging failed again: merging main conflicts in crates/codegen/lift-check.toml"
@@ -269,11 +274,6 @@
           "at": "2026-11-12T13:52:40Z",
           "by": "aa3b6b9a",
           "text": "merged main again (tracker/ only, clean, a900d93). Handed out at 08:51 despite min-minutes 40: loop ignores min-minutes for this unit (factory bug, for owner). just check cut off a 5th time. Next: run just check at run start, then done."
-        },
-        {
-          "at": "2026-11-12T13:50:47Z",
-          "by": "7fe4f8d3",
-          "text": "merged main again (tracker/ only, clean, 4758003). Loop still handed this out at 08:49 despite min-minutes 25 (loop bug?); just check cut off a 4th time. Raised to 40. Next: run just check early in a run, then record done."
         }
       ],
       "round": "2026-11-12T13:43:18Z"
