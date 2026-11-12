@@ -1703,15 +1703,24 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "7492320f",
-        "session": "7492320f-6704-408b-9f75-751df2d10449",
-        "host": "quack",
-        "pid": 2489427,
-        "start": "10657408",
-        "at": "2026-11-12T11:49:58Z",
+        "checker": "verifier-7c3e91",
+        "at": "2026-11-12T13:35:43Z",
+        "evidence": "Prelude affine_set prints swi 0x0E/0x0F over runtime::bios::math (verifier matched it to the play build). lift-check --only native-bios-affine passed after merging main (600 frames, 0 differences, packed same; verifier reran it). gbaa-holes vs main: swi 0x0e/0x0f lines 2->0 on minish-cap, emerald, emerald-rogue, imperium; hard 93->85. gbaa-lift: 0x0e/0x0f holes 1+1->0 on minish-cap (42->40) and emerald (28->26); 0 on rogue and imperium (new lifter only, no time for main's). just check green. lines_prelude 961->994: +33 prelude lines (affine_set). native-spike's hard hole is on main too, filed.",
         "branch": "unit/native/lift-bios-affine",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T13:35:43Z",
+          "by": "7492320f",
+          "host": "quack",
+          "pid": 2489427,
+          "start": "10657408",
+          "beats": true,
+          "session": "7492320f-6704-408b-9f75-751df2d10449",
+          "lane": "quack/2"
+        },
+        "pushed": true
       },
       "round": "2026-11-12T11:49:58Z"
     },
