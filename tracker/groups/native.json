@@ -1583,15 +1583,23 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "9fcf9764",
-        "session": "9fcf9764-90bc-4e3b-8d61-b6f6ae7454c1",
-        "host": "quack",
-        "pid": 2489918,
-        "start": "10657789",
-        "at": "2026-11-12T10:43:38Z",
+        "checker": "subagent-a87d606f",
+        "at": "2026-11-12T11:15:27Z",
+        "evidence": "Fresh verifier subagent: just lift-check --only native-bios-region passed (601 frames, 0 differences, packed layout same); mgba-diff 601 matches route hash 966182bb68b4b4b0, incl. new Halt slot 10 (0xE3A02004: review's AFTER_IRQ fix was wrong, lift-check caught it at frame 3). just check green after merging main (78a8847).",
         "branch": "unit/native/lift-bios-region",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T11:15:27Z",
+          "by": "9fcf9764",
+          "host": "quack",
+          "pid": 2489918,
+          "start": "10657789",
+          "beats": true,
+          "session": "9fcf9764-90bc-4e3b-8d61-b6f6ae7454c1",
+          "lane": "quack/3"
+        }
       },
       "notes": [
         {
