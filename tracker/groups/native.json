@@ -1516,6 +1516,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T09:56:55Z",
+          "by": "d12ab564",
+          "text": "Landed: Metroid (DMA3SAD) and Nightmare (DMA0CNT_H) should get past their first-frame panics now; rerun both native builds headless to find the next stop ({unit:native/native-first-stop})."
+        },
+        {
           "at": "2026-11-11T15:50:55Z",
           "by": "6a8b662c",
           "text": "2026-11-11: overnight Metroid and Nightmare native builds both panic before frame 1 (headless): Metroid at I/O 0x0d4 (DMA3SAD), Nightmare at 0x0ba (DMA0CNT_H). This blocks both from a first frame; rerun both after it lands to find the next."

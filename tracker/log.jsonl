@@ -2616,3 +2616,4 @@
 {"at":"2026-11-12T09:54:19Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"multiplayer/desktop-wireless-radio","text":"Union Room from the desktop: a wireless seat on the server: on main"}
 {"at":"2026-11-12T09:54:28Z","actor":"loop","tag":"00024cba","host":"quack","cmd":"claim","id":"native/lift-save-memory","text":"Lifted code reads and writes the save chip: claimed"}
 {"at":"2026-11-12T09:56:48Z","actor":"loop","tag":"d12ab564","host":"quack","cmd":"done","id":"native/hw-dma-registers","text":"DMA by its registers in the hardware library: done, checked by verifier-3e91c7"}
+{"at":"2026-11-12T09:56:55Z","actor":"loop","tag":"d12ab564","host":"quack","cmd":"note","id":"native/hw-dma-registers","text":"DMA by its registers in the hardware library: note: Landed: Metroid (DMA3SAD) and Nightmare (DMA0CNT_H) should get past their first-frame panics now; rerun both native builds headless to find the next stop ({unit:native/native-first-stop})."}
