@@ -209,6 +209,14 @@
         "host": "quack"
       },
       "round": "2026-11-12T09:57:13Z"
+    },
+    {
+      "id": "merge/quack-lane4-native-lift-save-memory",
+      "title": "Merge main on quack lane 4",
+      "detail": "Branch `unit/native/lift-save-memory` holds {unit:native/lift-save-memory}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml docs/tools/commands.md justfile. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/4",
+      "branch": "unit/native/lift-save-memory"
     }
   ]
 }
