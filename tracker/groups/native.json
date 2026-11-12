@@ -1496,15 +1496,23 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "d12ab564",
-        "session": "d12ab564-753c-4c27-9539-9b83303ebf20",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T09:05:41Z",
+        "checker": "verifier-3e91c7",
+        "at": "2026-11-12T09:56:48Z",
+        "evidence": "Verifier ran just lift-check --only native-dma after the merge with main: agb/native-dma (DMA0 H-blank, DMA1 FIFO special, DMA2 V-blank, DMA3 immediate, all by address) passes 600 frames with 0 differences, audio equal, packed layout equal, planted DMAxCNT store (0x08000180) caught at frame 1. runtime hw:: tests 32 pass; just check passes after its two fixes. Prelude bar 850->861 (11 lines of DMA hooks).",
         "branch": "unit/native/hw-dma-registers",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T09:56:48Z",
+          "by": "d12ab564",
+          "host": "quack",
+          "pid": 2489252,
+          "start": "10657014",
+          "beats": true,
+          "session": "d12ab564-753c-4c27-9539-9b83303ebf20",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
