@@ -2665,3 +2665,4 @@
 {"at":"2026-11-12T11:33:09Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane3-native-lift-bios-region","text":"Merge main on quack lane 3: on main"}
 {"at":"2026-11-12T11:33:09Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-bios-region","text":"Lifted loads from the BIOS read the play build's latch: on main"}
 {"at":"2026-11-12T11:33:19Z","actor":"loop","tag":"a7b7e9d7","host":"quack","cmd":"claim","id":"native/lift-psr-boot-irq","text":"The lifter handles reset and IRQ-wrapper msr/mrs itself: claimed"}
+{"at":"2026-11-12T11:45:41Z","actor":"loop","tag":"598b2669","host":"quack","cmd":"done","id":"native/check-holes-copies","text":"The native check skips the holes file's RAM code copies: done, checked by a0568327"}
