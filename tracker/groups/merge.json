@@ -247,7 +247,7 @@
       "check": "recorded",
       "lane": "quack/2",
       "branch": "unit/native/lift-bios-affine",
-      "minMinutes": 25,
+      "minMinutes": 40,
       "record": {
         "state": "claimed",
         "by": "7fe4f8d3",
