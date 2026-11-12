@@ -1643,15 +1643,23 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "3402e3f4",
-        "session": "3402e3f4-9509-490a-811b-8f126aa4b75b",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T11:27:23Z",
+        "checker": "a6dfd1e9",
+        "at": "2026-11-12T13:35:13Z",
+        "evidence": "Prelude prints SoftReset (restart via main), RegisterRamReset, HuffUnComp, SoundDriverVSyncOff. New program agb/native-bios-more (all four, 3 restarts in 600 frames): lift-check pass, 0 differences; all other programs but native-spike (pre-existing hole) pass; after merging main bios-more/region/calls pass; just check passes. Nightmare lifts without the 3 stand-ins (only its 10 entry-read holes). lines_prelude 885->1098: prelude +137 lines for the four routines and restart loop. Verifier a6dfd1e9: PASS.",
         "branch": "unit/native/lift-bios-more",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T13:35:13Z",
+          "by": "3402e3f4",
+          "host": "quack",
+          "pid": 2489252,
+          "start": "10657014",
+          "beats": true,
+          "session": "3402e3f4-9509-490a-811b-8f126aa4b75b",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
