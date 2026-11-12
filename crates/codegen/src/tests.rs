@@ -210,6 +210,32 @@ fn table_under_a_bl_pairs_first_half() {
 }
 
 #[test]
+fn holes_file_targets_follow_an_unresolved_jump() {
+    // `mov pc, r0` Recovery left unresolved; the holes file's targets
+    // (`[[jump]]`, Ctx::with_jumps) are its cases, as a table's would be.
+    let (rom, mut d) = program(
+        &[
+            0xE1A0_F000, // 0x08000000 mov pc, r0
+            0xE280_0001, // 0x08000004 add r0, r0, #1
+            0xE12F_FF1E, // 0x08000008 bx lr
+            0xE12F_FF1E, // 0x0800000C bx lr
+        ],
+        &[0x0800_0000],
+    );
+    d.rec.jumps.insert(0x0800_0000, JumpRes::Unresolved);
+    let ctx = Ctx::new(&rom, &d);
+    assert_eq!(ctx.table_targets(0x0800_0000, false), None);
+    let f = build_func(&ctx, 0x0800_0000);
+    assert_eq!(f.blocks.keys().copied().collect::<Vec<_>>(), [0x0800_0000]);
+    let given = [0x0800_0004, 0x0800_000C];
+    let ctx = Ctx::new(&rom, &d).with_jumps([(0x0800_0000, &given[..])]);
+    assert_eq!(ctx.table_targets(0x0800_0000, false), Some(given.to_vec()));
+    let f = build_func(&ctx, 0x0800_0000);
+    let starts: Vec<u32> = f.blocks.keys().copied().collect();
+    assert_eq!(starts, [0x0800_0000, 0x0800_0004, 0x0800_000C]);
+}
+
+#[test]
 fn entry_without_code_in_its_mode_is_skipped() {
     // ARM code, with a Thumb root at the same address.
     let (rom, d) = program(&[0xE1A0_0000], &[0x0800_0000, 0x0800_0001]);
@@ -1046,7 +1072,7 @@ fn a_conditional_pop_and_return_keeps_the_registers() {
 
 /// `w: push {r4, lr}; bl s; pop {r4}; pop {r0}; bx r0` and `s`, which uses
 /// r4 and r5 as scratch: `movs r4, #1; movs r5, #2; bx lr`, or (`param`)
-/// reads r4 as a parameter: `adds r0, r4, #0; movs r4, #1; bx lr`.
+/// reads r4 as a parameter: `ldr r0, [r4, #0]; movs r4, #1; bx lr`.
 fn scratch_callee(param: bool) -> (Vec<u8>, Discovery) {
     let mut h = vec![
         0xB510, // 0x00 push {r4, lr}
@@ -1057,7 +1083,7 @@ fn scratch_callee(param: bool) -> (Vec<u8>, Discovery) {
         0x46C0, // 0x0c nop
     ];
     let s: &[u16] = if param {
-        &[0x1C20, 0x2401, 0x4770]
+        &[0x6820, 0x2401, 0x4770]
     } else {
         &[0x2401, 0x2502, 0x4770]
     };
@@ -1093,6 +1119,177 @@ fn scratch_r4_r11_no_caller_reads_is_soft_and_a_register_parameter_hard() {
     assert_eq!(
         hard_holes(&sums, 0x0800_000f),
         vec!["0x0800000f: changes r4-r11 and may be called through a pointer".to_string()]
+    );
+}
+
+/// The summary holes of the function at 0x08000001 of a Thumb program of
+/// one-halfword instructions, with a pointer to it in the ROM (so its
+/// callers are unknown, and enter it with r4-r11 zeroed).
+fn one_function_holes(h: &[u16]) -> Vec<String> {
+    let (mut rom, d) = thumb_program(h, &vec![2; h.len()], &[0x0800_0001]);
+    rom.resize(rom.len().next_multiple_of(4), 0);
+    rom.extend(0x0800_0001u32.to_le_bytes());
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    sums.by_entry[&0x0800_0001].holes.iter().cloned().collect()
+}
+
+#[test]
+fn an_entry_read_masked_away_is_soft_and_one_that_survives_hard() {
+    // agbcc's byte-by-byte word in an r4 it never set: every old bit
+    // cleared before r4 is used.
+    let masked = one_function_holes(&[
+        0xB510, // 0x00 push {r4, lr}
+        0x21FF, // 0x02 movs r1, #0xff
+        0x438C, // 0x04 bics r4, r1: bits 8-31 survive
+        0x4304, // 0x06 orrs r4, r0
+        0x400C, // 0x08 ands r4, r1: none do
+        0x1C20, // 0x0a adds r0, r4, #0
+        0xBC10, // 0x0c pop {r4}
+        0xBC02, // 0x0e pop {r1}
+        0x4708, // 0x10 bx r1
+    ]);
+    assert_eq!(
+        masked,
+        vec!["0x08000008: masks away r4-r11's entry bits: r4".to_string()]
+    );
+    // Without the last `and`, bits 8-31 are stored: `str r4, [r0, #0]`.
+    let kept = one_function_holes(&[
+        0xB510, 0x21FF, 0x438C, 0x4304, 0x46C0, 0x6004, 0xBC10, 0xBC02, 0x4708,
+    ]);
+    assert_eq!(
+        kept,
+        vec!["0x0800000a: reads r4-r11 at entry: r4".to_string()]
+    );
+    // An entry r5 used as an address (Minish's 0x08060ba1), in a
+    // function that keeps them.
+    let deref = one_function_holes(&[
+        0xB510, // push {r4, lr}
+        0x6828, // ldr r0, [r5, #0]
+        0xBC10, // pop {r4}
+        0xBC02, // pop {r1}
+        0x4708, // bx r1
+    ]);
+    // (The load's rotation by the address's low bits makes the r0 it
+    // returns depend on r5 too, but no caller reads it.)
+    assert_eq!(
+        deref,
+        vec!["0x08000002: reads r4-r11 at entry: r5".to_string()]
+    );
+    // An entry r6 compared: the branch's condition holds its bits.
+    let cmp = one_function_holes(&[
+        0x2E00, // 0x00 cmp r6, #0
+        0xD000, // 0x02 beq 0x06
+        0x2001, // 0x04 movs r0, #1
+        0x4770, // 0x06 bx lr
+    ]);
+    assert_eq!(
+        cmp,
+        vec!["0x08000002: reads r4-r11 at entry: r6".to_string()]
+    );
+}
+
+#[test]
+fn an_entry_value_returned_is_hard_where_a_caller_reads_it() {
+    // `c: push {lr}; bl f; adds r2, r0, #0; pop {r0}; bx r0` and `f: adds
+    // r0, r5, #0; bx lr`, or (`unread`) c without its `adds`.
+    for unread in [false, true] {
+        let read = if unread { 0x46C0 } else { 0x1C02 };
+        let (rom, d) = thumb_program(
+            &[
+                0xB500, // 0x00 push {lr}
+                0xF000, 0xF803, // 0x02 bl 0x0c
+                read,   // 0x06 adds r2, r0, #0 (or nop)
+                0xBC01, // 0x08 pop {r0}
+                0x4700, // 0x0a bx r0
+                0x1C28, // 0x0c adds r0, r5, #0
+                0x4770, // 0x0e bx lr
+            ],
+            &[2, 4, 2, 2, 2, 2, 2],
+            &[0x0800_0001, 0x0800_000d],
+        );
+        let ctx = Ctx::new(&rom, &d);
+        let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+        let want: Vec<String> = if unread {
+            vec![]
+        } else {
+            vec!["0x0800000e: reads r4-r11 at entry: r5, returned in r0".into()]
+        };
+        assert_eq!(hard_holes(&sums, 0x0800_000d), want);
+    }
+}
+
+#[test]
+fn an_entry_hi_register_passed_to_a_callee_is_hard() {
+    // `w: push {lr}; mov r0, r8; bl s; pop {r0}; bx r0`, `s: adds r0, #1;
+    // bx lr`: s reads the r8 that w took as it came (TMC's `player.s`
+    // passing r8 and r11 on).
+    let (rom, d) = thumb_program(
+        &[
+            0xB500, // 0x00 push {lr}
+            0x4640, // 0x02 mov r0, r8
+            0xF000, 0xF802, // 0x04 bl 0x0c
+            0xBC01, // 0x08 pop {r0}
+            0x4700, // 0x0a bx r0
+            0x3001, // 0x0c adds r0, #1
+            0x4770, // 0x0e bx lr
+        ],
+        &[2, 2, 4, 2, 2, 2, 2],
+        &[0x0800_0001, 0x0800_000d],
+    );
+    // A pointer to w: its callers are unknown.
+    let mut rom = rom;
+    rom.extend(0x0800_0001u32.to_le_bytes());
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    assert_eq!(
+        hard_holes(&sums, 0x0800_0001),
+        vec!["0x08000006: reads r4-r11 at entry: r8, passed in r0".to_string()]
+    );
+    // Without the pointer nothing enters w by a call: it would be
+    // jumped into, with every register.
+    rom.truncate(rom.len() - 4);
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    assert_eq!(hard_holes(&sums, 0x0800_0001), Vec::<String>::new());
+    assert!(
+        sums.by_entry[&0x0800_0001]
+            .holes
+            .contains("0x08000006: reads r4-r11 at entry, only jumped into: r8, passed in r0")
+    );
+}
+
+#[test]
+fn an_entry_read_tail_called_from_a_called_function_is_hard() {
+    // `g: b f`, `f: ldr r0, [r5, #0]; bx lr`: f takes g's r4-r11, which
+    // `Regs::call` zeroed where a pointer enters g.
+    let (rom, d) = thumb_program(
+        &[
+            0xE000, // 0x00 b 0x04
+            0x46C0, // 0x02 nop
+            0x6828, // 0x04 ldr r0, [r5, #0]
+            0x4770, // 0x06 bx lr
+        ],
+        &[2, 2, 2, 2],
+        &[0x0800_0001, 0x0800_0005],
+    );
+    let mut rom = rom;
+    rom.extend(0x0800_0001u32.to_le_bytes());
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    assert_eq!(
+        hard_holes(&sums, 0x0800_0005),
+        vec!["0x08000004: reads r4-r11 at entry: r5".to_string()]
+    );
+    // Without the pointer g is only jumped into, and so is f.
+    rom.truncate(rom.len() - 4);
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    assert_eq!(hard_holes(&sums, 0x0800_0005), Vec::<String>::new());
+    assert!(
+        sums.by_entry[&0x0800_0005]
+            .holes
+            .contains("0x08000004: reads r4-r11 at entry, only jumped into: r5")
     );
 }
 

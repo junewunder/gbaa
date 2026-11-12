@@ -1290,13 +1290,13 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   given (a file name with spaces: `just lift "…/Metroid - Zero Mission
   (USA).gba" out/lift-metroid --name metroid`), else the ROM's file name
   lowercased. The file has `[[standin]]` (a function's hand-written Rust,
-  and why), `[[jump]]` (an unresolved jump's targets), `[[copy]]` (code
+  and why), `[[jump]]` (an unresolved jump's targets as keys, its cases), `[[copy]]` (code
   the game copies to RAM that discovery's static copies don't have:
   `src`, `dst`, `len`, `roots` and why, as `just holes` prints its run's
   copies; lifted at its RAM keys like a static copy, native/lift-ram-copies)
   and, at the top,
-  `skip_fn_flow = "why"` (the function-address flow left out, for a game
-  it doesn't settle on). A hard hole no stand-in
+  `skip_fn_flow = "why"` (the function-address flow left out, saving
+  the minutes it runs before its token bound stops it). A hard hole no stand-in
   covers (CPU state, an unresolved jump, a BIOS call the prelude lacks, an
   undefined instruction, a jump to no code, a summary that returns r4-r11
   or sp changed) fails the lift, naming each, and the build (a
@@ -1472,6 +1472,13 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   [FRAMES]` (heavy) needs identical audio hashes interpreted and recompiled,
   no dropped samples, and 280896/period samples a frame from frame 10;
   passes on agb ROMs at 18157 Hz (304) and 10512 Hz (176).
+- `gbaa-present-sim [--scale X]… TIMES…` (deck/even-presents): what a
+  60 Hz display shows of a single game's frames. TIMES: `gbaa-desktop
+  --headless --frame-times` files (least of two runs on a busy machine);
+  `--scale` multiplies costs (0.7 recompiled; 2.2 the Deck, estimated
+  from its 2-2.5x quack's, not measured). Prints doubled, skipped, late
+  and lag for frames handed over when done, 8 ms in, and after the
+  slowest recent frame. Numbers: `docs/sound-design.md`, "When a frame…".
 - mGBA oracle (#55, milestone 3): `just mgba-diff ROM FRAMES [INPUT]` runs
   ROM in mGBA (`crates/mgba-dump`, over a static libmgba that
   `scripts/fetch-mgba.sh` builds once into `$GBAA_DATA/tools/mgba/`, under
@@ -1661,6 +1668,23 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   (2026-10-25: 6201 transfers in 4000 frames). About a minute. `--input0`
   and `--input1` replace a player's presses (`a@900`, `a@1400-3400/60`,
   `+held`), `--dump DIR --dump-at N,N` writes both players' frames.
+- The wireless adapter's check (multiplayer/wireless-adapter-local,
+  `runtime::link::rfu`): `just emerald-wireless [ROM] [ARGS]` runs
+  alice.sav and bob.sav as two Emeralds, each with an emulated wireless
+  adapter in one radio, in the interpreter. Both continue, walk to
+  Oldale's Union Room attendant (down two, left four, up two: the
+  counter's posts block row 3) and go in (about frame 3500). BOB
+  registers his Torchic at the room's attendant wanting WATER; ALICE
+  checks the trading board, offers her Mudkip, BOB accepts, and the
+  trade and its save run (back in the room by about 10200). It prints
+  each player's map, `gMain.callback2`, the adapter's state and ID,
+  position and broadcast as they change, and each adapter's commands;
+  runs it all twice and passes when both were in the Union Room, the
+  first Pokémon swapped, and the two runs printed the same and ended in
+  the same machine states (2026-11-08: 10500 frames, about 2 minutes a
+  run). `--once` skips the second run; `--input0`/`--input1` replace a
+  player's presses; `--dump DIR --dump-at` takes frames as `N,N` or
+  `FROM-TO/EVERY`.
 - Linked play: `gbaa-desktop ROM --link B.sav` runs a second GBA on the
   same ROM, on one cable with the first (`runtime::link`;
   `crates/desktop/src/link.rs`), the two screens side by side in one

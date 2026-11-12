@@ -684,23 +684,27 @@
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): both players noticed small stutters ('a little framey sometimes', 'skipped frames'); it played well otherwise. ping-sim checks hashes, not feel. Build a sim that plays Kirby two-player (four with {unit:multiplayer/four-seats}) through ping-sim profiles like home Wi-Fi to fly, and measures what each window shows: frames presented late, doubled or skipped, rollback depth, frames run again, time-sync holds, the other Kirby's jumps. Put budgets on them in a test, then fix the worst offenders. Beside {unit:multiplayer/lag-report}, which needs a real session's numbers. june's view: rollback of whole consoles has a ceiling; the real fix for this game is a multiplayer mod on its decomp (docs/ideas.md). Check: before and after numbers in docs/research/multiplayer.md; the budget test in just check.",
       "minMinutes": 150,
       "record": {
-        "state": "done",
-        "by": "29ee78be",
-        "at": "2026-11-08T20:55:16Z",
-        "evidence": "Feel sim built (netplay::feel, just rollback-feel-sim; wifi and fly profiles) and four fixes in the desktop's netplay loop: holds undone by sound pacing, muted window at 45 fps, uneven presents, drawing unseen seats. Before/after in docs/research/multiplayer.md, Feel: model, Kirby trace (x0.7: fly holds 330->3, late 453->51, doubled 557->99) and real windows in a cu session (holds 226/102 -> 2-10 a seat, one hash each run). Budget tests netplay::feel (every_window_stays_in_its_budgets, the_old_loop_breaks_the_budgets) pass in just check, exit 0 after merging main (cef5487).",
-        "branch": "unit/multiplayer/rollback-feel-sim",
+        "state": "claimed",
+        "by": "7ac5db9e",
+        "session": "7ac5db9e-c4a7-474b-be5e-cb9b9c712ac7",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-08T20:55:16Z",
-          "by": "29ee78be",
-          "host": "quack",
-          "pid": 3349268,
-          "start": "14822772",
-          "beats": true,
-          "session": "29ee78be-f7f7-4b33-9049-fe8ed023a471",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "pid": 2489252,
+        "start": "10657014",
+        "at": "2026-11-12T05:48:15Z",
+        "branch": "unit/multiplayer/rollback-feel-sim",
+        "beats": true
+      },
+      "notes": [
+        {
+          "at": "2026-11-08T20:59:55Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - justfile:1356 (the comment above `rollback-feel-sim`): it says that with `--rom ROM` the sim runs \"a session of interpreted GBAs on ROM, each turn's measured time\". That is the wall-time approach that docs/res…"
+        }
+      ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-08T20:59:55Z",
+        "findings": "- justfile:1356 (the comment above `rollback-feel-sim`): it says that with `--rom ROM` the sim runs \"a session of interpreted GBAs on ROM, each turn's measured time\". That is the wall-time approach that docs/research/multiplayer.md (\"Feel\") says was tried and dropped. What the code actually does (`measure` in crates/netplay/src/bin/gbaa-pingsim.rs) is time the ROM once, straight, on the thread's CPU clock, writing a `feel::Trace`, and then run the toy session on those costs. Reword the comment to say that, and add the missing `--trace F` / `--trace-out F` options to its ARGS list and to the feel-sim entry in docs/tools/commands.md (around line 1865), which also leaves them out.\n- crates/netplay/src/feel.rs, the doc comment on `pub fn toy`: it calls this \"`gbaa-pingsim feel --console toy`'s run\", but `feel` has no `--console` option and rejects it as `unknown option`. Change it to \"`gbaa-pingsim feel`'s run\"."
       },
       "round": "2026-11-01T01:44:42Z"
     },
@@ -856,17 +860,12 @@
       "title": "Emerald's Union Room over an emulated wireless adapter",
       "detail": "From the link-cable survey (docs/research/multiplayer.md, 'The cable over the internet'): the wireless adapter is the one link gap that matters for june's games (Emerald's Union Room, wireless trades, Berry Crush). Emulate the adapter on the link hub, both consoles in one process first: normal 32-bit mode on runtime::link, librfu's STWI commands (afska's gba-link-connection docs), and the adapter's radio between machines. Check: two Emeralds from alice.sav and bob.sav meet in the Union Room and trade, identically twice; just check. Networking it (each player runs only their own console, the server as the radio) is later work.",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "954f0eb1",
-        "session": "954f0eb1-8b50-45a5-9f0e-1a0408fed293",
-        "host": "quack",
-        "pid": 3349722,
-        "start": "14823514",
-        "at": "2026-11-08T20:38:54Z",
-        "branch": "unit/multiplayer/wireless-adapter-local",
-        "beats": true
-      },
-      "round": "2026-11-08T20:38:54Z"
+        "at": "2026-11-08T21:50:22Z",
+        "evidence": "just emerald-wireless (runtime::link::rfu, crates/emerald-save/src/bin/emerald-wireless.rs) after merging main at 51b5017: alice.sav and bob.sav both in Oldale's Union Room (frames 3529, 3479); BOB registers Torchic at the trading board, ALICE offers Mudkip, BOB accepts, trade and save run; first Pokémon swapped (1a2b3c4d <-> 9a8b7c6d); second run identical (states 0ddcc166e736c0ae 566c499d6b8d9e67, 228071 transfers in 10500 frames). just check passes. New unit tests cover the NINTENDO handshake against afska's log, a command and a wait event on the port, host/child packets.",
+        "host": "quack"
+      }
     },
     {
       "id": "multiplayer/single-pak-multiboot",
@@ -877,6 +876,20 @@
       "id": "multiplayer/wander-split-under-load",
       "title": "Emerald's netplay trade split once on wander, under load",
       "detail": "From the link-cable survey (2026-11-08, quack, load average 18 from other lanes): just emerald-netplay-trade wander failed once: player 1 saw player 2 leave at frame 1119, player 2 left at 1144 (its max frame 3400 ms, round trip up to 3439 ms), each played on alone and the end hashes differed. The rerun and calm passed. Find why a 3.4 s stall ended the session (the stopped-answering timeouts are 5 s freeze plus 15 s), and make a stalled peer catch up instead. Check: just emerald-netplay-trade wander passes 5 times in a row with a peer SIGSTOPped for 4 s mid-run; just check."
+    },
+    {
+      "id": "multiplayer/wireless-radio-netplay",
+      "title": "Emerald's Union Room with the radio on the server",
+      "detail": "After {unit:multiplayer/wireless-adapter-local}: runtime::link::rfu's radio (hosts, searches, connections, packets) moves onto gbaa-server so each player runs only their own Emerald and adapter (docs/research/multiplayer.md option F, 'The wireless adapter, locally'). Measure how much latency librfu's timeouts and the Union Room's host/search switching allow, through the variable-ping simulator. Check: two Emerald processes (alice.sav, bob.sav) trade in the Union Room through a local server under the 'calm' profile; just check.",
+      "check": "recorded",
+      "needs": ["multiplayer/wireless-adapter-local"],
+      "notes": [
+        {
+          "at": "2026-11-08T21:50:27Z",
+          "by": "954f0eb1",
+          "text": "The local adapter's one guess beyond afska's docs: a searching adapter lists a host it heard for 3 s across searches (Adapter::heard); without it BOB's board offer rarely reached ALICE. Check whether the networked radio still needs it."
+        }
+      ]
     }
   ]
 }

@@ -62,6 +62,12 @@ pub struct Ctx<'a> {
     /// libgcc's soft-float routines in the code, found on first use
     /// ([`Ctx::library`]).
     pub library: std::sync::OnceLock<Library>,
+    /// The targets the holes file gives jumps Recovery left unresolved
+    /// (`[[jump]]`, by the address Recovery records the jump under), as
+    /// keys: [`Ctx::table_targets`] takes them as a resolved table's, so
+    /// the function's blocks reach them. Only the native lift sets them
+    /// ([`Ctx::with_jumps`]).
+    pub given_jumps: BTreeMap<u32, Vec<u32>>,
 }
 
 /// The library routines the runtime stands in for that a context's code
@@ -231,6 +237,7 @@ impl<'a> Ctx<'a> {
             pointed: std::sync::OnceLock::new(),
             spins: std::sync::OnceLock::new(),
             library: std::sync::OnceLock::new(),
+            given_jumps: BTreeMap::new(),
         };
         // An entry discovery found no code at in its mode (a root whose
         // analysis hit the step cap, or one also a root in the other mode)
@@ -257,6 +264,14 @@ impl<'a> Ctx<'a> {
             .filter(|&k| self.is_code(k))
             .collect();
         self.entries.extend(ks);
+        self
+    }
+
+    /// This context with the holes file's targets for the jumps Recovery
+    /// left unresolved ([`Ctx::given_jumps`]), `jumps` by the jump's
+    /// address.
+    pub fn with_jumps<'b>(mut self, jumps: impl IntoIterator<Item = (u32, &'b [u32])>) -> Ctx<'a> {
+        self.given_jumps = jumps.into_iter().map(|(a, ts)| (a, ts.to_vec())).collect();
         self
     }
 
@@ -326,17 +341,19 @@ impl<'a> Ctx<'a> {
     }
 
     /// The targets of the resolved jump at `at` (a Thumb `bl` into a case
-    /// helper is recorded under the pair's first half), as keys.
+    /// helper is recorded under the pair's first half), as keys; for one
+    /// Recovery left unresolved, those the holes file gives
+    /// ([`Ctx::given_jumps`]), if it gives any.
     pub fn table_targets(&self, at: u32, thumb: bool) -> Option<Vec<u32>> {
         let jumps = &self.disc.rec.jumps;
-        let found = jumps
-            .get(&at)
-            .or_else(|| thumb.then(|| jumps.get(&at.wrapping_sub(2))).flatten());
-        match found {
-            Some(JumpRes::Resolved(j)) => {
+        let a = std::iter::once(at)
+            .chain(thumb.then(|| at.wrapping_sub(2)))
+            .find(|a| jumps.contains_key(a))?;
+        match &jumps[&a] {
+            JumpRes::Resolved(j) => {
                 Some(j.targets.iter().map(|&t| key(t & !1, t & 1 != 0)).collect())
             }
-            _ => None,
+            _ => self.given_jumps.get(&a).cloned(),
         }
     }
 

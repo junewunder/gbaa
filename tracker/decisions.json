@@ -1061,6 +1061,15 @@
       "by": "29ee78be",
       "at": "2026-11-08T20:49:34Z",
       "scope": ["multiplayer/*"]
+    },
+    {
+      "id": "d/raise-lift-bars-rom-widening",
+      "title": "Raise lift bars for the ROM-widening fix's honest rise: Raise the bars to the new values",
+      "why": "the fix lands; the ref_unexplained and native-spike fn_words_not_proven bars go up to what the sound run measures, and later heap units lower them from there",
+      "by": "owner",
+      "at": "2026-11-08T23:18:08Z",
+      "question": "q/raise-lift-bars-rom-widening",
+      "via": "d06a24f2"
     }
   ]
 }
