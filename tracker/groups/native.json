@@ -1496,15 +1496,23 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "12ef2e3c",
-        "session": "12ef2e3c-5b4d-487a-a4a2-90fcf6d0b90a",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T10:09:42Z",
+        "checker": "verifier-lane1-dmaregs",
+        "at": "2026-11-12T10:40:04Z",
+        "evidence": "Verifier (fresh context) ran just lift-check --only native-dma: pass, 600 frames, 0 differences, packed layout same, planted DMAxCNT fault caught (frame 1, EWRAM 0x020002f4); just check exit 0 after merging main. Review fixes: lift-check --only affine, mosaic-modes, native-fallthrough, native-irq-hold, native-frame-locals, native-ime-release, native-bios-calls, native-tasks, native-dma all pass their 600/601 frames, every planted fault and native-tasks' planted hole caught (16m47s); native-spike stops at its known hard hole f_08006d47 in the bars step, as on main. V-blank run_sound now only after register-set channels' cycles; justfile lift-check comment says 39 crates, about 20 min.",
         "branch": "unit/native/hw-dma-registers",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T10:40:04Z",
+          "by": "12ef2e3c",
+          "host": "quack",
+          "pid": 2489252,
+          "start": "10657014",
+          "beats": true,
+          "session": "12ef2e3c-5b4d-487a-a4a2-90fcf6d0b90a",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
