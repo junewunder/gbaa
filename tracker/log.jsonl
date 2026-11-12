@@ -2664,3 +2664,4 @@
 {"at":"2026-11-12T11:27:23Z","actor":"loop","tag":"3402e3f4","host":"quack","cmd":"claim","id":"native/lift-bios-more","text":"Lifted code makes SoftReset, RegisterRamReset and HuffUnComp: claimed"}
 {"at":"2026-11-12T11:33:09Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane3-native-lift-bios-region","text":"Merge main on quack lane 3: on main"}
 {"at":"2026-11-12T11:33:09Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-bios-region","text":"Lifted loads from the BIOS read the play build's latch: on main"}
+{"at":"2026-11-12T11:33:19Z","actor":"loop","tag":"a7b7e9d7","host":"quack","cmd":"claim","id":"native/lift-psr-boot-irq","text":"The lifter handles reset and IRQ-wrapper msr/mrs itself: claimed"}

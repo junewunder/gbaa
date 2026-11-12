@@ -1663,7 +1663,19 @@
       "title": "The lifter handles reset and IRQ-wrapper msr/mrs itself",
       "detail": "From the overnight lift (2026-11-11, runs/long/overnight-lift.log): every one of the seven games that failed to lift has 2-5 msr/mrs hard holes, nearly all in the reset code at 0x08000000 and the IRQ wrapper. analysis::holes::classify already returns these as CpuWhere::Boot and CpuWhere::Wrapper (recognised, not holes; docs/research/native-holes.md, What the Stage-A lifter should know), but the lifter still makes them hard, and Metroid and Kirby Nightmare get past them only by hand stand-ins in mods/<game>/holes.toml. Have the lifter print the reset's mode switches and stack setup as the program's start and the IRQ wrapper's PSR saves as runtime::hw IRQ entry/exit (keep The native-timing play build takes an IRQ the I bit held as soon as an msr clears I), so no game needs these stand-ins; msr/mrs anywhere else stay hard. Done when: no Boot/Wrapper msr/mrs is a hard hole on the corpus (just holes-all --against main, the lift's counts), Metroid and Nightmare still lift and build with their reset and IRQ-wrapper stand-ins removed (or the reason one stays written down), lift-check green, just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "a7b7e9d7",
+        "session": "a7b7e9d7-b73a-46db-8e16-fc315bde78a9",
+        "host": "quack",
+        "pid": 2489918,
+        "start": "10657789",
+        "at": "2026-11-12T11:33:19Z",
+        "branch": "unit/native/lift-psr-boot-irq",
+        "beats": true
+      },
+      "round": "2026-11-12T11:33:19Z"
     },
     {
       "id": "native/lift-bios-affine",
