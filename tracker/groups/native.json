@@ -1067,14 +1067,19 @@
       "uses": ["heavy"],
       "notes": [
         {
+          "at": "2026-11-12T06:58:38Z",
+          "by": "21ac895a",
+          "text": "Facility in {unit:native/task-coroutines}: prelude task_resume/task_yield/task_exit; stand-in lr = true gives Game::lr; holes/native-tasks.toml is a worked example. Lifter flags f_080cfdc8/d0/d8. The scheduler's resume call (0x08005364) is still taken never to return."
+        },
+        {
+          "at": "2026-11-12T06:37:54Z",
+          "by": "b67b3cd7",
+          "text": "From {unit:native/copy-tail-discovery}: discovery now finds resume (0x08000234, entered by the veneer 0x080cfdc5's ARM part f_080cfdc8 via b); its bx r1 at 0x08000254 is a hard hole in the lift, which stops there until a stand-in for 0x080cfdc8 covers it."
+        },
+        {
           "at": "2026-11-08T22:24:15Z",
           "by": "f66d452c",
           "text": "Nightmare now lifts with 0 hard holes (mods/kirby-nightmare/holes.toml); the IRQ dispatcher stand-in 0x03001030 moves an IRQ on a task stack (sp<0x03007b80) to 0x03007c80. The lifter doesn't flag the 3 stack switches. SoftReset stand-in panics until {unit:native/lift-bios-more}."
-        },
-        {
-          "at": "2026-11-07T11:44:49Z",
-          "by": "ccb35e7f",
-          "text": "Split 2026-11-07: Nightmare's lift (skip_fn_flow) stops at 15 other hard holes, 9 BIOS; and the lifter doesn't flag the 3 stack switches. Now needs {unit:native/nightmare-lifts} and the shared facility {unit:native/task-coroutines}; then only the stand-in and route are left here."
         }
       ],
       "round": "2026-11-07T11:32:04Z"
@@ -1274,16 +1279,21 @@
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
-        "by": "21ac895a",
-        "session": "21ac895a-0051-45ec-874a-3fad33b396f8",
+        "by": "2ad4dbaa",
+        "session": "2ad4dbaa-abc3-4845-a0ce-e3557140c638",
         "host": "quack",
         "pid": 2489427,
         "start": "10657408",
-        "at": "2026-11-12T04:53:34Z",
+        "at": "2026-11-12T07:28:22Z",
         "branch": "unit/native/task-coroutines",
+        "reviewing": {
+          "by": "21ac895a",
+          "at": "2026-11-12T06:58:26Z",
+          "evidence": "After merging origin/main (ea60907, bar fix 67cc5eb): just check passes; just lift-check --only native-tasks passes (600 frames 0 differences; planted store caught at EWRAM 0x020000d0; planted hole caught: f_080001a4 at 0x080001c0 stack switch); lift-check on the 7 other agb programs except native-spike passes. native-spike fails on pure origin/main 12b2053 too (f_08006d47 summary hole), filed as {unit:native/spike-entry-read-hole}. Nightmare's lift now has exactly its 3 holes 0x08000244/0x08000278/0x08000298; other corpus games gain only SDK soft-reset and Moonbeam's longjmp switches. lines_prelude 724->850 (task facility). Test ROM matches mGBA at frame 600 (ec4286836efdf369)."
+        },
         "beats": true
       },
-      "round": "2026-11-12T04:53:34Z"
+      "round": "2026-11-12T07:28:22Z"
     },
     {
       "id": "native/copy-tail-discovery",
@@ -1293,14 +1303,31 @@
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
-        "by": "b67b3cd7",
-        "session": "b67b3cd7-bb29-4ef9-8053-574c0e6d691c",
+        "by": "51cae3e4",
+        "session": "51cae3e4-5c5f-4c22-8ab6-a591f23922e4",
         "host": "quack",
         "pid": 2489918,
         "start": "10657789",
-        "at": "2026-11-12T04:53:37Z",
+        "at": "2026-11-12T07:02:58Z",
         "branch": "unit/native/copy-tail-discovery",
         "beats": true
+      },
+      "notes": [
+        {
+          "at": "2026-11-12T07:02:46Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - Card check not run on the merged branch (tracker/groups/native.json:1310, the Evidence). The card's Done-when needs `just holes-all --against main` to show the copy-tail bytes discovered and no hard count high…"
+        },
+        {
+          "at": "2026-11-12T06:58:23Z",
+          "by": "b67b3cd7",
+          "text": "Verifier: run holes-all on origin/main (merged as b9f25c8^2) and on this branch, --against the first; main's summary rework raises hard counts itself (Nightmare 15, moonbeam 11 at b9f25c8). Nightmare's lift now stops at 0x08000254 until its switcher stand-in."
+        }
+      ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-12T07:02:46Z",
+        "findings": "- Card check not run on the merged branch (tracker/groups/native.json:1310, the Evidence). The card's Done-when needs `just holes-all --against main` to show the copy-tail bytes discovered and no hard count higher. The session ran that only on the pre-merge branch cc18acf against main 92dc9e1, where the hard total went from 106 to 103. Its Evidence says the run on the merged branch (b9f25c8) has not been done yet. Main's summary rework, merged in since, raises hard counts on its own (Nightmare 15, moonbeam 11), so nobody has checked what will actually land. The session's note hands this run to the verifier, but the reviewer has no shell. The next session should run two things: `just holes-all` on main at b9f25c8^1 (origin/main as merged), and `just holes-all --against <that output>` on this branch's head. It should confirm three things: the m4a SoundMain tails and Nightmare's resume and its return site are still discovered; no game's hard count rises except Nightmare's +1 (resume's bx r1 at 0x08000254, explained in d/a-constant-jump-to-a-ram-copy-s-function-is); and the total still falls by about 3. Then it should rerun `just lift-check` and the disc-* bars on the merged head and record the numbers with `just done native/copy-tail-discovery --evidence …`."
       },
       "round": "2026-11-12T04:53:37Z"
     },
@@ -1326,7 +1353,19 @@
       "id": "native/fnref-unknown-addrs",
       "title": "Function flow: loads through unknown addresses",
       "detail": "docs/native-stage-b.md piece 3. Measured on {unit:native/fnref-context}'s branch (commit e81168f; it holds the object split and call-site context): fn_words_not_proven unmoved by either. ~640 of affine's load sites (spike 644) have an address that may be unknown (Val::unk), and each reads the pile and every RAM cell (Run::load_at's anywhere arm), so e.g. the IRQ vector word's f_03000000 is in nearly every hole. Not the cause (tried, no change): naming the allocator, dropping the pile from constant-address loads, dropping the I/O unk flag, NUMS 8->256. A seen source: main's inlined free-list walk at 0x080001a8 (affine) loads GLOBAL_ALLOC fields holding allocator-made pointers. Find where the unknown comes from (GBAA_FNREF_TRACE; print each anywhere load) and fix the first big source. Done when: fn_words_not_proven falls on every agb program, bars lowered, a unit test, just lift-check and just check pass.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "3454f93a",
+        "session": "3454f93a-c5b2-49fa-ab4a-bcd1d4efe225",
+        "host": "quack",
+        "pid": 2489252,
+        "start": "10657014",
+        "at": "2026-11-12T07:01:25Z",
+        "branch": "unit/native/fnref-unknown-addrs",
+        "beats": true
+      },
+      "round": "2026-11-12T07:01:25Z"
     },
     {
       "id": "native/ref-heap-static-arrays",
@@ -1493,6 +1532,13 @@
       "detail": "The 2026-11-11 overnight run (hole report, gameplay and readable builds, and gbaa-lift of all nine games in holes/corpus.toml, about 3 hours on quack) was a throwaway shell script. Make it a recipe driven by holes/corpus.toml in Rust (no bash logic): per game the hole report, the play build, the lift with its holes file (corpus.toml gains each game's --name for lift), the build, and {unit:native/native-first-stop}'s headless run; one game failing doesn't stop the rest; run under just long with the build lock and MemoryMax. Write out/nightly/<date>/summary.toml and a short summary.txt per game (hard holes by kind, built or not, frames run and stop) with what changed against the previous night's. Done when: one full run on quack writes both files and a second run's diff names a change made between them; docs/tools/commands.md has the entry; just check passes.",
       "check": "independent",
       "needs": ["native/native-first-stop"],
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/spike-entry-read-hole",
+      "title": "native-spike lifts again after entry-read masking",
+      "detail": "Since {unit:native/entry-read-masking} landed (origin/main 12b2053), gbaa-lift on agb/native-spike stops at: hard hole in f_08006d47 at 0x08006d47: summary: 0x08006d76: reads r4-r11 at entry: r6, passed in r1. So just lift-check fails on native-spike on main (lift-metrics: hard_holes 1>0). Find whether the read is real or the new fall/tail-call rule is over-hard there; fix the rule or give a stand-in. Done when: just lift-check passes on every program; just check passes.",
+      "check": "recorded",
       "uses": ["heavy"]
     }
   ]

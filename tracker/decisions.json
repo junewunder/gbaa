@@ -1070,6 +1070,22 @@
       "at": "2026-11-08T23:18:08Z",
       "question": "q/raise-lift-bars-rom-widening",
       "via": "d06a24f2"
+    },
+    {
+      "id": "d/netplay-waits-8-s-for-a-silent-peer-before-it",
+      "title": "Netplay waits 8 s for a silent peer before it has left",
+      "why": "From Emerald's netplay trade split once on wander, under load ({unit:multiplayer/wander-split-under-load}): room::QUIET was 3 s, and a loaded machine (a 3.4 s rollback) or a 4 s SIGSTOP ended the session. 8 s lets a stall of a few seconds catch up; past the 5 s window the others freeze, so a truly gone peer costs 3 s frozen before they play on alone (the mark says 'not hearing' after 0.75 s). The owner may prefer shorter.",
+      "by": "18d209b3",
+      "at": "2026-11-12T06:34:01Z",
+      "scope": ["group:multiplayer"]
+    },
+    {
+      "id": "d/a-constant-jump-to-a-ram-copy-s-function-is",
+      "title": "A constant jump to a RAM copy's function is resolved",
+      "why": "From Discover code past m4a's and Nightmare's copy sources ({unit:native/copy-tail-discovery}): a jump to one constant RAM address (m4a's SoundMain into its IWRAM copy, Minish Cap's ROM-to-IWRAM veneers) is Recovery's JumpRes::Ram. It is no more a hole than a constant call: the hole report doesn't count it where an overlay discovered a function at the target, and the lifter jumps to that function (a hole if none is there). Hard total over the corpus 106 to 103. Code discovery then finds that hides a real hole counts it: Nightmare's resume bx r1 (0x08000254) takes it 9 to 10, covered by its task switcher's stand-in.",
+      "by": "b67b3cd7",
+      "at": "2026-11-12T06:37:44Z",
+      "scope": ["group:native"]
     }
   ]
 }
