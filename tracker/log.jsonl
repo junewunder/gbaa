@@ -2695,3 +2695,4 @@
 {"at":"2026-11-12T13:42:59Z","actor":"loop","tag":"74679aef","host":"quack","cmd":"edit","id":"native/lift-undefined-insns","text":"Find why moonbeam's and Rogue's lifts decode data as code: edited (min-minutes)"}
 {"at":"2026-11-12T13:43:04Z","actor":"loop","tag":"74679aef","host":"quack","cmd":"unclaim","id":"native/lift-undefined-insns","text":"Find why moonbeam's and Rogue's lifts decode data as code: handed back by its session, its work kept (1 commit on its branch); ready"}
 {"at":"2026-11-12T13:43:07Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane2-native-lift-bios-affine","text":"new unit: Merge main on quack lane 2"}
+{"at":"2026-11-12T13:43:18Z","actor":"loop","tag":"eae64132","host":"quack","cmd":"claim","id":"merge/quack-lane2-native-lift-bios-affine","text":"Merge main on quack lane 2: claimed"}
