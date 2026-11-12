@@ -45,12 +45,23 @@
 //! in it), `|`, `^`, a mask down to an alignment and its pieces (bytes,
 //! halves); any other op makes a number of it (the closed world, as for
 //! ROM pointers), so an address the run doesn't know is no object's,
-//! unless a pointer into one was dropped ([`Val::lost_obj`]: then every
-//! object). A load through a pointer into an object reads its cell there,
-//! its anywhere cell and what lost pointers stored; one at a constant
-//! address its cell and the pile; one the run can't place, the pile and
-//! every RAM cell (every object's too, if lost), or, where the value-set
-//! analysis bounds it to ROM, the words there. An object doesn't overlap
+//! unless a pointer into one was dropped ([`Val::lost_ptr`]: then every
+//! object). RAM addresses the same way (`native/fnref-unknown-addrs`):
+//! a constant RAM address is a pointer, kept in memory as itself, and
+//! moved by an index the run doesn't know it is one "from here on"
+//! ([`Tok::RamFrom`]: up to the next RAM address the code names; a
+//! piece of one too, as an object's); less an unknown, or in more runs
+//! than [`RAM_RUNS`], it is lost ([`Val::lost_ptr`]). A load through a pointer into an object reads its
+//! cell there, its anywhere cell and what lost pointers stored; one at a
+//! constant address its cell and the pile; one from here on in RAM the
+//! cells of its run and the pile; one through a lost pointer, the pile
+//! and every cell, RAM's and every object's; one through any other
+//! unknown nothing in RAM (an I/O read: by the closed world no RAM
+//! address; a store through one changes no cell, its function and ROM
+//! addresses still go to the pile), or, where the value-set
+//! analysis bounds it to ROM, the words there (a ROM pointer "from here
+//! on" too reads only the words in those bounds). A store into ROM
+//! changes nothing. An object doesn't overlap
 //! a constant address the code reads (the stack, the heap). Interprocedural: a call passes r0-r3 to its callee's entry
 //! and takes back what its returns hold; a tail call or a fall passes
 //! every register. An indirect call passes them to each function whose
@@ -159,6 +170,11 @@ enum Tok {
     Rom(u32),
     /// Somewhere in ROM from here on.
     RomFrom(u32),
+    /// Somewhere in RAM from this address (without its mirror) on, up to
+    /// the next RAM address the code names ([`ram_bound`]): a constant
+    /// RAM address moved by an index the run doesn't know (an array in a
+    /// static, a loop's pointer), as [`Tok::RomFrom`] in ROM.
+    RamFrom(u32),
     /// A pointer into an object ([`ObjId`], by its index in
     /// [`G::objs`]) at this offset, or anywhere in it ([`OBJ_ANY`]).
     Obj(u32, i32),
@@ -183,7 +199,7 @@ const OBJ_OFFS: usize = 8;
 /// window above here (no RAM address, nor any the program makes).
 const OBJ_BASE: u32 = 0x1000_0000;
 /// The cell of stores through a lost pointer into an object
-/// ([`Val::lost_obj`]): every object's load reads it, as does every load
+/// ([`Val::lost_ptr`]): every object's load reads it, as does every load
 /// from RAM the run can't place ([`G::read_cells`]).
 const LOST_CELL: u32 = OBJ_BASE - 0x10;
 /// The most objects: past it, a new one's pointers are lost.
@@ -260,10 +276,13 @@ struct Val {
     /// a ROM pointer it gave up on. A call through it has an incomplete
     /// callee set, whatever whole addresses it holds besides.
     lost_rom: bool,
-    /// Maybe a pointer into an object the run dropped (arithmetic it
-    /// doesn't follow, a pointer stored in pieces): used as an address,
-    /// it may reach every object. Set only with [`Val::unk`].
-    lost_obj: bool,
+    /// Maybe a pointer into RAM the run dropped: into an object, or a
+    /// constant RAM address (arithmetic it doesn't follow, a pointer
+    /// stored in pieces, too many addresses to keep). Used as an address,
+    /// it may reach every object and every RAM cell; nothing else unknown
+    /// is a RAM address (`native/fnref-unknown-addrs`). Set only with
+    /// [`Val::unk`].
+    lost_ptr: bool,
 }
 
 thread_local! {
@@ -284,6 +303,58 @@ fn bound(a: u32) -> u32 {
             .copied()
             .unwrap_or(u32::MAX)
     })
+}
+
+thread_local! {
+    /// The RAM addresses the run's code names (without their mirrors),
+    /// sorted, for [`ram_bound`] (empty outside [`follow`]).
+    static RAMK: std::cell::RefCell<std::rc::Rc<Vec<u32>>> = std::cell::RefCell::default();
+}
+
+/// Where a pointer into RAM from `a` (without its mirror) may reach: the
+/// next RAM address the code names, or the end of `a`'s RAM.
+fn ram_bound(a: u32) -> u32 {
+    let end = if a < 0x0300_0000 {
+        0x0204_0000
+    } else {
+        0x0300_8000
+    };
+    RAMK.with(|k| {
+        let k = k.borrow();
+        k.get(k.partition_point(|&x| x <= a))
+            .copied()
+            .map_or(end, |n| n.min(end))
+    })
+}
+
+/// Sets [`RAMK`] for a run; the one before comes back when it's dropped.
+struct RamGuard(std::rc::Rc<Vec<u32>>);
+
+impl RamGuard {
+    fn set(fns: &[FnIn], copies: &[(u32, u32, u32)]) -> RamGuard {
+        let mut v: Vec<u32> = copies.iter().map(|c| c.1).filter(|&a| is_ram(a)).collect();
+        for f in fns {
+            for b in f.blocks.values() {
+                for inst in b.insts {
+                    if let Op::Const(c) | Op::Pool(c) = inst.op
+                        && is_ram(c)
+                    {
+                        v.push(c);
+                    }
+                }
+            }
+        }
+        let mut v: Vec<u32> = v.into_iter().map(ram_canon).collect();
+        v.sort_unstable();
+        v.dedup();
+        RamGuard(RAMK.with(|k| k.replace(std::rc::Rc::new(v))))
+    }
+}
+
+impl Drop for RamGuard {
+    fn drop(&mut self) {
+        RAMK.with(|k| *k.borrow_mut() = self.0.clone());
+    }
 }
 
 /// Sets [`CODE`] for a run; the one before comes back when it's dropped.
@@ -324,6 +395,15 @@ const TOKENS: usize = 48_000_000;
 
 /// More numbers than this in a value: it's unknown.
 const NUMS: usize = 8;
+/// More exact RAM addresses than this in a value: "from the lowest on"
+/// ([`Tok::RamFrom`]); more of those, a pointer lost ([`Val::lost_ptr`]).
+/// A ROM table read by an unknown index gives every word in it that
+/// looks like one (on affine's font and pictures, 100 to 200 of each run
+/// of data).
+const RAMS: usize = 16;
+/// More RAM runs than this in a value (each [`Tok::RamFrom`]): a pointer
+/// lost.
+const RAM_RUNS: usize = 256;
 /// More exact ROM pointers than this: "from the lowest on".
 const ROMS: usize = 16;
 /// The most ROM bytes one read by an unknown index reads (a "from here
@@ -345,13 +425,13 @@ impl Val {
     fn lost() -> Val {
         Val {
             unk: true,
-            lost_obj: true,
+            lost_ptr: true,
             ..Val::default()
         }
     }
 
     fn has_obj(&self) -> bool {
-        self.lost_obj || self.toks.range(Tok::Obj(0, i32::MIN)..).next().is_some()
+        self.lost_ptr || self.toks.range(Tok::Obj(0, i32::MIN)..).next().is_some()
     }
 
     fn of(t: Tok) -> Val {
@@ -371,7 +451,7 @@ impl Val {
         self.mem |= o.mem;
         self.unk |= o.unk;
         self.lost_rom |= o.lost_rom;
-        self.lost_obj |= o.lost_obj;
+        self.lost_ptr |= o.lost_ptr;
     }
 
     fn join(&mut self, o: &Val) -> bool {
@@ -380,7 +460,7 @@ impl Val {
             self.mem,
             self.unk,
             self.lost_rom,
-            self.lost_obj,
+            self.lost_ptr,
         );
         if self.toks.is_empty() {
             self.toks = o.toks.clone();
@@ -390,7 +470,7 @@ impl Val {
         self.mem |= o.mem;
         self.unk |= o.unk;
         self.lost_rom |= o.lost_rom;
-        self.lost_obj |= o.lost_obj;
+        self.lost_ptr |= o.lost_ptr;
         self.cap();
         before
             != (
@@ -398,7 +478,7 @@ impl Val {
                 self.mem,
                 self.unk,
                 self.lost_rom,
-                self.lost_obj,
+                self.lost_ptr,
             )
     }
 
@@ -416,8 +496,11 @@ impl Val {
         let mut wide: Vec<u32> = Vec::new();
         let mut obj: Option<(u32, usize, bool)> = None;
         // Functions' tokens sort first: only those after them count.
+        let mut rams = 0;
         for t in self.toks.range(Tok::Num(0)..) {
             match *t {
+                Tok::Num(c) if is_ram(c) => rams += 1,
+                Tok::RamFrom(_) => rams += 1,
                 Tok::Num(_) => nums += 1,
                 Tok::Rom(_) => roms += 1,
                 Tok::RomFrom(_) => froms = true,
@@ -442,9 +525,21 @@ impl Val {
         if nums > NUMS {
             self.unk = true;
         }
-        // Unknown takes in every number (so the cap stays monotone).
+        // Unknown takes in every number but RAM addresses (so the cap
+        // stays monotone): those are pointers, kept up to [`RAMS`] of
+        // them; past that they are lost.
         if self.unk && nums > 0 {
-            self.drop_range(Tok::Num(0)..=Tok::Num(u32::MAX));
+            self.drop_range(Tok::Num(0)..Tok::Num(RAM.start));
+            self.drop_range(Tok::Num(RAM.end)..=Tok::Num(u32::MAX));
+        }
+        // A lost pointer takes in every RAM address (it reads them all).
+        if self.lost_ptr {
+            if rams > 0 {
+                self.drop_range(Tok::Num(RAM.start)..Tok::Num(RAM.end));
+                self.drop_range(Tok::RamFrom(0)..=Tok::RamFrom(u32::MAX));
+            }
+        } else if rams > 0 {
+            self.cap_ram(rams);
         }
         if roms > ROMS {
             // The lowest of each run of data.
@@ -493,6 +588,84 @@ impl Val {
                 self.drop_range(hi);
                 self.drop_range(hf);
             }
+        }
+    }
+
+    /// Widen RAM addresses as ROM's ([`Val::cap`]): too many are "from
+    /// the lowest on" per run between the addresses the code names
+    /// ([`ram_bound`]), and one from here on takes in those above it in
+    /// its run; too many runs, it is lost.
+    fn cap_ram(&mut self, rams: usize) {
+        let ram_num = |t: &Tok| matches!(*t, Tok::Num(c) if is_ram(c));
+        if rams > RAMS {
+            let mut los: Vec<u32> = self
+                .toks
+                .range(Tok::Num(RAM.start)..Tok::Num(RAM.end))
+                .filter(|t| ram_num(t))
+                .map(|t| match *t {
+                    Tok::Num(c) => ram_canon(c),
+                    _ => unreachable!(),
+                })
+                .collect();
+            los.sort_unstable();
+            let mut runs: Vec<u32> = Vec::new();
+            let mut end = 0;
+            for a in los {
+                if a >= end {
+                    runs.push(a);
+                    end = ram_bound(a);
+                }
+            }
+            self.drop_range(Tok::Num(RAM.start)..Tok::Num(RAM.end));
+            for lo in runs {
+                self.toks.insert(Tok::RamFrom(lo));
+            }
+        }
+        let froms: Vec<u32> = self
+            .toks
+            .range(Tok::RamFrom(0)..=Tok::RamFrom(u32::MAX))
+            .map(|t| match *t {
+                Tok::RamFrom(a) => a,
+                _ => unreachable!(),
+            })
+            .collect();
+        if froms.is_empty() {
+            return;
+        }
+        if froms.len() > RAM_RUNS {
+            self.unk = true;
+            self.lost_ptr = true;
+            self.drop_range(Tok::Num(RAM.start)..Tok::Num(RAM.end));
+            self.drop_range(Tok::RamFrom(0)..=Tok::RamFrom(u32::MAX));
+            return;
+        }
+        // Each from here on takes in the exact addresses and those from
+        // here on above it in its run (exact ones by their canonical
+        // address: a mirror is the same cell).
+        let exact: Vec<Tok> = self
+            .toks
+            .range(Tok::Num(RAM.start)..Tok::Num(RAM.end))
+            .copied()
+            .collect();
+        let mut covered = 0;
+        let mut gone: Vec<Tok> = Vec::new();
+        for lo in froms {
+            if lo < covered {
+                gone.push(Tok::RamFrom(lo));
+                continue;
+            }
+            let end = ram_bound(lo);
+            covered = end;
+            for t in &exact {
+                if let Tok::Num(c) = *t
+                    && (lo..end).contains(&ram_canon(c))
+                {
+                    gone.push(*t);
+                }
+            }
+        }
+        for t in gone {
+            self.toks.remove(&t);
         }
     }
 
@@ -1090,9 +1263,9 @@ impl G {
                     a.mem,
                     a.unk,
                     a.lost_rom,
-                    a.lost_obj,
+                    a.lost_ptr,
                 );
-                let before = (a.toks.len(), a.mem, a.unk, a.lost_rom, a.lost_obj);
+                let before = (a.toks.len(), a.mem, a.unk, a.lost_rom, a.lost_ptr);
                 match memo.get(&key) {
                     Some((_, v)) => *a = v.clone(),
                     None => {
@@ -1101,7 +1274,7 @@ impl G {
                         memo.insert(key, (old, a.clone()));
                     }
                 }
-                c |= before != (a.toks.len(), a.mem, a.unk, a.lost_rom, a.lost_obj);
+                c |= before != (a.toks.len(), a.mem, a.unk, a.lost_rom, a.lost_ptr);
             }
             if c {
                 self.dirty_entry.insert(f);
@@ -1199,8 +1372,11 @@ fn bytes(w: Width) -> u8 {
     }
 }
 
+/// RAM's addresses (EWRAM and IWRAM, with their mirrors).
+const RAM: std::ops::Range<u32> = 0x0200_0000..0x0400_0000;
+
 fn is_ram(a: u32) -> bool {
-    (0x0200_0000..0x0400_0000).contains(&a)
+    RAM.contains(&a)
 }
 
 /// A RAM address without its mirror: EWRAM repeats every 256 KB, IWRAM
@@ -1234,6 +1410,17 @@ fn to_mem(v: &Val, w: u8) -> (Vec<(Tok, u8)>, Vec<Form>) {
                 }
             }
             Tok::Rom(_) | Tok::RomFrom(_) | Tok::Obj(..) if w == 4 => out.push((t, 4)),
+            // A RAM address: a pointer, kept.
+            // A piece of one: from here on, as an object's piece.
+            Tok::Num(c) if is_ram(c) => out.push((
+                if w == 4 {
+                    t
+                } else {
+                    Tok::RamFrom(ram_canon(c))
+                },
+                w,
+            )),
+            Tok::RamFrom(_) => out.push((t, w)),
             // A piece of a pointer into an object: of the object still.
             Tok::Obj(i, _) => out.push((Tok::Obj(i, OBJ_ANY), w)),
             _ => out.push((OTHER, w)),
@@ -1247,8 +1434,8 @@ fn to_mem(v: &Val, w: u8) -> (Vec<(Tok, u8)>, Vec<Form>) {
     if v.lost_rom {
         out.push((LOST, w));
     }
-    if v.lost_obj {
-        out.push((LOST_OBJ, w));
+    if v.lost_ptr {
+        out.push((LOST_PTR, w));
     }
     (out, bad)
 }
@@ -1258,9 +1445,9 @@ const OTHER: Tok = Tok::Num(0);
 /// In memory: a value with [`Val::lost_rom`] stored (no other number is
 /// kept in memory: [`to_mem`] makes each [`OTHER`]).
 const LOST: Tok = Tok::Num(1);
-/// In memory: a value with [`Val::lost_obj`] stored, or a piece of a
+/// In memory: a value with [`Val::lost_ptr`] stored, or a piece of a
 /// pointer into an object.
-const LOST_OBJ: Tok = Tok::Num(2);
+const LOST_PTR: Tok = Tok::Num(2);
 
 /// What a load at width `w` reads of memory `m`.
 fn from_mem(m: &Mem, w: u8, into: &mut Val) {
@@ -1286,6 +1473,18 @@ fn from_mem_one(t: Tok, sw: u8, w: u8, into: &mut Val) {
             Tok::Fn { key, origin, form }
         }
         Tok::Rom(_) | Tok::RomFrom(_) | Tok::Obj(..) if w == 4 && sw == 4 => t,
+        Tok::Num(c) if is_ram(c) && w == 4 && sw == 4 => t,
+        Tok::RamFrom(_) if w == 4 && sw == 4 => t,
+        // A piece of a RAM address, or pieces of one read as a word: from
+        // here on.
+        Tok::Num(c) if is_ram(c) => {
+            into.unk = true;
+            Tok::RamFrom(ram_canon(c))
+        }
+        Tok::RamFrom(_) => {
+            into.unk = true;
+            t
+        }
         // A piece of a pointer into an object, or pieces of one read as a
         // word: of the object still.
         Tok::Obj(i, _) => {
@@ -1298,8 +1497,8 @@ fn from_mem_one(t: Tok, sw: u8, w: u8, into: &mut Val) {
                 into.lost_rom = true;
                 return;
             }
-            if t == LOST_OBJ {
-                into.lost_obj = true;
+            if t == LOST_PTR {
+                into.lost_ptr = true;
                 into.unk = true;
                 return;
             }
@@ -1430,6 +1629,26 @@ impl Run<'_, '_> {
         into.cap();
     }
 
+    /// What a load at width `w` reads of the ROM words from `lo` to `hi`
+    /// (kept by bounds and width).
+    fn rom_range(&mut self, lo: u32, hi: u32, w: u8, into: &mut Val) {
+        match self.g.rom_hull.get(&(lo, hi, w)) {
+            Some(v) => {
+                into.join(v);
+            }
+            None => {
+                let mut v = Val::default();
+                let mut p = lo & !3;
+                while p <= hi {
+                    self.rom_read(p, w, &mut v);
+                    p += 4;
+                }
+                into.join(&v);
+                self.g.rom_hull.insert((lo, hi, w), v);
+            }
+        }
+    }
+
     fn rom_from(&mut self, a: u32, w: u8, into: &mut Val) {
         if let Some(v) = self.g.rom_from.get(&(a, w)) {
             into.join(v);
@@ -1532,6 +1751,26 @@ impl Run<'_, '_> {
                             )
                         {
                             out.lost_rom = true;
+                        }
+                        // A RAM address moved by an unknown (an index, a
+                        // mask), as for an object: still a pointer, which
+                        // the run can't place (any other op makes a
+                        // number of it: a difference, a hash).
+                        let ram = |t: Option<Tok>| {
+                            matches!(t, Some(Tok::Num(c)) if is_ram(c))
+                                || matches!(t, Some(Tok::RamFrom(_)))
+                        };
+                        // A mask the run doesn't know makes a number of
+                        // it, as of a pointer into an object.
+                        let moved = match op {
+                            BinOp::Add | BinOp::Or | BinOp::Xor => ram(x) || ram(y),
+                            // Less a number or an unknown (a difference
+                            // with another is a number).
+                            BinOp::Sub => ram(x) && !ram(y),
+                            BinOp::And | BinOp::Mul => false,
+                        };
+                        if moved {
+                            out.lost_ptr = true;
                         }
                     }
                     R::Hole(why, num) => {
@@ -1660,6 +1899,23 @@ impl Run<'_, '_> {
                                 });
                             }
                         }
+                        // What the other tokens make (a pointer the value
+                        // may be instead, moved: dropped, a load through
+                        // it would read nothing).
+                        let others = |v: &Val| Val {
+                            toks: v
+                                .toks
+                                .iter()
+                                .filter(|t| !matches!(t, Tok::Fn { .. }))
+                                .copied()
+                                .collect(),
+                            ..v.clone()
+                        };
+                        let (a, b) = (others(&a), others(&b));
+                        if !a.toks.is_empty() || !b.toks.is_empty() {
+                            let ab = self.bin(BinOp::Add, &a, &b, site, at);
+                            out.join(&self.bin(BinOp::Add, &ab, &val(c), site, at));
+                        }
                         out
                     } else {
                         let ab = self.bin(BinOp::Add, &a, &b, site, at);
@@ -1689,7 +1945,7 @@ impl Run<'_, '_> {
                             Tok::Num(c) | Tok::Rom(c) => {
                                 out.toks.insert(num_tok(self.img, !c));
                             }
-                            Tok::RomFrom(_) => out.unk = true,
+                            Tok::RomFrom(_) | Tok::RamFrom(_) => out.unk = true,
                             // `!` of a pointer is a number (the closed world).
                             Tok::Obj(..) => out.unk = true,
                         }
@@ -1757,6 +2013,28 @@ impl Run<'_, '_> {
                                     out.toks.insert(Tok::Obj(i, OBJ_ANY));
                                 }
                             }
+                            // A RAM address through a word load's rotation
+                            // stays one; cut in bytes (a piece copied) or
+                            // by an unknown amount, it is lost.
+                            Tok::Num(c) if is_ram(c) && kind == ShiftType::Ror && n.is_none() => {
+                                out.toks.insert(t);
+                            }
+                            Tok::RamFrom(_)
+                                if n == Some(0) || (kind == ShiftType::Ror && n.is_none()) =>
+                            {
+                                out.toks.insert(t);
+                            }
+                            // Shifted by bytes, a RAM address is a piece of
+                            // one (as of an object, above): from here on.
+                            Tok::Num(c) if is_ram(c) && matches!(n, Some(8 | 16 | 24)) => {
+                                out.unk = true;
+                                out.toks.insert(Tok::RamFrom(ram_canon(c)));
+                            }
+                            Tok::RamFrom(_) if matches!(n, Some(8 | 16 | 24)) => {
+                                out.unk = true;
+                                out.toks.insert(t);
+                            }
+                            Tok::RamFrom(_) => out.unk = true,
                             Tok::Num(c) | Tok::Rom(c) => match n {
                                 Some(n) => {
                                     out.toks.insert(num_tok(self.img, shift(kind, c, n)));
@@ -1827,7 +2105,7 @@ impl Run<'_, '_> {
                     let a = val(addr);
                     self.g.hole(&a, at, Why::Address, |_| true);
                     let mut out = self.load(&s, key, i, &a, w, b.hulls.get(&i).copied());
-                    if self.trace && out.lost_obj && !a.lost_obj {
+                    if self.trace && out.lost_ptr && !a.lost_ptr {
                         eprintln!("  obj lost by load at {at:#010x} w{w} through {a:?}");
                     }
                     if guarded {
@@ -1868,12 +2146,12 @@ impl Run<'_, '_> {
                 v.lost_rom = true;
             }
             // What a word op makes of a lost pointer is lost.
-            if !v.lost_obj
+            if !v.lost_ptr
                 && !matches!(inst.op, Op::Load { .. })
-                && lost_from(&inst.op).iter().any(|x| vals[x.index()].lost_obj)
+                && lost_from(&inst.op).iter().any(|x| vals[x.index()].lost_ptr)
             {
                 v.unk = true;
-                v.lost_obj = true;
+                v.lost_ptr = true;
             }
             if self.trace && self.g.flow.holes.len() != holes_before {
                 let ops: Vec<String> = inst_operands(&inst.op)
@@ -1989,18 +2267,48 @@ impl Run<'_, '_> {
     /// not in the function's own frame, or not placed there).
     fn load_at(&mut self, a: &Val, w: u8, hull: Option<(u32, u32)>) -> Val {
         let mut out = Val::default();
-        let mut anywhere = a.unk || a.mem;
-        // Every object too: a pointer into one may be among the unknown.
-        let mut objs = a.lost_obj || a.toks.is_empty();
+        // A pointer into RAM the run dropped may be any: every cell and
+        // object, and the pile. An unknown with none dropped is no RAM
+        // address (the closed world): an I/O read, or one the value-set
+        // analysis bounds.
+        let mut lost = a.lost_ptr;
+        let unknown = a.unk || a.mem || a.toks.is_empty();
         for &t in &a.toks {
             match t {
                 Tok::Rom(r) => self.rom_read(r, w, &mut out),
-                Tok::RomFrom(r) => self.rom_from(r, w, &mut out),
-                Tok::Obj(o, off) if self.g.obj_up(o, off) => {
-                    anywhere = true;
-                    objs = true;
-                }
+                // Up to the next code, or, where the value-set analysis
+                // bounds the load in ROM, only the words in both (a table
+                // ahead of others: a font's before vtables).
+                Tok::RomFrom(r) => match hull {
+                    Some((lo, hi))
+                        if self.img.word(lo).is_some()
+                            && self.img.word(hi).is_some()
+                            && hi >= r
+                            && hi - lo.max(r) < ROM_READ =>
+                    {
+                        let hi = hi.min(self.img.bound(r).saturating_sub(1));
+                        self.rom_range(lo.max(r), hi, w, &mut out);
+                    }
+                    Some((lo, hi))
+                        if self.img.word(lo).is_some() && self.img.word(hi).is_some() =>
+                    {
+                        if hi >= r {
+                            self.rom_from(r, w, &mut out);
+                        }
+                    }
+                    _ => self.rom_from(r, w, &mut out),
+                },
+                Tok::Obj(o, off) if self.g.obj_up(o, off) => lost = true,
                 Tok::Obj(o, off) => self.g.read_obj(o, off, w, &mut out),
+                // Its run's cells, and the pile.
+                Tok::RamFrom(c) => {
+                    let hi = ram_bound(c) - 1;
+                    self.g.rd.ranges.push((c.saturating_sub(3), hi));
+                    for (_, m) in self.g.cells.range(c.saturating_sub(3)..=hi) {
+                        from_mem(m, w, &mut out);
+                    }
+                    self.g.read_pile(w, &mut out);
+                }
                 Tok::Num(c) | Tok::Fn { key: c, .. } => {
                     if is_ram(c) {
                         let c = ram_canon(c);
@@ -2019,10 +2327,10 @@ impl Run<'_, '_> {
                 }
             }
         }
-        if a.toks.is_empty() {
-            anywhere = true;
+        if lost && self.trace {
+            eprintln!("  load anywhere at {:#010x} through {a:?}", self.at);
         }
-        if anywhere {
+        if lost || unknown {
             match hull {
                 // Bounded to ROM: its words there.
                 Some((lo, hi))
@@ -2030,21 +2338,7 @@ impl Run<'_, '_> {
                         && self.img.word(hi).is_some()
                         && hi - lo < ROM_READ =>
                 {
-                    match self.g.rom_hull.get(&(lo, hi, w)) {
-                        Some(v) => {
-                            out.join(v);
-                        }
-                        None => {
-                            let mut v = Val::default();
-                            let mut p = lo & !3;
-                            while p <= hi {
-                                self.rom_read(p, w, &mut v);
-                                p += 4;
-                            }
-                            out.join(&v);
-                            self.g.rom_hull.insert((lo, hi, w), v);
-                        }
-                    }
+                    self.rom_range(lo, hi, w, &mut out);
                 }
                 _ => {
                     // Bounded to ROM but too wide to read: its words go
@@ -2055,17 +2349,22 @@ impl Run<'_, '_> {
                     {
                         out.lost_rom = true;
                     }
-                    self.g.read_pile(w, &mut out);
                     match hull {
+                        // Bounded (to RAM, or wider): the cells there.
                         Some((lo, hi)) => {
+                            self.g.read_pile(w, &mut out);
                             self.g.rd.ranges.push((lo.saturating_sub(3), hi));
                             for (_, c) in self.g.cells.range(lo.saturating_sub(3)..=hi) {
                                 from_mem(c, w, &mut out);
                             }
                         }
-                        None => self.g.read_cells(w, &mut out),
+                        None if lost => {
+                            self.g.read_pile(w, &mut out);
+                            self.g.read_cells(w, &mut out);
+                        }
+                        None => {}
                     }
-                    if objs {
+                    if lost {
                         self.g.read_objs(w, &mut out);
                     }
                     // An I/O read, too.
@@ -2103,11 +2402,11 @@ impl Run<'_, '_> {
                         let mut v = Val::unk();
                         v.toks.extend(
                             toks.iter()
-                                .filter(|(t, _)| *t != OTHER && *t != LOST && *t != LOST_OBJ)
+                                .filter(|(t, _)| *t != OTHER && *t != LOST && *t != LOST_PTR)
                                 .map(|(t, _)| *t),
                         );
                         v.lost_rom = x.lost_rom;
-                        v.lost_obj = x.lost_obj;
+                        v.lost_ptr = x.lost_ptr;
                         v
                     };
                     let new = match (guarded, old) {
@@ -2161,7 +2460,21 @@ impl Run<'_, '_> {
     /// A store of `toks` through address `a` (not to a place in the
     /// function's own frame).
     fn store_at(&mut self, a: &Val, toks: &[(Tok, u8)]) {
-        let mut anywhere = a.unk || a.mem || a.toks.is_empty();
+        let mut anywhere = a.lost_ptr;
+        // An unknown address with no RAM pointer lost is none in RAM (the
+        // closed world, as for loads): what it stores reaches no load,
+        // but function and ROM addresses go to the pile all the same (so
+        // their flow is as before).
+        if !a.lost_ptr && (a.unk || a.mem || a.toks.is_empty()) {
+            let kept: Vec<(Tok, u8)> = toks
+                .iter()
+                .copied()
+                .filter(|(t, _)| matches!(t, Tok::Fn { .. } | Tok::Rom(_) | Tok::RomFrom(_)))
+                .collect();
+            if !kept.is_empty() {
+                self.g.store(Store::Pile, &kept);
+            }
+        }
         for &t in &a.toks {
             match t {
                 Tok::Num(c) | Tok::Fn { key: c, .. } if is_ram(c) => {
@@ -2169,12 +2482,16 @@ impl Run<'_, '_> {
                 }
                 Tok::Obj(o, off) if self.g.obj_up(o, off) => anywhere = true,
                 Tok::Obj(o, off) => self.g.store(Store::Cell(obj_addr(o, off)), toks),
-                Tok::RomFrom(_) => anywhere = true,
-                Tok::Num(_) | Tok::Rom(_) | Tok::Fn { .. } => {}
+                // Somewhere in a run of RAM: the pile (every load from RAM
+                // reads it).
+                Tok::RamFrom(_) => anywhere = true,
+                // ROM: nothing changes (the closed world: a ROM pointer
+                // moved stays in ROM).
+                Tok::Num(_) | Tok::Rom(_) | Tok::RomFrom(_) | Tok::Fn { .. } => {}
             }
         }
         // A lost pointer into an object: every object.
-        if a.lost_obj {
+        if a.lost_ptr {
             self.g.store(Store::Cell(LOST_CELL), toks);
         }
         // Somewhere the run can't place: the pile, which every load from
@@ -2257,15 +2574,25 @@ impl Run<'_, '_> {
                 }
                 // CpuSet and CpuFastSet from ROM copy its words to RAM.
                 if matches!(out.bios, Some(0x0B | 0x0C)) {
+                    let src = &s.regs[0];
                     let mut got = Val {
-                        lost_rom: s.regs[0].lost_rom,
+                        lost_rom: src.lost_rom,
                         ..Val::default()
                     };
-                    for &t in &s.regs[0].toks {
+                    for &t in &src.toks {
                         match t {
                             Tok::Rom(a) | Tok::RomFrom(a) => self.rom_from(a, 4, &mut got),
-                            _ => {}
+                            // From RAM (not followed): the RAM pointers
+                            // it may copy are lost.
+                            _ => {
+                                got.unk = true;
+                                got.lost_ptr = true;
+                            }
                         }
+                    }
+                    if src.unk || src.mem || src.lost_ptr {
+                        got.unk = true;
+                        got.lost_ptr = true;
                     }
                     let (toks, _) = to_mem(&got, 4);
                     self.g.store(Store::Pile, &toks);
@@ -2316,7 +2643,7 @@ impl Run<'_, '_> {
                             mem: a.mem && !o.mem,
                             unk: a.unk && !o.unk,
                             lost_rom: a.lost_rom && !o.lost_rom,
-                            lost_obj: a.lost_obj && !o.lost_obj,
+                            lost_ptr: a.lost_ptr && !o.lost_ptr,
                             ..Val::default()
                         };
                         if !std::rc::Rc::ptr_eq(&a.toks.0, &o.toks.0) {
@@ -2327,9 +2654,10 @@ impl Run<'_, '_> {
                     .collect();
                 if delta
                     .iter()
-                    .any(|d| !d.toks.is_empty() || d.mem || d.unk || d.lost_rom || d.lost_obj)
+                    .any(|d| !d.toks.is_empty() || d.mem || d.unk || d.lost_rom || d.lost_ptr)
                 {
-                    let ixs: BTreeSet<Ix> = callees.iter().map(|&k| self.g.ix_call(k, ctx)).collect();
+                    let ixs: BTreeSet<Ix> =
+                        callees.iter().map(|&k| self.g.ix_call(k, ctx)).collect();
                     self.g.give_all(&ixs, &delta);
                     for (o, a) in m.args.iter_mut().zip(args) {
                         o.union(a);
@@ -2448,7 +2776,7 @@ fn offset(v: &Val, d: Option<i64>) -> Val {
     let mut out = Val {
         unk: v.unk,
         mem: v.mem,
-        lost_obj: v.lost_obj,
+        lost_ptr: v.lost_ptr,
         ..Val::default()
     };
     for &t in &v.toks {
@@ -2461,6 +2789,20 @@ fn offset(v: &Val, d: Option<i64>) -> Val {
             }
             (Tok::Num(c), Some(d)) => {
                 out.toks.insert(Tok::Num(c.wrapping_add(d as u32)));
+            }
+            // A RAM address by an offset not known: from here on.
+            (Tok::Num(c), None) if is_ram(c) => {
+                out.toks.insert(Tok::RamFrom(ram_canon(c)));
+            }
+            (Tok::RamFrom(a), Some(d)) if d >= 0 => {
+                out.toks.insert(Tok::RamFrom(a));
+            }
+            (Tok::RamFrom(a), None) => {
+                out.toks.insert(Tok::RamFrom(a));
+            }
+            (Tok::RamFrom(_), Some(_)) => {
+                out.unk = true;
+                out.lost_ptr = true;
             }
             _ => out.unk = true,
         }
@@ -2601,6 +2943,38 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> R {
         }
         _ => {}
     }
+    // A RAM address moved by an index the run doesn't know, joined or
+    // tagged (`|`, `^`): from here on. Less one, or masked by one, it is
+    // lost ([`Run::bin`]).
+    let ram = |t: Option<Tok>| match t {
+        Some(Num(c)) if is_ram(c) => Some(ram_canon(c)),
+        Some(RamFrom(a)) => Some(a),
+        _ => None,
+    };
+    let moves = matches!(op, BinOp::Add | BinOp::Or | BinOp::Xor);
+    match (x, y) {
+        (Some(_), None) | (None, Some(_)) if moves => {
+            if let Some(a) = ram(x).or(ram(y)) {
+                return R::T(RamFrom(a));
+            }
+        }
+        (Some(RamFrom(a)), Some(Num(_))) | (Some(Num(_)), Some(RamFrom(a))) if moves => {
+            return R::T(RamFrom(a));
+        }
+        (Some(RamFrom(a)), Some(Num(b))) if op == BinOp::Sub => {
+            let p = a.wrapping_sub(b);
+            return if is_ram(p) && ram_canon(p) == p && (p >> 24) == (a >> 24) {
+                R::T(RamFrom(p))
+            } else {
+                R::Unk
+            };
+        }
+        (Some(RamFrom(a)), Some(Num(m))) if op == BinOp::And && m >= 0xffff_0000 => {
+            return R::T(RamFrom(a & m));
+        }
+        (Some(RamFrom(_)), _) | (_, Some(RamFrom(_))) => return R::Unk,
+        _ => {}
+    }
     let (x, y) = match (x, y) {
         (Some(x), Some(y)) => (x, y),
         (Some(Rom(a)), None) | (None, Some(Rom(a))) if op == BinOp::Add => return R::T(RomFrom(a)),
@@ -2640,6 +3014,7 @@ pub fn follow(
     ctx_blocks: usize,
 ) -> Flow {
     let _code = CodeGuard::set(img);
+    let _ram = RamGuard::set(fns, copies);
     let mut g = G {
         loose_args: vec![Val::default(); 16],
         allocs: allocs.clone(),
@@ -2768,7 +3143,7 @@ pub fn follow(
             // The sp it was called with; its own is its frame's start.
             let mut sp_in = std::mem::take(&mut entry[13]);
             if sp_in.toks.is_empty() {
-                sp_in.unk = true;
+                sp_in = Val::lost();
             }
             for r in &mut entry[4..] {
                 r.unk = true;
