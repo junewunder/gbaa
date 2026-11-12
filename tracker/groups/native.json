@@ -1799,7 +1799,14 @@
       "detail": "Once {unit:native/lift-psr-boot-irq} is on main (the lifter prints the reset's and the IRQ wrapper's msr/mrs), remove from the private mods repo: mods/metroid/holes.toml's stand-ins 0x08000000 (reset), 0x08000104 (IRQ dispatcher) and 0x03000c7c (its IWRAM copy); mods/kirby-nightmare/holes.toml's 0x08000000 and 0x03001030. Left in until then because mods/ is shared by every lane and an older lifter needs them. Verified on the branch: both lift with 0 msr/mrs hard holes and build without them. Done when: just lift on each reports no reset/dispatcher hole (other known holes aside) and the mods commit is in.",
       "check": "recorded",
       "needs": ["native/lift-psr-boot-irq"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-12T12:50:05Z",
+          "by": "a7b7e9d7",
+          "text": "Lifting Nightmare's dispatcher 0x03001030 (stand-in dropped) adds 5 IWRAM functions with hard entry-read summary holes main's lift lacks: 0x03007151 0x0300715c 0x030071df 0x030072e8 0x030074d1. Built only with temp panic stand-ins for them; settle these first."
+        }
+      ]
     }
   ]
 }
