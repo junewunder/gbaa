@@ -1387,8 +1387,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   lift-check` (or `--only NAME`). **Raising a bar** is a hand edit a unit may make itself (never
   `hard_holes`, a planted control or the native check: ask june) when the
   native check stays green and its evidence gives the bar, old and new value
-  and the cause; then `just tracker decide --for-run`. Ask june when the bar
-  is the unit's own target (`docs/native-stage-b.md`). A new metric needs a bar in every table (the lift
+  and the cause; then `just tracker decide --for-run`. A target that won't
+  move: `docs/native-stage-b.md`, check 2. A new metric needs a bar in every table (the lift
   fails on a metric with none); a new program is a new table, its bars
   at the values its first lift reports. `cargo test -p codegen --test
   lift_bars` shows a lowered bar failing the lift by name.

@@ -44,12 +44,12 @@ mode.
    summary hole") is a metric of its own with bar 0. A unit's check names
    the bar it lowers and to what; a fraction ("a quarter") is of the bar's
    value when the unit is claimed, since earlier units move the baseline.
-   Bars measure how plain the lift is, not whether it's right. The native
-   check, `hard_holes` and planted controls never loosen without june. A
-   unit may raise another bar itself, the native check green and its
-   evidence giving the bar, both values and the cause (the review judges
-   it; then `just tracker decide --for-run`); ask june when that bar is the
-   unit's own target or a large rise has no cause. `docs/tools/commands.md`.
+   Bars and target counts measure precision, not whether the lift is right:
+   the native check, `hard_holes` and planted controls never loosen without
+   june. A unit may itself raise another bar (evidence: bar, both values,
+   cause), or land on a direct measure when its target doesn't move (it
+   becomes a bar; a named unit takes the target; the checker agrees). Then
+   `just tracker decide --for-run`. No direct measure: ask june. `commands.md`.
 3. **The old behaviour is a planted control** wherever the stack is
    involved or the change could pass by not running: the native check
    skips the guest stack, so a wrong stack slot only shows where it reaches
