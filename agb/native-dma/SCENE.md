@@ -22,4 +22,4 @@ display memories.
 | Build | Frame 600 |
 |-------|-----------|
 | mGBA 0.10.5, our interpreter at `--timing exact` | hash `d8d698342cc0e045` |
-| the lift with `dma_set`'s `DMAxCNT` store one more (the planted control) | every transfer one unit longer: H-blank DMA two lines a line, so the bands move twice as fast |
+| the lift with `dma_set`'s `DMAxCNT` store one more (the planted control) | every transfer one unit longer: the check catches it on frame 1, the fill writing one unit past `FILL` in EWRAM (and H-blank DMA two lines a line, the bands moving twice as fast) |
