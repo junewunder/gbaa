@@ -2533,3 +2533,4 @@
 {"at":"2026-11-12T04:53:41Z","actor":"loop","tag":"6f486280","host":"quack","cmd":"claim","id":"native/nightmare-cover-list","text":"Refresh Nightmare's coverage jump list: claimed"}
 {"at":"2026-11-12T05:33:11Z","actor":"loop","tag":"6f486280","host":"quack","cmd":"check","id":"native/nightmare-cover-list","text":"Refresh Nightmare's coverage jump list: now done (its check passes)"}
 {"at":"2026-11-12T05:36:39Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/nightmare-cover-list","text":"Refresh Nightmare's coverage jump list: on main"}
+{"at":"2026-11-12T05:44:14Z","actor":"loop","tag":"b3d0fb3e","host":"quack","cmd":"done","id":"native/entry-read-masking","text":"Tell masked entry reads of r4-r11 from parameters: done, checked by a64859a25a26ba9d2"}

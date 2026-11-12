@@ -1203,15 +1203,23 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "b3d0fb3e",
-        "session": "b3d0fb3e-b920-4e56-a4e2-460218715578",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T04:53:30Z",
+        "checker": "a64859a25a26ba9d2",
+        "at": "2026-11-12T05:44:14Z",
+        "evidence": "Verifier (fresh context) PASS: just check exit 0 after merging main; holes-all --against out/holes/2359ecdd-dirty (out/holes/tailcall) names 36 hard entry-read functions, matching the doc's table; soft kinds hold only fully-masked reads and only-jumped ones (Rogue 15, Nightmare 1, moonbeam 1). Review fix: tail calls/falls from called functions count as calls, with a test.",
         "branch": "unit/native/entry-read-masking",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T05:44:14Z",
+          "by": "b3d0fb3e",
+          "host": "quack",
+          "pid": 2489252,
+          "start": "10657014",
+          "beats": true,
+          "session": "b3d0fb3e-b920-4e56-a4e2-460218715578",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
