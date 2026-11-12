@@ -143,11 +143,13 @@ pub const BUSY_ITERATIONS: u32 = 64;
 /// The BIOS calls the native lifter prints (`gbaa-lift`'s prelude,
 /// `crates/codegen/src/native/prelude.rs`): `Halt`, `Stop`, `IntrWait`,
 /// `VBlankIntrWait`, `Div`, `Sqrt`, `ArcTan2`, `CpuSet`, `CpuFastSet`,
-/// the LZ77 and RL decompressors, `SoundBias`, `MidiKey2Freq` and
-/// `MultiBoot`. Every other call is a hard hole in a native build, though
-/// the play build's BIOS (`runtime::bios`) has nearly all of them.
+/// `BgAffineSet`, `ObjAffineSet`, the LZ77 and RL decompressors,
+/// `SoundBias`, `MidiKey2Freq` and `MultiBoot`. Every other call is a hard
+/// hole in a native build, though the play build's BIOS (`runtime::bios`)
+/// has nearly all of them.
 pub const NATIVE_BIOS: &[u8] = &[
-    0x02, 0x03, 0x04, 0x05, 0x06, 0x08, 0x0A, 0x0B, 0x0C, 0x11, 0x12, 0x14, 0x15, 0x19, 0x1F, 0x25,
+    0x02, 0x03, 0x04, 0x05, 0x06, 0x08, 0x0A, 0x0B, 0x0C, 0x0E, 0x0F, 0x11, 0x12, 0x14, 0x15, 0x19,
+    0x1F, 0x25,
 ];
 
 /// Whether a native build can make BIOS call `n`: the lifter prints it

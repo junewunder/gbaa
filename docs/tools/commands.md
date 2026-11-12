@@ -1337,8 +1337,10 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
   `agb/native-frame-locals`, `agb/native-ime-release`,
   `agb/native-bios-calls`, `agb/native-tasks`, `agb/native-dma`,
-  `agb/native-save` (SRAM), `agb/native-bios-region` (the BIOS latch;
-  `just agb-tests`; native-bios-calls is native/lift-bios-calls) on
+  `agb/native-save` (SRAM), `agb/native-bios-region` (the BIOS latch),
+  `agb/native-bios-affine` (`BgAffineSet`, `ObjAffineSet`;
+  `just agb-tests`; native-bios-calls is native/lift-bios-calls,
+  native-bios-affine native/lift-bios-affine) on
   `units/<name>-600.toml` (the spike's is `units/native-spike.toml`,
   native-irq-hold's, native-ime-release's and native-bios-region's
   `-601`). First every program is lifted with `--bars`
