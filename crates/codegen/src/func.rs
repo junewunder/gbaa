@@ -729,7 +729,19 @@ pub fn successors(ctx: &Ctx, x: &ExitInfo) -> Vec<u32> {
         Plan::Static(k) | Plan::Rekey(k) => vec![k],
         Plan::Call { ret, .. } | Plan::CallVia { ret, .. } => vec![ret],
         Plan::Dynamic { ret, target, .. } => ret.into_iter().chain(target).collect(),
-        Plan::Swi { next } => vec![next],
+        // `SoftReset` and `HardReset` restart the program: no code runs
+        // after them (a compiler may put a trap or data there).
+        Plan::Swi { next } => match ctx.decode(x.at, x.thumb, 2).first() {
+            Some(&(_, Instr::Swi { comment, .. }))
+                if matches!(
+                    runtime::bios::number(comment, x.thumb),
+                    runtime::bios::call::SOFT_RESET | runtime::bios::call::HARD_RESET
+                ) =>
+            {
+                vec![]
+            }
+            _ => vec![next],
+        },
         Plan::Undefined => vec![],
     };
     out.extend(x.ret);
