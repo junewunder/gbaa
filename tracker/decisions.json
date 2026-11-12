@@ -989,7 +989,8 @@
       "by": "owner",
       "at": "2026-11-07T04:27:11Z",
       "question": "q/accept-indirect-call-bar-today",
-      "via": "8f498bd1"
+      "via": "8f498bd1",
+      "until": "2026-11-07T05:00:00Z"
     },
     {
       "id": "d/covered-controls-page-your-deck",
