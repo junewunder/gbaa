@@ -257,8 +257,8 @@ stub targets too (a `bl` to a stub returns); a Thumb `bx pc` is never a
 return (`classify` took the veneer's linear predecessor, a `pop {…, pc}`,
 for its own); a constant jump into RAM, Recovery's `JumpRes::Ram`, is
 resolved where an overlay has a function there: `SoundMain`'s, Minish
-Cap's two reached ones, one each in Rogue and Imperium (hard 106 to 103).
-Resume's `bx r1` (0x08000254), found now, is real: Nightmare 9 to 10, its
+Cap's two reached ones, one each in Rogue and Imperium (hard 139 to
+136 over the corpus, main at 878cf4a). Resume's `bx r1` (0x08000254), found now, is real: Nightmare 14 to 15, its
 lift stopped there until the switcher's stand-in covers it.
 
 ## Each game's worst holes
