@@ -30,6 +30,7 @@ pub mod feel;
 pub mod gba;
 pub mod msg;
 pub mod proxy;
+pub mod radio;
 pub mod rollback;
 pub mod script;
 pub mod session;
