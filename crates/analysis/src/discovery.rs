@@ -112,6 +112,10 @@ pub struct Discovery {
     /// interworking form: call and jump targets, and the IRQ handler the
     /// code installs. Where [`copies`](Discovery::copies)' code is entered.
     pub ram_entries: BTreeSet<u32>,
+    /// The IRQ handlers the code installs: constant words stored to the
+    /// BIOS's IRQ vector, ROM or RAM, as ARM keys. The lifter prints their
+    /// `msr`s and `mrs`s as the IRQ wrapper's (`codegen::native`).
+    pub irq_handlers: BTreeSet<u32>,
     /// The jumps and far-jump `bl`s over every root.
     pub rec: Recovery,
     /// Descent rounds run.
@@ -774,6 +778,7 @@ impl Driver {
             }
             d.copies.extend(&self.eng.results[k].copies);
             d.ram_entries.extend(&self.eng.results[k].ram_entries);
+            d.irq_handlers.extend(&self.eng.results[k].irq_handlers);
             for &(a, size) in &self.eng.results[k].insns {
                 let c = Code {
                     size,
