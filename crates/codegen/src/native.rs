@@ -2141,7 +2141,9 @@ impl FnPrinter<'_, '_> {
                         return s;
                     }
                 };
-                let c = self.call_then(call, next, at);
+                // The BIOS region then reads the opcode after the call's
+                // return, as the play build's (`swi_done`).
+                let c = self.call_then(format!("{call} swi_done(g);"), next, at);
                 writeln!(s, "{ind}{c}").unwrap();
             }
             Plan::Undefined => self.hole(at, "an undefined instruction"),

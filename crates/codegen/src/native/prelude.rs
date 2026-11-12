@@ -45,6 +45,10 @@ pub struct Game {
     pub lr: u32,
     /// The tasks a game's task switcher runs ([`task_resume`]).
     pub tasks: Tasks,
+    /// What the BIOS region reads (`runtime::bus::BIOS_LATCH_*`), moved as
+    /// the play build's BIOS moves it: after boot, after a call, in and
+    /// after an IRQ.
+    pub bios_latch: u32,
 }
 
 impl Native for Game {
@@ -87,6 +91,7 @@ impl Game {
             cpsr: 0x1F,
             lr: RET,
             tasks: Tasks::default(),
+            bios_latch: runtime::bus::BIOS_LATCH_AFTER_BOOT,
         });
         g.hw.irq.set_handler(irq_entry);
         g.hw.on_frame_end(record);
@@ -140,12 +145,14 @@ fn record(g: &mut Game) {
 }
 
 /// The handler the game stored at `0x0300_7FFC` (`IRQ_HANDLER_PTR`), run
-/// as the BIOS's IRQ stub runs it: r0 = `0x0400_0000`, on the IRQ stack.
+/// as the BIOS's IRQ stub runs it: r0 = `0x0400_0000`, on the IRQ stack,
+/// the BIOS region reading the stub's latch in it and after.
 fn irq_entry(g: &mut Game) {
     let h = ld32(g, 0x0300_7FFC);
     if h == 0 {
         return;
     }
+    g.bios_latch = runtime::bus::BIOS_LATCH_IN_IRQ;
     let k = if h & 1 != 0 { h } else { h & !3 };
     // IRQ mode, I set, as the exception enters it; back as it was on the
     // return (the BIOS's `subs pc, lr, #4` restores the SPSR).
@@ -154,7 +161,29 @@ fn irq_entry(g: &mut Game) {
     // A handler doesn't wait, so it can't be told to stop.
     let _ = call_fn(g, k, IRQ_SP, [0x0400_0000, 0, 0, 0]);
     g.cpsr = cpsr;
+    g.bios_latch = runtime::bus::BIOS_LATCH_AFTER_IRQ;
 }
+
+/// A BIOS call has returned: the BIOS region reads the opcode after its
+/// `swi` return, as the play build's.
+pub fn swi_done(g: &mut Game) {
+    g.bios_latch = runtime::bus::BIOS_LATCH_AFTER_SWI;
+}
+
+/// The BIOS region's protection latch, `n` bytes at `a` (BIOS protection:
+/// code outside the BIOS reads the last opcode fetched from it).
+#[inline(never)]
+fn bios_read(g: &Game, a: u32, n: u32) -> u32 {
+    match n {
+        1 => (g.bios_latch >> ((a & 3) * 8)) & 0xFF,
+        2 => (g.bios_latch >> ((a & 2) * 8)) & 0xFFFF,
+        _ => g.bios_latch,
+    }
+}
+
+/// The BIOS's size: past it, the region reads open bus, which the
+/// program doesn't keep.
+const BIOS_SIZE: u32 = 0x4000;
 
 /// The RAM offset of a guest EWRAM or IWRAM address (mirrors included).
 #[inline(always)]
@@ -338,6 +367,7 @@ pub fn ld8(g: &mut Game, a: u32) -> u32 {
             let o = (a & 0x1FF_FFFF) as usize;
             (rom16(o & !1) >> ((o & 1) * 8)) & 0xFF
         }
+        0 if a < BIOS_SIZE => bios_read(g, a, 1),
         _ => unmapped("a byte load", a),
     }
 }
@@ -353,6 +383,7 @@ pub fn ld16(g: &mut Game, a: u32) -> u32 {
         6 => vram_at(g, a).map_or(0, |o| le(&g.hw.ppu.vram, o)),
         7 => le(&g.hw.ppu.oam, (a & 0x3FE) as usize),
         8..=0xD => rom16((a & 0x1FF_FFFE) as usize),
+        0 if a < BIOS_SIZE => bios_read(g, a, 2),
         _ => unmapped("a halfword load", a),
     }
 }
@@ -367,6 +398,7 @@ pub fn ld32(g: &mut Game, a: u32) -> u32 {
             io_read16(g, o) | io_read16(g, o + 2) << 16
         }
         5..=0xD => ld16(g, a) | ld16(g, a.wrapping_add(2)) << 16,
+        0 if a < BIOS_SIZE => bios_read(g, a, 4),
         _ => unmapped("a word load", a),
     }
 }
@@ -405,8 +437,8 @@ pub fn st8(g: &mut Game, a: u32, v: u32) {
                 g.hw.ppu.vram[o..o + 2].copy_from_slice(&[v, v]);
             }
         }
-        // OAM ignores byte stores; ROM takes none.
-        7..=0xD => {}
+        // OAM ignores byte stores; the BIOS and ROM take none.
+        0 | 1 | 7..=0xD => {}
         _ => unmapped("a byte store", a),
     }
 }
@@ -432,7 +464,7 @@ pub fn st16(g: &mut Game, a: u32, v: u32) {
             let o = (a & 0x3FE) as usize;
             g.hw.ppu.oam[o..o + 2].copy_from_slice(&b);
         }
-        8..=0xD => {}
+        0 | 1 | 8..=0xD => {}
         _ => unmapped("a halfword store", a),
     }
 }
@@ -454,7 +486,7 @@ pub fn st32(g: &mut Game, a: u32, v: u32) {
             st16(g, a, v & 0xFFFF);
             st16(g, a.wrapping_add(2), v >> 16);
         }
-        8..=0xD => {}
+        0 | 1 | 8..=0xD => {}
         _ => unmapped("a word store", a),
     }
 }
