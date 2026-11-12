@@ -1,6 +1,6 @@
 ---
 title: Why the function-address flow ran out of memory on Emerald, and the Ref fix
-hook: big reads (pile, every cell, ROM tables) are now one Tok::Ref; round 0 holds 1.5 GB but runs ~60 s per 500 fns: speed is next (2026-11-08)
+hook: big reads are one Tok::Ref (1.5 GB); 2026-11-12 speed work: round 0 in 7 min, a whole run in 28 min at 2.1 GB, but unsettled; profile with eu-stack (perf is blocked)
 open: true
 ---
 
@@ -35,7 +35,39 @@ tokens a Ref is expanded where an op makes it, so the agb programs come
 out as before. Entries at 8,500 functions: 5.6M tokens (135M at 7,000
 before); RSS flat at 1.5 GB.
 
-**Open:** round 0 is slow (about 60 s per 500 functions late on); suspects
-are per-op scans of 30k-token Refs (`split_refs`' rest, `cmp_refs`'
-difference, `hole` on fresh expansions, `ref_make` redone after each
-store). Unit: native/fnref-emerald-speed.
+**Profiling (2026-11-12, quack).** `perf` can't open events here (paranoid
+2, and SELinux); `eu-stack -p PID` works (ptrace_scope 0). Build a copy
+with `CARGO_TARGET_DIR=/tmp/x CARGO_PROFILE_RELEASE_DEBUG=line-tables-only`,
+run it, and every 0.4 s append `eu-stack -p $pid | head -40` to a file;
+count frames (demangle with `c++filt`), and for inlined hot spots
+`addr2line -e BIN -i -p` on the frame address less the load base
+(`main`'s printed address less `nm BIN | grep ' T main$'`). 60-100
+samples found each of the below.
+
+**What was slow, in the order fixed (native/fnref-emerald-speed):**
+1. `ref_val`'s cache was cleared at every store; rebuilding 30k-token
+   expansions was 65% of the time. Now each `Exp` keeps the reads it is
+   made of and a position in `G::mem_log` (every token newly stored to the
+   pile or a cell) and takes in only what was stored since. Memory is read
+   uncapped (`pile_raw`/`cell_raw`): it holds no numbers, so the result
+   matches the capped read but for the order ROM pointers widen in.
+2. ROM reads "from here on" capped the set after each of up to 64k
+   words: `rom_read_capped` skips tokens the cap would drop again.
+3. One-at-a-time BTreeSet inserts of thousands of tokens (bin, shift, Adc
+   compares, split_refs' rest, unions): `Toks::add_all` rebuilds from
+   both sorted runs; `bin` and shift batch their per-token holes.
+4. `expand` of several Refs and split_refs' rest are cached by set pointer.
+5. Round 1: `cap` per callee's results joined (thousands of callees), and
+   cap's absorb pass did a `bound()` + two range searches per RomFrom
+   (results hold thousands): results now unioned then capped once; the
+   absorb pass is one walk. Entries/results skip the cap when a join adds
+   nothing (`join_capped`).
+
+Results: round 0 was 4,352 functions in 6 min; now all 15,158 in 437 s
+(stats identical: pile 10480, cells 3736, holes 9159). A whole run at an
+intermediate build (before 4-5) finished: 27:37, 2.1 GB peak, but "didn't
+settle" (35,409 runs, so not the 256-round bound: a function hit its
+step bound, `64 * blocks + 64`; the trace now names it, "unsettled after").
+Round 1 at the last build: 256 functions per ~60 s, its time spread over
+ref_val/exp_add (new reads), add_all and call_by_value. lift-metrics on
+the agb programs: identical to main's table at each step.
