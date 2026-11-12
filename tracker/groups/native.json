@@ -1158,6 +1158,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T10:56:36Z",
+          "by": "5cf6c823",
+          "text": "2026-11-12: Emerald's flow now finishes (27:37, 2.1 GB, on Function-address flow on Emerald fast enough to finish's branch) but reports 'didn't settle' after 35,409 runs: a function hit its 64*blocks+64 step bound, not the round bound. Trace prints which ('unsettled after')."
+        },
+        {
           "at": "2026-11-08T18:27:27Z",
           "by": "c06275d9",
           "text": "2026-11-08: Refs (b6d5ed3f) fixed memory: Emerald round 0 flat at 1.5 GB (was >10 GB), entries 5.6M tokens. Not done: too slow to finish (~60 s/500 fns). Split: {unit:native/fnref-emerald-speed} (needed); widening gap {unit:native/fnref-romfrom-absorb}. memory/ file says how to measure."
@@ -1432,25 +1437,33 @@
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
-        "by": "5cf6c823",
-        "session": "5cf6c823-3eeb-4734-8c09-a83340a43640",
+        "by": "d258b190",
+        "session": "d258b190-7fbc-4544-b0d3-69f7ab7ebcf7",
         "host": "quack",
         "pid": 2489427,
         "start": "10657408",
-        "at": "2026-11-12T08:41:16Z",
+        "at": "2026-11-12T10:57:25Z",
         "branch": "unit/native/fnref-emerald-speed",
+        "resumed": "5cf6c823",
+        "prevSession": "5cf6c823-3eeb-4734-8c09-a83340a43640",
+        "pushed": true,
         "beats": true
       },
       "notes": [
         {
+          "at": "2026-11-12T10:56:48Z",
+          "by": "5cf6c823",
+          "text": "2026-11-12: branch ec10365: Emerald round 0 in 437 s (was ~20 min); a run on an earlier build finished: 27:37, 2.1 GB peak, unsettled. Left (~1 h): merging main's rom-read-bound took native-tasks fn_words_not_proven to 59>57 (main 57); speed changes each reverted: same"
+        },
+        {
+          "at": "2026-11-12T10:56:33Z",
+          "by": "5cf6c823",
+          "text": "Then: one timed whole run at HEAD (just long, --mem 9G, GBAA_FNREF_TRACE=1 names the function that stops it settling: 'unsettled after'). Round 1 runs ~256 fns/min. memory/fnref-flow-emerald-memory.md says how to profile with eu-stack (perf is blocked here)."
+        },
+        {
           "at": "2026-11-08T22:44:22Z",
           "by": "9e61b577",
           "text": "main now has a 48M-token bound in fnref::follow (stops unsettled) and G::give_all (shared joins across a by-value call's callees) from {unit:native/whole-lift-memory}; expect a merge in fnref.rs with b6d5ed3f; raise TOKENS if Emerald needs it."
-        },
-        {
-          "at": "2026-11-08T18:34:25Z",
-          "by": "c06275d9",
-          "text": "--callee-sets is on main now (indirect-call-args landed 2026-11-08): no worktree needed; plain gbaa-recompile --summaries ROM --callee-sets under just long --mem 9G. Ref code: b6d5ed3f on {unit:native/fnref-flow-emerald}'s branch."
         }
       ],
       "round": "2026-11-12T08:41:16Z"
@@ -1528,15 +1541,24 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "28dc0a51",
-        "session": "28dc0a51-8c19-468a-a7a7-97e6b429929c",
-        "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T10:28:21Z",
+        "checker": "verifier-a7e3c1",
+        "at": "2026-11-12T10:46:14Z",
+        "evidence": "Review fixes made: the prelude st16 and runtime::bus save-store comments now say mGBA 0.10.5 drops unaligned SRAM stores (prelude comment kept at 2 lines for its lines_prelude bar). Merged origin/main; just check green. Verifier re-read the 0xD-0xF arms against runtime::bus, ran lift-check --only native-save: pass, 600 frames, planted strb fault caught at frame 1.",
         "branch": "unit/native/lift-save-memory",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T10:46:14Z",
+          "by": "28dc0a51",
+          "host": "quack",
+          "pid": 2490379,
+          "start": "10658170",
+          "beats": true,
+          "session": "28dc0a51-8c19-468a-a7a7-97e6b429929c",
+          "lane": "quack/4"
+        },
+        "pushed": true
       },
       "notes": [
         {
