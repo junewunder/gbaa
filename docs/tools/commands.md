@@ -1335,34 +1335,34 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `[program.<name>.bars]`. Today `agb/native-spike`, `agb/affine`,
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
   `agb/native-frame-locals`, `agb/native-ime-release`,
-  `agb/native-bios-calls`, `agb/native-tasks` (`just agb-tests`) on
-  `units/native-spike.toml`, `units/affine-600.toml`,
+  `agb/native-bios-calls`, `agb/native-tasks`, `agb/native-dma` (`just
+  agb-tests`) on `units/native-spike.toml`, `units/affine-600.toml`,
   `units/mosaic-modes-600.toml`, `units/native-fallthrough-600.toml`,
   `units/native-irq-hold-601.toml`, `units/native-frame-locals-600.toml`,
   `units/native-ime-release-601.toml`, `units/native-bios-calls-600.toml`
-  (native/lift-bios-calls), `units/native-tasks-600.toml`. First every
-  program is lifted with `--bars` (seconds), failing before any build on
-  a metric over its bar; then each lift and its play build
-  (`--timing native`) are built and `route-check --native` runs them for
-  600 frames, capped at 3 GB, with no `--replaced` list: everything but
-  the stack and the code copies is compared. The spike lifted with its
-  `planted_store` (0x08000186, the V-blank handler's frame count) must be
-  caught, and with its `planted_hole` (agb's IRQ wrapper's stand-in
-  dropped) the lift and the build must fail naming `f_03000000`'s `mrs`;
-  native-tasks likewise (a task's store; its yield's stack switch).
-  native-fallthrough, native-irq-hold, native-frame-locals and
+  (native/lift-bios-calls), `units/native-tasks-600.toml`,
+  `units/native-dma-600.toml`. First every program is lifted with `--bars`
+  (seconds), failing before any build on a metric over its bar; then each
+  lift and its play build (`--timing native`) are built and `route-check
+  --native` runs them for 600 frames, capped at 3 GB, with no `--replaced`
+  list: everything but the stack and the code copies is compared. The
+  spike lifted with its `planted_store` (0x08000186, the V-blank handler's
+  frame count) must be caught, and with its `planted_hole` (agb's IRQ
+  wrapper's stand-in dropped) the lift and the build must fail naming
+  `f_03000000`'s `mrs`; native-tasks likewise (a task's store; its yield's
+  stack switch); native-dma's (0x08000180, `dma_set`'s `DMAxCNT`, a unit
+  more) too. native-fallthrough, native-irq-hold, native-frame-locals and
   native-ime-release lifted with their `planted_flags`
   (`--fall-as-tail-call`, the old fall into another function;
   `--irq-at-waits`, the old IRQ run at a wait inside a critical section;
   `--plant-slot=0x08000182`, `fl_keep`'s store to a stack local made one
   more, native/frame-locals; `--ime-at-waits`, the old IRQ held past the
   store that sets `IME` again to the next wait, native/ime-release) must
-  be caught too. Each program is
-  lifted once more with `--layout packed` (`out/lift-<name>-packed`),
-  passed as `--packed`: it must draw the guest layout's frames and
-  record the same bytes, nothing skipped (native/lift-packed-layout).
-  Passes with
-  `every metric within its bar`, eight `pass (60x frames, 0 differences …;
+  be caught too. Each program is lifted once more with `--layout packed`
+  (`out/lift-<name>-packed`), passed as `--packed`: it must draw the guest
+  layout's frames and record the same bytes, nothing skipped
+  (native/lift-packed-layout). Passes with
+  `every metric within its bar`, ten `pass (60x frames, 0 differences …;
   the play layout draws the same 60x frames, its records the same …)`
   lines, `planted fault caught (…-planted: frame 2: EWRAM byte 0x020000c0
   …)`, `(…-fall-as-tail-call: frame 1: EWRAM byte 0x020000c4 …)`,
@@ -1693,6 +1693,16 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   `--sim-ms N` (on `just emerald-wireless`) is it on simulated time in one
   process, N ms each way; `--heard-ms N` (default 3000; 0: only the hosts
   open now); numbers: research multiplayer.md, "The radio on the server".
+- Wireless from the desktop (multiplayer/desktop-wireless-radio,
+  `crates/desktop/src/wireless.rs`, which says how it runs):
+  `gbaa-desktop ROM --server ADDR --wireless --host` (prints `room CODE`;
+  `--players N`) or `--wireless --join CODE`: the window's GBA with a
+  wireless adapter whose radio is the server room's, as `emerald-wireless
+  --seat`; its own GBA only, interpreted, real time, from reset. A radio
+  silent for 10 s is said (a server older than the radio, as fly's was).
+  From the window (multiplayer/menu-wireless-room): the Netplay page's
+  Link row, on Wireless, makes Host a room and Join wireless; the game
+  alone after it goes on from the seat's state.
 - Linked play: `gbaa-desktop ROM --link B.sav` runs a second GBA on the
   same ROM, on one cable with the first (`runtime::link`;
   `crates/desktop/src/link.rs`), the two screens side by side in one

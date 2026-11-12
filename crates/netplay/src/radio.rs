@@ -37,6 +37,7 @@ pub struct Radio {
     sock: UdpSocket,
     server: SocketAddr,
     seat: usize,
+    seats: usize,
     chan: Channel,
     buf: Vec<u8>,
     pub stats: Stats,
@@ -68,12 +69,14 @@ impl Radio {
     }
 
     fn from(u: Udp, server: SocketAddr) -> Result<Radio, String> {
+        let seats = u.seats();
         let (sock, seat, _) = u.into_parts();
         sock.set_nonblocking(true).map_err(|e| e.to_string())?;
         Ok(Radio {
             sock,
             server,
             seat,
+            seats,
             chan: Channel::new(),
             buf: vec![0; 2048],
             stats: Stats::default(),
@@ -83,6 +86,11 @@ impl Radio {
     /// This player's seat in the room.
     pub fn seat(&self) -> usize {
         self.seat
+    }
+
+    /// The room's seats.
+    pub fn seats(&self) -> usize {
+        self.seats
     }
 
     /// Send what adapter `w` has to tell the radio, give it what the radio
