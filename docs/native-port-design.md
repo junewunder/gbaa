@@ -272,8 +272,11 @@ g.hw.sound.fifo_a.stream(Ref::of(&g.gSoundInfo.pcmBuffer));
   (native/flash-stack-standin): `Hw::save` is the chip emulation itself,
   and the three routines `AgbFlash` copies onto the stack and calls there
   (`ReadFlash1`, `ReadFlash_Core`, `VerifyFlashSector_Core`; recognised at
-  the call by `analysis::flash`) are `hw::flash::{read_byte, read,
-  verify}` over it.
+  the call by their bytes, `hw::flash::recognise`) are `hw::flash::{read_byte, read,
+  verify}` over it. A lifted program's `call_fn` makes that call when a
+  call into RAM finds no function there but one of the routines
+  (native/lift-flash-routines; Metroid's SRAM library calls the same
+  agbcc code).
 - **Library code with its own convention is the runtime's.** libgcc's
   soft-float `__muldf3` and `__divdf3` (modern GCC's games: moonbeam,
   Emerald Rogue, Imperium) call their special-case paths with r4 and r5
@@ -711,8 +714,9 @@ with the same key presses, frame by frame:
   `route-check` does today, `crates/route-check/src/main.rs`);
 - EWRAM and IWRAM equal outside the guest stack, below the lowest `sp`
   the play build's run reached (it reports it), and outside the
-  destinations of code copies (`Discovery::copies`, the copies seen
-  running): the native program runs that code as Rust functions and
+  destinations of code copies (`Discovery::copies`, and the copies seen
+  running that the lifter's holes file lists as `[[copy]]`, which
+  `route-check --native` reads from it): the native program runs that code as Rust functions and
   doesn't copy it, so those bytes are the one other range it leaves
   empty. A copy that also carries data (agb's `.iwram` holds variables
   too) has its data's globals in `Ram` as usual, initialised from the

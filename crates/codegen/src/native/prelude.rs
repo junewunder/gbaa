@@ -824,8 +824,52 @@ pub fn sound_bias(g: &mut Game, level: u32) {
 pub fn call_fn(g: &mut Game, k: u32, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
     match FNS.binary_search_by_key(&k, |&(e, _)| e) {
         Ok(i) => (FNS[i].1)(g, sp, a),
-        Err(_) => panic!("a call or jump to {k:#010x}, which is no function's entry"),
+        Err(_) => match flash_call(g, k, a) {
+            Some(r) => Ok(r),
+            None => panic!("a call or jump to {k:#010x}, which is no function's entry"),
+        },
     }
+}
+
+/// A call into RAM holding one of the flash save library's stack routines
+/// (known by its bytes) is its `runtime::hw::flash` call on the play
+/// build's chip; the copy never runs. The routines take any memory
+/// (Metroid's SRAM library verifies chip against RAM and back), so the
+/// chip's side goes through `hw::flash`, the other through the bus.
+/// r1-r3 come back as they went in (the callers don't read them).
+fn flash_call(g: &mut Game, k: u32, a: [u32; 4]) -> Option<[u32; 4]> {
+    use runtime::hw::flash::{self as fl, Routine};
+    let bytes = |g: &mut Game, at: u32, n: usize| -> Vec<u8> {
+        (0..n).map(|i| ld8(g, at.wrapping_add(i as u32)) as u8).collect()
+    };
+    matches!(k >> 24, 2 | 3).then_some(())?;
+    let routine = fl::recognise(&bytes(g, k & !1, fl::MAX_LEN))?.routine;
+    let chip = |x: u32| matches!(x >> 24, 0xE | 0xF);
+    let (src, dst, n) = (a[0], a[1], a[2] as usize);
+    let r0 = match routine {
+        Routine::ReadByte if chip(src) => fl::read_byte(&g.hw.save, src) as u32,
+        Routine::ReadByte => ld8(g, src),
+        Routine::Read => {
+            let mut b = vec![0; n];
+            match chip(src) {
+                true => fl::read(&g.hw.save, src, &mut b),
+                false => b = bytes(g, src, n),
+            }
+            (0..n).for_each(|i| st8(g, dst.wrapping_add(i as u32), b[i] as u32));
+            src
+        }
+        // 0, or `dst`'s address of the first byte that differs.
+        Routine::Verify => {
+            let (s, d) = (bytes(g, src, n), bytes(g, dst, n));
+            let at = match (chip(src), chip(dst)) {
+                (_, true) => fl::verify(&g.hw.save, &s, dst).checked_sub(dst),
+                (true, false) => fl::verify(&g.hw.save, &d, src).checked_sub(src),
+                _ => (0..n).position(|i| s[i] != d[i]).map(|i| i as u32),
+            };
+            at.map_or(0, |i| dst.wrapping_add(i))
+        }
+    };
+    Some([r0, a[1], a[2], a[3]])
 }
 
 /// A lifted function's four-register form (`a_<key>` if shaped): sp, r0-r3 in; r0-r3 out.
