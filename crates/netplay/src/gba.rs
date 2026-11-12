@@ -127,7 +127,8 @@ pub trait Turns<P: Platform> {
     fn end(&mut self);
 }
 
-/// Linked GBAs running one ROM.
+/// Linked GBAs running one ROM, or (single-pak, [`Gba::single_pak`]) seat
+/// 0 running it and the others with no cartridge, booting what it sends.
 pub struct Gba<P: Seat = Pad> {
     /// How recompiled consoles take their turns, if not by unwinding.
     /// Before `machines`, which the runs it holds point into: dropped
@@ -181,6 +182,27 @@ impl Gba {
     pub fn new(rom: &'static [u8], saves: &[Option<&[u8]>]) -> Gba {
         Gba::with_code(rom, saves, None, Timing::Exact)
     }
+
+    /// Single-pak link play: seat 0 running `rom` from reset with the
+    /// cartridge save `save` if given, and `seats - 1` (1 to 3) GBAs with
+    /// no cartridge ([`runtime::bios::multiboot::boot_cartless`]), whose BIOS waits for the
+    /// program seat 0's game sends with `MultiBoot` and boots it. In the
+    /// interpreter, counting cycles by `timing`.
+    pub fn single_pak(
+        rom: &'static [u8],
+        seats: usize,
+        save: Option<&[u8]>,
+        timing: Timing,
+    ) -> Gba {
+        assert!(
+            (2..=runtime::link::MAX_PLAYERS).contains(&seats),
+            "2 to 4 seats"
+        );
+        let mut saves = vec![None; seats];
+        saves[0] = save;
+        let cartless = (1u8 << seats) - 2;
+        Gba::build(rom, &saves, None, timing, cartless)
+    }
 }
 
 impl<P: Seat> Gba<P> {
@@ -195,10 +217,27 @@ impl<P: Seat> Gba<P> {
         code: Option<&'static Code<P>>,
         timing: Timing,
     ) -> Gba<P> {
+        Gba::build(rom, saves, code, timing, 0)
+    }
+
+    /// [`Gba::with_code`], the seats whose bits are set in `cartless` with
+    /// no cartridge ([`Gba::single_pak`]).
+    fn build(
+        rom: &'static [u8],
+        saves: &[Option<&[u8]>],
+        code: Option<&'static Code<P>>,
+        timing: Timing,
+        cartless: u8,
+    ) -> Gba<P> {
         let mut machines: Vec<Box<Machine<P>>> = saves
             .iter()
-            .map(|save| {
-                let mut m = Box::new(Machine::new(rom, P::seat()));
+            .enumerate()
+            .map(|(i, save)| {
+                let none = cartless & 1 << i != 0;
+                let mut m = Box::new(Machine::new(if none { &[] } else { rom }, P::seat()));
+                if none {
+                    runtime::bios::multiboot::boot_cartless(&mut m);
+                }
                 m.set_timing(timing);
                 m.spin_list = code.map_or(&[][..], |c| c.spins);
                 if let Some(s) = save {
@@ -221,6 +260,7 @@ impl<P: Seat> Gba<P> {
         build[24..28].copy_from_slice(&(rom.len() as u32).to_le_bytes());
         build[28] = saves.len() as u8;
         build[29] = timing as u8;
+        build[30] = cartless;
         Gba {
             turns: None,
             machines,
