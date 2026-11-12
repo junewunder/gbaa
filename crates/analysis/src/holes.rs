@@ -501,11 +501,16 @@ pub fn summary_kind(hole: &str) -> String {
 /// each caller's r4-r11 and sp in its own locals and passes only r0-r3,
 /// so it is wrong where a function returns with sp moved (by a run-time
 /// amount, as a variable-length array does), where a caller reads one of
-/// r4-r11 that a callee changed, where a function reads one of r4-r11 as
-/// it came other than to save it (a register parameter), or where a
-/// function that changes them may be called through a pointer. A return
-/// with r4-r11 changed (hand-written code's scratch registers) is not
-/// itself hard: the reads are. The other kinds are counted under other
+/// r4-r11 that a callee changed, where a function entered by a call reads
+/// one of r4-r11 as it came and some of its bits reach a use (a register
+/// parameter: an address, a condition, a value stored, passed on or
+/// returned), or where a function that changes them may be called
+/// through a pointer. A return with r4-r11 changed (hand-written code's
+/// scratch registers) is not itself hard: the reads are. Nor is a read
+/// whose every bit is masked away (`masks away r4-r11's entry bits`), the
+/// caller's frame pointer read through a frame record, or a read in a
+/// function only jumped into, which takes every register (nothing
+/// called tail-calls or falls into it). The other kinds are counted under other
 /// holes (an unknown jump, a mode change, RAM code) or aren't holes for a
 /// native build (an indirect call is an `FnRef`).
 pub const SUMMARY_HARD: [&str; 4] = [
