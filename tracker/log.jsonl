@@ -2646,3 +2646,5 @@
 {"at":"2026-11-12T10:56:56Z","actor":"loop","tag":"5cf6c823","host":"quack","cmd":"unclaim","id":"native/fnref-emerald-speed","text":"Function-address flow on Emerald fast enough to finish: handed back by its session, its work kept (5 commits on its branch); ready"}
 {"at":"2026-11-12T10:57:25Z","actor":"loop","tag":"d258b190","host":"quack","cmd":"claim","id":"native/fnref-emerald-speed","text":"Function-address flow on Emerald fast enough to finish: claimed (picking up after 5cf6c823)"}
 {"at":"2026-11-12T11:09:20Z","actor":"loop","tag":"5d09211d","host":"quack","cmd":"done","id":"merge/quack-lane4-native-lift-save-memory","text":"Merge main on quack lane 4: done"}
+{"at":"2026-11-12T11:13:23Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane4-native-lift-save-memory","text":"Merge main on quack lane 4: on main"}
+{"at":"2026-11-12T11:13:23Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-save-memory","text":"Lifted code reads and writes the save chip: on main"}

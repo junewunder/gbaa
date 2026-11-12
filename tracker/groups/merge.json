@@ -222,21 +222,8 @@
         "by": "5d09211d",
         "at": "2026-11-12T11:09:20Z",
         "evidence": "Merged origin/main (24432fa) into the branch as 751b8be: lift-check.toml keeps both native-dma and native-save, lines_prelude 885 (measured by lift-metrics); justfile and commands.md list both. just check passes; just lift-check --only native-save --only native-dma passes (both routes 600 frames, planted faults caught). native-spike's hard hole also fails on clean main 24432fa, already filed as {unit:native/spike-entry-read-hole}.",
-        "branch": "unit/native/lift-save-memory",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T11:09:20Z",
-          "by": "5d09211d",
-          "host": "quack",
-          "pid": 2490379,
-          "start": "10658170",
-          "beats": true,
-          "session": "5d09211d-684a-4301-980a-35dd293c790e",
-          "lane": "quack/4"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-12T10:46:46Z"
+        "host": "quack"
+      }
     }
   ]
 }
