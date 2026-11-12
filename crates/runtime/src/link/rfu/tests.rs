@@ -177,3 +177,67 @@ fn a_child_finds_a_host_joins_and_they_trade_packets() {
         Some((event::DISCONNECTED, Some(1)))
     );
 }
+
+/// Two networked adapters and the server's radio: everything each has to
+/// say reaches the other through the air at once.
+fn pump(w: &mut [Wireless; 2], air: &mut air::Air) {
+    loop {
+        let mut any = false;
+        for s in 0..2 {
+            while let Some(u) = w[s].take_up() {
+                any = true;
+                let mut out = Vec::new();
+                air.take(s, u, &mut |t, d| out.push((t, d)));
+                for (t, d) in out {
+                    if t < 2 {
+                        w[t].deliver(d);
+                    }
+                }
+            }
+        }
+        if !any {
+            break;
+        }
+    }
+}
+
+#[test]
+fn networked_adapters_meet_through_the_air() {
+    let (mut m0, mut m1) = (machine(), machine());
+    let mut w = [
+        Wireless::networked(&mut m0, 0),
+        Wireless::networked(&mut m1, 1),
+    ];
+    let mut air = air::Air::new();
+    cmd(&mut w[0], 0, 0x16, &[1, 2, 3, 4, 5, 6]);
+    cmd(&mut w[0], 0, 0x19, &[]);
+    cmd(&mut w[1], 0, 0x1C, &[]);
+    // Nothing heard until the radio says.
+    assert_eq!(cmd(&mut w[1], 0, 0x1D, &[]).len(), 1);
+    pump(&mut w, &mut air);
+    let found = cmd(&mut w[1], 0, 0x1D, &[]);
+    assert_eq!(found[1..], [0x1001, 1, 2, 3, 4, 5, 6]);
+    cmd(&mut w[1], 0, 0x1E, &[]);
+    cmd(&mut w[1], 0, 0x1F, &[0x1001]);
+    // Pending (status 1) until the radio answers.
+    assert_eq!(cmd(&mut w[1], 0, 0x20, &[])[1] >> 24, 1);
+    pump(&mut w, &mut air);
+    assert_eq!(cmd(&mut w[1], 0, 0x20, &[])[1], 0x8001);
+    assert_eq!(cmd(&mut w[1], 0, 0x21, &[])[1], 0x8001);
+    assert_eq!(cmd(&mut w[0], 0, 0x1A, &[])[1], 0x8001);
+    // A child sending twice before the host reads: both come, in order.
+    cmd(&mut w[1], 0, 0x24, &[4 << 8, 0x1111_1111]);
+    cmd(&mut w[1], 0, 0x24, &[4 << 8, 0x2222_2222]);
+    pump(&mut w, &mut air);
+    assert_eq!(cmd(&mut w[0], 0, 0x26, &[])[1..], [4 << 8, 0x1111_1111]);
+    assert_eq!(cmd(&mut w[0], 0, 0x26, &[])[1..], [4 << 8, 0x2222_2222]);
+    assert_eq!(cmd(&mut w[0], 0, 0x26, &[]).len(), 1);
+    // The host's packet reaches the child.
+    cmd(&mut w[0], 0, 0x24, &[3, 0x00AB_CDEF]);
+    pump(&mut w, &mut air);
+    assert_eq!(cmd(&mut w[1], 0, 0x26, &[])[1..], [3, 0x00AB_CDEF]);
+    // The host sends the child away.
+    cmd(&mut w[0], 0, 0x30, &[1]);
+    pump(&mut w, &mut air);
+    assert_eq!(w[1].status(0).1, 0);
+}

@@ -370,7 +370,8 @@ broadcast, parent and child slots, packets. Each peer runs only its own
 console, so a Union Room can hold many players. Needs the device emulated
 first locally (two machines in one hub, adapter to adapter), then the
 radio moved onto the network, then a measurement of how much latency
-librfu's timeouts allow.
+librfu's timeouts allow. All three done (2026-11-08, 2026-11-12; "The
+wireless adapter, locally", "The radio on the server").
 
 **Presence, later.** A shared overworld is not a link feature. Each game
 reports where its player is (map, coordinates, facing, sprite) by reading
@@ -1573,9 +1574,92 @@ in one process, from librfu's game side (pret's `librfu_stwi.c`,
   at the trading board, ALICE offers her Mudkip, BOB accepts, and the
   trade and its save complete, identically twice.
 
-Not done: the radio across the network (each player runs only their own
-console), Berry Crush and the other wireless games, a check with more
-than two adapters, and the adapter's state in save states.
+Not done: Berry Crush and the other wireless games, a check with more
+than two adapters, and the adapter's state in save states. The radio
+across the network is the next section.
+
+## The radio on the server
+
+multiplayer/wireless-radio-netplay (2026-11-12): each player runs only
+their own Emerald and adapter (`Wireless::networked`), and the radio
+is a `gbaa-server` room's (option F):
+
+- **Who decides.** The server's `runtime::link::rfu::air::Air` (no_std,
+  so the server and any test share it) is the one place that says who
+  hosts with which broadcast, who is whose child in which slot, and
+  where packets go. Each adapter tells it what it does (`Up`: host,
+  leave, connect, kick, a packet) and keeps a view of what it heard
+  (`Down`: the open hosts, joined or refused, a host's children,
+  dropped, a packet), from which it answers its GBA at once, as a real
+  adapter answers from what it last heard. A `Connect` is pending
+  (`IsConnectionComplete` gives status 1, which `AgbRfu_LinkManager.c`
+  polls until its `connect_period` runs out) until the server answers.
+  Host IDs are the adapter's own, `0x1000 * (seat + 1)` counting up, so
+  no two seats collide without asking; a child's ID is the server's,
+  from `0x8001`.
+- **The wire.** Rooms' `W` datagrams (`relay::rooms`), each a
+  `relay::radio::Channel` datagram: reliable and in order (a number per
+  message, a cumulative ack, resent after twice the smoothed round
+  trip), so a lost `Connect` or packet costs a resend, never a radio out
+  of step. The player's side is `netplay::radio::Radio`, pumped four
+  times a frame and while the frame waits for its turn.
+- **Packets.** A host's packet goes to every child and a child's to its
+  host as each is sent, queued (eight deep) and read one per
+  `ReceiveData`. The local radio's rhythm, a child's packet waiting for
+  the host's next, lost packets here: the host numbers its children's
+  packets (`link_rfu_2.c`, `childRecvIds`, three bits) and calls five
+  out of turn in a row a link error (`0x8100`, F_RFU_ERROR_8 | 1), and
+  under calm's jitter a child often sent twice before the host's next
+  packet came, the first overwritten.
+- **The guess beyond afska's docs** (a search lists a host it heard
+  within 3 s, `HEARD_FOR`): the networked radio doesn't need it, and is
+  better without it, so a networked adapter lists only the hosts the
+  server last said were open (`--heard-ms N` brings it back). Without
+  it the simulated trade connects at the first `Connect` (22 ms each
+  way: frame 6718; 200 ms: 6760); with it, the first went to the host's
+  ID from before it last reopened (each `StartHost` takes a new one) and
+  was refused (6812, 6833). The server's list already outlasts each
+  open spell by the path's delay, which is what the guess stood in for
+  locally. Remembered hosts are kept one per adapter (the ID's top four
+  bits), as the local radio's index does.
+- **The check:** `just emerald-radio` (`docs/tools/commands.md`): two
+  processes through a server in the check's, each path through the ping
+  simulator's calm (20-25 ms each way). 2026-11-12: connected at frame
+  6719, the trade on screen at 7920 (the local radio: 6715 and 7883),
+  back in the room by 10238; about 3400 messages each way, none resent,
+  no frame late.
+
+How much latency it takes (`emerald-wireless --sim-ms N`: the same two
+consoles and the server's `Air` in one process on simulated time, N ms
+each way between each console and the server, so twice that between
+the consoles; no jitter or loss; 20000 frames, both pressing A every
+second from 9400 so a late trade can finish):
+
+| each way | connected | trade on screen | traded |
+|---|---|---|---|
+| 0 ms | 6714 | 7882 | yes, on the local check's presses (10165) |
+| 22 ms | 6812 (6718 without the 3 s memory) | 7909 | yes, on its presses (10212) |
+| 45 ms | 6815 | 7999 | yes, on its presses (10324) |
+| 100 ms | 6821 | 9752 | yes (12166) |
+| 150 ms | 6827 | 9810 | yes (12308) |
+| 200 ms | 6833 (6760 without) | 9992 | yes (12576) |
+| 250 ms | 6839 | no | no: the connection given up (`DisconnectClient`), no link error |
+| 300 ms | 6845 | no | no: both gave the connection up at 7086, no link error |
+| 400 ms | never (4660 without) | no | no: with the memory no `Connect` completes in its 95 frames |
+
+(Run with the 3 s memory but for the two marked; frames are each
+player's own, which start together in the sim.)
+
+So librfu's own timeouts are not what limits it: the link held at 200
+ms each way (about 800 ms round trip between the consoles) with no
+error. What gives out first is the Union Room's handshake after
+connecting (between 200 and 250 ms each way), then connecting at all,
+since a host switches between hosting and searching every 40 to 100
+frames and a `Connect` must reach it open. From 100 ms on, every
+exchange in the room takes longer (the trade screen 30 seconds later
+at 100 ms), so the check's fixed presses no longer fit: a player waits
+longer for the other's answer. Real paths add jitter and loss, which
+the sim leaves out; calm's (5 ms) passed in real time.
 
 ## Questions for june
 

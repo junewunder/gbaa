@@ -1338,6 +1338,11 @@ emerald-wireless rom=(roms / "Pokemon - Emerald Version.gba") *args:
     {{lock}} cargo build -q --release -p emerald-save
     target/release/emerald-wireless {{quote(rom)}} {{quote(gbaa_data / "saves/emerald")}} {{args}}
 
+# The radio on the server's check (multiplayer/wireless-radio-netplay): emerald-wireless's trade with each player's Emerald in a process of its own, in real time, with a networked wireless adapter whose radio (hosts, connections, packets) is a gbaa-server room's in this process (relay::radio, runtime::link::rfu::air), each path to it through the ping simulator's PROFILE (default calm; a name in crates/netplay/profiles/ or a file); passes when both were in the Union Room and the first Pokémon swapped. About 3 minutes. ARGS: emerald-wireless's, and --heard-ms N. `just emerald-wireless ROM --sim-ms N` is the same on simulated time in one process, N ms each way (the latency sweep's).
+emerald-radio profile="calm" rom=(roms / "Pokemon - Emerald Version.gba") *args:
+    {{lock}} cargo build -q --release -p emerald-save
+    target/release/emerald-wireless {{quote(rom)}} {{quote(gbaa_data / "saves/emerald")}} --net {{profile}} {{args}}
+
 # The netplay session core's check (multiplayer/session-core): the two saves as two linked Emeralds walking into the Trade Center, straight and as a two-peer rollback session at no input delay over a simulated network (40 ms, +30 ms jitter, 10% loss); passes when both peers' hashes every 60 frames and at the end are the straight run's, with no desync (crates/emerald-save/src/bin/emerald-netplay.rs). About 90 s. ARGS: --delay, --latency, --jitter, --loss, --seed, --frames.
 emerald-netplay rom=(roms / "Pokemon - Emerald Version.gba") *args:
     {{lock}} cargo build -q --release -p emerald-save

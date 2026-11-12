@@ -7,8 +7,14 @@ publish = false
 # The netplay server, gbaa-server (multiplayer/relay-server, then
 # multiplayer/remove-lockstep-quic): plain-UDP rooms that seat the players
 # and pass their datagrams on, knowing nothing about the game or the
-# console. docs/research/multiplayer.md, "Relay server".
+# console, except the wireless adapter's radio (relay::radio,
+# multiplayer/wireless-radio-netplay). docs/research/multiplayer.md,
+# "Relay server".
 
 [[bin]]
 name = "gbaa-server"
 path = "src/bin/gbaa-server.rs"
+
+[dependencies]
+# The wireless adapter's radio (relay::radio): runtime::link::rfu::air, no_std.
+runtime = { path = "../runtime" }
