@@ -260,7 +260,8 @@
         "resumed": "538fc492",
         "prevSession": "538fc492-b2c1-497d-aee5-7a032c66a497",
         "pushed": true,
-        "beats": true
+        "beats": true,
+        "handedBack": "2026-11-12T13:48:55Z"
       },
       "notes": [
         {
