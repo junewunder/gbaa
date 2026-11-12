@@ -1237,7 +1237,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   guest-layout`: RAM as the ROM's EWRAM and IWRAM, each global at its
   link address), the spike also in the play layout, the spike and
   psg-square with their planted faults, then runs `route-check --native NATIVE PLAY
-  ROUTE [--replaced FILE] [--packed BIN] [--planted BIN]...` on
+  ROUTE [--replaced FILE] [--holes FILE] [--name N] [--packed BIN] [--planted BIN]...` on
   `units/native-spike.toml` (600 frames), `units/psg-square.toml`
   (120) and `units/direct-sound.toml` (300). Each build writes every
   frame's record at its present
@@ -1246,7 +1246,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   and which reports the lowest sp (compiled code doesn't keep it). Fails
   at the first difference, naming the frame, region and byte, in the
   picture, EWRAM/IWRAM (but the stack from the lowest sp to IWRAM's end,
-  code copies, and `crates/native-spike/check/*.replaced.toml`: agb's
+  code copies (discovery's, and the `[[copy]]`s of the holes file `just lift`
+  finds, by `--name N` else the ROM's name; or `--holes FILE`), and `crates/native-spike/check/*.replaced.toml`: agb's
   globals, heap and VRAM free list, which the native programs replaced),
   the I/O registers the library models (display, `DISPSTAT`'s writable
   bits, `VCOUNT`, the sound registers with `SOUNDCNT_X`'s status, wave
