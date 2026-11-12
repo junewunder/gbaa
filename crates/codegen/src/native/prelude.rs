@@ -55,6 +55,13 @@ impl Native for Game {
     fn irq_masked(&self) -> bool {
         IRQ_HOLD && self.cpsr & 0x80 != 0
     }
+    /// DMA set up by its registers moves through the program's memory.
+    fn dma_load(&mut self, a: u32, word: bool) -> u32 {
+        if word { ld32(self, a) } else { ld16(self, a) }
+    }
+    fn dma_store(&mut self, a: u32, v: u32, word: bool) {
+        if word { st32(self, a, v) } else { st16(self, a, v) }
+    }
 }
 
 /// IRQs held while the CPSR's I bit is set (`false`: `gbaa-lift --irq-at-waits`).
@@ -311,6 +318,10 @@ fn io_write16(g: &mut Game, o: u32, v: u32) {
     }
     if IME_RELEASE && o == runtime::io::reg::IME {
         return hw::write_ime(g, v as u16);
+    }
+    // An immediate DMA runs in the store, through the program's memory.
+    if (hw::dma_regs::DMA_START..hw::dma_regs::DMA_END).contains(&o) {
+        return hw::write_dma(g, o, v as u16);
     }
     g.hw.write16(o, v as u16);
 }
