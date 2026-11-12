@@ -1063,7 +1063,13 @@
       "title": "Kirby - Nightmare's task switcher as host coroutines",
       "detail": "Nightmare's 3 CPU-state holes are its object-task switcher (resume 0x08000244, yield 0x08000278, exit 0x08000298; docs/research/native-holes.md, 'Kirby: Nightmare's task switcher'). Write a stand-in in mods/kirby-nightmare/holes.toml (or a runtime facility if the lifter needs one) that runs each task's lifted code on a stackful coroutine (corosensei, as crates/desktop/src/coro.rs): resume starts or resumes the task keyed by its saved sp, yield/exit suspend with the values the scheduler reads. Done when: just holes counts the 3 as covered/not hard (or the lift's stand-ins cover them), the lift builds, and the native check matches the interpreter on a route through task-heavy play; just check passes.",
       "check": "independent",
-      "needs": ["native/nightmare-lifts", "native/task-coroutines"],
+      "needs": [
+        "native/nightmare-lifts",
+        "native/task-coroutines",
+        "native/nightmare-entry-reads",
+        "native/hw-dma-registers",
+        "native/hw-serial-registers"
+      ],
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
@@ -1357,16 +1363,23 @@
       "detail": "docs/native-stage-b.md piece 3. Measured on {unit:native/fnref-context}'s branch (commit e81168f; it holds the object split and call-site context): fn_words_not_proven unmoved by either. ~640 of affine's load sites (spike 644) have an address that may be unknown (Val::unk), and each reads the pile and every RAM cell (Run::load_at's anywhere arm), so e.g. the IRQ vector word's f_03000000 is in nearly every hole. Not the cause (tried, no change): naming the allocator, dropping the pile from constant-address loads, dropping the I/O unk flag, NUMS 8->256. A seen source: main's inlined free-list walk at 0x080001a8 (affine) loads GLOBAL_ALLOC fields holding allocator-made pointers. Find where the unknown comes from (GBAA_FNREF_TRACE; print each anywhere load) and fix the first big source. Done when: fn_words_not_proven falls on every agb program, bars lowered, a unit test, just lift-check and just check pass.",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "blocked",
+        "on": "q/unknown-address-step-land-without",
         "by": "3454f93a",
-        "session": "3454f93a-c5b2-49fa-ab4a-bcd1d4efe225",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T07:01:25Z",
-        "branch": "unit/native/fnref-unknown-addrs",
-        "beats": true
+        "at": "2026-11-12T08:30:17Z"
       },
+      "notes": [
+        {
+          "at": "2026-11-12T08:30:33Z",
+          "by": "3454f93a",
+          "text": "Measured: roots' r0-r3 as lost brings all 623 back (reset->main); RAMS 8 too few (font data 100-200 RAM-looking words); naming affine's allocator 0x08002055 or skipping the pile: no fall. Context (GBAA_FNREF_CTX_BLOCKS=6) takes 70s, -1 word."
+        },
+        {
+          "at": "2026-11-12T08:30:29Z",
+          "by": "3454f93a",
+          "text": "Branch eb76aa55 (fnref-context merged in): RamFrom tokens + lost_ptr closed world; affine anywhere loads 623->8, fn_words unmoved. Costs: spike/ime/irq-hold +1-3 not_proven, irq-hold ref_accesses 16->0 (heap.rs reads callee sets). GBAA_FNREF_TRACE prints 'load anywhere'."
+        }
+      ],
       "round": "2026-11-12T07:01:25Z"
     },
     {
@@ -1374,13 +1387,32 @@
       "title": "Ref<T> objects in static arrays fit the packed layout",
       "detail": "Found by {unit:native/lift-bios-calls}: heap.rs makes an object where a RAM base meets an unknown index, so an element of a static array (agb/native-bios-calls 4ee88ac's OUT.regs[k], 16 bytes at 0x020000b8) prints as g.at(Ref::<H_..>). The same words are also constant-address globals, which --layout packed places apart (in the lifter's order), so Ram::span fails and the packed build panics: 'pointer 0x020000b8 to 16 bytes isn't in RAM in one piece'. The guest layout passes. Repro: build agb/native-bios-calls at 4ee88ac (its main loop colours from o.regs.iter()) and run just lift-check --only native-bios-calls. The program now colours from a returned copy to avoid it; any game indexing a static array its code also touches by constant address hits it. Fix in the lifter (keep such globals contiguous in packed, or leave objects whose base is a global's region as bytes). Done when: the 4ee88ac loop shape (as a lift-check program or test) passes the packed native check; lift-check and just check pass.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "f336c3b0",
+        "session": "f336c3b0-9a14-4fc7-a992-a88f313d5fbf",
+        "host": "quack",
+        "pid": 2490379,
+        "start": "10658170",
+        "at": "2026-11-12T08:31:49Z",
+        "branch": "unit/native/ref-heap-static-arrays",
+        "beats": true
+      },
+      "round": "2026-11-12T08:31:49Z"
     },
     {
       "id": "native/fnref-rom-read-bound",
       "title": "Function flow bounds a ROM read by its table, not next code",
       "detail": "fnref's from-here-on ROM read (affine at 0x08000af2) ran to the next code; once {unit:native/modern-gcc-data-as-code} removed a false start in agb's panic text, it runs into agb's vtables: ref_unexplained rose 35->97 (93->164 ime-release/irq-hold), fn_words_not_proven +4/5. Bound the read by the table it indexes (its length or a bounds check) and lower both lift-check bars on the seven agb programs. Owner's answer (a) to the bar question.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-12T08:30:41Z",
+          "by": "3454f93a",
+          "text": "From {unit:native/fnref-unknown-addrs}'s branch: a from-here-on ROM read intersected with its load's value-set bounds fixes affine 0x08000af2 (hull 0x080160a4-0x0801f900); next, 0x08000bba's hull is 115 KB and false pointers in font data (0x080075f8) read to next code."
+        }
+      ]
     },
     {
       "id": "native/fnref-emerald-speed",
@@ -1540,6 +1572,27 @@
       "id": "native/spike-entry-read-hole",
       "title": "native-spike lifts again after entry-read masking",
       "detail": "Since {unit:native/entry-read-masking} landed (origin/main 12b2053), gbaa-lift on agb/native-spike stops at: hard hole in f_08006d47 at 0x08006d47: summary: 0x08006d76: reads r4-r11 at entry: r6, passed in r1. So just lift-check fails on native-spike on main (lift-metrics: hard_holes 1>0). Find whether the read is real or the new fall/tail-call rule is over-hard there; fix the rule or give a stand-in. Done when: just lift-check passes on every program; just check passes.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-12T08:33:14Z",
+          "by": "eb7b70bf",
+          "text": "Kirby - Nightmare has 5 more hard entry-read holes from the same change ({unit:native/nightmare-entry-reads}); a fix to the rule may cover both."
+        }
+      ]
+    },
+    {
+      "id": "native/nightmare-entry-reads",
+      "title": "Nightmare lifts again after entry-read masking",
+      "detail": "Since {unit:native/entry-read-masking} landed, gbaa-lift on Kirby - Nightmare has 5 hard summary holes (reads r4-r11 at entry), so the lift's crate doesn't build: 0x08064759 (r8 at 0x080647d0), 0x080647fd (r8 at 0x08064874), 0x0806b411 (r8 at 0x0806b5e8), 0x0806b671 (r9 at 0x0806b782), 0x080ce1f9 (r4: m4a's ChnVolSetAsm, r4 the channel and r5 the track passed in registers by its m4a callers; docs/research/native-holes.md had it under libgcc, now corrected). 0x08064759's read looks path-infeasible (r6 = entry r8 is compared only after r5 != -1, which sets r6 first). Fix the rule where it's over-hard, or give stand-ins (ChnVolSetAsm needs its callers' r4/r5: a stand-in per caller, or the lifter passing r4/r5 to it). Done when: just lift ROM out/lift-kirby-nightmare --name kirby-nightmare reports 0 hard holes and the crate builds; just check passes.",
+      "check": "recorded",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/hw-serial-registers",
+      "title": "Serial registers kept in the hardware library",
+      "detail": "Kirby - Nightmare's boot (0x08000311) writes the serial registers (0x120, and on into 0x120-0x15f: SIODATA, SIOCNT, RCNT, JOY), which Hw::write16 (crates/runtime/src/hw.rs) panics on as unmodelled; with DMA writes ignored this is its next stop. Keep the registers' values in Hw (reads give back what was written, as the play build's bus does with no link partner: SIOCNT's start bit and its IRQ as the play build has them), routed by the prelude's io_write16/io_read16. Done when: an agb program writing and reading them passes just lift-check with its route matching the play build; just check passes.",
       "check": "recorded",
       "uses": ["heavy"]
     }

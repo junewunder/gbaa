@@ -895,17 +895,18 @@
       "check": "recorded",
       "needs": ["multiplayer/wireless-adapter-local"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "4d69fe66",
-        "session": "4d69fe66-e9f8-495d-a27d-ed2db80a85f4",
-        "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T07:47:59Z",
-        "branch": "unit/multiplayer/wireless-radio-netplay",
-        "beats": true
+        "at": "2026-11-12T08:26:28Z",
+        "evidence": "Review fixes: latency sweep rerun (emerald-wireless --sim-ms 0-400) on the shipped adapter, which now keeps the 3 s host memory (without it 100/120 ms lost BOB's offer; with it 0-200 ms trade, 250+ handshake gives up; 400 ms is the script blocked, the old 4660 explained). just emerald-radio calm after merging main: pass (traded, 0 resent); just check passes.",
+        "host": "quack"
       },
       "notes": [
+        {
+          "at": "2026-11-12T08:26:32Z",
+          "by": "4d69fe66",
+          "text": "Networked adapter keeps HEARD_FOR by default now: without it the sim lost BOB's offer at 100/120 ms. Sim log prints positions; at 400 ms ALICE's avatar blocks BOB's scripted walk at 3,6."
+        },
         {
           "at": "2026-11-12T07:47:47Z",
           "by": "manual",
@@ -916,13 +917,7 @@
           "by": "954f0eb1",
           "text": "The local adapter's one guess beyond afska's docs: a searching adapter lists a host it heard for 3 s across searches (Adapter::heard); without it BOB's board offer rarely reached ALICE. Check whether the networked radio still needs it."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-12T07:47:47Z",
-        "findings": "- docs/research/multiplayer.md, \"The radio on the server\" latency table (diff.patch lines ~2671-2684): this table is the card's \"measure how much latency librfu's timeouts and the Union Room's host/search switching allow\", but (a) the 400 ms row says \"never (4660 without)\", i.e. that without the 3 s memory the Connect completed at frame 4660, earlier than the 0 ms run's 6714 and every other row's ~6714-6845. That is almost certainly a typo or a misread log. (b) The footnote says the table was run \"with the 3 s memory but for the two marked\", yet three cells are marked, and the 3 s memory (HEARD_FOR) is what this branch turns off by default for a networked adapter. So the rows that set the limit (250, 300 and 400 ms: 'between 200 and 250 ms each way') were measured only on a setting that doesn't ship. Fix: rerun `just emerald-wireless ROM --sim-ms N` with the default (no --heard-ms) at least at 250, 300 and 400 ms (ideally 100 and 150 too), correct the 400 ms cell, make the footnote match which cells used which setting, and restate the latency limit for the networked adapter as it ships."
-      },
-      "round": "2026-11-12T06:30:40Z"
+      ]
     },
     {
       "id": "multiplayer/stall-catch-up-paced",
