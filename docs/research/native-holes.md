@@ -35,7 +35,7 @@ tracker evidence has the before and after (`just show <id> --full`).
   veneers, jumps into RAM code, and a few real switch tables Recovery
   misses (Rogue's, moonbeam's). The summaries' holes were mostly the
   analysis being too cautious ("Functions that change r4-r11 or sp",
-  below; `native/callee-save-breaks`): 31 then, 14 now, all real
+  below; `native/callee-save-breaks`): 31 then, 14 after, all real
   convention breaks in hand-written code or data taken for code.
 - **The flash library's stack routines are hardware-library calls, not
   holes** (`native/flash-stack-standin`; below). Five games ran code from
@@ -353,8 +353,8 @@ kind is soft, as before (main never looked), and not proven safe; the
 run would have to follow which bits survive (`native/entry-read-masking`). After: 14, the six real ones, the six callers of
 moonbeam's and Rogue's that read the r4 the helper returns, and the two
 data. Each real one is the lift's stand-in to write (`[[standin]]` in
-the game's holes file covers a function's holes): libgcc's `__muldf3`
-and `__divdf3` as Rust's `f64` operations, the others as written.
+the game's holes file), the others as written. libgcc's `__muldf3` and
+`__divdf3` are every game's: `runtime::softfloat`, found by its code.
 
 ## Modern GCC's unresolved jumps, by kind
 

@@ -115,6 +115,18 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   generated numbers file (header, date, commit); `--from DIR` runs
   nothing and renders DIR's saved `summary.toml` (with `--write-doc`, the
   file), for a run already made at the commit wanted.
+- `just softfloat-check ROM [--cases N] [--pins]`
+  (`gbaa-softfloat-check`, `crates/hole-report/src/bin/softfloat_check.rs`):
+  the runtime's stand-ins for libgcc's `__muldf3` and `__divdf3`
+  (`runtime::softfloat`) against the ROM's own copies, found by
+  `analysis::softfloat::scan` and run in the interpreter: every pair of an
+  edge grid (zeros, denormals, the normal range's ends, infinities, quiet
+  and signalling NaNs), then N (default 50,000) random pairs of each kind
+  (any bits, results near the denormals, near overflow, short mantissas).
+  Prints each copy's count of differences and the first few; fails on
+  any, or on a ROM with neither. `--pins` prints a smaller grid's results
+  as `runtime::softfloat`'s test table holds them. About 2 s a ROM
+  (moonbeam, Emerald Rogue and Imperium have them). Light.
 - `just jt-score`: the jump-table check (decision 5c). Builds truth tables
   from `$GBAA_DATA/src/pokeemerald/pokeemerald{,_modern}.elf` and the ROMs
   beside them, runs `analysis::jumptable` over each ELF's code map, and
@@ -1278,13 +1290,13 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   given (a file name with spaces: `just lift "…/Metroid - Zero Mission
   (USA).gba" out/lift-metroid --name metroid`), else the ROM's file name
   lowercased. The file has `[[standin]]` (a function's hand-written Rust,
-  and why), `[[jump]]` (an unresolved jump's targets), `[[copy]]` (code
+  and why), `[[jump]]` (an unresolved jump's targets as keys, its cases), `[[copy]]` (code
   the game copies to RAM that discovery's static copies don't have:
   `src`, `dst`, `len`, `roots` and why, as `just holes` prints its run's
   copies; lifted at its RAM keys like a static copy, native/lift-ram-copies)
   and, at the top,
-  `skip_fn_flow = "why"` (the function-address flow left out, for a game
-  it doesn't settle on). A hard hole no stand-in
+  `skip_fn_flow = "why"` (the function-address flow left out, saving
+  the minutes it runs before its token bound stops it). A hard hole no stand-in
   covers (CPU state, an unresolved jump, a BIOS call the prelude lacks, an
   undefined instruction, a jump to no code, a summary that returns r4-r11
   or sp changed) fails the lift, naming each, and the build (a
@@ -1460,6 +1472,13 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   [FRAMES]` (heavy) needs identical audio hashes interpreted and recompiled,
   no dropped samples, and 280896/period samples a frame from frame 10;
   passes on agb ROMs at 18157 Hz (304) and 10512 Hz (176).
+- `gbaa-present-sim [--scale X]… TIMES…` (deck/even-presents): what a
+  60 Hz display shows of a single game's frames. TIMES: `gbaa-desktop
+  --headless --frame-times` files (least of two runs on a busy machine);
+  `--scale` multiplies costs (0.7 recompiled; 2.2 the Deck, estimated
+  from its 2-2.5x quack's, not measured). Prints doubled, skipped, late
+  and lag for frames handed over when done, 8 ms in, and after the
+  slowest recent frame. Numbers: `docs/sound-design.md`, "When a frame…".
 - mGBA oracle (#55, milestone 3): `just mgba-diff ROM FRAMES [INPUT]` runs
   ROM in mGBA (`crates/mgba-dump`, over a static libmgba that
   `scripts/fetch-mgba.sh` builds once into `$GBAA_DATA/tools/mgba/`, under
@@ -1649,6 +1668,23 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   (2026-10-25: 6201 transfers in 4000 frames). About a minute. `--input0`
   and `--input1` replace a player's presses (`a@900`, `a@1400-3400/60`,
   `+held`), `--dump DIR --dump-at N,N` writes both players' frames.
+- The wireless adapter's check (multiplayer/wireless-adapter-local,
+  `runtime::link::rfu`): `just emerald-wireless [ROM] [ARGS]` runs
+  alice.sav and bob.sav as two Emeralds, each with an emulated wireless
+  adapter in one radio, in the interpreter. Both continue, walk to
+  Oldale's Union Room attendant (down two, left four, up two: the
+  counter's posts block row 3) and go in (about frame 3500). BOB
+  registers his Torchic at the room's attendant wanting WATER; ALICE
+  checks the trading board, offers her Mudkip, BOB accepts, and the
+  trade and its save run (back in the room by about 10200). It prints
+  each player's map, `gMain.callback2`, the adapter's state and ID,
+  position and broadcast as they change, and each adapter's commands;
+  runs it all twice and passes when both were in the Union Room, the
+  first Pokémon swapped, and the two runs printed the same and ended in
+  the same machine states (2026-11-08: 10500 frames, about 2 minutes a
+  run). `--once` skips the second run; `--input0`/`--input1` replace a
+  player's presses; `--dump DIR --dump-at` takes frames as `N,N` or
+  `FROM-TO/EVERY`.
 - Linked play: `gbaa-desktop ROM --link B.sav` runs a second GBA on the
   same ROM, on one cable with the first (`runtime::link`;
   `crates/desktop/src/link.rs`), the two screens side by side in one
@@ -1684,7 +1720,16 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   typed on the keyboard or a pad (up/down step a letter), Leave the room;
   in a session it shows the seats, round trip, lead, rollbacks and frames
   run again. The game alone stops for the session and comes back after
-  it. With `--frames N` each run stops at N frames, and the window closes
+  it, and neither restarts it, as a GBA doesn't when its cable goes in
+  or out (multiplayer/join-without-restart): your seat starts from the
+  game as it was when you asked for the room (or from `--state`), and
+  the game alone goes on from where your seat left off. Checked
+  2026-11-08 on quack, two Kirby windows in a private `cu session`, each
+  at game select with a cursor moved since its `--state`: the session
+  began on each window's own screen, player 2 left and played on in
+  Rainbow Route, player 1 hosted again from its cable screen, and a new
+  player 2 joined: Kirby's cable screen saw P1 and P2, both reached
+  Rainbow Route, no desync in 1860 frames. With `--frames N` each run stops at N frames, and the window closes
   when a session ends there. Checked 2026-10-29 on quack: two Kirby
   windows in a private `cu session`, through a local `gbaa-server`, hosted
   and joined from the menus alone, both ending 3600 frames on one hash.
@@ -1767,6 +1812,12 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   `just build-recompiled`, in `target/recompiled/release/`).
   Kirby's multiplayer from reset: `start@400,start@700,a@800,a@950,
   down@1050,a@1100` on both, then `a@1820,a@1950,a@2100` on player 1.
+  `--state1 F`.. start a seat from a state (as a window's game goes into
+  its session): Kirby from game select, player 1 at frame 1000 and
+  player 2 at 1500 of the presses above, `--input1
+  'down@50,a@100,a@820,a@950,a@1100,right@1200-1800/18+9' --input2
+  'down@30,a@80,left@1200-1800/18+9' --frames 1800 --timing exact` on
+  calm reach Rainbow Route on one end hash (`cdc7b0d1…`, 2026-11-08).
   `--menu1 SPANS` and `--menu2 SPANS` (headless) open each seat's menu
   over those frames as a player would (`gbaa-desktop --menu`: the
   seat's presses let go, the menu's report refreshed), the check of

@@ -373,11 +373,20 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // literal pool). Each such target is decoded as code from there, and
     // again from what that reaches, so the lift has the code the play
     // build would hand to its interpreter. Listed in the report.
+    // The holes file's targets for jumps Recovery left unresolved are
+    // followed as a table's cases, and decoded the same way if discovery
+    // has no code there.
+    let given = || holes.jumps.iter().map(|(&a, (ts, _))| (a, ts.as_slice()));
     let mut gaps = BTreeSet::new();
     for _ in 0..64 {
-        let ctx = Ctx::new(rom, &disc);
+        let ctx = Ctx::new(rom, &disc).with_library().with_jumps(given());
         let funcs: Vec<Func> = ctx.entries.iter().map(|&e| build_func(&ctx, e)).collect();
-        let missing = missing(&ctx, &funcs);
+        let mut missing = missing(&ctx, &funcs);
+        missing.extend(
+            given()
+                .flat_map(|(_, ts)| ts.iter().copied())
+                .filter(|&k| (0x0800_0000..0x0A00_0000).contains(&(k & !1)) && !ctx.is_code(k)),
+        );
         if missing.is_empty() {
             break;
         }
@@ -425,11 +434,18 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         });
     }
     let overlays = overlays;
-    let mut codes = vec![code(Ctx::new(rom, &disc))];
+    let mut codes = vec![code(
+        Ctx::new(rom, &disc).with_library().with_jumps(given()),
+    )];
     for o in &overlays {
         let o_rom = &rom[(o.src - 0x0800_0000) as usize..][..o.len as usize];
-        codes.push(code(Ctx::at(o.dst, o_rom, &o.disc)));
+        codes.push(code(
+            Ctx::at(o.dst, o_rom, &o.disc)
+                .with_library()
+                .with_jumps(given()),
+        ));
     }
+    let holes = &library_standins(holes, &codes);
     // Every function, by key, over all contexts.
     let mut all: BTreeSet<u32> = BTreeSet::new();
     for c in &codes {
@@ -504,8 +520,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             })
             .unwrap_or(0)
     };
+    // A flow that didn't settle (its rounds or its token bound ran out:
+    // native/whole-lift-memory) gives the heap what a skipped one does:
+    // its sites and taken functions may be missing some.
+    let settled = fnrefs.as_ref().filter(|(f, _, _)| !f.unsettled);
     let no_sites = BTreeMap::new();
-    let taken: Option<BTreeSet<u32>> = fnrefs.as_ref().map(|(f, words, _)| {
+    let taken: Option<BTreeSet<u32>> = settled.map(|(f, words, _)| {
         f.consts
             .values()
             .chain(words.values().map(|(k, _)| k))
@@ -514,7 +534,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     });
     let heap = heap::follow(
         &ins,
-        fnrefs.as_ref().map_or(&no_sites, |(f, _, _)| &f.sites),
+        settled.map_or(&no_sites, |(f, _, _)| &f.sites),
         taken.as_ref(),
         &ram_init,
     );
@@ -546,10 +566,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         for f in &c.funcs {
             fns.push(f.entry);
             if let Some((code, why)) = holes.standins.get(&f.entry) {
-                let mut t = format!(
-                    "// f_{:08x}: a stand-in from the holes file: {why}\n",
-                    f.entry
-                );
+                let mut t = format!("// f_{:08x}: a stand-in: {why}\n", f.entry);
                 t.push_str(code);
                 if !t.ends_with('\n') {
                     t.push('\n');
@@ -1178,6 +1195,45 @@ fn fn_ins<'a>(
         }
     }
     (ins, pools, call_fn)
+}
+
+/// `holes` with a stand-in for each library routine the code has
+/// (`Ctx::library`: libgcc's `__muldf3` and `__divdf3`, a call of
+/// `runtime::softfloat`) and for each function inside one's code (its
+/// special-case paths, which only it calls: never run), unless the holes
+/// file has its own.
+fn library_standins(holes: &Holes, codes: &[Code]) -> Holes {
+    let mut h = holes.clone();
+    for c in codes {
+        let lib = c.ctx.library();
+        for f in c.funcs.iter().filter(|f| lib.inside(f.entry)) {
+            let k = f.entry;
+            let (code, why) = match lib.routines.get(&k) {
+                Some(r) => (
+                    format!(
+                        "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{\n    \
+                         let r = {}(a[0] as u64 | (a[1] as u64) << 32, a[2] as u64 | (a[3] as u64) << 32);\n    \
+                         Ok([r as u32, (r >> 32) as u32, a[2], a[3]])\n}}\n",
+                        r.call()
+                    ),
+                    format!(
+                        "libgcc's {} (analysis::softfloat), found by its code: {}, bit-exact",
+                        r.name(),
+                        r.call()
+                    ),
+                ),
+                None => (
+                    format!(
+                        "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{\n    \
+                         unreachable!(\"0x{k:08x} is inside a libgcc routine that runtime::softfloat stands in for\")\n}}\n"
+                    ),
+                    "a path inside a libgcc routine the runtime stands in for (analysis::softfloat); only the routine calls it".into(),
+                ),
+            };
+            h.standins.entry(k).or_insert((code, why));
+        }
+    }
+    h
 }
 
 fn code(ctx: Ctx<'_>) -> Code<'_> {
