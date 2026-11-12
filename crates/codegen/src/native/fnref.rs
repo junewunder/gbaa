@@ -466,6 +466,27 @@ impl Val {
         before != (self.toks.len(), self.mem, self.unk, self.lost_rom)
     }
 
+    /// [`Val::union`], and whether `o` added anything (the callees'
+    /// results of a call by value are taken in so, then capped once: a cap
+    /// at each of thousands was most of a large game's run).
+    fn union_new(&mut self, o: &Val) -> bool {
+        let flags = (o.mem && !self.mem) || (o.unk && !self.unk) || (o.lost_rom && !self.lost_rom);
+        let toks = !(o.toks.is_empty()
+            || std::rc::Rc::ptr_eq(&self.toks.0, &o.toks.0)
+            || o.toks.is_subset(&self.toks));
+        if toks {
+            if self.toks.is_empty() {
+                self.toks = o.toks.clone();
+            } else {
+                self.toks.add_all(o.toks.iter().copied().collect());
+            }
+        }
+        self.mem |= o.mem;
+        self.unk |= o.unk;
+        self.lost_rom |= o.lost_rom;
+        flags || toks
+    }
+
     /// [`Val::join`] into a value as the cap leaves it (one only ever
     /// joined into, from empty: an entry, a result): when `o` adds
     /// nothing, without the cap (a large callee set's results, joined
@@ -528,30 +549,55 @@ impl Val {
             return;
         }
         // A pointer "from here on" takes in those above it, up to the end
-        // of its run of data.
-        let los: Vec<u32> = self
-            .toks
-            .range(Tok::RomFrom(0)..=Tok::RomFrom(u32::MAX))
-            .filter_map(|t| match *t {
-                Tok::RomFrom(a) => Some(a),
-                _ => None,
-            })
-            .collect();
-        let mut covered = 0;
-        for lo in los {
+        // of its run of data: one walk over both sorted lists (a search
+        // per pointer was most of a large game's later rounds, whose
+        // results hold thousands).
+        let addrs = |r: std::ops::RangeInclusive<Tok>| -> Vec<u32> {
+            self.toks
+                .range(r)
+                .filter_map(|t| match *t {
+                    Tok::Rom(a) | Tok::RomFrom(a) => Some(a),
+                    _ => None,
+                })
+                .collect()
+        };
+        let roms = addrs(Tok::Rom(0)..=Tok::Rom(u32::MAX));
+        let los = addrs(Tok::RomFrom(0)..=Tok::RomFrom(u32::MAX));
+        let code = CODE.with(|c| c.borrow().clone());
+        let mut at = 0;
+        let mut bound = |a: u32| -> u32 {
+            if code.is_empty() {
+                return u32::MAX;
+            }
+            at += code[at..].partition_point(|&k| k <= a);
+            code.get(at).copied().unwrap_or(u32::MAX)
+        };
+        let mut gone: Vec<Tok> = Vec::new();
+        let (mut covered, mut ri) = (0, 0);
+        for (i, &lo) in los.iter().enumerate() {
             if lo < covered {
                 continue;
             }
             let end = bound(lo);
             covered = end;
-            let hi = Tok::Rom(lo)..Tok::Rom(end);
-            let hf = Tok::RomFrom(lo.saturating_add(1))..Tok::RomFrom(end);
-            if end > lo
-                && (self.toks.range(hi.clone()).next().is_some()
-                    || self.toks.range(hf.clone()).next().is_some())
-            {
-                self.drop_range(hi);
-                self.drop_range(hf);
+            while ri < roms.len() && roms[ri] < lo {
+                ri += 1;
+            }
+            while ri < roms.len() && roms[ri] < end {
+                gone.push(Tok::Rom(roms[ri]));
+                ri += 1;
+            }
+            gone.extend(
+                los[i + 1..]
+                    .iter()
+                    .take_while(|&&f| f < end)
+                    .map(|&f| Tok::RomFrom(f)),
+            );
+        }
+        if !gone.is_empty() {
+            let s = &mut self.toks;
+            for t in gone {
+                s.remove(&t);
             }
         }
     }
@@ -2643,12 +2689,18 @@ impl Run<'_, '_> {
                         o.union(a);
                     }
                 }
+                let mut grew = false;
                 for &k in &callees {
                     self.rets_read.insert(k);
                     if self.g.ret_stamp.get(&k).is_some_and(|&s| s > m.stamp) {
                         for (a, b) in m.rets.iter_mut().zip(&self.g.ret[&k]) {
-                            a.join_capped(b);
+                            grew |= a.union_new(b);
                         }
+                    }
+                }
+                if grew {
+                    for a in &mut m.rets {
+                        a.cap();
                     }
                 }
                 m.stamp = self.g.stamp;
@@ -2661,8 +2713,11 @@ impl Run<'_, '_> {
                 self.g.give_all(&callees, args);
                 for &k in &callees {
                     for (a, b) in rets.iter_mut().zip(self.ret_of(k)) {
-                        a.join_capped(&b);
+                        a.union_new(&b);
                     }
+                }
+                for a in &mut rets {
+                    a.cap();
                 }
                 if callees.len() > 1 {
                     self.g.by_value.insert(
