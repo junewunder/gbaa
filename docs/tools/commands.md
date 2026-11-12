@@ -1334,14 +1334,13 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `planted_store`, `planted_hole`, `planted_flags`) and its bars,
   `[program.<name>.bars]`. Today `agb/native-spike`, `agb/affine`,
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
-  `agb/native-frame-locals`, `agb/native-ime-release` and
-  `agb/native-bios-calls` (`just agb-tests`) on
+  `agb/native-frame-locals`, `agb/native-ime-release`,
+  `agb/native-bios-calls`, `agb/native-tasks` (`just agb-tests`) on
   `units/native-spike.toml`, `units/affine-600.toml`,
   `units/mosaic-modes-600.toml`, `units/native-fallthrough-600.toml`,
   `units/native-irq-hold-601.toml`, `units/native-frame-locals-600.toml`,
-  `units/native-ime-release-601.toml` and
-  `units/native-bios-calls-600.toml` (each BIOS call the prelude has
-  past the waits, `Div` and `CpuSet`, native/lift-bios-calls). First every
+  `units/native-ime-release-601.toml`, `units/native-bios-calls-600.toml`
+  (native/lift-bios-calls), `units/native-tasks-600.toml`. First every
   program is lifted with `--bars` (seconds), failing before any build on
   a metric over its bar; then each lift and its play build
   (`--timing native`) are built and `route-check --native` runs them for
@@ -1349,7 +1348,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   the stack and the code copies is compared. The spike lifted with its
   `planted_store` (0x08000186, the V-blank handler's frame count) must be
   caught, and with its `planted_hole` (agb's IRQ wrapper's stand-in
-  dropped) the lift and the build must fail naming `f_03000000`'s `mrs`.
+  dropped) the lift and the build must fail naming `f_03000000`'s `mrs`;
+  native-tasks likewise (a task's store; its yield's stack switch).
   native-fallthrough, native-irq-hold, native-frame-locals and
   native-ime-release lifted with their `planted_flags`
   (`--fall-as-tail-call`, the old fall into another function;
