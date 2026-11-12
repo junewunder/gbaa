@@ -46,13 +46,3 @@ pub fn f_03000000(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> 
     Ok([0x0400_0000, a[1], ime, ie_if])
 }
 '''
-
-[[standin]]
-entry = 0x08006d77
-why = "a cold block of qrcodegen's QrCode::draw_format_bits (agb's panic screen) that the function reaches by `bl` from its entry: a run of calls of core::panicking::panic and panic_bounds_check, each a panic, which read the caller's r6 (its summary's hole). The program never panics, so this only stops"
-code = '''
-pub fn f_08006d77(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
-    let _ = (g, sp, a);
-    panic!("agb's qrcodegen panic path (0x08006d77): the program panicked");
-}
-'''
