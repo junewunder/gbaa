@@ -930,7 +930,44 @@
       "id": "multiplayer/desktop-wireless-radio",
       "title": "Union Room from the desktop: a wireless seat on the server",
       "detail": "gbaa-desktop has no wireless adapter yet. Give it a networked one (Wireless::networked + netplay::radio::Radio, as emerald-wireless --seat does): --server ADDR --wireless host/join, each window runs only its own Emerald, real time. Check: two windows in a private cu session through a local gbaa-server trade in the Union Room. The fly server needs a redeploy for W datagrams.",
-      "needs": ["multiplayer/wireless-radio-netplay"]
+      "needs": ["multiplayer/wireless-radio-netplay"],
+      "record": {
+        "state": "done",
+        "by": "688d2c6c",
+        "at": "2026-11-12T09:46:24Z",
+        "evidence": "Review fix made: --rogue usage line realigned to column 20 (63e2cd3, whitespace only). Union Room check from 2026-11-12 on quack stands: two windows in a private cu session through a local gbaa-server traded (BOB sent over TORCHIC / ALICE sent over MUDKIP), 10600 frames, 0 late, 0 resent. Main merged (582c725); just check passed after the merge.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-11-12T09:42:32Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/desktop/src/lib.rs:304: the diff removed a space from the existing `--rogue ADDR` line in the usage text. It now reads ` --rogue ADDR Emerald Rogue's co-op…` (4 spaces), where it had ` --rogue ADDR Emer…"
+        }
+      ]
+    },
+    {
+      "id": "multiplayer/menu-wireless-room",
+      "title": "Host or join a wireless room from the window's menu",
+      "record": {
+        "state": "done",
+        "by": "9dc0f7d7",
+        "at": "2026-11-12T10:03:08Z",
+        "evidence": "Checked 2026-11-12 on quack in a private cu session: two Emerald windows (alice.sav, bob.sav copies) through a local gbaa-server, from the menus alone. Netplay page, Link row set to Wireless, Host a room: page showed code 8RQ96J big, title 'wireless room 8RQ96J, 1 of 2 players in'. Other window typed the server and code, Join: titles 'player 1' / 'player 2'. In-room page listed radio datagrams and 12 adapter transfers. Leave the room ended the joiner ('wireless: 1170 frames in 19.6 s, 0 late, 12 transfers'; server 'player 2 left'), page said 'You left the room.' The menu unit test covers Link toggling into Ask.wireless for host and join. just check passes after merging main. Built on {unit:multiplayer/desktop-wireless-radio}'s branch, merged in, which isn't on main yet.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-11-12T10:03:16Z",
+          "by": "9dc0f7d7",
+          "text": "This branch merges {unit:multiplayer/desktop-wireless-radio}'s branch (not on main when done), so landing it lands that one too. Wireless rooms still start from reset; no leave notice reaches the other seat (the radio has none)."
+        },
+        {
+          "at": "2026-11-12T09:36:15Z",
+          "by": "2be79df9",
+          "text": "gbaa-desktop --wireless works from the command line only ({unit:multiplayer/desktop-wireless-radio}); the Netplay page's Ask has no wireless choice. Fly's server still needs just fly-deploy before W datagrams reach it."
+        }
+      ]
     }
   ]
 }

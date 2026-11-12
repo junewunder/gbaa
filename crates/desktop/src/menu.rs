@@ -35,9 +35,12 @@
 //! unless another is set, and then remembered in [`crate::settings`]), and
 //! leaves it. A field is typed on the keyboard, or on a pad: up and down
 //! step the letter at the cursor, left and right move it ([`Edit`]); A or
-//! Enter keeps it, B or Escape drops it. In a session it shows the room,
-//! the seats, the round trip, how far ahead or behind, the rollbacks and
-//! the frames run again.
+//! Enter keeps it, B or Escape drops it. Its Link row picks the cable's
+//! rooms (rollback netplay) or wireless ones ([`crate::wireless`]: the
+//! adapter's radio on the server, each window its own GBA, from reset).
+//! In a session it shows the room, the seats, the round trip, how far
+//! ahead or behind, the rollbacks and the frames run again (a wireless
+//! room: the radio's traffic).
 
 use crate::audio::MAX_VOLUME;
 use crate::console::{self, Console, ScriptCmd};
@@ -614,6 +617,9 @@ pub struct Menu {
     code: String,
     /// The seats in a room the Netplay page hosts (2-4).
     players: usize,
+    /// The Netplay page's rooms are wireless ([`crate::wireless`]), not
+    /// the cable's.
+    wireless: bool,
     /// The Netplay page's field being typed in.
     edit: Option<Edit>,
     pub quit: bool,
@@ -688,6 +694,7 @@ impl Menu {
             server: room::DEFAULT_SERVER.into(),
             code: String::new(),
             players: room::SEATS,
+            wireless: false,
             edit: None,
             quit: false,
             controls,
@@ -1244,8 +1251,8 @@ impl Menu {
 }
 
 impl Menu {
-    /// The Netplay page: out of a room, the server, Host, the code and
-    /// Join; in one, where it is (the code big while the host waits) and
+    /// The Netplay page: out of a room, the server, the players, the
+    /// link (cable or wireless), Host, the code and Join; in one, where it is (the code big while the host waits) and
     /// Leave.
     fn netplay_page(&mut self, ui: &mut egui::Ui, rows: &mut Rows) {
         title(ui, "Netplay");
@@ -1275,11 +1282,23 @@ impl Menu {
                         self.players =
                             2 + (self.players as i32 - 2 + players).rem_euclid(n as i32) as usize;
                     }
+                    let link = if self.wireless { "Wireless" } else { "Cable" };
+                    if rows.row(ui, "Link", link).step != 0 {
+                        self.wireless = !self.wireless;
+                    }
+                    if self.wireless {
+                        said(
+                            ui,
+                            "A wireless room (Union Room, wireless club) starts the game \
+                             from reset: save in the game first.",
+                        );
+                    }
                     if rows.row(ui, "Host a room", "").step != 0 {
                         self.netplay_ask = Some(room::Ask {
                             server: self.server.clone(),
                             role: room::Role::Host,
                             players: self.players,
+                            wireless: self.wireless,
                         });
                     }
                     let code = match self.edit.as_ref().filter(|e| e.field == Field::Code) {
@@ -1297,6 +1316,7 @@ impl Menu {
                                     server: self.server.clone(),
                                     role: room::Role::Join(c),
                                     players: 0,
+                                    wireless: self.wireless,
                                 })
                             }
                             Err(_) => {
@@ -2965,11 +2985,18 @@ mod tests {
         go(&mut m, &[Nav::Ok]);
         assert_eq!(m.page, Page::Netplay);
         pass(&mut m);
-        // Server, Players, Host a room, Room code, Join, Back. Join with no
-        // code asks for one.
+        // Server, Players, Link, Host a room, Room code, Join, Back. Join
+        // with no code asks for one.
         go(
             &mut m,
-            &[Nav::Down, Nav::Down, Nav::Down, Nav::Down, Nav::Ok],
+            &[
+                Nav::Down,
+                Nav::Down,
+                Nav::Down,
+                Nav::Down,
+                Nav::Down,
+                Nav::Ok,
+            ],
         );
         assert_eq!(m.netplay_ask, None);
         assert!(m.saved.as_deref().unwrap().contains("code"));
@@ -2992,6 +3019,7 @@ mod tests {
                 server: room::DEFAULT_SERVER.into(),
                 role: room::Role::Join(*b"B9CDEF"),
                 players: 0,
+                wireless: false,
             })
         );
         // Hosting: the code shows big while it waits; the session begun
@@ -3004,16 +3032,39 @@ mod tests {
             &mut m,
             &[
                 Nav::Up,
+                Nav::Up,
                 Nav::Ok,
                 Nav::Ok,
                 Nav::Ok,
                 Nav::Left,
                 Nav::Down,
+                Nav::Down,
                 Nav::Ok,
             ],
         );
         let ask = m.netplay_ask.take().unwrap();
-        assert_eq!((ask.role, ask.players), (room::Role::Host, 4));
+        assert_eq!(
+            (ask.role, ask.players, ask.wireless),
+            (room::Role::Host, 4, false)
+        );
+        // Link steps cable and wireless: a wireless room's host, then its
+        // join.
+        go(&mut m, &[Nav::Up, Nav::Ok, Nav::Down, Nav::Ok]);
+        let ask = m.netplay_ask.take().unwrap();
+        assert_eq!(
+            (ask.role, ask.players, ask.wireless),
+            (room::Role::Host, 4, true)
+        );
+        go(&mut m, &[Nav::Down, Nav::Down, Nav::Ok]);
+        assert_eq!(
+            m.netplay_ask.take(),
+            Some(room::Ask {
+                server: room::DEFAULT_SERVER.into(),
+                role: room::Role::Join(*b"B9CDEF"),
+                players: 0,
+                wireless: true,
+            })
+        );
         m.set_netplay(room::State::Waiting {
             code: "QWERTY".into(),
             filled: 3,
