@@ -1145,6 +1145,15 @@
       "at": "2026-11-12T18:59:55Z",
       "question": "q/unknown-address-step-land-without",
       "via": "625afd3a"
+    },
+    {
+      "id": "d/lift-counts-are-the-agents-call-correctness",
+      "title": "Lift counts are the agents' call; correctness stays june's",
+      "why": "june, 2026-11-12. The bars in crates/codegen/lift-check.toml and the counts a unit's done-when names measure precision: how much the analysis proves, how plain the lift is. They are not the correctness check. Correctness stays june's: the native check (the lifted build draws its route's frames as the interpreter does), hard_holes and the planted controls never loosen without her. Two things are the unit's own call, with no question. (1) Raising a bar: allowed when the native check stays green and the evidence gives each raised bar, its old and new value, and the cause (the old value was unsound or an accident, or counts moved between categories). (2) A target count that doesn't move: the unit may land on a direct measure of what it did, when the native check stays green, the direct measure becomes a new bar in every program's table, the original target is handed to a named follow-up unit (filed, or an existing one's done-when), and the independent checker agrees the swap is fair and says so in its verdict. Either is recorded with 'just tracker decide --for-run' so the morning report shows it, and the loop's review judges the explanation. Still ask june when a unit can show no direct measure of what it did, or a large rise has no cause found. Why: seven such questions in a week, all answered with the default, each holding finished work for hours.",
+      "by": "owner",
+      "at": "2026-11-12T19:01:57Z",
+      "scope": ["group:native"],
+      "replaces": "d/lift-bars-agents-may-raise-a-count-with-the"
     }
   ]
 }
