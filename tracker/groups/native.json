@@ -1571,21 +1571,8 @@
         "checker": "verifier-3e91c7",
         "at": "2026-11-12T11:52:30Z",
         "evidence": "Prelude call_fn: RAM target with no function whose bytes match a flash/SRAM stack routine calls runtime::hw::flash (signatures moved to runtime). Metroid lift (scratch-patched for the filed entry-read hole and BIOS region) runs all 2700 route frames: 33 Read/Verify calls, Verify all 0, frames 350/700 hash as mGBA's checkpoints. lift-check --only native-save, native-bios-region pass; just check passes after merging main. lines_prelude 917->961 (+44, flash_call). Verifier reproduced the run and reran just check.",
-        "branch": "unit/native/lift-flash-routines",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T11:52:30Z",
-          "by": "928c9e05",
-          "host": "quack",
-          "pid": 2490379,
-          "start": "10658170",
-          "beats": true,
-          "session": "928c9e05-48b6-4898-9ac3-844e8633b1c0",
-          "lane": "quack/4"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-12T11:13:32Z"
+        "host": "quack"
+      }
     },
     {
       "id": "native/lift-bios-region",
