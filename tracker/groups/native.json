@@ -1158,6 +1158,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T10:56:36Z",
+          "by": "5cf6c823",
+          "text": "2026-11-12: Emerald's flow now finishes (27:37, 2.1 GB, on Function-address flow on Emerald fast enough to finish's branch) but reports 'didn't settle' after 35,409 runs: a function hit its 64*blocks+64 step bound, not the round bound. Trace prints which ('unsettled after')."
+        },
+        {
           "at": "2026-11-08T18:27:27Z",
           "by": "c06275d9",
           "text": "2026-11-08: Refs (b6d5ed3f) fixed memory: Emerald round 0 flat at 1.5 GB (was >10 GB), entries 5.6M tokens. Not done: too slow to finish (~60 s/500 fns). Split: {unit:native/fnref-emerald-speed} (needed); widening gap {unit:native/fnref-romfrom-absorb}. memory/ file says how to measure."
@@ -1432,25 +1437,33 @@
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
-        "by": "5cf6c823",
-        "session": "5cf6c823-3eeb-4734-8c09-a83340a43640",
+        "by": "d258b190",
+        "session": "d258b190-7fbc-4544-b0d3-69f7ab7ebcf7",
         "host": "quack",
         "pid": 2489427,
         "start": "10657408",
-        "at": "2026-11-12T08:41:16Z",
+        "at": "2026-11-12T10:57:25Z",
         "branch": "unit/native/fnref-emerald-speed",
+        "resumed": "5cf6c823",
+        "prevSession": "5cf6c823-3eeb-4734-8c09-a83340a43640",
+        "pushed": true,
         "beats": true
       },
       "notes": [
         {
+          "at": "2026-11-12T10:56:48Z",
+          "by": "5cf6c823",
+          "text": "2026-11-12: branch ec10365: Emerald round 0 in 437 s (was ~20 min); a run on an earlier build finished: 27:37, 2.1 GB peak, unsettled. Left (~1 h): merging main's rom-read-bound took native-tasks fn_words_not_proven to 59>57 (main 57); speed changes each reverted: same"
+        },
+        {
+          "at": "2026-11-12T10:56:33Z",
+          "by": "5cf6c823",
+          "text": "Then: one timed whole run at HEAD (just long, --mem 9G, GBAA_FNREF_TRACE=1 names the function that stops it settling: 'unsettled after'). Round 1 runs ~256 fns/min. memory/fnref-flow-emerald-memory.md says how to profile with eu-stack (perf is blocked here)."
+        },
+        {
           "at": "2026-11-08T22:44:22Z",
           "by": "9e61b577",
           "text": "main now has a 48M-token bound in fnref::follow (stops unsettled) and G::give_all (shared joins across a by-value call's callees) from {unit:native/whole-lift-memory}; expect a merge in fnref.rs with b6d5ed3f; raise TOKENS if Emerald needs it."
-        },
-        {
-          "at": "2026-11-08T18:34:25Z",
-          "by": "c06275d9",
-          "text": "--callee-sets is on main now (indirect-call-args landed 2026-11-08): no worktree needed; plain gbaa-recompile --summaries ROM --callee-sets under just long --mem 9G. Ref code: b6d5ed3f on {unit:native/fnref-flow-emerald}'s branch."
         }
       ],
       "round": "2026-11-12T08:41:16Z"
@@ -1496,15 +1509,12 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "12ef2e3c",
-        "session": "12ef2e3c-5b4d-487a-a4a2-90fcf6d0b90a",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T10:09:42Z",
-        "branch": "unit/native/hw-dma-registers",
-        "beats": true
+        "checker": "verifier-lane1-dmaregs",
+        "at": "2026-11-12T10:40:04Z",
+        "evidence": "Verifier (fresh context) ran just lift-check --only native-dma: pass, 600 frames, 0 differences, packed layout same, planted DMAxCNT fault caught (frame 1, EWRAM 0x020002f4); just check exit 0 after merging main. Review fixes: lift-check --only affine, mosaic-modes, native-fallthrough, native-irq-hold, native-frame-locals, native-ime-release, native-bios-calls, native-tasks, native-dma all pass their 600/601 frames, every planted fault and native-tasks' planted hole caught (16m47s); native-spike stops at its known hard hole f_08006d47 in the bars step, as on main. V-blank run_sound now only after register-set channels' cycles; justfile lift-check comment says 39 crates, about 20 min.",
+        "host": "quack"
       },
       "notes": [
         {
@@ -1522,13 +1532,7 @@
           "by": "6a8b662c",
           "text": "2026-11-11: overnight Metroid and Nightmare native builds both panic before frame 1 (headless): Metroid at I/O 0x0d4 (DMA3SAD), Nightmare at 0x0ba (DMA0CNT_H). This blocks both from a first frame; rerun both after it lands to find the next."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-12T10:09:29Z",
-        "findings": "- Check not run as far as the card asks. The card's Done when is that the new DMA test program 'passes just lift-check'. Both the unit's evidence and the merge's evidence ran only `just lift-check --only native-dma`. But the branch changes code every lifted program runs: (1) crates/codegen/src/native/prelude.rs:320 sends every program's io_write16 through the new DMA path; (2) crates/runtime/src/hw.rs:827 adds a DMA run at each sync, and hw.rs:887 does the same at each H-blank; (3) hw.rs:929-932 adds a `run_sound(g)` after V-blank whenever `cycles != 0`, and that count includes the existing typed V-blank copies (`f(g)`), so any program with a typed V-blank copy now refills its sound FIFOs at a different moment. The prelude line bar went from 850 to 861 for all nine existing programs, but nothing shows those programs still pass. A full `just lift-check` fails on main for an unrelated reason, so the session can't just run the whole thing: native-spike has a hard hole at f_08006d47 (the 'native-spike lifts again after entry-read masking' unit, {unit:native/spike-entry-read-hole}). What to do: run `just lift-check --only <name>` for each of affine, mosaic-modes, native-fallthrough, native-irq-hold, native-frame-locals, native-ime-release, native-bios-calls and native-tasks. Each must pass its 600/601 frames with its planted fault still caught. Also run native-spike as far as its known hole allows. Put those results in the evidence. If any program differs because of the V-blank `run_sound` change, limit that change to channels set up by their registers, or fix it.\n- justfile:943: the lift-check recipe's comment still says 'builds thirty-three generated crates (about 12 minutes)'. Adding native-dma adds its lift, its packed-layout lift and its planted lift, so the count and the time are now wrong. Update both to what the full run actually builds and takes."
-      },
-      "round": "2026-11-12T09:05:41Z"
+      ]
     },
     {
       "id": "native/lift-save-memory",
@@ -1537,15 +1541,24 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "28dc0a51",
-        "session": "28dc0a51-8c19-468a-a7a7-97e6b429929c",
-        "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T10:28:21Z",
+        "checker": "verifier-a7e3c1",
+        "at": "2026-11-12T10:46:14Z",
+        "evidence": "Review fixes made: the prelude st16 and runtime::bus save-store comments now say mGBA 0.10.5 drops unaligned SRAM stores (prelude comment kept at 2 lines for its lines_prelude bar). Merged origin/main; just check green. Verifier re-read the 0xD-0xF arms against runtime::bus, ran lift-check --only native-save: pass, 600 frames, planted strb fault caught at frame 1.",
         "branch": "unit/native/lift-save-memory",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T10:46:14Z",
+          "by": "28dc0a51",
+          "host": "quack",
+          "pid": 2490379,
+          "start": "10658170",
+          "beats": true,
+          "session": "28dc0a51-8c19-468a-a7a7-97e6b429929c",
+          "lane": "quack/4"
+        },
+        "pushed": true
       },
       "notes": [
         {
@@ -1576,32 +1589,33 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "done",
-        "by": "dd145eb8",
-        "checker": "verifier-latch-lane3",
-        "at": "2026-11-12T10:38:21Z",
-        "evidence": "lift-check --only native-bios-region passed (601 frames, 0 differences; packed layout same), run by me and by the verifier; new agb/native-bios-region reads the latch after a swi, in and after an IRQ, all widths; mGBA hash matches at 601. just check passes after merging main (dac0a8c). lines_prelude 850->882 (+32: latch field, bios_read, swi_done, load/store arms). Full lift-check still fails on main on native-spike's hard hole ({unit:native/spike-entry-read-hole}), confirmed at b17b7a8 before this change.",
-        "branch": "unit/native/lift-bios-region",
+        "state": "claimed",
+        "by": "9fcf9764",
+        "session": "9fcf9764-90bc-4e3b-8d61-b6f6ae7454c1",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-12T10:38:21Z",
-          "by": "dd145eb8",
-          "host": "quack",
-          "pid": 2489918,
-          "start": "10657789",
-          "beats": true,
-          "session": "dd145eb8-bbea-42de-85a6-c1b6538cbcd3",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "pid": 2489918,
+        "start": "10657789",
+        "at": "2026-11-12T10:43:38Z",
+        "branch": "unit/native/lift-bios-region",
+        "beats": true
       },
       "notes": [
+        {
+          "at": "2026-11-12T10:43:25Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/native.rs:2146: the lift appends `swi_done(g)` after every BIOS call. That's wrong for Halt/Stop (`0x02 | 0x03` => `g.sp = r13; hw::halt(g)?;`). hw::halt (crates/runtime/src/hw.rs:988) runs …"
+        },
         {
           "at": "2026-11-12T10:38:25Z",
           "by": "dd145eb8",
           "text": "Lift has no m4a NopCall (BIOS 0x1B0, play build sets NOP_CALL_LATCH 0xE3A0C301): call_fn panics there. Whoever lifts m4a's jump list must set g.bios_latch to that too. Open bus past 0x4000 still panics in the lift."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-12T10:43:25Z",
+        "findings": "- crates/codegen/src/native.rs:2146: the lift appends `swi_done(g)` after every BIOS call. That's wrong for Halt/Stop (`0x02 | 0x03` => `g.sp = r13; hw::halt(g)?;`). hw::halt (crates/runtime/src/hw.rs:988) runs until an IRQ has run, so irq_entry leaves g.bios_latch at BIOS_LATCH_AFTER_IRQ, and swi_done then overwrites it with BIOS_LATCH_AFTER_SWI. The play build sets AFTER_SWI when the call is made (crates/runtime/src/bios.rs:603, before the CPU halts), and the IRQ that wakes it leaves AFTER_IRQ (bios.rs:459). Halt pushes no pending call, so nothing sets AFTER_SWI again. After a Halt the lift's BIOS-region loads read 0xE3A02004 where the play build reads 0xE55EC002. Fix: for 0x02/0x03, emit `swi_done(g);` before the halt (`swi_done(g); g.sp = r13; hw::halt(g)?;`) and don't append it after. Keep it after for the other calls; that's right for IntrWait/VBlankIntrWait (intr_wait_check sets AFTER_SWI last, bios.rs:647) and for the stalled copies (stall_step, bios.rs:409). Then extend agb/native-bios-region/src/main.rs with a `swi 2` (Halt) with an IRQ enabled, followed by a read of the word at 0, so the lift-check covers it. Update SCENE.md, units/native-bios-region-601.toml's hash (checked against mGBA) and the bars in crates/codegen/lift-check.toml."
+      },
       "round": "2026-11-12T10:07:23Z"
     },
     {
@@ -1609,7 +1623,19 @@
       "title": "Metroid's native-timing play build strays from its interp",
       "detail": "docs/native-stage-b.md, 'The first game': out/metroid recompiled at --timing native, on units/metroid-native.toml: its compiled code and its --interp run differ at frame 1 (EWRAM 0x02038000 on, 32,651 bytes, the compiled run ahead; pictures differ in 983 of 2,700 frames). route-check --native gates on these agreeing. The compiled run interprets 45% of its cycles (1.6M instructions in the fallback). Also: the interpreter's frame-1 record has VCOUNT 159 where the native program has 160. Find why and fix it in the recompiler or runtime. Done when: route-check --native's play-against-interp step passes on the route, and just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "ba1a464f",
+        "session": "ba1a464f-09a6-40f0-b263-fabbb9594de4",
+        "host": "quack",
+        "pid": 2489252,
+        "start": "10657014",
+        "at": "2026-11-12T10:44:40Z",
+        "branch": "unit/native/play-native-metroid-interp",
+        "beats": true
+      },
+      "round": "2026-11-12T10:44:40Z"
     },
     {
       "id": "native/check-holes-copies",

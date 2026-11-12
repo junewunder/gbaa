@@ -483,7 +483,7 @@ fn io_writes_by_offset_reach_the_fields() {
 #[should_panic(expected = "isn't modelled")]
 fn unmodelled_registers_are_loud() {
     let mut g = game(100);
-    g.hw.write16(reg::DMA0SAD, 1);
+    g.hw.write16(reg::SIOCNT, 1);
 }
 
 /// Polls on each of `DISPSTAT`'s flags finish.
@@ -617,4 +617,195 @@ fn vblank_is_requested_before_the_present() {
     wait_vblank(&mut *g).unwrap();
     assert_eq!(g.seen.0, irq::VBLANK);
     assert_eq!(g.hw.irq.flags, 0);
+}
+
+/// A program whose memory is EWRAM, the I/O registers and the palette:
+/// what DMA by its registers moves through.
+struct Mem {
+    hw: Hw<Mem>,
+    ewram: Vec<u8>,
+}
+
+impl Native for Mem {
+    type Host = Rec;
+    fn hw(&mut self) -> &mut Hw<Mem> {
+        &mut self.hw
+    }
+    fn irq_masked(&self) -> bool {
+        false
+    }
+    fn dma_load(&mut self, a: u32, word: bool) -> u32 {
+        let half = |g: &mut Mem, a: u32| -> u32 {
+            let o = (a & 0xFF_FFFF) as usize;
+            match a >> 24 {
+                2 => u16::from_le_bytes([g.ewram[o], g.ewram[o + 1]]) as u32,
+                4 => g.hw.read16(o as u32) as u32,
+                5 => u16::from_le_bytes([g.hw.ppu.palette[o], g.hw.ppu.palette[o + 1]]) as u32,
+                _ => panic!("no memory at {a:#x}"),
+            }
+        };
+        if word {
+            half(self, a) | half(self, a + 2) << 16
+        } else {
+            half(self, a)
+        }
+    }
+    fn dma_store(&mut self, a: u32, v: u32, word: bool) {
+        let half = |g: &mut Mem, a: u32, v: u16| {
+            let o = (a & 0xFF_FFFF) as usize;
+            match a >> 24 {
+                2 => g.ewram[o..o + 2].copy_from_slice(&v.to_le_bytes()),
+                4 => write_dma(g, o as u32, v),
+                5 => g.hw.ppu.palette[o..o + 2].copy_from_slice(&v.to_le_bytes()),
+                _ => panic!("no memory at {a:#x}"),
+            }
+        };
+        half(self, a, v as u16);
+        if word {
+            half(self, a + 2, (v >> 16) as u16);
+        }
+    }
+}
+
+fn mem(stop_after: usize) -> Box<Mem> {
+    let mut g = Box::new(Mem {
+        hw: Hw::new(Rec {
+            frames: Vec::new(),
+            stop_after,
+            keys: Vec::new(),
+        }),
+        ewram: std::vec![0; 0x4_0000],
+    });
+    for i in 0..0x400 {
+        g.ewram[i] = i as u8;
+    }
+    g
+}
+
+/// Store a channel's four registers as a program does: source, destination,
+/// then count and control as one word (the control written last).
+fn dma_set(g: &mut Mem, n: u32, src: u32, dst: u32, count: u16, control: u16) {
+    let b = reg::DMA0SAD + 12 * n;
+    for (o, v) in [
+        (b, src),
+        (b + 4, dst),
+        (b + 8, count as u32 | (control as u32) << 16),
+    ] {
+        write_dma(g, o, v as u16);
+        write_dma(g, o + 2, (v >> 16) as u16);
+    }
+}
+
+use crate::dma::ctl as dctl;
+
+/// An immediate DMA by its registers: the same bytes, price on the clock,
+/// IRQ and registers after as the play build's bus.
+#[test]
+fn immediate_dma_by_registers_is_the_play_builds() {
+    const EW: u32 = 0x0200_0000;
+    let mut m = crate::test_util::machine();
+    let mut g = mem(100);
+    for i in 0..0x400 {
+        m.bus.write8(EW + i, i as u8);
+    }
+    let io = crate::test_util::IO;
+    // Words up, IRQ; then halfwords down from a fixed source to the
+    // palette (a fill), the count 0 meaning the maximum is not used.
+    let runs = [
+        (3, EW, EW + 0x800, 16, dctl::ENABLE | dctl::WORD | dctl::IRQ),
+        (
+            0,
+            EW + 6,
+            0x0500_0020,
+            8,
+            dctl::ENABLE | 2 << dctl::SRC_SHIFT,
+        ),
+        (
+            2,
+            EW + 0x40,
+            EW + 0x900,
+            5,
+            dctl::ENABLE | 1 << dctl::DST_SHIFT,
+        ),
+    ];
+    for (n, src, dst, count, control) in runs {
+        let (m0, g0) = (m.bus.io.now, g.hw.now());
+        let b = io + reg::DMA0SAD + 12 * n;
+        m.bus.write32(b, src);
+        m.bus.write32(b + 4, dst);
+        m.bus.write32(b + 8, count as u32 | (control as u32) << 16);
+        dma_set(&mut g, n, src, dst, count, control);
+        assert_eq!(m.bus.io.now - m0, g.hw.now() - g0, "channel {n}'s price");
+        for o in (reg::DMA0SAD..reg::DMA0SAD + 48).step_by(2) {
+            assert_eq!(m.bus.io.raw16(o), g.hw.raw16(o), "{o:#x}");
+            assert_eq!(m.bus.io.read16(o), g.hw.read16(o), "{o:#x} read");
+        }
+    }
+    assert_eq!(&m.bus.ewram[..0x1000], &g.ewram[..0x1000]);
+    assert_eq!(m.bus.video.palette[..0x40], g.hw.ppu.palette[..0x40]);
+    assert_eq!(m.bus.io.raw16(reg::IF), irq::DMA0 << 3);
+    assert_eq!(g.hw.irq.flags, irq::DMA0 << 3);
+    // Done and switched off: the enable bit reads clear.
+    assert_eq!(g.hw.read16(reg::DMA0SAD + 36 + 10) & dctl::ENABLE, 0);
+    assert_eq!(&g.ewram[0x800..0x840], &g.ewram[..0x40]);
+}
+
+/// H-blank and V-blank channels repeat at the beam's events: one unit a
+/// visible line to a fixed palette entry, and a block reloaded at each
+/// V-blank, each priced on the clock.
+#[test]
+fn hblank_and_vblank_dma_by_registers_repeat() {
+    const EW: u32 = 0x0200_0000;
+    let mut g = mem(100);
+    let mut plain = mem(100);
+    let hb = dctl::ENABLE | 2 << dctl::TIMING_SHIFT | dctl::REPEAT | 2 << dctl::DST_SHIFT;
+    dma_set(&mut g, 0, EW, 0x0500_0000, 1, hb);
+    let vb =
+        dctl::ENABLE | 1 << dctl::TIMING_SHIFT | dctl::REPEAT | dctl::WORD | 3 << dctl::DST_SHIFT;
+    dma_set(&mut g, 2, EW + 0x200, EW + 0x1000, 4, vb);
+    // Nothing runs at the stores.
+    assert_eq!(g.hw.ppu.palette[..2], [0, 0]);
+    wait_vblank(&mut *g).unwrap();
+    wait_vblank(&mut *plain).unwrap();
+    // 160 H-blanks, a halfword each: the last read EWRAM 0x13E.
+    assert_eq!(g.hw.ppu.palette[..2], [0x3E, 0x3F]);
+    assert_eq!(g.hw.dma.regs.ch[0].src, EW + 320);
+    assert_eq!(&g.ewram[0x1000..0x1010], &g.ewram[0x200..0x210]);
+    // The destination reloads, the source goes on.
+    let ch = g.hw.dma.regs.ch[2];
+    assert_eq!((ch.src, ch.dst, ch.count), (EW + 0x210, EW + 0x1000, 4));
+    // Each H-blank's price fits in its idle half line; V-blank's comes
+    // after the line's events, as the play build adds it.
+    let v = dma_cycles(0, 4, EW + 0x200, EW + 0x1000, 4) as u64;
+    assert_eq!(g.hw.now() - plain.hw.now(), v);
+    // Off: the channels stop.
+    write_dma(&mut *g, reg::DMA0SAD + 10, 0);
+    wait_vblank(&mut *g).unwrap();
+    assert_eq!(g.hw.dma.regs.ch[0].src, EW + 320);
+}
+
+/// A special start aimed at a FIFO feeds it from the program's memory;
+/// switched off, it stops.
+#[test]
+fn special_dma_by_registers_feeds_a_fifo() {
+    const EW: u32 = 0x0200_0000;
+    let mut g = mem(100);
+    let c = dctl::ENABLE | 3 << dctl::TIMING_SHIFT | dctl::REPEAT | dctl::WORD | dctl::IRQ;
+    dma_set(&mut g, 1, EW, crate::sound::FIFO_ADDR[1], 0, c);
+    let d = g.hw.sound.dma[0].expect("DMA1 feeds a FIFO");
+    assert_eq!((d.fifo, d.src, d.control), (1, EW, c));
+    // Timer 0 clocks FIFO B; its first pop asks for 4 words.
+    g.hw.write16(reg::SOUNDCNT_H, 0x3000);
+    g.hw.write16(reg::SOUNDCNT_X, 0x80);
+    g.hw.write16(reg::TM0CNT_L, 0xFF00);
+    g.hw.write16(reg::TM0CNT_L + 2, crate::timer::ctl::ENABLE);
+    spend(&mut *g, 0x100).unwrap();
+    assert_eq!(g.hw.sound.dma[0].unwrap().src, EW + 16);
+    assert_eq!(g.hw.dma.regs.ch[1].src, EW + 16);
+    assert_eq!(g.hw.irq.flags & irq::DMA0 << 1, irq::DMA0 << 1);
+    // A special start aimed elsewhere feeds nothing.
+    write_dma(&mut *g, reg::DMA0SAD + 12 + 10, 0);
+    assert!(g.hw.sound.dma[0].is_none());
+    dma_set(&mut g, 2, EW, EW + 0x100, 4, c);
+    assert!(g.hw.sound.dma[1].is_none());
 }

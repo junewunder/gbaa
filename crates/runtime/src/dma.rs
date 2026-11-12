@@ -41,7 +41,7 @@ pub enum Timing {
 }
 
 impl Timing {
-    fn of(control: u16) -> Timing {
+    pub fn of(control: u16) -> Timing {
         [
             Timing::Immediate,
             Timing::VBlank,
