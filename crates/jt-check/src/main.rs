@@ -113,6 +113,7 @@ fn run(args: &[String]) -> Result<ExitCode> {
                 analysis::vsa::func::JumpRes::Resolved(j) => ("resolved", Some(j)),
                 analysis::vsa::func::JumpRes::Rejected(j) => ("rejected", Some(j)),
                 analysis::vsa::func::JumpRes::Unresolved => ("unresolved", None),
+                analysis::vsa::func::JumpRes::Ram(_) => ("unresolved", None),
             };
             let table = j
                 .and_then(|j| j.table)

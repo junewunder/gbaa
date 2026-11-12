@@ -2350,9 +2350,11 @@ fn shapes_of(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> Shapes {
 }
 
 /// The known targets of a jump by value at `at` (not a call): its own
-/// (`target`), a resolved table's cases, the holes file's for one
-/// Recovery didn't resolve. `Err` with the jump's address where it's
-/// unresolved and the holes file gives none.
+/// (`target`), a resolved table's cases, the constant RAM address of a
+/// jump into a copy's code ([`JumpRes::Ram`]: a function of an overlay,
+/// or a hole where the jump goes), the holes file's for one Recovery
+/// didn't resolve. `Err` with the jump's address where it's unresolved
+/// and the holes file gives none.
 fn dyn_targets(
     ctx: &Ctx,
     holes: &Holes,
@@ -2369,6 +2371,10 @@ fn dyn_targets(
         Some((_, JumpRes::Resolved(_))) => {
             targets.extend(ctx.table_targets(at, thumb).unwrap_or_default());
         }
+        Some((a, JumpRes::Ram(t))) => match holes.jumps.get(&a) {
+            Some((ts, _)) => targets.extend(ts),
+            None => targets.push(*t),
+        },
         Some((a, JumpRes::Unresolved | JumpRes::Rejected(_))) => match holes.jumps.get(&a) {
             Some((ts, _)) => targets.extend(ts),
             None => return Err(a),
