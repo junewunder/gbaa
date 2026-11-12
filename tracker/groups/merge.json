@@ -247,36 +247,36 @@
       "check": "recorded",
       "lane": "quack/2",
       "branch": "unit/native/lift-bios-affine",
-      "minMinutes": 25,
+      "minMinutes": 40,
       "record": {
         "state": "claimed",
-        "by": "7fe4f8d3",
-        "session": "7fe4f8d3-4658-453d-a576-783438233da4",
+        "by": "e610b9cf",
+        "session": "e610b9cf-2c66-4b47-a657-583f71674716",
         "host": "quack",
         "pid": 2489427,
         "start": "10657408",
-        "at": "2026-11-12T13:49:18Z",
+        "at": "2026-11-12T13:52:59Z",
         "branch": "unit/native/lift-bios-affine",
-        "resumed": "d57bd0f8",
-        "prevSession": "d57bd0f8-5b34-449c-b157-3dfc5c512c00",
+        "resumed": "aa3b6b9a",
+        "prevSession": "aa3b6b9a-6084-4cc5-85af-c3ef173585c2",
         "pushed": true,
         "beats": true
       },
       "notes": [
         {
-          "at": "2026-11-12T13:48:50Z",
-          "by": "d57bd0f8",
-          "text": "merged main again (tracker/ only, clean). just check cut off a third time by the 09:00 stop. Set min-minutes 25 so it starts early: just rerun just check, then record done."
+          "at": "2026-11-12T13:52:40Z",
+          "by": "aa3b6b9a",
+          "text": "merged main again (tracker/ only, clean, a900d93). Handed out at 08:51 despite min-minutes 40: loop ignores min-minutes for this unit (factory bug, for owner). just check cut off a 5th time. Next: run just check at run start, then done."
+        },
+        {
+          "at": "2026-11-12T13:50:47Z",
+          "by": "7fe4f8d3",
+          "text": "merged main again (tracker/ only, clean, 4758003). Loop still handed this out at 08:49 despite min-minutes 25 (loop bug?); just check cut off a 4th time. Raised to 40. Next: run just check early in a run, then record done."
         },
         {
           "at": "2026-11-12T13:47:04Z",
           "by": "538fc492",
           "text": "merged latest main again (only tracker/ changes came in, no conflicts). just check cut off by the 09:00 stop after ~1 min, mid-tests. Next session: rerun just check (needs ~10+ min before stop), then record done."
-        },
-        {
-          "at": "2026-11-12T13:45:18Z",
-          "by": "eae64132",
-          "text": "Merge of main committed (8c4d0c1): NATIVE_BIOS union, lines_prelude 1131 (merged prelude.rs lines), docs list both programs. just check was stopped at the lane's 09:00 stop mid-tests: rerun just check, then record done."
         }
       ],
       "round": "2026-11-12T13:43:18Z"
