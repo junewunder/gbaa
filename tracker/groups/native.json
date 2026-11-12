@@ -642,7 +642,8 @@
         "native/lift-flash-routines",
         "native/lift-bios-region",
         "native/play-native-metroid-interp",
-        "native/check-holes-copies"
+        "native/check-holes-copies",
+        "native/metroid-entry-reads"
       ],
       "uses": ["heavy"],
       "minMinutes": 120,
@@ -1080,9 +1081,17 @@
         "start": "10657408",
         "at": "2026-11-12T08:00:34Z",
         "branch": "unit/native/nightmare-task-switch",
-        "beats": true
+        "beats": true,
+        "handedBack": "2026-11-12T08:40:45Z",
+        "pushed": true,
+        "ended": "2026-11-12T08:41:01Z"
       },
       "notes": [
+        {
+          "at": "2026-11-12T08:40:35Z",
+          "by": "eb7b70bf",
+          "text": "Stand-ins at 0x080cfdc5/cd/d5 in mods/kirby-nightmare/holes.toml (mods commit 64b65dc); classify fix makes the scheduler's resume call return. Untested at run time: the native build stops at boot (DMA, serial, then 0x080cdcd5 in m4a init) before any task runs."
+        },
         {
           "at": "2026-11-12T06:58:38Z",
           "by": "21ac895a",
@@ -1092,11 +1101,6 @@
           "at": "2026-11-12T06:37:54Z",
           "by": "b67b3cd7",
           "text": "From {unit:native/copy-tail-discovery}: discovery now finds resume (0x08000234, entered by the veneer 0x080cfdc5's ARM part f_080cfdc8 via b); its bx r1 at 0x08000254 is a hard hole in the lift, which stops there until a stand-in for 0x080cfdc8 covers it."
-        },
-        {
-          "at": "2026-11-08T22:24:15Z",
-          "by": "f66d452c",
-          "text": "Nightmare now lifts with 0 hard holes (mods/kirby-nightmare/holes.toml); the IRQ dispatcher stand-in 0x03001030 moves an IRQ on a task stack (sp<0x03007b80) to 0x03007c80. The lifter doesn't flag the 3 stack switches. SoftReset stand-in panics until {unit:native/lift-bios-more}."
         }
       ],
       "round": "2026-11-07T11:32:04Z"
@@ -1380,17 +1384,20 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "f336c3b0",
-        "session": "f336c3b0-9a14-4fc7-a992-a88f313d5fbf",
-        "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T08:31:49Z",
-        "branch": "unit/native/ref-heap-static-arrays",
-        "beats": true
+        "checker": "verifier-aa82f59c",
+        "at": "2026-11-12T09:09:21Z",
+        "evidence": "Verifier subagent aa82f59c: lift-check --only native-bios-calls passed with the 4ee88ac loop (o.regs.iter()) restored: 600 frames, packed layout draws the same; just check passed. Control without fix: packed panics 'pointer 0x020000b8 to 16 bytes isn't in RAM in one piece'. Its Sub gap fixed; rerun both pass, all 9 programs' metrics within bars.",
+        "host": "quack"
       },
-      "round": "2026-11-12T08:31:49Z"
+      "notes": [
+        {
+          "at": "2026-11-12T09:09:25Z",
+          "by": "f336c3b0",
+          "text": "Shared $GBAA_DATA/agb/native-bios-calls.gba was rebuilt from this branch (holes moved to 0x08002704/0x08002720/0x08002765); until merge, main's holes file doesn't match it."
+        }
+      ]
     },
     {
       "id": "native/fnref-rom-read-bound",
@@ -1423,6 +1430,17 @@
       "detail": "After {unit:native/fnref-flow-emerald} made large reads one Ref token (b6d5ed3f), Emerald's flow (gbaa-recompile --summaries --callee-sets, from the indirect-call-args branch with this fnref.rs) holds RSS at 1.5 GB through round 0, but round 0 alone runs about 60 s per 500 functions (542 s at 8,500 of 15,158). Profile it (likely per-op scans of 30k-token Refs: split_refs' rest, cmp_refs' difference, hole() on fresh expansions, ref_make after each store) and make the whole run finish. Done when: that command finishes on Emerald under 8 GB with time and peak quoted, and just lift-metrics shows no bar over.",
       "check": "recorded",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "5cf6c823",
+        "session": "5cf6c823-3eeb-4734-8c09-a83340a43640",
+        "host": "quack",
+        "pid": 2489427,
+        "start": "10657408",
+        "at": "2026-11-12T08:41:16Z",
+        "branch": "unit/native/fnref-emerald-speed",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-08T22:44:22Z",
@@ -1434,7 +1452,8 @@
           "by": "c06275d9",
           "text": "--callee-sets is on main now (indirect-call-args landed 2026-11-08): no worktree needed; plain gbaa-recompile --summaries ROM --callee-sets under just long --mem 9G. Ref code: b6d5ed3f on {unit:native/fnref-flow-emerald}'s branch."
         }
-      ]
+      ],
+      "round": "2026-11-12T08:41:16Z"
     },
     {
       "id": "native/fnref-romfrom-absorb",
@@ -1461,7 +1480,14 @@
       "title": "Metroid's holes file drops a stand-in that is data now",
       "detail": "After {unit:native/modern-gcc-data-as-code} lands, discovery no longer starts a function at 0x087603d9 (pointer data), so mods/metroid/holes.toml's stand-in there matches nothing: just lift Metroid --name metroid fails with that 1 hard hole. Drop the stand-in (commit in the private mods repo), rerun just lift + build: 0 hard holes.",
       "needs": ["native/modern-gcc-data-as-code"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "The stand-in at 0x087603d9 was already dropped by mods commit 6b0d0cd (for {unit:native/metroid-native-check}). Rerun 2026-11-12: just lift Metroid --name metroid has no hole there; its 1 hard hole is f_08073ce5 reading entry r9 (entry-read masking), a different cause filed as {unit:native/metroid-entry-reads}.",
+        "by": "fade7f76",
+        "at": "2026-11-12T09:05:22Z"
+      },
+      "round": "2026-11-12T08:48:57Z"
     },
     {
       "id": "native/hw-dma-registers",
@@ -1469,13 +1495,25 @@
       "detail": "docs/native-stage-b.md, 'The first game': a lifted program's store to a DMA register (0x0B0-0x0DF) panics in Hw::write16 (Metroid's m4a SoundInit, DMA1/2CNT = 0x84400004). Keep the channels' registers in Hw (read16/raw16), latch on enable as runtime::dma::control_written, run immediate transfers through the program's memory (a Native hook, as FifoDma's read), price them on the clock as the play build's io_write (io.now += cycles, no sync), repeat at V-blank and H-blank, a special start aimed at a FIFO as Hw::fifo_dma, the IRQ at the end; the prelude's io_write16/io_read16 route them. Done when: an agb program setting up each start by address passes just lift-check (a planted wrong control word caught), and just check passes.",
       "check": "independent",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "d12ab564",
+        "session": "d12ab564-753c-4c27-9539-9b83303ebf20",
+        "host": "quack",
+        "pid": 2489252,
+        "start": "10657014",
+        "at": "2026-11-12T09:05:41Z",
+        "branch": "unit/native/hw-dma-registers",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-11T15:50:55Z",
           "by": "6a8b662c",
           "text": "2026-11-11: overnight Metroid and Nightmare native builds both panic before frame 1 (headless): Metroid at I/O 0x0d4 (DMA3SAD), Nightmare at 0x0ba (DMA0CNT_H). This blocks both from a first frame; rerun both after it lands to find the next."
         }
-      ]
+      ],
+      "round": "2026-11-12T09:05:41Z"
     },
     {
       "id": "native/lift-save-memory",
@@ -1597,6 +1635,12 @@
       "title": "Serial registers kept in the hardware library",
       "detail": "Kirby - Nightmare's boot (0x08000311) writes the serial registers (0x120, and on into 0x120-0x15f: SIODATA, SIOCNT, RCNT, JOY), which Hw::write16 (crates/runtime/src/hw.rs) panics on as unmodelled; with DMA writes ignored this is its next stop. Keep the registers' values in Hw (reads give back what was written, as the play build's bus does with no link partner: SIOCNT's start bit and its IRQ as the play build has them), routed by the prelude's io_write16/io_read16. Done when: an agb program writing and reading them passes just lift-check with its route matching the play build; just check passes.",
       "check": "recorded",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/metroid-entry-reads",
+      "title": "Metroid lifts again after entry-read masking",
+      "detail": "Since {unit:native/entry-read-masking} landed, gbaa-lift on Metroid has 1 hard hole: f_08073ce5, summary 0x08073f08 reads entry r9. agbcc builds a word in r6 = entry r9 byte by byte (ands ffffff00, ands ffff00ff), so r9's top 16 bits are stored to RAM at [r4+0x244+4]; the lift zeroes r4-r12 at a call, the game keeps the caller's r9. Real, not over-hard. Fix: a stand-in (caller's r9 is likely a constant or garbage; check callers), or the lifter passing r9. Done when: just lift ROM out/lift-metroid --name metroid reports 0 hard holes and the crate builds; just check passes.",
       "uses": ["heavy"]
     }
   ]
