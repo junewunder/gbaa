@@ -345,9 +345,15 @@ pub fn run(
 }
 
 /// How long another player may send nothing before this peer takes
-/// them to have left: a seated peer sends every frame, and this is under
-/// the rollback window (5 s), so the game doesn't stop for someone gone.
-pub const QUIET: Duration = Duration::from_secs(3);
+/// them to have left: a seated peer sends every frame (and, in a long
+/// rollback, every [`netplay::rollback::KEEP_ALIVE`] frames run again).
+/// A machine that stalls a few seconds (a loaded one swapping, a laptop
+/// lid, a `SIGSTOP`) catches up rather than ending the session: 3 s
+/// until 2026-11-12 split a trade on wander under load, where one peer
+/// went 3.4 s without a word (multiplayer/wander-split-under-load). Past
+/// the rollback window (5 s) the game waits for them, so someone truly
+/// gone costs the others 3 s frozen before they play on alone.
+pub const QUIET: Duration = Duration::from_secs(8);
 
 /// How long the other player may send nothing before the window's mark
 /// says it hears nothing from them (before [`QUIET`] takes them to have
