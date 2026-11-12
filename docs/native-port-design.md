@@ -704,8 +704,9 @@ with the same key presses, frame by frame:
   `route-check` does today, `crates/route-check/src/main.rs`);
 - EWRAM and IWRAM equal outside the guest stack, below the lowest `sp`
   the play build's run reached (it reports it), and outside the
-  destinations of code copies (`Discovery::copies`, the copies seen
-  running): the native program runs that code as Rust functions and
+  destinations of code copies (`Discovery::copies`, and the copies seen
+  running that the lifter's holes file lists as `[[copy]]`, which
+  `route-check --native` reads from it): the native program runs that code as Rust functions and
   doesn't copy it, so those bytes are the one other range it leaves
   empty. A copy that also carries data (agb's `.iwram` holds variables
   too) has its data's globals in `Ram` as usual, initialised from the

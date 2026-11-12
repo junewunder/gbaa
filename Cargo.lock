@@ -1801,6 +1801,7 @@ name = "route-check"
 version = "0.1.0"
 dependencies = [
  "analysis",
+ "codegen",
  "native-record",
  "png",
  "serde",
