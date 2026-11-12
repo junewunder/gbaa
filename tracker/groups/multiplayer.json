@@ -931,6 +931,17 @@
       "title": "Union Room from the desktop: a wireless seat on the server",
       "detail": "gbaa-desktop has no wireless adapter yet. Give it a networked one (Wireless::networked + netplay::radio::Radio, as emerald-wireless --seat does): --server ADDR --wireless host/join, each window runs only its own Emerald, real time. Check: two windows in a private cu session through a local gbaa-server trade in the Union Room. The fly server needs a redeploy for W datagrams.",
       "needs": ["multiplayer/wireless-radio-netplay"],
+      "record": {
+        "state": "claimed",
+        "by": "688d2c6c",
+        "session": "688d2c6c-811f-498f-b882-1534237ece2b",
+        "host": "quack",
+        "pid": 2490379,
+        "start": "10658170",
+        "at": "2026-11-12T09:42:37Z",
+        "branch": "unit/multiplayer/desktop-wireless-radio",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-12T09:42:32Z",
