@@ -332,7 +332,7 @@ impl Score {
         for (at, res) in &rec.jumps {
             let j = match res {
                 JumpRes::Resolved(j) => j,
-                JumpRes::Unresolved => {
+                JumpRes::Unresolved | JumpRes::Ram(_) => {
                     s.unresolved += 1;
                     continue;
                 }
