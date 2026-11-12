@@ -1788,6 +1788,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T13:35:18Z",
+          "by": "3402e3f4",
+          "text": "holes/native-bios-more.toml also stands in that qrcodegen panic path (f_08006d77, panics). Drop it when this lands."
+        },
+        {
           "at": "2026-11-12T10:05:09Z",
           "by": "fd902c34",
           "text": "Seen 2026-11-12: native-spike's hard hole (f_08006d47, r6 read at 0x08006d76, passed in r1) is on origin/main and before the fnref-rom-read-bound merge (1c09d57c^1), so full just lift-check / lift-metrics fail on main until this lands."
@@ -1796,11 +1801,6 @@
           "at": "2026-11-12T09:30:23Z",
           "by": "d12ab564",
           "text": "2026-11-12: agb/native-dma (new, {unit:native/hw-dma-registers}) hits the same hole, a gap in qrcodegen's draw_format_bits (f_08006d23 reads r6); holes/native-dma.toml stands it in with unreachable!. Drop that stand-in when this lands."
-        },
-        {
-          "at": "2026-11-12T08:33:14Z",
-          "by": "eb7b70bf",
-          "text": "Kirby - Nightmare has 5 more hard entry-read holes from the same change ({unit:native/nightmare-entry-reads}); a fix to the rule may cover both."
         }
       ],
       "round": "2026-11-12T13:08:36Z"

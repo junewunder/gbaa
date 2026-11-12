@@ -2687,3 +2687,4 @@
 {"at":"2026-11-12T13:08:15Z","actor":"loop","tag":"5b8af8c2","host":"quack","cmd":"unclaim","id":"native/native-first-stop","text":"Each built native game runs headless; report where it stops: given back unstarted","unstarted":true}
 {"at":"2026-11-12T13:08:36Z","actor":"loop","tag":"695902dc","host":"quack","cmd":"claim","id":"native/spike-entry-read-hole","text":"native-spike lifts again after entry-read masking: claimed"}
 {"at":"2026-11-12T13:35:13Z","actor":"loop","tag":"3402e3f4","host":"quack","cmd":"done","id":"native/lift-bios-more","text":"Lifted code makes SoftReset, RegisterRamReset and HuffUnComp: done, checked by a6dfd1e9"}
+{"at":"2026-11-12T13:35:18Z","actor":"loop","tag":"3402e3f4","host":"quack","cmd":"note","id":"native/spike-entry-read-hole","text":"native-spike lifts again after entry-read masking: note: holes/native-bios-more.toml also stands in that qrcodegen panic path (f_08006d77, panics). Drop it when this lands."}
