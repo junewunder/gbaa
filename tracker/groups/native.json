@@ -1566,17 +1566,13 @@
       "needs": ["native/lift-save-memory"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "928c9e05",
-        "session": "928c9e05-48b6-4898-9ac3-844e8633b1c0",
-        "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T11:13:32Z",
-        "branch": "unit/native/lift-flash-routines",
-        "beats": true
-      },
-      "round": "2026-11-12T11:13:32Z"
+        "checker": "verifier-3e91c7",
+        "at": "2026-11-12T11:52:30Z",
+        "evidence": "Prelude call_fn: RAM target with no function whose bytes match a flash/SRAM stack routine calls runtime::hw::flash (signatures moved to runtime). Metroid lift (scratch-patched for the filed entry-read hole and BIOS region) runs all 2700 route frames: 33 Read/Verify calls, Verify all 0, frames 350/700 hash as mGBA's checkpoints. lift-check --only native-save, native-bios-region pass; just check passes after merging main. lines_prelude 917->961 (+44, flash_call). Verifier reproduced the run and reran just check.",
+        "host": "quack"
+      }
     },
     {
       "id": "native/lift-bios-region",
@@ -1657,6 +1653,13 @@
         "branch": "unit/native/lift-bios-more",
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-12T12:35:05Z",
+          "by": "a7b7e9d7",
+          "text": "Emerald's lift (this branch base, 2026-11-12) has a hard 'stack switch' at 0x082e70b2 in the SDK SoftReset stub f_082e70ad (mov sp before swi 1; swi 0): SoftReset's own sp setup, which the stub's lift now reaches. Moonbeam has longjmp's at 0x08038328 too."
+        }
+      ],
       "round": "2026-11-12T11:27:23Z"
     },
     {
@@ -1763,7 +1766,14 @@
       "title": "Nightmare lifts again after entry-read masking",
       "detail": "Since {unit:native/entry-read-masking} landed, gbaa-lift on Kirby - Nightmare has 5 hard summary holes (reads r4-r11 at entry), so the lift's crate doesn't build: 0x08064759 (r8 at 0x080647d0), 0x080647fd (r8 at 0x08064874), 0x0806b411 (r8 at 0x0806b5e8), 0x0806b671 (r9 at 0x0806b782), 0x080ce1f9 (r4: m4a's ChnVolSetAsm, r4 the channel and r5 the track passed in registers by its m4a callers; docs/research/native-holes.md had it under libgcc, now corrected). 0x08064759's read looks path-infeasible (r6 = entry r8 is compared only after r5 != -1, which sets r6 first). Fix the rule where it's over-hard, or give stand-ins (ChnVolSetAsm needs its callers' r4/r5: a stand-in per caller, or the lifter passing r4/r5 to it). Done when: just lift ROM out/lift-kirby-nightmare --name kirby-nightmare reports 0 hard holes and the crate builds; just check passes.",
       "check": "recorded",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-12T12:50:09Z",
+          "by": "a7b7e9d7",
+          "text": "Once the dispatcher 0x03001030 is lifted, not stood in ({unit:native/drop-psr-standins}), 5 more entry-read holes appear in IWRAM m4a code: 0x03007151 (r4), 0x0300715c (r4), 0x030071df (r8), 0x030072e8 (r4), 0x030074d1 (r4)."
+        }
+      ]
     },
     {
       "id": "native/hw-serial-registers",
@@ -1787,6 +1797,21 @@
           "at": "2026-11-12T09:30:14Z",
           "by": "d12ab564",
           "text": "just native-check fails at the spike: --packed target/release/native-spike is built without guest-layout, and route-check now passes it --native-record (since {unit:native/lift-packed-layout}), which native-host refuses. psg-square, direct-sound and the spike without --packed pass."
+        }
+      ]
+    },
+    {
+      "id": "native/drop-psr-standins",
+      "title": "Metroid and Nightmare drop their reset and IRQ stand-ins",
+      "detail": "Once {unit:native/lift-psr-boot-irq} is on main (the lifter prints the reset's and the IRQ wrapper's msr/mrs), remove from the private mods repo: mods/metroid/holes.toml's stand-ins 0x08000000 (reset), 0x08000104 (IRQ dispatcher) and 0x03000c7c (its IWRAM copy); mods/kirby-nightmare/holes.toml's 0x08000000 and 0x03001030. Left in until then because mods/ is shared by every lane and an older lifter needs them. Verified on the branch: both lift with 0 msr/mrs hard holes and build without them. Done when: just lift on each reports no reset/dispatcher hole (other known holes aside) and the mods commit is in.",
+      "check": "recorded",
+      "needs": ["native/lift-psr-boot-irq"],
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-12T12:50:05Z",
+          "by": "a7b7e9d7",
+          "text": "Lifting Nightmare's dispatcher 0x03001030 (stand-in dropped) adds 5 IWRAM functions with hard entry-read summary holes main's lift lacks: 0x03007151 0x0300715c 0x030071df 0x030072e8 0x030074d1. Built only with temp panic stand-ins for them; settle these first."
         }
       ]
     }

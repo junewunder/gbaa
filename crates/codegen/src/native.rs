@@ -95,7 +95,10 @@
 //!   (`analysis::idle`, `runtime::spins`, as the play build's
 //!   `--timing native` marks them).
 //! - Function pointers are their keys (ROM or IWRAM address, Thumb bit):
-//!   `call_fn` (prelude) looks them up in `FNS`. Stage A has no dense IDs
+//!   `call_fn` (prelude) looks them up in `FNS`; a RAM key that isn't
+//!   there but holds one of the flash save library's stack routines is
+//!   that routine's `hw::flash` call (unit `native/lift-flash-routines`).
+//!   Stage A has no dense IDs
 //!   (`--fn-ids rom` only): a literal lift loads pointers from ROM bytes
 //!   and RAM, so it can't renumber them. [`fnref`] follows every function
 //!   address to its uses and reports the ROM words dense IDs could rewrite
