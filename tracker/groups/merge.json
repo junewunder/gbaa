@@ -218,17 +218,32 @@
       "lane": "quack/4",
       "branch": "unit/native/lift-save-memory",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "5d09211d",
-        "session": "5d09211d-684a-4301-980a-35dd293c790e",
+        "at": "2026-11-12T11:09:20Z",
+        "evidence": "Merged origin/main (24432fa) into the branch as 751b8be: lift-check.toml keeps both native-dma and native-save, lines_prelude 885 (measured by lift-metrics); justfile and commands.md list both. just check passes; just lift-check --only native-save --only native-dma passes (both routes 600 frames, planted faults caught). native-spike's hard hole also fails on clean main 24432fa, already filed as {unit:native/spike-entry-read-hole}.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane3-native-lift-bios-region",
+      "title": "Merge main on quack lane 3",
+      "detail": "Branch `unit/native/lift-bios-region` holds {unit:native/lift-bios-region}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml crates/codegen/src/native/prelude.rs docs/tools/commands.md justfile. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/3",
+      "branch": "unit/native/lift-bios-region",
+      "record": {
+        "state": "claimed",
+        "by": "391251bf",
+        "session": "391251bf-5b99-4e03-b9d9-351960038018",
         "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T10:46:46Z",
-        "branch": "unit/native/lift-save-memory",
+        "pid": 2489918,
+        "start": "10657789",
+        "at": "2026-11-12T11:16:04Z",
+        "branch": "unit/native/lift-bios-region",
         "beats": true
       },
-      "round": "2026-11-12T10:46:46Z"
+      "round": "2026-11-12T11:16:04Z"
     }
   ]
 }
