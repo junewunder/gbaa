@@ -371,8 +371,8 @@ value returned in r0-r3 that a caller's own instruction reads (agbcc's
   whose `Regs::call` zeroes r4-r12.
 - `masks away r4-r11's entry bits` (soft): every bit cleared before any
   use, agbcc's word built byte by byte in an unset register.
-- `reads r4-r11 at entry, only jumped into` (soft): nothing called
-  calls, tail-calls or falls into it (a jump passes the jumper's r4-r11).
+- `reads r4-r11 at entry, only jumped into` (soft): no `bl` or pointer
+  enters it, nor a tail call or fall from a function one enters.
 - `reads the caller's frame pointer` (soft): agb's backtrace walking r7
   from a frame record (`add r7, sp, #12` at the saved r7); natively the
   walk finds no frames. Only the agb programs have it.
@@ -382,7 +382,7 @@ the merge, as before (a path that can't happen, or a C local never set):
 counting those made LLVM's paths in agb hard.
 
 Summary holes that are hard, before and after (`just holes-all --against`):
-3 and 36; hard over the corpus 106 and 139. The 36, from the report:
+3 entry readers (of 5 summary holes) and 36; corpus hard 130 and 139. The 36, from the report:
 
 | Cause | Functions |
 |---|---|
