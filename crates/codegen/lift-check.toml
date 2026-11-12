@@ -15,14 +15,14 @@
 #                  flag; the native check must catch each (`route-check --planted`)
 #
 # [program.<key>.bars]: each metric of the lift's report.txt at most its bar.
-# Bars are maxima, set at the values measured when the program was added, and
-# only lowered: a unit's check names the bar it lowers and to what. Raising one
-# to make a check pass is changing the oracle: ask june (`just ask`). The one
-# exception is lines_prelude, the hand-written prelude every lift starts with
-# (crates/codegen/src/native/prelude.rs): it may rise when a unit adds to the
-# prelude, the unit's evidence saying how many lines and why. lines is the rest
-# of what the lift writes (the lifted code and the stand-ins; not the modules'
-# wiring, native/modules.rs), and only goes down.
+# Bars are maxima, set at the values measured when the program was added; a
+# unit's check names the bar it lowers and to what. They measure how plain the
+# lift is, not whether it is right: hard_holes and the planted controls never
+# loosen without june (`just ask`). A unit may raise any other bar itself when
+# the native check stays green and its evidence gives the bar, its old and new
+# value, and the cause (docs/native-stage-b.md has the rule). lines_prelude is
+# the hand-written prelude (crates/codegen/src/native/prelude.rs); lines is the
+# rest of what the lift writes (not the modules' wiring, native/modules.rs).
 # functions_recognised has no bar (it should rise); every other metric needs one.
 # Metric names: crates/codegen/src/native/metrics.rs.
 
