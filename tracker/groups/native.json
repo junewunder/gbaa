@@ -1496,15 +1496,24 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "12ef2e3c",
-        "session": "12ef2e3c-5b4d-487a-a4a2-90fcf6d0b90a",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T10:09:42Z",
+        "checker": "verifier-lane1-dmaregs",
+        "at": "2026-11-12T10:40:04Z",
+        "evidence": "Verifier (fresh context) ran just lift-check --only native-dma: pass, 600 frames, 0 differences, packed layout same, planted DMAxCNT fault caught (frame 1, EWRAM 0x020002f4); just check exit 0 after merging main. Review fixes: lift-check --only affine, mosaic-modes, native-fallthrough, native-irq-hold, native-frame-locals, native-ime-release, native-bios-calls, native-tasks, native-dma all pass their 600/601 frames, every planted fault and native-tasks' planted hole caught (16m47s); native-spike stops at its known hard hole f_08006d47 in the bars step, as on main. V-blank run_sound now only after register-set channels' cycles; justfile lift-check comment says 39 crates, about 20 min.",
         "branch": "unit/native/hw-dma-registers",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T10:40:04Z",
+          "by": "12ef2e3c",
+          "host": "quack",
+          "pid": 2489252,
+          "start": "10657014",
+          "beats": true,
+          "session": "12ef2e3c-5b4d-487a-a4a2-90fcf6d0b90a",
+          "lane": "quack/1"
+        },
+        "pushed": true
       },
       "notes": [
         {
@@ -1576,16 +1585,32 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "dd145eb8",
-        "session": "dd145eb8-bbea-42de-85a6-c1b6538cbcd3",
-        "host": "quack",
-        "pid": 2489918,
-        "start": "10657789",
-        "at": "2026-11-12T10:07:23Z",
+        "checker": "verifier-latch-lane3",
+        "at": "2026-11-12T10:38:21Z",
+        "evidence": "lift-check --only native-bios-region passed (601 frames, 0 differences; packed layout same), run by me and by the verifier; new agb/native-bios-region reads the latch after a swi, in and after an IRQ, all widths; mGBA hash matches at 601. just check passes after merging main (dac0a8c). lines_prelude 850->882 (+32: latch field, bios_read, swi_done, load/store arms). Full lift-check still fails on main on native-spike's hard hole ({unit:native/spike-entry-read-hole}), confirmed at b17b7a8 before this change.",
         "branch": "unit/native/lift-bios-region",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T10:38:21Z",
+          "by": "dd145eb8",
+          "host": "quack",
+          "pid": 2489918,
+          "start": "10657789",
+          "beats": true,
+          "session": "dd145eb8-bbea-42de-85a6-c1b6538cbcd3",
+          "lane": "quack/3"
+        },
+        "pushed": true
       },
+      "notes": [
+        {
+          "at": "2026-11-12T10:38:25Z",
+          "by": "dd145eb8",
+          "text": "Lift has no m4a NopCall (BIOS 0x1B0, play build sets NOP_CALL_LATCH 0xE3A0C301): call_fn panics there. Whoever lifts m4a's jump list must set g.bios_latch to that too. Open bus past 0x4000 still panics in the lift."
+        }
+      ],
       "round": "2026-11-12T10:07:23Z"
     },
     {
