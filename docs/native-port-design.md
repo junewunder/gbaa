@@ -823,9 +823,21 @@ The library mixes with the play build's own sound path, not a copy:
   planted wrong sample in psg-square is caught. The card asked for "a
   native bios-sound"; agb/bios-sound only calls the BIOS sound driver's
   no-op stubs and plays nothing, so direct-sound is the direct-sound case.
-- **Not yet:** H-blank DMA's price on the clock (no program needs it with
-  sound yet), DMA and FIFO DMA by address through the escape hatch (a
-  lifted program setting up DMA1 by its registers panics there).
+- **Not yet:** the price of `Dma::hblank_to`'s H-blank DMA on the clock
+  (no program needs it with sound yet).
+- **DMA by its registers** (native/hw-dma-registers, 2026-11-12):
+  `runtime::hw::dma_regs`. A lifted program that sets a channel up by
+  address (m4a's `SoundInit`, agbcc games' copy and fill macros) gets the
+  play build's channels: the registers stored in the sound's I/O block
+  through its masks, latched on enable as `dma::control_written`, an
+  immediate one run in the store through the program's memory
+  (`Native::dma_load`/`dma_store`; the prelude's `io_write16` calls
+  `hw::write_dma`) and priced as the play build's `io_write` (the clock
+  moves, no sync), V-blank and H-blank ones repeated at the beam's events
+  and priced there, a special DMA1/2 aimed at a FIFO becoming its
+  `FifoDma`, the IRQ at the end. Checked by `agb/native-dma` in the lift
+  check, each start set up by address, with a planted wrong `DMAxCNT`.
+  Not yet: the EEPROM's DMA.
 
 Once a mod edits the program, none of this applies: a mod is meant to
 differ. The oracle is for the unmodded native port, and a mod is checked

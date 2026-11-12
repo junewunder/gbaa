@@ -1,0 +1,12 @@
+# agb/native-dma for 600 frames with no input: the DMA-by-address program of
+# the stage-A lifter's check (native/hw-dma-registers; `just lift-check`), its
+# lift (gbaa-lift) against the play build at --timing native by route-check
+# --native. What it draws: agb/native-dma/SCENE.md.
+rom = "$GBAA_DATA/agb/native-dma.gba"
+
+[[checkpoint]]
+name = "native-dma-600"
+frame = 600
+hash = "d8d698342cc0e045"
+# Verified: mGBA 0.10.5 (`just mgba-diff`) draws the same at frame 600
+# (2026-11-12).

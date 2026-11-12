@@ -32,7 +32,7 @@ route = "units/affine-600.toml"
 
 [program.affine.bars]
 lines = 71199
-lines_prelude = 850
+lines_prelude = 861
 functions = 109
 functions_iwram = 3
 functions_lifted = 106
@@ -89,7 +89,7 @@ route = "units/mosaic-modes-600.toml"
 
 [program.mosaic-modes.bars]
 lines = 49224
-lines_prelude = 850
+lines_prelude = 861
 functions = 102
 functions_iwram = 3
 functions_lifted = 99
@@ -150,7 +150,7 @@ planted_hole = { drop_standin = 0x03000000, names = "error: hard hole in f_03000
 
 [program.native-spike.bars]
 lines = 71803
-lines_prelude = 850
+lines_prelude = 861
 functions = 110
 functions_iwram = 3
 functions_lifted = 107
@@ -211,7 +211,7 @@ planted_flags = ["--fall-as-tail-call"]
 
 [program.native-fallthrough.bars]
 lines = 70089
-lines_prelude = 850
+lines_prelude = 861
 functions = 112
 functions_iwram = 3
 functions_lifted = 109
@@ -273,7 +273,7 @@ planted_flags = ["--irq-at-waits"]
 
 [program.native-irq-hold.bars]
 lines = 70742
-lines_prelude = 850
+lines_prelude = 861
 functions = 114
 functions_iwram = 3
 functions_lifted = 109
@@ -337,7 +337,7 @@ planted_flags = ["--plant-slot=0x08000182"]
 
 [program.native-frame-locals.bars]
 lines = 70171
-lines_prelude = 850
+lines_prelude = 861
 functions = 113
 functions_iwram = 3
 functions_lifted = 110
@@ -398,7 +398,7 @@ planted_flags = ["--ime-at-waits"]
 
 [program.native-ime-release.bars]
 lines = 70732
-lines_prelude = 850
+lines_prelude = 861
 functions = 113
 functions_iwram = 3
 functions_lifted = 110
@@ -460,7 +460,7 @@ route = "units/native-bios-calls-600.toml"
 
 [program.native-bios-calls.bars]
 lines = 71803
-lines_prelude = 850
+lines_prelude = 861
 functions = 109
 functions_iwram = 3
 functions_lifted = 106
@@ -528,7 +528,7 @@ planted_hole = { drop_standin = 0x080001a4, names = "error: hard hole in f_08000
 
 [program.native-tasks.bars]
 lines = 71522
-lines_prelude = 850
+lines_prelude = 861
 functions = 122
 functions_iwram = 3
 functions_lifted = 113
@@ -578,3 +578,64 @@ call_fn_four_complete = 0
 jumps_by_value = 8
 gap_targets = 5
 fn_words_not_proven = 61
+
+[program.native-dma]
+rom = "agb/native-dma.gba"
+route = "units/native-dma-600.toml"
+# DMA by its registers (native/hw-dma-registers): every channel is set up
+# through dma_set, whose last store is DMAxCNT, count and control as one
+# word; planted, every transfer moves one more unit.
+planted_store = 0x08000180
+
+[program.native-dma.bars]
+lines = 48301
+lines_prelude = 861
+functions = 107
+functions_iwram = 3
+functions_lifted = 103
+functions_unrecognised = 107
+functions_replaced = 4
+standins = 4
+functions_summary_hole = 76
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 47
+hard_holes = 0
+blocks = 1258
+load_const_ram = 0
+load_const_io = 21
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 422
+load_computed_ram = 0
+load_computed_io = 5
+load_computed_rom = 54
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 675
+store_const_ram = 0
+store_const_io = 46
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 484
+store_computed_ram = 0
+store_computed_io = 3
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 270
+pointer_unexplained = 0
+ref_unexplained = 105
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 904
+sp_accesses_callers_frame = 2
+call_fn_calls = 65
+call_fn_four_complete = 60
+jumps_by_value = 8
+gap_targets = 80
+fn_words_not_proven = 62
