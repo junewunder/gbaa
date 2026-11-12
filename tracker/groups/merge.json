@@ -250,16 +250,15 @@
       "minMinutes": 40,
       "record": {
         "state": "claimed",
-        "by": "eae1c8a3",
-        "session": "eae1c8a3-81b6-4774-b682-105c8bd914f9",
+        "by": "625afd3a",
+        "session": "625afd3a-88ca-4d8e-b948-b204f5cc6e89",
         "host": "quack",
-        "pid": 2489427,
-        "start": "10657408",
-        "at": "2026-11-12T13:59:12Z",
-        "branch": "unit/native/lift-bios-affine",
-        "beats": true,
-        "pushed": true,
-        "ended": "2026-11-12T14:01:41Z"
+        "pid": 4142206,
+        "start": "14910976",
+        "at": "2026-11-12T16:44:30Z",
+        "resumed": "eae1c8a3",
+        "prevSession": "eae1c8a3-81b6-4774-b682-105c8bd914f9",
+        "pushed": true
       },
       "notes": [
         {
