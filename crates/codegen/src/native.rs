@@ -1690,7 +1690,9 @@ impl FnPrinter<'_, '_> {
                     if mask.contains(PsrMask::CONTROL) {
                         write!(body, "r13 = msr_cpsr(g, r13, {x});").unwrap();
                     }
-                    stmt(&mut s, body.trim_end().to_string());
+                    if !body.is_empty() {
+                        stmt(&mut s, body.trim_end().to_string());
+                    }
                 }
                 Op::SetSpsr { v: x, mask } => {
                     let m = mask.bits();
