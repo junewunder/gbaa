@@ -84,12 +84,23 @@
 //! chip until the program sets its kind), driven by the chip's commands
 //! or, for the flash library's stack routines, by [`flash`]'s calls.
 //!
-//! What isn't here yet: DMA by address (the escape hatch panics on its
-//! registers), H-blank DMA's price on the clock, serial, keeping the save
-//! in a `.sav`.
+//! **DMA by its registers** ([`dma_regs`]): a program that sets a channel
+//! up by address (`DMA0SAD` to `DMA3CNT_H`) gets the play build's
+//! channels: latched on enable, an immediate one run at once through the
+//! program's memory ([`Native::dma_load`], [`Native::dma_store`];
+//! [`write_dma`]) and priced on the clock as the play build's store
+//! prices it, V-blank and H-blank ones repeated at the beam's events (and
+//! priced there), a special start aimed at a FIFO feeding it
+//! ([`Hw::fifo_dma`]), the IRQ at the end.
+//!
+//! What isn't here yet: [`Dma::hblank_to`]'s price on the clock, serial,
+//! the EEPROM's DMA, keeping the save in a `.sav`.
 
 pub mod bios;
+pub mod dma_regs;
 pub mod flash;
+
+pub use dma_regs::write_dma;
 
 use crate::io::{self, Io, irq, reg};
 use crate::platform::{Frame, HEIGHT};
@@ -155,6 +166,22 @@ pub trait Native: Sized {
     /// calls [`irq_release`]. A program with no CPSR (one written by hand
     /// over the library) returns `false`.
     fn irq_masked(&self) -> bool;
+
+    /// A DMA transfer's load from the program's memory at `a` (aligned):
+    /// a word, else a halfword. What DMA by its registers ([`dma_regs`])
+    /// reads; a program that never sets a channel up by address needn't
+    /// give it.
+    fn dma_load(&mut self, a: u32, word: bool) -> u32 {
+        let _ = word;
+        panic!("hw: a DMA load at {a:#010x} in a program with no memory for DMA")
+    }
+
+    /// A DMA transfer's store of `v` to the program's memory at `a`
+    /// (aligned): a word, else a halfword.
+    fn dma_store(&mut self, a: u32, v: u32, word: bool) {
+        let _ = (v, word);
+        panic!("hw: a DMA store at {a:#010x} in a program with no memory for DMA")
+    }
 }
 
 /// The keys as the game reads them.
@@ -250,11 +277,15 @@ pub struct HblankDma<G> {
     pub next: usize,
 }
 
-/// The DMA channels' repeating kinds (section 8). Immediate copies are
-/// plain copies into [`Video`] ([`Video::copy_vram16`] and friends).
+/// The DMA channels' repeating kinds (section 8), as typed calls.
+/// Immediate copies are plain copies into [`Video`]
+/// ([`Video::copy_vram16`] and friends). A program that sets channels up
+/// by address gets [`dma_regs`]'s channels, kept here too.
 pub struct Dma<G> {
     hblank: [Option<HblankDma<G>>; 4],
     vblank: [Option<VblankCopy<G>>; 4],
+    /// The channels as their registers set them up.
+    pub regs: dma_regs::Channels,
 }
 
 /// A V-blank DMA's copy: it runs over the game and returns its price in
@@ -266,6 +297,7 @@ impl<G> Default for Dma<G> {
         Dma {
             hblank: [None, None, None, None],
             vblank: [None; 4],
+            regs: dma_regs::Channels::default(),
         }
     }
 }
@@ -424,6 +456,7 @@ impl<G: Native> crate::sound::Audio for Run<'_, G> {
         }
         s.dma[n] = (d.control & crate::dma::ctl::REPEAT != 0).then_some(FifoDma { src, ..d });
         s.io.now += crate::dma::FIFO_REFILL_CYCLES;
+        self.0.hw().fifo_refilled(n + 1, src, d.control);
         true
     }
 }
@@ -604,10 +637,12 @@ impl<G: Native> Hw<G> {
     /// The escape hatch (section 2): write the I/O register at offset `o`
     /// (even) as a store to `0x0400_0000 + o` would, for code that
     /// addresses registers through a table or a loop. The display
-    /// registers, `DISPSTAT`, the sound registers and FIFOs, the timers,
-    /// `IE`, `IF` (1s acknowledge) and `IME`; panics on a register the
-    /// library doesn't model yet (DMA by address, serial), which a lifted
-    /// program must not reach silently.
+    /// registers, `DISPSTAT`, the sound registers and FIFOs, the DMA
+    /// registers (an immediate channel switched on runs at [`write_dma`]
+    /// or the next sync: this can't reach the program's memory), the
+    /// timers, `IE`, `IF` (1s acknowledge) and `IME`; panics on a register
+    /// the library doesn't model yet (serial), which a lifted program must
+    /// not reach silently.
     pub fn write16(&mut self, o: u32, v: u16) {
         match o {
             reg::DISPSTAT => {
@@ -621,6 +656,7 @@ impl<G: Native> Hw<G> {
             reg::VCOUNT | reg::KEYINPUT => {}
             _ if o < crate::video::REGS_END => self.ppu.write16(o, v),
             _ if Sound::<G>::has(o) => self.sound_store(o, 2, v as u32),
+            _ if is_dma(o) => self.dma_store(o, 2, v as u32),
             // Bit 15 is the cartridge type: read-only, 0 (GBA).
             reg::WAITCNT => self.waitcnt = v & 0x7FFF,
             reg::IE => self.irq.enable = v & 0x3FFF,
@@ -672,7 +708,7 @@ impl<G: Native> Hw<G> {
             reg::VCOUNT => self.line,
             reg::KEYINPUT => self.keys.keyinput(),
             _ if o < crate::video::REGS_END => self.ppu.read16(o),
-            _ if Sound::<G>::has(o) => self.sound.io.read16(o),
+            _ if Sound::<G>::has(o) || is_dma(o) => self.sound.io.read16(o),
             reg::WAITCNT => self.waitcnt,
             reg::IE => self.irq.enable,
             reg::IF => self.irq.flags,
@@ -690,7 +726,7 @@ impl<G: Native> Hw<G> {
             reg::DISPSTAT => self.dispstat() & 0xFF38,
             reg::VCOUNT => self.line,
             _ if o < crate::video::REGS_END => self.ppu.raw16(o),
-            _ if Sound::<G>::has(o) => self.sound.io.raw16(o),
+            _ if Sound::<G>::has(o) || is_dma(o) => self.sound.io.raw16(o),
             reg::KEYINPUT => self.keys.keyinput(),
             reg::WAITCNT => self.waitcnt,
             reg::IE => self.irq.enable,
@@ -704,6 +740,11 @@ impl<G: Native> Hw<G> {
     fn request(&mut self, bits: u16) {
         self.irq.flags |= bits;
     }
+}
+
+/// Whether `o` is a DMA register ([`dma_regs`]).
+fn is_dma(o: u32) -> bool {
+    (dma_regs::DMA_START..dma_regs::DMA_END).contains(&o)
 }
 
 /// Run the handlers of what's requested and enabled: the master handler
@@ -783,6 +824,10 @@ fn run_sound<G: Native>(g: &mut G) {
 /// found ([`Hw::next_event`]), and the handlers of what's requested run.
 /// Returns whether V-blank started.
 fn sync<G: Native>(g: &mut G, cycles: u32) -> Result<bool, Exit> {
+    // An immediate DMA a bare `Hw::write16` switched on.
+    if g.hw().dma_pending() {
+        dma_regs::run_pending(g);
+    }
     g.hw().sound.io.now += cycles as u64;
     let mut vblank = false;
     while g.hw().sound.io.now >= g.hw().next_line_event {
@@ -842,6 +887,10 @@ fn line_event<G: Native>(g: &mut G) -> Result<bool, Exit> {
                     d.next += 1;
                 }
             }
+            // The channels set up by address, priced as the play build's
+            // H-blank trigger.
+            let c = dma_regs::trigger(g, crate::dma::Timing::HBlank);
+            g.hw().sound.io.now += c as u64;
         }
         return Ok(false);
     }
@@ -871,9 +920,20 @@ fn line_event<G: Native>(g: &mut G) -> Result<bool, Exit> {
             cycles += f(g) as u64;
         }
     }
+    let by_regs = dma_regs::trigger(g, crate::dma::Timing::VBlank) as u64;
+    cycles += by_regs;
     let hw = g.hw();
     hw.sound.io.now += cycles;
     hand_off(hw);
+    // The play build records the frame after its sync's last walk of the
+    // timers, which reaches past the V-blank DMA's price: a FIFO refill
+    // (and its IRQ request) that fell in it is in the record. Only for the
+    // channels set up by their registers: the typed copies' programs keep
+    // the timing they were checked at.
+    if by_regs != 0 {
+        run_sound(g);
+    }
+    let hw = g.hw();
     hw.frames += 1;
     if let Some(f) = hw.frame_end {
         f(g);
