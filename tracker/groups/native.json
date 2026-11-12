@@ -1202,6 +1202,17 @@
       "detail": "After {unit:native/callee-save-breaks}, a function that keeps r4-r11 and reads one as it came is soft ('reads r4-r11 at entry and keeps them'): mostly agbcc building a word byte by byte in an unset register, every old bit masked away, but TMC's sub_080086D8 takes r8/r11 from player.s as parameters (Minish 0x08060ba1 derefs entry r5 too), which the lift gets wrong (Regs::call zeroes r4-r12). Track which bits of an entry value survive (and/orr masks, uses as address or callee argument, hi-reg mov then pass-on); make a surviving read hard. Done when: the soft kind holds only fully-masked reads (doc lists the corpus's), holes-all --against shows the new hard ones named, just check passes.",
       "check": "independent",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "b3d0fb3e",
+        "session": "b3d0fb3e-b920-4e56-a4e2-460218715578",
+        "host": "quack",
+        "pid": 2489252,
+        "start": "10657014",
+        "at": "2026-11-12T04:53:30Z",
+        "branch": "unit/native/entry-read-masking",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-08T23:12:49Z",

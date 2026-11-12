@@ -2527,3 +2527,4 @@
 {"at":"2026-11-11T15:56:46Z","actor":"session","tag":"6a8b662c","host":"quack","cmd":"add-unit","id":"native/native-first-stop","text":"new unit: Each built native game runs headless; report where it stops"}
 {"at":"2026-11-11T15:56:58Z","actor":"session","tag":"6a8b662c","host":"quack","cmd":"add-unit","id":"native/nightly-corpus","text":"new unit: A nightly command over the corpus, diffed with last night"}
 {"at":"2026-11-12T04:53:00Z","actor":"session","tag":"608de829","host":"quack","cmd":"overseer","text":"overseer cf4018 on quack attached, replacing 408c3e on quack"}
+{"at":"2026-11-12T04:53:30Z","actor":"loop","tag":"b3d0fb3e","host":"quack","cmd":"claim","id":"native/entry-read-masking","text":"Tell masked entry reads of r4-r11 from parameters: claimed"}
