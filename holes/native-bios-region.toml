@@ -4,10 +4,10 @@
 # addresses (`nm agb/native-bios-region.elf`).
 
 [[standin]]
-entry = 0x08002600
+entry = 0x08002620
 why = "portable_atomic's interrupt::disable (ARM): `mrs r0, cpsr; orr r1, r0, #0x80; msr cpsr_c, r1`, a critical section's start. The program's CPSR is Game::cpsr; while its I bit is set the waits hold IRQs (Native::irq_masked)"
 code = '''
-pub fn f_08002600(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+pub fn f_08002620(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
     let r0 = g.cpsr;
     g.cpsr = r0 | 0x80;
     Ok([r0, r0 | 0x80, a[2], a[3]])
@@ -15,10 +15,10 @@ pub fn f_08002600(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> 
 '''
 
 [[standin]]
-entry = 0x0800261c
+entry = 0x0800263c
 why = "portable_atomic's interrupt::restore (ARM): `msr cpsr_c, r0`, a critical section's end: clearing I runs the IRQs it held (msr_cpsr_c)"
 code = '''
-pub fn f_0800261c(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+pub fn f_0800263c(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
     msr_cpsr_c(g, sp, a[0]);
     Ok(a)
 }
@@ -39,7 +39,7 @@ pub fn f_03000000(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> 
     let ime = ld32(g, 0x0400_0208); // swp: IME off
     st32(g, 0x0400_0208, 0);
     // System mode: `push {lr}`, then __RUST_INTERRUPT_HANDLER(due).
-    f_08002661(g, g.sp.wrapping_sub(4), [due, 0x08002661, ime, ie_if])?;
+    f_08002681(g, g.sp.wrapping_sub(4), [due, 0x08002681, ime, ie_if])?;
     st32(g, 0x0400_0208, 0x0400_0000); // IME's low half 0
     st32(g, 0x0400_0208, ime); // IME as it was
     st16(g, 0x0400_0200, ie_if); // IE as it was

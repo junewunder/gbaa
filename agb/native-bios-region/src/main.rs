@@ -19,7 +19,11 @@
 //! 6. after polling `VCOUNT` from line 100 to 170, across V-blank's IRQ:
 //!    the word at `0x10`,
 //! 7. the byte at `0x13`, computed;
-//! 8. `Div`'s quotient, and the frame.
+//! 8. `Div`'s quotient,
+//! 9. the frame,
+//! 10. after `swi 2` (`Halt`), woken by V-blank's IRQ: the word at 0 (the
+//!     latch the IRQ left: the play build moves it as the call is made,
+//!     before halting).
 //!
 //! Each frame it also stores to 0 and to `0x100` (nowhere). It draws `OUT`
 //! in mode 3: frame `f` (from 0) row `f % 160`, one pixel per slot, the
@@ -35,7 +39,7 @@ use core::ptr::{read_volatile, write_volatile};
 const DISPCNT: *mut u16 = 0x0400_0000 as *mut u16;
 const VCOUNT: *const u16 = 0x0400_0006 as *const u16;
 const VRAM: *mut u16 = 0x0600_0000 as *mut u16;
-const SLOTS: usize = 10;
+const SLOTS: usize = 11;
 
 /// What it read (see the header). (ARMv4T has no atomics.)
 struct Out(UnsafeCell<[u32; SLOTS]>);
@@ -124,6 +128,22 @@ fn main(_gba: agb::Gba) -> ! {
                 write_volatile(VRAM.add(y * 240 + k), ((v ^ v >> 15) & 0x7FFF) as u16);
             }
         }
+        // Halt until V-blank's IRQ (enabled with its handler), then read
+        // the latch it left. agb's `wait_for_vblank` then skips its wait.
+        let a: u32;
+        // SAFETY: Halt changes r2 and r12 in the BIOS (r0-r3 declared
+        // clobbered); the load reads the BIOS region at 0.
+        unsafe {
+            asm!(
+                "swi 2",
+                "movs {t}, #0",
+                "ldr {a}, [{t}]",
+                t = out(reg) _,
+                a = out(reg) a,
+                out("r0") _, out("r1") _, out("r2") _, out("r3") _, out("r12") _,
+            );
+        }
+        put(10, a);
         vblank.wait_for_vblank();
         f += 1;
     }

@@ -7,7 +7,7 @@ The stage-A lifter's check runs it (`just lift-check`, the
 `src/main.rs`'s header (unit `native/lift-bios-region`).
 
 Mode 3, BG2 on. Each pass of the main loop `f` (from 0) draws row `f %
-160`, pixels 0-9, one per slot of `OUT`: the slot's value `v` as BGR555
+160`, pixels 0-10, one per slot of `OUT`: the slot's value `v` as BGR555
 `(v ^ v >> 15) & 0x7FFF`. What the slots hold on the hardware, mGBA and
 the play build (2026-11-12, frame 601):
 
@@ -23,14 +23,15 @@ the play build (2026-11-12, frame 601):
 | 7 | byte at `0x13`, after V-blank's IRQ | `0xE5` |
 | 8 | `Div`'s quotient, `(f + 1000) / 7` | |
 | 9 | `f` | |
+| 10 | word at 0, after `Halt` woken by V-blank's IRQ | `0xE3A02004` (the IRQ returns into the BIOS's `Halt`, which then returns from the call) |
 
-Slot 5 is 0 until the first V-blank IRQ. A pass takes a frame and a half
-on average (it polls to line 170, and agb's `wait_for_vblank` skips the
-wait when a V-blank came since the last call), so by frame 601 there are
-400 passes: `f` runs to 399, row 79. At frame 600 our exact interpreter
-has drawn pass 399 and mGBA not yet (only row 79's slots 8 and 9
-differ), so the route stops at 601, where mGBA 0.10.5 draws hash
-`39dbbbb064134435` as our interpreter does.
+Slot 5 is 0 until the first V-blank IRQ. A pass polls to line 170, then
+halts to the next V-blank (agb's `wait_for_vblank` then skips its wait),
+so passes come about once a frame and a half. Our exact interpreter draws
+each pass a little before mGBA (at frames 598, 600 and 602 only the last
+row's slots 8 and 9 differ), so the route stops at 601, where mGBA 0.10.5
+draws hash `966182bb68b4b4b0` as our interpreter does.
 
 A lift that panics on the BIOS region (stage A before this unit) stops
-at slot 0; one that reads a fixed value draws slots 5 and 6 as slot 1.
+at slot 0; one that reads a fixed value draws slots 5 and 6 as slot 1; one that
+leaves the IRQ's latch after a `Halt` draws slot 10 as slot 6.
