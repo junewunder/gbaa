@@ -1336,9 +1336,10 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
   `agb/native-frame-locals`, `agb/native-ime-release`,
   `agb/native-bios-calls`, `agb/native-tasks`, `agb/native-dma`,
-  `agb/native-save` (SRAM; `just agb-tests`; native-bios-calls is
-  native/lift-bios-calls) on `units/<name>-600.toml` (the spike's is
-  `units/native-spike.toml`, native-irq-hold's and native-ime-release's
+  `agb/native-save` (SRAM), `agb/native-bios-region` (the BIOS latch;
+  `just agb-tests`; native-bios-calls is native/lift-bios-calls) on
+  `units/<name>-600.toml` (the spike's is `units/native-spike.toml`,
+  native-irq-hold's, native-ime-release's and native-bios-region's
   `-601`). First every program is lifted with `--bars`
   (seconds), failing before any build on a metric over its bar; then each
   lift and its play build (`--timing native`) are built and `route-check
@@ -1360,11 +1361,10 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   be caught too. Each program is lifted once more with `--layout packed`
   (`out/lift-<name>-packed`), passed as `--packed`: it must draw the guest
   layout's frames and record the same bytes, nothing skipped
-  (native/lift-packed-layout). Passes with
-  `every metric within its bar`, ten `pass (60x frames, 0 differences …;
-  the play layout draws the same 60x frames, its records the same …)`
-  lines, `planted fault caught (…-planted: frame 2: EWRAM byte 0x020000c0
-  …)`, `(…-fall-as-tail-call: frame 1: EWRAM byte 0x020000c4 …)`,
+  (native/lift-packed-layout). Passes with `every metric within its bar`,
+  a `pass (60x frames, 0 differences …; the play layout draws the same 60x
+  frames, its records the same …)` line per program, `planted fault caught
+  (…-planted: frame 2: EWRAM byte 0x020000c0 …)`, `(…-fall-as-tail-call: frame 1: EWRAM byte 0x020000c4 …)`,
   `(…-plant-slot-0x08000182: frame 1: EWRAM byte 0x020000c4: play 0x61,
   native 0x62 …)` and `(…-irq-at-waits: frame 2: EWRAM byte 0x020000c8:
   play 0x00, native 0x01 …)`, `(…-ime-at-waits: frame 2: EWRAM byte

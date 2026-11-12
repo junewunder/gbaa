@@ -2144,7 +2144,13 @@ impl FnPrinter<'_, '_> {
                         return s;
                     }
                 };
-                let c = self.call_then(call, next, at);
+                // The BIOS region then reads the opcode after the call's
+                // return, as the play build's (`swi_done`). After a halt too:
+                // the IRQ that wakes it returns into the BIOS's Halt, which
+                // then returns from the call (the play build finishes its
+                // pending call there; mGBA agrees, agb/native-bios-region's
+                // slot 10).
+                let c = self.call_then(format!("{call} swi_done(g);"), next, at);
                 writeln!(s, "{ind}{c}").unwrap();
             }
             Plan::Undefined => self.hole(at, "an undefined instruction"),

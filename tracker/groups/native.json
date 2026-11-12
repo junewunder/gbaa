@@ -663,6 +663,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T11:21:46Z",
+          "by": "ba1a464f",
+          "text": "Play build now syncs where an idle loop's cond branch isn't taken (rt::idle_exit; DMA waits). The lifter (Exact clock) has no Idle::Exit counterpart (native.rs emits hw::idle/spin only): if lift vs play differs after a DMA-wait loop, look there."
+        },
+        {
           "at": "2026-11-08T21:25:50Z",
           "by": "a98172f6",
           "text": "Route written (units/metroid-native.toml, 2700 frames). First run: 6 causes filed as needs (doc: The first game). Lift: just lift ROM out/lift-metroid --name metroid; play: just recompile ROM out/metroid --timing native; then route-check --native. Planted store not tried yet."
@@ -1436,34 +1441,26 @@
       "check": "recorded",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "blocked",
+        "on": "q/raise-native-tasks-unproven-function",
         "by": "d258b190",
-        "session": "d258b190-7fbc-4544-b0d3-69f7ab7ebcf7",
-        "host": "quack",
-        "pid": 2489427,
-        "start": "10657408",
-        "at": "2026-11-12T10:57:25Z",
-        "branch": "unit/native/fnref-emerald-speed",
-        "resumed": "5cf6c823",
-        "prevSession": "5cf6c823-3eeb-4734-8c09-a83340a43640",
-        "pushed": true,
-        "beats": true
+        "at": "2026-11-12T11:23:37Z"
       },
       "notes": [
+        {
+          "at": "2026-11-12T11:23:26Z",
+          "by": "d258b190",
+          "text": "The 2 words: vtable 0x080244c8/cc. Main reads them only via an early transient value of sp at 0x08000180's pop (n=5); settled values are wide RomFrom sets on both. Tried: cap absorbing only to stop(lo) (object end): ref_unexplained 35->93, reverted."
+        },
+        {
+          "at": "2026-11-12T11:23:22Z",
+          "by": "d258b190",
+          "text": "at ec10365 Emerald --summaries --callee-sets finishes: 11:24 wall, 2.37 GB peak, round 0 82 s; stops unsettled at main's 48M-token bound (29,696 runs). Only blocker: native-tasks fn_words_not_proven 59>57, see the ask."
+        },
         {
           "at": "2026-11-12T10:56:48Z",
           "by": "5cf6c823",
           "text": "2026-11-12: branch ec10365: Emerald round 0 in 437 s (was ~20 min); a run on an earlier build finished: 27:37, 2.1 GB peak, unsettled. Left (~1 h): merging main's rom-read-bound took native-tasks fn_words_not_proven to 59>57 (main 57); speed changes each reverted: same"
-        },
-        {
-          "at": "2026-11-12T10:56:33Z",
-          "by": "5cf6c823",
-          "text": "Then: one timed whole run at HEAD (just long, --mem 9G, GBAA_FNREF_TRACE=1 names the function that stops it settling: 'unsettled after'). Round 1 runs ~256 fns/min. memory/fnref-flow-emerald-memory.md says how to profile with eu-stack (perf is blocked here)."
-        },
-        {
-          "at": "2026-11-08T22:44:22Z",
-          "by": "9e61b577",
-          "text": "main now has a 48M-token bound in fnref::follow (stops unsettled) and G::give_all (shared joins across a by-value call's callees) from {unit:native/whole-lift-memory}; expect a merge in fnref.rs with b6d5ed3f; raise TOKENS if Emerald needs it."
         }
       ],
       "round": "2026-11-12T08:41:16Z"
@@ -1583,17 +1580,19 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "9fcf9764",
-        "session": "9fcf9764-90bc-4e3b-8d61-b6f6ae7454c1",
-        "host": "quack",
-        "pid": 2489918,
-        "start": "10657789",
-        "at": "2026-11-12T10:43:38Z",
-        "branch": "unit/native/lift-bios-region",
-        "beats": true
+        "checker": "subagent-a87d606f",
+        "at": "2026-11-12T11:15:27Z",
+        "evidence": "Fresh verifier subagent: just lift-check --only native-bios-region passed (601 frames, 0 differences, packed layout same); mgba-diff 601 matches route hash 966182bb68b4b4b0, incl. new Halt slot 10 (0xE3A02004: review's AFTER_IRQ fix was wrong, lift-check caught it at frame 3). just check green after merging main (78a8847).",
+        "host": "quack"
       },
       "notes": [
+        {
+          "at": "2026-11-12T11:15:32Z",
+          "by": "9fcf9764",
+          "text": "Review's Halt fix was wrong: play build's irq_return finishes Halt's pending call and sets AFTER_SWI; mGBA agrees (test slot 10). Separately, native-spike has a hard hole on main (filed: {unit:native/spike-entry-read-hole}); numbers doc shows it."
+        },
         {
           "at": "2026-11-12T10:43:25Z",
           "by": "manual",
@@ -1604,13 +1603,7 @@
           "by": "dd145eb8",
           "text": "Lift has no m4a NopCall (BIOS 0x1B0, play build sets NOP_CALL_LATCH 0xE3A0C301): call_fn panics there. Whoever lifts m4a's jump list must set g.bios_latch to that too. Open bus past 0x4000 still panics in the lift."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-12T10:43:25Z",
-        "findings": "- crates/codegen/src/native.rs:2146: the lift appends `swi_done(g)` after every BIOS call. That's wrong for Halt/Stop (`0x02 | 0x03` => `g.sp = r13; hw::halt(g)?;`). hw::halt (crates/runtime/src/hw.rs:988) runs until an IRQ has run, so irq_entry leaves g.bios_latch at BIOS_LATCH_AFTER_IRQ, and swi_done then overwrites it with BIOS_LATCH_AFTER_SWI. The play build sets AFTER_SWI when the call is made (crates/runtime/src/bios.rs:603, before the CPU halts), and the IRQ that wakes it leaves AFTER_IRQ (bios.rs:459). Halt pushes no pending call, so nothing sets AFTER_SWI again. After a Halt the lift's BIOS-region loads read 0xE3A02004 where the play build reads 0xE55EC002. Fix: for 0x02/0x03, emit `swi_done(g);` before the halt (`swi_done(g); g.sp = r13; hw::halt(g)?;`) and don't append it after. Keep it after for the other calls; that's right for IntrWait/VBlankIntrWait (intr_wait_check sets AFTER_SWI last, bios.rs:647) and for the stalled copies (stall_step, bios.rs:409). Then extend agb/native-bios-region/src/main.rs with a `swi 2` (Halt) with an IRQ enabled, followed by a read of the word at 0, so the lift-check covers it. Update SCENE.md, units/native-bios-region-601.toml's hash (checked against mGBA) and the bars in crates/codegen/lift-check.toml."
-      },
-      "round": "2026-11-12T10:07:23Z"
+      ]
     },
     {
       "id": "native/play-native-metroid-interp",
@@ -1619,38 +1612,70 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "ba1a464f",
-        "session": "ba1a464f-09a6-40f0-b263-fabbb9594de4",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T10:44:40Z",
-        "branch": "unit/native/play-native-metroid-interp",
-        "beats": true
-      },
-      "round": "2026-11-12T10:44:40Z"
+        "checker": "ae19d9e3",
+        "at": "2026-11-12T11:21:43Z",
+        "evidence": "Verifier subagent ae19d9e3 rebuilt out/metroid at --timing native from this branch: route-check --native on units/metroid-native.toml (2700 frames) passes the play-against-interp step, play.rec and interp.rec byte-identical (was frame 1, EWRAM 0x02038000). Cause: an idle loop's conditional branch mid-block got no rt::idle_exit; build_block now splits after it. Unit test added; just check passes after merging main.",
+        "host": "quack"
+      }
     },
     {
       "id": "native/check-holes-copies",
       "title": "The native check skips the holes file's RAM code copies",
       "detail": "docs/native-stage-b.md, 'The first game': route-check --native skips the destinations of Discovery::copies only; a commercial game's IWRAM copies come from its holes file's [[copy]] entries (Metroid's five, mods/metroid/holes.toml), which the native program runs as Rust and never writes, so they would differ. Skip them too (the lifter's holes file, given to route-check or found by the game's name). Done when: Metroid's route-check --native prints those ranges as not compared, a unit test covers it, and just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "598b2669",
+        "session": "598b2669-ad9d-445e-93b5-80339472ed46",
+        "host": "quack",
+        "pid": 2489427,
+        "start": "10657408",
+        "at": "2026-11-12T11:24:07Z",
+        "branch": "unit/native/check-holes-copies",
+        "beats": true
+      },
+      "round": "2026-11-12T11:24:07Z"
     },
     {
       "id": "native/lift-bios-more",
       "title": "Lifted code makes SoftReset, RegisterRamReset and HuffUnComp",
       "detail": "Left out of {unit:native/lift-bios-calls}: the lifter's prelude (NATIVE_BIOS) has no swi 0x00 SoftReset, 0x01 RegisterRamReset, 0x13 HuffUnComp, 0x28 SoundDriverVSyncOff. 0x00/0x01 are reached in Nightmare, Rogue, Imperium, Emerald, Mariomon (docs/research/bios-calls.md); SoftReset needs a way for a native program to restart (no Exit for it today). Nightmare stands in for the stubs in mods/kirby-nightmare/holes.toml (Huffman ported, VSyncOff a no-op, SoftReset panics); drop those stand-ins after. Done when: the lifter prints all four (over runtime::bios's logic as lz77/rl do), lift-check green with a case per call, Nightmare lifts without the three stand-ins; just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "3402e3f4",
+        "session": "3402e3f4-9509-490a-811b-8f126aa4b75b",
+        "host": "quack",
+        "pid": 2489252,
+        "start": "10657014",
+        "at": "2026-11-12T11:27:23Z",
+        "branch": "unit/native/lift-bios-more",
+        "beats": true
+      },
+      "round": "2026-11-12T11:27:23Z"
     },
     {
       "id": "native/lift-psr-boot-irq",
       "title": "The lifter handles reset and IRQ-wrapper msr/mrs itself",
       "detail": "From the overnight lift (2026-11-11, runs/long/overnight-lift.log): every one of the seven games that failed to lift has 2-5 msr/mrs hard holes, nearly all in the reset code at 0x08000000 and the IRQ wrapper. analysis::holes::classify already returns these as CpuWhere::Boot and CpuWhere::Wrapper (recognised, not holes; docs/research/native-holes.md, What the Stage-A lifter should know), but the lifter still makes them hard, and Metroid and Kirby Nightmare get past them only by hand stand-ins in mods/<game>/holes.toml. Have the lifter print the reset's mode switches and stack setup as the program's start and the IRQ wrapper's PSR saves as runtime::hw IRQ entry/exit (keep The native-timing play build takes an IRQ the I bit held as soon as an msr clears I), so no game needs these stand-ins; msr/mrs anywhere else stay hard. Done when: no Boot/Wrapper msr/mrs is a hard hole on the corpus (just holes-all --against main, the lift's counts), Metroid and Nightmare still lift and build with their reset and IRQ-wrapper stand-ins removed (or the reason one stays written down), lift-check green, just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "a7b7e9d7",
+        "session": "a7b7e9d7-b73a-46db-8e16-fc315bde78a9",
+        "host": "quack",
+        "pid": 2489918,
+        "start": "10657789",
+        "at": "2026-11-12T11:33:19Z",
+        "branch": "unit/native/lift-psr-boot-irq",
+        "beats": true
+      },
+      "round": "2026-11-12T11:33:19Z"
     },
     {
       "id": "native/lift-bios-affine",
