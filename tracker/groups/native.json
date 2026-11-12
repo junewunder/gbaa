@@ -1528,15 +1528,23 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "28dc0a51",
-        "session": "28dc0a51-8c19-468a-a7a7-97e6b429929c",
-        "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T10:28:21Z",
+        "checker": "verifier-a7e3c1",
+        "at": "2026-11-12T10:46:14Z",
+        "evidence": "Review fixes made: the prelude st16 and runtime::bus save-store comments now say mGBA 0.10.5 drops unaligned SRAM stores (prelude comment kept at 2 lines for its lines_prelude bar). Merged origin/main; just check green. Verifier re-read the 0xD-0xF arms against runtime::bus, ran lift-check --only native-save: pass, 600 frames, planted strb fault caught at frame 1.",
         "branch": "unit/native/lift-save-memory",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T10:46:14Z",
+          "by": "28dc0a51",
+          "host": "quack",
+          "pid": 2490379,
+          "start": "10658170",
+          "beats": true,
+          "session": "28dc0a51-8c19-468a-a7a7-97e6b429929c",
+          "lane": "quack/4"
+        }
       },
       "notes": [
         {
