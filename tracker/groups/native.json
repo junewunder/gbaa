@@ -1304,6 +1304,17 @@
       "detail": "{unit:native/kirby-undiscovered} left two kinds of ROM code inside a BIOS copy's source undiscovered on purpose (docs/research/native-holes.md, What discovery misses): m4a's SoundMainRAM copy ends in the bx r3 stub SoundMain calls in ROM, hiding SoundMain's tail (38 bytes, every m4a game), and Nightmare's crt0 copy runs into its coroutine switch at 0x08000234, entered by a veneer's ARM b (36 bytes, and 44 after calls into it). Extending discovery::copy_cuts to them (stub targets, b targets) finds it but each game's hard count rises by the jumps found there: SoundMain's constant jump into its IWRAM copy (needs a holes-file entry in the lift) and the switch's bx r1. Decide whether a constant jump to a discovered overlay entry should be resolved (Recovery and the lifter's dyn_targets) so it isn't a hole, then extend the cut. Done when: those bytes are discovered in just holes-all --against main, no hard count higher (or the rise explained and agreed), disc-* bars hold, just check passes.",
       "check": "independent",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "51cae3e4",
+        "session": "51cae3e4-5c5f-4c22-8ab6-a591f23922e4",
+        "host": "quack",
+        "pid": 2489918,
+        "start": "10657789",
+        "at": "2026-11-12T07:02:58Z",
+        "branch": "unit/native/copy-tail-discovery",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-12T07:02:46Z",
