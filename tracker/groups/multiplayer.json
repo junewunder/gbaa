@@ -969,6 +969,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T10:03:16Z",
+          "by": "9dc0f7d7",
+          "text": "This branch merges {unit:multiplayer/desktop-wireless-radio}'s branch (not on main when done), so landing it lands that one too. Wireless rooms still start from reset; no leave notice reaches the other seat (the radio has none)."
+        },
+        {
           "at": "2026-11-12T09:36:15Z",
           "by": "2be79df9",
           "text": "gbaa-desktop --wireless works from the command line only ({unit:multiplayer/desktop-wireless-radio}); the Netplay page's Ask has no wireless choice. Fly's server still needs just fly-deploy before W datagrams reach it."
