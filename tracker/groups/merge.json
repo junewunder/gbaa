@@ -247,21 +247,27 @@
       "check": "recorded",
       "lane": "quack/2",
       "branch": "unit/native/lift-bios-affine",
+      "minMinutes": 25,
       "record": {
         "state": "claimed",
-        "by": "d57bd0f8",
-        "session": "d57bd0f8-5b34-449c-b157-3dfc5c512c00",
+        "by": "7fe4f8d3",
+        "session": "7fe4f8d3-4658-453d-a576-783438233da4",
         "host": "quack",
         "pid": 2489427,
         "start": "10657408",
-        "at": "2026-11-12T13:47:28Z",
+        "at": "2026-11-12T13:49:18Z",
         "branch": "unit/native/lift-bios-affine",
-        "resumed": "538fc492",
-        "prevSession": "538fc492-b2c1-497d-aee5-7a032c66a497",
+        "resumed": "d57bd0f8",
+        "prevSession": "d57bd0f8-5b34-449c-b157-3dfc5c512c00",
         "pushed": true,
         "beats": true
       },
       "notes": [
+        {
+          "at": "2026-11-12T13:48:50Z",
+          "by": "d57bd0f8",
+          "text": "merged main again (tracker/ only, clean). just check cut off a third time by the 09:00 stop. Set min-minutes 25 so it starts early: just rerun just check, then record done."
+        },
         {
           "at": "2026-11-12T13:47:04Z",
           "by": "538fc492",
