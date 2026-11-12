@@ -1078,6 +1078,14 @@
       "by": "18d209b3",
       "at": "2026-11-12T06:34:01Z",
       "scope": ["group:multiplayer"]
+    },
+    {
+      "id": "d/a-constant-jump-to-a-ram-copy-s-function-is",
+      "title": "A constant jump to a RAM copy's function is resolved",
+      "why": "From Discover code past m4a's and Nightmare's copy sources ({unit:native/copy-tail-discovery}): a jump to one constant RAM address (m4a's SoundMain into its IWRAM copy, Minish Cap's ROM-to-IWRAM veneers) is Recovery's JumpRes::Ram. It is no more a hole than a constant call: the hole report doesn't count it where an overlay discovered a function at the target, and the lifter jumps to that function (a hole if none is there). Hard total over the corpus 106 to 103. Code discovery then finds that hides a real hole counts it: Nightmare's resume bx r1 (0x08000254) takes it 9 to 10, covered by its task switcher's stand-in.",
+      "by": "b67b3cd7",
+      "at": "2026-11-12T06:37:44Z",
+      "scope": ["group:native"]
     }
   ]
 }
