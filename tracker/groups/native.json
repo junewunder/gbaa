@@ -1617,6 +1617,11 @@
       "uses": ["heavy"],
       "notes": [
         {
+          "at": "2026-11-12T09:30:23Z",
+          "by": "d12ab564",
+          "text": "2026-11-12: agb/native-dma (new, {unit:native/hw-dma-registers}) hits the same hole, a gap in qrcodegen's draw_format_bits (f_08006d23 reads r6); holes/native-dma.toml stands it in with unreachable!. Drop that stand-in when this lands."
+        },
+        {
           "at": "2026-11-12T08:33:14Z",
           "by": "eb7b70bf",
           "text": "Kirby - Nightmare has 5 more hard entry-read holes from the same change ({unit:native/nightmare-entry-reads}); a fix to the rule may cover both."
