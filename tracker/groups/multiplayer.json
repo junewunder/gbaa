@@ -688,19 +688,7 @@
         "by": "7ac5db9e",
         "at": "2026-11-12T05:54:23Z",
         "evidence": "Review fixes made: justfile comment and commands.md entry now describe --rom as a straight CPU-clock trace then the session on its costs, and list --trace/--trace-out; feel::toy doc drops --console. Before/after numbers in docs/research/multiplayer.md (Feel); budget test cargo test -p netplay feel runs in just check, which passed after merging main (commands.md budget raised to 1962 with a reason).",
-        "branch": "unit/multiplayer/rollback-feel-sim",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T05:54:23Z",
-          "by": "7ac5db9e",
-          "host": "quack",
-          "pid": 2489252,
-          "start": "10657014",
-          "beats": true,
-          "session": "7ac5db9e-c4a7-474b-be5e-cb9b9c712ac7",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -708,13 +696,7 @@
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - justfile:1356 (the comment above `rollback-feel-sim`): it says that with `--rom ROM` the sim runs \"a session of interpreted GBAs on ROM, each turn's measured time\". That is the wall-time approach that docs/res…"
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-08T20:59:55Z",
-        "findings": "- justfile:1356 (the comment above `rollback-feel-sim`): it says that with `--rom ROM` the sim runs \"a session of interpreted GBAs on ROM, each turn's measured time\". That is the wall-time approach that docs/research/multiplayer.md (\"Feel\") says was tried and dropped. What the code actually does (`measure` in crates/netplay/src/bin/gbaa-pingsim.rs) is time the ROM once, straight, on the thread's CPU clock, writing a `feel::Trace`, and then run the toy session on those costs. Reword the comment to say that, and add the missing `--trace F` / `--trace-out F` options to its ARGS list and to the feel-sim entry in docs/tools/commands.md (around line 1865), which also leaves them out.\n- crates/netplay/src/feel.rs, the doc comment on `pub fn toy`: it calls this \"`gbaa-pingsim feel --console toy`'s run\", but `feel` has no `--console` option and rejects it as `unknown option`. Change it to \"`gbaa-pingsim feel`'s run\"."
-      },
-      "round": "2026-11-01T01:44:42Z"
+      ]
     },
     {
       "id": "multiplayer/other-seat-sound",
@@ -895,7 +877,19 @@
     {
       "id": "multiplayer/wander-split-under-load",
       "title": "Emerald's netplay trade split once on wander, under load",
-      "detail": "From the link-cable survey (2026-11-08, quack, load average 18 from other lanes): just emerald-netplay-trade wander failed once: player 1 saw player 2 leave at frame 1119, player 2 left at 1144 (its max frame 3400 ms, round trip up to 3439 ms), each played on alone and the end hashes differed. The rerun and calm passed. Find why a 3.4 s stall ended the session (the stopped-answering timeouts are 5 s freeze plus 15 s), and make a stalled peer catch up instead. Check: just emerald-netplay-trade wander passes 5 times in a row with a peer SIGSTOPped for 4 s mid-run; just check."
+      "detail": "From the link-cable survey (2026-11-08, quack, load average 18 from other lanes): just emerald-netplay-trade wander failed once: player 1 saw player 2 leave at frame 1119, player 2 left at 1144 (its max frame 3400 ms, round trip up to 3439 ms), each played on alone and the end hashes differed. The rerun and calm passed. Find why a 3.4 s stall ended the session (the stopped-answering timeouts are 5 s freeze plus 15 s), and make a stalled peer catch up instead. Check: just emerald-netplay-trade wander passes 5 times in a row with a peer SIGSTOPped for 4 s mid-run; just check.",
+      "record": {
+        "state": "claimed",
+        "by": "18d209b3",
+        "session": "18d209b3-06f2-421f-8061-da4ac3c8552e",
+        "host": "quack",
+        "pid": 2489252,
+        "start": "10657014",
+        "at": "2026-11-12T06:02:10Z",
+        "branch": "unit/multiplayer/wander-split-under-load",
+        "beats": true
+      },
+      "round": "2026-11-12T06:02:10Z"
     },
     {
       "id": "multiplayer/wireless-radio-netplay",

@@ -1,0 +1,10 @@
+# Two players on one home Wi-Fi, straight to each other: a few ms, Wi-Fi's
+# jitter, and every 3 s or so a 40 ms stall of 100 ms (the radio scanning
+# or dozing); 1% lost.
+latency_ms = 3
+jitter_ms = 8
+spike_every_s = 3
+spike_ms = 40
+spike_len_ms = 100
+loss = 0.01
+seed = 5
