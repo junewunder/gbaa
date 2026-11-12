@@ -156,6 +156,11 @@ pub struct Frame {
     /// Its stack switches ([`switches`](Frame::switches)): the
     /// instructions that set sp to a value not made from the frame's.
     pub switches: BTreeSet<u32>,
+    /// Its fresh stacks: the instructions that set sp, made from the
+    /// frame's until then, to a constant (the SDK's `SoftReset`, `mov sp,
+    /// r3` with r3 the stack's top, before a reset). Nothing on the old
+    /// stack is reached after one in a function that never returns.
+    pub fresh: BTreeSet<u32>,
 }
 
 impl Frame {
@@ -448,6 +453,8 @@ struct Raw {
     /// r2 a parameter, `ldr sp, [r3]` from a global). A mode change's own
     /// sp isn't one: the `msr` is a hole of its own.
     switches: BTreeSet<u32>,
+    /// Those whose value is a constant ([`Frame::fresh`]), apart.
+    fresh: BTreeSet<u32>,
 }
 
 struct Run<'a, 'e> {
@@ -610,7 +617,11 @@ impl Run<'_, '_> {
                     let restored = matches!(b.insts[root.index()].op,
                         Op::Load { addr, .. } if framed(&vals[addr.index()]));
                     if r == 13 && framed(&s.regs[13]) && !framed(&x) && !restored {
-                        self.raw.switches.insert(born[root.index()]);
+                        let set = match x {
+                            V::Const(_) => &mut self.raw.fresh,
+                            _ => &mut self.raw.switches,
+                        };
+                        set.insert(born[root.index()]);
                     }
                     s.regs[r] = if guarded { s.regs[r].join(&x) } else { x };
                     if r == 13 && !matches!(s.regs[13], V::Sp(_)) {
@@ -695,7 +706,7 @@ fn origin(insts: &[Inst], mut x: ValueId) -> ValueId {
 /// One function's run, from `entry` over `blocks`.
 fn run(entry: u32, blocks: &BTreeMap<u32, FBlock>, env: &dyn Env) -> Raw {
     let mut held = BTreeMap::new();
-    let mut switches = BTreeSet::new();
+    let (mut switches, mut fresh) = (BTreeSet::new(), BTreeSet::new());
     // Each pass's `holds` only grows, and feeds the next: rerun until it
     // stops.
     for _ in 0..8 {
@@ -725,11 +736,13 @@ fn run(entry: u32, blocks: &BTreeMap<u32, FBlock>, env: &dyn Env) -> Raw {
         }
         held = std::mem::take(&mut r.raw.holds);
         switches = std::mem::take(&mut r.raw.switches);
+        fresh = std::mem::take(&mut r.raw.fresh);
     }
     Raw {
         lost: true,
         holds: held,
         switches,
+        fresh,
         ..Raw::default()
     }
 }
@@ -925,6 +938,7 @@ fn resolve(raw: Raw, reads: &dyn Fn(Option<u32>) -> Reads, env: &dyn Env) -> Fra
         places: raw.places,
         flush,
         switches: raw.switches,
+        fresh: raw.fresh,
     }
 }
 

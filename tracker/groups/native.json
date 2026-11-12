@@ -1648,19 +1648,7 @@
         "checker": "a6dfd1e9",
         "at": "2026-11-12T13:35:13Z",
         "evidence": "Prelude prints SoftReset (restart via main), RegisterRamReset, HuffUnComp, SoundDriverVSyncOff. New program agb/native-bios-more (all four, 3 restarts in 600 frames): lift-check pass, 0 differences; all other programs but native-spike (pre-existing hole) pass; after merging main bios-more/region/calls pass; just check passes. Nightmare lifts without the 3 stand-ins (only its 10 entry-read holes). lines_prelude 885->1098: prelude +137 lines for the four routines and restart loop. Verifier a6dfd1e9: PASS.",
-        "branch": "unit/native/lift-bios-more",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T13:35:13Z",
-          "by": "3402e3f4",
-          "host": "quack",
-          "pid": 2489252,
-          "start": "10657014",
-          "beats": true,
-          "session": "3402e3f4-9509-490a-811b-8f126aa4b75b",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -1673,8 +1661,7 @@
           "by": "a7b7e9d7",
           "text": "Emerald's lift (this branch base, 2026-11-12) has a hard 'stack switch' at 0x082e70b2 in the SDK SoftReset stub f_082e70ad (mov sp before swi 1; swi 0): SoftReset's own sp setup, which the stub's lift now reaches. Moonbeam has longjmp's at 0x08038328 too."
         }
-      ],
-      "round": "2026-11-12T11:27:23Z"
+      ]
     },
     {
       "id": "native/lift-psr-boot-irq",
@@ -1730,6 +1717,7 @@
       "detail": "From the overnight lift (2026-11-11, runs/long/overnight-lift.log): gbaa-lift reports 21 'an undefined instruction' hard holes in moonbeam (e.g. f_08006731 at 0x08006966, f_08017a91 at 0x08017b7e), 24 in Emerald Rogue and 2 in Imperium. {unit:native/modern-gcc-data-as-code} fixed discovery's own case, and gbaa-holes doesn't count undefined instructions at all, so these likely come from the lifter's gap decoding (decision: The lifter decodes discovery's gaps itself and lists them) or a function run on past its end. Find which rule takes each, stop it there without losing real code. Done when: the cause of each kind is written in docs/research/native-holes.md, the undefined-instruction holes fall on moonbeam and Rogue with no other hard count higher (just holes-all --against main and the lifts' counts), disc-* bars hold, just check passes.",
       "check": "independent",
       "uses": ["heavy"],
+      "minMinutes": 90,
       "record": {
         "state": "claimed",
         "by": "74679aef",
@@ -1739,8 +1727,18 @@
         "start": "10658170",
         "at": "2026-11-12T13:02:46Z",
         "branch": "unit/native/lift-undefined-insns",
-        "beats": true
+        "beats": true,
+        "handedBack": "2026-11-12T13:43:04Z",
+        "pushed": true,
+        "ended": "2026-11-12T13:43:15Z"
       },
+      "notes": [
+        {
+          "at": "2026-11-12T13:42:55Z",
+          "by": "74679aef",
+          "text": "Code on branch (48b1f0e): traps (udf #255) lift as panic!, SoftReset ends paths. Unverified: moonbeam's gbaa-lift then ran >10 min at 100% CPU, 0.6 GB (overnight <3 min with build); first check whether main's lifter is as slow, then lifts' counts, holes-all, just check."
+        }
+      ],
       "round": "2026-11-12T13:02:46Z"
     },
     {
