@@ -1437,17 +1437,17 @@
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
-        "by": "5cf6c823",
-        "session": "5cf6c823-3eeb-4734-8c09-a83340a43640",
+        "by": "d258b190",
+        "session": "d258b190-7fbc-4544-b0d3-69f7ab7ebcf7",
         "host": "quack",
         "pid": 2489427,
         "start": "10657408",
-        "at": "2026-11-12T08:41:16Z",
+        "at": "2026-11-12T10:57:25Z",
         "branch": "unit/native/fnref-emerald-speed",
-        "beats": true,
-        "handedBack": "2026-11-12T10:56:56Z",
+        "resumed": "5cf6c823",
+        "prevSession": "5cf6c823-3eeb-4734-8c09-a83340a43640",
         "pushed": true,
-        "ended": "2026-11-12T10:57:11Z"
+        "beats": true
       },
       "notes": [
         {
