@@ -237,21 +237,8 @@
         "by": "391251bf",
         "at": "2026-11-12T11:24:18Z",
         "evidence": "Merged origin/main (61773aa) into unit/native/lift-bios-region as 186b4cd: prelude keeps BIOS latch and save-chip accesses, lift-check.toml has both programs with lines_prelude 917; just check passes; just lift-metrics all bars hold except native-spike's hard hole, which is {unit:native/spike-entry-read-hole} on main.",
-        "branch": "unit/native/lift-bios-region",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T11:24:18Z",
-          "by": "391251bf",
-          "host": "quack",
-          "pid": 2489918,
-          "start": "10657789",
-          "beats": true,
-          "session": "391251bf-5b99-4e03-b9d9-351960038018",
-          "lane": "quack/3"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-12T11:16:04Z"
+        "host": "quack"
+      }
     }
   ]
 }

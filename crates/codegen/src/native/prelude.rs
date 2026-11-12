@@ -48,6 +48,10 @@ pub struct Game {
     /// Where a `SoftReset` restarts the program ([`soft_reset`]), while
     /// its `Err(Exit)` unwinds the stack to `main`.
     pub reset: Option<u32>,
+    /// What the BIOS region reads (`runtime::bus::BIOS_LATCH_*`), moved as
+    /// the play build's BIOS moves it: after boot, after a call, in and
+    /// after an IRQ.
+    pub bios_latch: u32,
 }
 
 impl Native for Game {
@@ -98,6 +102,7 @@ impl Game {
             lr: RET,
             tasks: Tasks::default(),
             reset: None,
+            bios_latch: runtime::bus::BIOS_LATCH_AFTER_BOOT,
         });
         // The save chip the ROM's library tag names, as the play build's bus.
         g.hw.save = runtime::save::Save::new(runtime::save::Kind::detect(ROM));
@@ -153,12 +158,14 @@ fn record(g: &mut Game) {
 }
 
 /// The handler the game stored at `0x0300_7FFC` (`IRQ_HANDLER_PTR`), run
-/// as the BIOS's IRQ stub runs it: r0 = `0x0400_0000`, on the IRQ stack.
+/// as the BIOS's IRQ stub runs it: r0 = `0x0400_0000`, on the IRQ stack,
+/// the BIOS region reading the stub's latch in it and after.
 fn irq_entry(g: &mut Game) {
     let h = ld32(g, 0x0300_7FFC);
     if h == 0 {
         return;
     }
+    g.bios_latch = runtime::bus::BIOS_LATCH_IN_IRQ;
     let k = if h & 1 != 0 { h } else { h & !3 };
     // IRQ mode, I set, as the exception enters it; back as it was on the
     // return (the BIOS's `subs pc, lr, #4` restores the SPSR).
@@ -171,7 +178,29 @@ fn irq_entry(g: &mut Game) {
         panic!("a SoftReset (to {to:#010x}) in an IRQ handler, which the native program can't restart from");
     }
     g.cpsr = cpsr;
+    g.bios_latch = runtime::bus::BIOS_LATCH_AFTER_IRQ;
 }
+
+/// A BIOS call has returned: the BIOS region reads the opcode after its
+/// `swi` return, as the play build's.
+pub fn swi_done(g: &mut Game) {
+    g.bios_latch = runtime::bus::BIOS_LATCH_AFTER_SWI;
+}
+
+/// The BIOS region's protection latch, `n` bytes at `a` (BIOS protection:
+/// code outside the BIOS reads the last opcode fetched from it).
+#[inline(never)]
+fn bios_read(g: &Game, a: u32, n: u32) -> u32 {
+    match n {
+        1 => (g.bios_latch >> ((a & 3) * 8)) & 0xFF,
+        2 => (g.bios_latch >> ((a & 2) * 8)) & 0xFFFF,
+        _ => g.bios_latch,
+    }
+}
+
+/// The BIOS's size: past it, the region reads open bus, which the
+/// program doesn't keep.
+const BIOS_SIZE: u32 = 0x4000;
 
 /// The RAM offset of a guest EWRAM or IWRAM address (mirrors included).
 #[inline(always)]
@@ -368,6 +397,7 @@ pub fn ld8(g: &mut Game, a: u32) -> u32 {
             let o = (a & 0x1FF_FFFF) as usize;
             (rom16(o & !1) >> ((o & 1) * 8)) & 0xFF
         }
+        0 if a < BIOS_SIZE => bios_read(g, a, 1),
         0xE | 0xF => g.hw.save.read(a as u16) as u32,
         _ => unmapped("a byte load", a),
     }
@@ -385,6 +415,7 @@ pub fn ld16(g: &mut Game, a: u32) -> u32 {
         7 => le(&g.hw.ppu.oam, (a & 0x3FE) as usize),
         0xD if eeprom_at(g, a) => g.hw.save.eeprom_status() as u32,
         8..=0xD => rom16((a & 0x1FF_FFFE) as usize),
+        0 if a < BIOS_SIZE => bios_read(g, a, 2),
         // The save has an 8-bit bus: wider loads see the byte repeated.
         0xE | 0xF => g.hw.save.read((a & !1) as u16) as u32 * 0x0101,
         _ => unmapped("a halfword load", a),
@@ -404,6 +435,7 @@ pub fn ld32(g: &mut Game, a: u32) -> u32 {
         // ROM (the EEPROM answers halfword loads only, as the play build's).
         8..=0xD => rom16((a & 0x1FF_FFFE) as usize) | rom16((a.wrapping_add(2) & 0x1FF_FFFE) as usize) << 16,
         0xE | 0xF => g.hw.save.read((a & !3) as u16) as u32 * 0x0101_0101,
+        0 if a < BIOS_SIZE => bios_read(g, a, 4),
         _ => unmapped("a word load", a),
     }
 }
@@ -442,8 +474,8 @@ pub fn st8(g: &mut Game, a: u32, v: u32) {
                 g.hw.ppu.vram[o..o + 2].copy_from_slice(&[v, v]);
             }
         }
-        // OAM ignores byte stores; ROM takes none.
-        7..=0xD => {}
+        // OAM ignores byte stores; the BIOS and ROM take none.
+        0 | 1 | 7..=0xD => {}
         0xE | 0xF => g.hw.save.write(a as u16, v),
         _ => unmapped("a byte store", a),
     }
@@ -471,7 +503,7 @@ pub fn st16(g: &mut Game, a: u32, v: u32) {
             g.hw.ppu.oam[o..o + 2].copy_from_slice(&b);
         }
         0xD if eeprom_at(g, a) => g.hw.save.eeprom_write(v as u16, 1),
-        8..=0xD => {}
+        0 | 1 | 8..=0xD => {}
         // The addressed byte lane at the unaligned address, as runtime::bus;
         // mGBA 0.10.5 drops these stores (units/native-save-600.toml).
         0xE | 0xF => g.hw.save.write(a as u16, b[(a & 1) as usize]),
@@ -496,7 +528,7 @@ pub fn st32(g: &mut Game, a: u32, v: u32) {
             st16(g, a, v & 0xFFFF);
             st16(g, a.wrapping_add(2), v >> 16);
         }
-        8..=0xD => {}
+        0 | 1 | 8..=0xD => {}
         0xE | 0xF => g.hw.save.write(a as u16, (v >> ((a & 3) * 8)) as u8),
         _ => unmapped("a word store", a),
     }
@@ -825,12 +857,14 @@ pub fn register_ram_reset(g: &mut Game, flags: u32) {
 /// `SoftReset`, as the play build's (`runtime::bios::soft_reset`): IWRAM's
 /// top 0x200 bytes (the stacks, the IRQ handler's pointer) cleared, then
 /// the program restarts in system mode at the cartridge's entry, or at
-/// EWRAM's start if the byte at `0x0300_7FFA` was non-zero. The restart
-/// is `main`'s: this returns `Err(Exit)` with [`Game::reset`] set, which
-/// every frame passes up as it would a stop. It takes no time.
+/// EWRAM's start if the byte at `0x0300_7FFA` was non-zero, the BIOS
+/// region reading as after boot. The restart is `main`'s: this returns
+/// `Err(Exit)` with [`Game::reset`] set, which every frame passes up as it
+/// would a stop. It takes no time.
 pub fn soft_reset(g: &mut Game) -> Result<(), Exit> {
     let to_ram = ld8(g, 0x0300_7FFA) != 0;
     (EWRAM + 0x7E00..EWRAM + IWRAM).for_each(|o| g.ram[o] = 0);
+    g.bios_latch = runtime::bus::BIOS_LATCH_AFTER_BOOT;
     g.reset = Some(if to_ram { 0x0200_0000 } else { 0x0800_0000 });
     Err(Exit)
 }
@@ -850,8 +884,52 @@ pub fn sound_bias(g: &mut Game, level: u32) {
 pub fn call_fn(g: &mut Game, k: u32, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
     match FNS.binary_search_by_key(&k, |&(e, _)| e) {
         Ok(i) => (FNS[i].1)(g, sp, a),
-        Err(_) => panic!("a call or jump to {k:#010x}, which is no function's entry"),
+        Err(_) => match flash_call(g, k, a) {
+            Some(r) => Ok(r),
+            None => panic!("a call or jump to {k:#010x}, which is no function's entry"),
+        },
     }
+}
+
+/// A call into RAM holding one of the flash save library's stack routines
+/// (known by its bytes) is its `runtime::hw::flash` call on the play
+/// build's chip; the copy never runs. The routines take any memory
+/// (Metroid's SRAM library verifies chip against RAM and back), so the
+/// chip's side goes through `hw::flash`, the other through the bus.
+/// r1-r3 come back as they went in (the callers don't read them).
+fn flash_call(g: &mut Game, k: u32, a: [u32; 4]) -> Option<[u32; 4]> {
+    use runtime::hw::flash::{self as fl, Routine};
+    let bytes = |g: &mut Game, at: u32, n: usize| -> Vec<u8> {
+        (0..n).map(|i| ld8(g, at.wrapping_add(i as u32)) as u8).collect()
+    };
+    matches!(k >> 24, 2 | 3).then_some(())?;
+    let routine = fl::recognise(&bytes(g, k & !1, fl::MAX_LEN))?.routine;
+    let chip = |x: u32| matches!(x >> 24, 0xE | 0xF);
+    let (src, dst, n) = (a[0], a[1], a[2] as usize);
+    let r0 = match routine {
+        Routine::ReadByte if chip(src) => fl::read_byte(&g.hw.save, src) as u32,
+        Routine::ReadByte => ld8(g, src),
+        Routine::Read => {
+            let mut b = vec![0; n];
+            match chip(src) {
+                true => fl::read(&g.hw.save, src, &mut b),
+                false => b = bytes(g, src, n),
+            }
+            (0..n).for_each(|i| st8(g, dst.wrapping_add(i as u32), b[i] as u32));
+            src
+        }
+        // 0, or `dst`'s address of the first byte that differs.
+        Routine::Verify => {
+            let (s, d) = (bytes(g, src, n), bytes(g, dst, n));
+            let at = match (chip(src), chip(dst)) {
+                (_, true) => fl::verify(&g.hw.save, &s, dst).checked_sub(dst),
+                (true, false) => fl::verify(&g.hw.save, &d, src).checked_sub(src),
+                _ => (0..n).position(|i| s[i] != d[i]).map(|i| i as u32),
+            };
+            at.map_or(0, |i| dst.wrapping_add(i))
+        }
+    };
+    Some([r0, a[1], a[2], a[3]])
 }
 
 /// A lifted function's four-register form (`a_<key>` if shaped): sp, r0-r3 in; r0-r3 out.

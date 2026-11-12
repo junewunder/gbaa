@@ -2662,3 +2662,13 @@
 {"at":"2026-11-12T11:24:18Z","actor":"loop","tag":"391251bf","host":"quack","cmd":"done","id":"merge/quack-lane3-native-lift-bios-region","text":"Merge main on quack lane 3: done"}
 {"at":"2026-11-12T11:27:18Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/play-native-metroid-interp","text":"Metroid's native-timing play build strays from its interp: on main"}
 {"at":"2026-11-12T11:27:23Z","actor":"loop","tag":"3402e3f4","host":"quack","cmd":"claim","id":"native/lift-bios-more","text":"Lifted code makes SoftReset, RegisterRamReset and HuffUnComp: claimed"}
+{"at":"2026-11-12T11:33:09Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane3-native-lift-bios-region","text":"Merge main on quack lane 3: on main"}
+{"at":"2026-11-12T11:33:09Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-bios-region","text":"Lifted loads from the BIOS read the play build's latch: on main"}
+{"at":"2026-11-12T11:33:19Z","actor":"loop","tag":"a7b7e9d7","host":"quack","cmd":"claim","id":"native/lift-psr-boot-irq","text":"The lifter handles reset and IRQ-wrapper msr/mrs itself: claimed"}
+{"at":"2026-11-12T11:45:41Z","actor":"loop","tag":"598b2669","host":"quack","cmd":"done","id":"native/check-holes-copies","text":"The native check skips the holes file's RAM code copies: done, checked by a0568327"}
+{"at":"2026-11-12T11:45:45Z","actor":"loop","tag":"598b2669","host":"quack","cmd":"note","id":"native/metroid-native-check","text":"Metroid passes the native check on a route: note: route-check --native now skips the holes file's [[copy]] ranges: pass --name metroid (the ROM's file name doesn't match mods/metroid/), or --holes mods/metroid/holes.toml."}
+{"at":"2026-11-12T11:49:46Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/check-holes-copies","text":"The native check skips the holes file's RAM code copies: on main"}
+{"at":"2026-11-12T11:49:58Z","actor":"loop","tag":"7492320f","host":"quack","cmd":"claim","id":"native/lift-bios-affine","text":"Lifted code makes BgAffineSet and ObjAffineSet: claimed"}
+{"at":"2026-11-12T11:52:30Z","actor":"loop","tag":"928c9e05","host":"quack","cmd":"done","id":"native/lift-flash-routines","text":"The lifter calls hw::flash for the save stack routines: done, checked by verifier-3e91c7"}
+{"at":"2026-11-12T11:57:16Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-flash-routines","text":"The lifter calls hw::flash for the save stack routines: on main"}
+{"at":"2026-11-12T12:02:32Z","actor":"loop","tag":"a7b7e9d7","host":"quack","cmd":"add-unit","id":"native/drop-psr-standins","text":"new unit: Metroid and Nightmare drop their reset and IRQ stand-ins"}
