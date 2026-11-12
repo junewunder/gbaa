@@ -249,15 +249,25 @@
       "branch": "unit/native/lift-bios-affine",
       "record": {
         "state": "claimed",
-        "by": "eae64132",
-        "session": "eae64132-8dca-415e-94e3-91cab1067dc4",
+        "by": "538fc492",
+        "session": "538fc492-b2c1-497d-aee5-7a032c66a497",
         "host": "quack",
         "pid": 2489427,
         "start": "10657408",
-        "at": "2026-11-12T13:43:18Z",
+        "at": "2026-11-12T13:45:46Z",
         "branch": "unit/native/lift-bios-affine",
+        "resumed": "eae64132",
+        "prevSession": "eae64132-8dca-415e-94e3-91cab1067dc4",
+        "pushed": true,
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-12T13:45:18Z",
+          "by": "eae64132",
+          "text": "Merge of main committed (8c4d0c1): NATIVE_BIOS union, lines_prelude 1131 (merged prelude.rs lines), docs list both programs. just check was stopped at the lane's 09:00 stop mid-tests: rerun just check, then record done."
+        }
+      ],
       "round": "2026-11-12T13:43:18Z"
     }
   ]
