@@ -2562,3 +2562,4 @@
 {"at":"2026-11-12T07:01:25Z","actor":"loop","tag":"3454f93a","host":"quack","cmd":"claim","id":"native/fnref-unknown-addrs","text":"Function flow: loads through unknown addresses: claimed"}
 {"at":"2026-11-12T07:02:46Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/copy-tail-discovery","text":"Discover code past m4a's and Nightmare's copy sources: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-12T07:02:58Z","actor":"loop","tag":"51cae3e4","host":"quack","cmd":"claim","id":"native/copy-tail-discovery","text":"Discover code past m4a's and Nightmare's copy sources: claimed"}
+{"at":"2026-11-12T07:03:26Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/task-coroutines","text":"Lifted task switchers run tasks on host coroutines: on main"}
