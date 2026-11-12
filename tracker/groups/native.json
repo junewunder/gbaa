@@ -1203,17 +1203,31 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "b3d0fb3e",
-        "session": "b3d0fb3e-b920-4e56-a4e2-460218715578",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T04:53:30Z",
+        "checker": "a64859a25a26ba9d2",
+        "at": "2026-11-12T05:44:14Z",
+        "evidence": "Verifier (fresh context) PASS: just check exit 0 after merging main; holes-all --against out/holes/2359ecdd-dirty (out/holes/tailcall) names 36 hard entry-read functions, matching the doc's table; soft kinds hold only fully-masked reads and only-jumped ones (Rogue 15, Nightmare 1, moonbeam 1). Review fix: tail calls/falls from called functions count as calls, with a test.",
         "branch": "unit/native/entry-read-masking",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T05:44:14Z",
+          "by": "b3d0fb3e",
+          "host": "quack",
+          "pid": 2489252,
+          "start": "10657014",
+          "beats": true,
+          "session": "b3d0fb3e-b920-4e56-a4e2-460218715578",
+          "lane": "quack/1"
+        },
+        "pushed": true
       },
       "notes": [
+        {
+          "at": "2026-11-12T05:44:18Z",
+          "by": "b3d0fb3e",
+          "text": "No test covers the falls edge (saves.rs sum.falls) or a chain of jumps through the fixpoint; tail-call edge is tested. A fall after the jumper changed r4-r11 is labelled hard (over-hard, safe)."
+        },
         {
           "at": "2026-11-08T23:12:49Z",
           "by": "manual",
@@ -1323,21 +1337,8 @@
         "worker": "6f486280",
         "at": "2026-11-12T05:33:11Z",
         "evidence": "gbaa-holes: kirby-nightmare: hard 9, 426 s",
-        "branch": "unit/native/nightmare-cover-list",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T05:33:11Z",
-          "by": "6f486280",
-          "host": "quack",
-          "pid": 2490379,
-          "start": "10658170",
-          "beats": true,
-          "session": "6f486280-7bc1-4e0a-ac81-c4fb6f851535",
-          "lane": "quack/4"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-12T04:53:41Z"
+        "host": "quack"
+      }
     },
     {
       "id": "native/fnref-unknown-addrs",

@@ -2532,3 +2532,6 @@
 {"at":"2026-11-12T04:53:37Z","actor":"loop","tag":"b67b3cd7","host":"quack","cmd":"claim","id":"native/copy-tail-discovery","text":"Discover code past m4a's and Nightmare's copy sources: claimed"}
 {"at":"2026-11-12T04:53:41Z","actor":"loop","tag":"6f486280","host":"quack","cmd":"claim","id":"native/nightmare-cover-list","text":"Refresh Nightmare's coverage jump list: claimed"}
 {"at":"2026-11-12T05:33:11Z","actor":"loop","tag":"6f486280","host":"quack","cmd":"check","id":"native/nightmare-cover-list","text":"Refresh Nightmare's coverage jump list: now done (its check passes)"}
+{"at":"2026-11-12T05:36:39Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/nightmare-cover-list","text":"Refresh Nightmare's coverage jump list: on main"}
+{"at":"2026-11-12T05:44:14Z","actor":"loop","tag":"b3d0fb3e","host":"quack","cmd":"done","id":"native/entry-read-masking","text":"Tell masked entry reads of r4-r11 from parameters: done, checked by a64859a25a26ba9d2"}
+{"at":"2026-11-12T05:44:18Z","actor":"loop","tag":"b3d0fb3e","host":"quack","cmd":"note","id":"native/entry-read-masking","text":"Tell masked entry reads of r4-r11 from parameters: note: No test covers the falls edge (saves.rs sum.falls) or a chain of jumps through the fixpoint; tail-call edge is tested. A fall after the jumper changed r4-r11 is labelled hard (over-hard, safe)."}
