@@ -1158,6 +1158,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T10:56:36Z",
+          "by": "5cf6c823",
+          "text": "2026-11-12: Emerald's flow now finishes (27:37, 2.1 GB, on Function-address flow on Emerald fast enough to finish's branch) but reports 'didn't settle' after 35,409 runs: a function hit its 64*blocks+64 step bound, not the round bound. Trace prints which ('unsettled after')."
+        },
+        {
           "at": "2026-11-08T18:27:27Z",
           "by": "c06275d9",
           "text": "2026-11-08: Refs (b6d5ed3f) fixed memory: Emerald round 0 flat at 1.5 GB (was >10 GB), entries 5.6M tokens. Not done: too slow to finish (~60 s/500 fns). Split: {unit:native/fnref-emerald-speed} (needed); widening gap {unit:native/fnref-romfrom-absorb}. memory/ file says how to measure."
@@ -1432,25 +1437,33 @@
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
-        "by": "5cf6c823",
-        "session": "5cf6c823-3eeb-4734-8c09-a83340a43640",
+        "by": "d258b190",
+        "session": "d258b190-7fbc-4544-b0d3-69f7ab7ebcf7",
         "host": "quack",
         "pid": 2489427,
         "start": "10657408",
-        "at": "2026-11-12T08:41:16Z",
+        "at": "2026-11-12T10:57:25Z",
         "branch": "unit/native/fnref-emerald-speed",
+        "resumed": "5cf6c823",
+        "prevSession": "5cf6c823-3eeb-4734-8c09-a83340a43640",
+        "pushed": true,
         "beats": true
       },
       "notes": [
         {
+          "at": "2026-11-12T10:56:48Z",
+          "by": "5cf6c823",
+          "text": "2026-11-12: branch ec10365: Emerald round 0 in 437 s (was ~20 min); a run on an earlier build finished: 27:37, 2.1 GB peak, unsettled. Left (~1 h): merging main's rom-read-bound took native-tasks fn_words_not_proven to 59>57 (main 57); speed changes each reverted: same"
+        },
+        {
+          "at": "2026-11-12T10:56:33Z",
+          "by": "5cf6c823",
+          "text": "Then: one timed whole run at HEAD (just long, --mem 9G, GBAA_FNREF_TRACE=1 names the function that stops it settling: 'unsettled after'). Round 1 runs ~256 fns/min. memory/fnref-flow-emerald-memory.md says how to profile with eu-stack (perf is blocked here)."
+        },
+        {
           "at": "2026-11-08T22:44:22Z",
           "by": "9e61b577",
           "text": "main now has a 48M-token bound in fnref::follow (stops unsettled) and G::give_all (shared joins across a by-value call's callees) from {unit:native/whole-lift-memory}; expect a merge in fnref.rs with b6d5ed3f; raise TOKENS if Emerald needs it."
-        },
-        {
-          "at": "2026-11-08T18:34:25Z",
-          "by": "c06275d9",
-          "text": "--callee-sets is on main now (indirect-call-args landed 2026-11-08): no worktree needed; plain gbaa-recompile --summaries ROM --callee-sets under just long --mem 9G. Ref code: b6d5ed3f on {unit:native/fnref-flow-emerald}'s branch."
         }
       ],
       "round": "2026-11-12T08:41:16Z"
@@ -1528,15 +1541,12 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "28dc0a51",
-        "session": "28dc0a51-8c19-468a-a7a7-97e6b429929c",
-        "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T10:28:21Z",
-        "branch": "unit/native/lift-save-memory",
-        "beats": true
+        "checker": "verifier-a7e3c1",
+        "at": "2026-11-12T10:46:14Z",
+        "evidence": "Review fixes made: the prelude st16 and runtime::bus save-store comments now say mGBA 0.10.5 drops unaligned SRAM stores (prelude comment kept at 2 lines for its lines_prelude bar). Merged origin/main; just check green. Verifier re-read the 0xD-0xF arms against runtime::bus, ran lift-check --only native-save: pass, 600 frames, planted strb fault caught at frame 1.",
+        "host": "quack"
       },
       "notes": [
         {
@@ -1544,13 +1554,7 @@
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/native/prelude.rs:456-457: the new comment says the save's 8-bit bus stores the addressed byte lane at the unaligned address \"as the play build's bus, and mGBA\". This unit's own finding says…"
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-12T10:28:09Z",
-        "findings": "- crates/codegen/src/native/prelude.rs:456-457: the new comment says the save's 8-bit bus stores the addressed byte lane at the unaligned address \"as the play build's bus, and mGBA\". This unit's own finding says otherwise. agb/native-save/SCENE.md and units/native-save-600.toml's mgba_why both record that mGBA 0.10.5 drops an unaligned SRAM strh/str, and that this is the whole reason the hashes differ. Change the comment to say it follows the play build's bus (runtime::bus), and note that mGBA 0.10.5 drops these stores (see units/native-save-600.toml). The same wrong claim, \"(as mGBA does)\", is in crates/runtime/src/bus.rs:497-498, which this lane didn't write. Correct it there too so the next reader doesn't take mGBA as agreeing."
-      },
-      "round": "2026-11-12T09:54:28Z"
+      ]
     },
     {
       "id": "native/lift-flash-routines",
@@ -1558,7 +1562,19 @@
       "detail": "docs/native-stage-b.md, 'The first game': the save libraries copy their read and verify routines onto the stack and call them (Metroid's SRAM library at 0x03007d39); the bytes are analysis::flash's agbcc signatures (Read, Verify) and runtime::hw::flash stands in ({unit:native/flash-stack-standin}), but gbaa-lift doesn't call it: call_fn panics, no function's entry. At a call into RAM, recognise the routine and call hw::flash on Hw::save. Done when: a lifted program calling a copied routine runs it as hw::flash (a lift-check program or Metroid's route past its save read), and just check passes.",
       "check": "independent",
       "needs": ["native/lift-save-memory"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "928c9e05",
+        "session": "928c9e05-48b6-4898-9ac3-844e8633b1c0",
+        "host": "quack",
+        "pid": 2490379,
+        "start": "10658170",
+        "at": "2026-11-12T11:13:32Z",
+        "branch": "unit/native/lift-flash-routines",
+        "beats": true
+      },
+      "round": "2026-11-12T11:13:32Z"
     },
     {
       "id": "native/lift-bios-region",
@@ -1567,17 +1583,31 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "9fcf9764",
-        "session": "9fcf9764-90bc-4e3b-8d61-b6f6ae7454c1",
-        "host": "quack",
-        "pid": 2489918,
-        "start": "10657789",
-        "at": "2026-11-12T10:43:38Z",
+        "checker": "subagent-a87d606f",
+        "at": "2026-11-12T11:15:27Z",
+        "evidence": "Fresh verifier subagent: just lift-check --only native-bios-region passed (601 frames, 0 differences, packed layout same); mgba-diff 601 matches route hash 966182bb68b4b4b0, incl. new Halt slot 10 (0xE3A02004: review's AFTER_IRQ fix was wrong, lift-check caught it at frame 3). just check green after merging main (78a8847).",
         "branch": "unit/native/lift-bios-region",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T11:15:27Z",
+          "by": "9fcf9764",
+          "host": "quack",
+          "pid": 2489918,
+          "start": "10657789",
+          "beats": true,
+          "session": "9fcf9764-90bc-4e3b-8d61-b6f6ae7454c1",
+          "lane": "quack/3"
+        },
+        "pushed": true
       },
       "notes": [
+        {
+          "at": "2026-11-12T11:15:32Z",
+          "by": "9fcf9764",
+          "text": "Review's Halt fix was wrong: play build's irq_return finishes Halt's pending call and sets AFTER_SWI; mGBA agrees (test slot 10). Separately, native-spike has a hard hole on main (filed: {unit:native/spike-entry-read-hole}); numbers doc shows it."
+        },
         {
           "at": "2026-11-12T10:43:25Z",
           "by": "manual",
