@@ -1793,19 +1793,7 @@
         "by": "695902dc",
         "at": "2026-11-12T13:49:36Z",
         "evidence": "Cause: summary walked past bl to never-returning panics into agb's panic-path blocks (caller's r6); now a call to a callee that never returns (no stopped hole) ends the path, with a unit test that fails without it. Before merge: just lift-check passed all 12 programs (native-spike 0 hard holes, every route pass) and just check passed. After merging main: just check passes, lift-metrics 0 over/under on all 13, lift-check --only native-bios-more passes. Dropped the native-dma and native-bios-more stand-ins for that panic path.",
-        "branch": "unit/native/spike-entry-read-hole",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T13:49:36Z",
-          "by": "695902dc",
-          "host": "quack",
-          "pid": 2489918,
-          "start": "10657789",
-          "beats": true,
-          "session": "695902dc-510f-4cba-b66c-c882d4c0132f",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -1823,8 +1811,7 @@
           "by": "d12ab564",
           "text": "2026-11-12: agb/native-dma (new, {unit:native/hw-dma-registers}) hits the same hole, a gap in qrcodegen's draw_format_bits (f_08006d23 reads r6); holes/native-dma.toml stands it in with unreachable!. Drop that stand-in when this lands."
         }
-      ],
-      "round": "2026-11-12T13:08:36Z"
+      ]
     },
     {
       "id": "native/nightmare-entry-reads",
