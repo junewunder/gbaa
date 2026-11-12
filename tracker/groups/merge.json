@@ -248,26 +248,12 @@
       "lane": "quack/2",
       "branch": "unit/native/lift-bios-affine",
       "minMinutes": 40,
-      "record": {
-        "state": "done",
-        "by": "e610b9cf",
-        "at": "2026-11-12T13:58:35Z",
-        "evidence": "Merged latest origin/main (clean, tracker/ only). just check failed docs line budget (commands.md 1982/1981); reflowed a list to fit, commit ab5e54e; just check then passed in full (exit 0).",
-        "branch": "unit/native/lift-bios-affine",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T13:58:35Z",
-          "by": "e610b9cf",
-          "host": "quack",
-          "pid": 2489427,
-          "start": "10657408",
-          "beats": true,
-          "session": "e610b9cf-2c66-4b47-a657-583f71674716",
-          "lane": "quack/2"
-        },
-        "pushed": true
-      },
       "notes": [
+        {
+          "at": "2026-11-12T13:58:59Z",
+          "by": "manual",
+          "text": "Merging failed again: merging main conflicts in crates/codegen/lift-check.toml"
+        },
         {
           "at": "2026-11-12T13:52:40Z",
           "by": "aa3b6b9a",
@@ -277,11 +263,6 @@
           "at": "2026-11-12T13:50:47Z",
           "by": "7fe4f8d3",
           "text": "merged main again (tracker/ only, clean, 4758003). Loop still handed this out at 08:49 despite min-minutes 25 (loop bug?); just check cut off a 4th time. Raised to 40. Next: run just check early in a run, then record done."
-        },
-        {
-          "at": "2026-11-12T13:47:04Z",
-          "by": "538fc492",
-          "text": "merged latest main again (only tracker/ changes came in, no conflicts). just check cut off by the 09:00 stop after ~1 min, mid-tests. Next session: rerun just check (needs ~10+ min before stop), then record done."
         }
       ],
       "round": "2026-11-12T13:43:18Z"
