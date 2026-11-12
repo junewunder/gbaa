@@ -1086,6 +1086,23 @@
       "by": "b67b3cd7",
       "at": "2026-11-12T06:37:44Z",
       "scope": ["group:native"]
+    },
+    {
+      "id": "d/a-networked-adapter-lists-only-the-hosts-the",
+      "title": "A networked adapter lists only the hosts the server says are open",
+      "why": "From {unit:multiplayer/wireless-radio-netplay}: the local radio's 3 s host memory (a guess beyond afska's docs) sent the first Connect to a host's ID from before it reopened; without it the sim trade connects first try at 22 and 200 ms each way, and calm passes. --heard-ms N brings it back.",
+      "by": "8f376444",
+      "at": "2026-11-12T07:42:04Z",
+      "scope": ["multiplayer/wireless-*"]
+    },
+    {
+      "id": "d/a-networked-adapter-keeps-the-3-s-host-memory",
+      "title": "A networked adapter keeps the 3 s host memory",
+      "why": "Rerun of the latency sweep (multiplayer.md, 'The radio on the server'): without HEARD_FOR, 100 and 120 ms each way lost BOB's offer from ALICE's board; with it 0-200 ms all trade. Cost: a first Connect to a stale host ID is refused and retried (~100 frames). --heard-ms 0 turns it off.",
+      "by": "4d69fe66",
+      "at": "2026-11-12T08:18:42Z",
+      "scope": ["multiplayer/wireless-*"],
+      "replaces": "d/a-networked-adapter-lists-only-the-hosts-the"
     }
   ]
 }
