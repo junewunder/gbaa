@@ -1729,7 +1729,8 @@
         "branch": "unit/native/lift-undefined-insns",
         "beats": true,
         "handedBack": "2026-11-12T13:43:04Z",
-        "pushed": true
+        "pushed": true,
+        "ended": "2026-11-12T13:43:15Z"
       },
       "notes": [
         {
