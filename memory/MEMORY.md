@@ -19,3 +19,5 @@ Made from each file's frontmatter (`title`, `hook`, `open: true`) by `just memor
 
 Unsettled investigations, one per file with `open: true` and the next step in its hook.
 Drop the flag in the session that settles it.
+
+- [Why the function-address flow ran out of memory on Emerald, and the Ref fix](fnref-flow-emerald-memory.md) — big reads (pile, every cell, ROM tables) are now one Tok::Ref; round 0 holds 1.5 GB but runs ~60 s per 500 fns: speed is next (2026-11-08)
