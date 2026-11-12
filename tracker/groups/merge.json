@@ -224,6 +224,14 @@
         "evidence": "Merged origin/main (24432fa) into the branch as 751b8be: lift-check.toml keeps both native-dma and native-save, lines_prelude 885 (measured by lift-metrics); justfile and commands.md list both. just check passes; just lift-check --only native-save --only native-dma passes (both routes 600 frames, planted faults caught). native-spike's hard hole also fails on clean main 24432fa, already filed as {unit:native/spike-entry-read-hole}.",
         "host": "quack"
       }
+    },
+    {
+      "id": "merge/quack-lane3-native-lift-bios-region",
+      "title": "Merge main on quack lane 3",
+      "detail": "Branch `unit/native/lift-bios-region` holds {unit:native/lift-bios-region}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml crates/codegen/src/native/prelude.rs docs/tools/commands.md justfile. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/3",
+      "branch": "unit/native/lift-bios-region"
     }
   ]
 }
