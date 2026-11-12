@@ -85,7 +85,7 @@
 //! or, for the flash library's stack routines, by [`flash`]'s calls.
 //!
 //! **DMA by its registers** ([`dma_regs`]): a program that sets a channel
-//! up by address (`DMA3SAD` to `DMA3CNT_H`) gets the play build's
+//! up by address (`DMA0SAD` to `DMA3CNT_H`) gets the play build's
 //! channels: latched on enable, an immediate one run at once through the
 //! program's memory ([`Native::dma_load`], [`Native::dma_store`];
 //! [`write_dma`]) and priced on the clock as the play build's store

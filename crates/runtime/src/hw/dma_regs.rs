@@ -115,11 +115,20 @@ impl<G: Native> Hw<G> {
         let ch = self.dma.regs.ch[n];
         match feeds(n, &ch) {
             Some(fifo) if latched => self.fifo_dma(n, fifo, ch.src, control, fifo_word::<G>),
-            Some(_) => {
-                if let Some(d) = self.sound.dma[n - 1].as_mut() {
-                    d.control = control;
+            // Still on: the play build's refill reads the new control (a
+            // timing turned to special feeds the FIFO from the latched
+            // source, with no restart).
+            Some(fifo) => match self.sound.dma[n - 1].as_mut() {
+                Some(d) => d.control = control,
+                None => {
+                    self.sound.dma[n - 1] = Some(super::FifoDma {
+                        fifo,
+                        src: ch.src,
+                        control,
+                        read: fifo_word::<G>,
+                    })
                 }
-            }
+            },
             None => self.fifo_dma_stop(n),
         }
     }
