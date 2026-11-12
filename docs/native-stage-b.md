@@ -104,6 +104,9 @@ any real game.
   sets `g.sp = r13;` before every store that may reach I/O so the
   handler runs on the right stack. Control `--ime-at-waits`; program
   `agb/native-ime-release` (frame 601 matches mGBA).
+- **Task switchers on host coroutines** (`native/task-coroutines`). Done:
+  a stack switch is a hard hole; the prelude's `task_resume` and kin run
+  tasks on coroutines for the stand-ins. Program `agb/native-tasks`.
 
 ### 2. Recognising the agb library
 
