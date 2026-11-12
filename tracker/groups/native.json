@@ -1537,24 +1537,27 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "done",
-        "by": "00024cba",
-        "checker": "verifier-7c3e1a",
-        "at": "2026-11-12T10:23:23Z",
-        "evidence": "Prelude ld/st reach Hw::save at 0x0E-0x0F (byte lanes, byte repeated) and the EEPROM at 0x0D as runtime::bus; Game::new sets Kind::detect(ROM). New lift-check program agb/native-save (SRAM): lift-check --only native-save passed, planted SRAM strb caught (EWRAM 0x020000c4 play 0x00 native 0x01); control without the kind line fails (native reads 0xff). just check passes. Verifier verifier-7c3e1a reran both and compared prelude to bus: pass. lines_prelude 850->874 (eeprom_at, save arms, kind). Route records a known mGBA 0.10.5 mismatch: it drops unaligned SRAM strh/str.",
-        "branch": "unit/native/lift-save-memory",
+        "state": "claimed",
+        "by": "28dc0a51",
+        "session": "28dc0a51-8c19-468a-a7a7-97e6b429929c",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-12T10:23:23Z",
-          "by": "00024cba",
-          "host": "quack",
-          "pid": 2490379,
-          "start": "10658170",
-          "beats": true,
-          "session": "00024cba-14bc-471e-a1bb-2b8d8d83435f",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "pid": 2490379,
+        "start": "10658170",
+        "at": "2026-11-12T10:28:21Z",
+        "branch": "unit/native/lift-save-memory",
+        "beats": true
+      },
+      "notes": [
+        {
+          "at": "2026-11-12T10:28:09Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/native/prelude.rs:456-457: the new comment says the save's 8-bit bus stores the addressed byte lane at the unaligned address \"as the play build's bus, and mGBA\". This unit's own finding says…"
+        }
+      ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-12T10:28:09Z",
+        "findings": "- crates/codegen/src/native/prelude.rs:456-457: the new comment says the save's 8-bit bus stores the addressed byte lane at the unaligned address \"as the play build's bus, and mGBA\". This unit's own finding says otherwise. agb/native-save/SCENE.md and units/native-save-600.toml's mgba_why both record that mGBA 0.10.5 drops an unaligned SRAM strh/str, and that this is the whole reason the hashes differ. Change the comment to say it follows the play build's bus (runtime::bus), and note that mGBA 0.10.5 drops these stores (see units/native-save-600.toml). The same wrong claim, \"(as mGBA does)\", is in crates/runtime/src/bus.rs:497-498, which this lane didn't write. Correct it there too so the next reader doesn't take mGBA as agreeing."
       },
       "round": "2026-11-12T09:54:28Z"
     },
