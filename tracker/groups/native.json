@@ -1562,7 +1562,19 @@
       "detail": "docs/native-stage-b.md, 'The first game': the save libraries copy their read and verify routines onto the stack and call them (Metroid's SRAM library at 0x03007d39); the bytes are analysis::flash's agbcc signatures (Read, Verify) and runtime::hw::flash stands in ({unit:native/flash-stack-standin}), but gbaa-lift doesn't call it: call_fn panics, no function's entry. At a call into RAM, recognise the routine and call hw::flash on Hw::save. Done when: a lifted program calling a copied routine runs it as hw::flash (a lift-check program or Metroid's route past its save read), and just check passes.",
       "check": "independent",
       "needs": ["native/lift-save-memory"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "928c9e05",
+        "session": "928c9e05-48b6-4898-9ac3-844e8633b1c0",
+        "host": "quack",
+        "pid": 2490379,
+        "start": "10658170",
+        "at": "2026-11-12T11:13:32Z",
+        "branch": "unit/native/lift-flash-routines",
+        "beats": true
+      },
+      "round": "2026-11-12T11:13:32Z"
     },
     {
       "id": "native/lift-bios-region",

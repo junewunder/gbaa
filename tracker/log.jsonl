@@ -2648,3 +2648,4 @@
 {"at":"2026-11-12T11:09:20Z","actor":"loop","tag":"5d09211d","host":"quack","cmd":"done","id":"merge/quack-lane4-native-lift-save-memory","text":"Merge main on quack lane 4: done"}
 {"at":"2026-11-12T11:13:23Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane4-native-lift-save-memory","text":"Merge main on quack lane 4: on main"}
 {"at":"2026-11-12T11:13:23Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-save-memory","text":"Lifted code reads and writes the save chip: on main"}
+{"at":"2026-11-12T11:13:32Z","actor":"loop","tag":"928c9e05","host":"quack","cmd":"claim","id":"native/lift-flash-routines","text":"The lifter calls hw::flash for the save stack routines: claimed"}
