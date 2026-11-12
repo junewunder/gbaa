@@ -2630,3 +2630,4 @@
 {"at":"2026-11-12T10:23:23Z","actor":"loop","tag":"00024cba","host":"quack","cmd":"done","id":"native/lift-save-memory","text":"Lifted code reads and writes the save chip: done, checked by verifier-7c3e1a"}
 {"at":"2026-11-12T10:28:09Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-save-memory","text":"Lifted code reads and writes the save chip: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-12T10:28:21Z","actor":"loop","tag":"28dc0a51","host":"quack","cmd":"claim","id":"native/lift-save-memory","text":"Lifted code reads and writes the save chip: claimed"}
+{"at":"2026-11-12T10:38:21Z","actor":"loop","tag":"dd145eb8","host":"quack","cmd":"done","id":"native/lift-bios-region","text":"Lifted loads from the BIOS read the play build's latch: done, checked by verifier-latch-lane3"}
