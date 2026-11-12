@@ -2671,3 +2671,4 @@
 {"at":"2026-11-12T11:49:58Z","actor":"loop","tag":"7492320f","host":"quack","cmd":"claim","id":"native/lift-bios-affine","text":"Lifted code makes BgAffineSet and ObjAffineSet: claimed"}
 {"at":"2026-11-12T11:52:30Z","actor":"loop","tag":"928c9e05","host":"quack","cmd":"done","id":"native/lift-flash-routines","text":"The lifter calls hw::flash for the save stack routines: done, checked by verifier-3e91c7"}
 {"at":"2026-11-12T11:57:16Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-flash-routines","text":"The lifter calls hw::flash for the save stack routines: on main"}
+{"at":"2026-11-12T12:02:32Z","actor":"loop","tag":"a7b7e9d7","host":"quack","cmd":"add-unit","id":"native/drop-psr-standins","text":"new unit: Metroid and Nightmare drop their reset and IRQ stand-ins"}
