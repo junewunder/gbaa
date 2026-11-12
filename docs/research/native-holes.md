@@ -369,7 +369,8 @@ value returned in r0-r3 that a caller's own instruction reads (agbcc's
 
 - `reads r4-r11 at entry` (hard): a use, in a function entered by a call
   (`bl`, a complete indirect set, or a pointer: the key as a ROM word),
-  whose `Regs::call` zeroes r4-r12.
+  whose `Regs::call` zeroes r4-r12. Not after a `bl` to a function that
+  never returns: agb's panic paths, branched into with the caller's r6.
 - `masks away r4-r11's entry bits` (soft): every bit cleared before any
   use, agbcc's word built byte by byte in an unset register.
 - `reads r4-r11 at entry, only jumped into` (soft): no `bl` or pointer
@@ -378,9 +379,8 @@ value returned in r0-r3 that a caller's own instruction reads (agbcc's
   from a frame record (`add r7, sp, #12` at the saved r7); natively the
   walk finds no frames. Only the agb programs have it.
 
-A value that holds entry bits on one path and not another is unknown at
-the merge, as before (a path that can't happen, or a C local never set):
-counting those made LLVM's paths in agb hard.
+A value with entry bits on one path only is unknown at the merge, as
+before (an impossible path, an unset C local): counting them made agb hard.
 
 Summary holes that are hard, before and after (`just holes-all --against`):
 3 entry readers (of 5 summary holes) and 36; corpus hard 130 and 139. The 36, from the report:
