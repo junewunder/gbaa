@@ -950,6 +950,10 @@
         }
       },
       "round": "2026-11-12T09:13:28Z"
+    },
+    {
+      "id": "multiplayer/menu-wireless-room",
+      "title": "Host or join a wireless room from the window's menu"
     }
   ]
 }
