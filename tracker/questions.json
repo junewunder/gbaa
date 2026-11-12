@@ -1512,7 +1512,13 @@
         "host": "quack",
         "unit": "native/fnref-romfrom-absorb"
       },
-      "answer": null
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "d06a24f2",
+        "at": "2026-11-08T23:18:08Z",
+        "decision": "d/raise-lift-bars-rom-widening"
+      }
     }
   ]
 }

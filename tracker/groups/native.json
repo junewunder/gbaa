@@ -1203,31 +1203,33 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "review",
-        "by": "71b3ef7c",
-        "at": "2026-11-08T23:08:30Z",
-        "evidence": "just check passes after merging main (67e15d7). just lift-metrics: every agb program within its bars, 0 hard holes. just holes-all --against out/holes/erm-base (base = main before the change): summary hard 3 -> 36, total hard 106 -> 139, each named and sorted by cause in docs/research/native-holes.md 'Entry reads of r4-r11, by the bits that survive', with the corpus's fully masked reads listed. Unit tests: masked soft, address/condition/store/callee argument/read return hard, jumped-only soft. Reports: out/holes/erm-new3.",
-        "branch": "unit/native/entry-read-masking",
+        "state": "claimed",
+        "by": "b3d0fb3e",
+        "session": "b3d0fb3e-b920-4e56-a4e2-460218715578",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-08T23:08:30Z",
-          "by": "71b3ef7c",
-          "host": "quack",
-          "pid": 3349268,
-          "start": "14822772",
-          "beats": true,
-          "session": "71b3ef7c-8885-4bbe-b9b9-e52b241115bb",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "pid": 2489252,
+        "start": "10657014",
+        "at": "2026-11-12T04:53:30Z",
+        "branch": "unit/native/entry-read-masking",
+        "beats": true
       },
       "notes": [
+        {
+          "at": "2026-11-08T23:12:49Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/saves/summary.rs:733-777 and :919-952 (the `bl` map and the `readers.difference(&called)` relabel to `JUMPED_READ`): tail calls are left out on purpose (`.filter_map(|(&at, &c)| c.filter(|&c…"
+        },
         {
           "at": "2026-11-08T23:08:44Z",
           "by": "71b3ef7c",
           "text": "Rules settled by corpus reruns: a merge of entry bits with anything else is unknown (else LLVM paths go hard); returned entry bits count only if a caller's own instruction reads them (agbcc pop {r3}; mov r8, r3). 7 of the 36 hard not looked into (doc)."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-08T23:12:49Z",
+        "findings": "- crates/codegen/src/saves/summary.rs:733-777 and :919-952 (the `bl` map and the `readers.difference(&called)` relabel to `JUMPED_READ`): tail calls are left out on purpose (`.filter_map(|(&at, &c)| c.filter(|&c| c != at))`). So a function reached only by a tail call or a fall is marked `reads r4-r11 at entry, only jumped into` (soft). The reason given, \"takes every register through its extended entry\", is only true if the function that jumps in had real r4-r11 itself. In saves.rs:384-396 a tail call needs `s.kept()`, so the callee gets the tail-caller's own entry r4-r11. The lift's `fall_into` (native.rs:1886) passes the caller's locals r4..r11. If that caller was entered by a `bl` or a pointer, `Regs::call` zeroed those locals, so the callee reads 0 where the game has a real value. Nothing reports this: the tail-caller's walk (`sum.call(&mut after, Some(to), to)`) passes on only r0-r3 parameters, not the callee's entry reads of r4-r11. That is the silent wrong lift this unit exists to catch. Fix: decide 'only jumped into' over all the ways in. Keep a function's entry reads soft only if every function that tail-calls it or falls into it is itself only jumped into (a fixpoint over tail-call sites, `c == at` in `sum.sites`, and over falls). Otherwise keep them hard. The simplest version is to count tail-call targets and fall targets as `called`. Add a test: `g` is reached by a pointer in the ROM, `g` tail-calls `f` with `b`, and `f` reads its entry r5 (`ldr r0, [r5]`). It should give a hard `reads r4-r11 at entry` hole. Then rerun `just holes-all --against` and update the counts and lists in docs/research/native-holes.md (the 36 hard ones and the 'Only jumped into' list: Rogue's 13 fragments, Nightmare 0x0804c489, moonbeam 0x08038310), since some of those may now be hard."
+      },
       "round": "2026-11-08T21:00:00Z"
     },
     {
@@ -1273,14 +1275,38 @@
       "title": "Lifted task switchers run tasks on host coroutines",
       "detail": "Shared code for {unit:native/nightmare-task-switch} (docs/research/native-holes.md, 'Kirby: Nightmare's task switcher'). The lifter doesn't count a stack switch (mov sp, rN; ldr sp, [rN]) as a hard hole: on Nightmare it lifts 0x08000244/0x08000278/0x08000298 silently, though gbaa-holes counts them. Make it hard there too, and give stand-ins a prelude facility: run a task's lifted code on a stackful coroutine (corosensei, as crates/desktop/src/coro.rs; the generated crate's Cargo.toml gains it), keyed by the guest sp it saved; resume starts or resumes, yield/exit suspend with the values the scheduler reads. Test it on an agb program with a small ARM switcher of that shape (resume, yield with a frame count, exit) and 3+ tasks, as a lift-check case with a stand-in and a planted control. Done when: lift-check green with the case, its bars set; just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "21ac895a",
+        "session": "21ac895a-0051-45ec-874a-3fad33b396f8",
+        "host": "quack",
+        "pid": 2489427,
+        "start": "10657408",
+        "at": "2026-11-12T04:53:34Z",
+        "branch": "unit/native/task-coroutines",
+        "beats": true
+      },
+      "round": "2026-11-12T04:53:34Z"
     },
     {
       "id": "native/copy-tail-discovery",
       "title": "Discover code past m4a's and Nightmare's copy sources",
       "detail": "{unit:native/kirby-undiscovered} left two kinds of ROM code inside a BIOS copy's source undiscovered on purpose (docs/research/native-holes.md, What discovery misses): m4a's SoundMainRAM copy ends in the bx r3 stub SoundMain calls in ROM, hiding SoundMain's tail (38 bytes, every m4a game), and Nightmare's crt0 copy runs into its coroutine switch at 0x08000234, entered by a veneer's ARM b (36 bytes, and 44 after calls into it). Extending discovery::copy_cuts to them (stub targets, b targets) finds it but each game's hard count rises by the jumps found there: SoundMain's constant jump into its IWRAM copy (needs a holes-file entry in the lift) and the switch's bx r1. Decide whether a constant jump to a discovered overlay entry should be resolved (Recovery and the lifter's dyn_targets) so it isn't a hole, then extend the cut. Done when: those bytes are discovered in just holes-all --against main, no hard count higher (or the rise explained and agreed), disc-* bars hold, just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "b67b3cd7",
+        "session": "b67b3cd7-bb29-4ef9-8053-574c0e6d691c",
+        "host": "quack",
+        "pid": 2489918,
+        "start": "10657789",
+        "at": "2026-11-12T04:53:37Z",
+        "branch": "unit/native/copy-tail-discovery",
+        "beats": true
+      },
+      "round": "2026-11-12T04:53:37Z"
     },
     {
       "id": "native/nightmare-cover-list",
@@ -1290,7 +1316,28 @@
       "probe": {
         "cmd": "just holes-all --only kirby-nightmare --cover --out out/holes/nightmare-cover"
       },
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "check",
+        "worker": "6f486280",
+        "at": "2026-11-12T05:33:11Z",
+        "evidence": "gbaa-holes: kirby-nightmare: hard 9, 426 s",
+        "branch": "unit/native/nightmare-cover-list",
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T05:33:11Z",
+          "by": "6f486280",
+          "host": "quack",
+          "pid": 2490379,
+          "start": "10658170",
+          "beats": true,
+          "session": "6f486280-7bc1-4e0a-ac81-c4fb6f851535",
+          "lane": "quack/4"
+        },
+        "pushed": true
+      },
+      "round": "2026-11-12T04:53:41Z"
     },
     {
       "id": "native/fnref-unknown-addrs",
@@ -1335,12 +1382,6 @@
       "title": "Flow's ROM from-here-on widening keeps pointers it reads",
       "detail": "Val::cap lets RomFrom(lo) absorb Rom(a) for any a >= lo, but rom_from(lo) reads only up to the next code, so a pointer past it is never read and a call through it may get a complete callee set missing callees. Seen in mosaic-modes (found by {unit:native/fnref-flow-emerald}): fn 0x080037f1 (core::fmt pad) r0 widens to RomFrom(0x08000100), absorbing vtable Rom(0x08024c50); word 0x08024c5c (f_08002ee1) was read only transiently before. Make the widening keep such pointers (mark lost_rom, or don't absorb past bound) with a unit test; just lift-metrics bars hold (lower any that drop).",
       "check": "recorded",
-      "record": {
-        "state": "blocked",
-        "on": "q/raise-lift-bars-rom-widening",
-        "by": "b9262a93",
-        "at": "2026-11-08T19:20:26Z"
-      },
       "notes": [
         {
           "at": "2026-11-08T19:20:32Z",
@@ -1362,7 +1403,14 @@
       "title": "DMA by its registers in the hardware library",
       "detail": "docs/native-stage-b.md, 'The first game': a lifted program's store to a DMA register (0x0B0-0x0DF) panics in Hw::write16 (Metroid's m4a SoundInit, DMA1/2CNT = 0x84400004). Keep the channels' registers in Hw (read16/raw16), latch on enable as runtime::dma::control_written, run immediate transfers through the program's memory (a Native hook, as FifoDma's read), price them on the clock as the play build's io_write (io.now += cycles, no sync), repeat at V-blank and H-blank, a special start aimed at a FIFO as Hw::fifo_dma, the IRQ at the end; the prelude's io_write16/io_read16 route them. Done when: an agb program setting up each start by address passes just lift-check (a planted wrong control word caught), and just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-11T15:50:55Z",
+          "by": "6a8b662c",
+          "text": "2026-11-11: overnight Metroid and Nightmare native builds both panic before frame 1 (headless): Metroid at I/O 0x0d4 (DMA3SAD), Nightmare at 0x0ba (DMA0CNT_H). This blocks both from a first frame; rerun both after it lands to find the next."
+        }
+      ]
     },
     {
       "id": "native/lift-save-memory",
@@ -1405,6 +1453,57 @@
       "title": "Lifted code makes SoftReset, RegisterRamReset and HuffUnComp",
       "detail": "Left out of {unit:native/lift-bios-calls}: the lifter's prelude (NATIVE_BIOS) has no swi 0x00 SoftReset, 0x01 RegisterRamReset, 0x13 HuffUnComp, 0x28 SoundDriverVSyncOff. 0x00/0x01 are reached in Nightmare, Rogue, Imperium, Emerald, Mariomon (docs/research/bios-calls.md); SoftReset needs a way for a native program to restart (no Exit for it today). Nightmare stands in for the stubs in mods/kirby-nightmare/holes.toml (Huffman ported, VSyncOff a no-op, SoftReset panics); drop those stand-ins after. Done when: the lifter prints all four (over runtime::bios's logic as lz77/rl do), lift-check green with a case per call, Nightmare lifts without the three stand-ins; just check passes.",
       "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-psr-boot-irq",
+      "title": "The lifter handles reset and IRQ-wrapper msr/mrs itself",
+      "detail": "From the overnight lift (2026-11-11, runs/long/overnight-lift.log): every one of the seven games that failed to lift has 2-5 msr/mrs hard holes, nearly all in the reset code at 0x08000000 and the IRQ wrapper. analysis::holes::classify already returns these as CpuWhere::Boot and CpuWhere::Wrapper (recognised, not holes; docs/research/native-holes.md, What the Stage-A lifter should know), but the lifter still makes them hard, and Metroid and Kirby Nightmare get past them only by hand stand-ins in mods/<game>/holes.toml. Have the lifter print the reset's mode switches and stack setup as the program's start and the IRQ wrapper's PSR saves as runtime::hw IRQ entry/exit (keep The native-timing play build takes an IRQ the I bit held as soon as an msr clears I), so no game needs these stand-ins; msr/mrs anywhere else stay hard. Done when: no Boot/Wrapper msr/mrs is a hard hole on the corpus (just holes-all --against main, the lift's counts), Metroid and Nightmare still lift and build with their reset and IRQ-wrapper stand-ins removed (or the reason one stays written down), lift-check green, just check passes.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-bios-affine",
+      "title": "Lifted code makes BgAffineSet and ObjAffineSet",
+      "detail": "From the overnight lift of the nine corpus games (2026-11-11, runs/long/overnight-lift.log): swi 0x0E BgAffineSet and 0x0F ObjAffineSet aren't in analysis::holes::NATIVE_BIOS, so each is a hard hole in Minish Cap, Emerald, Emerald Rogue and Imperium (docs/research/bios-calls.md lists the callers). Add both to the lifter's prelude over runtime::bios's math, as {unit:native/lift-bios-calls} did for its calls, with a lift-check case each (an agb test program calling them). lines_prelude may rise (say how many and why). Done when: lift-check green with a case per call, gbaa-holes and gbaa-lift both stop counting 0x0E/0x0F on those four games (just holes-all --against main), just check passes.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-undefined-insns",
+      "title": "Find why moonbeam's and Rogue's lifts decode data as code",
+      "detail": "From the overnight lift (2026-11-11, runs/long/overnight-lift.log): gbaa-lift reports 21 'an undefined instruction' hard holes in moonbeam (e.g. f_08006731 at 0x08006966, f_08017a91 at 0x08017b7e), 24 in Emerald Rogue and 2 in Imperium. {unit:native/modern-gcc-data-as-code} fixed discovery's own case, and gbaa-holes doesn't count undefined instructions at all, so these likely come from the lifter's gap decoding (decision: The lifter decodes discovery's gaps itself and lists them) or a function run on past its end. Find which rule takes each, stop it there without losing real code. Done when: the cause of each kind is written in docs/research/native-holes.md, the undefined-instruction holes fall on moonbeam and Rogue with no other hard count higher (just holes-all --against main and the lifts' counts), disc-* bars hold, just check passes.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/holes-match-lift",
+      "title": "The hole report counts what the lifter counts",
+      "detail": "From the overnight run (2026-11-11): gbaa-holes' hard count and gbaa-lift's disagree on every game (out/holes/overnight-2026-11-10/summary.toml against runs/long/overnight-lift.log: Minish Cap 30 against 53, Rogue 23 against 55, moonbeam 3 against 28, Imperium 20 against 30). Known gaps: gbaa-holes doesn't count undefined instructions, takes Boot/Wrapper msr/mrs as recognised where the lifter doesn't (until {unit:native/lift-psr-boot-irq}), and finds RAM copies with a run where the lifter needs [[copy]] in the holes file. Make gbaa-holes report the lifter's hard holes, by kind, from the same code (or list each difference and why it is right), so 'what blocks a native build' has one answer. Done when: on the nine corpus games gbaa-holes' hard count per kind equals the lift's (holes files applied), or each remaining difference is named in docs/research/native-holes.md; just check passes.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/mirror-lifts",
+      "title": "Kirby Amazing Mirror lifts with no hard holes and builds",
+      "detail": "As {unit:native/metroid-lifts} and {unit:native/nightmare-lifts}. The overnight lift (2026-11-11, just lift --name kirby-mirror, runs/long/overnight-lift.log) gave 5613 functions and 5 hard holes: 2 msr in the reset (0x080000c4, 0x080000d0; gone with {unit:native/lift-psr-boot-irq}), swi 0x01 and 0x00 at 0x08159326/0x08159328 (gone with {unit:native/lift-bios-more}), and an unresolved jump at 0x080001bc in f_080000fc. Write mods/kirby-mirror/holes.toml with that jump's targets from a run (holes/coverage) and skip_fn_flow if the fn flow needs it. Done when: the lift exits 0 and its crate builds in release under just long; lines, build time and peak RAM quoted in docs/native-stage-b.md; just check passes.",
+      "check": "independent",
+      "needs": ["native/lift-bios-more", "native/lift-psr-boot-irq"],
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/native-first-stop",
+      "title": "Each built native game runs headless; report where it stops",
+      "detail": "From the overnight run (2026-11-11): Metroid and Nightmare lift and build, but both panic before frame 1 on an unmodelled I/O register (Hw::write16, hw.rs) and no tool reported it, so 'built' overstated them. After a lift builds, run gbaa-native-<game> --headless --frames N (under MemoryMax) and report how many frames it drew and where it stopped: the panic's kind (unmodelled register by address and name, unknown BIOS region read, Exit) and the guest function and pc when known. Put it in the lift's report.txt and metrics.toml (frames_run, stop kind) and in gbaa-holes' corpus summary beside the hard holes, so a stop counts as the next hole. Done when: Metroid and Nightmare show their DMA stops (until {unit:native/hw-dma-registers} lands), a lift-check program shows 600 frames and no stop, just check passes.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/nightly-corpus",
+      "title": "A nightly command over the corpus, diffed with last night",
+      "detail": "The 2026-11-11 overnight run (hole report, gameplay and readable builds, and gbaa-lift of all nine games in holes/corpus.toml, about 3 hours on quack) was a throwaway shell script. Make it a recipe driven by holes/corpus.toml in Rust (no bash logic): per game the hole report, the play build, the lift with its holes file (corpus.toml gains each game's --name for lift), the build, and {unit:native/native-first-stop}'s headless run; one game failing doesn't stop the rest; run under just long with the build lock and MemoryMax. Write out/nightly/<date>/summary.toml and a short summary.txt per game (hard holes by kind, built or not, frames run and stop) with what changed against the previous night's. Done when: one full run on quack writes both files and a second run's diff names a change made between them; docs/tools/commands.md has the entry; just check passes.",
+      "check": "independent",
+      "needs": ["native/native-first-stop"],
       "uses": ["heavy"]
     }
   ]
