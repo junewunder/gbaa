@@ -920,14 +920,17 @@ fn line_event<G: Native>(g: &mut G) -> Result<bool, Exit> {
             cycles += f(g) as u64;
         }
     }
-    cycles += dma_regs::trigger(g, crate::dma::Timing::VBlank) as u64;
+    let by_regs = dma_regs::trigger(g, crate::dma::Timing::VBlank) as u64;
+    cycles += by_regs;
     let hw = g.hw();
     hw.sound.io.now += cycles;
     hand_off(hw);
     // The play build records the frame after its sync's last walk of the
     // timers, which reaches past the V-blank DMA's price: a FIFO refill
-    // (and its IRQ request) that fell in it is in the record.
-    if cycles != 0 {
+    // (and its IRQ request) that fell in it is in the record. Only for the
+    // channels set up by their registers: the typed copies' programs keep
+    // the timing they were checked at.
+    if by_regs != 0 {
         run_sound(g);
     }
     let hw = g.hw();
