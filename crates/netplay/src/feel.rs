@@ -749,7 +749,7 @@ fn feel<C: Snapshot>(seat: usize, p: &mut Rollback<C, Endpoint>, f: &mut Front) 
 /// Feel through `profile` with `players` seats of the toy console, each
 /// pressing what `scripts[seat]` says, every peer's window as `window`
 /// gives (by seat), its turns costing what `cost` says; `frames` frames. The
-/// test's and `gbaa-pingsim feel --console toy`'s run.
+/// test's and `gbaa-pingsim feel`'s run.
 pub fn toy(
     profile: &Profile,
     scripts: &[crate::script::Script],
