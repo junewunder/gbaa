@@ -1656,7 +1656,19 @@
       "title": "The native check skips the holes file's RAM code copies",
       "detail": "docs/native-stage-b.md, 'The first game': route-check --native skips the destinations of Discovery::copies only; a commercial game's IWRAM copies come from its holes file's [[copy]] entries (Metroid's five, mods/metroid/holes.toml), which the native program runs as Rust and never writes, so they would differ. Skip them too (the lifter's holes file, given to route-check or found by the game's name). Done when: Metroid's route-check --native prints those ranges as not compared, a unit test covers it, and just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "598b2669",
+        "session": "598b2669-ad9d-445e-93b5-80339472ed46",
+        "host": "quack",
+        "pid": 2489427,
+        "start": "10657408",
+        "at": "2026-11-12T11:24:07Z",
+        "branch": "unit/native/check-holes-copies",
+        "beats": true
+      },
+      "round": "2026-11-12T11:24:07Z"
     },
     {
       "id": "native/lift-bios-more",
