@@ -932,15 +932,22 @@
       "detail": "gbaa-desktop has no wireless adapter yet. Give it a networked one (Wireless::networked + netplay::radio::Radio, as emerald-wireless --seat does): --server ADDR --wireless host/join, each window runs only its own Emerald, real time. Check: two windows in a private cu session through a local gbaa-server trade in the Union Room. The fly server needs a redeploy for W datagrams.",
       "needs": ["multiplayer/wireless-radio-netplay"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "688d2c6c",
-        "session": "688d2c6c-811f-498f-b882-1534237ece2b",
-        "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T09:42:37Z",
+        "at": "2026-11-12T09:46:24Z",
+        "evidence": "Review fix made: --rogue usage line realigned to column 20 (63e2cd3, whitespace only). Union Room check from 2026-11-12 on quack stands: two windows in a private cu session through a local gbaa-server traded (BOB sent over TORCHIC / ALICE sent over MUDKIP), 10600 frames, 0 late, 0 resent. Main merged (582c725); just check passed after the merge.",
         "branch": "unit/multiplayer/desktop-wireless-radio",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T09:46:24Z",
+          "by": "688d2c6c",
+          "host": "quack",
+          "pid": 2490379,
+          "start": "10658170",
+          "beats": true,
+          "session": "688d2c6c-811f-498f-b882-1534237ece2b",
+          "lane": "quack/4"
+        }
       },
       "notes": [
         {
