@@ -259,7 +259,8 @@
         "resumed": "eae64132",
         "prevSession": "eae64132-8dca-415e-94e3-91cab1067dc4",
         "pushed": true,
-        "beats": true
+        "beats": true,
+        "ended": "2026-11-12T13:47:15Z"
       },
       "notes": [
         {
