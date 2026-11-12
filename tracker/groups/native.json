@@ -1737,6 +1737,13 @@
         "branch": "unit/native/holes-match-lift",
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-12T13:07:28Z",
+          "by": "5b99a863",
+          "text": "Lift holes are found while printing (FnPrinter::hole, native.rs ~1380-2156): no cheap scan. Full lift is 15G/minutes (heap 370s). Idea: Hole gets a kind enum; lift() holes-only mode skipping fn_flow+heap+modules, called by gbaa-holes; check summaries w/o sets match."
+        }
+      ],
       "round": "2026-11-12T13:06:00Z"
     },
     {
