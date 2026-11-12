@@ -13,6 +13,11 @@ path = "src/main.rs"
 name = "gbaa-timing-report"
 path = "src/bin/timing_report.rs"
 
+# What a 60 Hz display shows of a game's frames (src/present.rs).
+[[bin]]
+name = "gbaa-present-sim"
+path = "src/bin/present_sim.rs"
+
 [dependencies]
 runtime = { path = "../runtime" }
 # The native check's per-frame record (`--native-record`).
