@@ -1082,7 +1082,8 @@
         "branch": "unit/native/nightmare-task-switch",
         "beats": true,
         "handedBack": "2026-11-12T08:40:45Z",
-        "pushed": true
+        "pushed": true,
+        "ended": "2026-11-12T08:41:01Z"
       },
       "notes": [
         {
