@@ -919,6 +919,13 @@
           "text": "The local adapter's one guess beyond afska's docs: a searching adapter lists a host it heard for 3 s across searches (Adapter::heard); without it BOB's board offer rarely reached ALICE. Check whether the networked radio still needs it."
         }
       ]
+    },
+    {
+      "id": "multiplayer/stall-catch-up-paced",
+      "title": "Netplay: a peer back from a stall catches up in seconds",
+      "detail": "From Emerald's netplay trade split once on wander, under load ({unit:multiplayer/wander-split-under-load}): a stall now survives (room::QUIET 8 s), but a paced peer back from a 4 s stall stays ~240 frames behind; time sync holds the one ahead back one frame in 13, so ~50 s at that gap, each changed input a ~240-frame rollback on it (3.7 s under load). Make the gap close in a few seconds (the behind peer running unpaced frames, or holding back harder far ahead), without hurting rollback-feel's budgets. Check: just rollback-feel wander headless --paced with a peer SIGSTOPped 4 s: lead back under 10 frames within 10 s; the feel budget test; just check.",
+      "check": "recorded",
+      "uses": ["heavy"]
     }
   ]
 }
