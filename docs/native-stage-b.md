@@ -351,19 +351,14 @@ What the done pieces left open, for the units that come next.
   code) calls them, and a jump by value the run didn't prove a return
   adds r0 to every function. `native/indirect-call-args` and the stack
   units narrow those as the summaries' holes close.
-- **The pile** (piece 3, function addresses). agb keeps closures and
-  trait objects on the heap, and every heap store goes to one pile, so a
-  load through any heap pointer may give every function address stored
-  there, and one such load used as a number marks them all: most words
-  aren't proven, and each `call_fn` set, though complete, is every
-  address-taken function (17 on the spike). Splitting the pile by the
-  value-set bounds on each store proved nothing more (agb's heap stores
-  aren't bounded) and was nine times slower; the heap by allocation site
-  and field (`native/fnref-heap-sites`) is what dense IDs need. Measured
-  on its branch with call-site context on top (`native/fnref-context`,
-  k = 1), neither moved a word: about 640 of affine's load sites have an
-  address that may be unknown (pointers the allocator makes by
-  arithmetic among them), and each reads the pile and every RAM cell.
+- **The pile** (piece 3, function addresses). One pile held every heap
+  store, so one heap load used as a number marked every function stored
+  there (each `call_fn` set is every address-taken function). Objects by
+  allocation site (`native/fnref-heap-sites`), call-site context
+  (`native/fnref-context`) and RAM pointers kept apart from other
+  unknowns (`native/fnref-unknown-addrs`: affine's loads that read every
+  cell, 623 sites to 8) are on that unit's branch; no word moved yet: ROM
+  reads run past their tables (`native/fnref-rom-read-bound`).
 - **Function-address flow, smaller gaps** (for `native/fnref-dense`).
   Proofs are per origin, and a pool load folded from a non-pc-relative
   address gets a code-constant origin, so dense needs per-site constant
