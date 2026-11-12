@@ -88,6 +88,8 @@ impl Game {
             lr: RET,
             tasks: Tasks::default(),
         });
+        // The save chip the ROM's library tag names, as the play build's bus.
+        g.hw.save = runtime::save::Save::new(runtime::save::Kind::detect(ROM));
         g.hw.irq.set_handler(irq_entry);
         g.hw.on_frame_end(record);
         g
@@ -320,6 +322,15 @@ fn rom16(o: usize) -> u32 {
     }
 }
 
+/// Whether `a` reaches the EEPROM: all of `0D` behind a ROM of up to
+/// 16 MB, its last 256 bytes behind a larger one (the play build's
+/// `Bus::eeprom_at`).
+fn eeprom_at(g: &Game, a: u32) -> bool {
+    g.hw.save.kind == runtime::save::Kind::Eeprom
+        && a >> 24 == 0xD
+        && (ROM.len() <= 16 << 20 || a & 0x00FF_FF00 == 0x00FF_FF00)
+}
+
 #[inline(never)]
 fn unmapped(what: &str, a: u32) -> ! {
     panic!("{what} at {a:#010x}: no memory the program has there")
@@ -338,6 +349,7 @@ pub fn ld8(g: &mut Game, a: u32) -> u32 {
             let o = (a & 0x1FF_FFFF) as usize;
             (rom16(o & !1) >> ((o & 1) * 8)) & 0xFF
         }
+        0xE | 0xF => g.hw.save.read(a as u16) as u32,
         _ => unmapped("a byte load", a),
     }
 }
@@ -352,7 +364,10 @@ pub fn ld16(g: &mut Game, a: u32) -> u32 {
         5 => le(&g.hw.ppu.palette, (a & 0x3FE) as usize),
         6 => vram_at(g, a).map_or(0, |o| le(&g.hw.ppu.vram, o)),
         7 => le(&g.hw.ppu.oam, (a & 0x3FE) as usize),
+        0xD if eeprom_at(g, a) => g.hw.save.eeprom_status() as u32,
         8..=0xD => rom16((a & 0x1FF_FFFE) as usize),
+        // The save has an 8-bit bus: wider loads see the byte repeated.
+        0xE | 0xF => g.hw.save.read((a & !1) as u16) as u32 * 0x0101,
         _ => unmapped("a halfword load", a),
     }
 }
@@ -366,7 +381,10 @@ pub fn ld32(g: &mut Game, a: u32) -> u32 {
             let o = io_at(a) & !3;
             io_read16(g, o) | io_read16(g, o + 2) << 16
         }
-        5..=0xD => ld16(g, a) | ld16(g, a.wrapping_add(2)) << 16,
+        5..=7 => ld16(g, a) | ld16(g, a.wrapping_add(2)) << 16,
+        // ROM (the EEPROM answers halfword loads only, as the play build's).
+        8..=0xD => rom16((a & 0x1FF_FFFE) as usize) | rom16((a.wrapping_add(2) & 0x1FF_FFFE) as usize) << 16,
+        0xE | 0xF => g.hw.save.read((a & !3) as u16) as u32 * 0x0101_0101,
         _ => unmapped("a word load", a),
     }
 }
@@ -407,6 +425,7 @@ pub fn st8(g: &mut Game, a: u32, v: u32) {
         }
         // OAM ignores byte stores; ROM takes none.
         7..=0xD => {}
+        0xE | 0xF => g.hw.save.write(a as u16, v),
         _ => unmapped("a byte store", a),
     }
 }
@@ -432,7 +451,11 @@ pub fn st16(g: &mut Game, a: u32, v: u32) {
             let o = (a & 0x3FE) as usize;
             g.hw.ppu.oam[o..o + 2].copy_from_slice(&b);
         }
+        0xD if eeprom_at(g, a) => g.hw.save.eeprom_write(v as u16, 1),
         8..=0xD => {}
+        // The save's 8-bit bus stores the addressed byte lane, at the
+        // unaligned address (as the play build's bus, and mGBA).
+        0xE | 0xF => g.hw.save.write(a as u16, b[(a & 1) as usize]),
         _ => unmapped("a halfword store", a),
     }
 }
@@ -455,6 +478,7 @@ pub fn st32(g: &mut Game, a: u32, v: u32) {
             st16(g, a.wrapping_add(2), v >> 16);
         }
         8..=0xD => {}
+        0xE | 0xF => g.hw.save.write(a as u16, (v >> ((a & 3) * 8)) as u8),
         _ => unmapped("a word store", a),
     }
 }

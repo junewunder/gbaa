@@ -280,6 +280,14 @@ and the shortcuts above at game scale.
   the lift 3 min 6 s at 2.06 GB (the flow settles in 12 rounds), the
   crate alone builds in 32.4 s, rustc 3.95 GB, as the synthetic crate
   predicted.
+- **Lifted code reads and writes the save chip**
+  (`native/lift-save-memory`). Done (2026-11-12, quack): the prelude's
+  loads and stores reach `Hw::save` at `0x0E`-`0x0F` as `runtime::bus`
+  does (an 8-bit bus: a wider load sees the byte repeated, a wider store
+  writes the addressed byte lane; the EEPROM's halfwords at `0x0D`), and
+  `Game::new` sets the chip's kind from the ROM (`Kind::detect`: Metroid
+  is SRAM). `agb/native-save` (lift-check) stores to and loads from SRAM
+  every frame, its planted wrong `strb` caught.
 - **Metroid passes the native check on a route**
   (`native/metroid-native-check`). A route `units/metroid-native.toml`
   from boot into gameplay, compared every frame with sound
