@@ -933,16 +933,39 @@
       "needs": ["multiplayer/wireless-radio-netplay"],
       "record": {
         "state": "claimed",
-        "by": "2be79df9",
-        "session": "2be79df9-742f-4acc-971c-f31dbf757d15",
+        "by": "688d2c6c",
+        "session": "688d2c6c-811f-498f-b882-1534237ece2b",
         "host": "quack",
         "pid": 2490379,
         "start": "10658170",
-        "at": "2026-11-12T09:13:28Z",
+        "at": "2026-11-12T09:42:37Z",
         "branch": "unit/multiplayer/desktop-wireless-radio",
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-12T09:42:32Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/desktop/src/lib.rs:304: the diff removed a space from the existing `--rogue ADDR` line in the usage text. It now reads ` --rogue ADDR Emerald Rogue's co-op…` (4 spaces), where it had ` --rogue ADDR Emer…"
+        }
+      ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-12T09:42:32Z",
+        "findings": "- crates/desktop/src/lib.rs:304: the diff removed a space from the existing `--rogue ADDR` line in the usage text. It now reads `  --rogue ADDR    Emerald Rogue's co-op…` (4 spaces), where it had `  --rogue ADDR     Emerald…` (5 spaces), so its description no longer lines up with the column every other option uses (column 20, as `--wireless`, `--server ADDR` and `--desync-at N` have). Put the fifth space back so the line reads `  --rogue ADDR     Emerald Rogue's co-op (Multiplayer Adventures) with`. Its continuation lines are already aligned and don't change."
+      },
       "round": "2026-11-12T09:13:28Z"
+    },
+    {
+      "id": "multiplayer/menu-wireless-room",
+      "title": "Host or join a wireless room from the window's menu",
+      "notes": [
+        {
+          "at": "2026-11-12T09:36:15Z",
+          "by": "2be79df9",
+          "text": "gbaa-desktop --wireless works from the command line only ({unit:multiplayer/desktop-wireless-radio}); the Netplay page's Ask has no wireless choice. Fly's server still needs just fly-deploy before W datagrams reach it."
+        }
+      ]
     }
   ]
 }
