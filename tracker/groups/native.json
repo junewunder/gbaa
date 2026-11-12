@@ -1310,15 +1310,23 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "51cae3e4",
-        "session": "51cae3e4-5c5f-4c22-8ab6-a591f23922e4",
-        "host": "quack",
-        "pid": 2489918,
-        "start": "10657789",
-        "at": "2026-11-12T07:02:58Z",
+        "checker": "verifier-copy-tail-merged",
+        "at": "2026-11-12T08:35:07Z",
+        "evidence": "Merged head bd11b32 (main 878cf4a merged in). holes-all on main 878cf4a vs this head: hard 139 to 136; only Nightmare rises, 14 to 15 (resume bx r1 0x08000254, agreed); minish 34-32, rogue 27-26, imperium 22-21. Undiscovered: SoundMain tails gone (emerald/mirror 50-14, minish 52-16), Nightmare 126-10 (0x08000234..58 and return site 0x08005368 discovered). disc-pret 0.9997/0.9555, disc-agb 1.0/0.9835 and 1.0/0.5789: bars hold. just check exit 0. lift-check: 8 programs pass; native-spike's 1 hard hole identical on main 6119e7b (filed as {unit:native/spike-entry-read-hole}). Verifier read the diff: no bugs; doc counts fixed in 89aad85.",
         "branch": "unit/native/copy-tail-discovery",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T08:35:07Z",
+          "by": "51cae3e4",
+          "host": "quack",
+          "pid": 2489918,
+          "start": "10657789",
+          "beats": true,
+          "session": "51cae3e4-5c5f-4c22-8ab6-a591f23922e4",
+          "lane": "quack/3"
+        }
       },
       "notes": [
         {
