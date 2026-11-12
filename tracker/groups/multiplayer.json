@@ -895,15 +895,22 @@
       "check": "recorded",
       "needs": ["multiplayer/wireless-adapter-local"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "8f376444",
-        "session": "8f376444-9b26-4bb9-bc1e-903dc68ee5e5",
-        "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T06:30:40Z",
+        "at": "2026-11-12T07:42:32Z",
+        "evidence": "just emerald-radio (calm, two Emerald processes, alice.sav/bob.sav, local gbaa-server room holding the radio) passed after merging main: connected frame 6718, trade on screen 7920, Mudkip/Torchic swapped, 0 resends. Latency via emerald-wireless --sim-ms: trades up to 200 ms each way; the Union Room gives up the connection from 250; 400 no lasting link (docs/research/multiplayer.md). just check passes; local emerald-wireless unchanged (same end states, identical twice).",
         "branch": "unit/multiplayer/wireless-radio-netplay",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T07:42:32Z",
+          "by": "8f376444",
+          "host": "quack",
+          "pid": 2490379,
+          "start": "10658170",
+          "beats": true,
+          "session": "8f376444-9b26-4bb9-bc1e-903dc68ee5e5",
+          "lane": "quack/4"
+        }
       },
       "notes": [
         {
