@@ -1693,6 +1693,13 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   `--sim-ms N` (on `just emerald-wireless`) is it on simulated time in one
   process, N ms each way; `--heard-ms N` (default 3000; 0: only the hosts
   open now); numbers: research multiplayer.md, "The radio on the server".
+- Wireless from the desktop (multiplayer/desktop-wireless-radio,
+  `crates/desktop/src/wireless.rs`, which says how it runs):
+  `gbaa-desktop ROM --server ADDR --wireless --host` (prints `room CODE`;
+  `--players N`) or `--wireless --join CODE`: the window's GBA with a
+  wireless adapter whose radio is the server room's, as `emerald-wireless
+  --seat`; its own GBA only, interpreted, real time, from reset. A radio
+  silent for 10 s is said (a server older than the radio, as fly's was).
 - Linked play: `gbaa-desktop ROM --link B.sav` runs a second GBA on the
   same ROM, on one cable with the first (`runtime::link`;
   `crates/desktop/src/link.rs`), the two screens side by side in one
