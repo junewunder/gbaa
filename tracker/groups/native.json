@@ -1405,15 +1405,22 @@
       "detail": "fnref's from-here-on ROM read (affine at 0x08000af2) ran to the next code; once {unit:native/modern-gcc-data-as-code} removed a false start in agb's panic text, it runs into agb's vtables: ref_unexplained rose 35->97 (93->164 ime-release/irq-hold), fn_words_not_proven +4/5. Bound the read by the table it indexes (its length or a bounds check) and lower both lift-check bars on the seven agb programs. Owner's answer (a) to the bar question.",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "a14298c2",
-        "session": "a14298c2-17fa-4b77-8ced-af626dfddecf",
-        "host": "quack",
-        "pid": 2489918,
-        "start": "10657789",
-        "at": "2026-11-12T08:39:52Z",
+        "at": "2026-11-12T09:45:37Z",
+        "evidence": "A ROM read by index now stops at its object's end (next ROM data address a ROM word holds, not inside a handler run), meets its value-set bounds; BIOS copies read their length. ref_unexplained bars lowered: 97->35 affine/fallthrough/frame-locals, 96->34 mosaic, 98->36 spike, 101->39 bios-calls, 164->48 irq-hold/ime-release; native-tasks fn_words_not_proven 61->57. fn_words_not_proven doesn't fall on the other seven: the +4 was the false start's words becoming data (25 vtable words now never read), not a read bound. After merging main: just lift-check --only each program but native-spike passes (8 routes, 0 differences, planted faults caught); native-spike's lift has the hard hole its own unit fixes. just check passes; 3 new fnref unit tests.",
         "branch": "unit/native/fnref-rom-read-bound",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T09:45:37Z",
+          "by": "a14298c2",
+          "host": "quack",
+          "pid": 2489918,
+          "start": "10657789",
+          "beats": true,
+          "session": "a14298c2-17fa-4b77-8ced-af626dfddecf",
+          "lane": "quack/3"
+        }
       },
       "notes": [
         {
