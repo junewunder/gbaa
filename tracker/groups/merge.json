@@ -206,19 +206,7 @@
         "by": "fd902c34",
         "at": "2026-11-12T10:05:05Z",
         "evidence": "Merged origin/main (4b80ea23): lift-check.toml kept main's fn_words_not_proven=57 plus the branch's native-dma table, its ref_unexplained bar lowered 105->43. just check exit 0; just lift-check --only native-dma passed (600 frames, planted fault caught).",
-        "branch": "unit/native/hw-dma-registers",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T10:05:05Z",
-          "by": "fd902c34",
-          "host": "quack",
-          "pid": 2489252,
-          "start": "10657014",
-          "beats": true,
-          "session": "fd902c34-a5f4-4319-b983-92ca2208e9b9",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "round": "2026-11-12T09:57:13Z"
     }

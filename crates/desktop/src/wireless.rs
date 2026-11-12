@@ -1,5 +1,6 @@
 //! Wireless play (`--server ADDR --wireless` with `--host` or `--join
-//! CODE`): this window's GBA with a wireless adapter (the one Emerald's
+//! CODE`, or the window menu's Netplay page with its Link row on
+//! Wireless): this window's GBA with a wireless adapter (the one Emerald's
 //! Union Room and FireRed's wireless club use, [`runtime::link::rfu`]),
 //! whose radio is a `gbaa-server` room's ([`relay::radio`]; option F of
 //! `docs/research/multiplayer.md`), as `emerald-wireless --seat` runs it
@@ -14,7 +15,11 @@
 //! seat's adapter then hears the others' through the room.
 //!
 //! The game starts from reset, its save kept as `--save`
-//! keeps any game's, in the interpreter (a recompiled build's too). The
+//! keeps any game's, in the interpreter (a recompiled build's too). From
+//! the window, the Netplay page shows the room as it does the cable's
+//! ([`room::State`]: its code while the host waits, then the seat and the
+//! radio's traffic) and leaves it; the game alone then goes on from where
+//! this seat's ended, its adapter gone. The
 //! menu doesn't pause the game (the other players' games would time out
 //! waiting on the radio): while it's open the game plays on with this
 //! window's pad let go. The sound paces the window, or, muted and
@@ -34,7 +39,7 @@ use crate::audio::Player;
 use crate::dump::{pixels_hash, write_png};
 use crate::fast::{self, Pacer};
 use crate::link::Seat;
-use crate::room::{Role, SEATS};
+use crate::room::{self, Role, SEATS, State};
 use crate::window::Screen;
 use crate::{Options, dump_at_path, sav_file};
 
@@ -75,10 +80,20 @@ pub fn check(o: &Options) -> Result<(), String> {
     crate::link::check(o).map_err(|e| e.replace("linked play (--link)", "wireless play"))
 }
 
+/// While the menu is open, how often (in frames) the Netplay page's lines
+/// are brought up to date.
+const REPORT_EVERY: u64 = 30;
+
 /// Play this window's GBA with a networked wireless adapter, as `opts`
 /// says, in the window `screen` or headless, its interpreter timed by
-/// `timing`.
-pub fn run(opts: &Options, timing: Timing, screen: Option<Screen>) -> Result<(), String> {
+/// `timing`. At the end, in a window, `carry` takes the seat's state, for
+/// the game alone after it ([`crate::run`]).
+pub fn run(
+    opts: &Options,
+    timing: Timing,
+    screen: Option<Screen>,
+    carry: &mut Option<Vec<u8>>,
+) -> Result<(), String> {
     let (Some(server), Some(role)) = (&opts.server, &opts.role) else {
         return Err("wireless play needs --server and --host or --join".into());
     };
@@ -88,7 +103,12 @@ pub fn run(opts: &Options, timing: Timing, screen: Option<Screen>) -> Result<(),
             s.set_title(t);
         }
     };
-    let addr = crate::room::address(server)?;
+    let addr = room::address(server)?;
+    let tell = |state: State| {
+        if let Some(s) = &screen {
+            s.set_netplay(state);
+        }
+    };
     let seats = opts.players.unwrap_or(SEATS);
     let until = Instant::now() + WAIT;
     let closed = std::cell::Cell::new(false);
@@ -103,6 +123,10 @@ pub fn run(opts: &Options, timing: Timing, screen: Option<Screen>) -> Result<(),
     title(match role {
         Role::Host => "gbaa: making a wireless room",
         Role::Join(_) => "gbaa: joining a wireless room",
+    });
+    tell(match role {
+        Role::Host => State::Making,
+        Role::Join(c) => State::Joining(String::from_utf8_lossy(c).into_owned()),
     });
     let mut said = false;
     let r = match role {
@@ -122,6 +146,11 @@ pub fn run(opts: &Options, timing: Timing, screen: Option<Screen>) -> Result<(),
                     s.set_title(&format!(
                         "gbaa: wireless room {code}, {filled} of {seats} players in, waiting"
                     ));
+                    s.set_netplay(State::Waiting {
+                        code,
+                        filled,
+                        seats,
+                    });
                 }
             },
             go_on,
@@ -139,6 +168,17 @@ pub fn run(opts: &Options, timing: Timing, screen: Option<Screen>) -> Result<(),
         seat + 1
     );
     title(&format!("gbaa: wireless room {code}, player {}", seat + 1));
+    let seats = radio.seats();
+    let playing = |lines| State::Playing {
+        code: code.clone(),
+        seat,
+        seats,
+        lines,
+        left: None,
+        quiet: false,
+        desync: None,
+    };
+    tell(playing(Vec::new()));
 
     let sound = (screen.is_some() && !opts.mute)
         .then(|| {
@@ -179,9 +219,16 @@ pub fn run(opts: &Options, timing: Timing, screen: Option<Screen>) -> Result<(),
             radio.pump(&mut w, Instant::now());
         }
         frames += 1;
-        if frames == SILENT_FOR && radio.stats.datagrams_in == 0 {
+        let silent = frames >= SILENT_FOR && radio.stats.datagrams_in == 0;
+        if frames == SILENT_FOR && silent {
             eprintln!("gbaa-desktop: {SILENT}");
             title(&format!("gbaa: wireless room {code}: {SILENT}"));
+        }
+        if let Some(s) = &screen
+            && frames % REPORT_EVERY == 0
+            && s.menu_open()
+        {
+            tell(playing(lines(&radio, w.transfers, silent)));
         }
         if let Some(f) = &m.fault {
             return Err(format!("frame {frames}: {f}"));
@@ -236,6 +283,13 @@ pub fn run(opts: &Options, timing: Timing, screen: Option<Screen>) -> Result<(),
         }
     }
     radio.leave();
+    // The game alone goes on from this seat, as a GBA does when its
+    // adapter comes out.
+    if screen.is_some() && m.fault.is_none() {
+        let mut bytes = Vec::new();
+        m.save_state(&mut |s| bytes.extend_from_slice(s));
+        *carry = Some(bytes);
+    }
     if let Some(f) = &mut sav {
         f.flush(&mut m.bus.save)?;
         if screen.is_some() {
@@ -267,4 +321,24 @@ pub fn run(opts: &Options, timing: Timing, screen: Option<Screen>) -> Result<(),
         radio.resent()
     );
     Ok(())
+}
+
+/// The Netplay page's lines for a wireless room: what the radio has
+/// carried, and whether it has ever answered.
+fn lines(radio: &Radio, transfers: u64, silent: bool) -> Vec<String> {
+    let s = &radio.stats;
+    let mut l = vec![
+        "Wireless: each player runs their own game.".to_string(),
+        format!(
+            "Radio: {} datagrams in, {} out, {} resent",
+            s.datagrams_in,
+            s.datagrams_out,
+            radio.resent()
+        ),
+        format!("{transfers} transfers through the adapter"),
+    ];
+    if silent {
+        l.push(format!("The {SILENT}"));
+    }
+    l
 }

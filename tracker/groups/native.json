@@ -1496,26 +1496,22 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "done",
-        "by": "d12ab564",
-        "checker": "verifier-3e91c7",
-        "at": "2026-11-12T09:56:48Z",
-        "evidence": "Verifier ran just lift-check --only native-dma after the merge with main: agb/native-dma (DMA0 H-blank, DMA1 FIFO special, DMA2 V-blank, DMA3 immediate, all by address) passes 600 frames with 0 differences, audio equal, packed layout equal, planted DMAxCNT store (0x08000180) caught at frame 1. runtime hw:: tests 32 pass; just check passes after its two fixes. Prelude bar 850->861 (11 lines of DMA hooks).",
-        "branch": "unit/native/hw-dma-registers",
+        "state": "claimed",
+        "by": "12ef2e3c",
+        "session": "12ef2e3c-5b4d-487a-a4a2-90fcf6d0b90a",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-12T09:56:48Z",
-          "by": "d12ab564",
-          "host": "quack",
-          "pid": 2489252,
-          "start": "10657014",
-          "beats": true,
-          "session": "d12ab564-753c-4c27-9539-9b83303ebf20",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "pid": 2489252,
+        "start": "10657014",
+        "at": "2026-11-12T10:09:42Z",
+        "branch": "unit/native/hw-dma-registers",
+        "beats": true
       },
       "notes": [
+        {
+          "at": "2026-11-12T10:09:29Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - Check not run as far as the card asks. The card's Done when is that the new DMA test program 'passes just lift-check'. Both the unit's evidence and the merge's evidence ran only `just lift-check --only native-…"
+        },
         {
           "at": "2026-11-12T09:56:55Z",
           "by": "d12ab564",
@@ -1527,6 +1523,11 @@
           "text": "2026-11-11: overnight Metroid and Nightmare native builds both panic before frame 1 (headless): Metroid at I/O 0x0d4 (DMA3SAD), Nightmare at 0x0ba (DMA0CNT_H). This blocks both from a first frame; rerun both after it lands to find the next."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-12T10:09:29Z",
+        "findings": "- Check not run as far as the card asks. The card's Done when is that the new DMA test program 'passes just lift-check'. Both the unit's evidence and the merge's evidence ran only `just lift-check --only native-dma`. But the branch changes code every lifted program runs: (1) crates/codegen/src/native/prelude.rs:320 sends every program's io_write16 through the new DMA path; (2) crates/runtime/src/hw.rs:827 adds a DMA run at each sync, and hw.rs:887 does the same at each H-blank; (3) hw.rs:929-932 adds a `run_sound(g)` after V-blank whenever `cycles != 0`, and that count includes the existing typed V-blank copies (`f(g)`), so any program with a typed V-blank copy now refills its sound FIFOs at a different moment. The prelude line bar went from 850 to 861 for all nine existing programs, but nothing shows those programs still pass. A full `just lift-check` fails on main for an unrelated reason, so the session can't just run the whole thing: native-spike has a hard hole at f_08006d47 (the 'native-spike lifts again after entry-read masking' unit, {unit:native/spike-entry-read-hole}). What to do: run `just lift-check --only <name>` for each of affine, mosaic-modes, native-fallthrough, native-irq-hold, native-frame-locals, native-ime-release, native-bios-calls and native-tasks. Each must pass its 600/601 frames with its planted fault still caught. Also run native-spike as far as its known hole allows. Put those results in the evidence. If any program differs because of the V-blank `run_sound` change, limit that change to channels set up by their registers, or fix it.\n- justfile:943: the lift-check recipe's comment still says 'builds thirty-three generated crates (about 12 minutes)'. Adding native-dma adds its lift, its packed-layout lift and its planted lift, so the count and the time are now wrong. Update both to what the full run actually builds and takes."
+      },
       "round": "2026-11-12T09:05:41Z"
     },
     {
@@ -1537,14 +1538,26 @@
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
-        "by": "00024cba",
-        "session": "00024cba-14bc-471e-a1bb-2b8d8d83435f",
+        "by": "28dc0a51",
+        "session": "28dc0a51-8c19-468a-a7a7-97e6b429929c",
         "host": "quack",
         "pid": 2490379,
         "start": "10658170",
-        "at": "2026-11-12T09:54:28Z",
+        "at": "2026-11-12T10:28:21Z",
         "branch": "unit/native/lift-save-memory",
         "beats": true
+      },
+      "notes": [
+        {
+          "at": "2026-11-12T10:28:09Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/native/prelude.rs:456-457: the new comment says the save's 8-bit bus stores the addressed byte lane at the unaligned address \"as the play build's bus, and mGBA\". This unit's own finding says…"
+        }
+      ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-12T10:28:09Z",
+        "findings": "- crates/codegen/src/native/prelude.rs:456-457: the new comment says the save's 8-bit bus stores the addressed byte lane at the unaligned address \"as the play build's bus, and mGBA\". This unit's own finding says otherwise. agb/native-save/SCENE.md and units/native-save-600.toml's mgba_why both record that mGBA 0.10.5 drops an unaligned SRAM strh/str, and that this is the whole reason the hashes differ. Change the comment to say it follows the play build's bus (runtime::bus), and note that mGBA 0.10.5 drops these stores (see units/native-save-600.toml). The same wrong claim, \"(as mGBA does)\", is in crates/runtime/src/bus.rs:497-498, which this lane didn't write. Correct it there too so the next reader doesn't take mGBA as agreeing."
       },
       "round": "2026-11-12T09:54:28Z"
     },
@@ -1561,7 +1574,19 @@
       "title": "Lifted loads from the BIOS read the play build's latch",
       "detail": "docs/native-stage-b.md, 'The first game': m4a's SoundInit starts an immediate DMA1 with its addresses 0, reading the BIOS (the play build gives Bus::bios_latch: after a call, in and after an IRQ, after boot) and writing to 0 (ignored). The prelude panics on loads and stores below 0x02000000. Keep the latch in the lift as the play build's BIOS moves it (its BIOS calls and IRQ entry), loads give it, stores go nowhere. Done when: a lift-check program reading the BIOS region passes, and just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "dd145eb8",
+        "session": "dd145eb8-bbea-42de-85a6-c1b6538cbcd3",
+        "host": "quack",
+        "pid": 2489918,
+        "start": "10657789",
+        "at": "2026-11-12T10:07:23Z",
+        "branch": "unit/native/lift-bios-region",
+        "beats": true
+      },
+      "round": "2026-11-12T10:07:23Z"
     },
     {
       "id": "native/play-native-metroid-interp",
