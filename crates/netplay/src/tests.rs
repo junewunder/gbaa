@@ -302,6 +302,42 @@ fn rollback_keeps_two_peers_level() {
 }
 
 #[test]
+fn a_deep_rollback_keeps_sending_while_it_runs() {
+    // Seat 1 stops (a loaded machine, a SIGSTOP) while seat 0 runs 200
+    // frames on, guessing; seat 1's first input then differs, and seat 0
+    // runs all 200 again. Its inputs must go out as it does, or seat 1
+    // hears nothing for that long and takes it to have left
+    // (multiplayer/wander-split-under-load).
+    let consoles = (0..2).map(|s| Toy::peer(2, s)).collect();
+    let (mut peers, net) = rollback_session(consoles, Conditions::LOCAL, 1, Config::default());
+    while !peers.iter().all(|p| p.started()) {
+        let t = net.borrow().now() + 1000;
+        net.borrow_mut().advance_to(t);
+        for p in peers.iter_mut() {
+            p.pump().unwrap();
+            if !p.started() {
+                p.advance(0).unwrap();
+            }
+        }
+    }
+    // Time sync holds a frame back now and then; it runs on regardless.
+    while peers[0].frame() < 200 {
+        assert_ne!(peers[0].advance(0).unwrap(), Status::Waiting);
+    }
+    assert_eq!(peers[1].advance(1).unwrap(), Status::Stepped);
+    let t = net.borrow().now() + 1000;
+    net.borrow_mut().advance_to(t);
+    let before = net.borrow().stats.sent;
+    peers[0].pump().unwrap();
+    let sent = net.borrow().stats.sent - before;
+    assert!(peers[0].stats.deepest >= 190, "{:?}", peers[0].stats);
+    assert!(
+        sent >= (200 / rollback::KEEP_ALIVE) as u64,
+        "{sent} sent in a 200-frame rollback"
+    );
+}
+
+#[test]
 fn rolled_back_linked_gbas_are_a_straight_run() {
     let rom = key_folder();
     let frames = 600;
