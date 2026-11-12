@@ -2532,3 +2532,4 @@
 {"at":"2026-11-12T04:53:37Z","actor":"loop","tag":"b67b3cd7","host":"quack","cmd":"claim","id":"native/copy-tail-discovery","text":"Discover code past m4a's and Nightmare's copy sources: claimed"}
 {"at":"2026-11-12T04:53:41Z","actor":"loop","tag":"6f486280","host":"quack","cmd":"claim","id":"native/nightmare-cover-list","text":"Refresh Nightmare's coverage jump list: claimed"}
 {"at":"2026-11-12T05:33:11Z","actor":"loop","tag":"6f486280","host":"quack","cmd":"check","id":"native/nightmare-cover-list","text":"Refresh Nightmare's coverage jump list: now done (its check passes)"}
+{"at":"2026-11-12T05:36:39Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/nightmare-cover-list","text":"Refresh Nightmare's coverage jump list: on main"}

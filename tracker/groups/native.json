@@ -1323,21 +1323,8 @@
         "worker": "6f486280",
         "at": "2026-11-12T05:33:11Z",
         "evidence": "gbaa-holes: kirby-nightmare: hard 9, 426 s",
-        "branch": "unit/native/nightmare-cover-list",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T05:33:11Z",
-          "by": "6f486280",
-          "host": "quack",
-          "pid": 2490379,
-          "start": "10658170",
-          "beats": true,
-          "session": "6f486280-7bc1-4e0a-ac81-c4fb6f851535",
-          "lane": "quack/4"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-12T04:53:41Z"
+        "host": "quack"
+      }
     },
     {
       "id": "native/fnref-unknown-addrs",
