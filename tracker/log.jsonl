@@ -2567,3 +2567,4 @@
 {"at":"2026-11-12T07:42:04Z","actor":"loop","tag":"8f376444","host":"quack","cmd":"decide","text":"decided: A networked adapter lists only the hosts the server says are open","d":"d/a-networked-adapter-lists-only-the-hosts-the"}
 {"at":"2026-11-12T07:42:22Z","actor":"loop","tag":"8f376444","host":"quack","cmd":"add-unit","id":"multiplayer/desktop-wireless-radio","text":"new unit: Union Room from the desktop: a wireless seat on the server"}
 {"at":"2026-11-12T07:42:32Z","actor":"loop","tag":"8f376444","host":"quack","cmd":"done","id":"multiplayer/wireless-radio-netplay","text":"Emerald's Union Room with the radio on the server: done"}
+{"at":"2026-11-12T07:43:46Z","actor":"loop","tag":"2ad4dbaa","host":"quack","cmd":"done","id":"native/task-coroutines","text":"Lifted task switchers run tasks on host coroutines: done, checked by 2ad4dbaa"}

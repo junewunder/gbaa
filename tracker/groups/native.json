@@ -1278,20 +1278,23 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
-        "by": "2ad4dbaa",
-        "session": "2ad4dbaa-abc3-4845-a0ce-e3557140c638",
-        "host": "quack",
-        "pid": 2489427,
-        "start": "10657408",
-        "at": "2026-11-12T07:28:22Z",
+        "state": "done",
+        "by": "21ac895a",
+        "checker": "2ad4dbaa",
+        "at": "2026-11-12T07:43:46Z",
+        "evidence": "Checked on main c36eb9e (work d710e0f) by session 2ad4dbaa, fresh context: just check passes; just lift-check --only native-tasks passes (600 frames 0 differences, play layout same; planted store caught at EWRAM 0x020000d0; planted hole caught: f_080001a4 at 0x080001c0 stack switch). Nightmare lifted with no stand-ins: stack-switch hard holes at 0x08000244/0x08000278/0x08000298 plus the SDK soft-reset's at 0x080cfa8c (a real switch, as in the other SDK games).",
         "branch": "unit/native/task-coroutines",
-        "reviewing": {
-          "by": "21ac895a",
-          "at": "2026-11-12T06:58:26Z",
-          "evidence": "After merging origin/main (ea60907, bar fix 67cc5eb): just check passes; just lift-check --only native-tasks passes (600 frames 0 differences; planted store caught at EWRAM 0x020000d0; planted hole caught: f_080001a4 at 0x080001c0 stack switch); lift-check on the 7 other agb programs except native-spike passes. native-spike fails on pure origin/main 12b2053 too (f_08006d47 summary hole), filed as {unit:native/spike-entry-read-hole}. Nightmare's lift now has exactly its 3 holes 0x08000244/0x08000278/0x08000298; other corpus games gain only SDK soft-reset and Moonbeam's longjmp switches. lines_prelude 724->850 (task facility). Test ROM matches mGBA at frame 600 (ec4286836efdf369)."
-        },
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T07:43:46Z",
+          "by": "2ad4dbaa",
+          "host": "quack",
+          "pid": 2489427,
+          "start": "10657408",
+          "beats": true,
+          "session": "2ad4dbaa-abc3-4845-a0ce-e3557140c638",
+          "lane": "quack/2"
+        }
       },
       "round": "2026-11-12T07:28:22Z"
     },
