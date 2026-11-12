@@ -1474,7 +1474,8 @@ fn asset_overrides(
 /// after it. `--frames` bounds each run, and the window closes at a
 /// session's end. Each run starts where the one before it ended, as a GBA
 /// does when its cable goes in or out (multiplayer/join-without-restart):
-/// a session's seat from the game alone's state, and the game alone after
+/// a session's seat from the game alone's state (a wireless room's from
+/// reset, as the adapter is looked for there), and the game alone after
 /// it from that seat's.
 fn run_window(
     opts: &Options,
@@ -1513,6 +1514,7 @@ fn run_window(
             server: None,
             role: None,
             players: None,
+            wireless: false,
             ..opts.clone()
         };
         let Some(ask) = screen.take_netplay_ask() else {
@@ -1525,9 +1527,16 @@ fn run_window(
             server: Some(ask.server),
             players: (ask.role == room::Role::Host).then_some(ask.players),
             role: Some(ask.role),
+            wireless: ask.wireless,
+            // A wireless room starts its game from reset.
+            state: o.state.clone().filter(|_| !ask.wireless),
             ..o.clone()
         };
-        match room::check(&asked) {
+        let checked = match asked.wireless {
+            true => wireless::check(&asked).and_then(|()| room::check(&asked)),
+            false => room::check(&asked),
+        };
+        match checked {
             Ok(()) => o = asked,
             Err(e) => screen.end_session(room::State::Ended(format!("No netplay: {e}"))),
         }
@@ -1572,7 +1581,7 @@ pub fn run(
         return link::run(opts, timing, screen);
     }
     if opts.server.is_some() && opts.wireless {
-        return wireless::run(opts, timing, screen);
+        return wireless::run(opts, timing, screen, carry);
     }
     if opts.server.is_some() {
         return room::run(opts, code.filter(|_| !opts.interp), timing, screen, carry);
