@@ -2683,3 +2683,4 @@
 {"at":"2026-11-12T13:07:32Z","actor":"loop","tag":"5b99a863","host":"quack","cmd":"edit","id":"native/holes-match-lift","text":"The hole report counts what the lifter counts: edited (min-minutes)"}
 {"at":"2026-11-12T13:07:36Z","actor":"loop","tag":"5b99a863","host":"quack","cmd":"unclaim","id":"native/holes-match-lift","text":"The hole report counts what the lifter counts: given back unstarted","unstarted":true}
 {"at":"2026-11-12T13:07:54Z","actor":"loop","tag":"5b8af8c2","host":"quack","cmd":"claim","id":"native/native-first-stop","text":"Each built native game runs headless; report where it stops: claimed"}
+{"at":"2026-11-12T13:08:11Z","actor":"loop","tag":"5b8af8c2","host":"quack","cmd":"edit","id":"native/native-first-stop","text":"Each built native game runs headless; report where it stops: edited (min-minutes)"}

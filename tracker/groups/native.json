@@ -1750,6 +1750,7 @@
       "detail": "From the overnight run (2026-11-11): Metroid and Nightmare lift and build, but both panic before frame 1 on an unmodelled I/O register (Hw::write16, hw.rs) and no tool reported it, so 'built' overstated them. After a lift builds, run gbaa-native-<game> --headless --frames N (under MemoryMax) and report how many frames it drew and where it stopped: the panic's kind (unmodelled register by address and name, unknown BIOS region read, Exit) and the guest function and pc when known. Put it in the lift's report.txt and metrics.toml (frames_run, stop kind) and in gbaa-holes' corpus summary beside the hard holes, so a stop counts as the next hole. Done when: Metroid and Nightmare show their DMA stops (until {unit:native/hw-dma-registers} lands), a lift-check program shows 600 frames and no stop, just check passes.",
       "check": "independent",
       "uses": ["heavy"],
+      "minMinutes": 150,
       "record": {
         "state": "claimed",
         "by": "5b8af8c2",
