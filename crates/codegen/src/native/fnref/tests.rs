@@ -673,8 +673,9 @@ const ALLOC: u32 = 0x0800_3001;
 /// Two objects from two allocator calls: F stored in the first, a number
 /// in the second, the second's word read and used as a number, the
 /// first's called. With the allocator named the objects are apart, so F
-/// is proven and the call's set is it; unnamed, both pointers are
-/// unknown, the stores go to the pile, and the number read is F too.
+/// is proven and the call's set is it; unnamed, both pointers are its
+/// heap's RAM address from there on, the stores go to the pile, and the
+/// number read is F too.
 #[test]
 fn two_heap_objects_are_kept_apart() {
     let e = 0x0800_1001;
@@ -718,7 +719,14 @@ fn two_heap_objects_are_kept_apart() {
         ),
         (e + 0x30, B::default().end(None, Edge::Return)),
     ];
-    let alloc = (ALLOC, vec![(ALLOC, B::default().end(None, Edge::Return))]);
+    // Unnamed, it returns a pointer into its heap the way agb's does: a
+    // RAM address plus an offset the run doesn't know.
+    let mut heap = B::default();
+    let base = heap.k(0x0200_0100);
+    let off = heap.get(1);
+    let p = heap.bin(BinOp::Add, base, off);
+    heap.set(0, p);
+    let alloc = (ALLOC, vec![(ALLOC, heap.end(None, Edge::Return))]);
     let fns = [(e, f), alloc];
     let named = run_allocs(
         &fns,
@@ -857,4 +865,65 @@ fn a_callee_s_values_are_kept_apart_by_call_site() {
     assert!(f.proven(POOL), "{f:?}");
     assert_eq!(f.sites[&0x0800_1110].callees, BTreeSet::from([F]));
     assert!(f.sites[&0x0800_1110].complete);
+}
+
+/// An unknown that no RAM pointer was dropped into (an I/O read) is no RAM
+/// address (`native/fnref-unknown-addrs`): a load through it reads none
+/// of RAM's stores, so the number it gives, used in arithmetic, isn't F
+/// stored in a cell, and the cell's word called is F alone.
+#[test]
+fn a_load_through_an_unknown_reads_no_ram() {
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let c = b.k(CELL);
+    b.st(Width::Word, c, p);
+    let io = b.k(0x0400_0130);
+    let x = b.ld(Width::Half, io);
+    let y = b.ld(Width::Word, x);
+    let four = b.k(4);
+    b.bin(BinOp::Add, y, four);
+    let t = b.ld(Width::Word, c);
+    let f = run(&[calling(0x0800_1001, b, t)]);
+    assert!(f.proven(POOL), "{f:?}");
+    assert_eq!(site(&f).callees, BTreeSet::from([F]));
+    assert!(site(&f).complete);
+}
+
+/// A RAM address stored in RAM is a pointer still when loaded back, and
+/// one moved by an index the run doesn't know is its static's (up to the
+/// next RAM address the code names): neither reads the cell holding F,
+/// so the numbers read through them, used in arithmetic, leave F proven.
+/// Moved below the address it is lost: every cell, F among them.
+#[test]
+fn a_ram_pointer_is_followed_through_memory_and_an_index() {
+    let build = |below: bool| {
+        let mut b = B::default();
+        let p = b.pool(POOL, F);
+        let c = b.k(CELL);
+        b.st(Width::Word, c, p);
+        // A pointer to a number, kept at 0x0300_0200.
+        let num = b.k(0x0300_0300);
+        let five = b.k(5);
+        b.st(Width::Word, num, five);
+        let at = b.k(0x0300_0200);
+        b.st(Width::Word, at, num);
+        let q = b.ld(Width::Word, at);
+        let n = b.ld(Width::Word, q);
+        let four = b.k(4);
+        b.bin(BinOp::Add, n, four);
+        // An array at 0x0300_0400, by an index from I/O.
+        let arr = b.k(0x0300_0400);
+        let io = b.k(0x0400_0130);
+        let i = b.ld(Width::Half, io);
+        let op = if below { BinOp::Sub } else { BinOp::Add };
+        let e = b.bin(op, arr, i);
+        let m = b.ld(Width::Word, e);
+        b.bin(BinOp::Add, m, four);
+        run(&[just(0x0800_1001, b)])
+    };
+    let f = build(false);
+    assert!(f.proven(POOL), "{f:?}");
+    let f = build(true);
+    assert!(!f.proven(POOL));
+    assert_eq!(f.holes[&Origin::Word(POOL)].1, Why::Arithmetic);
 }
