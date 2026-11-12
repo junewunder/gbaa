@@ -2678,3 +2678,4 @@
 {"at":"2026-11-12T12:59:21Z","actor":"loop","tag":"a7b7e9d7","host":"quack","cmd":"done","id":"native/lift-psr-boot-irq","text":"The lifter handles reset and IRQ-wrapper msr/mrs itself: done, checked by verifier-7e4c2a"}
 {"at":"2026-11-12T13:02:46Z","actor":"loop","tag":"74679aef","host":"quack","cmd":"claim","id":"native/lift-undefined-insns","text":"Find why moonbeam's and Rogue's lifts decode data as code: claimed"}
 {"at":"2026-11-12T13:05:47Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-psr-boot-irq","text":"The lifter handles reset and IRQ-wrapper msr/mrs itself: back to ready: the loop's review asked for fixes"}
+{"at":"2026-11-12T13:06:00Z","actor":"loop","tag":"5b99a863","host":"quack","cmd":"claim","id":"native/holes-match-lift","text":"The hole report counts what the lifter counts: claimed"}
