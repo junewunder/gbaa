@@ -2717,3 +2717,4 @@
 {"at":"2026-11-12T13:52:59Z","actor":"loop","tag":"e610b9cf","host":"quack","cmd":"claim","id":"merge/quack-lane2-native-lift-bios-affine","text":"Merge main on quack lane 2: claimed (picking up after aa3b6b9a)"}
 {"at":"2026-11-12T13:54:20Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/spike-entry-read-hole","text":"native-spike lifts again after entry-read masking: on main"}
 {"at":"2026-11-12T13:58:35Z","actor":"loop","tag":"e610b9cf","host":"quack","cmd":"done","id":"merge/quack-lane2-native-lift-bios-affine","text":"Merge main on quack lane 2: done"}
+{"at":"2026-11-12T13:58:55Z","actor":"session","tag":"manual","host":"quack","cmd":"edit","id":"merge/quack-lane2-native-lift-bios-affine","text":"Merge main on quack lane 2: edited (detail, branch)"}
