@@ -1343,7 +1343,7 @@ emerald-netplay rom=(roms / "Pokemon - Emerald Version.gba") *args:
     {{lock}} cargo build -q --release -p emerald-save
     target/release/emerald-netplay {{quote(rom)}} {{quote(gbaa_data / "saves/emerald")}} {{args}}
 
-# The variable-ping simulator (multiplayer/ping-sim): two peer processes play a rollback netplay session over UDP through a proxy that delays, loses, reorders and duplicates as a profile says (crates/netplay/profiles/NAME.toml: calm, wander, spiky, rough); passes when both peers' hashes every 60 frames and at the end are a straight run's (crates/netplay/src/bin/gbaa-pingsim.rs). Real time: 600 frames at 60 fps, about 15 s. ARGS: --console toy|gba, --frames, --delay, --fps, --linger-ms.
+# The variable-ping simulator (multiplayer/ping-sim): two peer processes play a rollback netplay session over UDP through a proxy that delays, loses, reorders and duplicates as a profile says (crates/netplay/profiles/NAME.toml: calm, wander, spiky, rough); passes when both peers' hashes every 60 frames and at the end are a straight run's (crates/netplay/src/bin/gbaa-pingsim.rs). Real time: 600 frames at 60 fps, about 15 s. ARGS: --console toy|gba|single-pak (single-pak: a homebrew sender gives its program by MultiBoot to a seat with no cartridge, multiplayer/single-pak-multiboot), --frames, --delay, --fps, --linger-ms.
 ping-sim profile="rough" *args:
     {{lock}} cargo build -q --release -p netplay --bin gbaa-pingsim
     target/release/gbaa-pingsim run crates/netplay/profiles/{{profile}}.toml {{args}}

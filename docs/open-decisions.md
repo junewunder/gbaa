@@ -73,7 +73,7 @@ the locals spike (`structured/regs-locals`) to say.
 
 Settled in decisions.md (11, 12, 13). Still open: mid-block sync after I/O stores, if a ROM needs
 IRQs sooner than its block's end; the unimplemented BIOS calls (Huffman,
-Diff, the sound driver, MultiBoot, HardReset); the PSG sound channels and
+Diff, the sound driver, HardReset; MultiBoot in normal mode); the PSG sound channels and
 desktop audio playback (DMA sound is done, #52); affine modes, windows, blending
 and mosaic; the ESP32 backend.
 

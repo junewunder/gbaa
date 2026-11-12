@@ -1202,7 +1202,7 @@ column is what a game does when transfers stop coming.
 |------|---------------------|-------------------|-------------------------------------|-----------------|
 | Multiplayer (16-bit, 2–4 GBAs) | the parent starts it; every console's halfword reaches every console at once | 3,194 cycles (190 µs) for 2 players at 115,200 bps, 11,863 (707 µs) for 4; 8.5 ms for 4 at 9,600 bps | Emerald (`src/link.c`, `LinkVSync`): the parent in the frame its V-blank sees fewer than 9 serial IRQs (`LAG_MASTER`), a child after 10 V-blanks with none (`LAG_SLAVE`), a player-data exchange after 600 frames. Not measured in the others | **yes** (2026-10-25; 2–4 players, 2026-10-31) |
 | Normal 8-bit / 32-bit | one side clocks a shift register, the other is clocked | internal clock 256 kHz: 524 cycles (8-bit), 2,097 (32-bit); 2 MHz: 67 and 268 | the hardware waits forever for an outside clock; any timeout is the game's | no: no partner |
-| MultiBoot (single-pak) | BIOS `MultiBoot` (SWI 0x25) sends a program of up to 256 KB to children that have no cartridge, over multiplayer mode at 115,200 bps or normal 32-bit mode; a child boots it from RAM | in multiplayer mode a halfword per transfer, about 190 µs, so 256 KB would take about 25 s; real single-pak programs are smaller and send in a few seconds (from memory) | the BIOS's handshake retries, and the game's own screen times out | no: our HLE `MultiBoot` always fails (`runtime/src/bios.rs`), and a seat can't start without a cartridge. Games that send their own program (Nightmare in Dream Land) work if both seats have the cartridge |
+| MultiBoot (single-pak) | BIOS `MultiBoot` (SWI 0x25) sends a program of up to 256 KB to children that have no cartridge, over multiplayer mode at 115,200 bps or normal 32-bit mode; a child boots it from RAM | in multiplayer mode a halfword per transfer, about 190 µs, so 256 KB would take about 25 s; real single-pak programs are smaller and send in a few seconds (from memory) | the BIOS's handshake retries, and the game's own screen times out | **yes, multiplayer mode** (2026-11-12): a seat with no cartridge waits in its BIOS and boots what the parent's `MultiBoot` sends (`runtime::bios::multiboot`, both ends HLE: GBATEK's handshake rows as games see them, the main transfer unencrypted with a check value of our own); `gbaa-pingsim run PROFILE --console single-pak` plays a homebrew sender to a cartless seat. Normal mode's `MultiBoot` fails. No commercial single-pak game tried (none of june's) |
 | UART | RS-232-style bytes, a 4-byte FIFO, CTS flow control | 10 bits a byte: 87 µs at 115,200 bps | the game's | no: no partner |
 | JOY bus | a GameCube polls; the GBA's hardware answers reset, status, read and write commands | a few hundred µs per command, clocked by the GameCube (from memory, not checked) | the GameCube game's | no; needs a GameCube on the other end, which we don't run |
 | General purpose | the four pins as plain I/O | — | — | not linking |
@@ -1241,9 +1241,9 @@ ROMs unless the game is in the table of games tried below.
 |------|------|----------------------------|
 | Pokémon Ruby, Sapphire, FireRed, LeafGreen, Emerald | multiplayer mode (trades, battles, Record Mixing, Berry Blender, contests); FireRed, LeafGreen and Emerald also the wireless adapter (Union Room); JOY bus to Colosseum, XD and Box | the adapter; JOY bus means a GameCube |
 | The Legend of Zelda: Four Swords (with A Link to the Past) | multiplayer mode, 2–4, every player needs a cartridge | nothing, in principle (not tried: no ROM) |
-| Mario Kart: Super Circuit | multiplayer mode with every player's cartridge (all tracks); single-pak MultiBoot (fewer tracks) | the multi-pak game: nothing (not tried); single-pak: MultiBoot |
-| Bomberman Tournament, Bomberman Max 2 | multiplayer mode, multi-pak; Tournament also single-pak | single-pak: MultiBoot |
-| Super Mario Advance 1–4 (Mario Bros. Classic), many puzzle games (Puyo Pop, Tetris Worlds) | single-pak MultiBoot, 2–4 | MultiBoot |
+| Mario Kart: Super Circuit | multiplayer mode with every player's cartridge (all tracks); single-pak MultiBoot (fewer tracks) | the multi-pak game: nothing (not tried); single-pak: nothing in principle (not tried: no ROM) |
+| Bomberman Tournament, Bomberman Max 2 | multiplayer mode, multi-pak; Tournament also single-pak | single-pak: nothing in principle (not tried: no ROM) |
+| Super Mario Advance 1–4 (Mario Bros. Classic), many puzzle games (Puyo Pop, Tetris Worlds) | single-pak MultiBoot, 2–4 | nothing in principle (not tried: no ROM) |
 | Kirby & the Amazing Mirror | multiplayer mode, 2–4, every player needs a cartridge | nothing: works |
 | Kirby: Nightmare in Dream Land (sub-games) | multiplayer mode; the parent sends the sub-game ("Transmitting…") | nothing when every seat has the cartridge: works |
 | Final Fantasy Crystal Chronicles, Four Swords Adventures, Metroid Fusion with Prime, Wind Waker's Tingle Tuner | JOY bus, a GBA as a GameCube controller or screen | a GameCube; out of scope |
@@ -1270,10 +1270,14 @@ Gaps filed as units, each with what it changes:
   Union Room, first with both consoles in one process. This is the gap
   that matters for june's games. It also needs normal 32-bit mode on the
   hub.
-- **Single-pak MultiBoot** (multiplayer/single-pak-multiboot): a seat
-  with no cartridge that boots the program the parent sends (the BIOS's
-  `MultiBoot` over the hub). For Mario Kart's and Bomberman's single-pak
-  modes and the Mario Bros. Classic games. None of june's ROMs need it.
+- **Single-pak MultiBoot** (multiplayer/single-pak-multiboot), done
+  2026-11-12: a seat with no cartridge boots the program the parent
+  sends (the BIOS's `MultiBoot` over the hub, `runtime::bios::multiboot`;
+  `netplay::gba::Gba::single_pak`). Checked with a homebrew sender
+  (`netplay::demo::single_pak_sender`) through two ping-sim peers. For
+  Mario Kart's and Bomberman's single-pak modes and the Mario Bros.
+  Classic games, none tried (none of june's ROMs need it); the desktop
+  has no cartless seat yet.
 - **Emerald's netplay trade splitting on wander under load**
   (multiplayer/wander-split-under-load): the one failure above.
 
