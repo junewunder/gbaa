@@ -1668,25 +1668,17 @@
       "detail": "From the overnight lift (2026-11-11, runs/long/overnight-lift.log): every one of the seven games that failed to lift has 2-5 msr/mrs hard holes, nearly all in the reset code at 0x08000000 and the IRQ wrapper. analysis::holes::classify already returns these as CpuWhere::Boot and CpuWhere::Wrapper (recognised, not holes; docs/research/native-holes.md, What the Stage-A lifter should know), but the lifter still makes them hard, and Metroid and Kirby Nightmare get past them only by hand stand-ins in mods/<game>/holes.toml. Have the lifter print the reset's mode switches and stack setup as the program's start and the IRQ wrapper's PSR saves as runtime::hw IRQ entry/exit (keep The native-timing play build takes an IRQ the I bit held as soon as an msr clears I), so no game needs these stand-ins; msr/mrs anywhere else stay hard. Done when: no Boot/Wrapper msr/mrs is a hard hole on the corpus (just holes-all --against main, the lift's counts), Metroid and Nightmare still lift and build with their reset and IRQ-wrapper stand-ins removed (or the reason one stays written down), lift-check green, just check passes.",
       "check": "independent",
       "uses": ["heavy"],
-      "record": {
-        "state": "done",
-        "by": "a7b7e9d7",
-        "checker": "verifier-7e4c2a",
-        "at": "2026-11-12T12:59:21Z",
-        "evidence": "Lifter prints msr/mrs in the reset (ROM entry) and IRQ-vector handlers via prelude msr_cpsr (sp banked by mode)/mrs_cpsr/Game::spsr; elsewhere they stay hard. Corpus: moonbeam, warioware, emerald, Metroid and Nightmare now have 0 msr/mrs hard holes (overnight: 2-5 each); kirby-mirror/minish-cap share warioware's crt0, rogue/imperium emerald's (checked with gbaa-dis). Metroid lifts with 0 hard holes and builds without its reset/dispatcher stand-ins (Nightmare too, with temp stand-ins for 5 new IWRAM entry-read holes, noted). The removal from mods/ waits on {unit:native/drop-psr-standins}, since mods/ is shared live with main's lifter. agb native-irq-hold and native-ime-release pass route-check --native with the wrapper stand-in dropped. just check passes; lift-check --only native-irq-hold --only native-save passes; lift-metrics bars are all within except native-spike's hard hole, which is on main too ({unit:native/spike-entry-read-hole}). lines_prelude 961->1025 (+64: msr_cpsr, mrs_cpsr, bank_sp, banked sp/SPSR). The spike's planted_hole now targets interrupt::disable's mrs.",
-        "branch": "unit/native/lift-psr-boot-irq",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T12:59:21Z",
-          "by": "a7b7e9d7",
-          "host": "quack",
-          "pid": 2489918,
-          "start": "10657789",
-          "beats": true,
-          "session": "a7b7e9d7-b73a-46db-8e16-fc315bde78a9",
-          "lane": "quack/3"
-        },
-        "pushed": true
+      "notes": [
+        {
+          "at": "2026-11-12T13:05:47Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - Card check \"lift-check green\" was only partly run. The Evidence says `lift-check --only native-irq-hold --only native-save` passed, which is 2 of the 12 programs. But the branch changes the bars of all 12 in c…"
+        }
+      ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-12T13:05:47Z",
+        "findings": "- Card check \"lift-check green\" was only partly run. The Evidence says `lift-check --only native-irq-hold --only native-save` passed, which is 2 of the 12 programs. But the branch changes the bars of all 12 in crates/codegen/lift-check.toml (lines_prelude 961->1025), and it moves native-spike's planted_hole control (lift-check.toml:148-151) from the IRQ wrapper's mrs to interrupt::disable's mrs at f_08002728. Neither the new control nor the other 10 programs' native checks and builds were run on this branch, and they run new prelude code (msr_cpsr, the banked IRQ stack in irq_entry). Fix: run the full `just lift-check` and record the result. If native-spike is red only because of the entry-read hole that main also has (the spike entry-read hole unit, {unit:native/spike-entry-read-hole}), show that with `just lift-check --only native-spike` on main next to this branch's run, and confirm the moved planted_hole still makes the lift and the build fail with the expected f_08002728 mrs message.\n- Card check \"no Boot/Wrapper msr/mrs is a hard hole on the corpus (just holes-all --against main, the lift's counts)\" wasn't run as written. The Evidence gives lift counts for only 5 games (moonbeam, warioware, emerald, Metroid, Nightmare). For kirby-mirror, minish-cap, rogue and imperium it only says they share a crt0 with a lifted game, which was checked by eye with gbaa-dis, so those four were never lifted with this lifter. Fix: run `just holes-all --against main` (or lift every corpus game) on this branch, and put each game's msr/mrs hard-hole count, this branch against main, in the Evidence."
       },
       "round": "2026-11-12T11:33:19Z"
     },
