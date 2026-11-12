@@ -685,3 +685,70 @@ fn fly_refuses_versions_before_this_one() {
         "deploy/fly/Dockerfile's CMD should pass {want}: netplay::VERSION changed"
     );
 }
+
+/// Single-pak: the sender in seat 0 sends its program over the cable to
+/// seat 1, which has no cartridge; seat 1 boots it from EWRAM and plays on
+/// its own player's keys.
+#[test]
+fn a_cartless_seat_boots_what_the_sender_sends() {
+    use crate::demo::{MB_MARK, MB_MARK_AT, MB_PARAMS, gba_single_pak};
+    let mut g = gba_single_pak();
+    for f in 0..60 {
+        g.step(&[script(0, f), script(1, f)]).unwrap();
+    }
+    let ms = g.machines_mut();
+    // MultiBoot returned 0: the child took it.
+    assert_eq!(ms[0].bus.read32(MB_PARAMS + 0x40), 0, "MultiBoot failed");
+    let c = &ms[1];
+    assert!(
+        (0x0200_00C0..0x0200_01C0).contains(&c.cpu.pc),
+        "the child runs its program: pc {:#x}",
+        c.cpu.pc
+    );
+    assert_eq!(c.bus.read16(MB_MARK_AT), MB_MARK);
+    // The header, its boot mode (3, multiplayer) and player ID.
+    let rom = crate::demo::single_pak_sender();
+    assert_eq!(
+        c.bus.read32(0x0200_0000),
+        u32::from_le_bytes(rom[..4].try_into().unwrap())
+    );
+    assert_eq!(c.bus.read8(0x0200_00C4), 3);
+    assert_eq!(c.bus.read8(0x0200_00C5), 1);
+    for o in (0xC8..0x1C0).step_by(4) {
+        assert_eq!(
+            c.bus.read32(0x0200_0000 + o),
+            u32::from_le_bytes(rom[o as usize..o as usize + 4].try_into().unwrap()),
+            "program word {o:#x}"
+        );
+    }
+    // Each folds its own keys.
+    assert_ne!(c.bus.read32(0x0300_0000), 0);
+    assert_ne!(ms[0].bus.read32(MB_PARAMS + 0x44), 0);
+}
+
+/// A single-pak session, rolled back over a bad network, is the straight
+/// run; and it is another build than the two-cartridge one.
+#[test]
+fn a_single_pak_session_rolls_back_to_the_straight_run() {
+    use crate::demo::gba_single_pak;
+    let frames = 120;
+    let mut g = gba_single_pak();
+    g.set_clock(Config::default().clock);
+    let want = straight(g, 0, frames);
+    let consoles = (0..2).map(|_| gba_single_pak()).collect();
+    let (mut peers, net) = rollback_session(consoles, BAD, 9, Config::default());
+    play(&mut peers, &net, frames, script, |_, _| {}).unwrap();
+    settle(&mut peers, &net);
+    assert_rolled_straight(&mut peers, &want, frames);
+    assert!(peers.iter().all(|p| p.stats.rollbacks > 0));
+    for p in &peers {
+        let c = &p.console().machines()[1];
+        assert!(
+            (0x0200_00C0..0x0200_01C0).contains(&c.cpu.pc),
+            "seat {} booted",
+            p.seat()
+        );
+    }
+    let two = gba(crate::demo::single_pak_sender(), 2, None);
+    assert_ne!(gba_single_pak().build_id(), two.build_id());
+}

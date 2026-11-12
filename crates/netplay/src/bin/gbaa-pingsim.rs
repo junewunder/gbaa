@@ -58,8 +58,10 @@
 //!   same presses straight (a [`netplay::feel::Trace`]; `--trace-out F`
 //!   keeps it, `--trace F` reuses one); either times `--scale K` (1).
 //!
-//! OPTIONS: `--console toy|gba` (the toy console, or GBAs on a cable
-//! running a tiny ROM that reads the keys; toy), `--players N` (seats, 2
+//! OPTIONS: `--console toy|gba|single-pak` (the toy console, GBAs on a
+//! cable running a tiny ROM that reads the keys, or single-pak link play:
+//! a homebrew sender in seat 0 sending its program by `MultiBoot` to seat
+//! 1, which has no cartridge, `demo::single_pak_sender`; toy), `--players N` (seats, 2
 //! to 4, `room` only; 2), `--frames N`
 //! (600), `--delay D` (input delay, 0), `--fps F` (each peer's frame rate,
 //! 60), `--linger-ms M` (the most a peer keeps answering after its last
@@ -85,12 +87,14 @@ const USAGE: &str = "usage: gbaa-pingsim run PROFILE [OPTIONS]
        gbaa-pingsim straight [OPTIONS]
        gbaa-pingsim desktop PROFILE ROM [-- DESKTOP_ARGS]
        gbaa-pingsim feel PROFILE [FEEL_OPTIONS]
-OPTIONS: --console toy|gba, --players N, --frames N, --delay D, --fps F, --linger-ms M";
+OPTIONS: --console toy|gba|single-pak, --players N, --frames N, --delay D, --fps F, --linger-ms M";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Kind {
     Toy,
     Gba,
+    /// Single-pak: a sender in seat 0, seat 1 with no cartridge.
+    SinglePak,
 }
 
 #[derive(Clone, Debug)]
@@ -112,6 +116,7 @@ impl Options {
         let console = match self.console {
             Kind::Toy => "toy",
             Kind::Gba => "gba",
+            Kind::SinglePak => "single-pak",
         };
         [
             ("--console", console.to_string()),
@@ -152,7 +157,8 @@ fn options(args: &[String]) -> Result<(Options, Vec<String>), String> {
                 o.console = match v.as_str() {
                     "toy" => Kind::Toy,
                     "gba" => Kind::Gba,
-                    _ => return Err(format!("--console toy or gba, not {v}")),
+                    "single-pak" => Kind::SinglePak,
+                    _ => return Err(format!("--console toy, gba or single-pak, not {v}")),
                 }
             }
             "--frames" => o.frames = v.parse().map_err(bad)?,
@@ -202,10 +208,21 @@ fn console_gba(seats: usize, seat: Option<usize>) -> netplay::gba::Gba {
     g
 }
 
+/// The single-pak sender and a seat with no cartridge
+/// ([`demo::gba_single_pak`]); seat `seat`'s peer's, or the whole session's.
+fn console_single_pak(seat: Option<usize>) -> netplay::gba::Gba {
+    let mut g = demo::gba_single_pak();
+    if seat.is_none() {
+        g.set_clock(Config::default().clock);
+    }
+    g
+}
+
 fn straight(o: &Options) -> Vec<(u32, u64)> {
     match o.console {
         Kind::Toy => demo::straight(console_toy(o.players, None), o.delay as u32, o.frames),
         Kind::Gba => demo::straight(console_gba(o.players, None), o.delay as u32, o.frames),
+        Kind::SinglePak => demo::straight(console_single_pak(None), o.delay as u32, o.frames),
     }
 }
 
@@ -221,6 +238,7 @@ fn peer(seat: usize, to: SocketAddr, o: &Options) -> Result<(), String> {
     match o.console {
         Kind::Toy => play(console_toy(2, Some(seat)), udp, seat, o),
         Kind::Gba => play(console_gba(2, Some(seat)), udp, seat, o),
+        Kind::SinglePak => play(console_single_pak(Some(seat)), udp, seat, o),
     }
 }
 
@@ -242,6 +260,10 @@ fn room_peer(
     match o.console {
         Kind::Toy => room_play(|s| console_toy(n, Some(s)), server, seat, code, o),
         Kind::Gba => room_play(|s| console_gba(n, Some(s)), server, seat, code, o),
+        Kind::SinglePak if n == 2 => {
+            room_play(|s| console_single_pak(Some(s)), server, seat, code, o)
+        }
+        Kind::SinglePak => Err("single-pak plays two seats".into()),
     }
 }
 

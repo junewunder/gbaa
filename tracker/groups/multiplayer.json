@@ -862,17 +862,19 @@
       "title": "Single-pak link: a seat with no cartridge boots by MultiBoot",
       "detail": "From the link-cable survey (docs/research/multiplayer.md, 'The cable over the internet'): single-pak games (Mario Kart Super Circuit's single-pak mode, Bomberman Tournament, the Mario Bros. Classic games) send a program over the cable to GBAs with no cartridge. Our HLE BIOS MultiBoot (SWI 0x25) always fails (runtime/src/bios.rs) and a machine can't start without a ROM. Add: a cartridge-less machine that runs the BIOS's boot-time MultiBoot receive over runtime::link and boots what it gets from EWRAM, and MultiBoot on the parent over the hub. Check: a homebrew single-pak sender (written here, or an agb/libtonc example) boots a client on a cartless seat through two local netplay peers, same end hash; just check. No ROM june has needs it.",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "a897fc66",
-        "session": "a897fc66-b4e2-4e72-b83a-9a5982cf7e3b",
-        "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T05:56:52Z",
-        "branch": "unit/multiplayer/single-pak-multiboot",
-        "beats": true
+        "at": "2026-11-12T06:25:44Z",
+        "evidence": "Homebrew single-pak sender (netplay::demo::single_pak_sender: GBATEK handshake, then SWI 0x25) boots a cartless seat 1 through two local netplay peers: just ping-sim rough --console single-pak passes (10 hashes and end match the straight run on both seats; calm and wander pass too), after merging main. Unit tests: a_cartless_seat_boots_what_the_sender_sends (child at 0x020000C0+, mark written, header/program copied, boot mode 3, ID 1, MultiBoot r0=0; boots ~frame 18 after 237 transfers), a_single_pak_session_rolls_back_to_the_straight_run (in-process rollback over a lossy net), ping_sim::rough_single_pak, runtime link tests for the failing paths and cartless HardReset; snap v4 with a pinned v3 state. just check passes on the merged branch (1c68875).",
+        "host": "quack"
       },
-      "round": "2026-11-12T05:56:52Z"
+      "notes": [
+        {
+          "at": "2026-11-12T06:25:48Z",
+          "by": "a897fc66",
+          "text": "Not done: the desktop has no cartless seat (netplay::gba::Gba::single_pak and runtime::bios::multiboot::boot_cartless are there to use); normal-mode MultiBoot (r1=0/2) still fails; no commercial single-pak game tried (none of june's)."
+        }
+      ]
     },
     {
       "id": "multiplayer/wander-split-under-load",
@@ -897,13 +899,32 @@
       "detail": "After {unit:multiplayer/wireless-adapter-local}: runtime::link::rfu's radio (hosts, searches, connections, packets) moves onto gbaa-server so each player runs only their own Emerald and adapter (docs/research/multiplayer.md option F, 'The wireless adapter, locally'). Measure how much latency librfu's timeouts and the Union Room's host/search switching allow, through the variable-ping simulator. Check: two Emerald processes (alice.sav, bob.sav) trade in the Union Room through a local server under the 'calm' profile; just check.",
       "check": "recorded",
       "needs": ["multiplayer/wireless-adapter-local"],
+      "record": {
+        "state": "claimed",
+        "by": "8f376444",
+        "session": "8f376444-9b26-4bb9-bc1e-903dc68ee5e5",
+        "host": "quack",
+        "pid": 2490379,
+        "start": "10658170",
+        "at": "2026-11-12T06:30:40Z",
+        "branch": "unit/multiplayer/wireless-radio-netplay",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-08T21:50:27Z",
           "by": "954f0eb1",
           "text": "The local adapter's one guess beyond afska's docs: a searching adapter lists a host it heard for 3 s across searches (Adapter::heard); without it BOB's board offer rarely reached ALICE. Check whether the networked radio still needs it."
         }
-      ]
+      ],
+      "round": "2026-11-12T06:30:40Z"
+    },
+    {
+      "id": "multiplayer/stall-catch-up-paced",
+      "title": "Netplay: a peer back from a stall catches up in seconds",
+      "detail": "From Emerald's netplay trade split once on wander, under load ({unit:multiplayer/wander-split-under-load}): a stall now survives (room::QUIET 8 s), but a paced peer back from a 4 s stall stays ~240 frames behind; time sync holds the one ahead back one frame in 13, so ~50 s at that gap, each changed input a ~240-frame rollback on it (3.7 s under load). Make the gap close in a few seconds (the behind peer running unpaced frames, or holding back harder far ahead), without hurting rollback-feel's budgets. Check: just rollback-feel wander headless --paced with a peer SIGSTOPped 4 s: lead back under 10 frames within 10 s; the feel budget test; just check.",
+      "check": "recorded",
+      "uses": ["heavy"]
     }
   ]
 }
