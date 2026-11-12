@@ -249,16 +249,17 @@
       "branch": "unit/native/lift-bios-affine",
       "record": {
         "state": "claimed",
-        "by": "eae64132",
-        "session": "eae64132-8dca-415e-94e3-91cab1067dc4",
+        "by": "538fc492",
+        "session": "538fc492-b2c1-497d-aee5-7a032c66a497",
         "host": "quack",
         "pid": 2489427,
         "start": "10657408",
-        "at": "2026-11-12T13:43:18Z",
+        "at": "2026-11-12T13:45:46Z",
         "branch": "unit/native/lift-bios-affine",
-        "beats": true,
+        "resumed": "eae64132",
+        "prevSession": "eae64132-8dca-415e-94e3-91cab1067dc4",
         "pushed": true,
-        "ended": "2026-11-12T13:45:33Z"
+        "beats": true
       },
       "notes": [
         {
