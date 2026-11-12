@@ -1136,6 +1136,15 @@
         "by": "625afd3a",
         "other": "d/lift-bars-agents-may-raise-a-count-with-the"
       }
+    },
+    {
+      "id": "d/unknown-address-step-land-without",
+      "title": "Should the unknown-address step land without the fall it was to show: Land the step",
+      "why": "june, 2026-11-12: land it, judged by the loads-that-read-everything count. Before it lands, native-irq-hold must get its 16 typed heap accesses (ref_accesses) back: that is a real loss, not a counting accident. The 1-3 unproven words on the three IRQ programs fall under the new lift-bars rule (d/lift-bars-agents-may-raise-a-count-with-the): raise only with the cause named.",
+      "by": "owner",
+      "at": "2026-11-12T18:59:55Z",
+      "question": "q/unknown-address-step-land-without",
+      "via": "625afd3a"
     }
   ]
 }
