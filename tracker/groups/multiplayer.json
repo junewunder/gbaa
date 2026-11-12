@@ -914,6 +914,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T08:26:32Z",
+          "by": "4d69fe66",
+          "text": "Networked adapter keeps HEARD_FOR by default now: without it the sim lost BOB's offer at 100/120 ms. Sim log prints positions; at 400 ms ALICE's avatar blocks BOB's scripted walk at 3,6."
+        },
+        {
           "at": "2026-11-12T07:47:47Z",
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - docs/research/multiplayer.md, \"The radio on the server\" latency table (diff.patch lines ~2671-2684): this table is the card's \"measure how much latency librfu's timeouts and the Union Room's host/search switch…"
