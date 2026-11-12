@@ -1637,21 +1637,8 @@
         "checker": "a0568327",
         "at": "2026-11-12T11:45:41Z",
         "evidence": "Verifier subagent a0568327 (fresh context): diff reviewed, no bugs; cargo test -p route-check 12 passed incl. native::tests::skips_the_holes_files_copies and finds_the_holes_file_by_name; Metroid's route (units/metroid-native.toml from its unit branch) with --name metroid prints all five mods/metroid/holes.toml [[copy]] ranges as not compared (0x03000c7c..0x03000eac, 0x030016c4..0x030017da, 0x03003b90..0x030041ec, 0x030041ec..0x03004294, 0x03004294..0x03004440), then fails on the known play-vs-interp stray. just check exit 0 after merging main.",
-        "branch": "unit/native/check-holes-copies",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T11:45:41Z",
-          "by": "598b2669",
-          "host": "quack",
-          "pid": 2489427,
-          "start": "10657408",
-          "beats": true,
-          "session": "598b2669-ad9d-445e-93b5-80339472ed46",
-          "lane": "quack/2"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-12T11:24:07Z"
+        "host": "quack"
+      }
     },
     {
       "id": "native/lift-bios-more",
