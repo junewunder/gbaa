@@ -1643,6 +1643,11 @@
       "uses": ["heavy"],
       "notes": [
         {
+          "at": "2026-11-12T10:05:09Z",
+          "by": "fd902c34",
+          "text": "Seen 2026-11-12: native-spike's hard hole (f_08006d47, r6 read at 0x08006d76, passed in r1) is on origin/main and before the fnref-rom-read-bound merge (1c09d57c^1), so full just lift-check / lift-metrics fail on main until this lands."
+        },
+        {
           "at": "2026-11-12T09:30:23Z",
           "by": "d12ab564",
           "text": "2026-11-12: agb/native-dma (new, {unit:native/hw-dma-registers}) hits the same hole, a gap in qrcodegen's draw_format_bits (f_08006d23 reads r6); holes/native-dma.toml stands it in with unreachable!. Drop that stand-in when this lands."
