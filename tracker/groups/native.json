@@ -1537,15 +1537,23 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "00024cba",
-        "session": "00024cba-14bc-471e-a1bb-2b8d8d83435f",
-        "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T09:54:28Z",
+        "checker": "verifier-7c3e1a",
+        "at": "2026-11-12T10:23:23Z",
+        "evidence": "Prelude ld/st reach Hw::save at 0x0E-0x0F (byte lanes, byte repeated) and the EEPROM at 0x0D as runtime::bus; Game::new sets Kind::detect(ROM). New lift-check program agb/native-save (SRAM): lift-check --only native-save passed, planted SRAM strb caught (EWRAM 0x020000c4 play 0x00 native 0x01); control without the kind line fails (native reads 0xff). just check passes. Verifier verifier-7c3e1a reran both and compared prelude to bus: pass. lines_prelude 850->874 (eeprom_at, save arms, kind). Route records a known mGBA 0.10.5 mismatch: it drops unaligned SRAM strh/str.",
         "branch": "unit/native/lift-save-memory",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T10:23:23Z",
+          "by": "00024cba",
+          "host": "quack",
+          "pid": 2490379,
+          "start": "10658170",
+          "beats": true,
+          "session": "00024cba-14bc-471e-a1bb-2b8d8d83435f",
+          "lane": "quack/4"
+        }
       },
       "round": "2026-11-12T09:54:28Z"
     },
