@@ -157,6 +157,8 @@ pub struct Gba<P: Seat = Pad> {
     /// The cable unplugged ([`Gba::unplug`]): the one seat still running,
     /// on a cable of its own.
     alone: Option<usize>,
+    /// The one seat whose picture is drawn ([`Gba::show_only`]), or all.
+    shown: Option<usize>,
 }
 
 /// Every seat's consoles and the cable, in memory ([`Snapshot`]); not
@@ -231,7 +233,18 @@ impl<P: Seat> Gba<P> {
             build,
             changed: [false; runtime::link::MAX_PLAYERS],
             alone: None,
+            shown: None,
         }
+    }
+
+    /// Draw only seat `seat`'s picture (`None`: every seat's), the one
+    /// this peer shows: the others' PPUs skip their lines, as in frames
+    /// rollback runs again. The picture is outside snapshots and hashes,
+    /// so this changes nothing any console computes, only the time a
+    /// frame takes (multiplayer/rollback-feel-sim).
+    pub fn show_only(&mut self, seat: Option<usize>) {
+        self.shown = seat;
+        self.quiet(false);
     }
 
     /// Pull the cable out of every console but seat `keep`'s, which plays
@@ -468,9 +481,10 @@ impl<P: Seat> Snapshot for Gba<P> {
     }
 
     fn quiet(&mut self, on: bool) {
-        for m in &mut self.machines {
+        let shown = self.shown;
+        for (i, m) in self.machines.iter_mut().enumerate() {
             m.platform.pad_mut().quiet = on;
-            m.ppu.draw = !on;
+            m.ppu.draw = !on && shown.is_none_or(|s| s == i);
         }
     }
 }

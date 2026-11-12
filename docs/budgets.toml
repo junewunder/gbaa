@@ -22,9 +22,11 @@ max_lines = 400
 path = "docs/research/native-holes.md"
 max_lines = 470
 
+# 1962 after multiplayer/rollback-feel-sim added the feel sim's entry
+# (12 lines, its other options left to the justfile's comment).
 [[doc]]
 path = "docs/tools/commands.md"
-max_lines = 1950
+max_lines = 1962
 
 [[doc]]
 path = "docs/native-port-design.md"

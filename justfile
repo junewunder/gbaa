@@ -1358,6 +1358,11 @@ rollback-feel profile="wander" rom=(roms / "Kirby & The Amazing Mirror.gba") *ar
     {{lock}} cargo build -q --release -p netplay --bin gbaa-pingsim -p desktop --bin gbaa-desktop
     target/release/gbaa-pingsim desktop crates/netplay/profiles/{{profile}}.toml {{quote(rom)}} -- {{args}}
 
+# The feel sim (multiplayer/rollback-feel-sim; netplay::feel): every peer in one process, in simulated time, through the profile (crates/netplay/profiles/NAME.toml: calm, wifi, fly, wander, spiky, rough), each driven as gbaa-desktop's window drives it, and what each window shows: frames late, doubled, skipped, rollbacks and their depth, holds, the other player's jumps, how long after due a frame is on screen; for the window's loop before 2026-11-08's fixes and after. Turns cost what two recompiled Kirbys do on quack (a model), or with --rom ROM what ROM's own frames cost: it first runs ROM once on interpreted GBAs, straight, timing each frame, snapshot and restore on the thread's CPU clock (a feel::Trace; --trace-out F keeps it, --trace F reuses one instead of --rom), then plays the session on those costs (either times --scale K). Milliseconds modelled; about 90 s to trace 5400 Kirby frames. Its budgets are `cargo test -p netplay feel`, in just check. ARGS: --players N, --frames N, --pacing audio|muted|paced, --version before|after|both, --present-ms L, --scale K, --rom ROM, --trace F, --trace-out F, --input1..4 S.
+rollback-feel-sim profile="fly" *args:
+    {{lock}} cargo build -q --release -p netplay --bin gbaa-pingsim
+    target/release/gbaa-pingsim feel crates/netplay/profiles/{{profile}}.toml {{args}}
+
 # gbaa-server on fly.io (multiplayer/play-gate; deploy/fly/): the app gbaa-server in ewr, one shared-cpu machine, its rooms on UDP 7374. It keeps no files, so no volume. fly-setup once (billed: a dedicated IPv4, which public UDP needs), then fly-deploy after any server change.
 fly-setup:
     fly ips list -a gbaa-server | grep -q 'v4.*dedicated' || fly ips allocate-v4 -a gbaa-server -y

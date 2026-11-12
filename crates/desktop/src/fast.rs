@@ -101,6 +101,42 @@ impl Clock {
     }
 }
 
+/// A frame clock that catches up, as pacing by sound does: frame k is
+/// due k periods after the first, and a frame that runs late lets the
+/// next ones run at once until they are on time again, unless more than
+/// [`Pacer::SLACK`] behind (the sound queue's worth), when it starts
+/// afresh. Netplay's: a peer that slid back on every late frame would
+/// fall behind the others, and time sync would hold them back to match.
+#[derive(Clone, Debug, Default)]
+pub struct Pacer {
+    next: Option<Instant>,
+}
+
+impl Pacer {
+    /// The most it catches up: `audio::TARGET_MS`.
+    pub const SLACK: Duration = Duration::from_millis(50);
+
+    /// Wait until the next frame is due.
+    pub fn wait(&mut self, period: Duration) {
+        let now = Instant::now();
+        let mut due = *self.next.get_or_insert(now);
+        if due > now {
+            std::thread::sleep(due - now);
+        } else if now - due > Pacer::SLACK {
+            due = now - Pacer::SLACK;
+        }
+        self.next = Some(due + period);
+    }
+
+    /// A frame held back (netplay's time sync): the next is due a period
+    /// later, as if it had run.
+    pub fn hold(&mut self, period: Duration) {
+        if let Some(n) = &mut self.next {
+            *n += period;
+        }
+    }
+}
+
 /// Whether fast-forward is on, and how fast.
 #[derive(Clone, Debug, Default)]
 pub struct FastForward {

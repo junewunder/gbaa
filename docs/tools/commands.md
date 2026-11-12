@@ -1886,6 +1886,18 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   The pieces alone: `gbaa-pingsim proxy PROFILE A_ADDR B_ADDR`, `peer
   SEAT ADDR`, `straight`. `cargo test -p netplay --test ping_sim` runs
   every profile (and `rough` with GBAs), about 20 s of wall time.
+- The feel sim (multiplayer/rollback-feel-sim, `netplay::feel`):
+  `just rollback-feel-sim [PROFILE] [ARGS]` runs `gbaa-pingsim feel`:
+  every peer in one process, in simulated time, through the profile's
+  network, each driven as `gbaa-desktop`'s netplay loop (`--pacing
+  audio|muted|paced`) onto a 60 Hz display. A line a seat: frames late,
+  doubled, skipped, rollbacks and depth, holds, the other player's
+  jumps, lag to screen; before 2026-11-08's fixes and after
+  (`--version`). Turns cost a model of two recompiled Kirbys (ms a run),
+  or with `--rom ROM` a trace of ROM run once straight on interpreted
+  GBAs, timed on the thread's CPU clock (~90 s for 5400 frames;
+  `--trace-out F` keeps it, `--trace F` reuses it). Other ARGS: the
+  justfile's comment. `cargo test -p netplay feel` holds the budgets.
 - The server (multiplayer/relay-server, then multiplayer/remove-lockstep-quic,
   `crates/relay`): `gbaa-server [ADDR] [--min-version N]` serves
   plain-UDP rooms (`relay::rooms`, default `0.0.0.0:7374`): it seats the
