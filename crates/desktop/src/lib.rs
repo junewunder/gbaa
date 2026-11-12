@@ -275,6 +275,9 @@ usage: gbaa-desktop ROM [options]
                    player
   --delay N        netplay, the host's: input delay in frames (default
                    0; 0-30)
+  --present-ms N   netplay: a frame goes to the window N ms after it was
+                   due (default 8; 0: as soon as it's done), so frames
+                   reach the display evenly, whatever a rollback cost
   --paced          netplay, headless: run at the GBA's frame rate, as the
                    window does, not flat out; the end line counts the
                    freezes (waits over a frame) and the frame times
@@ -483,6 +486,9 @@ pub struct Options {
     pub players: Option<usize>,
     /// `--paced`: headless netplay at the GBA's frame rate, not flat out.
     pub paced: bool,
+    /// `--present-ms`: netplay, how long after a frame was due it goes to
+    /// the window (`netplay::feel::PRESENT_US` unless given).
+    pub present_ms: Option<f64>,
     /// `--menu`: headless netplay, when the menu is open.
     pub menu: input::Spans,
     /// `--desync-at`: netplay, a forced desync from this frame on.
@@ -637,6 +643,7 @@ impl Options {
             delay: None,
             players: None,
             paced: false,
+            present_ms: None,
             menu: input::Spans::default(),
             desync_at: None,
         };
@@ -730,6 +737,15 @@ impl Options {
                             .ok()
                             .filter(|d| (0..=30).contains(d))
                             .ok_or(format!("bad delay {v:?} (0-30 frames)"))?,
+                    );
+                }
+                "--present-ms" => {
+                    let v = value("--present-ms")?;
+                    o.present_ms = Some(
+                        v.parse()
+                            .ok()
+                            .filter(|ms: &f64| (0.0..=16.0).contains(ms))
+                            .ok_or(format!("bad --present-ms {v:?} (0-16)"))?,
                     );
                 }
                 "--dump" => o.dump = Some(value("--dump")?.into()),

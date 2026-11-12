@@ -1343,7 +1343,7 @@ emerald-netplay rom=(roms / "Pokemon - Emerald Version.gba") *args:
     {{lock}} cargo build -q --release -p emerald-save
     target/release/emerald-netplay {{quote(rom)}} {{quote(gbaa_data / "saves/emerald")}} {{args}}
 
-# The variable-ping simulator (multiplayer/ping-sim): two peer processes play a rollback netplay session over UDP through a proxy that delays, loses, reorders and duplicates as a profile says (crates/netplay/profiles/NAME.toml: calm, wander, spiky, rough); passes when both peers' hashes every 60 frames and at the end are a straight run's (crates/netplay/src/bin/gbaa-pingsim.rs). Real time: 600 frames at 60 fps, about 15 s. ARGS: --console toy|gba, --frames, --delay, --fps, --linger-ms.
+# The variable-ping simulator (multiplayer/ping-sim): two peer processes play a rollback netplay session over UDP through a proxy that delays, loses, reorders and duplicates as a profile says (crates/netplay/profiles/NAME.toml: calm, wander, spiky, rough); passes when both peers' hashes every 60 frames and at the end are a straight run's (crates/netplay/src/bin/gbaa-pingsim.rs). Real time: 600 frames at 60 fps, about 15 s. ARGS: --console toy|gba|single-pak (single-pak: a homebrew sender gives its program by MultiBoot to a seat with no cartridge, multiplayer/single-pak-multiboot), --frames, --delay, --fps, --linger-ms.
 ping-sim profile="rough" *args:
     {{lock}} cargo build -q --release -p netplay --bin gbaa-pingsim
     target/release/gbaa-pingsim run crates/netplay/profiles/{{profile}}.toml {{args}}
@@ -1357,6 +1357,11 @@ room-sim profile="calm" *args:
 rollback-feel profile="wander" rom=(roms / "Kirby & The Amazing Mirror.gba") *args:
     {{lock}} cargo build -q --release -p netplay --bin gbaa-pingsim -p desktop --bin gbaa-desktop
     target/release/gbaa-pingsim desktop crates/netplay/profiles/{{profile}}.toml {{quote(rom)}} -- {{args}}
+
+# The feel sim (multiplayer/rollback-feel-sim; netplay::feel): every peer in one process, in simulated time, through the profile (crates/netplay/profiles/NAME.toml: calm, wifi, fly, wander, spiky, rough), each driven as gbaa-desktop's window drives it, and what each window shows: frames late, doubled, skipped, rollbacks and their depth, holds, the other player's jumps, how long after due a frame is on screen; for the window's loop before 2026-11-08's fixes and after. Turns cost what two recompiled Kirbys do on quack (a model), or with --rom ROM what ROM's own frames cost: it first runs ROM once on interpreted GBAs, straight, timing each frame, snapshot and restore on the thread's CPU clock (a feel::Trace; --trace-out F keeps it, --trace F reuses one instead of --rom), then plays the session on those costs (either times --scale K). Milliseconds modelled; about 90 s to trace 5400 Kirby frames. Its budgets are `cargo test -p netplay feel`, in just check. ARGS: --players N, --frames N, --pacing audio|muted|paced, --version before|after|both, --present-ms L, --scale K, --rom ROM, --trace F, --trace-out F, --input1..4 S.
+rollback-feel-sim profile="fly" *args:
+    {{lock}} cargo build -q --release -p netplay --bin gbaa-pingsim
+    target/release/gbaa-pingsim feel crates/netplay/profiles/{{profile}}.toml {{args}}
 
 # gbaa-server on fly.io (multiplayer/play-gate; deploy/fly/): the app gbaa-server in ewr, one shared-cpu machine, its rooms on UDP 7374. It keeps no files, so no volume. fly-setup once (billed: a dedicated IPv4, which public UDP needs), then fly-deploy after any server change.
 fly-setup:
