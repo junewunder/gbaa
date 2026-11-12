@@ -317,20 +317,8 @@ saved sp; a new task starts with the r4-r11 the game put on its stack.
 A state machine would split functions at 11,063 sites. Filed as
 `native/nightmare-task-switch`. No other corpus game switches stacks
 (Amazing Mirror doesn't); the rule finds one anywhere. The lifter flags
-them too, and has the coroutines (`native/task-coroutines`).
-
-The stand-ins (2026-11-12, in Nightmare's holes file) are at the veneers'
-Thumb keys, as `holes/native-tasks.toml`'s; the veneers' ARM halves get
-unreachable ones. Yield stores its three globals (0x03002470, 0x030026f8,
-0x030025e0) and the scheduler copies them into the task; resume hands a
-resumed task r2 = 1 and r3 = 0x03004c94 and the pc with bit 0 set, as
-its `orr` and `bx r1` do. Discovery had taken the scheduler's call of
-resume for a jump: resume's veneer follows a `pop {pc}`, so its `bx pc`
-read as `pop {rN}; bx rN`'s return, the veneer ran as a leaf returning
-to its ARM half, and the code after the call wasn't code. A `bx pc` is a
-jump now (`vsa::func::classify`). The native build still stops at boot,
-before any task runs: DMA (0x0ba), then serial (0x120), then, with both
-ignored, a call to 0x080cdcd5 in m4a's init.
+them too, and has the coroutines (`native/task-coroutines`). Stand-ins: its
+holes file; resume's `bx pc` after a `pop {pc}` is a jump now (`classify`).
 
 ## Functions that change r4-r11 or sp
 
@@ -399,8 +387,7 @@ Summary holes that are hard, before and after (`just holes-all --against`):
 
 | Cause | Functions |
 |---|---|
-| libgcc ieee754-df.S's denormal paths, r4 and r5 in (ARM) | Emerald 0x082dfd09, Rogue 0x0800cb45, Imperium 0x08003879, Kirby M. 0x0814fd35, Minish 0x080afbd1 |
-| m4a's `ChnVolSetAsm` (m4a_1.s), r4 the channel and r5 the track in | Nightmare 0x080ce1f9 (`ldrb r1, [r4, #18]` at its entry; the others in the row above not checked against it) |
+| libgcc ieee754-df.S's denormal paths, r4 and r5 in (ARM) | Emerald 0x082dfd09, Rogue 0x0800cb45, Imperium 0x08003879, Kirby M. 0x0814fd35, Minish 0x080afbd1; Nightmare 0x080ce1f9 is m4a's `ChnVolSetAsm` instead (r4 the channel, r5 the track), the others not checked against it |
 | hand-written register parameters | Minish 0x080086d9 (`sub_080086D8`, r8 and r11), 0x08060ba1 (derefs r5), 0x08008a89 (r5, `ClampPlayerVelocity`'s kind); WarioWare 0x080efe51, 0x080f0ab0 |
 | modern GCC's far jump by `bl` into a fragment of the caller's, taken for a call | moonbeam 0x0801a081 and six more, Rogue 0x0820c629, Imperium 0x0821e331 (not looked into one by one) |
 | agbcc's partly built word stored with the unset register's other bits (a struct's padding) | Emerald 0x080852d5, Kirby M. 0x08132889, WarioWare 0x080abfa5, Metroid 0x08073ce5 |
