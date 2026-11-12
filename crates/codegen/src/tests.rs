@@ -2,7 +2,7 @@
 //! discovery's output written by hand.
 
 use crate::emit::{build_all, pretty};
-use crate::func::{Ctx, Insn, Plan, build_func, exits};
+use crate::func::{Ctx, Idle, Insn, Plan, build_func, exits};
 use crate::lower::{lower_func, lower_func_checked};
 use analysis::discovery::{Code, Discovery, Evidence};
 use analysis::program::ROM_BASE;
@@ -2136,4 +2136,26 @@ fn an_arm_ldr_pop_of_r4_restores_it() {
     let s = &sums.by_entry[&ROM_BASE];
     assert_eq!(s.holes, std::collections::BTreeSet::new());
     assert!(s.keeps);
+}
+
+#[test]
+fn an_idle_loops_exit_syncs_in_native_code() {
+    // `b L2; L1: ldr r0, [r1, #8]; L2: ands r0, r4; cmp r0, #0; bne L1;
+    // nop; bx lr`: a DMA wait entered in its middle (Metroid's).
+    let (rom, d) = thumb_program(
+        &[0xE000, 0x6888, 0x4020, 0x2800, 0xD1FB, 0x46C0, 0x4770],
+        &[2; 7],
+        &[0x0800_0001],
+    );
+    let mut ctx = Ctx::new(&rom, &d);
+    ctx.cfg.clock = crate::func::Clock::Native;
+    let f = build_func(&ctx, 0x0800_0001);
+    // The `bne` ends its block, so where it isn't taken the loop's exit
+    // syncs as the interpreter does (native/play-native-metroid-interp).
+    let x = exits(&ctx, &f.blocks[&0x0800_0005]);
+    let idle: Vec<Idle> = x.iter().map(|x| x.idle).collect();
+    assert_eq!(idle, [Idle::Edge, Idle::Exit], "{x:x?}");
+    let text = pretty(lower_func(&ctx, &f));
+    assert!(text.contains("rt::idle_edge(m)"), "{text}");
+    assert!(text.contains("rt::idle_exit(m)"), "{text}");
 }
