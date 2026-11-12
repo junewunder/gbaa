@@ -1441,34 +1441,26 @@
       "check": "recorded",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "blocked",
+        "on": "q/raise-native-tasks-unproven-function",
         "by": "d258b190",
-        "session": "d258b190-7fbc-4544-b0d3-69f7ab7ebcf7",
-        "host": "quack",
-        "pid": 2489427,
-        "start": "10657408",
-        "at": "2026-11-12T10:57:25Z",
-        "branch": "unit/native/fnref-emerald-speed",
-        "resumed": "5cf6c823",
-        "prevSession": "5cf6c823-3eeb-4734-8c09-a83340a43640",
-        "pushed": true,
-        "beats": true
+        "at": "2026-11-12T11:23:37Z"
       },
       "notes": [
+        {
+          "at": "2026-11-12T11:23:26Z",
+          "by": "d258b190",
+          "text": "The 2 words: vtable 0x080244c8/cc. Main reads them only via an early transient value of sp at 0x08000180's pop (n=5); settled values are wide RomFrom sets on both. Tried: cap absorbing only to stop(lo) (object end): ref_unexplained 35->93, reverted."
+        },
+        {
+          "at": "2026-11-12T11:23:22Z",
+          "by": "d258b190",
+          "text": "at ec10365 Emerald --summaries --callee-sets finishes: 11:24 wall, 2.37 GB peak, round 0 82 s; stops unsettled at main's 48M-token bound (29,696 runs). Only blocker: native-tasks fn_words_not_proven 59>57, see the ask."
+        },
         {
           "at": "2026-11-12T10:56:48Z",
           "by": "5cf6c823",
           "text": "2026-11-12: branch ec10365: Emerald round 0 in 437 s (was ~20 min); a run on an earlier build finished: 27:37, 2.1 GB peak, unsettled. Left (~1 h): merging main's rom-read-bound took native-tasks fn_words_not_proven to 59>57 (main 57); speed changes each reverted: same"
-        },
-        {
-          "at": "2026-11-12T10:56:33Z",
-          "by": "5cf6c823",
-          "text": "Then: one timed whole run at HEAD (just long, --mem 9G, GBAA_FNREF_TRACE=1 names the function that stops it settling: 'unsettled after'). Round 1 runs ~256 fns/min. memory/fnref-flow-emerald-memory.md says how to profile with eu-stack (perf is blocked here)."
-        },
-        {
-          "at": "2026-11-08T22:44:22Z",
-          "by": "9e61b577",
-          "text": "main now has a 48M-token bound in fnref::follow (stops unsettled) and G::give_all (shared joins across a by-value call's callees) from {unit:native/whole-lift-memory}; expect a merge in fnref.rs with b6d5ed3f; raise TOKENS if Emerald needs it."
         }
       ],
       "round": "2026-11-12T08:41:16Z"
@@ -1664,7 +1656,19 @@
       "title": "The native check skips the holes file's RAM code copies",
       "detail": "docs/native-stage-b.md, 'The first game': route-check --native skips the destinations of Discovery::copies only; a commercial game's IWRAM copies come from its holes file's [[copy]] entries (Metroid's five, mods/metroid/holes.toml), which the native program runs as Rust and never writes, so they would differ. Skip them too (the lifter's holes file, given to route-check or found by the game's name). Done when: Metroid's route-check --native prints those ranges as not compared, a unit test covers it, and just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "598b2669",
+        "session": "598b2669-ad9d-445e-93b5-80339472ed46",
+        "host": "quack",
+        "pid": 2489427,
+        "start": "10657408",
+        "at": "2026-11-12T11:24:07Z",
+        "branch": "unit/native/check-holes-copies",
+        "beats": true
+      },
+      "round": "2026-11-12T11:24:07Z"
     },
     {
       "id": "native/lift-bios-more",
