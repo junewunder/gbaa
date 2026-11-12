@@ -1669,15 +1669,23 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "a7b7e9d7",
-        "session": "a7b7e9d7-b73a-46db-8e16-fc315bde78a9",
-        "host": "quack",
-        "pid": 2489918,
-        "start": "10657789",
-        "at": "2026-11-12T11:33:19Z",
+        "checker": "verifier-7e4c2a",
+        "at": "2026-11-12T12:59:21Z",
+        "evidence": "Lifter prints msr/mrs in the reset (ROM entry) and IRQ-vector handlers via prelude msr_cpsr (sp banked by mode)/mrs_cpsr/Game::spsr; elsewhere they stay hard. Corpus: moonbeam, warioware, emerald, Metroid and Nightmare now have 0 msr/mrs hard holes (overnight: 2-5 each); kirby-mirror/minish-cap share warioware's crt0, rogue/imperium emerald's (checked with gbaa-dis). Metroid lifts with 0 hard holes and builds without its reset/dispatcher stand-ins (Nightmare too, with temp stand-ins for 5 new IWRAM entry-read holes, noted). The removal from mods/ waits on {unit:native/drop-psr-standins}, since mods/ is shared live with main's lifter. agb native-irq-hold and native-ime-release pass route-check --native with the wrapper stand-in dropped. just check passes; lift-check --only native-irq-hold --only native-save passes; lift-metrics bars are all within except native-spike's hard hole, which is on main too ({unit:native/spike-entry-read-hole}). lines_prelude 961->1025 (+64: msr_cpsr, mrs_cpsr, bank_sp, banked sp/SPSR). The spike's planted_hole now targets interrupt::disable's mrs.",
         "branch": "unit/native/lift-psr-boot-irq",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T12:59:21Z",
+          "by": "a7b7e9d7",
+          "host": "quack",
+          "pid": 2489918,
+          "start": "10657789",
+          "beats": true,
+          "session": "a7b7e9d7-b73a-46db-8e16-fc315bde78a9",
+          "lane": "quack/3"
+        }
       },
       "round": "2026-11-12T11:33:19Z"
     },
