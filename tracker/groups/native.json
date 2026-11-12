@@ -1365,6 +1365,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T09:45:41Z",
+          "by": "a14298c2",
+          "text": "From {unit:native/fnref-rom-read-bound}: ROM reads by index now stop at the next object; affine's 25 vtable words read only by junk reads are now 'never read', so fn_words_not_proven won't fall from that bound. Merging it changes this branch's RomFrom reads."
+        },
+        {
           "at": "2026-11-12T08:30:33Z",
           "by": "3454f93a",
           "text": "Measured: roots' r0-r3 as lost brings all 623 back (reset->main); RAMS 8 too few (font data 100-200 RAM-looking words); naming affine's allocator 0x08002055 or skipping the pile: no fall. Context (GBAA_FNREF_CTX_BLOCKS=6) takes 70s, -1 word."
@@ -1405,15 +1410,11 @@
       "detail": "fnref's from-here-on ROM read (affine at 0x08000af2) ran to the next code; once {unit:native/modern-gcc-data-as-code} removed a false start in agb's panic text, it runs into agb's vtables: ref_unexplained rose 35->97 (93->164 ime-release/irq-hold), fn_words_not_proven +4/5. Bound the read by the table it indexes (its length or a bounds check) and lower both lift-check bars on the seven agb programs. Owner's answer (a) to the bar question.",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "a14298c2",
-        "session": "a14298c2-17fa-4b77-8ced-af626dfddecf",
-        "host": "quack",
-        "pid": 2489918,
-        "start": "10657789",
-        "at": "2026-11-12T08:39:52Z",
-        "branch": "unit/native/fnref-rom-read-bound",
-        "beats": true
+        "at": "2026-11-12T09:45:37Z",
+        "evidence": "A ROM read by index now stops at its object's end (next ROM data address a ROM word holds, not inside a handler run), meets its value-set bounds; BIOS copies read their length. ref_unexplained bars lowered: 97->35 affine/fallthrough/frame-locals, 96->34 mosaic, 98->36 spike, 101->39 bios-calls, 164->48 irq-hold/ime-release; native-tasks fn_words_not_proven 61->57. fn_words_not_proven doesn't fall on the other seven: the +4 was the false start's words becoming data (25 vtable words now never read), not a read bound. After merging main: just lift-check --only each program but native-spike passes (8 routes, 0 differences, planted faults caught); native-spike's lift has the hard hole its own unit fixes. just check passes; 3 new fnref unit tests.",
+        "host": "quack"
       },
       "notes": [
         {
@@ -1421,8 +1422,7 @@
           "by": "3454f93a",
           "text": "From {unit:native/fnref-unknown-addrs}'s branch: a from-here-on ROM read intersected with its load's value-set bounds fixes affine 0x08000af2 (hull 0x080160a4-0x0801f900); next, 0x08000bba's hull is 115 KB and false pointers in font data (0x080075f8) read to next code."
         }
-      ],
-      "round": "2026-11-12T08:39:52Z"
+      ]
     },
     {
       "id": "native/fnref-emerald-speed",
@@ -1496,17 +1496,31 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "d12ab564",
-        "session": "d12ab564-753c-4c27-9539-9b83303ebf20",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T09:05:41Z",
+        "checker": "verifier-3e91c7",
+        "at": "2026-11-12T09:56:48Z",
+        "evidence": "Verifier ran just lift-check --only native-dma after the merge with main: agb/native-dma (DMA0 H-blank, DMA1 FIFO special, DMA2 V-blank, DMA3 immediate, all by address) passes 600 frames with 0 differences, audio equal, packed layout equal, planted DMAxCNT store (0x08000180) caught at frame 1. runtime hw:: tests 32 pass; just check passes after its two fixes. Prelude bar 850->861 (11 lines of DMA hooks).",
         "branch": "unit/native/hw-dma-registers",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T09:56:48Z",
+          "by": "d12ab564",
+          "host": "quack",
+          "pid": 2489252,
+          "start": "10657014",
+          "beats": true,
+          "session": "d12ab564-753c-4c27-9539-9b83303ebf20",
+          "lane": "quack/1"
+        },
+        "pushed": true
       },
       "notes": [
+        {
+          "at": "2026-11-12T09:56:55Z",
+          "by": "d12ab564",
+          "text": "Landed: Metroid (DMA3SAD) and Nightmare (DMA0CNT_H) should get past their first-frame panics now; rerun both native builds headless to find the next stop ({unit:native/native-first-stop})."
+        },
         {
           "at": "2026-11-11T15:50:55Z",
           "by": "6a8b662c",
@@ -1520,7 +1534,19 @@
       "title": "Lifted code reads and writes the save chip",
       "detail": "docs/native-stage-b.md, 'The first game': the stage-A prelude's ld8/16/32 and st8/16/32 have no arm for 0x0D-0x0F, so Metroid's byte store at 0x0E007F80 panics; and Game::new leaves Hw::save the 512 Kbit flash chip where the play build detects the kind (save::Kind::detect: Metroid is SRAM_V113). Map them to Hw::save as runtime::bus does (byte lanes, the EEPROM at 0x0D), set the kind from ROM. Done when: a lift-check program that writes and reads its SRAM passes (a planted wrong store caught), and just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "00024cba",
+        "session": "00024cba-14bc-471e-a1bb-2b8d8d83435f",
+        "host": "quack",
+        "pid": 2490379,
+        "start": "10658170",
+        "at": "2026-11-12T09:54:28Z",
+        "branch": "unit/native/lift-save-memory",
+        "beats": true
+      },
+      "round": "2026-11-12T09:54:28Z"
     },
     {
       "id": "native/lift-flash-routines",
