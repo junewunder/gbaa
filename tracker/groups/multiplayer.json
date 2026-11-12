@@ -684,15 +684,23 @@
       "detail": "From june's Kirby & the Amazing Mirror playtest (2026-10-29, june hosting, Athena on june's Deck, through fly): both players noticed small stutters ('a little framey sometimes', 'skipped frames'); it played well otherwise. ping-sim checks hashes, not feel. Build a sim that plays Kirby two-player (four with {unit:multiplayer/four-seats}) through ping-sim profiles like home Wi-Fi to fly, and measures what each window shows: frames presented late, doubled or skipped, rollback depth, frames run again, time-sync holds, the other Kirby's jumps. Put budgets on them in a test, then fix the worst offenders. Beside {unit:multiplayer/lag-report}, which needs a real session's numbers. june's view: rollback of whole consoles has a ceiling; the real fix for this game is a multiplayer mod on its decomp (docs/ideas.md). Check: before and after numbers in docs/research/multiplayer.md; the budget test in just check.",
       "minMinutes": 150,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "7ac5db9e",
-        "session": "7ac5db9e-c4a7-474b-be5e-cb9b9c712ac7",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T05:48:15Z",
+        "at": "2026-11-12T05:54:23Z",
+        "evidence": "Review fixes made: justfile comment and commands.md entry now describe --rom as a straight CPU-clock trace then the session on its costs, and list --trace/--trace-out; feel::toy doc drops --console. Before/after numbers in docs/research/multiplayer.md (Feel); budget test cargo test -p netplay feel runs in just check, which passed after merging main (commands.md budget raised to 1962 with a reason).",
         "branch": "unit/multiplayer/rollback-feel-sim",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T05:54:23Z",
+          "by": "7ac5db9e",
+          "host": "quack",
+          "pid": 2489252,
+          "start": "10657014",
+          "beats": true,
+          "session": "7ac5db9e-c4a7-474b-be5e-cb9b9c712ac7",
+          "lane": "quack/1"
+        },
+        "pushed": true
       },
       "notes": [
         {
