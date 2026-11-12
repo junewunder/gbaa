@@ -1726,6 +1726,7 @@
       "detail": "From the overnight run (2026-11-11): gbaa-holes' hard count and gbaa-lift's disagree on every game (out/holes/overnight-2026-11-10/summary.toml against runs/long/overnight-lift.log: Minish Cap 30 against 53, Rogue 23 against 55, moonbeam 3 against 28, Imperium 20 against 30). Known gaps: gbaa-holes doesn't count undefined instructions, takes Boot/Wrapper msr/mrs as recognised where the lifter doesn't (until {unit:native/lift-psr-boot-irq}), and finds RAM copies with a run where the lifter needs [[copy]] in the holes file. Make gbaa-holes report the lifter's hard holes, by kind, from the same code (or list each difference and why it is right), so 'what blocks a native build' has one answer. Done when: on the nine corpus games gbaa-holes' hard count per kind equals the lift's (holes files applied), or each remaining difference is named in docs/research/native-holes.md; just check passes.",
       "check": "independent",
       "uses": ["heavy"],
+      "minMinutes": 180,
       "record": {
         "state": "claimed",
         "by": "5b99a863",
