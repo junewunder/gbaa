@@ -936,19 +936,7 @@
         "by": "688d2c6c",
         "at": "2026-11-12T09:46:24Z",
         "evidence": "Review fix made: --rogue usage line realigned to column 20 (63e2cd3, whitespace only). Union Room check from 2026-11-12 on quack stands: two windows in a private cu session through a local gbaa-server traded (BOB sent over TORCHIC / ALICE sent over MUDKIP), 10600 frames, 0 late, 0 resent. Main merged (582c725); just check passed after the merge.",
-        "branch": "unit/multiplayer/desktop-wireless-radio",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T09:46:24Z",
-          "by": "688d2c6c",
-          "host": "quack",
-          "pid": 2490379,
-          "start": "10658170",
-          "beats": true,
-          "session": "688d2c6c-811f-498f-b882-1534237ece2b",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -956,13 +944,7 @@
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - crates/desktop/src/lib.rs:304: the diff removed a space from the existing `--rogue ADDR` line in the usage text. It now reads ` --rogue ADDR Emerald Rogue's co-op…` (4 spaces), where it had ` --rogue ADDR Emer…"
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-12T09:42:32Z",
-        "findings": "- crates/desktop/src/lib.rs:304: the diff removed a space from the existing `--rogue ADDR` line in the usage text. It now reads `  --rogue ADDR    Emerald Rogue's co-op…` (4 spaces), where it had `  --rogue ADDR     Emerald…` (5 spaces), so its description no longer lines up with the column every other option uses (column 20, as `--wireless`, `--server ADDR` and `--desync-at N` have). Put the fifth space back so the line reads `  --rogue ADDR     Emerald Rogue's co-op (Multiplayer Adventures) with`. Its continuation lines are already aligned and don't change."
-      },
-      "round": "2026-11-12T09:13:28Z"
+      ]
     },
     {
       "id": "multiplayer/menu-wireless-room",
