@@ -1685,6 +1685,14 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   run). `--once` skips the second run; `--input0`/`--input1` replace a
   player's presses; `--dump DIR --dump-at` takes frames as `N,N` or
   `FROM-TO/EVERY`.
+- The radio on the server (multiplayer/wireless-radio-netplay):
+  `just emerald-radio [PROFILE] [ROM] [ARGS]` is `emerald-wireless --net
+  PROFILE`, the same trade with each Emerald in its own process in real
+  time and the radio a `gbaa-server` room's (in-process; each path
+  through the ping simulator's PROFILE, default calm). About 3 minutes.
+  `--sim-ms N` (on `just emerald-wireless`) is it on simulated time in one
+  process, N ms each way; `--heard-ms N` (default 3000; 0: only the hosts
+  open now); numbers: research multiplayer.md, "The radio on the server".
 - Linked play: `gbaa-desktop ROM --link B.sav` runs a second GBA on the
   same ROM, on one cable with the first (`runtime::link`;
   `crates/desktop/src/link.rs`), the two screens side by side in one
@@ -1908,7 +1916,8 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   (multiplayer/server-version-cutoff). A player's seat is freed when
   it leaves (`L`) or sends nothing for 10 s, and a room closes with its
   last player; it says so on stderr (`room CODE opened`, `player 2 left`,
-  `closed: every player gone`). `gbaa-server --rooms ADDR` asks one how
+  `closed: every player gone`); `W` datagrams speak to a room's radio
+  (`relay::radio`). `gbaa-server --rooms ADDR` asks one how
   many rooms are open and how many players are in them (no codes). `just room-sim [PROFILE]
   [ARGS]` is its check: `gbaa-pingsim room` starts a server in-process
   (or uses `--server ADDR`) and a proxy (`netplay::proxy`, `Proxy::to`)

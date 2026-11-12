@@ -37,11 +37,14 @@
 //! `0x2001`, not at random. The hub's state isn't in the machines' save
 //! states.
 
+pub mod air;
+
 use super::{MAX_PLAYERS, QUANTUM};
 use crate::io::{Io, irq, reg};
 use crate::machine::Machine;
 use crate::platform::Platform;
 use crate::sched::FRAME_CYCLES;
+use air::{Down, FROM_HOST, MAX_HOSTS, Up};
 
 /// `SIOCNT`'s bits in normal mode (GBATEK).
 pub mod cnt {
@@ -135,7 +138,7 @@ impl Words {
 
 /// A packet's bytes, as the radio carries them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Packet {
+pub struct Packet {
     b: [u8; PACKET],
     n: usize,
 }
@@ -162,10 +165,89 @@ impl Packet {
         p
     }
 
-    fn bytes(&self) -> &[u8] {
+    /// Up to [`PACKET`] bytes.
+    pub fn of(bytes: &[u8]) -> Packet {
+        let mut p = Packet::new();
+        p.n = bytes.len().min(PACKET);
+        p.b[..p.n].copy_from_slice(&bytes[..p.n]);
+        p
+    }
+
+    pub fn bytes(&self) -> &[u8] {
         &self.b[..self.n]
     }
 }
+
+/// Packets that came in and wait for the adapter's slot to empty (a
+/// networked adapter's: the network may bring two at once).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Queue {
+    p: [Packet; QUEUE],
+    head: usize,
+    len: usize,
+}
+
+/// The most packets a [`Queue`] holds; past it the oldest go.
+const QUEUE: usize = 8;
+
+impl Queue {
+    const fn new() -> Queue {
+        Queue {
+            p: [Packet::new(); QUEUE],
+            head: 0,
+            len: 0,
+        }
+    }
+
+    fn push(&mut self, p: Packet) {
+        if self.len == QUEUE {
+            self.head = (self.head + 1) % QUEUE;
+            self.len -= 1;
+        }
+        self.p[(self.head + self.len) % QUEUE] = p;
+        self.len += 1;
+    }
+
+    fn pop(&mut self) -> Option<Packet> {
+        (self.len > 0).then(|| {
+            let p = self.p[self.head];
+            self.head = (self.head + 1) % QUEUE;
+            self.len -= 1;
+            p
+        })
+    }
+}
+
+/// What a networked adapter ([`Wireless::networked`]) keeps of the radio
+/// beyond what a local one does.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Net {
+    seat: u8,
+    /// Host IDs this adapter has used, counted.
+    ids: u16,
+    /// What it has to tell the radio, oldest first.
+    out: [Up; OUTBOX],
+    out_head: usize,
+    out_len: usize,
+    /// What it last told of its hosting: open, max children, broadcast.
+    told: Option<(bool, u8, [u32; 6])>,
+    /// The open hosts the radio last told of.
+    hosts: Down,
+    /// Hosts heard while searching, by ID: the entry and when.
+    heard: [Option<([u32; 7], u64)>; HEARD],
+    /// The host a pending `Connect` is for.
+    target: u16,
+    /// Each slot's child's ID (a host).
+    kids: [u16; 4],
+    from_host: Queue,
+    from_child: [Queue; 4],
+}
+
+/// Messages a networked adapter holds for the radio between pumps; past
+/// it the oldest go.
+const OUTBOX: usize = 64;
+/// Hosts a networked adapter remembers hearing.
+const HEARD: usize = 8;
 
 /// Where an adapter is in the radio.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -320,6 +402,10 @@ pub struct Wireless {
     pub transfers: u64,
     /// Commands each adapter took, by command (a histogram, for logs).
     pub commands: [[u32; 64]; MAX_PLAYERS],
+    /// How long a search keeps listing a host it no longer hears.
+    heard_for: u64,
+    /// The radio is elsewhere ([`Wireless::networked`]).
+    net: Option<Net>,
 }
 
 impl Wireless {
@@ -345,6 +431,161 @@ impl Wireless {
             next_id: 0x2001,
             transfers: 0,
             commands: [[0; 64]; MAX_PLAYERS],
+            heard_for: HEARD_FOR,
+            net: None,
+        }
+    }
+
+    /// Put an adapter on `m`, the console of seat `seat` (below
+    /// [`MAX_PLAYERS`]), whose radio is an [`air::Air`] elsewhere: what
+    /// the adapter does comes out of [`Wireless::take_up`], what the radio
+    /// says goes in through [`Wireless::deliver`]. Host IDs are
+    /// `0x1000 * (seat + 1)` counting up, below the server's children's.
+    /// A search keeps listing a host for [`HEARD_FOR`] after the radio
+    /// last said it was open, as the local radio does: without it, at 100
+    /// and 120 ms each way the Union Room's board never showed the other
+    /// player's offer; with it, the first `Connect` may go to a host's ID
+    /// from before it reopened and be refused, costing a retry
+    /// (docs/research/multiplayer.md, "The radio on the server").
+    pub fn networked<P: Platform>(m: &mut Machine<P>, seat: u8) -> Wireless {
+        let mut w = Wireless::new(&mut [m]);
+        w.net = Some(Net {
+            seat,
+            ids: 0,
+            out: [Up::Leave; OUTBOX],
+            out_head: 0,
+            out_len: 0,
+            told: None,
+            hosts: Down::Hosts {
+                n: 0,
+                hosts: [air::Heard {
+                    id: 0,
+                    slot: 0,
+                    broadcast: [0; 6],
+                }; MAX_HOSTS],
+            },
+            heard: [None; HEARD],
+            target: 0,
+            kids: [0; 4],
+            from_host: Queue::new(),
+            from_child: [Queue::new(); 4],
+        });
+        w
+    }
+
+    /// How long a search keeps listing a host it no longer hears
+    /// ([`HEARD_FOR`] unless set; 0 lists only those heard now).
+    pub fn set_heard_for(&mut self, cycles: u64) {
+        self.heard_for = cycles;
+    }
+
+    /// The next thing a networked adapter has to tell the radio.
+    pub fn take_up(&mut self) -> Option<Up> {
+        let n = self.net.as_mut()?;
+        (n.out_len > 0).then(|| {
+            let m = n.out[n.out_head];
+            n.out_head = (n.out_head + 1) % OUTBOX;
+            n.out_len -= 1;
+            m
+        })
+    }
+
+    fn tell(&mut self, m: Up) {
+        if let Some(n) = &mut self.net {
+            if n.out_len == OUTBOX {
+                n.out_head = (n.out_head + 1) % OUTBOX;
+                n.out_len -= 1;
+            }
+            n.out[(n.out_head + n.out_len) % OUTBOX] = m;
+            n.out_len += 1;
+        }
+    }
+
+    /// What the radio says to a networked adapter, at the hub's time.
+    pub fn deliver(&mut self, d: Down) {
+        let t = self.now;
+        let Some(n) = &mut self.net else { return };
+        let a = &mut self.adapters[0];
+        match d {
+            Down::Hosts { n: k, hosts } => {
+                n.hosts = d;
+                for h in &hosts[..k as usize] {
+                    remember(&mut n.heard, h.entry(), t);
+                }
+            }
+            Down::Joined { host, id, slot } => {
+                if a.role == Role::Connecting(Some(0)) && n.target == host {
+                    a.id = id;
+                    a.role = Role::Child { host: 0, slot };
+                    a.from_host = Packet::new();
+                    a.sending = Packet::new();
+                    n.from_host = Queue::new();
+                } else {
+                    // Given up on before the radio answered.
+                    self.tell(Up::Leave);
+                }
+            }
+            Down::Refused { host } => {
+                if a.role == Role::Connecting(Some(0)) && n.target == host {
+                    a.role = Role::Connecting(None);
+                }
+            }
+            Down::Children { ids } => {
+                if let Role::Host { open, .. } = a.role {
+                    let mut children = [None; 4];
+                    for s in 0..4 {
+                        if ids[s] != 0 {
+                            children[s] = Some(s as u8);
+                        } else {
+                            a.from_child[s] = Packet::new();
+                            n.from_child[s] = Queue::new();
+                        }
+                    }
+                    n.kids = ids;
+                    a.role = Role::Host { open, children };
+                }
+            }
+            Down::Dropped { reason } => {
+                if let Role::Child { slot, .. } = a.role {
+                    n.from_host = Queue::new();
+                    self.drop_child(0, slot as usize, reason as u32);
+                }
+            }
+            Down::Data { from, packet } => match a.role {
+                Role::Child { .. } if from == FROM_HOST => {
+                    n.from_host.push(packet);
+                    self.refill(0);
+                }
+                Role::Host { children, .. }
+                    if (from as usize) < 4 && children[from as usize].is_some() =>
+                {
+                    n.from_child[from as usize].push(packet);
+                    self.refill(0);
+                }
+                _ => {}
+            },
+        }
+    }
+
+    /// A networked adapter's empty receive slots take the next packet
+    /// waiting; a waiting child hears there's one.
+    fn refill(&mut self, i: usize) {
+        let Some(n) = &mut self.net else { return };
+        let a = &mut self.adapters[i];
+        if a.from_host.n == 0
+            && let Some(p) = n.from_host.pop()
+        {
+            a.from_host = p;
+            if a.waiting() && a.event.is_none() {
+                a.event = Some((event::DATA, None));
+            }
+        }
+        for s in 0..4 {
+            if a.from_child[s].n == 0
+                && let Some(p) = n.from_child[s].pop()
+            {
+                a.from_child[s] = p;
+            }
         }
     }
 
@@ -627,6 +868,24 @@ impl Wireless {
     /// its host. A child that loses its host hears `reason` (0 sent away,
     /// 1 the link lost).
     fn leave(&mut self, i: usize, reason: u32) {
+        if let Some(n) = &mut self.net {
+            // The radio drops the children, or tells the host.
+            n.told = None;
+            n.kids = [0; 4];
+            n.from_host = Queue::new();
+            n.from_child = [Queue::new(); 4];
+            let a = &mut self.adapters[i];
+            let was = core::mem::replace(&mut a.role, Role::Idle);
+            a.from_host = Packet::new();
+            a.from_child = [Packet::new(); 4];
+            if matches!(
+                was,
+                Role::Host { .. } | Role::Child { .. } | Role::Connecting(Some(_))
+            ) {
+                self.tell(Up::Leave);
+            }
+            return;
+        }
         match self.adapters[i].role {
             Role::Host { children, .. } => {
                 for (s, c) in children.iter().enumerate() {
@@ -741,7 +1000,13 @@ impl Wireless {
                 }
                 _ => {
                     self.leave(i, 1);
-                    let id = self.new_id();
+                    let id = match &mut self.net {
+                        Some(n) => {
+                            n.ids = (n.ids + 1) & 0xFFF;
+                            0x1000 * (n.seat as u16 + 1) + n.ids
+                        }
+                        None => self.new_id(),
+                    };
                     let a = &mut self.adapters[i];
                     a.id = id;
                     a.role = Role::Host {
@@ -776,6 +1041,27 @@ impl Wireless {
             0x1D | 0x1E => {
                 if self.adapters[i].role != Role::Searching {
                     ok = false;
+                } else if let Some(n) = &mut self.net {
+                    if let Down::Hosts { n: k, hosts } = n.hosts {
+                        for h in &hosts[..k as usize] {
+                            remember(&mut n.heard, h.entry(), t);
+                        }
+                    }
+                    let mut found = 0;
+                    let own = n.seat as u32 + 1;
+                    for (e, when) in n.heard.iter().flatten() {
+                        // Not this adapter's own room, while the radio
+                        // hasn't heard it's gone.
+                        if found < 4 && t - when <= self.heard_for && e[0] >> 12 & 0xF != own {
+                            for &w in e {
+                                ack.push(w);
+                            }
+                            found += 1;
+                        }
+                    }
+                    if cmd == 0x1E {
+                        self.adapters[i].role = Role::Idle;
+                    }
                 } else {
                     let mut found = 0;
                     for j in 0..self.players {
@@ -786,7 +1072,7 @@ impl Wireless {
                             self.adapters[i].heard[j] = Some((e, t));
                         }
                         match self.adapters[i].heard[j] {
-                            Some((e, when)) if found < 4 && t - when <= HEARD_FOR => {
+                            Some((e, when)) if found < 4 && t - when <= self.heard_for => {
                                 for w in e {
                                     ack.push(w);
                                 }
@@ -804,6 +1090,14 @@ impl Wireless {
             0x1F => {
                 let id = arg(0) as u16;
                 self.leave(i, 1);
+                if let Some(n) = &mut self.net {
+                    // Pending until the radio answers.
+                    n.target = id;
+                    self.adapters[i].role = Role::Connecting(Some(0));
+                    self.tell(Up::Connect { id });
+                    self.finish(i, cmd, ack, ok, turn);
+                    return;
+                }
                 let host = (0..self.players).find(|&j| {
                     j != i
                         && self.adapters[j].id == id
@@ -813,6 +1107,15 @@ impl Wireless {
             }
             // IsConnectionComplete, FinishConnection.
             0x20 | 0x21 => match self.adapters[i].role {
+                Role::Connecting(Some(_)) if self.net.is_some() => {
+                    // Still waiting for the radio: status 1, or given up.
+                    if cmd == 0x21 {
+                        self.leave(i, 1);
+                        ack.push(self.adapters[i].id as u32 | 4 << 16 | 2 << 24);
+                    } else {
+                        ack.push(self.adapters[i].id as u32 | 1 << 24);
+                    }
+                }
                 Role::Connecting(host) => {
                     let slot = host.map_or(0xFF, |h| self.adapters[h as usize].next_slot());
                     match host {
@@ -861,6 +1164,28 @@ impl Wireless {
             0x30 => {
                 let mask = arg(0);
                 match self.adapters[i].role {
+                    Role::Host { children, open } if self.net.is_some() => {
+                        let mut left = children;
+                        for (s, c) in left.iter_mut().enumerate() {
+                            if mask >> s & 1 != 0 {
+                                *c = None;
+                                self.adapters[i].from_child[s] = Packet::new();
+                            }
+                        }
+                        self.adapters[i].role = Role::Host {
+                            open,
+                            children: left,
+                        };
+                        if let Some(n) = &mut self.net {
+                            for s in 0..4 {
+                                if mask >> s & 1 != 0 {
+                                    n.kids[s] = 0;
+                                    n.from_child[s] = Queue::new();
+                                }
+                            }
+                        }
+                        self.tell(Up::Kick { mask: mask as u8 });
+                    }
                     Role::Host { children, .. } => {
                         for (s, c) in children.iter().enumerate() {
                             if mask >> s & 1 != 0
@@ -894,6 +1219,33 @@ impl Wireless {
                 ack.push(2);
             }
         }
+        self.finish(i, cmd, ack, ok, turn);
+    }
+
+    /// Command `cmd`'s acknowledgement: `ack`'s words, or an error; then
+    /// the clock turns round if `turn`. A networked host tells the radio
+    /// what changed of its room.
+    fn finish(&mut self, i: usize, cmd: u8, ack: Words, ok: bool, turn: bool) {
+        if let Some(n) = &mut self.net {
+            let a = &self.adapters[i];
+            let now = match a.role {
+                Role::Host { open, .. } => Some((open, a.max_children() as u8, a.broadcast)),
+                _ => None,
+            };
+            if now != n.told {
+                n.told = now;
+                let id = a.id;
+                self.tell(match now {
+                    Some((open, max, broadcast)) => Up::Host {
+                        id,
+                        open,
+                        max,
+                        broadcast,
+                    },
+                    None => Up::Leave,
+                });
+            }
+        }
         let a = &mut self.adapters[i];
         a.ack = Words::new();
         if ok {
@@ -920,7 +1272,11 @@ impl Wireless {
         if let Role::Host { children, .. } = self.adapters[i].role {
             for (s, c) in children.iter().enumerate() {
                 if let Some(c) = *c {
-                    ack.push(self.adapters[c as usize].id as u32 | (s as u32) << 16);
+                    let id = match &self.net {
+                        Some(n) => n.kids[s],
+                        None => self.adapters[c as usize].id,
+                    };
+                    ack.push(id as u32 | (s as u32) << 16);
                 }
             }
         }
@@ -948,7 +1304,17 @@ impl Wireless {
             }
             Role::Child { slot, .. } => {
                 let n = (header >> (8 + 5 * slot as u32) & 0x1F) as usize;
-                self.adapters[i].sending = Packet::from_words(data, n);
+                let p = Packet::from_words(data, n);
+                if self.net.is_some() {
+                    // At once: a child sending twice before the host's next
+                    // packet came would otherwise lose the first, and the
+                    // game numbers them (link_rfu_2.c's childRecvIds).
+                    if p.n > 0 {
+                        self.tell(Up::Data(p));
+                    }
+                } else {
+                    self.adapters[i].sending = p;
+                }
             }
             _ => {}
         }
@@ -960,6 +1326,10 @@ impl Wireless {
         let Role::Host { children, .. } = self.adapters[i].role else {
             return;
         };
+        if self.net.is_some() {
+            self.tell(Up::Data(p));
+            return;
+        }
         for (s, c) in children.iter().enumerate() {
             let Some(c) = *c else { continue };
             let c = &mut self.adapters[c as usize];
@@ -1003,6 +1373,7 @@ impl Wireless {
             }
             _ => {}
         }
+        self.refill(i);
         if n == 0 {
             return;
         }
@@ -1011,6 +1382,24 @@ impl Wireless {
             ack.push(w.iter().rev().fold(0, |v, &b| v << 8 | b as u32));
         }
     }
+}
+
+/// Note host `entry` as heard at `t`, in place of the last from the
+/// same adapter (a host ID's top four bits are its seat's,
+/// [`Wireless::networked`]: a host reopening takes a new ID, and the old
+/// one is gone), or of the one heard longest ago.
+fn remember(heard: &mut [Option<([u32; 7], u64)>; HEARD], entry: [u32; 7], t: u64) {
+    let seat = entry[0] >> 12 & 0xF;
+    let k = heard
+        .iter()
+        .position(|h| h.is_some_and(|(e, _)| e[0] >> 12 & 0xF == seat))
+        .or_else(|| heard.iter().position(Option::is_none))
+        .unwrap_or_else(|| {
+            (0..HEARD)
+                .min_by_key(|&k| heard[k].map_or(0, |(_, w)| w))
+                .unwrap_or(0)
+        });
+    heard[k] = Some((entry, t));
 }
 
 /// `SystemStatus`'s state byte.
