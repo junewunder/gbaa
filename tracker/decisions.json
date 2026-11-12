@@ -1112,6 +1112,15 @@
       "at": "2026-11-12T18:55:48Z",
       "scope": ["group:native"],
       "replaces": "d/stage-b-checks-are-bars-in-one-committed-file"
+    },
+    {
+      "id": "d/raise-native-tasks-unproven-function",
+      "title": "Raise native-tasks' unproven-function-words bar 57 to 59: Raise it to 59",
+      "why": "june, 2026-11-12: raise to 59. The 57 recorded an ordering accident, not a proof. Decided under the new standing rule on lift bars (d/lift-bars-agents-may-raise-a-count-with-the).",
+      "by": "owner",
+      "at": "2026-11-12T18:55:57Z",
+      "question": "q/raise-native-tasks-unproven-function",
+      "via": "625afd3a"
     }
   ]
 }

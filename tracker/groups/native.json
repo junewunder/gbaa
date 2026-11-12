@@ -1445,12 +1445,6 @@
       "detail": "After {unit:native/fnref-flow-emerald} made large reads one Ref token (b6d5ed3f), Emerald's flow (gbaa-recompile --summaries --callee-sets, from the indirect-call-args branch with this fnref.rs) holds RSS at 1.5 GB through round 0, but round 0 alone runs about 60 s per 500 functions (542 s at 8,500 of 15,158). Profile it (likely per-op scans of 30k-token Refs: split_refs' rest, cmp_refs' difference, hole() on fresh expansions, ref_make after each store) and make the whole run finish. Done when: that command finishes on Emerald under 8 GB with time and peak quoted, and just lift-metrics shows no bar over.",
       "check": "recorded",
       "uses": ["heavy"],
-      "record": {
-        "state": "blocked",
-        "on": "q/raise-native-tasks-unproven-function",
-        "by": "d258b190",
-        "at": "2026-11-12T11:23:37Z"
-      },
       "notes": [
         {
           "at": "2026-11-12T11:23:26Z",

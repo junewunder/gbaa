@@ -1570,7 +1570,14 @@
         "host": "quack",
         "unit": "native/fnref-emerald-speed"
       },
-      "answer": null
+      "answer": {
+        "key": "a",
+        "note": "june, 2026-11-12: raise to 59. The 57 recorded an ordering accident, not a proof. Decided under the new standing rule on lift bars (d/lift-bars-agents-may-raise-a-count-with-the).",
+        "by": "owner",
+        "via": "625afd3a",
+        "at": "2026-11-12T18:55:57Z",
+        "decision": "d/raise-native-tasks-unproven-function"
+      }
     }
   ]
 }
