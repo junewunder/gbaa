@@ -1501,19 +1501,7 @@
         "checker": "verifier-lane1-dmaregs",
         "at": "2026-11-12T10:40:04Z",
         "evidence": "Verifier (fresh context) ran just lift-check --only native-dma: pass, 600 frames, 0 differences, packed layout same, planted DMAxCNT fault caught (frame 1, EWRAM 0x020002f4); just check exit 0 after merging main. Review fixes: lift-check --only affine, mosaic-modes, native-fallthrough, native-irq-hold, native-frame-locals, native-ime-release, native-bios-calls, native-tasks, native-dma all pass their 600/601 frames, every planted fault and native-tasks' planted hole caught (16m47s); native-spike stops at its known hard hole f_08006d47 in the bars step, as on main. V-blank run_sound now only after register-set channels' cycles; justfile lift-check comment says 39 crates, about 20 min.",
-        "branch": "unit/native/hw-dma-registers",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T10:40:04Z",
-          "by": "12ef2e3c",
-          "host": "quack",
-          "pid": 2489252,
-          "start": "10657014",
-          "beats": true,
-          "session": "12ef2e3c-5b4d-487a-a4a2-90fcf6d0b90a",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -1531,13 +1519,7 @@
           "by": "6a8b662c",
           "text": "2026-11-11: overnight Metroid and Nightmare native builds both panic before frame 1 (headless): Metroid at I/O 0x0d4 (DMA3SAD), Nightmare at 0x0ba (DMA0CNT_H). This blocks both from a first frame; rerun both after it lands to find the next."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-12T10:09:29Z",
-        "findings": "- Check not run as far as the card asks. The card's Done when is that the new DMA test program 'passes just lift-check'. Both the unit's evidence and the merge's evidence ran only `just lift-check --only native-dma`. But the branch changes code every lifted program runs: (1) crates/codegen/src/native/prelude.rs:320 sends every program's io_write16 through the new DMA path; (2) crates/runtime/src/hw.rs:827 adds a DMA run at each sync, and hw.rs:887 does the same at each H-blank; (3) hw.rs:929-932 adds a `run_sound(g)` after V-blank whenever `cycles != 0`, and that count includes the existing typed V-blank copies (`f(g)`), so any program with a typed V-blank copy now refills its sound FIFOs at a different moment. The prelude line bar went from 850 to 861 for all nine existing programs, but nothing shows those programs still pass. A full `just lift-check` fails on main for an unrelated reason, so the session can't just run the whole thing: native-spike has a hard hole at f_08006d47 (the 'native-spike lifts again after entry-read masking' unit, {unit:native/spike-entry-read-hole}). What to do: run `just lift-check --only <name>` for each of affine, mosaic-modes, native-fallthrough, native-irq-hold, native-frame-locals, native-ime-release, native-bios-calls and native-tasks. Each must pass its 600/601 frames with its planted fault still caught. Also run native-spike as far as its known hole allows. Put those results in the evidence. If any program differs because of the V-blank `run_sound` change, limit that change to channels set up by their registers, or fix it.\n- justfile:943: the lift-check recipe's comment still says 'builds thirty-three generated crates (about 12 minutes)'. Adding native-dma adds its lift, its packed-layout lift and its planted lift, so the count and the time are now wrong. Update both to what the full run actually builds and takes."
-      },
-      "round": "2026-11-12T09:05:41Z"
+      ]
     },
     {
       "id": "native/lift-save-memory",
