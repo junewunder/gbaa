@@ -1663,6 +1663,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T13:35:22Z",
+          "by": "3402e3f4",
+          "text": "Emerald's SDK SoftReset stub (0x082e70ad, ldr sp const; swi 1; swi 0) should be covered by the new fresh-stack rule but its lift wasn't run (memory queue). RegisterRamReset skips serial (0x20)."
+        },
+        {
           "at": "2026-11-12T12:35:05Z",
           "by": "a7b7e9d7",
           "text": "Emerald's lift (this branch base, 2026-11-12) has a hard 'stack switch' at 0x082e70b2 in the SDK SoftReset stub f_082e70ad (mov sp before swi 1; swi 0): SoftReset's own sp setup, which the stub's lift now reaches. Moonbeam has longjmp's at 0x08038328 too."
