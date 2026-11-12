@@ -454,7 +454,8 @@ pub fn st16(g: &mut Game, a: u32, v: u32) {
         0xD if eeprom_at(g, a) => g.hw.save.eeprom_write(v as u16, 1),
         8..=0xD => {}
         // The save's 8-bit bus stores the addressed byte lane, at the
-        // unaligned address (as the play build's bus, and mGBA).
+        // unaligned address, as the play build's bus (runtime::bus) does.
+        // mGBA 0.10.5 drops these stores (see units/native-save-600.toml).
         0xE | 0xF => g.hw.save.write(a as u16, b[(a & 1) as usize]),
         _ => unmapped("a halfword store", a),
     }
