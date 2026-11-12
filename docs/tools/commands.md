@@ -1691,8 +1691,8 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   time and the radio a `gbaa-server` room's (in-process; each path
   through the ping simulator's PROFILE, default calm). About 3 minutes.
   `--sim-ms N` (on `just emerald-wireless`) is it on simulated time in one
-  process, N ms each way; `--heard-ms N`; numbers: research
-  multiplayer.md, "The radio on the server".
+  process, N ms each way; `--heard-ms N` (default 3000; 0: only the hosts
+  open now); numbers: research multiplayer.md, "The radio on the server".
 - Linked play: `gbaa-desktop ROM --link B.sav` runs a second GBA on the
   same ROM, on one cable with the first (`runtime::link`;
   `crates/desktop/src/link.rs`), the two screens side by side in one
