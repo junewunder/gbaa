@@ -1005,6 +1005,187 @@ there: june decided on 2026-11-01 to leave the Deck's runs for later
 Deck for later), so they are their own unit (multiplayer/four-kirbys-deck),
 run whenever june next says yes.
 
+### Feel (multiplayer/rollback-feel-sim)
+
+From june's Kirby playtest (2026-10-29, june hosting, Athena on june's
+Deck, both through fly): "a little framey sometimes", "skipped frames";
+it played well otherwise. `ping-sim` checks hashes, not feel, so this
+unit built a sim of what each window shows (`netplay::feel`; `just
+rollback-feel-sim PROFILE`, docs/tools/commands.md) and fixed what it
+found worst. Beside it, multiplayer/lag-report still wants a real
+session's report files.
+
+**The sim.** Every peer is a `Rollback` on its own consoles, as in a
+session, in one process and in simulated time, joined by a network whose
+every path follows a ping-sim profile (the proxy's own delay model,
+`netplay::proxy::Line`). Each peer is driven as the desktop's netplay
+loop (`crates/desktop/src/room.rs`) drives it: paced by its sound (the
+device takes it at a steady rate, so a frame late for one reason lets
+the next ones run at once), by a frame clock when muted, or headless
+`--paced`; each turn costs what a cost model says, and each finished
+frame is handed to a display refreshing at 60 Hz on a phase of its own.
+The costs are either a model of two recompiled Kirbys on quack (3.5 ms
+a frame, 3.0 run again, a snapshot 0.35, a restore 0.7, each ±30%), or
+a game's own cost frame by frame (`feel::Trace`: `gbaa-pingsim feel
+--rom` first runs the game's consoles straight on the same presses,
+timing each frame on the thread's CPU clock three ways from one snapshot:
+every picture drawn, only seat 0's, none), so every version runs on the
+same costs however busy the machine was. Never the wall clock: a run
+repeats exactly and takes milliseconds. Measuring Kirby by each turn's
+wall time was tried first and dropped: on a loaded quack the same work
+measured 6.2 to 11.7 ms a frame from one run to the next, more than the
+fixes changed. Two new profiles: `wifi` (two players on one home
+Wi-Fi: 3 ms + 8 of jitter, a 40 ms stall of 100 ms every 3 s or so, 1%
+lost) and `fly` (the playtest's path: each player on home Wi-Fi to
+gbaa-server on fly, 17 ms + 20 of jitter one way, from the round trips
+measured 2026-10-29, and 60 ms stalls of 120 ms every 3 s; 1% lost).
+
+What each window shows, per seat: **late** (a frame finished more than
+a frame after it was due), **doubled** (a refresh showing the frame the
+one before showed; a 60 Hz display shows 59.73 Hz frames with one
+doubled every 3.7 s whatever the network does, 16 a minute, the
+"beat"), **skipped** (finished, never shown), rollbacks and their depth,
+frames run again, **holds** (time sync holding a frame back), stalls,
+sound underruns, **jumps** (shown frames a rollback rewrote since the
+last shown one: the other Kirby moves that many frames at once; "4+"
+counts the ones a player sees as a teleport), and how long after due a
+frame reaches the screen.
+
+**What it found**, worst first:
+
+1. **Time sync's holds were undone by the sound.** A held frame slept a
+   frame, and the sound's pacing, finding the queue a frame short, ran
+   the next frame at once: a doubled frame, then a skipped one, and the
+   peer no further back than before. So time sync held again 12 frames
+   later, and again: on fly the host held back 271 times a minute (the
+   most it can, one in 12), and since it never fell back it guessed
+   further ahead than the joiner and rolled back deeper (depth p99 7
+   against 5; on wander 18 against 5). The headless `--paced` runs of
+   the earlier tables pace by a clock, where a hold works, which is why
+   they showed tens of holds, not hundreds. Since this unit a hold
+   queues a frame of silence (`audio::Player::hold`), so the pacer runs
+   the next frame a frame later: the peer really falls back.
+2. **Frames reached the display unevenly.** A frame went to the window
+   the moment it was done, so its time against the 60 Hz refresh moved
+   with its cost, and every frame whose finish crossed a refresh made a
+   doubled frame and a skipped one: about 200 a minute on calm with no
+   frame late at all, against the beat's 16. Rollback turns (two or
+   three frames of work in one) make it worse. Since this unit a frame
+   goes to the window 8 ms after its turn began, or when done if later
+   (`--present-ms`, `feel::PRESENT_US`), so frames arrive on the
+   pacer's even beat. It costs display lag: a frame is on screen 17.5
+   ms after due on average instead of 13.7. Each 2 ms more takes about
+   half the remaining judder off and adds 1.9 ms: at 4 ms 162
+   doubled a minute on calm, 8 ms 73, 12 ms 25, 14 ms 16 (the beat
+   alone).
+3. **A muted window ran at 45 fps.** Without sound it slept a frame
+   after every frame and then waited on its clock, which never waited
+   after that: a frame took its cost plus a frame, 971 doubled a minute.
+   The other peer, running at 60, ran ahead until time sync held it
+   back. Since this unit it paces by a clock that catches up, as sound
+   does (`fast::Pacer`, also headless `--paced`'s).
+4. **Every seat's picture was drawn.** A peer shows one, but drew all:
+   0.44 ms of a 6.14 ms frame of two interpreted Kirbys (7%). Since this
+   unit only the shown seat draws (`netplay::gba::Gba::show_only`; the
+   picture is outside snapshots and hashes, so the peers still agree).
+
+Model costs (two recompiled Kirbys), a minute of the lag report's play
+(`feel::PLAY`: both moving and jumping, every 9-18 frames a new input),
+delay 0, the window with sound, the worse seat of each run:
+
+| profile | loop | late | doubled | skipped | holds | depth p99 | jumps 4+ | on screen after due |
+|---|---|---|---|---|---|---|---|---|
+| calm | before | 0 | 202 | 185 | 0 | 2 | 0 | 13.7 ms |
+| calm | after | 0 | 73 | 56 | 0 | 2 | 0 | 17.7 ms |
+| wifi | before | 3 | 150 | 133 | 1 | 4 | 8 | 13.5 ms |
+| wifi | after | 6 | 33 | 14 | 2 | 4 | 9 | 17.5 ms |
+| fly | before | 407 | 512 | 495 | 271 | 7 | 127 | 16.0 ms |
+| fly | after | 42 | 102 | 77 | 8 | 6 | 12 | 17.6 ms |
+| wander | before | 885 | 826 | 801 | 300 | 18 | 272 | 20.5 ms |
+| wander | after | 225 | 243 | 212 | 14 | 15 | 189 | 18.8 ms |
+| fly, muted | before | 21 | 971 | 0 | 11 | 5 | 11 | 13.7 ms |
+| fly, muted | after | 42 | 102 | 77 | 8 | 6 | 12 | 17.6 ms |
+| wifi, 4 players | before | 1394 | 858 | 839 | 300 | 7 | 203 | 27.0 ms |
+| wifi, 4 players | after | 351 | 340 | 301 | 29 | 4 | 17 | 19.6 ms |
+
+Kirby's own costs (a trace of two interpreted Kirbys on quack,
+2026-11-08: a frame p50 5.70 ms drawn, 6.14 with both pictures, 5.29
+undrawn; a snapshot 0.19 ms, a restore 0.27), 5400 frames (the menus to
+2-player Rainbow Route, then 50 s of the lag report's play), scaled
+x0.7 for a recompiled build on quack and x1.5 for one on the Deck (an
+estimate: the Deck about 2.2 times slower):
+
+| profile, cost | loop | late | doubled | skipped | holds | depth p99 | jumps 4+ | on screen after due |
+|---|---|---|---|---|---|---|---|---|
+| calm, x0.7 | before | 6 | 163 | 138 | 0 | 2 | 0 | 14.0 ms |
+| calm, x0.7 | after | 5 | 74 | 49 | 0 | 2 | 0 | 17.5 ms |
+| wifi, x0.7 | before | 7 | 123 | 98 | 0 | 4 | 8 | 14.0 ms |
+| wifi, x0.7 | after | 5 | 42 | 17 | 0 | 4 | 8 | 17.4 ms |
+| fly, x0.7 | before | 453 | 557 | 532 | 330 | 7 | 99 | 15.7 ms |
+| fly, x0.7 | after | 51 | 99 | 71 | 3 | 6 | 15 | 17.6 ms |
+| wander, x0.7 | before | 1098 | 1021 | 987 | 450 | 20 | 275 | 19.7 ms |
+| wander, x0.7 | after | 222 | 239 | 200 | 14 | 15 | 193 | 18.2 ms |
+| calm, x1.5 | before | 567 | 315 | 289 | 1 | 3 | 1 | 20.5 ms |
+| calm, x1.5 | after | 446 | 270 | 244 | 1 | 3 | 0 | 19.9 ms |
+| wifi, x1.5 | before | 618 | 303 | 279 | 93 | 4 | 5 | 20.3 ms |
+| wifi, x1.5 | after | 223 | 172 | 147 | 1 | 4 | 6 | 19.3 ms |
+| fly, x1.5 | before | 752 | 425 | 397 | 82 | 7 | 54 | 21.7 ms |
+| fly, x1.5 | after | 573 | 360 | 320 | 14 | 6 | 16 | 20.5 ms |
+| wander, x1.5 | before | 1361 | 759 | 648 | 152 | 19 | 213 | 25.9 ms |
+| wander, x1.5 | after | 1050 | 648 | 538 | 30 | 15 | 191 | 24.5 ms |
+
+Real windows agree. Two `gbaa-desktop` windows with sound (to the
+silent sink) in a private `cu session` on quack, interpreted Kirby,
+3000 frames through the fly profile with the lag report's presses
+(`gbaa-pingsim desktop crates/netplay/profiles/fly.toml ROM -- --frames
+3000 --input1 … --input2 …`), main's build (`364eea7`, before this unit) and
+this one alternating, twice each; the window's own end lines (presents:
+the gaps between the frames it drew), each seat:
+
+| build | run | held back | present gaps over 25 ms | present p99 | frames run again |
+|---|---|---|---|---|---|
+| before | 1 | 0, 226 | 41, 184 | 31, 44 ms | 86, 221 |
+| before | 2 | 14, 102 | 62, 99 | 34, 40 ms | 148, 198 |
+| after | 1 | 10, 9 | 57, 54 | 41, 36 ms | 135, 155 |
+| after | 2 | 2, 2 | 54, 53 | 38, 34 ms | 147, 143 |
+
+Every run's two windows ended on one hash. Before, one seat in each
+run held back on and on, and drew 3100-3200 presents for 3000 frames
+(a held frame drawn again); after, both seats hold a few times and draw
+about one present a frame. The present gaps can't show judder against
+the display (they're the window's own draws, not the display's
+refreshes); the sim's doubled and skipped counts are for that.
+
+**What's left is the ceiling june named.** On a machine with room
+(quack, recompiled) the fixes take the doubled and skipped frames on
+fly from about one frame in five to one in 30, most of what's left the
+beat and the rollback turns. On the Deck's estimate a turn that runs two or three
+frames again costs more than a frame on any line, so nearly every
+rollback is a late frame and the next ones are caught up (a skipped
+frame): calm's 446 late in 90 s are that, and the game's own heavy
+frames (the trace's slowest, 34-48 ms interpreted, in the menus and
+loads). Without input delay, the rollbacks themselves are set by the
+round trip and how often the other player's input changes; what's
+left to win is speed (a frame run again for less), or the per-game mod
+(docs/ideas.md).
+
+**Budgets** (`netplay::feel` tests, in `just check`): a minute of the
+model on calm, wifi, fly and wander, and wifi with four players, with
+sound, muted and headless-paced, must stay under these on every seat
+(about 1.3 times the after column, so a change that makes feel worse
+fails), and the loop before this unit's fixes must break them on fly:
+
+| profile | late | doubled | skipped | depth p99 | holds | jumps 4+ | on screen after due |
+|---|---|---|---|---|---|---|---|
+| calm | 5 | 80 | 70 | 3 | 5 | 0 | 20 ms |
+| wifi | 15 | 45 | 25 | 5 | 6 | 15 | 20 ms |
+| fly | 60 | 130 | 100 | 7 | 15 | 20 | 20 ms |
+| wander | 300 | 300 | 280 | 17 | 20 | 250 | 22 ms |
+| wifi, 4 players | 450 | 420 | 380 | 5 | 40 | 25 | 22 ms |
+
+The sim models the desktop's loop; it doesn't run it. When `room.rs`'s
+pacing or presenting changes, change `feel::run` to match.
+
 ### The other players' sound (multiplayer/other-seat-sound)
 
 From june's Kirby playtest (2026-10-29, through fly): her friend couldn't

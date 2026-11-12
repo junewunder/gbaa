@@ -1,0 +1,12 @@
+# june's Kirby playtest (2026-10-29): both players at home on Wi-Fi, each
+# through gbaa-server on fly.io (ewr). Fly's round trips measured
+# 2026-10-29 were about 52 ms, least 32-35 and most 139-217
+# (docs/research/multiplayer.md, "Resends backed off"): 17 ms one way
+# plus up to 20 of jitter, the Wi-Fi's stalls on top; 1% lost.
+latency_ms = 17
+jitter_ms = 20
+spike_every_s = 3
+spike_ms = 60
+spike_len_ms = 120
+loss = 0.01
+seed = 6
