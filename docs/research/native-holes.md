@@ -111,7 +111,8 @@ call into RAM (`Run::ram_calls`); a target whose every version is one
 GCC's two) is a call of `runtime::hw::flash::{read_byte, read, verify}`
 on `Hw::save`, listed as a "flash library stand-in", and its RAM isn't
 changed code, undiscovered code nor a non-entry. Six of the eight call
-them (not moonbeam, Minish Cap); no stage-A build lifts one yet.
+them (not moonbeam, Minish Cap). A lifted program's `call_fn` makes the
+same call at a RAM target with no function (native/lift-flash-routines).
 
 ### RAM copies
 
