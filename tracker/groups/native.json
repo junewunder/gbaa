@@ -1402,6 +1402,13 @@
           "lane": "quack/4"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-12T09:09:25Z",
+          "by": "f336c3b0",
+          "text": "Shared $GBAA_DATA/agb/native-bios-calls.gba was rebuilt from this branch (holes moved to 0x08002704/0x08002720/0x08002765); until merge, main's holes file doesn't match it."
+        }
+      ],
       "round": "2026-11-12T08:31:49Z"
     },
     {
