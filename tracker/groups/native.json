@@ -1683,7 +1683,19 @@
       "title": "Lifted code makes BgAffineSet and ObjAffineSet",
       "detail": "From the overnight lift of the nine corpus games (2026-11-11, runs/long/overnight-lift.log): swi 0x0E BgAffineSet and 0x0F ObjAffineSet aren't in analysis::holes::NATIVE_BIOS, so each is a hard hole in Minish Cap, Emerald, Emerald Rogue and Imperium (docs/research/bios-calls.md lists the callers). Add both to the lifter's prelude over runtime::bios's math, as {unit:native/lift-bios-calls} did for its calls, with a lift-check case each (an agb test program calling them). lines_prelude may rise (say how many and why). Done when: lift-check green with a case per call, gbaa-holes and gbaa-lift both stop counting 0x0E/0x0F on those four games (just holes-all --against main), just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "7492320f",
+        "session": "7492320f-6704-408b-9f75-751df2d10449",
+        "host": "quack",
+        "pid": 2489427,
+        "start": "10657408",
+        "at": "2026-11-12T11:49:58Z",
+        "branch": "unit/native/lift-bios-affine",
+        "beats": true
+      },
+      "round": "2026-11-12T11:49:58Z"
     },
     {
       "id": "native/lift-undefined-insns",
