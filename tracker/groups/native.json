@@ -1585,32 +1585,33 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "done",
-        "by": "dd145eb8",
-        "checker": "verifier-latch-lane3",
-        "at": "2026-11-12T10:38:21Z",
-        "evidence": "lift-check --only native-bios-region passed (601 frames, 0 differences; packed layout same), run by me and by the verifier; new agb/native-bios-region reads the latch after a swi, in and after an IRQ, all widths; mGBA hash matches at 601. just check passes after merging main (dac0a8c). lines_prelude 850->882 (+32: latch field, bios_read, swi_done, load/store arms). Full lift-check still fails on main on native-spike's hard hole ({unit:native/spike-entry-read-hole}), confirmed at b17b7a8 before this change.",
-        "branch": "unit/native/lift-bios-region",
+        "state": "claimed",
+        "by": "9fcf9764",
+        "session": "9fcf9764-90bc-4e3b-8d61-b6f6ae7454c1",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-12T10:38:21Z",
-          "by": "dd145eb8",
-          "host": "quack",
-          "pid": 2489918,
-          "start": "10657789",
-          "beats": true,
-          "session": "dd145eb8-bbea-42de-85a6-c1b6538cbcd3",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "pid": 2489918,
+        "start": "10657789",
+        "at": "2026-11-12T10:43:38Z",
+        "branch": "unit/native/lift-bios-region",
+        "beats": true
       },
       "notes": [
+        {
+          "at": "2026-11-12T10:43:25Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/native.rs:2146: the lift appends `swi_done(g)` after every BIOS call. That's wrong for Halt/Stop (`0x02 | 0x03` => `g.sp = r13; hw::halt(g)?;`). hw::halt (crates/runtime/src/hw.rs:988) runs …"
+        },
         {
           "at": "2026-11-12T10:38:25Z",
           "by": "dd145eb8",
           "text": "Lift has no m4a NopCall (BIOS 0x1B0, play build sets NOP_CALL_LATCH 0xE3A0C301): call_fn panics there. Whoever lifts m4a's jump list must set g.bios_latch to that too. Open bus past 0x4000 still panics in the lift."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-12T10:43:25Z",
+        "findings": "- crates/codegen/src/native.rs:2146: the lift appends `swi_done(g)` after every BIOS call. That's wrong for Halt/Stop (`0x02 | 0x03` => `g.sp = r13; hw::halt(g)?;`). hw::halt (crates/runtime/src/hw.rs:988) runs until an IRQ has run, so irq_entry leaves g.bios_latch at BIOS_LATCH_AFTER_IRQ, and swi_done then overwrites it with BIOS_LATCH_AFTER_SWI. The play build sets AFTER_SWI when the call is made (crates/runtime/src/bios.rs:603, before the CPU halts), and the IRQ that wakes it leaves AFTER_IRQ (bios.rs:459). Halt pushes no pending call, so nothing sets AFTER_SWI again. After a Halt the lift's BIOS-region loads read 0xE3A02004 where the play build reads 0xE55EC002. Fix: for 0x02/0x03, emit `swi_done(g);` before the halt (`swi_done(g); g.sp = r13; hw::halt(g)?;`) and don't append it after. Keep it after for the other calls; that's right for IntrWait/VBlankIntrWait (intr_wait_check sets AFTER_SWI last, bios.rs:647) and for the stalled copies (stall_step, bios.rs:409). Then extend agb/native-bios-region/src/main.rs with a `swi 2` (Halt) with an IRQ enabled, followed by a read of the word at 0, so the lift-check covers it. Update SCENE.md, units/native-bios-region-601.toml's hash (checked against mGBA) and the bars in crates/codegen/lift-check.toml."
+      },
       "round": "2026-11-12T10:07:23Z"
     },
     {
