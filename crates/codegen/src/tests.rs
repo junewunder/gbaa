@@ -1259,6 +1259,40 @@ fn an_entry_hi_register_passed_to_a_callee_is_hard() {
     );
 }
 
+#[test]
+fn an_entry_read_tail_called_from_a_called_function_is_hard() {
+    // `g: b f`, `f: ldr r0, [r5, #0]; bx lr`: f takes g's r4-r11, which
+    // `Regs::call` zeroed where a pointer enters g.
+    let (rom, d) = thumb_program(
+        &[
+            0xE000, // 0x00 b 0x04
+            0x46C0, // 0x02 nop
+            0x6828, // 0x04 ldr r0, [r5, #0]
+            0x4770, // 0x06 bx lr
+        ],
+        &[2, 2, 2, 2],
+        &[0x0800_0001, 0x0800_0005],
+    );
+    let mut rom = rom;
+    rom.extend(0x0800_0001u32.to_le_bytes());
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    assert_eq!(
+        hard_holes(&sums, 0x0800_0005),
+        vec!["0x08000004: reads r4-r11 at entry: r5".to_string()]
+    );
+    // Without the pointer g is only jumped into, and so is f.
+    rom.truncate(rom.len() - 4);
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    assert_eq!(hard_holes(&sums, 0x0800_0005), Vec::<String>::new());
+    assert!(
+        sums.by_entry[&0x0800_0005]
+            .holes
+            .contains("0x08000004: reads r4-r11 at entry, only jumped into: r5")
+    );
+}
+
 /// `c: push {lr}; movs r1, #5; bl f; adds r2, r0, #0; pop {r0}; bx r0`,
 /// `f: adds r0, r1, #0; bx lr` and `g: push {lr}; bl f; pop {r0}; bx r0`,
 /// in Thumb.

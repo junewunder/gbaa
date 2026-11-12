@@ -403,6 +403,9 @@ impl Walk<'_> {
                     for (&k, b) in &r.blocks {
                         self.blocks.entry(k).or_insert(b);
                     }
+                    if func && let Some(sum) = &mut self.sum {
+                        sum.falls.insert(to);
+                    }
                 }
                 _ => return self.stop(format!("jumps to 0x{to:08x}, which has no code here")),
             }

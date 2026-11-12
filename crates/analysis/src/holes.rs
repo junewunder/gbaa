@@ -509,7 +509,8 @@ pub fn summary_kind(hole: &str) -> String {
 /// scratch registers) is not itself hard: the reads are. Nor is a read
 /// whose every bit is masked away (`masks away r4-r11's entry bits`), the
 /// caller's frame pointer read through a frame record, or a read in a
-/// function only jumped into, which takes every register. The other kinds are counted under other
+/// function only jumped into, which takes every register (nothing
+/// called tail-calls or falls into it). The other kinds are counted under other
 /// holes (an unknown jump, a mode change, RAM code) or aren't holes for a
 /// native build (an indirect call is an `FnRef`).
 pub const SUMMARY_HARD: [&str; 4] = [

@@ -371,8 +371,8 @@ value returned in r0-r3 that a caller's own instruction reads (agbcc's
   whose `Regs::call` zeroes r4-r12.
 - `masks away r4-r11's entry bits` (soft): every bit cleared before any
   use, agbcc's word built byte by byte in an unset register.
-- `reads r4-r11 at entry, only jumped into` (soft): nothing calls it;
-  jumps and falls pass every register (its extended entry).
+- `reads r4-r11 at entry, only jumped into` (soft): nothing called
+  calls, tail-calls or falls into it (a jump passes the jumper's r4-r11).
 - `reads the caller's frame pointer` (soft): agb's backtrace walking r7
   from a frame record (`add r7, sp, #12` at the saved r7); natively the
   walk finds no frames. Only the agb programs have it.
@@ -401,8 +401,9 @@ last bit: Emerald 0x082e14f5 (0x082e151a), 0x082e1629 (0x082e164e),
 0x08037c3d, 0x080622f5, 0x0806252d, 0x08068319, 0x08068579, 0x080b13d5;
 moonbeam 0x0801a081 (r7, four); WarioWare 0x0807f6e5, 0x0808e325,
 0x080afab9, 0x080d19b9, 0x080d355d, 0x080dffe5, 0x080efe51, 0x080f56ed.
-Only jumped into: Rogue's 0x080ba12b-0x080bbfff fragments (13), Nightmare
-0x0804c489, moonbeam 0x08038310.
+Only jumped into: Rogue's 0x080ba12b-0x080bbfff fragments (15, past
+unresolved jumps), Nightmare 0x0804c489, moonbeam 0x08038310. A tail call
+or fall from a called function counting as a call (2026-11-12) left the 36.
 
 ## Modern GCC's unresolved jumps, by kind
 
