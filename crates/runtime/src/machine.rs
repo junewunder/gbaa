@@ -468,6 +468,7 @@ impl<P: Platform> Machine<P> {
                 self.tick(3)
             }
             bios::STALL_LOOP if let Some(n) = bios::stall_step(self) => self.spend(n),
+            bios::multiboot::LOOP if let Some(n) = bios::multiboot::step(self) => self.spend(n),
             // A `swi` that took the hardware exception (an exit applied
             // with `Cpu::apply_exit`) rather than coming through `swi`.
             bios::SWI_VECTOR if self.cpu.cpsr & 0x1F == mode::SVC => {

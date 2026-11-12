@@ -20,12 +20,18 @@
 //!   directly or through `gbaa-server`'s rooms; [`proxy`]: the
 //!   variable-ping simulator between two of them, from a TOML profile
 //!   (`gbaa-pingsim`). [`demo`]: what the tests play.
+//! - [`feel`]: the feel sim, what each player's window shows (frames
+//!   late, doubled, skipped; rollbacks, holds, the other player's jumps)
+//!   in simulated time through a profile, and the budgets on it.
+//!   [`script`]: headless input scripts, the desktop's and the sim's.
 
 pub mod demo;
+pub mod feel;
 pub mod gba;
 pub mod msg;
 pub mod proxy;
 pub mod rollback;
+pub mod script;
 pub mod session;
 pub mod sim;
 pub mod udp;

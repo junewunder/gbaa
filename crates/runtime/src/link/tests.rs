@@ -173,3 +173,66 @@ fn four_players_share_one_bus() {
         assert_ne!(m.bus.read16(IO + reg::IF) & irq::SERIAL, 0);
     }
 }
+
+/// `MultiBoot`'s parameters at IWRAM's start: seat 1 the one child, the
+/// program the `len` bytes from the cartridge's start.
+fn multi_boot(m: &mut M, len: u32) {
+    use crate::machine::ROM_ENTRY;
+    m.bus.write8(0x0300_001E, 2);
+    m.bus.write32(0x0300_0020, ROM_ENTRY);
+    m.bus.write32(0x0300_0024, ROM_ENTRY + len);
+    m.cpu.r[0] = 0x0300_0000;
+    m.cpu.r[1] = 1;
+    // Returning to the `b .` at the entry.
+    m.cpu.pc = ROM_ENTRY;
+    crate::bios::swi(m, 0x25 << 16).unwrap();
+}
+
+/// A child with a cartridge never answers as a cartless one's BIOS does:
+/// `MultiBoot` sends, waits for its `0075`, gives up and fails, with IRQs
+/// and `SIOCNT` as they were.
+#[test]
+fn multi_boot_with_no_child_taking_it_fails() {
+    use crate::bios::multiboot::LOOP;
+    let (mut a, mut b, mut l) = pair();
+    multi_boot(&mut a, 0x100);
+    assert_eq!(a.cpu.pc, LOOP, "sending");
+    assert!(siocnt(&a) & sio::IRQ != 0);
+    for _ in 0..30 {
+        run(&mut l, &mut a, &mut b, crate::sched::FRAME_CYCLES);
+        if a.cpu.pc != LOOP {
+            break;
+        }
+    }
+    assert_eq!(a.cpu.pc, 0x0800_0000, "returned");
+    assert_eq!(a.cpu.r[0], 1, "failed");
+    assert_eq!(a.cpu.cpsr & 0x80, 0, "IRQs as they were");
+    assert!(l.transfers > 128, "the program went out: {}", l.transfers);
+    assert_eq!(a.bios.multiboot, Default::default());
+}
+
+/// A length `MultiBoot` can't send (not a multiple of 16) fails at once.
+#[test]
+fn multi_boot_of_a_bad_length_fails_at_once() {
+    let (mut a, _b, _l) = pair();
+    multi_boot(&mut a, 0x108);
+    assert_eq!((a.cpu.pc, a.cpu.r[0]), (0x0800_0000, 1));
+}
+
+/// A GBA with no cartridge waits for a program in multiplayer mode, and
+/// `HardReset` there waits again.
+#[test]
+fn a_cartless_gba_waits_for_a_program() {
+    use crate::bios::multiboot::{LOOP, boot_cartless, role};
+    let mut m: M = Box::new(Machine::new(&[], Headless));
+    boot_cartless(&mut m);
+    assert_eq!(m.cpu.pc, LOOP);
+    assert!(multiplayer(&m.bus.io));
+    m.run_frame();
+    assert_eq!(m.cpu.pc, LOOP);
+    assert!(m.fault.is_none());
+    m.cpu.pc = 0x0200_0100;
+    crate::bios::swi(&mut m, 0x26 << 16).unwrap();
+    assert_eq!(m.cpu.pc, LOOP);
+    assert_eq!(m.bios.multiboot.role, role::CHILD);
+}
