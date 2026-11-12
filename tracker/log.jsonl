@@ -2544,3 +2544,4 @@
 {"at":"2026-11-12T05:56:52Z","actor":"loop","tag":"a897fc66","host":"quack","cmd":"claim","id":"multiplayer/single-pak-multiboot","text":"Single-pak link: a seat with no cartridge boots by MultiBoot: claimed"}
 {"at":"2026-11-12T06:01:57Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"multiplayer/rollback-feel-sim","text":"Rollback: a sim test of what players feel, then fix it: on main"}
 {"at":"2026-11-12T06:02:10Z","actor":"loop","tag":"18d209b3","host":"quack","cmd":"claim","id":"multiplayer/wander-split-under-load","text":"Emerald's netplay trade split once on wander, under load: claimed"}
+{"at":"2026-11-12T06:25:44Z","actor":"loop","tag":"a897fc66","host":"quack","cmd":"done","id":"multiplayer/single-pak-multiboot","text":"Single-pak link: a seat with no cartridge boots by MultiBoot: done"}
