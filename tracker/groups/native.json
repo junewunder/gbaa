@@ -663,6 +663,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T11:21:46Z",
+          "by": "ba1a464f",
+          "text": "Play build now syncs where an idle loop's cond branch isn't taken (rt::idle_exit; DMA waits). The lifter (Exact clock) has no Idle::Exit counterpart (native.rs emits hw::idle/spin only): if lift vs play differs after a DMA-wait loop, look there."
+        },
+        {
           "at": "2026-11-08T21:25:50Z",
           "by": "a98172f6",
           "text": "Route written (units/metroid-native.toml, 2700 frames). First run: 6 causes filed as needs (doc: The first game). Lift: just lift ROM out/lift-metroid --name metroid; play: just recompile ROM out/metroid --timing native; then route-check --native. Planted store not tried yet."
@@ -1546,19 +1551,7 @@
         "checker": "verifier-a7e3c1",
         "at": "2026-11-12T10:46:14Z",
         "evidence": "Review fixes made: the prelude st16 and runtime::bus save-store comments now say mGBA 0.10.5 drops unaligned SRAM stores (prelude comment kept at 2 lines for its lines_prelude bar). Merged origin/main; just check green. Verifier re-read the 0xD-0xF arms against runtime::bus, ran lift-check --only native-save: pass, 600 frames, planted strb fault caught at frame 1.",
-        "branch": "unit/native/lift-save-memory",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T10:46:14Z",
-          "by": "28dc0a51",
-          "host": "quack",
-          "pid": 2490379,
-          "start": "10658170",
-          "beats": true,
-          "session": "28dc0a51-8c19-468a-a7a7-97e6b429929c",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -1566,13 +1559,7 @@
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/native/prelude.rs:456-457: the new comment says the save's 8-bit bus stores the addressed byte lane at the unaligned address \"as the play build's bus, and mGBA\". This unit's own finding says…"
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-12T10:28:09Z",
-        "findings": "- crates/codegen/src/native/prelude.rs:456-457: the new comment says the save's 8-bit bus stores the addressed byte lane at the unaligned address \"as the play build's bus, and mGBA\". This unit's own finding says otherwise. agb/native-save/SCENE.md and units/native-save-600.toml's mgba_why both record that mGBA 0.10.5 drops an unaligned SRAM strh/str, and that this is the whole reason the hashes differ. Change the comment to say it follows the play build's bus (runtime::bus), and note that mGBA 0.10.5 drops these stores (see units/native-save-600.toml). The same wrong claim, \"(as mGBA does)\", is in crates/runtime/src/bus.rs:497-498, which this lane didn't write. Correct it there too so the next reader doesn't take mGBA as agreeing."
-      },
-      "round": "2026-11-12T09:54:28Z"
+      ]
     },
     {
       "id": "native/lift-flash-routines",
@@ -1580,7 +1567,19 @@
       "detail": "docs/native-stage-b.md, 'The first game': the save libraries copy their read and verify routines onto the stack and call them (Metroid's SRAM library at 0x03007d39); the bytes are analysis::flash's agbcc signatures (Read, Verify) and runtime::hw::flash stands in ({unit:native/flash-stack-standin}), but gbaa-lift doesn't call it: call_fn panics, no function's entry. At a call into RAM, recognise the routine and call hw::flash on Hw::save. Done when: a lifted program calling a copied routine runs it as hw::flash (a lift-check program or Metroid's route past its save read), and just check passes.",
       "check": "independent",
       "needs": ["native/lift-save-memory"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "928c9e05",
+        "session": "928c9e05-48b6-4898-9ac3-844e8633b1c0",
+        "host": "quack",
+        "pid": 2490379,
+        "start": "10658170",
+        "at": "2026-11-12T11:13:32Z",
+        "branch": "unit/native/lift-flash-routines",
+        "beats": true
+      },
+      "round": "2026-11-12T11:13:32Z"
     },
     {
       "id": "native/lift-bios-region",
@@ -1589,17 +1588,31 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "9fcf9764",
-        "session": "9fcf9764-90bc-4e3b-8d61-b6f6ae7454c1",
-        "host": "quack",
-        "pid": 2489918,
-        "start": "10657789",
-        "at": "2026-11-12T10:43:38Z",
+        "checker": "subagent-a87d606f",
+        "at": "2026-11-12T11:15:27Z",
+        "evidence": "Fresh verifier subagent: just lift-check --only native-bios-region passed (601 frames, 0 differences, packed layout same); mgba-diff 601 matches route hash 966182bb68b4b4b0, incl. new Halt slot 10 (0xE3A02004: review's AFTER_IRQ fix was wrong, lift-check caught it at frame 3). just check green after merging main (78a8847).",
         "branch": "unit/native/lift-bios-region",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T11:15:27Z",
+          "by": "9fcf9764",
+          "host": "quack",
+          "pid": 2489918,
+          "start": "10657789",
+          "beats": true,
+          "session": "9fcf9764-90bc-4e3b-8d61-b6f6ae7454c1",
+          "lane": "quack/3"
+        },
+        "pushed": true
       },
       "notes": [
+        {
+          "at": "2026-11-12T11:15:32Z",
+          "by": "9fcf9764",
+          "text": "Review's Halt fix was wrong: play build's irq_return finishes Halt's pending call and sets AFTER_SWI; mGBA agrees (test slot 10). Separately, native-spike has a hard hole on main (filed: {unit:native/spike-entry-read-hole}); numbers doc shows it."
+        },
         {
           "at": "2026-11-12T10:43:25Z",
           "by": "manual",
@@ -1625,15 +1638,24 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "ba1a464f",
-        "session": "ba1a464f-09a6-40f0-b263-fabbb9594de4",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T10:44:40Z",
+        "checker": "ae19d9e3",
+        "at": "2026-11-12T11:21:43Z",
+        "evidence": "Verifier subagent ae19d9e3 rebuilt out/metroid at --timing native from this branch: route-check --native on units/metroid-native.toml (2700 frames) passes the play-against-interp step, play.rec and interp.rec byte-identical (was frame 1, EWRAM 0x02038000). Cause: an idle loop's conditional branch mid-block got no rt::idle_exit; build_block now splits after it. Unit test added; just check passes after merging main.",
         "branch": "unit/native/play-native-metroid-interp",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T11:21:43Z",
+          "by": "ba1a464f",
+          "host": "quack",
+          "pid": 2489252,
+          "start": "10657014",
+          "beats": true,
+          "session": "ba1a464f-09a6-40f0-b263-fabbb9594de4",
+          "lane": "quack/1"
+        },
+        "pushed": true
       },
       "round": "2026-11-12T10:44:40Z"
     },
