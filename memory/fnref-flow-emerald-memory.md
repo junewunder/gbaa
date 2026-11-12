@@ -1,6 +1,6 @@
 ---
 title: Why the function-address flow ran out of memory on Emerald, and the Ref fix
-hook: big reads are one Tok::Ref (1.5 GB); 2026-11-12 speed work: round 0 in 7 min, a whole run in 28 min at 2.1 GB, but unsettled; profile with eu-stack (perf is blocked)
+hook: big reads are one Tok::Ref (1.5 GB); 2026-11-12: Emerald whole run 11:24 at 2.4 GB, unsettled at the 48M-token bound; profile with eu-stack (perf is blocked)
 open: true
 ---
 
@@ -71,3 +71,16 @@ step bound, `64 * blocks + 64`; the trace now names it, "unsettled after").
 Round 1 at the last build: 256 functions per ~60 s, its time spread over
 ref_val/exp_add (new reads), add_all and call_by_value. lift-metrics on
 the agb programs: identical to main's table at each step.
+
+**2026-11-12 (later), at ec10365:** a whole run finishes: 11:24 wall, 2.37
+GB peak, round 0 in 82 s, but stops unsettled at main's 48M-token bound
+(`TOKENS`, 29,696 runs; entries, results, by_value and all_holed grow
+together). Settling Emerald means raising or replacing that bound, not
+more speed. The one bar over (native-tasks `fn_words_not_proven` 59 > 57)
+is evaluation order: main proves vtable words 0x080244c8/cc only through an
+early, short-lived 5-token value of sp at f_08000180's `pop`; the settled
+values are wide RomFrom sets on both. `Val::cap` letting a RomFrom absorb
+Roms up to the next code while `rom_from` reads only to the object end is
+a real gap on main, but closing it (absorb to the object end) sent
+ref_unexplained from 35 to 93 on every agb program: don't try it as a
+quick fix.
