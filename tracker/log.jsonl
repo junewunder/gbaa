@@ -2719,3 +2719,4 @@
 {"at":"2026-11-12T13:58:35Z","actor":"loop","tag":"e610b9cf","host":"quack","cmd":"done","id":"merge/quack-lane2-native-lift-bios-affine","text":"Merge main on quack lane 2: done"}
 {"at":"2026-11-12T13:58:55Z","actor":"session","tag":"manual","host":"quack","cmd":"edit","id":"merge/quack-lane2-native-lift-bios-affine","text":"Merge main on quack lane 2: edited (detail, branch)"}
 {"at":"2026-11-12T13:58:59Z","actor":"session","tag":"manual","host":"quack","cmd":"reopen","id":"merge/quack-lane2-native-lift-bios-affine","text":"Merge main on quack lane 2: back to ready: Merging failed again: merging main conflicts in crates/codegen/lift-check.toml"}
+{"at":"2026-11-12T13:59:12Z","actor":"loop","tag":"eae1c8a3","host":"quack","cmd":"claim","id":"merge/quack-lane2-native-lift-bios-affine","text":"Merge main on quack lane 2: claimed"}

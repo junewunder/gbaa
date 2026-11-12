@@ -248,6 +248,17 @@
       "lane": "quack/2",
       "branch": "unit/native/lift-bios-affine",
       "minMinutes": 40,
+      "record": {
+        "state": "claimed",
+        "by": "eae1c8a3",
+        "session": "eae1c8a3-81b6-4774-b682-105c8bd914f9",
+        "host": "quack",
+        "pid": 2489427,
+        "start": "10657408",
+        "at": "2026-11-12T13:59:12Z",
+        "branch": "unit/native/lift-bios-affine",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-12T13:58:59Z",
