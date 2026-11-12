@@ -275,6 +275,9 @@ pub(super) struct Sum<'a> {
     pub(super) stopped: bool,
     /// Each call site's callee, `None` for an indirect one.
     sites: BTreeMap<u32, Option<u32>>,
+    /// The functions it falls or jumps into and goes on through, with
+    /// its own registers ([`super::Walk::flow`]).
+    pub(super) falls: BTreeSet<u32>,
     /// The functions whose summaries this run used.
     refs: BTreeSet<u32>,
     /// r4–r11 not as they came, over every return ([`Summary::changes`]).
@@ -330,6 +333,7 @@ impl<'a> Sum<'a> {
             holes: BTreeSet::new(),
             stopped: false,
             sites: BTreeMap::new(),
+            falls: BTreeSet::new(),
             refs: BTreeSet::new(),
             changes: 0,
             entry_reads: BTreeSet::new(),
@@ -648,7 +652,8 @@ impl<'a> Sum<'a> {
 /// An entry read's hole, after its address: hard
 /// (`analysis::holes::SUMMARY_HARD`).
 const ENTRY_READ: &str = ": reads r4-r11 at entry: ";
-/// [`ENTRY_READ`] in a function nothing enters by `Regs::call`: soft.
+/// [`ENTRY_READ`] in a function nothing enters by `Regs::call`, nor by
+/// a tail call or fall from one so entered: soft.
 const JUMPED_READ: &str = ": reads r4-r11 at entry, only jumped into: ";
 
 /// Every function's summary, by entry.
@@ -732,6 +737,9 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
     let mut used: BTreeMap<u32, BTreeMap<(u32, u8), Cause>> = BTreeMap::new();
     // Each function's `bl` callees (a tail call's site is its callee).
     let mut bl: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
+    // Each function's tail callees and the functions it falls into: they
+    // take its own r4-r11.
+    let mut jumps: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
     let mut callers: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
     let mut work: VecDeque<u32> = by_entry
         .keys()
@@ -818,6 +826,14 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
             sum.sites
                 .iter()
                 .filter_map(|(&at, &c)| c.filter(|&c| c != at))
+                .collect(),
+        );
+        jumps.insert(
+            k,
+            sum.sites
+                .iter()
+                .filter_map(|(&at, &c)| c.filter(|&c| c == at))
+                .chain(sum.falls.iter().copied())
                 .collect(),
         );
         used.insert(k, sum.used);
@@ -919,9 +935,11 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
     // An entry read of r4–r11 is a parameter the lift doesn't pass where
     // it enters the function by `Regs::call`, which zeroes them: from a
     // `bl`, or an indirect call (one of a complete callee set, or through
-    // a pointer: the key as a word in the ROM). A function only jumped or
-    // fallen into (agb's panic paths, discovery's entries inside another
-    // function) takes every register through its extended entry.
+    // a pointer: the key as a word in the ROM). A function tail-called or
+    // fallen into takes the jumper's own r4–r11 through its extended
+    // entry: real only if the jumper is itself only jumped into (agb's
+    // panic paths, discovery's entries inside another function), so a
+    // jump from a called function counts as a call.
     let readers: BTreeSet<u32> = sums
         .iter()
         .filter(|(_, s)| s.holes.iter().any(|h| h.contains(ENTRY_READ)))
@@ -937,10 +955,18 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
                     .0
                     .iter()
                     .map(|&w| u32::from_le_bytes(w))
-                    .filter(|w| readers.contains(w)),
+                    .filter(|w| sums.contains_key(w)),
             );
         } else {
-            called.extend(readers.iter().copied());
+            called.extend(sums.keys().copied());
+        }
+        let mut todo: Vec<u32> = called.iter().copied().collect();
+        while let Some(f) = todo.pop() {
+            for &c in jumps.get(&f).into_iter().flatten() {
+                if called.insert(c) {
+                    todo.push(c);
+                }
+            }
         }
         for k in readers.difference(&called) {
             let s = sums.get_mut(k).expect("a summary");
