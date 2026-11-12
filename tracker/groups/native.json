@@ -1643,24 +1643,25 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "3402e3f4",
-        "session": "3402e3f4-9509-490a-811b-8f126aa4b75b",
-        "host": "quack",
-        "pid": 2489252,
-        "start": "10657014",
-        "at": "2026-11-12T11:27:23Z",
-        "branch": "unit/native/lift-bios-more",
-        "beats": true
+        "checker": "a6dfd1e9",
+        "at": "2026-11-12T13:35:13Z",
+        "evidence": "Prelude prints SoftReset (restart via main), RegisterRamReset, HuffUnComp, SoundDriverVSyncOff. New program agb/native-bios-more (all four, 3 restarts in 600 frames): lift-check pass, 0 differences; all other programs but native-spike (pre-existing hole) pass; after merging main bios-more/region/calls pass; just check passes. Nightmare lifts without the 3 stand-ins (only its 10 entry-read holes). lines_prelude 885->1098: prelude +137 lines for the four routines and restart loop. Verifier a6dfd1e9: PASS.",
+        "host": "quack"
       },
       "notes": [
+        {
+          "at": "2026-11-12T13:35:22Z",
+          "by": "3402e3f4",
+          "text": "Emerald's SDK SoftReset stub (0x082e70ad, ldr sp const; swi 1; swi 0) should be covered by the new fresh-stack rule but its lift wasn't run (memory queue). RegisterRamReset skips serial (0x20)."
+        },
         {
           "at": "2026-11-12T12:35:05Z",
           "by": "a7b7e9d7",
           "text": "Emerald's lift (this branch base, 2026-11-12) has a hard 'stack switch' at 0x082e70b2 in the SDK SoftReset stub f_082e70ad (mov sp before swi 1; swi 0): SoftReset's own sp setup, which the stub's lift now reaches. Moonbeam has longjmp's at 0x08038328 too."
         }
-      ],
-      "round": "2026-11-12T11:27:23Z"
+      ]
     },
     {
       "id": "native/lift-psr-boot-irq",
@@ -1689,15 +1690,24 @@
       "check": "independent",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "7492320f",
-        "session": "7492320f-6704-408b-9f75-751df2d10449",
-        "host": "quack",
-        "pid": 2489427,
-        "start": "10657408",
-        "at": "2026-11-12T11:49:58Z",
+        "checker": "verifier-7c3e91",
+        "at": "2026-11-12T13:35:43Z",
+        "evidence": "Prelude affine_set prints swi 0x0E/0x0F over runtime::bios::math (verifier matched it to the play build). lift-check --only native-bios-affine passed after merging main (600 frames, 0 differences, packed same; verifier reran it). gbaa-holes vs main: swi 0x0e/0x0f lines 2->0 on minish-cap, emerald, emerald-rogue, imperium; hard 93->85. gbaa-lift: 0x0e/0x0f holes 1+1->0 on minish-cap (42->40) and emerald (28->26); 0 on rogue and imperium (new lifter only, no time for main's). just check green. lines_prelude 961->994: +33 prelude lines (affine_set). native-spike's hard hole is on main too, filed.",
         "branch": "unit/native/lift-bios-affine",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-12T13:35:43Z",
+          "by": "7492320f",
+          "host": "quack",
+          "pid": 2489427,
+          "start": "10657408",
+          "beats": true,
+          "session": "7492320f-6704-408b-9f75-751df2d10449",
+          "lane": "quack/2"
+        },
+        "pushed": true
       },
       "round": "2026-11-12T11:49:58Z"
     },
@@ -1707,6 +1717,7 @@
       "detail": "From the overnight lift (2026-11-11, runs/long/overnight-lift.log): gbaa-lift reports 21 'an undefined instruction' hard holes in moonbeam (e.g. f_08006731 at 0x08006966, f_08017a91 at 0x08017b7e), 24 in Emerald Rogue and 2 in Imperium. {unit:native/modern-gcc-data-as-code} fixed discovery's own case, and gbaa-holes doesn't count undefined instructions at all, so these likely come from the lifter's gap decoding (decision: The lifter decodes discovery's gaps itself and lists them) or a function run on past its end. Find which rule takes each, stop it there without losing real code. Done when: the cause of each kind is written in docs/research/native-holes.md, the undefined-instruction holes fall on moonbeam and Rogue with no other hard count higher (just holes-all --against main and the lifts' counts), disc-* bars hold, just check passes.",
       "check": "independent",
       "uses": ["heavy"],
+      "minMinutes": 90,
       "record": {
         "state": "claimed",
         "by": "74679aef",
@@ -1716,8 +1727,18 @@
         "start": "10658170",
         "at": "2026-11-12T13:02:46Z",
         "branch": "unit/native/lift-undefined-insns",
-        "beats": true
+        "beats": true,
+        "handedBack": "2026-11-12T13:43:04Z",
+        "pushed": true,
+        "ended": "2026-11-12T13:43:15Z"
       },
+      "notes": [
+        {
+          "at": "2026-11-12T13:42:55Z",
+          "by": "74679aef",
+          "text": "Code on branch (48b1f0e): traps (udf #255) lift as panic!, SoftReset ends paths. Unverified: moonbeam's gbaa-lift then ran >10 min at 100% CPU, 0.6 GB (overnight <3 min with build); first check whether main's lifter is as slow, then lifts' counts, holes-all, just check."
+        }
+      ],
       "round": "2026-11-12T13:02:46Z"
     },
     {
@@ -1780,6 +1801,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T13:35:18Z",
+          "by": "3402e3f4",
+          "text": "holes/native-bios-more.toml also stands in that qrcodegen panic path (f_08006d77, panics). Drop it when this lands."
+        },
+        {
           "at": "2026-11-12T10:05:09Z",
           "by": "fd902c34",
           "text": "Seen 2026-11-12: native-spike's hard hole (f_08006d47, r6 read at 0x08006d76, passed in r1) is on origin/main and before the fnref-rom-read-bound merge (1c09d57c^1), so full just lift-check / lift-metrics fail on main until this lands."
@@ -1788,11 +1814,6 @@
           "at": "2026-11-12T09:30:23Z",
           "by": "d12ab564",
           "text": "2026-11-12: agb/native-dma (new, {unit:native/hw-dma-registers}) hits the same hole, a gap in qrcodegen's draw_format_bits (f_08006d23 reads r6); holes/native-dma.toml stands it in with unreachable!. Drop that stand-in when this lands."
-        },
-        {
-          "at": "2026-11-12T08:33:14Z",
-          "by": "eb7b70bf",
-          "text": "Kirby - Nightmare has 5 more hard entry-read holes from the same change ({unit:native/nightmare-entry-reads}); a fix to the rule may cover both."
         }
       ],
       "round": "2026-11-12T13:08:36Z"
