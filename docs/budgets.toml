@@ -27,10 +27,12 @@ max_lines = 470
 # multiplayer/wireless-radio-netplay's emerald-radio entry (8 lines, its
 # numbers in docs/research/multiplayer.md); 1978 after
 # multiplayer/desktop-wireless-radio's --wireless entry (7 lines, its
-# check's numbers in the tracker's evidence).
+# check's numbers in the tracker's evidence); 1981 after
+# multiplayer/menu-wireless-room's Link row (3 lines, its check in the
+# tracker's evidence).
 [[doc]]
 path = "docs/tools/commands.md"
-max_lines = 1978
+max_lines = 1981
 
 [[doc]]
 path = "docs/native-port-design.md"
