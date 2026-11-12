@@ -41,6 +41,7 @@ pub mod state_file;
 #[cfg(feature = "timing-lab")]
 mod timing_lab;
 pub mod window;
+pub mod wireless;
 
 pub use capture::{Capture, wav};
 pub use dump::{frame_hash, write_png, write_png_over};
@@ -290,6 +291,16 @@ usage: gbaa-desktop ROM [options]
                    consoles see your seat holding A, while the other
                    peer gets your real presses: a desync, which the
                    window, the end lines and the kept report then show
+  --wireless       with --server and --host or --join: not the cable but
+                   a wireless adapter (Emerald's Union Room, FireRed's
+                   wireless club), whose radio is the server room's.
+                   Each window runs only its own GBA, in real time, in
+                   the interpreter; nothing is rolled back, the menu
+                   doesn't pause, and the game starts from reset.
+                   --players seats (2 by default). With --frames,
+                   --input, --save, --dump, --hash, --dump-at/--dump-dir,
+                   --mute, --scale, --fullscreen, --pad-config,
+                   --pad-script
   --rogue ADDR     Emerald Rogue's co-op (Multiplayer Adventures) with
                    Rogue Assistant built in: when the game hosts, listen on
                    ADDR's port; when it joins, connect to ADDR (host[:port],
@@ -493,6 +504,9 @@ pub struct Options {
     pub menu: input::Spans,
     /// `--desync-at`: netplay, a forced desync from this frame on.
     pub desync_at: Option<u32>,
+    /// `--wireless`: with `--server`, a wireless adapter whose radio is
+    /// the server's ([`wireless`]), not netplay's cable.
+    pub wireless: bool,
 }
 
 impl Options {
@@ -646,6 +660,7 @@ impl Options {
             present_ms: None,
             menu: input::Spans::default(),
             desync_at: None,
+            wireless: false,
         };
         let mut args = args.into_iter();
         while let Some(a) = args.next() {
@@ -715,6 +730,7 @@ impl Options {
                 "--join" => o.role = Some(room::Role::Join(room::parse_code(&value("--join")?)?)),
                 // Rollback is the only netplay; the old flag still parses.
                 "--rollback" => {}
+                "--wireless" => o.wireless = true,
                 "--paced" => o.paced = true,
                 "--menu" => o.menu = input::Spans::parse(&value("--menu")?)?,
                 "--desync-at" => {
@@ -839,7 +855,13 @@ impl Options {
         if o.link.is_none() && o.input2 != Script::default() {
             return Err("--input2 is player 2's, with --link".into());
         }
-        if o.server.is_some() || o.role.is_some() {
+        if o.wireless && (o.server.is_none() || o.role.is_none()) {
+            return Err("--wireless needs --server ADDR and --host or --join CODE".into());
+        }
+        if o.wireless {
+            wireless::check(&o)?;
+            room::check(&o)?;
+        } else if o.server.is_some() || o.role.is_some() {
             room::check(&o)?;
         } else if o.delay.is_some()
             || o.players.is_some()
@@ -1548,6 +1570,9 @@ pub fn run(
     }
     if opts.link.is_some() {
         return link::run(opts, timing, screen);
+    }
+    if opts.server.is_some() && opts.wireless {
+        return wireless::run(opts, timing, screen);
     }
     if opts.server.is_some() {
         return room::run(opts, code.filter(|_| !opts.interp), timing, screen, carry);

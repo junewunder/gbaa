@@ -1987,6 +1987,30 @@ fn netplay_options() {
 }
 
 #[test]
+fn wireless_options() {
+    let o = parse("g.gba --server s --wireless --host --players 3").unwrap();
+    assert!(o.wireless);
+    assert_eq!((o.role, o.players), (Some(room::Role::Host), Some(3)));
+    let o = parse("g.gba --headless --server s --wireless --join abcdef --frames 9").unwrap();
+    assert_eq!(o.role, Some(room::Role::Join(*b"ABCDEF")));
+    for (args, why) in [
+        ("--wireless", "--server"),
+        ("--wireless --server s", "--host or --join"),
+        ("--wireless --host", "--server"),
+        ("--server s --wireless --host --delay 2", "rollback"),
+        (
+            "--server s --wireless --join abcdef --state p.state",
+            "--state",
+        ),
+        ("--server s --wireless --host --link b.sav", "--link"),
+        ("--server s --wireless --host --fast-forward", "wireless"),
+    ] {
+        let e = parse(&format!("g.gba {args}")).unwrap_err();
+        assert!(e.contains(why), "{args}: {e}");
+    }
+}
+
+#[test]
 fn pads_take_seats_in_the_order_they_came() {
     use gamepad::PadEvent::*;
     use runtime::io::key;
