@@ -105,13 +105,15 @@ pub enum Role {
 /// (`docs/tools/commands.md`, the server on fly.io).
 pub const DEFAULT_SERVER: &str = "37.16.3.41";
 
-/// A session the menu asked for: the server, the seat, and the seats in
-/// the room if hosting.
+/// A session the menu asked for: the server, the seat, the seats in the
+/// room if hosting, and whether it's a wireless room ([`crate::wireless`])
+/// rather than the cable's.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Ask {
     pub server: String,
     pub role: Role,
     pub players: usize,
+    pub wireless: bool,
 }
 
 /// Where this window's netplay is, as the menu shows it.
