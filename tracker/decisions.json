@@ -1070,6 +1070,14 @@
       "at": "2026-11-08T23:18:08Z",
       "question": "q/raise-lift-bars-rom-widening",
       "via": "d06a24f2"
+    },
+    {
+      "id": "d/netplay-waits-8-s-for-a-silent-peer-before-it",
+      "title": "Netplay waits 8 s for a silent peer before it has left",
+      "why": "From Emerald's netplay trade split once on wander, under load ({unit:multiplayer/wander-split-under-load}): room::QUIET was 3 s, and a loaded machine (a 3.4 s rollback) or a 4 s SIGSTOP ended the session. 8 s lets a stall of a few seconds catch up; past the 5 s window the others freeze, so a truly gone peer costs 3 s frozen before they play on alone (the mark says 'not hearing' after 0.75 s). The owner may prefer shorter.",
+      "by": "18d209b3",
+      "at": "2026-11-12T06:34:01Z",
+      "scope": ["group:multiplayer"]
     }
   ]
 }
