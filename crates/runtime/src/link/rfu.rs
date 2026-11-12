@@ -441,13 +441,14 @@ impl Wireless {
     /// the adapter does comes out of [`Wireless::take_up`], what the radio
     /// says goes in through [`Wireless::deliver`]. Host IDs are
     /// `0x1000 * (seat + 1)` counting up, below the server's children's.
-    /// A search lists only the hosts the radio last said were open (no
-    /// [`HEARD_FOR`]): kept, a host's entry from before it reopened under
-    /// a new ID sent the first `Connect` to the old one
+    /// A search keeps listing a host for [`HEARD_FOR`] after the radio
+    /// last said it was open, as the local radio does: without it, at 100
+    /// and 120 ms each way the Union Room's board never showed the other
+    /// player's offer; with it, the first `Connect` may go to a host's ID
+    /// from before it reopened and be refused, costing a retry
     /// (docs/research/multiplayer.md, "The radio on the server").
     pub fn networked<P: Platform>(m: &mut Machine<P>, seat: u8) -> Wireless {
         let mut w = Wireless::new(&mut [m]);
-        w.heard_for = 0;
         w.net = Some(Net {
             seat,
             ids: 0,
@@ -473,8 +474,7 @@ impl Wireless {
     }
 
     /// How long a search keeps listing a host it no longer hears
-    /// ([`HEARD_FOR`], or 0 for a networked adapter, unless set; 0 lists
-    /// only those heard now).
+    /// ([`HEARD_FOR`] unless set; 0 lists only those heard now).
     pub fn set_heard_for(&mut self, cycles: u64) {
         self.heard_for = cycles;
     }

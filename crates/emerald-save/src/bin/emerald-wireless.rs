@@ -30,8 +30,8 @@
 //! and as fast as the local check, for measuring how much latency the
 //! Union Room allows.
 //! `--heard-ms N` sets how long a networked adapter's search keeps
-//! listing a host it no longer hears (default 0: only those the server
-//! last said were open; the local radio's is 3000).
+//! listing a host it no longer hears (default 3000, as the local
+//! radio's; 0: only those the server last said were open).
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::{SocketAddr, UdpSocket};
@@ -797,6 +797,7 @@ fn run_sim(o: &Options, ms: f64) -> Result<bool, String> {
                 state,
                 id,
                 m.bus.read32(G_LINK_STATUS) & !0x100,
+                position(m),
             );
             if Some(now) != last[p] {
                 if now.1 == CB2_LINK_ERROR && last[p].is_none_or(|l| l.1 != CB2_LINK_ERROR) {
@@ -808,8 +809,8 @@ fn run_sim(o: &Options, ms: f64) -> Result<bool, String> {
                 }
                 println!(
                     "frame {f}: player {p} map {}.{} callback2 {:08x} commType {} \
-                     adapter state {} id {:04x} gLinkStatus {:#010x}",
-                    map[0], map[1], now.1, now.2, now.3, now.4, now.5
+                     adapter state {} id {:04x} gLinkStatus {:#010x} at {},{}",
+                    map[0], map[1], now.1, now.2, now.3, now.4, now.5, now.6.0, now.6.1
                 );
                 last[p] = Some(now);
             }
