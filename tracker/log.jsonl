@@ -2703,3 +2703,4 @@
 {"at":"2026-11-12T13:47:15Z","actor":"loop","tag":"538fc492","host":"quack","cmd":"settle","id":"merge/quack-lane2-native-lift-bios-affine","text":"Merge main on quack lane 2: session ended mid-unit"}
 {"at":"2026-11-12T13:47:28Z","actor":"loop","tag":"d57bd0f8","host":"quack","cmd":"claim","id":"merge/quack-lane2-native-lift-bios-affine","text":"Merge main on quack lane 2: claimed (picking up after 538fc492)"}
 {"at":"2026-11-12T13:48:46Z","actor":"loop","tag":"d57bd0f8","host":"quack","cmd":"edit","id":"merge/quack-lane2-native-lift-bios-affine","text":"Merge main on quack lane 2: edited (min-minutes)"}
+{"at":"2026-11-12T13:48:50Z","actor":"loop","tag":"d57bd0f8","host":"quack","cmd":"note","id":"merge/quack-lane2-native-lift-bios-affine","text":"Merge main on quack lane 2: note: merged main again (tracker/ only, clean). just check cut off a third time by the 09:00 stop. Set min-minutes 25 so it starts early: just rerun just check, then record done."}

@@ -264,6 +264,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-12T13:48:50Z",
+          "by": "d57bd0f8",
+          "text": "merged main again (tracker/ only, clean). just check cut off a third time by the 09:00 stop. Set min-minutes 25 so it starts early: just rerun just check, then record done."
+        },
+        {
           "at": "2026-11-12T13:47:04Z",
           "by": "538fc492",
           "text": "merged latest main again (only tracker/ changes came in, no conflicts). just check cut off by the 09:00 stop after ~1 min, mid-tests. Next session: rerun just check (needs ~10+ min before stop), then record done."
