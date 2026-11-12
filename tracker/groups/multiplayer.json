@@ -885,21 +885,8 @@
         "by": "18d209b3",
         "at": "2026-11-12T06:52:54Z",
         "evidence": "Cause: room::QUIET was 3 s and a deep rollback (up to 300 frames) sent nothing while it ran, 3.4 s under load. Fix: rollback sends inputs every 16 rerun frames (rollback::KEEP_ALIVE, test a_deep_rollback_keeps_sending_while_it_runs: 1 send before, 13 after), QUIET 8 s. New emerald-trade --stop SEAT@SECS+DUR SIGSTOPs a player. Before: just emerald-netplay-trade wander --stop 2@20+4 split (each took the other to have left). After, quack 2026-11-12: 5 in a row passed (stopping players 2,1,2,1,2 for 4 s at 20 s), all ending 35d6b1be; after merging main once more, passed on f57d24ba. just check passes before and after the merge.",
-        "branch": "unit/multiplayer/wander-split-under-load",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-12T06:52:54Z",
-          "by": "18d209b3",
-          "host": "quack",
-          "pid": 2489252,
-          "start": "10657014",
-          "beats": true,
-          "session": "18d209b3-06f2-421f-8061-da4ac3c8552e",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-12T06:02:10Z"
+        "host": "quack"
+      }
     },
     {
       "id": "multiplayer/wireless-radio-netplay",
