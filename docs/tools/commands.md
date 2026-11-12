@@ -1875,9 +1875,12 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   due a frame reaches the screen, turn costs; for the window's loop
   before 2026-11-08's fixes and after (`--version`). Turn costs are a
   model of two recompiled Kirbys on quack (`--scale K` times it), which
-  repeats exactly and takes milliseconds, or with `--rom ROM` measured on
-  interpreted GBAs running ROM (about 90 s for 5400 Kirby frames, and
-  only as steady as the machine). `--players N`, `--frames N` (3600),
+  repeats exactly and takes milliseconds, or with `--rom ROM` ROM's own:
+  it first runs ROM once on interpreted GBAs, straight, timing each
+  frame, snapshot and restore on the thread's CPU clock (a
+  `netplay::feel::Trace`, about 90 s for 5400 Kirby frames), then plays
+  the session on those costs. `--trace-out F` keeps the trace, `--trace F`
+  reuses one in place of `--rom`. `--players N`, `--frames N` (3600),
   `--present-ms L`, `--input1 S`.. (default `netplay::feel::PLAY`, the
   lag report's play). `cargo test -p netplay feel` holds the budgets
   (`docs/research/multiplayer.md`, "Feel").
