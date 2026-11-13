@@ -1208,6 +1208,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-13T06:51:25Z",
+          "by": "ae52d6ac",
+          "text": "Correction, 2026-11-13: with all four kinds of memory read off affine is 39, not 55 (a shell slip set one switch). Loads that read everything + pointer-anywhere reads off together: 41. See docs/research/fnref-held-words.md and {unit:native/fnref-frame-pointers}."
+        },
+        {
           "at": "2026-11-13T06:12:23Z",
           "by": "ae52d6ac",
           "text": "2026-11-13: no single read holds the words (docs/research/fnref-held-words.md): affine stays 55 with every mixing memory read off. Context alone won't lower fn_words_not_proven; pick a direct measure. Its code is on branch unit/native/fnref-unknown-addrs."
@@ -1769,13 +1774,11 @@
       "uses": ["heavy"],
       "minMinutes": 150,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "3d525e2f",
-        "session": "3d525e2f-fa9e-4ab0-851f-1e2f2cec2205",
-        "host": "quack",
-        "pid": 276052,
-        "start": "369085",
-        "at": "2026-11-13T05:46:57Z"
+        "checker": "a3cc37a1ce8881d59",
+        "at": "2026-11-13T06:57:12Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/5 (head 2b5dda0b). just lift on agb/native-spike (a lift-check program): '600 of 600 frames, no stop' in report.txt and metrics.toml [run]. A KEYCNT store planted by hand in a copy: '5 of 600 frames, unmodelled-register 0x04000132 KEYCNT', in f_0800017d. A planted endless loop: 'time-limit 3 s'. Metroid on main's lifter: 'didn't build: 1 hard hole'; Nightmare: 'didn't build: 10 hard holes' (DMA by its registers has landed; their entry-read holes are other units'), both shown beside hard in just holes-all's table. just check passes (peak 7.5 GB). A fresh subagent reviewed the diff and checked the card: 'the unit's check is met', with no guest pc (filed: {unit:native/first-stop-guest-pc}) and a column that isn't rerun as the weaker parts; its two real bugs are fixed."
       },
       "round": "2026-11-12T13:07:54Z"
     },
@@ -1858,7 +1861,17 @@
       "id": "native/metroid-entry-reads",
       "title": "Metroid lifts again after entry-read masking",
       "detail": "Since {unit:native/entry-read-masking} landed, gbaa-lift on Metroid has 1 hard hole: f_08073ce5, summary 0x08073f08 reads entry r9. agbcc builds a word in r6 = entry r9 byte by byte (ands ffffff00, ands ffff00ff), so r9's top 16 bits are stored to RAM at [r4+0x244+4]; the lift zeroes r4-r12 at a call, the game keeps the caller's r9. Real, not over-hard. Fix: a stand-in (caller's r9 is likely a constant or garbage; check callers), or the lifter passing r9. Done when: just lift ROM out/lift-metroid --name metroid reports 0 hard holes and the crate builds; just check passes.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "8814ddd6",
+        "session": "8814ddd6-8ca4-45af-919c-a91eea1e5151",
+        "host": "quack",
+        "pid": 627066,
+        "start": "800290",
+        "at": "2026-11-13T06:58:38Z"
+      },
+      "round": "2026-11-13T06:58:38Z"
     },
     {
       "id": "native/native-check-spike-packed",
@@ -1915,7 +1928,7 @@
     {
       "id": "native/fnref-live-registers",
       "title": "Function flow passes only registers a callee reads",
-      "detail": "docs/research/fnref-held-words.md, 'Registers nobody reads'. The function flow (crates/codegen/src/native/fnref.rs) passes r0-r3 to every callee and takes all four back, read or not, so a function's address left in a scratch register travels the whole program: on native-irq-hold the handler's pool word 0x080001bc goes in r3 through 39 calls and 36 returns of 26 functions that never touch r3, to the reset's swi, where all four registers count as given to the BIOS. With every mixing memory read off, this road alone holds 12 of affine's words. Work on the branch unit/native/fnref-unknown-addrs (it has the object split, RAM pointers and GBAA_FNREF_WATCH; not on main). Give a callee only the registers its summary reads and take back only those it sets (codegen::saves; all four where the summary has a hole); a swi holes only the registers its BIOS call reads; a call whose target is still empty in an early round must not pass its registers to every function without a direct caller for good. Done when: unit tests for each; on every agb program, GBAA_FNREF_WATCH=all shows no word whose first use not allowed is reached only through registers passed or returned unread (the research note's method; make it a metric with bar 0 if it can be counted in the run); fn_words_not_proven and the other counts no higher than the branch's; the evidence says what holds native-irq-hold's two handler words next. The branch doesn't land here: {unit:native/fnref-ram-pointers-land} does.",
+      "detail": "docs/research/fnref-held-words.md, 'Registers nobody reads'. The function flow (crates/codegen/src/native/fnref.rs) passes r0-r3 to every callee and takes all four back, read or not, so a function's address left in a scratch register travels the whole program: on native-irq-hold, as built on the branch unit/native/fnref-unknown-addrs, the handler's pool word 0x080001bc goes in r3 through 39 calls and 36 returns of 26 functions that never touch r3, to the reset's swi, where all four registers count as given to the BIOS. That un-proves the two handler words main proves and costs the program its 16 typed heap accesses. (With every kind of memory read switched off, GBAA_FNREF_OFF, 13 of affine's 39 words left are given to the BIOS, most by this road, but in a flow the switches changed: it shows the road, not a count.) Work on that branch (it has the object split, RAM pointers, GBAA_FNREF_WATCH; not on main). Give a callee only the registers its summary reads and take back only those it sets (codegen::saves; all four where the summary has a hole); a swi holes only the registers its BIOS call reads; a call whose target is still empty in an early round must not pass its registers to every function without a direct caller for good. Done when: unit tests for each; native-irq-hold's words 0x080001bc and 0x080001c0 are no longer first held by a register passed or returned unread (GBAA_FNREF_WATCH), and the evidence says what holds them next, or that they are proven; fn_words_not_proven and the other counts no higher than the branch's on any program. The branch doesn't land here: {unit:native/fnref-ram-pointers-land} does.",
       "check": "recorded",
       "uses": ["heavy"]
     },
@@ -1924,8 +1937,27 @@
       "title": "Function flow: the object split and RAM pointers land",
       "detail": "The branch unit/native/fnref-unknown-addrs holds three units' work on crates/codegen/src/native/fnref.rs that isn't on main: frames and allocation sites as objects ({unit:native/fnref-heap-sites}), call-site context, off by default ({unit:native/fnref-context}), and RAM pointers followed ({unit:native/fnref-unknown-addrs}), with the metric fn_loads_read_everything (623 load sites on affine at the start, 3 now; barred in every table of lift-check.toml on the branch) and GBAA_FNREF_WATCH. june's answer (q/unknown-address-step-land-without, 2026-11-12): land it on that count, once native-irq-hold has its 16 typed heap accesses (ref_accesses) back, every other bar held, or raised with its cause named. On 2026-11-13 twelve bars are over (docs/research/fnref-held-words.md, 'Why the branch doesn't land'): native-irq-hold loses its two handlers' proven words (0x080001bc, 0x080001c0) and with them ref_accesses 16 to 0; ref_unexplained rises about 42 on native-bios-more, -bios-region, -dma and the spike because every call_fn set, all the address-taken functions, grows by the words now read; native-tasks has complete sets where main has none. Also unexplained: native-bios-calls' 571 loads that read everything. Done when: main merged into the branch, native-irq-hold's ref_accesses is 16, each bar over is back or raised by hand with its cause in the evidence (just tracker decide --for-run), the branch is merged, just lift-check and just check pass.",
       "check": "recorded",
-      "needs": ["native/fnref-live-registers"],
+      "needs": ["native/fnref-live-registers", "native/fnref-frame-pointers"],
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-frame-pointers",
+      "title": "Function flow: pointers into stack frames kept exact",
+      "detail": "docs/research/fnref-held-words.md, 'Kinds of read switched off'. On affine, with GBAA_FNREF_OFF (unsound, measuring only; on the branch unit/native/fnref-unknown-addrs, as is all of this) the loads that read everything alone leave fn_words_not_proven at 55, reads through a pointer anywhere in an object alone leave it 55, and both off give 41: the two must be made exact together, and both are about stack frames. (1) The 3 loads left that read everything (affine 0x08000a24 to 0x08000a2c) go through a pointer into a caller's frame at or above the callee's entry sp, which Run::load_at gives up on (G::obj_up): follow it to the callers' frame objects through the sp each call passed. (2) A pointer into a frame moved by an index the run doesn't know becomes anywhere in the frame and reads every word of it: keep it in its stack slot (crates/codegen/src/native/frame.rs has the slots), and keep an array of pairs' fields apart (an offset known modulo the stride; core::fmt's argument arrays hold a value and a function each, affine 0x080036e4). Work on that branch (it has the object split, GBAA_FNREF_WATCH and GBAA_FNREF_OFF). Done when: unit tests for each; fn_loads_read_everything is 0 on affine and no higher anywhere; fn_words_not_proven falls on affine (the switches say up to 14 words; say in the evidence how close it got and what holds the rest) and rises nowhere. The branch doesn't land here: {unit:native/fnref-ram-pointers-land} does.",
+      "check": "recorded",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/first-stop-guest-pc",
+      "title": "A native game's stop names its guest pc, not only functions",
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-13T06:56:53Z",
+          "by": "3d525e2f",
+          "text": "From {unit:native/native-first-stop} (PR 5): the stop line gives lifted functions from the panic's backtrace (inlined ones don't show) and no guest pc, since lifted code keeps none. Needs the lifter to keep a pc or block address a panic can read, cheaply."
+        }
+      ]
     }
   ]
 }
