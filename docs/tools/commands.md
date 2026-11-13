@@ -1251,7 +1251,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   globals, heap and VRAM free list, which the native programs replaced),
   the I/O registers the library models (display, `DISPSTAT`'s writable
   bits, `VCOUNT`, the sound registers with `SOUNDCNT_X`'s status, wave
-  RAM, the FIFOs' last stores, the timers, `IE`/`IF`/`WAITCNT`/`IME`),
+  RAM, the FIFOs' last stores, the timers, the serial port's and
+  `KEYCNT`, `IE`/`IF`/`WAITCNT`/`IME`),
   palette, VRAM, OAM, and each frame's audio (samples' count and hash):
   `runtime::hw` mixes with the play build's own sound path
   (native/hw-sound), so psg-square's FIFO A and PSG and direct-sound's
