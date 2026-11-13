@@ -894,8 +894,7 @@ fn cpu_fast_set_leaves_a_word_it_copied_in_r3() {
 }
 
 /// The play build's BIOS, call `n` from an ARM `swi` with `r` in r0 to
-/// r3, and any stall it leaves: the registers after, and the RAM the
-/// calls here write.
+/// r3, and any stall it leaves: the registers after, and EWRAM and IWRAM.
 fn play_bios(n: u8, r: [u32; 4]) -> ([u32; 4], Vec<u8>) {
     use runtime::bios;
     let rom: &'static [u8] = Box::leak(vec![0u8; 0x200].into_boxed_slice());
@@ -906,18 +905,23 @@ fn play_bios(n: u8, r: [u32; 4]) -> ([u32; 4], Vec<u8>) {
     while m.cpu.pc == bios::STALL_LOOP {
         m.step();
     }
-    let ram = m.bus.ewram[..0x2000].to_vec();
+    let ram = [&m.bus.ewram[..], &m.bus.iwram[..]].concat();
     (m.cpu.r[..4].try_into().unwrap(), ram)
 }
 
 #[test]
 fn the_play_builds_bios_reads_and_leaves_what_the_rules_say() {
-    // Each call from two sets of registers: a source and a destination in
-    // EWRAM (zeroes: every decompressor's empty input) with a count of 4,
-    // and a source in the BIOS, which the copies refuse.
+    // Each call from three sets of registers: a source and a destination
+    // in EWRAM (zeroes: every decompressor's empty input) with a count of
+    // 4; a source in the BIOS, which the copies refuse; and flags that
+    // make RegisterRamReset clear memory. The decompressors' and
+    // MultiBoot's own work isn't reached (the lift check's native-bios
+    // programs hold the lifted calls to the play build's on real data),
+    // nor a wait's end, and nothing here tells "sets" from "may set".
     let sets = [
         [0x0200_0100, 0x0200_1000, 4, 2],
         [0, 0x0200_1000, 3, 0x0bad_f00d],
+        [0x1f, 0x0200_1000, 0, 7],
     ];
     for &n in analysis::holes::NATIVE_BIOS {
         // SoftReset doesn't return, and zeroes them all.
@@ -935,7 +939,7 @@ fn the_play_builds_bios_reads_and_leaves_what_the_rules_say() {
                 // One it doesn't read changes nothing else.
                 if rule.reads & 1 << i == 0 {
                     let mut other = r;
-                    other[i] ^= 0x5555_0000;
+                    other[i] = !other[i];
                     let (o2, ram2) = play_bios(n, other);
                     for j in (0..4).filter(|&j| j != i) {
                         assert_eq!(o2[j], out[j], "call {n:#04x}: r{j} by r{i}");
