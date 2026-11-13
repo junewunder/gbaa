@@ -21,6 +21,12 @@ pub const STEP_CAP: u64 = 2_000_000;
 /// How often [`analyze_capped`] reruns the fixpoint for `bl`s into the
 /// function's own code.
 const INNER_TRIES: u32 = 4;
+/// How many more reruns it makes for the cold blocks after a function's
+/// code: each is found only once the one before it is the function's.
+const TAIL_TRIES: u32 = 16;
+/// The most instructions ahead of a prologue's `push {…, lr}`
+/// ([`is_push_lr`]). moonbeam's longest is 7.
+const LEAD_MAX: usize = 8;
 /// The longest straight-line callee run inline at its call.
 const LEAF_MAX: usize = 24;
 /// The most instructions [`Analysis::kept`] reads of a callee.
@@ -341,17 +347,20 @@ pub fn analyze_capped(
     // target looks like a function of its own (a prologue, a `bx rN`
     // stub, a short leaf returning with `bx lr`, a target the probe says
     // returns balanced; a case block ending in the epilogue pops a frame
-    // it didn't push). Rerun the fixpoint with those taken as jumps
-    // until no new one turns up.
+    // it didn't push). So is one to right where that span ends, if nothing
+    // returns from there: the cold blocks modern GCC puts last, each ending
+    // in a call that never returns, reached only by `bl` (too far for a
+    // `b`) and reading the function's registers. Rerun the fixpoint with
+    // those taken as jumps until no new one turns up.
     let mut inner = BTreeSet::new();
-    let mut tries = 0;
+    let (mut tries, mut tails) = (0, 0);
     let prologue = thumb && is_push_lr(prog, entry);
     let (mut a, states) = loop {
         let (mut a, states) = fixpoint(prog, entry, thumb, far, cap, inner.clone());
         let mut more = Vec::new();
+        // The span of the code reached and the pools it reads.
+        let (mut lo, mut hi) = (u32::MAX, 0);
         if prologue && !a.res.capped && tries < INNER_TRIES {
-            // The span of the code reached and the pools it reads.
-            let (mut lo, mut hi) = (u32::MAX, 0);
             let mut bls = Vec::new();
             for &at in states.keys() {
                 let Some(i) = a.decode(at) else { continue };
@@ -364,12 +373,16 @@ pub fn analyze_capped(
             for t in bls {
                 if t != entry
                     && lo < t
-                    && t < hi
+                    && t <= hi
                     && !inner.contains(&t)
                     && !is_stub(prog, t)
                     && !is_push_lr(prog, t)
                     && !is_leaf(&mut a, t)
-                    && (a.far)(t, true) != Bl::Balanced
+                    && match (a.far)(t, true) {
+                        Bl::Balanced => false,
+                        Bl::NoReturn => true,
+                        _ => t < hi,
+                    }
                 {
                     more.push(t);
                 }
@@ -380,8 +393,13 @@ pub fn analyze_capped(
         if more.is_empty() {
             break (a, states);
         }
+        // A round that found only the block after the span.
+        if more == [hi] && tails < TAIL_TRIES {
+            tails += 1;
+        } else {
+            tries += 1;
+        }
         inner.extend(more);
-        tries += 1;
     };
     // The results come from the final states only: an earlier visit may
     // have resolved a jump with a narrower state than the fixpoint allows.
@@ -963,12 +981,31 @@ impl Analysis<'_, '_> {
     }
 }
 
-/// Whether Thumb code at `t` starts with `push {…, lr}`: a prologue.
-fn is_push_lr(prog: &Program, t: u32) -> bool {
-    matches!(
-        prog.decode(t, true).map(|i| i.instr),
-        Some(Instr::Block { load: false, rn: DReg::Sp, writeback: true, regs, .. }) if regs & 1 << 14 != 0
-    )
+/// Whether Thumb code at `t` starts with a prologue: `push {…, lr}`, at
+/// `t` or after up to [`LEAD_MAX`] instructions that touch neither the
+/// frame nor pc (modern GCC schedules the body's first instructions ahead
+/// of the push: `movs r3, #180; push {r4-r7, lr}`).
+fn is_push_lr(prog: &Program, mut t: u32) -> bool {
+    for _ in 0..=LEAD_MAX {
+        let Some(i) = prog.decode(t, true) else {
+            return false;
+        };
+        match i.instr {
+            Instr::Block {
+                load: false,
+                rn: DReg::Sp,
+                writeback: true,
+                regs,
+                ..
+            } => {
+                return regs & 1 << 14 != 0;
+            }
+            Instr::Undefined { .. } | Instr::Swi { .. } => return false,
+            _ if i.bl.is_some() || writes_pc(&i.instr) || touches_frame(&i.instr) => return false,
+            _ => t = i.next(),
+        }
+    }
+    false
 }
 
 /// Whether Thumb code at `t` is a lone `bx rN` (rN not lr): a
