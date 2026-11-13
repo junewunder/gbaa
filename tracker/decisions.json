@@ -1238,6 +1238,14 @@
       "at": "2026-11-13T20:37:48Z",
       "scope": ["group:native"],
       "replaces": "d/a-compiler-s-trap-lifts-as-a-named-stop-not-a"
+    },
+    {
+      "id": "d/test-programs-may-share-short-arm-idioms-with",
+      "title": "Test programs may share short ARM idioms with games",
+      "why": "june (2026-11-13): agb/native-irq-wrapper's few-instruction mode switch and handler call matches the games' IRQ wrappers; a standard idiom of a few instructions is not game-derived and may be public. Whole functions or game-specific sequences still go in mods/.",
+      "by": "owner",
+      "at": "2026-11-13T20:37:51Z",
+      "scope": ["group:native"]
     }
   ]
 }
