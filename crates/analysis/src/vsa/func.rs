@@ -21,6 +21,9 @@ pub const STEP_CAP: u64 = 2_000_000;
 /// How often [`analyze_capped`] reruns the fixpoint for `bl`s into the
 /// function's own code.
 const INNER_TRIES: u32 = 4;
+/// How many more reruns it makes for the cold blocks after a function's
+/// code: each is found only once the one before it is the function's.
+const TAIL_TRIES: u32 = 16;
 /// The most instructions ahead of a prologue's `push {…, lr}`
 /// ([`is_push_lr`]). moonbeam's longest is 7.
 const LEAD_MAX: usize = 8;
@@ -339,14 +342,14 @@ pub fn analyze_capped(
     // `b`) and reading the function's registers. Rerun the fixpoint with
     // those taken as jumps until no new one turns up.
     let mut inner = BTreeSet::new();
-    let mut tries = 0;
+    let (mut tries, mut tails) = (0, 0);
     let prologue = thumb && is_push_lr(prog, entry);
     let (mut a, states) = loop {
         let (mut a, states) = fixpoint(prog, entry, thumb, far, cap, inner.clone());
         let mut more = Vec::new();
+        // The span of the code reached and the pools it reads.
+        let (mut lo, mut hi) = (u32::MAX, 0);
         if prologue && !a.res.capped && tries < INNER_TRIES {
-            // The span of the code reached and the pools it reads.
-            let (mut lo, mut hi) = (u32::MAX, 0);
             let mut bls = Vec::new();
             for &at in states.keys() {
                 let Some(i) = a.decode(at) else { continue };
@@ -379,8 +382,13 @@ pub fn analyze_capped(
         if more.is_empty() {
             break (a, states);
         }
+        // A round that found only the block after the span.
+        if more == [hi] && tails < TAIL_TRIES {
+            tails += 1;
+        } else {
+            tries += 1;
+        }
         inner.extend(more);
-        tries += 1;
     };
     // The results come from the final states only: an earlier visit may
     // have resolved a jump with a narrower state than the fixpoint allows.
