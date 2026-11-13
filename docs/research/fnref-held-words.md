@@ -515,8 +515,9 @@ and r3 past the copies held no word the switch had proven.
 
 The agb programs each had one word at stake, 0x08000178, the main
 function's address, left in a register at a `swi` that reads none (in
-affine `VBlankIntrWait`'s, at 0x0800088e). In twelve of the fifteen it
+affine `VBlankIntrWait`'s, at 0x0800088e). In twelve of the sixteen it
 is proven now (`fn_words_not_proven` one lower, the bars with it). In
-native-spike, native-tasks and native-bios-region the word is also
-stored to the pile and meets arithmetic there, so the count stays and
-its reason moves from "given to the BIOS" to "arithmetic".
+native-spike, native-tasks, native-bios-region and native-irq-wrapper
+the word is also stored to the pile and meets arithmetic there, so the
+count stays and its reason moves from "given to the BIOS" to
+"arithmetic".
