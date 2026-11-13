@@ -2179,9 +2179,8 @@ impl FnPrinter<'_, '_> {
                 let c = self.call_then(format!("{call} swi_done(g);"), next, at);
                 writeln!(s, "{ind}{c}").unwrap();
             }
-            // A compiler's trap: the game stops there (on the GBA, the
-            // BIOS's undefined-instruction handler), as `call_fn` does on
-            // a call to no function.
+            // A compiler's trap: the game stops there, as `call_fn` does
+            // on a call to no function.
             Plan::Undefined { trap: true } => writeln!(
                 s,
                 "{ind}panic!(\"{at:#010x}: a compiler's trap (undefined instruction), which stops the game\");"
