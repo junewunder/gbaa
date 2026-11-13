@@ -2787,3 +2787,4 @@
 {"at":"2026-11-13T08:32:19Z","actor":"session","tag":"afebd1b0","host":"quack","cmd":"add-unit","id":"native/fnref-table-ends","text":"new unit: Function flow: where a ROM table read by index ends"}
 {"at":"2026-11-13T08:32:46Z","actor":"session","tag":"afebd1b0","host":"quack","cmd":"add-unit","id":"native/fnref-gcc-moves","text":"new unit: Function flow: old GCC's moves and compares with 0"}
 {"at":"2026-11-13T08:32:50Z","actor":"session","tag":"afebd1b0","host":"quack","cmd":"add-unit","id":"native/fnref-table-fields","text":"new unit: Function flow: struct tables read by one field"}
+{"at":"2026-11-13T08:32:55Z","actor":"session","tag":"afebd1b0","host":"quack","cmd":"add-unit","id":"native/fnref-pile-globals","text":"new unit: Function flow: the pile split by global, for C games"}

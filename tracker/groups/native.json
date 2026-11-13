@@ -2064,6 +2064,14 @@
       "detail": "From {unit:native/fnref-c-game-words} (docs/research/fnref-held-words.md, 'A C game', item 5). A ROM table of records read by index at one field (base + i * size + offset, a byte flag beside two function pointers) is read 'from here on' as every byte of the object, so the byte read gives the bytes of the records' function words, and their first use is arithmetic. On Metroid 66 words: 33 at 0x0805b4f8 (records of 24 bytes from 0x08345d00, the byte at +0, functions at +4 and +12), 15 at 0x080609b4 (records of 16), 18 at 0x08069dd8; they are still held with every GBAA_FNREF_OFF switch on. Keep the stride: a read through base plus an index scaled by a known size (the shift and add before the load, or the value sets' stride if they keep one) at a known offset reads only that field of each record (crates/codegen/src/native/fnref.rs, Tok::RomFrom and Run::rom_from). {unit:native/fnref-frame-pointers} has the same idea for arrays of pairs in a stack frame. Done when: a unit test with a table of (byte, function) records whose byte read leaves the functions proven, Metroid's count reported before and after, the agb bars hold, just lift-check and just check pass.",
       "check": "independent",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-pile-globals",
+      "title": "Function flow: the pile split by global, for C games",
+      "detail": "From {unit:native/fnref-c-game-words} (docs/research/fnref-held-words.md, 'A C game', item 6). The flow keeps one pile for every store it can't place, and a load at a constant RAM address reads its cell and the pile. C keeps its state in globals: a callback stored in a struct through a pointer goes to the pile, and any byte loaded through a pointer then reads the bytes of every such callback. First road of 2,515 of Kirby Nightmare's 4,054 held words (733 at 0x08006162) and 3,594 of the 9,031 Emerald holds when it stops; on Metroid 13, and at most 62 after {unit:native/fnref-bios-reads} (GBAA_FNREF_OFF=bios,pile: 338 to 276). {unit:native/fnref-heap-sites} splits by allocation site, which a C game doesn't have. The value-set analysis bounds 8,582 of Metroid's stores to one global and leaves 3,989 unbounded (store_ram_object, store_computed_unknown), so split the pile by those bounds, and stop a constant-address load reading the pile where every store that could reach its cell is bounded elsewhere. Measure on Nightmare (the flow settles there now: gbaa-recompile --summaries ROM --callee-sets, 31 minutes, 2.0 GB) with GBAA_FNREF_WATCH=roads. Do it after {unit:native/fnref-table-ends}: on Metroid the two reach the same words. Done when: a unit test with two globals whose stores stay apart, Nightmare's held words by pile reads reported before and after and lower, the agb bars hold, just lift-check and just check pass.",
+      "check": "independent",
+      "needs": ["native/fnref-table-ends"],
+      "uses": ["heavy"]
     }
   ]
 }
