@@ -111,18 +111,21 @@
 //! proven (barred) and proven. `GBAA_FNREF_TRACE=1` prints each round of
 //! the run and each use not allowed, with its operands.
 //!
-//! Precision (`docs/native-stage-b.md`, "Known gaps"): splitting the
-//! pile into objects proved no more words on the agb programs (measured
-//! with no pile at all, too), nor did running each function once per
-//! call site (`native/fnref-context`, k = 1, [`Ix`]; on affine 5 s
-//! became 21 s with direct calls only, 445 s with each `call_fn`
-//! callee's too). What holds them: a load whose address may be unknown
-//! (affine: about 640 load sites, the same with the allocator named, the
-//! pile left out of constant-address loads, or the I/O flag left off)
-//! reads the pile and every RAM cell, so the IRQ vector's handler
-//! address, among others, reaches almost every hole. Pointers the agb
-//! allocator makes by arithmetic (its free list in `GLOBAL_ALLOC`) are
-//! unknown.
+//! Precision (`docs/native-stage-b.md`, "Known gaps", the pile): no
+//! word moved on the agb programs from the objects, from call-site
+//! context (`native/fnref-context`, k = 1, [`Ix`]: 5 s became 21 s on
+//! affine, 445 s with each `call_fn` callee's too), nor from RAM
+//! pointers followed (`native/fnref-unknown-addrs`: the loads that read
+//! everything, [`Flow::everything`], fell from 623 sites to 3 on
+//! affine). Each word reaches a use not allowed by several roads, any
+//! one enough: registers a callee neither reads nor sets, passed in and
+//! taken back (a function's address left in r3 crosses forty functions
+//! to a `swi`); the pile, which every load at a constant address reads;
+//! a pointer anywhere in a frame (an array of pairs read by index, a
+//! byte loop); a frame word the run didn't keep, read as everything
+//! stored in the frame. `GBAA_FNREF_WATCH=WORD[,WORD…]` (or `all`)
+//! prints each place a ROM word's function address goes ([`G::watch`]),
+//! and `GBAA_FNREF_TRACE` where a RAM pointer is lost.
 
 use super::frame::{Edge, Frame};
 use analysis::ir::{BinOp, Exit, Inst, Op, ValueId};
@@ -682,6 +685,7 @@ impl Val {
         }
         if froms.len() > RAM_RUNS {
             self.unk = true;
+            lost_said("more RAM runs than RAM_RUNS in a value");
             self.lost_ptr = true;
             self.drop_range(Tok::Num(RAM.start)..Tok::Num(RAM.end));
             self.drop_range(Tok::RamFrom(0)..=Tok::RamFrom(u32::MAX));
@@ -970,8 +974,9 @@ struct G {
     rd: Rd,
     /// The functions nothing the run saw calls, directly or by an address
     /// it read, once it settled without them: their callers are out of
-    /// sight (a vtable word no load reached), so what they are passed may
-    /// point anywhere ([`Val::lost_ptr`]).
+    /// sight (a vtable word no load reached), and so is what they are
+    /// passed. A call of theirs through a target that holds no function
+    /// may be any whose address is taken ([`Run::callees`]).
     orphans: BTreeSet<u32>,
     /// `GBAA_FNREF_WATCH`'s origins: each place their function address
     /// goes is printed, once ([`G::watch`]).
@@ -1181,7 +1186,9 @@ impl G {
                 .filter(|t| matches!(t, Tok::Fn { form, .. } if only(*form)))
                 .collect();
             let n = v.toks.len();
-            self.watch(&ts, || format!("HOLE, {}, in a value of {n} tokens", why.what()));
+            self.watch(&ts, || {
+                format!("HOLE, {}, in a value of {n} tokens", why.what())
+            });
         }
         if big && self.all_holed.contains_key(&p) {
             return;
@@ -1219,7 +1226,9 @@ impl G {
         into.union(v);
         if !self.watch.is_empty() {
             let v = self.spill_reads[&(f, w)].clone();
-            self.watch(&v.toks, || format!("read w{w} from f_{:08x}'s spills", entry_of(f)));
+            self.watch(&v.toks, || {
+                format!("read w{w} from f_{:08x}'s spills", entry_of(f))
+            });
         }
     }
 
@@ -1515,7 +1524,9 @@ impl G {
     }
 
     fn give_ret(&mut self, f: Ix, regs: &[Val]) {
-        self.watch_regs(regs, |r| format!("returned in r{r} by f_{:08x}", entry_of(f)));
+        self.watch_regs(regs, |r| {
+            format!("returned in r{r} by f_{:08x}", entry_of(f))
+        });
         let e = self.ret.entry(f).or_insert_with(|| vec![Val::default(); 4]);
         let mut c = false;
         for (a, b) in e.iter_mut().zip(regs) {
@@ -1802,7 +1813,8 @@ impl Run<'_, '_> {
                 form,
             };
             into.toks.insert(t);
-            self.g.watch(&[t], || format!("read w{w} from ROM at {a:#010x}"));
+            self.g
+                .watch(&[t], || format!("read w{w} from ROM at {a:#010x}"));
             return;
         }
         let sh = (a & 3) * 8;
@@ -1892,7 +1904,10 @@ impl Run<'_, '_> {
             ..Val::default()
         };
         if self.trace && end < hi {
-            eprintln!("  rom lost at {:#010x}: {lo:#x}..{hi:#x} cut short", self.at);
+            eprintln!(
+                "  rom lost at {:#010x}: {lo:#x}..{hi:#x} cut short",
+                self.at
+            );
         }
         while p < end {
             self.rom_read(p, w.min(4), &mut v);
@@ -1997,14 +2012,24 @@ impl Run<'_, '_> {
                         };
                         // A mask the run doesn't know makes a number of
                         // it, as of a pointer into an object.
+                        // Another pointer (into ROM, an object, RAM): two
+                        // values' tokens paired that never meet (a
+                        // pointer plus a pointer is none), or a
+                        // difference, a number.
+                        let ptr = |t: Option<Tok>| {
+                            ram(t)
+                                || matches!(t, Some(Tok::Rom(_) | Tok::RomFrom(_) | Tok::Obj(..)))
+                        };
                         let moved = match op {
-                            BinOp::Add | BinOp::Or | BinOp::Xor => ram(x) || ram(y),
-                            // Less a number or an unknown (a difference
-                            // with another is a number).
-                            BinOp::Sub => ram(x) && !ram(y),
+                            BinOp::Add | BinOp::Or | BinOp::Xor => {
+                                (ram(x) && !ptr(y)) || (ram(y) && !ptr(x))
+                            }
+                            // Less a number or an unknown.
+                            BinOp::Sub => ram(x) && !ptr(y),
                             BinOp::And | BinOp::Mul => false,
                         };
                         if moved {
+                            lost_said(&format!("{op:?} of {x:x?} and {y:x?} at {at:#010x}"));
                             out.lost_ptr = true;
                         }
                     }
@@ -2055,7 +2080,15 @@ impl Run<'_, '_> {
     /// The callees of a call or jump through `t` at `at`.
     fn callees(&mut self, t: &Val, at: u32, tail: bool) -> (BTreeSet<u32>, bool) {
         self.g.hole(t, at, Why::CalledInPart, |f| f != Form::Full);
-        let callees: BTreeSet<u32> = t.fns().filter(|f| f.2 == Form::Full).map(|f| f.0).collect();
+        let mut callees: BTreeSet<u32> =
+            t.fns().filter(|f| f.2 == Form::Full).map(|f| f.0).collect();
+        // A function with no caller in sight, calling through what it was
+        // passed: any function whose address is taken (what a load
+        // through an unknown address gave before RAM pointers were
+        // followed, `native/fnref-unknown-addrs`).
+        if callees.is_empty() && !t.lost_rom && self.g.orphans.contains(&entry_of(self.ix)) {
+            callees = self.g.taken.clone();
+        }
         // In the closed world nothing unknown is a function's address, so
         // the whole addresses the target may hold are all it can call (a
         // piece of one, called, is a hole of its origin's, above).
@@ -2111,7 +2144,10 @@ impl Run<'_, '_> {
                 Op::Bit(x) => Val::of(Tok::Num(x as u32)),
                 Op::GetReg(r) => s.regs[r.index()].clone(),
                 // What a user-bank register holds isn't followed.
-                Op::GetUserReg(_) => Val::lost(),
+                Op::GetUserReg(_) => {
+                    lost_said(&format!("a user-bank register read at {at:#010x}"));
+                    Val::lost()
+                }
                 Op::Bin(op, a, b) => self.bin(op, &val(a), &val(b), site, at),
                 Op::Adc { a, b, c } => {
                     let (a, b) = (val(a), val(b));
@@ -2527,7 +2563,13 @@ impl Run<'_, '_> {
             match t {
                 Tok::Rom(r) => self.rom_read(r, w, &mut out),
                 Tok::RomFrom(r) => self.rom_from(r, w, hull, None, &mut out),
-                Tok::Obj(o, off) if self.g.obj_up(o, off) => lost = true,
+                Tok::Obj(o, off) if self.g.obj_up(o, off) => {
+                    lost_said(&format!(
+                        "a load at {:#010x} through {:x?} at {off}, a caller's frame",
+                        self.at, self.g.objs[o as usize]
+                    ));
+                    lost = true
+                }
                 Tok::Obj(o, off) => self.g.read_obj(o, off, w, &mut out),
                 // Its run's cells, and the pile.
                 Tok::RamFrom(c) => {
@@ -2595,7 +2637,8 @@ impl Run<'_, '_> {
                         Some((lo, hi)) => {
                             self.g.read_pile(w, &mut out);
                             let lo = lo.saturating_sub(3);
-                            self.g.read_range(lo, hi, w, "in the load's bounds", &mut out);
+                            self.g
+                                .read_range(lo, hi, w, "in the load's bounds", &mut out);
                         }
                         None if lost => {
                             self.g.read_pile(w, &mut out);
@@ -2828,12 +2871,14 @@ impl Run<'_, '_> {
                             // it may copy are lost.
                             _ => {
                                 got.unk = true;
+                                lost_said("CpuSet from RAM");
                                 got.lost_ptr = true;
                             }
                         }
                     }
                     if src.unk || src.mem || src.lost_ptr {
                         got.unk = true;
+                        lost_said("CpuSet from an unknown source");
                         got.lost_ptr = true;
                     }
                     let (toks, _) = to_mem(&got, 4);
@@ -3046,6 +3091,7 @@ fn offset(v: &Val, d: Option<i64>) -> Val {
             }
             (Tok::RamFrom(_), Some(_)) => {
                 out.unk = true;
+                lost_said("a RAM run moved down");
                 out.lost_ptr = true;
             }
             _ => out.unk = true,
@@ -3247,6 +3293,21 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> R {
     }
 }
 
+thread_local! {
+    /// [`lost_said`]'s lines, each once.
+    static LOST_SAID: std::cell::RefCell<BTreeSet<String>> = std::cell::RefCell::default();
+}
+
+/// `GBAA_FNREF_TRACE`: print where a pointer into RAM is lost
+/// ([`Val::lost_ptr`]), each place once.
+fn lost_said(what: &str) {
+    if std::env::var_os("GBAA_FNREF_TRACE").is_some()
+        && LOST_SAID.with(|s| s.borrow_mut().insert(what.to_string()))
+    {
+        eprintln!("  pointer lost: {what}");
+    }
+}
+
 /// Where every program starts: the cartridge header's branch.
 const RESET: u32 = 0x0800_0000;
 
@@ -3402,13 +3463,13 @@ pub fn follow(
         if dirty.is_empty() {
             // Settled: the functions still without a caller in sight
             // (but the reset, whose registers are nothing) run again,
-            // their parameters lost pointers.
+            // their calls by value any taken function's.
             let new: Vec<u32> = loose
                 .iter()
                 .map(|&i| entry_of(i))
                 .filter(|k| !g.taken.contains(k) && *k != RESET && !g.orphans.contains(k))
                 .collect();
-            if !new.is_empty() && std::env::var_os("GBAA_X_NO_ORPHANS").is_none() {
+            if !new.is_empty() {
                 if trace {
                     eprintln!("fnref round {round}: settled; no caller in sight: {new:x?}");
                 }
@@ -3443,15 +3504,11 @@ pub fn follow(
                 for r in &mut entry {
                     r.unk = true;
                 }
-                if g.orphans.contains(&entry_of(i)) {
-                    for r in &mut entry[..4] {
-                        r.lost_ptr = true;
-                    }
-                }
             }
             // The sp it was called with; its own is its frame's start.
             let mut sp_in = std::mem::take(&mut entry[13]);
             if sp_in.toks.is_empty() {
+                lost_said("a function no call gave an sp");
                 sp_in = Val::lost();
             }
             for r in &mut entry[4..] {

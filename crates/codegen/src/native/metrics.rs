@@ -41,7 +41,10 @@
 //!
 //! Function words (`super::fnref`): the words of ROM outside code that hold
 //! a function's key, `fn_words_not_proven` those the flow didn't prove
-//! (barred), `fn_words_proven` the rest (no bar: it should rise).
+//! (barred), `fn_words_proven` the rest (no bar: it should rise);
+//! `fn_loads_read_everything` the load sites whose address may be a
+//! pointer into RAM the flow dropped, so that they read every RAM cell,
+//! every object and the pile (barred; `native/fnref-unknown-addrs`).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
