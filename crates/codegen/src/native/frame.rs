@@ -450,8 +450,9 @@ struct Raw {
     lost: bool,
     /// Stack switches, by instruction: sp, made from the frame's sp until
     /// then, set to a value made from no frame address (`mov sp, r2` with
-    /// r2 a parameter, `ldr sp, [r3]` from a global). A mode change's own
-    /// sp isn't one: the `msr` is a hole of its own.
+    /// r2 a parameter, `ldr sp, [r3]` from a global). Not sp set after a
+    /// mode change, another mode's: the `msr` is a hole of its own, but
+    /// in the reset and the IRQ wrappers, which print it (`PsrFns`).
     switches: BTreeSet<u32>,
     /// Those whose value is a constant ([`Frame::fresh`]), apart.
     fresh: BTreeSet<u32>,
