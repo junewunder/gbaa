@@ -2148,7 +2148,14 @@
       "title": "RAM-copy code only jumped into needs no [[takes]] entry",
       "detail": "Left by {unit:native/nightmare-entry-reads}, 2026-11-13. In a RAM copy's context the summaries take every function as one a pointer may call (saves/summary.rs, 'Code not in the ROM: any pointer may'), so each part of m4a's IWRAM mixer that reads r4-r11 as it came is a hard hole until the holes file names it: five '[[takes]] sites = []' entries in Nightmare's (SoundMainRAM and the four places it changes between Thumb and ARM by 'adr; bx'). Every m4a game with the mixer in IWRAM will need the same five by hand. Find a rule the lifter can apply itself (say: no ROM word holds the function's RAM key but a resolved constant jump's literal, and every way in that the lift prints is a jump), or decide the holes entries are the rule and write the m4a recipe in docs/research/native-holes.md. Done when: just lift on Nightmare reports 0 hard holes with those five entries removed, or the doc has the recipe and why no rule; just lift-check and just check pass.",
       "check": "recorded",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-13T10:50:42Z",
+          "by": "d2717a37",
+          "text": "Review of PR 12: a jump into a no-sites taker isn't checked against the jumper. A jumper that never set the register (another code context, or one whose run stops at the jump) hands on its own zeroes, no hole. Nightmare's SoundMain was checked by hand; a rule must check jumpers."
+        }
+      ]
     },
     {
       "id": "native/moonbeam-taker-chain",
