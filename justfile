@@ -1,7 +1,7 @@
 import 'factory/factory.just'
 
-# The machine's build lock: every compile takes it, at 6 jobs, so lanes take turns. Recipes take it around the compile only, so running a built binary never waits; never run `just` under it (a recipe taking it under a caller that holds it deadlocks).
-lock := "env CARGO_BUILD_JOBS=6 flock /tmp/gbaa-build.lock"
+# The machine's build lock: every compile takes one of its slots (scripts/build-lock: 3, GBAA_BUILD_SLOTS), at 6 jobs, so lanes take turns three at a time. Recipes take it around the compile only, so running a built binary never waits; never run `just` under it (a recipe taking it under callers that hold every slot deadlocks).
+lock := "env CARGO_BUILD_JOBS=6 " + justfile_directory() + "/scripts/build-lock"
 
 # A memory cap for a heavy tool: `{{cap}} MemoryMax=8G <cmd>` runs it in a systemd scope of its own with that cap and no swap. gbaa-lift, gbaa-recompile, gbaa-holes, gbaa-lift-check and route-check (but its --args and --missing) refuse to run without one (crates/analysis/src/cap.rs; GBAA_UNCAPPED=1 skips that). Inside a factory job (`just capped`, `just long start`: FACTORY_CAPPED_IN is set) it makes no scope, so the tool stays in the job's, under its cap and in its peak (a `systemd-run --scope` would leave it); off Linux there is no systemd. Either way `env MemoryMax=…` just runs the command.
 cap := if env("FACTORY_CAPPED_IN", "") != "" { "env" } else if os() != "linux" { "env" } else { "systemd-run --user --scope -q -p MemorySwapMax=0 -p" }
