@@ -114,8 +114,9 @@
 //! unless the game's holes file gives a stand-in or, for an unresolved
 //! jump, its targets ([`Holes`]):
 //!
-//! - CPU state: `mrs`, `msr`, user-bank transfers, exception returns,
-//!   stack switches ([`Frame::switches`]: a task switcher's, which a stand-in
+//! - CPU state: `mrs` and `msr` outside the reset and the IRQ wrappers
+//!   (theirs are printed: [`PsrFns`]), user-bank transfers, exception
+//!   returns, stack switches ([`Frame::switches`]: a task switcher's, which a stand-in
 //!   runs on the prelude's host coroutines, `task_resume`);
 //! - an indirect jump Recovery didn't resolve;
 //! - a BIOS call the prelude doesn't have;
@@ -133,7 +134,7 @@ use crate::saves::{Assume, Sets, Summaries, Summary, summarize, summarize_sets};
 use analysis::discovery::{self, Discovery};
 use analysis::ir::{BinOp, BitOp, Exit, Inst, Op, ValueId};
 use analysis::vsa::func::JumpRes;
-use armv4t::sem::{Flag, ShiftType, Width};
+use armv4t::sem::{Flag, PsrMask, ShiftType, Width};
 use frame::{Frame, Kind, Local};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -474,6 +475,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     for c in &codes {
         all.extend(c.funcs.iter().map(|f| f.entry));
     }
+    // The reset (the ROM's entry) and the IRQ wrappers the code installs,
+    // whose `msr` and `mrs` are printed ([`PsrFns`]).
+    let psr_fns = PsrFns::of(&disc, &overlays);
     // RAM's globals: what the constant-address accesses of the functions
     // printed (a stand-in's code is its own) reach.
     // And what their computed ones reach, where the value sets bound it
@@ -633,6 +637,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 globals: &globals,
                 args: &args,
                 heap: &heap,
+                psr: psr_fns.place(f.entry),
             };
             let s = c.sums.get(f.entry);
             let text = p.print(s);
@@ -1365,6 +1370,59 @@ struct FnPrinter<'a, 'b> {
     args: &'a Args,
     /// The heap's types and the accesses through them.
     heap: &'a heap::Heap,
+    /// Whether it is the reset or an IRQ wrapper, whose `msr` and `mrs`
+    /// are printed ([`PsrFns`]); elsewhere they are hard holes.
+    psr: Option<PsrPlace>,
+}
+
+/// Where an `msr` or `mrs` the lifter prints is: the hole report's
+/// `CpuWhere::Boot` and `CpuWhere::Wrapper`, known without a run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PsrPlace {
+    /// The reset, the ROM's entry: its mode switches set each mode's sp,
+    /// the program's start.
+    Boot,
+    /// An IRQ handler the code installs (a constant stored to the BIOS's
+    /// IRQ vector): its PSR saves and its switch to system mode and back
+    /// around the call.
+    Wrapper,
+}
+
+/// The functions whose `msr` and `mrs` the lifter prints (the
+/// `native/lift-psr-boot-irq` unit; `docs/research/native-holes.md`, "What
+/// the Stage-A lifter should know"): the reset at the ROM's entry, and the
+/// IRQ handlers the code installs, ROM or RAM (discovery's
+/// `irq_handlers`). Their `msr cpsr` is the prelude's `msr_cpsr`, which
+/// banks sp by mode as the hardware does and runs the IRQs a cleared I bit
+/// releases; `mrs cpsr` is `mrs_cpsr` (the flags from the locals); the
+/// SPSR is `Game::spsr`, which the prelude's IRQ entry sets. Anywhere else
+/// they stay hard holes: a critical section's or a mode switch elsewhere
+/// needs a stand-in.
+struct PsrFns {
+    wrappers: BTreeSet<u32>,
+}
+
+/// The reset's key: ARM code at the ROM's start.
+const RESET: u32 = 0x0800_0000;
+
+impl PsrFns {
+    fn of(disc: &Discovery, overlays: &[discovery::Overlay]) -> PsrFns {
+        let mut wrappers = disc.irq_handlers.clone();
+        for o in overlays {
+            wrappers.extend(&o.disc.irq_handlers);
+        }
+        PsrFns { wrappers }
+    }
+
+    fn place(&self, k: u32) -> Option<PsrPlace> {
+        if self.wrappers.contains(&k) {
+            Some(PsrPlace::Wrapper)
+        } else if k == RESET {
+            Some(PsrPlace::Boot)
+        } else {
+            None
+        }
+    }
 }
 
 fn v(i: ValueId) -> String {
@@ -1638,9 +1696,38 @@ impl FnPrinter<'_, '_> {
                 Op::GetUserReg(_) | Op::SetUserReg(..) => {
                     self.hole(at, "CPU state: a user-bank register transfer")
                 }
-                Op::GetCpsr | Op::GetSpsr => self.hole(at, "CPU state: mrs (reads a PSR)"),
-                Op::SetCpsr { .. } | Op::SetSpsr { .. } => {
+                Op::GetCpsr | Op::GetSpsr if self.psr.is_none() => {
+                    self.hole(at, "CPU state: mrs (reads a PSR)")
+                }
+                Op::SetCpsr { .. } | Op::SetSpsr { .. } if self.psr.is_none() => {
                     self.hole(at, "CPU state: msr (writes a PSR)")
+                }
+                // The reset's and the IRQ wrapper's ([`PsrFns`]).
+                Op::GetCpsr => {
+                    writeln!(s, "{ind}let {}: u32 = mrs_cpsr(g, nf, zf, cf, vf);", v(id)).unwrap()
+                }
+                Op::GetSpsr => writeln!(s, "{ind}let {}: u32 = g.spsr;", v(id)).unwrap(),
+                Op::SetCpsr { v: x, mask } => {
+                    let x = v(x);
+                    let mut body = String::new();
+                    if mask.contains(PsrMask::FLAGS) {
+                        for (fl, bit) in Flag::ALL.into_iter().zip([31, 30, 29, 28]) {
+                            write!(body, "{} = {x} & 1 << {bit} != 0; ", flag(fl)).unwrap();
+                        }
+                    }
+                    if mask.contains(PsrMask::CONTROL) {
+                        write!(body, "r13 = msr_cpsr(g, r13, {x});").unwrap();
+                    }
+                    if !body.is_empty() {
+                        stmt(&mut s, body.trim_end().to_string());
+                    }
+                }
+                Op::SetSpsr { v: x, mask } => {
+                    let m = mask.bits();
+                    stmt(
+                        &mut s,
+                        format!("g.spsr = g.spsr & !{m:#x} | {} & {m:#x};", v(x)),
+                    );
                 }
                 Op::Load { width, addr } => {
                     let (f, m) = match width {
@@ -1747,7 +1834,11 @@ impl FnPrinter<'_, '_> {
                                     Where::Const(r) => metrics::REGIONS[r] == "io",
                                     _ => true,
                                 };
-                            if io {
+                            if io && self.psr.is_some() {
+                                // The reset or the IRQ wrapper may be in
+                                // another mode: sp is that mode's.
+                                format!("bank_sp(g, r13); {mem}")
+                            } else if io {
                                 format!("g.sp = r13; {mem}")
                             } else {
                                 mem
@@ -2753,6 +2844,18 @@ mod tests {
             call_fn_text("k", 0xf, 0xf),
             "[r0, r1, r2, r3] = call_fn(g, k, r13, [r0, r1, r2, r3])?;"
         );
+    }
+
+    #[test]
+    fn the_reset_and_installed_irq_handlers_print_their_psr_ops() {
+        let p = PsrFns {
+            wrappers: BTreeSet::from([0x0300_0c7c, 0x0800_0104]),
+        };
+        assert_eq!(p.place(RESET), Some(PsrPlace::Boot));
+        assert_eq!(p.place(0x0800_0104), Some(PsrPlace::Wrapper));
+        assert_eq!(p.place(0x0300_0c7c), Some(PsrPlace::Wrapper));
+        // A critical section's elsewhere stays a hole.
+        assert_eq!(p.place(0x0800_2728), None);
     }
 
     #[test]
