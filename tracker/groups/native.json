@@ -1725,16 +1725,11 @@
       "uses": ["heavy"],
       "minMinutes": 90,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "7e93e2be",
-        "session": "7e93e2be-e416-470a-957c-a9f1a60442b5",
-        "host": "quack",
-        "pid": 1247572,
-        "start": "1952922",
-        "at": "2026-11-13T10:10:49Z",
-        "resumed": "77aa5fbf",
-        "prevSession": "77aa5fbf-b416-45f2-a48d-d2a67bcf68d8",
-        "pushed": true
+        "checker": "24166938",
+        "at": "2026-11-13T12:03:18Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/6 (head 5f979890). gbaa-lift, main's lifter against the branch's: 'an undefined instruction' hard holes moonbeam 21 to 0 (527 to 506 in all), Rogue 23 to 0 (75 to 52), Imperium 2 to 0 (22 to 20); main's other hard-hole lines are byte-identical to the branch's in each (out/liftcmp2). 46 of the 47 are GCC's udf #255 trap, by kind in docs/research/native-holes.md. Hole report over nine games: 626 hard on both sides, summaries identical but seconds. Discovery: Emerald 0.9997/0.9555, gba-cart1 1.0/0.9835, llvm-sample 1.0/0.5789, starts identical to main's; jt-score passes. just check passes (runs/long/lift-undef-check4.log, 97 of 97 ok); lift-metrics 0 over, 0 under. perf stat on moonbeam: branch 0.02% fewer instructions than main, so not slower. Reviewer 24166938 recounted from the logs and read the 46 sites: pass, two wording fixes made. Rogue and Imperium lifted with skip_fn_flow on both sides."
       },
       "notes": [
         {
