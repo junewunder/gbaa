@@ -1755,6 +1755,11 @@
       "minMinutes": 180,
       "notes": [
         {
+          "at": "2026-11-13T08:31:01Z",
+          "by": "8814ddd6",
+          "text": "PR 8 (metroid-entry-reads) changed the summaries' entry-read kinds: a bl-called reader is soft (takes r4-r11 from its callers), hard sits on the pointer-entered caller. gbaa-holes counts move; native-holes.numbers.md not regenerated (whole-corpus run)."
+        },
+        {
           "at": "2026-11-12T13:07:28Z",
           "by": "5b99a863",
           "text": "Lift holes are found while printing (FnPrinter::hole, native.rs ~1380-2156): no cheap scan. Full lift is 15G/minutes (heap 370s). Idea: Hole gets a kind enum; lift() holes-only mode skipping fn_flow+heap+modules, called by gbaa-holes; check summaries w/o sets match."
