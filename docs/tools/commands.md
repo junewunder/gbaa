@@ -1370,8 +1370,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   native 0x62 …)` and `(…-irq-at-waits: frame 2: EWRAM byte 0x020000c8:
   play 0x00, native 0x01 …)`, `(…-ime-at-waits: frame 2: EWRAM byte
   0x020000cc: play 0x01, native 0x00 …)`, `planted hard hole caught` and
-  `lift-check: passed`. Logs in `out/lift-*.txt`. About 10 minutes on
-  quack. Heavy: builds twenty-nine generated crates; gbaa-lift-check runs capped at 8 GB (its lifts in its scope; route-check in a 3 GB scope and the builds in their own).
+  `lift-check: passed`. Logs in `out/lift-*.txt`. About 30 minutes on
+  quack. Heavy: builds fifty-six generated crates; gbaa-lift-check runs capped at 8 GB (its lifts in its scope; route-check in a 3 GB scope and the builds in their own).
 
   `gbaa-lift --shadow-locals` (native/frame-locals; by hand, not part of
   the check) keeps every stack local in the frame's bytes too and prints

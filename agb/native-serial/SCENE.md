@@ -10,9 +10,9 @@ Mode 3, BG2 on, from the first frame of the loop. Each frame `f` (from 0)
 stores to the serial port's registers (`0x0400_0120`-`0x0400_015F`), loads
 them back and draws one pixel, at row `f / 240 % 4`, column `f % 240`:
 everything it loaded (`OUT` in `src/main.rs`) folded into 15 bits
-(`colour`). So by frame 600 rows 0-3 hold frames 360-599 (row 2 from
-column 120 on, and row 3, are frames 120-239 and 240-359 from the first
-pass, overwritten by the second where it reached). The rest of the frame
+(`colour`). So by frame 600 row 0 holds frames 0-239, row 1 frames
+240-479 and row 2 the frames from 480 on, about half of it; the rows fill
+again from the top at frame 960. The rest of the frame
 buffer is what agb's start-up left in VRAM, the same every run. `OUT`'s
 bytes are also compared as RAM by the native check, and the registers
 themselves as I/O.
