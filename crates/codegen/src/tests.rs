@@ -1719,6 +1719,23 @@ fn a_context_save_its_restore_reloads_takes_nothing() {
     // The caller set none of r4-r11, so the zeroes a pointer call gives it
     // reach the save: its eight reads, hard.
     assert_eq!(takes(NOP, SAVE, NOP), (0xff, [8, 0]));
+    // (A stand-in for the caller: its code doesn't run, so nothing is
+    // zeroed through it, and its hole is its own, which the lift drops.)
+    let (rom, d) = jump_buffer(NOP, SAVE, NOP);
+    let ctx = Ctx::new(&rom, &d);
+    let mut passing = crate::saves::Passing::default();
+    passing.replaced.insert(ROM_BASE + 0x1c);
+    let sums = crate::saves::summarize_passing(
+        &ctx,
+        &build_all(&ctx).funcs,
+        crate::saves::Assume::default(),
+        &crate::saves::Sets::new(),
+        &passing,
+    );
+    let hard = [ROM_BASE, ROM_BASE + 0x1c].map(|f| hard_holes(&sums, f).len());
+    assert_eq!(hard, [0, 8]);
+    // A save under a condition (`stmne`) is no context save.
+    assert_eq!(takes(NOP, 0x18A0_7FF0, RESTORE).0, 0xff);
     // A restore of other registers (`ldm r0!, {r4-r11, sp, lr}`), or the
     // other way (`ldmib`): the words aren't read back where they came from.
     assert_eq!(takes(NOP, SAVE, 0xE8B0_6FF0).0, 0xff);
