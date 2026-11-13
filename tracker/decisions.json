@@ -1221,6 +1221,14 @@
       "by": "c5c06b25",
       "at": "2026-11-13T12:44:54Z",
       "scope": ["group:native"]
+    },
+    {
+      "id": "d/llm-passes-may-alternate-with-the-algorithmic",
+      "title": "LLM passes may alternate with the algorithmic lift",
+      "why": "june, 2026-11-13, after playing Metroid's native build: she is fine with the lift alternating between the algorithmic lifter and an LLM (Claude). Either the lifter goes as far as it can, Claude reads the result and finds what unblocks the lifter, and the two iterate; or the lifter goes as far as it can and Claude brings the code the rest of the way. Either is OK with her. She set no rule for how LLM-written code is checked.",
+      "by": "owner",
+      "at": "2026-11-13T18:32:21Z",
+      "scope": ["group:native"]
     }
   ]
 }
