@@ -155,6 +155,17 @@ pub struct Summary {
     /// aren't known. A function's own read of one of r4–r11 as it came is
     /// a hole whether it changes them or not ([`Sum::entry_uses`]).
     pub changes: u16,
+    /// The registers of r4–r11 (bit `n - 4` for rN) it reads as they came,
+    /// some bit reaching a use: its own, or a callee's it passes them on
+    /// to ([`Sum::call`]). Parameters by register: the lift passes them at
+    /// each direct call and tail call, and at the indirect calls a holes
+    /// file names ([`Passing`]); any other way in zeroes them, a hole.
+    /// One only returned in r0–r3 isn't here ([`Summary::entry_returns`]).
+    pub takes: u8,
+    /// The calls its run saw pass a callee what it takes: (the call's
+    /// address, the callee). The lift passes at no other: a call the run
+    /// never reached (code past a hole) had its registers unread.
+    pub passes: BTreeSet<(u32, u32)>,
     /// Why the summary may be incomplete: what the proof fails on, and
     /// each read of a register a callee (`Some`) or a BIOS or indirect
     /// call (`None`) left undefined, by the reading instruction.
@@ -185,6 +196,42 @@ impl Summary {
     pub fn defines(&self) -> u16 {
         defines(self.params, &self.exit)
     }
+
+    /// [`Summary::takes`] where its callers pass them (a `takes r4-r11
+    /// from its callers` hole): 0 for one whose read is a hard hole, or
+    /// that nothing calls.
+    pub fn passed(&self) -> u8 {
+        if self.holes.iter().any(|h| h.contains(TAKES_READ)) {
+            self.takes
+        } else {
+            0
+        }
+    }
+
+    /// [`Summary::takes`] where a call may pass them: [`Summary::passed`],
+    /// or a hard hole a holes file may yet name the callers of. 0 for one
+    /// nothing calls.
+    pub fn may_take(&self) -> u8 {
+        let called = |h: &String| h.contains(TAKES_READ) || h.contains(ENTRY_READ);
+        if self.holes.iter().any(called) {
+            self.takes
+        } else {
+            0
+        }
+    }
+}
+
+/// What the lift passes of r4–r11 besides a direct call's: the holes
+/// file's part of a summary's run.
+#[derive(Clone, Debug, Default)]
+pub struct Passing {
+    /// By an indirect call's address: the functions it passes what they
+    /// take (`[[takes]]`). The lift prints the call to one of them with
+    /// the caller's registers, and their plain entries stop the program,
+    /// so no other pointer call reaches one with zeroes.
+    pub sites: BTreeMap<u32, BTreeSet<u32>>,
+    /// The functions a stand-in replaces: they take nothing.
+    pub replaced: BTreeSet<u32>,
 }
 
 fn defines(params: u8, exit: &[Bits; 5]) -> u16 {
@@ -262,6 +309,7 @@ pub(super) struct Sum<'a> {
     assume: Assume,
     /// The indirect calls whose callee sets are complete.
     sets: &'a Sets,
+    passing: &'a Passing,
     params: BTreeMap<u8, Cause>,
     /// r0–r3 and r12's origins, joined over every return.
     exit: Option<Vec<Org>>,
@@ -285,6 +333,8 @@ pub(super) struct Sum<'a> {
     /// Reads of r4–r11 as they came whose bits reach a use: (the
     /// instruction, the register, how).
     entry_reads: BTreeSet<(u32, u8, Via)>,
+    /// [`Summary::passes`].
+    passes: BTreeSet<(u32, u32)>,
     /// Reads of r4–r11 as they came whose every bit an op masks away:
     /// (the op's instruction, the register).
     masked: BTreeSet<(u32, u8)>,
@@ -303,6 +353,8 @@ enum Via {
     Arg(u8),
     /// In this register, returned.
     Ret(u8),
+    /// As it came, to this callee, which takes it ([`Summary::takes`]).
+    Takes(u32),
 }
 
 impl Via {
@@ -311,6 +363,7 @@ impl Via {
             Via::Own => String::new(),
             Via::Arg(r) => format!(", passed in r{r}"),
             Via::Ret(r) => format!(", returned in r{r}"),
+            Via::Takes(c) => format!(", which 0x{c:08x} takes"),
         }
     }
 }
@@ -321,11 +374,17 @@ fn entry_regs(regs: u8) -> impl Iterator<Item = u8> {
 }
 
 impl<'a> Sum<'a> {
-    fn new(sums: &'a BTreeMap<u32, Summary>, assume: Assume, sets: &'a Sets) -> Sum<'a> {
+    fn new(
+        sums: &'a BTreeMap<u32, Summary>,
+        assume: Assume,
+        sets: &'a Sets,
+        passing: &'a Passing,
+    ) -> Sum<'a> {
         Sum {
             sums,
             assume,
             sets,
+            passing,
             params: BTreeMap::new(),
             exit: None,
             used: BTreeMap::new(),
@@ -337,6 +396,7 @@ impl<'a> Sum<'a> {
             refs: BTreeSet::new(),
             changes: 0,
             entry_reads: BTreeSet::new(),
+            passes: BTreeSet::new(),
             masked: BTreeSet::new(),
             frames: 0,
         }
@@ -481,6 +541,49 @@ impl<'a> Sum<'a> {
                     None => Cause::Indirect(at),
                 };
                 self.read(s, r, cause);
+            }
+        }
+        // What a callee takes of r4–r11 is this call's own registers (the
+        // lift passes them): one still as it came is taken in turn.
+        let takers: Vec<u32> = match callee {
+            Some(c) => vec![c],
+            None => self
+                .passing
+                .sites
+                .get(&at)
+                .into_iter()
+                .flatten()
+                .copied()
+                .collect(),
+        };
+        for c in takers {
+            self.refs.insert(c);
+            let takes = match self.sums.get(&c) {
+                Some(x) if !self.passing.replaced.contains(&c) => x.takes,
+                _ => 0,
+            };
+            // A stack address through a named pointer call: the frames
+            // (`native::frame`, made before the holes file is read) don't
+            // see it escape, so the call isn't one the lift passes at.
+            let frame = callee.is_none()
+                && entry_regs(takes).any(|n| matches!(s.regs[n as usize], V::Sp(_)));
+            if takes != 0 && !frame {
+                self.passes.insert((at, c));
+            }
+            for n in entry_regs(takes) {
+                if let Some((regs, _)) = s.regs[n as usize].taint() {
+                    for e in entry_regs(regs) {
+                        self.entry_reads.insert((at, e, Via::Takes(c)));
+                    }
+                }
+                // The lift's local is as it was before an earlier callee
+                // changed the register: not what the machine passes.
+                let by = s.chg[n as usize - 4];
+                if by != 0 {
+                    self.holes.insert(format!(
+                        "0x{at:08x}: reads r4-r11 a callee changed: r{n}, by 0x{by:08x}"
+                    ));
+                }
             }
         }
         self.sites.insert(at, callee);
@@ -664,6 +767,9 @@ const ENTRY_READ: &str = ": reads r4-r11 at entry: ";
 /// [`ENTRY_READ`] in a function nothing enters by `Regs::call`, nor by
 /// a tail call or fall from one so entered: soft.
 const JUMPED_READ: &str = ": reads r4-r11 at entry, only jumped into: ";
+/// [`ENTRY_READ`] where every way in passes the register
+/// ([`Summary::takes`]): soft.
+const TAKES_READ: &str = ": takes r4-r11 from its callers: ";
 
 /// Every function's summary, by entry.
 #[derive(Clone, Debug, Default)]
@@ -732,6 +838,18 @@ pub fn summarize_with(ctx: &Ctx, funcs: &[Func], assume: Assume) -> Summaries {
 /// leaves what they leave, and what is read after it is read after each.
 /// `assume` holds for the rest.
 pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) -> Summaries {
+    summarize_passing(ctx, funcs, assume, sets, &Passing::default())
+}
+
+/// [`summarize_sets`], with what a holes file says of r4–r11's passing
+/// ([`Passing`]).
+pub fn summarize_passing(
+    ctx: &Ctx,
+    funcs: &[Func],
+    assume: Assume,
+    sets: &Sets,
+    passing: &Passing,
+) -> Summaries {
     let proof = prove(ctx, funcs);
     let by_entry: BTreeMap<u32, &Func> = funcs.iter().map(|f| (f.entry, f)).collect();
     let mut sums: BTreeMap<u32, Summary> =
@@ -776,7 +894,7 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
             ctx,
             &by_entry,
             by_entry[&k],
-            Some(Sum::new(&sums, assume, sets)),
+            Some(Sum::new(&sums, assume, sets, passing)),
         )
         .expect("a summary's run records what the proof fails on");
         let mut sum = w.sum.expect("a summary's run");
@@ -802,6 +920,11 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
         }
         let exit = sum.exit_bits();
         let params = sum.params.keys().fold(0, |m, &r| m | 1 << r);
+        let takes = sum
+            .entry_reads
+            .iter()
+            .filter(|&&(_, r, via)| !matches!(via, Via::Ret(_)) && sum.frames & 1 << r == 0)
+            .fold(0, |m, &(_, r, _)| m | 1 << (r - 4));
         let new = Summary {
             params,
             causes: sum.params.clone(),
@@ -815,6 +938,8 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
             forwards: sum.forwards(),
             keeps: proof.kept.contains(&k),
             changes: sum.changes,
+            takes,
+            passes: sum.passes.clone(),
             holes: sum.holes.clone(),
             stopped: sum.stopped,
             callees: sum.refs.clone(),
@@ -850,6 +975,7 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
         let grew = old.params != new.params
             || old.exit != new.exit
             || old.changes != new.changes
+            || old.takes != new.takes
             || old.returns != new.returns
             || Sum::lost(old) != Sum::lost(&new);
         sums.insert(k, new);
@@ -942,24 +1068,28 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
             ));
         }
     }
-    // An entry read of r4–r11 is a parameter the lift doesn't pass where
-    // it enters the function by `Regs::call`, which zeroes them: from a
-    // `bl`, or an indirect call (one of a complete callee set, or through
-    // a pointer: the key as a word in the ROM). A function tail-called or
-    // fallen into takes the jumper's own r4–r11 through its extended
-    // entry: real only if the jumper is itself only jumped into (agb's
-    // panic paths, discovery's entries inside another function), so a
-    // jump from a called function counts as a call.
+    // An entry read of r4–r11 is a parameter by register. The lift passes
+    // it at a `bl` and a tail call or fall (the extended entry, with the
+    // caller's registers; one the caller still has as it came is the
+    // caller's read too, `Sum::call`), and at the indirect calls a holes
+    // file names: soft, `takes r4-r11 from its callers`. Any other way in
+    // is `Regs::call`, which zeroes them: an indirect call (one of a
+    // complete callee set, or through a pointer: the key as a word in
+    // the ROM), hard. One nothing calls is only jumped into, by functions
+    // themselves only jumped into (agb's panic paths, discovery's entries
+    // inside another function): soft. An entry value returned in r0–r3
+    // isn't passed: hard wherever the function is called, or jumped into
+    // from one that is.
     let readers: BTreeSet<u32> = sums
         .iter()
         .filter(|(_, s)| s.holes.iter().any(|h| h.contains(ENTRY_READ)))
         .map(|(&k, _)| k)
         .collect();
     if !readers.is_empty() {
-        let mut called: BTreeSet<u32> = bl.values().flatten().copied().collect();
-        called.extend(sets.values().flatten().copied());
+        let named: BTreeSet<u32> = passing.sites.values().flatten().copied().collect();
+        let mut zeroed: BTreeSet<u32> = sets.values().flatten().copied().collect();
         if ctx.base == analysis::program::ROM_BASE {
-            called.extend(
+            zeroed.extend(
                 ctx.rom
                     .as_chunks::<4>()
                     .0
@@ -968,8 +1098,10 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
                     .filter(|w| sums.contains_key(w)),
             );
         } else {
-            called.extend(sums.keys().copied());
+            zeroed.extend(sums.keys().copied());
         }
+        let mut called: BTreeSet<u32> = bl.values().flatten().copied().collect();
+        called.extend(zeroed.iter().copied());
         let mut todo: Vec<u32> = called.iter().copied().collect();
         while let Some(f) = todo.pop() {
             for &c in jumps.get(&f).into_iter().flatten() {
@@ -978,11 +1110,26 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
                 }
             }
         }
-        for k in readers.difference(&called) {
+        for k in &readers {
             let s = sums.get_mut(k).expect("a summary");
             s.holes = std::mem::take(&mut s.holes)
                 .into_iter()
-                .map(|h| h.replace(ENTRY_READ, JUMPED_READ))
+                .filter_map(|h| {
+                    let to = if !called.contains(k) && !named.contains(k) {
+                        // Its jumpers' pass-on reads say no more than its own.
+                        if h.contains(ENTRY_READ) && h.contains(", which 0x") {
+                            return None;
+                        }
+                        JUMPED_READ
+                    } else if h.contains(", returned in r")
+                        || zeroed.contains(k) && !named.contains(k)
+                    {
+                        ENTRY_READ
+                    } else {
+                        TAKES_READ
+                    };
+                    Some(h.replace(ENTRY_READ, to))
+                })
                 .collect();
         }
     }
