@@ -1205,6 +1205,14 @@
       "scope": ["native/hw-serial-registers"],
       "replaces": "d/prelude-bar-1131-to-1137-registerramreset-s",
       "until": "2026-11-14T05:00:00Z"
+    },
+    {
+      "id": "d/a-compiler-s-trap-lifts-as-a-named-stop-not-a",
+      "title": "A compiler's trap lifts as a named stop, not a hard hole",
+      "why": "From {unit:native/lift-undefined-insns}: 46 of the 47 undefined-instruction holes in moonbeam, Rogue and Imperium are GCC's udf #255 ending a path it proved can only crash. gbaa-lift knows a trap by its encoding alone (Thumb 0xdeff/0xdefe, ARM 0xe7ffdefe/0xe7f000f0, as discovery's deliberate does) and prints a panic! naming the address, listed in the report; the play build faults there too. Data read as code that held one of these words would be a named stop, not a hole: exact or a named stop, as a taker's plain entry. The hard_holes bars are untouched (0); what counts as a hard hole is narrower by this one kind, and the traps are a report line, not a metric.",
+      "by": "7e93e2be",
+      "at": "2026-11-13T11:45:22Z",
+      "scope": ["group:native"]
     }
   ]
 }
