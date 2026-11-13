@@ -1155,6 +1155,15 @@
       "at": "2026-11-12T19:01:57Z",
       "scope": ["group:native"],
       "replaces": "d/lift-bars-agents-may-raise-a-count-with-the"
+    },
+    {
+      "id": "d/native-units-run-side-by-side-needs-set-the",
+      "title": "Native units run side by side; needs set the order",
+      "why": "june, 2026-11-12, asked the sweep's foreman to judge whether native units may go out of the sprint order. Both sprint orders named units that are all done now. What is ready today has no needs between its units; the real orderings are in the tracker as needs. Kept by hand: the hole report matching the lifter waits for the reset/IRQ msr work and the data-as-code fix, and the two function-flow units warn each other about fnref.rs.",
+      "by": "9828215c",
+      "at": "2026-11-13T04:48:41Z",
+      "scope": ["group:native"],
+      "replaces": "d/stage-b-sprint-2026-11-01-one-unit-at-a-time"
     }
   ]
 }
