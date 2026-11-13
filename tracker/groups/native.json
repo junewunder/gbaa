@@ -1160,7 +1160,8 @@
         "at": "2026-11-13T08:55:31Z",
         "resumed": "c06275d9",
         "prevSession": "c06275d9-b496-4ead-9bf1-0085c8ece768",
-        "pushed": true
+        "pushed": true,
+        "handedBack": "2026-11-13T11:55:09Z"
       },
       "notes": [
         {
