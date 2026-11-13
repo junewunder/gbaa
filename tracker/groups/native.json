@@ -2242,6 +2242,12 @@
       "title": "Metroid's lift uses the names file for functions and data",
       "detail": "gbaa-lift --names DIR already reads $GBAA_DATA/names/<game>.toml but uses it only for RAM globals; functions still print as f_<addr>. Use its function names for each lifted function (and its calls), and its data names where code takes a ROM or RAM address as a constant, keeping the address in a comment. Names that aren't valid or unique Rust identifiers get a suffix. Metroid's names file comes from the Zero Mission decompilation (about 2,600 functions). Output is game-derived but stays in out/ (gitignored); tests use an agb program's names. Done when: Metroid lifted with --names builds and runs 600 of 600 frames headless as before; a unit test on an agb program's names; the report counts functions and data named; just lift-check and just check pass.",
       "check": "recorded"
+    },
+    {
+      "id": "native/lift-structured",
+      "title": "The native lifter uses the structuring pass",
+      "detail": "Every lifted function is still a loop { match block }. crates/codegen/src/lower.rs has a structuring pass (the mod view and structured codegen use it) that the native lifter doesn't. Emit if/else, while and loop with break where the control flow is reducible, keeping the block match only for what isn't. Done when: just lift-check passes on every program with 0 differences and every planted fault caught; Metroid lifted builds and runs 600 of 600 frames headless; just lift-metrics reports the share of functions and blocks structured, with a bar; just check passes.",
+      "check": "recorded"
     }
   ]
 }
