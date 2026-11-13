@@ -512,8 +512,9 @@ pub fn summary_kind(hole: &str) -> String {
 /// pointer reads one of r4-r11 as it came and some of its bits reach a use
 /// (a register parameter: an address, a condition, a value stored, passed
 /// on or returned; a direct call passes it, `takes r4-r11 from its
-/// callers`, soft), or where a function that changes them may be called
-/// through a pointer. A return with r4-r11 changed (hand-written code's
+/// callers`, soft; the zero of a function that only passes it on is the
+/// hole of the read it reaches), or where a function that changes them
+/// may be called through a pointer. A return with r4-r11 changed (hand-written code's
 /// scratch registers) is not itself hard: the reads are. Nor is a read
 /// whose every bit is masked away (`masks away r4-r11's entry bits`), the
 /// caller's frame pointer read through a frame record, or a read in a

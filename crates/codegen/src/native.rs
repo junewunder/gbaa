@@ -75,11 +75,12 @@
 //!   a direct call is its `x_` with r0-r3 and the caller's own of those
 //!   registers ([`taking`]), and a caller that still has one as it came
 //!   takes it in turn. A pointer call can't (`call_fn` passes r0-r3): the
-//!   function is a hard hole unless the holes file names the indirect
-//!   calls that reach it (`[[takes]]`, [`Holes::takes`]), which then pass
-//!   it theirs (none, `sites = []`, for code only jumped into: a jump
-//!   passes every register). Its `f_` stops the program, so no call runs
-//!   it on zeroes.
+//!   read its zeroes reach is a hard hole unless the holes file names the
+//!   indirect calls that reach the function (`[[takes]]`,
+//!   [`Holes::takes`]), which then pass it theirs (none, `sites = []`,
+//!   for code only jumped into: a jump passes every register). Its `f_`
+//!   stops the program, so no call runs it on zeroes. A context save
+//!   (`setjmp`'s `stm`, `saves::summary`'s `context_saves`) is no read.
 //! - Blocks are the arms of a `loop { match b }` over local labels
 //!   (0 the entry); calls are Rust calls; a return is a jump to the value
 //!   `lr` held on entry, [`RET`] (prelude), told by value since compiled
