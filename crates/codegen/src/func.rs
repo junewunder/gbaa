@@ -509,10 +509,7 @@ pub enum Plan {
     Static(u32),
     /// Call the recompiled function whose entry is `target`, then continue
     /// at whatever it returns to (normally `ret`).
-    Call {
-        target: u32,
-        ret: u32,
-    },
+    Call { target: u32, ret: u32 },
     /// A call through a `bx rN` stub at `stub` (a `bl` to it): take the
     /// `bx` as the stub would, then call whatever block rN names
     /// (`rt::call`) and continue at whatever it returns to (normally
@@ -539,10 +536,11 @@ pub enum Plan {
         local: bool,
     },
     /// `swi`; continues at `next` unless the BIOS sends it elsewhere.
-    Swi {
-        next: u32,
-    },
-    Undefined,
+    Swi { next: u32 },
+    /// An undefined instruction. `trap`: a compiler's trap
+    /// ([`analysis::vsa::func::is_trap`]), which a lift prints as a stop of
+    /// the game, not a hole.
+    Undefined { trap: bool },
 }
 
 /// An exit of a block, with what codegen needs to lower it.
@@ -682,7 +680,9 @@ pub fn exits(ctx: &Ctx, gb: &GBlock) -> Vec<ExitInfo> {
             Exit::Swi { next, .. } => Plan::Swi {
                 next: key(next, thumb),
             },
-            Exit::Undefined => Plan::Undefined,
+            Exit::Undefined => Plan::Undefined {
+                trap: analysis::vsa::func::is_trap(ctx.read(at, size as usize), thumb),
+            },
         };
         let plan = match plan {
             Plan::Static(k) if writes_control => Plan::Rekey(k),
@@ -742,7 +742,7 @@ pub fn successors(ctx: &Ctx, x: &ExitInfo) -> Vec<u32> {
             }
             _ => vec![next],
         },
-        Plan::Undefined => vec![],
+        Plan::Undefined { .. } => vec![],
     };
     out.extend(x.ret);
     out.extend(ctx.table_targets(x.at, x.thumb).unwrap_or_default());
