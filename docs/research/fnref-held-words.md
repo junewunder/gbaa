@@ -16,35 +16,36 @@ premise, that loads through unknown addresses hold the count, is half of
 that pair: those loads are down from 623 sites to 3 on affine, and the
 count is 55.
 
-Everything below was measured on the unit's branch,
-`unit/native/fnref-unknown-addrs` at 233ba6c0 (it also carries the object
-split and call-site context, none of it on main), on `agb/affine` unless
-a program is named. Addresses are our own agb test programs'.
-
-**These numbers are from before main's `Ref` tokens.** While this was
-measured, main's function flow was rewritten to keep large pile and ROM
-reads as one token each (`native/fnref-emerald-speed`, f52fe115). The
-branch isn't merged with that yet (22 conflicts in `fnref.rs`, and the
-branch's objects and RAM pointers must learn the new token), and nothing
-here is re-measured on it: `native/fnref-branch-merge` does both, and
-corrects this note. "Main" below is main before that commit.
+Everything in this first half was measured on the unit's branch,
+`unit/native/fnref-unknown-addrs` (it also carries the object split and
+call-site context, none of it on main), on `agb/affine` unless a program
+is named. Addresses are our own agb test programs'. It was first
+measured before main's `Ref` tokens (`native/fnref-emerald-speed`,
+f52fe115) and the BIOS rule (`native/fnref-bios-reads`); every table
+here is measured again on the branch merged with main at 81e5e5cb
+(`native/fnref-branch-merge`, 2026-11-13), and "main" is main at that
+commit. The finding stands: the switched-off table is the same row for
+row, and the first roads the same but for the BIOS's.
 
 ## How it was measured
 
-Both tools are on that branch only.
-
-`GBAA_FNREF_WATCH=0x080008c8[,…]` (or `all`) makes `gbaa-lift` print each
-place a ROM word's function address goes, once: read from which memory by
-which load, stored where, passed in which register to which function,
-returned by which, and each use not allowed. The lines before a word's
-first `HOLE` are a road to it: the first the run found, in the order it
-runs functions, not the only one. `GBAA_FNREF_TRACE=1` says where a
-pointer into RAM is lost and why a callee set is incomplete.
+`GBAA_FNREF_WATCH=0x080008c8[,…]` (or `all`, every ROM word) makes
+`gbaa-lift` print each place a ROM word's function address goes, once:
+read from which memory by which load, stored where, passed in which
+register to which function, returned by which, and each use not allowed.
+The lines before a word's first `HOLE` are a road to it: the first the
+run found, in the order it runs functions, not the only one. Main's watch
+looks through `Ref`s, and with any `GBAA_FNREF_WATCH` set prints a
+`road:` line at each instruction that gives words their first hole (what
+held them: the value's own token, or a pile, every-cell, every-object or
+ROM read). `GBAA_FNREF_TRACE=1` says, once a place, where a pointer into
+RAM is lost and why a callee set is incomplete.
 
 `GBAA_FNREF_OFF=lost,pile,any,spill` makes kinds of read give nothing,
-to see what the count would be if that kind were exact. It is unsound
-(the lift says so) and an upper bound: an exact read still reads
-something.
+to see what the count would be if that kind were exact (the merged list
+has main's kinds too: `move`, `flags`, `tables`, `cells`; the lift
+prints the kinds it saw). It is unsound (the lift says so) and an upper
+bound: an exact read still reads something.
 
 ## The loads that read everything
 
@@ -72,29 +73,39 @@ Two more fixes on the branch, which don't move that count:
 
 The new metric `fn_loads_read_everything` (a site counts if any run of
 its function read everything, an early round's too: what it read then
-stays) is 3 on eleven programs, 5 on native-fallthrough and the spike,
-and 533 on native-bios-calls (not looked at). The 3 on affine are loads
-at 0x08000a24 to 0x08000a2c through a pointer into a caller's frame at
-or above the callee's entry sp, which the run can't place.
+stays) is 3 on thirteen of the sixteen programs, 5 on native-fallthrough
+and the spike, and 533 on native-bios-calls (not looked at), the same on
+the merged code. The 3 on affine are loads at 0x08000a24 to 0x08000a2c
+through a pointer into a caller's frame at or above the callee's entry
+sp, which the run can't place.
 
 ## Where each word first goes wrong
 
 Affine has 60 function words: 5 proven, 15 never read, 40 with a use not
-allowed. The road the run found first to each of the 40:
+allowed (the same on the merged code). The road the run found first to
+each of the 40, from `GBAA_FNREF_WATCH=all` on the merged code (the
+`road:` lines, and the watch lines before each word's first hole):
 
 | words | road |
 |---|---|
-| 11 | the pile, read by a load at a constant address (0x08000188, 0x0300001c) or through a mixed set (0x08000bc0). Five got there as bytes stored by a copy loop in IWRAM (0x03000164) through a lost pointer, three by a store through an unknown address (0x080009cc), one from the reset's `CpuSet`, two from the start's copies |
-| 10 | the 3 loads left that read everything (0x08000a24 to 0x08000a2c), spilled and loaded back at 0x08000a40 |
+| 12 | the pile, by a load at a constant address or through a mixed set: holed at 0x03000020 (2), 0x08000198 (1, the reset's `CpuSet` copied it there), 0x080009d0 (3) and in the copy loop in IWRAM at 0x03000164 (6, bytes it copied through a lost pointer) |
+| 10 | the 3 loads left that read everything (0x08000a24 to 0x08000a2c), spilled and loaded back, holed at 0x08000a42: 9 by its every-object read, 1 by its every-cell read |
 | 6 | an array of (value, function) pairs in a caller's frame, read by index at 0x080036e4 and 0x080036e8 (a loop like `core::fmt::write`'s over its arguments): the pointer is "anywhere in the frame", so the value read holds the functions too, and the callee (one of a set of 12) uses its value as an address at 0x080037b2 |
-| 6 | bytes of the function's own frame read by a pointer anywhere in it (0x08001418, 0x08001c86) |
-| 3 | a frame word the run hadn't kept, read as everything stored in the frame (0x08001b66) |
-| 3 | given to the BIOS: one is loaded two instructions before its `swi` (0x0800016c), two were left over in r2 and r3 |
-| 1 | a ROM word read through a set of 11 ROM pointers merged from every caller (0x08003734) |
+| 6 | bytes of the function's own frame read by a pointer anywhere in it (0x0800141a, 0x08001ca0) |
+| 3 | a frame word the run hadn't kept, read as everything stored in the frame (0x08001b68) |
+| 1 | given to the BIOS: loaded two instructions before its `swi` (0x0800016c) |
+| 1 | main's address (0x08000178), left in r2 at a `swi` that doesn't read it (no hole there since the BIOS rule), passed on in r2 through a callee set of 19 and added to at 0x08000a12 |
+| 1 | a ROM word read through a set of 11 ROM pointers merged from every caller (0x08003736) |
+
+Before the BIOS rule three were given to the BIOS: two left over in r2
+and r3 at a `swi` that reads neither now go on to the pile and the
+register row.
 
 ## Kinds of read switched off
 
-Words not proven on affine (of 60; as built 55), by `GBAA_FNREF_OFF`:
+Words not proven on affine (of 60; as built 55), by `GBAA_FNREF_OFF`,
+each row one comma list, the kinds the lift printed checked; on the
+merged code every row is what it was before the merge:
 `lost` the loads that read everything, `pile` the pile, `any` a pointer
 anywhere in an object (it reads only the object's anywhere cell), `spill`
 a function's spills (what it stored in its frame, read where the run
@@ -116,12 +127,12 @@ pointer moved in a frame by an index. Both are about stack frames. With
 the pile off, 13 complete callee sets become incomplete (56 to 43), so
 those rows also measure a flow with fewer callees.
 
-With all four off, 13 words are "given to the BIOS", 12 of them (in a
-run before the spill switch covered both its reads) by one road: the
-address is returned in r3 to the reset function and holed at its `swi`
-at 0x080000d8. That run has 15 incomplete sets passing their registers to
-every function without a direct caller, which the flow as built hardly
-does, so it shows the road exists, not how many words it holds as built.
+Before the merge, with all four off, 13 words were "given to the BIOS",
+12 of them by one road: returned in r3 to the reset function and holed
+at its `swi` at 0x080000d8. Since the BIOS rule that `swi` reads none of
+them, and on the merged code 1 word is given to the BIOS with all four
+off, as built: those 12 meet their holes elsewhere, and the count is the
+same 39.
 
 ## Registers nobody reads
 
@@ -129,11 +140,14 @@ A call passes r0 to r3 to its callee and takes back what the callee's
 returns hold in them, whether or not the callee reads or sets them. So a
 function's address left in a scratch register travels the whole program.
 This one is measured as built, no switch: on native-irq-hold the
-handler's pool word 0x080001bc is loaded into r3 at 0x08000188. Before
-its first use not allowed it is passed in r3 39 times and returned in r3
-36 times by 26 functions, stored once (a byte, by the copy loop in
-IWRAM), and never read. It ends at the reset's `swi`, where all four
-registers count as given to the BIOS.
+handler's pool word 0x080001bc (and its pair, 0x080001c0, by the same
+road) is loaded into r3 at 0x08000188. Before its first use not allowed
+it is passed in r3 39 times and returned in r3 by 25 functions, which
+never touch r3. Before the BIOS rule it ended at the reset's `swi`, where
+all four registers counted as given to the BIOS; on the merged code the
+`swi` doesn't read r3, so it goes on to the copy loop in IWRAM, which
+copies it by bytes (to the pile and two frames' anywhere cells) and holes
+it there as arithmetic (0x03000164).
 
 Calls whose target is still empty in an early round, and complete when the
 run settles, also pass their registers to every function without a direct
@@ -143,33 +157,42 @@ caller for good.
 
 june's answer to the unit's question was to land the step on the count of
 loads that read everything, once native-irq-hold has its 16 typed heap
-accesses back. It doesn't yet. Twelve bars are over on the branch:
+accesses back. It doesn't yet. Measured again on the merged code against
+main at 81e5e5cb (`just lift-metrics`, main's bars being main's values:
+0 over, 0 under), 21 bars are over (12 before the merge), 8 under:
 
-- **native-irq-hold** loses two words main proves, its own two handlers'
-  (0x080001bc, 0x080001c0), by the road above, and gains one
-  (0x0802448c); with the reset's `swi` out of the way the IWRAM copy
-  loop's pile store and a load at 0x0800019a hold the two next. Both
-  handlers are then in the `call_fn` sets (14 functions on main, 21 on
-  the branch), the heap's typing follows every callee, and the IRQ
-  list's type is gone: `ref_accesses` 16 to 0, `ref_unexplained` 48 to
-  93, and with them `lines`, `load_computed_unknown` and
-  `store_computed_unknown`; `fn_words_not_proven` 59 to 60.
-- **`ref_unexplained`** on native-bios-more (94 to 136), native-bios-region
-  (36 to 77), native-dma (43 to 85) and the spike (36 to 78). The branch
-  reads more words (the spike: 24 never read on main, 18 on the branch),
-  nearly every `call_fn` set is every address-taken function, so the
-  sets grow (16 to 19 on the spike).
-- **native-tasks**: `call_fn_four_complete` 0 to 56 and `ref_unexplained`
-  0 to 35 (both bars are 0 on main; the branch has 56 complete sets), and
-  `fn_words_not_proven` 57 to 58.
+| program | `fn_words_not_proven` main / merged | other bars over |
+|---|---|---|
+| native-irq-hold | 58 / 60 | `ref_accesses` 16 to 0, `ref_unexplained` 48 to 132, `lines`, `load_computed_unknown`, `store_computed_unknown` |
+| native-bios-calls | 55 / 56 | `ref_accesses` 11 to 0, `ref_unexplained` 39 to 50, `lines`, `load_computed_unknown`, `store_computed_unknown` |
+| mosaic-modes, native-bios-more, native-dma | 54, 55, 61 / one more each | `ref_unexplained` 94 to 136 (bios-more), 43 to 85 (dma) |
+| native-bios-region, native-ime-release, native-serial, the spike | 59, 58, 58, 58 / 58, 58, 58, 58 | `ref_unexplained` 36 to 77, 48 to 75, 110 to 151, 36 to 78 |
+| native-irq-wrapper | 60 / 59 | |
+| native-tasks | 59 / 58 | `call_fn_four_complete` 0 to 56, `ref_unexplained` 0 to 35: main's flow doesn't settle there (0 complete sets, nothing proven), the branch's does |
 
-The count the unit was to move, `fn_words_not_proven`, is 55 on affine
-against main's 56, and within one of main's on the others.
+The rest (affine 55, native-bios-affine 56, native-fallthrough 56,
+native-frame-locals 55, native-save 55) are as main. So the count the
+unit was to move is no longer ahead of main anywhere it was: affine was
+55 against main's 56, and main's BIOS rule took main to 55 too. The
+branch's 55 there is a different 55: the 3 loads that read everything
+against main's 623.
+
+- **native-irq-hold** loses its two handlers' words (0x080001bc,
+  0x080001c0) by the road above. Both are then in the `call_fn` sets,
+  the heap's typing follows every callee, and the IRQ list's type is
+  gone. native-bios-calls now loses its 11 typed heap accesses the same
+  way (on main since the BIOS rule).
+- **`ref_unexplained`** grows where the branch reads more words and
+  nearly every `call_fn` set is every address-taken function.
 
 ## What it points to
 
 0. The branch merged with main's `Ref` tokens and these tables measured
-   again (`native/fnref-branch-merge`): everything below waits on it.
+   again (`native/fnref-branch-merge`): done for the agb programs, above.
+   On Emerald the merged flow is far slower than main's (below,
+   "Emerald on the merged code"); that is the object split's and RAM
+   pointers' cost, for `native/fnref-ram-pointers-land` to answer
+   before anything lands.
 1. Frames, as one unit (`native/fnref-frame-pointers`), since neither
    half moves the count alone: a pointer into a caller's frame at or
    above the entry sp followed to the callers' frames, not lost (the 3
@@ -179,10 +202,12 @@ against main's 56, and within one of main's on the others.
    to 14 words on affine, so a falling count is a fair check for it.
 2. Registers (`native/fnref-live-registers`): a call gives a callee only
    the registers it reads and takes back only those it sets (the
-   summaries have both, `codegen::saves`), and a `swi` holes only what
-   its BIOS call reads. It is what un-proves native-irq-hold's handlers
-   on the branch, and nothing in it is about agb: a C game's scratch
-   registers travel the same way.
+   summaries have both, `codegen::saves`); a `swi` holes only what its
+   BIOS call reads, which is main's rule now (`native/fnref-bios-reads`).
+   The first half is what un-proves native-irq-hold's handlers on the
+   branch (their road now ends in the IWRAM copy loop, not the `swi`),
+   and nothing in it is about agb: a C game's scratch registers travel
+   the same way.
 3. Then the branch can land (`native/fnref-ram-pointers-land`), if
    native-irq-hold's handlers are proven again.
 4. After those: loads at a constant address stop reading the pile (alone

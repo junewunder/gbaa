@@ -257,6 +257,12 @@ const OBJ_ANY: i32 = i32::MAX;
 const OBJ_WIN: i32 = 0x7ff0;
 /// More exact offsets than this into one object: anywhere in it.
 const OBJ_OFFS: usize = 8;
+/// More objects than this in one value: a pointer lost
+/// ([`Val::lost_ptr`]), as for RAM runs past [`RAM_RUNS`]. Without it an
+/// sp passed in from hundreds of callers held a frame of each, and every
+/// stack argument read them all (Emerald's first round 15 times main's).
+/// At 64 the agb programs' metrics are the same as with none.
+const OBJS: usize = 64;
 /// Where the objects' cells are kept, among RAM's: each object a 64 KB
 /// window above here (no RAM address, nor any the program makes).
 const OBJ_BASE: u32 = 0x1000_0000;
@@ -688,8 +694,10 @@ const NUMS: usize = 8;
 /// of data).
 const RAMS: usize = 16;
 /// More RAM runs than this in a value (each [`Tok::RamFrom`]): a pointer
-/// lost.
-const RAM_RUNS: usize = 256;
+/// lost. (256 before the merge with main's `Ref` tokens: Emerald names
+/// thousands of globals, and its entries held 125,000 of these; at 64
+/// the agb programs' metrics are the same as at 256.)
+const RAM_RUNS: usize = 64;
 /// More exact ROM pointers than this: "from the lowest on".
 const ROMS: usize = 16;
 /// The most ROM bytes one read by an unknown index reads (a "from here
@@ -877,10 +885,20 @@ impl Val {
                                 .filter(|t| !self.toks.contains(t))
                                 .count()
                             <= ROMS));
-        if adds {
-            self.join(o);
+        if !adds {
+            return false;
         }
-        adds
+        // What `takes_in` can't tell (RAM pointers past [`RAMS`], an
+        // object's offsets past [`OBJ_OFFS`]) is joined and compared: a
+        // join the cap undoes is no change.
+        // (Unchanged, it keeps the set it held, not an equal copy.)
+        let was = self.clone();
+        self.join(o);
+        if *self == was {
+            *self = was;
+            return false;
+        }
+        true
     }
 
     /// Whether this, as the cap leaves it, takes token `t` in with no more
@@ -893,9 +911,19 @@ impl Val {
     fn takes_in(&self, t: Tok) -> bool {
         self.toks.contains(&t)
             || match t {
-                Tok::Num(c) | Tok::RamFrom(c) if is_ram(c) => self.lost_ptr,
+                // A lost pointer takes in every RAM address, a pointer
+                // "from here on" in RAM those in its run ([`Val::cap_ram`]).
+                Tok::Num(c) | Tok::RamFrom(c) if is_ram(c) => {
+                    self.lost_ptr || {
+                        let c = ram_canon(c);
+                        self.toks
+                            .range(Tok::RamFrom(0)..=Tok::RamFrom(c))
+                            .next_back()
+                            .is_some_and(|f| matches!(*f, Tok::RamFrom(lo) if c < ram_bound(lo)))
+                    }
+                }
                 Tok::RamFrom(_) => self.lost_ptr,
-                Tok::Obj(i, _) => self.toks.contains(&Tok::Obj(i, OBJ_ANY)),
+                Tok::Obj(i, _) => self.lost_ptr || self.toks.contains(&Tok::Obj(i, OBJ_ANY)),
                 Tok::Num(_) => self.unk,
                 Tok::Rom(x) | Tok::RomFrom(x) => self
                     .toks
@@ -942,9 +970,33 @@ impl Val {
                 _ => {}
             }
         }
-        for i in wide {
-            self.drop_range(Tok::Obj(i, i32::MIN)..=Tok::Obj(i, OBJ_ANY));
-            self.toks.insert(Tok::Obj(i, OBJ_ANY));
+        let objs = {
+            let mut n = 0;
+            let mut last = None;
+            for t in self.toks.range(Tok::Obj(0, i32::MIN)..REF0) {
+                if let Tok::Obj(i, _) = *t
+                    && last != Some(i)
+                {
+                    n += 1;
+                    last = Some(i);
+                }
+            }
+            n
+        };
+        if objs > OBJS {
+            lost_said(|| "more objects than OBJS in a value".into());
+            self.unk = true;
+            self.lost_ptr = true;
+        }
+        // A lost pointer takes in every object (it reads and stores
+        // them all: [`LOST_CELL`]), so the cap stays monotone.
+        if self.lost_ptr && objs > 0 {
+            self.drop_range(Tok::Obj(0, i32::MIN)..REF0);
+        } else {
+            for i in wide {
+                self.drop_range(Tok::Obj(i, i32::MIN)..=Tok::Obj(i, OBJ_ANY));
+                self.toks.insert(Tok::Obj(i, OBJ_ANY));
+            }
         }
         if nums > NUMS {
             self.unk = true;
@@ -1373,6 +1425,9 @@ struct G {
     /// cells at an address (kept until they change).
     spill_reads: std::collections::HashMap<(Ix, u8), Val, Fx>,
     cell_at_reads: std::collections::HashMap<(u32, u8), Val, Fx>,
+    /// What a load at a width through a pointer anywhere in an object
+    /// reads of its cells ([`G::read_obj`]), until a store reaches it.
+    obj_any_reads: std::collections::HashMap<(u32, u8), Val, Fx>,
     /// The origins in [`Flow::holes`], to look up fast.
     holed: std::collections::HashSet<Origin, Fx>,
     /// Large token sets whose every origin is in [`Flow::holes`], by
@@ -1557,7 +1612,25 @@ impl G {
             self.read_cell(obj_addr(i, OBJ_ANY), w, into);
         } else if off == OBJ_ANY {
             let (lo, hi) = (obj_addr(i, -OBJ_WIN), obj_addr(i, OBJ_ANY) + 3);
-            self.read_range(lo, hi, w, "by a pointer anywhere in it", into);
+            if !self.watch.is_empty() {
+                self.read_range(lo, hi, w, "by a pointer anywhere in it", into);
+            } else {
+                // Kept until a store reaches the object (read afresh at
+                // each load, it was most of Emerald's first round).
+                self.rd.ranges.push((lo, hi));
+                let v = match self.obj_any_reads.get(&(i, w)) {
+                    Some(v) => v.clone(),
+                    None => {
+                        let mut v = Val::default();
+                        for (_, m) in self.cells.range(lo..=hi) {
+                            from_mem(m, w, &mut v);
+                        }
+                        self.obj_any_reads.insert((i, w), v.clone());
+                        v
+                    }
+                };
+                into.union(&v);
+            }
         } else {
             let c = obj_addr(i, off);
             self.rd.ranges.push((c.saturating_sub(3), c + w as u32 - 1));
@@ -1758,6 +1831,12 @@ impl G {
                 }
                 Store::Cell(a) => {
                     let objs = a >= OBJ_BASE;
+                    if objs {
+                        let i = (a - OBJ_BASE) >> 16;
+                        for w in [1u8, 2, 4] {
+                            self.obj_any_reads.remove(&(i, w));
+                        }
+                    }
                     let (kind, all) = if objs {
                         self.obj_reads = Default::default();
                         (MemKind::Objs, &mut self.objs_all)
@@ -2262,6 +2341,10 @@ impl G {
                 "cell_at_reads",
                 &mut self.cell_at_reads.values().map(|v| &v.toks),
             ),
+            count(
+                "obj_any_reads",
+                &mut self.obj_any_reads.values().map(|v| &v.toks),
+            ),
             // The kept reads and expansions (`native/fnref-flow-emerald`:
             // they held 11 million tokens the bound didn't count).
             count(
@@ -2315,6 +2398,35 @@ impl G {
     /// content (equal sets held apart are copies: what took Emerald to
     /// [`TOKENS`] before [`Sets`]), and the sets with the most tokens in
     /// copies.
+    /// For the trace: the entries' tokens (each distinct set once) by
+    /// kind, and how many entries hold a lost RAM pointer.
+    fn entry_kinds(&self) -> String {
+        let mut seen = std::collections::HashSet::new();
+        let mut n = [0usize; 7];
+        let mut lost = 0;
+        for v in self.entry.values().flatten() {
+            lost += v.lost_ptr as usize;
+            if !seen.insert(std::rc::Rc::as_ptr(&v.toks.0)) {
+                continue;
+            }
+            for t in v.toks.iter() {
+                n[match t {
+                    Tok::Fn { .. } => 0,
+                    Tok::Num(c) if is_ram(*c) => 2,
+                    Tok::Num(_) => 1,
+                    Tok::Rom(_) | Tok::RomFrom(_) => 3,
+                    Tok::RamFrom(_) => 4,
+                    Tok::Obj(..) => 5,
+                    Tok::Ref { .. } => 6,
+                }] += 1;
+            }
+        }
+        format!(
+            "functions' {}, numbers {}, RAM addresses {}, ROM pointers {}, RAM runs {}, objects {}, Refs {}; {lost} registers a lost pointer",
+            n[0], n[1], n[2], n[3], n[4], n[5], n[6]
+        )
+    }
+
     fn held_copies(&self) -> String {
         use std::hash::{Hash, Hasher};
         let stores: [(&str, Vec<&Toks>); 5] = [
@@ -3020,10 +3132,8 @@ impl Run<'_, '_> {
             ..Val::default()
         };
         if self.trace && end < hi {
-            eprintln!(
-                "  rom lost at {:#010x}: {lo:#x}..{hi:#x} cut short",
-                self.at
-            );
+            let at = self.at;
+            trace_at("rom lost", at, || format!("{lo:#x}..{hi:#x} cut short"));
         }
         while p < end {
             self.rom_read_capped(p, w.min(4), &mut v);
@@ -3201,7 +3311,7 @@ impl Run<'_, '_> {
                         {
                             out.lost_rom = true;
                             if self.trace {
-                                eprintln!("  rom lost at {at:#010x}: {x:x?} - {y:x?}");
+                                trace_at("rom lost", at, || format!("{x:x?} - {y:x?}"));
                             }
                         }
                         // A RAM address moved by an unknown (an index, a
@@ -3303,7 +3413,7 @@ impl Run<'_, '_> {
         // make, or a ROM pointer it lost.
         let complete = !callees.is_empty() && !t.lost_rom;
         if self.trace && !complete {
-            eprintln!("  incomplete at {at:#010x}: through {}", brief(t));
+            trace_at("incomplete", at, || format!("through {}", brief(t)));
         }
         let site = Site {
             callees: callees.clone(),
@@ -3662,7 +3772,9 @@ impl Run<'_, '_> {
                     self.g.hole(&a, at, Why::Address, |_| true);
                     let mut out = self.load(&s, key, i, &a, w, b.hulls.get(&i).copied());
                     if self.trace && out.lost_ptr && !a.lost_ptr {
-                        eprintln!("  obj lost by load at {at:#010x} w{w} through {a:?}");
+                        trace_at("obj lost by load", at, || {
+                            format!("w{w} through {}", brief(&a))
+                        });
                     }
                     if !self.g.watch.is_empty() {
                         let hull = b.hulls.get(&i).copied();
@@ -3947,7 +4059,7 @@ impl Run<'_, '_> {
             }
         }
         if lost && self.trace {
-            eprintln!("  load anywhere at {:#010x} through {a:?}", self.at);
+            trace_at("load anywhere", self.at, || format!("through {}", brief(a)));
         }
         if self.g.off & OFF_LOST != 0 {
             lost = false;
@@ -3983,11 +4095,9 @@ impl Run<'_, '_> {
                     {
                         out.lost_rom = true;
                         if self.trace {
-                            eprintln!(
-                                "  rom lost at {:#010x}: bounds {lo:#x}..={hi:#x} too wide, through {}",
-                                self.at,
-                                brief(a)
-                            );
+                            trace_at("rom lost", self.at, || {
+                                format!("bounds {lo:#x}..={hi:#x} too wide, through {}", brief(a))
+                            });
                         }
                     }
                     // Bounds that reach past RAM are none: "not null",
@@ -4152,7 +4262,7 @@ impl Run<'_, '_> {
         // RAM reads.
         if anywhere {
             if self.trace && toks.iter().any(|(t, _)| matches!(t, Tok::Fn { .. })) {
-                eprintln!("  piled at {:#010x} through {a:?}", self.at);
+                trace_at("piled", self.at, || format!("through {}", brief(a)));
             }
             self.g.store(Store::Pile, toks);
         }
@@ -4755,6 +4865,19 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> R {
 thread_local! {
     /// [`lost_said`]'s lines, each once.
     static LOST_SAID: std::cell::RefCell<BTreeSet<String>> = std::cell::RefCell::default();
+}
+
+thread_local! {
+    /// [`trace_at`]'s places, each once.
+    static TRACED: std::cell::RefCell<BTreeSet<(&'static str, u32)>> = std::cell::RefCell::default();
+}
+
+/// `GBAA_FNREF_TRACE`: print `what` happened at `at`, the first time it
+/// does there (a run reruns a function hundreds of times).
+fn trace_at(what: &'static str, at: u32, how: impl FnOnce() -> String) {
+    if TRACED.with(|s| s.borrow_mut().insert((what, at))) {
+        eprintln!("  {what} at {at:#010x}: {}", how());
+    }
 }
 
 /// `GBAA_FNREF_TRACE`: print where a pointer into RAM is lost
@@ -5402,6 +5525,7 @@ pub fn follow(
                 }
                 if trace && (total > TOKENS || ran.is_multiple_of(4096)) {
                     eprint!("{}", g.held_copies());
+                    eprintln!("  entries' tokens by kind: {}", g.entry_kinds());
                 }
                 if total > TOKENS {
                     g.flow.unsettled = true;
