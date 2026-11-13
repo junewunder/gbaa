@@ -1985,7 +1985,14 @@
       "detail": "docs/research/fnref-held-words.md, 'Kinds of read switched off'. On affine, with GBAA_FNREF_OFF (unsound, measuring only; on the branch unit/native/fnref-unknown-addrs, as is all of this) the loads that read everything alone leave fn_words_not_proven at 55, reads through a pointer anywhere in an object alone leave it 55, and both off give 41: the two must be made exact together, and both are about stack frames. (1) The 3 loads left that read everything (affine 0x08000a24 to 0x08000a2c) go through a pointer into a caller's frame at or above the callee's entry sp, which Run::load_at gives up on (G::obj_up): follow it to the callers' frame objects through the sp each call passed. (2) A pointer into a frame moved by an index the run doesn't know becomes anywhere in the frame and reads every word of it: keep it in its stack slot (crates/codegen/src/native/frame.rs has the slots), and keep an array of pairs' fields apart (an offset known modulo the stride; core::fmt's argument arrays hold a value and a function each, affine 0x080036e4). Work on that branch (it has the object split, GBAA_FNREF_WATCH and GBAA_FNREF_OFF). Done when: unit tests for each; fn_loads_read_everything is 0 on affine and no higher anywhere; fn_words_not_proven falls on affine (the switches say up to 14 words; say in the evidence how close it got and what holds the rest) and rises nowhere. The branch doesn't land here: {unit:native/fnref-ram-pointers-land} does.",
       "check": "recorded",
       "needs": ["native/fnref-branch-merge"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-13T08:33:10Z",
+          "by": "afebd1b0",
+          "text": "2026-11-13: agb only by {unit:native/fnref-c-game-words}: none of Metroid's 734 held words is first held through a stack frame (docs/research/fnref-held-words.md, 'A C game'). The stride idea carries to ROM tables: {unit:native/fnref-table-fields}."
+        }
+      ]
     },
     {
       "id": "native/first-stop-guest-pc",
