@@ -2297,7 +2297,14 @@
       "title": "Lifter code-shape bars judged on C programs and games",
       "detail": "Owner (2026-11-13): agb programs stay as the tests of the hardware library and the native check, but code-shape work (function flow, structuring, parameters, stack frames, typed access) is judged on the C test programs and the games, not on agb. Add the C programs' rows to crates/codegen/lift-check.toml with bars. Then edit the done-when of each open unit whose bar is an agb program's (the function-flow units: object split and RAM pointers, frame pointers, live registers, taker registers, table ends and fields, GCC moves, pile by global; and the stage-B units still aimed at agb) so a C program or a game decides it and the agb bars only must not get worse; say on each card what changed. Leave a unit whose branch is in flight alone and add a note instead. Done when: the C rows and bars are in lift-check.toml; every such card is edited or noted, listed in the evidence; just lint and just check pass.",
       "check": "recorded",
-      "needs": ["native/c-test-programs"]
+      "needs": ["native/c-test-programs"],
+      "notes": [
+        {
+          "at": "2026-11-13T21:30:25Z",
+          "by": "ec2ee7ee",
+          "text": "When this is done, look at the parked function-flow branch units (object split, call-site context, unknown-address loads, frame pointers, live registers): re-measure the branch (ef361daf) on the C programs and unpark what pays, or drop it."
+        }
+      ]
     }
   ]
 }
