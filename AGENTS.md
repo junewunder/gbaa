@@ -40,7 +40,7 @@ hand), `native-host` (the native programs' headless front end), `interp` (the he
 [--frames N] [--test]` runner), `hole-report` (`gbaa-holes`, what blocks a native
 build), and the `disc-check`, `jt-check`, `aw-check` and `mgba-dump` tools; `gbaa-dis` (`just dis`) disassembles ROM code.
 `codegen`'s `gbaa-lift` is the stage-A lifter (`just lift`, `just
-lift-check`); `holes/<game>.toml` are its stand-ins (a commercial game's
+lift-check`; `just lift` ends by running the build and recording where it stops, `just first-stop`); `holes/<game>.toml` are its stand-ins (a commercial game's
 are game-derived: `mods/<game>/holes.toml`). Generated code goes in
 `out/<game>/` (gitignored).
 
