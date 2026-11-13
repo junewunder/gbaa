@@ -474,6 +474,36 @@ fn new_data_over_a_jump_target_redoes_the_jump() {
     );
 }
 
+/// The entry with `set_lr` before its `bx r0`, and whether discovery has
+/// code at the `bx`'s return site (0xc) and whether it took the `bx` for
+/// a jump.
+fn entry_bx_after(set_lr: u32) -> (bool, bool) {
+    let mut a = Asm::new();
+    a.entry(0x100).w(0x4, set_lr).h(0x100, 0x4770); // main: bx lr
+    let d = a.run();
+    assert_eq!(d.funcs.get(&thumb(0x100)), Some(&Evidence::Confirmed));
+    (
+        d.code.contains_key(&(B + 0xc)),
+        d.rec.jumps.contains_key(&(B + 0x8)),
+    )
+}
+
+#[test]
+fn bx_after_lr_set_to_its_return_site_is_a_call() {
+    // `mov lr, pc` and agbcc's IRQ wrapper's `add lr, pc, #0` both leave
+    // lr at the address after the `bx`: a call, and the code after it is
+    // the same function's.
+    for set_lr in [0xe1a0_e00f, 0xe28f_e000] {
+        assert_eq!(entry_bx_after(set_lr), (true, false), "{set_lr:#x}");
+    }
+    // A tail jump: the instruction before doesn't set lr (`mov r12, pc`),
+    // or sets it somewhere else (`add lr, pc, #4`, `add lr, r1, #0`).
+    // Nothing follows it.
+    for other in [0xe1a0_c00f, 0xe28f_e004, 0xe281_e000] {
+        assert_eq!(entry_bx_after(other), (false, true), "{other:#x}");
+    }
+}
+
 #[test]
 fn nothing_follows_a_call_that_never_returns() {
     let mut a = Asm::new();

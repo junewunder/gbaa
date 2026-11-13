@@ -405,7 +405,7 @@ mode and calling `gIntrTable[n]`), agb's handler, or a game's own.
   reset and each handler stored to `IRQ_HANDLER_PTR`, over the prelude's
   `msr_cpsr` (banks sp by mode, runs the IRQs a cleared I releases),
   `mrs_cpsr` and `Game::spsr` (`codegen::native`, `PsrFns`); such a
-  wrapper nests. Past an agbcc wrapper's `bx r0` nothing is lifted yet.
+  wrapper nests. An agbcc wrapper's `add lr, pc, #0; bx r0` is a call to discovery, so the half after it is lifted (native/lift-irq-wrapper-tail; `agb/native-irq-wrapper` runs both).
 - **No nesting.** Handlers run to completion at the points above (and
   when a library copy's cost crosses an event, section 7), never
   inside another handler or inside game code. A real GBA can take the
