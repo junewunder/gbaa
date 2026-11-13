@@ -2162,6 +2162,13 @@
         "start": "1950544",
         "at": "2026-11-13T10:10:31Z"
       },
+      "notes": [
+        {
+          "at": "2026-11-13T10:11:11Z",
+          "by": "d2717a37",
+          "text": "From {unit:native/nightmare-entry-reads}: its branch adds Passing::named (a [[takes]] with sites = [] counts as named) in summary.rs and native.rs, 3 small hunks, and a constant-branch rule in saves.rs. Nothing else of the taker rule moved; expect a small conflict."
+        }
+      ],
       "round": "2026-11-13T10:10:31Z"
     },
     {
