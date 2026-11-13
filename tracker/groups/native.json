@@ -2195,6 +2195,12 @@
       "detail": "Found by {unit:native/fnref-bios-reads}. The flow (crates/codegen/src/native/fnref.rs, Run::exit, Edge::Swi) follows CpuSet and CpuFastSet only from ROM: the source's words go to the pile. A copy whose source is RAM moves nothing, so a function's address stored at a constant RAM address (its cell) and copied elsewhere by the BIOS is not in what a load of the copy reads (that cell and the pile): the load gives no address, arithmetic on it is no hole, and the word stays proven though the lifted program computes with it. C games copy structs with CpuSet. Unsound, and older than that unit (which only made CpuFastSet's r3, a word it read, hold what a load from anywhere reads). The same for what the other calls read through a pointer and write back (the affine sets, MidiKey2Freq's wave header, the decompressors' bytes): arithmetic inside the BIOS on memory the flow never looks at. Done when: a BIOS copy from RAM, or from a source the run can't place, stores to the pile what a load of its source reads (its cells in range if the address and length are numbers, else every cell, and the pile), with a unit test (F stored at a cell, CpuSet to another, loaded there and added to: a hole); the other calls' memory reads are either modelled or written down as why not; Metroid's fn_words_not_proven and the agb bars are quoted before and after; just lift-check and just check pass.",
       "check": "independent",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/longjmp-uncounted",
+      "title": "longjmp: a return to another frame, counted nowhere",
+      "detail": "Found by {unit:native/moonbeam-taker-chain}. moonbeam has newlib's setjmp (0x0803830d) and longjmp (0x08038325: ldm r0!, {r4-r12, sp, lr}; movs r0, r1; moveq r0, #1; bx lr). The summaries give longjmp only 'a jump to an unknown place' (soft) and the hole report counts nothing for it, so a native build has no hole there, yet a lifted longjmp can't return into setjmp's caller's frame: each function's r4-r11 and sp are its own Rust locals. setjmp itself now takes nothing (a context save). Done: say what the lift prints for longjmp's bx lr and what happens when it runs (a named stop, or a wrong return); if wrong or silent, the pair is a hard hole in the hole report and the lift (found by shape: a context restore, codegen::saves::summary's context_saves has the save's), or lifted as a stand-in pair (host unwinding to the setjmp call). Check on moonbeam whether a route reaches longjmp at all.",
+      "uses": ["heavy"]
     }
   ]
 }
