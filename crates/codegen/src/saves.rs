@@ -20,7 +20,8 @@
 //!   jump the dispatcher finds), or jumps where nothing is known;
 //! - calls or tail-jumps to a function that doesn't keep them;
 //! - changes mode (`msr`, a user-bank write, an exception return, an
-//!   undefined instruction, `SoftReset` or `HardReset`);
+//!   undefined instruction that isn't a compiler's trap, `SoftReset` or
+//!   `HardReset`);
 //! - runs from IWRAM, where its code may change.
 //!
 //! A library routine the runtime stands in for (`Ctx::library`: libgcc's
@@ -679,7 +680,8 @@ impl Walk<'_> {
                 Ok(())
             }
             Plan::Rekey(_) => self.stop(format!("0x{at:08x}: changes mode")),
-            // A compiler's trap stops the game: the path never returns.
+            // A compiler's trap stops the game (the BIOS's handler never
+            // comes back to the function): the path never returns.
             Plan::Undefined { trap: true } => Ok(()),
             Plan::Undefined { trap: false } => {
                 self.fail(format!("0x{at:08x}: an undefined instruction"))
