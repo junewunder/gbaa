@@ -397,29 +397,30 @@ Both with `gbaa-recompile --summaries ROM --callee-sets` and the roads
 counted, not the proven ones.
 
 **Kirby: Nightmare in Dream Land** (5,177 functions). The flow settles
-now, in 31 minutes at 2.0 GB (its holes file still skips it, as not
-settling under 16 GB). 51 of 54 indirect calls have a complete set, of
-2,044 callees on average. 4,054 words are held, none at a BIOS call.
-2,515 are first held by a pile read: 733 at 0x08006162, a byte out of
-the pile passed as a parameter and shifted, 269 at 0x0800582a. 1,260
-are held at 0x0801c6b8, the sign-extended byte load of an array by a
-halfword index, and 113 at two loads the roads name as a bounded ROM
-read, 64 KB from 0x087336f0 and from 0x087339f0, the first the same
-array: where a table ends. With `pile` off (3 minutes, 515 MB) 1,599
-are held, 1,396 of them at 0x08021c32, another byte array loaded so: the
-pile is worth at most 2,455 words there, and table ends most of the
-rest.
+now, in 31 to 35 minutes at 2.0 GB (its holes file still skips it, as
+not settling under 16 GB). 51 of 54 indirect calls have a complete set,
+of 2,044 callees on average. 4,054 words are held, none at a BIOS call.
+2,523 are first held by a pile read: 733 at 0x08006162, a byte out of
+the pile passed as a parameter and shifted, 269 at 0x0800582a. 1,401
+are held by bounded ROM reads of 64 KB, five byte arrays each read by a
+halfword index: 1,260 at 0x0801c6b8 (the array at 0x08732ef0), 98, 23,
+15 and 5 at four more (0x087336f0 to 0x08733af0): where a table ends.
+With `pile` off (3 minutes, 503 MB) 1,599 are held, 1,396 of them at
+0x08021c32 by the 64 KB read of the array at 0x087339f0: the pile is
+worth at most 2,455 words there, and table ends most of the rest.
 
 **Emerald** (15,159 functions). The flow stops at its token bound after
-27,776 function runs (601 s, 2.4 GB, the same stop with the roads on),
-so this is what it held when it stopped, 9,031 words, not a count: a
-settled run would hold these and more, and may meet a word's first hole
-elsewhere. By what gave the value: 3,594 a pile read, 2,013 a ROM read
-by index, 1,209 a bounded ROM read of 64 KB, 2,100 the value's own
-token. The largest sites: 1,373 at 0x0801d874, an indirect call's
-result compared with 1 (item 2); 473 at 0x080a8fb2 and 458 at
-0x0806a684, a parameter moved with `adds rd, rs, #0` (item 4), the
-first the callback given to the function that makes a task, the second
-a data pointer that a ROM table's leftovers reached; 394, 351 and 154
-by 64 KB reads of byte tables (item 3); 333 at 0x0800059e out of the
-pile. One word is given to the BIOS.
+27,776 function runs (10 to 12 minutes, 2.4 GB, the same stop with the
+roads on), so this is what it held when it stopped, 9,031 words, not a
+count: a settled run would hold these and more, and may meet a word's
+first hole elsewhere. By what gave the value: 3,701 a pile read, 2,013 a
+ROM read by index, 1,209 a bounded ROM read of 64 KB, 2,107 the value's
+own token, 1 an every-cell read. The sites over 150 words: 1,373 at
+0x0801d874, an indirect call's result compared with 1 (item 2); 473 at
+0x080a8fb2 and 458 at 0x0806a684, a parameter moved with `adds rd, rs,
+#0` (item 4), the first the callback given to the function that makes a
+task, the second a data pointer that a ROM table's leftovers reached;
+394, 351 and 154 by 64 KB reads of byte tables (item 3); 333, 162 and
+151 out of the pile (0x0800059e, 0x080135b8, 0x0817f504); 228 at
+0x08098d72 and 208 at 0x0808f616 by ROM reads by index, not looked at.
+One word is given to the BIOS.
