@@ -510,7 +510,9 @@ and what the other calls read through a pointer is not looked at.
 **Counts.** Metroid (the lift alone, about a minute, peak 312 MB):
 `fn_words_proven` 37 to 466, `fn_words_not_proven` 767 to 338, as the
 switch measured; `call_fn_calls` 70, `call_fn_complete` 68 and
-`call_fn_four_complete` 37, as on main today. Keeping r2 and r3 past the waits
+`call_fn_four_complete` 37, as on main with the same holes file (with
+the reset's and the IRQ dispatcher's stand-ins dropped from it later
+that morning, 72, 70 and 39, the words the same). Keeping r2 and r3 past the waits
 and r3 past the copies held no word the switch had proven.
 
 The agb programs each had one word at stake, 0x08000178, the main
@@ -519,5 +521,6 @@ affine `VBlankIntrWait`'s, at 0x0800088e). In twelve of the sixteen it
 is proven now (`fn_words_not_proven` one lower, the bars with it). In
 native-spike, native-tasks, native-bios-region and native-irq-wrapper
 the word is also stored to the pile and meets arithmetic there, so the
-count stays and its reason moves from "given to the BIOS" to
-"arithmetic".
+count stays. In the first three its reason moved from "given to the
+BIOS" to "arithmetic" (main's reports against these); the fourth came
+to main the same morning and had no report from before to compare.
