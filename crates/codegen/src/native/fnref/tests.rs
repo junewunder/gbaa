@@ -994,31 +994,57 @@ fn a_large_read_is_used_as_a_small_one_is() {
 /// A join into an entry that the cap undoes (a pointer one "from here
 /// on" takes in, a number into an unknown) leaves the set itself, not a
 /// copy of it; one that changes it says so whatever its length after.
+/// Either way it is what the plain join makes.
 #[test]
 fn a_join_the_cap_undoes_leaves_the_set_itself() {
     let mut img = Img::new();
     img.code = (1..16).map(|k| 0x0800_0000 + 0x100 * k).collect();
     let _code = CodeGuard::set(&img);
+    // `join_capped` of `o` into `a`: as `join`, and whether it changed.
+    let both = |a: &mut Val, o: Val| {
+        let (was, mut plain) = (a.clone(), a.clone());
+        plain.join(&o);
+        let p = std::rc::Rc::as_ptr(&a.toks.0);
+        let grew = a.join_capped(&o);
+        assert_eq!(*a, plain, "{was:?} joined with {o:?}");
+        assert_eq!(grew, *a != was, "{was:?} joined with {o:?}");
+        // Unchanged, it is the set it was.
+        assert!(grew || p == std::rc::Rc::as_ptr(&a.toks.0));
+        grew
+    };
+    let rom = |x: u32| Val::of(Tok::Rom(x));
     let mut a = Val::of(Tok::RomFrom(0x0800_0810));
-    a.toks.insert(Tok::Num(5));
-    a.unk = true;
-    let p = std::rc::Rc::as_ptr(&a.toks.0);
-    let keep = a.clone();
-    assert!(!a.join_capped(&Val::of(Tok::Rom(0x0800_0820))));
-    assert!(!a.join_capped(&Val::of(Tok::RomFrom(0x0800_0840))));
-    assert!(!a.join_capped(&Val::of(Tok::Num(7))));
-    assert_eq!(p, std::rc::Rc::as_ptr(&a.toks.0));
-    assert_eq!(a, keep);
+    a.join(&Val::unk());
+    assert!(!both(&mut a, rom(0x0800_0820)));
+    assert!(!both(&mut a, Val::of(Tok::RomFrom(0x0800_0840))));
+    assert!(!both(&mut a, Val::of(Tok::Num(7))));
     // Past the next code, it is its own.
-    assert!(a.join_capped(&Val::of(Tok::Rom(0x0800_0910))));
+    assert!(both(&mut a, rom(0x0800_0910)));
     // Sixteen pointers, one in each run of data, and a seventeenth:
     // sixteen "from here on".
     let mut b = Val::default();
     for k in 0..16 {
-        b.join_capped(&Val::of(Tok::Rom(0x0800_0010 + 0x100 * k)));
+        both(&mut b, rom(0x0800_0010 + 0x100 * k));
     }
     assert_eq!(b.toks.len(), 16);
-    assert!(b.join_capped(&Val::of(Tok::Rom(0x0800_0020))));
+    assert!(both(&mut b, rom(0x0800_0020)));
     assert_eq!(b.toks.len(), 16);
     assert!(b.toks.contains(&Tok::RomFrom(0x0800_0010)));
+    // Pointers a "from here on" takes in still count toward the cap's
+    // sixteen: with the ones held below it, they widen those.
+    let mut c = Val::of(Tok::RomFrom(0x0800_0080));
+    for k in 0..16 {
+        both(&mut c, rom(0x0800_0010 + 4 * k));
+    }
+    assert_eq!(c.toks.len(), 17);
+    assert!(both(&mut c, rom(0x0800_0090)));
+    assert_eq!(
+        c.toks.iter().copied().collect::<Vec<_>>(),
+        [Tok::RomFrom(0x0800_0010)]
+    );
+    // With none held, they don't.
+    let mut d = Val::of(Tok::RomFrom(0x0800_0080));
+    let mut many = Val::default();
+    many.toks = (0..20).map(|k| Tok::Rom(0x0800_0084 + 4 * k)).collect();
+    assert!(!both(&mut d, many));
 }
