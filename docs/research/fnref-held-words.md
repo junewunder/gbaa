@@ -386,8 +386,10 @@ the pile passed as a parameter and shifted, 269 at 0x0800582a. 1,260
 are held at 0x0801c6b8, the sign-extended byte load of an array by a
 halfword index, and 113 at two loads the roads name as a bounded ROM
 read, 64 KB from 0x087336f0 and from 0x087339f0, the first the same
-array: where a table ends.
-NIGHTMARE-PILE
+array: where a table ends. With `pile` off (3 minutes, 515 MB) 1,599
+are held, 1,396 of them at 0x08021c32, another byte array loaded so: the
+pile is worth at most 2,455 words there, and table ends most of the
+rest.
 
 **Emerald** (15,159 functions). The flow stops at its token bound after
 27,776 function runs (601 s, 2.4 GB, the same stop with the roads on),
