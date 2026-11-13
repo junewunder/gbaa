@@ -1251,7 +1251,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   globals, heap and VRAM free list, which the native programs replaced),
   the I/O registers the library models (display, `DISPSTAT`'s writable
   bits, `VCOUNT`, the sound registers with `SOUNDCNT_X`'s status, wave
-  RAM, the FIFOs' last stores, the timers, `IE`/`IF`/`WAITCNT`/`IME`),
+  RAM, the FIFOs' last stores, the timers, the serial port's, `IE`/`IF`/`WAITCNT`/`IME`),
   palette, VRAM, OAM, and each frame's audio (samples' count and hash):
   `runtime::hw` mixes with the play build's own sound path
   (native/hw-sound), so psg-square's FIFO A and PSG and direct-sound's
@@ -1294,7 +1294,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   and why), `[[jump]]` (an unresolved jump's targets as keys, its cases), `[[copy]]` (code
   the game copies to RAM that discovery's static copies don't have:
   `src`, `dst`, `len`, `roots` and why, as `just holes` prints its run's
-  copies; lifted at its RAM keys like a static copy, native/lift-ram-copies)
+  copies; lifted at its RAM keys like a static copy, native/lift-ram-copies), `[[takes]]` (`entry`, `sites`, why: the indirect calls, each by the address the report gives it, that reach a function reading one of r4-r11 as its caller left it; they pass it theirs, as every direct call and tail call does, and any other pointer call to it stops the program, native/metroid-entry-reads)
   and, at the top,
   `skip_fn_flow = "why"` (the function-address flow left out, saving
   the minutes it runs before its token bound stops it). A hard hole no stand-in
@@ -1337,8 +1337,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
   `agb/native-frame-locals`, `agb/native-ime-release`, `agb/native-bios-calls`,
   `agb/native-bios-more` (SoftReset too), `agb/native-tasks`, `agb/native-dma`, `agb/native-save` (SRAM),
-  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`
-  (`just agb-tests`; units native/lift-bios-calls, -bios-affine) on
+  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`, `agb/native-serial`
+  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers) on
   `units/<name>-600.toml` (the spike's is `units/native-spike.toml`,
   native-irq-hold's, native-ime-release's and native-bios-region's
   `-601`). First every program is lifted with `--bars`
@@ -1351,7 +1351,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `interrupt::disable` stand-in dropped) the lift and the build must fail
   naming `f_08002728`'s `mrs`, a critical section's (left hard); native-tasks likewise (a task's store; its yield's
   stack switch); native-dma's (0x08000180, `dma_set`'s `DMAxCNT`, a unit
-  more) and native-save's (0x080002ac, an SRAM `strb`) too.
+  more), native-save's (0x080002ac, an SRAM `strb`) and native-serial's (0x0800017c, `SIOCNT`) too.
   native-fallthrough, native-irq-hold, native-frame-locals and
   native-ime-release lifted with their `planted_flags`
   (`--fall-as-tail-call`, the old fall into another function;
@@ -1370,8 +1370,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   native 0x62 …)` and `(…-irq-at-waits: frame 2: EWRAM byte 0x020000c8:
   play 0x00, native 0x01 …)`, `(…-ime-at-waits: frame 2: EWRAM byte
   0x020000cc: play 0x01, native 0x00 …)`, `planted hard hole caught` and
-  `lift-check: passed`. Logs in `out/lift-*.txt`. About 10 minutes on
-  quack. Heavy: builds twenty-nine generated crates; gbaa-lift-check runs capped at 8 GB (its lifts in its scope; route-check in a 3 GB scope and the builds in their own).
+  `lift-check: passed`. Logs in `out/lift-*.txt`. About 30 minutes on
+  quack. Heavy: builds fifty-six generated crates; gbaa-lift-check runs capped at 8 GB (its lifts in its scope; route-check in a 3 GB scope and the builds in their own).
 
   `gbaa-lift --shadow-locals` (native/frame-locals; by hand, not part of
   the check) keeps every stack local in the frame's bytes too and prints
