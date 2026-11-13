@@ -54,7 +54,7 @@ fn plain_reg(op2: &Operand2, r: DReg) -> bool {
 /// after the instruction that sets lr to the address after the pc write
 /// (`mov lr, pc`, or agbcc's IRQ wrapper's `add lr, pc, #0`), and a lone
 /// second half of Thumb `bl`. Everything else is a jump: a tail jump
-/// leaves lr its caller's, so nothing right before it sets lr from pc.
+/// leaves lr its caller's, so nothing right before it sets lr there.
 pub fn classify(prog: &Program, insn: &Insn) -> Ctl {
     let p = prog.prev(insn.addr, insn.thumb);
     let after_mov_lr_pc = matches!(
