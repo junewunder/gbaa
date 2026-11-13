@@ -46,6 +46,9 @@ pub struct Page {
     pub keyboard: bool,
     /// The directions are four rows, not one of whole pads.
     pub apart: bool,
+    /// A native program's window ([`super::Menu::native`]): the shortcuts
+    /// it has nothing for ([`NOT_NATIVE`]) are left out.
+    pub native: bool,
     /// The focused row (of [`Page::rows`]) and the item in it.
     pub(super) focus: (usize, usize),
     /// The focus last scrolled into view.
@@ -166,6 +169,14 @@ const SHORTCUTS: [(u16, &str); 6] = [
     (gamepad::LOAD_STATE, "Load state"),
     (gamepad::REWIND, "Rewind (hold)"),
     (gamepad::CONSOLE, "Script console"),
+];
+/// The shortcuts a native program's window has nothing for: no save
+/// states, rewind or scripts.
+const NOT_NATIVE: [u16; 4] = [
+    gamepad::SAVE_STATE,
+    gamepad::LOAD_STATE,
+    gamepad::REWIND,
+    gamepad::CONSOLE,
 ];
 
 /// A button's name on the page.
@@ -345,6 +356,9 @@ impl Page {
             items: Vec::new(),
         });
         for (bit, name) in SHORTCUTS {
+            if self.native && NOT_NATIVE.contains(&bit) {
+                continue;
+            }
             binds(&mut rows, Target::Button(bit), name, ones(bit));
         }
         if !keys {
@@ -1446,5 +1460,36 @@ fn gba(ui: &egui::Ui, rect: Rect, m: &gamepad::Mapping, keys: bool, lit: Option<
             bit,
         );
         y += 15.0;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The shortcuts' rows on a page, by name.
+    fn shortcuts(p: &Page) -> Vec<String> {
+        p.rows(&Controls::default(), false)
+            .into_iter()
+            .filter_map(|r| match r.kind {
+                Kind::Binds {
+                    target: Target::Button(b),
+                    label,
+                    ..
+                } if SHORTCUTS.iter().any(|&(s, _)| s == b) => Some(label),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_native_window_leaves_out_states_rewind_and_scripts() {
+        let mut p = Page::default();
+        assert_eq!(shortcuts(&p).len(), SHORTCUTS.len());
+        p.native = true;
+        assert_eq!(
+            shortcuts(&p),
+            ["Fast-forward (hold)", "Fast-forward on/off"]
+        );
     }
 }

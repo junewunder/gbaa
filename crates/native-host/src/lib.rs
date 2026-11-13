@@ -11,9 +11,13 @@
 //!
 //! Without `--headless` the program opens gbaa-desktop's window
 //! (`desktop::window`: its keys, pads, sound, pacing and menu) and runs
-//! until the window closes. The menu's save states, rewind and netplay
-//! are the play build's: here they do nothing, and nothing keeps the
-//! game's save between runs.
+//! until the window closes. It keeps the game's save as a play build of
+//! the game does: `<name>.sav` in the game's folder
+//! (`desktop::native_saves`; the Save folders page moves it), loaded
+//! before the program starts, written once it settles and on closing,
+//! when it is also backed up. The menus leave out save states, rewind,
+//! scripts and netplay, which a native program hasn't got. Headless runs
+//! keep no save, so the checks' runs stay reset-clean.
 //!
 //! `--input` is gbaa-desktop's (`button@frame[+frames],...`), read by the
 //! same parser; `--frame-hashes` writes the same `frame N hash H` lines;
@@ -37,12 +41,14 @@ use std::process::ExitCode;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use desktop::sav_file::SavFile;
 use desktop::{Desktop, Script};
 use native_record::stop::{Stop, Why, functions_in};
 use native_record::{Frame as Record, Region, Writer};
 use runtime::Platform;
 use runtime::hw::{Exit, Host, Hw, Native};
 use runtime::platform::{Frame, HEIGHT, WIDTH};
+use runtime::save::Save;
 use runtime::sound::AudioChunk;
 
 /// The exit code when `--time-limit` stops the program (`timeout(1)`'s).
@@ -173,8 +179,9 @@ impl Host for Headless {
 
 /// gbaa-desktop's window as the front end: its keys and pads, its sound
 /// (which paces the program, or a frame clock when muted) and its menu,
-/// until the window closes.
-struct Windowed(Desktop);
+/// until the window closes; and the game's `.sav`, shared with
+/// `run_window`, which loads it and writes it out at the end.
+struct Windowed(Desktop, Rc<RefCell<Option<SavFile>>>);
 
 impl Host for Windowed {
     fn present(&mut self, frame: &Frame) -> Result<(), Exit> {
@@ -193,6 +200,14 @@ impl Host for Windowed {
 
     fn keys(&mut self) -> u16 {
         Platform::keys(&mut self.0)
+    }
+
+    /// Written once it has settled, as gbaa-desktop's window writes it.
+    fn save(&mut self, save: &mut Save) {
+        let mut f = self.1.borrow_mut();
+        if let Some(Err(e)) = f.as_mut().map(|f| f.frame(save)) {
+            eprintln!("save not written: {e}");
+        }
     }
 }
 
@@ -239,6 +254,10 @@ impl Host for AnyHost {
 
     fn keys(&mut self) -> u16 {
         self.0.keys()
+    }
+
+    fn save(&mut self, save: &mut Save) {
+        self.0.save(save);
     }
 }
 
@@ -329,7 +348,7 @@ pub fn main<G: Native<Host = AnyHost> + 'static>(
     main: fn(&mut G) -> Result<Infallible, Exit>,
 ) -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    match parse(&args).and_then(|o| run(o, guest, make, main)) {
+    match parse(&args).and_then(|o| run(name, o, guest, make, main)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("{name}: {e}");
@@ -397,8 +416,9 @@ fn record_end() -> Result<(), String> {
 }
 
 /// The program in gbaa-desktop's window, on the window's game thread,
-/// until the window closes.
+/// until the window closes, keeping the save of the game `name`.
 fn run_window<G: Native<Host = AnyHost> + 'static>(
+    name: &str,
     w: Window,
     input: Script,
     record: Option<PathBuf>,
@@ -406,6 +426,7 @@ fn run_window<G: Native<Host = AnyHost> + 'static>(
     main: fn(&mut G) -> Result<Infallible, Exit>,
 ) -> Result<(), String> {
     use desktop::{audio, fast, gamepad, room, window};
+    let (sav, saves) = desktop::native_saves(name)?;
     let o = window::Options {
         scale: w.scale,
         fullscreen: false,
@@ -420,19 +441,30 @@ fn run_window<G: Native<Host = AnyHost> + 'static>(
         deadzone_axes_apart: false,
         axis_deadzones: [None; 2],
         resume: false,
-        saves: Default::default(),
+        saves,
+        native: true,
     };
     window::run(o, move |screen| {
         record_to(record.as_ref())?;
         let gain = audio::volume_gain(audio::DEFAULT_VOLUME);
         let d = Desktop::window(screen, w.mute, gain).with_input(input);
-        let mut g = make(AnyHost(Box::new(Windowed(d))));
+        // Loaded once the program has made its chip, the kind it set.
+        let file = Rc::new(RefCell::new(None));
+        let mut g = make(AnyHost(Box::new(Windowed(d, file.clone()))));
+        let f = SavFile::open(&sav, &mut g.hw().save)?;
+        *file.borrow_mut() = Some(f);
         let Err(Exit) = main(&mut g);
+        file.borrow_mut()
+            .as_mut()
+            .expect("opened")
+            .flush(&mut g.hw().save)?;
+        desktop::back_up_save(&sav);
         record_end()
     })?
 }
 
 fn run<G: Native<Host = AnyHost> + 'static>(
+    name: &str,
     o: Options,
     guest: bool,
     make: impl FnOnce(AnyHost) -> Box<G> + Send + 'static,
@@ -447,7 +479,7 @@ fn run<G: Native<Host = AnyHost> + 'static>(
         return Err("--native-record: this build has no guest-layout RAM to record".into());
     }
     if let Some(w) = o.window {
-        return run_window(w, o.input, o.native_record, make, main);
+        return run_window(name, w, o.input, o.native_record, make, main);
     }
     record_to(o.native_record.as_ref())?;
     let host = Rc::new(RefCell::new(Headless {

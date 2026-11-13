@@ -12,6 +12,9 @@ struct Rec {
     frames: Vec<Box<Frame>>,
     stop_after: usize,
     keys: Vec<u16>,
+    /// The save chip's first byte at each [`Host::save`], and the frames
+    /// presented before it.
+    saves: Vec<(u8, usize)>,
 }
 
 impl Host for Rec {
@@ -24,6 +27,9 @@ impl Host for Rec {
     }
     fn keys(&mut self) -> u16 {
         self.keys.get(self.frames.len() - 1).copied().unwrap_or(0)
+    }
+    fn save(&mut self, save: &mut crate::save::Save) {
+        self.saves.push((save.data[0], self.frames.len()));
     }
 }
 
@@ -62,6 +68,7 @@ fn game(stop_after: usize) -> Box<Game> {
             frames: Vec::new(),
             stop_after,
             keys: Vec::new(),
+            saves: Vec::new(),
         }),
     })
 }
@@ -154,6 +161,17 @@ fn template_scene_from_fields_alone() {
     }
     // The scene never changes: every frame is the same picture.
     assert!(frames.iter().all(|fr| fr[..] == f[..]));
+}
+
+/// The host is handed the save chip at each V-blank, before the frame is presented.
+#[test]
+fn the_host_sees_the_save_before_each_present() {
+    let mut g = game(3);
+    g.hw.save.data[0] = 0x5A;
+    assert_eq!(wait_vblank(&mut *g), Ok(()));
+    g.hw.save.data[0] = 0xA5;
+    while wait_vblank(&mut *g).is_ok() {}
+    assert_eq!(g.hw.host.saves, [(0x5A, 0), (0xA5, 1), (0xA5, 2)]);
 }
 
 /// The play build's renderer, on the same scene stored at addresses
@@ -659,6 +677,7 @@ fn vblank_is_requested_before_the_present() {
             frames: Vec::new(),
             stop_after: 2,
             keys: Vec::new(),
+            saves: Vec::new(),
         }),
         seen: Seen(0),
     });
@@ -726,6 +745,7 @@ fn mem(stop_after: usize) -> Box<Mem> {
             frames: Vec::new(),
             stop_after,
             keys: Vec::new(),
+            saves: Vec::new(),
         }),
         ewram: std::vec![0; 0x4_0000],
     });
