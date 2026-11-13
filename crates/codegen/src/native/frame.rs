@@ -970,14 +970,14 @@ pub struct FromSummaries<'a> {
 impl Env for FromSummaries<'_> {
     fn params(&self, target: Option<u32>) -> u16 {
         // And what a callee takes of r4-r11 (`Summary::takes`): the lift
-        // passes it the caller's. A call through a pointer may reach any
-        // function that takes one (the holes file's `[[takes]]`).
+        // passes it the caller's. (A pointer call the holes file names
+        // passes them too, which these summaries can't know: the
+        // summary's run refuses a stack address there, `Sum::call`.)
         let takes = |s: &Summary| (s.may_take() as u16) << 4;
-        match target.map(|t| self.sums.get(t)) {
-            Some(Some(s)) if s.holes.is_empty() => s.params as u16,
-            Some(Some(s)) => 0xf | takes(s),
-            Some(None) => 0xf,
-            None => self.sums.by_entry.values().fold(0xf, |m, s| m | takes(s)),
+        match target.and_then(|t| self.sums.get(t)) {
+            Some(s) if s.holes.is_empty() => s.params as u16,
+            Some(s) => 0xf | takes(s),
+            None => 0xf,
         }
     }
 

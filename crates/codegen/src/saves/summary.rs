@@ -562,7 +562,12 @@ impl<'a> Sum<'a> {
                 Some(x) if !self.passing.replaced.contains(&c) => x.takes,
                 _ => 0,
             };
-            if takes != 0 {
+            // A stack address through a named pointer call: the frames
+            // (`native::frame`, made before the holes file is read) don't
+            // see it escape, so the call isn't one the lift passes at.
+            let frame = callee.is_none()
+                && entry_regs(takes).any(|n| matches!(s.regs[n as usize], V::Sp(_)));
+            if takes != 0 && !frame {
                 self.passes.insert((at, c));
             }
             for n in entry_regs(takes) {
