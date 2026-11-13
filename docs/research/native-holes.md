@@ -367,10 +367,10 @@ condition, a callee's or BIOS call's argument (`mov r0, r8; bl`), or a
 value returned in r0-r3 that a caller's own instruction reads (agbcc's
 `pop {r3}; mov r8, r3` leaves the entry r8 in r3, unread). The kinds:
 
-- `reads r4-r11 at entry` (hard): a use, in a function entered by a call
-  (`bl`, a complete indirect set, or a pointer: the key as a ROM word),
+- `reads r4-r11 at entry` (hard): a use, in a function entered through a pointer (a complete indirect set, or the key as a ROM word),
   whose `Regs::call` zeroes r4-r12. Not after a `bl` to a function that
   never returns: agb's panic paths, branched into with the caller's r6.
+- `takes r4-r11 from its callers` (soft, native/metroid-entry-reads): the same use where every call the lift prints passes the register (any other stops the program). A `bl` or tail call is the callee's extended entry with the caller's own; a caller that still has it as it came takes it in turn (`…, which 0x… takes`), up to one that set it, or to a pointer call, where it is hard again. The holes file's `[[takes]] entry, sites, why` names the indirect calls that reach such a function: they pass theirs, and its plain entry (`call_fn`'s) stops the program. Metroid's 0x08073ce5: r9 is the sprite updater's, three calls up and through its AI table (0x082b0cac or 0x8000001c by the loop), so no constant stand-in is exact.
 - `masks away r4-r11's entry bits` (soft): every bit cleared before any
   use, agbcc's word built byte by byte in an unset register.
 - `reads r4-r11 at entry, only jumped into` (soft): no `bl` or pointer

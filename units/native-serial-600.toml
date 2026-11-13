@@ -1,0 +1,34 @@
+# agb/native-serial for 600 frames with no input: the serial registers'
+# program of the native lifter's check (native/hw-serial-registers; `just
+# lift-check`), its lift (gbaa-lift) against the play build at --timing
+# native by route-check --native. What it draws: agb/native-serial/SCENE.md.
+rom = "$GBAA_DATA/agb/native-serial.gba"
+
+[[checkpoint]]
+name = "native-serial-600"
+frame = 600
+hash = "b0cefdd15001e46e"
+mgba_hash = "8d45278efae3c410"
+mgba_why = "mGBA 0.10.5's serial port with nothing plugged in isn't the play build's: it sets SIOCNT's SI bit in normal mode, ends an internal-clock transfer at once and raises its IRQ, forces multiplayer's bits 2-6, keeps RCNT's low four bits, and has its own JOYCNT and JOYSTAT bits; unused halfwords read open bus there, 0 here"
+# Our interpreter at --timing exact (`just mgba-diff`, 2026-11-13).
+# Known mGBA mismatch: mGBA 0.10.5 draws 8d45278efae3c410. Read from its
+# src/gba/sio.c and io.c and from both builds' `OUT` (mGBA's from a save
+# state), frames 10-33:
+# - SIOCNT: mGBA's dummy driver sets SI (bit 2) in the normal modes, and a
+#   start on the internal clock (bits 0 and 7) is cleared in the store, with
+#   the serial IRQ raised if bit 14 asks; in multiplayer mode it forces bits
+#   2-3 on and 4-6 off. The play build keeps the value stored and raises no
+#   IRQ (the program's count stays 0; mGBA's was 2 by frame 40).
+# - RCNT: mGBA keeps the low four bits (the pins' data) as they were.
+# - JOYCNT: mGBA stores all 16 bits outside JOY bus mode and acknowledges
+#   bits 0-2 in it; the play build keeps bits 0-2 and 6.
+# - JOYSTAT: a JOY_RECV load clears its bit 1 and a JOY_TRANS store sets
+#   bit 3 in mGBA, which in JOY bus mode takes only bits 4-5; 0x15A reads
+#   0 there. The play build keeps both halfwords as stored.
+# - The unused halfwords (0x12C, 0x12E, 0x138-0x13E, 0x144-0x14E, 0x15C,
+#   0x15E) read open bus in mGBA, 0 in the play build.
+# With those left out of the pixel (SIOCNT, the IRQ count, RCNT's low four
+# bits, JOYCNT, JOYSTAT and the unused halfwords masked in `colour`), mGBA
+# and our interpreter both draw 67ad2572c48f1e9b at frame 600 (2026-11-13),
+# so they are the whole difference. Which of them the play build should
+# take from mGBA is native/serial-no-partner-as-mgba.
