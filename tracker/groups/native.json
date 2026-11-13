@@ -1208,6 +1208,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-13T06:51:25Z",
+          "by": "ae52d6ac",
+          "text": "Correction, 2026-11-13: with all four kinds of memory read off affine is 39, not 55 (a shell slip set one switch). Loads that read everything + pointer-anywhere reads off together: 41. See docs/research/fnref-held-words.md and {unit:native/fnref-frame-pointers}."
+        },
+        {
           "at": "2026-11-13T06:12:23Z",
           "by": "ae52d6ac",
           "text": "2026-11-13: no single read holds the words (docs/research/fnref-held-words.md): affine stays 55 with every mixing memory read off. Context alone won't lower fn_words_not_proven; pick a direct measure. Its code is on branch unit/native/fnref-unknown-addrs."
