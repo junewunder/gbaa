@@ -445,7 +445,7 @@ address left there is followed on past the call.
 |---|---|---|---|
 | `SoftReset` 0x00 (doesn't return), `Halt` 0x02, `Stop` 0x03, `SoundDriverVSyncOff` 0x28 | | | |
 | `RegisterRamReset` 0x01, `SoundBias` 0x19 | r0 | | |
-| `IntrWait` 0x04 | r0 r1 | r0 | |
+| `IntrWait` 0x04 | r0 r1 | | r0 |
 | `VBlankIntrWait` 0x05 | | r0 r1 | |
 | `Div` 0x06 | r0 r1 | r0 r1 r3 | |
 | `Sqrt` 0x08 | r0 | r0 | |
@@ -470,25 +470,38 @@ What decided the columns:
   copies and LZ77 return at once on a source in the BIOS (so `CpuSet`'s
   r3 is 0x170 or as it came), a halfword `CpuSet` moves neither
   pointer, the affine sets leave r0 and r1 on a count of 0, `ArcTan2`
-  leaves r1 on an axis. Every register in "sets" that the call doesn't
-  read gets a constant or a number made from the ones it does.
+  leaves r1 on an axis, and the play build's `IntrWait` leaves r0 when
+  the CPU comes out of the wait with IRQs off in the CPSR (the lifted
+  one waits on). Every register in "sets" that the call doesn't read
+  gets a constant or a number made from the ones it does.
 - **`CpuFastSet`'s r3 is data**: the fill's word, or the first word of
   the last block it copied. So after the call r3 also holds what the
   copy read: the ROM words the flow already sends to the pile, or, from
   a source not in ROM, what a load the run can't place reads.
-- **Where the console's BIOS overwrites what these leave** (r2 and r3
-  in the waits, by its own code; r1 and r3 in most), the address is
-  kept. The lifted program and the play build keep it, and kept is the
-  safe side: the address is followed further than it lives on a
-  console, and every use it meets is still judged.
+- **Where the console's BIOS overwrites what these leave** (r1 and r3
+  are its scratch in most calls; r2 its dispatcher restores,
+  `runtime/src/bios/decomp.rs` on `CpuFastSet`), the address is kept.
+  The play build keeps it, and kept is the safe side: the address is
+  followed further than it lives on a console, and every use it meets
+  is still judged. The lifted program keeps it too inside a function
+  and through a call that passes all four registers; a callee the
+  summaries gave a shape returns 0 in a register a `swi` in it left
+  alone (`saves/summary.rs` counts every one of r0 to r3 as set or
+  clobbered by a `swi`), so there the flow holds an address the lift
+  has lost. That is older than this rule, and the same side: more
+  followed than is there.
 - **A wait runs the IRQ handler**, which the BIOS's stub calls with
   r0 to r3 saved around it, and the lifted one as a function of its
   own: the waiting function's registers are as the call left them.
 
-A test runs each of the 22 in the play build's BIOS from two sets of
-registers and holds the table to it: a register outside "sets" and "may
-set" comes back unchanged, and changing one outside "reads" changes no
-other register and no RAM.
+A test runs 21 of the 22 (not `SoftReset`) in the play build's BIOS
+from three sets of registers and holds the table to it: a register
+outside "sets" and "may set" comes back unchanged, and changing one
+outside "reads" changes no other register and no byte of EWRAM or
+IWRAM. It doesn't reach a decompressor's or `MultiBoot`'s own work or
+a wait's end, and can't tell "sets" from "may set": those rows rest on
+the reading, and on the lift check's native-bios programs, which hold
+the lifted calls to the play build's on real data.
 
 Left as it was, and filed (`native/fnref-bios-ram-copies`): the flow
 follows a BIOS copy only out of ROM. One out of RAM moves no address,
@@ -497,7 +510,7 @@ and what the other calls read through a pointer is not looked at.
 **Counts.** Metroid (the lift alone, about a minute, peak 312 MB):
 `fn_words_proven` 37 to 466, `fn_words_not_proven` 767 to 338, as the
 switch measured; `call_fn_calls` 70, `call_fn_complete` 68 and
-`call_fn_four_complete` 37 as before. Keeping r2 and r3 past the waits
+`call_fn_four_complete` 37, as on main today. Keeping r2 and r3 past the waits
 and r3 past the copies held no word the switch had proven.
 
 The agb programs each had one word at stake, 0x08000178, the main

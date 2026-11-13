@@ -3288,13 +3288,15 @@ struct BiosRegs {
 /// (`native.rs`, `Plan::Swi`) and the prelude's routines, which are the
 /// play build's (`runtime::bios`), checked against it call by call. What
 /// it reads is either's (`MultiBoot`: the lifted one reads nothing). Where
-/// the console's BIOS overwrites a register these leave (r2 and r3 in the
-/// waits, r1 and r3 in most), the address is kept: it is followed further
-/// than it lives, never less. A register is only `sets` where every path
-/// writes it: the copies and the decompressors return early on a source in
-/// the BIOS, the affine sets leave r0 and r1 on a count of 0, `ArcTan2`
-/// r1 on an axis. `SoftReset` doesn't return: the code after it is
-/// followed with the registers as they were.
+/// the console's BIOS overwrites a register these leave (r1 and r3 are its
+/// scratch in most calls; r2 its dispatcher restores), the address is
+/// kept: it is followed further than it lives, never less. A register is
+/// only `sets` where every path of both writes it: the copies and the
+/// decompressors return early on a source in the BIOS, the affine sets
+/// leave r0 and r1 on a count of 0, `ArcTan2` r1 on an axis, and the play
+/// build's `IntrWait` r0 when the CPU leaves the wait with IRQs off.
+/// `SoftReset` doesn't return: the code after it is followed with the
+/// registers as they were.
 ///
 /// Any other call (one a native build can't make, a hard hole:
 /// [`analysis::holes::NATIVE_BIOS`]), and a number that is no call, reads
@@ -3309,8 +3311,9 @@ fn bios_regs(n: Option<u8>) -> BiosRegs {
         Some(0x00 | 0x02 | 0x03 | 0x28) => (0, 0, 0),
         // RegisterRamReset, SoundBias: r0 the flags, the level.
         Some(0x01 | 0x19) => (R0, 0, 0),
-        // IntrWait: r0 the flags it found.
-        Some(0x04) => (R0 | R1, R0, 0),
+        // IntrWait: r0 the flags it found (the play build's, left with
+        // IRQs off in the CPSR, leaves r0).
+        Some(0x04) => (R0 | R1, 0, R0),
         // VBlankIntrWait: IntrWait(1, 1).
         Some(0x05) => (0, R0 | R1, 0),
         // Div: quotient, remainder, the quotient's magnitude.
