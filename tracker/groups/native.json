@@ -2031,13 +2031,10 @@
       "detail": "From {unit:native/fnref-unknown-addrs} (docs/research/fnref-held-words.md): on our agb test programs the function words are held by Rust shapes (closures in frames, core::fmt argument arrays, a heap pile), and three units made the flow more exact without moving the count. agb is test input, not the target; nobody has looked at a C game. On main, run the function-address flow on Metroid (it settles) and say, for its function words not proven, what holds them: the count by first road, as that note does for affine (GBAA_FNREF_TRACE; the note's GBAA_FNREF_WATCH is on that unit's branch, bring it over alone if that is cheap). Done when docs/research/fnref-held-words.md has a Metroid section with the counts (proven, never read, not proven by road) and says which of the filed function-flow follow-ups a C game needs and which only agb does; just check passes. Addresses and counts only: nothing game-derived in the tracked note.",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "afebd1b0",
-        "session": "afebd1b0-9976-4586-b709-eacdc536b0e5",
-        "host": "quack",
-        "pid": 723464,
-        "start": "999516",
-        "at": "2026-11-13T07:32:03Z"
+        "at": "2026-11-13T09:43:58Z",
+        "evidence": "docs/research/fnref-held-words.md has 'A C game: Metroid, measured on main': 804 function words, 37 proven, 33 never read, 734 held, by first road (429 left in r0-r3 at VBlankIntrWait's swi, 99 an adds #0 move, 77 past a table's end, 66 struct fields, 39 a compare's carry, 13 pile and cells, 11 other). GBAA_FNREF_OFF=bios alone: 37 to 466 proven. A C game needs the swi clause of the registers unit and none of frames, the object split, heap sites, context or the branch merge; five follow-ups filed (bios-reads, table-ends, gcc-moves, table-fields, pile-globals). just check passes (long job fnref-c-words-check3, exit 0, on the tree merged with adfa45ee; leak check again on the final tree). Reviewed by a fresh subagent (fnref-c-words-review-7q3k), its findings fixed. PR https://github.com/junewunder/gbaa/pull/10"
       },
       "round": "2026-11-13T07:32:03Z"
     },
