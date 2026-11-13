@@ -2223,15 +2223,22 @@
       "title": "A native program's window keeps the game's save",
       "detail": "Since 5bb6efdc a native program run without --headless opens gbaa-desktop's window (crates/native-host, Windowed). Nothing writes the save chip's bytes to a file or reads them back, so every run starts from an empty save. The window's menu still offers save states, rewind and netplay, which do nothing here: keep the save as gbaa-desktop does (the .sav in the game's folder), and hide or wire the menu rows that don't apply. Check: save in Metroid's native build, close the window, reopen, and the file is there.",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "a1e87159",
-        "session": "a1e87159-18d0-4224-9c3f-ac8a61407e41",
-        "host": "quack",
-        "pid": 1860601,
-        "start": "4634915",
-        "at": "2026-11-13T18:02:06Z",
+        "at": "2026-11-13T18:05:53Z",
+        "evidence": "Review fix made (doc comments in crates/runtime/src/hw/tests.rs back on their tests); just check passes after merging main. Earlier check stands: Metroid native window wrote saves/metroid/metroid.sav, closing flushed it, reopening read it back (e3fde1f2, same as gbaa-desktop --headless --timing exact --save); native menu hides save states, rewind, netplay.",
         "branch": "unit/native/window-keeps-save",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-13T18:05:53Z",
+          "by": "a1e87159",
+          "host": "quack",
+          "pid": 1860601,
+          "start": "4634915",
+          "beats": true,
+          "session": "a1e87159-18d0-4224-9c3f-ac8a61407e41",
+          "lane": "quack/3"
+        }
       },
       "notes": [
         {
