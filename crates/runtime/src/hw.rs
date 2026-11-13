@@ -93,8 +93,17 @@
 //! priced there), a special start aimed at a FIFO feeding it
 //! ([`Hw::fifo_dma`]), the IRQ at the end.
 //!
-//! What isn't here yet: [`Dma::hblank_to`]'s price on the clock, serial,
-//! the EEPROM's DMA, keeping the save in a `.sav`.
+//! **The serial port** has no partner, as the play build's has none off a
+//! link hub: its registers ([`SERIAL_START`] to [`SERIAL_END`]: `SIODATA`,
+//! `SIOCNT`, `RCNT`, the JOY bus's, and `KEYCNT` among them) are kept in
+//! the sound's I/O block through the play build's masks and read back as
+//! written. A transfer started in `SIOCNT` never ends: the start bit stays
+//! set and no serial IRQ is requested, as in the play build (a keypad IRQ
+//! likewise: `KEYCNT` is only kept).
+//!
+//! What isn't here yet: [`Dma::hblank_to`]'s price on the clock, a link
+//! partner, the EEPROM's DMA. Keeping the save in a `.sav` is the host's
+//! ([`Host::save`]: the native window's, crates/native-host).
 
 pub mod bios;
 pub mod dma_regs;
@@ -137,6 +146,10 @@ pub trait Host {
     /// The keys held now, as [`key`] bits (1 = pressed), latched right
     /// after [`Host::present`] for the frame that follows.
     fn keys(&mut self) -> u16;
+    /// The save chip, at each V-blank just before [`Host::present`]: for
+    /// a host that keeps it in a file (the window's `.sav`). A host that
+    /// keeps none leaves it.
+    fn save(&mut self, _save: &mut crate::save::Save) {}
 }
 
 /// A [`crate::Platform`] as a [`Host`] that never stops.
@@ -354,8 +367,9 @@ impl<G> Copy for FifoDma<G> {}
 /// The sound: the play build's own sound path ([`crate::sound`]), so the
 /// two builds mix with one mixer. The sound and timer registers live in
 /// an I/O block of the play build's ([`Io`]: `SOUND1CNT_L` at `0x60` to
-/// the FIFOs at `0xA4`, the timers at `0x100`-`0x10F`; nothing else of it
-/// is used), stored and read as the play build stores and reads them, with
+/// the FIFOs at `0xA4`, the timers at `0x100`-`0x10F`; the DMA and serial
+/// registers are kept there too), stored and read as the play build stores
+/// and reads them, with
 /// the clock ([`Hw::now`]); the PSG, the FIFOs and the mixer are
 /// [`crate::sound::Sound`], handed to [`Host::audio`] at each V-blank;
 /// the FIFOs' DMA is [`FifoDma`] ([`Hw::fifo_dma`]).
@@ -403,6 +417,11 @@ pub const SOUND_END: u32 = 0x0A8;
 /// The timers' offsets.
 pub const TIMERS_START: u32 = 0x100;
 pub const TIMERS_END: u32 = 0x110;
+/// The serial port's registers' offsets, `SIODATA32` to past `JOYSTAT`:
+/// `SIOCNT`, `RCNT` and the JOY bus's, with `KEYCNT` (`KEYINPUT`, in
+/// their middle, is the keys').
+pub const SERIAL_START: u32 = reg::SIOMULTI0;
+pub const SERIAL_END: u32 = 0x160;
 
 /// The sound path over the registers and mixer alone: for a store, which
 /// never refills a FIFO (every overflow up to the clock was walked when
@@ -640,9 +659,11 @@ impl<G: Native> Hw<G> {
     /// registers, `DISPSTAT`, the sound registers and FIFOs, the DMA
     /// registers (an immediate channel switched on runs at [`write_dma`]
     /// or the next sync: this can't reach the program's memory), the
-    /// timers, `IE`, `IF` (1s acknowledge) and `IME`; panics on a register
-    /// the library doesn't model yet (serial), which a lifted program must
-    /// not reach silently.
+    /// timers, the serial port's registers and `KEYCNT` (kept, through the
+    /// play build's masks: nothing answers a transfer), `IE`, `IF` (1s
+    /// acknowledge) and `IME`; panics on a register the library doesn't
+    /// model yet (`POSTFLG`, `HALTCNT`), which a lifted program must not
+    /// reach silently.
     pub fn write16(&mut self, o: u32, v: u16) {
         match o {
             reg::DISPSTAT => {
@@ -657,6 +678,9 @@ impl<G: Native> Hw<G> {
             _ if o < crate::video::REGS_END => self.ppu.write16(o, v),
             _ if Sound::<G>::has(o) => self.sound_store(o, 2, v as u32),
             _ if is_dma(o) => self.dma_store(o, 2, v as u32),
+            // No partner: kept as the play build's bus keeps them off a
+            // link, the start bit as written and no IRQ.
+            _ if is_serial(o) => self.sound.io.write16(o, v),
             // Bit 15 is the cartridge type: read-only, 0 (GBA).
             reg::WAITCNT => self.waitcnt = v & 0x7FFF,
             reg::IE => self.irq.enable = v & 0x3FFF,
@@ -708,7 +732,7 @@ impl<G: Native> Hw<G> {
             reg::VCOUNT => self.line,
             reg::KEYINPUT => self.keys.keyinput(),
             _ if o < crate::video::REGS_END => self.ppu.read16(o),
-            _ if Sound::<G>::has(o) || is_dma(o) => self.sound.io.read16(o),
+            _ if Sound::<G>::has(o) || is_dma(o) || is_serial(o) => self.sound.io.read16(o),
             reg::WAITCNT => self.waitcnt,
             reg::IE => self.irq.enable,
             reg::IF => self.irq.flags,
@@ -726,7 +750,7 @@ impl<G: Native> Hw<G> {
             reg::DISPSTAT => self.dispstat() & 0xFF38,
             reg::VCOUNT => self.line,
             _ if o < crate::video::REGS_END => self.ppu.raw16(o),
-            _ if Sound::<G>::has(o) || is_dma(o) => self.sound.io.raw16(o),
+            _ if Sound::<G>::has(o) || is_dma(o) || is_serial(o) => self.sound.io.raw16(o),
             reg::KEYINPUT => self.keys.keyinput(),
             reg::WAITCNT => self.waitcnt,
             reg::IE => self.irq.enable,
@@ -745,6 +769,11 @@ impl<G: Native> Hw<G> {
 /// Whether `o` is a DMA register ([`dma_regs`]).
 fn is_dma(o: u32) -> bool {
     (dma_regs::DMA_START..dma_regs::DMA_END).contains(&o)
+}
+
+/// Whether `o` is one of the serial port's registers, or `KEYCNT`.
+fn is_serial(o: u32) -> bool {
+    (SERIAL_START..SERIAL_END).contains(&o) && o != reg::KEYINPUT
 }
 
 /// Run the handlers of what's requested and enabled: the master handler
@@ -939,6 +968,7 @@ fn line_event<G: Native>(g: &mut G) -> Result<bool, Exit> {
         f(g);
     }
     let hw = g.hw();
+    hw.host.save(&mut hw.save);
     let shown = hw.host.present(&hw.renderer.frame);
     hw.keys.held = hw.host.keys() & key::ALL;
     shown?;

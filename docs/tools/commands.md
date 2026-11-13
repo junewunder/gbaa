@@ -114,7 +114,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   docs/research/native-holes.numbers.md` also writes the table as that
   generated numbers file (header, date, commit); `--from DIR` runs
   nothing and renders DIR's saved `summary.toml` (with `--write-doc`, the
-  file), for a run already made at the commit wanted.
+  file), for a run already made at the commit wanted. The `first stop` column, beside `hard`, is each game's first stop as its last `just lift` recorded it (`LIFTS/lift-<name>/metrics.toml`'s `[run]`; `--lifts LIFTS`, default `out`), kept in `summary.toml`; `-` with no lift there. It isn't rerun: lift the game first (a run made at another commit says `(lifted at COMMIT)`).
 - `just softfloat-check ROM [--cases N] [--pins]`
   (`gbaa-softfloat-check`, `crates/hole-report/src/bin/softfloat_check.rs`):
   the runtime's stand-ins for libgcc's `__muldf3` and `__divdf3`
@@ -620,10 +620,10 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   complete callee set as calling exactly those
   (`codegen::saves::summarize_sets`; unit `native/indirect-call-args`),
   printing the counts without the sets too. About 5 s on an agb program;
-  on Emerald the flow didn't finish in 35 minutes (killed at 6 GB, then
-  stopped at 8 GB under a 16 GB cap), and after `native/fnref-flow-scale`
-  it was killed at a 14 GB cap in 5 minutes (2026-11-07):
-  `native/fnref-flow-emerald`'s work.
+  on Emerald (`just long start NAME --mem 4G`; 2026-11-13) it no longer
+  stops at its token bound (24M held of 48M, 1.5 GB), but a round reruns
+  15,000 functions in 2 to 10 minutes and seven hadn't settled it: no set
+  counts as complete yet: `native/fnref-flow-emerald`'s work.
   fn-diff's summary line gives the same count and
   how many picks call a proven function. Emerald, `just fn-diff ROM 2000
   --exact` (2026-10-27): every entered function picked, 270, 591 states,
@@ -1251,7 +1251,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   globals, heap and VRAM free list, which the native programs replaced),
   the I/O registers the library models (display, `DISPSTAT`'s writable
   bits, `VCOUNT`, the sound registers with `SOUNDCNT_X`'s status, wave
-  RAM, the FIFOs' last stores, the timers, `IE`/`IF`/`WAITCNT`/`IME`),
+  RAM, the FIFOs' last stores, the timers, the serial port's, `IE`/`IF`/`WAITCNT`/`IME`),
   palette, VRAM, OAM, and each frame's audio (samples' count and hash):
   `runtime::hw` mixes with the play build's own sound path
   (native/hw-sound), so psg-square's FIFO A and PSG and direct-sound's
@@ -1285,7 +1285,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   native/ram-globals), its registers locals, blocks a `loop { match }` over
   local labels, calls Rust calls; then the recipe builds it into
   `target/recompiled` (`gbaa-native-<name>`, the native programs' headless
-  flags, `crates/native-host`). It reads `holes/<name>.toml` when there is
+  flags or, with none, gbaa-desktop's window to play in: `--scale N`, `--mute`; it keeps the game's `.sav` in `saves/<name>/` as the play build does, and its menus leave out save states, rewind, scripts and netplay; `crates/native-host`). It reads `holes/<name>.toml` when there is
   one, else `mods/<name>/holes.toml` (a commercial game's, private: its
   stand-ins are ports of the game's code); `<name>` is `--name`'s when
   given (a file name with spaces: `just lift "…/Metroid - Zero Mission
@@ -1294,12 +1294,12 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   and why), `[[jump]]` (an unresolved jump's targets as keys, its cases), `[[copy]]` (code
   the game copies to RAM that discovery's static copies don't have:
   `src`, `dst`, `len`, `roots` and why, as `just holes` prints its run's
-  copies; lifted at its RAM keys like a static copy, native/lift-ram-copies)
+  copies; lifted at its RAM keys like a static copy, native/lift-ram-copies), `[[takes]]` (`entry`, `sites`, why: the indirect calls, each by the address the report gives it, that reach a function reading one of r4-r11 as its caller left it; they pass it theirs, as every direct call and tail call does, and any other pointer call to it stops the program, native/metroid-entry-reads; `sites = []` for code only jumped into, which no pointer call reaches, native/nightmare-entry-reads)
   and, at the top,
   `skip_fn_flow = "why"` (the function-address flow left out, saving
   the minutes it runs before its token bound stops it). A hard hole no stand-in
   covers (CPU state, an unresolved jump, a BIOS call the prelude lacks, an
-  undefined instruction, a jump to no code, a summary that returns r4-r11
+  undefined instruction other than a compiler's trap (`udf #255` and the like: a `panic!` and a line of the report), a jump to no code, a summary that returns r4-r11
   or sp changed) fails the lift, naming each, and the build (a
   `compile_error!` each). `report.txt` lists the soft holes and ends
   with the metrics as `name value` lines (`codegen::native::metrics`):
@@ -1327,7 +1327,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   hard hole and wrong store; `--fall-as-tail-call` prints a fall into
   another function's entry as the old tail call (r4-r12 and the flags
   zeroed, native/lift-fallthrough), the fallthrough control. About 6 s to lift, 15 s-2 min to build.
-  The lift runs capped at 16 GB, no swap (a commercial game's needs several).
+  The lift runs capped at 16 GB, no swap (a commercial game's needs several). Last, the first stop (native/native-first-stop; `codegen::native::first_stop`): `gbaa-first-stop OUT` (alone: `just first-stop OUT [--frames N] [--time-limit SECONDS] [--bin FILE] [--not-built]`) runs the built program `--headless --frames 600 --time-limit 120` in its own 3 GB scope, stderr in `OUT/first-stop.log`, and writes how far it got to `OUT/metrics.toml` (a `[run]` table: `frames_run`, `frames_asked`, `stop`, `what`, `detail`, `functions`) and the end of `report.txt` (the same, then `frames_run N`, `stop KIND`), printing `gbaa-first-stop: NAME: 600 of 600 frames, no stop`, or the stop: `0 of 600 frames, unmodelled-register 0x04000134 RCNT` and under it the panic's message and place and the lifted functions on the stack, innermost first (from the panic's backtrace, which the program prints as its stop line, `native_record::stop`; an inlined function doesn't show and no guest pc is kept). Kinds: `none`, `not-built` (the build failed: `didn't build: N hard holes`), `unmodelled-register` (`Hw::write16`/`read16`), `no-memory` and `no-function` (the prelude's), `panic`, `time-limit` (no stop within SECONDS: a loop that reaches no frame), `killed` (a signal; 9 is the cap's), `failed`. A lift with hard holes is `not-built` whatever binary an older lift left; a build that failed with none (refused for RAM, killed, code that doesn't compile) records no run; a binary older than OUT's sources is refused. `[run]`'s `commit` is the commit the run was made at. A stop is a finding: the recipe still exits 0 if the lift and build did. A new lift clears the `[run]` table until it is run again.
 - `just lift-check [--only NAME]` (native/lift-stage-a, native/lift-bars):
   the lifter's check, `gbaa-lift-check` driven by
   `crates/codegen/lift-check.toml`: one table per program (`rom` under
@@ -1337,8 +1337,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
   `agb/native-frame-locals`, `agb/native-ime-release`, `agb/native-bios-calls`,
   `agb/native-bios-more` (SoftReset too), `agb/native-tasks`, `agb/native-dma`, `agb/native-save` (SRAM),
-  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`
-  (`just agb-tests`; units native/lift-bios-calls, -bios-affine) on
+  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`, `agb/native-serial`, `agb/native-irq-wrapper` (both its IRQ wrappers lifted, their `msr` and `mrs` run)
+  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers, native/lift-irq-wrapper-tail) on
   `units/<name>-600.toml` (the spike's is `units/native-spike.toml`,
   native-irq-hold's, native-ime-release's and native-bios-region's
   `-601`). First every program is lifted with `--bars`
@@ -1347,11 +1347,11 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   --native` runs them for 600 frames, capped at 3 GB, with no `--replaced`
   list: everything but the stack and the code copies is compared. The
   spike lifted with its `planted_store` (0x08000186, the V-blank handler's
-  frame count) must be caught, and with its `planted_hole` (agb's IRQ
-  wrapper's stand-in dropped) the lift and the build must fail naming
-  `f_03000000`'s `mrs`; native-tasks likewise (a task's store; its yield's
+  frame count) must be caught, and with its `planted_hole` (portable_atomic's
+  `interrupt::disable` stand-in dropped) the lift and the build must fail
+  naming `f_08002728`'s `mrs`, a critical section's (left hard); native-tasks likewise (a task's store; its yield's
   stack switch); native-dma's (0x08000180, `dma_set`'s `DMAxCNT`, a unit
-  more) and native-save's (0x080002ac, an SRAM `strb`) too.
+  more), native-save's (0x080002ac, an SRAM `strb`), native-serial's (0x0800017c, `SIOCNT`) and native-irq-wrapper's (0x080001f4, the wrapper's `IE` put back after its handler call: `frame 33: I/O byte 0x04000200`) too.
   native-fallthrough, native-irq-hold, native-frame-locals and
   native-ime-release lifted with their `planted_flags`
   (`--fall-as-tail-call`, the old fall into another function;
@@ -1370,8 +1370,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   native 0x62 …)` and `(…-irq-at-waits: frame 2: EWRAM byte 0x020000c8:
   play 0x00, native 0x01 …)`, `(…-ime-at-waits: frame 2: EWRAM byte
   0x020000cc: play 0x01, native 0x00 …)`, `planted hard hole caught` and
-  `lift-check: passed`. Logs in `out/lift-*.txt`. About 10 minutes on
-  quack. Heavy: builds twenty-nine generated crates; gbaa-lift-check runs capped at 8 GB (its lifts in its scope; route-check in a 3 GB scope and the builds in their own).
+  `lift-check: passed`. Logs in `out/lift-*.txt`. About 30 minutes on
+  quack. Heavy: builds sixty generated crates; gbaa-lift-check runs capped at 8 GB (its lifts in its scope; route-check in a 3 GB scope and the builds in their own).
 
   `gbaa-lift --shadow-locals` (native/frame-locals; by hand, not part of
   the check) keeps every stack local in the frame's bytes too and prints
@@ -1621,8 +1621,8 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   docs/save-locations-design.md) is `saves/NAME/` in gbaa's data dir:
   `$XDG_DATA_HOME/gbaa` or `~/.local/share/gbaa` on Linux and the Deck,
   `~/Library/Application Support/gbaa` on macOS, `%APPDATA%\gbaa` on
-  Windows; NAME is the game's name (a build's baked-in `--name`, else the
-  ROM's file name, lower case, dashes for the rest). On a game's first run
+  Windows; NAME is the game's name (a build's or a lift's `--name`, else
+  the ROM's file name, lower case, dashes for the rest). On a game's first run
   with none of its files in the folder, the window copies in the
   `ROM.sav`, `ROM.state1`-`4`, `ROM.resume` and `.resume.old` beside the
   ROM (a build's own: `NAME.gba` beside the binary), renamed to NAME,

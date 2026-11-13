@@ -1170,6 +1170,65 @@
       "at": "2026-11-13T04:48:41Z",
       "scope": ["group:native"],
       "replaces": "d/stage-b-sprint-2026-11-01-one-unit-at-a-time"
+    },
+    {
+      "id": "d/a-native-stop-names-functions-from-the",
+      "title": "A native stop names functions from the backtrace; no guest pc yet",
+      "why": "Each built native game runs headless; report where it stops ({unit:native/native-first-stop}): the card asks for the guest function and pc when known. Lifted code keeps no pc, so the stop line gives the lifted functions the panic's backtrace names (innermost first; one inlined into its caller doesn't show). A pc is filed as {unit:native/first-stop-guest-pc}. A stop doesn't fail just lift; a build that failed with no hard hole records no run (it may only have been refused or killed).",
+      "by": "3d525e2f",
+      "at": "2026-11-13T06:57:03Z",
+      "scope": ["native/native-first-stop"]
+    },
+    {
+      "id": "d/a-direct-call-passes-the-r4-r11-its-callee",
+      "title": "A direct call passes the r4-r11 its callee reads at entry; a pointer call only where the holes file names it",
+      "why": "From {unit:native/metroid-entry-reads}: Metroid's save writer 0x08073ce5 stores the top of its caller's r9; r9 is the sprite updater's, three calls up through its AI table, 0x082b0cac or 0x8000001c by the loop, so no constant stand-in is exact. The summaries now give each function what it takes (Summary::takes); a bl or tail call is the callee's x_ entry with the caller's own registers, and a caller that still has one as it came takes it in turn. Such a reader is soft (takes r4-r11 from its callers); one a pointer may call stays hard unless the holes file's [[takes]] names the indirect calls that reach it, which then pass theirs. A taker's plain entry (call_fn's, a stand-in's) panics, so nothing runs it on zeroes: exact or a named stop. An entry value only returned in r0-r3 is not passed and stays as it was.",
+      "by": "8814ddd6",
+      "at": "2026-11-13T07:50:24Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/prelude-bar-1131-to-1137-registerramreset-s",
+      "title": "Prelude bar 1131 to 1137: RegisterRamReset's serial flag",
+      "why": "From {unit:native/hw-serial-registers}: the prelude's register_ram_reset now resets the serial registers on flag 0x20 as the play build's does (7 lines added, 1 doc line less: 6 net), so lines_prelude rose from 1131 to 1137 in every program's table of crates/codegen/lift-check.toml. Hand-written runtime code, not lifted output. The native check stays green: just lift-check passed whole, 15 programs with 0 differences, every planted fault caught.",
+      "by": "34d57864",
+      "at": "2026-11-13T08:10:34Z",
+      "scope": ["native/hw-serial-registers"],
+      "until": "2026-11-14T05:00:00Z"
+    },
+    {
+      "id": "d/prelude-bar-plus-6-registerramreset-s-serial",
+      "title": "Prelude bar plus 6: RegisterRamReset's serial flag",
+      "why": "From {unit:native/hw-serial-registers}: the prelude's register_ram_reset now resets the serial registers on flag 0x20 as the play build's does (7 lines added, 1 doc line less: 6 net). lines_prelude is 1201 in every table of crates/codegen/lift-check.toml: main's 1195 (after the reset and IRQ-wrapper msr work) plus these 6; before that merge it was 1131 to 1137. Hand-written runtime code, not lifted output. just lift-metrics measures 0 over, 0 under; the native check stays green (just lift-check passed whole, 15 programs, 0 differences, every planted fault caught).",
+      "by": "34d57864",
+      "at": "2026-11-13T08:54:00Z",
+      "scope": ["native/hw-serial-registers"],
+      "replaces": "d/prelude-bar-1131-to-1137-registerramreset-s",
+      "until": "2026-11-14T05:00:00Z"
+    },
+    {
+      "id": "d/a-compiler-s-trap-lifts-as-a-named-stop-not-a",
+      "title": "A compiler's trap lifts as a named stop, not a hard hole",
+      "why": "From {unit:native/lift-undefined-insns}: 46 of the 47 undefined-instruction holes in moonbeam, Rogue and Imperium are GCC's udf #255 ending a path it proved can only crash. gbaa-lift knows a trap by its encoding alone (Thumb 0xdeff/0xdefe, ARM 0xe7ffdefe/0xe7f000f0, as discovery's deliberate does) and prints a panic! naming the address, listed in the report; the play build faults there too. Data read as code that held one of these words would be a named stop, not a hole: exact or a named stop, as a taker's plain entry. The hard_holes bars are untouched (0); what counts as a hard hole is narrower by this one kind, and the traps are a report line, not a metric.",
+      "by": "7e93e2be",
+      "at": "2026-11-13T11:45:22Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/a-context-save-takes-nothing-a-broken-taker",
+      "title": "A context save takes nothing; a broken taker chain's hole is its reader's",
+      "why": "From {unit:native/moonbeam-taker-chain} (PR 16), adding to the decision that a direct call passes the r4-r11 its callee reads. (1) An unconditional ARM stm of r4-r11 with sp and lr through another register, each of r4-r11 whole and as it came, in a program with the matching ldm (same list, same way: setjmp and longjmp), is a save, not a use; with sp and lr it is a point to resume at. Any other store through a pointer is still a use (Metroid's half of r9). Not proven: that nothing reads the block as data; natively its words are zeroes, like a stack frame's saved registers. (2) A function a pointer call enters that only passes a register on is soft (passes on r4-r11 a pointer call zeroes); the read at the end of its chain is the hard hole, once (zeroed through 0x...). One hole a reader, as before calls passed registers; the lift prints the same code. Corpus hard holes 615 to 85, moonbeam 503 to 4.",
+      "by": "c5c06b25",
+      "at": "2026-11-13T12:44:54Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/llm-passes-may-alternate-with-the-algorithmic",
+      "title": "LLM passes may alternate with the algorithmic lift",
+      "why": "june, 2026-11-13, after playing Metroid's native build: she is fine with the lift alternating between the algorithmic lifter and an LLM (Claude). Either the lifter goes as far as it can, Claude reads the result and finds what unblocks the lifter, and the two iterate; or the lifter goes as far as it can and Claude brings the code the rest of the way. Either is OK with her. She set no rule for how LLM-written code is checked.",
+      "by": "owner",
+      "at": "2026-11-13T18:32:21Z",
+      "scope": ["group:native"]
     }
   ]
 }

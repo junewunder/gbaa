@@ -401,6 +401,11 @@ mode and calling `gIntrTable[n]`), agb's handler, or a game's own.
   recognises the standard prologue and epilogue (save SPSR, switch to
   system mode, re-enable IRQs, call, restore) and drops them, leaving
   the call. Unrecognised mode switches are holes.
+  *As built* (native/lift-psr-boot-irq): printed, not dropped, in the
+  reset and each handler stored to `IRQ_HANDLER_PTR`, over the prelude's
+  `msr_cpsr` (banks sp by mode, runs the IRQs a cleared I releases),
+  `mrs_cpsr` and `Game::spsr` (`codegen::native`, `PsrFns`); such a
+  wrapper nests. An agbcc wrapper's `add lr, pc, #0; bx r0` is a call to discovery, so the half after it is lifted (native/lift-irq-wrapper-tail; `agb/native-irq-wrapper` runs both).
 - **No nesting.** Handlers run to completion at the points above (and
   when a library copy's cost crosses an event, section 7), never
   inside another handler or inside game code. A real GBA can take the
@@ -589,7 +594,10 @@ callee set the function-address flow proves complete
 553 indirect calls, none has a set, because the flow didn't finish on
 its 15,158 functions in 35 minutes (past 8 GB and growing). With
 `native/fnref-flow-scale` landed (Metroid settles in 151 s) it still
-didn't: killed at a 14 GB cap after 5 minutes (2026-11-07). Making it
+didn't: killed at a 14 GB cap after 5 minutes (2026-11-07). Since
+2026-11-13 the run no longer dies or stops at its token bound (those 48M
+were copies; equal sets kept once, it holds 24M at 1.5 GB), but seven
+rounds in 53 minutes hadn't settled it: still no set is complete. Making it
 settle on Emerald is `native/fnref-flow-emerald`; the re-measurement
 of the 656, and what keeps sets incomplete (callbacks stored through RAM
 globals such as `gMain.callback1`), is `native/indirect-call-args-emerald`.
@@ -760,9 +768,9 @@ showed:
   compared. A lift of the library itself (stage A without recognition)
   would hold them and need no list. The recogniser should emit the list.
 - **Not compared:** `KEYINPUT` (the play build records after the
-  present's key latch), and the DMA and serial registers (the library
-  has none of them). At first the sound wasn't either: the library had no
-  mixer, so psg-square's samples were reported "NOT compared". Since
+  present's key latch), and the DMA registers (the typed copies store
+  none; the serial port's are compared). At first the sound wasn't
+  either: the library had no mixer, so psg-square's samples were reported "NOT compared". Since
   native/hw-sound (below) every frame's samples are, with `SOUNDCNT_X`'s
   status, the FIFOs' last stores and the timers. Play's sound against a
   host that records none still fails unless the run gives `--no-audio
@@ -842,6 +850,10 @@ The library mixes with the play build's own sound path, not a copy:
   `FifoDma`, the IRQ at the end. Checked by `agb/native-dma` in the lift
   check, each start set up by address, with a planted wrong `DMAxCNT`.
   Not yet: the EEPROM's DMA.
+- **The serial port's registers** (native/hw-serial-registers): `0x120`-
+  `0x15F` but `KEYINPUT`, kept through the play build's masks and compared
+  by the native check. Nothing answers a transfer, as in the play build
+  (mGBA's does: native/serial-no-partner-as-mgba). `agb/native-serial`.
 
 Once a mod edits the program, none of this applies: a mod is meant to
 differ. The oracle is for the unmodded native port, and a mod is checked

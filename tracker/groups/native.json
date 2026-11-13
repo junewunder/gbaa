@@ -663,6 +663,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-13T16:18:32Z",
+          "by": "c4272a60",
+          "text": "Branch predates 2026-11-13: git merge origin/main before lifting. Older lifters reject the [[takes]] table in mods/metroid/holes.toml and need stand-ins since dropped there; don't restore them. Route units/metroid-native.toml (2700 frames) is on the branch; no planted store yet."
+        },
+        {
           "at": "2026-11-12T11:45:45Z",
           "by": "598b2669",
           "text": "route-check --native now skips the holes file's [[copy]] ranges: pass --name metroid (the ROM's file name doesn't match mods/metroid/), or --holes mods/metroid/holes.toml."
@@ -671,11 +676,6 @@
           "at": "2026-11-12T11:21:46Z",
           "by": "ba1a464f",
           "text": "Play build now syncs where an idle loop's cond branch isn't taken (rt::idle_exit; DMA waits). The lifter (Exact clock) has no Idle::Exit counterpart (native.rs emits hw::idle/spin only): if lift vs play differs after a DMA-wait loop, look there."
-        },
-        {
-          "at": "2026-11-08T21:25:50Z",
-          "by": "a98172f6",
-          "text": "Route written (units/metroid-native.toml, 2700 frames). First run: 6 causes filed as needs (doc: The first game). Lift: just lift ROM out/lift-metroid --name metroid; play: just recompile ROM out/metroid --timing native; then route-check --native. Planted store not tried yet."
         }
       ],
       "round": "2026-11-08T20:48:18Z"
@@ -1079,38 +1079,41 @@
         "native/task-coroutines",
         "native/nightmare-entry-reads",
         "native/hw-dma-registers",
-        "native/hw-serial-registers"
+        "native/hw-serial-registers",
+        "native/nightmare-mixer-pointer"
       ],
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
-        "by": "eb7b70bf",
-        "session": "eb7b70bf-9977-437b-b8b6-70931ce0b89b",
+        "by": "9ecf2205",
+        "session": "9ecf2205-d617-407e-9017-6d376c02bc1e",
         "host": "quack",
-        "pid": 2489427,
-        "start": "10657408",
-        "at": "2026-11-12T08:00:34Z",
+        "pid": 1860178,
+        "start": "4633915",
+        "at": "2026-11-13T17:37:42Z",
         "branch": "unit/native/nightmare-task-switch",
-        "beats": true,
-        "handedBack": "2026-11-12T08:40:45Z",
+        "resumed": "eb7b70bf",
+        "prevSession": "eb7b70bf-9977-437b-b8b6-70931ce0b89b",
         "pushed": true,
-        "ended": "2026-11-12T08:41:01Z"
+        "beats": true,
+        "handedBack": "2026-11-13T17:38:20Z",
+        "ended": "2026-11-13T17:38:27Z"
       },
       "notes": [
+        {
+          "at": "2026-11-13T16:18:38Z",
+          "by": "c4272a60",
+          "text": "Branch predates 2026-11-13: git merge origin/main before lifting. Older lifters reject the holes file's [[takes]] table and need the reset and IRQ stand-ins since dropped from it; don't restore them. Worked example of task stand-ins: holes/native-tasks.toml."
+        },
+        {
+          "at": "2026-11-13T11:12:22Z",
+          "by": "d2717a37",
+          "text": "Since PR 12 the lift builds again (0 hard holes). It still stops before any task runs: frame 5, in m4a's mixer, a byte load at 0xe3a02004 ({unit:native/nightmare-mixer-pointer}). Two object callbacks take r8/r9 from the scheduler's call at 0x080053cc ([[takes]] in the holes file)."
+        },
         {
           "at": "2026-11-12T08:40:35Z",
           "by": "eb7b70bf",
           "text": "Stand-ins at 0x080cfdc5/cd/d5 in mods/kirby-nightmare/holes.toml (mods commit 64b65dc); classify fix makes the scheduler's resume call return. Untested at run time: the native build stops at boot (DMA, serial, then 0x080cdcd5 in m4a init) before any task runs."
-        },
-        {
-          "at": "2026-11-12T06:58:38Z",
-          "by": "21ac895a",
-          "text": "Facility in {unit:native/task-coroutines}: prelude task_resume/task_yield/task_exit; stand-in lr = true gives Game::lr; holes/native-tasks.toml is a worked example. Lifter flags f_080cfdc8/d0/d8. The scheduler's resume call (0x08005364) is still taken never to return."
-        },
-        {
-          "at": "2026-11-12T06:37:54Z",
-          "by": "b67b3cd7",
-          "text": "From {unit:native/copy-tail-discovery}: discovery now finds resume (0x08000234, entered by the veneer 0x080cfdc5's ARM part f_080cfdc8 via b); its bx r1 at 0x08000254 is a hard hole in the lift, which stops there until a stand-in for 0x080cfdc8 covers it."
         }
       ],
       "round": "2026-11-07T11:32:04Z"
@@ -1152,35 +1155,32 @@
       "minMinutes": 150,
       "record": {
         "state": "claimed",
-        "by": "c06275d9",
-        "session": "c06275d9-b496-4ead-9bf1-0085c8ece768",
+        "by": "81556889",
+        "session": "81556889-1b57-4a78-a2a5-c1c2c69e2aec",
         "host": "quack",
-        "pid": 3349068,
-        "start": "14822266",
-        "at": "2026-11-08T16:23:16Z",
-        "branch": "unit/native/fnref-flow-emerald",
-        "resumed": "8898da77",
-        "prevSession": "8898da77-3409-4343-b387-337a68538af5",
+        "pid": 1028184,
+        "start": "1500576",
+        "at": "2026-11-13T08:55:31Z",
+        "resumed": "c06275d9",
+        "prevSession": "c06275d9-b496-4ead-9bf1-0085c8ece768",
         "pushed": true,
-        "beats": true,
-        "handedBack": "2026-11-08T18:34:29Z",
-        "ended": "2026-11-08T18:34:40Z"
+        "handedBack": "2026-11-13T11:55:09Z"
       },
       "notes": [
+        {
+          "at": "2026-11-13T11:55:07Z",
+          "by": "81556889",
+          "text": "2026-11-13 PR 14: the 48M were copies (44M held, 3M distinct); sets kept once: 24M flat, 1.5 GB, bound not hit, rounds 3x faster. Still unsettled after 7 rounds/53 min: 12.3k entries change a round, memory still. Next: memory/fnref-flow-emerald-memory.md, 'Where it stands'."
+        },
+        {
+          "at": "2026-11-13T07:17:12Z",
+          "by": "ddd9a487",
+          "text": "2026-11-13 PR 3: Emerald flow finishes, 11 min, 2.4 GB (--mem 8G, not 16G); stops at TOKENS: 48.1M after 27,776 runs (gbaa-recompile prints it). To settle: raise/replace the bound. G::held() skips ref_exp/expanded/mem_log; large-Ref paths have one unit test."
+        },
         {
           "at": "2026-11-12T10:56:36Z",
           "by": "5cf6c823",
           "text": "2026-11-12: Emerald's flow now finishes (27:37, 2.1 GB, on Function-address flow on Emerald fast enough to finish's branch) but reports 'didn't settle' after 35,409 runs: a function hit its 64*blocks+64 step bound, not the round bound. Trace prints which ('unsettled after')."
-        },
-        {
-          "at": "2026-11-08T18:27:27Z",
-          "by": "c06275d9",
-          "text": "2026-11-08: Refs (b6d5ed3f) fixed memory: Emerald round 0 flat at 1.5 GB (was >10 GB), entries 5.6M tokens. Not done: too slow to finish (~60 s/500 fns). Split: {unit:native/fnref-emerald-speed} (needed); widening gap {unit:native/fnref-romfrom-absorb}. memory/ file says how to measure."
-        },
-        {
-          "at": "2026-11-07T12:41:33Z",
-          "by": "8898da77",
-          "text": "2026-11-07: measured, not fixed. Round 0 alone passes 10 GB: entries hold 100-180M tokens, copies of successive 30k-token pile reads; UnkUtil_Run's ~10k callees add 2-3 GB. Join sharing, 2-level set: not enough. Next: chunked sets or symbolic pile token (memory/ file)"
         }
       ],
       "round": "2026-11-07T12:12:38Z"
@@ -1381,6 +1381,7 @@
       "id": "native/fnref-unknown-addrs",
       "title": "Function flow: loads through unknown addresses",
       "detail": "docs/native-stage-b.md piece 3. Measured on {unit:native/fnref-context}'s branch (commit e81168f; it holds the object split and call-site context): fn_words_not_proven unmoved by either. ~640 of affine's load sites (spike 644) have an address that may be unknown (Val::unk), and each reads the pile and every RAM cell (Run::load_at's anywhere arm), so e.g. the IRQ vector word's f_03000000 is in nearly every hole. Not the cause (tried, no change): naming the allocator, dropping the pile from constant-address loads, dropping the I/O unk flag, NUMS 8->256. A seen source: main's inlined free-list walk at 0x080001a8 (affine) loads GLOBAL_ALLOC fields holding allocator-made pointers. Find where the unknown comes from (GBAA_FNREF_TRACE; print each anywhere load) and fix the first big source. Done when: fn_words_not_proven falls on every agb program, bars lowered, a unit test, just lift-check and just check pass.",
+      "needs": ["native/fnref-branch-merge"],
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
@@ -1389,9 +1390,15 @@
         "host": "quack",
         "pid": 11956,
         "start": "29684",
-        "at": "2026-11-13T04:50:28Z"
+        "at": "2026-11-13T04:50:28Z",
+        "handedBack": "2026-11-13T07:30:38Z"
       },
       "notes": [
+        {
+          "at": "2026-11-13T07:21:58Z",
+          "by": "ae52d6ac",
+          "text": "2026-11-13: finding written (docs/research/fnref-held-words.md, PR 4) but measured before main's Ref tokens (f52fe115); branch 233ba6c0 not merged with it (22 conflicts). After {unit:native/fnref-branch-merge} re-measures: record this done with those numbers. No other work owed."
+        },
         {
           "at": "2026-11-12T09:45:41Z",
           "by": "a14298c2",
@@ -1401,11 +1408,6 @@
           "at": "2026-11-12T08:30:33Z",
           "by": "3454f93a",
           "text": "Measured: roots' r0-r3 as lost brings all 623 back (reset->main); RAMS 8 too few (font data 100-200 RAM-looking words); naming affine's allocator 0x08002055 or skipping the pile: no fall. Context (GBAA_FNREF_CTX_BLOCKS=6) takes 70s, -1 word."
-        },
-        {
-          "at": "2026-11-12T08:30:29Z",
-          "by": "3454f93a",
-          "text": "Branch eb76aa55 (fnref-context merged in): RamFrom tokens + lost_ptr closed world; affine anywhere loads 623->8, fn_words unmoved. Costs: spike/ime/irq-hold +1-3 not_proven, irq-hold ref_accesses 16->0 (heap.rs reads callee sets). GBAA_FNREF_TRACE prints 'load anywhere'."
         }
       ],
       "round": "2026-11-12T07:01:25Z"
@@ -1459,13 +1461,10 @@
       "check": "recorded",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "ddd9a487",
-        "session": "ddd9a487-152d-416a-9d19-58f5068baeb6",
-        "host": "quack",
-        "pid": 10927,
-        "start": "27916",
-        "at": "2026-11-13T04:50:03Z"
+        "at": "2026-11-13T07:17:08Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/3, head ed8b08f9. gbaa-recompile --summaries --callee-sets on Emerald, under an 8 GB cap: exit 0, 11:16 wall (flow 610.8 s), 2.44 GB peak; main never finished (killed at 14 GB after 5 min, 2026-11-07). The flow stops unsettled at the 48M-token bound (48,096,722 tokens after 27,776 runs; 0 of 553 sets complete): that is the work of {unit:native/fnref-flow-emerald}. just lift-metrics at the head: 0 over, 0 under. One bar raised, native-tasks fn_words_not_proven 57 to 59, june's call (d/raise-native-tasks-unproven-function): the 57 was evaluation order, not a proof; reason beside the bar. just lift-check passed on all 14 programs (600 frames, 0 differences, planted faults caught); just check passed at the head. Reviewer reviewer-4be07d2c found a kept expansion could miss a ROM pointer (capped per store, not together), a missed finish() on the token-bound exit and an unverified doc claim; all fixed in 8f250fe9 and confirmed on a second read."
       },
       "notes": [
         {
@@ -1685,6 +1684,13 @@
       "detail": "From the overnight lift (2026-11-11, runs/long/overnight-lift.log): every one of the seven games that failed to lift has 2-5 msr/mrs hard holes, nearly all in the reset code at 0x08000000 and the IRQ wrapper. analysis::holes::classify already returns these as CpuWhere::Boot and CpuWhere::Wrapper (recognised, not holes; docs/research/native-holes.md, What the Stage-A lifter should know), but the lifter still makes them hard, and Metroid and Kirby Nightmare get past them only by hand stand-ins in mods/<game>/holes.toml. Have the lifter print the reset's mode switches and stack setup as the program's start and the IRQ wrapper's PSR saves as runtime::hw IRQ entry/exit (keep The native-timing play build takes an IRQ the I bit held as soon as an msr clears I), so no game needs these stand-ins; msr/mrs anywhere else stay hard. Done when: no Boot/Wrapper msr/mrs is a hard hole on the corpus (just holes-all --against main, the lift's counts), Metroid and Nightmare still lift and build with their reset and IRQ-wrapper stand-ins removed (or the reason one stays written down), lift-check green, just check passes.",
       "check": "independent",
       "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "fb5bc075",
+        "checker": "checker-psr-4b7e",
+        "at": "2026-11-13T08:31:06Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/9 (head e73378d3). Both review fixes done. (1) Full just lift-check, all 14 programs, no --only, three runs, last at the merge of main 57d84449: every metric within its bar, 14 pass lines (0 differences), native-spike's moved control caught (\"planted hard hole caught: error: hard hole in f_08002728 at 0x08002730: CPU state: mrs\"), native-tasks' too, \"lift-check: passed\". (2) All nine corpus games lifted by this branch's lifter and main's (ffebc576), same holes file; msr/mrs hard holes main -> branch: metroid 8 -> 0 and kirby-nightmare 5 -> 0 (reset and dispatcher stand-ins dropped; 0 -> 0 with their files as they are), warioware 2 -> 0, kirby-mirror 2 -> 0, moonbeam 2 -> 0, emerald 5 -> 0, minish-cap 2 -> 0, emerald-rogue 5 -> 0, imperium 5 -> 0; the other hard holes are the same list on both. These lifts skipped the function-address flow (it doesn't decide where an msr is) and ran under 3G and 6G caps (peaks 476M, 1.3G). just holes-all --against main's run: every column (0) on all nine, no msr/mrs under CPU state hard. just check passes. By hand: native-irq-hold and native-ime-release with agb's wrapper stand-in dropped (2 msr_cpsr, 2 mrs_cpsr, 3 g.spsr printed) pass route-check --native, 601 frames, 0 differences. lines_prelude 1131 -> 1195 in all 14 tables: 64 hand-written prelude lines (msr_cpsr, mrs_cpsr, bank_sp, the banked sp and SPSR). Why the IRQ-dispatcher stand-ins stay (the card's \"or the reason one stays written down\"): the review found the agbcc wrapper's second half, past its 'add lr, pc, #0; bx r0' handler call, is in no lift (discovery takes that bx for a jump; the lifted wrapper ends in unreachable!), so the corpus counts 3 of each wrapper's 6 msr/mrs. Handed to {unit:native/lift-irq-wrapper-tail}, which {unit:native/drop-psr-standins} now needs; the reset stand-ins can go. The checker (a fresh reviewer subagent) reviewed the diff (msr_cpsr's banking, the merged irq_entry, the printed statements: no bug found) and verified each number against the logs."
+      },
       "notes": [
         {
           "at": "2026-11-12T13:05:47Z",
@@ -1722,18 +1728,18 @@
       "uses": ["heavy"],
       "minMinutes": 90,
       "record": {
-        "state": "claimed",
-        "by": "77aa5fbf",
-        "session": "77aa5fbf-b416-45f2-a48d-d2a67bcf68d8",
-        "host": "quack",
-        "pid": 11545,
-        "start": "29000",
-        "at": "2026-11-13T04:50:16Z",
-        "resumed": "74679aef",
-        "prevSession": "74679aef-e087-4107-ae60-ffc062168b01",
-        "pushed": true
+        "state": "done",
+        "by": "7e93e2be",
+        "checker": "24166938",
+        "at": "2026-11-13T12:03:18Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/6 (head 5f979890). gbaa-lift, main's lifter against the branch's: 'an undefined instruction' hard holes moonbeam 21 to 0 (527 to 506 in all), Rogue 23 to 0 (75 to 52), Imperium 2 to 0 (22 to 20); main's other hard-hole lines are byte-identical to the branch's in each (out/liftcmp2). 46 of the 47 are GCC's udf #255 trap, by kind in docs/research/native-holes.md. Hole report over nine games: 626 hard on both sides, summaries identical but seconds. Discovery: Emerald 0.9997/0.9555, gba-cart1 1.0/0.9835, llvm-sample 1.0/0.5789, starts identical to main's; jt-score passes. just check passes (runs/long/lift-undef-check4.log, 97 of 97 ok); lift-metrics 0 over, 0 under. perf stat on moonbeam: branch 0.02% fewer instructions than main, so not slower. Reviewer 24166938 recounted from the logs and read the 46 sites: pass, two wording fixes made. Rogue and Imperium lifted with skip_fn_flow on both sides."
       },
       "notes": [
+        {
+          "at": "2026-11-13T07:57:14Z",
+          "by": "77aa5fbf",
+          "text": "PR #6: traps (46 of 47 sites, udf #255) lift as panic!; tests, holes-all +0, disc bars, check done. Not run: moonbeam/Rogue gbaa-lift on main and branch (16G slot starved 3 h by 4G jobs). Run those 4 lifts, count 'undefined instruction' holes, then done."
+        },
         {
           "at": "2026-11-12T13:42:55Z",
           "by": "74679aef",
@@ -1750,6 +1756,11 @@
       "uses": ["heavy"],
       "minMinutes": 180,
       "notes": [
+        {
+          "at": "2026-11-13T08:31:01Z",
+          "by": "8814ddd6",
+          "text": "PR 8 (metroid-entry-reads) changed the summaries' entry-read kinds: a bl-called reader is soft (takes r4-r11 from its callers), hard sits on the pointer-entered caller. gbaa-holes counts move; native-holes.numbers.md not regenerated (whole-corpus run)."
+        },
         {
           "at": "2026-11-12T13:07:28Z",
           "by": "5b99a863",
@@ -1774,13 +1785,11 @@
       "uses": ["heavy"],
       "minMinutes": 150,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "3d525e2f",
-        "session": "3d525e2f-fa9e-4ab0-851f-1e2f2cec2205",
-        "host": "quack",
-        "pid": 276052,
-        "start": "369085",
-        "at": "2026-11-13T05:46:57Z"
+        "checker": "a3cc37a1ce8881d59",
+        "at": "2026-11-13T06:57:12Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/5 (head 2b5dda0b). just lift on agb/native-spike (a lift-check program): '600 of 600 frames, no stop' in report.txt and metrics.toml [run]. A KEYCNT store planted by hand in a copy: '5 of 600 frames, unmodelled-register 0x04000132 KEYCNT', in f_0800017d. A planted endless loop: 'time-limit 3 s'. Metroid on main's lifter: 'didn't build: 1 hard hole'; Nightmare: 'didn't build: 10 hard holes' (DMA by its registers has landed; their entry-read holes are other units'), both shown beside hard in just holes-all's table. just check passes (peak 7.5 GB). A fresh subagent reviewed the diff and checked the card: 'the unit's check is met', with no guest pc (filed: {unit:native/first-stop-guest-pc}) and a column that isn't rerun as the weaker parts; its two real bugs are fixed."
       },
       "round": "2026-11-12T13:07:54Z"
     },
@@ -1790,7 +1799,14 @@
       "detail": "The 2026-11-11 overnight run (hole report, gameplay and readable builds, and gbaa-lift of all nine games in holes/corpus.toml, about 3 hours on quack) was a throwaway shell script. Make it a recipe driven by holes/corpus.toml in Rust (no bash logic): per game the hole report, the play build, the lift with its holes file (corpus.toml gains each game's --name for lift), the build, and {unit:native/native-first-stop}'s headless run; one game failing doesn't stop the rest; run under just long with the build lock and MemoryMax. Write out/nightly/<date>/summary.toml and a short summary.txt per game (hard holes by kind, built or not, frames run and stop) with what changed against the previous night's. Done when: one full run on quack writes both files and a second run's diff names a change made between them; docs/tools/commands.md has the entry; just check passes.",
       "check": "independent",
       "needs": ["native/native-first-stop"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-13T13:12:00Z",
+          "by": "9828215c",
+          "text": "a lifter-rule merge passed lift-check and took moonbeam's hard holes 11 to 503 unseen. This command's diff with last night should fail on any game's hard count rising, so that can't land quietly again."
+        }
+      ]
     },
     {
       "id": "native/spike-entry-read-hole",
@@ -1829,7 +1845,18 @@
       "detail": "Since {unit:native/entry-read-masking} landed, gbaa-lift on Kirby - Nightmare has 5 hard summary holes (reads r4-r11 at entry), so the lift's crate doesn't build: 0x08064759 (r8 at 0x080647d0), 0x080647fd (r8 at 0x08064874), 0x0806b411 (r8 at 0x0806b5e8), 0x0806b671 (r9 at 0x0806b782), 0x080ce1f9 (r4: m4a's ChnVolSetAsm, r4 the channel and r5 the track passed in registers by its m4a callers; docs/research/native-holes.md had it under libgcc, now corrected). 0x08064759's read looks path-infeasible (r6 = entry r8 is compared only after r5 != -1, which sets r6 first). Fix the rule where it's over-hard, or give stand-ins (ChnVolSetAsm needs its callers' r4/r5: a stand-in per caller, or the lifter passing r4/r5 to it). Done when: just lift ROM out/lift-kirby-nightmare --name kirby-nightmare reports 0 hard holes and the crate builds; just check passes.",
       "check": "recorded",
       "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "d2717a37",
+        "at": "2026-11-13T11:12:18Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/12, head de80679a (main 45c56fcc merged in). just lift ROM out/lift-kirby-nightmare --name kirby-nightmare: 0 hard holes (13 on main adfa45ee), the crate builds; first stop 5 of 600 frames, no-memory, a byte load at 0xe3a02004 in f_030072e8 < f_030071df < f_03007151 < f_080cd8ad (m4a's IWRAM mixer from SoundMain in the V-blank IRQ), filed as {unit:native/nightmare-mixer-pointer}. just check: passes. just lift-check, whole: passed, every metric within its bar for all 15 programs, no bar moved. How: the summary's run takes a branch on a certain constant one way (6 holes: an unreachable read in two list-scan functions); two [[takes]] name the object scheduler's callback call (2 holes); a [[takes]] with sites = [] names code only jumped into, m4a's IWRAM mixer (5 holes); holes file in mods commit 1cf76a7. A fresh reviewer read the diff: two real bugs fixed (constants stayed certain past an msr; an always-taken exit lost its own register read), each with a test that fails without the fix. Not proven: r8 at the scheduler's call on a pass where it hasn't set it (the lift passes 0; 0 and the usual value take the same branch); the mixer's registers checked by hand against SoundMain, not by the lifter."
+      },
       "notes": [
+        {
+          "at": "2026-11-13T08:36:12Z",
+          "by": "8814ddd6",
+          "text": "Since PR 8: a bl or tail call passes the r4-r11 its callee reads at entry; the caller takes it in turn; hard only where a pointer enters. There, the holes file's [[takes]] entry/sites names the indirect calls (addresses as the report prints them)."
+        },
         {
           "at": "2026-11-12T13:49:40Z",
           "by": "695902dc",
@@ -1840,7 +1867,8 @@
           "by": "a7b7e9d7",
           "text": "Once the dispatcher 0x03001030 is lifted, not stood in ({unit:native/drop-psr-standins}), 5 more entry-read holes appear in IWRAM m4a code: 0x03007151 (r4), 0x0300715c (r4), 0x030071df (r8), 0x030072e8 (r4), 0x030074d1 (r4)."
         }
-      ]
+      ],
+      "round": "2026-11-13T08:58:21Z"
     },
     {
       "id": "native/hw-serial-registers",
@@ -1849,13 +1877,10 @@
       "check": "recorded",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "34d57864",
-        "session": "34d57864-956a-4832-9a45-ef91a450bec5",
-        "host": "quack",
-        "pid": 12294,
-        "start": "30124",
-        "at": "2026-11-13T04:50:26Z"
+        "at": "2026-11-13T08:54:05Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/7, head 8e37b0e0 (main merged at 3a88c78d). runtime::hw keeps 0x120-0x15F but KEYINPUT in its I/O block through the play build's masks (a started SIOCNT transfer keeps its start bit, no IRQ, as the play build off a link); the prelude's RegisterRamReset resets them on flag 0x20; route-check --native now compares them. New agb/native-serial stores and loads every register as halfwords, words and bytes. just lift-check, whole, on that head (03:36-03:53): 'lift-check: passed', 15 programs each 0 differences, 9 planted faults and 2 planted holes caught; 'native native-serial-600: pass (600 frames, 0 differences in pictures, RAM, I/O, palette, VRAM and OAM; audio the same in 600 frames; the play layout draws the same 600 frames, its records the same; planted fault caught (frame 1: EWRAM byte 0x02000100: play 0x81, native 0x82))'. just check on that head: exit 0. Earlier, two merges back: just native-check 3 passes; just unit native-serial-600 pass. lines_prelude 1201 = main's 1195 + 6 net lines (decision recorded); just lift-metrics 0 over, 0 under. Known mGBA mismatch recorded in the route with each cause, shown to be the whole difference (both draw 67ad2572c48f1e9b with them masked); follow-up filed: {unit:native/serial-no-partner-as-mgba}. Fresh subagent review of the PR diff and logs: no bugs, check met as worded; its doc nits fixed (comments and counts only, ROM byte-identical). Not rerun: Nightmare's own lift."
       },
       "round": "2026-11-13T04:50:26Z"
     },
@@ -1863,7 +1888,14 @@
       "id": "native/metroid-entry-reads",
       "title": "Metroid lifts again after entry-read masking",
       "detail": "Since {unit:native/entry-read-masking} landed, gbaa-lift on Metroid has 1 hard hole: f_08073ce5, summary 0x08073f08 reads entry r9. agbcc builds a word in r6 = entry r9 byte by byte (ands ffffff00, ands ffff00ff), so r9's top 16 bits are stored to RAM at [r4+0x244+4]; the lift zeroes r4-r12 at a call, the game keeps the caller's r9. Real, not over-hard. Fix: a stand-in (caller's r9 is likely a constant or garbage; check callers), or the lifter passing r9. Done when: just lift ROM out/lift-metroid --name metroid reports 0 hard holes and the crate builds; just check passes.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "8814ddd6",
+        "at": "2026-11-13T08:56:54Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/8, head e9d95e4d (main 3a88c78d merged). just lift ROM out/lift-metroid --name metroid --holes out/metroid-entry-reads/holes.toml: hard_holes 0 (main: 1, f_08073ce5 reads entry r9), the crate builds, gbaa-first-stop: 600 of 600 frames, no stop. The holes copy is mods/metroid/holes.toml plus one [[takes]] (the cursor function 0x0801bbfd, the sprite updater's 4 pointer calls); main's lifter rejects that table, so it is uncommitted and lands in mods/ with this PR: without --holes the lift has 1 hard hole until then. just check: passed. just lift-check (whole): passed, 0 metrics over their bars. Reviewed by a fresh subagent (a4ef6077): a stale-register pass and unseen calls fixed; the flow's r4-r11 and a run that exercises a passing call are filed ({unit:native/fnref-taker-regs}, {unit:native/taker-test-program})."
+      },
+      "round": "2026-11-13T06:58:38Z"
     },
     {
       "id": "native/native-check-spike-packed",
@@ -1889,15 +1921,32 @@
       "title": "Metroid and Nightmare drop their reset and IRQ stand-ins",
       "detail": "Once {unit:native/lift-psr-boot-irq} is on main (the lifter prints the reset's and the IRQ wrapper's msr/mrs), remove from the private mods repo: mods/metroid/holes.toml's stand-ins 0x08000000 (reset), 0x08000104 (IRQ dispatcher) and 0x03000c7c (its IWRAM copy); mods/kirby-nightmare/holes.toml's 0x08000000 and 0x03001030. Left in until then because mods/ is shared by every lane and an older lifter needs them. Verified on the branch: both lift with 0 msr/mrs hard holes and build without them. Done when: just lift on each reports no reset/dispatcher hole (other known holes aside) and the mods commit is in.",
       "check": "recorded",
-      "needs": ["native/lift-psr-boot-irq"],
+      "needs": ["native/lift-psr-boot-irq", "native/lift-irq-wrapper-tail"],
       "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "949481c0",
+        "at": "2026-11-13T12:21:33Z",
+        "evidence": "No tracked change, so no PR: the work is three commits in the private mods repo (bbf6283 Metroid, c767a0b Nightmare, ad0cdf4 a header comment). Removed: Metroid's stand-ins 0x08000000, 0x08000104, 0x03000c7c; Nightmare's 0x08000000, 0x03001030; every other entry kept. Card check, at main 90eb57a3 with the committed files: 'just lift ROM out/psr/final-metroid --name metroid': 0 hard holes, 4 stand-ins (was 7), 'gbaa-first-stop: gbaa-native-metroid: 600 of 600 frames, no stop' (before: the same line). 'just lift ROM out/psr/final-kirby-nightmare --name kirby-nightmare': 0 hard holes, 6 stand-ins (was 8), 'gbaa-first-stop: gbaa-native-kirby-nightmare: 5 of 600 frames, no-memory a byte load at 0xe3a02004' in f_030072e8 < f_030071df < f_03007151 < f_080cd8ad < f_080010cd < f_03001030 < f_080cfa6d < f_0800157d (before: the same line and stack; that stop is {unit:native/nightmare-mixer-pointer}, noted there). Beyond the card: the builds with and without the stand-ins draw the same frame hashes: Metroid 600 frames with no input and 1800 with presses into a new game, Nightmare its 5. Not proven: Nightmare's lifted dispatcher past frame 5. A lifter older than 90eb57a3 now fails on both games (hard holes, or a dispatcher ending in unreachable!): branches must merge main. Reviewer checker-psr-7c3e agreed the done-when is met."
+      },
       "notes": [
+        {
+          "at": "2026-11-13T08:31:08Z",
+          "by": "fb5bc075",
+          "text": "Its What's 'both lift with 0 msr/mrs and build without them' holds only for the reset. The 2026-11-12 note's five extra IWRAM holes don't reproduce: Nightmare has the same 10 hard holes with and without the stand-ins (2026-11-13)."
+        },
+        {
+          "at": "2026-11-13T07:46:32Z",
+          "by": "fb5bc075",
+          "text": "Review 2026-11-13: only the reset stand-ins can go now. The IRQ dispatchers' lifted second half is missing (unreachable! after the handler call), so they stay until the wrapper's second half lifts ({unit:native/lift-irq-wrapper-tail})."
+        },
         {
           "at": "2026-11-12T12:50:05Z",
           "by": "a7b7e9d7",
           "text": "Lifting Nightmare's dispatcher 0x03001030 (stand-in dropped) adds 5 IWRAM functions with hard entry-read summary holes main's lift lacks: 0x03007151 0x0300715c 0x030071df 0x030072e8 0x030074d1. Built only with temp panic stand-ins for them; settle these first."
         }
-      ]
+      ],
+      "round": "2026-11-13T11:59:16Z"
     },
     {
       "id": "native/serial-no-partner-as-mgba",
@@ -1922,14 +1971,32 @@
       "title": "Function flow passes only registers a callee reads",
       "detail": "docs/research/fnref-held-words.md, 'Registers nobody reads'. The function flow (crates/codegen/src/native/fnref.rs) passes r0-r3 to every callee and takes all four back, read or not, so a function's address left in a scratch register travels the whole program: on native-irq-hold, as built on the branch unit/native/fnref-unknown-addrs, the handler's pool word 0x080001bc goes in r3 through 39 calls and 36 returns of 26 functions that never touch r3, to the reset's swi, where all four registers count as given to the BIOS. That un-proves the two handler words main proves and costs the program its 16 typed heap accesses. (With every kind of memory read switched off, GBAA_FNREF_OFF, 13 of affine's 39 words left are given to the BIOS, most by this road, but in a flow the switches changed: it shows the road, not a count.) Work on that branch (it has the object split, RAM pointers, GBAA_FNREF_WATCH; not on main). Give a callee only the registers its summary reads and take back only those it sets (codegen::saves; all four where the summary has a hole); a swi holes only the registers its BIOS call reads; a call whose target is still empty in an early round must not pass its registers to every function without a direct caller for good. Done when: unit tests for each; native-irq-hold's words 0x080001bc and 0x080001c0 are no longer first held by a register passed or returned unread (GBAA_FNREF_WATCH), and the evidence says what holds them next, or that they are proven; fn_words_not_proven and the other counts no higher than the branch's on any program. The branch doesn't land here: {unit:native/fnref-ram-pointers-land} does.",
       "check": "recorded",
-      "uses": ["heavy"]
+      "needs": ["native/fnref-branch-merge"],
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-13T11:22:04Z",
+          "by": "45f263ac",
+          "text": "From {unit:native/fnref-bios-reads}: two BIOS tables now. fnref.rs bios_regs keeps a register a swi leaves; saves/summary.rs bios() counts all of r0-r3 set or clobbered, so a shaped callee returns 0 there. Make the summaries use bios_regs' sets/may-set."
+        },
+        {
+          "at": "2026-11-13T08:33:08Z",
+          "by": "afebd1b0",
+          "text": "2026-11-13: measured on Metroid (docs/research/fnref-held-words.md, 'A C game'). The swi clause is now {unit:native/fnref-bios-reads} (767 to 338, on main). Left here: results only a callee sets, 90 Metroid words, 1,373 on Emerald. Needs nothing of the branch."
+        },
+        {
+          "at": "2026-11-13T08:31:03Z",
+          "by": "8814ddd6",
+          "text": "Since PR 8 (metroid-entry-reads) a callee may also take r4-r11 (Summary::takes/may_take): narrowing what a call gives must keep those. The flow doesn't give them yet: {unit:native/fnref-taker-regs}."
+        }
+      ]
     },
     {
       "id": "native/fnref-ram-pointers-land",
       "title": "Function flow: the object split and RAM pointers land",
       "detail": "The branch unit/native/fnref-unknown-addrs holds three units' work on crates/codegen/src/native/fnref.rs that isn't on main: frames and allocation sites as objects ({unit:native/fnref-heap-sites}), call-site context, off by default ({unit:native/fnref-context}), and RAM pointers followed ({unit:native/fnref-unknown-addrs}), with the metric fn_loads_read_everything (623 load sites on affine at the start, 3 now; barred in every table of lift-check.toml on the branch) and GBAA_FNREF_WATCH. june's answer (q/unknown-address-step-land-without, 2026-11-12): land it on that count, once native-irq-hold has its 16 typed heap accesses (ref_accesses) back, every other bar held, or raised with its cause named. On 2026-11-13 twelve bars are over (docs/research/fnref-held-words.md, 'Why the branch doesn't land'): native-irq-hold loses its two handlers' proven words (0x080001bc, 0x080001c0) and with them ref_accesses 16 to 0; ref_unexplained rises about 42 on native-bios-more, -bios-region, -dma and the spike because every call_fn set, all the address-taken functions, grows by the words now read; native-tasks has complete sets where main has none. Also unexplained: native-bios-calls' 571 loads that read everything. Done when: main merged into the branch, native-irq-hold's ref_accesses is 16, each bar over is back or raised by hand with its cause in the evidence (just tracker decide --for-run), the branch is merged, just lift-check and just check pass.",
       "check": "recorded",
-      "needs": ["native/fnref-live-registers", "native/fnref-frame-pointers"],
+      "needs": ["native/fnref-live-registers", "native/fnref-frame-pointers", "native/fnref-branch-merge"],
       "uses": ["heavy"]
     },
     {
@@ -1937,7 +2004,280 @@
       "title": "Function flow: pointers into stack frames kept exact",
       "detail": "docs/research/fnref-held-words.md, 'Kinds of read switched off'. On affine, with GBAA_FNREF_OFF (unsound, measuring only; on the branch unit/native/fnref-unknown-addrs, as is all of this) the loads that read everything alone leave fn_words_not_proven at 55, reads through a pointer anywhere in an object alone leave it 55, and both off give 41: the two must be made exact together, and both are about stack frames. (1) The 3 loads left that read everything (affine 0x08000a24 to 0x08000a2c) go through a pointer into a caller's frame at or above the callee's entry sp, which Run::load_at gives up on (G::obj_up): follow it to the callers' frame objects through the sp each call passed. (2) A pointer into a frame moved by an index the run doesn't know becomes anywhere in the frame and reads every word of it: keep it in its stack slot (crates/codegen/src/native/frame.rs has the slots), and keep an array of pairs' fields apart (an offset known modulo the stride; core::fmt's argument arrays hold a value and a function each, affine 0x080036e4). Work on that branch (it has the object split, GBAA_FNREF_WATCH and GBAA_FNREF_OFF). Done when: unit tests for each; fn_loads_read_everything is 0 on affine and no higher anywhere; fn_words_not_proven falls on affine (the switches say up to 14 words; say in the evidence how close it got and what holds the rest) and rises nowhere. The branch doesn't land here: {unit:native/fnref-ram-pointers-land} does.",
       "check": "recorded",
+      "needs": ["native/fnref-branch-merge"],
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-13T08:33:10Z",
+          "by": "afebd1b0",
+          "text": "2026-11-13: agb only by {unit:native/fnref-c-game-words}: none of Metroid's 734 held words is first held through a stack frame (docs/research/fnref-held-words.md, 'A C game'). The stride idea carries to ROM tables: {unit:native/fnref-table-fields}."
+        }
+      ]
+    },
+    {
+      "id": "native/first-stop-guest-pc",
+      "title": "A native game's stop names its guest pc, not only functions",
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-13T06:56:53Z",
+          "by": "3d525e2f",
+          "text": "From {unit:native/native-first-stop} (PR 5): the stop line gives lifted functions from the panic's backtrace (inlined ones don't show) and no guest pc, since lifted code keeps none. Needs the lifter to keep a pc or block address a panic can read, cheaply."
+        }
+      ]
+    },
+    {
+      "id": "native/fnref-branch-merge",
+      "title": "Function-flow branch merged with main's Ref tokens",
+      "detail": "The branch unit/native/fnref-unknown-addrs (head 233ba6c0) holds three units' unlanded work on crates/codegen/src/native/fnref.rs: frames and allocation sites as objects, call-site context (off by default), RAM pointers followed, the metric fn_loads_read_everything, and the tools GBAA_FNREF_WATCH and GBAA_FNREF_OFF. Main's {unit:native/fnref-emerald-speed} (f52fe115) rewrote about 1,000 lines of the same file: large pile, every-cell and ROM reads are one lazy token each (Tok::Ref, Src, Xf, G::expand). Merging main into the branch gives 22 conflicts in fnref.rs (G::store, give, give_all, Val::cap, Run::block, load_raw, call_by_value, follow, and more: that PR's 'For whoever merges' lists them), one in fnref/tests.rs and one in lift-check.toml; beyond the conflicts, the branch's own reads (every object's cells, a run of RAM, an object's cells, the lost-pointer cell) and its tokens (Tok::Obj, Tok::RamFrom) must work with Ref tokens, and the watch trace must see through them. docs/research/fnref-held-words.md was measured before that commit and says so. Done when: the branch builds merged with main, its and main's fnref unit tests pass, Emerald's flow still finishes (main's time and memory within a tenth), and every table of the research note is measured again on the merged code and the note corrected (drop its 'before main's Ref tokens' paragraph): just lift-metrics on every program, GBAA_FNREF_OFF's rows on affine (set as one comma list; check the lift prints the switches it saw), the first-road table from GBAA_FNREF_WATCH=all, native-irq-hold's handler words. Then record {unit:native/fnref-unknown-addrs} with the re-measured finding if it stands. The branch doesn't land here: {unit:native/fnref-ram-pointers-land} does.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "5ce5cf47",
+        "session": "5ce5cf47-4a13-4c36-9ef3-66bd1287b6c9",
+        "host": "quack",
+        "pid": 1989311,
+        "start": "5552414",
+        "at": "2026-11-13T20:11:26Z"
+      },
+      "notes": [
+        {
+          "at": "2026-11-13T08:33:12Z",
+          "by": "afebd1b0",
+          "text": "2026-11-13: Metroid's count needs nothing of the branch ({unit:native/fnref-c-game-words}). GBAA_FNREF_WATCH is on main now (Ref-aware), and a GBAA_FNREF_OFF with other kinds (bios,move,flags,tables,pile,cells): keep both lists when merging."
+        }
+      ],
+      "round": "2026-11-13T20:11:26Z"
+    },
+    {
+      "id": "native/fnref-c-game-words",
+      "title": "What holds a C game's function words: Metroid, measured",
+      "detail": "From {unit:native/fnref-unknown-addrs} (docs/research/fnref-held-words.md): on our agb test programs the function words are held by Rust shapes (closures in frames, core::fmt argument arrays, a heap pile), and three units made the flow more exact without moving the count. agb is test input, not the target; nobody has looked at a C game. On main, run the function-address flow on Metroid (it settles) and say, for its function words not proven, what holds them: the count by first road, as that note does for affine (GBAA_FNREF_TRACE; the note's GBAA_FNREF_WATCH is on that unit's branch, bring it over alone if that is cheap). Done when docs/research/fnref-held-words.md has a Metroid section with the counts (proven, never read, not proven by road) and says which of the filed function-flow follow-ups a C game needs and which only agb does; just check passes. Addresses and counts only: nothing game-derived in the tracked note.",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "afebd1b0",
+        "at": "2026-11-13T09:43:58Z",
+        "evidence": "docs/research/fnref-held-words.md has 'A C game: Metroid, measured on main': 804 function words, 37 proven, 33 never read, 734 held, by first road (429 left in r0-r3 at VBlankIntrWait's swi, 99 an adds #0 move, 77 past a table's end, 66 struct fields, 39 a compare's carry, 13 pile and cells, 11 other). GBAA_FNREF_OFF=bios alone: 37 to 466 proven. A C game needs the swi clause of the registers unit and none of frames, the object split, heap sites, context or the branch merge; five follow-ups filed (bios-reads, table-ends, gcc-moves, table-fields, pile-globals). just check passes (long job fnref-c-words-check3, exit 0, on the tree merged with adfa45ee; leak check again on the final tree). Reviewed by a fresh subagent (fnref-c-words-review-7q3k), its findings fixed. PR https://github.com/junewunder/gbaa/pull/10"
+      },
+      "round": "2026-11-13T07:32:03Z"
+    },
+    {
+      "id": "native/lift-irq-wrapper-tail",
+      "title": "The IRQ wrapper's second half is discovered and lifted",
+      "detail": "Found by the review of {unit:native/lift-psr-boot-irq}, 2026-11-13. The agbcc-shape IRQ wrapper (Metroid 0x08000104 and its IWRAM copy 0x03000c7c, Nightmare 0x03001030, Emerald 0x08000248, Rogue 0x0800025c, Imperium 0x08000264) calls its handler with 'add lr, pc, #0; bx r0' (Metroid 0x08000204). analysis::vsa::func::classify makes a bx a call only right after 'mov lr, pc', so this one is a jump, discovery has no code at its return site (0x0800020c), and the wrapper's second half (ldm, mrs cpsr, msr cpsr back to IRQ mode, IE and IME stores, msr spsr, bx lr) is in no lift. The lifter prints the call and then unreachable!(\"a call that never returns returned\") (seen in Metroid's lift with the dispatcher stand-in dropped), so a lifted wrapper panics when its first handler returns. That is why the corpus counts 3 msr/mrs per wrapper where the code has 6, and why the games' IRQ-dispatcher stand-ins can't go yet (the reset stand-ins can). Do: have discovery take 'add lr, pc, #0' (lr = the address after the bx) as the call it is, so the return site is the same function's code and PsrFns prints its msr/mrs (if it comes out as its own function instead, PsrFns::place must cover it). It changes discovery for every program and the play build: run the scored checks (disc-*, jt-score) and the full just lift-check. Also add a standing check that runs printed PSR statements: today no lift-check program does (agb's wrapper keeps its stand-in in all 14; that unit's PR says how a hand run with --drop-standin 0x03000000 went). Smaller things from the same review: an sp write after a wrapper's mode switch is no longer a stack-switch hole in these functions (crates/codegen/src/native/frame.rs, the comment near line 451 is stale there); a wait or an ordinary function's I/O store while still in IRQ mode writes Game::sp with the IRQ-mode sp. Done when: Metroid and Nightmare lifted with their dispatcher stand-ins dropped print all six PSR statements of each wrapper and no unreachable! after the handler call; a native check that runs a lifted wrapper's whole path is in lift-check; lift-check, the scored checks and just check pass.",
+      "check": "independent",
+      "needs": ["native/lift-psr-boot-irq"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "af8e0194",
+        "checker": "checker-irqtail-7c3e",
+        "at": "2026-11-13T11:36:14Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/15 (head d8847cc7). just lift-check, whole, 16 programs: lift-check: passed; native-irq-wrapper-600: pass (600 frames, 0 differences; planted fault caught at frame 33, IE 0x05 against 0x06). Metroid lifted with its dispatcher stand-ins (0x08000104, 0x03000c7c) dropped: 0 hard holes, six PSR statements in each wrapper, no unreachable! after the handler call, and it runs 600 of 600 frames; Nightmare with 0x03001030's dropped: six, none, and the same 11 entry-read hard holes as with its file as is. disc-pret (0.9997/0.9555, bars 0.9987/0.9349), disc-agb and jt-score (676/676, 610/617) pass and print as main's do. just check passes. The checker read the diff twice (second time after its findings were fixed) and found all three parts of the done-when met. Logs: out/irq-tail/ in the worker's checkout."
+      },
+      "round": "2026-11-13T08:33:00Z"
+    },
+    {
+      "id": "native/fnref-taker-regs",
+      "title": "Function flow gives a callee the r4-r11 it takes",
+      "detail": "Since {unit:native/metroid-entry-reads} a direct call passes a callee the r4-r11 it reads at entry (Summary::takes; x_<key> with the caller's own), and so do the indirect calls a holes file's [[takes]] names. Two analyses made before that don't follow it. (1) The function-address flow (crates/codegen/src/native/fnref.rs, Edge::Call) gives a callee r0-r3 only, so a function pointer or a table's address that reaches a taker in r4-r11 is missing from its entry state, and a callee set built from it can be called complete when it isn't. (2) The frames (native/frame.rs) let a stack address in a taken register escape at a direct call, but not at a named pointer call: the summary's run refuses that call instead (only an address it sees as sp plus a constant). Metroid's one chain passes a constant that is only stored, so its lift is unaffected. Fix: give all registers at a direct call to a function with may_take() != 0 and at the named indirect calls, as Edge::Tail does; hand the frames the named sites. Done when: a test whose taker calls through a pointer it was passed in r8 gets that callee in its set; just lift-check passes.",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/taker-test-program",
+      "title": "An agb program whose function takes r8 from its caller",
+      "detail": "From {unit:native/metroid-entry-reads}: no lifted program that runs under the native check has a function that takes r4-r11 from its callers (every agb program's report says 0 functions take), and Metroid's 600 frames from boot don't reach its save writer. So the printed passing call, the named indirect call's match and a taker's stopping plain entry are checked by unit tests of the summaries and by the crate building, not by a run against the interpreter. Add an agb test program with a hand-written assembly function that reads r8 and r9 as its caller left them (one called by bl, one through a pointer named in holes/<name>.toml's [[takes]]), draws what it read, and add it to crates/codegen/lift-check.toml with a planted control. Done when: just lift-check passes with it, and its report says 2 functions take.",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-bios-reads",
+      "title": "Function flow: a BIOS call holes only what it reads",
+      "detail": "From {unit:native/fnref-c-game-words} (docs/research/fnref-held-words.md, 'A C game'). The flow (crates/codegen/src/native/fnref.rs, Run::exit, Edge::Swi) holes all of r0-r3 at every swi as given to the BIOS. On Metroid 429 of 804 function words have that as their only use not allowed, all at one swi, VBlankIntrWait's wrapper (0x080051ce), which takes no arguments: handlers left in r0-r3 by the bx-rN call stub travel there. Measured on main with GBAA_FNREF_OFF=bios (fnref.rs bios_reads, a table of which registers each BIOS call reads): fn_words_proven 37 to 466, fn_words_not_proven 767 to 338, nothing else moves. Make that the rule, not a switch: a swi holes only the registers its call reads. Settle what r0-r3 hold after the swi (the flow makes all four unknown; a register the BIOS leaves as it came must keep its tokens, or be shown clobbered). On main; needs nothing of the branch unit/native/fnref-unknown-addrs. Done when: the rule is on by default with a unit test (a function address left in r3 at VBlankIntrWait stays proven; one in r0 at CpuSet is still a hole), Metroid's lift (just capped --mem 2G, about a minute) reports fn_words_not_proven at or under 338, the agb programs' bars in crates/codegen/lift-check.toml hold or are lowered, just lift-check and just check pass.",
+      "check": "independent",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "45f263ac",
+        "checker": "reviewer-a40db092",
+        "at": "2026-11-13T12:40:56Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/13. Rule on by default (fnref.rs bios_regs), unit tests: r3 at VBlankIntrWait proven and followed, r0 at CpuSet a hole. An independent checker verified head 5ea12fa0: checks out (lift-check whole 16 programs 0 differences, just check exit 0, Metroid 0 hard holes, 600 of 600 frames, fn_words_not_proven 767 to 338). After it main was merged again (no shared file) and two doc sentences reworded: head ecf7425f, where the worker reran all three, same results; that rerun is not independently checked. Twelve agb fn_words_not_proven bars one lower, four unchanged."
+      },
+      "round": "2026-11-13T09:45:04Z"
+    },
+    {
+      "id": "native/fnref-table-ends",
+      "title": "Function flow: where a ROM table read by index ends",
+      "detail": "From {unit:native/fnref-c-game-words} (docs/research/fnref-held-words.md, 'A C game', item 3). C lays tables of handlers back to back in ROM. A table read by a byte index is read 256 entries long, and a byte array whose address the run can't place is read as far as the value sets bound it, the index's width: 64 KB for a halfword. Run::object_end (crates/codegen/src/native/fnref.rs) doesn't stop between function words, and the bounded read (load_raw's hull path) doesn't stop at an object at all. On Metroid that is 77 words' first hole (0x08067f72, 0x08061aae), the 256-word reads behind the 429 words left in registers, and the width of the callee sets (18 sets of 210 callees, 73 on average). On Kirby Nightmare 64 KB reads of five byte arrays hold 1,401 of 4,054 held words (1,260 at 0x0801c6b8, the array at 0x08732ef0); on Emerald 1,209 of the 9,031 held when it stops. GBAA_FNREF_OFF=tables (unsound: it cuts at every object start) gives the upper bound: Metroid fn_words_not_proven 767 to 452 alone, 338 to 273 after bios. Find a sound end: a table's length from the compare that guards its index, from the next address a pool word holds that code indexes from, or from the entries' own shape. Done when: a rule that is sound (a unit test where a pointer into the middle of a table still reads to its end), Metroid's count and its callee sets' average size reported before and after and lower, the agb bars hold, just lift-check and just check pass.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-gcc-moves",
+      "title": "Function flow: old GCC's moves and compares with 0",
+      "detail": "From {unit:native/fnref-c-game-words} (docs/research/fnref-held-words.md, 'A C game', item 4). Old GCC (every commercial C game) moves a low register with adds rd, rs, #0, and tests a callback with cmp r0, #0. The flow (crates/codegen/src/native/fnref.rs, Run::block's Op::Adc, AdcCarry, AdcOverflow arms) follows an add that sets flags only as a compare, so the move is arithmetic, and it counts the compare's carry as an ordered compare though it is constant. On Metroid 99 words' first hole is such a move (0x0800535a, 0x08001416, 0x080031f0) and 39 the carry of cmp r0, #0 in three callback setters (0x08000aea); on Emerald 473 at CreateTask's first instruction (0x080a8fb2). Sound rules, each small: x + 0 with carry 0 is x, its carry and overflow 0; x + !0 + 1 (cmp x, #0) always carries and never overflows; a value that may be a function or a number compared with 0 holes nothing (the Adc arm's bad test looks at the same operand's other numbers, not the other operand's); a flag set and never read before the function returns is no use (the N flag of cmp r0, #0). GBAA_FNREF_OFF=move does the first, flags switches all flag holes off (an upper bound). Alone they move nothing on Metroid (767 to 769, 767): the words meet the next hole, so this pays only with {unit:native/fnref-bios-reads} and the results half of {unit:native/fnref-live-registers}. Done when: each rule has a unit test, the two switches are gone or folded into the rules, Metroid's count is reported before and after, the agb bars hold, just lift-check and just check pass.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-table-fields",
+      "title": "Function flow: struct tables read by one field",
+      "detail": "From {unit:native/fnref-c-game-words} (docs/research/fnref-held-words.md, 'A C game', item 5). A ROM table of records read by index at one field (base + i * size + offset, a byte flag beside two function pointers) is read 'from here on' as every byte of the object, so the byte read gives the bytes of the records' function words, and their first use is arithmetic. On Metroid 66 words: 33 at 0x0805b4f8 (records of 24 bytes from 0x08345d00, the byte at +0, functions at +4 and +12), 15 at 0x080609b4 (records of 16), 18 at 0x08069dd8; they are still held with every GBAA_FNREF_OFF switch on. Keep the stride: a read through base plus an index scaled by a known size (the shift and add before the load, or the value sets' stride if they keep one) at a known offset reads only that field of each record (crates/codegen/src/native/fnref.rs, Tok::RomFrom and Run::rom_from). {unit:native/fnref-frame-pointers} has the same idea for arrays of pairs in a stack frame. Done when: a unit test with a table of (byte, function) records whose byte read leaves the functions proven, Metroid's count reported before and after, the agb bars hold, just lift-check and just check pass.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-pile-globals",
+      "title": "Function flow: the pile split by global, for C games",
+      "detail": "From {unit:native/fnref-c-game-words} (docs/research/fnref-held-words.md, 'A C game', item 6). The flow keeps one pile for every store it can't place, and a load at a constant RAM address reads its cell and the pile. C keeps its state in globals: a callback stored in a struct through a pointer goes to the pile, and any byte loaded through a pointer then reads the bytes of every such callback. First road of 2,523 of Kirby Nightmare's 4,054 held words (733 at 0x08006162; with GBAA_FNREF_OFF=pile 1,599 are held) and 3,701 of the 9,031 Emerald holds when it stops; on Metroid 13, and at most 62 after {unit:native/fnref-bios-reads} (GBAA_FNREF_OFF=bios,pile: 338 to 276). {unit:native/fnref-heap-sites} splits by allocation site, which a C game doesn't have. The value-set analysis bounds 8,582 of Metroid's stores to one global and leaves 3,989 unbounded (store_ram_object, store_computed_unknown), so split the pile by those bounds, and stop a constant-address load reading the pile where every store that could reach its cell is bounded elsewhere. Measure on Nightmare (the flow settles there now: gbaa-recompile --summaries ROM --callee-sets, 31 to 35 minutes, 2.0 GB) with GBAA_FNREF_WATCH=roads. Do it after {unit:native/fnref-table-ends}: on Metroid the two reach the same words. Done when: a unit test with two globals whose stores stay apart, Nightmare's held words by pile reads reported before and after and lower, the agb bars hold, just lift-check and just check pass.",
+      "check": "independent",
+      "needs": ["native/fnref-table-ends"],
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/hw-io-ignored-ranges",
+      "title": "Library ignores the I/O offsets the play build ignores",
+      "detail": "From {unit:native/hw-serial-registers}: Hw::write16 still panics on I/O offsets 0x160-0x1FE and 0x300 (POSTFLG, HALTCNT), which the play build's bus ignores or keeps. A lifted game that stores there stops in the library though the play build runs on. Make the library do what the play build does for each (keep, ignore, or halt), with a unit test against Io as the serial registers' test does; keep the panic only where the play build has no behaviour. Also fix agb/native-save/SCENE.md, which says the picture wraps by frame 600 (it doesn't until 960). Done when the test passes and just check passes.",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/irq-mode-sp-bank",
+      "title": "A store or wait in IRQ mode banks sp, not Game::sp",
+      "detail": "Left by {unit:native/lift-irq-wrapper-tail}, from the review of {unit:native/lift-psr-boot-irq}, 2026-11-13. An ordinary lifted function prints 'g.sp = r13' before a wait and before an I/O store that may set IME (crates/codegen/src/native.rs), and the prelude's helpers that take sp (intr_wait, cpu_set, cpu_fast_set, lz77: 'g.sp = sp') do the same, also when the reset or an IRQ wrapper calls them. Game::sp is system mode's banked sp (prelude banked_sp). If one runs while Game::cpsr's mode is IRQ (a lifted wrapper that calls something or makes a BIOS call before its msr to system mode, or one that never switches), it puts an IRQ-stack address in system mode's bank, and the wrapper's later msr_cpsr to system mode hands that back as sp. What the lifter prints in the reset and the wrappers themselves already banks by mode (bank_sp: I/O stores since {unit:native/lift-psr-boot-irq}; poll-loop waits and Halt since {unit:native/lift-irq-wrapper-tail}). No wrapper seen so far calls anything before its switch (Metroid 0x08000104, Nightmare 0x03001030, agb's InterruptHandler, agb/native-irq-wrapper's iw_main), so nothing is known to be wrong today; it was left out of that unit to keep its diff small, since it changes every lifted function's text. That unit's reviewer read the agb wrapper's stand-in (holes/*.toml, entry 0x03000000, which leaves Game::cpsr in IRQ mode while its handler runs on Game::sp) and found nothing reads either bank before irq_entry puts cpsr and the IRQ bank back (I is set, so dispatch returns early): printing bank_sp everywhere looks safe under it, to be proven by lift-check. Do: print bank_sp (or a prelude set_sp that picks the bank by mode) in every function and use it in the prelude's helpers. Done when: an agb program whose wrapper calls a function that stores to I/O before switching to system mode passes the native check, and just lift-check passes.",
+      "check": "independent",
+      "needs": ["native/lift-irq-wrapper-tail"],
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/entry-readers-moonbeam-rogue",
+      "title": "Entry readers left on moonbeam and Rogue, looked into",
+      "detail": "Left by {unit:discovery/gcc-far-jump-bl} (docs/research/native-holes.md, 'Modern GCC's cold blocks'): hard 'reads r4-r11 at entry' holes not explained yet. moonbeam 0x08025a29 reads r8 and r9 at 0x08025dec (str through r3) in a 2.8 KB function whose far jumps are all taken, so some path reaches it with r8 unset or the summary joins one in; Rogue 0x081b42e1 (r11 passed in r0 at 0x081b444c) and 0x0826c5e7 (r4, r7 at its first instruction, r6 at 0x0826c5fa: may be a fragment or data). Known and not this unit's: moonbeam 0x0800019b (crt0's copy loop takes its end address in r4) and 0x0803830d (a register save as setjmp makes). Done: each one's cause written in the doc, fixed where it is the summary's or discovery's mistake, holes-all --against main with no hard count higher.",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/nightmare-mixer-pointer",
+      "title": "Nightmare's mixer reads through 0xe3a02004 at frame 5",
+      "detail": "Left by {unit:native/nightmare-entry-reads}, 2026-11-13: the lift builds again and its first stop is 5 of 600 frames, no-memory, 'a byte load at 0xe3a02004', in f_030072e8 < f_030071df < f_03007151 < f_080cd8ad < f_080010cd < f_03001030 < f_080cfa6d < f_0800157d: m4a's IWRAM mixer, run from SoundMain inside the V-blank IRQ (the dispatcher's stand-in). The load is the sample loops' 'ldrsb r0, [r3], #1' (ROM source 0x080cdb1c on; the copy is 0x080cd930 to 0x03007150); r3 is the channel's current pointer, 'ldr r3, [r4, #40]' at 0x080cdac0, r4 the channel from the SoundInfo at [sp, #24]. 0xe3a02004 is no word of the ROM (it reads as ARM 'mov r2, #4'), so a channel's wave pointer, or sp under the mixer (the IRQ stand-in's stack), is wrong. Not the entry-read work: with the constant-branch rule off the lift's source differs only in the list-scan functions' modules. Find the cause against the interpreter (just first-stop, gbaa-interp), fix it or file what it needs. Done when: just lift ROM out/lift-kirby-nightmare --name kirby-nightmare runs past frame 5 and the next first stop is quoted; just check passes.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-13T12:14:41Z",
+          "by": "949481c0",
+          "text": "2026-11-13: f_03001030 is lifted code now, its stand-in dropped ({unit:native/drop-psr-standins}, mods c767a0b). Stop unchanged: frame 5, same load, same stack, frames 1-5 hash the same. Past frame 5 the lifted dispatcher is unrun; the stand-in is in mods' history."
+        }
+      ]
+    },
+    {
+      "id": "native/ram-copy-jump-only",
+      "title": "RAM-copy code only jumped into needs no [[takes]] entry",
+      "detail": "Left by {unit:native/nightmare-entry-reads}, 2026-11-13. In a RAM copy's context the summaries take every function as one a pointer may call (saves/summary.rs, 'Code not in the ROM: any pointer may'), so each part of m4a's IWRAM mixer that reads r4-r11 as it came is a hard hole until the holes file names it: five '[[takes]] sites = []' entries in Nightmare's (SoundMainRAM and the four places it changes between Thumb and ARM by 'adr; bx'). Every m4a game with the mixer in IWRAM will need the same five by hand. Find a rule the lifter can apply itself (say: no ROM word holds the function's RAM key but a resolved constant jump's literal, and every way in that the lift prints is a jump), or decide the holes entries are the rule and write the m4a recipe in docs/research/native-holes.md. Done when: just lift on Nightmare reports 0 hard holes with those five entries removed, or the doc has the recipe and why no rule; just lift-check and just check pass.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-13T10:50:42Z",
+          "by": "d2717a37",
+          "text": "Review of PR 12: a jump into a no-sites taker isn't checked against the jumper. A jumper that never set the register (another code context, or one whose run stops at the jump) hands on its own zeroes, no hole. Nightmare's SoundMain was checked by hand; a rule must check jumpers."
+        }
+      ]
+    },
+    {
+      "id": "native/moonbeam-taker-chain",
+      "title": "moonbeam's hard holes: 11 to 503 since calls pass registers",
+      "detail": "Found by {unit:discovery/gcc-far-jump-bl} while measuring against main: 'just holes-all' gave moonbeam 11 hard holes at f52fe115 and 503 at 4fb9a5cf, after {unit:native/metroid-entry-reads} merged (a call passes the r4-r11 its callee reads at entry). 500 functions now have 'reads r4-r11 at entry: rN, which X takes' and 220 are 'takes r4-r11 from its callers'. The most cited taker, 0x08002549 (2,664 lines), starts push {r3-r7, lr} and reads none of r4-r11 first, so it takes through its callees. Not verified: the root may be 0x0803830d, a bx pc veneer to ARM stmia r0!, {r4-r14} (a register save as setjmp makes, which reads all of r4-r11 without using them). Rogue went 21 to 48 and Imperium 16 to 15 over the same merge. Done: the cause named, a register save that only stores them not counted as taking (or the real cause fixed), moonbeam's hard count back near 6, no other game's higher.",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "c5c06b25",
+        "at": "2026-11-13T12:44:43Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/16 at 110c3204. Roots found by following 'which X takes' to own reads: moonbeam's newlib setjmp 0x0803830d (stm r0!, {r4-r12, sp, lr}) rooted 499 of 500 hard functions; Rogue's 0x081b42e1 (r11's unset half passed in r0 as struct padding, stored) 29 of 30. Rule (codegen::saves::summary): a context save (unconditional ARM stm of r4-r11 with sp and lr, each whole as it came, with the matching ldm in the program) is no use; a pointer-entered function that only passes a register on is soft and the read at its chain's end is the one hard hole. just holes-all against main 90eb57a3: moonbeam 503 to 4, Rogue 45 to 17, Emerald 11 to 7, Nightmare 8 to 7, the rest equal, corpus 615 to 85 (112 at f52fe115, none above it). Metroid's lift: hard_holes 0, 600 of 600 frames, holes file untouched. just lift-check: passed (16 programs). just check: passed. Reviewed by a fresh subagent (aafd61cd): one real finding (a stand-in's function zeroing through it) fixed. Follow-up filed: {unit:native/longjmp-uncounted}."
+      },
+      "notes": [
+        {
+          "at": "2026-11-13T12:25:52Z",
+          "by": "c5c06b25",
+          "text": "Roots: moonbeam newlib setjmp 0x0803830d (stm r0!,{r4-r12,sp,lr}) 499 of 500; Rogue 0x081b42e1 (r11 struct padding passed in r0) 29 of 30. Fix PR 16: context save no use; a broken chain's hard hole is its reader's. Write-up docs/research/entry-read-takers.md."
+        },
+        {
+          "at": "2026-11-13T10:11:11Z",
+          "by": "d2717a37",
+          "text": "From {unit:native/nightmare-entry-reads}: its branch adds Passing::named (a [[takes]] with sites = [] counts as named) in summary.rs and native.rs, 3 small hunks, and a constant-branch rule in saves.rs. Nothing else of the taker rule moved; expect a small conflict."
+        }
+      ],
+      "round": "2026-11-13T10:10:31Z"
+    },
+    {
+      "id": "native/nightmare-fn-flow-again",
+      "title": "Nightmare's lift runs the function flow again",
+      "detail": "From the sweep's foreman, 2026-11-13, by way of {unit:native/nightmare-entry-reads}: mods/kirby-nightmare/holes.toml's skip_fn_flow says the function-address flow doesn't settle on Nightmare under 16 GB. That is stale: on main it settles now (31 to 35 minutes, 2.0 GB peak, measured by {unit:native/fnref-c-game-words}), and crates/codegen/src/native/fnref.rs's module comment says the same stale thing. Drop the line (or keep it with a true reason: it saves half an hour a lift, and the flow only feeds the report and stage B's metrics), fix the comment, and lift once with the flow on. Done when: the holes file and fnref.rs say what is true today; just lift ROM out/lift-kirby-nightmare --name kirby-nightmare with the flow on still reports 0 hard holes and builds, its time and peak quoted; just check passes.",
+      "check": "recorded",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-bios-ram-copies",
+      "title": "Function flow: a BIOS copy out of RAM carries no addresses",
+      "detail": "Found by {unit:native/fnref-bios-reads}. The flow (crates/codegen/src/native/fnref.rs, Run::exit, Edge::Swi) follows CpuSet and CpuFastSet only from ROM: the source's words go to the pile. A copy whose source is RAM moves nothing, so a function's address stored at a constant RAM address (its cell) and copied elsewhere by the BIOS is not in what a load of the copy reads (that cell and the pile): the load gives no address, arithmetic on it is no hole, and the word stays proven though the lifted program computes with it. C games copy structs with CpuSet. Unsound, and older than that unit (which only made CpuFastSet's r3, a word it read, hold what a load from anywhere reads). The same for what the other calls read through a pointer and write back (the affine sets, MidiKey2Freq's wave header, the decompressors' bytes): arithmetic inside the BIOS on memory the flow never looks at. Done when: a BIOS copy from RAM, or from a source the run can't place, stores to the pile what a load of its source reads (its cells in range if the address and length are numbers, else every cell, and the pile), with a unit test (F stored at a cell, CpuSet to another, loaded there and added to: a hole); the other calls' memory reads are either modelled or written down as why not; Metroid's fn_words_not_proven and the agb bars are quoted before and after; just lift-check and just check pass.",
+      "check": "independent",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/longjmp-uncounted",
+      "title": "longjmp: a return to another frame, counted nowhere",
+      "detail": "Found by {unit:native/moonbeam-taker-chain}. moonbeam has newlib's setjmp (0x0803830d) and longjmp (0x08038325: ldm r0!, {r4-r12, sp, lr}; movs r0, r1; moveq r0, #1; bx lr). The summaries give longjmp only 'a jump to an unknown place' (soft) and the hole report counts nothing for it, so a native build has no hole there, yet a lifted longjmp can't return into setjmp's caller's frame: each function's r4-r11 and sp are its own Rust locals. setjmp itself now takes nothing (a context save). Done: say what the lift prints for longjmp's bx lr and what happens when it runs (a named stop, or a wrong return); if wrong or silent, the pair is a hard hole in the hole report and the lift (found by shape: a context restore, codegen::saves::summary's context_saves has the save's), or lifted as a stand-in pair (host unwinding to the setjmp call). Check on moonbeam whether a route reaches longjmp at all.",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/window-keeps-save",
+      "title": "A native program's window keeps the game's save",
+      "detail": "Since 5bb6efdc a native program run without --headless opens gbaa-desktop's window (crates/native-host, Windowed). Nothing writes the save chip's bytes to a file or reads them back, so every run starts from an empty save. The window's menu still offers save states, rewind and netplay, which do nothing here: keep the save as gbaa-desktop does (the .sav in the game's folder), and hide or wire the menu rows that don't apply. Check: save in Metroid's native build, close the window, reopen, and the file is there.",
+      "record": {
+        "state": "done",
+        "by": "a1e87159",
+        "at": "2026-11-13T18:05:53Z",
+        "evidence": "Review fix made (doc comments in crates/runtime/src/hw/tests.rs back on their tests); just check passes after merging main. Earlier check stands: Metroid native window wrote saves/metroid/metroid.sav, closing flushed it, reopening read it back (e3fde1f2, same as gbaa-desktop --headless --timing exact --save); native menu hides save states, rewind, netplay.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-11-13T18:02:01Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/runtime/src/hw/tests.rs:166-169: the new test `the_host_sees_the_save_before_each_present` was put between `same_frame_as_the_play_build`'s doc comment and that test. The comment \"The play build's rende…"
+        }
+      ]
+    },
+    {
+      "id": "native/lift-fn-names",
+      "title": "Metroid's lift uses the names file for functions and data",
+      "detail": "gbaa-lift --names DIR already reads $GBAA_DATA/names/<game>.toml but uses it only for RAM globals; functions still print as f_<addr>. Use its function names for each lifted function (and its calls), and its data names where code takes a ROM or RAM address as a constant, keeping the address in a comment. Names that aren't valid or unique Rust identifiers get a suffix. Metroid's names file comes from the Zero Mission decompilation (about 2,600 functions). Output is game-derived but stays in out/ (gitignored); tests use an agb program's names. Done when: Metroid lifted with --names builds and runs 600 of 600 frames headless as before; a unit test on an agb program's names; the report counts functions and data named; just lift-check and just check pass.",
+      "check": "recorded"
+    },
+    {
+      "id": "native/lift-structured",
+      "title": "The native lifter uses the structuring pass",
+      "detail": "Every lifted function is still a loop { match block }. crates/codegen/src/lower.rs has a structuring pass (the mod view and structured codegen use it) that the native lifter doesn't. Emit if/else, while and loop with break where the control flow is reducible, keeping the block match only for what isn't. Done when: just lift-check passes on every program with 0 differences and every planted fault caught; Metroid lifted builds and runs 600 of 600 frames headless; just lift-metrics reports the share of functions and blocks structured, with a bar; just check passes.",
+      "check": "recorded"
+    },
+    {
+      "id": "native/fn-check-any",
+      "title": "A per-function check for any function in any game",
+      "detail": "crates/native-fn-diff checks a native function against the interpreter from recorded entry states, but is wired to Emerald's ten (its NativeGame per game). Make it take a game and a function address, with a replacement from mods/<game>/ as the native side. Owner's view (2026-11-13): there is no proof, only tests, and tests bloat and cost CPU. So: store a seed, count and digest, not the states; make the reference the lifted function run natively (cheap, many inputs per second), with the interpreter as an occasional second reference; give each function a fixed budget and print its time. Done when: it runs on a Metroid function and on an agb one; a planted wrong replacement is caught, the differing byte named; the budget and time per function are printed; just check passes.",
+      "check": "recorded"
+    },
+    {
+      "id": "native/llm-pilot-metroid",
+      "title": "LLM pilot: 20 Metroid functions as plain Rust",
+      "detail": "Owner decision: LLM passes may alternate with the algorithmic lift. Claude rewrites 20 Metroid functions of mixed size and kind (leaf, loop, switch, struct access, calls, one storing a function pointer) as plain typed Rust, from the named lift. Each goes into mods/metroid/ as a stand-in (game-derived: never in the public repo), with its per-function check. The owner said there is no sound check, only tests: report, per function, whether it passes its budgeted check, what that check missed when the route check caught it, and the time and tokens it took. Done when: the 20 are written; each passes or its failure is written up; Metroid's route check passes with every passing one in place; findings in docs/research/llm-pilot.md with no game code quoted beyond a few instructions.",
+      "check": "recorded",
+      "needs": ["native/metroid-native-check", "native/lift-fn-names", "native/fn-check-any"]
+    },
+    {
+      "id": "native/llm-pilot-patterns",
+      "title": "LLM pilot's repeated rewrites become lifter units",
+      "detail": "The alternating loop: what the lifter can do for every game shouldn't be left to Claude. From the pilot's rewrites, list each transformation Claude made in more than one function (loop shapes, struct access, compiler idioms, flag use), say whether the lifter could prove it, and file one unit per pattern that could, with the pilot's functions as examples by address. Done when: the list is in docs/research/llm-pilot.md and a unit is filed for each provable pattern.",
+      "check": "recorded",
+      "needs": ["native/llm-pilot-metroid"]
     }
   ]
 }
