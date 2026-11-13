@@ -180,14 +180,14 @@ pub fn discover_with(rom: Vec<u8>, roots: &[u32]) -> Discovery {
 }
 
 /// Starts inside a BIOS copy's source (still data) that code outside it
-/// calls with a `bl`: ROM code the copy's length reads on into (Kirby &
-/// the Amazing Mirror's 0x1c0-byte copy runs into its heap allocator).
-/// Code in ROM doesn't call a copy's ROM source, which runs at the
-/// destination. Not a `bl` to a `bx rN` stub (m4a's `SoundMainRAM` copy
-/// ends in the `bx r3` `SoundMain` calls in ROM), nor a `b` (Kirby:
-/// Nightmare in Dream Land's crt0 copy runs into its coroutine switch):
-/// the code they lead to has jumps the hole report would count
-/// (`docs/research/native-holes.md`, "What discovery misses"). Aligned.
+/// calls with a `bl` or jumps to with a `b`: ROM code the copy's length
+/// reads on into (Kirby & the Amazing Mirror's 0x1c0-byte copy runs into
+/// its heap allocator; Kirby: Nightmare in Dream Land's crt0 copy into
+/// its coroutine switch, which a veneer's ARM `b` enters; m4a's
+/// `SoundMainRAM` copy ends in the `bx r3` stub `SoundMain` calls in
+/// ROM). Code in ROM doesn't call a copy's ROM source, which runs at the
+/// destination. A stub cut so stays out of the code (a `bl` to it calls
+/// rN), but the call returns: what follows it is found. Aligned.
 fn copy_cuts(rom: &[u8], d: &Discovery) -> BTreeSet<u32> {
     let prog = Program::new(rom.to_vec(), Vec::new(), Vec::new());
     let in_data = |a: u32| {
@@ -199,15 +199,16 @@ fn copy_cuts(rom: &[u8], d: &Discovery) -> BTreeSet<u32> {
         let Some(i) = prog.decode(a, c.thumb) else {
             continue;
         };
-        let Some(t) = i.bl else { continue };
-        // A `bl` to a lone `bx rN` calls rN, not the stub.
-        let stub = prog.decode(t, c.thumb).is_some_and(|s| {
-            matches!(s.instr, Instr::Bx { rm, cond: Cond::Al }
-                if rm != armv4t::decode::Reg::Lr && rm != armv4t::decode::Reg::Pc)
-        });
-        if stub {
-            continue;
-        }
+        let t = match i.instr {
+            _ if i.bl.is_some() => i.bl,
+            Instr::Branch {
+                link: false,
+                target,
+                ..
+            } => Some(target),
+            _ => None,
+        };
+        let Some(t) = t else { continue };
         let src = d
             .copies
             .iter()

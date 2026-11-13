@@ -1,6 +1,7 @@
 # gbaa-server on fly.io (deploy/fly/fly.toml; docs/tools/commands.md,
-# "fly-deploy"). Built from the repo root: only the relay crate compiles,
-# but cargo needs the whole workspace's manifests.
+# "fly-deploy"). Built from the repo root: only the relay crate compiles
+# (and runtime, for the wireless radio's relay::radio), but cargo needs
+# the whole workspace's manifests.
 FROM rust:1-bookworm AS build
 WORKDIR /src
 COPY . .

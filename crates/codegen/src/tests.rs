@@ -2,7 +2,7 @@
 //! discovery's output written by hand.
 
 use crate::emit::{build_all, pretty};
-use crate::func::{Ctx, Insn, Plan, build_func, exits};
+use crate::func::{Ctx, Idle, Insn, Plan, build_func, exits};
 use crate::lower::{lower_func, lower_func_checked};
 use analysis::discovery::{Code, Discovery, Evidence};
 use analysis::program::ROM_BASE;
@@ -1293,6 +1293,33 @@ fn an_entry_read_tail_called_from_a_called_function_is_hard() {
     );
 }
 
+#[test]
+fn the_code_after_a_call_that_never_returns_is_not_the_callers() {
+    // `f: push {lr}; bl p; ldr r0, [r5, #0]; pop {r1}; bx r1`, `p: b p`:
+    // p never returns, so the read of r5 after the call runs only from
+    // jumps into it (agb's panic paths), never from f's own entry.
+    let (rom, d) = thumb_program(
+        &[
+            0xB500, // 0x00 push {lr}
+            0xF000, 0xF803, // 0x02 bl 0x0c
+            0x6828, // 0x06 ldr r0, [r5, #0]
+            0xBC02, // 0x08 pop {r1}
+            0x4708, // 0x0a bx r1
+            0xE7FE, // 0x0c b 0x0c
+        ],
+        &[2, 4, 2, 2, 2, 2],
+        &[0x0800_0001, 0x0800_000d],
+    );
+    // A pointer to f: it is entered by a call.
+    let mut rom = rom;
+    rom.extend(0x0800_0001u32.to_le_bytes());
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    assert!(!sums.by_entry[&0x0800_000d].returns);
+    assert!(!sums.by_entry[&0x0800_0001].returns);
+    assert_eq!(hard_holes(&sums, 0x0800_0001), Vec::<String>::new());
+}
+
 /// `c: push {lr}; movs r1, #5; bl f; adds r2, r0, #0; pop {r0}; bx r0`,
 /// `f: adds r0, r1, #0; bx lr` and `g: push {lr}; bl f; pop {r0}; bx r0`,
 /// in Thumb.
@@ -2136,4 +2163,26 @@ fn an_arm_ldr_pop_of_r4_restores_it() {
     let s = &sums.by_entry[&ROM_BASE];
     assert_eq!(s.holes, std::collections::BTreeSet::new());
     assert!(s.keeps);
+}
+
+#[test]
+fn an_idle_loops_exit_syncs_in_native_code() {
+    // `b L2; L1: ldr r0, [r1, #8]; L2: ands r0, r4; cmp r0, #0; bne L1;
+    // nop; bx lr`: a DMA wait entered in its middle (Metroid's).
+    let (rom, d) = thumb_program(
+        &[0xE000, 0x6888, 0x4020, 0x2800, 0xD1FB, 0x46C0, 0x4770],
+        &[2; 7],
+        &[0x0800_0001],
+    );
+    let mut ctx = Ctx::new(&rom, &d);
+    ctx.cfg.clock = crate::func::Clock::Native;
+    let f = build_func(&ctx, 0x0800_0001);
+    // The `bne` ends its block, so where it isn't taken the loop's exit
+    // syncs as the interpreter does (native/play-native-metroid-interp).
+    let x = exits(&ctx, &f.blocks[&0x0800_0005]);
+    let idle: Vec<Idle> = x.iter().map(|x| x.idle).collect();
+    assert_eq!(idle, [Idle::Edge, Idle::Exit], "{x:x?}");
+    let text = pretty(lower_func(&ctx, &f));
+    assert!(text.contains("rt::idle_edge(m)"), "{text}");
+    assert!(text.contains("rt::idle_exit(m)"), "{text}");
 }

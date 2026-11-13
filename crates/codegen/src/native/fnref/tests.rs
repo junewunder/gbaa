@@ -394,6 +394,61 @@ fn a_table_read_past_what_the_run_reads_is_incomplete() {
     assert!(!site(&f).complete, "{f:?}");
 }
 
+/// `ldr r0, =VT; ldr r3, [r0, r1]` with r1 unknown, calling r3.
+fn calling_vt_entry() -> Built {
+    let mut b = B::default();
+    let vt = b.pool(0x0800_0408, VT);
+    let i = b.get(1);
+    let a = b.bin(BinOp::Add, vt, i);
+    let t = b.ld(Width::Word, a);
+    calling(0x0800_1001, b, t)
+}
+
+#[test]
+fn a_table_read_stops_at_the_next_object() {
+    // A second object at VT + 0x40 (a ROM word points at it) holds H: a
+    // read by an unknown index from VT on stays in VT's object
+    // (native/fnref-rom-read-bound).
+    let mut img = Img::new();
+    img.words.insert(0x0800_0420, VT + 0x40);
+    img.words.insert(VT + 0x44, H);
+    let f = run_img(&[calling_vt_entry()], &BTreeMap::new(), &img);
+    assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
+    assert!(site(&f).complete, "{f:?}");
+    // Without the pointer it runs to the next code, taking in H.
+    img.words.remove(&0x0800_0420);
+    let f = run_img(&[calling_vt_entry()], &BTreeMap::new(), &img);
+    assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
+}
+
+#[test]
+fn a_pointer_into_a_table_of_handlers_doesnt_cut_it() {
+    // VT's handlers F, H, F at 12, 16 and 20, and a ROM word pointing at
+    // VT + 16 (as `&TABLE[4..]` would): not an object's start.
+    let mut img = Img::new();
+    img.words.insert(VT + 16, H);
+    img.words.insert(VT + 20, F);
+    img.words.insert(0x0800_0420, VT + 16);
+    let f = run_img(&[calling_vt_entry()], &BTreeMap::new(), &img);
+    assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
+}
+
+#[test]
+fn a_bios_copy_reads_its_length() {
+    let n = |m: u32| Val::of(Tok::Num(m));
+    // CpuSet: halfwords, words with bit 26, one unit with the fill bit.
+    assert_eq!(copy_len(false, &n(92)), Some(184));
+    assert_eq!(copy_len(false, &n(1 << 26 | 92)), Some(368));
+    assert_eq!(copy_len(false, &n(1 << 24 | 1 << 26 | 92)), Some(4));
+    // CpuFastSet: words, in blocks of eight.
+    assert_eq!(copy_len(true, &n(9)), Some(64));
+    // The longest of several; none for an unknown.
+    let mut v = n(8);
+    v.join(&n(16));
+    assert_eq!(copy_len(false, &v), Some(32));
+    assert_eq!(copy_len(false, &Val::unk()), None);
+}
+
 #[test]
 fn a_rom_pointer_past_the_next_code_is_not_taken_in_by_one_from_below() {
     // r0 is VT + r1 (r1 unknown: "from VT on", read up to the code at

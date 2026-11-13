@@ -27,7 +27,10 @@
 //!   [pc]`);
 //! - a load through a ROM pointer, of a word holding a function's key
 //!   (agb's vtables, tables of handlers); a load "from here on" reads
-//!   every word up to the next code ([`Image::bound`]);
+//!   the words of the object it points into: up to the next code
+//!   ([`Image::bound`]) or the next ROM data address a ROM word holds
+//!   ([`objects`]), and only those the value-set analysis bounds the
+//!   load to (`native/fnref-rom-read-bound`);
 //! - the program start's copies of ROM data to RAM (`Discovery::copies`
 //!   that aren't code) and `CpuSet` from ROM.
 //!
@@ -412,6 +415,51 @@ const ROMS: usize = 16;
 /// [`Val::lost_rom`]. The agb programs' data runs to about 110 KB; reading
 /// it all costs about a second of each lift.
 const ROM_READ: u32 = 0x4_0000;
+
+/// The most bytes a `CpuSet` (or, `fast`, `CpuFastSet`) with `r2` as its
+/// length and mode reads, if `r2` holds only numbers: a fill reads one
+/// unit, a copy its count of halfwords or words (`CpuFastSet` in blocks
+/// of eight words).
+fn copy_len(fast: bool, r2: &Val) -> Option<u32> {
+    if r2.unk || r2.mem || r2.toks.is_empty() {
+        return None;
+    }
+    let mut most = 0;
+    for &t in &r2.toks {
+        let Tok::Num(m) = t else { return None };
+        let unit = if fast || m & 1 << 26 != 0 { 4 } else { 2 };
+        let count = if m & 1 << 24 != 0 {
+            1
+        } else if fast {
+            (m & 0x1f_ffff).div_ceil(8) * 8
+        } else {
+            m & 0x1f_ffff
+        };
+        most = most.max(count * unit);
+    }
+    Some(most)
+}
+
+/// The objects in ROM data, by start: every ROM data address (not a
+/// function's key) that an aligned ROM word holds, a pool literal's or a
+/// pointer field's. A read "from here on" stays in the object it starts
+/// in, so it stops at the next of these: the next glyph, string, slice
+/// or vtable. Without it, affine's reads through its font's glyph
+/// records and strings ran 110 KB to the next code, into agb's vtables
+/// (`native/fnref-rom-read-bound`). Font bytes that look like pointers
+/// add starts too; only cutting a table of handlers short would be
+/// wrong, so [`Run::object_end`] doesn't stop between function words.
+fn objects(img: &dyn Image) -> BTreeSet<u32> {
+    let mut o = BTreeSet::new();
+    let mut p = 0x0800_0000u32;
+    while let Some(x) = img.word(p) {
+        if x & 0xff00_0000 == 0x0800_0000 && img.word(x).is_some() && !img.is_fn(x) {
+            o.insert(x);
+        }
+        p = p.wrapping_add(4);
+    }
+    o
+}
 
 impl Val {
     fn unk() -> Val {
@@ -886,8 +934,10 @@ struct G {
     loose_args: Vec<Val>,
     /// Functions whose address is taken.
     taken: BTreeSet<u32>,
-    /// What a read from ROM "from here on" gives, by (address, width).
-    rom_from: BTreeMap<(u32, u8), Val>,
+    /// What a read from ROM "from here on" gives, by (start, end, width).
+    rom_from: BTreeMap<(u32, u32, u8), Val>,
+    /// The objects in ROM data ([`objects`]).
+    objects: BTreeSet<u32>,
     /// What a read the value-set analysis bounds to ROM gives, by bounds
     /// and width.
     rom_hull: BTreeMap<(u32, u32, u8), Val>,
@@ -914,6 +964,14 @@ struct G {
     pile_changed: bool,
     /// What the running function read of memory.
     rd: Rd,
+    /// `GBAA_FNREF_WATCH`'s origins: each place their function address
+    /// goes is printed, once ([`G::watch`]).
+    watch: Vec<Origin>,
+    /// `GBAA_FNREF_WATCH=all`: every ROM word's.
+    watch_all: bool,
+    watch_said: BTreeSet<String>,
+    /// The instance and instruction being run, for those lines.
+    now: (Ix, u32),
 }
 
 /// A fast hash for the run's small keys (the standard one was a tenth of
@@ -1023,10 +1081,7 @@ impl G {
     fn read_obj(&mut self, i: u32, off: i32, w: u8, into: &mut Val) {
         if off == OBJ_ANY {
             let (lo, hi) = (obj_addr(i, -OBJ_WIN), obj_addr(i, OBJ_ANY) + 3);
-            self.rd.ranges.push((lo, hi));
-            for (_, c) in self.cells.range(lo..=hi) {
-                from_mem(c, w, into);
-            }
+            self.read_range(lo, hi, w, "by a pointer anywhere in it", into);
         } else {
             let c = obj_addr(i, off);
             self.rd.ranges.push((c.saturating_sub(3), c + w as u32 - 1));
@@ -1050,11 +1105,75 @@ impl G {
             self.obj_reads[i] = Some(v);
         }
         into.join(self.obj_reads[i].as_ref().unwrap());
+        if !self.watch.is_empty() {
+            let v = self.obj_reads[i].clone().unwrap();
+            self.watch(&v.toks, || format!("read w{w} from every object"));
+        }
+    }
+
+    /// `GBAA_FNREF_WATCH=0x080008c8[,…]` (ROM words, or `BLOCK:INST` for a
+    /// code constant): print, once each, where the function address of
+    /// each goes: `what` says where, for the tokens `toks` that got there.
+    fn watch<'t>(&mut self, toks: impl IntoIterator<Item = &'t Tok>, what: impl Fn() -> String) {
+        if self.watch.is_empty() {
+            return;
+        }
+        for t in toks {
+            if let Tok::Fn { origin, form, .. } = *t
+                && (self.watch.contains(&origin)
+                    || (self.watch_all && matches!(origin, Origin::Word(_))))
+            {
+                let line = format!(
+                    "watch {origin:x?} ({form:?}): {} [f_{:08x} at {:#010x}]",
+                    what(),
+                    entry_of(self.now.0),
+                    self.now.1
+                );
+                if self.watch_said.insert(line.clone()) {
+                    eprintln!("{line}");
+                }
+            }
+        }
+    }
+
+    /// What a load at width `w` reads of the cells from `lo` to `hi`.
+    fn read_range(&mut self, lo: u32, hi: u32, w: u8, how: &str, into: &mut Val) {
+        self.rd.ranges.push((lo, hi));
+        for (_, m) in self.cells.range(lo..=hi) {
+            from_mem(m, w, into);
+        }
+        if !self.watch.is_empty() {
+            let cs: Vec<u32> = self.cells.range(lo..=hi).map(|c| *c.0).collect();
+            for c in cs {
+                let mut v = Val::default();
+                from_mem(&self.cells[&c], w, &mut v);
+                let name = self.cell_name(c);
+                self.watch(&v.toks, || format!("read w{w} from {name}, {how}"));
+            }
+        }
+    }
+
+    /// [`G::watch`] for what is in memory.
+    fn watch_mem(&mut self, toks: &[(Tok, u8)], what: impl Fn() -> String) {
+        if !self.watch.is_empty() {
+            let ts: Vec<Tok> = toks.iter().map(|t| t.0).collect();
+            self.watch(&ts, what);
+        }
     }
 
     fn hole(&mut self, v: &Val, at: u32, why: Why, only: impl Fn(Form) -> bool) {
         let big = v.toks.len() >= 64;
         let p = std::rc::Rc::as_ptr(&v.toks.0);
+        if !self.watch.is_empty() {
+            let ts: Vec<Tok> = v
+                .toks
+                .iter()
+                .copied()
+                .filter(|t| matches!(t, Tok::Fn { form, .. } if only(*form)))
+                .collect();
+            let n = v.toks.len();
+            self.watch(&ts, || format!("HOLE, {}, in a value of {n} tokens", why.what()));
+        }
         if big && self.all_holed.contains_key(&p) {
             return;
         }
@@ -1089,6 +1208,10 @@ impl G {
             v
         });
         into.union(v);
+        if !self.watch.is_empty() {
+            let v = self.spill_reads[&(f, w)].clone();
+            self.watch(&v.toks, || format!("read w{w} from f_{:08x}'s spills", entry_of(f)));
+        }
     }
 
     /// What a load at width `w` from RAM address `c` reads of the cells
@@ -1106,9 +1229,40 @@ impl G {
             v
         });
         into.union(v);
+        if !self.watch.is_empty() {
+            let v = self.cell_at_reads[&(c, w)].clone();
+            let name = self.cell_name(c);
+            self.watch(&v.toks, || format!("read w{w} from {name}"));
+        }
+    }
+
+    /// A cell's name for [`G::watch`]: a RAM address, or an object's
+    /// offset.
+    fn cell_name(&self, c: u32) -> String {
+        if c == LOST_CELL {
+            "the lost-pointer cell".into()
+        } else if c >= OBJ_BASE {
+            let (i, at) = ((c - OBJ_BASE) >> 16, (c - OBJ_BASE) & 0xffff);
+            let o = self.objs.get(i as usize);
+            if at >= 0xfff8 {
+                format!("object {i} ({o:x?}) anywhere")
+            } else {
+                format!("object {i} ({o:x?}) at {}", at as i32 - 0x8000)
+            }
+        } else {
+            format!("the cell at {c:#010x}")
+        }
     }
 
     fn store(&mut self, to: Store, toks: &[(Tok, u8)]) {
+        if !self.watch.is_empty() {
+            let name = match to {
+                Store::Pile => "the pile".to_string(),
+                Store::Cell(a) => self.cell_name(a),
+                Store::Spill(f) => format!("f_{:08x}'s spills", entry_of(f)),
+            };
+            self.watch_mem(toks, || format!("stored to {name}"));
+        }
         let m = match to {
             // One pile: splitting it by the value-set analysis's bounds on
             // the stores' addresses proved nothing more on the agb programs
@@ -1194,6 +1348,10 @@ impl G {
             self.pile_reads[i] = Some(v);
         }
         into.join(self.pile_reads[i].as_ref().unwrap());
+        if !self.watch.is_empty() {
+            let v = self.pile_reads[i].clone().unwrap();
+            self.watch(&v.toks, || format!("read w{w} from the pile"));
+        }
     }
 
     /// What a load at width `w` from anywhere reads of the cells (kept
@@ -1208,6 +1366,10 @@ impl G {
             self.cell_reads[i] = Some(v);
         }
         into.join(self.cell_reads[i].as_ref().unwrap());
+        if !self.watch.is_empty() {
+            let v = self.cell_reads[i].clone().unwrap();
+            self.watch(&v.toks, || format!("read w{w} from every RAM cell"));
+        }
     }
 
     fn give(&mut self, f: Ix, regs: &[Val]) {
@@ -1223,6 +1385,16 @@ impl G {
             self.dirty_entry.insert(f);
         }
         self.mark(c);
+        self.watch_regs(regs, |r| format!("passed in r{r} to f_{:08x}", entry_of(f)));
+    }
+
+    /// [`G::watch`] for registers given.
+    fn watch_regs(&mut self, regs: &[Val], what: impl Fn(usize) -> String) {
+        if !self.watch.is_empty() {
+            for (r, v) in regs.to_vec().iter().enumerate() {
+                self.watch(&v.toks, || what(r));
+            }
+        }
     }
 
     /// [`G::give`] the same registers to each of `ks` (a call by value's
@@ -1237,6 +1409,8 @@ impl G {
             }
             return;
         }
+        let n = ks.len();
+        self.watch_regs(regs, |r| format!("passed in r{r} to a callee set of {n}"));
         // By register and the set it held (kept alive here, so its
         // address isn't reused) with its flags: what it joined to.
         #[allow(clippy::type_complexity)]
@@ -1332,6 +1506,7 @@ impl G {
     }
 
     fn give_ret(&mut self, f: Ix, regs: &[Val]) {
+        self.watch_regs(regs, |r| format!("returned in r{r} by f_{:08x}", entry_of(f)));
         let e = self.ret.entry(f).or_insert_with(|| vec![Val::default(); 4]);
         let mut c = false;
         for (a, b) in e.iter_mut().zip(regs) {
@@ -1612,11 +1787,13 @@ impl Run<'_, '_> {
             } else {
                 Form::Part
             };
-            into.toks.insert(Tok::Fn {
+            let t = Tok::Fn {
                 key: word,
                 origin: o,
                 form,
-            });
+            };
+            into.toks.insert(t);
+            self.g.watch(&[t], || format!("read w{w} from ROM at {a:#010x}"));
             return;
         }
         let sh = (a & 3) * 8;
@@ -1649,17 +1826,60 @@ impl Run<'_, '_> {
         }
     }
 
-    fn rom_from(&mut self, a: u32, w: u8, into: &mut Val) {
-        if let Some(v) = self.g.rom_from.get(&(a, w)) {
+    /// Where the object a read "from here on" at `a` is in ends, before
+    /// `hi`: the next object start ([`objects`]) past `a` that isn't
+    /// inside a table of handlers (function words in the 16 bytes before
+    /// it and the 16 from it on), or `hi`.
+    fn object_end(&self, a: u32, hi: u32) -> u32 {
+        let img = self.img;
+        let fns_in = |lo: u32, hi: u32| {
+            (lo & !3..hi)
+                .step_by(4)
+                .any(|p| img.word(p).is_some_and(|x| img.is_fn(x)))
+        };
+        self.g
+            .objects
+            .range(a.saturating_add(1)..hi)
+            .copied()
+            .find(|&c| !(fns_in(c.saturating_sub(16), c) && fns_in(c, c.saturating_add(16))))
+            .unwrap_or(hi)
+    }
+
+    /// A read "from here on" at `a` (`native/fnref-rom-read-bound`): the
+    /// words of its object ([`Self::object_end`]), or, a BIOS copy's
+    /// whose length the run knows, those `len` bytes; and of those only
+    /// the ones in the load's value-set bounds (`hull`, in ROM, inclusive)
+    /// where they meet.
+    fn rom_from(
+        &mut self,
+        a: u32,
+        w: u8,
+        hull: Option<(u32, u32)>,
+        len: Option<u32>,
+        into: &mut Val,
+    ) {
+        let bound = self.img.bound(a);
+        let (mut lo, mut hi) = match len {
+            Some(n) => (a, bound.min(a.saturating_add(n))),
+            None => (a, self.object_end(a, bound)),
+        };
+        if let Some((l, h)) = hull
+            && self.img.word(l).is_some()
+            && self.img.word(h).is_some()
+            && l.max(lo) < hi.min(h.saturating_add(1))
+        {
+            lo = l.max(lo);
+            hi = hi.min(h.saturating_add(1));
+        }
+        let end = hi.min(lo.saturating_add(ROM_READ));
+        if let Some(v) = self.g.rom_from.get(&(lo, end, w)) {
             into.join(v);
             return;
         }
-        let bound = self.img.bound(a);
-        let end = bound.min(a.saturating_add(ROM_READ));
-        let mut p = a & !3;
+        let mut p = lo & !3;
         let mut v = Val {
             // Cut short: the words past the cut go unread.
-            lost_rom: end < bound,
+            lost_rom: end < hi,
             ..Val::default()
         };
         while p < end {
@@ -1667,7 +1887,7 @@ impl Run<'_, '_> {
             p += 4;
         }
         into.join(&v);
-        self.g.rom_from.insert((a, w), v);
+        self.g.rom_from.insert((lo, end, w), v);
     }
 
     fn bin(&mut self, op: BinOp, a: &Val, b: &Val, site: Origin, at: u32) -> Val {
@@ -1843,6 +2063,7 @@ impl Run<'_, '_> {
         let mut s = self.ins[&key].clone();
         let mut at = key & !1;
         self.at = at;
+        self.g.now = (self.ix, at);
         let mut vals: Vec<Val> = vec![Val::default(); b.insts.len()];
         for (i, inst) in b.insts.iter().enumerate() {
             let site = Origin::Code(key, i as u32);
@@ -1853,6 +2074,7 @@ impl Run<'_, '_> {
                 Op::Insn(a) => {
                     at = a;
                     self.at = a;
+                    self.g.now = (self.ix, a);
                     Val::default()
                 }
                 Op::Const(c) => Val::of(self.classify(c, site)),
@@ -2108,6 +2330,16 @@ impl Run<'_, '_> {
                     if self.trace && out.lost_ptr && !a.lost_ptr {
                         eprintln!("  obj lost by load at {at:#010x} w{w} through {a:?}");
                     }
+                    if !self.g.watch.is_empty() {
+                        let n = out.toks.len();
+                        let hull = b.hulls.get(&i).copied();
+                        self.g.watch(&out.toks.clone(), || {
+                            format!(
+                                "LOADED w{w}, one of {n} tokens, through {}, bounds {hull:x?}",
+                                brief(&a)
+                            )
+                        });
+                    }
                     if guarded {
                         out.unk = true;
                     }
@@ -2276,37 +2508,14 @@ impl Run<'_, '_> {
         for &t in &a.toks {
             match t {
                 Tok::Rom(r) => self.rom_read(r, w, &mut out),
-                // Up to the next code, or, where the value-set analysis
-                // bounds the load in ROM, only the words in both (a table
-                // ahead of others: a font's before vtables).
-                Tok::RomFrom(r) => match hull {
-                    Some((lo, hi))
-                        if self.img.word(lo).is_some()
-                            && self.img.word(hi).is_some()
-                            && hi >= r
-                            && hi - lo.max(r) < ROM_READ =>
-                    {
-                        let hi = hi.min(self.img.bound(r).saturating_sub(1));
-                        self.rom_range(lo.max(r), hi, w, &mut out);
-                    }
-                    Some((lo, hi))
-                        if self.img.word(lo).is_some() && self.img.word(hi).is_some() =>
-                    {
-                        if hi >= r {
-                            self.rom_from(r, w, &mut out);
-                        }
-                    }
-                    _ => self.rom_from(r, w, &mut out),
-                },
+                Tok::RomFrom(r) => self.rom_from(r, w, hull, None, &mut out),
                 Tok::Obj(o, off) if self.g.obj_up(o, off) => lost = true,
                 Tok::Obj(o, off) => self.g.read_obj(o, off, w, &mut out),
                 // Its run's cells, and the pile.
                 Tok::RamFrom(c) => {
                     let hi = ram_bound(c) - 1;
-                    self.g.rd.ranges.push((c.saturating_sub(3), hi));
-                    for (_, m) in self.g.cells.range(c.saturating_sub(3)..=hi) {
-                        from_mem(m, w, &mut out);
-                    }
+                    let lo = c.saturating_sub(3);
+                    self.g.read_range(lo, hi, w, "in a RAM run", &mut out);
                     self.g.read_pile(w, &mut out);
                 }
                 Tok::Num(c) | Tok::Fn { key: c, .. } => {
@@ -2349,14 +2558,16 @@ impl Run<'_, '_> {
                     {
                         out.lost_rom = true;
                     }
+                    // Bounds that reach past RAM are none: "not null",
+                    // 1 to 0xffff_ffff, took in every cell and every
+                    // object's, the frames' among them.
+                    let hull = hull.filter(|&(lo, hi)| is_ram(lo) && is_ram(hi));
                     match hull {
-                        // Bounded (to RAM, or wider): the cells there.
+                        // Bounded to RAM: the cells there.
                         Some((lo, hi)) => {
                             self.g.read_pile(w, &mut out);
-                            self.g.rd.ranges.push((lo.saturating_sub(3), hi));
-                            for (_, c) in self.g.cells.range(lo.saturating_sub(3)..=hi) {
-                                from_mem(c, w, &mut out);
-                            }
+                            let lo = lo.saturating_sub(3);
+                            self.g.read_range(lo, hi, w, "in the load's bounds", &mut out);
                         }
                         None if lost => {
                             self.g.read_pile(w, &mut out);
@@ -2572,16 +2783,19 @@ impl Run<'_, '_> {
                 for r in &s.regs[..4] {
                     self.g.hole(r, out.at, Why::Bios, |_| true);
                 }
-                // CpuSet and CpuFastSet from ROM copy its words to RAM.
+                // CpuSet and CpuFastSet from ROM copy its words to RAM: their
+                // length's, or the source object's.
                 if matches!(out.bios, Some(0x0B | 0x0C)) {
                     let src = &s.regs[0];
                     let mut got = Val {
                         lost_rom: src.lost_rom,
                         ..Val::default()
                     };
+                    let n = copy_len(out.bios == Some(0x0C), &s.regs[2]);
                     for &t in &src.toks {
                         match t {
-                            Tok::Rom(a) | Tok::RomFrom(a) => self.rom_from(a, 4, &mut got),
+                            Tok::Rom(a) => self.rom_from(a, 4, None, n, &mut got),
+                            Tok::RomFrom(a) => self.rom_from(a, 4, None, None, &mut got),
                             // From RAM (not followed): the RAM pointers
                             // it may copy are lost.
                             _ => {
@@ -2707,6 +2921,8 @@ impl Run<'_, '_> {
             for (a, b) in self.g.loose_args.iter_mut().zip(args) {
                 c |= a.join(b);
             }
+            self.g
+                .watch_regs(args, |r| format!("passed in r{r} to every loose function"));
             self.g.dirty_loose |= c;
             self.g.mark(c);
             let lr = match &self.g.loose_rets {
@@ -3003,6 +3219,43 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> R {
     }
 }
 
+/// `GBAA_FNREF_WATCH`'s origins ([`G::watch`]).
+fn watch_env() -> Vec<Origin> {
+    let hex = |s: &str| u32::from_str_radix(s.trim().trim_start_matches("0x"), 16).ok();
+    let v = std::env::var("GBAA_FNREF_WATCH").unwrap_or_default();
+    if v == "all" {
+        return vec![Origin::Word(0)];
+    }
+    v.split(',')
+        .filter_map(|s| match s.split_once(':') {
+            Some((b, i)) => Some(Origin::Code(hex(b)?, i.trim().parse().ok()?)),
+            None => hex(s).map(Origin::Word),
+        })
+        .collect()
+}
+
+/// A value for a [`G::watch`] line: its flags and the tokens that aren't
+/// functions' (those only counted).
+fn brief(v: &Val) -> String {
+    let fns = v.fns().count();
+    let rest: Vec<String> = v
+        .toks
+        .iter()
+        .filter(|t| !matches!(t, Tok::Fn { .. }))
+        .take(12)
+        .map(|t| format!("{t:x?}"))
+        .collect();
+    format!(
+        "{{{fns} function tokens, {} others: {}{}{}{}{}}}",
+        v.toks.len() - fns,
+        rest.join(" "),
+        if v.unk { " unk" } else { "" },
+        if v.mem { " mem" } else { "" },
+        if v.lost_ptr { " lost_ptr" } else { "" },
+        if v.lost_rom { " lost_rom" } else { "" },
+    )
+}
+
 /// Follow every function address in `fns` (all the program's functions,
 /// over every code context) from its sources to its uses. `copies`: the
 /// program start's copies of ROM data to RAM (source, destination, bytes).
@@ -3018,6 +3271,9 @@ pub fn follow(
     let mut g = G {
         loose_args: vec![Val::default(); 16],
         allocs: allocs.clone(),
+        objects: objects(img),
+        watch: watch_env(),
+        watch_all: std::env::var("GBAA_FNREF_WATCH").is_ok_and(|v| v == "all"),
         ..G::default()
     };
     // Functions some exit enters directly; the rest have callers the run
