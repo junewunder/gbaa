@@ -44,12 +44,12 @@ mode.
    summary hole") is a metric of its own with bar 0. A unit's check names
    the bar it lowers and to what; a fraction ("a quarter") is of the bar's
    value when the unit is claimed, since earlier units move the baseline.
-   Bars are only lowered: raising one to make a check pass is changing the
-   oracle, so it goes to june (`just ask`). The one exception is
-   `lines_prelude`, the hand-written prelude, which may rise with the
-   unit's evidence saying how many lines and why; `lines` is the rest and
-   only goes down. How to read and lower bars: `docs/tools/commands.md`,
-   `just lift-check` and `just lift-metrics`.
+   Bars and target counts measure precision, not whether the lift is right:
+   the native check, `hard_holes` and planted controls never loosen without
+   june. A unit may itself raise another bar (evidence: bar, both values,
+   cause), or land on a direct measure when its target doesn't move (it
+   becomes a bar; a named unit takes the target; the checker agrees). Then
+   `just tracker decide --for-run`. No direct measure: ask june. `commands.md`.
 3. **The old behaviour is a planted control** wherever the stack is
    involved or the change could pass by not running: the native check
    skips the guest stack, so a wrong stack slot only shows where it reaches

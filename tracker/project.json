@@ -5,8 +5,7 @@
   "resources": {},
   "ranking": 2,
   "last_call": 10,
-  "private_words": [
-    "$GBAA_DATA/leak-words.txt",
-    "~/.local/share/gbaa/leak-words.txt"
-  ]
+  "private_words": ["$GBAA_DATA/leak-words.txt", "~/.local/share/gbaa/leak-words.txt"],
+  "checkin_at": "2026-11-12T19:04:33Z",
+  "checkin_most": 28
 }

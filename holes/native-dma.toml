@@ -47,13 +47,3 @@ pub fn f_03000000(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> 
     Ok([0x0400_0000, a[1], ime, ie_if])
 }
 '''
-
-[[standin]]
-entry = 0x08006d23
-why = "not a function: a gap the lifter decodes inside qrcodegen's QrCode::draw_format_bits (agb's panic screen draws a QR code), from a bounds-check panic's call; it reads r6 from its caller. Nothing calls it, and the panic screen never runs in the check"
-code = '''
-pub fn f_08006d23(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
-    let _ = (g, sp, a);
-    unreachable!("agb's panic screen: not lifted")
-}
-'''

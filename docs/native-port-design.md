@@ -1087,6 +1087,16 @@ with the native check and no replaced-library list.
   spends `cpu_set_cycles`; `Div`. Idle edges get `hw::idle`, spin edges
   `hw::spin` (`ExitInfo::idle`, the play build's own marks). IRQs go
   through the word at `0x0300_7FFC`, as the BIOS's stub calls it.
+  The prelude has every call `analysis::holes::NATIVE_BIOS` lists
+  (native/lift-bios-calls, native/lift-bios-more). `SoftReset` clears
+  IWRAM's top 0x200 bytes, sets `Game::reset` and returns `Err(Exit)`,
+  which unwinds to `main`; `main` restarts the entry (or the EWRAM
+  function, if the reset flag says so) on the same `Game`, as the
+  hardware keeps EWRAM, VRAM and the registers, with sp, the CPSR and the
+  tasks fresh. One in an IRQ handler panics: the handler's caller drops
+  its `Err`. Code after a `SoftReset` or `HardReset` `swi` isn't the
+  function's (`func::successors`), and sp set to a constant in a function
+  that never returns (the SDK's reset) is no stack switch.
 - **Holes.** `holes/<game>.toml` (a commercial game's in the private
   `mods/<game>/holes.toml`) gives stand-ins (`[[standin]]`, Rust
   for one function, with why), unresolved jumps' targets (`[[jump]]`)
