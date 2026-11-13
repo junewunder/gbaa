@@ -34,9 +34,12 @@ max_lines = 470
 path = "docs/tools/commands.md"
 max_lines = 1981
 
+# 1254 after native/hw-serial-registers added the serial registers' entry
+# to section 7's as-built list (4 lines: what the library keeps and that
+# nothing answers; the rest is in runtime::hw's docs and the route file).
 [[doc]]
 path = "docs/native-port-design.md"
-max_lines = 1250
+max_lines = 1254
 
 [[doc]]
 path = "AGENTS.md"

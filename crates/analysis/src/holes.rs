@@ -508,10 +508,11 @@ pub fn summary_kind(hole: &str) -> String {
 /// each caller's r4-r11 and sp in its own locals and passes only r0-r3,
 /// so it is wrong where a function returns with sp moved (by a run-time
 /// amount, as a variable-length array does), where a caller reads one of
-/// r4-r11 that a callee changed, where a function entered by a call reads
-/// one of r4-r11 as it came and some of its bits reach a use (a register
-/// parameter: an address, a condition, a value stored, passed on or
-/// returned), or where a function that changes them may be called
+/// r4-r11 that a callee changed, where a function entered through a
+/// pointer reads one of r4-r11 as it came and some of its bits reach a use
+/// (a register parameter: an address, a condition, a value stored, passed
+/// on or returned; a direct call passes it, `takes r4-r11 from its
+/// callers`, soft), or where a function that changes them may be called
 /// through a pointer. A return with r4-r11 changed (hand-written code's
 /// scratch registers) is not itself hard: the reads are. Nor is a read
 /// whose every bit is masked away (`masks away r4-r11's entry bits`), the

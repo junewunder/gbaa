@@ -1104,12 +1104,29 @@ fn scratch_r4_r11_no_caller_reads_is_soft_and_a_register_parameter_hard() {
         // The wrapper pops r4 back: it keeps them, and reads nothing s
         // changed.
         assert_eq!(hard_holes(&sums, 0x0800_0001), Vec::<String>::new());
-        let want: Vec<String> = if param {
-            vec!["0x0800000e: reads r4-r11 at entry: r4".into()]
-        } else {
-            vec![]
-        };
-        assert_eq!(hard_holes(&sums, 0x0800_000f), want, "{:?}", s.holes);
+        // A register parameter comes from the `bl`, which passes it: soft.
+        assert_eq!(hard_holes(&sums, 0x0800_000f), Vec::<String>::new());
+        assert_eq!(s.passed(), if param { 1 } else { 0 }, "{:?}", s.holes);
+        assert_eq!(
+            s.holes
+                .contains("0x0800000e: takes r4-r11 from its callers: r4"),
+            param
+        );
+    }
+    // The wrapper passes the r4 it came with, so it takes it in turn:
+    // hard where a pointer may call the wrapper, or the reader itself.
+    for (f, hole) in [
+        (
+            0x0800_0001u32,
+            "0x08000004: reads r4-r11 at entry: r4, which 0x0800000f takes",
+        ),
+        (0x0800_000f, "0x0800000e: reads r4-r11 at entry: r4"),
+    ] {
+        let (mut rom, d) = scratch_callee(true);
+        rom.extend(f.to_le_bytes());
+        let ctx = Ctx::new(&rom, &d);
+        let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+        assert_eq!(hard_holes(&sums, f)[0], hole);
     }
     // A pointer to the scratch function in the ROM: callers unknown.
     let (mut rom, d) = scratch_callee(false);
@@ -1262,7 +1279,8 @@ fn an_entry_hi_register_passed_to_a_callee_is_hard() {
 #[test]
 fn an_entry_read_tail_called_from_a_called_function_is_hard() {
     // `g: b f`, `f: ldr r0, [r5, #0]; bx lr`: f takes g's r4-r11, which
-    // `Regs::call` zeroed where a pointer enters g.
+    // `Regs::call` zeroed where a pointer enters g: g's hole, since the
+    // jump passes f what g has.
     let (rom, d) = thumb_program(
         &[
             0xE000, // 0x00 b 0x04
@@ -1278,9 +1296,11 @@ fn an_entry_read_tail_called_from_a_called_function_is_hard() {
     let ctx = Ctx::new(&rom, &d);
     let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
     assert_eq!(
-        hard_holes(&sums, 0x0800_0005),
-        vec!["0x08000004: reads r4-r11 at entry: r5".to_string()]
+        hard_holes(&sums, 0x0800_0001),
+        vec!["0x08000005: reads r4-r11 at entry: r5, which 0x08000005 takes".to_string()]
     );
+    assert_eq!(hard_holes(&sums, 0x0800_0005), Vec::<String>::new());
+    assert_eq!(sums.by_entry[&0x0800_0005].passed(), 1 << 1);
     // Without the pointer g is only jumped into, and so is f.
     rom.truncate(rom.len() - 4);
     let ctx = Ctx::new(&rom, &d);
@@ -1291,6 +1311,109 @@ fn an_entry_read_tail_called_from_a_called_function_is_hard() {
             .holes
             .contains("0x08000004: reads r4-r11 at entry, only jumped into: r5")
     );
+}
+
+/// `d: push {r5, lr}; movs r5, #3 (or, `unset`, nop); bl v; pop {r5}; pop
+/// {r0}; bx r0`, the stub `v: bx r0`, `t: ldr r0, [r5, #0]; bx lr`, and a pointer
+/// to t in the ROM: d calls through a pointer, t reads r5 as it came.
+fn pointer_call_to_a_reader(unset: bool) -> (Vec<u8>, Discovery) {
+    let (mut rom, d) = thumb_program(
+        &[
+            0xB520,                              // 0x00 push {r5, lr}
+            if unset { 0x46C0 } else { 0x2503 }, // 0x02 movs r5, #3
+            0xF000,
+            0xF804, // 0x04 bl 0x10
+            0xBC20, // 0x08 pop {r5}
+            0xBC01, // 0x0a pop {r0}
+            0x4700, // 0x0c bx r0
+            0x46C0, // 0x0e nop
+            0x4700, // 0x10 bx r0
+            0x46C0, // 0x12 nop
+            0x6828, // 0x14 ldr r0, [r5, #0]
+            0x4770, // 0x16 bx lr
+        ],
+        &[2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 2],
+        &[0x0800_0001, 0x0800_0015],
+    );
+    rom.extend(0x0800_0015u32.to_le_bytes());
+    (rom, d)
+}
+
+#[test]
+fn a_register_a_callee_changed_is_not_passed_on() {
+    // `c: push {lr}; bl a; bl b; pop {r0}; bx r0`, `a: movs r5, #1; bx
+    // lr`, `b: ldr r0, [r5, #0]; bx lr`: the machine gives b the r5 a
+    // left, the lift c's own local.
+    let (rom, d) = thumb_program(
+        &[
+            0xB500, // 0x00 push {lr}
+            0xF000, 0xF805, // 0x02 bl 0x10
+            0xF000, 0xF805, // 0x06 bl 0x14
+            0xBC01, // 0x0a pop {r0}
+            0x4700, // 0x0c bx r0
+            0x46C0, // 0x0e nop
+            0x2501, // 0x10 movs r5, #1
+            0x4770, // 0x12 bx lr
+            0x6828, // 0x14 ldr r0, [r5, #0]
+            0x4770, // 0x16 bx lr
+        ],
+        &[2, 4, 4, 2, 2, 2, 2, 2, 2, 2],
+        &[0x0800_0001, 0x0800_0011, 0x0800_0015],
+    );
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    assert_eq!(
+        hard_holes(&sums, 0x0800_0001),
+        vec!["0x08000008: reads r4-r11 a callee changed: r5, by 0x08000011".to_string()]
+    );
+    let c = &sums.by_entry[&0x0800_0001];
+    assert_eq!(
+        c.passes,
+        std::collections::BTreeSet::from([(0x0800_0008, 0x0800_0015)])
+    );
+}
+
+#[test]
+fn a_pointer_call_the_holes_file_names_passes_what_its_callee_takes() {
+    use crate::saves::{Assume, Passing, Sets, summarize_passing};
+    let (d, t) = (0x0800_0001u32, 0x0800_0015u32);
+    for unset in [false, true] {
+        let (mut rom, disc) = pointer_call_to_a_reader(unset);
+        // A pointer to d too: `Regs::call` zeroes what it comes with.
+        rom.extend(d.to_le_bytes());
+        let ctx = Ctx::new(&rom, &disc);
+        let funcs = build_all(&ctx).funcs;
+        // Unnamed, the pointer call zeroes t's r5: t's hole.
+        let sums = crate::saves::summarize(&ctx, &funcs);
+        assert_eq!(
+            hard_holes(&sums, t),
+            vec!["0x08000014: reads r4-r11 at entry: r5".to_string()]
+        );
+        assert_eq!(hard_holes(&sums, d), Vec::<String>::new());
+        let sites = &sums.by_entry[&d].indirect_sites;
+        assert_eq!(sites.len(), 1, "{sites:?}");
+        let at = *sites.iter().next().unwrap();
+        // Named, d's call passes its r5: exact where d set it, d's own
+        // entry read where it didn't.
+        let mut passing = Passing::default();
+        passing.sites.entry(at).or_default().insert(t);
+        let sums = summarize_passing(&ctx, &funcs, Assume::default(), &Sets::new(), &passing);
+        assert_eq!(hard_holes(&sums, t), Vec::<String>::new());
+        assert_eq!(sums.by_entry[&t].passed(), 1 << 1);
+        let want: Vec<String> = if unset {
+            vec![format!(
+                "0x{at:08x}: reads r4-r11 at entry: r5, which 0x08000015 takes"
+            )]
+        } else {
+            vec![]
+        };
+        assert_eq!(hard_holes(&sums, d), want);
+        // A stand-in's code takes nothing, whatever the function it
+        // replaces read.
+        passing.replaced.insert(t);
+        let sums = summarize_passing(&ctx, &funcs, Assume::default(), &Sets::new(), &passing);
+        assert_eq!(hard_holes(&sums, d), Vec::<String>::new());
+    }
 }
 
 #[test]

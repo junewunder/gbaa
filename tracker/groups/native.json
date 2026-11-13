@@ -1152,19 +1152,15 @@
       "minMinutes": 150,
       "record": {
         "state": "claimed",
-        "by": "c06275d9",
-        "session": "c06275d9-b496-4ead-9bf1-0085c8ece768",
+        "by": "81556889",
+        "session": "81556889-1b57-4a78-a2a5-c1c2c69e2aec",
         "host": "quack",
-        "pid": 3349068,
-        "start": "14822266",
-        "at": "2026-11-08T16:23:16Z",
-        "branch": "unit/native/fnref-flow-emerald",
-        "resumed": "8898da77",
-        "prevSession": "8898da77-3409-4343-b387-337a68538af5",
-        "pushed": true,
-        "beats": true,
-        "handedBack": "2026-11-08T18:34:29Z",
-        "ended": "2026-11-08T18:34:40Z"
+        "pid": 1028184,
+        "start": "1500576",
+        "at": "2026-11-13T08:55:31Z",
+        "resumed": "c06275d9",
+        "prevSession": "c06275d9-b496-4ead-9bf1-0085c8ece768",
+        "pushed": true
       },
       "notes": [
         {
@@ -1868,13 +1864,10 @@
       "check": "recorded",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "34d57864",
-        "session": "34d57864-956a-4832-9a45-ef91a450bec5",
-        "host": "quack",
-        "pid": 12294,
-        "start": "30124",
-        "at": "2026-11-13T04:50:26Z"
+        "at": "2026-11-13T08:54:05Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/7, head 8e37b0e0 (main merged at 3a88c78d). runtime::hw keeps 0x120-0x15F but KEYINPUT in its I/O block through the play build's masks (a started SIOCNT transfer keeps its start bit, no IRQ, as the play build off a link); the prelude's RegisterRamReset resets them on flag 0x20; route-check --native now compares them. New agb/native-serial stores and loads every register as halfwords, words and bytes. just lift-check, whole, on that head (03:36-03:53): 'lift-check: passed', 15 programs each 0 differences, 9 planted faults and 2 planted holes caught; 'native native-serial-600: pass (600 frames, 0 differences in pictures, RAM, I/O, palette, VRAM and OAM; audio the same in 600 frames; the play layout draws the same 600 frames, its records the same; planted fault caught (frame 1: EWRAM byte 0x02000100: play 0x81, native 0x82))'. just check on that head: exit 0. Earlier, two merges back: just native-check 3 passes; just unit native-serial-600 pass. lines_prelude 1201 = main's 1195 + 6 net lines (decision recorded); just lift-metrics 0 over, 0 under. Known mGBA mismatch recorded in the route with each cause, shown to be the whole difference (both draw 67ad2572c48f1e9b with them masked); follow-up filed: {unit:native/serial-no-partner-as-mgba}. Fresh subagent review of the PR diff and logs: no bugs, check met as worded; its doc nits fixed (comments and counts only, ROM byte-identical). Not rerun: Nightmare's own lift."
       },
       "round": "2026-11-13T04:50:26Z"
     },
@@ -1884,13 +1877,10 @@
       "detail": "Since {unit:native/entry-read-masking} landed, gbaa-lift on Metroid has 1 hard hole: f_08073ce5, summary 0x08073f08 reads entry r9. agbcc builds a word in r6 = entry r9 byte by byte (ands ffffff00, ands ffff00ff), so r9's top 16 bits are stored to RAM at [r4+0x244+4]; the lift zeroes r4-r12 at a call, the game keeps the caller's r9. Real, not over-hard. Fix: a stand-in (caller's r9 is likely a constant or garbage; check callers), or the lifter passing r9. Done when: just lift ROM out/lift-metroid --name metroid reports 0 hard holes and the crate builds; just check passes.",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "8814ddd6",
-        "session": "8814ddd6-8ca4-45af-919c-a91eea1e5151",
-        "host": "quack",
-        "pid": 627066,
-        "start": "800290",
-        "at": "2026-11-13T06:58:38Z"
+        "at": "2026-11-13T08:56:54Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/8, head e9d95e4d (main 3a88c78d merged). just lift ROM out/lift-metroid --name metroid --holes out/metroid-entry-reads/holes.toml: hard_holes 0 (main: 1, f_08073ce5 reads entry r9), the crate builds, gbaa-first-stop: 600 of 600 frames, no stop. The holes copy is mods/metroid/holes.toml plus one [[takes]] (the cursor function 0x0801bbfd, the sprite updater's 4 pointer calls); main's lifter rejects that table, so it is uncommitted and lands in mods/ with this PR: without --holes the lift has 1 hard hole until then. just check: passed. just lift-check (whole): passed, 0 metrics over their bars. Reviewed by a fresh subagent (a4ef6077): a stale-register pass and unseen calls fixed; the flow's r4-r11 and a run that exercises a passing call are filed ({unit:native/fnref-taker-regs}, {unit:native/taker-test-program})."
       },
       "round": "2026-11-13T06:58:38Z"
     },
@@ -2105,6 +2095,12 @@
       "detail": "From {unit:native/fnref-c-game-words} (docs/research/fnref-held-words.md, 'A C game', item 6). The flow keeps one pile for every store it can't place, and a load at a constant RAM address reads its cell and the pile. C keeps its state in globals: a callback stored in a struct through a pointer goes to the pile, and any byte loaded through a pointer then reads the bytes of every such callback. First road of 2,515 of Kirby Nightmare's 4,054 held words (733 at 0x08006162) and 3,594 of the 9,031 Emerald holds when it stops; on Metroid 13, and at most 62 after {unit:native/fnref-bios-reads} (GBAA_FNREF_OFF=bios,pile: 338 to 276). {unit:native/fnref-heap-sites} splits by allocation site, which a C game doesn't have. The value-set analysis bounds 8,582 of Metroid's stores to one global and leaves 3,989 unbounded (store_ram_object, store_computed_unknown), so split the pile by those bounds, and stop a constant-address load reading the pile where every store that could reach its cell is bounded elsewhere. Measure on Nightmare (the flow settles there now: gbaa-recompile --summaries ROM --callee-sets, 31 minutes, 2.0 GB) with GBAA_FNREF_WATCH=roads. Do it after {unit:native/fnref-table-ends}: on Metroid the two reach the same words. Done when: a unit test with two globals whose stores stay apart, Nightmare's held words by pile reads reported before and after and lower, the agb bars hold, just lift-check and just check pass.",
       "check": "independent",
       "needs": ["native/fnref-table-ends"],
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/hw-io-ignored-ranges",
+      "title": "Library ignores the I/O offsets the play build ignores",
+      "detail": "From {unit:native/hw-serial-registers}: Hw::write16 still panics on I/O offsets 0x160-0x1FE and 0x300 (POSTFLG, HALTCNT), which the play build's bus ignores or keeps. A lifted game that stores there stops in the library though the play build runs on. Make the library do what the play build does for each (keep, ignore, or halt), with a unit test against Io as the serial registers' test does; keep the panic only where the play build has no behaviour. Also fix agb/native-save/SCENE.md, which says the picture wraps by frame 600 (it doesn't until 960). Done when the test passes and just check passes.",
       "uses": ["heavy"]
     }
   ]
