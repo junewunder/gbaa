@@ -271,8 +271,7 @@ fn shape(s: &Summary, demand: u8) -> Shape {
         };
     }
     let (mut changed, mut entry) = (0u8, 0u8);
-    for r in 0..4 {
-        let b = s.exit[r];
+    for (r, &b) in s.exit[..4].iter().enumerate() {
         if b.entry {
             entry |= 1 << r;
         }

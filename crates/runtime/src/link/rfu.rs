@@ -1360,8 +1360,8 @@ impl Wireless {
         };
         match a.role {
             Role::Host { .. } => {
-                for s in 0..4 {
-                    let p = core::mem::replace(&mut a.from_child[s], Packet::new());
+                for (s, c) in a.from_child.iter_mut().enumerate() {
+                    let p = core::mem::replace(c, Packet::new());
                     header |= (p.n as u32) << (8 + 5 * s);
                     put(&p);
                 }
