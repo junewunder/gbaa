@@ -2023,7 +2023,17 @@
       "detail": "Found by the review of {unit:native/lift-psr-boot-irq}, 2026-11-13. The agbcc-shape IRQ wrapper (Metroid 0x08000104 and its IWRAM copy 0x03000c7c, Nightmare 0x03001030, Emerald 0x08000248, Rogue 0x0800025c, Imperium 0x08000264) calls its handler with 'add lr, pc, #0; bx r0' (Metroid 0x08000204). analysis::vsa::func::classify makes a bx a call only right after 'mov lr, pc', so this one is a jump, discovery has no code at its return site (0x0800020c), and the wrapper's second half (ldm, mrs cpsr, msr cpsr back to IRQ mode, IE and IME stores, msr spsr, bx lr) is in no lift. The lifter prints the call and then unreachable!(\"a call that never returns returned\") (seen in Metroid's lift with the dispatcher stand-in dropped), so a lifted wrapper panics when its first handler returns. That is why the corpus counts 3 msr/mrs per wrapper where the code has 6, and why the games' IRQ-dispatcher stand-ins can't go yet (the reset stand-ins can). Do: have discovery take 'add lr, pc, #0' (lr = the address after the bx) as the call it is, so the return site is the same function's code and PsrFns prints its msr/mrs (if it comes out as its own function instead, PsrFns::place must cover it). It changes discovery for every program and the play build: run the scored checks (disc-*, jt-score) and the full just lift-check. Also add a standing check that runs printed PSR statements: today no lift-check program does (agb's wrapper keeps its stand-in in all 14; that unit's PR says how a hand run with --drop-standin 0x03000000 went). Smaller things from the same review: an sp write after a wrapper's mode switch is no longer a stack-switch hole in these functions (crates/codegen/src/native/frame.rs, the comment near line 451 is stale there); a wait or an ordinary function's I/O store while still in IRQ mode writes Game::sp with the IRQ-mode sp. Done when: Metroid and Nightmare lifted with their dispatcher stand-ins dropped print all six PSR statements of each wrapper and no unreachable! after the handler call; a native check that runs a lifted wrapper's whole path is in lift-check; lift-check, the scored checks and just check pass.",
       "check": "independent",
       "needs": ["native/lift-psr-boot-irq"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "af8e0194",
+        "session": "af8e0194-8e87-4f06-82d4-0c94d5f525c2",
+        "host": "quack",
+        "pid": 887035,
+        "start": "1364723",
+        "at": "2026-11-13T08:33:00Z"
+      },
+      "round": "2026-11-13T08:33:00Z"
     },
     {
       "id": "native/fnref-taker-regs",
