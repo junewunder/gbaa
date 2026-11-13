@@ -1763,6 +1763,15 @@
       "check": "independent",
       "uses": ["heavy"],
       "minMinutes": 150,
+      "record": {
+        "state": "claimed",
+        "by": "3d525e2f",
+        "session": "3d525e2f-fa9e-4ab0-851f-1e2f2cec2205",
+        "host": "quack",
+        "pid": 276052,
+        "start": "369085",
+        "at": "2026-11-13T05:46:57Z"
+      },
       "round": "2026-11-12T13:07:54Z"
     },
     {

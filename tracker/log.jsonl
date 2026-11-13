@@ -2745,3 +2745,4 @@
 {"at":"2026-11-13T05:43:25Z","actor":"session","tag":"8eda0ebb","host":"quack","cmd":"done","id":"native/native-check-spike-packed","text":"just native-check passes again: the spike's packed record: done"}
 {"at":"2026-11-13T05:43:34Z","actor":"session","tag":"8eda0ebb","host":"quack","cmd":"add-unit","id":"native/packed-diff-labels","text":"new unit: route-check --packed: failure names the two layouts"}
 {"at":"2026-11-13T05:46:06Z","actor":"session","tag":"9828215c","host":"quack","cmd":"add-unit","id":"native/native-check-in-gate","text":"new unit: just native-check runs somewhere that gates a merge"}
+{"at":"2026-11-13T05:46:57Z","actor":"session","tag":"3d525e2f","host":"quack","cmd":"claim","id":"native/native-first-stop","text":"Each built native game runs headless; report where it stops: claimed"}
