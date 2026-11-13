@@ -27,6 +27,8 @@ struct Img {
     top: u32,
     /// Code in ROM, where a run of data ends (none: it runs to `top`).
     code: BTreeSet<u32>,
+    /// More functions' keys.
+    fns: BTreeSet<u32>,
 }
 
 impl Img {
@@ -35,13 +37,14 @@ impl Img {
             words: BTreeMap::from([(POOL, F), (VT + 12, F), (0x0800_0404, H), (POOL_A, A)]),
             top: 0x0800_1000,
             code: BTreeSet::new(),
+            fns: BTreeSet::new(),
         }
     }
 }
 
 impl Image for Img {
     fn is_fn(&self, v: u32) -> bool {
-        v == F || v == H || v == A
+        v == F || v == H || v == A || self.fns.contains(&v)
     }
     fn word(&self, a: u32) -> Option<u32> {
         (0x0800_0000..self.top)
@@ -741,4 +744,278 @@ fn a_kept_expansion_caps_all_it_read_together() {
     assert_eq!(e.v, whole);
     let toks: Vec<Tok> = e.v.toks.iter().copied().collect();
     assert_eq!(toks, [fn_tok(1), fn_tok(2), Tok::RomFrom(0x0800_0800 + 4)]);
+}
+
+#[test]
+fn equal_sets_kept_are_one_set() {
+    let set = |n: u32| -> Toks { (0..n).map(Tok::Num).collect() };
+    let same = |a: &Toks, b: &Toks| std::rc::Rc::ptr_eq(&a.0, &b.0);
+    let mut sets = Sets::default();
+    let (mut a, mut b, mut c) = (set(100), set(100), set(99));
+    for t in [&mut a, &mut b, &mut c] {
+        sets.share(t);
+    }
+    assert!(same(&a, &b) && !same(&a, &c));
+    // Changing one leaves the other, which stays the kept set.
+    b.insert(Tok::Num(1000));
+    assert_eq!((a.len(), b.len()), (100, 101));
+    let mut d = set(100);
+    sets.share(&mut d);
+    assert!(same(&a, &d));
+    // A kept set changed while nothing else held it is not found as what
+    // it was.
+    let mut e = set(50);
+    sets.share(&mut e);
+    e.insert(Tok::Num(77));
+    let mut f = set(50);
+    sets.share(&mut f);
+    assert_eq!((e.len(), f.len()), (51, 50));
+    // One nothing holds is gone: the next of its tokens is kept instead.
+    drop((a, d));
+    let mut g = set(100);
+    let p = std::rc::Rc::as_ptr(&g.0);
+    sets.share(&mut g);
+    assert_eq!(p, std::rc::Rc::as_ptr(&g.0));
+}
+
+/// Entries that grow to the same tokens by different joins hold one set,
+/// and the bound counts it once.
+#[test]
+fn entries_joined_to_the_same_tokens_share_a_set() {
+    let fn_tok = |key| Tok::Fn {
+        key,
+        origin: Origin::Word(key),
+        form: Form::Full,
+    };
+    let of = |ks: std::ops::Range<u32>| Val {
+        toks: ks.map(fn_tok).collect(),
+        ..Val::default()
+    };
+    let mut g = G::default();
+    let (x, y) = (vec![of(0..80)], vec![of(40..120)]);
+    g.give(10, &x);
+    g.give(10, &y);
+    g.give(11, &y);
+    g.give(11, &x);
+    g.give_ret(12, &y);
+    g.give_ret(12, &x);
+    let (a, b, c) = (&g.entry[&10][0], &g.entry[&11][0], &g.ret[&12][0]);
+    assert_eq!(a.toks.len(), 120);
+    assert!(std::rc::Rc::ptr_eq(&a.toks.0, &b.toks.0));
+    assert!(std::rc::Rc::ptr_eq(&a.toks.0, &c.toks.0));
+    assert_eq!(g.held().iter().map(|h| h.2).sum::<usize>(), 120);
+}
+
+/// The bound counts what the kept reads and expansions hold too.
+#[test]
+fn the_bound_counts_the_kept_expansions() {
+    let set = |lo: u32| -> Toks { (lo..lo + 10).map(Tok::Num).collect() };
+    let val = |lo: u32| Val {
+        toks: set(lo),
+        ..Val::default()
+    };
+    let mut g = G::default();
+    let r = mem_ref(false, 4);
+    g.ref_exp.insert(
+        r,
+        Exp {
+            v: val(0),
+            raw: set(0).iter().copied().collect(),
+            ..Exp::default()
+        },
+    );
+    g.ref_rom.insert(mem_ref(true, 4), val(100));
+    let key = (0, None, std::ptr::null(), false, false, false);
+    g.expanded.insert(key, (set(200), vec![val(300)], val(400)));
+    g.split_rest.insert((r, Xf::ID), (set(500), set(600)));
+    g.pile_raw[4] = val(700);
+    g.cell_reads[4] = Some(val(800));
+    g.loose_args = vec![val(900)];
+    g.loose_rets = Some(vec![val(1000)]);
+    g.mem_log.push((false, r, 4));
+    // Eleven sets of ten, the expansion's raw tokens and the log's one.
+    assert_eq!(g.held().iter().map(|h| h.2).sum::<usize>(), 110 + 10 + 1);
+}
+
+/// A table of `n` functions' addresses at 0x0800_0800, the functions'
+/// keys, and the table's words.
+fn table(n: u32) -> (Img, BTreeSet<u32>, Vec<u32>) {
+    let mut img = Img::new();
+    img.top = 0x0801_0000;
+    let mut words = Vec::new();
+    for i in 0..n {
+        let k = 0x0800_4001 + 16 * i;
+        img.fns.insert(k);
+        img.words.insert(0x0800_0800 + 4 * i, k);
+        words.push(0x0800_0800 + 4 * i);
+    }
+    let fns = img.fns.clone();
+    (img, fns, words)
+}
+
+/// What a use of a table's entry comes to: whether the call's callees are
+/// the table's functions, the set complete, each `Why` with whether every
+/// word has that hole, and whether every word is proven.
+type Shape = (bool, bool, Vec<(Why, bool)>, bool);
+
+/// Runs `body` (given the entry loaded by an unknown index at width `w`,
+/// it gives the call's target) on a table of `n` functions.
+fn table_use(n: u32, w: Width, body: &dyn Fn(&mut B, ValueId) -> ValueId) -> Shape {
+    let (img, fns, words) = table(n);
+    let mut b = B::default();
+    let tab = b.pool(0x0800_0408, 0x0800_0800);
+    let i = b.get(1);
+    let a = b.bin(BinOp::Add, tab, i);
+    let x = b.ld(w, a);
+    let t = body(&mut b, x);
+    let f = run_img(&[calling(0x0800_1001, b, t)], &BTreeMap::new(), &img);
+    assert!(!f.unsettled);
+    let mut whys: BTreeMap<Why, usize> = BTreeMap::new();
+    for wd in &words {
+        if let Some((_, why)) = f.holes.get(&Origin::Word(*wd)) {
+            *whys.entry(*why).or_default() += 1;
+        }
+    }
+    (
+        site(&f).callees == fns,
+        site(&f).complete,
+        whys.into_iter()
+            .map(|(y, c)| (y, c == words.len()))
+            .collect(),
+        words.iter().all(|wd| f.proven(*wd)),
+    )
+}
+
+/// A read of a hundred functions' addresses is one [`Tok::Ref`], where
+/// one of three is its tokens: every use comes to the same.
+#[test]
+fn a_large_read_is_used_as_a_small_one_is() {
+    type Body = (
+        &'static str,
+        Width,
+        Box<dyn Fn(&mut B, ValueId) -> ValueId>,
+        Shape,
+    );
+    let proven: Shape = (true, true, vec![], true);
+    let holed = |why| (true, true, vec![(why, true)], false);
+    let bodies: Vec<Body> = vec![
+        ("called", Width::Word, Box::new(|_, x| x), proven.clone()),
+        (
+            "stored to a cell and loaded",
+            Width::Word,
+            Box::new(|b, x| {
+                let c = b.k(CELL);
+                b.st(Width::Word, c, x);
+                b.ld(Width::Word, c)
+            }),
+            proven.clone(),
+        ),
+        (
+            "stored and loaded through unknown addresses",
+            Width::Word,
+            Box::new(|b, x| {
+                let (p, q) = (b.get(2), b.get(3));
+                b.st(Width::Word, p, x);
+                b.ld(Width::Word, q)
+            }),
+            proven.clone(),
+        ),
+        (
+            "compared with 0",
+            Width::Word,
+            Box::new(|b, x| {
+                let z = b.k(0);
+                let d = b.bin(BinOp::Sub, x, z);
+                b.op(Op::IsZero(d));
+                x
+            }),
+            proven.clone(),
+        ),
+        (
+            "added to",
+            Width::Word,
+            Box::new(|b, x| {
+                let four = b.k(4);
+                b.bin(BinOp::Add, x, four);
+                x
+            }),
+            holed(Why::Arithmetic),
+        ),
+        (
+            "its top half used as an address",
+            Width::Word,
+            Box::new(|b, x| {
+                let h = b.shift(ShiftType::Lsr, x, 16);
+                b.ld(Width::Word, h);
+                x
+            }),
+            holed(Why::Address),
+        ),
+        (
+            "its compare's result stored",
+            Width::Word,
+            Box::new(|b, x| {
+                let z = b.k(0);
+                let d = b.bin(BinOp::Sub, x, z);
+                let c = b.k(CELL);
+                b.st(Width::Word, c, d);
+                x
+            }),
+            holed(Why::CmpUsed),
+        ),
+        (
+            "copied by bytes and loaded as a word",
+            Width::Byte,
+            Box::new(|b, x| {
+                let (p, q) = (b.get(2), b.get(3));
+                b.st(Width::Byte, p, x);
+                b.ld(Width::Word, q)
+            }),
+            proven.clone(),
+        ),
+        (
+            "its bytes called",
+            Width::Byte,
+            Box::new(|_, x| x),
+            (false, false, vec![(Why::CalledInPart, true)], false),
+        ),
+    ];
+    for (what, w, body, want) in bodies {
+        let small = table_use(3, w, &*body);
+        let large = table_use(100, w, &*body);
+        assert_eq!(small, want, "{what}, 3 functions");
+        assert_eq!(large, want, "{what}, 100 functions");
+    }
+}
+
+/// A join into an entry that the cap undoes (a pointer one "from here
+/// on" takes in, a number into an unknown) leaves the set itself, not a
+/// copy of it; one that changes it says so whatever its length after.
+#[test]
+fn a_join_the_cap_undoes_leaves_the_set_itself() {
+    let mut img = Img::new();
+    img.code = (1..16).map(|k| 0x0800_0000 + 0x100 * k).collect();
+    let _code = CodeGuard::set(&img);
+    let mut a = Val::of(Tok::RomFrom(0x0800_0810));
+    a.toks.insert(Tok::Num(5));
+    a.unk = true;
+    let p = std::rc::Rc::as_ptr(&a.toks.0);
+    let keep = a.clone();
+    assert!(!a.join_capped(&Val::of(Tok::Rom(0x0800_0820))));
+    assert!(!a.join_capped(&Val::of(Tok::RomFrom(0x0800_0840))));
+    assert!(!a.join_capped(&Val::of(Tok::Num(7))));
+    assert_eq!(p, std::rc::Rc::as_ptr(&a.toks.0));
+    assert_eq!(a, keep);
+    // Past the next code, it is its own.
+    assert!(a.join_capped(&Val::of(Tok::Rom(0x0800_0910))));
+    // Sixteen pointers, one in each run of data, and a seventeenth:
+    // sixteen "from here on".
+    let mut b = Val::default();
+    for k in 0..16 {
+        b.join_capped(&Val::of(Tok::Rom(0x0800_0010 + 0x100 * k)));
+    }
+    assert_eq!(b.toks.len(), 16);
+    assert!(b.join_capped(&Val::of(Tok::Rom(0x0800_0020))));
+    assert_eq!(b.toks.len(), 16);
+    assert!(b.toks.contains(&Tok::RomFrom(0x0800_0010)));
 }
