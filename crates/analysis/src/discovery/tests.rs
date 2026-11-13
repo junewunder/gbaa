@@ -707,6 +707,11 @@ fn code_copied_to_iwram_is_discovered_where_it_runs() {
         d.ram_entries.iter().copied().collect::<Vec<_>>(),
         [0x0300_0000, 0x0300_0010]
     );
+    // The word stored to the IRQ vector is the IRQ wrapper.
+    assert_eq!(
+        d.irq_handlers.iter().copied().collect::<Vec<_>>(),
+        [0x0300_0000]
+    );
     // ROM discovery is as it was: the stub isn't a function.
     assert!(!d.funcs.contains_key(&thumb(0x180)));
     let ov = overlays(&a.0, &d);
