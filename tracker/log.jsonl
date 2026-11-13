@@ -2852,3 +2852,4 @@
 {"at":"2026-11-13T18:09:18Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/window-keeps-save","text":"A native program's window keeps the game's save: on main"}
 {"at":"2026-11-13T18:12:00Z","actor":"loop","tag":"manual","host":"quack","cmd":"lanes-stopped","text":"quack: the last lane stopped and tidied up; the machine may sleep now"}
 {"at":"2026-11-13T18:32:21Z","actor":"session","tag":"c4272a60","host":"quack","cmd":"decide","text":"decided: LLM passes may alternate with the algorithmic lift","d":"d/llm-passes-may-alternate-with-the-algorithmic"}
+{"at":"2026-11-13T20:09:32Z","actor":"session","tag":"ec2ee7ee","host":"quack","cmd":"add-unit","id":"native/lift-fn-names","text":"new unit: Metroid's lift uses the names file for functions and data"}
