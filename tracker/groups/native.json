@@ -1918,6 +1918,15 @@
       "check": "recorded",
       "needs": ["native/lift-psr-boot-irq", "native/lift-irq-wrapper-tail"],
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "949481c0",
+        "session": "949481c0-e23d-420f-834c-36bda09666f3",
+        "host": "quack",
+        "pid": 1634689,
+        "start": "2603373",
+        "at": "2026-11-13T11:59:16Z"
+      },
       "notes": [
         {
           "at": "2026-11-13T08:31:08Z",
@@ -1934,7 +1943,8 @@
           "by": "a7b7e9d7",
           "text": "Lifting Nightmare's dispatcher 0x03001030 (stand-in dropped) adds 5 IWRAM functions with hard entry-read summary holes main's lift lacks: 0x03007151 0x0300715c 0x030071df 0x030072e8 0x030074d1. Built only with temp panic stand-ins for them; settle these first."
         }
-      ]
+      ],
+      "round": "2026-11-13T11:59:16Z"
     },
     {
       "id": "native/serial-no-partner-as-mgba",
