@@ -676,8 +676,8 @@ fn mem(stop_after: usize) -> Box<Mem> {
         }),
         ewram: std::vec![0; 0x4_0000],
     });
-    for i in 0..0x400 {
-        g.ewram[i] = i as u8;
+    for (i, b) in g.ewram[..0x400].iter_mut().enumerate() {
+        *b = i as u8;
     }
     g
 }

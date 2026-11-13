@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# The machine's build lock (the justfile's `lock`): runs a compile in one of
+# GBAA_BUILD_SLOTS slots (default 3), waiting while all are held. The first
+# slot is /tmp/gbaa-build.lock, which a bare `flock /tmp/gbaa-build.lock …`
+# still takes. The command inherits the lock and holds it until it exits.
+n=${GBAA_BUILD_SLOTS:-3}
+while :; do
+  for i in $(seq 1 "$n"); do
+    f=/tmp/gbaa-build.lock; [ "$i" -gt 1 ] && f=$f.$i
+    exec 9>>"$f"
+    flock -n 9 && exec "$@"
+  done
+  sleep 2
+done
