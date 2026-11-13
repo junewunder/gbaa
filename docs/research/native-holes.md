@@ -466,8 +466,10 @@ between. The read is then masked away (soft), as agbcc's byte-built word.
 Hard holes, main (f52fe115) and this branch (`just holes-all --against`):
 moonbeam 11 and 6, Rogue 21 and 19 (one fewer jump: 0x080bb454's table
 is no longer rejected), Imperium 16 and 15, the other six unchanged; the
-corpus 112 and 104. moonbeam's lift: 37 hard holes and 32, 1,216
-functions and 1,211, the five gone and nothing new. Against pret's
+corpus 112 and 104. The lifts' hard holes (`gbaa-lift`; Rogue's and
+Imperium's with `skip_fn_flow`): moonbeam 37 and 32 (1,216 functions and
+1,211, the five gone), Rogue 56 and 53 (that jump, counted in two
+functions, and 0x0820c629), Imperium 29 and 28; none new. Against pret's
 modern build's ELF (`just disc-pret pokeemerald_modern`): far jumps found
 600 and 728, of 732 in the code map, none false either time; exact
 tables 560 and 572 of 617; true starts 12,436 and 12,529, 5 false both;
