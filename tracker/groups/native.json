@@ -2248,6 +2248,12 @@
       "title": "The native lifter uses the structuring pass",
       "detail": "Every lifted function is still a loop { match block }. crates/codegen/src/lower.rs has a structuring pass (the mod view and structured codegen use it) that the native lifter doesn't. Emit if/else, while and loop with break where the control flow is reducible, keeping the block match only for what isn't. Done when: just lift-check passes on every program with 0 differences and every planted fault caught; Metroid lifted builds and runs 600 of 600 frames headless; just lift-metrics reports the share of functions and blocks structured, with a bar; just check passes.",
       "check": "recorded"
+    },
+    {
+      "id": "native/fn-check-any",
+      "title": "A per-function check for any function in any game",
+      "detail": "crates/native-fn-diff checks a native function against the interpreter from recorded entry states, but is wired to Emerald's ten (its NativeGame per game). Make it take a game and a function address, with a replacement from mods/<game>/ as the native side. Owner's view (2026-11-13): there is no proof, only tests, and tests bloat and cost CPU. So: store a seed, count and digest, not the states; make the reference the lifted function run natively (cheap, many inputs per second), with the interpreter as an occasional second reference; give each function a fixed budget and print its time. Done when: it runs on a Metroid function and on an agb one; a planted wrong replacement is caught, the differing byte named; the budget and time per function are printed; just check passes.",
+      "check": "recorded"
     }
   ]
 }
