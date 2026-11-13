@@ -1340,6 +1340,40 @@ fn pointer_call_to_a_reader(unset: bool) -> (Vec<u8>, Discovery) {
 }
 
 #[test]
+fn a_register_a_callee_changed_is_not_passed_on() {
+    // `c: push {lr}; bl a; bl b; pop {r0}; bx r0`, `a: movs r5, #1; bx
+    // lr`, `b: ldr r0, [r5, #0]; bx lr`: the machine gives b the r5 a
+    // left, the lift c's own local.
+    let (rom, d) = thumb_program(
+        &[
+            0xB500, // 0x00 push {lr}
+            0xF000, 0xF805, // 0x02 bl 0x10
+            0xF000, 0xF805, // 0x06 bl 0x14
+            0xBC01, // 0x0a pop {r0}
+            0x4700, // 0x0c bx r0
+            0x46C0, // 0x0e nop
+            0x2501, // 0x10 movs r5, #1
+            0x4770, // 0x12 bx lr
+            0x6828, // 0x14 ldr r0, [r5, #0]
+            0x4770, // 0x16 bx lr
+        ],
+        &[2, 4, 4, 2, 2, 2, 2, 2, 2, 2],
+        &[0x0800_0001, 0x0800_0011, 0x0800_0015],
+    );
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    assert_eq!(
+        hard_holes(&sums, 0x0800_0001),
+        vec!["0x08000008: reads r4-r11 a callee changed: r5, by 0x08000011".to_string()]
+    );
+    let c = &sums.by_entry[&0x0800_0001];
+    assert_eq!(
+        c.passes,
+        std::collections::BTreeSet::from([(0x0800_0008, 0x0800_0015)])
+    );
+}
+
+#[test]
 fn a_pointer_call_the_holes_file_names_passes_what_its_callee_takes() {
     use crate::saves::{Assume, Passing, Sets, summarize_passing};
     let (d, t) = (0x0800_0001u32, 0x0800_0015u32);

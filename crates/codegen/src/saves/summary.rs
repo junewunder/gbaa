@@ -162,6 +162,10 @@ pub struct Summary {
     /// file names ([`Passing`]); any other way in zeroes them, a hole.
     /// One only returned in r0–r3 isn't here ([`Summary::entry_returns`]).
     pub takes: u8,
+    /// The calls its run saw pass a callee what it takes: (the call's
+    /// address, the callee). The lift passes at no other: a call the run
+    /// never reached (code past a hole) had its registers unread.
+    pub passes: BTreeSet<(u32, u32)>,
     /// Why the summary may be incomplete: what the proof fails on, and
     /// each read of a register a callee (`Some`) or a BIOS or indirect
     /// call (`None`) left undefined, by the reading instruction.
@@ -198,6 +202,18 @@ impl Summary {
     /// that nothing calls.
     pub fn passed(&self) -> u8 {
         if self.holes.iter().any(|h| h.contains(TAKES_READ)) {
+            self.takes
+        } else {
+            0
+        }
+    }
+
+    /// [`Summary::takes`] where a call may pass them: [`Summary::passed`],
+    /// or a hard hole a holes file may yet name the callers of. 0 for one
+    /// nothing calls.
+    pub fn may_take(&self) -> u8 {
+        let called = |h: &String| h.contains(TAKES_READ) || h.contains(ENTRY_READ);
+        if self.holes.iter().any(called) {
             self.takes
         } else {
             0
@@ -317,6 +333,8 @@ pub(super) struct Sum<'a> {
     /// Reads of r4–r11 as they came whose bits reach a use: (the
     /// instruction, the register, how).
     entry_reads: BTreeSet<(u32, u8, Via)>,
+    /// [`Summary::passes`].
+    passes: BTreeSet<(u32, u32)>,
     /// Reads of r4–r11 as they came whose every bit an op masks away:
     /// (the op's instruction, the register).
     masked: BTreeSet<(u32, u8)>,
@@ -378,6 +396,7 @@ impl<'a> Sum<'a> {
             refs: BTreeSet::new(),
             changes: 0,
             entry_reads: BTreeSet::new(),
+            passes: BTreeSet::new(),
             masked: BTreeSet::new(),
             frames: 0,
         }
@@ -543,11 +562,22 @@ impl<'a> Sum<'a> {
                 Some(x) if !self.passing.replaced.contains(&c) => x.takes,
                 _ => 0,
             };
+            if takes != 0 {
+                self.passes.insert((at, c));
+            }
             for n in entry_regs(takes) {
                 if let Some((regs, _)) = s.regs[n as usize].taint() {
                     for e in entry_regs(regs) {
                         self.entry_reads.insert((at, e, Via::Takes(c)));
                     }
+                }
+                // The lift's local is as it was before an earlier callee
+                // changed the register: not what the machine passes.
+                let by = s.chg[n as usize - 4];
+                if by != 0 {
+                    self.holes.insert(format!(
+                        "0x{at:08x}: reads r4-r11 a callee changed: r{n}, by 0x{by:08x}"
+                    ));
                 }
             }
         }
@@ -904,6 +934,7 @@ pub fn summarize_passing(
             keeps: proof.kept.contains(&k),
             changes: sum.changes,
             takes,
+            passes: sum.passes.clone(),
             holes: sum.holes.clone(),
             stopped: sum.stopped,
             callees: sum.refs.clone(),
