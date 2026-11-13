@@ -438,7 +438,7 @@ could call through `FnRef`.
 
 - Take holes from `analysis::holes::classify`; its `Report` lists each
   site. The IRQ wrapper and boot `msr`/`mrs` come back as `CpuWhere::Wrapper`
-  and `Boot`: recognised, not holes.
+  and `Boot`: recognised, not holes; the lifter prints them (`PsrFns`).
 - The run's call targets (`Run::call_targets`, `indirect_calls`) are the
   roots discovery lacks. The RAM copies are `analysis::holes::ram_copies`
   (each an `Overlay`, with the roots it was given), which needs a run; a
