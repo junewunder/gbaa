@@ -10,8 +10,9 @@
 //! `--input` is gbaa-desktop's (`button@frame[+frames],...`), read by the
 //! same parser; `--frame-hashes` writes the same `frame N hash H` lines;
 //! `--native-record` writes each frame's record as the play build's
-//! `--native-record` does (crates/native-record), from the program's
-//! guest-layout RAM: only a build with `--features guest-layout` has one.
+//! `--native-record` does (crates/native-record), from the program's RAM
+//! as the guest lays it out: a guest-layout build's own bytes, or the
+//! image a play-layout build makes of its fields.
 
 use std::cell::RefCell;
 use std::convert::Infallible;
@@ -181,9 +182,6 @@ thread_local! {
 /// library's I/O registers ([`Hw::raw16`]), the display's memories, and
 /// the sound handed off since the last record (the frame's own, as the
 /// play build's record has it).
-// Unused by the play layout's build of `native-spike`, which has no RAM to
-// record.
-#[allow(dead_code)]
 pub fn record<G: Native>(hw: &Hw<G>, ram: &[u8]) {
     RECORD.with_borrow_mut(|r| {
         let Some((w, f)) = r else {
@@ -220,7 +218,7 @@ pub fn record<G: Native>(hw: &Hw<G>, ram: &[u8]) {
 
 /// Parse the command line, make the game on a headless host, run `main`
 /// until the frames run out, and write what was asked for. `guest`: the
-/// build has a guest-layout RAM to record.
+/// build can record its RAM as the guest lays it out.
 pub fn main<G: Native<Host = AnyHost>>(
     name: &str,
     guest: bool,
@@ -246,7 +244,7 @@ fn run<G: Native<Host = AnyHost>>(
     if let Some(p) = &o.native_record {
         if !guest {
             return Err(
-                "--native-record needs the guest layout: build with --features guest-layout".into(),
+                "--native-record: this build has no guest-layout RAM to record".into(),
             );
         }
         let w = Writer::create(p).map_err(|e| format!("{}: {e}", p.display()))?;
