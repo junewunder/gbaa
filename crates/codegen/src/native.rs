@@ -335,7 +335,9 @@ impl Holes {
                             .iter()
                             .map(|v| int(v, "sites"))
                             .collect::<Result<Vec<_>, _>>()?;
-                        h.takes.insert(entry, (sites, str_of(e, "why")?));
+                        if h.takes.insert(entry, (sites, str_of(e, "why")?)).is_some() {
+                            return Err(format!("takes: {entry:#010x} twice"));
+                        }
                     }
                     "copy" => {
                         let field = |f: &str| -> Result<u32, String> {
@@ -631,6 +633,15 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     }
     let shapes = shapes_of(&codes, &all, holes);
     let args = call_fn_args(&sets, &codes, &shapes.shaped);
+    // The functions that take r4-r11 from their callers, over all
+    // contexts; a stand-in that calls one by its plain entry would run
+    // into its stop.
+    let takers: BTreeSet<u32> = codes
+        .iter()
+        .flat_map(|c| c.sums.by_entry.iter())
+        .filter(|(k, s)| s.passed() != 0 && !holes.standins.contains_key(k))
+        .map(|(&k, _)| k)
+        .collect();
     // Each function's text by key, in print order: the modules' contents.
     let mut out: Vec<(u32, String)> = Vec::new();
     let mut report = String::new();
@@ -660,6 +671,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 f,
                 all: &all,
                 sums: &c.sums,
+                takers: &takers,
                 shapes: &shapes.shaped,
                 me: shapes.shaped.get(&f.entry).copied(),
                 holes,
@@ -702,6 +714,18 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             at: *k,
             what: "the holes file's stand-in matches no function".into(),
         });
+    }
+    for (&f, (code, _)) in &holes.standins {
+        for &k in takers
+            .iter()
+            .filter(|k| code.contains(&format!("f_{k:08x}(")))
+        {
+            hard.push(Hole {
+                func: f,
+                at: f,
+                what: format!("the stand-in calls f_{k:08x}, which takes r4-r11 from its callers and stops the program when called so"),
+            });
+        }
     }
     for (&k, (sites, _)) in &holes.takes {
         for &at in sites.iter().filter(|&&at| !soft.passes.contains(&(at, k))) {
@@ -1408,6 +1432,8 @@ struct FnPrinter<'a, 'b> {
     all: &'a BTreeSet<u32>,
     /// This context's summaries.
     sums: &'a Summaries,
+    /// Every context's functions that take r4-r11 from their callers.
+    takers: &'a BTreeSet<u32>,
     /// Every shaped function's parameters and results.
     shapes: &'a BTreeMap<u32, Shape>,
     /// This one's, `None` for the four-register form.
@@ -2059,6 +2085,22 @@ impl FnPrinter<'_, '_> {
         self.sums.get(k).map_or(0, Summary::passed)
     }
 
+    /// A direct call at `at` to `k`: a hole where `k` takes r4-r11 from
+    /// its callers and this call can't be shown to pass them (the
+    /// summary's run never reached it, or `k` is another context's).
+    fn passes_at(&mut self, at: u32, k: u32) {
+        if !self.takers.contains(&k) {
+            return;
+        }
+        let seen = self
+            .sums
+            .get(self.f.entry)
+            .is_some_and(|s| s.passes.contains(&(at, k)));
+        if self.passed(k) == 0 || !seen {
+            self.hole(at, format!("a call to {k:#010x}, which takes r4-r11 from its callers, that the summaries didn't see pass them (past a hole in this function, or from another code context)"));
+        }
+    }
+
     /// `k`'s shape, `None` for a four-register function or a stand-in.
     fn shape(&self, k: u32) -> Option<Shape> {
         if self.holes.standins.contains_key(&k) {
@@ -2145,7 +2187,10 @@ impl FnPrinter<'_, '_> {
             .iter()
             .filter(|(_, (sites, _))| sites.contains(&at))
             .map(|(&e, _)| (e, self.passed(e)))
-            .filter(|&(_, m)| m != 0)
+            .filter(|&(e, m)| {
+                let seen = |s: &Summary| s.passes.contains(&(at, e));
+                m != 0 && self.sums.get(self.f.entry).is_some_and(seen)
+            })
             .collect();
         if !named.is_empty() {
             let mut t = format!("match {k} {{ ");
@@ -2180,6 +2225,7 @@ impl FnPrinter<'_, '_> {
                 writeln!(s, "{ind}{wait}{j}").unwrap();
             }
             Plan::Call { target, ret } => {
+                self.passes_at(at, target);
                 let c = self.call_stmt(target);
                 let c = self.call_then(c, ret, at);
                 writeln!(s, "{ind}{wait}{c}").unwrap();
@@ -2216,8 +2262,18 @@ impl FnPrinter<'_, '_> {
                     // `call_fn` all the same: the summaries took this for
                     // an indirect call, so what it would pass went unread.)
                     let c = match target {
-                        Some(tk) if self.all.contains(&tk) && self.passed(tk) == 0 => {
+                        Some(tk) if self.all.contains(&tk) && !self.takers.contains(&tk) => {
                             self.call_stmt(tk)
+                        }
+                        Some(tk) if self.all.contains(&tk) => {
+                            if !self
+                                .sums
+                                .get(self.f.entry)
+                                .is_some_and(|s| s.passes.contains(&(at, tk)))
+                            {
+                                self.hole(at, format!("a call through a register to {tk:#010x}, which takes r4-r11 from its callers: not passed (the holes file's takes can name the call)"));
+                            }
+                            self.call_fn(at, &k)
                         }
                         _ => self.call_fn(at, &k),
                     };
