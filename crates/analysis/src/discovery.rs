@@ -18,7 +18,8 @@
 //!   every round. It also says which calls never return (nothing follows
 //!   them). A `bl` from a function with a prologue into the span of its own
 //!   code is a jump too ([`crate::vsa::func`]): LLVM's long branches to
-//!   cold blocks and to the chunks of a `main` that never returns.
+//!   cold blocks and to the chunks of a `main` that never returns. So is
+//!   one to a block right after that span that never returns (modern GCC's).
 //! - **Run roots.** [`discover_with`] takes more starts known to be code
 //!   (a run's calls through a register, from `gbaa-holes`) into the first
 //!   descent beside the entry; a BIOS copy's source ends at the first of

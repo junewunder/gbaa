@@ -219,6 +219,75 @@ fn far_jump_bl_is_not_a_call() {
 }
 
 #[test]
+fn modern_gcc_cold_blocks_are_the_callers() {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        // main: movs r3, #180; push {r4, lr}; cmp r0, #0; bge 1f; bl cold1;
+        // 1: cmp r0, #1; bne 2f; bl cold2; 2: movs r0, #0; b 3f;
+        // cold1: movs r0, r4; bl die; 3: pop {r4, pc};
+        // cold2: movs r0, r4; bl die
+        .h(0x100, 0x23b4)
+        .h(0x102, 0xb510)
+        .h(0x104, 0x2800)
+        .bcond(0x106, 0xa, 0x10c)
+        .bl(0x108, 0x118)
+        .h(0x10c, 0x2801)
+        .bcond(0x10e, 1, 0x114)
+        .bl(0x110, 0x120)
+        .h(0x114, 0x2000)
+        .h(0x116, 0xe002) // b 0x11e
+        .h(0x118, 0x0020)
+        .bl(0x11a, 0x126)
+        .h(0x11e, 0xbd10)
+        .h(0x120, 0x0020)
+        .bl(0x122, 0x126)
+        // die: movs r1, #5; push {r4, lr}; b .
+        .h(0x126, 0x2105)
+        .h(0x128, 0xb510)
+        .h(0x12a, 0xe7fe);
+    let d = a.run();
+    // The push comes second, so main still has a prologue; cold1 is
+    // inside its code and cold2 right after it, and neither returns.
+    assert!(d.rec.far_jumps.contains(&(B + 0x108)));
+    assert!(d.rec.far_jumps.contains(&(B + 0x110)));
+    assert!(!d.funcs.contains_key(&thumb(0x118)), "{:x?}", d.funcs);
+    assert!(!d.funcs.contains_key(&thumb(0x120)), "{:x?}", d.funcs);
+    assert!(d.code.contains_key(&(B + 0x118)) && d.code.contains_key(&(B + 0x120)));
+    // A function with a prologue of its own stays one, wherever it is.
+    assert!(!d.rec.far_jumps.contains(&(B + 0x11a)));
+    assert!(!d.rec.far_jumps.contains(&(B + 0x122)));
+    assert_eq!(d.funcs.get(&thumb(0x126)), Some(&Evidence::Confirmed));
+}
+
+#[test]
+fn a_run_of_cold_blocks_after_a_function_is_all_its_own() {
+    let mut a = Asm::new();
+    // main: movs r3, #180; push {r4, lr}; six of `cmp r0, #k; bne 1f;
+    // bl cold_k; 1:`; movs r0, #0; pop {r4, pc}; then the six blocks, each
+    // `movs r0, r4; bl die`, found one a rerun.
+    a.entry(0x100).h(0x100, 0x23b4).h(0x102, 0xb510);
+    for k in 0..6 {
+        let (at, cold) = (0x104 + 8 * k, 0x138 + 6 * k);
+        a.h(at, 0x2800 | k as u16)
+            .bcond(at + 2, 1, at + 8)
+            .bl(at + 4, cold)
+            .h(cold, 0x0020)
+            .bl(cold + 2, 0x200);
+    }
+    a.h(0x134, 0x2000)
+        .h(0x136, 0xbd10)
+        // die: push {r4, lr}; b .
+        .h(0x200, 0xb510)
+        .h(0x202, 0xe7fe);
+    let d = a.run();
+    for k in 0..6 {
+        assert!(d.rec.far_jumps.contains(&(B + 0x108 + 8 * k)), "block {k}");
+        assert!(!d.funcs.contains_key(&thumb(0x138 + 6 * k)), "block {k}");
+    }
+    assert!(d.funcs.contains_key(&thumb(0x200)));
+}
+
+#[test]
 fn bl_to_a_bx_stub_calls_the_register() {
     let mut a = Asm::new();
     a.entry(0x100)
