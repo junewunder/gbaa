@@ -17,10 +17,12 @@ max_lines = 400
 # 420 after native/modern-gcc-jumps added Imperium's and Rogue's
 # unresolved jumps sorted by kind (30 lines: the card asks for them here);
 # 470 after native/entry-read-masking listed the corpus's entry reads of
-# r4-r11 by kind (48 lines: the card asks for the fully masked ones).
+# r4-r11 by kind (48 lines: the card asks for the fully masked ones);
+# 495 after native/lift-undefined-insns sorted the lifts' undefined
+# instructions by kind (25 lines: the card asks for each kind's cause here).
 [[doc]]
 path = "docs/research/native-holes.md"
-max_lines = 470
+max_lines = 495
 
 # 1962 after multiplayer/rollback-feel-sim added the feel sim's entry
 # (12 lines, its other options left to the justfile's comment); 1971 after
