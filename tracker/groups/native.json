@@ -2073,7 +2073,17 @@
       "title": "Function flow: a BIOS call holes only what it reads",
       "detail": "From {unit:native/fnref-c-game-words} (docs/research/fnref-held-words.md, 'A C game'). The flow (crates/codegen/src/native/fnref.rs, Run::exit, Edge::Swi) holes all of r0-r3 at every swi as given to the BIOS. On Metroid 429 of 804 function words have that as their only use not allowed, all at one swi, VBlankIntrWait's wrapper (0x080051ce), which takes no arguments: handlers left in r0-r3 by the bx-rN call stub travel there. Measured on main with GBAA_FNREF_OFF=bios (fnref.rs bios_reads, a table of which registers each BIOS call reads): fn_words_proven 37 to 466, fn_words_not_proven 767 to 338, nothing else moves. Make that the rule, not a switch: a swi holes only the registers its call reads. Settle what r0-r3 hold after the swi (the flow makes all four unknown; a register the BIOS leaves as it came must keep its tokens, or be shown clobbered). On main; needs nothing of the branch unit/native/fnref-unknown-addrs. Done when: the rule is on by default with a unit test (a function address left in r3 at VBlankIntrWait stays proven; one in r0 at CpuSet is still a hole), Metroid's lift (just capped --mem 2G, about a minute) reports fn_words_not_proven at or under 338, the agb programs' bars in crates/codegen/lift-check.toml hold or are lowered, just lift-check and just check pass.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "3502c802",
+        "session": "3502c802-2765-4929-bab3-efc404b57109",
+        "host": "quack",
+        "pid": 1206400,
+        "start": "1798812",
+        "at": "2026-11-13T09:45:04Z"
+      },
+      "round": "2026-11-13T09:45:04Z"
     },
     {
       "id": "native/fnref-table-ends",
