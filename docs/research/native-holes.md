@@ -434,24 +434,24 @@ nest (a `bl` from a function with a prologue into the span of its own
 code is a jump, unless the target looks like a function). As built now:
 
 - A prologue is `push {…, lr}` at the entry or after up to 8
-  instructions that touch neither sp, lr nor pc (`is_push_lr`), for the
+  instructions that write neither sp, lr nor pc (`is_push_lr`), for the
   caller and for a target. Modern GCC schedules the body's start ahead
   of the push: 125 of moonbeam's 1,050 pushing Thumb starts, the latest
   after 7. The rule used to ask for the push first.
 - A target right where the function's reached code and pools end is a
   jump too, if its probe says nothing returns from it: the last cold
-  blocks lie past everything a branch reaches. Only then, since the next
-  function starts there as well. A never-returning function taken for a
-  block runs the same code with the same registers; the opposite mistake
-  zeroes them.
+  blocks lie past everything a branch reaches (one rerun a block, 16 at
+  most). Only then, since the next function starts there as well. A
+  never-returning function taken for a block runs the same code with
+  the same registers; the opposite mistake zeroes them.
 
 **`sbcs rN, rN` after a compare** (Rogue 0x0820c629, r5; Imperium
 0x0821e331, r5 holding the entry r8): GCC's 0 or -1 of a condition,
 `cmp r3, r7; sbcs r5, r5`, in real functions. The value is the carry
 extended to a word whatever rN held, and the summaries took it for a use.
 `codegen::saves::spread` gives `a + !a + c`, its carry and its overflow
-the carry's bits only, where `a` and the complemented operand are one
-value or two reads of one register with no write between: masked (soft).
+the carry's bits only (the IR reads rN once, so `a` is one value): the
+entry bits are masked away, a soft hole.
 
 Hard holes fell on the three games and rose nowhere; the numbers are in
 the unit's evidence. Still hard entry readers there: moonbeam 0x0800019b

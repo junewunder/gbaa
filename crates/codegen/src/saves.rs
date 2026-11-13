@@ -907,22 +907,10 @@ fn spread(insts: &[Inst], op: Op, vals: &[V]) -> Option<V> {
     })
 }
 
-/// Whether one of `a` and `b` is the other's complement: a `not` of the
-/// same value, or of another read of the register it was read from, not
-/// written in between (`sbc rN, rN` reads rN twice).
+/// Whether one of `a` and `b` is the other's complement: `sbc rN, rN`'s
+/// operands (the builder reads a register once an instruction).
 fn complement(insts: &[Inst], a: ValueId, b: ValueId) -> bool {
-    let of = |a: ValueId, b: ValueId| {
-        let Op::Not(x) = insts[b.index()].op else {
-            return false;
-        };
-        let (lo, hi) = (a.index().min(x.index()), a.index().max(x.index()));
-        x == a
-            || matches!(
-                (insts[a.index()].op, insts[x.index()].op),
-                (Op::GetReg(p), Op::GetReg(q)) if p == q
-                    && !insts[lo..hi].iter().any(|i| matches!(i.op, Op::SetReg(r, _) if r == p))
-            )
-    };
+    let of = |a: ValueId, b: ValueId| matches!(insts[b.index()].op, Op::Not(x) if x == a);
     of(a, b) || of(b, a)
 }
 
