@@ -1962,6 +1962,11 @@
       "uses": ["heavy"],
       "notes": [
         {
+          "at": "2026-11-13T11:22:04Z",
+          "by": "45f263ac",
+          "text": "From {unit:native/fnref-bios-reads}: two BIOS tables now. fnref.rs bios_regs keeps a register a swi leaves; saves/summary.rs bios() counts all of r0-r3 set or clobbered, so a shaped callee returns 0 there. Make the summaries use bios_regs' sets/may-set."
+        },
+        {
           "at": "2026-11-13T08:33:08Z",
           "by": "afebd1b0",
           "text": "2026-11-13: measured on Metroid (docs/research/fnref-held-words.md, 'A C game'). The swi clause is now {unit:native/fnref-bios-reads} (767 to 338, on main). Left here: results only a callee sets, 90 Metroid words, 1,373 on Emerald. Needs nothing of the branch."
