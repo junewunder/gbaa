@@ -340,10 +340,10 @@ In the order they'd pay on Metroid:
    read by a byte index is read 256 entries long and one read by a
    halfword 64 KB, through its neighbours: C lays tables of handlers
    back to back, and `object_end` doesn't stop between function words,
-   so that no table of handlers is cut short. That is the 77 words read past an
-   end, the 256-word reads of row one, and the width of the callee sets
-   (18 sets of 210; 162 with the switch). On the two larger games it is
-   the first holder (below).
+   so that no table of handlers is cut short. That is the 77 words read
+   past an end, the 256-word reads of row one, and the width of the
+   callee sets (18 sets of 210; 162 with the switch). On the two larger
+   games it holds over a thousand words each (below).
 4. **Old GCC's moves and compares** (`native/fnref-gcc-moves`, new):
    `adds rd, rs, #0` is a move, and its carry and overflow are 0; `cmp
    x, #0` carries always and never overflows; a value that may be a
@@ -382,9 +382,11 @@ now, in 31 minutes at 2.0 GB (its holes file still skips it, as not
 settling under 16 GB). 51 of 54 indirect calls have a complete set, of
 2,044 callees on average. 4,054 words are held, none at a BIOS call.
 2,515 are first held by a pile read: 733 at 0x08006162, a byte out of
-the pile passed as a parameter and shifted, 269 at 0x0800582a. 1,373
-are held by one byte array read by a halfword index, 64 KB from
-0x087336f0 (0x0801c6b8 and the two loads after it): where a table ends.
+the pile passed as a parameter and shifted, 269 at 0x0800582a. 1,260
+are held at 0x0801c6b8, the sign-extended byte load of an array by a
+halfword index, and 113 at two loads the roads name as a bounded ROM
+read, 64 KB from 0x087336f0 and from 0x087339f0, the first the same
+array: where a table ends.
 NIGHTMARE-PILE
 
 **Emerald** (15,159 functions). The flow stops at its token bound after
