@@ -1942,7 +1942,14 @@
     {
       "id": "native/first-stop-guest-pc",
       "title": "A native game's stop names its guest pc, not only functions",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-13T06:56:53Z",
+          "by": "3d525e2f",
+          "text": "From {unit:native/native-first-stop} (PR 5): the stop line gives lifted functions from the panic's backtrace (inlined ones don't show) and no guest pc, since lifted code keeps none. Needs the lifter to keep a pc or block address a panic can read, cheaply."
+        }
+      ]
     }
   ]
 }
