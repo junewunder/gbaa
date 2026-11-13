@@ -1734,6 +1734,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-13T07:57:14Z",
+          "by": "77aa5fbf",
+          "text": "PR #6: traps (46 of 47 sites, udf #255) lift as panic!; tests, holes-all +0, disc bars, check done. Not run: moonbeam/Rogue gbaa-lift on main and branch (16G slot starved 3 h by 4G jobs). Run those 4 lifts, count 'undefined instruction' holes, then done."
+        },
+        {
           "at": "2026-11-12T13:42:55Z",
           "by": "74679aef",
           "text": "Code on branch (48b1f0e): traps (udf #255) lift as panic!, SoftReset ends paths. Unverified: moonbeam's gbaa-lift then ran >10 min at 100% CPU, 0.6 GB (overnight <3 min with build); first check whether main's lifter is as slow, then lifts' counts, holes-all, just check."
