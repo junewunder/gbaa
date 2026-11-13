@@ -137,6 +137,7 @@ use frame::{Frame, Kind, Local};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
+pub mod first_stop;
 pub mod fnref;
 pub mod frame;
 pub mod globals;

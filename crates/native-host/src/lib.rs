@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! PROGRAM --headless --frames N [--input PRESSES] [--frame-hashes F]
-//!         [--dump FILE.png] [--native-record FILE]
+//!         [--dump FILE.png] [--native-record FILE] [--time-limit SECONDS]
 //! ```
 //!
 //! `--input` is gbaa-desktop's (`button@frame[+frames],...`), read by the
@@ -13,21 +13,41 @@
 //! `--native-record` does (crates/native-record), from the program's RAM
 //! as the guest lays it out: a guest-layout build's own bytes, or the
 //! image a play-layout build makes of its fields.
+//!
+//! A program that stops before its frames run out says where in one line
+//! on stderr, the stop line (`native_record::stop`, unit
+//! `native/native-first-stop`): at a panic (an I/O register the library
+//! doesn't model, memory the program hasn't got), after the panic's own
+//! message, with the frames presented and the lifted functions on the
+//! stack; and when `--time-limit`'s seconds pass first (a loop that never
+//! reaches a frame), exiting [`TIME_LIMIT_EXIT`]. `gbaa-first-stop` reads it.
 
 use std::cell::RefCell;
 use std::convert::Infallible;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use desktop::Script;
+use native_record::stop::{Stop, Why, functions_in};
 use native_record::{Frame as Record, Region, Writer};
 use runtime::hw::{Exit, Host, Hw, Native};
 use runtime::platform::{Frame, HEIGHT, WIDTH};
 use runtime::sound::AudioChunk;
 
+/// The exit code when `--time-limit` stops the program (`timeout(1)`'s).
+pub const TIME_LIMIT_EXIT: i32 = 124;
+
+/// Frames presented so far and `--frames`, for the stop line: the panic
+/// hook and the time limit's thread read them.
+static SHOWN: AtomicU64 = AtomicU64::new(0);
+static ASKED: AtomicU64 = AtomicU64::new(0);
+
 pub struct Options {
     frames: u64,
+    /// Seconds the run may take; 0 for no limit.
+    time_limit: u64,
     input: Script,
     frame_hashes: Option<PathBuf>,
     dump: Option<PathBuf>,
@@ -37,6 +57,7 @@ pub struct Options {
 fn parse(args: &[String]) -> Result<Options, String> {
     let mut o = Options {
         frames: 0,
+        time_limit: 0,
         input: Script::default(),
         frame_hashes: None,
         dump: None,
@@ -50,6 +71,9 @@ fn parse(args: &[String]) -> Result<Options, String> {
             "--headless" => headless = true,
             "--frames" => {
                 o.frames = value()?.parse().map_err(|e| format!("--frames: {e}"))?;
+            }
+            "--time-limit" => {
+                o.time_limit = value()?.parse().map_err(|e| format!("--time-limit: {e}"))?;
             }
             "--input" => o.input = Script::parse(value()?)?,
             "--frame-hashes" => o.frame_hashes = Some(value()?.into()),
@@ -77,6 +101,7 @@ struct Headless {
 impl Host for Headless {
     fn present(&mut self, frame: &Frame) -> Result<(), Exit> {
         self.shown += 1;
+        SHOWN.store(self.shown, Ordering::Relaxed);
         let h = desktop::frame_hash(frame);
         self.hashes
             .push_str(&format!("frame {} hash {h:016x}\n", self.shown));
@@ -235,12 +260,55 @@ pub fn main<G: Native<Host = AnyHost>>(
     }
 }
 
+/// The stop line for a stop now, on stderr.
+fn say_stop(functions: Vec<u32>, at: String, why: Why) {
+    let s = Stop {
+        frames: SHOWN.load(Ordering::Relaxed),
+        asked: ASKED.load(Ordering::Relaxed),
+        functions,
+        at,
+        why,
+    };
+    eprintln!("{}", s.line());
+}
+
+/// Say where a panic stopped the program, after the panic's own message:
+/// the stop line, its functions the lifted ones the backtrace names.
+fn stop_at_a_panic() {
+    let before = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        before(info);
+        let bt = std::backtrace::Backtrace::force_capture().to_string();
+        let at = info
+            .location()
+            .map(|l| format!("{}:{}", l.file(), l.line()))
+            .unwrap_or_default();
+        let message = info.payload_as_str().unwrap_or("a panic with no message");
+        say_stop(functions_in(&bt), at, Why::Panic(message.to_string()));
+    }));
+}
+
+/// Stop the program [`TIME_LIMIT_EXIT`] with a stop line if it is still
+/// running after `seconds`.
+fn stop_after(seconds: u64) {
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(seconds));
+        say_stop(Vec::new(), String::new(), Why::TimeLimit(seconds));
+        std::process::exit(TIME_LIMIT_EXIT);
+    });
+}
+
 fn run<G: Native<Host = AnyHost>>(
     o: Options,
     guest: bool,
     make: impl FnOnce(AnyHost) -> Box<G>,
     main: fn(&mut G) -> Result<Infallible, Exit>,
 ) -> Result<(), String> {
+    ASKED.store(o.frames, Ordering::Relaxed);
+    stop_at_a_panic();
+    if o.time_limit > 0 {
+        stop_after(o.time_limit);
+    }
     if let Some(p) = &o.native_record {
         if !guest {
             return Err("--native-record: this build has no guest-layout RAM to record".into());

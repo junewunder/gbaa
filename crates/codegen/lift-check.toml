@@ -647,7 +647,12 @@ call_fn_calls = 61
 call_fn_four_complete = 0
 jumps_by_value = 8
 gap_targets = 5
-fn_words_not_proven = 57
+# Raised 57 to 59 (native/fnref-emerald-speed; june's call, 2026-11-12,
+# d/raise-native-tasks-unproven-function). The 57 was evaluation order, not a
+# proof: vtable words 0x080244c8/cc counted as proven only because sp at
+# f_08000180's pop held a short-lived 5-token value early in the flow; settled,
+# it is a wide "from here on" set with or without that unit's caches.
+fn_words_not_proven = 59
 
 [program.native-dma]
 rom = "agb/native-dma.gba"
