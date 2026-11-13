@@ -84,7 +84,7 @@ instruction that writes PC and is neither a branch, a return nor a call.
 - A **return** is one of: `bx lr`, `mov pc, lr`, any `ldm`/`pop` loading pc,
   `ldr pc, [sp], #4`, or `bx rN` right after a `pop` that loads rN (the
   agbcc/LLVM interworking return `pop {r0}; bx r0`).
-- A **call** is `bx`/`mov pc` right after `mov lr, pc`.
+- A **call** is `bx`/`mov pc` right after `mov lr, pc` or ARM `add lr, pc, #0` (lr is the address after it).
 - A `bl` also counts as a candidate when its target is a short leaf (no
   branches, up to its first return) that writes lr with an ALU op or `ldr`
   and returns with `bx lr`/`mov pc, lr`. Such a helper returns to a computed

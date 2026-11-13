@@ -51,14 +51,29 @@ fn plain_reg(op2: &Operand2, r: DReg) -> bool {
 /// (`docs/research/jump-tables.md`, "Definitions"). Returns: `bx lr`,
 /// `mov pc, lr`, any `ldm`/`pop` loading pc, `ldr pc, [sp], #4`, and
 /// `bx rN` (not pc) right after a `pop` that loads rN. Calls: `bx`/`mov pc` right
-/// after `mov lr, pc`, and a lone second half of Thumb `bl`. Everything
-/// else is a jump.
+/// after the instruction that sets lr to the address after the pc write
+/// (`mov lr, pc`, or agbcc's IRQ wrapper's `add lr, pc, #0`), and a lone
+/// second half of Thumb `bl`. Everything else is a jump: a tail jump
+/// leaves lr its caller's, so nothing right before it sets lr there.
 pub fn classify(prog: &Program, insn: &Insn) -> Ctl {
     let p = prog.prev(insn.addr, insn.thumb);
     let after_mov_lr_pc = matches!(
         p,
         Some(Insn { instr: Instr::Alu { op: AluOp::Mov, rd: DReg::Lr, op2, .. }, .. })
             if plain_reg(&op2, DReg::Pc)
+    ) || matches!(
+        p,
+        Some(Insn {
+            instr: Instr::Alu {
+                op: AluOp::Add,
+                rd: DReg::Lr,
+                rn: DReg::Pc,
+                op2: Operand2::Imm { value: 0, .. },
+                ..
+            },
+            thumb: false,
+            ..
+        })
     );
     match insn.instr {
         Instr::Bx { rm: DReg::Lr, .. } => Ctl::Return,

@@ -1160,9 +1160,15 @@
         "at": "2026-11-13T08:55:31Z",
         "resumed": "c06275d9",
         "prevSession": "c06275d9-b496-4ead-9bf1-0085c8ece768",
-        "pushed": true
+        "pushed": true,
+        "handedBack": "2026-11-13T11:55:09Z"
       },
       "notes": [
+        {
+          "at": "2026-11-13T11:55:07Z",
+          "by": "81556889",
+          "text": "2026-11-13 PR 14: the 48M were copies (44M held, 3M distinct); sets kept once: 24M flat, 1.5 GB, bound not hit, rounds 3x faster. Still unsettled after 7 rounds/53 min: 12.3k entries change a round, memory still. Next: memory/fnref-flow-emerald-memory.md, 'Where it stands'."
+        },
         {
           "at": "2026-11-13T07:17:12Z",
           "by": "ddd9a487",
@@ -1172,11 +1178,6 @@
           "at": "2026-11-12T10:56:36Z",
           "by": "5cf6c823",
           "text": "2026-11-12: Emerald's flow now finishes (27:37, 2.1 GB, on Function-address flow on Emerald fast enough to finish's branch) but reports 'didn't settle' after 35,409 runs: a function hit its 64*blocks+64 step bound, not the round bound. Trace prints which ('unsettled after')."
-        },
-        {
-          "at": "2026-11-08T18:27:27Z",
-          "by": "c06275d9",
-          "text": "2026-11-08: Refs (b6d5ed3f) fixed memory: Emerald round 0 flat at 1.5 GB (was >10 GB), entries 5.6M tokens. Not done: too slow to finish (~60 s/500 fns). Split: {unit:native/fnref-emerald-speed} (needed); widening gap {unit:native/fnref-romfrom-absorb}. memory/ file says how to measure."
         }
       ],
       "round": "2026-11-07T12:12:38Z"
@@ -1917,6 +1918,15 @@
       "check": "recorded",
       "needs": ["native/lift-psr-boot-irq", "native/lift-irq-wrapper-tail"],
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "949481c0",
+        "session": "949481c0-e23d-420f-834c-36bda09666f3",
+        "host": "quack",
+        "pid": 1634689,
+        "start": "2603373",
+        "at": "2026-11-13T11:59:16Z"
+      },
       "notes": [
         {
           "at": "2026-11-13T08:31:08Z",
@@ -1933,7 +1943,8 @@
           "by": "a7b7e9d7",
           "text": "Lifting Nightmare's dispatcher 0x03001030 (stand-in dropped) adds 5 IWRAM functions with hard entry-read summary holes main's lift lacks: 0x03007151 0x0300715c 0x030071df 0x030072e8 0x030074d1. Built only with temp panic stand-ins for them; settle these first."
         }
-      ]
+      ],
+      "round": "2026-11-13T11:59:16Z"
     },
     {
       "id": "native/serial-no-partner-as-mgba",
