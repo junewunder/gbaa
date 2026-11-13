@@ -1229,6 +1229,15 @@
       "by": "owner",
       "at": "2026-11-13T18:32:21Z",
       "scope": ["group:native"]
+    },
+    {
+      "id": "d/a-compiler-s-trap-lifts-as-a-named-stop-not-a-2",
+      "title": "A compiler's trap lifts as a named stop, not a hard hole",
+      "why": "june confirmed the sweep's call (2026-11-13): GCC's udf trap (Thumb 0xdeff/0xdefe, ARM 0xe7ffdefe/0xe7f000f0) lifts as a panic! naming its address, listed in the lift report, not counted as a hard hole; the play build faults there too.",
+      "by": "owner",
+      "at": "2026-11-13T20:37:48Z",
+      "scope": ["group:native"],
+      "replaces": "d/a-compiler-s-trap-lifts-as-a-named-stop-not-a"
     }
   ]
 }
