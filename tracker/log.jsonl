@@ -2803,3 +2803,4 @@
 {"at":"2026-11-13T09:23:49Z","actor":"session","tag":"af8e0194","host":"quack","cmd":"add-unit","id":"native/irq-mode-sp-bank","text":"new unit: A store or wait in IRQ mode banks sp, not Game::sp"}
 {"at":"2026-11-13T09:36:34Z","actor":"session","tag":"838ecd32","host":"quack","cmd":"add-unit","id":"discovery/cold-block-rule-edges","text":"new unit: Cold-block rule: variadic neighbours and stale lead-ins"}
 {"at":"2026-11-13T09:36:39Z","actor":"session","tag":"838ecd32","host":"quack","cmd":"add-unit","id":"native/entry-readers-moonbeam-rogue","text":"new unit: Entry readers left on moonbeam and Rogue, looked into"}
+{"at":"2026-11-13T09:42:29Z","actor":"session","tag":"d2717a37","host":"quack","cmd":"add-unit","id":"native/nightmare-mixer-pointer","text":"new unit: Nightmare's mixer reads through 0xe3a02004 at frame 5"}
