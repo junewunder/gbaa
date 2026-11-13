@@ -1098,6 +1098,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-13T11:12:22Z",
+          "by": "d2717a37",
+          "text": "Since PR 12 the lift builds again (0 hard holes). It still stops before any task runs: frame 5, in m4a's mixer, a byte load at 0xe3a02004 ({unit:native/nightmare-mixer-pointer}). Two object callbacks take r8/r9 from the scheduler's call at 0x080053cc ([[takes]] in the holes file)."
+        },
+        {
           "at": "2026-11-12T08:40:35Z",
           "by": "eb7b70bf",
           "text": "Stand-ins at 0x080cfdc5/cd/d5 in mods/kirby-nightmare/holes.toml (mods commit 64b65dc); classify fix makes the scheduler's resume call return. Untested at run time: the native build stops at boot (DMA, serial, then 0x080cdcd5 in m4a init) before any task runs."
@@ -1106,11 +1111,6 @@
           "at": "2026-11-12T06:58:38Z",
           "by": "21ac895a",
           "text": "Facility in {unit:native/task-coroutines}: prelude task_resume/task_yield/task_exit; stand-in lr = true gives Game::lr; holes/native-tasks.toml is a worked example. Lifter flags f_080cfdc8/d0/d8. The scheduler's resume call (0x08005364) is still taken never to return."
-        },
-        {
-          "at": "2026-11-12T06:37:54Z",
-          "by": "b67b3cd7",
-          "text": "From {unit:native/copy-tail-discovery}: discovery now finds resume (0x08000234, entered by the veneer 0x080cfdc5's ARM part f_080cfdc8 via b); its bx r1 at 0x08000254 is a hard hole in the lift, which stops there until a stand-in for 0x080cfdc8 covers it."
         }
       ],
       "round": "2026-11-07T11:32:04Z"
@@ -1962,6 +1962,11 @@
       "uses": ["heavy"],
       "notes": [
         {
+          "at": "2026-11-13T11:22:04Z",
+          "by": "45f263ac",
+          "text": "From {unit:native/fnref-bios-reads}: two BIOS tables now. fnref.rs bios_regs keeps a register a swi leaves; saves/summary.rs bios() counts all of r0-r3 set or clobbered, so a shaped callee returns 0 there. Make the summaries use bios_regs' sets/may-set."
+        },
+        {
           "at": "2026-11-13T08:33:08Z",
           "by": "afebd1b0",
           "text": "2026-11-13: measured on Metroid (docs/research/fnref-held-words.md, 'A C game'). The swi clause is now {unit:native/fnref-bios-reads} (767 to 338, on main). Left here: results only a callee sets, 90 Metroid words, 1,373 on Emerald. Needs nothing of the branch."
@@ -2122,7 +2127,7 @@
     {
       "id": "native/irq-mode-sp-bank",
       "title": "A store or wait in IRQ mode banks sp, not Game::sp",
-      "detail": "Left by {unit:native/lift-irq-wrapper-tail}, from the review of {unit:native/lift-psr-boot-irq}, 2026-11-13. An ordinary lifted function prints 'g.sp = r13' before a wait and before an I/O store that may set IME (crates/codegen/src/native.rs; the prelude's intr_wait, cpu_set and the like do the same with their sp). Game::sp is system mode's banked sp (prelude banked_sp). If such a function runs while Game::cpsr's mode is IRQ (a lifted wrapper that calls something before its msr to system mode, or one that never switches), it puts an IRQ-stack address in system mode's bank, and the wrapper's later msr_cpsr to system mode hands that back as sp. The reset and the wrappers themselves already bank by mode (bank_sp, at stores since {unit:native/lift-psr-boot-irq} and at waits since {unit:native/lift-irq-wrapper-tail}). No corpus wrapper seen so far calls anything before its switch (Metroid 0x08000104, Nightmare 0x03001030, agb's InterruptHandler, agb/native-irq-wrapper's iw_main), so nothing is known to be wrong today. Why it wasn't simply changed to bank_sp everywhere: the agb wrapper's stand-in in the 15 older holes files (holes/*.toml, entry 0x03000000) leaves Game::cpsr in IRQ mode while it runs the handler on Game::sp, and its handlers' 'g.sp = r13' must reach Game::sp for a nested IRQ to nest below them; with bank_sp they would land in the IRQ bank and a nested handler would overwrite the outer one's frames. Do: either drop that stand-in from the agb holes files (the lifted wrapper runs: agb/native-irq-wrapper's first 32 frames, and the hand runs of {unit:native/lift-psr-boot-irq}) or have it set system mode around its call, then print bank_sp (or a prelude set_sp that picks the bank by mode) in every function and in the prelude's helpers. Done when: an agb program whose wrapper calls a function that stores to I/O before switching to system mode passes the native check, and just lift-check passes.",
+      "detail": "Left by {unit:native/lift-irq-wrapper-tail}, from the review of {unit:native/lift-psr-boot-irq}, 2026-11-13. An ordinary lifted function prints 'g.sp = r13' before a wait and before an I/O store that may set IME (crates/codegen/src/native.rs), and the prelude's helpers that take sp (intr_wait, cpu_set, cpu_fast_set, lz77: 'g.sp = sp') do the same, also when the reset or an IRQ wrapper calls them. Game::sp is system mode's banked sp (prelude banked_sp). If one runs while Game::cpsr's mode is IRQ (a lifted wrapper that calls something or makes a BIOS call before its msr to system mode, or one that never switches), it puts an IRQ-stack address in system mode's bank, and the wrapper's later msr_cpsr to system mode hands that back as sp. What the lifter prints in the reset and the wrappers themselves already banks by mode (bank_sp: I/O stores since {unit:native/lift-psr-boot-irq}; poll-loop waits and Halt since {unit:native/lift-irq-wrapper-tail}). No wrapper seen so far calls anything before its switch (Metroid 0x08000104, Nightmare 0x03001030, agb's InterruptHandler, agb/native-irq-wrapper's iw_main), so nothing is known to be wrong today; it was left out of that unit to keep its diff small, since it changes every lifted function's text. That unit's reviewer read the agb wrapper's stand-in (holes/*.toml, entry 0x03000000, which leaves Game::cpsr in IRQ mode while its handler runs on Game::sp) and found nothing reads either bank before irq_entry puts cpsr and the IRQ bank back (I is set, so dispatch returns early): printing bank_sp everywhere looks safe under it, to be proven by lift-check. Do: print bank_sp (or a prelude set_sp that picks the bank by mode) in every function and use it in the prelude's helpers. Done when: an agb program whose wrapper calls a function that stores to I/O before switching to system mode passes the native check, and just lift-check passes.",
       "check": "independent",
       "needs": ["native/lift-irq-wrapper-tail"],
       "uses": ["heavy"]
