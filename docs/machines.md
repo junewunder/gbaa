@@ -18,7 +18,7 @@ The scripts read this table (`factory/machines.sh`); keep its columns.
 
 | Machine | ssh | Lanes | Takes | Checkout | Can | Cache | Heavy | Reserve | GPU |
 |---|---|---|---|---|---|---|---|---|---|
-| quack | quack | 2 | any | ~/Documents/homelab/gbaa | — | 100G | 4 | 3G | 0 |
+| quack | quack | 2 | any | ~/Documents/homelab/gbaa | — | 100G | 6 | 3G | 0 |
 | pyon | pyon | 0 | any | ~/Documents/homelab/gbaa | — | 100G | 1 | 3G | 0 |
 
 - **Machine:** its short hostname (`hostname -s`). A unit pinned with
@@ -72,7 +72,7 @@ from it. ROMs never go in git.
 - **Cache:** none used (no store); `$GBAA_DATA` is shared by both lanes
 - **Notes:** 24 cores, 30 GB RAM of which ~10 GB is usually available; 7 GB
   swap, often full. Two lanes, june's choice (2026-10-20); raise to 3 if
-  build-lock waits stay under ~10% of unit time. Heavy 2, june's choice
+  build-lock waits stay under ~10% of unit time. Heavy 6 (2026-11-13: six sweep workers left load at 6 of 24 threads with 4), was 2, june's choice
   (2026-11-05): 24 threads, and the memory budget gates each job. Each lane clone has its own
   `target/`.
 
