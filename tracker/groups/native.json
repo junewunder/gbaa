@@ -1971,7 +1971,17 @@
       "id": "native/fnref-c-game-words",
       "title": "What holds a C game's function words: Metroid, measured",
       "detail": "From {unit:native/fnref-unknown-addrs} (docs/research/fnref-held-words.md): on our agb test programs the function words are held by Rust shapes (closures in frames, core::fmt argument arrays, a heap pile), and three units made the flow more exact without moving the count. agb is test input, not the target; nobody has looked at a C game. On main, run the function-address flow on Metroid (it settles) and say, for its function words not proven, what holds them: the count by first road, as that note does for affine (GBAA_FNREF_TRACE; the note's GBAA_FNREF_WATCH is on that unit's branch, bring it over alone if that is cheap). Done when docs/research/fnref-held-words.md has a Metroid section with the counts (proven, never read, not proven by road) and says which of the filed function-flow follow-ups a C game needs and which only agb does; just check passes. Addresses and counts only: nothing game-derived in the tracked note.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "afebd1b0",
+        "session": "afebd1b0-9976-4586-b709-eacdc536b0e5",
+        "host": "quack",
+        "pid": 723464,
+        "start": "999516",
+        "at": "2026-11-13T07:32:03Z"
+      },
+      "round": "2026-11-13T07:32:03Z"
     }
   ]
 }
