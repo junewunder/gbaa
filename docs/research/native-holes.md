@@ -362,15 +362,18 @@ the game's holes file), the others as written. libgcc's `__muldf3` and
 (`codegen::saves`) now follows which bits of each value may hold r4-r11's
 entry values (`V::Part`): an `and` or `orr` with a constant clears bits, a
 shift moves them, an add carries them up, a copy to a register, a flag or
-a stack word keeps them. A use is an address, a value stored elsewhere, a
-condition, a callee's or BIOS call's argument (`mov r0, r8; bl`), or a
+a stack word keeps them, and so does a context save (below). A use is an
+address, a value stored elsewhere, a condition, a callee's or BIOS call's argument (`mov r0, r8; bl`), or a
 value returned in r0-r3 that a caller's own instruction reads (agbcc's
 `pop {r3}; mov r8, r3` leaves the entry r8 in r3, unread). The kinds:
 
 - `reads r4-r11 at entry` (hard): a use, in a function entered through a pointer (a complete indirect set, or the key as a ROM word),
   whose `Regs::call` zeroes r4-r12. Not after a `bl` to a function that
   never returns: agb's panic paths, branched into with the caller's r6.
-- `takes r4-r11 from its callers` (soft, native/metroid-entry-reads): the same use where every call the lift prints passes the register (any other stops the program). A `bl` or tail call is the callee's extended entry with the caller's own; a caller that still has it as it came takes it in turn (`…, which 0x… takes`), up to one that set it, or to a pointer call, where it is hard again. The holes file's `[[takes]] entry, sites, why` names the indirect calls that reach such a function: they pass theirs, and its plain entry (`call_fn`'s) stops the program. Metroid's 0x08073ce5: r9 is the sprite updater's, three calls up and through its AI table (0x082b0cac or 0x8000001c by the loop), so no constant stand-in is exact.
+  With `…, zeroed through 0x… and N more` it is a taker's read (next)
+  that functions entered through a pointer pass their zero on to.
+- `takes r4-r11 from its callers` (soft, native/metroid-entry-reads): the same use where every call the lift prints passes the register (any other stops the program). A `bl` or tail call is the callee's extended entry with the caller's own; a caller that still has it as it came takes it in turn (`…, which 0x… takes`), up to one that set it, or to one a pointer call enters: there the chain is broken, and the hole is the read at its end (above), once, however many functions are above it. The holes file's `[[takes]] entry, sites, why` names the indirect calls that reach such a function: they pass theirs, and its plain entry (`call_fn`'s) stops the program. Metroid's 0x08073ce5: r9 is the sprite updater's, three calls up and through its AI table (0x082b0cac or 0x8000001c by the loop), so no constant stand-in is exact.
+- `passes on r4-r11 a pointer call zeroes` (soft, native/moonbeam-taker-chain): a pass-on in a function entered through a pointer, which uses nothing itself. Its plain entry runs, on the zeroes; the read they reach is the hard hole.
 - `masks away r4-r11's entry bits` (soft): every bit cleared before any
   use, agbcc's word built byte by byte in an unset register.
 - `reads r4-r11 at entry, only jumped into` (soft): no `bl` or pointer
@@ -405,6 +408,72 @@ moonbeam 0x0801a081 (r7, four); WarioWare 0x0807f6e5, 0x0808e325,
 Only jumped into: Rogue's 0x080ba12b-0x080bbfff fragments (15, past
 unresolved jumps), Nightmare 0x0804c489, moonbeam 0x08038310. A tail call
 or fall from a called function counting as a call (2026-11-12) left the 36.
+
+## A context save, and where a broken chain's hole is
+
+`native/moonbeam-taker-chain`, 2026-11-13. Calls passing registers
+(`native/metroid-entry-reads`) took moonbeam's hard holes from 11 to 503,
+Rogue's from 21 to 48 and the corpus from 112 to 629. Two roots, by
+following each hard function's `which 0x… takes` to the reads that aren't
+pass-ons:
+
+- moonbeam, 499 of its 500: newlib's `setjmp` (0x0803830d, a `bx pc`
+  veneer to ARM `stm r0!, {r4-r12, sp, lr}`). It stores all of r4-r11, so
+  it took all eight, every function above it took what it hadn't set
+  (713 functions), and each of those a pointer may call was hard.
+- Rogue, 29 of its 30: 0x081b42e1 keeps a two-byte struct in r11, never
+  set, and passes it to itself by value in r0 (`ands` with 0xffff00ff:
+  r11's top half is the padding); the callee stores the word. A real
+  use, of 57 functions' r11, 29 of them entered through a pointer.
+
+**A context save isn't a use.** One unconditional ARM `stm` of r4-r11
+with sp and lr through another register, each of r4-r11 whole and still
+as it came, in a program that has the matching restore: an `ldm` of the
+same register list the same way, so each word goes back into the
+register it came from (`longjmp`'s `ldm r0!, {r4-r12, sp, lr}`). With sp
+and lr beside them the block is a point to resume at, and r4-r11 in it
+are what any callee keeps for its caller: saved, as a `push` saves
+them. Everything else stored through a pointer is still a use: the same
+`stm` with no restore in the program, a restore of other registers or
+the other way, a list without sp and lr, a register changed before it is
+stored, or bits of one stored alone (Metroid's save writer: half of r9
+into a save buffer). Two limits. A Thumb `setjmp` that moves r8-r11
+through low registers isn't one instruction and stays a taker. And
+nothing shows that no other code reads the block's words as data (a
+collector scanning a `jmp_buf` for pointers would): natively they are the
+zeroes `Regs::call` gave, as a stack frame's saved registers are.
+
+**A broken chain's hole is its reader's.** A function entered through a
+pointer that only passes a register on uses nothing itself; the zero is
+wrong where it is read. So the read at the end of the chain is the hard
+hole, once, naming the lowest function it is zeroed through and how many
+more, and each pass-on is soft. One hole a reader, as before calls passed
+registers, and the readers are those of f52fe115 again (Metroid
+0x08073ce5, Emerald 0x080852d5, Nightmare's four). What the lift passes is unchanged (a `bl` passes, `call_fn`
+doesn't, a taker's plain entry stops), so naming a chain's pointer calls
+in `[[takes]]` closes it as before.
+
+Hard holes (`just holes-all`), at f52fe115 (before calls passed
+registers), on main (fd678a87) and with both changes:
+
+| Game | f52fe115 | main | now |
+|---|---|---|---|
+| Metroid | 5 | 5 | 5 |
+| WarioWare | 9 | 8 | 8 |
+| Kirby Mirror | 3 | 1 | 1 |
+| Kirby Nightmare | 11 | 14 | 10 |
+| moonbeam | 11 | 503 | 4 |
+| Emerald | 9 | 11 | 8 |
+| Minish Cap | 27 | 24 | 24 |
+| Rogue | 21 | 46 | 18 |
+| Imperium | 16 | 14 | 14 |
+| corpus | 112 | 626 | 92 |
+
+moonbeam's four: three unresolved jumps and 0x08025a29 (reads r8 and r9,
+zeroed through 0x08027ff9); `setjmp` takes nothing and 0x0800019b's
+callers all pass r4. `longjmp` (0x08038325) has only `a jump to an
+unknown place`, which the report doesn't count: a return to another
+frame, `native/longjmp-uncounted`'s to look into.
 
 ## Modern GCC's cold blocks, and `sbcs rN, rN`
 
