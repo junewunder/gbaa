@@ -2759,3 +2759,4 @@
 {"at":"2026-11-13T06:57:03Z","actor":"session","tag":"3d525e2f","host":"quack","cmd":"decide","text":"decided: A native stop names functions from the backtrace; no guest pc yet","d":"d/a-native-stop-names-functions-from-the"}
 {"at":"2026-11-13T06:57:12Z","actor":"session","tag":"3d525e2f","host":"quack","cmd":"done","id":"native/native-first-stop","text":"Each built native game runs headless; report where it stops: done, checked by a3cc37a1ce8881d59"}
 {"at":"2026-11-13T06:58:38Z","actor":"session","tag":"8814ddd6","host":"quack","cmd":"claim","id":"native/metroid-entry-reads","text":"Metroid lifts again after entry-read masking: claimed"}
+{"at":"2026-11-13T07:17:08Z","actor":"session","tag":"ddd9a487","host":"quack","cmd":"done","id":"native/fnref-emerald-speed","text":"Function-address flow on Emerald fast enough to finish: done"}
