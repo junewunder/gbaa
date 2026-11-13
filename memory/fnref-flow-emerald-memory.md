@@ -1,6 +1,6 @@
 ---
 title: Why the function-address flow ran out of memory on Emerald, and the Ref fix
-hook: the 48M tokens were copies (sets now kept once by content: 24M, 1.5 GB); 6 rounds in 37 min and still unsettled, 12k entries change a round; profile with eu-stack (perf is blocked)
+hook: the 48M tokens were copies (sets now kept once by content: 24M, 1.5 GB); 7 rounds in 53 min and still unsettled, 12k entries change a round; profile with eu-stack (perf is blocked)
 open: true
 ---
 
@@ -126,15 +126,22 @@ read's gain once. Round 0: 88 s to 31 s. Round 1 ends at 177 s (never
 before), round 2 at 536 s; rounds 3 to 5 at 1,079, 1,629 and 2,194 s with
 `just lift-check` running beside them.
 
-**Where it stands.** It doesn't settle in six rounds: every round reruns
-15,200 functions (any pile change reruns every pile reader), and 12,400
-entries change in each though the pile gains little (16,920, 23,841,
-24,309, 24,574, 24,632 tokens after rounds 1 to 5; holes 9,414 and taken
-6,664 from round 2 on). Held tokens are flat at 24M from round 3, peak
-RSS 1.5 GB: the bound is no longer what stops it. Next: (1) find what the
-12,400 entries gain a round (print an entry's new tokens under the trace;
-suspects: `Ref`s with ever longer `Xf` chains, ROM pointers); (2) rerun a
-function by the `Ref` values it looked at, not by pile width; (3) left in
+**Where it stands.** It doesn't settle in seven rounds (stopped by hand
+at 53 minutes, in round 7): every round reruns 15,200 functions, and
+12,300 entries change in each though memory has all but stopped (pile
+16,920, 23,841, 24,309, 24,574, 24,632, 24,632 tokens after rounds 1 to
+6, unchanged in round 6; holes 9,414 and taken 6,664 from round 2 on).
+Held tokens are flat (24M after round 3, 22M in round 7), peak RSS 1.5
+GB: the bound is no longer what stops it. Next: (1) find what 12,300
+entries gain a round with memory still (print an entry's new tokens
+under the trace). Not checked, the first suspect: ROM pointers stepping
+down. `bin_tok` makes `RomFrom(a) - n` a `RomFrom(a - n)` and `Rom(a) -
+n` a lower `Rom`, the cap only takes in pointers above a "from here on",
+and arithmetic on functions' addresses (holes) leaves `Rom`s all over the
+code, each its own run of data: a pointer walked down through calls would
+move a step a round through every entry the big callee sets share, with
+no end before the 256 rounds. (2) rerun a function by the `Ref` values
+it looked at, not by pile width; (3) left in
 the round-2 profile: `St::join`'s cap at every edge (17%), shift
 `split_refs` misses when the Refs' values change (17%), a load's
 `join_capped` per pointer (8%). The op memo's results aren't `share`d
