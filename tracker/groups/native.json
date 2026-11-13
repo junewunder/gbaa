@@ -1372,6 +1372,15 @@
       "title": "Function flow: loads through unknown addresses",
       "detail": "docs/native-stage-b.md piece 3. Measured on {unit:native/fnref-context}'s branch (commit e81168f; it holds the object split and call-site context): fn_words_not_proven unmoved by either. ~640 of affine's load sites (spike 644) have an address that may be unknown (Val::unk), and each reads the pile and every RAM cell (Run::load_at's anywhere arm), so e.g. the IRQ vector word's f_03000000 is in nearly every hole. Not the cause (tried, no change): naming the allocator, dropping the pile from constant-address loads, dropping the I/O unk flag, NUMS 8->256. A seen source: main's inlined free-list walk at 0x080001a8 (affine) loads GLOBAL_ALLOC fields holding allocator-made pointers. Find where the unknown comes from (GBAA_FNREF_TRACE; print each anywhere load) and fix the first big source. Done when: fn_words_not_proven falls on every agb program, bars lowered, a unit test, just lift-check and just check pass.",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "ae52d6ac",
+        "session": "ae52d6ac-326b-48e0-96ac-c8694b013cb5",
+        "host": "quack",
+        "pid": 11956,
+        "start": "29684",
+        "at": "2026-11-13T04:50:28Z"
+      },
       "notes": [
         {
           "at": "2026-11-12T09:45:41Z",
@@ -1704,17 +1713,15 @@
       "minMinutes": 90,
       "record": {
         "state": "claimed",
-        "by": "74679aef",
-        "session": "74679aef-e087-4107-ae60-ffc062168b01",
+        "by": "77aa5fbf",
+        "session": "77aa5fbf-b416-45f2-a48d-d2a67bcf68d8",
         "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T13:02:46Z",
-        "branch": "unit/native/lift-undefined-insns",
-        "beats": true,
-        "handedBack": "2026-11-12T13:43:04Z",
-        "pushed": true,
-        "ended": "2026-11-12T13:43:15Z"
+        "pid": 11545,
+        "start": "29000",
+        "at": "2026-11-13T04:50:16Z",
+        "resumed": "74679aef",
+        "prevSession": "74679aef-e087-4107-ae60-ffc062168b01",
+        "pushed": true
       },
       "notes": [
         {
@@ -1821,7 +1828,17 @@
       "title": "Serial registers kept in the hardware library",
       "detail": "Kirby - Nightmare's boot (0x08000311) writes the serial registers (0x120, and on into 0x120-0x15f: SIODATA, SIOCNT, RCNT, JOY), which Hw::write16 (crates/runtime/src/hw.rs) panics on as unmodelled; with DMA writes ignored this is its next stop. Keep the registers' values in Hw (reads give back what was written, as the play build's bus does with no link partner: SIOCNT's start bit and its IRQ as the play build has them), routed by the prelude's io_write16/io_read16. Done when: an agb program writing and reading them passes just lift-check with its route matching the play build; just check passes.",
       "check": "recorded",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "34d57864",
+        "session": "34d57864-956a-4832-9a45-ef91a450bec5",
+        "host": "quack",
+        "pid": 12294,
+        "start": "30124",
+        "at": "2026-11-13T04:50:26Z"
+      },
+      "round": "2026-11-13T04:50:26Z"
     },
     {
       "id": "native/metroid-entry-reads",
@@ -1833,13 +1850,23 @@
       "id": "native/native-check-spike-packed",
       "title": "just native-check passes again: the spike's packed record",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "8eda0ebb",
+        "session": "8eda0ebb-616f-4c93-851f-ad8fa556645f",
+        "host": "quack",
+        "pid": 12793,
+        "start": "30628",
+        "at": "2026-11-13T04:50:31Z"
+      },
       "notes": [
         {
           "at": "2026-11-12T09:30:14Z",
           "by": "d12ab564",
           "text": "just native-check fails at the spike: --packed target/release/native-spike is built without guest-layout, and route-check now passes it --native-record (since {unit:native/lift-packed-layout}), which native-host refuses. psg-square, direct-sound and the spike without --packed pass."
         }
-      ]
+      ],
+      "round": "2026-11-13T04:50:31Z"
     },
     {
       "id": "native/drop-psr-standins",
