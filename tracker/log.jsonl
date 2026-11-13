@@ -2764,3 +2764,4 @@
 {"at":"2026-11-13T07:18:41Z","actor":"session","tag":"838ecd32","host":"quack","cmd":"claim","id":"discovery/gcc-far-jump-bl","text":"Modern GCC's far-jump bl into a caller's fragment: claimed"}
 {"at":"2026-11-13T07:21:48Z","actor":"session","tag":"ae52d6ac","host":"quack","cmd":"add-unit","id":"native/fnref-branch-merge","text":"new unit: Function-flow branch merged with main's Ref tokens"}
 {"at":"2026-11-13T07:21:50Z","actor":"session","tag":"ae52d6ac","host":"quack","cmd":"edit","id":"native/fnref-frame-pointers","text":"Function flow: pointers into stack frames kept exact: edited (add-needs)"}
+{"at":"2026-11-13T07:21:52Z","actor":"session","tag":"ae52d6ac","host":"quack","cmd":"edit","id":"native/fnref-live-registers","text":"Function flow passes only registers a callee reads: edited (add-needs)"}
