@@ -602,6 +602,13 @@ impl Walk<'_> {
                 let mut after = s.clone();
                 if let Some(sum) = &mut self.sum {
                     sum.call(&mut after, Some(target), at);
+                    // A callee whose summary never returns (and lost no
+                    // return to a hole): the code after the call runs only
+                    // from jumps into it (agb's panic paths after their
+                    // `bl`s), with the jumper's registers, not ours.
+                    if sum.never_returns(target) {
+                        return Ok(());
+                    }
                 }
                 after.called();
                 self.flow(ret, &after)
