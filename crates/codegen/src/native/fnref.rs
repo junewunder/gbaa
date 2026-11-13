@@ -1846,11 +1846,8 @@ impl Run<'_, '_> {
         into.cap();
     }
 
-    /// [`Run::rom_read`] into `into` as [`Val::cap`] leaves it: a number
-    /// or ROM pointer the cap would drop again (one held, one unknown takes
-    /// in, one a pointer "from here on" covers) is left out without a cap
-    /// (a cap at each of a long read's words was most of a large game's
-    /// run).
+    /// [`Run::rom_read_capped`] if `into` is as the cap leaves it
+    /// (`capped`), else [`Run::rom_read`].
     fn rom_read_or_capped(&mut self, a: u32, w: u8, into: &mut Val, capped: bool) {
         if capped {
             self.rom_read_capped(a, w, into);
@@ -1859,6 +1856,11 @@ impl Run<'_, '_> {
         }
     }
 
+    /// [`Run::rom_read`] into `into` as [`Val::cap`] leaves it: a number
+    /// or ROM pointer the cap would drop again (one held, one unknown takes
+    /// in, one a pointer "from here on" covers) is left out without a cap
+    /// (a cap at each of a long read's words was most of a large game's
+    /// run).
     fn rom_read_capped(&mut self, a: u32, w: u8, into: &mut Val) {
         if let Some(word) = self.img.word(a)
             && !self.img.is_fn(word)
@@ -2936,7 +2938,6 @@ fn shift(kind: ShiftType, x: u32, n: u32) -> u32 {
     }
 }
 
-/// A number: a ROM pointer if it is in ROM.
 /// The form a shift by `n` (`None`: not a constant) makes of a
 /// function's address of form `form` (`None`: no form, a hole).
 fn shift_form(form: Form, kind: ShiftType, n: Option<u32>) -> Option<Form> {
@@ -2955,6 +2956,7 @@ fn shift_form(form: Form, kind: ShiftType, n: Option<u32>) -> Option<Form> {
     }
 }
 
+/// A number: a ROM pointer if it is in ROM.
 fn num(img: &dyn Image, c: u32) -> Tok {
     if img.word(c).is_some() && !img.is_fn(c) {
         Tok::Rom(c)
