@@ -1906,6 +1906,13 @@
       "title": "just native-check runs somewhere that gates a merge",
       "detail": "Found 2026-11-13 by {unit:native/native-check-spike-packed}: the native check is in no gate, so it stayed broken from 2026-11-06 to 2026-11-13 unseen. Put it (or the cheap part of it) where a landing runs it: just check if it fits the time, else the nightly corpus command. Done when a change that breaks the native check fails a gate, shown with a planted break.",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-live-registers",
+      "title": "Function flow passes only registers a callee reads",
+      "detail": "docs/research/fnref-held-words.md, 'Registers nobody reads'. The function flow (crates/codegen/src/native/fnref.rs) passes r0-r3 to every callee and takes all four back, read or not, so a function's address left in a scratch register travels the whole program: on native-irq-hold the handler's pool word 0x080001bc goes in r3 through 39 calls and 36 returns of 26 functions that never touch r3, to the reset's swi, where all four registers count as given to the BIOS. With every mixing memory read off, this road alone holds 12 of affine's words. Work on the branch unit/native/fnref-unknown-addrs (it has the object split, RAM pointers and GBAA_FNREF_WATCH; not on main). Give a callee only the registers its summary reads and take back only those it sets (codegen::saves; all four where the summary has a hole); a swi holes only the registers its BIOS call reads; a call whose target is still empty in an early round must not pass its registers to every function without a direct caller for good. Done when: unit tests for each; on every agb program, GBAA_FNREF_WATCH=all shows no word whose first use not allowed is reached only through registers passed or returned unread (the research note's method; make it a metric with bar 0 if it can be counted in the run); fn_words_not_proven and the other counts no higher than the branch's; the evidence says what holds native-irq-hold's two handler words next. The branch doesn't land here: {unit:native/fnref-ram-pointers-land} does.",
+      "check": "recorded",
+      "uses": ["heavy"]
     }
   ]
 }
