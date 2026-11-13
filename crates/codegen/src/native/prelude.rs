@@ -19,9 +19,10 @@ pub const IWRAM: usize = 0x8000;
 /// return (`bx lr`, `pop {pc}`) is told from a jump by its value.
 pub const RET: u32 = 0xFFFF_FFF0;
 
-/// The IRQ-mode stack pointer a handler starts on: the BIOS's IRQ stack
-/// (0x0300_7FA0) less the six registers its stub pushes.
-pub const IRQ_SP: u32 = 0x0300_7F88;
+/// The IRQ mode's stack pointer as the BIOS leaves it, till the reset
+/// sets its own (`Game::banked`). A handler starts six registers below
+/// it, the BIOS stub's push.
+pub const IRQ_STACK: u32 = 0x0300_7FA0;
 
 /// The ROM, for its data (section 8: bytes where nothing is typed yet).
 pub static ROM: &[u8] = include_bytes!("../rom.gba");
@@ -33,13 +34,24 @@ pub struct Game {
     pub hw: Hw<Game>,
     /// The stack pointer where the program last waited: where an IRQ
     /// handler that switches to system mode puts its frames, as the
-    /// hardware's banked `sp` would.
+    /// hardware's banked `sp` would (system mode's bank, [`msr_cpsr`]).
     pub sp: u32,
-    /// The CPSR's control byte as the program sets it (system mode, the
-    /// I bit for a critical section), through the stand-ins for code that
-    /// reads or writes the CPSR (holes files; [`msr_cpsr_c`]). While I is
+    /// The CPSR's control byte as the program sets it (the mode, the I
+    /// bit for a critical section): the reset's and the IRQ wrapper's
+    /// `msr` as the lifter prints them ([`msr_cpsr`]), and the stand-ins
+    /// for other code that reads or writes the CPSR (holes files;
+    /// [`msr_cpsr_c`]). While I is
     /// set the waits run no handler ([`Native::irq_masked`]).
     pub cpsr: u32,
+    /// The stack pointers of the modes besides system and user (whose is
+    /// [`Game::sp`]): IRQ, supervisor, and the rest (FIQ, abort,
+    /// undefined) as one. A mode switch in the reset or the IRQ wrapper
+    /// ([`msr_cpsr`]) banks sp here, as the hardware does. lr isn't
+    /// banked: the wrappers keep it on the stack around their switch.
+    pub banked: [u32; 3],
+    /// The IRQ mode's SPSR: the CPSR an IRQ interrupted (its control
+    /// byte; the flags of the code it stopped aren't known natively).
+    pub spsr: u32,
     /// The return address of the last call of a stand-in that reads it
     /// (`lr = true` in its holes file): the caller's `bl` sets it.
     pub lr: u32,
@@ -92,6 +104,52 @@ pub fn msr_cpsr_c(g: &mut Game, sp: u32, v: u32) {
     }
 }
 
+/// The stack pointer of `mode` (a CPSR's low five bits), where a mode
+/// switch banks it.
+fn banked_sp(g: &mut Game, mode: u32) -> &mut u32 {
+    match mode {
+        0x10 | 0x1F => &mut g.sp,
+        0x12 => &mut g.banked[0],
+        0x13 => &mut g.banked[1],
+        _ => &mut g.banked[2],
+    }
+}
+
+/// `msr cpsr` (its control byte) in the reset or the IRQ wrapper, the
+/// lifter's: on a mode switch sp (`sp`, the lifted code's r13) goes to
+/// the old mode's bank and the new mode's comes back, as the result.
+/// Clearing the I bit runs the IRQs it held at once, as [`msr_cpsr_c`].
+pub fn msr_cpsr(g: &mut Game, sp: u32, v: u32) -> u32 {
+    let (old, new) = (g.cpsr & 0x1F, v & 0x1F);
+    let held = g.cpsr & 0x80 != 0;
+    let sp = if old == new {
+        sp
+    } else {
+        *banked_sp(g, old) = sp;
+        *banked_sp(g, new)
+    };
+    g.cpsr = g.cpsr & !0xFF | v & 0xFF;
+    if held && v & 0x80 == 0 {
+        // The handler nests below this mode's sp as it is now.
+        *banked_sp(g, new) = sp;
+        hw::irq_release(g);
+    }
+    sp
+}
+
+/// sp (`sp`, the lifted code's r13) before a store that may set `IME`
+/// again, in the reset or the IRQ wrapper: the current mode's bank, where
+/// a handler it releases nests (`Game::sp` in system mode, as elsewhere).
+pub fn bank_sp(g: &mut Game, sp: u32) {
+    *banked_sp(g, g.cpsr & 0x1F) = sp;
+}
+
+/// `mrs rN, cpsr` in the reset or the IRQ wrapper: the flags from the
+/// lifted code's locals, the control byte as the program set it.
+pub fn mrs_cpsr(g: &Game, n: bool, z: bool, c: bool, v: bool) -> u32 {
+    (n as u32) << 31 | (z as u32) << 30 | (c as u32) << 29 | (v as u32) << 28 | g.cpsr & 0xFF
+}
+
 impl Game {
     pub fn new(host: native_host::AnyHost) -> Box<Game> {
         let mut g = Box::new(Game {
@@ -99,6 +157,8 @@ impl Game {
             hw: Hw::new(host),
             sp: 0x0300_7F00,
             cpsr: 0x1F,
+            banked: [IRQ_STACK, 0x0300_7FE0, 0],
+            spsr: 0,
             lr: RET,
             tasks: Tasks::default(),
             reset: None,
@@ -158,8 +218,9 @@ fn record(g: &mut Game) {
 }
 
 /// The handler the game stored at `0x0300_7FFC` (`IRQ_HANDLER_PTR`), run
-/// as the BIOS's IRQ stub runs it: r0 = `0x0400_0000`, on the IRQ stack,
-/// the BIOS region reading the stub's latch in it and after.
+/// as the BIOS's IRQ stub runs it: r0 = `0x0400_0000`, on the IRQ stack
+/// below the stub's six registers, the BIOS region reading the stub's
+/// latch in it and after.
 fn irq_entry(g: &mut Game) {
     let h = ld32(g, 0x0300_7FFC);
     if h == 0 {
@@ -167,17 +228,20 @@ fn irq_entry(g: &mut Game) {
     }
     g.bios_latch = runtime::bus::BIOS_LATCH_IN_IRQ;
     let k = if h & 1 != 0 { h } else { h & !3 };
-    // IRQ mode, I set, as the exception enters it; back as it was on the
-    // return (the BIOS's `subs pc, lr, #4` restores the SPSR).
-    let cpsr = g.cpsr;
+    // IRQ mode, I set, as the exception enters it, the CPSR it stopped in
+    // the SPSR; back as it was on the return (the BIOS's `subs pc, lr,
+    // #4` restores the SPSR, which a wrapper that nests puts back). The
+    // IRQ stack as it was: the stub pops what it pushed.
+    let (cpsr, spsr, base) = (g.cpsr, g.spsr, g.banked[0]);
+    g.spsr = cpsr;
     g.cpsr = 0x92;
     // A handler doesn't wait, so it can't be told to stop.
-    let _ = call_fn(g, k, IRQ_SP, [0x0400_0000, 0, 0, 0]);
+    let _ = call_fn(g, k, base.wrapping_sub(24), [0x0400_0000, 0, 0, 0]);
     // Nor restart: its `Err(Exit)` stops here, not at `main`.
     if let Some(to) = g.reset {
         panic!("a SoftReset (to {to:#010x}) in an IRQ handler, which the native program can't restart from");
     }
-    g.cpsr = cpsr;
+    (g.cpsr, g.spsr, g.banked[0]) = (cpsr, spsr, base);
     g.bios_latch = runtime::bus::BIOS_LATCH_AFTER_IRQ;
 }
 
