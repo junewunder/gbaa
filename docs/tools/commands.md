@@ -1337,8 +1337,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
   `agb/native-frame-locals`, `agb/native-ime-release`, `agb/native-bios-calls`,
   `agb/native-bios-more` (SoftReset too), `agb/native-tasks`, `agb/native-dma`, `agb/native-save` (SRAM),
-  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`, `agb/native-serial`
-  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers) on
+  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`, `agb/native-serial`, `agb/native-irq-wrapper` (both its IRQ wrappers lifted, their `msr` and `mrs` run)
+  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers, native/lift-irq-wrapper-tail) on
   `units/<name>-600.toml` (the spike's is `units/native-spike.toml`,
   native-irq-hold's, native-ime-release's and native-bios-region's
   `-601`). First every program is lifted with `--bars`
@@ -1351,7 +1351,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `interrupt::disable` stand-in dropped) the lift and the build must fail
   naming `f_08002728`'s `mrs`, a critical section's (left hard); native-tasks likewise (a task's store; its yield's
   stack switch); native-dma's (0x08000180, `dma_set`'s `DMAxCNT`, a unit
-  more), native-save's (0x080002ac, an SRAM `strb`) and native-serial's (0x0800017c, `SIOCNT`) too.
+  more), native-save's (0x080002ac, an SRAM `strb`), native-serial's (0x0800017c, `SIOCNT`) and native-irq-wrapper's (0x08000204, the wrapper's `IE` put back after its handler call: `frame 33: I/O byte 0x04000200`) too.
   native-fallthrough, native-irq-hold, native-frame-locals and
   native-ime-release lifted with their `planted_flags`
   (`--fall-as-tail-call`, the old fall into another function;
@@ -1371,7 +1371,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   play 0x00, native 0x01 …)`, `(…-ime-at-waits: frame 2: EWRAM byte
   0x020000cc: play 0x01, native 0x00 …)`, `planted hard hole caught` and
   `lift-check: passed`. Logs in `out/lift-*.txt`. About 30 minutes on
-  quack. Heavy: builds fifty-six generated crates; gbaa-lift-check runs capped at 8 GB (its lifts in its scope; route-check in a 3 GB scope and the builds in their own).
+  quack. Heavy: builds sixty generated crates; gbaa-lift-check runs capped at 8 GB (its lifts in its scope; route-check in a 3 GB scope and the builds in their own).
 
   `gbaa-lift --shadow-locals` (native/frame-locals; by hand, not part of
   the check) keeps every stack local in the frame's bytes too and prints
