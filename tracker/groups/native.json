@@ -1084,17 +1084,17 @@
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
-        "by": "eb7b70bf",
-        "session": "eb7b70bf-9977-437b-b8b6-70931ce0b89b",
+        "by": "9ecf2205",
+        "session": "9ecf2205-d617-407e-9017-6d376c02bc1e",
         "host": "quack",
-        "pid": 2489427,
-        "start": "10657408",
-        "at": "2026-11-12T08:00:34Z",
+        "pid": 1860178,
+        "start": "4633915",
+        "at": "2026-11-13T17:37:42Z",
         "branch": "unit/native/nightmare-task-switch",
-        "beats": true,
-        "handedBack": "2026-11-12T08:40:45Z",
+        "resumed": "eb7b70bf",
+        "prevSession": "eb7b70bf-9977-437b-b8b6-70931ce0b89b",
         "pushed": true,
-        "ended": "2026-11-12T08:41:01Z"
+        "beats": true
       },
       "notes": [
         {
