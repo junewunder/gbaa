@@ -1984,6 +1984,12 @@
       "check": "recorded",
       "needs": ["native/fnref-live-registers", "native/fnref-frame-pointers", "native/fnref-branch-merge"],
       "uses": ["heavy"],
+      "record": {
+        "state": "parked",
+        "why": "june (2026-11-13): parked with the function-flow branch. Merged with main and pushed (ef361daf), but about 8x slower than main's flow on Emerald, and its gains are on agb programs. Revisit once C test programs judge lifter work: {unit:native/c-bars}.",
+        "by": "ec2ee7ee",
+        "at": "2026-11-13T21:30:23Z"
+      },
       "notes": [
         {
           "at": "2026-11-13T21:21:19Z",
