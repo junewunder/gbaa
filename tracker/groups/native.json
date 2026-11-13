@@ -2227,19 +2227,7 @@
         "by": "a1e87159",
         "at": "2026-11-13T18:05:53Z",
         "evidence": "Review fix made (doc comments in crates/runtime/src/hw/tests.rs back on their tests); just check passes after merging main. Earlier check stands: Metroid native window wrote saves/metroid/metroid.sav, closing flushed it, reopening read it back (e3fde1f2, same as gbaa-desktop --headless --timing exact --save); native menu hides save states, rewind, netplay.",
-        "branch": "unit/native/window-keeps-save",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-13T18:05:53Z",
-          "by": "a1e87159",
-          "host": "quack",
-          "pid": 1860601,
-          "start": "4634915",
-          "beats": true,
-          "session": "a1e87159-18d0-4224-9c3f-ac8a61407e41",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -2247,13 +2235,7 @@
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - crates/runtime/src/hw/tests.rs:166-169: the new test `the_host_sees_the_save_before_each_present` was put between `same_frame_as_the_play_build`'s doc comment and that test. The comment \"The play build's rende…"
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-13T18:02:01Z",
-        "findings": "- crates/runtime/src/hw/tests.rs:166-169: the new test `the_host_sees_the_save_before_each_present` was put between `same_frame_as_the_play_build`'s doc comment and that test. The comment \"The play build's renderer, on the same scene stored at addresses through the bus, draws the same frame.\" now sits on the save test, and `same_frame_as_the_play_build` (line 179) has no doc. Move that two-line comment back above `#[test] fn same_frame_as_the_play_build`, and give the new test its own doc line, e.g. \"/// The host is handed the save chip at each V-blank, before the frame is presented.\""
-      },
-      "round": "2026-11-13T17:37:51Z"
+      ]
     }
   ]
 }
