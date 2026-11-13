@@ -1079,7 +1079,8 @@
         "native/task-coroutines",
         "native/nightmare-entry-reads",
         "native/hw-dma-registers",
-        "native/hw-serial-registers"
+        "native/hw-serial-registers",
+        "native/nightmare-mixer-pointer"
       ],
       "uses": ["heavy"],
       "record": {
