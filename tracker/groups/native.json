@@ -2163,6 +2163,13 @@
         "at": "2026-11-13T10:10:31Z"
       },
       "round": "2026-11-13T10:10:31Z"
+    },
+    {
+      "id": "native/nightmare-fn-flow-again",
+      "title": "Nightmare's lift runs the function flow again",
+      "detail": "From the sweep's foreman, 2026-11-13, by way of {unit:native/nightmare-entry-reads}: mods/kirby-nightmare/holes.toml's skip_fn_flow says the function-address flow doesn't settle on Nightmare under 16 GB. That is stale: on main it settles now (31 to 35 minutes, 2.0 GB peak, measured by {unit:native/fnref-c-game-words}), and crates/codegen/src/native/fnref.rs's module comment says the same stale thing. Drop the line (or keep it with a true reason: it saves half an hour a lift, and the flow only feeds the report and stage B's metrics), fix the comment, and lift once with the flow on. Done when: the holes file and fnref.rs say what is true today; just lift ROM out/lift-kirby-nightmare --name kirby-nightmare with the flow on still reports 0 hard holes and builds, its time and peak quoted; just check passes.",
+      "check": "recorded",
+      "uses": ["heavy"]
     }
   ]
 }
