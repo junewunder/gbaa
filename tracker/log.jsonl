@@ -2805,3 +2805,4 @@
 {"at":"2026-11-13T09:36:39Z","actor":"session","tag":"838ecd32","host":"quack","cmd":"add-unit","id":"native/entry-readers-moonbeam-rogue","text":"new unit: Entry readers left on moonbeam and Rogue, looked into"}
 {"at":"2026-11-13T09:42:29Z","actor":"session","tag":"d2717a37","host":"quack","cmd":"add-unit","id":"native/nightmare-mixer-pointer","text":"new unit: Nightmare's mixer reads through 0xe3a02004 at frame 5"}
 {"at":"2026-11-13T09:43:00Z","actor":"session","tag":"d2717a37","host":"quack","cmd":"add-unit","id":"native/ram-copy-jump-only","text":"new unit: RAM-copy code only jumped into needs no [[takes]] entry"}
+{"at":"2026-11-13T09:43:06Z","actor":"session","tag":"afebd1b0","host":"quack","cmd":"edit","id":"native/fnref-table-ends","text":"Function flow: where a ROM table read by index ends: edited (detail)"}
