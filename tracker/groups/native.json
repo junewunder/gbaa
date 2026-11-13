@@ -2048,13 +2048,11 @@
       "needs": ["native/lift-psr-boot-irq"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "af8e0194",
-        "session": "af8e0194-8e87-4f06-82d4-0c94d5f525c2",
-        "host": "quack",
-        "pid": 887035,
-        "start": "1364723",
-        "at": "2026-11-13T08:33:00Z"
+        "checker": "checker-irqtail-7c3e",
+        "at": "2026-11-13T11:36:14Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/15 (head d8847cc7). just lift-check, whole, 16 programs: lift-check: passed; native-irq-wrapper-600: pass (600 frames, 0 differences; planted fault caught at frame 33, IE 0x05 against 0x06). Metroid lifted with its dispatcher stand-ins (0x08000104, 0x03000c7c) dropped: 0 hard holes, six PSR statements in each wrapper, no unreachable! after the handler call, and it runs 600 of 600 frames; Nightmare with 0x03001030's dropped: six, none, and the same 11 entry-read hard holes as with its file as is. disc-pret (0.9997/0.9555, bars 0.9987/0.9349), disc-agb and jt-score (676/676, 610/617) pass and print as main's do. just check passes. The checker read the diff twice (second time after its findings were fixed) and found all three parts of the done-when met. Logs: out/irq-tail/ in the worker's checkout."
       },
       "round": "2026-11-13T08:33:00Z"
     },
