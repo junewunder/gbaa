@@ -1170,6 +1170,14 @@
       "at": "2026-11-13T04:48:41Z",
       "scope": ["group:native"],
       "replaces": "d/stage-b-sprint-2026-11-01-one-unit-at-a-time"
+    },
+    {
+      "id": "d/a-native-stop-names-functions-from-the",
+      "title": "A native stop names functions from the backtrace; no guest pc yet",
+      "why": "Each built native game runs headless; report where it stops ({unit:native/native-first-stop}): the card asks for the guest function and pc when known. Lifted code keeps no pc, so the stop line gives the lifted functions the panic's backtrace names (innermost first; one inlined into its caller doesn't show). A pc is filed as {unit:native/first-stop-guest-pc}. A stop doesn't fail just lift; a build that failed with no hard hole records no run (it may only have been refused or killed).",
+      "by": "3d525e2f",
+      "at": "2026-11-13T06:57:03Z",
+      "scope": ["native/native-first-stop"]
     }
   ]
 }
