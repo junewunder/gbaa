@@ -2103,6 +2103,12 @@
       "check": "independent",
       "needs": ["native/fnref-table-ends"],
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/hw-io-ignored-ranges",
+      "title": "Library ignores the I/O offsets the play build ignores",
+      "detail": "From {unit:native/hw-serial-registers}: Hw::write16 still panics on I/O offsets 0x160-0x1FE and 0x300 (POSTFLG, HALTCNT), which the play build's bus ignores or keeps. A lifted game that stores there stops in the library though the play build runs on. Make the library do what the play build does for each (keep, ignore, or halt), with a unit test against Io as the serial registers' test does; keep the panic only where the play build has no behaviour. Also fix agb/native-save/SCENE.md, which says the picture wraps by frame 600 (it doesn't until 960). Done when the test passes and just check passes.",
+      "uses": ["heavy"]
     }
   ]
 }
