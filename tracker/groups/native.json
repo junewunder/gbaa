@@ -1839,6 +1839,15 @@
       "detail": "Since {unit:native/entry-read-masking} landed, gbaa-lift on Kirby - Nightmare has 5 hard summary holes (reads r4-r11 at entry), so the lift's crate doesn't build: 0x08064759 (r8 at 0x080647d0), 0x080647fd (r8 at 0x08064874), 0x0806b411 (r8 at 0x0806b5e8), 0x0806b671 (r9 at 0x0806b782), 0x080ce1f9 (r4: m4a's ChnVolSetAsm, r4 the channel and r5 the track passed in registers by its m4a callers; docs/research/native-holes.md had it under libgcc, now corrected). 0x08064759's read looks path-infeasible (r6 = entry r8 is compared only after r5 != -1, which sets r6 first). Fix the rule where it's over-hard, or give stand-ins (ChnVolSetAsm needs its callers' r4/r5: a stand-in per caller, or the lifter passing r4/r5 to it). Done when: just lift ROM out/lift-kirby-nightmare --name kirby-nightmare reports 0 hard holes and the crate builds; just check passes.",
       "check": "recorded",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "d2717a37",
+        "session": "d2717a37-2f09-4fa2-90e3-3e8f8d2ca636",
+        "host": "quack",
+        "pid": 1035338,
+        "start": "1518245",
+        "at": "2026-11-13T08:58:21Z"
+      },
       "notes": [
         {
           "at": "2026-11-13T08:36:12Z",
@@ -1855,7 +1864,8 @@
           "by": "a7b7e9d7",
           "text": "Once the dispatcher 0x03001030 is lifted, not stood in ({unit:native/drop-psr-standins}), 5 more entry-read holes appear in IWRAM m4a code: 0x03007151 (r4), 0x0300715c (r4), 0x030071df (r8), 0x030072e8 (r4), 0x030074d1 (r4)."
         }
-      ]
+      ],
+      "round": "2026-11-13T08:58:21Z"
     },
     {
       "id": "native/hw-serial-registers",
@@ -2071,7 +2081,7 @@
     {
       "id": "native/fnref-table-ends",
       "title": "Function flow: where a ROM table read by index ends",
-      "detail": "From {unit:native/fnref-c-game-words} (docs/research/fnref-held-words.md, 'A C game', item 3). C lays tables of handlers back to back in ROM. A table read by a byte index is read 256 entries long, and a byte array whose address the run can't place is read as far as the value sets bound it, the index's width: 64 KB for a halfword. Run::object_end (crates/codegen/src/native/fnref.rs) doesn't stop between function words, and the bounded read (load_raw's hull path) doesn't stop at an object at all. On Metroid that is 77 words' first hole (0x08067f72, 0x08061aae), the 256-word reads behind the 429 words left in registers, and the width of the callee sets (18 sets of 210 callees, 73 on average). On Kirby Nightmare one such 64 KB read holds 1,373 of 4,054 held words (0x0801c6b8); on Emerald 1,209 of the 9,031 held when it stops. GBAA_FNREF_OFF=tables (unsound: it cuts at every object start) gives the upper bound: Metroid fn_words_not_proven 767 to 452 alone, 338 to 273 after bios. Find a sound end: a table's length from the compare that guards its index, from the next address a pool word holds that code indexes from, or from the entries' own shape. Done when: a rule that is sound (a unit test where a pointer into the middle of a table still reads to its end), Metroid's count and its callee sets' average size reported before and after and lower, the agb bars hold, just lift-check and just check pass.",
+      "detail": "From {unit:native/fnref-c-game-words} (docs/research/fnref-held-words.md, 'A C game', item 3). C lays tables of handlers back to back in ROM. A table read by a byte index is read 256 entries long, and a byte array whose address the run can't place is read as far as the value sets bound it, the index's width: 64 KB for a halfword. Run::object_end (crates/codegen/src/native/fnref.rs) doesn't stop between function words, and the bounded read (load_raw's hull path) doesn't stop at an object at all. On Metroid that is 77 words' first hole (0x08067f72, 0x08061aae), the 256-word reads behind the 429 words left in registers, and the width of the callee sets (18 sets of 210 callees, 73 on average). On Kirby Nightmare 64 KB reads of five byte arrays hold 1,401 of 4,054 held words (1,260 at 0x0801c6b8, the array at 0x08732ef0); on Emerald 1,209 of the 9,031 held when it stops. GBAA_FNREF_OFF=tables (unsound: it cuts at every object start) gives the upper bound: Metroid fn_words_not_proven 767 to 452 alone, 338 to 273 after bios. Find a sound end: a table's length from the compare that guards its index, from the next address a pool word holds that code indexes from, or from the entries' own shape. Done when: a rule that is sound (a unit test where a pointer into the middle of a table still reads to its end), Metroid's count and its callee sets' average size reported before and after and lower, the agb bars hold, just lift-check and just check pass.",
       "check": "independent",
       "uses": ["heavy"]
     },
@@ -2092,7 +2102,7 @@
     {
       "id": "native/fnref-pile-globals",
       "title": "Function flow: the pile split by global, for C games",
-      "detail": "From {unit:native/fnref-c-game-words} (docs/research/fnref-held-words.md, 'A C game', item 6). The flow keeps one pile for every store it can't place, and a load at a constant RAM address reads its cell and the pile. C keeps its state in globals: a callback stored in a struct through a pointer goes to the pile, and any byte loaded through a pointer then reads the bytes of every such callback. First road of 2,515 of Kirby Nightmare's 4,054 held words (733 at 0x08006162) and 3,594 of the 9,031 Emerald holds when it stops; on Metroid 13, and at most 62 after {unit:native/fnref-bios-reads} (GBAA_FNREF_OFF=bios,pile: 338 to 276). {unit:native/fnref-heap-sites} splits by allocation site, which a C game doesn't have. The value-set analysis bounds 8,582 of Metroid's stores to one global and leaves 3,989 unbounded (store_ram_object, store_computed_unknown), so split the pile by those bounds, and stop a constant-address load reading the pile where every store that could reach its cell is bounded elsewhere. Measure on Nightmare (the flow settles there now: gbaa-recompile --summaries ROM --callee-sets, 31 minutes, 2.0 GB) with GBAA_FNREF_WATCH=roads. Do it after {unit:native/fnref-table-ends}: on Metroid the two reach the same words. Done when: a unit test with two globals whose stores stay apart, Nightmare's held words by pile reads reported before and after and lower, the agb bars hold, just lift-check and just check pass.",
+      "detail": "From {unit:native/fnref-c-game-words} (docs/research/fnref-held-words.md, 'A C game', item 6). The flow keeps one pile for every store it can't place, and a load at a constant RAM address reads its cell and the pile. C keeps its state in globals: a callback stored in a struct through a pointer goes to the pile, and any byte loaded through a pointer then reads the bytes of every such callback. First road of 2,523 of Kirby Nightmare's 4,054 held words (733 at 0x08006162; with GBAA_FNREF_OFF=pile 1,599 are held) and 3,701 of the 9,031 Emerald holds when it stops; on Metroid 13, and at most 62 after {unit:native/fnref-bios-reads} (GBAA_FNREF_OFF=bios,pile: 338 to 276). {unit:native/fnref-heap-sites} splits by allocation site, which a C game doesn't have. The value-set analysis bounds 8,582 of Metroid's stores to one global and leaves 3,989 unbounded (store_ram_object, store_computed_unknown), so split the pile by those bounds, and stop a constant-address load reading the pile where every store that could reach its cell is bounded elsewhere. Measure on Nightmare (the flow settles there now: gbaa-recompile --summaries ROM --callee-sets, 31 to 35 minutes, 2.0 GB) with GBAA_FNREF_WATCH=roads. Do it after {unit:native/fnref-table-ends}: on Metroid the two reach the same words. Done when: a unit test with two globals whose stores stay apart, Nightmare's held words by pile reads reported before and after and lower, the agb bars hold, just lift-check and just check pass.",
       "check": "independent",
       "needs": ["native/fnref-table-ends"],
       "uses": ["heavy"]
@@ -2101,6 +2111,34 @@
       "id": "native/hw-io-ignored-ranges",
       "title": "Library ignores the I/O offsets the play build ignores",
       "detail": "From {unit:native/hw-serial-registers}: Hw::write16 still panics on I/O offsets 0x160-0x1FE and 0x300 (POSTFLG, HALTCNT), which the play build's bus ignores or keeps. A lifted game that stores there stops in the library though the play build runs on. Make the library do what the play build does for each (keep, ignore, or halt), with a unit test against Io as the serial registers' test does; keep the panic only where the play build has no behaviour. Also fix agb/native-save/SCENE.md, which says the picture wraps by frame 600 (it doesn't until 960). Done when the test passes and just check passes.",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/irq-mode-sp-bank",
+      "title": "A store or wait in IRQ mode banks sp, not Game::sp",
+      "detail": "Left by {unit:native/lift-irq-wrapper-tail}, from the review of {unit:native/lift-psr-boot-irq}, 2026-11-13. An ordinary lifted function prints 'g.sp = r13' before a wait and before an I/O store that may set IME (crates/codegen/src/native.rs; the prelude's intr_wait, cpu_set and the like do the same with their sp). Game::sp is system mode's banked sp (prelude banked_sp). If such a function runs while Game::cpsr's mode is IRQ (a lifted wrapper that calls something before its msr to system mode, or one that never switches), it puts an IRQ-stack address in system mode's bank, and the wrapper's later msr_cpsr to system mode hands that back as sp. The reset and the wrappers themselves already bank by mode (bank_sp, at stores since {unit:native/lift-psr-boot-irq} and at waits since {unit:native/lift-irq-wrapper-tail}). No corpus wrapper seen so far calls anything before its switch (Metroid 0x08000104, Nightmare 0x03001030, agb's InterruptHandler, agb/native-irq-wrapper's iw_main), so nothing is known to be wrong today. Why it wasn't simply changed to bank_sp everywhere: the agb wrapper's stand-in in the 15 older holes files (holes/*.toml, entry 0x03000000) leaves Game::cpsr in IRQ mode while it runs the handler on Game::sp, and its handlers' 'g.sp = r13' must reach Game::sp for a nested IRQ to nest below them; with bank_sp they would land in the IRQ bank and a nested handler would overwrite the outer one's frames. Do: either drop that stand-in from the agb holes files (the lifted wrapper runs: agb/native-irq-wrapper's first 32 frames, and the hand runs of {unit:native/lift-psr-boot-irq}) or have it set system mode around its call, then print bank_sp (or a prelude set_sp that picks the bank by mode) in every function and in the prelude's helpers. Done when: an agb program whose wrapper calls a function that stores to I/O before switching to system mode passes the native check, and just lift-check passes.",
+      "check": "independent",
+      "needs": ["native/lift-irq-wrapper-tail"],
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/entry-readers-moonbeam-rogue",
+      "title": "Entry readers left on moonbeam and Rogue, looked into",
+      "detail": "Left by {unit:discovery/gcc-far-jump-bl} (docs/research/native-holes.md, 'Modern GCC's cold blocks'): hard 'reads r4-r11 at entry' holes not explained yet. moonbeam 0x08025a29 reads r8 and r9 at 0x08025dec (str through r3) in a 2.8 KB function whose far jumps are all taken, so some path reaches it with r8 unset or the summary joins one in; Rogue 0x081b42e1 (r11 passed in r0 at 0x081b444c) and 0x0826c5e7 (r4, r7 at its first instruction, r6 at 0x0826c5fa: may be a fragment or data). Known and not this unit's: moonbeam 0x0800019b (crt0's copy loop takes its end address in r4) and 0x0803830d (a register save as setjmp makes). Done: each one's cause written in the doc, fixed where it is the summary's or discovery's mistake, holes-all --against main with no hard count higher.",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/nightmare-mixer-pointer",
+      "title": "Nightmare's mixer reads through 0xe3a02004 at frame 5",
+      "detail": "Left by {unit:native/nightmare-entry-reads}, 2026-11-13: the lift builds again and its first stop is 5 of 600 frames, no-memory, 'a byte load at 0xe3a02004', in f_030072e8 < f_030071df < f_03007151 < f_080cd8ad < f_080010cd < f_03001030 < f_080cfa6d < f_0800157d: m4a's IWRAM mixer, run from SoundMain inside the V-blank IRQ (the dispatcher's stand-in). The load is the sample loops' 'ldrsb r0, [r3], #1' (ROM source 0x080cdb1c on; the copy is 0x080cd930 to 0x03007150); r3 is the channel's current pointer, 'ldr r3, [r4, #40]' at 0x080cdac0, r4 the channel from the SoundInfo at [sp, #24]. 0xe3a02004 is no word of the ROM (it reads as ARM 'mov r2, #4'), so a channel's wave pointer, or sp under the mixer (the IRQ stand-in's stack), is wrong. Not the entry-read work: with the constant-branch rule off the lift's source differs only in the list-scan functions' modules. Find the cause against the interpreter (just first-stop, gbaa-interp), fix it or file what it needs. Done when: just lift ROM out/lift-kirby-nightmare --name kirby-nightmare runs past frame 5 and the next first stop is quoted; just check passes.",
+      "check": "recorded",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/ram-copy-jump-only",
+      "title": "RAM-copy code only jumped into needs no [[takes]] entry",
+      "detail": "Left by {unit:native/nightmare-entry-reads}, 2026-11-13. In a RAM copy's context the summaries take every function as one a pointer may call (saves/summary.rs, 'Code not in the ROM: any pointer may'), so each part of m4a's IWRAM mixer that reads r4-r11 as it came is a hard hole until the holes file names it: five '[[takes]] sites = []' entries in Nightmare's (SoundMainRAM and the four places it changes between Thumb and ARM by 'adr; bx'). Every m4a game with the mixer in IWRAM will need the same five by hand. Find a rule the lifter can apply itself (say: no ROM word holds the function's RAM key but a resolved constant jump's literal, and every way in that the lift prints is a jump), or decide the holes entries are the rule and write the m4a recipe in docs/research/native-holes.md. Done when: just lift on Nightmare reports 0 hard holes with those five entries removed, or the doc has the recipe and why no rule; just lift-check and just check pass.",
+      "check": "recorded",
       "uses": ["heavy"]
     }
   ]
