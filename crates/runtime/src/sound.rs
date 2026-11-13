@@ -475,8 +475,8 @@ fn overflowed<A: Audio>(a: &mut A, over: u8, clocks: u8, at: u64) {
     // above it, asks for the next buffer: mark it, and time the re-latch.
     let Some(low) = popped else { return };
     let mut swap = false;
-    for n in low..4 {
-        let c = io.timers[n].control;
+    for (n, t) in io.timers.iter().enumerate().skip(low) {
+        let c = t.control;
         if n > low && c & (ctl::ENABLE | ctl::CASCADE) != ctl::ENABLE | ctl::CASCADE {
             break;
         }
