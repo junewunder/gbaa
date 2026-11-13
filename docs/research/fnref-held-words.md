@@ -17,9 +17,17 @@ that pair: those loads are down from 623 sites to 3 on affine, and the
 count is 55.
 
 Everything below was measured on the unit's branch,
-`unit/native/fnref-unknown-addrs` (it also carries the object split and
-call-site context, none of it on main), on `agb/affine` unless a program
-is named. Addresses are our own agb test programs'.
+`unit/native/fnref-unknown-addrs` at 233ba6c0 (it also carries the object
+split and call-site context, none of it on main), on `agb/affine` unless
+a program is named. Addresses are our own agb test programs'.
+
+**These numbers are from before main's `Ref` tokens.** While this was
+measured, main's function flow was rewritten to keep large pile and ROM
+reads as one token each (`native/fnref-emerald-speed`, f52fe115). The
+branch isn't merged with that yet (22 conflicts in `fnref.rs`, and the
+branch's objects and RAM pointers must learn the new token), and nothing
+here is re-measured on it: `native/fnref-branch-merge` does both, and
+corrects this note. "Main" below is main before that commit.
 
 ## How it was measured
 
@@ -160,6 +168,8 @@ against main's 56, and within one of main's on the others.
 
 ## What it points to
 
+0. The branch merged with main's `Ref` tokens and these tables measured
+   again (`native/fnref-branch-merge`): everything below waits on it.
 1. Frames, as one unit (`native/fnref-frame-pointers`), since neither
    half moves the count alone: a pointer into a caller's frame at or
    above the entry sp followed to the callers' frames, not lost (the 3
