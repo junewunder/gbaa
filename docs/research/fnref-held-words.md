@@ -266,7 +266,8 @@ same with and without the first two.
   `move` is a sound rule, and `bios` is for compiled code once it is
   settled what the registers hold after the call (below); the others
   are unsound, upper bounds. A report made with any of them says so in
-  its first line.
+  its first line. (`bios` is the rule since `native/fnref-bios-reads`
+  and no longer a kind: "The BIOS rule, as landed", at the end.)
 
 The run is the lift alone, no build: `just capped --mem 2G
 target/release/gbaa-lift ROM OUT --name metroid --holes
@@ -424,3 +425,102 @@ task, the second a data pointer that a ROM table's leftovers reached;
 151 out of the pile (0x0800059e, 0x080135b8, 0x0817f504); 228 at
 0x08098d72 and 208 at 0x0808f616 by ROM reads by index, not looked at.
 One word is given to the BIOS.
+
+## The BIOS rule, as landed
+
+Unit `native/fnref-bios-reads`, 2026-11-13. Follow-up 1 above is the
+rule now (`fnref.rs`, `bios_regs`), with the question it left settled:
+what r0 to r3 hold after the call.
+
+The flow follows the lifted program, so each call is what the lifter
+prints for it (`native.rs`, `Plan::Swi`) and the prelude's routine,
+which is the play build's (`runtime::bios`), read side by side. Three
+things are said of each register: the call **reads** it (a function's
+address there is a hole, given to the BIOS); it always **sets** it (a
+number after, nothing of what it held); it **may set** it (after, what
+it held or a number). A register in none of the three is as it came: an
+address left there is followed on past the call.
+
+| call | reads | sets | may set |
+|---|---|---|---|
+| `SoftReset` 0x00 (doesn't return), `Halt` 0x02, `Stop` 0x03, `SoundDriverVSyncOff` 0x28 | | | |
+| `RegisterRamReset` 0x01, `SoundBias` 0x19 | r0 | | |
+| `IntrWait` 0x04 | r0 r1 | | r0 |
+| `VBlankIntrWait` 0x05 | | r0 r1 | |
+| `Div` 0x06 | r0 r1 | r0 r1 r3 | |
+| `Sqrt` 0x08 | r0 | r0 | |
+| `ArcTan2` 0x0a | r0 r1 | r0 r3 | r1 |
+| `CpuSet` 0x0b, `CpuFastSet` 0x0c | r0 r1 r2 | | r0 r1 r3 |
+| `BgAffineSet` 0x0e | r0 r1 r2 | r2 | r0 r1 |
+| `ObjAffineSet` 0x0f | r0 r1 r2 r3 | r2 | r0 r1 |
+| `LZ77UnComp` 0x11, 0x12 | r0 r1 | | r0 r1 r3 |
+| `HuffUnComp` 0x13, `RLUnComp` 0x14, 0x15 | r0 r1 | | r0 r1 |
+| `MidiKey2Freq` 0x1f | r0 r1 r2 | r0 | |
+| `MultiBoot` 0x25 | r0 r1 | r0 | |
+| any other, and a number that is no call | all | all | |
+
+Those are the 22 calls a native build can make
+(`analysis::holes::NATIVE_BIOS`; a test holds the two lists together).
+Every other call is a hard hole there, so there is no lifted call to
+read: it holes and sets all four, as every call did before.
+
+What decided the columns:
+
+- **May set, not sets**, wherever some path leaves the register: the
+  copies and LZ77 return at once on a source in the BIOS (so `CpuSet`'s
+  r3 is 0x170 or as it came), a halfword `CpuSet` moves neither
+  pointer, the affine sets leave r0 and r1 on a count of 0, `ArcTan2`
+  leaves r1 on an axis, and the play build's `IntrWait` leaves r0 when
+  the CPU comes out of the wait with IRQs off in the CPSR (the lifted
+  one waits on). Every register in "sets" that the call doesn't read
+  gets a constant or a number made from the ones it does.
+- **`CpuFastSet`'s r3 is data**: the fill's word, or the first word of
+  the last block it copied. So after the call r3 also holds what the
+  copy read: the ROM words the flow already sends to the pile, or, from
+  a source not in ROM, what a load the run can't place reads.
+- **Where the console's BIOS overwrites what these leave** (r1 and r3
+  are its scratch in most calls; r2 its dispatcher restores,
+  `runtime/src/bios/decomp.rs` on `CpuFastSet`), the address is kept.
+  The play build keeps it, and kept is the safe side: the address is
+  followed further than it lives on a console, and every use it meets
+  is still judged. The lifted program keeps it too inside a function
+  and through a call that passes all four registers; a callee the
+  summaries gave a shape returns 0 in a register a `swi` in it left
+  alone (`saves/summary.rs` counts every one of r0 to r3 as set or
+  clobbered by a `swi`), so there the flow holds an address the lift
+  has lost. That is older than this rule, and the same side: more
+  followed than is there.
+- **A wait runs the IRQ handler**, which the BIOS's stub calls with
+  r0 to r3 saved around it, and the lifted one as a function of its
+  own: the waiting function's registers are as the call left them.
+
+A test runs 21 of the 22 (not `SoftReset`) in the play build's BIOS
+from three sets of registers and holds the table to it: a register
+outside "sets" and "may set" comes back unchanged, and changing one
+outside "reads" changes no other register and no byte of EWRAM or
+IWRAM. It doesn't reach a decompressor's or `MultiBoot`'s own work or
+a wait's end, and can't tell "sets" from "may set": those rows rest on
+the reading, and on the lift check's native-bios programs, which hold
+the lifted calls to the play build's on real data.
+
+Left as it was, and filed (`native/fnref-bios-ram-copies`): the flow
+follows a BIOS copy only out of ROM. One out of RAM moves no address,
+and what the other calls read through a pointer is not looked at.
+
+**Counts.** Metroid (the lift alone, about a minute, peak 312 MB):
+`fn_words_proven` 37 to 466, `fn_words_not_proven` 767 to 338, as the
+switch measured; `call_fn_calls` 70, `call_fn_complete` 68 and
+`call_fn_four_complete` 37, as on main with the same holes file (with
+the reset's and the IRQ dispatcher's stand-ins dropped from it later
+that morning, 72, 70 and 39, the words the same). Keeping r2 and r3 past the waits
+and r3 past the copies held no word the switch had proven.
+
+The agb programs each had one word at stake, 0x08000178, the main
+function's address, left in a register at a `swi` that reads none (in
+affine `VBlankIntrWait`'s, at 0x0800088e). In twelve of the sixteen it
+is proven now (`fn_words_not_proven` one lower, the bars with it). In
+native-spike, native-tasks, native-bios-region and native-irq-wrapper
+the word is also stored to the pile and meets arithmetic there, so the
+count stays. In the first three its reason moved from "given to the
+BIOS" to "arithmetic" (main's reports against these); the fourth came
+to main the same morning and had no report from before to compare.

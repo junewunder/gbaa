@@ -746,6 +746,222 @@ fn a_kept_expansion_caps_all_it_read_together() {
     assert_eq!(toks, [fn_tok(1), fn_tok(2), Tok::RomFrom(0x0800_0800 + 4)]);
 }
 
+/// Where [`swi_then`]'s BIOS call is.
+const SWI_AT: u32 = 0x0800_0080;
+
+/// A function at `e`: `b`, BIOS call `n`, then `then` ending in an
+/// indirect call through `t` (the call [`site`] finds) and a return.
+fn swi_then(e: u32, b: B, n: u8, then: B, t: ValueId) -> Built {
+    let (next, ret) = (e + 0x10, e + 0x20);
+    let mut first = b.end(None, Edge::Swi(next));
+    (first.1.bios, first.1.at) = (Some(n), SWI_AT);
+    (
+        e,
+        vec![
+            (e, first),
+            (next, then.end(Some(t), Edge::Call { target: None, ret })),
+            (ret, B::default().end(None, Edge::Return)),
+        ],
+    )
+}
+
+/// F from its pool word in register `r`, BIOS call `n`, then a call
+/// through `r`.
+fn in_reg_at_swi(r: u8, n: u8) -> Flow {
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    b.set(r, p);
+    let mut then = B::default();
+    let t = then.get(r);
+    run(&[swi_then(0x0800_1001, b, n, then, t)])
+}
+
+#[test]
+fn an_address_left_where_a_bios_call_doesnt_read_stays_proven_and_followed() {
+    // VBlankIntrWait takes no arguments and leaves r2 and r3 as they came.
+    for r in [2, 3] {
+        let f = in_reg_at_swi(r, 0x05);
+        assert!(f.proven(POOL), "r{r}: {f:?}");
+        assert_eq!(site(&f).callees, BTreeSet::from([F]), "r{r}");
+        assert!(site(&f).complete, "r{r}");
+    }
+    // It leaves its flags in r0 and 1 in r1: no hole, and nothing of F
+    // after it.
+    for r in [0, 1] {
+        let f = in_reg_at_swi(r, 0x05);
+        assert!(f.proven(POOL), "r{r}: {f:?}");
+        assert!(site(&f).callees.is_empty(), "r{r}");
+        assert!(!site(&f).complete, "r{r}");
+    }
+    // Halt reads and sets none.
+    for r in 0..4 {
+        let f = in_reg_at_swi(r, 0x02);
+        assert!(f.proven(POOL), "r{r}: {f:?}");
+        assert_eq!(site(&f).callees, BTreeSet::from([F]), "r{r}");
+    }
+}
+
+#[test]
+fn an_address_where_a_bios_call_reads_is_a_hole() {
+    // CpuSet: source, destination, length and mode.
+    for r in 0..3 {
+        let f = in_reg_at_swi(r, 0x0b);
+        assert!(!f.proven(POOL), "r{r}");
+        assert_eq!(f.holes[&Origin::Word(POOL)], (SWI_AT, Why::Bios), "r{r}");
+    }
+    // r3 it doesn't read, and leaves 0x170 there, or r3 as it came (a
+    // source in the BIOS): F may still be called through it.
+    let f = in_reg_at_swi(3, 0x0b);
+    assert!(f.proven(POOL), "{f:?}");
+    assert_eq!(site(&f).callees, BTreeSet::from([F]));
+    // Div reads r0 and r1, and sets r3 too: r2 alone is as it came.
+    for (r, hole, kept) in [(0, true, false), (2, false, true), (3, false, false)] {
+        let f = in_reg_at_swi(r, 0x06);
+        assert_eq!(f.proven(POOL), !hole, "r{r}");
+        assert_eq!(site(&f).callees.contains(&F), kept, "r{r}");
+    }
+}
+
+#[test]
+fn a_bios_call_with_no_rule_holes_all_four() {
+    // ArcTan (the play build has it, a native build doesn't), a number
+    // that is no call, and an exit that names none.
+    for n in [Some(0x09), Some(0xff), None] {
+        for r in 0..4 {
+            let mut b = B::default();
+            let p = b.pool(POOL, F);
+            b.set(r, p);
+            let mut then = B::default();
+            let t = then.get(r);
+            let mut fun = swi_then(0x0800_1001, b, 0, then, t);
+            fun.1[0].1.1.bios = n;
+            let f = run(&[fun]);
+            assert_eq!(f.holes[&Origin::Word(POOL)].1, Why::Bios, "{n:?} r{r}");
+            assert!(site(&f).callees.is_empty(), "{n:?} r{r}");
+        }
+    }
+}
+
+#[test]
+fn every_call_a_native_build_makes_has_a_rule_and_no_other() {
+    let none = bios_regs(None);
+    assert_eq!((none.reads, none.sets), (0xf, 0xf));
+    for n in 0..=0xff {
+        let has = bios_regs(Some(n)) != none;
+        assert_eq!(has, analysis::holes::NATIVE_BIOS.contains(&n), "{n:#04x}");
+        // Set or maybe set, not both.
+        let r = bios_regs(Some(n));
+        assert_eq!(r.sets & r.may_set, 0, "{n:#04x}");
+    }
+}
+
+#[test]
+fn cpu_fast_set_leaves_a_word_it_copied_in_r3() {
+    // Eight words from VT (its fourth is F) to RAM: r3 is the last
+    // block's first word as the BIOS leaves it, so one of the eight.
+    let copy = |b: &mut B, from: ValueId| {
+        b.set(0, from);
+        let to = b.k(0x0200_0000);
+        b.set(1, to);
+        let n = b.k(8);
+        b.set(2, n);
+    };
+    let mut b = B::default();
+    let vt = b.pool(0x0800_0408, VT);
+    copy(&mut b, vt);
+    let mut then = B::default();
+    let t = then.get(3);
+    let f = run(&[swi_then(0x0800_1001, b, 0x0c, then, t)]);
+    assert!(f.proven(VT + 12), "{f:?}");
+    assert!(site(&f).callees.contains(&F), "{f:?}");
+    // Arithmetic on it is arithmetic on F.
+    let mut b = B::default();
+    let vt = b.pool(0x0800_0408, VT);
+    copy(&mut b, vt);
+    let mut then = B::default();
+    let x = then.get(3);
+    let four = then.k(4);
+    let t = then.bin(BinOp::Add, x, four);
+    let f = run(&[swi_then(0x0800_1001, b, 0x0c, then, t)]);
+    assert_eq!(f.holes[&Origin::Word(VT + 12)].1, Why::Arithmetic, "{f:?}");
+    // From RAM, a word some store left there.
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let c = b.k(CELL);
+    b.st(Width::Word, c, p);
+    copy(&mut b, c);
+    let mut then = B::default();
+    let t = then.get(3);
+    let f = run(&[swi_then(0x0800_1001, b, 0x0c, then, t)]);
+    assert!(site(&f).callees.contains(&F), "{f:?}");
+}
+
+/// The play build's BIOS, call `n` from an ARM `swi` with `r` in r0 to
+/// r3, and any stall it leaves: the registers after, and EWRAM and IWRAM.
+fn play_bios(n: u8, r: [u32; 4]) -> ([u32; 4], Vec<u8>) {
+    use runtime::bios;
+    let rom: &'static [u8] = Box::leak(vec![0u8; 0x200].into_boxed_slice());
+    let mut m = Box::new(runtime::Machine::new(rom, runtime::platform::Headless));
+    m.cpu.pc = 0x0800_0104;
+    m.cpu.r[..4].copy_from_slice(&r);
+    // RAM a pattern, so a copy moves something and a clear clears it;
+    // the sources' first word 0, a decompressor's empty input.
+    let bus = &mut m.bus;
+    for (i, b) in bus.ewram.iter_mut().chain(&mut bus.iwram).enumerate() {
+        *b = (i as u8).wrapping_mul(31) | 1;
+    }
+    bus.ewram[0x100..0x104].fill(0);
+    bios::swi(&mut m, (n as u32) << 16).unwrap();
+    while m.cpu.pc == bios::STALL_LOOP {
+        m.step();
+    }
+    let ram = [&m.bus.ewram[..], &m.bus.iwram[..]].concat();
+    (m.cpu.r[..4].try_into().unwrap(), ram)
+}
+
+#[test]
+fn the_play_builds_bios_reads_and_leaves_what_the_rules_say() {
+    // Each call from three sets of registers: a source and a destination
+    // in EWRAM with a count of 4 (the source's first word 0, every
+    // decompressor's empty input, then a pattern); a source in the BIOS,
+    // which the copies refuse; and flags that make RegisterRamReset clear
+    // memory. The decompressors' and MultiBoot's own work isn't reached
+    // (the lift check's native-bios programs hold the lifted calls to the
+    // play build's on real data), nor a wait's end, and nothing here tells
+    // "sets" from "may set".
+    let sets = [
+        [0x0200_0100, 0x0200_1000, 4, 2],
+        [0, 0x0200_1000, 3, 0x0bad_f00d],
+        [0x1f, 0x0200_1000, 0, 7],
+    ];
+    for &n in analysis::holes::NATIVE_BIOS {
+        // SoftReset doesn't return, and zeroes them all.
+        if n == 0x00 {
+            continue;
+        }
+        let rule = bios_regs(Some(n));
+        for r in sets {
+            let (out, ram) = play_bios(n, r);
+            for i in 0..4 {
+                // One the rule says is as it came, is.
+                if (rule.sets | rule.may_set) & 1 << i == 0 {
+                    assert_eq!(out[i], r[i], "call {n:#04x} changed r{i}");
+                }
+                // One it doesn't read changes nothing else.
+                if rule.reads & 1 << i == 0 {
+                    let mut other = r;
+                    other[i] = !other[i];
+                    let (o2, ram2) = play_bios(n, other);
+                    for j in (0..4).filter(|&j| j != i) {
+                        assert_eq!(o2[j], out[j], "call {n:#04x}: r{j} by r{i}");
+                    }
+                    assert!(ram2 == ram, "call {n:#04x}: RAM by r{i}");
+                }
+            }
+        }
+    }
+}
+
 #[test]
 fn equal_sets_kept_are_one_set() {
     let set = |n: u32| -> Toks { (0..n).map(Tok::Num).collect() };
