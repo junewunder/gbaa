@@ -1251,8 +1251,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   globals, heap and VRAM free list, which the native programs replaced),
   the I/O registers the library models (display, `DISPSTAT`'s writable
   bits, `VCOUNT`, the sound registers with `SOUNDCNT_X`'s status, wave
-  RAM, the FIFOs' last stores, the timers, the serial port's and
-  `KEYCNT`, `IE`/`IF`/`WAITCNT`/`IME`),
+  RAM, the FIFOs' last stores, the timers, the serial port's, `IE`/`IF`/`WAITCNT`/`IME`),
   palette, VRAM, OAM, and each frame's audio (samples' count and hash):
   `runtime::hw` mixes with the play build's own sound path
   (native/hw-sound), so psg-square's FIFO A and PSG and direct-sound's
@@ -1338,9 +1337,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
   `agb/native-frame-locals`, `agb/native-ime-release`, `agb/native-bios-calls`,
   `agb/native-bios-more` (SoftReset too), `agb/native-tasks`, `agb/native-dma`, `agb/native-save` (SRAM),
-  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`,
-  `agb/native-serial` (the serial port's registers, native/hw-serial-registers)
-  (`just agb-tests`; units native/lift-bios-calls, -bios-affine) on
+  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`, `agb/native-serial`
+  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers) on
   `units/<name>-600.toml` (the spike's is `units/native-spike.toml`,
   native-irq-hold's, native-ime-release's and native-bios-region's
   `-601`). First every program is lifted with `--bars`
@@ -1353,8 +1351,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   wrapper's stand-in dropped) the lift and the build must fail naming
   `f_03000000`'s `mrs`; native-tasks likewise (a task's store; its yield's
   stack switch); native-dma's (0x08000180, `dma_set`'s `DMAxCNT`, a unit
-  more), native-save's (0x080002ac, an SRAM `strb`) and native-serial's
-  (0x0800017c, `sio_set`'s `SIOCNT`) too.
+  more), native-save's (0x080002ac, an SRAM `strb`) and native-serial's (0x0800017c, `SIOCNT`) too.
   native-fallthrough, native-irq-hold, native-frame-locals and
   native-ime-release lifted with their `planted_flags`
   (`--fall-as-tail-call`, the old fall into another function;
