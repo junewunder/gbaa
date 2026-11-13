@@ -230,6 +230,12 @@ pub struct Passing {
     /// the caller's registers, and their plain entries stop the program,
     /// so no other pointer call reaches one with zeroes.
     pub sites: BTreeMap<u32, BTreeSet<u32>>,
+    /// Every function a `[[takes]]` names, one with no `sites` too: no
+    /// pointer call reaches that one (code only jumped into, with the
+    /// jumper's registers: m4a's mixer in IWRAM, from `SoundMain`'s
+    /// constant `bx r3`), and its plain entry stops the program all the
+    /// same (unit `native/nightmare-entry-reads`).
+    pub named: BTreeSet<u32>,
     /// The functions a stand-in replaces: they take nothing.
     pub replaced: BTreeSet<u32>,
 }
@@ -310,6 +316,8 @@ pub(super) struct Sum<'a> {
     /// The indirect calls whose callee sets are complete.
     sets: &'a Sets,
     passing: &'a Passing,
+    /// The functions proven to keep r4–r11 and sp ([`super::Proof`]).
+    kept: &'a BTreeSet<u32>,
     params: BTreeMap<u8, Cause>,
     /// r0–r3 and r12's origins, joined over every return.
     exit: Option<Vec<Org>>,
@@ -379,12 +387,14 @@ impl<'a> Sum<'a> {
         assume: Assume,
         sets: &'a Sets,
         passing: &'a Passing,
+        kept: &'a BTreeSet<u32>,
     ) -> Sum<'a> {
         Sum {
             sums,
             assume,
             sets,
             passing,
+            kept,
             params: BTreeMap::new(),
             exit: None,
             used: BTreeMap::new(),
@@ -457,6 +467,12 @@ impl<'a> Sum<'a> {
         self.sums
             .get(&callee)
             .is_some_and(|s| !s.returns && !s.stopped)
+    }
+
+    /// `callee` is proven to keep r4–r11: a caller's constant in one is
+    /// the same after a call to it ([`super::State::called`]).
+    pub(super) fn keeps(&self, callee: u32) -> bool {
+        self.kept.contains(&callee)
     }
 
     /// No return found, and a hole that may be why.
@@ -894,7 +910,7 @@ pub fn summarize_passing(
             ctx,
             &by_entry,
             by_entry[&k],
-            Some(Sum::new(&sums, assume, sets, passing)),
+            Some(Sum::new(&sums, assume, sets, passing, &proof.kept)),
         )
         .expect("a summary's run records what the proof fails on");
         let mut sum = w.sum.expect("a summary's run");
@@ -1086,7 +1102,8 @@ pub fn summarize_passing(
         .map(|(&k, _)| k)
         .collect();
     if !readers.is_empty() {
-        let named: BTreeSet<u32> = passing.sites.values().flatten().copied().collect();
+        let mut named: BTreeSet<u32> = passing.sites.values().flatten().copied().collect();
+        named.extend(passing.named.iter().copied());
         let mut zeroed: BTreeSet<u32> = sets.values().flatten().copied().collect();
         if ctx.base == analysis::program::ROM_BASE {
             zeroed.extend(
