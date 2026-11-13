@@ -2043,6 +2043,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-13T21:21:16Z",
+          "by": "5ce5cf47",
+          "text": "2026-11-13: merged+pushed (ef361daf), just check green, agb tables re-measured (finding stands). Not done: Emerald round 0 202s vs main 24s, stops at 48M bound after 19.7k runs (10:39, 2.7GB). Main never stops in 25 min either. Note's 'Emerald on the merged code'."
+        },
+        {
           "at": "2026-11-13T08:33:12Z",
           "by": "afebd1b0",
           "text": "2026-11-13: Metroid's count needs nothing of the branch ({unit:native/fnref-c-game-words}). GBAA_FNREF_WATCH is on main now (Ref-aware), and a GBAA_FNREF_OFF with other kinds (bios,move,flags,tables,pile,cells): keep both lists when merging."
