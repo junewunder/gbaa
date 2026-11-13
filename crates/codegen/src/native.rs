@@ -89,12 +89,16 @@
 //!   (`IntrWait`, `VBlankIntrWait` as `hw::halt` until the game's handler
 //!   sets the flag; `Halt`, `Stop`), `CpuSet`, `CpuFastSet` and LZ77 with
 //!   their time (`hw::spend`), RL, `Div`, `Sqrt`, `ArcTan2`, `SoundBias`,
-//!   `MidiKey2Freq`, `MultiBoot` (unit `native/lift-bios-calls`).
+//!   `MidiKey2Freq`, `MultiBoot` (unit `native/lift-bios-calls`),
+//!   `BgAffineSet`, `ObjAffineSet` (unit `native/lift-bios-affine`).
 //! - An idle loop's back edge calls `hw::idle`, a spin loop's `hw::spin`
 //!   (`analysis::idle`, `runtime::spins`, as the play build's
 //!   `--timing native` marks them).
 //! - Function pointers are their keys (ROM or IWRAM address, Thumb bit):
-//!   `call_fn` (prelude) looks them up in `FNS`. Stage A has no dense IDs
+//!   `call_fn` (prelude) looks them up in `FNS`; a RAM key that isn't
+//!   there but holds one of the flash save library's stack routines is
+//!   that routine's `hw::flash` call (unit `native/lift-flash-routines`).
+//!   Stage A has no dense IDs
 //!   (`--fn-ids rom` only): a literal lift loads pointers from ROM bytes
 //!   and RAM, so it can't renumber them. [`fnref`] follows every function
 //!   address to its uses and reports the ROM words dense IDs could rewrite
@@ -564,11 +568,22 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             .copied()
             .collect()
     });
+    // Whether a global ends past a guest RAM address in its region: an
+    // object an unknown index makes from there may share bytes with it
+    // (native/ref-heap-static-arrays).
+    let global_from = |a: u32| -> bool {
+        let Some(o) = globals::ram_at(a) else {
+            return false;
+        };
+        let end = if o < 0x4_0000 { 0x4_0000 } else { 0x4_8000 };
+        globals.0.range(..end).any(|(_, g)| g.lo + g.len > o)
+    };
     let heap = heap::follow(
         &ins,
         settled.map_or(&no_sites, |(f, _, _)| &f.sites),
         taken.as_ref(),
         &ram_init,
+        &global_from,
     );
     drop(ins);
     drop(flow_ins);
@@ -834,11 +849,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let refs = |st| soft.access.get(&(st, Where::Ref)).copied().unwrap_or(0);
     writeln!(
         report,
-        "heap pointers (native/ref-heap): {} loads and {} stores through a Ref<T>, {} types; {} accesses through an object's pointer no type explains (left as bytes); the run took {} rounds, {:.1} s{}",
+        "heap pointers (native/ref-heap): {} loads and {} stores through a Ref<T>, {} types; {} accesses through an object's pointer no type explains (left as bytes; {} sites' objects may be in a static array); the run took {} rounds, {:.1} s{}",
         refs(false),
         refs(true),
         soft.ref_tys.len(),
         soft.ref_unexplained,
+        heap.statics.len(),
         heap.rounds,
         heap.secs,
         if heap.unsettled { " and didn't settle: nothing typed" } else { "" },
@@ -1454,6 +1470,17 @@ impl FnPrinter<'_, '_> {
                 at,
                 "CPU state: a stack switch (sp set to a value not made from the frame's)",
             );
+        }
+        // sp set to a constant (a fresh stack, the SDK's `SoftReset`) is
+        // the guest's bytes from there on, as lifted; only a return could
+        // reach the frames left behind.
+        if sum.is_none_or(|s| s.returns) {
+            for &at in self.frame.map(|fr| &fr.fresh).into_iter().flatten() {
+                self.hole(
+                    at,
+                    "CPU state: a stack switch (sp set to a constant in a function that returns)",
+                );
+            }
         }
         // The plain entry, for calls, and the extended one, for a fall or
         // jump from another function, which passes its registers and flags.
@@ -2122,6 +2149,9 @@ impl FnPrinter<'_, '_> {
                 };
                 let n = runtime::bios::number(comment, thumb);
                 let call = match n {
+                    // The restart is `main`'s (the prelude's `soft_reset`).
+                    0x00 => "soft_reset(g)?;".to_string(),
+                    0x01 => "register_ram_reset(g, r0);".to_string(),
                     // `Stop` is a halt, as in the play build.
                     0x02 | 0x03 => "g.sp = r13; hw::halt(g)?;".to_string(),
                     0x04 => "r0 = intr_wait(g, r13, r0 != 0, r1)?;".to_string(),
@@ -2135,10 +2165,16 @@ impl FnPrinter<'_, '_> {
                         .to_string(),
                     0x0B => "let mut r = [r0, r1, r2, r3]; cpu_set(g, r13, &mut r)?; [r0, r1, r2, r3] = r;".to_string(),
                     0x0C => "let mut r = [r0, r1, r2, r3]; cpu_fast_set(g, r13, &mut r)?; [r0, r1, r2, r3] = r;".to_string(),
+                    0x0E | 0x0F => format!(
+                        "let mut r = [r0, r1, r2, r3]; affine_set(g, &mut r, {}); [r0, r1, r2, r3] = r;",
+                        n == 0x0E
+                    ),
                     0x11 | 0x12 => format!(
                         "let mut r = [r0, r1, r2, r3]; lz77(g, r13, &mut r, {}, {at:#010x}, {thumb})?; [r0, r1, r2, r3] = r;",
                         n == 0x12
                     ),
+                    0x13 => "let mut r = [r0, r1, r2, r3]; huff(g, &mut r); [r0, r1, r2, r3] = r;"
+                        .to_string(),
                     0x14 | 0x15 => format!(
                         "let mut r = [r0, r1, r2, r3]; rl(g, &mut r, {}); [r0, r1, r2, r3] = r;",
                         n == 0x15
@@ -2148,13 +2184,22 @@ impl FnPrinter<'_, '_> {
                         .to_string(),
                     // No link cable: no client answers (the play build's).
                     0x25 => "r0 = 1;".to_string(),
+                    // `SoundDriverVSyncOff`: the play build's BIOS has no
+                    // sound driver, so does nothing.
+                    0x28 => String::new(),
                     _ => {
                         debug_assert!(!BIOS.contains(&n));
                         self.hole(at, format!("BIOS call {n:#04x}, which the library doesn't have"));
                         return s;
                     }
                 };
-                let c = self.call_then(call, next, at);
+                // The BIOS region then reads the opcode after the call's
+                // return, as the play build's (`swi_done`). After a halt too:
+                // the IRQ that wakes it returns into the BIOS's Halt, which
+                // then returns from the call (the play build finishes its
+                // pending call there; mGBA agrees, agb/native-bios-region's
+                // slot 10).
+                let c = self.call_then(format!("{call} swi_done(g);"), next, at);
                 writeln!(s, "{ind}{c}").unwrap();
             }
             Plan::Undefined => self.hole(at, "an undefined instruction"),
@@ -2405,9 +2450,11 @@ fn shapes_of(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> Shapes {
 }
 
 /// The known targets of a jump by value at `at` (not a call): its own
-/// (`target`), a resolved table's cases, the holes file's for one
-/// Recovery didn't resolve. `Err` with the jump's address where it's
-/// unresolved and the holes file gives none.
+/// (`target`), a resolved table's cases, the constant RAM address of a
+/// jump into a copy's code ([`JumpRes::Ram`]: a function of an overlay,
+/// or a hole where the jump goes), the holes file's for one Recovery
+/// didn't resolve. `Err` with the jump's address where it's unresolved
+/// and the holes file gives none.
 fn dyn_targets(
     ctx: &Ctx,
     holes: &Holes,
@@ -2424,6 +2471,10 @@ fn dyn_targets(
         Some((_, JumpRes::Resolved(_))) => {
             targets.extend(ctx.table_targets(at, thumb).unwrap_or_default());
         }
+        Some((a, JumpRes::Ram(t))) => match holes.jumps.get(&a) {
+            Some((ts, _)) => targets.extend(ts),
+            None => targets.push(*t),
+        },
         Some((a, JumpRes::Unresolved | JumpRes::Rejected(_))) => match holes.jumps.get(&a) {
             Some((ts, _)) => targets.extend(ts),
             None => return Err(a),

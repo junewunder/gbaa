@@ -495,7 +495,8 @@ impl Bus {
             0x08 => self.gpio.write(addr & 0xFF_FFFF, v),
             0x0D if self.eeprom_at(addr) => self.save.eeprom_write(v, 1),
             // The save's 8-bit bus stores the addressed byte lane, at the
-            // unaligned address (as mGBA does).
+            // unaligned address. mGBA 0.10.5 drops an unaligned SRAM strh or
+            // str instead (see units/native-save-600.toml).
             0x0E | 0x0F => self
                 .save
                 .write(unaligned as u16, (v >> ((unaligned & 1) * 8)) as u8),

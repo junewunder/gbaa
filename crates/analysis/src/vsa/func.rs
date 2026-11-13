@@ -44,7 +44,7 @@ fn plain_reg(op2: &Operand2, r: DReg) -> bool {
 /// Classify an instruction that writes pc, other than `b` and `bl`
 /// (`docs/research/jump-tables.md`, "Definitions"). Returns: `bx lr`,
 /// `mov pc, lr`, any `ldm`/`pop` loading pc, `ldr pc, [sp], #4`, and
-/// `bx rN` right after a `pop` that loads rN. Calls: `bx`/`mov pc` right
+/// `bx rN` (not pc) right after a `pop` that loads rN. Calls: `bx`/`mov pc` right
 /// after `mov lr, pc`, and a lone second half of Thumb `bl`. Everything
 /// else is a jump.
 pub fn classify(prog: &Program, insn: &Insn) -> Ctl {
@@ -56,6 +56,10 @@ pub fn classify(prog: &Program, insn: &Insn) -> Ctl {
     );
     match insn.instr {
         Instr::Bx { rm: DReg::Lr, .. } => Ctl::Return,
+        // An interworking veneer's `bx pc` goes on into its own ARM code,
+        // whatever the instruction before (the end of the function before
+        // it, read linearly, may be a `pop {…, pc}`).
+        Instr::Bx { rm: DReg::Pc, .. } => Ctl::Jump,
         Instr::Bx { rm, .. } => match p {
             Some(Insn {
                 instr:
@@ -116,6 +120,13 @@ pub enum JumpRes {
     Resolved(Jump),
     /// The target isn't a small finite set of ROM addresses.
     Unresolved,
+    /// The target is one constant address in RAM, outside the image
+    /// (interworking form): code a BIOS copy put there, entered at one of
+    /// the image's [`ram_entries`](FuncResult::ram_entries) (m4a's
+    /// `SoundMain` ends in a jump into its IWRAM copy). Unresolved here;
+    /// resolved where that copy's code is known (the hole report's
+    /// overlays, the lifter's functions).
+    Ram(u32),
     /// A table with a target that doesn't decode or leaves the function.
     Rejected(Jump),
 }
@@ -660,13 +671,19 @@ impl Analysis<'_, '_> {
     ) {
         let Some(ts) = self.targets(v, kind) else {
             if self.record {
-                self.res.jumps.insert(at, JumpRes::Unresolved);
-                if let Some(k) = v.dom.konst() {
-                    self.ram_entry(match kind {
-                        ExitKind::Exchange => k,
-                        _ if self.thumb => k | 1,
-                        _ => k & !3,
-                    });
+                let k = v.dom.konst().map(|k| match kind {
+                    ExitKind::Exchange => k,
+                    _ if self.thumb => k | 1,
+                    _ => k & !3,
+                });
+                let ram = k.filter(|&k| {
+                    kind != ExitKind::ExceptionReturn && is_ram(k & !1) && !self.prog.in_rom(k & !1)
+                });
+                self.res
+                    .jumps
+                    .insert(at, ram.map_or(JumpRes::Unresolved, JumpRes::Ram));
+                if let Some(k) = k {
+                    self.ram_entry(k);
                 }
             }
             return;

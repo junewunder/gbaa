@@ -1237,7 +1237,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   guest-layout`: RAM as the ROM's EWRAM and IWRAM, each global at its
   link address), the spike also in the play layout, the spike and
   psg-square with their planted faults, then runs `route-check --native NATIVE PLAY
-  ROUTE [--replaced FILE] [--packed BIN] [--planted BIN]...` on
+  ROUTE [--replaced FILE] [--holes FILE] [--name N] [--packed BIN] [--planted BIN]...` on
   `units/native-spike.toml` (600 frames), `units/psg-square.toml`
   (120) and `units/direct-sound.toml` (300). Each build writes every
   frame's record at its present
@@ -1246,7 +1246,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   and which reports the lowest sp (compiled code doesn't keep it). Fails
   at the first difference, naming the frame, region and byte, in the
   picture, EWRAM/IWRAM (but the stack from the lowest sp to IWRAM's end,
-  code copies, and `crates/native-spike/check/*.replaced.toml`: agb's
+  code copies (discovery's, and the `[[copy]]`s of the holes file `just lift`
+  finds, by `--name N` else the ROM's name; or `--holes FILE`), and `crates/native-spike/check/*.replaced.toml`: agb's
   globals, heap and VRAM free list, which the native programs replaced),
   the I/O registers the library models (display, `DISPSTAT`'s writable
   bits, `VCOUNT`, the sound registers with `SOUNDCNT_X`'s status, wave
@@ -1334,22 +1335,23 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `planted_store`, `planted_hole`, `planted_flags`) and its bars,
   `[program.<name>.bars]`. Today `agb/native-spike`, `agb/affine`,
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
-  `agb/native-frame-locals`, `agb/native-ime-release`,
-  `agb/native-bios-calls`, `agb/native-tasks` (`just agb-tests`) on
-  `units/native-spike.toml`, `units/affine-600.toml`,
-  `units/mosaic-modes-600.toml`, `units/native-fallthrough-600.toml`,
-  `units/native-irq-hold-601.toml`, `units/native-frame-locals-600.toml`,
-  `units/native-ime-release-601.toml`, `units/native-bios-calls-600.toml`
-  (native/lift-bios-calls), `units/native-tasks-600.toml`. First every
-  program is lifted with `--bars` (seconds), failing before any build on
-  a metric over its bar; then each lift and its play build
-  (`--timing native`) are built and `route-check --native` runs them for
-  600 frames, capped at 3 GB, with no `--replaced` list: everything but
-  the stack and the code copies is compared. The spike lifted with its
-  `planted_store` (0x08000186, the V-blank handler's frame count) must be
-  caught, and with its `planted_hole` (agb's IRQ wrapper's stand-in
-  dropped) the lift and the build must fail naming `f_03000000`'s `mrs`;
-  native-tasks likewise (a task's store; its yield's stack switch).
+  `agb/native-frame-locals`, `agb/native-ime-release`, `agb/native-bios-calls`,
+  `agb/native-bios-more` (SoftReset too), `agb/native-tasks`, `agb/native-dma`, `agb/native-save` (SRAM),
+  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`
+  (`just agb-tests`; units native/lift-bios-calls, -bios-affine) on
+  `units/<name>-600.toml` (the spike's is `units/native-spike.toml`,
+  native-irq-hold's, native-ime-release's and native-bios-region's
+  `-601`). First every program is lifted with `--bars`
+  (seconds), failing before any build on a metric over its bar; then each
+  lift and its play build (`--timing native`) are built and `route-check
+  --native` runs them for 600 frames, capped at 3 GB, with no `--replaced`
+  list: everything but the stack and the code copies is compared. The
+  spike lifted with its `planted_store` (0x08000186, the V-blank handler's
+  frame count) must be caught, and with its `planted_hole` (agb's IRQ
+  wrapper's stand-in dropped) the lift and the build must fail naming
+  `f_03000000`'s `mrs`; native-tasks likewise (a task's store; its yield's
+  stack switch); native-dma's (0x08000180, `dma_set`'s `DMAxCNT`, a unit
+  more) and native-save's (0x080002ac, an SRAM `strb`) too.
   native-fallthrough, native-irq-hold, native-frame-locals and
   native-ime-release lifted with their `planted_flags`
   (`--fall-as-tail-call`, the old fall into another function;
@@ -1357,15 +1359,13 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `--plant-slot=0x08000182`, `fl_keep`'s store to a stack local made one
   more, native/frame-locals; `--ime-at-waits`, the old IRQ held past the
   store that sets `IME` again to the next wait, native/ime-release) must
-  be caught too. Each program is
-  lifted once more with `--layout packed` (`out/lift-<name>-packed`),
-  passed as `--packed`: it must draw the guest layout's frames and
-  record the same bytes, nothing skipped (native/lift-packed-layout).
-  Passes with
-  `every metric within its bar`, eight `pass (60x frames, 0 differences …;
-  the play layout draws the same 60x frames, its records the same …)`
-  lines, `planted fault caught (…-planted: frame 2: EWRAM byte 0x020000c0
-  …)`, `(…-fall-as-tail-call: frame 1: EWRAM byte 0x020000c4 …)`,
+  be caught too. Each program is lifted once more with `--layout packed`
+  (`out/lift-<name>-packed`), passed as `--packed`: it must draw the guest
+  layout's frames and record the same bytes, nothing skipped
+  (native/lift-packed-layout). Passes with `every metric within its bar`,
+  a `pass (60x frames, 0 differences …; the play layout draws the same 60x
+  frames, its records the same …)` line per program, `planted fault caught
+  (…-planted: frame 2: EWRAM byte 0x020000c0 …)`, `(…-fall-as-tail-call: frame 1: EWRAM byte 0x020000c4 …)`,
   `(…-plant-slot-0x08000182: frame 1: EWRAM byte 0x020000c4: play 0x61,
   native 0x62 …)` and `(…-irq-at-waits: frame 2: EWRAM byte 0x020000c8:
   play 0x00, native 0x01 …)`, `(…-ime-at-waits: frame 2: EWRAM byte
@@ -1384,11 +1384,11 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   **Lowering a bar** (every stage-B unit's check): `just lift-metrics
   --lower-bars` (`--metric`, `--only` to lower only some), or change the
   one `metric = N` line in the program's bars table, and run `just
-  lift-check` (or `--only NAME`). Bars are only lowered; raising one is changing the
-  oracle (ask june). The exception is `lines_prelude`, the hand-written
-  prelude every lift starts with: it may rise when a unit adds prelude
-  code, the evidence saying how many lines and why; `lines` is the rest
-  (lifted code and stand-ins) and only goes down. A new metric needs a bar in every table (the lift
+  lift-check` (or `--only NAME`). **Raising a bar** is a hand edit a unit may make itself (never
+  `hard_holes`, a planted control or the native check: ask june) when the
+  native check stays green and its evidence gives the bar, old and new value
+  and the cause; then `just tracker decide --for-run`. A target that won't
+  move: `docs/native-stage-b.md`, check 2. A new metric needs a bar in every table (the lift
   fails on a metric with none); a new program is a new table, its bars
   at the values its first lift reports. `cargo test -p codegen --test
   lift_bars` shows a lowered bar failing the lift by name.
@@ -1685,6 +1685,24 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   run). `--once` skips the second run; `--input0`/`--input1` replace a
   player's presses; `--dump DIR --dump-at` takes frames as `N,N` or
   `FROM-TO/EVERY`.
+- The radio on the server (multiplayer/wireless-radio-netplay):
+  `just emerald-radio [PROFILE] [ROM] [ARGS]` is `emerald-wireless --net
+  PROFILE`, the same trade with each Emerald in its own process in real
+  time and the radio a `gbaa-server` room's (in-process; each path
+  through the ping simulator's PROFILE, default calm). About 3 minutes.
+  `--sim-ms N` (on `just emerald-wireless`) is it on simulated time in one
+  process, N ms each way; `--heard-ms N` (default 3000; 0: only the hosts
+  open now); numbers: research multiplayer.md, "The radio on the server".
+- Wireless from the desktop (multiplayer/desktop-wireless-radio,
+  `crates/desktop/src/wireless.rs`, which says how it runs):
+  `gbaa-desktop ROM --server ADDR --wireless --host` (prints `room CODE`;
+  `--players N`) or `--wireless --join CODE`: the window's GBA with a
+  wireless adapter whose radio is the server room's, as `emerald-wireless
+  --seat`; its own GBA only, interpreted, real time, from reset. A radio
+  silent for 10 s is said (a server older than the radio, as fly's was).
+  From the window (multiplayer/menu-wireless-room): the Netplay page's
+  Link row, on Wireless, makes Host a room and Join wireless; the game
+  alone after it goes on from the seat's state.
 - Linked play: `gbaa-desktop ROM --link B.sav` runs a second GBA on the
   same ROM, on one cable with the first (`runtime::link`;
   `crates/desktop/src/link.rs`), the two screens side by side in one
@@ -1908,7 +1926,8 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   (multiplayer/server-version-cutoff). A player's seat is freed when
   it leaves (`L`) or sends nothing for 10 s, and a room closes with its
   last player; it says so on stderr (`room CODE opened`, `player 2 left`,
-  `closed: every player gone`). `gbaa-server --rooms ADDR` asks one how
+  `closed: every player gone`); `W` datagrams speak to a room's radio
+  (`relay::radio`). `gbaa-server --rooms ADDR` asks one how
   many rooms are open and how many players are in them (no codes). `just room-sim [PROFILE]
   [ARGS]` is its check: `gbaa-pingsim room` starts a server in-process
   (or uses `--server ADDR`) and a proxy (`netplay::proxy`, `Proxy::to`)

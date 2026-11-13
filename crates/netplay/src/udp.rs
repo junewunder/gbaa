@@ -365,6 +365,13 @@ impl Udp {
         }
     }
 
+    /// The socket, this seat, and the rooms server it goes through: for a
+    /// player whose seat speaks to the room's radio ([`crate::radio`]),
+    /// not to other seats.
+    pub fn into_parts(self) -> (UdpSocket, usize, Option<SocketAddr>) {
+        (self.sock, self.seat, self.via)
+    }
+
     /// Whether this seat has said goodbye ([`Udp::leave`]).
     pub fn has_left(&self) -> bool {
         self.left

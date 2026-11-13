@@ -31,9 +31,8 @@ tracker evidence has the before and after (`just show <id> --full`).
 - **What's left is mostly indirect jumps Recovery leaves unresolved**,
   most in Minish Cap and Emerald Rogue, and most never reached by any run:
   coverage runs (`native/hole-coverage`, "Coverage runs" below) tell real
-  tables from dead code. The reached ones are Minish Cap's ROM-to-IWRAM
-  veneers, jumps into RAM code, and a few real switch tables Recovery
-  misses (Rogue's, moonbeam's). The summaries' holes were mostly the
+  tables from dead code. The reached ones are jumps into RAM code and
+  a few real switch tables Recovery misses (Rogue's, moonbeam's). The summaries' holes were mostly the
   analysis being too cautious ("Functions that change r4-r11 or sp",
   below; `native/callee-save-breaks`): 31 then, 14 after, all real
   convention breaks in hand-written code or data taken for code.
@@ -76,7 +75,7 @@ runs the corpus into one table (about 10 minutes).
 
 | Hole | How it's found | Counted |
 |---|---|---|
-| Indirect jump not resolved | Recovery's `Unresolved` and `Rejected`, ROM and overlays | every one, reached or not ("jumps A+B": ROM + overlays) |
+| Indirect jump not resolved | Recovery's `Unresolved` and `Rejected`, ROM and overlays; its `Ram` (one constant RAM target) where no overlay has a function there | every one, reached or not ("jumps A+B": ROM + overlays) |
 | Return-address arithmetic | the run: a return (`bx`, `pop {pc}`, `mov pc, lr`, `ldr pc, [sp]`) landing 64 bytes before to 1 KiB after the innermost open call's return site, not on it, not on another call's return site, not on a function start, not inside the callee's own function; statically: a function doing arithmetic on lr, or loading through it, before writing lr | where Recovery doesn't resolve the call site as a jump |
 | RAM code that changed | the run: an address run again with different bytes or instruction set | each run of addresses (gaps up to 16 bytes) |
 | CPU state | `msr`, `mrs`, `ldm`/`stm` with the S bit, `s` writes to pc, stack switches (sp moved 4 KiB or more by one instruction other than sp-relative arithmetic) | outside the IRQ wrapper (code run at the top level of an IRQ, and the rest of its function; for a copy made by the game's loop, at the RAM address) and boot (code run only in the first frame, and its function) |
@@ -112,7 +111,8 @@ call into RAM (`Run::ram_calls`); a target whose every version is one
 GCC's two) is a call of `runtime::hw::flash::{read_byte, read, verify}`
 on `Hw::save`, listed as a "flash library stand-in", and its RAM isn't
 changed code, undiscovered code nor a non-entry. Six of the eight call
-them (not moonbeam, Minish Cap); no stage-A build lifts one yet.
+them (not moonbeam, Minish Cap). A lifted program's `call_fn` makes the
+same call at a RAM target with no function (native/lift-flash-routines).
 
 ### RAM copies
 
@@ -238,28 +238,29 @@ them.
 
 ## What discovery misses
 
-Bytes run but not discovered, listed at the report's end with what
-discovery has around each run (`native/kirby-undiscovered`, 2026-11-07).
-The coverage runs reach more but miss no more (Nightmare 1,748 bytes,
-as the press script; Mirror 372, 362): discovery's misses, none a jump
-into a function's middle or the wrong instruction set. Bytes, Nightmare
-/ Mirror:
+Bytes run but not discovered (the report lists each run with what
+discovery has around it). The coverage runs miss no more than the press
+script (2026-11-07), none a jump into a function's middle or the wrong
+instruction set. Bytes, Nightmare / Mirror:
 
-| Cause | Before | After |
-|---|---|---|
-| a task run as a coroutine (`push {…, lr}`, then an endless loop that yields each frame), reached only from a table of (kind, task) words: the scan wanted a return; five tasks and the function only one calls | 1,622 / 0 | 0 / 0 |
-| a BIOS copy whose length reads on into ROM code a `bl` calls (Mirror: 0x1c0 bytes from 0x08158f14 over its heap allocator), and the code after the calls | 0 / 312 | 0 / 0 |
-| m4a's `SoundMainRAM` copy ends in the `bx r3` that `SoundMain` calls in ROM (a stub), so `SoundMain`'s tail after the call (every m4a game: Emerald and Minish Cap too) | 38 / 38 | 38 / 38 |
-| the return from the scheduler's call to resume ("Kirby: Nightmare's task switcher", below: it comes back through a yield) | 44 / 0 | 44 / 0 |
-| crt0's copy (0x08000108, 0x140 bytes) reads on into the switcher, which a veneer's ARM `b` enters | 36 / 0 | 36 / 0 |
-| agbcc's `_call_via_rN` stubs: a `bl` to one calls rN, and the stub isn't kept as code | 8 / 12 | 8 / 12 |
+| Cause | Before | After | Now |
+|---|---|---|---|
+| a task run as a coroutine (`push {…, lr}`, then an endless loop that yields each frame), reached only from a table of (kind, task) words: the scan wanted a return; five tasks and the function only one calls | 1,622 / 0 | 0 / 0 | 0 / 0 |
+| a BIOS copy whose length reads on into ROM code a `bl` calls (Mirror: 0x1c0 bytes from 0x08158f14 over its heap allocator), and the code after the calls | 0 / 312 | 0 / 0 | 0 / 0 |
+| m4a's `SoundMainRAM` copy ends in the `bx r3` that `SoundMain` calls in ROM (a stub), so `SoundMain`'s tail after the call (every m4a game: Emerald and Minish Cap too) | 38 / 38 | 38 / 38 | 0 / 0 |
+| the return from the scheduler's call to resume ("Kirby: Nightmare's task switcher", below), through a `bx pc` veneer taken for a computed return | 44 / 0 | 44 / 0 | 0 / 0 |
+| crt0's copy (0x08000108, 0x140 bytes) reads on into the switcher, which a veneer's ARM `b` enters | 36 / 0 | 36 / 0 | 0 / 0 |
+| `bx rN` stubs (agbcc's `_call_via_rN`, m4a's): a `bl` to one calls rN, and the stub isn't kept as code | 8 / 12 | 8 / 12 | 10 / 14 |
 
-The fixes: the scan takes a body that opens with `push {…, lr}` and
-whose every path loops back into it; a BIOS copy's source ends at a `bl`
-target inside it called from outside (`discovery::copy_cuts`). Not at
-the stub or the `b`: the code there adds a real hard hole each
-(`SoundMain`'s constant jump into its IWRAM copy, which the lift needs
-in the holes file; resume's `bx r1`): `native/copy-tail-discovery`.
+After: `native/kirby-undiscovered` (endless tasks; `discovery::copy_cuts`
+at a `bl` target). Now: `native/copy-tail-discovery`: cuts at `b` and
+stub targets too (a `bl` to a stub returns); a Thumb `bx pc` is never a
+return (`classify` took the veneer's linear predecessor, a `pop {…, pc}`,
+for its own); a constant jump into RAM, Recovery's `JumpRes::Ram`, is
+resolved where an overlay has a function there: `SoundMain`'s, Minish
+Cap's two reached ones, one each in Rogue and Imperium (hard 139 to
+136 over the corpus, main at 878cf4a). Resume's `bx r1` (0x08000254), found now, is real: Nightmare 14 to 15, its
+lift stopped there until the switcher's stand-in covers it.
 
 ## Each game's worst holes
 
@@ -368,7 +369,8 @@ value returned in r0-r3 that a caller's own instruction reads (agbcc's
 
 - `reads r4-r11 at entry` (hard): a use, in a function entered by a call
   (`bl`, a complete indirect set, or a pointer: the key as a ROM word),
-  whose `Regs::call` zeroes r4-r12.
+  whose `Regs::call` zeroes r4-r12. Not after a `bl` to a function that
+  never returns: agb's panic paths, branched into with the caller's r6.
 - `masks away r4-r11's entry bits` (soft): every bit cleared before any
   use, agbcc's word built byte by byte in an unset register.
 - `reads r4-r11 at entry, only jumped into` (soft): no `bl` or pointer
@@ -377,9 +379,8 @@ value returned in r0-r3 that a caller's own instruction reads (agbcc's
   from a frame record (`add r7, sp, #12` at the saved r7); natively the
   walk finds no frames. Only the agb programs have it.
 
-A value that holds entry bits on one path and not another is unknown at
-the merge, as before (a path that can't happen, or a C local never set):
-counting those made LLVM's paths in agb hard.
+A value with entry bits on one path only is unknown at the merge, as
+before (an impossible path, an unset C local): counting them made agb hard.
 
 Summary holes that are hard, before and after (`just holes-all --against`):
 3 entry readers (of 5 summary holes) and 36; corpus hard 130 and 139. The 36, from the report:

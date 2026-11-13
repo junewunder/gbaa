@@ -41,6 +41,7 @@ pub mod state_file;
 #[cfg(feature = "timing-lab")]
 mod timing_lab;
 pub mod window;
+pub mod wireless;
 
 pub use capture::{Capture, wav};
 pub use dump::{frame_hash, write_png, write_png_over};
@@ -290,6 +291,16 @@ usage: gbaa-desktop ROM [options]
                    consoles see your seat holding A, while the other
                    peer gets your real presses: a desync, which the
                    window, the end lines and the kept report then show
+  --wireless       with --server and --host or --join: not the cable but
+                   a wireless adapter (Emerald's Union Room, FireRed's
+                   wireless club), whose radio is the server room's.
+                   Each window runs only its own GBA, in real time, in
+                   the interpreter; nothing is rolled back, the menu
+                   doesn't pause, and the game starts from reset.
+                   --players seats (2 by default). With --frames,
+                   --input, --save, --dump, --hash, --dump-at/--dump-dir,
+                   --mute, --scale, --fullscreen, --pad-config,
+                   --pad-script
   --rogue ADDR     Emerald Rogue's co-op (Multiplayer Adventures) with
                    Rogue Assistant built in: when the game hosts, listen on
                    ADDR's port; when it joins, connect to ADDR (host[:port],
@@ -493,6 +504,9 @@ pub struct Options {
     pub menu: input::Spans,
     /// `--desync-at`: netplay, a forced desync from this frame on.
     pub desync_at: Option<u32>,
+    /// `--wireless`: with `--server`, a wireless adapter whose radio is
+    /// the server's ([`wireless`]), not netplay's cable.
+    pub wireless: bool,
 }
 
 impl Options {
@@ -646,6 +660,7 @@ impl Options {
             present_ms: None,
             menu: input::Spans::default(),
             desync_at: None,
+            wireless: false,
         };
         let mut args = args.into_iter();
         while let Some(a) = args.next() {
@@ -715,6 +730,7 @@ impl Options {
                 "--join" => o.role = Some(room::Role::Join(room::parse_code(&value("--join")?)?)),
                 // Rollback is the only netplay; the old flag still parses.
                 "--rollback" => {}
+                "--wireless" => o.wireless = true,
                 "--paced" => o.paced = true,
                 "--menu" => o.menu = input::Spans::parse(&value("--menu")?)?,
                 "--desync-at" => {
@@ -839,7 +855,13 @@ impl Options {
         if o.link.is_none() && o.input2 != Script::default() {
             return Err("--input2 is player 2's, with --link".into());
         }
-        if o.server.is_some() || o.role.is_some() {
+        if o.wireless && (o.server.is_none() || o.role.is_none()) {
+            return Err("--wireless needs --server ADDR and --host or --join CODE".into());
+        }
+        if o.wireless {
+            wireless::check(&o)?;
+            room::check(&o)?;
+        } else if o.server.is_some() || o.role.is_some() {
             room::check(&o)?;
         } else if o.delay.is_some()
             || o.players.is_some()
@@ -1452,7 +1474,8 @@ fn asset_overrides(
 /// after it. `--frames` bounds each run, and the window closes at a
 /// session's end. Each run starts where the one before it ended, as a GBA
 /// does when its cable goes in or out (multiplayer/join-without-restart):
-/// a session's seat from the game alone's state, and the game alone after
+/// a session's seat from the game alone's state (a wireless room's from
+/// reset, as the adapter is looked for there), and the game alone after
 /// it from that seat's.
 fn run_window(
     opts: &Options,
@@ -1491,6 +1514,7 @@ fn run_window(
             server: None,
             role: None,
             players: None,
+            wireless: false,
             ..opts.clone()
         };
         let Some(ask) = screen.take_netplay_ask() else {
@@ -1503,9 +1527,16 @@ fn run_window(
             server: Some(ask.server),
             players: (ask.role == room::Role::Host).then_some(ask.players),
             role: Some(ask.role),
+            wireless: ask.wireless,
+            // A wireless room starts its game from reset.
+            state: o.state.clone().filter(|_| !ask.wireless),
             ..o.clone()
         };
-        match room::check(&asked) {
+        let checked = match asked.wireless {
+            true => wireless::check(&asked).and_then(|()| room::check(&asked)),
+            false => room::check(&asked),
+        };
+        match checked {
             Ok(()) => o = asked,
             Err(e) => screen.end_session(room::State::Ended(format!("No netplay: {e}"))),
         }
@@ -1548,6 +1579,9 @@ pub fn run(
     }
     if opts.link.is_some() {
         return link::run(opts, timing, screen);
+    }
+    if opts.server.is_some() && opts.wireless {
+        return wireless::run(opts, timing, screen, carry);
     }
     if opts.server.is_some() {
         return room::run(opts, code.filter(|_| !opts.interp), timing, screen, carry);

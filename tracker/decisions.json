@@ -714,7 +714,13 @@
       "why": "june asked for the native units as a sprint, one at a time. Order: agb spike, hw library, summaries, timing-native, native check, hole report, Emerald ten, Stage-A lifter (the lifter's check needs the native check, so it goes last). Calls taken in june's place: the spike writes a new agb/native-spike that reads input; summaries measure with no bar; Emerald's lifted code stays in mods/ out of the public mirror.",
       "by": "7b10ef7b",
       "at": "2026-11-01T02:34:52Z",
-      "scope": ["group:native"]
+      "scope": ["group:native"],
+      "retired": {
+        "kind": "superseded",
+        "at": "2026-11-13T04:48:46Z",
+        "by": "9828215c",
+        "other": "d/native-units-run-side-by-side-needs-set-the"
+      }
     },
     {
       "id": "d/a-vcount-dispstat-or-timer-read-outside-a-poll",
@@ -989,7 +995,8 @@
       "by": "owner",
       "at": "2026-11-07T04:27:11Z",
       "question": "q/accept-indirect-call-bar-today",
-      "via": "8f498bd1"
+      "via": "8f498bd1",
+      "until": "2026-11-07T05:00:00Z"
     },
     {
       "id": "d/covered-controls-page-your-deck",
@@ -1103,6 +1110,66 @@
       "at": "2026-11-12T08:18:42Z",
       "scope": ["multiplayer/wireless-*"],
       "replaces": "d/a-networked-adapter-lists-only-the-hosts-the"
+    },
+    {
+      "id": "d/lift-bars-agents-may-raise-a-count-with-the",
+      "title": "Lift bars: agents may raise a count, with the cause named",
+      "why": "june, 2026-11-12. The bars in crates/codegen/lift-check.toml measure how plain the lifted code is; they are not the correctness check. Correctness stays june's: the native check (the lifted build draws its route's frames as the interpreter does), hard_holes and the planted controls never loosen without her. Any other bar may be raised by the unit's own session, with no question, when the native check stays green and the unit's evidence gives each raised bar, its old and new value, and the cause (the old value was unsound or an accident, or counts moved between categories). The loop's review judges that explanation. Each raise is also recorded with 'just tracker decide --for-run', so the morning report shows it. Still ask june when the bar that would rise is the metric the unit's own done-when says must fall, or when a rise is large and its cause isn't found. Replaces 'only lowered': six raise questions in a week, the first five all answered yes, each holding finished work for hours.",
+      "by": "owner",
+      "at": "2026-11-12T18:55:48Z",
+      "scope": ["group:native"],
+      "replaces": "d/stage-b-checks-are-bars-in-one-committed-file"
+    },
+    {
+      "id": "d/raise-native-tasks-unproven-function",
+      "title": "Raise native-tasks' unproven-function-words bar 57 to 59: Raise it to 59",
+      "why": "june, 2026-11-12: raise to 59. The 57 recorded an ordering accident, not a proof. Decided under the new standing rule on lift bars (d/lift-bars-agents-may-raise-a-count-with-the).",
+      "by": "owner",
+      "at": "2026-11-12T18:55:57Z",
+      "question": "q/raise-native-tasks-unproven-function",
+      "via": "625afd3a"
+    },
+    {
+      "id": "d/lift-bars-agents-may-raise-a-count-with-the-2",
+      "title": "Lift bars: agents may raise a count, with the cause named",
+      "why": "x",
+      "by": "owner",
+      "at": "2026-11-12T18:55:59Z",
+      "scope": ["group:native"],
+      "replaces": "d/a-bar-may-rise-only-when-accesses-move-out-of",
+      "retired": {
+        "kind": "merged",
+        "at": "2026-11-12T18:56:10Z",
+        "by": "625afd3a",
+        "other": "d/lift-bars-agents-may-raise-a-count-with-the"
+      }
+    },
+    {
+      "id": "d/unknown-address-step-land-without",
+      "title": "Should the unknown-address step land without the fall it was to show: Land the step",
+      "why": "june, 2026-11-12: land it, judged by the loads-that-read-everything count. Before it lands, native-irq-hold must get its 16 typed heap accesses (ref_accesses) back: that is a real loss, not a counting accident. The 1-3 unproven words on the three IRQ programs fall under the new lift-bars rule (d/lift-bars-agents-may-raise-a-count-with-the): raise only with the cause named.",
+      "by": "owner",
+      "at": "2026-11-12T18:59:55Z",
+      "question": "q/unknown-address-step-land-without",
+      "via": "625afd3a"
+    },
+    {
+      "id": "d/lift-counts-are-the-agents-call-correctness",
+      "title": "Lift counts are the agents' call; correctness stays june's",
+      "why": "june, 2026-11-12. The bars in crates/codegen/lift-check.toml and the counts a unit's done-when names measure precision: how much the analysis proves, how plain the lift is. They are not the correctness check. Correctness stays june's: the native check (the lifted build draws its route's frames as the interpreter does), hard_holes and the planted controls never loosen without her. Two things are the unit's own call, with no question. (1) Raising a bar: allowed when the native check stays green and the evidence gives each raised bar, its old and new value, and the cause (the old value was unsound or an accident, or counts moved between categories). (2) A target count that doesn't move: the unit may land on a direct measure of what it did, when the native check stays green, the direct measure becomes a new bar in every program's table, the original target is handed to a named follow-up unit (filed, or an existing one's done-when), and the independent checker agrees the swap is fair and says so in its verdict. Either is recorded with 'just tracker decide --for-run' so the morning report shows it, and the loop's review judges the explanation. Still ask june when a unit can show no direct measure of what it did, or a large rise has no cause found. Why: seven such questions in a week, all answered with the default, each holding finished work for hours.",
+      "by": "owner",
+      "at": "2026-11-12T19:01:57Z",
+      "scope": ["group:native"],
+      "replaces": "d/lift-bars-agents-may-raise-a-count-with-the"
+    },
+    {
+      "id": "d/native-units-run-side-by-side-needs-set-the",
+      "title": "Native units run side by side; needs set the order",
+      "why": "june, 2026-11-12, asked the sweep's foreman to judge whether native units may go out of the sprint order. Both sprint orders named units that are all done now. What is ready today has no needs between its units; the real orderings are in the tracker as needs. Kept by hand: the hole report matching the lifter waits for the reset/IRQ msr work and the data-as-code fix, and the two function-flow units warn each other about fnref.rs.",
+      "by": "9828215c",
+      "at": "2026-11-13T04:48:41Z",
+      "scope": ["group:native"],
+      "replaces": "d/stage-b-sprint-2026-11-01-one-unit-at-a-time"
     }
   ]
 }

@@ -40,3 +40,9 @@ fn verify_gives_the_first_difference() {
     assert_eq!(verify(&s, &[9, 0, 7], 0x0E00_3000), 0x0E00_3001);
     assert_eq!(verify(&s, &[], 0x0E00_3000), 0);
 }
+
+#[test]
+fn max_len_is_the_longest_signature() {
+    let longest = SIGNATURES.iter().map(|s| s.len as usize).max();
+    assert_eq!(longest, Some(MAX_LEN));
+}
