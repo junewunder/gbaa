@@ -1057,7 +1057,7 @@ pub fn edge(ctx: &Ctx, f: &Func, all: &BTreeSet<u32>, gb: &GBlock, x: &ExitInfo)
             }
         }
         Plan::Swi { next } => Edge::Swi(next),
-        Plan::Undefined => Edge::Stop,
+        Plan::Undefined { .. } => Edge::Stop,
     }
 }
 

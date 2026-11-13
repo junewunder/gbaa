@@ -489,6 +489,31 @@ from 584 to 610 of 617 (agbcc 676/676, 0 wrong). What's left is mostly
 not tables: data decoded as code, and stubs and veneers a native build
 could call through `FnRef`.
 
+## The lift's undefined instructions, by kind
+
+`native/lift-undefined-insns`: the lift of 2026-11-11 had 21 "an
+undefined instruction" hard holes in moonbeam, 24 in Emerald Rogue and 2
+in Imperium (`gbaa-holes` doesn't count undefined instructions). By the
+halfword at each and the instructions before it (`just dis`):
+
+| Kind | moonbeam / Rogue / Imperium |
+|---|---|
+| GCC's trap after a load through a register proved null (`movs r3, #0; ldr r3, [r3, #k]; udf #255`: `-fisolate-erroneous-paths-dereference`, on at `-O2`) | 16 / 20 / 2 |
+| GCC's trap reached by a branch, after a store, or with the null pointer already in a register (the same isolation, laid out apart) | 5 / 2 / 0 |
+| GCC's trap after a call that doesn't return (`bl` to an abort) | 0 / 1 / 0 |
+| Run on past `SoftReset`: Rogue's reset routine ends `svc 1; svc 0`, and the lift went on through its literal pool into the ARM code after it (`e92d`, an ARM `push`'s high half) | 0 / 1 / 0 |
+
+So none was data decoded as code by gap decoding, and none is in a
+fragment reached by modern GCC's far-jump `bl`
+(`discovery/gcc-far-jump-bl`): 46 are real code, GCC's `udf #255` (Thumb
+0xdeff) ending a path it proved can only crash. Discovery took these
+encodings as deliberate (`vsa::func::deliberate`); the lifter didn't. Now
+it plans one (`is_trap`: Thumb `udf #255`/`#254`, ARM 0xe7ffdefe and
+0xe7f000f0) as `Plan::Undefined { trap: true }`: a `panic!` naming the
+address (the play build faults there too, `Fault::Bios`), listed in the
+report; the summaries end the path there. Any other undefined instruction
+is a hard hole still. `native/lift-bios-more` ended the 47th (`SoftReset`).
+
 ## What the Stage-A lifter should know
 
 - Take holes from `analysis::holes::classify`; its `Report` lists each
