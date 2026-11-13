@@ -2214,6 +2214,11 @@
       "title": "longjmp: a return to another frame, counted nowhere",
       "detail": "Found by {unit:native/moonbeam-taker-chain}. moonbeam has newlib's setjmp (0x0803830d) and longjmp (0x08038325: ldm r0!, {r4-r12, sp, lr}; movs r0, r1; moveq r0, #1; bx lr). The summaries give longjmp only 'a jump to an unknown place' (soft) and the hole report counts nothing for it, so a native build has no hole there, yet a lifted longjmp can't return into setjmp's caller's frame: each function's r4-r11 and sp are its own Rust locals. setjmp itself now takes nothing (a context save). Done: say what the lift prints for longjmp's bx lr and what happens when it runs (a named stop, or a wrong return); if wrong or silent, the pair is a hard hole in the hole report and the lift (found by shape: a context restore, codegen::saves::summary's context_saves has the save's), or lifted as a stand-in pair (host unwinding to the setjmp call). Check on moonbeam whether a route reaches longjmp at all.",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/window-keeps-save",
+      "title": "A native program's window keeps the game's save",
+      "detail": "Since 5bb6efdc a native program run without --headless opens gbaa-desktop's window (crates/native-host, Windowed). Nothing writes the save chip's bytes to a file or reads them back, so every run starts from an empty save. The window's menu still offers save states, rewind and netplay, which do nothing here: keep the save as gbaa-desktop does (the .sav in the game's folder), and hide or wire the menu rows that don't apply. Check: save in Metroid's native build, close the window, reopen, and the file is there."
     }
   ]
 }
