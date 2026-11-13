@@ -1861,7 +1861,17 @@
       "id": "native/metroid-entry-reads",
       "title": "Metroid lifts again after entry-read masking",
       "detail": "Since {unit:native/entry-read-masking} landed, gbaa-lift on Metroid has 1 hard hole: f_08073ce5, summary 0x08073f08 reads entry r9. agbcc builds a word in r6 = entry r9 byte by byte (ands ffffff00, ands ffff00ff), so r9's top 16 bits are stored to RAM at [r4+0x244+4]; the lift zeroes r4-r12 at a call, the game keeps the caller's r9. Real, not over-hard. Fix: a stand-in (caller's r9 is likely a constant or garbage; check callers), or the lifter passing r9. Done when: just lift ROM out/lift-metroid --name metroid reports 0 hard holes and the crate builds; just check passes.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "8814ddd6",
+        "session": "8814ddd6-8ca4-45af-919c-a91eea1e5151",
+        "host": "quack",
+        "pid": 627066,
+        "start": "800290",
+        "at": "2026-11-13T06:58:38Z"
+      },
+      "round": "2026-11-13T06:58:38Z"
     },
     {
       "id": "native/native-check-spike-packed",
