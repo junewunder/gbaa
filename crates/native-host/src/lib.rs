@@ -1,11 +1,19 @@
 //! What the native programs share (`native-spike`, `native-psg-square`):
-//! gbaa-desktop's headless flags, a host that hashes each frame, and the
-//! native check's record (`--native-record`).
+//! gbaa-desktop's headless flags, a host that hashes each frame, the
+//! native check's record (`--native-record`), and gbaa-desktop's window
+//! to play in.
 //!
 //! ```text
 //! PROGRAM --headless --frames N [--input PRESSES] [--frame-hashes F]
 //!         [--dump FILE.png] [--native-record FILE] [--time-limit SECONDS]
+//! PROGRAM [--scale N] [--mute] [--input PRESSES] [--native-record FILE]
 //! ```
+//!
+//! Without `--headless` the program opens gbaa-desktop's window
+//! (`desktop::window`: its keys, pads, sound, pacing and menu) and runs
+//! until the window closes. The menu's save states, rewind and netplay
+//! are the play build's: here they do nothing, and nothing keeps the
+//! game's save between runs.
 //!
 //! `--input` is gbaa-desktop's (`button@frame[+frames],...`), read by the
 //! same parser; `--frame-hashes` writes the same `frame N hash H` lines;
@@ -29,9 +37,10 @@ use std::process::ExitCode;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use desktop::Script;
+use desktop::{Desktop, Script};
 use native_record::stop::{Stop, Why, functions_in};
 use native_record::{Frame as Record, Region, Writer};
+use runtime::Platform;
 use runtime::hw::{Exit, Host, Hw, Native};
 use runtime::platform::{Frame, HEIGHT, WIDTH};
 use runtime::sound::AudioChunk;
@@ -52,6 +61,14 @@ pub struct Options {
     frame_hashes: Option<PathBuf>,
     dump: Option<PathBuf>,
     native_record: Option<PathBuf>,
+    /// No `--headless`: the window to open.
+    window: Option<Window>,
+}
+
+/// The window's flags, gbaa-desktop's.
+struct Window {
+    scale: usize,
+    mute: bool,
 }
 
 fn parse(args: &[String]) -> Result<Options, String> {
@@ -62,8 +79,15 @@ fn parse(args: &[String]) -> Result<Options, String> {
         frame_hashes: None,
         dump: None,
         native_record: None,
+        window: None,
     };
     let mut headless = false;
+    let mut window = Window {
+        scale: 3,
+        mute: false,
+    };
+    // The flags only one of the two front ends takes, as given.
+    let (mut headless_only, mut window_only) = (None, None);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         let mut value = || it.next().ok_or(format!("{a} needs a value"));
@@ -71,19 +95,47 @@ fn parse(args: &[String]) -> Result<Options, String> {
             "--headless" => headless = true,
             "--frames" => {
                 o.frames = value()?.parse().map_err(|e| format!("--frames: {e}"))?;
+                headless_only = Some(a);
+            }
+            "--scale" => {
+                window.scale = value()?.parse().map_err(|e| format!("--scale: {e}"))?;
+                window_only = Some(a);
+            }
+            "--mute" => {
+                window.mute = true;
+                window_only = Some(a);
             }
             "--time-limit" => {
                 o.time_limit = value()?.parse().map_err(|e| format!("--time-limit: {e}"))?;
             }
             "--input" => o.input = Script::parse(value()?)?,
-            "--frame-hashes" => o.frame_hashes = Some(value()?.into()),
-            "--dump" => o.dump = Some(value()?.into()),
+            "--frame-hashes" => {
+                o.frame_hashes = Some(value()?.into());
+                headless_only = Some(a);
+            }
+            "--dump" => {
+                o.dump = Some(value()?.into());
+                headless_only = Some(a);
+            }
             "--native-record" => o.native_record = Some(value()?.into()),
             _ => return Err(format!("unknown argument {a:?}")),
         }
     }
-    if !headless || o.frames == 0 {
-        return Err("only headless runs for now: --headless --frames N".into());
+    if headless {
+        if let Some(a) = window_only {
+            return Err(format!("{a} is the window's: not with --headless"));
+        }
+        if o.frames == 0 {
+            return Err("a headless run needs its end: --headless --frames N".into());
+        }
+    } else {
+        if let Some(a) = headless_only {
+            return Err(format!("{a} needs --headless"));
+        }
+        if window.scale == 0 {
+            return Err("--scale: at least 1".into());
+        }
+        o.window = Some(window);
     }
     Ok(o)
 }
@@ -116,6 +168,31 @@ impl Host for Headless {
     /// As gbaa-desktop's: the presses of the frame just shown.
     fn keys(&mut self) -> u16 {
         self.input.keys(self.shown - 1)
+    }
+}
+
+/// gbaa-desktop's window as the front end: its keys and pads, its sound
+/// (which paces the program, or a frame clock when muted) and its menu,
+/// until the window closes.
+struct Windowed(Desktop);
+
+impl Host for Windowed {
+    fn present(&mut self, frame: &Frame) -> Result<(), Exit> {
+        // `keys`, read after each present, learns the window has closed.
+        if !self.0.is_open() {
+            return Err(Exit);
+        }
+        SHOWN.fetch_add(1, Ordering::Relaxed);
+        Platform::present(&mut self.0, frame);
+        Ok(())
+    }
+
+    fn audio(&mut self, chunk: &AudioChunk<'_>) {
+        Platform::audio(&mut self.0, chunk);
+    }
+
+    fn keys(&mut self) -> u16 {
+        Platform::keys(&mut self.0)
     }
 }
 
@@ -241,13 +318,14 @@ pub fn record<G: Native>(hw: &Hw<G>, ram: &[u8]) {
     });
 }
 
-/// Parse the command line, make the game on a headless host, run `main`
-/// until the frames run out, and write what was asked for. `guest`: the
-/// build can record its RAM as the guest lays it out.
-pub fn main<G: Native<Host = AnyHost>>(
+/// Parse the command line, make the game on a headless host or in a
+/// window, run `main` until the frames run out or the window closes, and
+/// write what was asked for. `guest`: the build can record its RAM as the
+/// guest lays it out.
+pub fn main<G: Native<Host = AnyHost> + 'static>(
     name: &str,
     guest: bool,
-    make: impl FnOnce(AnyHost) -> Box<G>,
+    make: impl FnOnce(AnyHost) -> Box<G> + Send + 'static,
     main: fn(&mut G) -> Result<Infallible, Exit>,
 ) -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -298,10 +376,66 @@ fn stop_after(seconds: u64) {
     });
 }
 
-fn run<G: Native<Host = AnyHost>>(
+/// Start `--native-record`'s file, if asked for, on the thread the
+/// program runs on.
+fn record_to(p: Option<&PathBuf>) -> Result<(), String> {
+    let Some(p) = p else {
+        return Ok(());
+    };
+    let w = Writer::create(p).map_err(|e| format!("{}: {e}", p.display()))?;
+    RECORD.set(Some((w, Record::new())));
+    SOUND.set(Some((Vec::new(), Vec::new())));
+    Ok(())
+}
+
+/// Write out what is left of `--native-record`'s file.
+fn record_end() -> Result<(), String> {
+    if let Some((mut w, _)) = RECORD.take() {
+        w.flush().map_err(|e| format!("--native-record: {e}"))?;
+    }
+    Ok(())
+}
+
+/// The program in gbaa-desktop's window, on the window's game thread,
+/// until the window closes.
+fn run_window<G: Native<Host = AnyHost> + 'static>(
+    w: Window,
+    input: Script,
+    record: Option<PathBuf>,
+    make: impl FnOnce(AnyHost) -> Box<G> + Send + 'static,
+    main: fn(&mut G) -> Result<Infallible, Exit>,
+) -> Result<(), String> {
+    use desktop::{audio, fast, gamepad, room, window};
+    let o = window::Options {
+        scale: w.scale,
+        fullscreen: false,
+        controls: Default::default(),
+        fast_speed: fast::DEFAULT_SPEED,
+        volume: audio::DEFAULT_VOLUME,
+        pad_script: None,
+        screens: 1,
+        server: room::DEFAULT_SERVER.into(),
+        directions_apart: false,
+        deadzones: [gamepad::DEFAULT_DEADZONE, gamepad::DEFAULT_TRIGGER_DEADZONE],
+        deadzone_axes_apart: false,
+        axis_deadzones: [None; 2],
+        resume: false,
+        saves: Default::default(),
+    };
+    window::run(o, move |screen| {
+        record_to(record.as_ref())?;
+        let gain = audio::volume_gain(audio::DEFAULT_VOLUME);
+        let d = Desktop::window(screen, w.mute, gain).with_input(input);
+        let mut g = make(AnyHost(Box::new(Windowed(d))));
+        let Err(Exit) = main(&mut g);
+        record_end()
+    })?
+}
+
+fn run<G: Native<Host = AnyHost> + 'static>(
     o: Options,
     guest: bool,
-    make: impl FnOnce(AnyHost) -> Box<G>,
+    make: impl FnOnce(AnyHost) -> Box<G> + Send + 'static,
     main: fn(&mut G) -> Result<Infallible, Exit>,
 ) -> Result<(), String> {
     ASKED.store(o.frames, Ordering::Relaxed);
@@ -309,14 +443,13 @@ fn run<G: Native<Host = AnyHost>>(
     if o.time_limit > 0 {
         stop_after(o.time_limit);
     }
-    if let Some(p) = &o.native_record {
-        if !guest {
-            return Err("--native-record: this build has no guest-layout RAM to record".into());
-        }
-        let w = Writer::create(p).map_err(|e| format!("{}: {e}", p.display()))?;
-        RECORD.set(Some((w, Record::new())));
-        SOUND.set(Some((Vec::new(), Vec::new())));
+    if o.native_record.is_some() && !guest {
+        return Err("--native-record: this build has no guest-layout RAM to record".into());
     }
+    if let Some(w) = o.window {
+        return run_window(w, o.input, o.native_record, make, main);
+    }
+    record_to(o.native_record.as_ref())?;
     let host = Rc::new(RefCell::new(Headless {
         input: o.input,
         frames: o.frames,
@@ -326,9 +459,7 @@ fn run<G: Native<Host = AnyHost>>(
     }));
     let mut g = make(AnyHost(Box::new(Shared(host.clone()))));
     let Err(Exit) = main(&mut g);
-    if let Some((mut w, _)) = RECORD.take() {
-        w.flush().map_err(|e| format!("--native-record: {e}"))?;
-    }
+    record_end()?;
     let h = host.borrow();
     if let Some(p) = &o.frame_hashes {
         std::fs::write(p, &h.hashes).map_err(|e| format!("{}: {e}", p.display()))?;

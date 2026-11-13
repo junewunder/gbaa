@@ -36,7 +36,7 @@ binaries; link them from outside the repo.
 
 Crates live in `crates/`: `armv4t`, `analysis`, `codegen`, `runtime`
 (`#![no_std]`), `desktop`, `native-spike` (the first native port, by
-hand), `native-host` (the native programs' headless front end), `interp` (the headless `gbaa-interp ROM
+hand), `native-host` (the native programs' front end: headless, or gbaa-desktop's window), `interp` (the headless `gbaa-interp ROM
 [--frames N] [--test]` runner), `hole-report` (`gbaa-holes`, what blocks a native
 build), and the `disc-check`, `jt-check`, `aw-check` and `mgba-dump` tools; `gbaa-dis` (`just dis`) disassembles ROM code.
 `codegen`'s `gbaa-lift` is the stage-A lifter (`just lift`, `just
