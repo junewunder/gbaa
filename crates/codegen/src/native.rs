@@ -2126,9 +2126,12 @@ impl FnPrinter<'_, '_> {
         let at = x.at;
         let regs = "[r0, r1, r2, r3]";
         let mut s = String::new();
-        let wait = match x.idle {
-            Idle::Edge => "g.sp = r13; hw::idle(g)?; ",
-            Idle::Spin => "g.sp = r13; hw::spin(g)?; ",
+        // In the reset or the IRQ wrapper sp is its mode's, as at a store.
+        let wait = match (x.idle, self.psr.is_some()) {
+            (Idle::Edge, false) => "g.sp = r13; hw::idle(g)?; ",
+            (Idle::Spin, false) => "g.sp = r13; hw::spin(g)?; ",
+            (Idle::Edge, true) => "bank_sp(g, r13); hw::idle(g)?; ",
+            (Idle::Spin, true) => "bank_sp(g, r13); hw::spin(g)?; ",
             _ => "",
         };
         match x.plan {
