@@ -62,6 +62,19 @@
 //! unsettled (Kirby - Nightmare in Dream Land and Minish Cap, at about
 //! 3,000 functions run: `native/whole-lift-memory`).
 //!
+//! **Large reads by reference** (`native/fnref-flow-emerald`). On a large
+//! game a read of the pile, of every cell, or of a ROM table by an unknown
+//! index is tens of thousands of tokens, a new set at each store, and
+//! every function entry joined from a different one held its own copy
+//! (Emerald's flow passed 10 GB in its first round). So such a read is one
+//! token, [`Tok::Ref`]: its source and what was done to each function's
+//! address in it since ([`Xf`]: a shift's or `mvn`'s form, a compare's, a
+//! narrower load's or store's). Memory stores it as it is; whoever looks
+//! at the tokens (an op on them, a load's address, a call's target, a
+//! hole) expands it with memory as it is then ([`G::expand`]) and so reads
+//! that memory, rerunning when it grows. A small one (under 64 tokens) is
+//! expanded where an op makes it, as before.
+//!
 //! **The closed world.** Function and ROM addresses enter values only
 //! from the sources above; a number made by arithmetic the run doesn't
 //! follow, or read from I/O, is never one. So an unknown value is never a
@@ -142,6 +155,119 @@ enum Tok {
     Rom(u32),
     /// Somewhere in ROM from here on.
     RomFrom(u32),
+    /// What a load at width `w` reads of the pile, or of every cell, as
+    /// it is when someone looks ([`G::ref_val`]), not its tokens: a large
+    /// game's pile read is tens of thousands of tokens, a new set at each
+    /// store, and each function entry joined from a different one held
+    /// its own copy (`native/fnref-flow-emerald`). `xf`: with each
+    /// function's form made one ([`Xf`]). Memory keeps it where storing
+    /// it changes none of its tokens. Sorted last; whoever looks at the
+    /// tokens expands it ([`G::expand`]) and so reads that memory (reruns
+    /// when it grows).
+    Ref {
+        src: Src,
+        xf: Xf,
+    },
+}
+
+/// What a [`Tok::Ref`] stands for: a load at width `w`'s read of the pile,
+/// of every cell, of the ROM words in `lo..end` a read from `lo` on
+/// gives ([`Run::rom_from`]), or of the ROM words in `lo..=hi` (a read
+/// the value-set analysis bounds there).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Src {
+    Pile(u8),
+    Cells(u8),
+    RomFrom(u32, u32, u8),
+    Hull(u32, u32, u8),
+}
+
+impl Src {
+    fn w(self) -> u8 {
+        match self {
+            Src::Pile(w) | Src::Cells(w) | Src::RomFrom(_, _, w) | Src::Hull(_, _, w) => w,
+        }
+    }
+}
+
+/// What a [`Tok::Ref`] makes of the tokens it stands for: each
+/// function's address's form mapped (`map[form]`, [`Xf::DROP`]: none of
+/// it), ROM pointers kept or not (and if not, whether they make it a
+/// number read from memory), the read's flags kept or not.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct Xf {
+    map: [u8; 8],
+    roms: bool,
+    rom_mem: bool,
+    flags: bool,
+}
+
+const FORMS: [Form; 8] = [
+    Form::Full,
+    Form::Hi,
+    Form::Lo,
+    Form::HiUp,
+    Form::LoUp,
+    Form::Part,
+    Form::Not,
+    Form::Cmp,
+];
+
+impl Xf {
+    const DROP: u8 = u8::MAX;
+    /// As memory holds it.
+    const ID: Xf = Xf {
+        map: [0, 1, 2, 3, 4, 5, 6, 7],
+        roms: true,
+        rom_mem: false,
+        flags: true,
+    };
+
+    /// Every form made `f` ([`Form::Part`]: a word's bytes, read narrower
+    /// than it was stored; [`Form::Full`]: reassembled, read as a word
+    /// stored narrower; [`Form::Cmp`]: compared, [`Run::cmp_refs`]).
+    const fn all(f: Form, mem: bool) -> Xf {
+        Xf {
+            map: [f as u8; 8],
+            roms: false,
+            rom_mem: mem,
+            flags: mem,
+        }
+    }
+
+    /// Each form as `m` makes it (an op's: [`Run::split_refs`]).
+    fn of(m: impl Fn(Form) -> Option<Form>) -> Xf {
+        let mut map = [Xf::DROP; 8];
+        for f in FORMS {
+            map[f as usize] = m(f).map_or(Xf::DROP, |g| g as u8);
+        }
+        Xf {
+            map,
+            roms: false,
+            rom_mem: false,
+            flags: false,
+        }
+    }
+
+    /// This, then `o`.
+    fn then(self, o: Xf) -> Xf {
+        let mut map = [Xf::DROP; 8];
+        for (i, m) in map.iter_mut().enumerate() {
+            if self.map[i] != Xf::DROP {
+                *m = o.map[self.map[i] as usize];
+            }
+        }
+        Xf {
+            map,
+            roms: self.roms && o.roms,
+            rom_mem: (self.rom_mem && o.flags) || (self.roms && o.rom_mem),
+            flags: self.flags && o.flags,
+        }
+    }
+
+    fn form(self, f: Form) -> Option<Form> {
+        FORMS.get(self.map[f as usize] as usize).copied()
+    }
 }
 
 /// A token set, shared until changed (values are copied at every
@@ -165,6 +291,25 @@ impl std::ops::Deref for Toks {
 impl std::ops::DerefMut for Toks {
     fn deref_mut(&mut self) -> &mut BTreeSet<Tok> {
         std::rc::Rc::make_mut(&mut self.0)
+    }
+}
+
+impl Toks {
+    /// Adds `new` (in any order): one at a time when they're few beside
+    /// the set, else by building the set again from both (an insert each
+    /// of thousands of tokens was most of a large game's run).
+    fn add_all(&mut self, new: Vec<Tok>) {
+        if new.len() <= 32 || new.len() * 8 < self.0.len() {
+            let s = std::rc::Rc::make_mut(&mut self.0);
+            for t in new {
+                s.insert(t);
+            }
+            return;
+        }
+        let mut v: Vec<Tok> = Vec::with_capacity(self.0.len() + new.len());
+        v.extend(self.0.iter().copied());
+        v.extend(new);
+        self.0 = std::rc::Rc::new(v.into_iter().collect());
     }
 }
 
@@ -254,6 +399,25 @@ impl Drop for CodeGuard {
 /// round and a half, past 15 GB, before (`native/whole-lift-memory`).
 const TOKENS: usize = 48_000_000;
 
+/// The lowest [`Tok::Ref`].
+const REF0: Tok = Tok::Ref {
+    src: Src::Pile(0),
+    xf: Xf {
+        map: [0; 8],
+        roms: false,
+        rom_mem: false,
+        flags: false,
+    },
+};
+
+/// A load at width `w` of the pile's, or every cell's, words.
+fn mem_ref(cells: bool, w: u8) -> Tok {
+    Tok::Ref {
+        src: if cells { Src::Cells(w) } else { Src::Pile(w) },
+        xf: Xf::ID,
+    }
+}
+
 /// More numbers than this in a value: it's unknown.
 const NUMS: usize = 8;
 /// More exact ROM pointers than this: "from the lowest on".
@@ -330,7 +494,7 @@ impl Val {
         if self.toks.is_empty() {
             self.toks = o.toks.clone();
         } else if !std::rc::Rc::ptr_eq(&self.toks.0, &o.toks.0) && !o.toks.is_subset(&self.toks) {
-            self.toks.extend(o.toks.iter().copied());
+            self.toks.add_all(o.toks.iter().copied().collect());
         }
         self.mem |= o.mem;
         self.unk |= o.unk;
@@ -342,13 +506,48 @@ impl Val {
         if self.toks.is_empty() {
             self.toks = o.toks.clone();
         } else if !std::rc::Rc::ptr_eq(&self.toks.0, &o.toks.0) && !o.toks.is_subset(&self.toks) {
-            self.toks.extend(o.toks.iter().copied());
+            self.toks.add_all(o.toks.iter().copied().collect());
         }
         self.mem |= o.mem;
         self.unk |= o.unk;
         self.lost_rom |= o.lost_rom;
         self.cap();
         before != (self.toks.len(), self.mem, self.unk, self.lost_rom)
+    }
+
+    /// [`Val::union`], and whether `o` added anything (the callees'
+    /// results of a call by value are taken in so, then capped once: a cap
+    /// at each of thousands was most of a large game's run).
+    fn union_new(&mut self, o: &Val) -> bool {
+        let flags = (o.mem && !self.mem) || (o.unk && !self.unk) || (o.lost_rom && !self.lost_rom);
+        let toks = !(o.toks.is_empty()
+            || std::rc::Rc::ptr_eq(&self.toks.0, &o.toks.0)
+            || o.toks.is_subset(&self.toks));
+        if toks {
+            if self.toks.is_empty() {
+                self.toks = o.toks.clone();
+            } else {
+                self.toks.add_all(o.toks.iter().copied().collect());
+            }
+        }
+        self.mem |= o.mem;
+        self.unk |= o.unk;
+        self.lost_rom |= o.lost_rom;
+        flags || toks
+    }
+
+    /// [`Val::join`] into a value as the cap leaves it (one only ever
+    /// joined into, from empty: an entry, a result): when `o` adds
+    /// nothing, without the cap (a large callee set's results, joined
+    /// one by one, capped each time, was most of a large game's run).
+    fn join_capped(&mut self, o: &Val) -> bool {
+        let adds = (o.mem && !self.mem)
+            || (o.unk && !self.unk)
+            || (o.lost_rom && !self.lost_rom)
+            || !(o.toks.is_empty()
+                || std::rc::Rc::ptr_eq(&self.toks.0, &o.toks.0)
+                || o.toks.is_subset(&self.toks));
+        adds && self.join(o)
     }
 
     /// Widen: too many numbers are unknown, too many ROM pointers are
@@ -362,7 +561,7 @@ impl Val {
         // changed when something does.
         let (mut nums, mut roms, mut froms) = (0, 0, false);
         // Functions' tokens sort first: only those after them count.
-        for t in self.toks.range(Tok::Num(0)..) {
+        for t in self.toks.range(Tok::Num(0)..REF0) {
             match *t {
                 Tok::Num(_) => nums += 1,
                 Tok::Rom(_) => roms += 1,
@@ -399,30 +598,55 @@ impl Val {
             return;
         }
         // A pointer "from here on" takes in those above it, up to the end
-        // of its run of data.
-        let los: Vec<u32> = self
-            .toks
-            .range(Tok::RomFrom(0)..)
-            .filter_map(|t| match *t {
-                Tok::RomFrom(a) => Some(a),
-                _ => None,
-            })
-            .collect();
-        let mut covered = 0;
-        for lo in los {
+        // of its run of data: one walk over both sorted lists (a search
+        // per pointer was most of a large game's later rounds, whose
+        // results hold thousands).
+        let addrs = |r: std::ops::RangeInclusive<Tok>| -> Vec<u32> {
+            self.toks
+                .range(r)
+                .filter_map(|t| match *t {
+                    Tok::Rom(a) | Tok::RomFrom(a) => Some(a),
+                    _ => None,
+                })
+                .collect()
+        };
+        let roms = addrs(Tok::Rom(0)..=Tok::Rom(u32::MAX));
+        let los = addrs(Tok::RomFrom(0)..=Tok::RomFrom(u32::MAX));
+        let code = CODE.with(|c| c.borrow().clone());
+        let mut at = 0;
+        let mut bound = |a: u32| -> u32 {
+            if code.is_empty() {
+                return u32::MAX;
+            }
+            at += code[at..].partition_point(|&k| k <= a);
+            code.get(at).copied().unwrap_or(u32::MAX)
+        };
+        let mut gone: Vec<Tok> = Vec::new();
+        let (mut covered, mut ri) = (0, 0);
+        for (i, &lo) in los.iter().enumerate() {
             if lo < covered {
                 continue;
             }
             let end = bound(lo);
             covered = end;
-            let hi = Tok::Rom(lo)..Tok::Rom(end);
-            let hf = Tok::RomFrom(lo.saturating_add(1))..Tok::RomFrom(end);
-            if end > lo
-                && (self.toks.range(hi.clone()).next().is_some()
-                    || self.toks.range(hf.clone()).next().is_some())
-            {
-                self.drop_range(hi);
-                self.drop_range(hf);
+            while ri < roms.len() && roms[ri] < lo {
+                ri += 1;
+            }
+            while ri < roms.len() && roms[ri] < end {
+                gone.push(Tok::Rom(roms[ri]));
+                ri += 1;
+            }
+            gone.extend(
+                los[i + 1..]
+                    .iter()
+                    .take_while(|&&f| f < end)
+                    .map(|&f| Tok::RomFrom(f)),
+            );
+        }
+        if !gone.is_empty() {
+            let s = &mut self.toks;
+            for t in gone {
+                s.remove(&t);
             }
         }
     }
@@ -439,7 +663,18 @@ impl Val {
         }
     }
 
+    /// It holds a [`Tok::Ref`] not yet expanded.
+    fn marked(&self) -> bool {
+        self.toks.range(REF0..).next().is_some()
+    }
+
+    /// Its [`Tok::Ref`]s.
+    fn refs(&self) -> impl Iterator<Item = Tok> + '_ {
+        self.toks.range(REF0..).copied()
+    }
+
     fn fns(&self) -> impl Iterator<Item = (u32, Origin, Form)> + '_ {
+        debug_assert!(!self.marked(), "a memory mark not expanded");
         self.toks.iter().filter_map(|t| match *t {
             Tok::Fn { key, origin, form } => Some((key, origin, form)),
             _ => None,
@@ -448,6 +683,7 @@ impl Val {
 
     /// Each token, and `None` for the flags' unknown part.
     fn parts(&self) -> Vec<Option<Tok>> {
+        debug_assert!(!self.marked(), "a memory mark not expanded");
         let mut v: Vec<Option<Tok>> = self.toks.iter().copied().map(Some).collect();
         if self.mem || self.unk || v.is_empty() {
             v.push(None);
@@ -596,6 +832,29 @@ struct G {
     cell_raw: [Val; 5],
     cell_reads: [Option<Val>; 5],
     spills: BTreeMap<u32, Mem>,
+    /// [`G::ref_val`]'s, brought up to date with [`G::mem_log`] when
+    /// looked at again.
+    ref_exp: std::collections::HashMap<Tok, Exp, Fx>,
+    /// Each token stored new to the pile (`false`) or a cell (`true`),
+    /// with the width stored, in order: what a kept [`Exp`] hasn't read.
+    mem_log: Vec<(bool, Tok, u8)>,
+    /// Those that read ROM alone, kept for good.
+    ref_rom: std::collections::HashMap<Tok, Val, Fx>,
+    /// [`G::expand`]'s of a value with several Refs, by its set (kept, so
+    /// the address isn't reused) and flags: the Refs' values it was made
+    /// of, and it.
+    #[allow(clippy::type_complexity)]
+    expanded: std::collections::HashMap<
+        (*const BTreeSet<Tok>, bool, bool, bool),
+        (Toks, Vec<Val>, Val),
+        Fx,
+    >,
+    /// [`Run::split_refs`]' tokens a map leaves of a Ref's value, by the
+    /// Ref and map, with the value's set they came of (the same while it
+    /// is).
+    split_rest: std::collections::HashMap<(Tok, Xf), (Toks, Toks), Fx>,
+    /// The [`Tok::Ref`]s stored to the pile (their origins are piled too).
+    piled_refs: BTreeSet<Tok>,
     /// What a load at a width reads of a function's spills, and of the
     /// cells at an address (kept until they change).
     spill_reads: std::collections::HashMap<(u32, u8), Val, Fx>,
@@ -708,6 +967,13 @@ impl G {
     }
 
     fn hole(&mut self, v: &Val, at: u32, why: Why, only: impl Fn(Form) -> bool) {
+        let e;
+        let v = if v.marked() {
+            e = self.expand(v);
+            &e
+        } else {
+            v
+        };
         let big = v.toks.len() >= 64;
         let p = std::rc::Rc::as_ptr(&v.toks.0);
         if big && self.all_holed.contains_key(&p) {
@@ -731,6 +997,13 @@ impl G {
                 self.all_holed.clear();
             }
             self.all_holed.insert(p, v.toks.clone());
+        }
+    }
+
+    /// [`G::hole`] of one function's token, all forms.
+    fn hole_one(&mut self, o: Origin, at: u32, why: Why) {
+        if self.holed.insert(o) {
+            self.flow.holes.insert(o, (at, why));
         }
     }
 
@@ -771,8 +1044,14 @@ impl G {
             // time.
             Store::Pile => {
                 for (t, _) in toks {
-                    if let Tok::Fn { origin, .. } = t {
-                        self.flow.piled.insert(*origin);
+                    match t {
+                        Tok::Fn { origin, .. } => {
+                            self.flow.piled.insert(*origin);
+                        }
+                        Tok::Ref { .. } => {
+                            self.piled_refs.insert(*t);
+                        }
+                        _ => {}
                     }
                 }
                 &mut self.pile
@@ -786,11 +1065,15 @@ impl G {
             let raw = match to {
                 Store::Pile => {
                     self.pile_reads = Default::default();
+                    self.mem_log
+                        .extend(new.iter().map(|&(t, sw)| (false, t, sw)));
                     self.pile_changed = true;
                     Some(&mut self.pile_raw)
                 }
                 Store::Cell(a) => {
                     self.cell_reads = Default::default();
+                    self.mem_log
+                        .extend(new.iter().map(|&(t, sw)| (true, t, sw)));
                     // The kept reads of the addresses this cell overlaps.
                     for c in a.saturating_sub(4)..=a + 3 {
                         for w in [1u8, 2, 4] {
@@ -831,7 +1114,7 @@ impl G {
 
     /// What a load at width `w` reads of the pile (kept until the pile
     /// changes).
-    fn read_pile(&mut self, w: u8, into: &mut Val) {
+    fn pile_read(&mut self, w: u8) -> &Val {
         let i = w as usize;
         self.rd.pile |= 1 << w;
         if self.pile_reads[i].is_none() {
@@ -839,13 +1122,13 @@ impl G {
             v.cap();
             self.pile_reads[i] = Some(v);
         }
-        into.join(self.pile_reads[i].as_ref().unwrap());
+        self.pile_reads[i].as_ref().unwrap()
     }
 
     /// What a load at width `w` from anywhere reads of the cells (kept
     /// until a cell changes: reading three thousand of them at each such
     /// load was most of a large game's run).
-    fn read_cells(&mut self, w: u8, into: &mut Val) {
+    fn cells_read(&mut self, w: u8) -> &Val {
         let i = w as usize;
         self.rd.all_cells |= 1 << w;
         if self.cell_reads[i].is_none() {
@@ -853,7 +1136,208 @@ impl G {
             v.cap();
             self.cell_reads[i] = Some(v);
         }
-        into.join(self.cell_reads[i].as_ref().unwrap());
+        self.cell_reads[i].as_ref().unwrap()
+    }
+
+    /// A load at width `w` reads the pile (`cells`: every cell): its
+    /// [`Tok::Ref`] and the read's flags.
+    fn read_mem(&mut self, cells: bool, w: u8, into: &mut Val) {
+        let r = if cells {
+            self.cells_read(w)
+        } else {
+            self.pile_read(w)
+        };
+        let (mem, unk, lost_rom) = (r.mem, r.unk, r.lost_rom);
+        into.join(&Val {
+            toks: [mem_ref(cells, w)].into_iter().collect(),
+            mem,
+            unk,
+            lost_rom,
+        });
+    }
+
+    fn read_pile(&mut self, w: u8, into: &mut Val) {
+        self.read_mem(false, w, into);
+    }
+
+    fn read_cells(&mut self, w: u8, into: &mut Val) {
+        self.read_mem(true, w, into);
+    }
+
+    /// What [`Tok::Ref`] `r` holds now, with no `Ref` in it (kept, and
+    /// brought up to date with what memory gained since: made again at
+    /// each store, a large game's 30k-token reads were most of its run);
+    /// the running function reads the memory it does.
+    fn ref_val(&mut self, r: Tok) -> Val {
+        if let Some(v) = self.ref_rom.get(&r) {
+            return v.clone();
+        }
+        let mut e = match self.ref_exp.remove(&r) {
+            Some(e) => e,
+            None => {
+                let Tok::Ref { src, xf } = r else {
+                    unreachable!("not a Ref: {r:?}")
+                };
+                let mut e = Exp {
+                    at: self.mem_log.len(),
+                    ..Exp::default()
+                };
+                self.exp_add(&mut e, vec![(src, xf)]);
+                // Of ROM alone: it never changes.
+                if e.pile | e.cells == 0 {
+                    self.ref_rom.insert(r, e.v.clone());
+                    return e.v;
+                }
+                e
+            }
+        };
+        if e.at < self.mem_log.len() {
+            self.exp_update(&mut e);
+        }
+        self.rd.pile |= e.pile;
+        self.rd.all_cells |= e.cells;
+        let v = e.v.clone();
+        self.ref_exp.insert(r, e);
+        v
+    }
+
+    /// Reads `work` (and the reads it reaches through the `Ref`s memory
+    /// holds, each with the forms the `Ref`s on the way give) into `e`,
+    /// those it hasn't read yet, whole. Memory is read as stored, uncapped,
+    /// so that what it gains later can be added alone ([`exp_merge`] caps).
+    fn exp_add(&mut self, e: &mut Exp, mut work: Vec<(Src, Xf)>) {
+        let mut d = Val::default();
+        while let Some((src, xf)) = work.pop() {
+            if !e.seen.insert((src, xf)) {
+                continue;
+            }
+            let read = match src {
+                Src::Cells(w) => {
+                    e.cells |= 1 << w;
+                    self.cell_raw[w as usize].clone()
+                }
+                Src::Pile(w) => {
+                    e.pile |= 1 << w;
+                    self.pile_raw[w as usize].clone()
+                }
+                Src::RomFrom(lo, end, w) => self.rom_from[&(lo, end, w)].clone(),
+                Src::Hull(lo, hi, w) => self.rom_hull[&(lo, hi, w)].clone(),
+            };
+            exp_take(&mut d, &read, xf, &mut work);
+        }
+        exp_merge(e, d);
+    }
+
+    /// Brings `e` up to date: what was stored since it was made, read
+    /// through each memory read it holds, and whatever new reads that
+    /// reaches, whole.
+    fn exp_update(&mut self, e: &mut Exp) {
+        let mut work = Vec::new();
+        let mut d = Val::default();
+        let mems: Vec<(Src, Xf)> = e
+            .seen
+            .iter()
+            .filter(|(s, _)| matches!(s, Src::Pile(_) | Src::Cells(_)))
+            .copied()
+            .collect();
+        for &(cells, t, sw) in &self.mem_log[e.at..] {
+            for &(src, xf) in &mems {
+                let w = match src {
+                    Src::Cells(w) if cells => w,
+                    Src::Pile(w) if !cells => w,
+                    _ => continue,
+                };
+                let mut one = Val::default();
+                from_mem_one(t, sw, w, &mut one);
+                exp_take(&mut d, &one, xf, &mut work);
+            }
+        }
+        e.at = self.mem_log.len();
+        exp_merge(e, d);
+        work.retain(|x| !e.seen.contains(x));
+        if !work.is_empty() {
+            self.exp_add(e, work);
+        }
+    }
+
+    /// `v` with its [`Tok::Ref`]s taken in, to look at its tokens. A
+    /// `Ref` alone is its kept value itself, shared.
+    fn expand(&mut self, v: &Val) -> Val {
+        if !v.marked() {
+            return v.clone();
+        }
+        let refs: Vec<Tok> = v.refs().collect();
+        let parts: Vec<Val> = refs.iter().map(|&r| self.ref_val(r)).collect();
+        let key = (std::rc::Rc::as_ptr(&v.toks.0), v.mem, v.unk, v.lost_rom);
+        let same = |a: &Val, b: &Val| {
+            std::rc::Rc::ptr_eq(&a.toks.0, &b.toks.0)
+                && (a.mem, a.unk, a.lost_rom) == (b.mem, b.unk, b.lost_rom)
+        };
+        if parts.len() > 1
+            && let Some((_, was, out)) = self.expanded.get(&key)
+            && was.len() == parts.len()
+            && was.iter().zip(&parts).all(|(a, b)| same(a, b))
+        {
+            return out.clone();
+        }
+        let mut out = v.clone();
+        out.drop_range(REF0..);
+        for x in &parts {
+            out.union(x);
+        }
+        out.cap();
+        if parts.len() > 1 {
+            if self.expanded.len() >= 4096 {
+                self.expanded.clear();
+            }
+            self.expanded
+                .insert(key, (v.toks.clone(), parts, out.clone()));
+        }
+        out
+    }
+
+    /// `v` as memory keeps it at width `w`: each [`Tok::Ref`] with the
+    /// forms storing it there makes ([`store_form`]), and the Refs some
+    /// of whose functions can't be stored so (holes, [`to_mem`]'s `bad`).
+    fn for_mem(&mut self, v: &Val, w: u8) -> (Val, Vec<Tok>) {
+        if v.refs().all(|t| ref_keeps(t, w)) {
+            return (v.clone(), Vec::new());
+        }
+        let refs: Vec<Tok> = v.refs().filter(|t| !ref_keeps(*t, w)).collect();
+        let mut out = v.clone();
+        let mut bad = Vec::new();
+        for r in refs {
+            out.toks.remove(&r);
+            let Tok::Ref { src, xf } = r else {
+                continue;
+            };
+            if read_forms(src)
+                .iter()
+                .any(|&f| xf.form(f).is_some_and(|f| store_form(f, w).is_none()))
+            {
+                bad.push(r);
+            }
+            let to = Xf {
+                roms: w == 4,
+                rom_mem: w != 4,
+                flags: true,
+                ..Xf::of(|f| store_form(f, w))
+            };
+            out.toks.insert(Tok::Ref {
+                src,
+                xf: xf.then(to),
+            });
+        }
+        (out, bad)
+    }
+
+    /// Whether `v`, its [`Tok::Ref`]s taken in, may hold a dropped
+    /// address ([`Val::lost_rom`]).
+    fn lost(&mut self, v: &Val) -> bool {
+        v.lost_rom || {
+            let refs: Vec<Tok> = v.refs().collect();
+            refs.into_iter().any(|r| self.ref_val(r).lost_rom)
+        }
     }
 
     fn give(&mut self, f: u32, regs: &[Val]) {
@@ -863,7 +1347,7 @@ impl G {
             .or_insert_with(|| vec![Val::default(); 16]);
         let mut c = false;
         for (a, b) in e.iter_mut().zip(regs) {
-            c |= a.join(b);
+            c |= a.join_capped(b);
         }
         if c {
             self.dirty_entry.insert(f);
@@ -900,7 +1384,7 @@ impl G {
             let mut c = false;
             for (i, (a, b)) in e.iter_mut().zip(regs).enumerate() {
                 if a.toks.is_empty() {
-                    c |= a.join(b);
+                    c |= a.join_capped(b);
                     continue;
                 }
                 let key = (i, std::rc::Rc::as_ptr(&a.toks.0), a.mem, a.unk, a.lost_rom);
@@ -909,7 +1393,7 @@ impl G {
                     Some((_, v)) => *a = v.clone(),
                     None => {
                         let old = a.toks.clone();
-                        a.join(b);
+                        a.join_capped(b);
                         memo.insert(key, (old, a.clone()));
                     }
                 }
@@ -974,7 +1458,7 @@ impl G {
         let e = self.ret.entry(f).or_insert_with(|| vec![Val::default(); 4]);
         let mut c = false;
         for (a, b) in e.iter_mut().zip(regs) {
-            c |= a.join(b);
+            c |= a.join_capped(b);
         }
         if c {
             self.dirty_ret.insert(f);
@@ -1031,21 +1515,19 @@ fn to_mem(v: &Val, w: u8) -> (Vec<(Tok, u8)>, Vec<Form>) {
     let mut bad = Vec::new();
     for &t in &v.toks {
         match t {
-            Tok::Fn { key, origin, form } => {
-                let f = match (form, w) {
-                    (Form::Full, 4) => Some(Form::Full),
-                    (Form::Full, 2) => Some(Form::Lo),
-                    (Form::Full | Form::Part, _) => Some(Form::Part),
-                    (Form::Lo | Form::Hi, 2 | 4) => Some(form),
-                    (Form::HiUp | Form::LoUp, 4) => Some(form),
-                    _ => None,
-                };
-                match f {
-                    Some(form) => out.push((Tok::Fn { key, origin, form }, w)),
-                    None => bad.push(form),
-                }
-            }
+            Tok::Fn { key, origin, form } => match store_form(form, w) {
+                Some(form) => out.push((Tok::Fn { key, origin, form }, w)),
+                None => bad.push(form),
+            },
             Tok::Rom(_) | Tok::RomFrom(_) if w == 4 => out.push((t, 4)),
+            // As it is ([`G::for_mem`] expands any other).
+            Tok::Ref { .. } => {
+                debug_assert!(
+                    ref_keeps(t, w),
+                    "a Ref memory doesn't keep: {t:?} at width {w}"
+                );
+                out.push((t, w));
+            }
             _ => out.push((OTHER, w)),
         }
     }
@@ -1058,6 +1540,66 @@ fn to_mem(v: &Val, w: u8) -> (Vec<(Tok, u8)>, Vec<Form>) {
         out.push((LOST, w));
     }
     (out, bad)
+}
+
+/// ROM read `v` (from `src`), or if it is large its [`Tok::Ref`] (with its
+/// flags): a large game's tables hold thousands of functions' addresses.
+fn rom_ref(v: &Val, src: Src) -> Val {
+    if v.toks.len() < 64 {
+        return v.clone();
+    }
+    Val {
+        toks: [Tok::Ref { src, xf: Xf::ID }].into_iter().collect(),
+        ..v.clone()
+    }
+}
+
+/// Whether memory keeps [`Tok::Ref`] `t` stored at width `w` as it is:
+/// storing it there changes none of its tokens ([`to_mem`]: a read at `w`
+/// stored at `w`, bytes at any width, a reassembled word as a word).
+fn ref_keeps(t: Tok, w: u8) -> bool {
+    let Tok::Ref { src, xf } = t else {
+        return false;
+    };
+    // Each form the read holds, as the Ref makes it, stored at `w` as it
+    // is. (A ROM read's numbers come back as themselves, not as memory's
+    // mark: more exact, as compiled code reads them back.)
+    (!xf.roms || w == 4)
+        && read_forms(src)
+            .iter()
+            .filter_map(|&f| xf.form(f))
+            .all(|f| store_form(f, w) == Some(f))
+}
+
+/// The forms of functions' addresses a read from `src` holds
+/// ([`from_mem_one`] of what [`to_mem`] stores, or [`Run::rom_read`]'s).
+fn read_forms(src: Src) -> &'static [Form] {
+    match (src, src.w()) {
+        (Src::RomFrom(..) | Src::Hull(..), 4) => &[Form::Full, Form::Part],
+        (_, 4) => &[
+            Form::Full,
+            Form::Hi,
+            Form::Lo,
+            Form::HiUp,
+            Form::LoUp,
+            Form::Part,
+        ],
+        (_, 2) => &[Form::Hi, Form::Lo, Form::Part],
+        _ => &[Form::Part],
+    }
+}
+
+/// The form a function's address of form `form` stored at width `w` has
+/// in memory (`None`: it can't be stored, a hole).
+fn store_form(form: Form, w: u8) -> Option<Form> {
+    match (form, w) {
+        (Form::Full, 4) => Some(Form::Full),
+        (Form::Full, 2) => Some(Form::Lo),
+        (Form::Full | Form::Part, _) => Some(Form::Part),
+        (Form::Lo | Form::Hi, 2 | 4) => Some(form),
+        (Form::HiUp | Form::LoUp, 4) => Some(form),
+        _ => None,
+    }
 }
 
 /// In memory: something stored that isn't a function's or ROM address.
@@ -1090,6 +1632,18 @@ fn from_mem_one(t: Tok, sw: u8, w: u8, into: &mut Val) {
             Tok::Fn { key, origin, form }
         }
         Tok::Rom(_) | Tok::RomFrom(_) if w == 4 => t,
+        // Read at the width it was stored at, it is what was stored; a
+        // word from pieces, reassembled; narrower, its bytes.
+        Tok::Ref { src, xf } => Tok::Ref {
+            src,
+            xf: if sw == w {
+                xf
+            } else if w == 4 {
+                xf.then(Xf::all(Form::Full, true))
+            } else {
+                xf.then(Xf::all(Form::Part, true))
+            },
+        },
         _ => {
             // A mark, not a value: nothing else came of it.
             if t == LOST {
@@ -1101,6 +1655,90 @@ fn from_mem_one(t: Tok, sw: u8, w: u8, into: &mut Val) {
         }
     };
     into.toks.insert(t);
+}
+
+/// A [`Tok::Ref`]'s value kept ([`G::ref_val`]): with the reads it is
+/// made of, the widths of the pile and of every cell among them, and how
+/// much of [`G::mem_log`] it has read.
+#[derive(Default)]
+struct Exp {
+    v: Val,
+    /// Every number and ROM pointer read into it, as read ([`exp_merge`]).
+    raw: BTreeSet<Tok>,
+    seen: BTreeSet<(Src, Xf)>,
+    pile: u8,
+    cells: u8,
+    at: usize,
+}
+
+/// Takes `d`, read uncapped, into `e`. Its numbers and ROM pointers are
+/// kept as read (`e.raw`), and `e.v` holds the cap of them all: capping
+/// what each store adds onto the capped value would widen by the order of
+/// the stores, and leave a pointer out that the capped read of memory
+/// takes in, which is what [`follow`] reruns a function by (`snap`).
+fn exp_merge(e: &mut Exp, mut d: Val) {
+    let nums = Tok::Num(0)..REF0;
+    d.drop_range(REF0..);
+    let new: Vec<Tok> = d
+        .toks
+        .range(nums.clone())
+        .filter(|t| !e.raw.contains(t))
+        .copied()
+        .collect();
+    let unk = d.unk && !e.v.unk;
+    // Functions' tokens and the flags: the cap leaves them as they are.
+    d.drop_range(nums.clone());
+    e.v.union(&d);
+    if new.is_empty() && !unk {
+        return;
+    }
+    e.raw.extend(new);
+    let mut p = Val {
+        toks: e.raw.iter().copied().collect(),
+        unk: e.v.unk,
+        ..Val::default()
+    };
+    p.cap();
+    e.v.unk |= p.unk;
+    if !p.toks.iter().eq(e.v.toks.range(nums.clone())) {
+        e.v.drop_range(nums);
+        e.v.toks.add_all(p.toks.iter().copied().collect());
+    }
+}
+
+/// Takes `read`, a read seen through forms `xf`, into `v`; the `Ref`s it
+/// holds go on `work`, with `xf` after theirs.
+fn exp_take(v: &mut Val, read: &Val, xf: Xf, work: &mut Vec<(Src, Xf)>) {
+    for t in read.refs() {
+        if let Tok::Ref { src, xf: x } = t {
+            work.push((src, x.then(xf)));
+        }
+    }
+    if xf == Xf::ID {
+        v.union(read);
+        return;
+    }
+    if xf.flags {
+        v.mem |= read.mem;
+        v.unk |= read.unk;
+        v.lost_rom |= read.lost_rom;
+    }
+    let mut toks = Vec::new();
+    for &t in read.toks.range(..REF0) {
+        match t {
+            Tok::Fn { key, origin, form } => {
+                if let Some(form) = xf.form(form) {
+                    toks.push(Tok::Fn { key, origin, form });
+                }
+            }
+            _ if xf.roms => toks.push(t),
+            // A ROM pointer's bytes: a number read from memory.
+            _ => v.mem |= xf.rom_mem,
+        }
+    }
+    if !toks.is_empty() {
+        v.toks.add_all(toks);
+    }
 }
 
 struct Run<'a, 'g> {
@@ -1208,6 +1846,48 @@ impl Run<'_, '_> {
         into.cap();
     }
 
+    /// [`Run::rom_read_capped`] if `into` is as the cap leaves it
+    /// (`capped`), else [`Run::rom_read`].
+    fn rom_read_or_capped(&mut self, a: u32, w: u8, into: &mut Val, capped: bool) {
+        if capped {
+            self.rom_read_capped(a, w, into);
+        } else {
+            self.rom_read(a, w, into);
+        }
+    }
+
+    /// [`Run::rom_read`] into `into` as [`Val::cap`] leaves it: a number
+    /// or ROM pointer the cap would drop again (one held, one unknown takes
+    /// in, one a pointer "from here on" covers) is left out without a cap
+    /// (a cap at each of a long read's words was most of a large game's
+    /// run).
+    fn rom_read_capped(&mut self, a: u32, w: u8, into: &mut Val) {
+        if let Some(word) = self.img.word(a)
+            && !self.img.is_fn(word)
+        {
+            let sh = (a & 3) * 8;
+            let v = match w {
+                4 => word,
+                2 => (word >> (sh & 16)) & 0xffff,
+                _ => (word >> sh) & 0xff,
+            };
+            let t = num(self.img, v);
+            let covered = match t {
+                Tok::Num(_) => into.unk,
+                Tok::Rom(x) => into
+                    .toks
+                    .range(Tok::RomFrom(0)..=Tok::RomFrom(x))
+                    .next_back()
+                    .is_some_and(|f| matches!(*f, Tok::RomFrom(lo) if x < bound(lo))),
+                _ => false,
+            };
+            if covered || into.toks.contains(&t) {
+                return;
+            }
+        }
+        self.rom_read(a, w, into);
+    }
+
     /// Where the object a read "from here on" at `a` is in ends, before
     /// `hi`: the next object start ([`objects`]) past `a` that isn't
     /// inside a table of handlers (function words in the 16 bytes before
@@ -1255,7 +1935,8 @@ impl Run<'_, '_> {
         }
         let end = hi.min(lo.saturating_add(ROM_READ));
         if let Some(v) = self.g.rom_from.get(&(lo, end, w)) {
-            into.join(v);
+            let v = rom_ref(v, Src::RomFrom(lo, end, w));
+            into.join(&v);
             return;
         }
         let mut p = lo & !3;
@@ -1265,11 +1946,92 @@ impl Run<'_, '_> {
             ..Val::default()
         };
         while p < end {
-            self.rom_read(p, w.min(4), &mut v);
+            self.rom_read_capped(p, w.min(4), &mut v);
             p += 4;
         }
-        into.join(&v);
+        into.join(&rom_ref(&v, Src::RomFrom(lo, end, w)));
         self.g.rom_from.insert((lo, end, w), v);
+    }
+
+    /// `x` to run a per-token op on that makes a function's address of
+    /// form `f` one of form `m(f)` (and `None`, something else): the
+    /// tokens to run it on, and the Refs that stand for the rest of its
+    /// result. A large Ref's functions `m` maps go in a Ref of their own
+    /// mapped ([`Xf::then`]), not a copy; a small one is expanded.
+    fn split_refs(&mut self, x: &Val, m: impl Fn(Form) -> Option<Form>) -> (Val, Vec<Tok>) {
+        if !x.marked() {
+            return (x.clone(), Vec::new());
+        }
+        let mut conc = x.clone();
+        conc.drop_range(REF0..);
+        let xf = Xf::of(&m);
+        let mut refs = Vec::new();
+        for r in x.refs().collect::<Vec<_>>() {
+            let e = self.g.ref_val(r);
+            if e.toks.len() < 64 {
+                conc.union(&e);
+                continue;
+            }
+            conc.mem |= e.mem;
+            conc.unk |= e.unk;
+            conc.lost_rom |= e.lost_rom;
+            let rest = match self.g.split_rest.get(&(r, xf)) {
+                Some((t, rest)) if std::rc::Rc::ptr_eq(&t.0, &e.toks.0) => rest.clone(),
+                _ => {
+                    let rest: Toks = e
+                        .toks
+                        .iter()
+                        .filter(|t| !matches!(t, Tok::Fn { form, .. } if m(*form).is_some()))
+                        .copied()
+                        .collect();
+                    self.g
+                        .split_rest
+                        .insert((r, xf), (e.toks.clone(), rest.clone()));
+                    rest
+                }
+            };
+            if conc.toks.is_empty() {
+                conc.toks = rest;
+            } else if !rest.is_empty() {
+                conc.toks.add_all(rest.iter().copied().collect());
+            }
+            let Tok::Ref { src, xf: rx } = r else {
+                continue;
+            };
+            refs.push(Tok::Ref {
+                src,
+                xf: rx.then(xf),
+            });
+        }
+        conc.cap();
+        (conc, refs)
+    }
+
+    /// A compare's result `out` of operands `raws` holding [`Tok::Ref`]s:
+    /// each Ref's compared tokens as one Ref (`cmp`), not a copy (a large
+    /// game compares heap pointers everywhere). Its tokens are each of its
+    /// functions' compared, of any form: more than the op made only of
+    /// forms the op made a hole of already.
+    fn cmp_refs(&mut self, out: &mut Val, raws: &[&Val]) {
+        let refs: BTreeSet<Tok> = raws.iter().flat_map(|v| v.refs()).collect();
+        if refs.is_empty() || out.toks.len() < 64 {
+            return;
+        }
+        for r in refs {
+            let Tok::Ref { src, xf } = r else {
+                continue;
+            };
+            let c = Tok::Ref {
+                src,
+                xf: xf.then(Xf::all(Form::Cmp, false)),
+            };
+            let e = self.g.ref_val(c);
+            if !e.toks.is_empty() {
+                let rest: Toks = out.toks.difference(&e.toks).copied().collect();
+                out.toks = rest;
+            }
+            out.toks.insert(c);
+        }
     }
 
     fn bin(&mut self, op: BinOp, a: &Val, b: &Val, site: Origin, at: u32) -> Val {
@@ -1287,19 +2049,23 @@ impl Run<'_, '_> {
                 .flat_map(|&x| ys.iter().map(move |&y| (x, y)))
                 .collect()
         };
+        // Gathered, and added at the end (a large set's one at a time was
+        // most of a large game's run), as the holes of functions' tokens.
+        let mut toks = Vec::new();
+        let mut holes = Vec::new();
         for (x, y) in pairs {
             {
                 match bin_tok(self.img, op, x, y) {
                     R::T(Tok::Num(c)) => {
                         let t = self.classify(c, site);
-                        out.toks.insert(t);
+                        toks.push(t);
                     }
                     R::T(
                         t @ Tok::Fn {
                             form: Form::Cmp, ..
                         },
                     ) => {
-                        out.toks.insert(t);
+                        toks.push(t);
                         // `a - b` with both functions: b is compared too.
                         if let Some(Tok::Fn {
                             key,
@@ -1307,16 +2073,14 @@ impl Run<'_, '_> {
                             form: Form::Full | Form::Lo | Form::Hi,
                         }) = y
                         {
-                            out.toks.insert(Tok::Fn {
+                            toks.push(Tok::Fn {
                                 key,
                                 origin,
                                 form: Form::Cmp,
                             });
                         }
                     }
-                    R::T(t) => {
-                        out.toks.insert(t);
-                    }
+                    R::T(t) => toks.push(t),
                     R::Unk => {
                         out.unk = true;
                         // A ROM pointer less an unknown, or one "from here
@@ -1335,20 +2099,22 @@ impl Run<'_, '_> {
                     }
                     R::Hole(why, num) => {
                         for t in [x, y].into_iter().flatten() {
-                            if let Tok::Fn { .. } = t {
-                                self.g.hole(&Val::of(t), at, why, |_| true);
+                            if let Tok::Fn { origin, .. } = t {
+                                holes.push((origin, why));
                             }
                         }
                         match num {
-                            Some(c) => {
-                                out.toks.insert(num_tok(self.img, c));
-                            }
+                            Some(c) => toks.push(num_tok(self.img, c)),
                             None => out.unk = true,
                         }
                     }
                 }
             }
         }
+        for (o, why) in holes {
+            self.g.hole_one(o, at, why);
+        }
+        out.toks.add_all(toks);
         out.cap();
         out
     }
@@ -1408,6 +2174,8 @@ impl Run<'_, '_> {
             let site = Origin::Code(key, i as u32);
             let holes_before = self.g.flow.holes.len();
             let val = |x: ValueId| vals[x.index()].clone();
+            // With the pile's tokens in, to look at them.
+            let xv = |g: &mut G, x: ValueId| g.expand(&vals[x.index()]);
             let guarded = inst.guard.is_some();
             let v = match inst.op {
                 Op::Insn(a) => {
@@ -1430,9 +2198,16 @@ impl Run<'_, '_> {
                 }
                 Op::Bit(x) => Val::of(Tok::Num(x as u32)),
                 Op::GetReg(r) => s.regs[r.index()].clone(),
-                Op::Bin(op, a, b) => self.bin(op, &val(a), &val(b), site, at),
-                Op::Adc { a, b, c } => {
-                    let (a, b) = (val(a), val(b));
+                Op::Bin(op, ra, rb) => {
+                    let (a, b) = (xv(self.g, ra), xv(self.g, rb));
+                    let mut out = self.bin(op, &a, &b, site, at);
+                    if op == BinOp::Sub {
+                        self.cmp_refs(&mut out, &[&vals[ra.index()], &vals[rb.index()]]);
+                    }
+                    out
+                }
+                Op::Adc { a: ra, b: rb, c } => {
+                    let (a, b) = (xv(self.g, ra), xv(self.g, rb));
                     if a.fns().next().is_some() || b.fns().next().is_some() {
                         // A compare `a + !b + 1` (or an add, a hole when
                         // used): of whole addresses, with each other, 0 or
@@ -1445,31 +2220,36 @@ impl Run<'_, '_> {
                             })
                         };
                         let bad = other_num(&b, 0xffff_ffff) || other_num(&a, 0);
+                        let mut cmps = Vec::new();
                         for v in [&a, &b] {
                             self.g.hole(v, at, Why::Arithmetic, |f| {
                                 bad || !matches!(f, Form::Full | Form::Not)
                             });
-                            for (key, origin, _) in v.fns() {
-                                out.toks.insert(Tok::Fn {
-                                    key,
-                                    origin,
-                                    form: Form::Cmp,
-                                });
-                            }
+                            cmps.extend(v.fns().map(|(key, origin, _)| Tok::Fn {
+                                key,
+                                origin,
+                                form: Form::Cmp,
+                            }));
                         }
+                        out.toks.add_all(cmps);
+                        self.cmp_refs(&mut out, &[&vals[ra.index()], &vals[rb.index()]]);
                         out
                     } else {
                         let ab = self.bin(BinOp::Add, &a, &b, site, at);
-                        self.bin(BinOp::Add, &ab, &val(c), site, at)
+                        let c = xv(self.g, c);
+                        self.bin(BinOp::Add, &ab, &c, site, at)
                     }
                 }
-                Op::Not(a) => {
-                    let a = val(a);
+                Op::Not(ra) => {
+                    let not = |f| (f == Form::Full).then_some(Form::Not);
+                    let (a, refs) = self.split_refs(&vals[ra.index()], not);
                     let mut out = Val {
                         unk: a.unk || a.mem,
+                        toks: refs.into_iter().collect(),
                         ..Val::default()
                     };
-                    self.g.hole(&a, at, Why::Arithmetic, |f| f != Form::Full);
+                    self.g
+                        .hole(&vals[ra.index()], at, Why::Arithmetic, |f| f != Form::Full);
                     for &t in &a.toks {
                         match t {
                             Tok::Fn { key, origin, form } => {
@@ -1487,6 +2267,10 @@ impl Run<'_, '_> {
                                 out.toks.insert(num_tok(self.img, !c));
                             }
                             Tok::RomFrom(_) => out.unk = true,
+                            Tok::Ref { .. } => {
+                                debug_assert!(false, "a Ref not expanded");
+                                out.unk = true;
+                            }
                         }
                     }
                     out.cap();
@@ -1498,61 +2282,50 @@ impl Run<'_, '_> {
                         (Some(Tok::Num(n)), 1, false) => Some(*n),
                         _ => None,
                     };
+                    // Memory holds functions' and ROM addresses, which a
+                    // shift by 0 or a load's rotation keeps: its Refs
+                    // stay.
+                    let keep = n == Some(0) || (kind == ShiftType::Ror && n.is_none());
+                    // Otherwise each Ref's forms shifted, as one.
+                    let (x, refs) = if keep {
+                        (x, Vec::new())
+                    } else {
+                        self.split_refs(&x, |f| shift_form(f, kind, n))
+                    };
                     let mut out = Val {
                         unk: x.unk || x.mem,
+                        toks: refs.into_iter().collect(),
                         ..Val::default()
                     };
+                    // Gathered and added at once (as in `bin`).
+                    let mut toks = Vec::new();
                     for &t in &x.toks {
                         match t {
-                            Tok::Fn { key, origin, form } => {
-                                use Form::*;
-                                use ShiftType::*;
-                                let f = match (form, kind, n) {
-                                    (f, _, Some(0)) => Some(f),
-                                    // A word load's rotation by its
-                                    // address's low bits: 0 for the
-                                    // aligned words compiled code keeps
-                                    // function addresses in.
-                                    (f, Ror, None) => Some(f),
-                                    (Full, Lsr, Some(16)) | (HiUp, Lsr, Some(16)) => Some(Hi),
-                                    (Full | Lo, Lsl, Some(16)) => Some(LoUp),
-                                    (LoUp, Lsr, Some(16)) => Some(Lo),
-                                    (Hi, Lsl, Some(16)) => Some(HiUp),
-                                    _ => None,
-                                };
-                                match f {
-                                    Some(form) => {
-                                        out.toks.insert(Tok::Fn { key, origin, form });
-                                    }
-                                    None => {
-                                        self.g.hole(&Val::of(t), at, Why::Arithmetic, |_| true);
-                                        match n {
-                                            Some(n) => {
-                                                out.toks
-                                                    .insert(num_tok(self.img, shift(kind, key, n)));
-                                            }
-                                            None => out.unk = true,
+                            Tok::Fn { key, origin, form } => match shift_form(form, kind, n) {
+                                Some(form) => toks.push(Tok::Fn { key, origin, form }),
+                                None => {
+                                    self.g.hole_one(origin, at, Why::Arithmetic);
+                                    match n {
+                                        Some(n) => {
+                                            toks.push(num_tok(self.img, shift(kind, key, n)))
                                         }
+                                        None => out.unk = true,
                                     }
                                 }
-                            }
+                            },
                             // A ROM pointer through a word load's
                             // rotation stays one, as a function does.
-                            Tok::Rom(_) | Tok::RomFrom(_)
-                                if n == Some(0) || (kind == ShiftType::Ror && n.is_none()) =>
-                            {
-                                out.toks.insert(t);
-                            }
+                            Tok::Rom(_) | Tok::RomFrom(_) | Tok::Ref { .. } if keep => toks.push(t),
                             Tok::Num(c) | Tok::Rom(c) => match n {
-                                Some(n) => {
-                                    out.toks.insert(num_tok(self.img, shift(kind, c, n)));
-                                }
+                                Some(n) => toks.push(num_tok(self.img, shift(kind, c, n))),
                                 None => out.unk = true,
                             },
                             // Shifted, it's no pointer (the closed world).
                             Tok::RomFrom(_) => out.unk = true,
+                            Tok::Ref { .. } => unreachable!("expanded"),
                         }
                     }
+                    out.toks.add_all(toks);
                     out.cap();
                     out
                 }
@@ -1610,7 +2383,7 @@ impl Run<'_, '_> {
                 }
                 Op::Load { width, addr } => {
                     let w = bytes(width);
-                    let a = val(addr);
+                    let a = xv(self.g, addr);
                     self.g.hole(&a, at, Why::Address, |_| true);
                     let mut out = self.load(&s, key, i, &a, w, b.hulls.get(&i).copied());
                     if guarded {
@@ -1620,15 +2393,30 @@ impl Run<'_, '_> {
                 }
                 Op::Store { width, addr, value } => {
                     let w = bytes(width);
-                    let (a, x) = (val(addr), val(value));
+                    let (a, x) = (xv(self.g, addr), val(value));
                     self.g.hole(&a, at, Why::Address, |_| true);
-                    let (toks, bad) = to_mem(&x, w);
-                    for f in bad {
-                        let why = match f {
-                            Form::Cmp | Form::Not => Why::CmpUsed,
-                            _ => Why::PartUsed,
-                        };
-                        self.g.hole(&x, at, why, |g| g == f);
+                    let (xm, bad_refs) = self.g.for_mem(&x, w);
+                    let (toks, bad) = to_mem(&xm, w);
+                    if !bad.is_empty() {
+                        let mut xc = xm.clone();
+                        xc.drop_range(REF0..);
+                        for f in bad {
+                            let why = match f {
+                                Form::Cmp | Form::Not => Why::CmpUsed,
+                                _ => Why::PartUsed,
+                            };
+                            self.g.hole(&xc, at, why, |g| g == f);
+                        }
+                    }
+                    for r in bad_refs {
+                        let e = self.g.ref_val(r);
+                        let no = |f| store_form(f, w).is_none();
+                        self.g.hole(&e, at, Why::CmpUsed, |f| {
+                            matches!(f, Form::Cmp | Form::Not) && no(f)
+                        });
+                        self.g.hole(&e, at, Why::PartUsed, |f| {
+                            !matches!(f, Form::Cmp | Form::Not) && no(f)
+                        });
                     }
                     self.store(&mut s, key, i, &a, w, &x, &toks, guarded);
                     Val::default()
@@ -1637,7 +2425,7 @@ impl Run<'_, '_> {
                     let out = &b.exits[&i];
                     let t = match e {
                         Exit::Jump(t) | Exit::JumpExchange(t) | Exit::ExceptionReturn(t) => {
-                            Some(val(t))
+                            Some(xv(self.g, t))
                         }
                         _ => None,
                     };
@@ -1647,7 +2435,11 @@ impl Run<'_, '_> {
                 _ => Val::unk(),
             };
             let mut v = v;
-            if !v.lost_rom && lost_from(&inst.op).iter().any(|x| vals[x.index()].lost_rom) {
+            if !v.lost_rom
+                && lost_from(&inst.op)
+                    .iter()
+                    .any(|x| self.g.lost(&vals[x.index()]))
+            {
                 v.lost_rom = true;
             }
             if self.trace && self.g.flow.holes.len() != holes_before {
@@ -1725,12 +2517,22 @@ impl Run<'_, '_> {
             }
         }
         let mut anywhere = a.unk || a.mem;
+        // `out` as the cap leaves it (each ROM read caps it; a read
+        // through thousands of function addresses reads their code).
+        let mut capped = false;
         for &t in &a.toks {
             match t {
-                Tok::Rom(r) => self.rom_read(r, w, &mut out),
-                Tok::RomFrom(r) => self.rom_from(r, w, hull, None, &mut out),
+                Tok::Rom(r) => {
+                    self.rom_read_or_capped(r, w, &mut out, capped);
+                    capped = true;
+                }
+                Tok::RomFrom(r) => {
+                    self.rom_from(r, w, hull, None, &mut out);
+                    capped = true;
+                }
                 Tok::Num(c) | Tok::Fn { key: c, .. } => {
                     if is_ram(c) {
+                        capped = false;
                         let c = ram_canon(c);
                         self.g
                             .rd
@@ -1740,10 +2542,16 @@ impl Run<'_, '_> {
                         self.g.read_cell(c, w, &mut out);
                         self.g.read_pile(w, &mut out);
                     } else if self.img.word(c).is_some() {
-                        self.rom_read(c, w, &mut out);
+                        self.rom_read_or_capped(c, w, &mut out, capped);
+                        capped = true;
                     } else {
+                        capped = false;
                         out.unk = true;
                     }
+                }
+                Tok::Ref { .. } => {
+                    debug_assert!(false, "a Ref not expanded");
+                    anywhere = true;
                 }
             }
         }
@@ -1760,16 +2568,16 @@ impl Run<'_, '_> {
                 {
                     match self.g.rom_hull.get(&(lo, hi, w)) {
                         Some(v) => {
-                            out.join(v);
+                            out.join(&rom_ref(v, Src::Hull(lo, hi, w)));
                         }
                         None => {
                             let mut v = Val::default();
                             let mut p = lo & !3;
                             while p <= hi {
-                                self.rom_read(p, w, &mut v);
+                                self.rom_read_capped(p, w, &mut v);
                                 p += 4;
                             }
-                            out.join(&v);
+                            out.join(&rom_ref(&v, Src::Hull(lo, hi, w)));
                             self.g.rom_hull.insert((lo, hi, w), v);
                         }
                     }
@@ -1871,8 +2679,9 @@ impl Run<'_, '_> {
                     self.g.hole(x, self.at, Why::Outside, |_| true)
                 }
                 Tok::Num(_) | Tok::Rom(_) | Tok::RomFrom(_) | Tok::Fn { .. } => {}
+                Tok::Ref { .. } => debug_assert!(false, "a Ref not expanded"),
             }
-            if matches!(t, Tok::RomFrom(_)) {
+            if matches!(t, Tok::RomFrom(_) | Tok::Ref { .. }) {
                 anywhere = true;
             }
         }
@@ -1898,7 +2707,7 @@ impl Run<'_, '_> {
                     }
                     None => {
                         let t = match out.via {
-                            Some(r) => s.regs[r as usize].clone(),
+                            Some(r) => self.g.expand(&s.regs[r as usize]),
                             None => t.unwrap_or_else(Val::unk),
                         };
                         self.call_by_value(&t, out.at, args, false)
@@ -1946,7 +2755,7 @@ impl Run<'_, '_> {
                         ..Val::default()
                     };
                     let n = copy_len(out.bios == Some(0x0C), &s.regs[2]);
-                    for &t in &s.regs[0].toks {
+                    for &t in &self.g.expand(&s.regs[0]).toks {
                         match t {
                             Tok::Rom(a) => self.rom_from(a, 4, None, n, &mut got),
                             Tok::RomFrom(a) => self.rom_from(a, 4, None, None, &mut got),
@@ -1999,19 +2808,25 @@ impl Run<'_, '_> {
                     .collect();
                 if delta
                     .iter()
-                    .any(|d| !d.toks.is_empty() || d.mem || d.unk || d.lost_rom)
+                    .any(|d| !d.toks.is_empty() || d.mem || d.unk || d.lost_rom || d.marked())
                 {
                     self.g.give_all(&callees, &delta);
                     for (o, a) in m.args.iter_mut().zip(args) {
                         o.union(a);
                     }
                 }
+                let mut grew = false;
                 for &k in &callees {
                     self.rets_read.insert(k);
                     if self.g.ret_stamp.get(&k).is_some_and(|&s| s > m.stamp) {
                         for (a, b) in m.rets.iter_mut().zip(&self.g.ret[&k]) {
-                            a.join(b);
+                            grew |= a.union_new(b);
                         }
+                    }
+                }
+                if grew {
+                    for a in &mut m.rets {
+                        a.cap();
                     }
                 }
                 m.stamp = self.g.stamp;
@@ -2024,8 +2839,11 @@ impl Run<'_, '_> {
                 self.g.give_all(&callees, args);
                 for &k in &callees {
                     for (a, b) in rets.iter_mut().zip(self.ret_of(k)) {
-                        a.join(&b);
+                        a.union_new(&b);
                     }
+                }
+                for a in &mut rets {
+                    a.cap();
                 }
                 if callees.len() > 1 {
                     self.g.by_value.insert(
@@ -2046,7 +2864,7 @@ impl Run<'_, '_> {
             self.g.rd.incomplete = true;
             let mut c = false;
             for (a, b) in self.g.loose_args.iter_mut().zip(args) {
-                c |= a.join(b);
+                c |= a.join_capped(b);
             }
             self.g.dirty_loose |= c;
             self.g.mark(c);
@@ -2057,7 +2875,7 @@ impl Run<'_, '_> {
                     for k in self.loose {
                         if let Some(r) = self.g.ret.get(k) {
                             for (a, b) in v.iter_mut().zip(r) {
-                                a.join(b);
+                                a.join_capped(b);
                             }
                         }
                     }
@@ -2067,7 +2885,7 @@ impl Run<'_, '_> {
             };
             self.rets_read.extend(self.loose.iter().copied());
             for (a, b) in rets.iter_mut().zip(&lr) {
-                a.join(b);
+                a.join_capped(b);
             }
             for r in &mut rets {
                 r.unk = true;
@@ -2117,6 +2935,24 @@ fn shift(kind: ShiftType, x: u32, n: u32) -> u32 {
         ShiftType::Lsr => x.checked_shr(n).unwrap_or(0),
         ShiftType::Asr => ((x as i32) >> n.min(31)) as u32,
         ShiftType::Ror => x.rotate_right(n),
+    }
+}
+
+/// The form a shift by `n` (`None`: not a constant) makes of a
+/// function's address of form `form` (`None`: no form, a hole).
+fn shift_form(form: Form, kind: ShiftType, n: Option<u32>) -> Option<Form> {
+    use Form::*;
+    use ShiftType::*;
+    match (form, kind, n) {
+        (f, _, Some(0)) => Some(f),
+        // A word load's rotation by its address's low bits: 0 for the
+        // aligned words compiled code keeps function addresses in.
+        (f, Ror, None) => Some(f),
+        (Full, Lsr, Some(16)) | (HiUp, Lsr, Some(16)) => Some(Hi),
+        (Full | Lo, Lsl, Some(16)) => Some(LoUp),
+        (LoUp, Lsr, Some(16)) => Some(Lo),
+        (Hi, Lsl, Some(16)) => Some(HiUp),
+        _ => None,
     }
 }
 
@@ -2298,9 +3134,7 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
     let snap = |g: &mut G| -> Vec<Val> {
         let mut v = Vec::new();
         for w in [1, 2, 4] {
-            let (mut p, mut c) = (Val::default(), Val::default());
-            g.read_pile(w, &mut p);
-            g.read_cells(w, &mut c);
+            let (p, c) = (g.pile_read(w).clone(), g.cells_read(w).clone());
             v.push(p);
             v.push(c);
         }
@@ -2331,7 +3165,7 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
             }
         }
         if dirty.is_empty() {
-            return g.flow;
+            return finish(g);
         }
         if round == 256 {
             break;
@@ -2379,6 +3213,13 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
             while let Some(k) = run.work.pop_first() {
                 steps += 1;
                 if steps > 64 * f.blocks.len() + 64 {
+                    if trace {
+                        eprintln!(
+                            "fnref {:#010x}: unsettled after {steps} block runs ({} blocks)",
+                            f.entry,
+                            f.blocks.len()
+                        );
+                    }
                     run.g.flow.unsettled = true;
                     break;
                 }
@@ -2406,7 +3247,7 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
                 if total > TOKENS {
                     g.flow.unsettled = true;
                     g.flow.over = Some((total, ran));
-                    return g.flow;
+                    return finish(g);
                 }
             }
         }
@@ -2430,8 +3271,19 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
                 ..Val::default()
             }))
             .collect();
-        for v in &held {
-            g.taken_add(v);
+        // The memory reads the values hold by their Refs: whole addresses
+        // read as words that were stored in parts.
+        let refs: BTreeSet<Tok> = held.iter().flat_map(|v| v.refs()).collect();
+        for v in held {
+            let mut v = v;
+            if v.marked() {
+                v.drop_range(REF0..);
+            }
+            g.taken_add(&v);
+        }
+        for r in refs {
+            let v = g.ref_val(r);
+            g.taken_add(&v);
         }
         let called: Vec<u32> = g
             .flow
@@ -2497,6 +3349,18 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
         }
     }
     g.flow.unsettled = true;
+    finish(g)
+}
+
+/// The run's findings: with the origins of what the [`Tok::Ref`]s stored
+/// to the pile hold.
+fn finish(mut g: G) -> Flow {
+    for r in std::mem::take(&mut g.piled_refs) {
+        let v = g.ref_val(r);
+        for (_, o, _) in v.fns() {
+            g.flow.piled.insert(o);
+        }
+    }
     g.flow
 }
 

@@ -1168,6 +1168,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-13T07:17:12Z",
+          "by": "ddd9a487",
+          "text": "2026-11-13 PR 3: Emerald flow finishes, 11 min, 2.4 GB (--mem 8G, not 16G); stops at TOKENS: 48.1M after 27,776 runs (gbaa-recompile prints it). To settle: raise/replace the bound. G::held() skips ref_exp/expanded/mem_log; large-Ref paths have one unit test."
+        },
+        {
           "at": "2026-11-12T10:56:36Z",
           "by": "5cf6c823",
           "text": "2026-11-12: Emerald's flow now finishes (27:37, 2.1 GB, on Function-address flow on Emerald fast enough to finish's branch) but reports 'didn't settle' after 35,409 runs: a function hit its 64*blocks+64 step bound, not the round bound. Trace prints which ('unsettled after')."
@@ -1176,11 +1181,6 @@
           "at": "2026-11-08T18:27:27Z",
           "by": "c06275d9",
           "text": "2026-11-08: Refs (b6d5ed3f) fixed memory: Emerald round 0 flat at 1.5 GB (was >10 GB), entries 5.6M tokens. Not done: too slow to finish (~60 s/500 fns). Split: {unit:native/fnref-emerald-speed} (needed); widening gap {unit:native/fnref-romfrom-absorb}. memory/ file says how to measure."
-        },
-        {
-          "at": "2026-11-07T12:41:33Z",
-          "by": "8898da77",
-          "text": "2026-11-07: measured, not fixed. Round 0 alone passes 10 GB: entries hold 100-180M tokens, copies of successive 30k-token pile reads; UnkUtil_Run's ~10k callees add 2-3 GB. Join sharing, 2-level set: not enough. Next: chunked sets or symbolic pile token (memory/ file)"
         }
       ],
       "round": "2026-11-07T12:12:38Z"
@@ -1381,6 +1381,7 @@
       "id": "native/fnref-unknown-addrs",
       "title": "Function flow: loads through unknown addresses",
       "detail": "docs/native-stage-b.md piece 3. Measured on {unit:native/fnref-context}'s branch (commit e81168f; it holds the object split and call-site context): fn_words_not_proven unmoved by either. ~640 of affine's load sites (spike 644) have an address that may be unknown (Val::unk), and each reads the pile and every RAM cell (Run::load_at's anywhere arm), so e.g. the IRQ vector word's f_03000000 is in nearly every hole. Not the cause (tried, no change): naming the allocator, dropping the pile from constant-address loads, dropping the I/O unk flag, NUMS 8->256. A seen source: main's inlined free-list walk at 0x080001a8 (affine) loads GLOBAL_ALLOC fields holding allocator-made pointers. Find where the unknown comes from (GBAA_FNREF_TRACE; print each anywhere load) and fix the first big source. Done when: fn_words_not_proven falls on every agb program, bars lowered, a unit test, just lift-check and just check pass.",
+      "needs": ["native/fnref-branch-merge"],
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
@@ -1389,9 +1390,15 @@
         "host": "quack",
         "pid": 11956,
         "start": "29684",
-        "at": "2026-11-13T04:50:28Z"
+        "at": "2026-11-13T04:50:28Z",
+        "handedBack": "2026-11-13T07:30:38Z"
       },
       "notes": [
+        {
+          "at": "2026-11-13T07:21:58Z",
+          "by": "ae52d6ac",
+          "text": "2026-11-13: finding written (docs/research/fnref-held-words.md, PR 4) but measured before main's Ref tokens (f52fe115); branch 233ba6c0 not merged with it (22 conflicts). After {unit:native/fnref-branch-merge} re-measures: record this done with those numbers. No other work owed."
+        },
         {
           "at": "2026-11-12T09:45:41Z",
           "by": "a14298c2",
@@ -1401,11 +1408,6 @@
           "at": "2026-11-12T08:30:33Z",
           "by": "3454f93a",
           "text": "Measured: roots' r0-r3 as lost brings all 623 back (reset->main); RAMS 8 too few (font data 100-200 RAM-looking words); naming affine's allocator 0x08002055 or skipping the pile: no fall. Context (GBAA_FNREF_CTX_BLOCKS=6) takes 70s, -1 word."
-        },
-        {
-          "at": "2026-11-12T08:30:29Z",
-          "by": "3454f93a",
-          "text": "Branch eb76aa55 (fnref-context merged in): RamFrom tokens + lost_ptr closed world; affine anywhere loads 623->8, fn_words unmoved. Costs: spike/ime/irq-hold +1-3 not_proven, irq-hold ref_accesses 16->0 (heap.rs reads callee sets). GBAA_FNREF_TRACE prints 'load anywhere'."
         }
       ],
       "round": "2026-11-12T07:01:25Z"
@@ -1459,13 +1461,10 @@
       "check": "recorded",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "ddd9a487",
-        "session": "ddd9a487-152d-416a-9d19-58f5068baeb6",
-        "host": "quack",
-        "pid": 10927,
-        "start": "27916",
-        "at": "2026-11-13T04:50:03Z"
+        "at": "2026-11-13T07:17:08Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/3, head ed8b08f9. gbaa-recompile --summaries --callee-sets on Emerald, under an 8 GB cap: exit 0, 11:16 wall (flow 610.8 s), 2.44 GB peak; main never finished (killed at 14 GB after 5 min, 2026-11-07). The flow stops unsettled at the 48M-token bound (48,096,722 tokens after 27,776 runs; 0 of 553 sets complete): that is the work of {unit:native/fnref-flow-emerald}. just lift-metrics at the head: 0 over, 0 under. One bar raised, native-tasks fn_words_not_proven 57 to 59, june's call (d/raise-native-tasks-unproven-function): the 57 was evaluation order, not a proof; reason beside the bar. just lift-check passed on all 14 programs (600 frames, 0 differences, planted faults caught); just check passed at the head. Reviewer reviewer-4be07d2c found a kept expansion could miss a ROM pointer (capped per store, not together), a missed finish() on the token-bound exit and an unverified doc claim; all fixed in 8f250fe9 and confirmed on a second read."
       },
       "notes": [
         {
@@ -1735,6 +1734,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-13T07:57:14Z",
+          "by": "77aa5fbf",
+          "text": "PR #6: traps (46 of 47 sites, udf #255) lift as panic!; tests, holes-all +0, disc bars, check done. Not run: moonbeam/Rogue gbaa-lift on main and branch (16G slot starved 3 h by 4G jobs). Run those 4 lifts, count 'undefined instruction' holes, then done."
+        },
+        {
           "at": "2026-11-12T13:42:55Z",
           "by": "74679aef",
           "text": "Code on branch (48b1f0e): traps (udf #255) lift as panic!, SoftReset ends paths. Unverified: moonbeam's gbaa-lift then ran >10 min at 100% CPU, 0.6 GB (overnight <3 min with build); first check whether main's lifter is as slow, then lifts' counts, holes-all, just check."
@@ -1861,7 +1865,17 @@
       "id": "native/metroid-entry-reads",
       "title": "Metroid lifts again after entry-read masking",
       "detail": "Since {unit:native/entry-read-masking} landed, gbaa-lift on Metroid has 1 hard hole: f_08073ce5, summary 0x08073f08 reads entry r9. agbcc builds a word in r6 = entry r9 byte by byte (ands ffffff00, ands ffff00ff), so r9's top 16 bits are stored to RAM at [r4+0x244+4]; the lift zeroes r4-r12 at a call, the game keeps the caller's r9. Real, not over-hard. Fix: a stand-in (caller's r9 is likely a constant or garbage; check callers), or the lifter passing r9. Done when: just lift ROM out/lift-metroid --name metroid reports 0 hard holes and the crate builds; just check passes.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "8814ddd6",
+        "session": "8814ddd6-8ca4-45af-919c-a91eea1e5151",
+        "host": "quack",
+        "pid": 627066,
+        "start": "800290",
+        "at": "2026-11-13T06:58:38Z"
+      },
+      "round": "2026-11-13T06:58:38Z"
     },
     {
       "id": "native/native-check-spike-packed",
@@ -1887,9 +1901,14 @@
       "title": "Metroid and Nightmare drop their reset and IRQ stand-ins",
       "detail": "Once {unit:native/lift-psr-boot-irq} is on main (the lifter prints the reset's and the IRQ wrapper's msr/mrs), remove from the private mods repo: mods/metroid/holes.toml's stand-ins 0x08000000 (reset), 0x08000104 (IRQ dispatcher) and 0x03000c7c (its IWRAM copy); mods/kirby-nightmare/holes.toml's 0x08000000 and 0x03001030. Left in until then because mods/ is shared by every lane and an older lifter needs them. Verified on the branch: both lift with 0 msr/mrs hard holes and build without them. Done when: just lift on each reports no reset/dispatcher hole (other known holes aside) and the mods commit is in.",
       "check": "recorded",
-      "needs": ["native/lift-psr-boot-irq"],
+      "needs": ["native/lift-psr-boot-irq", "native/lift-irq-wrapper-tail"],
       "uses": ["heavy"],
       "notes": [
+        {
+          "at": "2026-11-13T07:46:32Z",
+          "by": "fb5bc075",
+          "text": "Review 2026-11-13: only the reset stand-ins can go now. The IRQ dispatchers' lifted second half is missing (unreachable! after the handler call), so they stay until the wrapper's second half lifts ({unit:native/lift-irq-wrapper-tail})."
+        },
         {
           "at": "2026-11-12T12:50:05Z",
           "by": "a7b7e9d7",
@@ -1920,6 +1939,7 @@
       "title": "Function flow passes only registers a callee reads",
       "detail": "docs/research/fnref-held-words.md, 'Registers nobody reads'. The function flow (crates/codegen/src/native/fnref.rs) passes r0-r3 to every callee and takes all four back, read or not, so a function's address left in a scratch register travels the whole program: on native-irq-hold, as built on the branch unit/native/fnref-unknown-addrs, the handler's pool word 0x080001bc goes in r3 through 39 calls and 36 returns of 26 functions that never touch r3, to the reset's swi, where all four registers count as given to the BIOS. That un-proves the two handler words main proves and costs the program its 16 typed heap accesses. (With every kind of memory read switched off, GBAA_FNREF_OFF, 13 of affine's 39 words left are given to the BIOS, most by this road, but in a flow the switches changed: it shows the road, not a count.) Work on that branch (it has the object split, RAM pointers, GBAA_FNREF_WATCH; not on main). Give a callee only the registers its summary reads and take back only those it sets (codegen::saves; all four where the summary has a hole); a swi holes only the registers its BIOS call reads; a call whose target is still empty in an early round must not pass its registers to every function without a direct caller for good. Done when: unit tests for each; native-irq-hold's words 0x080001bc and 0x080001c0 are no longer first held by a register passed or returned unread (GBAA_FNREF_WATCH), and the evidence says what holds them next, or that they are proven; fn_words_not_proven and the other counts no higher than the branch's on any program. The branch doesn't land here: {unit:native/fnref-ram-pointers-land} does.",
       "check": "recorded",
+      "needs": ["native/fnref-branch-merge"],
       "uses": ["heavy"]
     },
     {
@@ -1927,7 +1947,7 @@
       "title": "Function flow: the object split and RAM pointers land",
       "detail": "The branch unit/native/fnref-unknown-addrs holds three units' work on crates/codegen/src/native/fnref.rs that isn't on main: frames and allocation sites as objects ({unit:native/fnref-heap-sites}), call-site context, off by default ({unit:native/fnref-context}), and RAM pointers followed ({unit:native/fnref-unknown-addrs}), with the metric fn_loads_read_everything (623 load sites on affine at the start, 3 now; barred in every table of lift-check.toml on the branch) and GBAA_FNREF_WATCH. june's answer (q/unknown-address-step-land-without, 2026-11-12): land it on that count, once native-irq-hold has its 16 typed heap accesses (ref_accesses) back, every other bar held, or raised with its cause named. On 2026-11-13 twelve bars are over (docs/research/fnref-held-words.md, 'Why the branch doesn't land'): native-irq-hold loses its two handlers' proven words (0x080001bc, 0x080001c0) and with them ref_accesses 16 to 0; ref_unexplained rises about 42 on native-bios-more, -bios-region, -dma and the spike because every call_fn set, all the address-taken functions, grows by the words now read; native-tasks has complete sets where main has none. Also unexplained: native-bios-calls' 571 loads that read everything. Done when: main merged into the branch, native-irq-hold's ref_accesses is 16, each bar over is back or raised by hand with its cause in the evidence (just tracker decide --for-run), the branch is merged, just lift-check and just check pass.",
       "check": "recorded",
-      "needs": ["native/fnref-live-registers", "native/fnref-frame-pointers"],
+      "needs": ["native/fnref-live-registers", "native/fnref-frame-pointers", "native/fnref-branch-merge"],
       "uses": ["heavy"]
     },
     {
@@ -1935,6 +1955,7 @@
       "title": "Function flow: pointers into stack frames kept exact",
       "detail": "docs/research/fnref-held-words.md, 'Kinds of read switched off'. On affine, with GBAA_FNREF_OFF (unsound, measuring only; on the branch unit/native/fnref-unknown-addrs, as is all of this) the loads that read everything alone leave fn_words_not_proven at 55, reads through a pointer anywhere in an object alone leave it 55, and both off give 41: the two must be made exact together, and both are about stack frames. (1) The 3 loads left that read everything (affine 0x08000a24 to 0x08000a2c) go through a pointer into a caller's frame at or above the callee's entry sp, which Run::load_at gives up on (G::obj_up): follow it to the callers' frame objects through the sp each call passed. (2) A pointer into a frame moved by an index the run doesn't know becomes anywhere in the frame and reads every word of it: keep it in its stack slot (crates/codegen/src/native/frame.rs has the slots), and keep an array of pairs' fields apart (an offset known modulo the stride; core::fmt's argument arrays hold a value and a function each, affine 0x080036e4). Work on that branch (it has the object split, GBAA_FNREF_WATCH and GBAA_FNREF_OFF). Done when: unit tests for each; fn_loads_read_everything is 0 on affine and no higher anywhere; fn_words_not_proven falls on affine (the switches say up to 14 words; say in the evidence how close it got and what holds the rest) and rises nowhere. The branch doesn't land here: {unit:native/fnref-ram-pointers-land} does.",
       "check": "recorded",
+      "needs": ["native/fnref-branch-merge"],
       "uses": ["heavy"]
     },
     {
@@ -1948,6 +1969,37 @@
           "text": "From {unit:native/native-first-stop} (PR 5): the stop line gives lifted functions from the panic's backtrace (inlined ones don't show) and no guest pc, since lifted code keeps none. Needs the lifter to keep a pc or block address a panic can read, cheaply."
         }
       ]
+    },
+    {
+      "id": "native/fnref-branch-merge",
+      "title": "Function-flow branch merged with main's Ref tokens",
+      "detail": "The branch unit/native/fnref-unknown-addrs (head 233ba6c0) holds three units' unlanded work on crates/codegen/src/native/fnref.rs: frames and allocation sites as objects, call-site context (off by default), RAM pointers followed, the metric fn_loads_read_everything, and the tools GBAA_FNREF_WATCH and GBAA_FNREF_OFF. Main's {unit:native/fnref-emerald-speed} (f52fe115) rewrote about 1,000 lines of the same file: large pile, every-cell and ROM reads are one lazy token each (Tok::Ref, Src, Xf, G::expand). Merging main into the branch gives 22 conflicts in fnref.rs (G::store, give, give_all, Val::cap, Run::block, load_raw, call_by_value, follow, and more: that PR's 'For whoever merges' lists them), one in fnref/tests.rs and one in lift-check.toml; beyond the conflicts, the branch's own reads (every object's cells, a run of RAM, an object's cells, the lost-pointer cell) and its tokens (Tok::Obj, Tok::RamFrom) must work with Ref tokens, and the watch trace must see through them. docs/research/fnref-held-words.md was measured before that commit and says so. Done when: the branch builds merged with main, its and main's fnref unit tests pass, Emerald's flow still finishes (main's time and memory within a tenth), and every table of the research note is measured again on the merged code and the note corrected (drop its 'before main's Ref tokens' paragraph): just lift-metrics on every program, GBAA_FNREF_OFF's rows on affine (set as one comma list; check the lift prints the switches it saw), the first-road table from GBAA_FNREF_WATCH=all, native-irq-hold's handler words. Then record {unit:native/fnref-unknown-addrs} with the re-measured finding if it stands. The branch doesn't land here: {unit:native/fnref-ram-pointers-land} does.",
+      "check": "recorded",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-c-game-words",
+      "title": "What holds a C game's function words: Metroid, measured",
+      "detail": "From {unit:native/fnref-unknown-addrs} (docs/research/fnref-held-words.md): on our agb test programs the function words are held by Rust shapes (closures in frames, core::fmt argument arrays, a heap pile), and three units made the flow more exact without moving the count. agb is test input, not the target; nobody has looked at a C game. On main, run the function-address flow on Metroid (it settles) and say, for its function words not proven, what holds them: the count by first road, as that note does for affine (GBAA_FNREF_TRACE; the note's GBAA_FNREF_WATCH is on that unit's branch, bring it over alone if that is cheap). Done when docs/research/fnref-held-words.md has a Metroid section with the counts (proven, never read, not proven by road) and says which of the filed function-flow follow-ups a C game needs and which only agb does; just check passes. Addresses and counts only: nothing game-derived in the tracked note.",
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "afebd1b0",
+        "session": "afebd1b0-9976-4586-b709-eacdc536b0e5",
+        "host": "quack",
+        "pid": 723464,
+        "start": "999516",
+        "at": "2026-11-13T07:32:03Z"
+      },
+      "round": "2026-11-13T07:32:03Z"
+    },
+    {
+      "id": "native/lift-irq-wrapper-tail",
+      "title": "The IRQ wrapper's second half is discovered and lifted",
+      "detail": "Found by the review of {unit:native/lift-psr-boot-irq}, 2026-11-13. The agbcc-shape IRQ wrapper (Metroid 0x08000104 and its IWRAM copy 0x03000c7c, Nightmare 0x03001030, Emerald 0x08000248, Rogue 0x0800025c, Imperium 0x08000264) calls its handler with 'add lr, pc, #0; bx r0' (Metroid 0x08000204). analysis::vsa::func::classify makes a bx a call only right after 'mov lr, pc', so this one is a jump, discovery has no code at its return site (0x0800020c), and the wrapper's second half (ldm, mrs cpsr, msr cpsr back to IRQ mode, IE and IME stores, msr spsr, bx lr) is in no lift. The lifter prints the call and then unreachable!(\"a call that never returns returned\") (seen in Metroid's lift with the dispatcher stand-in dropped), so a lifted wrapper panics when its first handler returns. That is why the corpus counts 3 msr/mrs per wrapper where the code has 6, and why the games' IRQ-dispatcher stand-ins can't go yet (the reset stand-ins can). Do: have discovery take 'add lr, pc, #0' (lr = the address after the bx) as the call it is, so the return site is the same function's code and PsrFns prints its msr/mrs (if it comes out as its own function instead, PsrFns::place must cover it). It changes discovery for every program and the play build: run the scored checks (disc-*, jt-score) and the full just lift-check. Also add a standing check that runs printed PSR statements: today no lift-check program does (agb's wrapper keeps its stand-in in all 14; that unit's PR says how a hand run with --drop-standin 0x03000000 went). Smaller things from the same review: an sp write after a wrapper's mode switch is no longer a stack-switch hole in these functions (crates/codegen/src/native/frame.rs, the comment near line 451 is stale there); a wait or an ordinary function's I/O store while still in IRQ mode writes Game::sp with the IRQ-mode sp. Done when: Metroid and Nightmare lifted with their dispatcher stand-ins dropped print all six PSR statements of each wrapper and no unreachable! after the handler call; a native check that runs a lifted wrapper's whole path is in lift-check; lift-check, the scored checks and just check pass.",
+      "check": "independent",
+      "needs": ["native/lift-psr-boot-irq"],
+      "uses": ["heavy"]
     }
   ]
 }

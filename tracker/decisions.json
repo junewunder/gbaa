@@ -1178,6 +1178,14 @@
       "by": "3d525e2f",
       "at": "2026-11-13T06:57:03Z",
       "scope": ["native/native-first-stop"]
+    },
+    {
+      "id": "d/a-direct-call-passes-the-r4-r11-its-callee",
+      "title": "A direct call passes the r4-r11 its callee reads at entry; a pointer call only where the holes file names it",
+      "why": "From {unit:native/metroid-entry-reads}: Metroid's save writer 0x08073ce5 stores the top of its caller's r9; r9 is the sprite updater's, three calls up through its AI table, 0x082b0cac or 0x8000001c by the loop, so no constant stand-in is exact. The summaries now give each function what it takes (Summary::takes); a bl or tail call is the callee's x_ entry with the caller's own registers, and a caller that still has one as it came takes it in turn. Such a reader is soft (takes r4-r11 from its callers); one a pointer may call stays hard unless the holes file's [[takes]] names the indirect calls that reach it, which then pass theirs. A taker's plain entry (call_fn's, a stand-in's) panics, so nothing runs it on zeroes: exact or a named stop. An entry value only returned in r0-r3 is not passed and stays as it was.",
+      "by": "8814ddd6",
+      "at": "2026-11-13T07:50:24Z",
+      "scope": ["group:native"]
     }
   ]
 }
