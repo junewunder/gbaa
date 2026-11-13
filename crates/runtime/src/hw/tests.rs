@@ -163,8 +163,7 @@ fn template_scene_from_fields_alone() {
     assert!(frames.iter().all(|fr| fr[..] == f[..]));
 }
 
-/// The play build's renderer, on the same scene stored at addresses
-/// through the bus, draws the same frame.
+/// The host is handed the save chip at each V-blank, before the frame is presented.
 #[test]
 fn the_host_sees_the_save_before_each_present() {
     let mut g = game(3);
@@ -175,6 +174,8 @@ fn the_host_sees_the_save_before_each_present() {
     assert_eq!(g.hw.host.saves, [(0x5A, 0), (0xA5, 1), (0xA5, 2)]);
 }
 
+/// The play build's renderer, on the same scene stored at addresses
+/// through the bus, draws the same frame.
 #[test]
 fn same_frame_as_the_play_build() {
     use crate::test_util::ppu::{OAM, OBJ_PAL, PAL, VRAM, fill16, render};
