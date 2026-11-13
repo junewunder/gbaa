@@ -1796,7 +1796,14 @@
       "detail": "The 2026-11-11 overnight run (hole report, gameplay and readable builds, and gbaa-lift of all nine games in holes/corpus.toml, about 3 hours on quack) was a throwaway shell script. Make it a recipe driven by holes/corpus.toml in Rust (no bash logic): per game the hole report, the play build, the lift with its holes file (corpus.toml gains each game's --name for lift), the build, and {unit:native/native-first-stop}'s headless run; one game failing doesn't stop the rest; run under just long with the build lock and MemoryMax. Write out/nightly/<date>/summary.toml and a short summary.txt per game (hard holes by kind, built or not, frames run and stop) with what changed against the previous night's. Done when: one full run on quack writes both files and a second run's diff names a change made between them; docs/tools/commands.md has the entry; just check passes.",
       "check": "independent",
       "needs": ["native/native-first-stop"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-13T13:12:00Z",
+          "by": "9828215c",
+          "text": "a lifter-rule merge passed lift-check and took moonbeam's hard holes 11 to 503 unseen. This command's diff with last night should fail on any game's hard count rising, so that can't land quietly again."
+        }
+      ]
     },
     {
       "id": "native/spike-entry-read-hole",
