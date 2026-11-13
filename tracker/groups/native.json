@@ -1914,13 +1914,10 @@
       "needs": ["native/lift-psr-boot-irq", "native/lift-irq-wrapper-tail"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "949481c0",
-        "session": "949481c0-e23d-420f-834c-36bda09666f3",
-        "host": "quack",
-        "pid": 1634689,
-        "start": "2603373",
-        "at": "2026-11-13T11:59:16Z"
+        "at": "2026-11-13T12:21:33Z",
+        "evidence": "No tracked change, so no PR: the work is three commits in the private mods repo (bbf6283 Metroid, c767a0b Nightmare, ad0cdf4 a header comment). Removed: Metroid's stand-ins 0x08000000, 0x08000104, 0x03000c7c; Nightmare's 0x08000000, 0x03001030; every other entry kept. Card check, at main 90eb57a3 with the committed files: 'just lift ROM out/psr/final-metroid --name metroid': 0 hard holes, 4 stand-ins (was 7), 'gbaa-first-stop: gbaa-native-metroid: 600 of 600 frames, no stop' (before: the same line). 'just lift ROM out/psr/final-kirby-nightmare --name kirby-nightmare': 0 hard holes, 6 stand-ins (was 8), 'gbaa-first-stop: gbaa-native-kirby-nightmare: 5 of 600 frames, no-memory a byte load at 0xe3a02004' in f_030072e8 < f_030071df < f_03007151 < f_080cd8ad < f_080010cd < f_03001030 < f_080cfa6d < f_0800157d (before: the same line and stack; that stop is {unit:native/nightmare-mixer-pointer}, noted there). Beyond the card: the builds with and without the stand-ins draw the same frame hashes: Metroid 600 frames with no input and 1800 with presses into a new game, Nightmare its 5. Not proven: Nightmare's lifted dispatcher past frame 5. A lifter older than 90eb57a3 now fails on both games (hard holes, or a dispatcher ending in unreachable!): branches must merge main. Reviewer checker-psr-7c3e agreed the done-when is met."
       },
       "notes": [
         {
