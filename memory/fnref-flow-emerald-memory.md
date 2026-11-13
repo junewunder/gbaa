@@ -1,6 +1,6 @@
 ---
 title: Why the function-address flow ran out of memory on Emerald, and the Ref fix
-hook: big reads are one Tok::Ref (1.5 GB); 2026-11-12: Emerald whole run 11:24 at 2.4 GB, unsettled at the 48M-token bound; profile with eu-stack (perf is blocked)
+hook: big reads are one Tok::Ref (1.5 GB); 2026-11-13: Emerald whole run 11-15 min at 2.4 GB, unsettled at the 48M-token bound; profile with eu-stack (perf is blocked)
 open: true
 ---
 
@@ -84,3 +84,11 @@ Roms up to the next code while `rom_from` reads only to the object end is
 a real gap on main, but closing it (absorb to the object end) sent
 ref_unexplained from 35 to 93 on every agb program: don't try it as a
 quick fix.
+
+**2026-11-13, after merging main (rom-read-bound and later):** the same
+command, `just long start NAME --mem 8G`: 14:55 wall with four other
+workers' jobs running (flow 806.8 s), 2.43 GB peak, exit 0, `didn't
+settle`, 0 of 553 sets complete. Ask for 8G, not 16G: on a busy night a
+16G job never gets its turn (three waited over an hour while 4G jobs
+passed them). The native-tasks bar went 57 to 59 by june's call
+(d/raise-native-tasks-unproven-function); the reason is beside the bar.
