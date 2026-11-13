@@ -16,6 +16,8 @@
 //! the beam's line. Which offsets a check compares is the check's
 //! business (`route-check --native`).
 
+pub mod stop;
+
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::Path;
