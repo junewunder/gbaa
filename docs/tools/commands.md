@@ -1285,7 +1285,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   native/ram-globals), its registers locals, blocks a `loop { match }` over
   local labels, calls Rust calls; then the recipe builds it into
   `target/recompiled` (`gbaa-native-<name>`, the native programs' headless
-  flags or, with none, gbaa-desktop's window to play in: `--scale N`, `--mute`; `crates/native-host`). It reads `holes/<name>.toml` when there is
+  flags or, with none, gbaa-desktop's window to play in: `--scale N`, `--mute`; it keeps the game's `.sav` in `saves/<name>/` as the play build does, and its menus leave out save states, rewind, scripts and netplay; `crates/native-host`). It reads `holes/<name>.toml` when there is
   one, else `mods/<name>/holes.toml` (a commercial game's, private: its
   stand-ins are ports of the game's code); `<name>` is `--name`'s when
   given (a file name with spaces: `just lift "…/Metroid - Zero Mission
@@ -1621,8 +1621,8 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   docs/save-locations-design.md) is `saves/NAME/` in gbaa's data dir:
   `$XDG_DATA_HOME/gbaa` or `~/.local/share/gbaa` on Linux and the Deck,
   `~/Library/Application Support/gbaa` on macOS, `%APPDATA%\gbaa` on
-  Windows; NAME is the game's name (a build's baked-in `--name`, else the
-  ROM's file name, lower case, dashes for the rest). On a game's first run
+  Windows; NAME is the game's name (a build's or a lift's `--name`, else
+  the ROM's file name, lower case, dashes for the rest). On a game's first run
   with none of its files in the folder, the window copies in the
   `ROM.sav`, `ROM.state1`-`4`, `ROM.resume` and `.resume.old` beside the
   ROM (a build's own: `NAME.gba` beside the binary), renamed to NAME,

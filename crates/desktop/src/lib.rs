@@ -1161,37 +1161,13 @@ pub fn main(code: Option<&'static Code>, rom: Option<Embedded>) -> ExitCode {
     // is reported as the window starts.)
     let mut placing = Placing::default();
     if !opts.headless {
-        let s = settings::load(settings::path().as_deref()).unwrap_or_default();
-        let conf = gamepad::config_dir().map(|c| game_dir::GameConf::path(&c, &opts.game));
-        let game = game_dir::GameConf::load(conf.as_deref()).unwrap_or_else(|e| {
-            eprintln!("gbaa-desktop: {e}");
-            Default::default()
-        });
-        placing = Placing {
-            game,
-            global: s.save_dir,
-            previous_global: s.previous_save_dir,
-        };
-        opts.place(&placing, game_dir::data_dir().as_deref());
-        let dirs = [opts.save.as_deref(), Some(opts.states.as_path())];
-        for dir in dirs.into_iter().flatten().filter_map(Path::parent) {
-            if let Err(e) = std::fs::create_dir_all(dir) {
-                eprintln!("gbaa-desktop: {}: {e}", dir.display());
-                return ExitCode::FAILURE;
-            }
-        }
-        let moved: Result<Vec<_>, _> = opts.move_in.iter().map(|m| game_dir::move_in(m)).collect();
-        match moved.map(|m| m.concat()) {
-            Ok(copied) => {
-                for p in copied {
-                    eprintln!("gbaa-desktop: copied in: {}", p.display());
-                }
-            }
+        placing = match place_window(&mut opts) {
+            Ok(p) => p,
             Err(e) => {
                 eprintln!("gbaa-desktop: {e}");
                 return ExitCode::FAILURE;
             }
-        }
+        };
     }
     let result = if opts.headless {
         game_thread(move || run(&opts, code, None, &mut None))
@@ -1238,14 +1214,8 @@ pub fn main(code: Option<&'static Code>, rom: Option<Embedded>) -> ExitCode {
                     deadzone_axes_apart,
                     axis_deadzones,
                     resume,
-                    saves: menu::saves::save_folders(
-                        &opts.game,
-                        opts.save.as_deref(),
-                        &placing.game,
-                        placing.global.clone(),
-                        // --save names the .sav itself.
-                        opts.save_dir.is_some() || (opts.save.is_some() && !opts.save_placed),
-                    ),
+                    saves: save_folders(&opts, &placing),
+                    native: false,
                 };
                 window::run(o, move |screen| run_window(&opts, code, screen))
             })
@@ -1260,9 +1230,65 @@ pub fn main(code: Option<&'static Code>, rom: Option<Embedded>) -> ExitCode {
     }
 }
 
+/// A window's files placed in the game's folder by the settings
+/// ([`Options::place`]), the folders made and the game's files from
+/// before copied in ([`game_dir::move_in`]). The settings it went by. (A
+/// settings file that won't parse is reported as the window starts.)
+fn place_window(opts: &mut Options) -> Result<Placing, String> {
+    let s = settings::load(settings::path().as_deref()).unwrap_or_default();
+    let conf = gamepad::config_dir().map(|c| game_dir::GameConf::path(&c, &opts.game));
+    let game = game_dir::GameConf::load(conf.as_deref()).unwrap_or_else(|e| {
+        eprintln!("gbaa-desktop: {e}");
+        Default::default()
+    });
+    let placing = Placing {
+        game,
+        global: s.save_dir,
+        previous_global: s.previous_save_dir,
+    };
+    opts.place(&placing, game_dir::data_dir().as_deref());
+    let dirs = [opts.save.as_deref(), Some(opts.states.as_path())];
+    for dir in dirs.into_iter().flatten().filter_map(Path::parent) {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    let moved: Result<Vec<_>, _> = opts.move_in.iter().map(|m| game_dir::move_in(m)).collect();
+    for p in moved?.concat() {
+        eprintln!("gbaa-desktop: copied in: {}", p.display());
+    }
+    Ok(placing)
+}
+
+/// The menu's Save folders page for a window placed by `placing`.
+fn save_folders(opts: &Options, placing: &Placing) -> menu::saves::SaveFolders {
+    menu::saves::save_folders(
+        &opts.game,
+        opts.save.as_deref(),
+        &placing.game,
+        placing.global.clone(),
+        // --save names the .sav itself.
+        opts.save_dir.is_some() || (opts.save.is_some() && !opts.save_placed),
+    )
+}
+
+/// Where a native program's window (crates/native-host) keeps the save
+/// of the game `name`: where a play build of it would, beside the binary
+/// ([`embedded_path`]), in the game's folder ([`place_window`], which
+/// makes it and copies in the game's files from before); beside the
+/// binary with no data folder to put it in. The `.sav`, and the menu's
+/// Save folders page for it.
+pub fn native_saves(name: &str) -> Result<(PathBuf, menu::saves::SaveFolders), String> {
+    let exe = std::env::current_exe().map_err(|e| format!("the program's path: {e}"))?;
+    let rom = embedded_path(&exe, &runtime::name::GameName(name).to_string());
+    let arg = rom.to_str().ok_or("the program's path isn't UTF-8")?;
+    let mut opts = Options::parse_for([arg.to_owned()], None, Some(&exe))?;
+    let placing = place_window(&mut opts)?;
+    let sav = opts.save.clone().ok_or("no .sav placed")?;
+    Ok((sav, save_folders(&opts, &placing)))
+}
+
 /// On closing the window: copy the save at `sav` to its backups, and prune
 /// them ([`sav_file::backup`]).
-fn back_up_save(sav: &Path) {
+pub fn back_up_save(sav: &Path) {
     match sav_file::backup(sav, &sav_file::stamp_now()) {
         Ok(Some(p)) => eprintln!("gbaa-desktop: save backed up to {}", p.display()),
         Ok(None) => {}
