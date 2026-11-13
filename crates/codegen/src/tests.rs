@@ -1489,7 +1489,7 @@ fn lowest_of_a_list(callee: u32) -> (Vec<u8>, Discovery) {
         ],
         &[
             2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-            4, 2, 2, 2, 2, 2,
+            2, 4, 2, 2, 2, 2, 2,
         ],
         &[0x0800_0001, 0x0800_0039, 0x0800_003d],
     );
@@ -1514,10 +1514,88 @@ fn a_branch_on_a_certain_constant_is_taken_one_way() {
     let (rom, d) = lowest_of_a_list(0x3c);
     let ctx = Ctx::new(&rom, &d);
     let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
-    assert!(!sums.by_entry[&0x0800_003d].keeps);
+    let callee = &sums.by_entry[&0x0800_003d];
+    assert!(!callee.keeps);
+    assert!(
+        callee.holes.contains("0x08000040: an indirect call"),
+        "{:?}",
+        callee.holes
+    );
     assert_eq!(
         hard_holes(&sums, 0x0800_0001),
         vec!["0x08000020: reads r4-r11 at entry: r8".to_string()]
+    );
+}
+
+#[test]
+fn a_certain_constant_is_not_certain_after_an_msr() {
+    // ARM `f: mov r0, #0; b 1f; 1: cmp r0, #0; bne 2f; msr cpsr_f, r1;
+    // bxeq lr; ldr r0, [r5]; bx lr; 2: bx lr`. The `b` ends the block, so
+    // the 0 reaches the `cmp` as the register's certain constant, not
+    // folded by the IR, and the `bne` keeps the `cmp`'s flags written. The
+    // msr then sets Z from r1, so the `bxeq` may fall through to the read
+    // of r5.
+    let words: [u32; 9] = [
+        0xE3A0_0000, // 0x00 mov r0, #0
+        0xEAFF_FFFF, // 0x04 b 0x08
+        0xE350_0000, // 0x08 cmp r0, #0
+        0x1A00_0003, // 0x0c bne 0x20
+        0xE128_F001, // 0x10 msr cpsr_f, r1
+        0x012F_FF1E, // 0x14 bxeq lr
+        0xE595_0000, // 0x18 ldr r0, [r5]
+        0xE12F_FF1E, // 0x1c bx lr
+        0xE12F_FF1E, // 0x20 bx lr
+    ];
+    let mut rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let mut d = Discovery::default();
+    for i in 0..9 {
+        let code = Code {
+            size: 4,
+            thumb: false,
+            evidence: Evidence::Confirmed,
+        };
+        d.code.insert(ROM_BASE + 4 * i, code);
+    }
+    d.funcs.insert(ROM_BASE, Evidence::Confirmed);
+    // A pointer to f: it is entered by a call.
+    rom.extend(ROM_BASE.to_le_bytes());
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    assert_eq!(
+        hard_holes(&sums, ROM_BASE),
+        vec!["0x08000018: reads r4-r11 at entry: r5".to_string()]
+    );
+}
+
+#[test]
+fn an_exit_always_taken_still_reads_its_target() {
+    // ARM `f: mov r0, #0; b 1f; 1: cmp r0, #0; bxeq r8; bx lr` (the `b`
+    // as in the test above): Z is certain, so the `bxeq` is always taken,
+    // to the r8 f came with.
+    let words: [u32; 5] = [
+        0xE3A0_0000, // 0x00 mov r0, #0
+        0xEAFF_FFFF, // 0x04 b 0x08
+        0xE350_0000, // 0x08 cmp r0, #0
+        0x012F_FF18, // 0x0c bxeq r8
+        0xE12F_FF1E, // 0x10 bx lr
+    ];
+    let mut rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let mut d = Discovery::default();
+    for i in 0..5 {
+        let code = Code {
+            size: 4,
+            thumb: false,
+            evidence: Evidence::Confirmed,
+        };
+        d.code.insert(ROM_BASE + 4 * i, code);
+    }
+    d.funcs.insert(ROM_BASE, Evidence::Confirmed);
+    rom.extend(ROM_BASE.to_le_bytes());
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    assert_eq!(
+        hard_holes(&sums, ROM_BASE),
+        vec!["0x0800000c: reads r4-r11 at entry: r8".to_string()]
     );
 }
 

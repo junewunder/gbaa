@@ -457,6 +457,8 @@ impl Walk<'_> {
         // The values that are certain where constants ([`State::sure`]).
         let mut sure = vec![false; insts.len()];
         let xs = exits(self.ctx, gb);
+        // An exit always taken ended the block.
+        let mut over = false;
         // The values something uses: a read whose value nothing uses
         // reads nothing.
         let used: BTreeSet<ValueId> = match self.sum {
@@ -575,6 +577,12 @@ impl Walk<'_> {
                 }
                 Op::SetUserReg(..) | Op::SetCpsr { .. } | Op::SetSpsr { .. } => {
                     self.fail("changes mode or the PSRs".into())?;
+                    // An `msr` may set the flags and a user-bank write the
+                    // registers: no constant is certain past one.
+                    s.sure = 0;
+                    for (_, yes, no) in &mut cond {
+                        (yes.sure, no.sure) = (0, 0);
+                    }
                     V::Other
                 }
                 Op::Exit(e) => {
@@ -616,10 +624,7 @@ impl Walk<'_> {
                         }
                         None => {}
                     }
-                    // Nothing after an exit always taken runs.
-                    if taken == Some(true) {
-                        break;
-                    }
+                    over = taken == Some(true);
                     V::Other
                 }
                 _ => V::Other,
@@ -633,6 +638,10 @@ impl Walk<'_> {
                 };
             if let Some(sum) = &mut self.sum {
                 sum.entry_uses(insts, i, at, &vals);
+            }
+            // Nothing after an exit always taken runs.
+            if over {
+                break;
             }
         }
         Ok(())
