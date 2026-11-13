@@ -126,6 +126,9 @@ pub struct State {
     pub undoable: bool,
     /// The window is fullscreen: Fullscreen's row says how to leave it.
     pub fullscreen: bool,
+    /// A native program's window, which has no save states: Game has
+    /// only Quit.
+    pub native: bool,
 }
 
 /// The slot keys' names, slot 1 first: what [`crate::window`]'s
@@ -152,7 +155,8 @@ fn quit_key() -> &'static str {
 }
 
 /// The menu bar: Game (Save State and Load State, a row per slot; Undo
-/// Load; Quit) and View (Fullscreen).
+/// Load; Quit: only Quit in a native program's window) and View
+/// (Fullscreen).
 pub fn tree(state: State) -> Vec<Menu> {
     let slots = |names: &[&'static str], to: fn(u8) -> Action| {
         (1..=SLOTS)
@@ -171,22 +175,27 @@ pub fn tree(state: State) -> Vec<Menu> {
     } else {
         "Fullscreen"
     };
+    let quit = row("Quit", quit_key(), Action::Quit);
+    let game = match state.native {
+        true => vec![quit],
+        false => vec![
+            Item::Submenu {
+                label: "Save State".into(),
+                items: slots(&SAVE_KEY_NAMES, Action::Save),
+            },
+            Item::Submenu {
+                label: "Load State".into(),
+                items: slots(&SLOT_KEY_NAMES, Action::Load),
+            },
+            undo,
+            Item::Separator,
+            quit,
+        ],
+    };
     vec![
         Menu {
             title: "Game",
-            items: vec![
-                Item::Submenu {
-                    label: "Save State".into(),
-                    items: slots(&SAVE_KEY_NAMES, Action::Save),
-                },
-                Item::Submenu {
-                    label: "Load State".into(),
-                    items: slots(&SLOT_KEY_NAMES, Action::Load),
-                },
-                undo,
-                Item::Separator,
-                row("Quit", quit_key(), Action::Quit),
-            ],
+            items: game,
         },
         Menu {
             title: "View",
@@ -290,6 +299,16 @@ mod tests {
         assert_eq!(got, want);
         let titles: Vec<_> = tree(State::default()).iter().map(|m| m.title).collect();
         assert_eq!(titles, ["Game", "View"]);
+    }
+
+    #[test]
+    fn a_native_window_has_no_states() {
+        let native = State {
+            native: true,
+            ..State::default()
+        };
+        let rows: Vec<Action> = actions(&tree(native)).iter().map(|&(a, _)| a).collect();
+        assert_eq!(rows, [Action::Quit, Action::Fullscreen]);
     }
 
     #[test]

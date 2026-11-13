@@ -102,7 +102,8 @@
 //! likewise: `KEYCNT` is only kept).
 //!
 //! What isn't here yet: [`Dma::hblank_to`]'s price on the clock, a link
-//! partner, the EEPROM's DMA, keeping the save in a `.sav`.
+//! partner, the EEPROM's DMA. Keeping the save in a `.sav` is the host's
+//! ([`Host::save`]: the native window's, crates/native-host).
 
 pub mod bios;
 pub mod dma_regs;
@@ -145,6 +146,10 @@ pub trait Host {
     /// The keys held now, as [`key`] bits (1 = pressed), latched right
     /// after [`Host::present`] for the frame that follows.
     fn keys(&mut self) -> u16;
+    /// The save chip, at each V-blank just before [`Host::present`]: for
+    /// a host that keeps it in a file (the window's `.sav`). A host that
+    /// keeps none leaves it.
+    fn save(&mut self, _save: &mut crate::save::Save) {}
 }
 
 /// A [`crate::Platform`] as a [`Host`] that never stops.
@@ -963,6 +968,7 @@ fn line_event<G: Native>(g: &mut G) -> Result<bool, Exit> {
         f(g);
     }
     let hw = g.hw();
+    hw.host.save(&mut hw.save);
     let shown = hw.host.present(&hw.renderer.frame);
     hw.keys.held = hw.host.keys() & key::ALL;
     shown?;

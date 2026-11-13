@@ -445,6 +445,10 @@ const SCRIPTS_ROW: usize = 7;
 const NETPLAY_ROW: usize = 8;
 /// Its Save folders row.
 const SAVES_ROW: usize = 10;
+/// The main page's rows a native program's window leaves out
+/// ([`Menu::native`]): Undo load state, Scripts, Netplay and Resume on
+/// launch.
+const NOT_NATIVE: [usize; 4] = [4, SCRIPTS_ROW, NETPLAY_ROW, 9];
 
 /// A field of the Netplay page.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -650,6 +654,10 @@ pub struct Menu {
     saved: Option<String>,
     /// The Save folders page's settings ([`saves`]).
     pub saves: saves::SaveFolders,
+    /// The window plays a native program (crates/native-host), which has
+    /// no save states, rewind, scripts or netplay: the main page leaves
+    /// out their rows ([`NOT_NATIVE`]), the Controls page their shortcuts.
+    pub native: bool,
     /// Its folder picker, while open.
     picker: Option<saves::Picker>,
     /// What setting a folder did, for the page turned back to.
@@ -709,6 +717,7 @@ impl Menu {
             resume: false,
             saved: None,
             saves: saves::SaveFolders::default(),
+            native: false,
             picker: None,
             folder_said: None,
             console: Console::default(),
@@ -835,6 +844,16 @@ impl Menu {
         self.saved = None;
     }
 
+    /// The main page's row `row` (one of the `_ROW`s, counted with every
+    /// row shown) as it is shown: in a native program's window, less the
+    /// rows left out before it ([`NOT_NATIVE`]).
+    fn main_row(&self, row: usize) -> usize {
+        match self.native {
+            true => row - NOT_NATIVE.iter().filter(|&&r| r < row).count(),
+            false => row,
+        }
+    }
+
     /// Take a move. Arrows and Ok go to egui as keys pressed and let go.
     pub fn nav(&mut self, n: Nav) {
         if let Some(e) = &mut self.edit {
@@ -857,10 +876,14 @@ impl Menu {
                 self.remap.listen = None;
                 return;
             }
-            Nav::Back if self.page == Page::Remap => return self.turn(Page::Main, CONTROLS_ROW),
+            Nav::Back if self.page == Page::Remap => {
+                return self.turn(Page::Main, self.main_row(CONTROLS_ROW));
+            }
             Nav::Back if self.page == Page::Scripts => return self.turn(Page::Main, SCRIPTS_ROW),
             Nav::Back if self.page == Page::Netplay => return self.turn(Page::Main, NETPLAY_ROW),
-            Nav::Back if self.page == Page::Saves => return self.turn(Page::Main, SAVES_ROW),
+            Nav::Back if self.page == Page::Saves => {
+                return self.turn(Page::Main, self.main_row(SAVES_ROW));
+            }
             Nav::Back if self.page == Page::Folder => {
                 let row = match self.picker.as_ref().map(|p| p.target) {
                     Some(saves::Target::All) => 1,
@@ -1139,14 +1162,16 @@ impl Menu {
                 self.sound_changed = true;
             }
             // Greyed, it's no focus stop: the arrows pass over it.
-            let undo = ui
-                .add_enabled_ui(self.undoable, |ui| rows.row(ui, "Undo load state", ""))
-                .inner;
-            // Undone, the game goes on to show it.
-            if self.undoable && undo.step != 0 {
-                self.undo = true;
-                self.undoable = false;
-                self.set_open(false);
+            if !self.native {
+                let undo = ui
+                    .add_enabled_ui(self.undoable, |ui| rows.row(ui, "Undo load state", ""))
+                    .inner;
+                // Undone, the game goes on to show it.
+                if self.undoable && undo.step != 0 {
+                    self.undo = true;
+                    self.undoable = false;
+                    self.set_open(false);
+                }
             }
             if rows.link(ui, "Controls").step != 0 {
                 self.turn(Page::Remap, 0);
@@ -1155,19 +1180,21 @@ impl Menu {
             if rows.row(ui, "Fullscreen", full).step != 0 {
                 self.fullscreen_asked = true;
             }
-            if rows.link(ui, "Scripts").step != 0 {
-                self.turn(Page::Scripts, 0);
-            }
-            if rows.link(ui, "Netplay").step != 0 {
-                self.turn(Page::Netplay, 0);
-            }
-            let resume = rows.row(
-                ui,
-                "Resume on launch",
-                if self.resume { "on" } else { "off" },
-            );
-            if resume.step != 0 {
-                self.set_resume(!self.resume);
+            if !self.native {
+                if rows.link(ui, "Scripts").step != 0 {
+                    self.turn(Page::Scripts, 0);
+                }
+                if rows.link(ui, "Netplay").step != 0 {
+                    self.turn(Page::Netplay, 0);
+                }
+                let resume = rows.row(
+                    ui,
+                    "Resume on launch",
+                    if self.resume { "on" } else { "off" },
+                );
+                if resume.step != 0 {
+                    self.set_resume(!self.resume);
+                }
             }
             if rows.link(ui, "Save folders").step != 0 {
                 // The game's row is greyed when the launcher has it.
@@ -2006,6 +2033,31 @@ mod tests {
             m.nav(n);
             pass(m);
         }
+    }
+
+    #[test]
+    fn a_native_window_leaves_out_states_scripts_and_netplay() {
+        let mut m = Menu::new(4.0, 100, Controls::default());
+        m.native = true;
+        pass(&mut m);
+        go(&mut m, &[Nav::Toggle]);
+        for gone in ["Undo load state", "Scripts", "Netplay", "Resume on launch"] {
+            assert!(!shows(&mut m, gone), "{gone}");
+        }
+        assert!(shows(&mut m, "Save folders"));
+        // Controls is the fifth row, Save folders the seventh; back from
+        // their pages to them.
+        go(&mut m, &[Nav::Down; 4]);
+        go(&mut m, &[Nav::Ok]);
+        assert_eq!(m.page, Page::Remap);
+        m.nav(Nav::Back);
+        assert_eq!((m.page, m.focus), (Page::Main, Some(4)));
+        pass(&mut m);
+        go(&mut m, &[Nav::Down; 2]);
+        go(&mut m, &[Nav::Ok]);
+        assert_eq!(m.page, Page::Saves);
+        m.nav(Nav::Back);
+        assert_eq!((m.page, m.focus), (Page::Main, Some(6)));
     }
 
     /// A menu for ROM `rom`, open on the Controls page.
