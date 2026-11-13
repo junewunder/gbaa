@@ -834,18 +834,10 @@
       "uses": ["heavy"],
       "minMinutes": 180,
       "record": {
-        "state": "claimed",
-        "by": "ad1eaf05",
-        "session": "ad1eaf05-61d6-4c38-b911-2dfa23da168e",
-        "host": "quack",
-        "pid": 751355,
-        "start": "2170805",
-        "at": "2026-11-07T08:03:16Z",
-        "branch": "unit/native/fnref-heap-sites",
-        "beats": true,
-        "handedBack": "2026-11-07T08:33:24Z",
-        "pushed": true,
-        "ended": "2026-11-07T08:33:41Z"
+        "state": "parked",
+        "why": "june (2026-11-13): parked with the function-flow branch. Merged with main and pushed (ef361daf), but about 8x slower than main's flow on Emerald, and its gains are on agb programs. Revisit once C test programs judge lifter work: {unit:native/c-bars}.",
+        "by": "ec2ee7ee",
+        "at": "2026-11-13T21:30:16Z"
       },
       "notes": [
         {
