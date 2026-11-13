@@ -904,9 +904,8 @@ pub fn huff(g: &mut Game, r: &mut [u32; 4]) {
 /// `RegisterRamReset` (r0: what to reset), as the play build's
 /// (`runtime::bios::register_ram_reset`): `DISPCNT` forced blank, then
 /// each part flagged zeroed, the registers as stores so the library sees
-/// them. IWRAM's top 0x200 bytes are kept. The serial registers (0x20)
-/// aren't the library's (`runtime::hw` has no serial), so they stay. It
-/// takes no time (the play build's is its entry's).
+/// them. IWRAM's top 0x200 bytes are kept. It takes no time (the play
+/// build's is its entry's).
 pub fn register_ram_reset(g: &mut Game, flags: u32) {
     st16(g, 0x0400_0000, 0x80);
     let ram = |g: &mut Game, lo: usize, hi: usize| (lo..hi).for_each(|o| g.ram[o] = 0);
@@ -934,6 +933,13 @@ pub fn register_ram_reset(g: &mut Game, flags: u32) {
             st16(g, 0x0400_0000 + o, 0);
         }
         st16(g, 0x0400_0088, 0x200);
+    }
+    if flags & 0x20 != 0 {
+        // SIOCNT, SIOMLT_SEND, JOYCNT, JOY_RECV, JOY_TRANS; RCNT.
+        for o in [0x128, 0x12A, 0x140, 0x150, 0x152, 0x154, 0x156] {
+            st16(g, 0x0400_0000 + o, 0);
+        }
+        st16(g, 0x0400_0134, 0x8000);
     }
     if flags & 0x80 != 0 {
         // Display, DMA, timers (the affine backgrounds the identity),
