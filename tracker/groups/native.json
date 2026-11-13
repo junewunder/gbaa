@@ -1850,13 +1850,23 @@
       "id": "native/native-check-spike-packed",
       "title": "just native-check passes again: the spike's packed record",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "8eda0ebb",
+        "session": "8eda0ebb-616f-4c93-851f-ad8fa556645f",
+        "host": "quack",
+        "pid": 12793,
+        "start": "30628",
+        "at": "2026-11-13T04:50:31Z"
+      },
       "notes": [
         {
           "at": "2026-11-12T09:30:14Z",
           "by": "d12ab564",
           "text": "just native-check fails at the spike: --packed target/release/native-spike is built without guest-layout, and route-check now passes it --native-record (since {unit:native/lift-packed-layout}), which native-host refuses. psg-square, direct-sound and the spike without --packed pass."
         }
-      ]
+      ],
+      "round": "2026-11-13T04:50:31Z"
     },
     {
       "id": "native/drop-psr-standins",

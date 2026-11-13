@@ -2740,3 +2740,4 @@
 {"at":"2026-11-13T04:50:16Z","actor":"session","tag":"77aa5fbf","host":"quack","cmd":"claim","id":"native/lift-undefined-insns","text":"Find why moonbeam's and Rogue's lifts decode data as code: claimed (picking up after 74679aef)"}
 {"at":"2026-11-13T04:50:26Z","actor":"session","tag":"34d57864","host":"quack","cmd":"claim","id":"native/hw-serial-registers","text":"Serial registers kept in the hardware library: claimed"}
 {"at":"2026-11-13T04:50:28Z","actor":"session","tag":"ae52d6ac","host":"quack","cmd":"claim","id":"native/fnref-unknown-addrs","text":"Function flow: loads through unknown addresses: claimed"}
+{"at":"2026-11-13T04:50:31Z","actor":"session","tag":"8eda0ebb","host":"quack","cmd":"claim","id":"native/native-check-spike-packed","text":"just native-check passes again: the spike's packed record: claimed"}
