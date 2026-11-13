@@ -401,6 +401,11 @@ mode and calling `gIntrTable[n]`), agb's handler, or a game's own.
   recognises the standard prologue and epilogue (save SPSR, switch to
   system mode, re-enable IRQs, call, restore) and drops them, leaving
   the call. Unrecognised mode switches are holes.
+  *As built* (native/lift-psr-boot-irq): printed, not dropped, in the
+  reset and each handler stored to `IRQ_HANDLER_PTR`, over the prelude's
+  `msr_cpsr` (banks sp by mode, runs the IRQs a cleared I releases),
+  `mrs_cpsr` and `Game::spsr` (`codegen::native`, `PsrFns`); such a
+  wrapper nests. Past an agbcc wrapper's `bx r0` nothing is lifted yet.
 - **No nesting.** Handlers run to completion at the points above (and
   when a library copy's cost crosses an event, section 7), never
   inside another handler or inside game code. A real GBA can take the
