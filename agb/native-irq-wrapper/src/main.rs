@@ -11,18 +11,17 @@
 //!    `add_interrupt_handler` and `wait_for_vblank` as every agb program
 //!    uses them.
 //! 2. From frame 32: `iw_main` below, installed at `0x0300_7FFC` in its
-//!    place. It has the shape of the wrapper agbcc-era games link (the
-//!    SDK's `intr_main`): it saves the SPSR, `IME` and `IE`, picks the
-//!    first IRQ due in its own order, acknowledges it, leaves only the
-//!    IRQs that may nest in `IE`, switches to system mode with I clear
-//!    (`mrs`, `bic`, `orr`, `msr`), calls the handler from a table with
-//!    `add lr, pc, #0; bx r0`, and then switches back to IRQ mode with I
-//!    set, restores `IE`, `IME` and the SPSR and returns. Code discovery
-//!    once took that `bx` for a jump, so the half after it was in no
-//!    lift.
+//!    place, written for this test. It has what the wrappers agbcc-era
+//!    games link have that agb's lacks: the handler is called with `add
+//!    lr, pc, #0; bx r0`, and half the PSR statements come after that
+//!    call. It saves the SPSR, picks the IRQ (V-count before V-blank),
+//!    acknowledges it, leaves only V-blank in `IE` to nest, switches to
+//!    system mode with I clear (`mrs`, `bic`, `orr`, `msr`), calls the
+//!    handler from a table, then switches back to IRQ mode with I set and
+//!    puts `IE` and the SPSR back. Code discovery once took that `bx`
+//!    for a jump, so the half after it was in no lift.
 //!
-//! `iw_main` knows two IRQs, V-count before V-blank, and lets V-blank
-//! nest. The main loop alternates the V-count line (`DISPSTAT`'s LYC)
+//! The main loop alternates the V-count line (`DISPSTAT`'s LYC)
 //! between 100 and 160:
 //!
 //! - at 100 the V-count IRQ comes alone while the loop waits in
@@ -54,53 +53,50 @@ core::arch::global_asm!(
     ".syntax unified",
     ".balign 4",
     ".arm",
-    // The IRQ wrapper, entered from the BIOS's stub in IRQ mode.
+    // The IRQ wrapper, entered from the BIOS's stub in IRQ mode with r0
+    // = 0x04000000 and IME on (the stub leaves it as the IRQ found it).
     ".global iw_main",
     ".type iw_main, %function",
     "iw_main:",
-    "    mov r3, #0x04000000",
-    "    add r3, r3, #0x200",
-    // IE, and IF in the top half; IME.
-    "    ldr r2, [r3]",
-    "    ldrh r1, [r3, #8]",
-    "    mrs r0, spsr",
-    "    stmfd sp!, {{r0-r3, lr}}",
-    // IME on: what stays in IE below may nest.
-    "    mov r0, #1",
-    "    strh r0, [r3, #8]",
-    // Enabled and requested; r12 is the handler's offset in the table.
-    "    and r1, r2, r2, lsr #16",
-    "    mov r12, #0",
-    "    ands r0, r1, #4",
-    "    bne 1f",
-    "    add r12, r12, #4",
-    "    ands r0, r1, #1",
+    "    mrs r12, spsr",
+    "    stmfd sp!, {{r12, lr}}",
+    // IE, IF, and what is both enabled and requested.
+    "    add r1, r0, #0x200",
+    "    ldrh r2, [r1]",
+    "    ldrh r3, [r1, #2]",
+    "    and r3, r3, r2",
+    // V-count before V-blank: its bit, and its handler from the table.
+    "    ldr r12, =iw_table",
+    "    tst r3, #4",
+    "    movne r3, #4",
+    "    ldrne r0, [r12]",
+    "    moveq r3, #1",
+    "    ldreq r0, [r12, #4]",
     // Acknowledge it; of the others, only V-blank may nest.
-    "1:  strh r0, [r3, #2]",
-    "    bic r2, r2, r0",
-    "    and r1, r2, #1",
-    "    strh r1, [r3]",
+    "    strh r3, [r1, #2]",
+    "    bic r3, r2, r3",
+    "    and r3, r3, #1",
+    "    strh r3, [r1]",
+    "    stmfd sp!, {{r1, r2}}",
     // System mode, I clear.
-    "    mrs r3, cpsr",
-    "    bic r3, r3, #0xdf",
-    "    orr r3, r3, #0x1f",
-    "    msr cpsr_fc, r3",
-    "    ldr r1, =iw_table",
-    "    add r1, r1, r12",
-    "    ldr r0, [r1]",
+    "    mrs r2, cpsr",
+    "    bic r2, r2, #0xdf",
+    "    orr r2, r2, #0x1f",
+    "    msr cpsr_fc, r2",
     "    stmfd sp!, {{lr}}",
     "    add lr, pc, #0",
     "    bx r0",
     "    ldmfd sp!, {{lr}}",
     // IRQ mode, I set.
-    "    mrs r3, cpsr",
-    "    bic r3, r3, #0xdf",
-    "    orr r3, r3, #0x92",
-    "    msr cpsr_fc, r3",
-    "    ldmfd sp!, {{r0-r3, lr}}",
-    "    strh r2, [r3]",
-    "    strh r1, [r3, #8]",
-    "    msr spsr_fc, r0",
+    "    mrs r2, cpsr",
+    "    bic r2, r2, #0xdf",
+    "    orr r2, r2, #0x92",
+    "    msr cpsr_fc, r2",
+    // IE as it was, then the SPSR.
+    "    ldmfd sp!, {{r1, r2}}",
+    "    strh r2, [r1]",
+    "    ldmfd sp!, {{r12, lr}}",
+    "    msr spsr_fc, r12",
     "    bx lr",
     ".ltorg",
     ".balign 4",
