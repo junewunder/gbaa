@@ -86,7 +86,9 @@
 //! large value is kept by its operands' sets ([`G::op_kept`]), and a call
 //! by value joins each distinct result set once ([`Once`]): Emerald's
 //! first round takes 31 s (88 before), and its second, which the run
-//! never finished before, ends at 177 s.
+//! never finished before, ends at 177 s. It still doesn't settle: after
+//! six rounds 12,000 entries change in each, holding 24 million tokens
+//! (`memory/fnref-flow-emerald-memory.md` says where that stands).
 //!
 //! **The closed world.** Function and ROM addresses enter values only
 //! from the sources above; a number made by arithmetic the run doesn't
@@ -1783,7 +1785,7 @@ impl G {
         for (name, sets) in &stores {
             let (mut n, mut t, mut np, mut tp) = (0usize, 0usize, 0usize, 0usize);
             for v in sets {
-                if !ptrs.insert(std::rc::Rc::as_ptr(&v.0)) {
+                if v.is_empty() || !ptrs.insert(std::rc::Rc::as_ptr(&v.0)) {
                     continue;
                 }
                 np += 1;

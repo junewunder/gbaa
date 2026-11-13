@@ -1,6 +1,6 @@
 ---
 title: Why the function-address flow ran out of memory on Emerald, and the Ref fix
-hook: big reads are one Tok::Ref (1.5 GB); 2026-11-13: Emerald whole run 11-15 min at 2.4 GB, unsettled at the 48M-token bound; profile with eu-stack (perf is blocked)
+hook: the 48M tokens were copies (sets now kept once by content: 24M, 1.5 GB); 6 rounds in 37 min and still unsettled, 12k entries change a round; profile with eu-stack (perf is blocked)
 open: true
 ---
 
@@ -101,3 +101,41 @@ leave out a pointer the capped memory read (the rerun test's `snap`)
 already took in. `exp_merge` keeps numbers and pointers uncapped
 (`Exp::raw`) and caps them all together: the value is the capped read's
 again. The agb programs' metrics didn't move, Emerald's time neither.
+
+**What the 48M tokens were (2026-11-13, `native/fnref-flow-emerald`).**
+Copies. Counted by content (the trace's `held` lines, every 4,096
+functions run: sets by pointer, and those not equal to one before), the
+run that stopped at the bound held 44M tokens in 86,000 sets, 3M of them
+distinct: one 3,409-token set 685 times in entries, results and calls by
+value. Three makers of copies: a join into a set others share makes a new
+one (two entries reaching the same tokens by different joins); a join
+whose additions the cap drops again (a ROM pointer under a "from here
+on") copied the set and left it equal; and `all_holed` kept 845 of a
+function's own large sets alive (9M tokens). Now: `Sets` finds a kept set
+by content (weakly held; `Rc::make_mut` moves a changed one, so the table
+is never stale), `join_capped` asks `takes_in` first, `all_holed` holds
+weak pointers, and `G::held` counts the caches it missed (11M).
+
+**Speed, in the order found** (eu-stack, as above; each exact: the agb
+metrics and Emerald's per-round counts didn't move). Ops on large values
+kept by the operands' kept sets (`G::op_kept`: shift, `mvn`, binary ops,
+compares, `expand`); a call by value joining each distinct result set
+once (`Once`: 6,000 callees return a few sets); a cell's token logged the
+first time any cell gets it (`cells_all`), and `exp_update` making each
+read's gain once. Round 0: 88 s to 31 s. Round 1 ends at 177 s (never
+before), round 2 at 536 s; rounds 3 to 5 at 1,079, 1,629 and 2,194 s with
+`just lift-check` running beside them.
+
+**Where it stands.** It doesn't settle in six rounds: every round reruns
+15,200 functions (any pile change reruns every pile reader), and 12,400
+entries change in each though the pile gains little (16,920, 23,841,
+24,309, 24,574, 24,632 tokens after rounds 1 to 5; holes 9,414 and taken
+6,664 from round 2 on). Held tokens are flat at 24M from round 3, peak
+RSS 1.5 GB: the bound is no longer what stops it. Next: (1) find what the
+12,400 entries gain a round (print an entry's new tokens under the trace;
+suspects: `Ref`s with ever longer `Xf` chains, ROM pointers); (2) rerun a
+function by the `Ref` values it looked at, not by pile width; (3) left in
+the round-2 profile: `St::join`'s cap at every edge (17%), shift
+`split_refs` misses when the Refs' values change (17%), a load's
+`join_capped` per pointer (8%). The op memo's results aren't `share`d
+(one 1,426-token set 91 times in the cache): cheap to add.

@@ -20,4 +20,4 @@ Made from each file's frontmatter (`title`, `hook`, `open: true`) by `just memor
 Unsettled investigations, one per file with `open: true` and the next step in its hook.
 Drop the flag in the session that settles it.
 
-- [Why the function-address flow ran out of memory on Emerald, and the Ref fix](fnref-flow-emerald-memory.md) — big reads are one Tok::Ref (1.5 GB); 2026-11-13: Emerald whole run 11-15 min at 2.4 GB, unsettled at the 48M-token bound; profile with eu-stack (perf is blocked)
+- [Why the function-address flow ran out of memory on Emerald, and the Ref fix](fnref-flow-emerald-memory.md) — hook: the 48M tokens were copies (sets now kept once by content: 24M, 1.5 GB); 6 rounds in 37 min and still unsettled, 12k entries change a round; profile with eu-stack (perf is blocked)
