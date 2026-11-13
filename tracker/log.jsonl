@@ -2743,3 +2743,4 @@
 {"at":"2026-11-13T04:50:31Z","actor":"session","tag":"8eda0ebb","host":"quack","cmd":"claim","id":"native/native-check-spike-packed","text":"just native-check passes again: the spike's packed record: claimed"}
 {"at":"2026-11-13T05:22:02Z","actor":"session","tag":"34d57864","host":"quack","cmd":"add-unit","id":"native/serial-no-partner-as-mgba","text":"new unit: Unplugged serial port answers as mGBA's does"}
 {"at":"2026-11-13T05:43:25Z","actor":"session","tag":"8eda0ebb","host":"quack","cmd":"done","id":"native/native-check-spike-packed","text":"just native-check passes again: the spike's packed record: done"}
+{"at":"2026-11-13T05:43:34Z","actor":"session","tag":"8eda0ebb","host":"quack","cmd":"add-unit","id":"native/packed-diff-labels","text":"new unit: route-check --packed: failure names the two layouts"}

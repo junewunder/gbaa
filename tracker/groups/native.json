@@ -1885,6 +1885,12 @@
       "title": "Unplugged serial port answers as mGBA's does",
       "detail": "With no link partner the play build (runtime::io) and the hardware library keep a serial register as stored; mGBA 0.10.5 (src/gba/sio.c, io.c) doesn't. agb/native-serial's route records the mismatch (units/native-serial-600.toml lists each: SIOCNT's SI bit in normal mode, an internal-clock transfer ended in the store with its IRQ, multiplayer's forced bits 2-6, RCNT's low four bits kept, JOYCNT's and JOYSTAT's own bits, 0x15A not a register, unused halfwords open bus). A game that starts a normal-mode transfer on the internal clock and waits for its IRQ or for the start bit to clear hangs in both builds today. Decide per item which the play build takes (hardware first where GBATEK and mGBA disagree), change runtime::io and the scheduler's IRQ, and runtime::hw with them (it keeps the registers in the same Io, but requests its own IRQs). Done when: units/native-serial-600.toml's mgba_hash and mgba_why are gone or name only what was kept on purpose, with why; just unit native-serial-600 and just lift-check pass; just check passes.",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/packed-diff-labels",
+      "title": "route-check --packed: failure names the two layouts",
+      "detail": "Found reviewing {unit:native/native-check-spike-packed}. In route-check --native's --packed comparison (crates/route-check/src/native.rs, compare/frame_diff) a difference prints as 'play 0x.., native 0x..', but there the first record is the guest-layout build's and the second the play-layout (packed) build's, so the message names neither rightly. Give compare the two sides' names. Done when: a planted layout fault (a global at the wrong offset in a packed build) prints 'guest layout' and 'play layout' values; just native-check, just lift-check and just check pass.",
+      "uses": ["heavy"]
     }
   ]
 }
