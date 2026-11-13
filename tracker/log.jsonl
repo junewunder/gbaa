@@ -2766,3 +2766,4 @@
 {"at":"2026-11-13T07:21:50Z","actor":"session","tag":"ae52d6ac","host":"quack","cmd":"edit","id":"native/fnref-frame-pointers","text":"Function flow: pointers into stack frames kept exact: edited (add-needs)"}
 {"at":"2026-11-13T07:21:52Z","actor":"session","tag":"ae52d6ac","host":"quack","cmd":"edit","id":"native/fnref-live-registers","text":"Function flow passes only registers a callee reads: edited (add-needs)"}
 {"at":"2026-11-13T07:21:54Z","actor":"session","tag":"ae52d6ac","host":"quack","cmd":"edit","id":"native/fnref-ram-pointers-land","text":"Function flow: the object split and RAM pointers land: edited (add-needs)"}
+{"at":"2026-11-13T07:21:56Z","actor":"session","tag":"ae52d6ac","host":"quack","cmd":"edit","id":"native/fnref-unknown-addrs","text":"Function flow: loads through unknown addresses: edited (add-needs)"}
