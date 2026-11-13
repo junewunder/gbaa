@@ -922,15 +922,20 @@ struct G {
     ref_exp: std::collections::HashMap<Tok, Exp, Fx>,
     /// Each token stored new to the pile (`false`) or a cell (`true`),
     /// with the width stored, in order: what a kept [`Exp`] hasn't read.
+    /// A cell's the first time any cell gets it (`cells_all`: a read of
+    /// every cell holds it once, and Emerald's four thousand cells get
+    /// the same tokens).
     mem_log: Vec<(bool, Tok, u8)>,
+    cells_all: Mem,
     /// Those that read ROM alone, kept for good.
     ref_rom: std::collections::HashMap<Tok, Val, Fx>,
-    /// [`G::expand`]'s of a value (op 0), and a large value's shifted or
-    /// `mvn`ed ([`G::op_kept`]), by the op and the value's set (the kept
-    /// one of its tokens, [`Sets`]) and flags: the Refs' values it was
-    /// made of, and it.
+    /// [`G::expand`]'s of a value (op 0), and an op's result on large
+    /// values (a shift's, `mvn`'s, a binary op's or compare's:
+    /// [`G::op_kept`]), by the op and each operand's set (the kept one of
+    /// its tokens, [`Sets`]) and flags: the Refs' values it was made of,
+    /// and it.
     #[allow(clippy::type_complexity)]
-    expanded: std::collections::HashMap<OpKey, (Toks, Vec<Val>, Val), Fx>,
+    expanded: std::collections::HashMap<OpKey, ([Toks; 2], Vec<Val>, Val), Fx>,
     /// [`Run::split_refs`]' tokens a map leaves of a Ref's value, by the
     /// Ref and map, with the value's set they came of (the same while it
     /// is).
@@ -1000,9 +1005,13 @@ struct G {
     off: u8,
 }
 
-/// A kept op's key ([`G::op_kept`]): the op, a shift's amount, the
-/// operand's set and flags.
-type OpKey = (u8, Option<u32>, *const BTreeSet<Tok>, bool, bool, bool);
+/// A kept op's key ([`G::op_kept`]): the op, a shift's amount, each
+/// operand's set (null: empty, or no operand) and flags.
+type OpKey = (
+    u8,
+    Option<u32>,
+    [(*const BTreeSet<Tok>, bool, bool, bool); 2],
+);
 
 /// A fast hash for the run's small keys (the standard one was a tenth of
 /// a large game's run).
@@ -1209,8 +1218,11 @@ impl G {
                 }
                 Store::Cell(a) => {
                     self.cell_reads = Default::default();
-                    self.mem_log
-                        .extend(new.iter().map(|&(t, sw)| (true, t, sw)));
+                    for &(t, sw) in &new {
+                        if self.cells_all.insert((t, sw)) {
+                            self.mem_log.push((true, t, sw));
+                        }
+                    }
                     // The kept reads of the addresses this cell overlaps.
                     for c in a.saturating_sub(4)..=a + 3 {
                         for w in [1u8, 2, 4] {
@@ -1312,6 +1324,13 @@ impl G {
         if let Some(v) = self.ref_rom.get(&r) {
             return v.clone();
         }
+        if let Some(e) = self.ref_exp.get(&r)
+            && e.at == self.mem_log.len()
+        {
+            self.rd.pile |= e.pile;
+            self.rd.all_cells |= e.cells;
+            return e.v.clone();
+        }
         let mut e = match self.ref_exp.remove(&r) {
             Some(e) => e,
             None => {
@@ -1385,17 +1404,22 @@ impl G {
             .filter(|(s, _)| matches!(s, Src::Pile(_) | Src::Cells(_)))
             .copied()
             .collect();
-        for &(cells, t, sw) in &self.mem_log[e.at..] {
-            for &(src, xf) in &mems {
-                let w = match src {
-                    Src::Cells(w) if cells => w,
-                    Src::Pile(w) if !cells => w,
-                    _ => continue,
-                };
-                let mut one = Val::default();
-                from_mem_one(t, sw, w, &mut one);
-                exp_take(&mut d, &one, xf, &mut work);
-            }
+        // What each read gained (the pile's or every cell's, at a width),
+        // made once and taken through each of the forms it is seen by: a
+        // value a token and form at a time was most of Emerald's third
+        // round.
+        let mut gained: BTreeMap<Src, Val> = BTreeMap::new();
+        for &(src, xf) in &mems {
+            let read = gained.entry(src).or_insert_with(|| {
+                let mut read = Val::default();
+                for &(cells, t, sw) in &self.mem_log[e.at..] {
+                    if cells == matches!(src, Src::Cells(_)) {
+                        from_mem_one(t, sw, src.w(), &mut read);
+                    }
+                }
+                read
+            });
+            exp_take(&mut d, read, xf, &mut work);
         }
         e.at = self.mem_log.len();
         exp_merge(e, d);
@@ -1411,7 +1435,7 @@ impl G {
         if !v.marked() {
             return v.clone();
         }
-        let k = match self.op_kept(0, None, v) {
+        let k = match self.op_kept(0, None, [v, &Val::default()]) {
             Ok(out) => return out,
             Err(k) => k,
         };
@@ -1426,25 +1450,43 @@ impl G {
         out
     }
 
-    /// The kept result of `op` (with `n`) on `v`, if `v` has the tokens
-    /// and flags it was made from and its Refs the values they had then;
-    /// else what [`G::op_keep`] keeps the result by. By the kept set of
-    /// `v`'s tokens, so that an equal value finds it: in Emerald's second
-    /// round most functions shift, and expand, values equal to another
-    /// function's (two thirds of that round's time).
+    /// The kept result of `op` (with `n`) on `vs`, if they have the
+    /// tokens and flags it was made from and their Refs the values they
+    /// had then; else what [`G::op_keep`] keeps the result by. By the
+    /// kept sets of their tokens, so that equal values find it: in
+    /// Emerald's second round most functions shift, compare and expand
+    /// values equal to another function's (two thirds of that round's
+    /// time).
     #[allow(clippy::type_complexity)]
-    fn op_kept(&mut self, op: u8, n: Option<u32>, v: &Val) -> Result<Val, (OpKey, Toks, Vec<Val>)> {
-        let refs: Vec<Tok> = v.refs().collect();
+    fn op_kept(
+        &mut self,
+        op: u8,
+        n: Option<u32>,
+        vs: [&Val; 2],
+    ) -> Result<Val, (OpKey, [Toks; 2], Vec<Val>)> {
+        let refs: Vec<Tok> = vs.iter().flat_map(|v| v.refs()).collect();
         let parts: Vec<Val> = refs.iter().map(|&r| self.ref_val(r)).collect();
         let same = |a: &Val, b: &Val| {
             std::rc::Rc::ptr_eq(&a.toks.0, &b.toks.0)
                 && (a.mem, a.unk, a.lost_rom) == (b.mem, b.unk, b.lost_rom)
         };
-        let key = |t: &Toks| (op, n, std::rc::Rc::as_ptr(&t.0), v.mem, v.unk, v.lost_rom);
-        let mut kept = v.toks.clone();
+        let key = |ts: &[Toks; 2]| {
+            let of = |i: usize| {
+                let p = if ts[i].is_empty() {
+                    std::ptr::null()
+                } else {
+                    std::rc::Rc::as_ptr(&ts[i].0)
+                };
+                (p, vs[i].mem, vs[i].unk, vs[i].lost_rom)
+            };
+            (op, n, [of(0), of(1)])
+        };
+        let mut kept = [vs[0].toks.clone(), vs[1].toks.clone()];
         for shared in [false, true] {
             if shared {
-                self.sets.share(&mut kept);
+                for t in &mut kept {
+                    self.sets.share(t);
+                }
             }
             if let Some((_, was, out)) = self.expanded.get(&key(&kept))
                 && was.len() == parts.len()
@@ -1456,7 +1498,7 @@ impl G {
         Err((key(&kept), kept, parts))
     }
 
-    fn op_keep(&mut self, (key, kept, parts): (OpKey, Toks, Vec<Val>), out: &Val) {
+    fn op_keep(&mut self, (key, kept, parts): (OpKey, [Toks; 2], Vec<Val>), out: &Val) {
         if self.expanded.len() >= 4096 {
             self.expanded.clear();
         }
@@ -1643,7 +1685,7 @@ impl G {
             count(
                 "expanded",
                 &mut self.expanded.values().flat_map(|(a, ps, o)| {
-                    std::iter::once(a)
+                    a.iter()
                         .chain(ps.iter().map(|p| &p.toks))
                         .chain(std::iter::once(&o.toks))
                 }),
@@ -1670,18 +1712,19 @@ impl G {
                 self.pile.len()
                     + mems
                     + self.mem_log.len()
+                    + self.cells_all.len()
                     + self.ref_exp.values().map(|e| e.raw.len()).sum::<usize>(),
             ),
         ]
     }
 
-    /// For the trace: what the held sets are. Per store, its distinct
-    /// sets by pointer and by content (equal sets held apart are copies),
-    /// their tokens by kind, and the largest.
-    fn held_detail(&self) -> String {
+    /// For the trace: the kept sets by store, counted by pointer and by
+    /// content (equal sets held apart are copies: what took Emerald to
+    /// [`TOKENS`] before [`Sets`]), and the sets with the most tokens in
+    /// copies.
+    fn held_copies(&self) -> String {
         use std::hash::{Hash, Hasher};
-        let mut s = String::new();
-        let stores: Vec<(&str, Vec<&Toks>)> = vec![
+        let stores: [(&str, Vec<&Toks>); 5] = [
             (
                 "entry",
                 self.entry.values().flatten().map(|v| &v.toks).collect(),
@@ -1699,44 +1742,32 @@ impl G {
                     .collect(),
             ),
             (
-                "ref_exp",
-                self.ref_exp.values().map(|e| &e.v.toks).collect(),
+                "refs",
+                self.ref_exp
+                    .values()
+                    .map(|e| &e.v.toks)
+                    .chain(self.ref_rom.values().map(|v| &v.toks))
+                    .collect(),
             ),
-            ("ref_rom", self.ref_rom.values().map(|v| &v.toks).collect()),
             (
-                "expanded",
+                "expanded and split_rest",
                 self.expanded
                     .values()
                     .flat_map(|(a, ps, o)| {
-                        std::iter::once(a)
+                        a.iter()
                             .chain(ps.iter().map(|p| &p.toks))
                             .chain(std::iter::once(&o.toks))
                     })
-                    .collect(),
-            ),
-            (
-                "split_rest",
-                self.split_rest.values().flat_map(|(a, b)| [a, b]).collect(),
-            ),
-            (
-                "pile/cell reads",
-                self.pile_raw
-                    .iter()
-                    .chain(&self.cell_raw)
-                    .chain(self.pile_reads.iter().flatten())
-                    .chain(self.cell_reads.iter().flatten())
-                    .map(|v| &v.toks)
+                    .chain(self.split_rest.values().flat_map(|(a, b)| [a, b]))
                     .collect(),
             ),
         ];
+        let mut s = String::new();
         let mut ptrs = std::collections::HashSet::new();
-        let mut all: std::collections::HashMap<u64, (usize, usize, &Toks, Vec<&str>)> =
-            Default::default();
+        // By content: the copies, their length, and the stores they're in.
+        let mut all: std::collections::HashMap<u64, (usize, usize, Vec<&str>)> = Default::default();
         for (name, sets) in &stores {
             let (mut n, mut t, mut np, mut tp) = (0usize, 0usize, 0usize, 0usize);
-            let mut kinds = [0usize; 12];
-            let mut sizes = [(0usize, 0usize); 5];
-            let mut own = std::collections::HashSet::new();
             for v in sets {
                 if !ptrs.insert(std::rc::Rc::as_ptr(&v.0)) {
                     continue;
@@ -1748,71 +1779,26 @@ impl G {
                 for x in v.iter() {
                     x.hash(&mut h);
                 }
-                let h = h.finish();
-                let e = all.entry(h).or_insert((0, v.len(), v, Vec::new()));
+                let e = all.entry(h.finish()).or_insert((0, v.len(), Vec::new()));
                 e.0 += 1;
-                if !e.3.contains(name) {
-                    e.3.push(name);
+                if !e.2.contains(name) {
+                    e.2.push(name);
                 }
-                if e.0 > 1 || !own.insert(h) {
-                    continue;
-                }
-                n += 1;
-                t += v.len();
-                let b = match v.len() {
-                    0..64 => 0,
-                    64..1024 => 1,
-                    1024..8192 => 2,
-                    8192..32768 => 3,
-                    _ => 4,
-                };
-                sizes[b].0 += 1;
-                sizes[b].1 += v.len();
-                for x in v.iter() {
-                    kinds[match *x {
-                        Tok::Fn { form, .. } => form as usize,
-                        Tok::Num(_) => 8,
-                        Tok::Rom(_) => 9,
-                        Tok::RomFrom(_) => 10,
-                        Tok::Ref { .. } => 11,
-                    }] += 1;
+                if e.0 == 1 {
+                    n += 1;
+                    t += v.len();
                 }
             }
             writeln!(
                 s,
-                "  held {name}: {np} sets / {tp} tokens by pointer; {n} / {t} new by content; sizes <64 {:?}, <1k {:?}, <8k {:?}, <32k {:?}, more {:?}; kinds Full {} Hi {} Lo {} HiUp {} LoUp {} Part {} Not {} Cmp {} Num {} Rom {} RomFrom {} Ref {}",
-                sizes[0], sizes[1], sizes[2], sizes[3], sizes[4],
-                kinds[0], kinds[1], kinds[2], kinds[3], kinds[4], kinds[5],
-                kinds[6], kinds[7], kinds[8], kinds[9], kinds[10], kinds[11],
+                "  held {name}: {np} sets of {tp} tokens by pointer, {n} of {t} of them not equal to one before"
             )
             .unwrap();
         }
-        let mut top: Vec<&(usize, usize, &Toks, Vec<&str>)> = all.values().collect();
-        top.sort_by_key(|e| std::cmp::Reverse(e.0 * e.1));
-        for (copies, len, v, names) in top.into_iter().take(24) {
-            let fns: BTreeSet<Origin> = v
-                .iter()
-                .filter_map(|t| match t {
-                    Tok::Fn { origin, .. } => Some(*origin),
-                    _ => None,
-                })
-                .collect();
-            let forms: BTreeSet<Form> = v
-                .iter()
-                .filter_map(|t| match t {
-                    Tok::Fn { form, .. } => Some(*form),
-                    _ => None,
-                })
-                .collect();
-            let unholed = fns.iter().filter(|o| !self.holed.contains(o)).count();
-            writeln!(
-                s,
-                "  held set: {len} tokens x {copies} copies in {names:?}: {} origins ({unholed} not holed), forms {forms:?}, {} other tokens, refs {:?}",
-                fns.len(),
-                v.iter().filter(|t| !matches!(t, Tok::Fn { .. })).count(),
-                v.range(REF0..).take(4).collect::<Vec<_>>(),
-            )
-            .unwrap();
+        let mut top: Vec<&(usize, usize, Vec<&str>)> = all.values().filter(|e| e.0 > 1).collect();
+        top.sort_by_key(|e| std::cmp::Reverse((e.0 - 1) * e.1));
+        for (copies, len, names) in top.into_iter().take(8) {
+            writeln!(s, "  held set: {len} tokens, {copies} times, in {names:?}").unwrap();
         }
         s
     }
@@ -2299,6 +2285,12 @@ impl Run<'_, '_> {
         len: Option<u32>,
         into: &mut Val,
     ) {
+        let v = self.rom_from_val(a, w, hull, len);
+        into.join(&v);
+    }
+
+    /// What [`Self::rom_from`] reads.
+    fn rom_from_val(&mut self, a: u32, w: u8, hull: Option<(u32, u32)>, len: Option<u32>) -> Val {
         let bound = self.img.bound(a);
         let (mut lo, mut hi) = match len {
             Some(n) => (a, bound.min(a.saturating_add(n))),
@@ -2314,9 +2306,7 @@ impl Run<'_, '_> {
         }
         let end = hi.min(lo.saturating_add(ROM_READ));
         if let Some(v) = self.g.rom_from.get(&(lo, end, w)) {
-            let v = rom_ref(v, Src::RomFrom(lo, end, w));
-            into.join(&v);
-            return;
+            return rom_ref(v, Src::RomFrom(lo, end, w));
         }
         let mut p = lo & !3;
         let mut v = Val {
@@ -2328,8 +2318,9 @@ impl Run<'_, '_> {
             self.rom_read_capped(p, w.min(4), &mut v);
             p += 4;
         }
-        into.join(&rom_ref(&v, Src::RomFrom(lo, end, w)));
+        let r = rom_ref(&v, Src::RomFrom(lo, end, w));
         self.g.rom_from.insert((lo, end, w), v);
+        r
     }
 
     /// `x` to run a per-token op on that makes a function's address of
@@ -2560,9 +2551,14 @@ impl Run<'_, '_> {
             // With the pile's tokens in, to look at them.
             let xv = |g: &mut G, x: ValueId| g.expand(&vals[x.index()]);
             let guarded = inst.guard.is_some();
-            // A large value shifted or `mvn`ed, as kept: its holes are
-            // made already.
-            let large = |x: ValueId| vals[x.index()].toks.len() >= 64;
+            // An op on a large value, as kept: its holes are made
+            // already. (A shift that keeps the value as it is, below,
+            // leaves its Refs unread; an add with carry of no function's
+            // address reads its carry.)
+            let large = |x: ValueId| {
+                let v = &vals[x.index()];
+                v.toks.len() >= 64 || v.marked()
+            };
             let op = match inst.op {
                 Op::Shift { kind, v, amount } if large(v) => {
                     let n = &vals[amount.index()];
@@ -2570,14 +2566,21 @@ impl Run<'_, '_> {
                         (Some(Tok::Num(n)), 1, false) => Some(*n),
                         _ => None,
                     };
-                    // But one kept as it is (below), its Refs unread.
                     let keep = n == Some(0) || (kind == ShiftType::Ror && n.is_none());
-                    (!keep).then_some((1 + kind as u8, n, v))
+                    (!keep).then_some((1 + kind as u8, n, v, None))
                 }
-                Op::Not(v) if large(v) => Some((5, None, v)),
+                Op::Not(v) if large(v) => Some((5, None, v, None)),
+                Op::Bin(op, a, b) if large(a) || large(b) => Some((6 + op as u8, None, a, Some(b))),
+                Op::Adc { a, b, .. } if large(a) || large(b) => Some((12, None, a, Some(b))),
                 _ => None,
             };
-            let kept = match op.map(|(op, n, v)| self.g.op_kept(op, n, &vals[v.index()])) {
+            // (Not under `GBAA_FNREF_WATCH`, which says what each op makes.)
+            let op = op.filter(|_| self.g.watch.is_empty() && !self.g.roads);
+            let none = Val::default();
+            let mut kept = match op.map(|(op, n, a, b)| {
+                let b = b.map_or(&none, |b| &vals[b.index()]);
+                self.g.op_kept(op, n, [&vals[a.index()], b])
+            }) {
                 Some(Ok(out)) => {
                     vals[i] = out;
                     continue;
@@ -2649,6 +2652,7 @@ impl Run<'_, '_> {
                         self.cmp_refs(&mut out, &[&vals[ra.index()], &vals[rb.index()]]);
                         out
                     } else {
+                        kept = None;
                         let ab = self.bin(BinOp::Add, &a, &b, site, at);
                         let c = xv(self.g, c);
                         self.bin(BinOp::Add, &ab, &c, site, at)
@@ -2899,7 +2903,13 @@ impl Run<'_, '_> {
                 }
                 self.g.roads(logged, &ops);
             }
-            if let Some(k) = kept {
+            // Kept, but for a constant this instruction made (its own).
+            if let Some(k) = kept
+                && !v
+                    .toks
+                    .iter()
+                    .any(|t| matches!(t, Tok::Fn { origin, .. } if *origin == site))
+            {
                 self.g.op_keep(k, &v);
             }
             vals[i] = v;
@@ -2980,7 +2990,16 @@ impl Run<'_, '_> {
                     capped = true;
                 }
                 Tok::RomFrom(r) => {
-                    self.rom_from(r, w, hull, None, &mut out);
+                    // As the cap leaves it, and taking in all the read
+                    // holds, `out` is the join already (a load through
+                    // hundreds of pointers "from here on" capped it at
+                    // each: a fifth of Emerald's second round).
+                    let v = self.rom_from_val(r, w, hull, None);
+                    if capped {
+                        out.join_capped(&v);
+                    } else {
+                        out.join(&v);
+                    }
                     capped = true;
                 }
                 Tok::Num(c) | Tok::Fn { key: c, .. } => {
@@ -3289,11 +3308,12 @@ impl Run<'_, '_> {
                     }
                 }
                 let mut grew = false;
+                let mut once = Once::default();
                 for &k in &callees {
                     self.rets_read.insert(k);
                     if self.g.ret_stamp.get(&k).is_some_and(|&s| s > m.stamp) {
-                        for (a, b) in m.rets.iter_mut().zip(&self.g.ret[&k]) {
-                            grew |= a.union_new(b);
+                        for (i, (a, b)) in m.rets.iter_mut().zip(&self.g.ret[&k]).enumerate() {
+                            grew |= once.first(i, b) && a.union_new(b);
                         }
                     }
                 }
@@ -3311,9 +3331,12 @@ impl Run<'_, '_> {
             None => {
                 let mut rets = vec![Val::default(); 4];
                 self.g.give_all(&callees, args);
+                let mut once = Once::default();
                 for &k in &callees {
-                    for (a, b) in rets.iter_mut().zip(self.ret_of(k)) {
-                        a.union_new(&b);
+                    for (i, (a, b)) in rets.iter_mut().zip(self.ret_of(k)).enumerate() {
+                        if once.first(i, &b) {
+                            a.union_new(&b);
+                        }
                     }
                 }
                 for a in &mut rets {
@@ -3355,10 +3378,13 @@ impl Run<'_, '_> {
                 Some(v) => v.clone(),
                 None => {
                     let mut v = vec![Val::default(); 4];
+                    let mut once = Once::default();
                     for k in self.loose {
                         if let Some(r) = self.g.ret.get(k) {
-                            for (a, b) in v.iter_mut().zip(r) {
-                                a.join_capped(b);
+                            for (i, (a, b)) in v.iter_mut().zip(r).enumerate() {
+                                if once.first(i, b) {
+                                    a.join_capped(b);
+                                }
                             }
                         }
                     }
@@ -3378,6 +3404,23 @@ impl Run<'_, '_> {
             }
         }
         rets
+    }
+}
+
+/// The values joined into each register of a call's results so far, by
+/// set and flags: thousands of callees return the same few kept sets
+/// ([`Sets`]), and joining one again adds nothing (half of Emerald's third
+/// round was those joins).
+#[derive(Default)]
+struct Once(std::collections::HashSet<(usize, *const BTreeSet<Tok>, bool, bool, bool), Fx>);
+
+impl Once {
+    /// Whether `v` is new to register `i`.
+    fn first(&mut self, i: usize, v: &Val) -> bool {
+        v.toks.is_empty()
+            || self
+                .0
+                .insert((i, std::rc::Rc::as_ptr(&v.toks.0), v.mem, v.unk, v.lost_rom))
     }
 }
 
@@ -4018,7 +4061,7 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
                     );
                 }
                 if trace && (total > TOKENS || ran.is_multiple_of(4096)) {
-                    eprint!("{}", g.held_detail());
+                    eprint!("{}", g.held_copies());
                 }
                 if total > TOKENS {
                     g.flow.unsettled = true;
