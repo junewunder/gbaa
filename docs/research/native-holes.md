@@ -453,8 +453,8 @@ extended to a word whatever rN held, and the summaries took it for a use.
 the carry's bits only (the IR reads rN once, so `a` is one value): the
 entry bits are masked away, a soft hole.
 
-Hard holes fell on the three games and rose nowhere; the numbers are in
-the unit's evidence. Still hard entry readers there: moonbeam 0x0800019b
+Against the main it began from, hard holes fell on the three games and
+rose nowhere (numbers: the unit's evidence). Still hard then: moonbeam 0x0800019b
 (crt0's copy loop takes the end address in r4), 0x0803830d (a `bx pc`
 veneer to ARM `stmia r0!, {r4-r14}`, a register save as `setjmp` makes)
 and 0x08025a29 (r8 and r9 at 0x08025dec, its far jumps all taken; not
