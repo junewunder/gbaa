@@ -243,9 +243,7 @@ fn run<G: Native<Host = AnyHost>>(
 ) -> Result<(), String> {
     if let Some(p) = &o.native_record {
         if !guest {
-            return Err(
-                "--native-record: this build has no guest-layout RAM to record".into(),
-            );
+            return Err("--native-record: this build has no guest-layout RAM to record".into());
         }
         let w = Writer::create(p).map_err(|e| format!("{}: {e}", p.display()))?;
         RECORD.set(Some((w, Record::new())));
