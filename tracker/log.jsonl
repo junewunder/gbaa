@@ -2797,3 +2797,4 @@
 {"at":"2026-11-13T08:54:00Z","actor":"session","tag":"34d57864","host":"quack","cmd":"decide","text":"decided: Prelude bar plus 6: RegisterRamReset's serial flag","d":"d/prelude-bar-plus-6-registerramreset-s-serial"}
 {"at":"2026-11-13T08:54:05Z","actor":"session","tag":"34d57864","host":"quack","cmd":"done","id":"native/hw-serial-registers","text":"Serial registers kept in the hardware library: done"}
 {"at":"2026-11-13T08:54:54Z","actor":"session","tag":"9828215c","host":"quack","cmd":"add-unit","id":"native/hw-io-ignored-ranges","text":"new unit: Library ignores the I/O offsets the play build ignores"}
+{"at":"2026-11-13T08:55:31Z","actor":"session","tag":"81556889","host":"quack","cmd":"claim","id":"native/fnref-flow-emerald","text":"Function-address flow settles on Emerald: claimed (picking up after c06275d9)"}
