@@ -2120,6 +2120,12 @@
       "check": "independent",
       "needs": ["native/lift-irq-wrapper-tail"],
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/entry-readers-moonbeam-rogue",
+      "title": "Entry readers left on moonbeam and Rogue, looked into",
+      "detail": "Left by {unit:discovery/gcc-far-jump-bl} (docs/research/native-holes.md, 'Modern GCC's cold blocks'): hard 'reads r4-r11 at entry' holes not explained yet. moonbeam 0x08025a29 reads r8 and r9 at 0x08025dec (str through r3) in a 2.8 KB function whose far jumps are all taken, so some path reaches it with r8 unset or the summary joins one in; Rogue 0x081b42e1 (r11 passed in r0 at 0x081b444c) and 0x0826c5e7 (r4, r7 at its first instruction, r6 at 0x0826c5fa: may be a fragment or data). Known and not this unit's: moonbeam 0x0800019b (crt0's copy loop takes its end address in r4) and 0x0803830d (a register save as setjmp makes). Done: each one's cause written in the doc, fixed where it is the summary's or discovery's mistake, holes-all --against main with no hard count higher.",
+      "uses": ["heavy"]
     }
   ]
 }
