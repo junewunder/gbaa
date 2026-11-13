@@ -967,7 +967,13 @@ fn is_push_lr(prog: &Program, mut t: u32) -> bool {
             return false;
         };
         match i.instr {
-            Instr::Block { load: false, rn: DReg::Sp, writeback: true, regs, .. } => {
+            Instr::Block {
+                load: false,
+                rn: DReg::Sp,
+                writeback: true,
+                regs,
+                ..
+            } => {
                 return regs & 1 << 14 != 0;
             }
             Instr::Undefined { .. } | Instr::Swi { .. } => return false,
