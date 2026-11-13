@@ -921,6 +921,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         let fn_proven = f.1.keys().filter(|w| f.0.proven(**w)).count();
         m.push("fn_words_proven", n(fn_proven));
         m.push("fn_words_not_proven", n(f.1.len() - fn_proven));
+        m.push("fn_loads_read_everything", n(f.0.everything.len()));
     }
     m.push("gap_targets", n(gaps.len()));
     writeln!(

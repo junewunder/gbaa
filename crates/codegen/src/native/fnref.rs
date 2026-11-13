@@ -856,6 +856,10 @@ pub struct Flow {
     /// The origins stored where the run can't place them (the pile: not a
     /// constant address, nor a pointer into an object).
     pub piled: BTreeSet<Origin>,
+    /// The loads that read everything (`native/fnref-unknown-addrs`):
+    /// through a pointer into RAM the run dropped ([`Val::lost_ptr`]), so
+    /// every RAM cell, every object and the pile.
+    pub everything: BTreeSet<u32>,
     /// The run didn't settle: nothing is proven.
     pub unsettled: bool,
     /// It stopped at [`TOKENS`]: the tokens it held, after how many
@@ -964,6 +968,11 @@ struct G {
     pile_changed: bool,
     /// What the running function read of memory.
     rd: Rd,
+    /// The functions nothing the run saw calls, directly or by an address
+    /// it read, once it settled without them: their callers are out of
+    /// sight (a vtable word no load reached), so what they are passed may
+    /// point anywhere ([`Val::lost_ptr`]).
+    orphans: BTreeSet<u32>,
     /// `GBAA_FNREF_WATCH`'s origins: each place their function address
     /// goes is printed, once ([`G::watch`]).
     watch: Vec<Origin>,
@@ -1882,6 +1891,9 @@ impl Run<'_, '_> {
             lost_rom: end < hi,
             ..Val::default()
         };
+        if self.trace && end < hi {
+            eprintln!("  rom lost at {:#010x}: {lo:#x}..{hi:#x} cut short", self.at);
+        }
         while p < end {
             self.rom_read(p, w.min(4), &mut v);
             p += 4;
@@ -1971,6 +1983,9 @@ impl Run<'_, '_> {
                             )
                         {
                             out.lost_rom = true;
+                            if self.trace {
+                                eprintln!("  rom lost at {at:#010x}: {x:x?} - {y:x?}");
+                            }
                         }
                         // A RAM address moved by an unknown (an index, a
                         // mask), as for an object: still a pointer, which
@@ -2047,6 +2062,9 @@ impl Run<'_, '_> {
         // Unless the run dropped one: a ROM read it cut short or couldn't
         // make, or a ROM pointer it lost.
         let complete = !callees.is_empty() && !t.lost_rom;
+        if self.trace && !complete {
+            eprintln!("  incomplete at {at:#010x}: through {}", brief(t));
+        }
         let site = Site {
             callees: callees.clone(),
             complete,
@@ -2539,6 +2557,9 @@ impl Run<'_, '_> {
         if lost && self.trace {
             eprintln!("  load anywhere at {:#010x} through {a:?}", self.at);
         }
+        if lost && hull.is_none_or(|(lo, hi)| !(is_ram(lo) && is_ram(hi))) {
+            self.g.flow.everything.insert(self.at);
+        }
         if lost || unknown {
             match hull {
                 // Bounded to ROM: its words there.
@@ -2557,6 +2578,13 @@ impl Run<'_, '_> {
                         && self.img.word(hi).is_some()
                     {
                         out.lost_rom = true;
+                        if self.trace {
+                            eprintln!(
+                                "  rom lost at {:#010x}: bounds {lo:#x}..={hi:#x} too wide, through {}",
+                                self.at,
+                                brief(a)
+                            );
+                        }
                     }
                     // Bounds that reach past RAM are none: "not null",
                     // 1 to 0xffff_ffff, took in every cell and every
@@ -3219,6 +3247,9 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> R {
     }
 }
 
+/// Where every program starts: the cartridge header's branch.
+const RESET: u32 = 0x0800_0000;
+
 /// `GBAA_FNREF_WATCH`'s origins ([`G::watch`]).
 fn watch_env() -> Vec<Origin> {
     let hex = |s: &str| u32::from_str_radix(s.trim().trim_start_matches("0x"), 16).ok();
@@ -3369,6 +3400,23 @@ pub fn follow(
             }
         }
         if dirty.is_empty() {
+            // Settled: the functions still without a caller in sight
+            // (but the reset, whose registers are nothing) run again,
+            // their parameters lost pointers.
+            let new: Vec<u32> = loose
+                .iter()
+                .map(|&i| entry_of(i))
+                .filter(|k| !g.taken.contains(k) && *k != RESET && !g.orphans.contains(k))
+                .collect();
+            if !new.is_empty() && std::env::var_os("GBAA_X_NO_ORPHANS").is_none() {
+                if trace {
+                    eprintln!("fnref round {round}: settled; no caller in sight: {new:x?}");
+                }
+                dirty.extend(new.iter().map(|&k| k as Ix));
+                g.orphans.extend(new);
+            }
+        }
+        if dirty.is_empty() {
             if trace {
                 for (i, o) in g.objs.iter().enumerate() {
                     eprintln!("obj {i}: {o:x?}");
@@ -3394,6 +3442,11 @@ pub fn follow(
                 }
                 for r in &mut entry {
                     r.unk = true;
+                }
+                if g.orphans.contains(&entry_of(i)) {
+                    for r in &mut entry[..4] {
+                        r.lost_ptr = true;
+                    }
                 }
             }
             // The sp it was called with; its own is its frame's start.
