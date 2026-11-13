@@ -2319,9 +2319,12 @@ impl FnPrinter<'_, '_> {
         let at = x.at;
         let regs = "[r0, r1, r2, r3]";
         let mut s = String::new();
-        let wait = match x.idle {
-            Idle::Edge => "g.sp = r13; hw::idle(g)?; ",
-            Idle::Spin => "g.sp = r13; hw::spin(g)?; ",
+        // In the reset or the IRQ wrapper sp is its mode's, as at a store.
+        let wait = match (x.idle, self.psr.is_some()) {
+            (Idle::Edge, false) => "g.sp = r13; hw::idle(g)?; ",
+            (Idle::Spin, false) => "g.sp = r13; hw::spin(g)?; ",
+            (Idle::Edge, true) => "bank_sp(g, r13); hw::idle(g)?; ",
+            (Idle::Spin, true) => "bank_sp(g, r13); hw::spin(g)?; ",
             _ => "",
         };
         match x.plan {
@@ -2429,6 +2432,7 @@ impl FnPrinter<'_, '_> {
                     0x00 => "soft_reset(g)?;".to_string(),
                     0x01 => "register_ram_reset(g, r0);".to_string(),
                     // `Stop` is a halt, as in the play build.
+                    0x02 | 0x03 if self.psr.is_some() => "bank_sp(g, r13); hw::halt(g)?;".to_string(),
                     0x02 | 0x03 => "g.sp = r13; hw::halt(g)?;".to_string(),
                     0x04 => "r0 = intr_wait(g, r13, r0 != 0, r1)?;".to_string(),
                     0x05 => "r0 = intr_wait(g, r13, true, 1)?; r1 = 1;".to_string(),
