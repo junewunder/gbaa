@@ -190,8 +190,237 @@ against main's 56, and within one of main's on the others.
    another source first); a copy routine's source and destination kept
    apart by caller.
 
-One question this leaves for june: agb programs are test inputs, and
-their words are held by Rust's shapes (formatter arguments in stack
-arrays, trait objects, a byte copy of closures). Metroid's flow settles
-(2,616 functions); what holds a C game's words hasn't been looked at, and
-may be a shorter list.
+A C game was the question this left, and it has a different answer:
+the next section.
+
+## A C game: Metroid, measured on main
+
+Unit `native/fnref-c-game-words`, 2026-11-13 on quack, main at dac9dd7f
+(with the `Ref` tokens). Everything above is about agb programs, which
+are Rust. This is the same question for a game old GCC compiled from C:
+Metroid Zero Mission, 2,623 functions, lifted with its holes file.
+Addresses are the game's; nothing else of it is here. The counts and
+the roads are the same on main at adfa45ee, where a function may take
+r4 to r11 from its callers and Metroid lifts with no hard hole again.
+
+**The answer.** What holds affine's words was not found holding
+Metroid's. Nothing at the 19 instructions looked at, which hold 727 of
+its 734 words, and no road of the 20 words watched (one or two from
+each row below), goes through a stack frame, a heap object or a
+formatter's argument array. That is a sample: for 180 of the 734 the
+tool says only that the value held the address itself. So the frames unit
+(`native/fnref-frame-pointers`), the branch's object split and RAM
+pointers (`native/fnref-ram-pointers-land`), the merge that carries them
+to main (`native/fnref-branch-merge`), the heap by allocation site
+(`native/fnref-heap-sites`) and call-site context
+(`native/fnref-context`) are agb work: Metroid's count needs none of
+them.
+
+It needs one filed follow-up, and only half of it: the registers unit
+(`native/fnref-live-registers`) says a `swi` should hole only the
+registers its BIOS call reads. That rule alone takes Metroid from 37
+proven words to 466 of 804, on main, with nothing of the branch. It is
+filed on its own now (`native/fnref-bios-reads`).
+
+The rest of what holds a C game's words was filed nowhere: where a ROM
+table ends, struct tables read by one field, and three things old GCC's
+code does that LLVM's doesn't (a move written as an add of 0, a compare
+with 0 whose carry nobody reads, a handler left in the register it was
+called through).
+
+The pile is the exception, on the larger games. It holds 13 of
+Metroid's words, but it is the first road of most of Nightmare's and
+the largest share of Emerald's (below). Not the heap by allocation site:
+C has no allocator to split by. Its pile is stores through pointers into
+globals.
+
+**Counts**, main as built: 804 function words, 68 in literal pools and
+736 in data (tables of handlers). 37 proven, 33 never read, 734 with a
+use not allowed. 70 of the 72 `call_fn` calls have a complete callee
+set, where nearly every set of an agb program is every address-taken
+function; but they are wide, 73 callees on average, 18 of them 210 each.
+
+### How it was measured
+
+Three tools, on main with this unit, in `fnref.rs`; none prints or
+changes anything unless its variable is set, and the word report is the
+same with and without the first two.
+
+- `GBAA_FNREF_WATCH=roads`: at each instruction that gives words their
+  first use not allowed, a line: where, why, and what the instruction's
+  operands held the words by (the value's own token, or one of its
+  `Ref`s: a pile read, an every-cell read, a ROM read by index, a
+  bounded ROM read), with the words. When two `Ref`s hold a word the
+  first is named, pile before ROM.
+- `GBAA_FNREF_WATCH=0x0875e6a8[,…]`: the branch's watch, brought over
+  and made to look into `Ref`s: each place those words' addresses go,
+  up to 400 places a word (a word left in a scratch register goes to
+  millions: the first try printed 5.8 million lines).
+- `GBAA_FNREF_OFF=bios,move,flags,tables,pile,cells`: kinds of hole
+  made not to happen, as the branch's switch does for kinds of read (its
+  kinds are others; the merge should keep both lists). For measuring
+  only. `bios`: a BIOS call holes only the registers it reads. `move`:
+  `x + 0` is `x`. `flags`: a carry, overflow or bit test is no hole.
+  `tables`: a ROM read by index stops at the next object's start even
+  between function words. `pile`, `cells`: those reads give nothing.
+  `move` is a sound rule, and `bios` is for compiled code once it is
+  settled what the registers hold after the call (below); the others
+  are unsound, upper bounds. A report made with any of them says so in
+  its first line.
+
+The run is the lift alone, no build: `just capped --mem 2G
+target/release/gbaa-lift ROM OUT --name metroid --holes
+mods/metroid/holes.toml`, about a minute, peak 326 MB.
+
+### Where each word first goes wrong
+
+The 734, by the first use not allowed the run found, from the roads and
+a watch of 20 words, one or two from each row:
+
+| words | road |
+|---|---|
+| 429 | left in r0 to r3 at a BIOS call that reads none of them: the `swi` in `VBlankIntrWait`'s wrapper (0x080051ce). 400 came out of three tables of handlers read by index (0x0875e6a8 and 0x0875e7b4, 256 words each as read, and 0x0875f974, 77), 29 out of a fourth (0x0808cefc, called through r1 at 0x08001ae0). For 0x0875e6a8: loaded at 0x0800a4c6 into r1 and called through r1 at 0x0800a4cc. GCC calls a pointer with `bl` to a `bx r1` stub, so the handler's address is still in r1 when the handler starts. It is then passed on and returned in r1 by functions that never touch r1, until one calls the wrapper |
+| 99 | a register moved. Old GCC moves a low register with `adds rd, rs, #0`, and the flow follows an add that sets flags only as a compare, so an add of 0 is arithmetic. 77 at 0x0800535a and 13 at 0x08001416 are a call's result, r0 as a callee that sets none left it. The 77: the call at 0x08005326 has an empty callee set, so it takes back what every address-taken function returns in r0, and a handler called through r0 that returns nothing returns its own address. The 13: a table's handlers are called through r0 at 0x08000208, one of them is a bare return (0x08000c00), and that function is in the set of the call before 0x08001416 too. 8 at 0x080031f0 are a callback passed as a parameter, 1 at 0x0800cd54 |
+| 77 | a read past a table's end. 64 at 0x08067f72 and 13 at 0x08061aae: a byte array read by an index that came out of the pile, so the run can't place the address and reads all the value sets bound it to, which is the index's width: 64 KB from 0x087600dc, 256 bytes from 0x0875fe58, with the bytes of every function word in them |
+| 66 | a struct table read by one field. 33 at 0x0805b4f8: records of 24 bytes from 0x08345d00, the byte at +0 read by index, functions at +4 and +12 of each, so the read "from here on" gives their bytes too. 15 at 0x080609b4 (records of 16 bytes) and 18 at 0x08069dd8 (the byte passed on as a parameter first) the same |
+| 39 | `cmp r0, #0` on a callback, in the three functions that set one and put in a default when given none (0x08000aea, 0x08000baa, 0x08000bea). The compare's carry counts as an ordered compare, and nothing reads it before the return |
+| 13 | the pile and the cells. 5 at 0x0800124e and 1 at 0x0807aa80 by a load through a pointer loaded from memory, which reads every cell or the pile; 7 by a load at a constant RAM address, which reads its cell and the pile (0x0806054e, 0x080026c2, 0x08088f9c) |
+| 5 | stored outside RAM, lost (0x080025d2, 0x080025e6, 0x080025fa, 0x08057dd0, 0x0808797a) |
+| 4 | left in r2 at a jump to a set (0x0806a432, 210 callees when the run settles), one of which (0x0806c6b5) reads r2 as a parameter. Whether the table's real entries include it wasn't checked |
+| 2 | 0x0800e008 and 0x03003bb4, not looked at |
+
+So 429 + 99 + 4 are about registers and what GCC does with them, 77 +
+66 about where a ROM table's entries are, 39 about flags, and 13 about
+the memory model, which holds 36 of affine's 40.
+
+### Kinds of hole switched off
+
+Words not proven, of 804 (33 never read as built), by `GBAA_FNREF_OFF`:
+
+| off | not proven | | off | not proven |
+|---|---|---|---|---|
+| nothing | 767 | | `bios,move` | 340 |
+| `bios` | **338** | | `bios,move,flags` | 340 |
+| `move` | 769 | | `bios,pile` | 276 |
+| `flags` | 767 | | `bios,tables` | 273 |
+| `tables` | 452 | | `bios,tables,pile` | 272 |
+| `pile` | 324 | | `bios,move,flags,tables` | 274 |
+| `cells` | 766 | | all six | 272 |
+
+`bios` alone proves all 429 words of the first row and nothing else
+moves: they had no other use not allowed. `move` alone un-proves two
+words main proves (0x0807abc0, 0x08081e24: followed past the move, they
+meet a hole) and reads two it didn't. `tables` and `pile` alone
+reach most of the same words another way (with narrower callee sets, or
+no callbacks out of the pile, the handlers left in r1 don't reach the
+wrapper), and both are unsound as switched; with `pile` four complete
+sets become incomplete.
+
+After `bios`, `tables` or `pile` is worth about 63 more, the same words
+either way (the reads past a table's end, whose index came out of the
+pile), and `move` and `flags` nothing: a word let past the move meets
+the next hole. With `bios,move,flags` the 77 results are held at the
+compare after the move (0x0800535c: a value that may be a function or a
+number, compared with 0, counts as compared with the number), and 34 of
+the 39 callbacks at 0x08000b06, where the callback's global is loaded
+and tested before it is called: a load at a constant address reads the
+pile too, so the value holds the pile's numbers.
+
+With all six off 272 are left: 44 never read (the switch cuts reads
+short) and 228 held, which no switch here reaches: the 77 results of the
+empty callee set, the struct fields (67 here), 45 at 0x08001910 (new
+with the switches, not looked at), 13 lost outside RAM, and small ones.
+
+### Which follow-ups a C game needs
+
+In the order they'd pay on Metroid:
+
+1. **A BIOS call holes only the registers it reads**
+   (`native/fnref-bios-reads`, new; it was a clause of
+   `native/fnref-live-registers`). 767 to 338 not proven on Metroid, on
+   main, about twenty lines. `VBlankIntrWait` takes no arguments. What
+   the rule must settle: the flow makes r0 to r3 unknown after a `swi`,
+   so a register the BIOS leaves as it came loses its address there.
+2. **A callee's results are only the registers it sets**, the rest of
+   `native/fnref-live-registers`: the 77 + 13 results of callees that
+   set no r0, and the handlers left in r0 to r3 by the call stub, which
+   is what feeds row one. Its card says to work on the branch; nothing
+   it needs is there (the summaries are on main).
+3. **Where a ROM table ends** (`native/fnref-table-ends`, new). A table
+   read by a byte index is read 256 entries long and one read by a
+   halfword 64 KB, through its neighbours: C lays tables of handlers
+   back to back, and `object_end` doesn't stop between function words,
+   so that no table of handlers is cut short. That is the 77 words read
+   past an end, the 256-word reads of row one, and the width of the
+   callee sets (18 sets of 210; 162 with the switch). On the two larger
+   games it holds over a thousand words each (below).
+4. **Old GCC's moves and compares** (`native/fnref-gcc-moves`, new):
+   `adds rd, rs, #0` is a move, and its carry and overflow are 0; `cmp
+   x, #0` carries always and never overflows; a value that may be a
+   function or a number compared with 0 is no hole; a flag nobody reads
+   before the return is no use. All sound, all small, and worth nothing
+   alone on Metroid (767 to 769): 138 words pass through one first, and
+   they count once what's behind is cleared.
+5. **Struct tables read by one field** (`native/fnref-table-fields`,
+   new): a read by index at a known offset in records of a known size
+   reads that field only. 66 words, left with every switch off. The
+   frames unit has the same idea for arrays of pairs in a stack frame;
+   only that half of it carries over.
+6. **The pile split by global** (`native/fnref-pile-globals`, new; with
+   it item 4 of the list above, a load at a constant RAM address reads
+   its cell and not the pile). On Metroid at most 62 words after `bios`
+   (338 to 276), the same ones `tables` reaches; on Nightmare and
+   Emerald the first road of more words than anything else. C keeps its
+   state in globals, and the value sets bound 8,582 of Metroid's stores
+   to one global (3,989 to none), so a split by those bounds might pay
+   here where it proved nothing on agb's heap stores.
+
+Agb only, by this measure: frames, the object split and RAM pointers,
+the heap by allocation site, call-site context, and the branch merge as
+far as it serves those. The merge isn't needed for the tools any more:
+the watch is on main. Whether a C game wants call-site context later
+can't be told from first roads; nothing here asks for it.
+
+One thing this doesn't measure. At an ordinary call the flow passes r0
+to r3 and gives the callee unknowns in r4 and up, though since adfa45ee
+a function may take r4 to r11 from its caller
+(`native/fnref-taker-regs`). To the flow an unknown is never a
+function's address, so a handler passed that way would be a use it
+misses, not a word it holds, and no count here would show it. Two of
+the 20 words watched do travel in r4 and up, at tail calls and falls,
+which pass every register.
+
+### Nightmare and Emerald
+
+Both with `gbaa-recompile --summaries ROM --callee-sets` and the roads
+(the ROM's code alone, no stand-ins), so only the words held are
+counted, not the proven ones.
+
+**Kirby: Nightmare in Dream Land** (5,177 functions). The flow settles
+now, in 31 to 35 minutes at 2.0 GB (its holes file still skips it, as
+not settling under 16 GB). 51 of 54 indirect calls have a complete set,
+of 2,044 callees on average. 4,054 words are held, none at a BIOS call.
+2,523 are first held by a pile read: 733 at 0x08006162, a byte out of
+the pile passed as a parameter and shifted, 269 at 0x0800582a. 1,401
+are held by bounded ROM reads of 64 KB, five byte arrays each read by a
+halfword index: 1,260 at 0x0801c6b8 (the array at 0x08732ef0), 98, 23,
+15 and 5 at four more (0x087336f0 to 0x08733af0): where a table ends.
+With `pile` off (3 minutes, 503 MB) 1,599 are held, 1,396 of them at
+0x08021c32 by the 64 KB read of the array at 0x087339f0: the pile is
+worth at most 2,455 words there, and table ends most of the rest.
+
+**Emerald** (15,159 functions). The flow stops at its token bound after
+27,776 function runs (10 to 12 minutes, 2.4 GB, the same stop with the
+roads on), so this is what it held when it stopped, 9,031 words, not a
+count: a settled run would hold these and more, and may meet a word's
+first hole elsewhere. By what gave the value: 3,701 a pile read, 2,013 a
+ROM read by index, 1,209 a bounded ROM read of 64 KB, 2,107 the value's
+own token, 1 an every-cell read. The sites over 150 words: 1,373 at
+0x0801d874, an indirect call's result compared with 1 (item 2); 473 at
+0x080a8fb2 and 458 at 0x0806a684, a parameter moved with `adds rd, rs,
+#0` (item 4), the first the callback given to the function that makes a
+task, the second a data pointer that a ROM table's leftovers reached;
+394, 351 and 154 by 64 KB reads of byte tables (item 3); 333, 162 and
+151 out of the pile (0x0800059e, 0x080135b8, 0x0817f504); 228 at
+0x08098d72 and 208 at 0x0808f616 by ROM reads by index, not looked at.
+One word is given to the BIOS.

@@ -68,6 +68,16 @@
 //!   `lr` [`RET`]. A fall or jump into another function's entry (or a
 //!   call's return into one) runs on in its `x_` with this one's registers
 //!   and flags, as the hardware does (unit `native/lift-fallthrough`).
+//! - A function that reads one of r4-r11 as it came (a parameter by
+//!   register: hand-written code's, or agbcc's word built in an unset
+//!   register and stored) takes it from its callers
+//!   ([`crate::saves::Summary::takes`], unit `native/metroid-entry-reads`):
+//!   a direct call is its `x_` with r0-r3 and the caller's own of those
+//!   registers ([`taking`]), and a caller that still has one as it came
+//!   takes it in turn. A pointer call can't (`call_fn` passes r0-r3): the
+//!   function is a hard hole unless the holes file names the indirect
+//!   calls that reach it (`[[takes]]`, [`Holes::takes`]), which then pass
+//!   it theirs. Its `f_` stops the program, so no call runs it on zeroes.
 //! - Blocks are the arms of a `loop { match b }` over local labels
 //!   (0 the entry); calls are Rust calls; a return is a jump to the value
 //!   `lr` held on entry, [`RET`] (prelude), told by value since compiled
@@ -128,7 +138,7 @@
 //! ROM read at run time.
 
 use crate::func::{Ctx, ExitInfo, Func, Idle, Plan, build_func, exits, key};
-use crate::saves::{Assume, Sets, Summaries, Summary, summarize, summarize_sets};
+use crate::saves::{Assume, Passing, Sets, Summaries, Summary, summarize, summarize_passing};
 use analysis::discovery::{self, Discovery};
 use analysis::ir::{BinOp, BitOp, Exit, Inst, Op, ValueId};
 use analysis::vsa::func::JumpRes;
@@ -193,6 +203,13 @@ pub struct Holes {
     pub lr: BTreeSet<u32>,
     /// By the jump's instruction address: its targets (keys), and why.
     pub jumps: BTreeMap<u32, (Vec<u32>, String)>,
+    /// By function key: the indirect calls (their addresses) that reach a
+    /// function reading one of r4-r11 as it came, and why (`[[takes]]
+    /// entry = 0x…, sites = [0x…], why = "…"`): each passes it the
+    /// caller's ([`crate::saves::Passing`]), and its plain entry stops the
+    /// program, so a pointer call the file doesn't name can't run it on
+    /// zeroes.
+    pub takes: BTreeMap<u32, (Vec<u32>, String)>,
     /// Code the game copies to RAM itself that discovery's static copies
     /// don't have (by DMA, by its own loop, through a pointer):
     /// `[[copy]] src = 0x…, dst = 0x…, len = 0x…, roots = [0x…], why = "…"`
@@ -257,7 +274,8 @@ pub struct Holes {
 
 impl Holes {
     /// Parse a holes file: `[[standin]] entry = 0x…, why = "…", code =
-    /// '''…'''` (and `lr = true` for [`Holes::lr`]), `[[jump]] at = 0x…, targets = [0x…], why = "…"`, and at
+    /// '''…'''` (and `lr = true` for [`Holes::lr`]), `[[jump]] at = 0x…, targets = [0x…], why = "…"`,
+    /// `[[takes]]` ([`Holes::takes`]), and at
     /// the top, `skip_fn_flow = "why"`.
     pub fn parse(text: &str) -> Result<Holes, String> {
         let t: toml::Table = text.parse().map_err(|e| format!("{e}"))?;
@@ -308,6 +326,19 @@ impl Holes {
                             .map(|v| int(v, "targets"))
                             .collect::<Result<Vec<_>, _>>()?;
                         h.jumps.insert(at, (targets, str_of(e, "why")?));
+                    }
+                    "takes" => {
+                        let entry = int(e.get("entry").ok_or("takes: missing entry")?, "entry")?;
+                        let sites = e
+                            .get("sites")
+                            .and_then(|v| v.as_array())
+                            .ok_or("takes: missing sites")?
+                            .iter()
+                            .map(|v| int(v, "sites"))
+                            .collect::<Result<Vec<_>, _>>()?;
+                        if h.takes.insert(entry, (sites, str_of(e, "why")?)).is_some() {
+                            return Err(format!("takes: {entry:#010x} twice"));
+                        }
                     }
                     "copy" => {
                         let field = |f: &str| -> Result<u32, String> {
@@ -584,13 +615,37 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .as_ref()
         .map(|f| complete_sets(&f.0))
         .unwrap_or_default();
-    if !sets.is_empty() {
+    // And with what the holes file says of r4-r11's passing: its
+    // `[[takes]]`, and a stand-in takes nothing.
+    let mut passing = Passing {
+        replaced: holes.standins.keys().copied().collect(),
+        ..Passing::default()
+    };
+    for (&k, (sites, _)) in &holes.takes {
+        for &at in sites {
+            passing.sites.entry(at).or_default().insert(k);
+        }
+    }
+    let replaced_takes = codes.iter().any(|c| {
+        let takes = |k| c.sums.get(k).is_some_and(|s| s.takes != 0);
+        passing.replaced.iter().any(|&k| takes(k))
+    });
+    if !sets.is_empty() || !passing.sites.is_empty() || replaced_takes {
         for c in &mut codes {
-            c.sums = summarize_sets(&c.ctx, &c.funcs, Assume::default(), &sets);
+            c.sums = summarize_passing(&c.ctx, &c.funcs, Assume::default(), &sets, &passing);
         }
     }
     let shapes = shapes_of(&codes, &all, holes);
     let args = call_fn_args(&sets, &codes, &shapes.shaped);
+    // The functions that take r4-r11 from their callers, over all
+    // contexts; a stand-in that calls one by its plain entry would run
+    // into its stop.
+    let takers: BTreeSet<u32> = codes
+        .iter()
+        .flat_map(|c| c.sums.by_entry.iter())
+        .filter(|(k, s)| s.passed() != 0 && !holes.standins.contains_key(k))
+        .map(|(&k, _)| k)
+        .collect();
     // Each function's text by key, in print order: the modules' contents.
     let mut out: Vec<(u32, String)> = Vec::new();
     let mut report = String::new();
@@ -619,6 +674,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 ctx: &c.ctx,
                 f,
                 all: &all,
+                sums: &c.sums,
+                takers: &takers,
                 shapes: &shapes.shaped,
                 me: shapes.shaped.get(&f.entry).copied(),
                 holes,
@@ -662,6 +719,27 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             at: *k,
             what: "the holes file's stand-in matches no function".into(),
         });
+    }
+    for (&f, (code, _)) in &holes.standins {
+        for &k in takers
+            .iter()
+            .filter(|k| code.contains(&format!("f_{k:08x}(")))
+        {
+            hard.push(Hole {
+                func: f,
+                at: f,
+                what: format!("the stand-in calls f_{k:08x}, which takes r4-r11 from its callers and stops the program when called so"),
+            });
+        }
+    }
+    for (&k, (sites, _)) in &holes.takes {
+        for &at in sites.iter().filter(|&&at| !soft.passes.contains(&(at, k))) {
+            hard.push(Hole {
+                func: k,
+                at,
+                what: "the holes file's takes matches no indirect call (printed through call_fn) to a function that takes one of r4-r11 from its callers, or the call passes a stack address in one".into(),
+            });
+        }
     }
     fns.sort_unstable();
     let mut table = String::new();
@@ -816,6 +894,24 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         sets.len(),
         args.union_four,
         args.four_reg_callee,
+    )
+    .unwrap();
+    writeln!(
+        report,
+        "registers by caller (native/metroid-entry-reads): {} functions take one of r4-r11 as it came, passed by each direct call and tail call{}; {} indirect calls pass them as the holes file says",
+        soft.takers.len(),
+        soft.takers
+            .iter()
+            .map(|&(k, m)| {
+                let regs: Vec<String> = (4..12)
+                    .filter(|r| m & 1 << (r - 4) != 0)
+                    .map(|r| format!("r{r}"))
+                    .collect();
+                format!(" f_{k:08x} {}", regs.join(" "))
+            })
+            .collect::<Vec<_>>()
+            .concat(),
+        soft.passes.len(),
     )
     .unwrap();
     writeln!(
@@ -1321,6 +1417,11 @@ struct Soft {
     /// of r0-r3 still.
     indirect_complete: usize,
     indirect_four_complete: usize,
+    /// The holes file's `[[takes]]` printed: (the indirect call, the
+    /// function it passes r4-r11 to).
+    passes: BTreeSet<(u32, u32)>,
+    /// The functions that take one of r4-r11 from their callers.
+    takers: Vec<(u32, u8)>,
     dyn_jumps: usize,
     /// Falls and jumps into another function's entry, printed through its
     /// extended entry.
@@ -1334,6 +1435,10 @@ struct FnPrinter<'a, 'b> {
     ctx: &'a Ctx<'a>,
     f: &'a Func,
     all: &'a BTreeSet<u32>,
+    /// This context's summaries.
+    sums: &'a Summaries,
+    /// Every context's functions that take r4-r11 from their callers.
+    takers: &'a BTreeSet<u32>,
     /// Every shaped function's parameters and results.
     shapes: &'a BTreeMap<u32, Shape>,
     /// This one's, `None` for the four-register form.
@@ -1525,6 +1630,22 @@ impl FnPrinter<'_, '_> {
         let k = f.entry;
         let ty = ret_ty(self.me);
         match self.me {
+            // What it takes of r4-r11 comes through the extended entry
+            // ([`taking`]); the plain one would zero it.
+            None if self.passed(k) != 0 => {
+                let m = self.passed(k);
+                self.soft.takers.push((k, m));
+                let regs: Vec<String> = (4..12)
+                    .filter(|r| m & 1 << (r - 4) != 0)
+                    .map(|r| format!("r{r}"))
+                    .collect();
+                writeln!(
+                    s,
+                    "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ let _ = (g, sp, a); panic!(\"0x{k:08x} takes {} from its caller, and this call (through a pointer the holes file's takes doesn't name, or a stand-in's) passes none\") }}",
+                    regs.join(", ")
+                )
+                .unwrap()
+            }
             None => writeln!(
                 s,
                 "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ x_{k:08x}(g, Regs::call(sp, a)) }}"
@@ -2044,6 +2165,33 @@ impl FnPrinter<'_, '_> {
         self.tail(callee.map(|c| c.results), &lhs, &call)
     }
 
+    /// What `k` takes of r4-r11 from its callers (bit `n - 4` for rN,
+    /// [`Summary::passed`]): 0 for a stand-in, or a function of another
+    /// context (its summary isn't this one's, so this caller's reads of
+    /// what it passes went unseen; the plain entry stops the program).
+    fn passed(&self, k: u32) -> u8 {
+        if self.holes.standins.contains_key(&k) {
+            return 0;
+        }
+        self.sums.get(k).map_or(0, Summary::passed)
+    }
+
+    /// A direct call at `at` to `k`: a hole where `k` takes r4-r11 from
+    /// its callers and this call can't be shown to pass them (the
+    /// summary's run never reached it, or `k` is another context's).
+    fn passes_at(&mut self, at: u32, k: u32) {
+        if !self.takers.contains(&k) {
+            return;
+        }
+        let seen = self
+            .sums
+            .get(self.f.entry)
+            .is_some_and(|s| s.passes.contains(&(at, k)));
+        if self.passed(k) == 0 || !seen {
+            self.hole(at, format!("a call to {k:#010x}, which takes r4-r11 from its callers, that the summaries didn't see pass them (past a hole in this function, or from another code context)"));
+        }
+    }
+
     /// `k`'s shape, `None` for a four-register function or a stand-in.
     fn shape(&self, k: u32) -> Option<Shape> {
         if self.holes.standins.contains_key(&k) {
@@ -2055,6 +2203,10 @@ impl FnPrinter<'_, '_> {
     /// A plain call of `k` with this function's registers: what it
     /// assigns its results to, and the call (without `?`).
     fn call(&self, k: u32) -> (String, String) {
+        let m = self.passed(k);
+        if m != 0 {
+            return ("[r0, r1, r2, r3] = ".into(), taking(k, m));
+        }
         match self.shape(k) {
             None if self.holes.lr.contains(&k) => (
                 "[r0, r1, r2, r3] = ".into(),
@@ -2118,6 +2270,33 @@ impl FnPrinter<'_, '_> {
                 self.soft.indirect_four_complete += 1;
             }
         }
+        // The functions the holes file says this call reaches that take
+        // one of r4-r11 (`[[takes]]`): to those, with this function's.
+        let named: Vec<(u32, u8)> = self
+            .holes
+            .takes
+            .iter()
+            .filter(|(_, (sites, _))| sites.contains(&at))
+            .map(|(&e, _)| (e, self.passed(e)))
+            .filter(|&(e, m)| {
+                let seen = |s: &Summary| s.passes.contains(&(at, e));
+                m != 0 && self.sums.get(self.f.entry).is_some_and(seen)
+            })
+            .collect();
+        if !named.is_empty() {
+            let mut t = format!("match {k} {{ ");
+            for (e, m) in named {
+                self.soft.passes.insert((at, e));
+                write!(
+                    t,
+                    "{e:#010x} => {{ [r0, r1, r2, r3] = {}?; }} ",
+                    taking(e, m)
+                )
+                .unwrap();
+            }
+            write!(t, "k => {{ {} }} }}", call_fn_text("k", pass, back)).unwrap();
+            return t;
+        }
         call_fn_text(k, pass, back)
     }
 
@@ -2137,6 +2316,7 @@ impl FnPrinter<'_, '_> {
                 writeln!(s, "{ind}{wait}{j}").unwrap();
             }
             Plan::Call { target, ret } => {
+                self.passes_at(at, target);
                 let c = self.call_stmt(target);
                 let c = self.call_then(c, ret, at);
                 writeln!(s, "{ind}{wait}{c}").unwrap();
@@ -2169,8 +2349,23 @@ impl FnPrinter<'_, '_> {
                 };
                 if let Some(ret) = ret {
                     // An indirect call.
+                    // (One that takes r4-r11 from its callers goes by
+                    // `call_fn` all the same: the summaries took this for
+                    // an indirect call, so what it would pass went unread.)
                     let c = match target {
-                        Some(tk) if self.all.contains(&tk) => self.call_stmt(tk),
+                        Some(tk) if self.all.contains(&tk) && !self.takers.contains(&tk) => {
+                            self.call_stmt(tk)
+                        }
+                        Some(tk) if self.all.contains(&tk) => {
+                            if !self
+                                .sums
+                                .get(self.f.entry)
+                                .is_some_and(|s| s.passes.contains(&(at, tk)))
+                            {
+                                self.hole(at, format!("a call through a register to {tk:#010x}, which takes r4-r11 from its callers: not passed (the holes file's takes can name the call)"));
+                            }
+                            self.call_fn(at, &k)
+                        }
                         _ => self.call_fn(at, &k),
                     };
                     let c = self.call_then(c, ret, at);
@@ -2425,6 +2620,25 @@ fn complete_sets(flow: &fnref::Flow) -> Sets {
         .filter(|(_, s)| s.complete && !s.tail)
         .map(|(&a, s)| (a, s.callees.clone()))
         .collect()
+}
+
+/// A call of `k`, which takes the registers of `m` (bit `n - 4` for rN,
+/// of r4-r11) from its callers: its extended entry with r0-r3 and those
+/// of the caller's, the rest as `Regs::call` gives them (without `?`).
+fn taking(k: u32, m: u8) -> String {
+    let hi: Vec<String> = (4..12)
+        .map(|r| {
+            if m & 1 << (r - 4) != 0 {
+                format!("r{r}")
+            } else {
+                "0".into()
+            }
+        })
+        .collect();
+    format!(
+        "x_{k:08x}(g, Regs {{ r: [r0, r1, r2, r3, {}, 0, r13, RET], f: [false; 4] }})",
+        hi.join(", ")
+    )
 }
 
 /// A `call_fn` call to key `k` passing the registers of `pass` (0 for the
@@ -2874,6 +3088,16 @@ why = "a table"
             }]
         );
         assert!(Holes::parse("[[copy]]\nsrc = 0x08000104\nwhy = \"x\"\n").is_err());
+        let h = Holes::parse(
+            "[[takes]]\nentry = 0x08000015\nsites = [0x08000006, 0x08000020]\nwhy = \"its caller's r5\"\n",
+        )
+        .unwrap();
+        assert_eq!(h.takes[&0x0800_0015].0, vec![0x0800_0006, 0x0800_0020]);
+        assert!(Holes::parse("[[takes]]\nentry = 0x08000015\nwhy = \"no sites\"\n").is_err());
+        assert_eq!(
+            taking(0x0800_0015, 0b10_0010),
+            "x_08000015(g, Regs { r: [r0, r1, r2, r3, 0, r5, 0, 0, 0, r9, 0, 0, 0, r13, RET], f: [false; 4] })"
+        );
         assert!(Holes::parse("[[nothing]]\nx = 1\n").is_err());
         assert!(Holes::parse("[[standin]]\nwhy = \"no entry\"\n").is_err());
         assert_eq!(h.skip_fn_flow, None);
