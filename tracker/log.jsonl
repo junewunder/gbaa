@@ -2806,3 +2806,4 @@
 {"at":"2026-11-13T09:42:29Z","actor":"session","tag":"d2717a37","host":"quack","cmd":"add-unit","id":"native/nightmare-mixer-pointer","text":"new unit: Nightmare's mixer reads through 0xe3a02004 at frame 5"}
 {"at":"2026-11-13T09:43:00Z","actor":"session","tag":"d2717a37","host":"quack","cmd":"add-unit","id":"native/ram-copy-jump-only","text":"new unit: RAM-copy code only jumped into needs no [[takes]] entry"}
 {"at":"2026-11-13T09:43:06Z","actor":"session","tag":"afebd1b0","host":"quack","cmd":"edit","id":"native/fnref-table-ends","text":"Function flow: where a ROM table read by index ends: edited (detail)"}
+{"at":"2026-11-13T09:43:08Z","actor":"session","tag":"afebd1b0","host":"quack","cmd":"edit","id":"native/fnref-pile-globals","text":"Function flow: the pile split by global, for C games: edited (detail)"}
