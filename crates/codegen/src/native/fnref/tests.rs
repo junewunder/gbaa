@@ -997,9 +997,13 @@ fn a_ram_pointer_plus_another_pointer_is_not_a_lost_one() {
     let p = b.pool(POOL, F);
     let c = b.k(CELL);
     b.st(Width::Word, c, p);
+    // An array by an index from I/O (a RAM run), plus a ROM pointer.
     let arr = b.k(0x0300_0400);
+    let io = b.k(0x0400_0130);
+    let i = b.ld(Width::Half, io);
+    let run_of = b.bin(BinOp::Add, arr, i);
     let rom = b.k(VT);
-    let e = b.bin(BinOp::Add, arr, rom);
+    let e = b.bin(BinOp::Add, run_of, rom);
     let m = b.ld(Width::Word, e);
     let four = b.k(4);
     b.bin(BinOp::Add, m, four);
