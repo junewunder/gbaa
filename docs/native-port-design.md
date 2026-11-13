@@ -590,9 +590,9 @@ callee set the function-address flow proves complete
 its 15,158 functions in 35 minutes (past 8 GB and growing). With
 `native/fnref-flow-scale` landed (Metroid settles in 151 s) it still
 didn't: killed at a 14 GB cap after 5 minutes (2026-11-07). Since
-`native/fnref-emerald-speed` (2026-11-13) the run finishes, in about 15
-minutes at 2.4 GB, but the flow stops at its token bound unsettled, so
-still no set is complete. Making it
+`native/fnref-emerald-speed` (2026-11-13) the run finishes, in 11 to 15
+minutes at 2.4 GB, but the flow stops unsettled at its token bound (48M
+held after 27,776 runs), so still no set is complete. Making it
 settle on Emerald is `native/fnref-flow-emerald`; the re-measurement
 of the 656, and what keeps sets incomplete (callbacks stored through RAM
 globals such as `gMain.callback1`), is `native/indirect-call-args-emerald`.

@@ -26,7 +26,7 @@ joined into its own copy:
 5. words stored narrower (`strh`/`strb` copies) expanding into cells.
 
 **The fix (b6d5ed3f).** A large read is one token, `Tok::Ref { src, xf }`:
-`src` is Pile(w), Cells(w), RomFrom(a, w) or Hull(lo, hi, w); `xf` is a
+`src` is Pile(w), Cells(w), RomFrom(lo, end, w) or Hull(lo, hi, w); `xf` is a
 per-form map (shift, mvn, compare, narrower load or store composed with
 `Xf::then`). Memory stores Refs; whoever looks at tokens expands
 (`G::expand`/`ref_val`, cached until memory changes, ROM-only ones for
@@ -86,9 +86,18 @@ ref_unexplained from 35 to 93 on every agb program: don't try it as a
 quick fix.
 
 **2026-11-13, after merging main (rom-read-bound and later):** the same
-command, `just long start NAME --mem 8G`: 14:55 wall with four other
-workers' jobs running (flow 806.8 s), 2.43 GB peak, exit 0, `didn't
-settle`, 0 of 553 sets complete. Ask for 8G, not 16G: on a busy night a
-16G job never gets its turn (three waited over an hour while 4G jobs
-passed them). The native-tasks bar went 57 to 59 by june's call
+command, `just long start NAME --mem 8G`: 11:16 wall (flow 610.8 s), 2.44
+GB peak, exit 0; 14:55 (flow 807 s) on an earlier build with four other
+workers' jobs running. The first line now gives the stop: `didn't settle:
+48096722 tokens held, over its bound, after 27776 runs`; 0 of 553 sets
+complete. Ask for 8G, not 16G: on a busy night a 16G job never gets its
+turn (three waited over an hour while 4G jobs passed them). The
+native-tasks bar went 57 to 59 by june's call
 (d/raise-native-tasks-unproven-function); the reason is beside the bar.
+
+**Review fix (2026-11-13).** A kept `Exp` capped each store's tokens onto
+its capped value, so its ROM pointers widened by store order and could
+leave out a pointer the capped memory read (the rerun test's `snap`)
+already took in. `exp_merge` keeps numbers and pointers uncapped
+(`Exp::raw`) and caps them all together: the value is the capped read's
+again. The agb programs' metrics didn't move, Emerald's time neither.
