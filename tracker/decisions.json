@@ -1213,6 +1213,14 @@
       "by": "7e93e2be",
       "at": "2026-11-13T11:45:22Z",
       "scope": ["group:native"]
+    },
+    {
+      "id": "d/a-context-save-takes-nothing-a-broken-taker",
+      "title": "A context save takes nothing; a broken taker chain's hole is its reader's",
+      "why": "From {unit:native/moonbeam-taker-chain} (PR 16), adding to the decision that a direct call passes the r4-r11 its callee reads. (1) An unconditional ARM stm of r4-r11 with sp and lr through another register, each of r4-r11 whole and as it came, in a program with the matching ldm (same list, same way: setjmp and longjmp), is a save, not a use; with sp and lr it is a point to resume at. Any other store through a pointer is still a use (Metroid's half of r9). Not proven: that nothing reads the block as data; natively its words are zeroes, like a stack frame's saved registers. (2) A function a pointer call enters that only passes a register on is soft (passes on r4-r11 a pointer call zeroes); the read at the end of its chain is the hard hole, once (zeroed through 0x...). One hole a reader, as before calls passed registers; the lift prints the same code. Corpus hard holes 615 to 85, moonbeam 503 to 4.",
+      "by": "c5c06b25",
+      "at": "2026-11-13T12:44:54Z",
+      "scope": ["group:native"]
     }
   ]
 }
