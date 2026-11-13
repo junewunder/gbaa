@@ -2152,7 +2152,17 @@
       "id": "native/moonbeam-taker-chain",
       "title": "moonbeam's hard holes: 11 to 503 since calls pass registers",
       "detail": "Found by {unit:discovery/gcc-far-jump-bl} while measuring against main: 'just holes-all' gave moonbeam 11 hard holes at f52fe115 and 503 at 4fb9a5cf, after {unit:native/metroid-entry-reads} merged (a call passes the r4-r11 its callee reads at entry). 500 functions now have 'reads r4-r11 at entry: rN, which X takes' and 220 are 'takes r4-r11 from its callers'. The most cited taker, 0x08002549 (2,664 lines), starts push {r3-r7, lr} and reads none of r4-r11 first, so it takes through its callees. Not verified: the root may be 0x0803830d, a bx pc veneer to ARM stmia r0!, {r4-r14} (a register save as setjmp makes, which reads all of r4-r11 without using them). Rogue went 21 to 48 and Imperium 16 to 15 over the same merge. Done: the cause named, a register save that only stores them not counted as taking (or the real cause fixed), moonbeam's hard count back near 6, no other game's higher.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "c5c06b25",
+        "session": "c5c06b25-4281-48df-b692-2edc7c1b1973",
+        "host": "quack",
+        "pid": 1246801,
+        "start": "1950544",
+        "at": "2026-11-13T10:10:31Z"
+      },
+      "round": "2026-11-13T10:10:31Z"
     }
   ]
 }

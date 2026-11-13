@@ -2811,3 +2811,4 @@
 {"at":"2026-11-13T09:45:04Z","actor":"session","tag":"3502c802","host":"quack","cmd":"claim","id":"native/fnref-bios-reads","text":"Function flow: a BIOS call holes only what it reads: claimed"}
 {"at":"2026-11-13T10:03:52Z","actor":"session","tag":"838ecd32","host":"quack","cmd":"add-unit","id":"native/moonbeam-taker-chain","text":"new unit: moonbeam's hard holes: 11 to 503 since calls pass registers"}
 {"at":"2026-11-13T10:08:57Z","actor":"session","tag":"838ecd32","host":"quack","cmd":"done","id":"discovery/gcc-far-jump-bl","text":"Modern GCC's far-jump bl into a caller's fragment: done"}
+{"at":"2026-11-13T10:10:31Z","actor":"session","tag":"c5c06b25","host":"quack","cmd":"claim","id":"native/moonbeam-taker-chain","text":"moonbeam's hard holes: 11 to 503 since calls pass registers: claimed"}
