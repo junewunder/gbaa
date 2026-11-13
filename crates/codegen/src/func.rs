@@ -535,9 +535,7 @@ pub enum Plan {
         target: Option<u32>,
         local: bool,
     },
-    /// `swi`; continues at `next` unless the BIOS sends it elsewhere
-    /// (`SoftReset` and `HardReset` always do: [`successors`] leaves `next`
-    /// out for them).
+    /// `swi`; continues at `next` unless the BIOS sends it elsewhere.
     Swi { next: u32 },
     /// An undefined instruction. `trap`: a compiler's trap
     /// ([`analysis::vsa::func::is_trap`]), which a lift prints as a stop of
@@ -731,26 +729,24 @@ pub fn successors(ctx: &Ctx, x: &ExitInfo) -> Vec<u32> {
         Plan::Static(k) | Plan::Rekey(k) => vec![k],
         Plan::Call { ret, .. } | Plan::CallVia { ret, .. } => vec![ret],
         Plan::Dynamic { ret, target, .. } => ret.into_iter().chain(target).collect(),
-        // SoftReset and HardReset never return: the bytes after them are
-        // often a literal pool, or another mode's code.
-        Plan::Swi { .. } if no_return_swi(ctx, x) => vec![],
-        Plan::Swi { next } => vec![next],
+        // `SoftReset` and `HardReset` restart the program: no code runs
+        // after them (a compiler may put a trap or data there).
+        Plan::Swi { next } => match ctx.decode(x.at, x.thumb, 2).first() {
+            Some(&(_, Instr::Swi { comment, .. }))
+                if matches!(
+                    runtime::bios::number(comment, x.thumb),
+                    runtime::bios::call::SOFT_RESET | runtime::bios::call::HARD_RESET
+                ) =>
+            {
+                vec![]
+            }
+            _ => vec![next],
+        },
         Plan::Undefined { .. } => vec![],
     };
     out.extend(x.ret);
     out.extend(ctx.table_targets(x.at, x.thumb).unwrap_or_default());
     out
-}
-
-/// Whether the `swi` exit `x` is `SoftReset` (0x00) or `HardReset` (0x26),
-/// which never come back to the instruction after them.
-pub fn no_return_swi(ctx: &Ctx, x: &ExitInfo) -> bool {
-    let comment = if x.thumb {
-        ctx.read(x.at, 2) & 0xff
-    } else {
-        ctx.read(x.at, 4) & 0xff_ffff
-    };
-    matches!(runtime::bios::number(comment, x.thumb), 0x00 | 0x26)
 }
 
 /// Build the block starting at `k`, stopping before any key in `stops`.
