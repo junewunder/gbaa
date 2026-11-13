@@ -389,7 +389,7 @@ Summary holes that are hard, before and after (`just holes-all --against`):
 |---|---|
 | libgcc ieee754-df.S's denormal paths, r4 and r5 in (ARM) | Emerald 0x082dfd09, Rogue 0x0800cb45, Imperium 0x08003879, Kirby M. 0x0814fd35, Nightmare 0x080ce1f9, Minish 0x080afbd1 |
 | hand-written register parameters | Minish 0x080086d9 (`sub_080086D8`, r8 and r11), 0x08060ba1 (derefs r5), 0x08008a89 (r5, `ClampPlayerVelocity`'s kind); WarioWare 0x080efe51, 0x080f0ab0 |
-| modern GCC's far jump by `bl` into a fragment of the caller's, taken for a call | moonbeam 0x0801a081 and six more, Rogue 0x0820c629, Imperium 0x0821e331 (not looked into one by one) |
+| modern GCC's far jump by `bl` into a fragment of the caller's, taken for a call | moonbeam 0x0801a081 and six more, Rogue 0x0820c629, Imperium 0x0821e331 (looked into since: "Modern GCC's cold blocks", below) |
 | agbcc's partly built word stored with the unset register's other bits (a struct's padding) | Emerald 0x080852d5, Kirby M. 0x08132889, WarioWare 0x080abfa5, Metroid 0x08073ce5 |
 | an unset register used as an index (`lsls r1, r4, #2; ldr`) | Minish 0x08037c3d |
 | data decoded as code | Emerald 0x0850dbaf, 0x085ef6a1; Metroid 0x087d8000; WarioWare 0x083db2d7 |
@@ -405,6 +405,82 @@ moonbeam 0x0801a081 (r7, four); WarioWare 0x0807f6e5, 0x0808e325,
 Only jumped into: Rogue's 0x080ba12b-0x080bbfff fragments (15, past
 unresolved jumps), Nightmare 0x0804c489, moonbeam 0x08038310. A tail call
 or fall from a called function counting as a call (2026-11-12) left the 36.
+
+## Modern GCC's cold blocks, and `sbcs rN, rN`
+
+`discovery/gcc-far-jump-bl`, 2026-11-13. The entry readers the table
+above gave to "a far jump by `bl` into a fragment", one by one: two
+causes, neither the probe's.
+
+**A cold block of the caller's, reached by `bl`** (moonbeam's five:
+0x0801a081, 0x0801ae57, 0x0801ae5d, 0x0802f111, 0x0802f117). Modern GCC
+puts a function's unlikely blocks last, each ending in a call that never
+returns, and in a function over 2 KB reaches them by `bl`, a `b` being
+too short:
+
+```
+080195d0: movs r3, #180
+080195d2: push {r4, r5, r6, r7, lr}
+…
+08019884: bge 0x0801988a
+08019886: bl 0x0801a080
+…
+0801a080: ldr r0, [r7, #80]
+0801a082: bl 0x08033d4a        (never returns)
+```
+
+The far-jump probe (decision 5a) can't say so: from 0x0801a080 it
+reaches no return, so no frame is popped, and its answer is "never
+returns". The `bl` was then a call, the block a function of its own, and
+the lift called it with r4-r12 zeroed: the r7 the error routine's
+argument is loaded through would be 0. What makes the block the caller's
+is where it is, `analysis::vsa::func`'s rule that functions don't nest
+(a `bl` from a function with a prologue into the span of its own code is
+a jump, unless the target is a function by its looks). It missed these
+twice over, and now:
+
+- A prologue is `push {…, lr}` at the entry or after up to 8
+  instructions that touch neither sp, lr nor pc (`is_push_lr`). Modern
+  GCC schedules the body's first instructions ahead of the push: of
+  moonbeam's 1,050 Thumb starts that push lr, 125 do it second or later,
+  the latest after 7. The rule ran only for a function whose first
+  instruction was the push, and took a target as a function only then.
+- A target right where the function's reached code and pools end is a
+  jump too, if its probe says nothing returns from it: the last cold
+  blocks follow everything a branch reaches, so they are past the span,
+  not inside it. Only then: the next function starts there as well, and
+  one that returns is a call. Taking a never-returning function for a
+  block changes no path, its code runs with the same registers either
+  way, where the opposite gives the block zeroed registers.
+
+**`sbcs rN, rN` after a compare** (Rogue 0x0820c629, r5; Imperium
+0x0821e331, its r5 a copy of the entry r8): GCC's 0 or -1 of a
+condition, `cmp r3, r7; sbcs r5, r5; …; negs r5, r5`. The value is the
+carry extended to a word, whatever rN held; these two are real functions
+called by `bl`, and the summaries read the instruction as a use of the
+register. `codegen::saves::spread` now gives `a + !a + c` (and its carry
+and overflow) the carry's bits only, where `a` and the complemented
+operand are one value or two reads of one register with no write
+between. The read is then masked away (soft), as agbcc's byte-built word.
+
+Hard holes, main (f52fe115) and this branch (`just holes-all --against`):
+moonbeam 11 and 6, Rogue 21 and 19 (one fewer jump: 0x080bb454's table
+is no longer rejected), Imperium 16 and 15, the other six unchanged; the
+corpus 112 and 104. moonbeam's lift: 37 hard holes and 32, 1,216
+functions and 1,211, the five gone and nothing new. Against pret's
+modern build's ELF (`just disc-pret pokeemerald_modern`): far jumps found
+600 and 728, of 732 in the code map, none false either time; exact
+tables 560 and 572 of 617; true starts 12,436 and 12,529, 5 false both;
+code reached 87.6% and 88.6%. The agbcc build and the agb programs score
+as before.
+
+Still hard entry readers there: moonbeam 0x0800019b (crt0's copy loop
+takes the end address in r4: a hand-written register parameter), 0x0803830d (a
+`bx pc` veneer to ARM `stmia r0!, {r4-r14}`: a register save into a
+buffer, as `setjmp` makes) and 0x08025a29 (r8 and r9 at 0x08025dec, in a
+function whose far jumps are all taken; not looked into); Rogue
+0x081b42e1 and 0x0826c5e7 (not looked into); libgcc's denormal paths in
+Rogue and Imperium.
 
 ## Modern GCC's unresolved jumps, by kind
 
