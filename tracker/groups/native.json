@@ -2183,6 +2183,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-13T12:25:52Z",
+          "by": "c5c06b25",
+          "text": "Roots: moonbeam newlib setjmp 0x0803830d (stm r0!,{r4-r12,sp,lr}) 499 of 500; Rogue 0x081b42e1 (r11 struct padding passed in r0) 29 of 30. Fix PR 16: context save no use; a broken chain's hard hole is its reader's. Write-up docs/research/entry-read-takers.md."
+        },
+        {
           "at": "2026-11-13T10:11:11Z",
           "by": "d2717a37",
           "text": "From {unit:native/nightmare-entry-reads}: its branch adds Passing::named (a [[takes]] with sites = [] counts as named) in summary.rs and native.rs, 3 small hunks, and a constant-branch rule in saves.rs. Nothing else of the taker rule moved; expect a small conflict."
