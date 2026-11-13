@@ -47,6 +47,31 @@ fn calls_then(last: u32) -> (Vec<u8>, Discovery) {
     )
 }
 
+/// A compiler's trap is planned as one (a lift prints it as a stop of the
+/// game); any other undefined instruction stays a hole. Neither has a
+/// successor.
+#[test]
+fn a_compilers_trap_is_planned_apart_from_other_undefined_instructions() {
+    // 0x08000000 cmp r0, #0; bne 0x0800000c; GCC's ARM trap;
+    // 0x0800000c an undefined instruction no compiler emits as a trap.
+    let (rom, d) = program(
+        &[0xE350_0000, 0x1A00_0000, 0xE7F0_00F0, 0xE7F0_01F0],
+        &[0x0800_0000],
+    );
+    let ctx = Ctx::new(&rom, &d);
+    let f = build_func(&ctx, 0x0800_0000);
+    let at = |a: u32| {
+        let mut xs = f.blocks.values().flat_map(|b| exits(&ctx, b));
+        xs.find(|x| x.at == a).unwrap()
+    };
+    let trap = at(0x0800_0008);
+    assert_eq!(trap.plan, Plan::Undefined { trap: true });
+    assert!(crate::func::successors(&ctx, &trap).is_empty());
+    let other = at(0x0800_000C);
+    assert_eq!(other.plan, Plan::Undefined { trap: false });
+    assert!(crate::func::successors(&ctx, &other).is_empty());
+}
+
 #[test]
 fn calls_return_sites_and_splits() {
     let (rom, d) = calls();
@@ -995,6 +1020,28 @@ fn saves_fail_an_unbalanced_frame_and_an_unknown_jump() {
         let proof = crate::saves::prove(&ctx, &build_all(&ctx).funcs);
         assert!(proof.kept.is_empty());
         assert!(proof.why[&0x0800_0001].contains(why), "{:?}", proof.why);
+    }
+}
+
+/// A path ending in a compiler's trap never returns, so it fails no
+/// proof (GCC's `movs r3, #0; ldr r3, [r3]; udf #255` beside a clean
+/// return); any other undefined instruction still does.
+#[test]
+fn saves_end_a_path_at_a_trap_and_fail_another_undefined_instruction() {
+    for (udf, kept) in [(0xDEFFu16, true), (0xDE00, false)] {
+        // cmp r0, #0; bne +2; movs r3, #0; ldr r3, [r3]; udf; bx lr
+        let h = [0x2800, 0xD102, 0x2300, 0x681B, udf, 0x4770];
+        let (rom, d) = thumb_program(&h, &[2; 6], &[0x0800_0001]);
+        let ctx = Ctx::new(&rom, &d);
+        let proof = crate::saves::prove(&ctx, &build_all(&ctx).funcs);
+        assert_eq!(proof.kept.contains(&0x0800_0001), kept, "{:?}", proof.why);
+        if !kept {
+            let why = &proof.why[&0x0800_0001];
+            assert!(
+                why.contains("0x08000008: an undefined instruction"),
+                "{why}"
+            );
+        }
     }
 }
 

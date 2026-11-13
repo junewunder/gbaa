@@ -263,3 +263,17 @@ fn bios_copies_through_a_wrapper() {
         [(ROM_BASE, 0x0300_0000, 16)]
     );
 }
+
+/// The compilers' trap encodings are traps; other undefined encodings
+/// (Thumb 0xde00, an ARM `push`'s high half read as Thumb) are not.
+#[test]
+fn compiler_traps_are_known_by_encoding() {
+    use super::func::is_trap;
+    assert!(is_trap(0xdeff, true));
+    assert!(is_trap(0xdefe, true));
+    assert!(is_trap(0xe7ff_defe, false));
+    assert!(is_trap(0xe7f0_00f0, false));
+    assert!(!is_trap(0xde00, true));
+    assert!(!is_trap(0xe92d, true));
+    assert!(!is_trap(0xdeff, false));
+}
