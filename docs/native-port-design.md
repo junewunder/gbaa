@@ -761,9 +761,8 @@ showed:
   would hold them and need no list. The recogniser should emit the list.
 - **Not compared:** `KEYINPUT` (the play build records after the
   present's key latch), and the DMA registers (the typed copies store
-  none). The serial port's are compared since native/hw-serial-registers
-  (below). At first the sound wasn't either: the library had no
-  mixer, so psg-square's samples were reported "NOT compared". Since
+  none; the serial port's are compared). At first the sound wasn't
+  either: the library had no mixer, so psg-square's samples were reported "NOT compared". Since
   native/hw-sound (below) every frame's samples are, with `SOUNDCNT_X`'s
   status, the FIFOs' last stores and the timers. Play's sound against a
   host that records none still fails unless the run gives `--no-audio
@@ -843,23 +842,12 @@ The library mixes with the play build's own sound path, not a copy:
   `FifoDma`, the IRQ at the end. Checked by `agb/native-dma` in the lift
   check, each start set up by address, with a planted wrong `DMAxCNT`.
   Not yet: the EEPROM's DMA.
-- **The serial port's registers** (native/hw-serial-registers,
-  2026-11-13): `0x120`-`0x15F` but `KEYINPUT` (`SIODATA32`/`SIOMULTI0`-`3`,
-  `SIOCNT`, `SIODATA8`, `KEYCNT`, `RCNT`, `JOYCNT`, `JOY_RECV`,
-  `JOY_TRANS`, `JOYSTAT`) are kept in the sound's I/O block through the
-  play build's masks (`Hw::write16`, `read16`, `raw16`; the prelude's
-  `io_write16` and `io_read16` reach them with no route of their own), so
-  a store reads back as the play build's bus gives it off a link hub.
-  Nothing answers: a transfer started in `SIOCNT` keeps its start bit and
-  requests no IRQ, and `KEYCNT` raises none, as in the play build (mGBA's
-  port with nothing plugged in ends a normal-mode transfer on the internal
-  clock at once and raises its IRQ; the play build doesn't, filed as
-  native/serial-no-partner-as-mgba). The prelude's `RegisterRamReset`
-  resets them on flag `0x20`, and the native check compares them. Checked
-  by `agb/native-serial` in the lift check: every register stored and
-  loaded as halfwords, words and bytes, a transfer started in each mode
-  and read a frame later, the serial IRQ enabled and counted, with a
-  planted wrong `SIOCNT`. Not yet: a link partner.
+- **The serial port's registers** (native/hw-serial-registers): `0x120`-
+  `0x15F` but `KEYINPUT`, kept in the sound's I/O block through the play
+  build's masks and compared by the native check. Nothing answers: a
+  started transfer keeps `SIOCNT`'s start bit and requests no IRQ, as in
+  the play build (mGBA's unplugged port answers:
+  native/serial-no-partner-as-mgba). Checked by `agb/native-serial`.
 
 Once a mod edits the program, none of this applies: a mod is meant to
 differ. The oracle is for the unmodded native port, and a mod is checked
