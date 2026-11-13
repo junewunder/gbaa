@@ -386,7 +386,7 @@ mod tests {
 
     #[test]
     fn an_unmodelled_register_by_address_and_name() {
-        // hw.rs's text for `Hw::write16(0x134, …)`.
+        // hw.rs's text for a register `Hw::write16` doesn't model.
         let e = panicked(
             7,
             "/home/someone/gbaa/crates/runtime/src/hw.rs:665",
