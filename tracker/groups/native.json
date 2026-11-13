@@ -1914,13 +1914,10 @@
       "needs": ["native/lift-psr-boot-irq", "native/lift-irq-wrapper-tail"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "949481c0",
-        "session": "949481c0-e23d-420f-834c-36bda09666f3",
-        "host": "quack",
-        "pid": 1634689,
-        "start": "2603373",
-        "at": "2026-11-13T11:59:16Z"
+        "at": "2026-11-13T12:21:33Z",
+        "evidence": "No tracked change, so no PR: the work is three commits in the private mods repo (bbf6283 Metroid, c767a0b Nightmare, ad0cdf4 a header comment). Removed: Metroid's stand-ins 0x08000000, 0x08000104, 0x03000c7c; Nightmare's 0x08000000, 0x03001030; every other entry kept. Card check, at main 90eb57a3 with the committed files: 'just lift ROM out/psr/final-metroid --name metroid': 0 hard holes, 4 stand-ins (was 7), 'gbaa-first-stop: gbaa-native-metroid: 600 of 600 frames, no stop' (before: the same line). 'just lift ROM out/psr/final-kirby-nightmare --name kirby-nightmare': 0 hard holes, 6 stand-ins (was 8), 'gbaa-first-stop: gbaa-native-kirby-nightmare: 5 of 600 frames, no-memory a byte load at 0xe3a02004' in f_030072e8 < f_030071df < f_03007151 < f_080cd8ad < f_080010cd < f_03001030 < f_080cfa6d < f_0800157d (before: the same line and stack; that stop is {unit:native/nightmare-mixer-pointer}, noted there). Beyond the card: the builds with and without the stand-ins draw the same frame hashes: Metroid 600 frames with no input and 1800 with presses into a new game, Nightmare its 5. Not proven: Nightmare's lifted dispatcher past frame 5. A lifter older than 90eb57a3 now fails on both games (hard holes, or a dispatcher ending in unreachable!): branches must merge main. Reviewer checker-psr-7c3e agreed the done-when is met."
       },
       "notes": [
         {
@@ -2147,7 +2144,14 @@
       "title": "Nightmare's mixer reads through 0xe3a02004 at frame 5",
       "detail": "Left by {unit:native/nightmare-entry-reads}, 2026-11-13: the lift builds again and its first stop is 5 of 600 frames, no-memory, 'a byte load at 0xe3a02004', in f_030072e8 < f_030071df < f_03007151 < f_080cd8ad < f_080010cd < f_03001030 < f_080cfa6d < f_0800157d: m4a's IWRAM mixer, run from SoundMain inside the V-blank IRQ (the dispatcher's stand-in). The load is the sample loops' 'ldrsb r0, [r3], #1' (ROM source 0x080cdb1c on; the copy is 0x080cd930 to 0x03007150); r3 is the channel's current pointer, 'ldr r3, [r4, #40]' at 0x080cdac0, r4 the channel from the SoundInfo at [sp, #24]. 0xe3a02004 is no word of the ROM (it reads as ARM 'mov r2, #4'), so a channel's wave pointer, or sp under the mixer (the IRQ stand-in's stack), is wrong. Not the entry-read work: with the constant-branch rule off the lift's source differs only in the list-scan functions' modules. Find the cause against the interpreter (just first-stop, gbaa-interp), fix it or file what it needs. Done when: just lift ROM out/lift-kirby-nightmare --name kirby-nightmare runs past frame 5 and the next first stop is quoted; just check passes.",
       "check": "recorded",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-13T12:14:41Z",
+          "by": "949481c0",
+          "text": "2026-11-13: f_03001030 is lifted code now, its stand-in dropped ({unit:native/drop-psr-standins}, mods c767a0b). Stop unchanged: frame 5, same load, same stack, frames 1-5 hash the same. Past frame 5 the lifted dispatcher is unrun; the stand-in is in mods' history."
+        }
+      ]
     },
     {
       "id": "native/ram-copy-jump-only",

@@ -133,7 +133,9 @@
 //!   runs on the prelude's host coroutines, `task_resume`);
 //! - an indirect jump Recovery didn't resolve;
 //! - a BIOS call the prelude doesn't have;
-//! - an undefined instruction, a jump to no code;
+//! - an undefined instruction, a jump to no code (but a compiler's trap,
+//!   `udf #255` and the like, which the lift prints as a `panic!`: modern
+//!   GCC ends a path it proved dereferences null with one);
 //! - a function that returns without keeping r4-r11 and sp.
 //!
 //! Soft holes (counted in the report): every RAM access but the globals'
@@ -937,6 +939,17 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         frames.iter().map(|f| f.flush.len()).sum::<usize>(),
     )
     .unwrap();
+    if !soft.traps.is_empty() {
+        let at: BTreeSet<u32> = soft.traps.iter().copied().collect();
+        let at: Vec<String> = at.iter().map(|a| format!("{a:#010x}")).collect();
+        writeln!(
+            report,
+            "compilers' traps (native/lift-undefined-insns): {} `udf`s the compiler ends a path with, known by their encoding alone; each is a panic naming it, not a hard hole (printed where its function has no hard hole, which is a `compile_error!` whole): {}",
+            at.len(),
+            at.join(" "),
+        )
+        .unwrap();
+    }
     let objs = |st| soft.access.get(&(st, Where::Object)).copied().unwrap_or(0);
     writeln!(
         report,
@@ -1441,6 +1454,9 @@ struct Soft {
     /// extended entry.
     falls: usize,
     standins: usize,
+    /// The compilers' traps planned as a stop of the game, by address
+    /// (printed so unless the function has a hard hole).
+    traps: Vec<u32>,
     /// Functions whose callee-saves the summaries don't prove, and why.
     unproven: Vec<(u32, String)>,
 }
@@ -2482,7 +2498,17 @@ impl FnPrinter<'_, '_> {
                 let c = self.call_then(format!("{call} swi_done(g);"), next, at);
                 writeln!(s, "{ind}{c}").unwrap();
             }
-            Plan::Undefined => self.hole(at, "an undefined instruction"),
+            // A compiler's trap: the game stops there, as `call_fn` does
+            // on a call to no function.
+            Plan::Undefined { trap: true } => {
+                self.soft.traps.push(at);
+                writeln!(
+                    s,
+                    "{ind}panic!(\"{at:#010x}: a compiler's trap (undefined instruction), which stops the game\");"
+                )
+                .unwrap()
+            }
+            Plan::Undefined { trap: false } => self.hole(at, "an undefined instruction"),
         }
         s
     }
