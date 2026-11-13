@@ -27,9 +27,10 @@
 //! - the I/O registers the library models ([`IO`]): the display's,
 //!   `DISPSTAT`'s writable bits, `VCOUNT`, the sound registers (with
 //!   `SOUNDCNT_X`'s channel status, which the shared mixer sets), wave
-//!   RAM, the FIFOs' last stores, the timers' reloads and controls, `IE`,
-//!   `IF`, `WAITCNT`, `IME`. Not DMA, serial or the keypad's (`KEYINPUT`
-//!   is latched after the present, when the play build records);
+//!   RAM, the FIFOs' last stores, the timers' reloads and controls, the
+//!   serial port's registers and `KEYCNT` (kept as stored, with no
+//!   partner), `IE`, `IF`, `WAITCNT`, `IME`. Not DMA or `KEYINPUT` (latched
+//!   after the present, when the play build records);
 //! - palette, VRAM and OAM, but FILE's ranges there too (a replaced
 //!   library's state kept in VRAM: agb's tile allocator's free list);
 //! - each frame's audio (its samples' count and hash), when both make
@@ -71,6 +72,8 @@ pub const IO: &[(u32, u32, u16, &str)] = &[
     (0x086, 0x0A0, 0xFFFF, "SOUNDBIAS and wave RAM"),
     (0x0A0, 0x0A8, 0xFFFF, "the FIFOs' last stores"),
     (0x100, 0x110, 0xFFFF, "the timers' reloads and controls"),
+    (0x120, 0x130, 0xFFFF, "the serial registers"),
+    (0x132, 0x160, 0xFFFF, "KEYCNT, RCNT and the JOY bus"),
     (0x200, 0x204, 0xFFFF, "IE and IF"),
     (0x204, 0x206, 0xFFFF, "WAITCNT"),
     (0x208, 0x20A, 0xFFFF, "IME"),
@@ -625,10 +628,17 @@ mod tests {
         // In the stack: skipped.
         b.region_mut(Region::Iwram)[0x7F10] = 1;
         assert_eq!(frame_diff(&a, &b, &skips), None);
-        // DMA's and serial's registers: not compared.
+        // DMA's registers and KEYINPUT: not compared.
         b.set_io16(0x0B0, 5);
-        b.set_io16(0x128, 0x0080);
+        b.set_io16(0x130, 0x03FE);
         assert_eq!(frame_diff(&a, &b, &skips), None);
+        // The serial port's: compared, now the library keeps them.
+        b.set_io16(0x128, 0x0080);
+        assert!(frame_diff(&a, &b, &skips).unwrap().contains("serial"));
+        b.set_io16(0x128, 0);
+        b.set_io16(0x134, 0x8000);
+        assert!(frame_diff(&a, &b, &skips).unwrap().contains("RCNT"));
+        b.set_io16(0x134, 0);
         // A timer: compared, now the library has the play build's.
         b.set_io16(0x102, 0x0080);
         assert!(frame_diff(&a, &b, &skips).unwrap().contains("timers"));
