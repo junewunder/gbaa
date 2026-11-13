@@ -2032,13 +2032,23 @@
       "detail": "The branch unit/native/fnref-unknown-addrs (head 233ba6c0) holds three units' unlanded work on crates/codegen/src/native/fnref.rs: frames and allocation sites as objects, call-site context (off by default), RAM pointers followed, the metric fn_loads_read_everything, and the tools GBAA_FNREF_WATCH and GBAA_FNREF_OFF. Main's {unit:native/fnref-emerald-speed} (f52fe115) rewrote about 1,000 lines of the same file: large pile, every-cell and ROM reads are one lazy token each (Tok::Ref, Src, Xf, G::expand). Merging main into the branch gives 22 conflicts in fnref.rs (G::store, give, give_all, Val::cap, Run::block, load_raw, call_by_value, follow, and more: that PR's 'For whoever merges' lists them), one in fnref/tests.rs and one in lift-check.toml; beyond the conflicts, the branch's own reads (every object's cells, a run of RAM, an object's cells, the lost-pointer cell) and its tokens (Tok::Obj, Tok::RamFrom) must work with Ref tokens, and the watch trace must see through them. docs/research/fnref-held-words.md was measured before that commit and says so. Done when: the branch builds merged with main, its and main's fnref unit tests pass, Emerald's flow still finishes (main's time and memory within a tenth), and every table of the research note is measured again on the merged code and the note corrected (drop its 'before main's Ref tokens' paragraph): just lift-metrics on every program, GBAA_FNREF_OFF's rows on affine (set as one comma list; check the lift prints the switches it saw), the first-road table from GBAA_FNREF_WATCH=all, native-irq-hold's handler words. Then record {unit:native/fnref-unknown-addrs} with the re-measured finding if it stands. The branch doesn't land here: {unit:native/fnref-ram-pointers-land} does.",
       "check": "recorded",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "5ce5cf47",
+        "session": "5ce5cf47-4a13-4c36-9ef3-66bd1287b6c9",
+        "host": "quack",
+        "pid": 1989311,
+        "start": "5552414",
+        "at": "2026-11-13T20:11:26Z"
+      },
       "notes": [
         {
           "at": "2026-11-13T08:33:12Z",
           "by": "afebd1b0",
           "text": "2026-11-13: Metroid's count needs nothing of the branch ({unit:native/fnref-c-game-words}). GBAA_FNREF_WATCH is on main now (Ref-aware), and a GBAA_FNREF_OFF with other kinds (bios,move,flags,tables,pile,cells): keep both lists when merging."
         }
-      ]
+      ],
+      "round": "2026-11-13T20:11:26Z"
     },
     {
       "id": "native/fnref-c-game-words",
