@@ -11,13 +11,13 @@
 //! or not), then stores to every register, values from the frame's
 //! number, as halfwords, as words (`SIODATA32`, `SIOCNT` with `SIODATA8`,
 //! `KEYINPUT` with `KEYCNT`, `RCNT`, `JOYCNT`, `JOY_RECV`, `JOY_TRANS`,
-//! `JOYSTAT`) and as bytes (`SIOCNT`'s high byte, `RCNT`'s low, `JOYCNT`'s
-//! low, an unused one), and loads them back as halfwords, words and
-//! bytes. `SIOCNT` goes through `sio_set(reg, v)`, Thumb in `global_asm!`,
+//! `JOYSTAT`) and as bytes (`SIOCNT`'s and `SIODATA8`'s high, `RCNT`'s and
+//! `JOYCNT`'s low, an unused one), and loads them back in all three
+//! widths. `SIOCNT` goes through `sio_set(reg, v)`, Thumb in `global_asm!`,
 //! one `strh`, which the lift check plants a wrong value in; its values
-//! (`CNT`) start a transfer in each mode, with and without its IRQ. Every
-//! eighth frame it then calls `RegisterRamReset(0x20)`, the serial
-//! registers' flag, and loads them all again (`reset`).
+//! (`CNT`) start a transfer in each mode, with its IRQ and without (when
+//! `f % 4` is 1 a word and a byte store then replace it). Every eighth
+//! frame it calls `RegisterRamReset(0x20)` and loads them again (`reset`).
 //!
 //! The serial IRQ is enabled, its handler counting in `IRQS`. What it
 //! read is kept in `OUT`, a global in RAM, and folded into a pixel of
