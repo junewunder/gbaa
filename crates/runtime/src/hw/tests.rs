@@ -502,7 +502,7 @@ fn serial_registers_are_kept_as_the_play_build_keeps_them() {
             if o == reg::KEYINPUT {
                 continue;
             }
-            let v = (o.wrapping_mul(0x9E37) ^ 0xFFFF * pass) as u16;
+            let v = (o.wrapping_mul(0x9E37) ^ (0xFFFF * pass)) as u16;
             g.hw.write16(o, v);
             io.write16(o, v);
         }
