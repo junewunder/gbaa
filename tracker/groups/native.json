@@ -1704,17 +1704,15 @@
       "minMinutes": 90,
       "record": {
         "state": "claimed",
-        "by": "74679aef",
-        "session": "74679aef-e087-4107-ae60-ffc062168b01",
+        "by": "77aa5fbf",
+        "session": "77aa5fbf-b416-45f2-a48d-d2a67bcf68d8",
         "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T13:02:46Z",
-        "branch": "unit/native/lift-undefined-insns",
-        "beats": true,
-        "handedBack": "2026-11-12T13:43:04Z",
-        "pushed": true,
-        "ended": "2026-11-12T13:43:15Z"
+        "pid": 11545,
+        "start": "29000",
+        "at": "2026-11-13T04:50:16Z",
+        "resumed": "74679aef",
+        "prevSession": "74679aef-e087-4107-ae60-ffc062168b01",
+        "pushed": true
       },
       "notes": [
         {
