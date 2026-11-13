@@ -1725,14 +1725,14 @@
       "minMinutes": 90,
       "record": {
         "state": "claimed",
-        "by": "77aa5fbf",
-        "session": "77aa5fbf-b416-45f2-a48d-d2a67bcf68d8",
+        "by": "7e93e2be",
+        "session": "7e93e2be-e416-470a-957c-a9f1a60442b5",
         "host": "quack",
-        "pid": 11545,
-        "start": "29000",
-        "at": "2026-11-13T04:50:16Z",
-        "resumed": "74679aef",
-        "prevSession": "74679aef-e087-4107-ae60-ffc062168b01",
+        "pid": 1247572,
+        "start": "1952922",
+        "at": "2026-11-13T10:10:49Z",
+        "resumed": "77aa5fbf",
+        "prevSession": "77aa5fbf-b416-45f2-a48d-d2a67bcf68d8",
         "pushed": true
       },
       "notes": [
@@ -1840,13 +1840,10 @@
       "check": "recorded",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "d2717a37",
-        "session": "d2717a37-2f09-4fa2-90e3-3e8f8d2ca636",
-        "host": "quack",
-        "pid": 1035338,
-        "start": "1518245",
-        "at": "2026-11-13T08:58:21Z"
+        "at": "2026-11-13T11:12:18Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/12, head de80679a (main 45c56fcc merged in). just lift ROM out/lift-kirby-nightmare --name kirby-nightmare: 0 hard holes (13 on main adfa45ee), the crate builds; first stop 5 of 600 frames, no-memory, a byte load at 0xe3a02004 in f_030072e8 < f_030071df < f_03007151 < f_080cd8ad (m4a's IWRAM mixer from SoundMain in the V-blank IRQ), filed as {unit:native/nightmare-mixer-pointer}. just check: passes. just lift-check, whole: passed, every metric within its bar for all 15 programs, no bar moved. How: the summary's run takes a branch on a certain constant one way (6 holes: an unreachable read in two list-scan functions); two [[takes]] name the object scheduler's callback call (2 holes); a [[takes]] with sites = [] names code only jumped into, m4a's IWRAM mixer (5 holes); holes file in mods commit 1cf76a7. A fresh reviewer read the diff: two real bugs fixed (constants stayed certain past an msr; an always-taken exit lost its own register read), each with a test that fails without the fix. Not proven: r8 at the scheduler's call on a pass where it hasn't set it (the lift passes 0; 0 and the usual value take the same branch); the mixer's registers checked by hand against SoundMain, not by the lifter."
       },
       "notes": [
         {
@@ -2076,12 +2073,14 @@
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
-        "by": "3502c802",
-        "session": "3502c802-2765-4929-bab3-efc404b57109",
+        "by": "45f263ac",
+        "session": "45f263ac-c7c5-4146-a55b-7ad625efb3f5",
         "host": "quack",
-        "pid": 1206400,
-        "start": "1798812",
-        "at": "2026-11-13T09:45:04Z"
+        "pid": 1249632,
+        "start": "1955379",
+        "at": "2026-11-13T10:11:20Z",
+        "resumed": "3502c802",
+        "prevSession": "3502c802-2765-4929-bab3-efc404b57109"
       },
       "round": "2026-11-13T09:45:04Z"
     },
@@ -2146,12 +2145,50 @@
       "title": "RAM-copy code only jumped into needs no [[takes]] entry",
       "detail": "Left by {unit:native/nightmare-entry-reads}, 2026-11-13. In a RAM copy's context the summaries take every function as one a pointer may call (saves/summary.rs, 'Code not in the ROM: any pointer may'), so each part of m4a's IWRAM mixer that reads r4-r11 as it came is a hard hole until the holes file names it: five '[[takes]] sites = []' entries in Nightmare's (SoundMainRAM and the four places it changes between Thumb and ARM by 'adr; bx'). Every m4a game with the mixer in IWRAM will need the same five by hand. Find a rule the lifter can apply itself (say: no ROM word holds the function's RAM key but a resolved constant jump's literal, and every way in that the lift prints is a jump), or decide the holes entries are the rule and write the m4a recipe in docs/research/native-holes.md. Done when: just lift on Nightmare reports 0 hard holes with those five entries removed, or the doc has the recipe and why no rule; just lift-check and just check pass.",
       "check": "recorded",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-13T10:50:42Z",
+          "by": "d2717a37",
+          "text": "Review of PR 12: a jump into a no-sites taker isn't checked against the jumper. A jumper that never set the register (another code context, or one whose run stops at the jump) hands on its own zeroes, no hole. Nightmare's SoundMain was checked by hand; a rule must check jumpers."
+        }
+      ]
     },
     {
       "id": "native/moonbeam-taker-chain",
       "title": "moonbeam's hard holes: 11 to 503 since calls pass registers",
       "detail": "Found by {unit:discovery/gcc-far-jump-bl} while measuring against main: 'just holes-all' gave moonbeam 11 hard holes at f52fe115 and 503 at 4fb9a5cf, after {unit:native/metroid-entry-reads} merged (a call passes the r4-r11 its callee reads at entry). 500 functions now have 'reads r4-r11 at entry: rN, which X takes' and 220 are 'takes r4-r11 from its callers'. The most cited taker, 0x08002549 (2,664 lines), starts push {r3-r7, lr} and reads none of r4-r11 first, so it takes through its callees. Not verified: the root may be 0x0803830d, a bx pc veneer to ARM stmia r0!, {r4-r14} (a register save as setjmp makes, which reads all of r4-r11 without using them). Rogue went 21 to 48 and Imperium 16 to 15 over the same merge. Done: the cause named, a register save that only stores them not counted as taking (or the real cause fixed), moonbeam's hard count back near 6, no other game's higher.",
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "c5c06b25",
+        "session": "c5c06b25-4281-48df-b692-2edc7c1b1973",
+        "host": "quack",
+        "pid": 1246801,
+        "start": "1950544",
+        "at": "2026-11-13T10:10:31Z"
+      },
+      "notes": [
+        {
+          "at": "2026-11-13T10:11:11Z",
+          "by": "d2717a37",
+          "text": "From {unit:native/nightmare-entry-reads}: its branch adds Passing::named (a [[takes]] with sites = [] counts as named) in summary.rs and native.rs, 3 small hunks, and a constant-branch rule in saves.rs. Nothing else of the taker rule moved; expect a small conflict."
+        }
+      ],
+      "round": "2026-11-13T10:10:31Z"
+    },
+    {
+      "id": "native/nightmare-fn-flow-again",
+      "title": "Nightmare's lift runs the function flow again",
+      "detail": "From the sweep's foreman, 2026-11-13, by way of {unit:native/nightmare-entry-reads}: mods/kirby-nightmare/holes.toml's skip_fn_flow says the function-address flow doesn't settle on Nightmare under 16 GB. That is stale: on main it settles now (31 to 35 minutes, 2.0 GB peak, measured by {unit:native/fnref-c-game-words}), and crates/codegen/src/native/fnref.rs's module comment says the same stale thing. Drop the line (or keep it with a true reason: it saves half an hour a lift, and the flow only feeds the report and stage B's metrics), fix the comment, and lift once with the flow on. Done when: the holes file and fnref.rs say what is true today; just lift ROM out/lift-kirby-nightmare --name kirby-nightmare with the flow on still reports 0 hard holes and builds, its time and peak quoted; just check passes.",
+      "check": "recorded",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-bios-ram-copies",
+      "title": "Function flow: a BIOS copy out of RAM carries no addresses",
+      "detail": "Found by {unit:native/fnref-bios-reads}. The flow (crates/codegen/src/native/fnref.rs, Run::exit, Edge::Swi) follows CpuSet and CpuFastSet only from ROM: the source's words go to the pile. A copy whose source is RAM moves nothing, so a function's address stored at a constant RAM address (its cell) and copied elsewhere by the BIOS is not in what a load of the copy reads (that cell and the pile): the load gives no address, arithmetic on it is no hole, and the word stays proven though the lifted program computes with it. C games copy structs with CpuSet. Unsound, and older than that unit (which only made CpuFastSet's r3, a word it read, hold what a load from anywhere reads). The same for what the other calls read through a pointer and write back (the affine sets, MidiKey2Freq's wave header, the decompressors' bytes): arithmetic inside the BIOS on memory the flow never looks at. Done when: a BIOS copy from RAM, or from a source the run can't place, stores to the pile what a load of its source reads (its cells in range if the address and length are numbers, else every cell, and the pile), with a unit test (F stored at a cell, CpuSet to another, loaded there and added to: a hole); the other calls' memory reads are either modelled or written down as why not; Metroid's fn_words_not_proven and the agb bars are quoted before and after; just lift-check and just check pass.",
+      "check": "independent",
       "uses": ["heavy"]
     }
   ]
