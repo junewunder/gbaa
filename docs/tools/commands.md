@@ -1285,7 +1285,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   native/ram-globals), its registers locals, blocks a `loop { match }` over
   local labels, calls Rust calls; then the recipe builds it into
   `target/recompiled` (`gbaa-native-<name>`, the native programs' headless
-  flags, `crates/native-host`). It reads `holes/<name>.toml` when there is
+  flags or, with none, gbaa-desktop's window to play in: `--scale N`, `--mute`; `crates/native-host`). It reads `holes/<name>.toml` when there is
   one, else `mods/<name>/holes.toml` (a commercial game's, private: its
   stand-ins are ports of the game's code); `<name>` is `--name`'s when
   given (a file name with spaces: `just lift "…/Metroid - Zero Mission
