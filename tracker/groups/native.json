@@ -1774,13 +1774,11 @@
       "uses": ["heavy"],
       "minMinutes": 150,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "3d525e2f",
-        "session": "3d525e2f-fa9e-4ab0-851f-1e2f2cec2205",
-        "host": "quack",
-        "pid": 276052,
-        "start": "369085",
-        "at": "2026-11-13T05:46:57Z"
+        "checker": "a3cc37a1ce8881d59",
+        "at": "2026-11-13T06:57:12Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/5 (head 2b5dda0b). just lift on agb/native-spike (a lift-check program): '600 of 600 frames, no stop' in report.txt and metrics.toml [run]. A KEYCNT store planted by hand in a copy: '5 of 600 frames, unmodelled-register 0x04000132 KEYCNT', in f_0800017d. A planted endless loop: 'time-limit 3 s'. Metroid on main's lifter: 'didn't build: 1 hard hole'; Nightmare: 'didn't build: 10 hard holes' (DMA by its registers has landed; their entry-read holes are other units'), both shown beside hard in just holes-all's table. just check passes (peak 7.5 GB). A fresh subagent reviewed the diff and checked the card: 'the unit's check is met', with no guest pc (filed: {unit:native/first-stop-guest-pc}) and a column that isn't rerun as the weaker parts; its two real bugs are fixed."
       },
       "round": "2026-11-12T13:07:54Z"
     },
@@ -1863,7 +1861,17 @@
       "id": "native/metroid-entry-reads",
       "title": "Metroid lifts again after entry-read masking",
       "detail": "Since {unit:native/entry-read-masking} landed, gbaa-lift on Metroid has 1 hard hole: f_08073ce5, summary 0x08073f08 reads entry r9. agbcc builds a word in r6 = entry r9 byte by byte (ands ffffff00, ands ffff00ff), so r9's top 16 bits are stored to RAM at [r4+0x244+4]; the lift zeroes r4-r12 at a call, the game keeps the caller's r9. Real, not over-hard. Fix: a stand-in (caller's r9 is likely a constant or garbage; check callers), or the lifter passing r9. Done when: just lift ROM out/lift-metroid --name metroid reports 0 hard holes and the crate builds; just check passes.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "8814ddd6",
+        "session": "8814ddd6-8ca4-45af-919c-a91eea1e5151",
+        "host": "quack",
+        "pid": 627066,
+        "start": "800290",
+        "at": "2026-11-13T06:58:38Z"
+      },
+      "round": "2026-11-13T06:58:38Z"
     },
     {
       "id": "native/native-check-spike-packed",
@@ -1938,6 +1946,18 @@
       "detail": "docs/research/fnref-held-words.md, 'Kinds of read switched off'. On affine, with GBAA_FNREF_OFF (unsound, measuring only; on the branch unit/native/fnref-unknown-addrs, as is all of this) the loads that read everything alone leave fn_words_not_proven at 55, reads through a pointer anywhere in an object alone leave it 55, and both off give 41: the two must be made exact together, and both are about stack frames. (1) The 3 loads left that read everything (affine 0x08000a24 to 0x08000a2c) go through a pointer into a caller's frame at or above the callee's entry sp, which Run::load_at gives up on (G::obj_up): follow it to the callers' frame objects through the sp each call passed. (2) A pointer into a frame moved by an index the run doesn't know becomes anywhere in the frame and reads every word of it: keep it in its stack slot (crates/codegen/src/native/frame.rs has the slots), and keep an array of pairs' fields apart (an offset known modulo the stride; core::fmt's argument arrays hold a value and a function each, affine 0x080036e4). Work on that branch (it has the object split, GBAA_FNREF_WATCH and GBAA_FNREF_OFF). Done when: unit tests for each; fn_loads_read_everything is 0 on affine and no higher anywhere; fn_words_not_proven falls on affine (the switches say up to 14 words; say in the evidence how close it got and what holds the rest) and rises nowhere. The branch doesn't land here: {unit:native/fnref-ram-pointers-land} does.",
       "check": "recorded",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/first-stop-guest-pc",
+      "title": "A native game's stop names its guest pc, not only functions",
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-13T06:56:53Z",
+          "by": "3d525e2f",
+          "text": "From {unit:native/native-first-stop} (PR 5): the stop line gives lifted functions from the panic's backtrace (inlined ones don't show) and no guest pc, since lifted code keeps none. Needs the lifter to keep a pc or block address a panic can read, cheaply."
+        }
+      ]
     }
   ]
 }

@@ -1,4 +1,4 @@
-//! `gbaa-holes --corpus FILE --roms DIR [--out DIR] [--against DIR]
+//! `gbaa-holes --corpus FILE --roms DIR [--out DIR] [--against DIR] [--lifts DIR]
 //! [--only NAME]… [--cover] [--write-doc FILE] [FLAGS…]` (`just holes-all`): the hole report
 //! over every game of FILE (`holes/corpus.toml`), one table at the end.
 //!
@@ -11,6 +11,13 @@
 //! printed from those, and saved, one `[[game]]` each, in
 //! `OUT/summary.toml`. `--against DIR2` reads DIR2's `summary.toml` and
 //! puts each change beside its number, `4 (-3)`.
+//!
+//! Beside the hard holes is the game's first stop (unit
+//! `native/native-first-stop`): how far its last lift's built program ran
+//! headless, as `just lift` left it in `LIFTS/lift-<name>/metrics.toml`
+//! (`codegen::native::first_stop`; LIFTS defaults to `out`), `-` for a
+//! game with no lift there. A game that lifts with no hard hole and then
+//! stops still has a hole: that one.
 //!
 //! OUT defaults to `out/holes/<git short hash>` (`-dirty` after it when
 //! tracked files have changed). FLAGS (`--frames N`, `--no-summaries`,
@@ -121,6 +128,33 @@ pub struct Entry {
     pub seconds: f64,
     /// None when the child stopped before its report.
     pub line: Option<Line>,
+    /// The first stop of the game's last lift
+    /// (`codegen::native::first_stop::Run::summary`); None with no lift.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_stop: Option<String>,
+}
+
+/// The first stop's column in the table: beside the hard holes.
+const FIRST_STOP: usize = 2;
+
+/// The first stop of `name`'s lift under `lifts`, if it has one and its
+/// built program was run: the run in a few words, and the commit it was
+/// made at when that isn't `now`, this table's (an old lift's stop is not
+/// passed off as today's).
+fn first_stop(lifts: &Path, name: &str, now: &str) -> Option<String> {
+    let p = lifts.join(format!("lift-{name}")).join("metrics.toml");
+    let t = std::fs::read_to_string(p).ok()?;
+    match codegen::native::first_stop::Run::read(&t) {
+        Ok(r) => r.map(|r| match r.commit.as_str() {
+            c if c == now => r.summary(),
+            "" => format!("{} (lifted at an unknown commit)", r.summary()),
+            c => format!("{} (lifted at {c})", r.summary()),
+        }),
+        Err(e) => Some(format!(
+            "unreadable ({})",
+            e.lines().next().unwrap_or_default()
+        )),
+    }
 }
 
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -154,7 +188,9 @@ pub fn numbers_doc(s: &Summary, path: &str, from: &Path) -> String {
         &commit,
         &[
             "Each game of `holes/corpus.toml` through `gbaa-holes` (its ranking line's \
-             numbers, a row a game); `s` is the game's run time in seconds."
+             numbers, a row a game); `s` is the game's run time in seconds. `first stop` \
+             is how far the game's last lift ran headless when built (`just lift`), `-` \
+             with no lift where the table was made."
                 .into(),
         ],
         &table(s, None),
@@ -206,8 +242,10 @@ pub fn table(now: &Summary, against: Option<&Summary>) -> String {
             }
         }
         row.push(format!("{:.0}", e.seconds));
+        row.insert(FIRST_STOP, e.first_stop.clone().unwrap_or("-".into()));
         rows.push(row);
     }
+    rows[0].insert(FIRST_STOP, "first stop".into());
     let mut row = vec!["total".to_string()];
     // A total with a game missing on either side isn't comparable.
     let tw = total_was.filter(|_| all).map(|t| t.columns());
@@ -218,6 +256,7 @@ pub fn table(now: &Summary, against: Option<&Summary>) -> String {
         "{:.0}",
         now.game.iter().map(|e| e.seconds).sum::<f64>()
     ));
+    row.insert(FIRST_STOP, String::new());
     rows.push(row);
     let widths: Vec<usize> = (0..rows[0].len())
         .map(|c| rows.iter().map(|r| r[c].chars().count()).max().unwrap_or(0))
@@ -228,7 +267,7 @@ pub fn table(now: &Summary, against: Option<&Summary>) -> String {
             .iter()
             .enumerate()
             .map(|(c, v)| {
-                if c == 0 {
+                if c == 0 || c == FIRST_STOP {
                     format!("{v:<w$}", w = widths[c])
                 } else {
                     format!("{v:>w$}", w = widths[c])
@@ -299,7 +338,7 @@ fn write_doc_file(s: &Summary, path: &str, from: &Path) -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: gbaa-holes --corpus FILE --roms DIR [--out DIR] [--against DIR] [--only NAME]... [--cover] [--write-doc FILE] [gbaa-holes flags...]\n       gbaa-holes --corpus FILE --from DIR [--write-doc FILE]"
+        "usage: gbaa-holes --corpus FILE --roms DIR [--out DIR] [--against DIR] [--lifts DIR] [--only NAME]... [--cover] [--write-doc FILE] [gbaa-holes flags...]\n       gbaa-holes --corpus FILE --from DIR [--write-doc FILE]"
     );
     ExitCode::from(2)
 }
@@ -312,10 +351,11 @@ pub fn main(args: &[String]) -> ExitCode {
     let (mut roms, mut out, mut against) = (None, None, None);
     let (mut write_doc, mut from) = (None::<String>, None::<PathBuf>);
     let (mut only, mut cover, mut pass) = (Vec::new(), false, Vec::new());
+    let mut lifts = PathBuf::from("out");
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
-            "--roms" | "--out" | "--against" | "--only" | "--write-doc" | "--from" => {
+            "--roms" | "--out" | "--against" | "--only" | "--write-doc" | "--from" | "--lifts" => {
                 let Some(v) = it.next() else { return usage() };
                 match a.as_str() {
                     "--roms" => roms = Some(PathBuf::from(v)),
@@ -323,6 +363,7 @@ pub fn main(args: &[String]) -> ExitCode {
                     "--from" => from = Some(PathBuf::from(v)),
                     "--out" => out = Some(PathBuf::from(v)),
                     "--against" => against = Some(PathBuf::from(v)),
+                    "--lifts" => lifts = PathBuf::from(v),
                     _ => only.push(v.clone()),
                 }
             }
@@ -442,6 +483,7 @@ pub fn main(args: &[String]) -> ExitCode {
             exit,
             seconds,
             line,
+            first_stop: first_stop(&lifts, &g.name, summary.commit.as_deref().unwrap_or("")),
         });
     }
     let path = out.join("summary.toml");
@@ -483,7 +525,76 @@ mod tests {
                 jumps,
                 ..Line::default()
             }),
+            first_stop: None,
         }
+    }
+
+    #[test]
+    fn the_first_stop_is_beside_the_hard_holes() {
+        let now = Summary {
+            game: vec![
+                Entry {
+                    first_stop: Some("0 of 600 frames, unmodelled-register 0x04000134 RCNT".into()),
+                    ..entry("a", 0, 3)
+                },
+                entry("b", 10, 10),
+            ],
+            ..Summary::default()
+        };
+        let t = table(&now, None);
+        let rows: Vec<&str> = t.lines().collect();
+        let at = rows[0].find("first stop").unwrap();
+        let (hard, jumps) = (
+            rows[0].find("hard").unwrap(),
+            rows[0].find("jumps").unwrap(),
+        );
+        assert!(hard < at && at < jumps, "{t}");
+        assert!(
+            rows[1][at..].starts_with("0 of 600 frames, unmodelled-register"),
+            "{t}"
+        );
+        // No lift: a dash; the total has none.
+        assert!(rows[2][at..].starts_with("- "), "{t}");
+        assert!(
+            rows[3].starts_with("total") && rows[3][at..].starts_with(' '),
+            "{t}"
+        );
+        // Kept in the summary, and an older summary without it reads.
+        let s = toml::to_string(&now).unwrap();
+        assert_eq!(toml::from_str::<Summary>(&s).unwrap(), now);
+        assert!(!s.contains("first_stop = \"-\""), "{s}");
+    }
+
+    #[test]
+    fn the_first_stop_comes_from_the_lifts_metrics() {
+        let dir = std::env::temp_dir().join(format!("gbaa-first-stop-{}", std::process::id()));
+        let lift = dir.join("lift-g");
+        std::fs::create_dir_all(&lift).unwrap();
+        assert_eq!(first_stop(&dir, "g", "abc1234"), None);
+        // A lift that hasn't been run has none either.
+        std::fs::write(lift.join("metrics.toml"), "hard_holes = 2\n").unwrap();
+        assert_eq!(first_stop(&dir, "g", "abc1234"), None);
+        let r = codegen::native::first_stop::Run {
+            commit: "abc1234".into(),
+            ..codegen::native::first_stop::Run::not_built(600, 2, "")
+        };
+        let t = r.write_metrics("hard_holes = 2\n").unwrap();
+        std::fs::write(lift.join("metrics.toml"), t).unwrap();
+        assert_eq!(
+            first_stop(&dir, "g", "abc1234").as_deref(),
+            Some("didn't build: 2 hard holes")
+        );
+        // A lift made at another commit says so.
+        assert_eq!(
+            first_stop(&dir, "g", "def5678").as_deref(),
+            Some("didn't build: 2 hard holes (lifted at abc1234)")
+        );
+        std::fs::write(lift.join("metrics.toml"), "[run]\nframes_run = \"x\"\n").unwrap();
+        assert_eq!(
+            first_stop(&dir, "g", "abc1234").as_deref(),
+            Some("unreadable (run.functions: not an array)")
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
@@ -533,6 +644,7 @@ mod tests {
                     exit: 101,
                     seconds: 1.0,
                     line: None,
+                    first_stop: None,
                 },
             ],
             ..Summary::default()
