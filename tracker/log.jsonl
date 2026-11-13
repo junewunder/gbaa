@@ -2848,3 +2848,4 @@
 {"at":"2026-11-13T17:58:11Z","actor":"loop","tag":"debeff8d","host":"quack","cmd":"done","id":"native/window-keeps-save","text":"A native program's window keeps the game's save: done"}
 {"at":"2026-11-13T18:02:01Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/window-keeps-save","text":"A native program's window keeps the game's save: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-13T18:02:06Z","actor":"loop","tag":"a1e87159","host":"quack","cmd":"claim","id":"native/window-keeps-save","text":"A native program's window keeps the game's save: claimed"}
+{"at":"2026-11-13T18:05:53Z","actor":"loop","tag":"a1e87159","host":"quack","cmd":"done","id":"native/window-keeps-save","text":"A native program's window keeps the game's save: done"}
