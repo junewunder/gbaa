@@ -81,6 +81,7 @@ call_fn_four_complete = 56
 jumps_by_value = 8
 gap_targets = 5
 fn_words_not_proven = 56
+fn_loads_read_everything = 3
 sp_accesses_callers_frame = 7
 
 [program.mosaic-modes]
@@ -138,6 +139,7 @@ call_fn_four_complete = 56
 jumps_by_value = 8
 gap_targets = 24
 fn_words_not_proven = 55
+fn_loads_read_everything = 3
 sp_accesses_callers_frame = 4
 
 [program.native-spike]
@@ -199,6 +201,7 @@ call_fn_four_complete = 58
 jumps_by_value = 8
 gap_targets = 22
 fn_words_not_proven = 58
+fn_loads_read_everything = 5
 sp_accesses_callers_frame = 8
 
 [program.native-fallthrough]
@@ -260,6 +263,7 @@ call_fn_four_complete = 57
 jumps_by_value = 8
 gap_targets = 5
 fn_words_not_proven = 57
+fn_loads_read_everything = 5
 sp_accesses_callers_frame = 9
 
 [program.native-irq-hold]
@@ -322,6 +326,7 @@ call_fn_four_complete = 60
 jumps_by_value = 8
 gap_targets = 11
 fn_words_not_proven = 59
+fn_loads_read_everything = 3
 sp_accesses_callers_frame = 7
 
 [program.native-frame-locals]
@@ -387,6 +392,7 @@ call_fn_four_complete = 56
 jumps_by_value = 8
 gap_targets = 5
 fn_words_not_proven = 56
+fn_loads_read_everything = 3
 
 [program.native-ime-release]
 rom = "agb/native-ime-release.gba"
@@ -448,6 +454,7 @@ call_fn_four_complete = 58
 jumps_by_value = 8
 gap_targets = 15
 fn_words_not_proven = 59
+fn_loads_read_everything = 3
 
 [program.native-bios-calls]
 rom = "agb/native-bios-calls.gba"
@@ -513,6 +520,7 @@ call_fn_four_complete = 56
 jumps_by_value = 8
 gap_targets = 7
 fn_words_not_proven = 56
+fn_loads_read_everything = 571
 
 [program.native-bios-more]
 rom = "agb/native-bios-more.gba"
@@ -578,6 +586,7 @@ call_fn_four_complete = 56
 jumps_by_value = 7
 gap_targets = 165
 fn_words_not_proven = 56
+fn_loads_read_everything = 3
 
 [program.native-tasks]
 rom = "agb/native-tasks.gba"
@@ -646,6 +655,7 @@ call_fn_four_complete = 0
 jumps_by_value = 8
 gap_targets = 5
 fn_words_not_proven = 57
+fn_loads_read_everything = 3
 
 [program.native-dma]
 rom = "agb/native-dma.gba"
@@ -707,6 +717,7 @@ call_fn_four_complete = 60
 jumps_by_value = 8
 gap_targets = 80
 fn_words_not_proven = 62
+fn_loads_read_everything = 3
 
 [program.native-save]
 rom = "agb/native-save.gba"
@@ -770,6 +781,7 @@ call_fn_calls = 61
 call_fn_four_complete = 56
 jumps_by_value = 8
 fn_words_not_proven = 56
+fn_loads_read_everything = 3
 gap_targets = 5
 
 [program.native-bios-region]
@@ -832,6 +844,7 @@ call_fn_calls = 63
 call_fn_four_complete = 58
 jumps_by_value = 8
 fn_words_not_proven = 59
+fn_loads_read_everything = 3
 gap_targets = 11
 
 [program.native-bios-affine]
@@ -895,4 +908,5 @@ call_fn_calls = 61
 call_fn_four_complete = 56
 jumps_by_value = 9
 fn_words_not_proven = 57
+fn_loads_read_everything = 3
 gap_targets = 5

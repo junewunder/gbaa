@@ -978,7 +978,84 @@ fn a_ram_pointer_is_followed_through_memory_and_an_index() {
     };
     let f = build(false);
     assert!(f.proven(POOL), "{f:?}");
+    assert!(f.everything.is_empty(), "{f:?}");
     let f = build(true);
     assert!(!f.proven(POOL));
     assert_eq!(f.holes[&Origin::Word(POOL)].1, Why::Arithmetic);
+    // The one load that read everything is counted.
+    assert_eq!(f.everything.len(), 1, "{f:?}");
+}
+
+/// A RAM address added to another pointer is two values' tokens paired
+/// that never meet, not a pointer dropped: a load through the sum reads
+/// no RAM, so F in its cell stays proven. (After main's ROM read bound,
+/// such pairs brought affine's loads that read everything back from 8
+/// to 580.)
+#[test]
+fn a_ram_pointer_plus_another_pointer_is_not_a_lost_one() {
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let c = b.k(CELL);
+    b.st(Width::Word, c, p);
+    let arr = b.k(0x0300_0400);
+    let rom = b.k(VT);
+    let e = b.bin(BinOp::Add, arr, rom);
+    let m = b.ld(Width::Word, e);
+    let four = b.k(4);
+    b.bin(BinOp::Add, m, four);
+    let f = run(&[just(0x0800_1001, b)]);
+    assert!(f.everything.is_empty(), "{f:?}");
+    assert!(f.proven(POOL), "{f:?}");
+}
+
+/// Bounds wider than RAM on a load through an unknown ("not null", 1 to
+/// 0xffff_ffff) are none: it reads no cell, where it read them all.
+#[test]
+fn bounds_wider_than_ram_bound_nothing() {
+    let run_hull = |hull: (u32, u32)| {
+        let mut b = B::default();
+        let p = b.pool(POOL, F);
+        let c = b.k(CELL);
+        b.st(Width::Word, c, p);
+        let io = b.k(0x0400_0130);
+        let x = b.ld(Width::Half, io);
+        let y = b.ld(Width::Word, x);
+        let at = y.index();
+        let four = b.k(4);
+        b.bin(BinOp::Add, y, four);
+        let (insts, out, pools) = b.end(None, Edge::Return);
+        let ins = [FnIn {
+            entry: 0x0800_1001,
+            blocks: BTreeMap::from([(
+                0x0800_1001,
+                FBlock {
+                    insts: &insts,
+                    exits: BTreeMap::from([(insts.len() - 1, out)]),
+                    pools,
+                    hulls: BTreeMap::from([(at, hull)]),
+                },
+            )]),
+            frame: None,
+        }];
+        follow(&ins, &Img::new(), &[], &BTreeSet::new(), usize::MAX)
+    };
+    assert!(run_hull((1, 0xffff_ffff)).proven(POOL));
+    // Bounded to the cell: it reads it.
+    assert!(!run_hull((CELL, CELL)).proven(POOL));
+}
+
+/// A function nothing is seen to call, calling through what it was
+/// passed: any function whose address is taken, as a load through an
+/// unknown address gave before RAM pointers were followed.
+#[test]
+fn a_function_with_no_caller_in_sight_may_call_any_taken_function() {
+    let mut a = B::default();
+    let p = a.pool(POOL, F);
+    let c = a.k(CELL);
+    a.st(Width::Word, c, p);
+    let mut b = B::default();
+    let t = b.get(0);
+    let f = run(&[just(0x0800_1001, a), calling(0x0800_2001, b, t)]);
+    assert_eq!(site(&f).callees, BTreeSet::from([F]));
+    assert!(site(&f).complete);
 }
