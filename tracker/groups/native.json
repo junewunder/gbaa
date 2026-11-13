@@ -1725,14 +1725,14 @@
       "minMinutes": 90,
       "record": {
         "state": "claimed",
-        "by": "77aa5fbf",
-        "session": "77aa5fbf-b416-45f2-a48d-d2a67bcf68d8",
+        "by": "7e93e2be",
+        "session": "7e93e2be-e416-470a-957c-a9f1a60442b5",
         "host": "quack",
-        "pid": 11545,
-        "start": "29000",
-        "at": "2026-11-13T04:50:16Z",
-        "resumed": "74679aef",
-        "prevSession": "74679aef-e087-4107-ae60-ffc062168b01",
+        "pid": 1247572,
+        "start": "1952922",
+        "at": "2026-11-13T10:10:49Z",
+        "resumed": "77aa5fbf",
+        "prevSession": "77aa5fbf-b416-45f2-a48d-d2a67bcf68d8",
         "pushed": true
       },
       "notes": [
@@ -2076,12 +2076,14 @@
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
-        "by": "3502c802",
-        "session": "3502c802-2765-4929-bab3-efc404b57109",
+        "by": "45f263ac",
+        "session": "45f263ac-c7c5-4146-a55b-7ad625efb3f5",
         "host": "quack",
-        "pid": 1206400,
-        "start": "1798812",
-        "at": "2026-11-13T09:45:04Z"
+        "pid": 1249632,
+        "start": "1955379",
+        "at": "2026-11-13T10:11:20Z",
+        "resumed": "3502c802",
+        "prevSession": "3502c802-2765-4929-bab3-efc404b57109"
       },
       "round": "2026-11-13T09:45:04Z"
     },
@@ -2162,7 +2164,28 @@
         "start": "1950544",
         "at": "2026-11-13T10:10:31Z"
       },
+      "notes": [
+        {
+          "at": "2026-11-13T10:11:11Z",
+          "by": "d2717a37",
+          "text": "From {unit:native/nightmare-entry-reads}: its branch adds Passing::named (a [[takes]] with sites = [] counts as named) in summary.rs and native.rs, 3 small hunks, and a constant-branch rule in saves.rs. Nothing else of the taker rule moved; expect a small conflict."
+        }
+      ],
       "round": "2026-11-13T10:10:31Z"
+    },
+    {
+      "id": "native/nightmare-fn-flow-again",
+      "title": "Nightmare's lift runs the function flow again",
+      "detail": "From the sweep's foreman, 2026-11-13, by way of {unit:native/nightmare-entry-reads}: mods/kirby-nightmare/holes.toml's skip_fn_flow says the function-address flow doesn't settle on Nightmare under 16 GB. That is stale: on main it settles now (31 to 35 minutes, 2.0 GB peak, measured by {unit:native/fnref-c-game-words}), and crates/codegen/src/native/fnref.rs's module comment says the same stale thing. Drop the line (or keep it with a true reason: it saves half an hour a lift, and the flow only feeds the report and stage B's metrics), fix the comment, and lift once with the flow on. Done when: the holes file and fnref.rs say what is true today; just lift ROM out/lift-kirby-nightmare --name kirby-nightmare with the flow on still reports 0 hard holes and builds, its time and peak quoted; just check passes.",
+      "check": "recorded",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-bios-ram-copies",
+      "title": "Function flow: a BIOS copy out of RAM carries no addresses",
+      "detail": "Found by {unit:native/fnref-bios-reads}. The flow (crates/codegen/src/native/fnref.rs, Run::exit, Edge::Swi) follows CpuSet and CpuFastSet only from ROM: the source's words go to the pile. A copy whose source is RAM moves nothing, so a function's address stored at a constant RAM address (its cell) and copied elsewhere by the BIOS is not in what a load of the copy reads (that cell and the pile): the load gives no address, arithmetic on it is no hole, and the word stays proven though the lifted program computes with it. C games copy structs with CpuSet. Unsound, and older than that unit (which only made CpuFastSet's r3, a word it read, hold what a load from anywhere reads). The same for what the other calls read through a pointer and write back (the affine sets, MidiKey2Freq's wave header, the decompressors' bytes): arithmetic inside the BIOS on memory the flow never looks at. Done when: a BIOS copy from RAM, or from a source the run can't place, stores to the pile what a load of its source reads (its cells in range if the address and length are numbers, else every cell, and the pile), with a unit test (F stored at a cell, CpuSet to another, loaded there and added to: a hole); the other calls' memory reads are either modelled or written down as why not; Metroid's fn_words_not_proven and the agb bars are quoted before and after; just lift-check and just check pass.",
+      "check": "independent",
+      "uses": ["heavy"]
     }
   ]
 }
