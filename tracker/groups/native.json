@@ -2076,12 +2076,14 @@
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
-        "by": "3502c802",
-        "session": "3502c802-2765-4929-bab3-efc404b57109",
+        "by": "45f263ac",
+        "session": "45f263ac-c7c5-4146-a55b-7ad625efb3f5",
         "host": "quack",
-        "pid": 1206400,
-        "start": "1798812",
-        "at": "2026-11-13T09:45:04Z"
+        "pid": 1249632,
+        "start": "1955379",
+        "at": "2026-11-13T10:11:20Z",
+        "resumed": "3502c802",
+        "prevSession": "3502c802-2765-4929-bab3-efc404b57109"
       },
       "round": "2026-11-13T09:45:04Z"
     },
