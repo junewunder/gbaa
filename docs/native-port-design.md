@@ -596,8 +596,8 @@ its 15,158 functions in 35 minutes (past 8 GB and growing). With
 `native/fnref-flow-scale` landed (Metroid settles in 151 s) it still
 didn't: killed at a 14 GB cap after 5 minutes (2026-11-07). Since
 2026-11-13 the run no longer dies or stops at its token bound (those 48M
-were copies; equal sets kept once, it holds 24M at 1.5 GB), but six rounds
-in 37 minutes hadn't settled it, so still no set is complete. Making it
+were copies; equal sets kept once, it holds 24M at 1.5 GB), but seven
+rounds in 53 minutes hadn't settled it: still no set is complete. Making it
 settle on Emerald is `native/fnref-flow-emerald`; the re-measurement
 of the 656, and what keeps sets incomplete (callbacks stored through RAM
 globals such as `gMain.callback1`), is `native/indirect-call-args-emerald`.

@@ -87,7 +87,7 @@
 //! by value joins each distinct result set once ([`Once`]): Emerald's
 //! first round takes 31 s (88 before), and its second, which the run
 //! never finished before, ends at 177 s. It still doesn't settle: after
-//! six rounds 12,000 entries change in each, holding 24 million tokens
+//! seven rounds 12,000 entries change in each, holding 24 million tokens
 //! (`memory/fnref-flow-emerald-memory.md` says where that stands).
 //!
 //! **The closed world.** Function and ROM addresses enter values only
