@@ -2862,3 +2862,4 @@
 {"at":"2026-11-13T20:37:51Z","actor":"session","tag":"ec2ee7ee","host":"quack","cmd":"decide","text":"decided: Test programs may share short ARM idioms with games","d":"d/test-programs-may-share-short-arm-idioms-with"}
 {"at":"2026-11-13T20:46:04Z","actor":"session","tag":"ec2ee7ee","host":"quack","cmd":"add-unit","id":"native/c-test-programs","text":"new unit: C test programs built with agbcc and modern GCC"}
 {"at":"2026-11-13T20:46:09Z","actor":"session","tag":"ec2ee7ee","host":"quack","cmd":"add-unit","id":"native/c-bars","text":"new unit: Lifter code-shape bars judged on C programs and games"}
+{"at":"2026-11-13T20:46:13Z","actor":"session","tag":"ec2ee7ee","host":"quack","cmd":"decide","text":"decided: Code-shape lifter work is judged on C programs and games","d":"d/code-shape-lifter-work-is-judged-on-c-programs"}

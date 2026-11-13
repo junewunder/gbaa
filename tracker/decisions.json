@@ -1246,6 +1246,14 @@
       "by": "owner",
       "at": "2026-11-13T20:37:51Z",
       "scope": ["group:native"]
+    },
+    {
+      "id": "d/code-shape-lifter-work-is-judged-on-c-programs",
+      "title": "Code-shape lifter work is judged on C programs and games",
+      "why": "june (2026-11-13): agb programs are Rust from LLVM; the games are C from agbcc or modern GCC. agb programs stay as tests of the hardware library and the native check, but lifter code-shape work must not be steered by agb-only shapes (allocator, heap, vtables). Until the C test programs exist, agb bars still hold. The lifter's output stays Rust.",
+      "by": "owner",
+      "at": "2026-11-13T20:46:13Z",
+      "scope": ["group:native"]
     }
   ]
 }
