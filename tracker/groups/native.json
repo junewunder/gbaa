@@ -1774,13 +1774,11 @@
       "uses": ["heavy"],
       "minMinutes": 150,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "3d525e2f",
-        "session": "3d525e2f-fa9e-4ab0-851f-1e2f2cec2205",
-        "host": "quack",
-        "pid": 276052,
-        "start": "369085",
-        "at": "2026-11-13T05:46:57Z"
+        "checker": "a3cc37a1ce8881d59",
+        "at": "2026-11-13T06:57:12Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/5 (head 2b5dda0b). just lift on agb/native-spike (a lift-check program): '600 of 600 frames, no stop' in report.txt and metrics.toml [run]. A KEYCNT store planted by hand in a copy: '5 of 600 frames, unmodelled-register 0x04000132 KEYCNT', in f_0800017d. A planted endless loop: 'time-limit 3 s'. Metroid on main's lifter: 'didn't build: 1 hard hole'; Nightmare: 'didn't build: 10 hard holes' (DMA by its registers has landed; their entry-read holes are other units'), both shown beside hard in just holes-all's table. just check passes (peak 7.5 GB). A fresh subagent reviewed the diff and checked the card: 'the unit's check is met', with no guest pc (filed: {unit:native/first-stop-guest-pc}) and a column that isn't rerun as the weaker parts; its two real bugs are fixed."
       },
       "round": "2026-11-12T13:07:54Z"
     },
