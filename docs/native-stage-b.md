@@ -354,10 +354,10 @@ What the done pieces left open, for the units that come next.
 - **The pile** (piece 3, function addresses). Most words aren't proven
   and nearly every `call_fn` set is every address-taken function. No one
   kind of read holds them (`research/fnref-held-words.md`, measured
-  before main's `Ref` tokens). Objects by allocation site, call-site
+  again with main's `Ref` tokens). Objects by allocation site, call-site
   context and RAM pointers followed are unlanded on
-  `native/fnref-unknown-addrs`'s branch, which merges main first
-  (`native/fnref-branch-merge`); then frames (`native/fnref-frame-pointers`),
+  `native/fnref-unknown-addrs`'s branch, merged with main and far slower
+  than main on Emerald (`native/fnref-branch-merge`); then frames (`native/fnref-frame-pointers`),
   registers a callee doesn't read (`native/fnref-live-registers`), and
   it lands (`native/fnref-ram-pointers-land`).
 - **Function-address flow, smaller gaps** (for `native/fnref-dense`).
