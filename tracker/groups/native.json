@@ -2261,6 +2261,13 @@
       "detail": "Owner decision: LLM passes may alternate with the algorithmic lift. Claude rewrites 20 Metroid functions of mixed size and kind (leaf, loop, switch, struct access, calls, one storing a function pointer) as plain typed Rust, from the named lift. Each goes into mods/metroid/ as a stand-in (game-derived: never in the public repo), with its per-function check. The owner said there is no sound check, only tests: report, per function, whether it passes its budgeted check, what that check missed when the route check caught it, and the time and tokens it took. Done when: the 20 are written; each passes or its failure is written up; Metroid's route check passes with every passing one in place; findings in docs/research/llm-pilot.md with no game code quoted beyond a few instructions.",
       "check": "recorded",
       "needs": ["native/metroid-native-check", "native/lift-fn-names", "native/fn-check-any"]
+    },
+    {
+      "id": "native/llm-pilot-patterns",
+      "title": "LLM pilot's repeated rewrites become lifter units",
+      "detail": "The alternating loop: what the lifter can do for every game shouldn't be left to Claude. From the pilot's rewrites, list each transformation Claude made in more than one function (loop shapes, struct access, compiler idioms, flag use), say whether the lifter could prove it, and file one unit per pattern that could, with the pilot's functions as examples by address. Done when: the list is in docs/research/llm-pilot.md and a unit is filed for each provable pattern.",
+      "check": "recorded",
+      "needs": ["native/llm-pilot-metroid"]
     }
   ]
 }
