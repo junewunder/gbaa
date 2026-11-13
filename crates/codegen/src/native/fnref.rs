@@ -2555,7 +2555,9 @@ impl Run<'_, '_> {
             }
             if self.g.hole_log.len() != logged {
                 // A BIOS call's holes are its registers'.
-                let mut ops: Vec<Val> = inst_operands(&inst.op)
+                let mut ops: Vec<Val> = inst
+                    .op
+                    .operands()
                     .into_iter()
                     .map(|x| vals[x.index()].clone())
                     .collect();
