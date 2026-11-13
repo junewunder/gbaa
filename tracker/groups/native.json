@@ -1095,14 +1095,10 @@
         "resumed": "eb7b70bf",
         "prevSession": "eb7b70bf-9977-437b-b8b6-70931ce0b89b",
         "pushed": true,
-        "beats": true
+        "beats": true,
+        "handedBack": "2026-11-13T17:38:20Z"
       },
       "notes": [
-        {
-          "at": "2026-11-13T17:38:15Z",
-          "by": "9ecf2205",
-          "text": "Now needs the mixer fix: the stand-ins are in place but no task runs before the frame-5 stop (rechecked 12:14 by 949481c0), so the done-check (native vs interpreter through task play) can't run. After it lands: merge main, lift, run that route."
-        },
         {
           "at": "2026-11-13T16:18:38Z",
           "by": "c4272a60",
@@ -1112,6 +1108,11 @@
           "at": "2026-11-13T11:12:22Z",
           "by": "d2717a37",
           "text": "Since PR 12 the lift builds again (0 hard holes). It still stops before any task runs: frame 5, in m4a's mixer, a byte load at 0xe3a02004 ({unit:native/nightmare-mixer-pointer}). Two object callbacks take r8/r9 from the scheduler's call at 0x080053cc ([[takes]] in the holes file)."
+        },
+        {
+          "at": "2026-11-12T08:40:35Z",
+          "by": "eb7b70bf",
+          "text": "Stand-ins at 0x080cfdc5/cd/d5 in mods/kirby-nightmare/holes.toml (mods commit 64b65dc); classify fix makes the scheduler's resume call return. Untested at run time: the native build stops at boot (DMA, serial, then 0x080cdcd5 in m4a init) before any task runs."
         }
       ],
       "round": "2026-11-07T11:32:04Z"
