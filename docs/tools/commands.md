@@ -1294,7 +1294,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   and why), `[[jump]]` (an unresolved jump's targets as keys, its cases), `[[copy]]` (code
   the game copies to RAM that discovery's static copies don't have:
   `src`, `dst`, `len`, `roots` and why, as `just holes` prints its run's
-  copies; lifted at its RAM keys like a static copy, native/lift-ram-copies)
+  copies; lifted at its RAM keys like a static copy, native/lift-ram-copies), `[[takes]]` (`entry`, `sites`, why: the indirect calls, each by the address the report gives it, that reach a function reading one of r4-r11 as its caller left it; they pass it theirs, as every direct call and tail call does, and any other pointer call to it stops the program, native/metroid-entry-reads)
   and, at the top,
   `skip_fn_flow = "why"` (the function-address flow left out, saving
   the minutes it runs before its token bound stops it). A hard hole no stand-in

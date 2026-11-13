@@ -52,7 +52,7 @@
 //! context's functions.
 
 use crate::func::{Ctx, ExitInfo, Func, GBlock, Plan, exits, successors};
-use crate::saves::Summaries;
+use crate::saves::{Summaries, Summary};
 use analysis::ir::{BinOp, Exit, Inst, Op, ValueId};
 use armv4t::sem::Width;
 use std::collections::{BTreeMap, BTreeSet};
@@ -653,7 +653,7 @@ impl Run<'_, '_> {
                 }
             }
             Edge::Call { target, ret } => {
-                self.pass(self.env.params(*target) & 0xf, s, Kind::Call);
+                self.pass(self.env.params(*target) & 0xfff, s, Kind::Call);
                 self.raw.calls.insert(at, (Run::sp(s), *target, false));
                 let mut after = s.clone();
                 for r in [0, 1, 2, 3, 12, 14] {
@@ -969,9 +969,15 @@ pub struct FromSummaries<'a> {
 
 impl Env for FromSummaries<'_> {
     fn params(&self, target: Option<u32>) -> u16 {
+        // And what a callee takes of r4-r11 (`Summary::takes`): the lift
+        // passes it the caller's. (A pointer call the holes file names
+        // passes them too, which these summaries can't know: the
+        // summary's run refuses a stack address there, `Sum::call`.)
+        let takes = |s: &Summary| (s.may_take() as u16) << 4;
         match target.and_then(|t| self.sums.get(t)) {
             Some(s) if s.holes.is_empty() => s.params as u16,
-            _ => 0xf,
+            Some(s) => 0xf | takes(s),
+            None => 0xf,
         }
     }
 
