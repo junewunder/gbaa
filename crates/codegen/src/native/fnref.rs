@@ -100,6 +100,13 @@
 //! callee sets ([`Flow::report`]), and the metrics count the words not
 //! proven (barred) and proven. `GBAA_FNREF_TRACE=1` prints each round of
 //! the run and each use not allowed, with its operands.
+//! `GBAA_FNREF_WATCH=WORD[,WORD…]` prints each place those ROM words'
+//! function addresses go ([`G::watch`]), and (`roads` alone turns only
+//! this on) at each instruction that makes a use not allowed, what its
+//! operands held each address by ([`G::roads`]):
+//! `docs/research/fnref-held-words.md` is made with both, and with
+//! `GBAA_FNREF_OFF` ([`off_env`]), which measures what the words would be
+//! without one kind of hole.
 //!
 //! Precision: the one pile is the limit (`docs/native-stage-b.md`, "Known
 //! gaps", the pile). agb keeps closures and trait objects on its heap, so a
@@ -899,6 +906,18 @@ struct G {
     pile_changed: bool,
     /// What the running function read of memory.
     rd: Rd,
+    /// `GBAA_FNREF_WATCH`: the words watched (key, origin), whether the
+    /// roads are printed, the lines said, the function and instruction
+    /// running, and each origin as it gets its first hole ([`G::watch`],
+    /// [`G::roads`]).
+    watch: Vec<(u32, Origin)>,
+    roads: bool,
+    watch_said: BTreeSet<String>,
+    watch_lines: BTreeMap<(u32, bool), usize>,
+    /// `GBAA_FNREF_OFF`'s kinds ([`off_env`]).
+    off: u8,
+    now: (u32, u32),
+    hole_log: Vec<Origin>,
 }
 
 /// A fast hash for the run's small keys (the standard one was a tenth of
@@ -976,6 +995,12 @@ impl G {
         };
         let big = v.toks.len() >= 64;
         let p = std::rc::Rc::as_ptr(&v.toks.0);
+        if !self.watch.is_empty() {
+            let n = v.toks.len();
+            self.watch_if(v, &only, &|| {
+                format!("HOLE, {}, in a value of {n} tokens", why.what())
+            });
+        }
         if big && self.all_holed.contains_key(&p) {
             return;
         }
@@ -988,6 +1013,9 @@ impl G {
             if only(form) {
                 self.holed.insert(o);
                 self.flow.holes.insert(o, (at, why));
+                if self.roads {
+                    self.hole_log.push(o);
+                }
             } else {
                 all = false;
             }
@@ -1002,8 +1030,14 @@ impl G {
 
     /// [`G::hole`] of one function's token, all forms.
     fn hole_one(&mut self, o: Origin, at: u32, why: Why) {
+        if self.watch.iter().any(|w| w.1 == o) {
+            self.watch_line(o, &format!("HOLE, {}, of it alone", why.what()));
+        }
         if self.holed.insert(o) {
             self.flow.holes.insert(o, (at, why));
+            if self.roads {
+                self.hole_log.push(o);
+            }
         }
     }
 
@@ -1017,6 +1051,10 @@ impl G {
             v
         });
         into.union(v);
+        if !self.watch.is_empty() {
+            let v = self.spill_reads[&(f, w)].clone();
+            self.watch(&v, || format!("read w{w} from f_{f:08x}'s spills"));
+        }
     }
 
     /// What a load at width `w` from RAM address `c` reads of the cells
@@ -1034,9 +1072,24 @@ impl G {
             v
         });
         into.union(v);
+        if !self.watch.is_empty() {
+            let v = self.cell_at_reads[&(c, w)].clone();
+            self.watch(&v, || format!("read w{w} from the cell at {c:#010x}"));
+        }
     }
 
     fn store(&mut self, to: Store, toks: &[(Tok, u8)]) {
+        if !self.watch.is_empty() {
+            let v = Val {
+                toks: toks.iter().map(|t| t.0).collect(),
+                ..Val::default()
+            };
+            self.watch(&v, || match to {
+                Store::Pile => "stored to the pile".to_string(),
+                Store::Cell(a) => format!("stored to the cell at {a:#010x}"),
+                Store::Spill(f) => format!("stored to f_{f:08x}'s spills"),
+            });
+        }
         let m = match to {
             // One pile: splitting it by the value-set analysis's bounds on
             // the stores' addresses proved nothing more on the agb programs
@@ -1142,6 +1195,9 @@ impl G {
     /// A load at width `w` reads the pile (`cells`: every cell): its
     /// [`Tok::Ref`] and the read's flags.
     fn read_mem(&mut self, cells: bool, w: u8, into: &mut Val) {
+        if self.off & (if cells { OFF_CELLS } else { OFF_PILE }) != 0 {
+            return;
+        }
         let r = if cells {
             self.cells_read(w)
         } else {
@@ -1353,6 +1409,7 @@ impl G {
             self.dirty_entry.insert(f);
         }
         self.mark(c);
+        self.watch_regs(regs, |r| format!("passed in r{r} to f_{f:08x}"));
     }
 
     /// [`G::give`] the same registers to each of `ks` (a call by value's
@@ -1367,6 +1424,8 @@ impl G {
             }
             return;
         }
+        let n = ks.len();
+        self.watch_regs(regs, |r| format!("passed in r{r} to a callee set of {n}"));
         // By register and the set it held (kept alive here, so its
         // address isn't reused) with its flags: what it joined to.
         #[allow(clippy::type_complexity)]
@@ -1455,6 +1514,7 @@ impl G {
     }
 
     fn give_ret(&mut self, f: u32, regs: &[Val]) {
+        self.watch_regs(regs, |r| format!("returned in r{r} by f_{f:08x}"));
         let e = self.ret.entry(f).or_insert_with(|| vec![Val::default(); 4]);
         let mut c = false;
         for (a, b) in e.iter_mut().zip(regs) {
@@ -1485,6 +1545,11 @@ enum Store {
     Pile,
     Cell(u32),
     Spill(u32),
+}
+
+/// `v` is the number `n` and nothing else.
+fn is_num(v: &Val, n: u32) -> bool {
+    !v.unk && !v.mem && v.toks.len() == 1 && v.toks.contains(&Tok::Num(n))
 }
 
 fn bytes(w: Width) -> u8 {
@@ -1834,6 +1899,10 @@ impl Run<'_, '_> {
                 origin: o,
                 form,
             });
+            if self.g.watch.iter().any(|x| x.1 == o) {
+                self.g
+                    .watch_line(o, &format!("read w{w} from ROM at {a:#010x} ({form:?})"));
+            }
             return;
         }
         let sh = (a & 3) * 8;
@@ -1903,7 +1972,10 @@ impl Run<'_, '_> {
             .objects
             .range(a.saturating_add(1)..hi)
             .copied()
-            .find(|&c| !(fns_in(c.saturating_sub(16), c) && fns_in(c, c.saturating_add(16))))
+            .find(|&c| {
+                self.g.off & OFF_TABLES != 0
+                    || !(fns_in(c.saturating_sub(16), c) && fns_in(c, c.saturating_add(16)))
+            })
             .unwrap_or(hi)
     }
 
@@ -2039,7 +2111,8 @@ impl Run<'_, '_> {
         // Every token with every token, but for large sets: each with an
         // unknown partner (which only adds holes and unknowns).
         let (xs, ys) = (a.parts(), b.parts());
-        let pairs: Vec<(Option<Tok>, Option<Tok>)> = if xs.len() * ys.len() > 64 {
+        let one = self.g.off & OFF_MOVE != 0 && xs.len().min(ys.len()) == 1;
+        let pairs: Vec<(Option<Tok>, Option<Tok>)> = if xs.len() * ys.len() > 64 && !one {
             xs.iter()
                 .map(|&x| (x, None))
                 .chain(ys.iter().map(|&y| (None, y)))
@@ -2169,10 +2242,12 @@ impl Run<'_, '_> {
         let mut s = self.ins[&key].clone();
         let mut at = key & !1;
         self.at = at;
+        self.g.now = (self.f.entry, at);
         let mut vals: Vec<Val> = vec![Val::default(); b.insts.len()];
         for (i, inst) in b.insts.iter().enumerate() {
             let site = Origin::Code(key, i as u32);
             let holes_before = self.g.flow.holes.len();
+            let logged = self.g.hole_log.len();
             let val = |x: ValueId| vals[x.index()].clone();
             // With the pile's tokens in, to look at them.
             let xv = |g: &mut G, x: ValueId| g.expand(&vals[x.index()]);
@@ -2181,6 +2256,7 @@ impl Run<'_, '_> {
                 Op::Insn(a) => {
                     at = a;
                     self.at = a;
+                    self.g.now.1 = a;
                     Val::default()
                 }
                 Op::Const(c) => Val::of(self.classify(c, site)),
@@ -2194,7 +2270,9 @@ impl Run<'_, '_> {
                         }
                         None => site,
                     };
-                    Val::of(self.classify(c, o))
+                    let v = Val::of(self.classify(c, o));
+                    self.g.watch(&v, || "loaded from its pool word".to_string());
+                    v
                 }
                 Op::Bit(x) => Val::of(Tok::Num(x as u32)),
                 Op::GetReg(r) => s.regs[r.index()].clone(),
@@ -2208,7 +2286,10 @@ impl Run<'_, '_> {
                 }
                 Op::Adc { a: ra, b: rb, c } => {
                     let (a, b) = (xv(self.g, ra), xv(self.g, rb));
-                    if a.fns().next().is_some() || b.fns().next().is_some() {
+                    if self.g.off & OFF_MOVE != 0 && is_num(&b, 0) && is_num(&vals[c.index()], 0) {
+                        // `GBAA_FNREF_OFF`'s `move`: `x + 0 + 0` is `x`.
+                        val(ra)
+                    } else if a.fns().next().is_some() || b.fns().next().is_some() {
                         // A compare `a + !b + 1` (or an add, a hole when
                         // used): of whole addresses, with each other, 0 or
                         // an unknown.
@@ -2349,6 +2430,23 @@ impl Run<'_, '_> {
                     });
                     Val::unk()
                 }
+                // `move`: neither carries nor overflows.
+                Op::AdcCarry { b, c, .. } | Op::AdcOverflow { b, c, .. }
+                    if self.g.off & OFF_MOVE != 0
+                        && is_num(&vals[b.index()], 0)
+                        && is_num(&vals[c.index()], 0) =>
+                {
+                    Val::of(Tok::Num(0))
+                }
+                Op::AdcCarry { .. }
+                | Op::AdcOverflow { .. }
+                | Op::MulCarry { .. }
+                | Op::ShiftCarry { .. }
+                | Op::TestBit { .. }
+                    if self.g.off & OFF_FLAGS != 0 =>
+                {
+                    Val::unk()
+                }
                 Op::AdcCarry { a, b, .. } | Op::AdcOverflow { a, b, .. } => {
                     self.g.hole(&val(a), at, Why::Ordered, |_| true);
                     self.g.hole(&val(b), at, Why::Ordered, |_| true);
@@ -2386,6 +2484,12 @@ impl Run<'_, '_> {
                     let a = xv(self.g, addr);
                     self.g.hole(&a, at, Why::Address, |_| true);
                     let mut out = self.load(&s, key, i, &a, w, b.hulls.get(&i).copied());
+                    if !self.g.watch.is_empty() {
+                        let hull = b.hulls.get(&i).copied();
+                        self.g.watch(&out, || {
+                            format!("LOADED w{w} through {}, bounds {hull:x?}", brief(&a))
+                        });
+                    }
                     if guarded {
                         out.unk = true;
                     }
@@ -2448,6 +2552,17 @@ impl Run<'_, '_> {
                     .map(|x| format!("{:?}", vals[x.index()]))
                     .collect();
                 eprintln!("  hole at {at:#010x}: {:?} on {}", inst.op, ops.join(" / "));
+            }
+            if self.g.hole_log.len() != logged {
+                // A BIOS call's holes are its registers'.
+                let mut ops: Vec<Val> = inst_operands(&inst.op)
+                    .into_iter()
+                    .map(|x| vals[x.index()].clone())
+                    .collect();
+                if matches!(inst.op, Op::Exit(_)) {
+                    ops.extend(s.regs[..4].iter().cloned());
+                }
+                self.g.roads(logged, &ops);
             }
             vals[i] = v;
         }
@@ -2559,6 +2674,18 @@ impl Run<'_, '_> {
             anywhere = true;
         }
         if anywhere {
+            // `GBAA_FNREF_OFF`'s `tables`: only the object the bounds start in.
+            let hull = match hull {
+                Some((lo, hi))
+                    if self.g.off & OFF_TABLES != 0
+                        && self.img.word(lo).is_some()
+                        && self.img.word(hi).is_some() =>
+                {
+                    let end = self.object_end(lo, hi.saturating_add(1));
+                    Some((lo, hi.min(end.saturating_sub(1))))
+                }
+                h => h,
+            };
             match hull {
                 // Bounded to ROM: its words there.
                 Some((lo, hi))
@@ -2744,8 +2871,15 @@ impl Run<'_, '_> {
                 }
             }
             Edge::Swi(next) => {
-                for r in &s.regs[..4] {
-                    self.g.hole(r, out.at, Why::Bios, |_| true);
+                let reads = if self.g.off & OFF_BIOS != 0 {
+                    bios_reads(out.bios)
+                } else {
+                    0xf
+                };
+                for (i, r) in s.regs[..4].iter().enumerate() {
+                    if reads & 1 << i != 0 {
+                        self.g.hole(r, out.at, Why::Bios, |_| true);
+                    }
                 }
                 // CpuSet and CpuFastSet from ROM copy its words to RAM: their
                 // length's, or the source object's.
@@ -2862,6 +2996,8 @@ impl Run<'_, '_> {
         let mut rets = rets;
         if !complete {
             self.g.rd.incomplete = true;
+            self.g
+                .watch_regs(args, |r| format!("passed in r{r} to every loose function"));
             let mut c = false;
             for (a, b) in self.g.loose_args.iter_mut().zip(args) {
                 c |= a.join_capped(b);
@@ -3076,6 +3212,271 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> R {
     }
 }
 
+/// `GBAA_FNREF_OFF=bios,move,flags,tables,pile,cells`: kinds of hole
+/// made not to happen, to measure what the words would be without them
+/// (`docs/research/fnref-held-words.md`). **For measuring only**, never
+/// for a lift that is built: most are unsound, each an upper bound on
+/// what an exact rule would prove. `bios`: a BIOS call holes only the
+/// registers it reads ([`bios_reads`]), not all of r0-r3; `move`: `x + 0`
+/// with its flags set (`adds rd, rs, #0`, old GCC's move between low
+/// registers) is `x` and its carry and overflow 0, and an op on a large
+/// value and a single token runs token by token (both sound); `flags`: a
+/// carry, overflow or bit test of a function's address is no hole;
+/// `tables`: a ROM read by index, or one the value sets bound, stops at
+/// the next object's start even between function words; `pile`, `cells`:
+/// a pile read, an every-cell read, gives nothing.
+fn off_env() -> u8 {
+    let v = std::env::var("GBAA_FNREF_OFF").unwrap_or_default();
+    let mut off = 0;
+    for k in v.split(',').filter(|k| !k.is_empty()) {
+        match OFF_KINDS.iter().position(|n| *n == k) {
+            Some(i) => off |= 1 << i,
+            None => panic!("GBAA_FNREF_OFF: {k} is none of {}", OFF_KINDS.join(", ")),
+        }
+    }
+    if off != 0 {
+        eprintln!("GBAA_FNREF_OFF={v}: the function flow is unsound, for measuring only");
+    }
+    off
+}
+
+const OFF_KINDS: [&str; 6] = ["bios", "move", "flags", "tables", "pile", "cells"];
+const OFF_BIOS: u8 = 1;
+const OFF_MOVE: u8 = 2;
+const OFF_FLAGS: u8 = 4;
+const OFF_TABLES: u8 = 8;
+const OFF_PILE: u8 = 16;
+const OFF_CELLS: u8 = 32;
+
+/// The registers of r0-r3 BIOS call `n` reads, as bits (`GBAA_FNREF_OFF`'s
+/// `bios`): `VBlankIntrWait` and `Halt` none, `Div` r0 and r1, the copies
+/// and the affine sets up to r3; one this doesn't know, all four.
+fn bios_reads(n: Option<u8>) -> u8 {
+    match n {
+        Some(0x00 | 0x02 | 0x03 | 0x05 | 0x0d) => 0,
+        Some(0x01 | 0x08 | 0x09 | 0x19) => 0b0001,
+        Some(0x04 | 0x06 | 0x07 | 0x0a | 0x11..=0x18) => 0b0011,
+        Some(0x0b | 0x0c | 0x0e | 0x10 | 0x1f) => 0b0111,
+        _ => 0b1111,
+    }
+}
+
+/// `GBAA_FNREF_WATCH`'s words: `0x080008c8[,…]`, the ROM words that hold a
+/// function's address, each with its key (`roads`, or a word that holds
+/// none, watches nothing).
+fn watch_env(img: &dyn Image) -> Vec<(u32, Origin)> {
+    let v = std::env::var("GBAA_FNREF_WATCH").unwrap_or_default();
+    v.split(',')
+        .filter_map(|s| u32::from_str_radix(s.trim().trim_start_matches("0x"), 16).ok())
+        .filter_map(|w| Some((img.word(w).filter(|&k| img.is_fn(k))?, Origin::Word(w))))
+        .collect()
+}
+
+/// A value for a [`G::watch`] line: its flags and the tokens that aren't
+/// functions' (those only counted).
+fn brief(v: &Val) -> String {
+    let fns = v
+        .toks
+        .iter()
+        .filter(|t| matches!(t, Tok::Fn { .. }))
+        .count();
+    let rest: Vec<String> = v
+        .toks
+        .iter()
+        .filter(|t| !matches!(t, Tok::Fn { .. }))
+        .take(12)
+        .map(|t| format!("{t:x?}"))
+        .collect();
+    format!(
+        "{{{fns} function tokens, {} others: {}{}{}{}}}",
+        v.toks.len() - fns,
+        rest.join(" "),
+        if v.unk { " unk" } else { "" },
+        if v.mem { " mem" } else { "" },
+        if v.lost_rom { " lost_rom" } else { "" },
+    )
+}
+
+/// The most places, and the most holes, [`G::watch`] prints of a word.
+const WATCH_LINES: usize = 400;
+
+/// What gave a value a function's address, for [`G::roads`] and
+/// [`G::watch`]: the value's own token, or one of its [`Tok::Ref`]s'
+/// reads.
+fn via(r: Option<Tok>) -> String {
+    match r {
+        None => "its own token".to_string(),
+        Some(Tok::Ref { src, xf }) => {
+            let s = match src {
+                Src::Pile(w) => format!("a pile read w{w}"),
+                Src::Cells(w) => format!("an every-cell read w{w}"),
+                Src::RomFrom(lo, end, w) => {
+                    format!("a ROM read by index w{w} of {lo:#010x}..{end:#010x}")
+                }
+                Src::Hull(lo, hi, w) => {
+                    format!("a bounded ROM read w{w} of {lo:#010x}..={hi:#010x}")
+                }
+            };
+            if xf == Xf::ID {
+                s
+            } else {
+                format!("{s}, its forms mapped")
+            }
+        }
+        Some(t) => format!("{t:x?}"),
+    }
+}
+
+/// The tracing `GBAA_FNREF_WATCH` turns on. It looks into a value's
+/// [`Tok::Ref`]s without marking what the running function reads
+/// ([`G::rd`] is put back), so the run is the run without it.
+impl G {
+    /// Says, once, where watched word `o`'s function address is: up to
+    /// [`WATCH_LINES`] places a word and as many holes (a word left in a
+    /// scratch register of a large game goes to millions).
+    fn watch_line(&mut self, o: Origin, what: &str) {
+        let Origin::Word(w) = o else { return };
+        let n = self.watch_lines.get(&(w, what.starts_with("HOLE")));
+        if n.is_some_and(|n| *n >= WATCH_LINES) {
+            return;
+        }
+        let line = format!(
+            "watch {w:#010x}: {what} [f_{:08x} at {:#010x}]",
+            self.now.0, self.now.1
+        );
+        if self.watch_said.insert(line.clone()) {
+            eprintln!("{line}");
+            let n = self
+                .watch_lines
+                .entry((w, what.starts_with("HOLE")))
+                .or_default();
+            *n += 1;
+            if *n == WATCH_LINES {
+                eprintln!("watch {w:#010x}: {WATCH_LINES} such lines, the rest not printed");
+            }
+        }
+    }
+
+    /// The watched words `v` holds in a form `only` takes, each with the
+    /// form and the [`Tok::Ref`] that gave it (`None`: its own token).
+    fn watched(
+        &mut self,
+        v: &Val,
+        only: &dyn Fn(Form) -> bool,
+    ) -> Vec<(Origin, Form, Option<Tok>)> {
+        let mut hits = Vec::new();
+        let rd = std::mem::take(&mut self.rd);
+        let mut parts: Vec<(Option<Tok>, Toks)> = vec![(None, v.toks.clone())];
+        for r in v.refs().collect::<Vec<Tok>>() {
+            parts.push((Some(r), self.ref_val(r).toks));
+        }
+        self.rd = rd;
+        for (r, toks) in parts {
+            for &(key, origin) in &self.watch {
+                let of = |form| Tok::Fn { key, origin, form };
+                for t in toks.range(of(Form::Full)..=of(Form::Cmp)) {
+                    if let Tok::Fn { form, .. } = *t
+                        && only(form)
+                    {
+                        hits.push((origin, form, r));
+                    }
+                }
+            }
+        }
+        hits
+    }
+
+    fn watch_if(&mut self, v: &Val, only: &dyn Fn(Form) -> bool, what: &dyn Fn() -> String) {
+        if self.watch.is_empty() {
+            return;
+        }
+        for (o, form, r) in self.watched(v, only) {
+            let by = match r {
+                None => String::new(),
+                r => format!(", by {}", via(r)),
+            };
+            self.watch_line(o, &format!("{} ({form:?}{by})", what()));
+        }
+    }
+
+    /// `GBAA_FNREF_WATCH=0x080008c8[,…]`: print, once each, where the
+    /// function address of each of those ROM words goes: `what` says
+    /// where, for value `v` that got there. The lines before a word's
+    /// first `HOLE` are a road to it: the first the run found.
+    fn watch(&mut self, v: &Val, what: impl Fn() -> String) {
+        self.watch_if(v, &|_| true, &what);
+    }
+
+    /// [`G::watch`] for registers given.
+    fn watch_regs(&mut self, regs: &[Val], what: impl Fn(usize) -> String) {
+        if !self.watch.is_empty() {
+            for (r, v) in regs.iter().enumerate() {
+                self.watch(v, || what(r));
+            }
+        }
+    }
+
+    /// The roads' line for the instruction running, which gave the
+    /// origins of `hole_log[from..]` their first hole: for each reason and
+    /// each thing that gave an operand (`ops`, as they were, their
+    /// [`Tok::Ref`]s not taken in) the address ([`via`]), the ROM words
+    /// held so. An operand's own token says only that the address came by
+    /// registers, a frame word or a cell: watch the word to see from where.
+    fn roads(&mut self, from: usize, ops: &[Val]) {
+        let new: BTreeSet<Origin> = self.hole_log[from..].iter().copied().collect();
+        let rd = std::mem::take(&mut self.rd);
+        let mut by: BTreeMap<Origin, Option<Tok>> = BTreeMap::new();
+        let mut parts: Vec<(Option<Tok>, Toks)> = Vec::new();
+        for v in ops {
+            parts.push((None, v.toks.clone()));
+        }
+        for v in ops {
+            for r in v.refs().collect::<Vec<Tok>>() {
+                parts.push((Some(r), self.ref_val(r).toks));
+            }
+        }
+        self.rd = rd;
+        for (r, toks) in parts {
+            for t in &toks {
+                if let Tok::Fn { origin, .. } = *t
+                    && new.contains(&origin)
+                {
+                    by.entry(origin).or_insert(r);
+                }
+            }
+        }
+        let mut lines: BTreeMap<(Why, String), Vec<Origin>> = BTreeMap::new();
+        for &o in &new {
+            let how = match by.get(&o) {
+                Some(r) => via(*r),
+                None => "nothing the operands hold now".to_string(),
+            };
+            lines
+                .entry((self.flow.holes[&o].1, how))
+                .or_default()
+                .push(o);
+        }
+        for ((why, how), os) in lines {
+            let words: Vec<String> = os
+                .iter()
+                .filter_map(|o| match o {
+                    Origin::Word(w) => Some(format!("{w:#010x}")),
+                    Origin::Code(..) => None,
+                })
+                .collect();
+            eprintln!(
+                "road: hole at {:#010x} in f_{:08x}, {}, by {how}: {} words, {} code constants: {}",
+                self.now.1,
+                self.now.0,
+                why.what(),
+                words.len(),
+                os.len() - words.len(),
+                words.join(" ")
+            );
+        }
+    }
+}
+
 /// Follow every function address in `fns` (all the program's functions,
 /// over every code context) from its sources to its uses. `copies`: the
 /// program start's copies of ROM data to RAM (source, destination, bytes).
@@ -3084,6 +3485,9 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
     let mut g = G {
         loose_args: vec![Val::default(); 4],
         objects: objects(img),
+        watch: watch_env(img),
+        off: off_env(),
+        roads: std::env::var_os("GBAA_FNREF_WATCH").is_some(),
         ..G::default()
     };
     // Functions some exit enters directly; the rest have callers the run
