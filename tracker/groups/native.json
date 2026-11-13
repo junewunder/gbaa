@@ -1917,6 +1917,11 @@
       "uses": ["heavy"],
       "notes": [
         {
+          "at": "2026-11-13T08:31:08Z",
+          "by": "fb5bc075",
+          "text": "Its What's 'both lift with 0 msr/mrs and build without them' holds only for the reset. The 2026-11-12 note's five extra IWRAM holes don't reproduce: Nightmare has the same 10 hard holes with and without the stand-ins (2026-11-13)."
+        },
+        {
           "at": "2026-11-13T07:46:32Z",
           "by": "fb5bc075",
           "text": "Review 2026-11-13: only the reset stand-ins can go now. The IRQ dispatchers' lifted second half is missing (unreachable! after the handler call), so they stay until the wrapper's second half lifts ({unit:native/lift-irq-wrapper-tail})."
