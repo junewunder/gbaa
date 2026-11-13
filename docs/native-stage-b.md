@@ -351,14 +351,15 @@ What the done pieces left open, for the units that come next.
   code) calls them, and a jump by value the run didn't prove a return
   adds r0 to every function. `native/indirect-call-args` and the stack
   units narrow those as the summaries' holes close.
-- **The pile** (piece 3, function addresses). One pile held every heap
-  store, so one heap load used as a number marked every function stored
-  there (each `call_fn` set is every address-taken function). Objects by
-  allocation site (`native/fnref-heap-sites`), call-site context
-  (`native/fnref-context`) and RAM pointers kept apart from other
-  unknowns (`native/fnref-unknown-addrs`: affine's loads that read every
-  cell, 623 sites to 8) are on that unit's branch; no word moved yet: ROM
-  reads run past their tables (`native/fnref-rom-read-bound`).
+- **The pile** (piece 3, function addresses). Most words aren't proven
+  and every `call_fn` set is every address-taken function. No one kind
+  of read holds them (`research/fnref-held-words.md`): objects by
+  allocation site, call-site context and RAM pointers followed (the
+  loads that read everything, 623 sites to 3 on affine) are on
+  `native/fnref-unknown-addrs`'s branch, unlanded, and moved no word;
+  nor does every mixing memory read switched off. First, registers a
+  callee neither reads nor sets (`native/fnref-live-registers`), then
+  the branch lands (`native/fnref-ram-pointers-land`).
 - **Function-address flow, smaller gaps** (for `native/fnref-dense`).
   Proofs are per origin; a pool load folded from a non-pc-relative
   address gets a code-constant origin (dense needs per-site constant
