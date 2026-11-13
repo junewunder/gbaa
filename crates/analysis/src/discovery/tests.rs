@@ -219,6 +219,46 @@ fn far_jump_bl_is_not_a_call() {
 }
 
 #[test]
+fn modern_gcc_cold_blocks_are_the_callers() {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        // main: movs r3, #180; push {r4, lr}; cmp r0, #0; bge 1f; bl cold1;
+        // 1: cmp r0, #1; bne 2f; bl cold2; 2: movs r0, #0; b 3f;
+        // cold1: movs r0, r4; bl die; 3: pop {r4, pc};
+        // cold2: movs r0, r4; bl die
+        .h(0x100, 0x23b4)
+        .h(0x102, 0xb510)
+        .h(0x104, 0x2800)
+        .bcond(0x106, 0xa, 0x10c)
+        .bl(0x108, 0x118)
+        .h(0x10c, 0x2801)
+        .bcond(0x10e, 1, 0x114)
+        .bl(0x110, 0x120)
+        .h(0x114, 0x2000)
+        .h(0x116, 0xe002) // b 0x11e
+        .h(0x118, 0x0020)
+        .bl(0x11a, 0x126)
+        .h(0x11e, 0xbd10)
+        .h(0x120, 0x0020)
+        .bl(0x122, 0x126)
+        // die: push {r4, lr}; b .
+        .h(0x126, 0xb510)
+        .h(0x128, 0xe7fe);
+    let d = a.run();
+    // The push comes second, so main still has a prologue; cold1 is
+    // inside its code and cold2 right after it, and neither returns.
+    assert!(d.rec.far_jumps.contains(&(B + 0x108)));
+    assert!(d.rec.far_jumps.contains(&(B + 0x110)));
+    assert!(!d.funcs.contains_key(&thumb(0x118)), "{:x?}", d.funcs);
+    assert!(!d.funcs.contains_key(&thumb(0x120)), "{:x?}", d.funcs);
+    assert!(d.code.contains_key(&(B + 0x118)) && d.code.contains_key(&(B + 0x120)));
+    // A function with a prologue of its own stays one, wherever it is.
+    assert!(!d.rec.far_jumps.contains(&(B + 0x11a)));
+    assert!(!d.rec.far_jumps.contains(&(B + 0x122)));
+    assert_eq!(d.funcs.get(&thumb(0x126)), Some(&Evidence::Confirmed));
+}
+
+#[test]
 fn bl_to_a_bx_stub_calls_the_register() {
     let mut a = Asm::new();
     a.entry(0x100)

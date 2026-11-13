@@ -801,7 +801,7 @@ fn width_mask(width: Width) -> u32 {
 fn pure(insts: &[Inst], op: Op, vals: &[V], falses: &[ValueId]) -> Option<V> {
     let known = pure_known(insts, op, vals, falses);
     if matches!(known, None | Some(V::Other))
-        && let Some(v) = spread(op, vals)
+        && let Some(v) = spread(insts, op, vals)
     {
         return Some(v);
     }
@@ -823,7 +823,7 @@ fn up(bits: u32) -> u32 {
 /// constant that clears every one, as agbcc's `ands r4, r0; orrs r4, r1`
 /// building a word byte by byte in an unset register comes to). `None`
 /// if no operand holds any, or `op` isn't pure.
-fn spread(op: Op, vals: &[V]) -> Option<V> {
+fn spread(insts: &[Inst], op: Op, vals: &[V]) -> Option<V> {
     let val = |v: ValueId| vals[v.index()];
     let t = |v: ValueId| val(v).taint().unwrap_or((0, 0));
     let konst = |v: ValueId| match val(v) {
@@ -868,6 +868,12 @@ fn spread(op: Op, vals: &[V]) -> Option<V> {
             V::part(regs, bits)
         }
         Op::Not(a) => V::part(t(a).0, t(a).1),
+        // `sbcs r5, r5` (modern GCC's 0 or -1 of a compare): the carry in
+        // extended to a word and carried out again, whatever r5 holds.
+        Op::Adc { a, b, c } if complement(insts, a, b) => V::part(t(c).0, !0),
+        Op::AdcCarry { a, b, c } | Op::AdcOverflow { a, b, c } if complement(insts, a, b) => {
+            V::part(t(c).0, 1)
+        }
         Op::Adc { .. } => V::part(all.0, up(all.1)),
         Op::MulLongLo { .. } | Op::MulLongHi { .. } => V::part(all.0, !0),
         Op::Shift { kind, v, amount } => match (konst(amount), val(v).taint()) {
@@ -899,6 +905,25 @@ fn spread(op: Op, vals: &[V]) -> Option<V> {
         | Op::BSelect { .. } => bit(&ops),
         _ => return None,
     })
+}
+
+/// Whether one of `a` and `b` is the other's complement: a `not` of the
+/// same value, or of another read of the register it was read from, not
+/// written in between (`sbc rN, rN` reads rN twice).
+fn complement(insts: &[Inst], a: ValueId, b: ValueId) -> bool {
+    let of = |a: ValueId, b: ValueId| {
+        let Op::Not(x) = insts[b.index()].op else {
+            return false;
+        };
+        let (lo, hi) = (a.index().min(x.index()), a.index().max(x.index()));
+        x == a
+            || matches!(
+                (insts[a.index()].op, insts[x.index()].op),
+                (Op::GetReg(p), Op::GetReg(q)) if p == q
+                    && !insts[lo..hi].iter().any(|i| matches!(i.op, Op::SetReg(r, _) if r == p))
+            )
+    };
+    of(a, b) || of(b, a)
 }
 
 /// [`pure`] without [`spread`].

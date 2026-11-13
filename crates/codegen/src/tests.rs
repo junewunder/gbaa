@@ -1187,6 +1187,28 @@ fn an_entry_read_masked_away_is_soft_and_one_that_survives_hard() {
         cmp,
         vec!["0x08000002: reads r4-r11 at entry: r6".to_string()]
     );
+    // Modern GCC's `sbcs r5, r5` after a compare (Rogue's 0x0820c629):
+    // 0 or -1 by the carry, whatever r5 held.
+    let sbc = |cmp: u16| {
+        one_function_holes(&[
+            0xB530, // 0x00 push {r4, r5, lr}
+            cmp,    // 0x02
+            0x41AD, // 0x04 sbcs r5, r5
+            0x6828, // 0x06 ldr r0, [r5, #0]
+            0xBC30, // 0x08 pop {r4, r5}
+            0xBC02, // 0x0a pop {r1}
+            0x4708, // 0x0c bx r1
+        ])
+    };
+    assert_eq!(
+        sbc(0x4288), // cmp r0, r1
+        vec!["0x08000004: masks away r4-r11's entry bits: r5".to_string()]
+    );
+    // The carry of a compare of the entry r6 is still r6's.
+    assert_eq!(
+        sbc(0x2E00), // cmp r6, #0
+        vec!["0x08000006: reads r4-r11 at entry: r6".to_string()]
+    );
 }
 
 #[test]
