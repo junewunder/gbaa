@@ -77,9 +77,10 @@
 //!   takes it in turn. A pointer call can't (`call_fn` passes r0-r3): the
 //!   read its zeroes reach is a hard hole unless the holes file names the
 //!   indirect calls that reach the function (`[[takes]]`,
-//!   [`Holes::takes`]), which then pass it theirs. Its `f_` stops the
-//!   program, so no call runs it on zeroes. A context save (`setjmp`'s
-//!   `stm`, `saves::summary`'s `context_saves`) is no read.
+//!   [`Holes::takes`]), which then pass it theirs (none, `sites = []`,
+//!   for code only jumped into: a jump passes every register). Its `f_`
+//!   stops the program, so no call runs it on zeroes. A context save
+//!   (`setjmp`'s `stm`, `saves::summary`'s `context_saves`) is no read.
 //! - Blocks are the arms of a `loop { match b }` over local labels
 //!   (0 the entry); calls are Rust calls; a return is a jump to the value
 //!   `lr` held on entry, [`RET`] (prelude), told by value since compiled
@@ -210,7 +211,8 @@ pub struct Holes {
     /// entry = 0x…, sites = [0x…], why = "…"`): each passes it the
     /// caller's ([`crate::saves::Passing`]), and its plain entry stops the
     /// program, so a pointer call the file doesn't name can't run it on
-    /// zeroes.
+    /// zeroes. With no sites (`sites = []`) no pointer call reaches it:
+    /// code only jumped into, which gets the jumper's registers.
     pub takes: BTreeMap<u32, (Vec<u32>, String)>,
     /// Code the game copies to RAM itself that discovery's static copies
     /// don't have (by DMA, by its own loop, through a pointer):
@@ -624,6 +626,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         ..Passing::default()
     };
     for (&k, (sites, _)) in &holes.takes {
+        passing.named.insert(k);
         for &at in sites {
             passing.sites.entry(at).or_default().insert(k);
         }
@@ -632,7 +635,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         let takes = |k| c.sums.get(k).is_some_and(|s| s.takes != 0);
         passing.replaced.iter().any(|&k| takes(k))
     });
-    if !sets.is_empty() || !passing.sites.is_empty() || replaced_takes {
+    if !sets.is_empty() || !passing.named.is_empty() || replaced_takes {
         for c in &mut codes {
             c.sums = summarize_passing(&c.ctx, &c.funcs, Assume::default(), &sets, &passing);
         }
@@ -740,6 +743,15 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 func: k,
                 at,
                 what: "the holes file's takes matches no indirect call (printed through call_fn) to a function that takes one of r4-r11 from its callers, or the call passes a stack address in one".into(),
+            });
+        }
+        // One with no sites names a function only jumped into: stale if
+        // the function takes nothing.
+        if sites.is_empty() && !takers.contains(&k) {
+            hard.push(Hole {
+                func: k,
+                at: k,
+                what: "the holes file's takes, with no sites, names a function that takes none of r4-r11 from its callers".into(),
             });
         }
     }
@@ -3096,6 +3108,10 @@ why = "a table"
         .unwrap();
         assert_eq!(h.takes[&0x0800_0015].0, vec![0x0800_0006, 0x0800_0020]);
         assert!(Holes::parse("[[takes]]\nentry = 0x08000015\nwhy = \"no sites\"\n").is_err());
+        // No sites: code only jumped into.
+        let h = Holes::parse("[[takes]]\nentry = 0x08000015\nsites = []\nwhy = \"jumped into\"\n")
+            .unwrap();
+        assert!(h.takes[&0x0800_0015].0.is_empty());
         assert_eq!(
             taking(0x0800_0015, 0b10_0010),
             "x_08000015(g, Regs { r: [r0, r1, r2, r3, 0, r5, 0, 0, 0, r9, 0, 0, 0, r13, RET], f: [false; 4] })"
