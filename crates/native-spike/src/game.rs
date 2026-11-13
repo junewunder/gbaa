@@ -29,6 +29,11 @@ impl Native for Game {
     }
 }
 
+/// `FRAMES`'s offset in EWRAM (agb/native-spike's ELF links it at
+/// `0x0200_00C0`), and the size of EWRAM then IWRAM.
+const FRAMES_AT: usize = 0xC0;
+const RAM_SIZE: usize = 0x4_8000;
+
 /// The program's globals (its `.bss`): one, the V-blank handler's count.
 /// The play layout (the default, the design's `--layout packed`): fields
 /// for Rust.
@@ -42,6 +47,16 @@ pub struct Ram {
 impl Ram {
     pub fn new() -> Box<Ram> {
         Box::default()
+    }
+
+    /// EWRAM then IWRAM as the guest lays them out, which the native check
+    /// records (as a lifted program's `Ram::image` at `--layout packed`):
+    /// each global at its link address, zeros between, so the check
+    /// layout's record is this one's, byte for byte.
+    fn image(&self) -> Vec<u8> {
+        let mut v = vec![0; RAM_SIZE];
+        v[FRAMES_AT..FRAMES_AT + 4].copy_from_slice(&self.frames.to_le_bytes());
+        v
     }
 }
 
@@ -60,9 +75,9 @@ impl Ram {
 #[derive(zerocopy::IntoBytes, zerocopy::FromZeros, zerocopy::Immutable)]
 #[repr(C)]
 pub struct Ram {
-    _below_frames: [u8; 0xC0],
+    _below_frames: [u8; FRAMES_AT],
     pub frames: u32,
-    _ewram: [u8; 0x4_0000 - 0xC4],
+    _ewram: [u8; 0x4_0000 - FRAMES_AT - 4],
     _iwram: [u8; 0x8000],
 }
 
@@ -75,16 +90,17 @@ impl Ram {
 
 #[cfg(feature = "guest-layout")]
 const _: () = {
-    assert!(core::mem::offset_of!(Ram, frames) == 0xC0);
-    assert!(core::mem::size_of::<Ram>() == 0x4_8000);
+    assert!(core::mem::offset_of!(Ram, frames) == FRAMES_AT);
+    assert!(core::mem::size_of::<Ram>() == RAM_SIZE);
 };
 
-/// The check build's record of each frame ([`crate::host::record`]).
+/// Each frame's record ([`crate::host::record`]), in either layout: RAM
+/// as the guest lays it out.
 pub fn record(g: &mut Game) {
     #[cfg(feature = "guest-layout")]
     crate::host::record(&g.hw, zerocopy::IntoBytes::as_bytes(&*g.ram));
     #[cfg(not(feature = "guest-layout"))]
-    let _ = g;
+    crate::host::record(&g.hw, &g.ram.image());
 }
 
 const KEY_A: u16 = 1 << 0;

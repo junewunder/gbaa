@@ -1372,6 +1372,15 @@
       "title": "Function flow: loads through unknown addresses",
       "detail": "docs/native-stage-b.md piece 3. Measured on {unit:native/fnref-context}'s branch (commit e81168f; it holds the object split and call-site context): fn_words_not_proven unmoved by either. ~640 of affine's load sites (spike 644) have an address that may be unknown (Val::unk), and each reads the pile and every RAM cell (Run::load_at's anywhere arm), so e.g. the IRQ vector word's f_03000000 is in nearly every hole. Not the cause (tried, no change): naming the allocator, dropping the pile from constant-address loads, dropping the I/O unk flag, NUMS 8->256. A seen source: main's inlined free-list walk at 0x080001a8 (affine) loads GLOBAL_ALLOC fields holding allocator-made pointers. Find where the unknown comes from (GBAA_FNREF_TRACE; print each anywhere load) and fix the first big source. Done when: fn_words_not_proven falls on every agb program, bars lowered, a unit test, just lift-check and just check pass.",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "ae52d6ac",
+        "session": "ae52d6ac-326b-48e0-96ac-c8694b013cb5",
+        "host": "quack",
+        "pid": 11956,
+        "start": "29684",
+        "at": "2026-11-13T04:50:28Z"
+      },
       "notes": [
         {
           "at": "2026-11-12T09:45:41Z",
@@ -1704,17 +1713,15 @@
       "minMinutes": 90,
       "record": {
         "state": "claimed",
-        "by": "74679aef",
-        "session": "74679aef-e087-4107-ae60-ffc062168b01",
+        "by": "77aa5fbf",
+        "session": "77aa5fbf-b416-45f2-a48d-d2a67bcf68d8",
         "host": "quack",
-        "pid": 2490379,
-        "start": "10658170",
-        "at": "2026-11-12T13:02:46Z",
-        "branch": "unit/native/lift-undefined-insns",
-        "beats": true,
-        "handedBack": "2026-11-12T13:43:04Z",
-        "pushed": true,
-        "ended": "2026-11-12T13:43:15Z"
+        "pid": 11545,
+        "start": "29000",
+        "at": "2026-11-13T04:50:16Z",
+        "resumed": "74679aef",
+        "prevSession": "74679aef-e087-4107-ae60-ffc062168b01",
+        "pushed": true
       },
       "notes": [
         {
@@ -1756,6 +1763,15 @@
       "check": "independent",
       "uses": ["heavy"],
       "minMinutes": 150,
+      "record": {
+        "state": "claimed",
+        "by": "3d525e2f",
+        "session": "3d525e2f-fa9e-4ab0-851f-1e2f2cec2205",
+        "host": "quack",
+        "pid": 276052,
+        "start": "369085",
+        "at": "2026-11-13T05:46:57Z"
+      },
       "round": "2026-11-12T13:07:54Z"
     },
     {
@@ -1821,7 +1837,17 @@
       "title": "Serial registers kept in the hardware library",
       "detail": "Kirby - Nightmare's boot (0x08000311) writes the serial registers (0x120, and on into 0x120-0x15f: SIODATA, SIOCNT, RCNT, JOY), which Hw::write16 (crates/runtime/src/hw.rs) panics on as unmodelled; with DMA writes ignored this is its next stop. Keep the registers' values in Hw (reads give back what was written, as the play build's bus does with no link partner: SIOCNT's start bit and its IRQ as the play build has them), routed by the prelude's io_write16/io_read16. Done when: an agb program writing and reading them passes just lift-check with its route matching the play build; just check passes.",
       "check": "recorded",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "34d57864",
+        "session": "34d57864-956a-4832-9a45-ef91a450bec5",
+        "host": "quack",
+        "pid": 12294,
+        "start": "30124",
+        "at": "2026-11-13T04:50:26Z"
+      },
+      "round": "2026-11-13T04:50:26Z"
     },
     {
       "id": "native/metroid-entry-reads",
@@ -1833,13 +1859,20 @@
       "id": "native/native-check-spike-packed",
       "title": "just native-check passes again: the spike's packed record",
       "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "8eda0ebb",
+        "at": "2026-11-13T05:43:25Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/2 (head 7e92de4d). Main reproduced first: just native-check fails at the spike (native-host refuses --native-record for the play layout). Fix: the spike's play layout records RAM as the guest lays it out (Ram::image), as lifted packed programs do. Whole just native-check under the budget, exit 0: native-spike pass (600 frames, 0 differences; the play layout draws the same 600 frames, its records the same; planted fault caught at frame 212), psg-square pass (120 frames; planted caught at frame 74), direct-sound pass (300 frames). By-hand control: image offset 0xC4 for 0xC0 fails at frame 2, EWRAM 0x020000c0. just check: exit 0 with the clippy-1.100 fix (PR 1, branch fix/clippy-1-100) merged in the working tree; on this branch alone it stops at clippy on loops main has too (stable went to 1.100.0 on 2026-11-12), so PR 1 must merge first. Fresh reviewer subagent: no real bugs."
+      },
       "notes": [
         {
           "at": "2026-11-12T09:30:14Z",
           "by": "d12ab564",
           "text": "just native-check fails at the spike: --packed target/release/native-spike is built without guest-layout, and route-check now passes it --native-record (since {unit:native/lift-packed-layout}), which native-host refuses. psg-square, direct-sound and the spike without --packed pass."
         }
-      ]
+      ],
+      "round": "2026-11-13T04:50:31Z"
     },
     {
       "id": "native/drop-psr-standins",
@@ -1855,6 +1888,24 @@
           "text": "Lifting Nightmare's dispatcher 0x03001030 (stand-in dropped) adds 5 IWRAM functions with hard entry-read summary holes main's lift lacks: 0x03007151 0x0300715c 0x030071df 0x030072e8 0x030074d1. Built only with temp panic stand-ins for them; settle these first."
         }
       ]
+    },
+    {
+      "id": "native/serial-no-partner-as-mgba",
+      "title": "Unplugged serial port answers as mGBA's does",
+      "detail": "With no link partner the play build (runtime::io) and the hardware library keep a serial register as stored; mGBA 0.10.5 (src/gba/sio.c, io.c) doesn't. agb/native-serial's route records the mismatch (units/native-serial-600.toml lists each: SIOCNT's SI bit in normal mode, an internal-clock transfer ended in the store with its IRQ, multiplayer's forced bits 2-6, RCNT's low four bits kept, JOYCNT's and JOYSTAT's own bits, 0x15A not a register, unused halfwords open bus). A game that starts a normal-mode transfer on the internal clock and waits for its IRQ or for the start bit to clear hangs in both builds today. Decide per item which the play build takes (hardware first where GBATEK and mGBA disagree), change runtime::io and the scheduler's IRQ, and runtime::hw with them (it keeps the registers in the same Io, but requests its own IRQs). Done when: units/native-serial-600.toml's mgba_hash and mgba_why are gone or name only what was kept on purpose, with why; just unit native-serial-600 and just lift-check pass; just check passes.",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/packed-diff-labels",
+      "title": "route-check --packed: failure names the two layouts",
+      "detail": "Found reviewing {unit:native/native-check-spike-packed}. In route-check --native's --packed comparison (crates/route-check/src/native.rs, compare/frame_diff) a difference prints as 'play 0x.., native 0x..', but there the first record is the guest-layout build's and the second the play-layout (packed) build's, so the message names neither rightly. Give compare the two sides' names. Done when: a planted layout fault (a global at the wrong offset in a packed build) prints 'guest layout' and 'play layout' values; just native-check, just lift-check and just check pass.",
+      "uses": ["heavy"]
+    },
+    {
+      "id": "native/native-check-in-gate",
+      "title": "just native-check runs somewhere that gates a merge",
+      "detail": "Found 2026-11-13 by {unit:native/native-check-spike-packed}: the native check is in no gate, so it stayed broken from 2026-11-06 to 2026-11-13 unseen. Put it (or the cheap part of it) where a landing runs it: just check if it fits the time, else the nightly corpus command. Done when a change that breaks the native check fails a gate, shown with a planted break.",
+      "uses": ["heavy"]
     }
   ]
 }
