@@ -1840,13 +1840,10 @@
       "check": "recorded",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "d2717a37",
-        "session": "d2717a37-2f09-4fa2-90e3-3e8f8d2ca636",
-        "host": "quack",
-        "pid": 1035338,
-        "start": "1518245",
-        "at": "2026-11-13T08:58:21Z"
+        "at": "2026-11-13T11:12:18Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/12, head de80679a (main 45c56fcc merged in). just lift ROM out/lift-kirby-nightmare --name kirby-nightmare: 0 hard holes (13 on main adfa45ee), the crate builds; first stop 5 of 600 frames, no-memory, a byte load at 0xe3a02004 in f_030072e8 < f_030071df < f_03007151 < f_080cd8ad (m4a's IWRAM mixer from SoundMain in the V-blank IRQ), filed as {unit:native/nightmare-mixer-pointer}. just check: passes. just lift-check, whole: passed, every metric within its bar for all 15 programs, no bar moved. How: the summary's run takes a branch on a certain constant one way (6 holes: an unreachable read in two list-scan functions); two [[takes]] name the object scheduler's callback call (2 holes); a [[takes]] with sites = [] names code only jumped into, m4a's IWRAM mixer (5 holes); holes file in mods commit 1cf76a7. A fresh reviewer read the diff: two real bugs fixed (constants stayed certain past an msr; an always-taken exit lost its own register read), each with a test that fails without the fix. Not proven: r8 at the scheduler's call on a pass where it hasn't set it (the lift passes 0; 0 and the usual value take the same branch); the mixer's registers checked by hand against SoundMain, not by the lifter."
       },
       "notes": [
         {
