@@ -351,15 +351,15 @@ What the done pieces left open, for the units that come next.
   code) calls them, and a jump by value the run didn't prove a return
   adds r0 to every function. `native/indirect-call-args` and the stack
   units narrow those as the summaries' holes close.
-- **The pile** (piece 3, function addresses). agb keeps closures and
-  trait objects on the heap, and every heap store goes to one pile, so a
-  load through any heap pointer may give every function address stored
-  there, and one such load used as a number marks them all: most words
-  aren't proven, and each `call_fn` set, though complete, is every
-  address-taken function (17 on the spike). Splitting the pile by the
-  value-set bounds on each store proved nothing more (agb's heap stores
-  aren't bounded) and was nine times slower; the heap by allocation site
-  and field (`native/fnref-heap-sites`) is what dense IDs need.
+- **The pile** (piece 3, function addresses). Most words aren't proven
+  and nearly every `call_fn` set is every address-taken function. No one
+  kind of read holds them (`research/fnref-held-words.md`, measured
+  before main's `Ref` tokens). Objects by allocation site, call-site
+  context and RAM pointers followed are unlanded on
+  `native/fnref-unknown-addrs`'s branch, which merges main first
+  (`native/fnref-branch-merge`); then frames (`native/fnref-frame-pointers`),
+  registers a callee doesn't read (`native/fnref-live-registers`), and
+  it lands (`native/fnref-ram-pointers-land`).
 - **Function-address flow, smaller gaps** (for `native/fnref-dense`).
   Proofs are per origin; a pool load folded from a non-pc-relative
   address gets a code-constant origin (dense needs per-site constant
