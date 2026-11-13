@@ -257,7 +257,7 @@ moves on to the next workable unit. Don't guess.
   lanes take other units meanwhile. This project has none yet.
 - **Display, devices, shared state:** headless runs need no display; the build lock
   is shared by every lane: the recipes take it themselves
-  (`CARGO_BUILD_JOBS=6 flock /tmp/gbaa-build.lock`, the justfile's `lock`),
+  (`CARGO_BUILD_JOBS=6 scripts/build-lock`, the justfile's `lock`: three at once),
   around the compile only. Never wrap `just` in it (a recipe taking it under
   a caller holding it deadlocks); a bare `cargo build/test/clippy` takes it
   the same way; generated or new harness binaries under `systemd-run --user

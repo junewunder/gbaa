@@ -436,8 +436,8 @@ just recompile-check ROM [FRAMES]  # recompiled vs --interp: frame hash and regi
 just sst-gen [PER_FILE]            # SingleStepTests through generated Rust
 ```
 
-The recipes take the build lock (`CARGO_BUILD_JOBS=6 flock
-/tmp/gbaa-build.lock`) around each cargo step themselves, so running a built
+The recipes take the build lock (`CARGO_BUILD_JOBS=6
+scripts/build-lock`) around each cargo step themselves, so running a built
 binary never waits; callers never wrap `just` in it, which would deadlock.
 Generated binaries run under
 `systemd-run --user --scope -p MemoryMax=3G -p MemorySwapMax=0`, so a
