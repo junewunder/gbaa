@@ -451,13 +451,13 @@ halfword at each and the instructions before it (`just dis`):
 So none was data decoded as code by gap decoding, and none is in a
 fragment reached by modern GCC's far-jump `bl`
 (`discovery/gcc-far-jump-bl`): 46 are real code, GCC's `udf #255` (Thumb
-0xdeff) ending a path that can only crash. Discovery took these encodings
-as deliberate (`analysis::vsa::func::deliberate`); the lifter didn't. Now
+0xdeff) ending a path it proved can only crash. Discovery took these
+encodings as deliberate (`vsa::func::deliberate`); the lifter didn't. Now
 it plans one (`is_trap`: Thumb `udf #255`/`#254`, ARM 0xe7ffdefe and
-0xe7f000f0) as `Plan::Undefined { trap: true }`, printed as a `panic!`
-naming the address, and the summaries end the path there. Any other
-undefined instruction is still a hard hole. The 47th `native/lift-bios-more`
-ended meanwhile: a `SoftReset` has no successor (`func::successors`).
+0xe7f000f0) as `Plan::Undefined { trap: true }`: a `panic!` naming the
+address (the play build faults there too, `Fault::Bios`), listed in the
+report; the summaries end the path there. Any other undefined instruction
+is a hard hole still. `native/lift-bios-more` ended the 47th (`SoftReset`).
 
 ## What the Stage-A lifter should know
 

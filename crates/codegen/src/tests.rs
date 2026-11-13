@@ -1023,6 +1023,28 @@ fn saves_fail_an_unbalanced_frame_and_an_unknown_jump() {
     }
 }
 
+/// A path ending in a compiler's trap never returns, so it fails no
+/// proof (GCC's `movs r3, #0; ldr r3, [r3]; udf #255` beside a clean
+/// return); any other undefined instruction still does.
+#[test]
+fn saves_end_a_path_at_a_trap_and_fail_another_undefined_instruction() {
+    for (udf, kept) in [(0xDEFFu16, true), (0xDE00, false)] {
+        // cmp r0, #0; bne +2; movs r3, #0; ldr r3, [r3]; udf; bx lr
+        let h = [0x2800, 0xD102, 0x2300, 0x681B, udf, 0x4770];
+        let (rom, d) = thumb_program(&h, &[2; 6], &[0x0800_0001]);
+        let ctx = Ctx::new(&rom, &d);
+        let proof = crate::saves::prove(&ctx, &build_all(&ctx).funcs);
+        assert_eq!(proof.kept.contains(&0x0800_0001), kept, "{:?}", proof.why);
+        if !kept {
+            let why = &proof.why[&0x0800_0001];
+            assert!(
+                why.contains("0x08000008: an undefined instruction"),
+                "{why}"
+            );
+        }
+    }
+}
+
 #[test]
 fn a_summary_of_a_function_that_clobbers_r4_fails_its_proof() {
     for keeps in [true, false] {

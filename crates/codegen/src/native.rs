@@ -823,6 +823,17 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         frames.iter().map(|f| f.flush.len()).sum::<usize>(),
     )
     .unwrap();
+    if !soft.traps.is_empty() {
+        let at: BTreeSet<u32> = soft.traps.iter().copied().collect();
+        let at: Vec<String> = at.iter().map(|a| format!("{a:#010x}")).collect();
+        writeln!(
+            report,
+            "compilers' traps (native/lift-undefined-insns): {} `udf`s the compiler ends a path with, each printed as a panic naming it (a hard hole if it were data read as code): {}",
+            at.len(),
+            at.join(" "),
+        )
+        .unwrap();
+    }
     let objs = |st| soft.access.get(&(st, Where::Object)).copied().unwrap_or(0);
     writeln!(
         report,
@@ -1322,6 +1333,8 @@ struct Soft {
     /// extended entry.
     falls: usize,
     standins: usize,
+    /// The compilers' traps printed as a stop of the game, by address.
+    traps: Vec<u32>,
     /// Functions whose callee-saves the summaries don't prove, and why.
     unproven: Vec<(u32, String)>,
 }
@@ -2181,11 +2194,14 @@ impl FnPrinter<'_, '_> {
             }
             // A compiler's trap: the game stops there, as `call_fn` does
             // on a call to no function.
-            Plan::Undefined { trap: true } => writeln!(
-                s,
-                "{ind}panic!(\"{at:#010x}: a compiler's trap (undefined instruction), which stops the game\");"
-            )
-            .unwrap(),
+            Plan::Undefined { trap: true } => {
+                self.soft.traps.push(at);
+                writeln!(
+                    s,
+                    "{ind}panic!(\"{at:#010x}: a compiler's trap (undefined instruction), which stops the game\");"
+                )
+                .unwrap()
+            }
             Plan::Undefined { trap: false } => self.hole(at, "an undefined instruction"),
         }
         s

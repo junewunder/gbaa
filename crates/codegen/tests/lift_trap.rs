@@ -39,7 +39,8 @@ fn undefined(l: &Lifted) -> Vec<String> {
 }
 
 /// GCC's `udf #255` and LLVM's `udf #254` are no hole: the lift prints a
-/// stop naming the address, in a crate that parses as Rust.
+/// stop naming the address, in a crate that parses as Rust, and lists it
+/// in its report.
 #[test]
 fn a_compilers_trap_lifts_as_a_stop_not_a_hole() {
     for udf in [0xdeff, 0xdefe] {
@@ -53,6 +54,13 @@ fn a_compilers_trap_lifts_as_a_stop_not_a_hole() {
             .collect();
         assert_eq!(stops.len(), 1, "{udf:#06x}: {stops:?}");
         assert!(stops[0].trim_start().starts_with("panic!(\"0x080000d0:"));
+        // The report lists it, so a trap is never printed unseen.
+        let listed = l.report.lines().find(|r| r.starts_with("compilers' traps"));
+        assert!(
+            listed.is_some_and(|r| r.ends_with(": 0x080000d0")),
+            "{}",
+            l.report
+        );
         for (path, text) in &l.files {
             syn::parse_file(text).unwrap_or_else(|e| panic!("{path}: {e}"));
         }
@@ -72,4 +80,5 @@ fn another_undefined_instruction_is_still_a_hard_hole() {
     );
     assert!(holes[0].contains("at 0x080000d0: an undefined instruction"));
     assert!(!l.files.iter().any(|(_, t)| t.contains("a compiler's trap")));
+    assert!(!l.report.contains("compilers' traps"));
 }
