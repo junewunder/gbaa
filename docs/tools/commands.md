@@ -114,7 +114,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   docs/research/native-holes.numbers.md` also writes the table as that
   generated numbers file (header, date, commit); `--from DIR` runs
   nothing and renders DIR's saved `summary.toml` (with `--write-doc`, the
-  file), for a run already made at the commit wanted.
+  file), for a run already made at the commit wanted. The `first stop` column, beside `hard`, is each game's first stop as its last `just lift` recorded it (`LIFTS/lift-<name>/metrics.toml`'s `[run]`; `--lifts LIFTS`, default `out`), kept in `summary.toml`; `-` with no lift there. It isn't rerun: lift the game first (a run made at another commit says `(lifted at COMMIT)`).
 - `just softfloat-check ROM [--cases N] [--pins]`
   (`gbaa-softfloat-check`, `crates/hole-report/src/bin/softfloat_check.rs`):
   the runtime's stand-ins for libgcc's `__muldf3` and `__divdf3`
@@ -620,10 +620,10 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   complete callee set as calling exactly those
   (`codegen::saves::summarize_sets`; unit `native/indirect-call-args`),
   printing the counts without the sets too. About 5 s on an agb program;
-  on Emerald the flow didn't finish in 35 minutes (killed at 6 GB, then
-  stopped at 8 GB under a 16 GB cap), and after `native/fnref-flow-scale`
-  it was killed at a 14 GB cap in 5 minutes (2026-11-07):
-  `native/fnref-flow-emerald`'s work.
+  on Emerald (`just long start NAME --mem 8G`) 11 to 15 minutes, 2.4 GB
+  (`native/fnref-emerald-speed`, 2026-11-13), the flow 611 s of it; it
+  stops at its token bound (`didn't settle: … tokens held`), so no set
+  counts as complete yet: `native/fnref-flow-emerald`'s work.
   fn-diff's summary line gives the same count and
   how many picks call a proven function. Emerald, `just fn-diff ROM 2000
   --exact` (2026-10-27): every entered function picked, 270, 591 states,
@@ -1327,7 +1327,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   hard hole and wrong store; `--fall-as-tail-call` prints a fall into
   another function's entry as the old tail call (r4-r12 and the flags
   zeroed, native/lift-fallthrough), the fallthrough control. About 6 s to lift, 15 s-2 min to build.
-  The lift runs capped at 16 GB, no swap (a commercial game's needs several).
+  The lift runs capped at 16 GB, no swap (a commercial game's needs several). Last, the first stop (native/native-first-stop; `codegen::native::first_stop`): `gbaa-first-stop OUT` (alone: `just first-stop OUT [--frames N] [--time-limit SECONDS] [--bin FILE] [--not-built]`) runs the built program `--headless --frames 600 --time-limit 120` in its own 3 GB scope, stderr in `OUT/first-stop.log`, and writes how far it got to `OUT/metrics.toml` (a `[run]` table: `frames_run`, `frames_asked`, `stop`, `what`, `detail`, `functions`) and the end of `report.txt` (the same, then `frames_run N`, `stop KIND`), printing `gbaa-first-stop: NAME: 600 of 600 frames, no stop`, or the stop: `0 of 600 frames, unmodelled-register 0x04000134 RCNT` and under it the panic's message and place and the lifted functions on the stack, innermost first (from the panic's backtrace, which the program prints as its stop line, `native_record::stop`; an inlined function doesn't show and no guest pc is kept). Kinds: `none`, `not-built` (the build failed: `didn't build: N hard holes`), `unmodelled-register` (`Hw::write16`/`read16`), `no-memory` and `no-function` (the prelude's), `panic`, `time-limit` (no stop within SECONDS: a loop that reaches no frame), `killed` (a signal; 9 is the cap's), `failed`. A lift with hard holes is `not-built` whatever binary an older lift left; a build that failed with none (refused for RAM, killed, code that doesn't compile) records no run; a binary older than OUT's sources is refused. `[run]`'s `commit` is the commit the run was made at. A stop is a finding: the recipe still exits 0 if the lift and build did. A new lift clears the `[run]` table until it is run again.
 - `just lift-check [--only NAME]` (native/lift-stage-a, native/lift-bars):
   the lifter's check, `gbaa-lift-check` driven by
   `crates/codegen/lift-check.toml`: one table per program (`rom` under

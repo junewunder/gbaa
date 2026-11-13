@@ -69,7 +69,7 @@ each from frame 2000), discovery again with the run's call targets
 ("With the run's call targets"), the summaries, the RAM copies with the
 run ("RAM copies"), then `analysis::holes::classify` (in the analysis
 crate so the lifter reuses it). About a minute a game; `just holes-all`
-runs the corpus into one table (about 10 minutes).
+runs the corpus into one table (about 10 minutes), where `first stop` is how far each game's last lift ran once built (`just lift`): its next hole.
 
 ### What counts as a hard hole
 
