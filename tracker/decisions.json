@@ -1195,6 +1195,16 @@
       "at": "2026-11-13T08:10:34Z",
       "scope": ["native/hw-serial-registers"],
       "until": "2026-11-14T05:00:00Z"
+    },
+    {
+      "id": "d/prelude-bar-plus-6-registerramreset-s-serial",
+      "title": "Prelude bar plus 6: RegisterRamReset's serial flag",
+      "why": "From {unit:native/hw-serial-registers}: the prelude's register_ram_reset now resets the serial registers on flag 0x20 as the play build's does (7 lines added, 1 doc line less: 6 net). lines_prelude is 1201 in every table of crates/codegen/lift-check.toml: main's 1195 (after the reset and IRQ-wrapper msr work) plus these 6; before that merge it was 1131 to 1137. Hand-written runtime code, not lifted output. just lift-metrics measures 0 over, 0 under; the native check stays green (just lift-check passed whole, 15 programs, 0 differences, every planted fault caught).",
+      "by": "34d57864",
+      "at": "2026-11-13T08:54:00Z",
+      "scope": ["native/hw-serial-registers"],
+      "replaces": "d/prelude-bar-1131-to-1137-registerramreset-s",
+      "until": "2026-11-14T05:00:00Z"
     }
   ]
 }
