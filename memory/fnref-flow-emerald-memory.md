@@ -146,3 +146,13 @@ the round-2 profile: `St::join`'s cap at every edge (17%), shift
 `split_refs` misses when the Refs' values change (17%), a load's
 `join_capped` per pointer (8%). The op memo's results aren't `share`d
 (one 1,426-token set 91 times in the cache): cheap to add.
+
+**Checking a flow change is exact (2026-11-13).** Metroid settles, so it
+shows what Emerald can't: put `git show origin/main:…/fnref.rs` in the
+tree, build with another `CARGO_TARGET_DIR`, copy the binary out,
+restore, and run both with the trace. This branch against main: the same
+output, 20 rounds, the same end counts and hole addresses; 15.1 s against
+42.7 s, 173k tokens held against 2.06M. The review found `join_capped`
+inexact where pointers a "from here on" covers push the cap past its 16
+exact pointers (fixed; the test now compares each case with `join`), and
+the op memo wrong under `GBAA_FNREF_OFF=move` (off under any of them).
