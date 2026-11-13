@@ -389,7 +389,7 @@ Summary holes that are hard, before and after (`just holes-all --against`):
 |---|---|
 | libgcc ieee754-df.S's denormal paths, r4 and r5 in (ARM) | Emerald 0x082dfd09, Rogue 0x0800cb45, Imperium 0x08003879, Kirby M. 0x0814fd35, Nightmare 0x080ce1f9, Minish 0x080afbd1 |
 | hand-written register parameters | Minish 0x080086d9 (`sub_080086D8`, r8 and r11), 0x08060ba1 (derefs r5), 0x08008a89 (r5, `ClampPlayerVelocity`'s kind); WarioWare 0x080efe51, 0x080f0ab0 |
-| modern GCC's far jump by `bl` into a fragment of the caller's, taken for a call | moonbeam 0x0801a081 and six more, Rogue 0x0820c629, Imperium 0x0821e331 (not looked into one by one) |
+| modern GCC's far jump by `bl` into a fragment of the caller's, taken for a call | moonbeam 0x0801a081 and six more, Rogue 0x0820c629, Imperium 0x0821e331 (looked into since: "Modern GCC's cold blocks", below) |
 | agbcc's partly built word stored with the unset register's other bits (a struct's padding) | Emerald 0x080852d5, Kirby M. 0x08132889, WarioWare 0x080abfa5, Metroid 0x08073ce5 |
 | an unset register used as an index (`lsls r1, r4, #2; ldr`) | Minish 0x08037c3d |
 | data decoded as code | Emerald 0x0850dbaf, 0x085ef6a1; Metroid 0x087d8000; WarioWare 0x083db2d7 |
@@ -405,6 +405,61 @@ moonbeam 0x0801a081 (r7, four); WarioWare 0x0807f6e5, 0x0808e325,
 Only jumped into: Rogue's 0x080ba12b-0x080bbfff fragments (15, past
 unresolved jumps), Nightmare 0x0804c489, moonbeam 0x08038310. A tail call
 or fall from a called function counting as a call (2026-11-12) left the 36.
+
+## Modern GCC's cold blocks, and `sbcs rN, rN`
+
+`discovery/gcc-far-jump-bl`, 2026-11-13: the "far jump by `bl` into a
+fragment" entry readers above, one by one. Two causes, neither the probe's.
+
+**A cold block of the caller's, reached by `bl`** (moonbeam's five:
+0x0801a081, 0x0801ae57, 0x0801ae5d, 0x0802f111, 0x0802f117). Modern GCC
+puts a function's unlikely blocks last, each ending in a call that never
+returns, and a function over 2 KB reaches them by `bl`:
+
+```
+080195d0: movs r3, #180
+080195d2: push {r4, r5, r6, r7, lr}
+08019884: bge 0x0801988a
+08019886: bl 0x0801a080
+0801a080: ldr r0, [r7, #80]
+0801a082: bl 0x08033d4a        (never returns)
+```
+
+The far-jump probe (decision 5a) reaches no return from 0x0801a080, so
+no frame is popped and its answer is "never returns": the `bl` was a
+call, the block a function, and the lift entered it with r4-r12 zeroed
+(the error routine's argument loaded through a zero r7). Only its place
+makes it the caller's, `analysis::vsa::func`'s rule that functions don't
+nest (a `bl` from a function with a prologue into the span of its own
+code is a jump, unless the target looks like a function). As built now:
+
+- A prologue is `push {…, lr}` at the entry or after up to 8
+  instructions that write neither sp, lr nor pc (`is_push_lr`), for the
+  caller and for a target. Modern GCC schedules the body's start ahead
+  of the push: 125 of moonbeam's 1,050 pushing Thumb starts, the latest
+  after 7. The rule used to ask for the push first.
+- A target right where the function's reached code and pools end is a
+  jump too, if its probe says nothing returns from it: the last cold
+  blocks lie past everything a branch reaches (one rerun a block, 16 at
+  most). Only then, since the next function starts there as well. A
+  never-returning function taken for a block runs the same code with
+  the same registers; the opposite mistake zeroes them.
+
+**`sbcs rN, rN` after a compare** (Rogue 0x0820c629, r5; Imperium
+0x0821e331, r5 holding the entry r8): GCC's 0 or -1 of a condition,
+`cmp r3, r7; sbcs r5, r5`, in real functions. The value is the carry
+extended to a word whatever rN held, and the summaries took it for a use.
+`codegen::saves::spread` gives `a + !a + c`, its carry and its overflow
+the carry's bits only (the IR reads rN once, so `a` is one value): the
+entry bits are masked away, a soft hole.
+
+Against the main it began from, hard holes fell on the three games and
+rose nowhere (numbers: the unit's evidence). Still hard then: moonbeam 0x0800019b
+(crt0's copy loop takes the end address in r4), 0x0803830d (a `bx pc`
+veneer to ARM `stmia r0!, {r4-r14}`, a register save as `setjmp` makes)
+and 0x08025a29 (r8 and r9 at 0x08025dec, its far jumps all taken; not
+looked into); Rogue 0x081b42e1 and 0x0826c5e7 (not looked into); libgcc's
+denormal paths in Rogue and Imperium.
 
 ## Modern GCC's unresolved jumps, by kind
 
