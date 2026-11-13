@@ -825,8 +825,9 @@ fn the_bound_counts_the_kept_expansions() {
         },
     );
     g.ref_rom.insert(mem_ref(true, 4), val(100));
-    let key = (0, None, std::ptr::null(), false, false, false);
-    g.expanded.insert(key, (set(200), vec![val(300)], val(400)));
+    let key = (0, None, [(std::ptr::null(), false, false, false); 2]);
+    g.expanded
+        .insert(key, ([set(200), Toks::default()], vec![val(300)], val(400)));
     g.split_rest.insert((r, Xf::ID), (set(500), set(600)));
     g.pile_raw[4] = val(700);
     g.cell_reads[4] = Some(val(800));
@@ -859,7 +860,7 @@ fn table(n: u32) -> (Img, BTreeSet<u32>, Vec<u32>) {
 type Shape = (bool, bool, Vec<(Why, bool)>, bool);
 
 /// Runs `body` (given the entry loaded by an unknown index at width `w`,
-/// it gives the call's target) on a table of `n` functions.
+/// it gives the call's target), twice over, on a table of `n` functions.
 fn table_use(n: u32, w: Width, body: &dyn Fn(&mut B, ValueId) -> ValueId) -> Shape {
     let (img, fns, words) = table(n);
     let mut b = B::default();
@@ -867,6 +868,8 @@ fn table_use(n: u32, w: Width, body: &dyn Fn(&mut B, ValueId) -> ValueId) -> Sha
     let i = b.get(1);
     let a = b.bin(BinOp::Add, tab, i);
     let x = b.ld(w, a);
+    // Twice: the second time a large value's ops are found as kept.
+    body(&mut b, x);
     let t = body(&mut b, x);
     let f = run_img(&[calling(0x0800_1001, b, t)], &BTreeMap::new(), &img);
     assert!(!f.unsettled);
