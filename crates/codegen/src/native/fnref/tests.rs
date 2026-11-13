@@ -1044,7 +1044,9 @@ fn a_join_the_cap_undoes_leaves_the_set_itself() {
     );
     // With none held, they don't.
     let mut d = Val::of(Tok::RomFrom(0x0800_0080));
-    let mut many = Val::default();
-    many.toks = (0..20).map(|k| Tok::Rom(0x0800_0084 + 4 * k)).collect();
+    let many = Val {
+        toks: (0..20).map(|k| Tok::Rom(0x0800_0084 + 4 * k)).collect(),
+        ..Val::default()
+    };
     assert!(!both(&mut d, many));
 }
