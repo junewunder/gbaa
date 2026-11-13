@@ -4221,14 +4221,24 @@ impl Run<'_, '_> {
         // but function and ROM addresses go to the pile all the same (so
         // their flow is as before).
         if !a.lost_ptr && (a.unk || a.mem || a.toks.is_empty()) {
+            // A Ref's the same: its functions and ROM pointers only.
+            const FNS_ROMS: Xf = Xf {
+                flags: false,
+                ptrs: Xf::PTR_DROP,
+                ..Xf::ID
+            };
             let kept: Vec<(Tok, u8)> = toks
                 .iter()
-                .copied()
-                .filter(|(t, _)| {
-                    matches!(
-                        t,
-                        Tok::Fn { .. } | Tok::Rom(_) | Tok::RomFrom(_) | Tok::Ref { .. }
-                    )
+                .filter_map(|&(t, w)| match t {
+                    Tok::Fn { .. } | Tok::Rom(_) | Tok::RomFrom(_) => Some((t, w)),
+                    Tok::Ref { src, xf } => Some((
+                        Tok::Ref {
+                            src,
+                            xf: xf.then(FNS_ROMS),
+                        },
+                        w,
+                    )),
+                    _ => None,
                 })
                 .collect();
             if !kept.is_empty() {
@@ -4344,7 +4354,19 @@ impl Run<'_, '_> {
                     if rule.sets & 1 << i != 0 {
                         *r = Val::unk();
                     } else if rule.may_set & 1 << i != 0 {
-                        r.join(&Val::unk());
+                        // Moved past what it copied, maybe: a pointer into
+                        // RAM or an object is somewhere from there on.
+                        let moved = offset(&self.g.expand(r), None);
+                        r.join(&Val {
+                            toks: moved
+                                .toks
+                                .iter()
+                                .filter(|t| matches!(t, Tok::RamFrom(_) | Tok::Obj(..)))
+                                .copied()
+                                .collect(),
+                            lost_ptr: moved.lost_ptr,
+                            ..Val::unk()
+                        });
                     }
                 }
                 // CpuSet and CpuFastSet from ROM copy its words to RAM: their
@@ -4387,6 +4409,7 @@ impl Run<'_, '_> {
                         if src.unk || src.mem || !src.toks.iter().all(rom) || src.toks.is_empty() {
                             self.g.read_pile(4, &mut got);
                             self.g.read_cells(4, &mut got);
+                            self.g.read_objs(4, &mut got);
                         }
                         after.regs[3].join(&got);
                     }
@@ -5445,6 +5468,9 @@ pub fn follow(
                     r.unk = true;
                 }
             }
+            // What it reads of memory, from here: its sp's expansion too
+            // (an sp loaded from memory reads it).
+            g.rd = Rd::default();
             // The sp it was called with; its own is its frame's start.
             let mut sp_in = g.expand(&std::mem::take(&mut entry[13]));
             if sp_in.toks.is_empty() {
@@ -5487,7 +5513,6 @@ pub fn follow(
                 );
                 run.work.insert(f.entry);
             }
-            run.g.rd = Rd::default();
             let mut steps = 0;
             while let Some(k) = run.work.pop_first() {
                 steps += 1;

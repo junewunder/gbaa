@@ -25,7 +25,9 @@ f52fe115) and the BIOS rule (`native/fnref-bios-reads`); every table
 here is measured again on the branch merged with main at 81e5e5cb
 (`native/fnref-branch-merge`, 2026-11-13), and "main" is main at that
 commit. The finding stands: the switched-off table is the same row for
-row, and the first roads the same but for the BIOS's.
+row, and the first roads the same but for the BIOS's. (The merge's
+review fixes, after these runs, moved no agb metric and no row of the
+switched-off table.)
 
 ## How it was measured
 
@@ -214,6 +216,32 @@ against main's 623.
    it un-proves a word and breaks 13 callee sets, so the sets need
    another source first); a copy routine's source and destination kept
    apart by caller.
+
+## Emerald on the merged code
+
+`native/fnref-branch-merge`, 2026-11-13 on quack: `gbaa-recompile
+--summaries` on pret's Emerald with `--callee-sets` and the trace, main
+at 81e5e5cb and the merged branch side by side, each under an 8 GB cap
+and a 25-minute limit.
+
+| | main | merged |
+|---|---|---|
+| round 0 | 24 s | 202 s |
+| tokens held at about 7,400 runs | 0.45M | 2.7M |
+| how it ends | killed at 25 min in round 5 (rounds 1 to 4 at 145, 447, 814, 1,229 s), unsettled | stops at the 48M-token bound after 19,712 runs, 10:39, unsettled |
+| peak | 1.5 GB | 2.7 GB |
+
+Neither proves anything there (0 of 553 sets complete). The merged
+flow's entries hold far more: at its stop 8.4M functions' tokens, 1.3M
+ROM pointers and 1.1M `Ref`s in distinct entry sets, and 85,000 entry
+registers hold a lost RAM pointer, whose loads read every cell, object
+and the pile. Before two caps (both leave every agb metric as it was) it
+was slower still: 125,000 RAM runs in the entries (a value held up to
+256), and an sp passed in from hundreds of callers held a frame object of
+each (now past 64 objects a value, and past 64 RAM runs, a pointer is
+lost). The object split and RAM pointers cost Emerald what they don't
+cost the agb programs; making them pay there is work before
+`native/fnref-ram-pointers-land`, not part of the merge.
 
 A C game was the question this left, and it has a different answer:
 the next section.
