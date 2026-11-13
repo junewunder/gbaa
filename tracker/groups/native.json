@@ -2223,15 +2223,23 @@
       "title": "A native program's window keeps the game's save",
       "detail": "Since 5bb6efdc a native program run without --headless opens gbaa-desktop's window (crates/native-host, Windowed). Nothing writes the save chip's bytes to a file or reads them back, so every run starts from an empty save. The window's menu still offers save states, rewind and netplay, which do nothing here: keep the save as gbaa-desktop does (the .sav in the game's folder), and hide or wire the menu rows that don't apply. Check: save in Metroid's native build, close the window, reopen, and the file is there.",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "debeff8d",
-        "session": "debeff8d-e35c-4fbb-9b95-217d30c53774",
-        "host": "quack",
-        "pid": 1860601,
-        "start": "4634915",
-        "at": "2026-11-13T17:37:51Z",
+        "at": "2026-11-13T17:58:11Z",
+        "evidence": "Metroid lifted on this tree, played in its window in a private cu session (XDG_DATA_HOME in /tmp): boot wrote saves/metroid/metroid.sav (abf61aa7), starting file A on Normal changed it (00ea7e8f), closing flushed and backed it up; reopened, the game read it and rewrote it to e3fde1f2. Reference: gbaa-desktop --headless --timing exact --save, 400 frames: no file gives abf61aa7, file A's save gives e3fde1f2, the same. Native menu shows only Paused/Fast-forward/Volume/Mute/Controls/Fullscreen/Save folders/Close/Quit (screenshot). just check passes after merging main.",
         "branch": "unit/native/window-keeps-save",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-13T17:58:11Z",
+          "by": "debeff8d",
+          "host": "quack",
+          "pid": 1860601,
+          "start": "4634915",
+          "beats": true,
+          "session": "debeff8d-e35c-4fbb-9b95-217d30c53774",
+          "lane": "quack/3"
+        },
+        "pushed": true
       },
       "round": "2026-11-13T17:37:51Z"
     }
