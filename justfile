@@ -940,9 +940,11 @@ lift rom out="" *flags:
     built=0
     just build-recompiled "$out" || built=$?
     # Where the built program stops, or that it didn't build: into OUT's report.txt and metrics.toml.
-    if [ "$built" = 0 ]; then target/release/gbaa-first-stop "$out"; else target/release/gbaa-first-stop "$out" --not-built; fi
+    first=0
+    if [ "$built" = 0 ]; then target/release/gbaa-first-stop "$out" || first=$?; else target/release/gbaa-first-stop "$out" --not-built || first=$?; fi
     [ "$built" = 0 ] || exit "$built"
-    exit $lifted
+    [ "$lifted" = 0 ] || exit "$lifted"
+    exit "$first"
 
 # Where a built lift stops (native/native-first-stop; codegen::native::first_stop; docs/tools/commands.md): runs OUT's program (a lift `just lift` built into target/recompiled) headless for 600 frames in its own 3 GB scope and writes how far it got to OUT/metrics.toml ([run]: frames_run, stop, what, detail, functions) and the end of OUT/report.txt: every frame, or the stop's kind (an unmodelled I/O register by address and name, memory the program hasn't got, a call to no function, another panic, the time limit, killed) with the lifted functions on the stack. `just lift` ends with it. ARGS: --frames N, --time-limit SECONDS, --bin FILE, --not-built (the build failed: the stop is the lift's hard holes). A stop isn't a failure: exits 0 once recorded.
 first-stop out *args:
