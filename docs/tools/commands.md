@@ -1299,7 +1299,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `skip_fn_flow = "why"` (the function-address flow left out, saving
   the minutes it runs before its token bound stops it). A hard hole no stand-in
   covers (CPU state, an unresolved jump, a BIOS call the prelude lacks, an
-  undefined instruction, a jump to no code, a summary that returns r4-r11
+  undefined instruction other than a compiler's trap (`udf #255` and the like: a `panic!` and a line of the report), a jump to no code, a summary that returns r4-r11
   or sp changed) fails the lift, naming each, and the build (a
   `compile_error!` each). `report.txt` lists the soft holes and ends
   with the metrics as `name value` lines (`codegen::native::metrics`):

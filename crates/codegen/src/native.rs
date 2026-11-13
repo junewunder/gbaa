@@ -930,7 +930,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         let at: Vec<String> = at.iter().map(|a| format!("{a:#010x}")).collect();
         writeln!(
             report,
-            "compilers' traps (native/lift-undefined-insns): {} `udf`s the compiler ends a path with, each printed as a panic naming it (a hard hole if it were data read as code): {}",
+            "compilers' traps (native/lift-undefined-insns): {} `udf`s the compiler ends a path with, known by their encoding alone; each is a panic naming it, not a hard hole (printed where its function has no hard hole, which is a `compile_error!` whole): {}",
             at.len(),
             at.join(" "),
         )
@@ -1440,7 +1440,8 @@ struct Soft {
     /// extended entry.
     falls: usize,
     standins: usize,
-    /// The compilers' traps printed as a stop of the game, by address.
+    /// The compilers' traps planned as a stop of the game, by address
+    /// (printed so unless the function has a hard hole).
     traps: Vec<u32>,
     /// Functions whose callee-saves the summaries don't prove, and why.
     unproven: Vec<(u32, String)>,
