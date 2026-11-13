@@ -147,10 +147,12 @@ impl Metrics {
         s
     }
 
-    /// Read [`Metrics::to_toml`]'s text back, in its order.
+    /// Read [`Metrics::to_toml`]'s text back, in its order. A table isn't
+    /// a metric: `[run]` is the built program's run (`super::first_stop`).
     pub fn from_toml(text: &str) -> Result<Metrics, String> {
         let d: toml_edit::DocumentMut = text.parse().map_err(|e| format!("{e}"))?;
         d.iter()
+            .filter(|(_, v)| !v.is_table())
             .map(|(k, v)| {
                 v.as_integer()
                     .and_then(|i| u64::try_from(i).ok())

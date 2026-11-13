@@ -27,6 +27,8 @@ struct Img {
     top: u32,
     /// Code in ROM, where a run of data ends (none: it runs to `top`).
     code: BTreeSet<u32>,
+    /// More functions' keys.
+    fns: BTreeSet<u32>,
 }
 
 impl Img {
@@ -35,13 +37,14 @@ impl Img {
             words: BTreeMap::from([(POOL, F), (VT + 12, F), (0x0800_0404, H), (POOL_A, A)]),
             top: 0x0800_1000,
             code: BTreeSet::new(),
+            fns: BTreeSet::new(),
         }
     }
 }
 
 impl Image for Img {
     fn is_fn(&self, v: u32) -> bool {
-        v == F || v == H || v == A
+        v == F || v == H || v == A || self.fns.contains(&v)
     }
     fn word(&self, a: u32) -> Option<u32> {
         (0x0800_0000..self.top)
@@ -1062,4 +1065,667 @@ fn a_function_with_no_caller_in_sight_may_call_any_taken_function() {
     let f = run(&[just(0x0800_1001, a), calling(0x0800_2001, b, t)]);
     assert_eq!(site(&f).callees, BTreeSet::from([F]));
     assert!(site(&f).complete);
+}
+
+/// A kept expansion holds the cap of all it has read, whatever order
+/// memory gained it in: capped a store at a time, the pointers below a
+/// widened one stayed exact, while the capped read of memory, which a
+/// function is rerun by, already took a later one in.
+#[test]
+fn a_kept_expansion_caps_all_it_read_together() {
+    let rom = |n: u32| Tok::Rom(0x0800_0800 + 4 * n);
+    let fn_tok = |key| Tok::Fn {
+        key,
+        origin: Origin::Code(key, 0),
+        form: Form::Full,
+    };
+    let of = |ts: &[Tok]| Val {
+        toks: ts.iter().copied().collect(),
+        ..Val::default()
+    };
+    // Seventeen pointers widen to "from the lowest on"; then two below it.
+    let first: Vec<Tok> = (5..22).map(rom).chain([fn_tok(1)]).collect();
+    let mut e = Exp::default();
+    exp_merge(&mut e, of(&first));
+    assert!(e.v.toks.contains(&Tok::RomFrom(0x0800_0800 + 4 * 5)));
+    exp_merge(&mut e, of(&[rom(1)]));
+    exp_merge(&mut e, of(&[rom(3), fn_tok(2)]));
+    let mut whole = of(&first);
+    whole.union(&of(&[rom(1), rom(3), fn_tok(2)]));
+    whole.cap();
+    assert_eq!(e.v, whole);
+    let toks: Vec<Tok> = e.v.toks.iter().copied().collect();
+    assert_eq!(toks, [fn_tok(1), fn_tok(2), Tok::RomFrom(0x0800_0800 + 4)]);
+}
+
+/// Where [`swi_then`]'s BIOS call is.
+const SWI_AT: u32 = 0x0800_0080;
+
+/// A function at `e`: `b`, BIOS call `n`, then `then` ending in an
+/// indirect call through `t` (the call [`site`] finds) and a return.
+fn swi_then(e: u32, b: B, n: u8, then: B, t: ValueId) -> Built {
+    let (next, ret) = (e + 0x10, e + 0x20);
+    let mut first = b.end(None, Edge::Swi(next));
+    (first.1.bios, first.1.at) = (Some(n), SWI_AT);
+    (
+        e,
+        vec![
+            (e, first),
+            (next, then.end(Some(t), Edge::Call { target: None, ret })),
+            (ret, B::default().end(None, Edge::Return)),
+        ],
+    )
+}
+
+/// F from its pool word in register `r`, BIOS call `n`, then a call
+/// through `r`.
+fn in_reg_at_swi(r: u8, n: u8) -> Flow {
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    b.set(r, p);
+    let mut then = B::default();
+    let t = then.get(r);
+    run(&[swi_then(0x0800_1001, b, n, then, t)])
+}
+
+#[test]
+fn an_address_left_where_a_bios_call_doesnt_read_stays_proven_and_followed() {
+    // VBlankIntrWait takes no arguments and leaves r2 and r3 as they came.
+    for r in [2, 3] {
+        let f = in_reg_at_swi(r, 0x05);
+        assert!(f.proven(POOL), "r{r}: {f:?}");
+        assert_eq!(site(&f).callees, BTreeSet::from([F]), "r{r}");
+        assert!(site(&f).complete, "r{r}");
+    }
+    // It leaves its flags in r0 and 1 in r1: no hole, and nothing of F
+    // after it.
+    for r in [0, 1] {
+        let f = in_reg_at_swi(r, 0x05);
+        assert!(f.proven(POOL), "r{r}: {f:?}");
+        assert!(site(&f).callees.is_empty(), "r{r}");
+        assert!(!site(&f).complete, "r{r}");
+    }
+    // Halt reads and sets none.
+    for r in 0..4 {
+        let f = in_reg_at_swi(r, 0x02);
+        assert!(f.proven(POOL), "r{r}: {f:?}");
+        assert_eq!(site(&f).callees, BTreeSet::from([F]), "r{r}");
+    }
+}
+
+#[test]
+fn an_address_where_a_bios_call_reads_is_a_hole() {
+    // CpuSet: source, destination, length and mode.
+    for r in 0..3 {
+        let f = in_reg_at_swi(r, 0x0b);
+        assert!(!f.proven(POOL), "r{r}");
+        assert_eq!(f.holes[&Origin::Word(POOL)], (SWI_AT, Why::Bios), "r{r}");
+    }
+    // r3 it doesn't read, and leaves 0x170 there, or r3 as it came (a
+    // source in the BIOS): F may still be called through it.
+    let f = in_reg_at_swi(3, 0x0b);
+    assert!(f.proven(POOL), "{f:?}");
+    assert_eq!(site(&f).callees, BTreeSet::from([F]));
+    // Div reads r0 and r1, and sets r3 too: r2 alone is as it came.
+    for (r, hole, kept) in [(0, true, false), (2, false, true), (3, false, false)] {
+        let f = in_reg_at_swi(r, 0x06);
+        assert_eq!(f.proven(POOL), !hole, "r{r}");
+        assert_eq!(site(&f).callees.contains(&F), kept, "r{r}");
+    }
+}
+
+#[test]
+fn a_bios_call_with_no_rule_holes_all_four() {
+    // ArcTan (the play build has it, a native build doesn't), a number
+    // that is no call, and an exit that names none.
+    for n in [Some(0x09), Some(0xff), None] {
+        for r in 0..4 {
+            let mut b = B::default();
+            let p = b.pool(POOL, F);
+            b.set(r, p);
+            let mut then = B::default();
+            let t = then.get(r);
+            let mut fun = swi_then(0x0800_1001, b, 0, then, t);
+            fun.1[0].1.1.bios = n;
+            let f = run(&[fun]);
+            assert_eq!(f.holes[&Origin::Word(POOL)].1, Why::Bios, "{n:?} r{r}");
+            assert!(site(&f).callees.is_empty(), "{n:?} r{r}");
+        }
+    }
+}
+
+#[test]
+fn every_call_a_native_build_makes_has_a_rule_and_no_other() {
+    let none = bios_regs(None);
+    assert_eq!((none.reads, none.sets), (0xf, 0xf));
+    for n in 0..=0xff {
+        let has = bios_regs(Some(n)) != none;
+        assert_eq!(has, analysis::holes::NATIVE_BIOS.contains(&n), "{n:#04x}");
+        // Set or maybe set, not both.
+        let r = bios_regs(Some(n));
+        assert_eq!(r.sets & r.may_set, 0, "{n:#04x}");
+    }
+}
+
+#[test]
+fn cpu_fast_set_leaves_a_word_it_copied_in_r3() {
+    // Eight words from VT (its fourth is F) to RAM: r3 is the last
+    // block's first word as the BIOS leaves it, so one of the eight.
+    let copy = |b: &mut B, from: ValueId| {
+        b.set(0, from);
+        let to = b.k(0x0200_0000);
+        b.set(1, to);
+        let n = b.k(8);
+        b.set(2, n);
+    };
+    let mut b = B::default();
+    let vt = b.pool(0x0800_0408, VT);
+    copy(&mut b, vt);
+    let mut then = B::default();
+    let t = then.get(3);
+    let f = run(&[swi_then(0x0800_1001, b, 0x0c, then, t)]);
+    assert!(f.proven(VT + 12), "{f:?}");
+    assert!(site(&f).callees.contains(&F), "{f:?}");
+    // Arithmetic on it is arithmetic on F.
+    let mut b = B::default();
+    let vt = b.pool(0x0800_0408, VT);
+    copy(&mut b, vt);
+    let mut then = B::default();
+    let x = then.get(3);
+    let four = then.k(4);
+    let t = then.bin(BinOp::Add, x, four);
+    let f = run(&[swi_then(0x0800_1001, b, 0x0c, then, t)]);
+    assert_eq!(f.holes[&Origin::Word(VT + 12)].1, Why::Arithmetic, "{f:?}");
+    // From RAM, a word some store left there.
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let c = b.k(CELL);
+    b.st(Width::Word, c, p);
+    copy(&mut b, c);
+    let mut then = B::default();
+    let t = then.get(3);
+    let f = run(&[swi_then(0x0800_1001, b, 0x0c, then, t)]);
+    assert!(site(&f).callees.contains(&F), "{f:?}");
+}
+
+/// The play build's BIOS, call `n` from an ARM `swi` with `r` in r0 to
+/// r3, and any stall it leaves: the registers after, and EWRAM and IWRAM.
+fn play_bios(n: u8, r: [u32; 4]) -> ([u32; 4], Vec<u8>) {
+    use runtime::bios;
+    let rom: &'static [u8] = Box::leak(vec![0u8; 0x200].into_boxed_slice());
+    let mut m = Box::new(runtime::Machine::new(rom, runtime::platform::Headless));
+    m.cpu.pc = 0x0800_0104;
+    m.cpu.r[..4].copy_from_slice(&r);
+    // RAM a pattern, so a copy moves something and a clear clears it;
+    // the sources' first word 0, a decompressor's empty input.
+    let bus = &mut m.bus;
+    for (i, b) in bus.ewram.iter_mut().chain(&mut bus.iwram).enumerate() {
+        *b = (i as u8).wrapping_mul(31) | 1;
+    }
+    bus.ewram[0x100..0x104].fill(0);
+    bios::swi(&mut m, (n as u32) << 16).unwrap();
+    while m.cpu.pc == bios::STALL_LOOP {
+        m.step();
+    }
+    let ram = [&m.bus.ewram[..], &m.bus.iwram[..]].concat();
+    (m.cpu.r[..4].try_into().unwrap(), ram)
+}
+
+#[test]
+fn the_play_builds_bios_reads_and_leaves_what_the_rules_say() {
+    // Each call from three sets of registers: a source and a destination
+    // in EWRAM with a count of 4 (the source's first word 0, every
+    // decompressor's empty input, then a pattern); a source in the BIOS,
+    // which the copies refuse; and flags that make RegisterRamReset clear
+    // memory. The decompressors' and MultiBoot's own work isn't reached
+    // (the lift check's native-bios programs hold the lifted calls to the
+    // play build's on real data), nor a wait's end, and nothing here tells
+    // "sets" from "may set".
+    let sets = [
+        [0x0200_0100, 0x0200_1000, 4, 2],
+        [0, 0x0200_1000, 3, 0x0bad_f00d],
+        [0x1f, 0x0200_1000, 0, 7],
+    ];
+    for &n in analysis::holes::NATIVE_BIOS {
+        // SoftReset doesn't return, and zeroes them all.
+        if n == 0x00 {
+            continue;
+        }
+        let rule = bios_regs(Some(n));
+        for r in sets {
+            let (out, ram) = play_bios(n, r);
+            for i in 0..4 {
+                // One the rule says is as it came, is.
+                if (rule.sets | rule.may_set) & 1 << i == 0 {
+                    assert_eq!(out[i], r[i], "call {n:#04x} changed r{i}");
+                }
+                // One it doesn't read changes nothing else.
+                if rule.reads & 1 << i == 0 {
+                    let mut other = r;
+                    other[i] = !other[i];
+                    let (o2, ram2) = play_bios(n, other);
+                    for j in (0..4).filter(|&j| j != i) {
+                        assert_eq!(o2[j], out[j], "call {n:#04x}: r{j} by r{i}");
+                    }
+                    assert!(ram2 == ram, "call {n:#04x}: RAM by r{i}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn equal_sets_kept_are_one_set() {
+    let set = |n: u32| -> Toks { (0..n).map(Tok::Num).collect() };
+    let same = |a: &Toks, b: &Toks| std::rc::Rc::ptr_eq(&a.0, &b.0);
+    let mut sets = Sets::default();
+    let (mut a, mut b, mut c) = (set(100), set(100), set(99));
+    for t in [&mut a, &mut b, &mut c] {
+        sets.share(t);
+    }
+    assert!(same(&a, &b) && !same(&a, &c));
+    // Changing one leaves the other, which stays the kept set.
+    b.insert(Tok::Num(1000));
+    assert_eq!((a.len(), b.len()), (100, 101));
+    let mut d = set(100);
+    sets.share(&mut d);
+    assert!(same(&a, &d));
+    // A kept set changed while nothing else held it is not found as what
+    // it was.
+    let mut e = set(50);
+    sets.share(&mut e);
+    e.insert(Tok::Num(77));
+    let mut f = set(50);
+    sets.share(&mut f);
+    assert_eq!((e.len(), f.len()), (51, 50));
+    // One nothing holds is gone: the next of its tokens is kept instead.
+    drop((a, d));
+    let mut g = set(100);
+    let p = std::rc::Rc::as_ptr(&g.0);
+    sets.share(&mut g);
+    assert_eq!(p, std::rc::Rc::as_ptr(&g.0));
+}
+
+/// Entries that grow to the same tokens by different joins hold one set,
+/// and the bound counts it once.
+#[test]
+fn entries_joined_to_the_same_tokens_share_a_set() {
+    let fn_tok = |key| Tok::Fn {
+        key,
+        origin: Origin::Word(key),
+        form: Form::Full,
+    };
+    let of = |ks: std::ops::Range<u32>| Val {
+        toks: ks.map(fn_tok).collect(),
+        ..Val::default()
+    };
+    let mut g = G::default();
+    let (x, y) = (vec![of(0..80)], vec![of(40..120)]);
+    g.give(10, &x);
+    g.give(10, &y);
+    g.give(11, &y);
+    g.give(11, &x);
+    g.give_ret(12, &y);
+    g.give_ret(12, &x);
+    let (a, b, c) = (&g.entry[&10][0], &g.entry[&11][0], &g.ret[&12][0]);
+    assert_eq!(a.toks.len(), 120);
+    assert!(std::rc::Rc::ptr_eq(&a.toks.0, &b.toks.0));
+    assert!(std::rc::Rc::ptr_eq(&a.toks.0, &c.toks.0));
+    assert_eq!(g.held().iter().map(|h| h.2).sum::<usize>(), 120);
+}
+
+/// The bound counts what the kept reads and expansions hold too.
+#[test]
+fn the_bound_counts_the_kept_expansions() {
+    let set = |lo: u32| -> Toks { (lo..lo + 10).map(Tok::Num).collect() };
+    let val = |lo: u32| Val {
+        toks: set(lo),
+        ..Val::default()
+    };
+    let mut g = G::default();
+    let r = mem_ref(MemKind::Pile, 4);
+    g.ref_exp.insert(
+        r,
+        Exp {
+            v: val(0),
+            raw: set(0).iter().copied().collect(),
+            ..Exp::default()
+        },
+    );
+    g.ref_rom.insert(mem_ref(MemKind::Cells, 4), val(100));
+    let key = (
+        0,
+        None,
+        [(std::ptr::null(), (false, false, false, false)); 2],
+    );
+    g.expanded
+        .insert(key, ([set(200), Toks::default()], vec![val(300)], val(400)));
+    g.split_rest.insert((r, Xf::ID), (set(500), set(600)));
+    g.pile_raw[4] = val(700);
+    g.cell_reads[4] = Some(val(800));
+    g.loose_args = vec![val(900)];
+    g.loose_rets = Some(vec![val(1000)]);
+    g.mem_log.push((MemKind::Pile, r, 4));
+    // Eleven sets of ten, the expansion's raw tokens and the log's one.
+    assert_eq!(g.held().iter().map(|h| h.2).sum::<usize>(), 110 + 10 + 1);
+}
+
+/// A table of `n` functions' addresses at 0x0800_0800, the functions'
+/// keys, and the table's words.
+fn table(n: u32) -> (Img, BTreeSet<u32>, Vec<u32>) {
+    let mut img = Img::new();
+    img.top = 0x0801_0000;
+    let mut words = Vec::new();
+    for i in 0..n {
+        let k = 0x0800_4001 + 16 * i;
+        img.fns.insert(k);
+        img.words.insert(0x0800_0800 + 4 * i, k);
+        words.push(0x0800_0800 + 4 * i);
+    }
+    let fns = img.fns.clone();
+    (img, fns, words)
+}
+
+/// What a use of a table's entry comes to: whether the call's callees are
+/// the table's functions, the set complete, each `Why` with whether every
+/// word has that hole, and whether every word is proven.
+type Shape = (bool, bool, Vec<(Why, bool)>, bool);
+
+/// Runs `body` (given the entry loaded by an unknown index at width `w`,
+/// it gives the call's target), twice over, on a table of `n` functions.
+fn table_use(n: u32, w: Width, body: &dyn Fn(&mut B, ValueId) -> ValueId) -> Shape {
+    let (img, fns, words) = table(n);
+    let mut b = B::default();
+    let tab = b.pool(0x0800_0408, 0x0800_0800);
+    let i = b.get(1);
+    let a = b.bin(BinOp::Add, tab, i);
+    let x = b.ld(w, a);
+    // Twice: the second time a large value's ops are found as kept.
+    body(&mut b, x);
+    let t = body(&mut b, x);
+    let f = run_img(&[calling(0x0800_1001, b, t)], &BTreeMap::new(), &img);
+    assert!(!f.unsettled);
+    let mut whys: BTreeMap<Why, usize> = BTreeMap::new();
+    for wd in &words {
+        if let Some((_, why)) = f.holes.get(&Origin::Word(*wd)) {
+            *whys.entry(*why).or_default() += 1;
+        }
+    }
+    (
+        site(&f).callees == fns,
+        site(&f).complete,
+        whys.into_iter()
+            .map(|(y, c)| (y, c == words.len()))
+            .collect(),
+        words.iter().all(|wd| f.proven(*wd)),
+    )
+}
+
+/// A RAM address moved by register `r`, which the run doesn't know: a
+/// pointer "from here on" (an unknown address alone is no RAM address,
+/// and a store through it reaches no load).
+fn ram_at(b: &mut B, r: u8) -> ValueId {
+    let base = b.k(0x0300_0100);
+    let i = b.get(r);
+    b.bin(BinOp::Add, base, i)
+}
+
+/// A read of a hundred functions' addresses is one [`Tok::Ref`], where
+/// one of three is its tokens: every use comes to the same.
+#[test]
+fn a_large_read_is_used_as_a_small_one_is() {
+    type Body = (
+        &'static str,
+        Width,
+        Box<dyn Fn(&mut B, ValueId) -> ValueId>,
+        Shape,
+    );
+    let proven: Shape = (true, true, vec![], true);
+    let holed = |why| (true, true, vec![(why, true)], false);
+    let bodies: Vec<Body> = vec![
+        ("called", Width::Word, Box::new(|_, x| x), proven.clone()),
+        (
+            "stored to a cell and loaded",
+            Width::Word,
+            Box::new(|b, x| {
+                let c = b.k(CELL);
+                b.st(Width::Word, c, x);
+                b.ld(Width::Word, c)
+            }),
+            proven.clone(),
+        ),
+        (
+            "stored and loaded through RAM addresses moved by unknowns",
+            Width::Word,
+            Box::new(|b, x| {
+                let (p, q) = (ram_at(b, 2), ram_at(b, 3));
+                b.st(Width::Word, p, x);
+                b.ld(Width::Word, q)
+            }),
+            proven.clone(),
+        ),
+        (
+            "compared with 0",
+            Width::Word,
+            Box::new(|b, x| {
+                let z = b.k(0);
+                let d = b.bin(BinOp::Sub, x, z);
+                b.op(Op::IsZero(d));
+                x
+            }),
+            proven.clone(),
+        ),
+        (
+            "added to",
+            Width::Word,
+            Box::new(|b, x| {
+                let four = b.k(4);
+                b.bin(BinOp::Add, x, four);
+                x
+            }),
+            holed(Why::Arithmetic),
+        ),
+        (
+            "its top half used as an address",
+            Width::Word,
+            Box::new(|b, x| {
+                let h = b.shift(ShiftType::Lsr, x, 16);
+                b.ld(Width::Word, h);
+                x
+            }),
+            holed(Why::Address),
+        ),
+        (
+            "its compare's result stored",
+            Width::Word,
+            Box::new(|b, x| {
+                let z = b.k(0);
+                let d = b.bin(BinOp::Sub, x, z);
+                let c = b.k(CELL);
+                b.st(Width::Word, c, d);
+                x
+            }),
+            holed(Why::CmpUsed),
+        ),
+        (
+            "copied by bytes and loaded as a word",
+            Width::Byte,
+            Box::new(|b, x| {
+                let (p, q) = (ram_at(b, 2), ram_at(b, 3));
+                b.st(Width::Byte, p, x);
+                b.ld(Width::Word, q)
+            }),
+            proven.clone(),
+        ),
+        (
+            "its bytes called",
+            Width::Byte,
+            Box::new(|_, x| x),
+            (false, false, vec![(Why::CalledInPart, true)], false),
+        ),
+    ];
+    for (what, w, body, want) in bodies {
+        let small = table_use(3, w, &*body);
+        let large = table_use(100, w, &*body);
+        assert_eq!(small, want, "{what}, 3 functions");
+        assert_eq!(large, want, "{what}, 100 functions");
+    }
+}
+
+/// A join into an entry that the cap undoes (a pointer one "from here
+/// on" takes in, a number into an unknown) leaves the set itself, not a
+/// copy of it; one that changes it says so whatever its length after.
+/// Either way it is what the plain join makes.
+#[test]
+fn a_join_the_cap_undoes_leaves_the_set_itself() {
+    let mut img = Img::new();
+    img.code = (1..16).map(|k| 0x0800_0000 + 0x100 * k).collect();
+    let _code = CodeGuard::set(&img);
+    // `join_capped` of `o` into `a`: as `join`, and whether it changed.
+    let both = |a: &mut Val, o: Val| {
+        let (was, mut plain) = (a.clone(), a.clone());
+        plain.join(&o);
+        let p = std::rc::Rc::as_ptr(&a.toks.0);
+        let grew = a.join_capped(&o);
+        assert_eq!(*a, plain, "{was:?} joined with {o:?}");
+        assert_eq!(grew, *a != was, "{was:?} joined with {o:?}");
+        // Unchanged, it is the set it was.
+        assert!(grew || p == std::rc::Rc::as_ptr(&a.toks.0));
+        grew
+    };
+    let rom = |x: u32| Val::of(Tok::Rom(x));
+    let mut a = Val::of(Tok::RomFrom(0x0800_0810));
+    a.join(&Val::unk());
+    assert!(!both(&mut a, rom(0x0800_0820)));
+    assert!(!both(&mut a, Val::of(Tok::RomFrom(0x0800_0840))));
+    assert!(!both(&mut a, Val::of(Tok::Num(7))));
+    // Past the next code, it is its own.
+    assert!(both(&mut a, rom(0x0800_0910)));
+    // Sixteen pointers, one in each run of data, and a seventeenth:
+    // sixteen "from here on".
+    let mut b = Val::default();
+    for k in 0..16 {
+        both(&mut b, rom(0x0800_0010 + 0x100 * k));
+    }
+    assert_eq!(b.toks.len(), 16);
+    assert!(both(&mut b, rom(0x0800_0020)));
+    assert_eq!(b.toks.len(), 16);
+    assert!(b.toks.contains(&Tok::RomFrom(0x0800_0010)));
+    // Pointers a "from here on" takes in still count toward the cap's
+    // sixteen: with the ones held below it, they widen those.
+    let mut c = Val::of(Tok::RomFrom(0x0800_0080));
+    for k in 0..16 {
+        both(&mut c, rom(0x0800_0010 + 4 * k));
+    }
+    assert_eq!(c.toks.len(), 17);
+    assert!(both(&mut c, rom(0x0800_0090)));
+    assert_eq!(
+        c.toks.iter().copied().collect::<Vec<_>>(),
+        [Tok::RomFrom(0x0800_0010)]
+    );
+    // With none held, they don't.
+    let mut d = Val::of(Tok::RomFrom(0x0800_0080));
+    let many = Val {
+        toks: (0..20).map(|k| Tok::Rom(0x0800_0084 + 4 * k)).collect(),
+        ..Val::default()
+    };
+    assert!(!both(&mut d, many));
+}
+
+/// A [`Tok::Ref`]'s RAM pointers come out of its expansion as
+/// [`from_mem_one`] makes them of memory: as they are read at the width
+/// they were stored at, a piece of one (from here on, anywhere in the
+/// object, unknown) read narrower or reassembled, none in an op's own
+/// map; and a Ref that keeps them isn't kept as it is stored narrower.
+#[test]
+fn a_refs_ram_pointers_are_as_memory_reads_them() {
+    let read = Val {
+        toks: [
+            Tok::Num(0x0300_0100),
+            Tok::Num(0x0204_0010),
+            Tok::RamFrom(0x0200_0800),
+            Tok::Obj(3, 8),
+            Tok::Rom(0x0800_0400),
+        ]
+        .into_iter()
+        .collect(),
+        ..Val::default()
+    };
+    let take = |xf: Xf| {
+        let mut v = Val::default();
+        exp_take(&mut v, &read, xf, &mut Vec::new());
+        v
+    };
+    let kept = take(Xf::ID);
+    assert_eq!(kept, read);
+    let piece = take(Xf::all(Form::Part, true));
+    assert!(piece.unk);
+    let want: BTreeSet<Tok> = [
+        Tok::RamFrom(0x0300_0100),
+        Tok::RamFrom(0x0200_0010),
+        Tok::RamFrom(0x0200_0800),
+        Tok::Obj(3, OBJ_ANY),
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(*piece.toks.0, want);
+    // As memory does it: each stored at a word, read a byte.
+    let mut mem = Val::default();
+    for &t in &read.toks {
+        if !matches!(t, Tok::Rom(_)) {
+            from_mem_one(t, 4, 1, &mut mem);
+        }
+    }
+    assert_eq!(*mem.toks.0, want);
+    let op = take(Xf::of(Some));
+    assert!(op.toks.is_empty() && !op.unk);
+    // Kept stored as a word, a piece stored as a byte.
+    let r = Tok::Ref {
+        src: Src::Pile(4),
+        xf: Xf::ID,
+    };
+    assert!(ref_keeps(r, 4));
+    assert!(!ref_keeps(r, 1));
+    // A piece then kept is a piece; a piece of a piece the same.
+    let p = Xf::all(Form::Part, true);
+    assert_eq!(p.then(Xf::ID).ptrs, Xf::PTR_PIECE);
+    assert_eq!(p.then(p).ptrs, Xf::PTR_PIECE);
+    assert_eq!(Xf::ID.then(Xf::of(Some)).ptrs, Xf::PTR_DROP);
+}
+
+/// A load through a lost pointer reads every object's cells as one
+/// [`Tok::Ref`] (a read of every object), which holds what was stored
+/// into a frame's cell.
+#[test]
+fn every_objects_cells_are_read_by_reference() {
+    let mut g = G::default();
+    let f = Tok::Fn {
+        key: F,
+        origin: Origin::Word(POOL),
+        form: Form::Full,
+    };
+    let o = g.obj(ObjId::Frame(0x0800_1001), -8);
+    let Some(&Tok::Obj(i, off)) = o.toks.iter().next() else {
+        panic!("{o:?}");
+    };
+    g.store(Store::Cell(obj_addr(i, off)), &[(f, 4)]);
+    let mut v = Val::default();
+    g.read_objs(4, &mut v);
+    assert!(v.marked(), "{v:?}");
+    assert!(g.rd.all_objs & 1 << 4 != 0);
+    let e = g.expand(&v);
+    assert!(e.toks.contains(&f), "{e:?}");
+    // Stored to after it was made, the kept expansion takes it in.
+    let h = Tok::Fn {
+        key: F + 0x100,
+        origin: Origin::Word(POOL + 4),
+        form: Form::Full,
+    };
+    g.store(Store::Cell(obj_addr(i, OBJ_ANY)), &[(h, 4)]);
+    let e = g.expand(&v);
+    assert!(e.toks.contains(&f) && e.toks.contains(&h), "{e:?}");
+    // Not in every RAM cell's read.
+    let mut c = Val::default();
+    g.read_cells(4, &mut c);
+    assert!(!g.expand(&c).toks.contains(&f));
 }

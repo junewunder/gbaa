@@ -8,7 +8,8 @@
 //! ```
 //!
 //! The hardware is `runtime::hw` (native/hw-library): the play build's
-//! renderer drawing the program's `Video` line by line. No window yet.
+//! renderer drawing the program's `Video` line by line. With no flags it
+//! opens gbaa-desktop's window (`native_host`).
 //! Built with `--features guest-layout`, its RAM is the ROM's EWRAM and
 //! IWRAM, each global at its link address (src/game.rs, `Ram`), so the
 //! native check (`route-check --native`) compares it byte for byte. The

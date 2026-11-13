@@ -219,6 +219,75 @@ fn far_jump_bl_is_not_a_call() {
 }
 
 #[test]
+fn modern_gcc_cold_blocks_are_the_callers() {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        // main: movs r3, #180; push {r4, lr}; cmp r0, #0; bge 1f; bl cold1;
+        // 1: cmp r0, #1; bne 2f; bl cold2; 2: movs r0, #0; b 3f;
+        // cold1: movs r0, r4; bl die; 3: pop {r4, pc};
+        // cold2: movs r0, r4; bl die
+        .h(0x100, 0x23b4)
+        .h(0x102, 0xb510)
+        .h(0x104, 0x2800)
+        .bcond(0x106, 0xa, 0x10c)
+        .bl(0x108, 0x118)
+        .h(0x10c, 0x2801)
+        .bcond(0x10e, 1, 0x114)
+        .bl(0x110, 0x120)
+        .h(0x114, 0x2000)
+        .h(0x116, 0xe002) // b 0x11e
+        .h(0x118, 0x0020)
+        .bl(0x11a, 0x126)
+        .h(0x11e, 0xbd10)
+        .h(0x120, 0x0020)
+        .bl(0x122, 0x126)
+        // die: movs r1, #5; push {r4, lr}; b .
+        .h(0x126, 0x2105)
+        .h(0x128, 0xb510)
+        .h(0x12a, 0xe7fe);
+    let d = a.run();
+    // The push comes second, so main still has a prologue; cold1 is
+    // inside its code and cold2 right after it, and neither returns.
+    assert!(d.rec.far_jumps.contains(&(B + 0x108)));
+    assert!(d.rec.far_jumps.contains(&(B + 0x110)));
+    assert!(!d.funcs.contains_key(&thumb(0x118)), "{:x?}", d.funcs);
+    assert!(!d.funcs.contains_key(&thumb(0x120)), "{:x?}", d.funcs);
+    assert!(d.code.contains_key(&(B + 0x118)) && d.code.contains_key(&(B + 0x120)));
+    // A function with a prologue of its own stays one, wherever it is.
+    assert!(!d.rec.far_jumps.contains(&(B + 0x11a)));
+    assert!(!d.rec.far_jumps.contains(&(B + 0x122)));
+    assert_eq!(d.funcs.get(&thumb(0x126)), Some(&Evidence::Confirmed));
+}
+
+#[test]
+fn a_run_of_cold_blocks_after_a_function_is_all_its_own() {
+    let mut a = Asm::new();
+    // main: movs r3, #180; push {r4, lr}; six of `cmp r0, #k; bne 1f;
+    // bl cold_k; 1:`; movs r0, #0; pop {r4, pc}; then the six blocks, each
+    // `movs r0, r4; bl die`, found one a rerun.
+    a.entry(0x100).h(0x100, 0x23b4).h(0x102, 0xb510);
+    for k in 0..6 {
+        let (at, cold) = (0x104 + 8 * k, 0x138 + 6 * k);
+        a.h(at, 0x2800 | k as u16)
+            .bcond(at + 2, 1, at + 8)
+            .bl(at + 4, cold)
+            .h(cold, 0x0020)
+            .bl(cold + 2, 0x200);
+    }
+    a.h(0x134, 0x2000)
+        .h(0x136, 0xbd10)
+        // die: push {r4, lr}; b .
+        .h(0x200, 0xb510)
+        .h(0x202, 0xe7fe);
+    let d = a.run();
+    for k in 0..6 {
+        assert!(d.rec.far_jumps.contains(&(B + 0x108 + 8 * k)), "block {k}");
+        assert!(!d.funcs.contains_key(&thumb(0x138 + 6 * k)), "block {k}");
+    }
+    assert!(d.funcs.contains_key(&thumb(0x200)));
+}
+
+#[test]
 fn bl_to_a_bx_stub_calls_the_register() {
     let mut a = Asm::new();
     a.entry(0x100)
@@ -403,6 +472,36 @@ fn new_data_over_a_jump_target_redoes_the_jump() {
         "{:x?}",
         d.rec.jumps
     );
+}
+
+/// The entry with `set_lr` before its `bx r0`, and whether discovery has
+/// code at the `bx`'s return site (0xc) and whether it took the `bx` for
+/// a jump.
+fn entry_bx_after(set_lr: u32) -> (bool, bool) {
+    let mut a = Asm::new();
+    a.entry(0x100).w(0x4, set_lr).h(0x100, 0x4770); // main: bx lr
+    let d = a.run();
+    assert_eq!(d.funcs.get(&thumb(0x100)), Some(&Evidence::Confirmed));
+    (
+        d.code.contains_key(&(B + 0xc)),
+        d.rec.jumps.contains_key(&(B + 0x8)),
+    )
+}
+
+#[test]
+fn bx_after_lr_set_to_its_return_site_is_a_call() {
+    // `mov lr, pc` and agbcc's IRQ wrapper's `add lr, pc, #0` both leave
+    // lr at the address after the `bx`: a call, and the code after it is
+    // the same function's.
+    for set_lr in [0xe1a0_e00f, 0xe28f_e000] {
+        assert_eq!(entry_bx_after(set_lr), (true, false), "{set_lr:#x}");
+    }
+    // A tail jump: the instruction before doesn't set lr (`mov r12, pc`),
+    // or sets it somewhere else (`add lr, pc, #4`, `add lr, r1, #0`).
+    // Nothing follows it.
+    for other in [0xe1a0_c00f, 0xe28f_e004, 0xe281_e000] {
+        assert_eq!(entry_bx_after(other), (false, true), "{other:#x}");
+    }
 }
 
 #[test]
@@ -706,6 +805,11 @@ fn code_copied_to_iwram_is_discovered_where_it_runs() {
     assert_eq!(
         d.ram_entries.iter().copied().collect::<Vec<_>>(),
         [0x0300_0000, 0x0300_0010]
+    );
+    // The word stored to the IRQ vector is the IRQ wrapper.
+    assert_eq!(
+        d.irq_handlers.iter().copied().collect::<Vec<_>>(),
+        [0x0300_0000]
     );
     // ROM discovery is as it was: the stub isn't a function.
     assert!(!d.funcs.contains_key(&thumb(0x180)));

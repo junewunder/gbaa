@@ -12,6 +12,9 @@ struct Rec {
     frames: Vec<Box<Frame>>,
     stop_after: usize,
     keys: Vec<u16>,
+    /// The save chip's first byte at each [`Host::save`], and the frames
+    /// presented before it.
+    saves: Vec<(u8, usize)>,
 }
 
 impl Host for Rec {
@@ -24,6 +27,9 @@ impl Host for Rec {
     }
     fn keys(&mut self) -> u16 {
         self.keys.get(self.frames.len() - 1).copied().unwrap_or(0)
+    }
+    fn save(&mut self, save: &mut crate::save::Save) {
+        self.saves.push((save.data[0], self.frames.len()));
     }
 }
 
@@ -62,6 +68,7 @@ fn game(stop_after: usize) -> Box<Game> {
             frames: Vec::new(),
             stop_after,
             keys: Vec::new(),
+            saves: Vec::new(),
         }),
     })
 }
@@ -154,6 +161,17 @@ fn template_scene_from_fields_alone() {
     }
     // The scene never changes: every frame is the same picture.
     assert!(frames.iter().all(|fr| fr[..] == f[..]));
+}
+
+/// The host is handed the save chip at each V-blank, before the frame is presented.
+#[test]
+fn the_host_sees_the_save_before_each_present() {
+    let mut g = game(3);
+    g.hw.save.data[0] = 0x5A;
+    assert_eq!(wait_vblank(&mut *g), Ok(()));
+    g.hw.save.data[0] = 0xA5;
+    while wait_vblank(&mut *g).is_ok() {}
+    assert_eq!(g.hw.host.saves, [(0x5A, 0), (0xA5, 1), (0xA5, 2)]);
 }
 
 /// The play build's renderer, on the same scene stored at addresses
@@ -483,7 +501,60 @@ fn io_writes_by_offset_reach_the_fields() {
 #[should_panic(expected = "isn't modelled")]
 fn unmodelled_registers_are_loud() {
     let mut g = game(100);
-    g.hw.write16(reg::SIOCNT, 1);
+    g.hw.write16(reg::POSTFLG, 1);
+}
+
+/// The serial port's registers and `KEYCNT` are the play build's with no
+/// link: every store read back as its I/O block gives it, a started
+/// transfer left started, and no IRQ from it.
+#[test]
+fn serial_registers_are_kept_as_the_play_build_keeps_them() {
+    let mut g = game(100);
+    let mut io = Io::new();
+    // Power-on: RCNT as the BIOS leaves it, the rest zero.
+    assert_eq!(g.hw.read16(reg::RCNT), 0x8000);
+    assert_eq!(g.hw.read16(reg::SIOCNT), 0);
+    // Every halfword of the range, the unused ones too, twice over.
+    for pass in 0..2u32 {
+        for o in (SERIAL_START..SERIAL_END).step_by(2) {
+            if o == reg::KEYINPUT {
+                continue;
+            }
+            let v = (o.wrapping_mul(0x9E37) ^ (0xFFFF * pass)) as u16;
+            g.hw.write16(o, v);
+            io.write16(o, v);
+        }
+        for o in (SERIAL_START..SERIAL_END).step_by(2) {
+            if o == reg::KEYINPUT {
+                continue;
+            }
+            assert_eq!(g.hw.read16(o), io.read16(o), "{o:#05x} read");
+            assert_eq!(g.hw.raw16(o), io.raw16(o), "{o:#05x} as stored");
+        }
+    }
+    // The masks are the play build's: RCNT, JOYCNT, an unused halfword.
+    g.hw.write16(reg::RCNT, 0xFFFF);
+    assert_eq!(g.hw.read16(reg::RCNT), 0xC1FF);
+    g.hw.write16(0x140, 0xFFFF);
+    assert_eq!(g.hw.read16(0x140), 0x0047);
+    g.hw.write16(0x12C, 0xFFFF);
+    assert_eq!(g.hw.read16(0x12C), 0);
+    // The keys stay the keys'.
+    assert_eq!(g.hw.read16(reg::KEYINPUT), key::ALL);
+    // A word store is two halfwords (SIODATA32).
+    g.hw.write32(reg::SIOMULTI0, 0x1234_5678);
+    assert_eq!(g.hw.read16(reg::SIOMULTI0), 0x5678);
+    assert_eq!(g.hw.read16(reg::SIOMULTI0 + 2), 0x1234);
+    // A transfer started with its IRQ asked for (normal mode, internal
+    // clock): nothing answers, so the start bit stays and no IRQ comes.
+    g.hw.irq.on(irq::SERIAL, |g| g.ram.vcounts += 1);
+    g.hw.write16(reg::SIOCNT, 0x4081);
+    for _ in 0..3 {
+        wait_vblank(&mut *g).unwrap();
+    }
+    assert_eq!(g.hw.read16(reg::SIOCNT), 0x4081);
+    assert_eq!(g.hw.irq.flags & irq::SERIAL, 0);
+    assert_eq!(g.ram.vcounts, 0);
 }
 
 /// Polls on each of `DISPSTAT`'s flags finish.
@@ -606,6 +677,7 @@ fn vblank_is_requested_before_the_present() {
             frames: Vec::new(),
             stop_after: 2,
             keys: Vec::new(),
+            saves: Vec::new(),
         }),
         seen: Seen(0),
     });
@@ -673,6 +745,7 @@ fn mem(stop_after: usize) -> Box<Mem> {
             frames: Vec::new(),
             stop_after,
             keys: Vec::new(),
+            saves: Vec::new(),
         }),
         ewram: std::vec![0; 0x4_0000],
     });

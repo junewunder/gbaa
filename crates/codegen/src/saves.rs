@@ -20,7 +20,8 @@
 //!   jump the dispatcher finds), or jumps where nothing is known;
 //! - calls or tail-jumps to a function that doesn't keep them;
 //! - changes mode (`msr`, a user-bank write, an exception return, an
-//!   undefined instruction, `SoftReset` or `HardReset`);
+//!   undefined instruction that isn't a compiler's trap, `SoftReset` or
+//!   `HardReset`);
 //! - runs from IWRAM, where its code may change.
 //!
 //! A library routine the runtime stands in for (`Ctx::library`: libgcc's
@@ -31,6 +32,11 @@
 //! A conditional instruction's writes are kept apart per condition, so a
 //! pop and return under one condition (libgcc's `ldmhi sp!, {r4, r5, lr};
 //! bxhi lr`) returns with what it popped ([`Walk::block`]).
+//!
+//! A summary's run takes an exit whose condition is a certain constant
+//! ([`State::sure`]) always or never, so what a path that can't run would
+//! read isn't read (unit `native/nightmare-entry-reads`). The proof takes
+//! every exit both ways.
 //!
 //! Three things it assumes, which every function compiled from C relies on:
 //! the entry sp is word-aligned;
@@ -48,8 +54,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 mod summary;
 pub use summary::{
-    Assume, Bits, Category, Cause, Comparison, Sets, Summaries, Summary, Verdict, compare,
-    proto_regs, summarize, summarize_sets, summarize_with,
+    Assume, Bits, Category, Cause, Comparison, Passing, Sets, Summaries, Summary, Verdict, compare,
+    proto_regs, summarize, summarize_passing, summarize_sets, summarize_with,
 };
 use summary::{Org, Sum};
 
@@ -124,9 +130,16 @@ struct State {
     /// For each of r4–r11, a callee that may have changed it
     /// ([`Summary::changes`]), or 0; all 0 in the proof.
     chg: [u32; 8],
-    /// N, Z, C and V, as bits (only whether they hold bits of r4–r11's
-    /// entry values matters).
+    /// N, Z, C and V, as bits (whether they hold bits of r4–r11's entry
+    /// values, or a constant).
     flags: [V; 4],
+    /// The registers (bit `n`) and flags (bit `16 + f`) whose constant is
+    /// certain: made in this function from constants alone, through no
+    /// load from memory (a local whose address a callee has may have
+    /// changed), and since kept by every call (one to a function proven
+    /// to keep r4–r11). A summary's run takes an exit under a guard made
+    /// of such constants always or never ([`Walk::block`]).
+    sure: u32,
 }
 
 impl State {
@@ -144,6 +157,7 @@ impl State {
             org: Vec::new(),
             chg: [0; 8],
             flags: [V::Other; 4],
+            sure: 0,
         }
     }
 
@@ -176,6 +190,7 @@ impl State {
                 }
             }),
             flags: std::array::from_fn(|i| self.flags[i].join(o.flags[i])),
+            sure: self.sure & o.sure,
         }
     }
 
@@ -214,12 +229,14 @@ impl State {
 
     /// After a call into code that keeps r4–r11 and sp: the rest are
     /// unknown, and so is the stack below sp, where the callee's frame
-    /// was.
-    fn called(&mut self) {
+    /// was. `kept`: the callee is proven to keep them, so a certain
+    /// constant in one stays certain ([`State::sure`]).
+    fn called(&mut self, kept: bool) {
         for i in [0, 1, 2, 3, 12, 14] {
             self.regs[i] = V::Other;
         }
         self.flags = [V::Other; 4];
+        self.sure &= if kept { KEPT as u32 & 0x0ff0 } else { 0 };
         match self.regs[13] {
             V::Sp(sp) => self.slots.retain(|&k, _| k >= sp),
             _ => self.slots.clear(),
@@ -390,7 +407,7 @@ impl Walk<'_> {
                     // A call, then a return.
                     let mut after = s.clone();
                     sum.call(&mut after, Some(to), to);
-                    after.called();
+                    after.called(false);
                     sum.ret(&after, to);
                 }
                 return Ok(());
@@ -438,7 +455,11 @@ impl Walk<'_> {
         // The guards known false here (after an exit under each).
         let mut falses: Vec<ValueId> = Vec::new();
         let mut vals = vec![V::Other; insts.len()];
+        // The values that are certain where constants ([`State::sure`]).
+        let mut sure = vec![false; insts.len()];
         let xs = exits(self.ctx, gb);
+        // An exit always taken ended the block.
+        let mut over = false;
         // The values something uses: a read whose value nothing uses
         // reads nothing.
         let used: BTreeSet<ValueId> = match self.sum {
@@ -458,6 +479,11 @@ impl Walk<'_> {
             {
                 cond.push((g, s.clone(), s.clone()));
             }
+            let held = match inst.op {
+                Op::GetReg(r) => s.sure >> r.index() & 1 != 0,
+                Op::GetFlag(f) => s.sure >> (16 + f as usize) & 1 != 0,
+                _ => false,
+            };
             let v = match inst.op {
                 Op::Insn(a) => {
                     at = a;
@@ -504,13 +530,14 @@ impl Walk<'_> {
                     V::Other
                 }
                 Op::SetReg(r, x) => {
+                    let certain = sure[x.index()];
                     let (r, x) = (r.index(), val(x));
                     let guarded = guard.is_some();
                     if let Some(sum) = &mut self.sum {
                         sum.frame_record(&s, r, x);
                         sum.set(&mut s, r, guarded);
                     }
-                    set(&mut s, r, x, guarded);
+                    set(&mut s, r, x, guarded, certain);
                     for (c, yes, no) in &mut cond {
                         let this = guard.is_some_and(|g| same(insts, *c, g));
                         let maybe = guarded && !this;
@@ -519,17 +546,24 @@ impl Walk<'_> {
                             if let Some(sum) = &self.sum {
                                 sum.set(st, r, maybe);
                             }
-                            set(st, r, x, maybe);
+                            set(st, r, x, maybe, certain);
                         }
                     }
                     V::Other
                 }
                 Op::GetFlag(f) => s.flags[f as usize],
                 Op::SetFlag(f, x) => {
+                    let certain = sure[x.index()];
                     let x = val(x);
                     let flag = |st: &mut State, maybe: bool| {
                         let old = &mut st.flags[f as usize];
                         *old = if maybe { old.join(x) } else { x };
+                        let bit = 1 << (16 + f as usize);
+                        st.sure = if certain && !maybe {
+                            st.sure | bit
+                        } else {
+                            st.sure & !bit
+                        };
                     };
                     flag(&mut s, guard.is_some());
                     for (c, yes, no) in &mut cond {
@@ -544,6 +578,12 @@ impl Walk<'_> {
                 }
                 Op::SetUserReg(..) | Op::SetCpsr { .. } | Op::SetSpsr { .. } => {
                     self.fail("changes mode or the PSRs".into())?;
+                    // An `msr` may set the flags and a user-bank write the
+                    // registers: no constant is certain past one.
+                    s.sure = 0;
+                    for (_, yes, no) in &mut cond {
+                        (yes.sure, no.sure) = (0, 0);
+                    }
                     V::Other
                 }
                 Op::Exit(e) => {
@@ -552,11 +592,23 @@ impl Walk<'_> {
                     // is there.
                     let found =
                         guard.and_then(|g| cond.iter().position(|(c, ..)| same(insts, *c, g)));
+                    // A summary's run, under a guard that is a certain
+                    // constant here ([`State::sure`]): the exit is taken
+                    // always or never, so a path that can't run (agbcc's
+                    // `if (best == -1) … else if (v < low)` reads `low`,
+                    // a register it never set, only once `best` is set)
+                    // reads nothing (unit `native/nightmare-entry-reads`).
+                    let taken = match guard.map(|g| (sure[g.index()], val(g))) {
+                        Some((true, V::Const(c))) if self.sum.is_some() => Some(c != 0),
+                        _ => None,
+                    };
                     match found {
                         Some(j) => {
                             let (g, yes, no) = cond[j].clone();
-                            let t = under(insts, g, e).map_or(V::Other, val);
-                            self.exit(x, e, t, &yes)?;
+                            if taken != Some(false) {
+                                let t = under(insts, g, e).map_or(V::Other, val);
+                                self.exit(x, e, t, &yes)?;
+                            }
                             // The block goes on where the guard is false,
                             // and so do the values chosen by it.
                             s = no;
@@ -567,18 +619,30 @@ impl Walk<'_> {
                                 }
                             }
                         }
-                        None => {
+                        None if taken != Some(false) => {
                             let t = jump_target(e).map_or(V::Other, val);
                             self.exit(x, e, t, &s)?;
                         }
+                        None => {}
                     }
+                    over = taken == Some(true);
                     V::Other
                 }
                 _ => V::Other,
             };
             vals[i] = v;
+            sure[i] = matches!(v, V::Const(_))
+                && match inst.op {
+                    Op::GetReg(_) | Op::GetFlag(_) => held,
+                    Op::Load { .. } => false,
+                    op => op.operands().iter().all(|o| sure[o.index()]),
+                };
             if let Some(sum) = &mut self.sum {
                 sum.entry_uses(insts, i, at, &vals);
+            }
+            // Nothing after an exit always taken runs.
+            if over {
+                break;
             }
         }
         Ok(())
@@ -610,7 +674,7 @@ impl Walk<'_> {
                         return Ok(());
                     }
                 }
-                after.called();
+                after.called(self.sum.as_ref().is_some_and(|s| s.keeps(target)));
                 self.flow(ret, &after)
             }
             Plan::Swi { next } => {
@@ -634,6 +698,7 @@ impl Walk<'_> {
                     *r = V::Other;
                 }
                 after.flags = [V::Other; 4];
+                after.sure = 0;
                 self.flow(next, &after)
             }
             Plan::Dynamic {
@@ -666,7 +731,7 @@ impl Walk<'_> {
                 if let Some(sum) = &mut self.sum {
                     sum.call(&mut after, None, at);
                 }
-                after.called();
+                after.called(false);
                 self.flow(ret, &after)
             }
             Plan::Dynamic { .. } => {
@@ -679,7 +744,13 @@ impl Walk<'_> {
                 Ok(())
             }
             Plan::Rekey(_) => self.stop(format!("0x{at:08x}: changes mode")),
-            Plan::Undefined => self.fail(format!("0x{at:08x}: an undefined instruction")),
+            // A compiler's trap: it put one where the program can't go on
+            // (a null dereference, `unreachable`), so the path never
+            // returns.
+            Plan::Undefined { trap: true } => Ok(()),
+            Plan::Undefined { trap: false } => {
+                self.fail(format!("0x{at:08x}: an undefined instruction"))
+            }
         }
     }
 }
@@ -776,9 +847,15 @@ fn store(s: &mut State, width: Width, addr: V, value: V, maybe: bool) {
     s.slots.extend(new.map(|v| (o, v)));
 }
 
-/// Register `r` set to `x`, in every case or (`maybe`) only maybe.
-fn set(s: &mut State, r: usize, x: V, maybe: bool) {
+/// Register `r` set to `x`, in every case or (`maybe`) only maybe;
+/// `certain`: `x` is, where a constant ([`State::sure`]).
+fn set(s: &mut State, r: usize, x: V, maybe: bool, certain: bool) {
     s.regs[r] = if maybe { s.regs[r].join(x) } else { x };
+    s.sure = if certain && !maybe {
+        s.sure | 1 << r
+    } else {
+        s.sure & !(1 << r)
+    };
     if !maybe && (4..12).contains(&r) {
         s.chg[r - 4] = 0;
     }
@@ -801,7 +878,7 @@ fn width_mask(width: Width) -> u32 {
 fn pure(insts: &[Inst], op: Op, vals: &[V], falses: &[ValueId]) -> Option<V> {
     let known = pure_known(insts, op, vals, falses);
     if matches!(known, None | Some(V::Other))
-        && let Some(v) = spread(op, vals)
+        && let Some(v) = spread(insts, op, vals)
     {
         return Some(v);
     }
@@ -823,7 +900,7 @@ fn up(bits: u32) -> u32 {
 /// constant that clears every one, as agbcc's `ands r4, r0; orrs r4, r1`
 /// building a word byte by byte in an unset register comes to). `None`
 /// if no operand holds any, or `op` isn't pure.
-fn spread(op: Op, vals: &[V]) -> Option<V> {
+fn spread(insts: &[Inst], op: Op, vals: &[V]) -> Option<V> {
     let val = |v: ValueId| vals[v.index()];
     let t = |v: ValueId| val(v).taint().unwrap_or((0, 0));
     let konst = |v: ValueId| match val(v) {
@@ -868,6 +945,12 @@ fn spread(op: Op, vals: &[V]) -> Option<V> {
             V::part(regs, bits)
         }
         Op::Not(a) => V::part(t(a).0, t(a).1),
+        // `sbcs r5, r5` (modern GCC's 0 or -1 of a compare): the carry in
+        // extended to a word and carried out again, whatever r5 holds.
+        Op::Adc { a, b, c } if complement(insts, a, b) => V::part(t(c).0, !0),
+        Op::AdcCarry { a, b, c } | Op::AdcOverflow { a, b, c } if complement(insts, a, b) => {
+            V::part(t(c).0, 1)
+        }
         Op::Adc { .. } => V::part(all.0, up(all.1)),
         Op::MulLongLo { .. } | Op::MulLongHi { .. } => V::part(all.0, !0),
         Op::Shift { kind, v, amount } => match (konst(amount), val(v).taint()) {
@@ -899,6 +982,13 @@ fn spread(op: Op, vals: &[V]) -> Option<V> {
         | Op::BSelect { .. } => bit(&ops),
         _ => return None,
     })
+}
+
+/// Whether one of `a` and `b` is the other's complement: `sbc rN, rN`'s
+/// operands (the builder reads a register once an instruction).
+fn complement(insts: &[Inst], a: ValueId, b: ValueId) -> bool {
+    let of = |a: ValueId, b: ValueId| matches!(insts[b.index()].op, Op::Not(x) if x == a);
+    of(a, b) || of(b, a)
 }
 
 /// [`pure`] without [`spread`].

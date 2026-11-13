@@ -1,0 +1,12 @@
+# agb/native-irq-wrapper for 600 frames with no input: the IRQ-wrapper program
+# of the stage-A lifter's check (native/lift-irq-wrapper-tail; `just
+# lift-check`), its lift (gbaa-lift) against the play build at --timing native
+# by route-check --native. What it draws: agb/native-irq-wrapper/SCENE.md.
+rom = "$GBAA_DATA/agb/native-irq-wrapper.gba"
+
+[[checkpoint]]
+name = "native-irq-wrapper-600"
+frame = 600
+hash = "fbf60721245ba62f"
+# Verified: mGBA 0.10.5 (`just mgba-diff`) draws the same at frame 600
+# (2026-11-13).
