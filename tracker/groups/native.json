@@ -1193,18 +1193,10 @@
       "needs": ["native/fnref-unknown-addrs"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
-        "by": "3cbbe3ed",
-        "session": "3cbbe3ed-7764-4494-a58c-2c4701440c8c",
-        "host": "quack",
-        "pid": 862066,
-        "start": "2504341",
-        "at": "2026-11-07T12:42:01Z",
-        "branch": "unit/native/fnref-context",
-        "beats": true,
-        "handedBack": "2026-11-07T13:31:57Z",
-        "pushed": true,
-        "ended": "2026-11-07T13:32:08Z"
+        "state": "parked",
+        "why": "june (2026-11-13): parked with the function-flow branch. Merged with main and pushed (ef361daf), but about 8x slower than main's flow on Emerald, and its gains are on agb programs. Revisit once C test programs judge lifter work: {unit:native/c-bars}.",
+        "by": "ec2ee7ee",
+        "at": "2026-11-13T21:30:13Z"
       },
       "notes": [
         {
