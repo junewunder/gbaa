@@ -1079,7 +1079,8 @@
         "native/task-coroutines",
         "native/nightmare-entry-reads",
         "native/hw-dma-registers",
-        "native/hw-serial-registers"
+        "native/hw-serial-registers",
+        "native/nightmare-mixer-pointer"
       ],
       "uses": ["heavy"],
       "record": {
@@ -1094,7 +1095,9 @@
         "resumed": "eb7b70bf",
         "prevSession": "eb7b70bf-9977-437b-b8b6-70931ce0b89b",
         "pushed": true,
-        "beats": true
+        "beats": true,
+        "handedBack": "2026-11-13T17:38:20Z",
+        "ended": "2026-11-13T17:38:27Z"
       },
       "notes": [
         {
