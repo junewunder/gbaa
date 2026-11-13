@@ -813,6 +813,9 @@ pub struct Flow {
     /// It stopped at [`TOKENS`]: the tokens it held, after how many
     /// functions run.
     pub over: Option<(usize, usize)>,
+    /// `GBAA_FNREF_OFF` as it was set, if any kind was off: the run is
+    /// a measurement, not one to build from ([`off_env`]).
+    pub off: String,
 }
 
 impl Flow {
@@ -907,17 +910,18 @@ struct G {
     /// What the running function read of memory.
     rd: Rd,
     /// `GBAA_FNREF_WATCH`: the words watched (key, origin), whether the
-    /// roads are printed, the lines said, the function and instruction
-    /// running, and each origin as it gets its first hole ([`G::watch`],
-    /// [`G::roads`]).
+    /// roads are printed, the lines said and how many of each word (its
+    /// places, and its holes: [`WATCH_LINES`]), the function and
+    /// instruction running, and, when the roads are printed, each origin
+    /// as it gets its first hole ([`G::watch`], [`G::roads`]).
     watch: Vec<(u32, Origin)>,
     roads: bool,
     watch_said: BTreeSet<String>,
     watch_lines: BTreeMap<(u32, bool), usize>,
-    /// `GBAA_FNREF_OFF`'s kinds ([`off_env`]).
-    off: u8,
     now: (u32, u32),
     hole_log: Vec<Origin>,
+    /// `GBAA_FNREF_OFF`'s kinds ([`off_env`]).
+    off: u8,
 }
 
 /// A fast hash for the run's small keys (the standard one was a tenth of
@@ -1549,7 +1553,7 @@ enum Store {
 
 /// `v` is the number `n` and nothing else.
 fn is_num(v: &Val, n: u32) -> bool {
-    !v.unk && !v.mem && v.toks.len() == 1 && v.toks.contains(&Tok::Num(n))
+    !v.unk && !v.mem && !v.lost_rom && v.toks.len() == 1 && v.toks.contains(&Tok::Num(n))
 }
 
 fn bytes(w: Width) -> u8 {
@@ -3217,16 +3221,21 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> R {
 /// `GBAA_FNREF_OFF=bios,move,flags,tables,pile,cells`: kinds of hole
 /// made not to happen, to measure what the words would be without them
 /// (`docs/research/fnref-held-words.md`). **For measuring only**, never
-/// for a lift that is built: most are unsound, each an upper bound on
-/// what an exact rule would prove. `bios`: a BIOS call holes only the
-/// registers it reads ([`bios_reads`]), not all of r0-r3; `move`: `x + 0`
-/// with its flags set (`adds rd, rs, #0`, old GCC's move between low
-/// registers) is `x` and its carry and overflow 0, and an op on a large
-/// value and a single token runs token by token (both sound); `flags`: a
-/// carry, overflow or bit test of a function's address is no hole;
+/// for a lift that is built (the report's first line says which were
+/// off). `bios`: a BIOS call holes only the registers it reads
+/// ([`bios_reads`]), not all of r0-r3: right for compiled code, but the
+/// run still makes all four unknown after the call, so an address in a
+/// register the BIOS leaves as it came is neither holed nor followed;
+/// `move`: `x + 0` with its flags set (`adds rd, rs, #0`, old GCC's move
+/// between low registers) is `x` and its carry and overflow 0, and an op
+/// on a large value and a single token runs token by token (both sound;
+/// a word followed further may meet a hole it didn't before). The rest
+/// are unsound, to see what an exact rule could prove at most: `flags`:
+/// a carry, overflow or bit test of a function's address is no hole;
 /// `tables`: a ROM read by index, or one the value sets bound, stops at
-/// the next object's start even between function words; `pile`, `cells`:
-/// a pile read, an every-cell read, gives nothing.
+/// the next object's start even between function words (it reads fewer
+/// words, so more are never read); `pile`, `cells`: a pile read, an
+/// every-cell read, gives nothing.
 fn off_env() -> u8 {
     let v = std::env::var("GBAA_FNREF_OFF").unwrap_or_default();
     let mut off = 0;
@@ -3252,7 +3261,8 @@ const OFF_CELLS: u8 = 32;
 
 /// The registers of r0-r3 BIOS call `n` reads, as bits (`GBAA_FNREF_OFF`'s
 /// `bios`): `VBlankIntrWait` and `Halt` none, `Div` r0 and r1, the copies
-/// and the affine sets up to r3; one this doesn't know, all four.
+/// and `BgAffineSet` r0 to r2; `ObjAffineSet`, and one this doesn't know,
+/// all four.
 fn bios_reads(n: Option<u8>) -> u8 {
     match n {
         Some(0x00 | 0x02 | 0x03 | 0x05 | 0x0d) => 0,
@@ -3342,10 +3352,14 @@ impl G {
         if n.is_some_and(|n| *n >= WATCH_LINES) {
             return;
         }
-        let line = format!(
-            "watch {w:#010x}: {what} [f_{:08x} at {:#010x}]",
-            self.now.0, self.now.1
-        );
+        let line = if self.now == (0, 0) {
+            format!("watch {w:#010x}: {what} [the start's copies]")
+        } else {
+            format!(
+                "watch {w:#010x}: {what} [f_{:08x} at {:#010x}]",
+                self.now.0, self.now.1
+            )
+        };
         if self.watch_said.insert(line.clone()) {
             eprintln!("{line}");
             let n = self
@@ -3404,7 +3418,9 @@ impl G {
     /// `GBAA_FNREF_WATCH=0x080008c8[,…]`: print, once each, where the
     /// function address of each of those ROM words goes: `what` says
     /// where, for value `v` that got there. The lines before a word's
-    /// first `HOLE` are a road to it: the first the run found.
+    /// first `HOLE` are a road to it: the first the run found. A word can
+    /// be in the pile with no line saying it was stored there: a
+    /// [`Tok::Ref`] stored before the word was in what it reads.
     fn watch(&mut self, v: &Val, what: impl Fn() -> String) {
         self.watch_if(v, &|_| true, &what);
     }
@@ -3424,6 +3440,10 @@ impl G {
     /// [`Tok::Ref`]s not taken in) the address ([`via`]), the ROM words
     /// held so. An operand's own token says only that the address came by
     /// registers, a frame word or a cell: watch the word to see from where.
+    /// A word is looked for in any form, not only the one holed; the first
+    /// source that holds it is named (the value's own token, then its
+    /// `Ref`s in order, the pile's first); and one no operand holds (a
+    /// call through a register above r3) is "nothing the operands hold".
     fn roads(&mut self, from: usize, ops: &[Val]) {
         let new: BTreeSet<Origin> = self.hole_log[from..].iter().copied().collect();
         let rd = std::mem::take(&mut self.rd);
@@ -3492,6 +3512,9 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
         roads: std::env::var_os("GBAA_FNREF_WATCH").is_some(),
         ..G::default()
     };
+    if g.off != 0 {
+        g.flow.off = std::env::var("GBAA_FNREF_OFF").unwrap_or_default();
+    }
     // Functions some exit enters directly; the rest have callers the run
     // can't see (the reset, the IRQ handler, `call_fn`).
     let mut direct = BTreeSet::new();
@@ -3803,6 +3826,10 @@ impl Flow {
                     " (stopped holding {t} tokens, over its bound of {TOKENS}, after {n} functions run: nothing proven)"
                 ),
                 (true, None) => " (didn't settle: nothing proven)".to_string(),
+                _ if !self.off.is_empty() => format!(
+                    " (GBAA_FNREF_OFF={}: unsound, a measurement only)",
+                    self.off
+                ),
                 _ => String::new(),
             },
             words.len(),
