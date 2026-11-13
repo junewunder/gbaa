@@ -1851,13 +1851,10 @@
       "title": "just native-check passes again: the spike's packed record",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "8eda0ebb",
-        "session": "8eda0ebb-616f-4c93-851f-ad8fa556645f",
-        "host": "quack",
-        "pid": 12793,
-        "start": "30628",
-        "at": "2026-11-13T04:50:31Z"
+        "at": "2026-11-13T05:43:25Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/2 (head 7e92de4d). Main reproduced first: just native-check fails at the spike (native-host refuses --native-record for the play layout). Fix: the spike's play layout records RAM as the guest lays it out (Ram::image), as lifted packed programs do. Whole just native-check under the budget, exit 0: native-spike pass (600 frames, 0 differences; the play layout draws the same 600 frames, its records the same; planted fault caught at frame 212), psg-square pass (120 frames; planted caught at frame 74), direct-sound pass (300 frames). By-hand control: image offset 0xC4 for 0xC0 fails at frame 2, EWRAM 0x020000c0. just check: exit 0 with the clippy-1.100 fix (PR 1, branch fix/clippy-1-100) merged in the working tree; on this branch alone it stops at clippy on loops main has too (stable went to 1.100.0 on 2026-11-12), so PR 1 must merge first. Fresh reviewer subagent: no real bugs."
       },
       "notes": [
         {
