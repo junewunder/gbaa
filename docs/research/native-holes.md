@@ -408,81 +408,58 @@ or fall from a called function counting as a call (2026-11-12) left the 36.
 
 ## Modern GCC's cold blocks, and `sbcs rN, rN`
 
-`discovery/gcc-far-jump-bl`, 2026-11-13. The entry readers the table
-above gave to "a far jump by `bl` into a fragment", one by one: two
-causes, neither the probe's.
+`discovery/gcc-far-jump-bl`, 2026-11-13: the "far jump by `bl` into a
+fragment" entry readers above, one by one. Two causes, neither the probe's.
 
 **A cold block of the caller's, reached by `bl`** (moonbeam's five:
 0x0801a081, 0x0801ae57, 0x0801ae5d, 0x0802f111, 0x0802f117). Modern GCC
 puts a function's unlikely blocks last, each ending in a call that never
-returns, and in a function over 2 KB reaches them by `bl`, a `b` being
-too short:
+returns, and a function over 2 KB reaches them by `bl`:
 
 ```
 080195d0: movs r3, #180
 080195d2: push {r4, r5, r6, r7, lr}
-…
 08019884: bge 0x0801988a
 08019886: bl 0x0801a080
-…
 0801a080: ldr r0, [r7, #80]
 0801a082: bl 0x08033d4a        (never returns)
 ```
 
-The far-jump probe (decision 5a) can't say so: from 0x0801a080 it
-reaches no return, so no frame is popped, and its answer is "never
-returns". The `bl` was then a call, the block a function of its own, and
-the lift called it with r4-r12 zeroed: the r7 the error routine's
-argument is loaded through would be 0. What makes the block the caller's
-is where it is, `analysis::vsa::func`'s rule that functions don't nest
-(a `bl` from a function with a prologue into the span of its own code is
-a jump, unless the target is a function by its looks). It missed these
-twice over, and now:
+The far-jump probe (decision 5a) reaches no return from 0x0801a080, so
+no frame is popped and its answer is "never returns": the `bl` was a
+call, the block a function, and the lift entered it with r4-r12 zeroed
+(the error routine's argument loaded through a zero r7). Only its place
+makes it the caller's, `analysis::vsa::func`'s rule that functions don't
+nest (a `bl` from a function with a prologue into the span of its own
+code is a jump, unless the target looks like a function). As built now:
 
 - A prologue is `push {…, lr}` at the entry or after up to 8
-  instructions that touch neither sp, lr nor pc (`is_push_lr`). Modern
-  GCC schedules the body's first instructions ahead of the push: of
-  moonbeam's 1,050 Thumb starts that push lr, 125 do it second or later,
-  the latest after 7. The rule ran only for a function whose first
-  instruction was the push, and took a target as a function only then.
+  instructions that touch neither sp, lr nor pc (`is_push_lr`), for the
+  caller and for a target. Modern GCC schedules the body's start ahead
+  of the push: 125 of moonbeam's 1,050 pushing Thumb starts, the latest
+  after 7. The rule used to ask for the push first.
 - A target right where the function's reached code and pools end is a
   jump too, if its probe says nothing returns from it: the last cold
-  blocks follow everything a branch reaches, so they are past the span,
-  not inside it. Only then: the next function starts there as well, and
-  one that returns is a call. Taking a never-returning function for a
-  block changes no path, its code runs with the same registers either
-  way, where the opposite gives the block zeroed registers.
+  blocks lie past everything a branch reaches. Only then, since the next
+  function starts there as well. A never-returning function taken for a
+  block runs the same code with the same registers; the opposite mistake
+  zeroes them.
 
 **`sbcs rN, rN` after a compare** (Rogue 0x0820c629, r5; Imperium
-0x0821e331, its r5 a copy of the entry r8): GCC's 0 or -1 of a
-condition, `cmp r3, r7; sbcs r5, r5; …; negs r5, r5`. The value is the
-carry extended to a word, whatever rN held; these two are real functions
-called by `bl`, and the summaries read the instruction as a use of the
-register. `codegen::saves::spread` now gives `a + !a + c` (and its carry
-and overflow) the carry's bits only, where `a` and the complemented
-operand are one value or two reads of one register with no write
-between. The read is then masked away (soft), as agbcc's byte-built word.
+0x0821e331, r5 holding the entry r8): GCC's 0 or -1 of a condition,
+`cmp r3, r7; sbcs r5, r5`, in real functions. The value is the carry
+extended to a word whatever rN held, and the summaries took it for a use.
+`codegen::saves::spread` gives `a + !a + c`, its carry and its overflow
+the carry's bits only, where `a` and the complemented operand are one
+value or two reads of one register with no write between: masked (soft).
 
-Hard holes, main (f52fe115) and this branch (`just holes-all --against`):
-moonbeam 11 and 6, Rogue 21 and 19 (one fewer jump: 0x080bb454's table
-is no longer rejected), Imperium 16 and 15, the other six unchanged; the
-corpus 112 and 104. The lifts' hard holes (`gbaa-lift`; Rogue's and
-Imperium's with `skip_fn_flow`): moonbeam 37 and 32 (1,216 functions and
-1,211, the five gone), Rogue 56 and 53 (that jump, counted in two
-functions, and 0x0820c629), Imperium 29 and 28; none new. Against pret's
-modern build's ELF (`just disc-pret pokeemerald_modern`): far jumps found
-600 and 728, of 732 in the code map, none false either time; exact
-tables 560 and 572 of 617; true starts 12,436 and 12,529, 5 false both;
-code reached 87.6% and 88.6%. The agbcc build and the agb programs score
-as before.
-
-Still hard entry readers there: moonbeam 0x0800019b (crt0's copy loop
-takes the end address in r4: a hand-written register parameter), 0x0803830d (a
-`bx pc` veneer to ARM `stmia r0!, {r4-r14}`: a register save into a
-buffer, as `setjmp` makes) and 0x08025a29 (r8 and r9 at 0x08025dec, in a
-function whose far jumps are all taken; not looked into); Rogue
-0x081b42e1 and 0x0826c5e7 (not looked into); libgcc's denormal paths in
-Rogue and Imperium.
+Hard holes fell on the three games and rose nowhere; the numbers are in
+the unit's evidence. Still hard entry readers there: moonbeam 0x0800019b
+(crt0's copy loop takes the end address in r4), 0x0803830d (a `bx pc`
+veneer to ARM `stmia r0!, {r4-r14}`, a register save as `setjmp` makes)
+and 0x08025a29 (r8 and r9 at 0x08025dec, its far jumps all taken; not
+looked into); Rogue 0x081b42e1 and 0x0826c5e7 (not looked into); libgcc's
+denormal paths in Rogue and Imperium.
 
 ## Modern GCC's unresolved jumps, by kind
 
