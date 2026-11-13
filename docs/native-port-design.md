@@ -272,8 +272,11 @@ g.hw.sound.fifo_a.stream(Ref::of(&g.gSoundInfo.pcmBuffer));
   (native/flash-stack-standin): `Hw::save` is the chip emulation itself,
   and the three routines `AgbFlash` copies onto the stack and calls there
   (`ReadFlash1`, `ReadFlash_Core`, `VerifyFlashSector_Core`; recognised at
-  the call by `analysis::flash`) are `hw::flash::{read_byte, read,
-  verify}` over it.
+  the call by their bytes, `hw::flash::recognise`) are `hw::flash::{read_byte, read,
+  verify}` over it. A lifted program's `call_fn` makes that call when a
+  call into RAM finds no function there but one of the routines
+  (native/lift-flash-routines; Metroid's SRAM library calls the same
+  agbcc code).
 - **Library code with its own convention is the runtime's.** libgcc's
   soft-float `__muldf3` and `__divdf3` (modern GCC's games: moonbeam,
   Emerald Rogue, Imperium) call their special-case paths with r4 and r5
@@ -701,8 +704,9 @@ with the same key presses, frame by frame:
   `route-check` does today, `crates/route-check/src/main.rs`);
 - EWRAM and IWRAM equal outside the guest stack, below the lowest `sp`
   the play build's run reached (it reports it), and outside the
-  destinations of code copies (`Discovery::copies`, the copies seen
-  running): the native program runs that code as Rust functions and
+  destinations of code copies (`Discovery::copies`, and the copies seen
+  running that the lifter's holes file lists as `[[copy]]`, which
+  `route-check --native` reads from it): the native program runs that code as Rust functions and
   doesn't copy it, so those bytes are the one other range it leaves
   empty. A copy that also carries data (agb's `.iwram` holds variables
   too) has its data's globals in `Ram` as usual, initialised from the
@@ -1072,6 +1076,16 @@ with the native check and no replaced-library list.
   spends `cpu_set_cycles`; `Div`. Idle edges get `hw::idle`, spin edges
   `hw::spin` (`ExitInfo::idle`, the play build's own marks). IRQs go
   through the word at `0x0300_7FFC`, as the BIOS's stub calls it.
+  The prelude has every call `analysis::holes::NATIVE_BIOS` lists
+  (native/lift-bios-calls, native/lift-bios-more). `SoftReset` clears
+  IWRAM's top 0x200 bytes, sets `Game::reset` and returns `Err(Exit)`,
+  which unwinds to `main`; `main` restarts the entry (or the EWRAM
+  function, if the reset flag says so) on the same `Game`, as the
+  hardware keeps EWRAM, VRAM and the registers, with sp, the CPSR and the
+  tasks fresh. One in an IRQ handler panics: the handler's caller drops
+  its `Err`. Code after a `SoftReset` or `HardReset` `swi` isn't the
+  function's (`func::successors`), and sp set to a constant in a function
+  that never returns (the SDK's reset) is no stack switch.
 - **Holes.** `holes/<game>.toml` (a commercial game's in the private
   `mods/<game>/holes.toml`) gives stand-ins (`[[standin]]`, Rust
   for one function, with why), unresolved jumps' targets (`[[jump]]`)

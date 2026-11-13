@@ -1,0 +1,12 @@
+# agb/native-bios-more for 600 frames with no input: the second BIOS-calls
+# program of the native lifter's check (native/lift-bios-more; `just
+# lift-check`), its lift (gbaa-lift) against the play build at --timing
+# native by route-check --native. What it draws: agb/native-bios-more/SCENE.md.
+rom = "$GBAA_DATA/agb/native-bios-more.gba"
+
+[[checkpoint]]
+name = "native-bios-more-600"
+frame = 600
+hash = "fa22b5c1c506f81b"
+# Our interpreter at --timing exact and --timing native, and mGBA 0.10.5
+# (`mgba-dump ROM --frames 600 --hash`), 2026-11-12.

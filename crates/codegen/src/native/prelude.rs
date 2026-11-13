@@ -45,6 +45,13 @@ pub struct Game {
     pub lr: u32,
     /// The tasks a game's task switcher runs ([`task_resume`]).
     pub tasks: Tasks,
+    /// Where a `SoftReset` restarts the program ([`soft_reset`]), while
+    /// its `Err(Exit)` unwinds the stack to `main`.
+    pub reset: Option<u32>,
+    /// What the BIOS region reads (`runtime::bus::BIOS_LATCH_*`), moved as
+    /// the play build's BIOS moves it: after boot, after a call, in and
+    /// after an IRQ.
+    pub bios_latch: u32,
 }
 
 impl Native for Game {
@@ -94,6 +101,8 @@ impl Game {
             cpsr: 0x1F,
             lr: RET,
             tasks: Tasks::default(),
+            reset: None,
+            bios_latch: runtime::bus::BIOS_LATCH_AFTER_BOOT,
         });
         // The save chip the ROM's library tag names, as the play build's bus.
         g.hw.save = runtime::save::Save::new(runtime::save::Kind::detect(ROM));
@@ -149,12 +158,14 @@ fn record(g: &mut Game) {
 }
 
 /// The handler the game stored at `0x0300_7FFC` (`IRQ_HANDLER_PTR`), run
-/// as the BIOS's IRQ stub runs it: r0 = `0x0400_0000`, on the IRQ stack.
+/// as the BIOS's IRQ stub runs it: r0 = `0x0400_0000`, on the IRQ stack,
+/// the BIOS region reading the stub's latch in it and after.
 fn irq_entry(g: &mut Game) {
     let h = ld32(g, 0x0300_7FFC);
     if h == 0 {
         return;
     }
+    g.bios_latch = runtime::bus::BIOS_LATCH_IN_IRQ;
     let k = if h & 1 != 0 { h } else { h & !3 };
     // IRQ mode, I set, as the exception enters it; back as it was on the
     // return (the BIOS's `subs pc, lr, #4` restores the SPSR).
@@ -162,8 +173,34 @@ fn irq_entry(g: &mut Game) {
     g.cpsr = 0x92;
     // A handler doesn't wait, so it can't be told to stop.
     let _ = call_fn(g, k, IRQ_SP, [0x0400_0000, 0, 0, 0]);
+    // Nor restart: its `Err(Exit)` stops here, not at `main`.
+    if let Some(to) = g.reset {
+        panic!("a SoftReset (to {to:#010x}) in an IRQ handler, which the native program can't restart from");
+    }
     g.cpsr = cpsr;
+    g.bios_latch = runtime::bus::BIOS_LATCH_AFTER_IRQ;
 }
+
+/// A BIOS call has returned: the BIOS region reads the opcode after its
+/// `swi` return, as the play build's.
+pub fn swi_done(g: &mut Game) {
+    g.bios_latch = runtime::bus::BIOS_LATCH_AFTER_SWI;
+}
+
+/// The BIOS region's protection latch, `n` bytes at `a` (BIOS protection:
+/// code outside the BIOS reads the last opcode fetched from it).
+#[inline(never)]
+fn bios_read(g: &Game, a: u32, n: u32) -> u32 {
+    match n {
+        1 => (g.bios_latch >> ((a & 3) * 8)) & 0xFF,
+        2 => (g.bios_latch >> ((a & 2) * 8)) & 0xFFFF,
+        _ => g.bios_latch,
+    }
+}
+
+/// The BIOS's size: past it, the region reads open bus, which the
+/// program doesn't keep.
+const BIOS_SIZE: u32 = 0x4000;
 
 /// The RAM offset of a guest EWRAM or IWRAM address (mirrors included).
 #[inline(always)]
@@ -360,6 +397,7 @@ pub fn ld8(g: &mut Game, a: u32) -> u32 {
             let o = (a & 0x1FF_FFFF) as usize;
             (rom16(o & !1) >> ((o & 1) * 8)) & 0xFF
         }
+        0 if a < BIOS_SIZE => bios_read(g, a, 1),
         0xE | 0xF => g.hw.save.read(a as u16) as u32,
         _ => unmapped("a byte load", a),
     }
@@ -377,6 +415,7 @@ pub fn ld16(g: &mut Game, a: u32) -> u32 {
         7 => le(&g.hw.ppu.oam, (a & 0x3FE) as usize),
         0xD if eeprom_at(g, a) => g.hw.save.eeprom_status() as u32,
         8..=0xD => rom16((a & 0x1FF_FFFE) as usize),
+        0 if a < BIOS_SIZE => bios_read(g, a, 2),
         // The save has an 8-bit bus: wider loads see the byte repeated.
         0xE | 0xF => g.hw.save.read((a & !1) as u16) as u32 * 0x0101,
         _ => unmapped("a halfword load", a),
@@ -396,6 +435,7 @@ pub fn ld32(g: &mut Game, a: u32) -> u32 {
         // ROM (the EEPROM answers halfword loads only, as the play build's).
         8..=0xD => rom16((a & 0x1FF_FFFE) as usize) | rom16((a.wrapping_add(2) & 0x1FF_FFFE) as usize) << 16,
         0xE | 0xF => g.hw.save.read((a & !3) as u16) as u32 * 0x0101_0101,
+        0 if a < BIOS_SIZE => bios_read(g, a, 4),
         _ => unmapped("a word load", a),
     }
 }
@@ -434,8 +474,8 @@ pub fn st8(g: &mut Game, a: u32, v: u32) {
                 g.hw.ppu.vram[o..o + 2].copy_from_slice(&[v, v]);
             }
         }
-        // OAM ignores byte stores; ROM takes none.
-        7..=0xD => {}
+        // OAM ignores byte stores; the BIOS and ROM take none.
+        0 | 1 | 7..=0xD => {}
         0xE | 0xF => g.hw.save.write(a as u16, v),
         _ => unmapped("a byte store", a),
     }
@@ -463,7 +503,7 @@ pub fn st16(g: &mut Game, a: u32, v: u32) {
             g.hw.ppu.oam[o..o + 2].copy_from_slice(&b);
         }
         0xD if eeprom_at(g, a) => g.hw.save.eeprom_write(v as u16, 1),
-        8..=0xD => {}
+        0 | 1 | 8..=0xD => {}
         // The addressed byte lane at the unaligned address, as runtime::bus;
         // mGBA 0.10.5 drops these stores (units/native-save-600.toml).
         0xE | 0xF => g.hw.save.write(a as u16, b[(a & 1) as usize]),
@@ -488,7 +528,7 @@ pub fn st32(g: &mut Game, a: u32, v: u32) {
             st16(g, a, v & 0xFFFF);
             st16(g, a.wrapping_add(2), v >> 16);
         }
-        8..=0xD => {}
+        0 | 1 | 8..=0xD => {}
         0xE | 0xF => g.hw.save.write(a as u16, (v >> ((a & 3) * 8)) as u8),
         _ => unmapped("a word store", a),
     }
@@ -576,6 +616,39 @@ pub fn div(r: &mut [u32; 4]) {
     r[0] = q as u32;
     r[1] = m as u32;
     r[3] = a;
+}
+
+/// `BgAffineSet` (r0: 20-byte sources, r1: 16-byte destinations, r2:
+/// count; `bg`) or `ObjAffineSet` (r0: 8-byte sources, r1: destination,
+/// r2: count, r3: the stride between pa-pd), as the play build's: r0 and
+/// r1 past the last entry, r2 -1 or one less than a negative count.
+pub fn affine_set(g: &mut Game, r: &mut [u32; 4], bg: bool) {
+    let h = |g: &mut Game, a: u32| ld16(g, a & !1) as i16 as i32;
+    let (mut src, mut dst) = (r[0], r[1]);
+    for _ in 0..(r[2] as i32).max(0) {
+        if bg {
+            let (ox, oy) = (ld32(g, src & !3) as i32, ld32(g, src.wrapping_add(4) & !3) as i32);
+            let [cx, cy, sx, sy] = [8, 10, 12, 14].map(|o| h(g, src.wrapping_add(o)));
+            let angle = h(g, src.wrapping_add(16)) as u16;
+            let (m, x, y) = hw::bios::bg_affine(ox, oy, cx, cy, sx, sy, angle);
+            for (k, v) in m.into_iter().enumerate() {
+                st16(g, dst.wrapping_add(2 * k as u32) & !1, v as u16 as u32);
+            }
+            st32(g, dst.wrapping_add(8) & !3, x as u32);
+            st32(g, dst.wrapping_add(12) & !3, y as u32);
+            (src, dst) = (src.wrapping_add(20), dst.wrapping_add(16));
+        } else {
+            let [sx, sy, angle] = [0, 2, 4].map(|o| h(g, src.wrapping_add(o)));
+            for v in hw::bios::obj_affine(sx, sy, angle as u16) {
+                st16(g, dst & !1, v as u16 as u32);
+                dst = dst.wrapping_add(r[3]);
+            }
+            src = src.wrapping_add(8);
+        }
+    }
+    r[0] = src;
+    r[1] = dst;
+    r[2] = (r[2] as i32).min(0).wrapping_sub(1) as u32;
 }
 
 /// `CpuFastSet` (r0 source, r1 destination, r2 word count and fill), as
@@ -713,6 +786,122 @@ pub fn rl(g: &mut Game, r: &mut [u32; 4], vram: bool) {
     (r[0], r[1]) = (s, d);
 }
 
+/// `HuffUnComp` (r0 source, r1 destination), as the play build's
+/// (`runtime::bios::decomp::huffman`): 4- or 8-bit symbols (other widths
+/// do nothing), the output a word at a time; r0 and r1 end past the data.
+/// It takes no time (the play build's is its entry's).
+pub fn huff(g: &mut Game, r: &mut [u32; 4]) {
+    let mut src = r[0] & !3;
+    if src & 0x0E00_0000 == 0 {
+        return;
+    }
+    let header = ld32(g, src);
+    let mut remaining = (header >> 8) as i32;
+    let width = match header & 0xF {
+        0 => 8,
+        w => w,
+    };
+    if 32 % width != 0 || width == 1 {
+        return;
+    }
+    let root = src.wrapping_add(5);
+    src = root.wrapping_add(ld8(g, src.wrapping_add(4)) << 1 | 1);
+    let mut dst = r[1];
+    let (mut at, mut node) = (root, ld8(g, root));
+    let (mut word, mut filled) = (0u32, 0);
+    while remaining > 0 {
+        let bits = ld32(g, src);
+        src = src.wrapping_add(4);
+        for i in 0..32 {
+            if remaining <= 0 {
+                break;
+            }
+            let right = bits << i & 0x8000_0000 != 0;
+            let child = (at & !1).wrapping_add((node & 0x3F) * 2 + 2) + right as u32;
+            if node & if right { 0x40 } else { 0x80 } == 0 {
+                at = child;
+                node = ld8(g, at);
+                continue;
+            }
+            word |= (ld8(g, child) & ((1 << width) - 1)) << filled;
+            filled += width;
+            (at, node) = (root, ld8(g, root));
+            if filled == 32 {
+                st32(g, dst, word);
+                dst = dst.wrapping_add(4);
+                remaining -= 4;
+                (word, filled) = (0, 0);
+            }
+        }
+    }
+    (r[0], r[1]) = (src, dst);
+}
+
+/// `RegisterRamReset` (r0: what to reset), as the play build's
+/// (`runtime::bios::register_ram_reset`): `DISPCNT` forced blank, then
+/// each part flagged zeroed, the registers as stores so the library sees
+/// them. IWRAM's top 0x200 bytes are kept. The serial registers (0x20)
+/// aren't the library's (`runtime::hw` has no serial), so they stay. It
+/// takes no time (the play build's is its entry's).
+pub fn register_ram_reset(g: &mut Game, flags: u32) {
+    st16(g, 0x0400_0000, 0x80);
+    let ram = |g: &mut Game, lo: usize, hi: usize| (lo..hi).for_each(|o| g.ram[o] = 0);
+    if flags & 0x01 != 0 {
+        ram(g, 0, EWRAM);
+    }
+    if flags & 0x02 != 0 {
+        ram(g, EWRAM, EWRAM + 0x7E00);
+    }
+    if flags & 0x04 != 0 {
+        g.hw.ppu.palette.fill(0);
+    }
+    if flags & 0x08 != 0 {
+        g.hw.ppu.vram.fill(0);
+    }
+    if flags & 0x10 != 0 {
+        g.hw.ppu.oam.fill(0);
+    }
+    if flags & 0x40 != 0 {
+        // The sound channels, SOUNDCNT_L/H/X and wave RAM; SOUNDBIAS.
+        for o in [0x60, 0x62, 0x64, 0x68, 0x6C, 0x70, 0x72, 0x74, 0x78, 0x7C, 0x80, 0x82, 0x84] {
+            st16(g, 0x0400_0000 + o, 0);
+        }
+        for o in (0x90..0xA0).step_by(2) {
+            st16(g, 0x0400_0000 + o, 0);
+        }
+        st16(g, 0x0400_0088, 0x200);
+    }
+    if flags & 0x80 != 0 {
+        // Display, DMA, timers (the affine backgrounds the identity),
+        // then IE, IF (all acknowledged), WAITCNT and IME.
+        let display = (0x004..=0x054).step_by(2);
+        let dma = (0x0B0..0x0E0).step_by(2);
+        let timers = (0x100..0x110).step_by(2);
+        for o in display.chain(dma).chain(timers) {
+            let identity = matches!(o, 0x20 | 0x26 | 0x30 | 0x36);
+            st16(g, 0x0400_0000 + o, if identity { 0x100 } else { 0 });
+        }
+        for (o, v) in [(0x200, 0), (0x202, 0xFFFF), (0x204, 0), (0x208, 0)] {
+            st16(g, 0x0400_0000 + o, v);
+        }
+    }
+}
+
+/// `SoftReset`, as the play build's (`runtime::bios::soft_reset`): IWRAM's
+/// top 0x200 bytes (the stacks, the IRQ handler's pointer) cleared, then
+/// the program restarts in system mode at the cartridge's entry, or at
+/// EWRAM's start if the byte at `0x0300_7FFA` was non-zero, the BIOS
+/// region reading as after boot. The restart is `main`'s: this returns
+/// `Err(Exit)` with [`Game::reset`] set, which every frame passes up as it
+/// would a stop. It takes no time.
+pub fn soft_reset(g: &mut Game) -> Result<(), Exit> {
+    let to_ram = ld8(g, 0x0300_7FFA) != 0;
+    (EWRAM + 0x7E00..EWRAM + IWRAM).for_each(|o| g.ram[o] = 0);
+    g.bios_latch = runtime::bus::BIOS_LATCH_AFTER_BOOT;
+    g.reset = Some(if to_ram { 0x0200_0000 } else { 0x0800_0000 });
+    Err(Exit)
+}
+
 /// `SoundBias` (r0: 0 for level 0, else 0x200), as the play build's: the
 /// level (`SOUNDBIAS` bits 0-9) set at once, the upper bits kept.
 pub fn sound_bias(g: &mut Game, level: u32) {
@@ -728,8 +917,52 @@ pub fn sound_bias(g: &mut Game, level: u32) {
 pub fn call_fn(g: &mut Game, k: u32, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
     match FNS.binary_search_by_key(&k, |&(e, _)| e) {
         Ok(i) => (FNS[i].1)(g, sp, a),
-        Err(_) => panic!("a call or jump to {k:#010x}, which is no function's entry"),
+        Err(_) => match flash_call(g, k, a) {
+            Some(r) => Ok(r),
+            None => panic!("a call or jump to {k:#010x}, which is no function's entry"),
+        },
     }
+}
+
+/// A call into RAM holding one of the flash save library's stack routines
+/// (known by its bytes) is its `runtime::hw::flash` call on the play
+/// build's chip; the copy never runs. The routines take any memory
+/// (Metroid's SRAM library verifies chip against RAM and back), so the
+/// chip's side goes through `hw::flash`, the other through the bus.
+/// r1-r3 come back as they went in (the callers don't read them).
+fn flash_call(g: &mut Game, k: u32, a: [u32; 4]) -> Option<[u32; 4]> {
+    use runtime::hw::flash::{self as fl, Routine};
+    let bytes = |g: &mut Game, at: u32, n: usize| -> Vec<u8> {
+        (0..n).map(|i| ld8(g, at.wrapping_add(i as u32)) as u8).collect()
+    };
+    matches!(k >> 24, 2 | 3).then_some(())?;
+    let routine = fl::recognise(&bytes(g, k & !1, fl::MAX_LEN))?.routine;
+    let chip = |x: u32| matches!(x >> 24, 0xE | 0xF);
+    let (src, dst, n) = (a[0], a[1], a[2] as usize);
+    let r0 = match routine {
+        Routine::ReadByte if chip(src) => fl::read_byte(&g.hw.save, src) as u32,
+        Routine::ReadByte => ld8(g, src),
+        Routine::Read => {
+            let mut b = vec![0; n];
+            match chip(src) {
+                true => fl::read(&g.hw.save, src, &mut b),
+                false => b = bytes(g, src, n),
+            }
+            (0..n).for_each(|i| st8(g, dst.wrapping_add(i as u32), b[i] as u32));
+            src
+        }
+        // 0, or `dst`'s address of the first byte that differs.
+        Routine::Verify => {
+            let (s, d) = (bytes(g, src, n), bytes(g, dst, n));
+            let at = match (chip(src), chip(dst)) {
+                (_, true) => fl::verify(&g.hw.save, &s, dst).checked_sub(dst),
+                (true, false) => fl::verify(&g.hw.save, &d, src).checked_sub(src),
+                _ => (0..n).position(|i| s[i] != d[i]).map(|i| i as u32),
+            };
+            at.map_or(0, |i| dst.wrapping_add(i))
+        }
+    };
+    Some([r0, a[1], a[2], a[3]])
 }
 
 /// A lifted function's four-register form (`a_<key>` if shaped): sp, r0-r3 in; r0-r3 out.
@@ -876,10 +1109,23 @@ pub fn task_exit(g: &mut Game, out: [u32; 4]) -> ! {
 
 fn main() -> std::process::ExitCode {
     native_host::main(NAME, true, Game::new, |g| {
-        let r = ENTRY(g, 0x0300_7F00, [0; 4]);
-        match r {
-            Err(e) => Err(e),
-            Ok(_) => panic!("the program's entry returned"),
+        let mut to = None;
+        loop {
+            let r = match to {
+                None => ENTRY(g, 0x0300_7F00, [0; 4]),
+                // A `SoftReset` to EWRAM: the function there, if lifted.
+                Some(k) => call_fn(g, k, 0x0300_7F00, [0; 4]),
+            };
+            match r {
+                // A `SoftReset`: system mode, its stack and no tasks.
+                Err(Exit) if g.reset.is_some() => {
+                    to = g.reset.take().filter(|&k| k != 0x0800_0000);
+                    (g.sp, g.cpsr, g.lr) = (0x0300_7F00, 0x1F, RET);
+                    g.tasks = Tasks::default();
+                }
+                Err(e) => return Err(e),
+                Ok(_) => panic!("the program's entry returned"),
+            }
         }
     })
 }

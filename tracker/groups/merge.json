@@ -233,17 +233,45 @@
       "lane": "quack/3",
       "branch": "unit/native/lift-bios-region",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "391251bf",
-        "session": "391251bf-5b99-4e03-b9d9-351960038018",
-        "host": "quack",
-        "pid": 2489918,
-        "start": "10657789",
-        "at": "2026-11-12T11:16:04Z",
-        "branch": "unit/native/lift-bios-region",
-        "beats": true
+        "at": "2026-11-12T11:24:18Z",
+        "evidence": "Merged origin/main (61773aa) into unit/native/lift-bios-region as 186b4cd: prelude keeps BIOS latch and save-chip accesses, lift-check.toml has both programs with lines_prelude 917; just check passes; just lift-metrics all bars hold except native-spike's hard hole, which is {unit:native/spike-entry-read-hole} on main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane2-native-lift-bios-affine",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/native/lift-bios-affine` holds {unit:native/lift-bios-affine}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/native/lift-bios-affine",
+      "minMinutes": 40,
+      "record": {
+        "state": "done",
+        "by": "625afd3a",
+        "at": "2026-11-12T16:48:38Z",
+        "evidence": "Merged origin/main (8013955) into unit/native/lift-bios-affine at 377762c: clean, only tracker/ and docs/machines.md since the settled merge 957d9f4. Full just check passed on 377762c (check-nostd, rebuildable, fmt, clippy -D warnings, workspace tests: exit 0), run by hand in lane 2's clone outside a lane run so the stop time couldn't cut it off."
       },
-      "round": "2026-11-12T11:16:04Z"
+      "notes": [
+        {
+          "at": "2026-11-12T14:01:26Z",
+          "by": "eae1c8a3",
+          "text": "main conflicted again in lift-check.toml (native-bios-more, native-dma bars); settled: lines from main, lines_prelude 1131 from branch; lift-metrics 0 over/0 under; merge commit 957d9f4. Handed out at 08:59 again; just check cut off a 6th time. Next: just check, then done."
+        },
+        {
+          "at": "2026-11-12T13:58:59Z",
+          "by": "manual",
+          "text": "Merging failed again: merging main conflicts in crates/codegen/lift-check.toml"
+        },
+        {
+          "at": "2026-11-12T13:52:40Z",
+          "by": "aa3b6b9a",
+          "text": "merged main again (tracker/ only, clean, a900d93). Handed out at 08:51 despite min-minutes 40: loop ignores min-minutes for this unit (factory bug, for owner). just check cut off a 5th time. Next: run just check at run start, then done."
+        }
+      ],
+      "round": "2026-11-12T13:43:18Z"
     }
   ]
 }
