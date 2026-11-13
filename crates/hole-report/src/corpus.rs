@@ -138,13 +138,22 @@ pub struct Entry {
 const FIRST_STOP: usize = 2;
 
 /// The first stop of `name`'s lift under `lifts`, if it has one and its
-/// built program was run.
-fn first_stop(lifts: &Path, name: &str) -> Option<String> {
+/// built program was run: the run in a few words, and the commit it was
+/// made at when that isn't `now`, this table's (an old lift's stop is not
+/// passed off as today's).
+fn first_stop(lifts: &Path, name: &str, now: &str) -> Option<String> {
     let p = lifts.join(format!("lift-{name}")).join("metrics.toml");
     let t = std::fs::read_to_string(p).ok()?;
     match codegen::native::first_stop::Run::read(&t) {
-        Ok(r) => r.map(|r| r.summary()),
-        Err(e) => Some(format!("unreadable ({e})")),
+        Ok(r) => r.map(|r| match r.commit.as_str() {
+            c if c == now => r.summary(),
+            "" => format!("{} (lifted at an unknown commit)", r.summary()),
+            c => format!("{} (lifted at {c})", r.summary()),
+        }),
+        Err(e) => Some(format!(
+            "unreadable ({})",
+            e.lines().next().unwrap_or_default()
+        )),
     }
 }
 
@@ -474,7 +483,7 @@ pub fn main(args: &[String]) -> ExitCode {
             exit,
             seconds,
             line,
-            first_stop: first_stop(&lifts, &g.name),
+            first_stop: first_stop(&lifts, &g.name, summary.commit.as_deref().unwrap_or("")),
         });
     }
     let path = out.join("summary.toml");
@@ -561,16 +570,29 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("gbaa-first-stop-{}", std::process::id()));
         let lift = dir.join("lift-g");
         std::fs::create_dir_all(&lift).unwrap();
-        assert_eq!(first_stop(&dir, "g"), None);
+        assert_eq!(first_stop(&dir, "g", "abc1234"), None);
         // A lift that hasn't been run has none either.
         std::fs::write(lift.join("metrics.toml"), "hard_holes = 2\n").unwrap();
-        assert_eq!(first_stop(&dir, "g"), None);
-        let r = codegen::native::first_stop::Run::not_built(600, 2, "");
+        assert_eq!(first_stop(&dir, "g", "abc1234"), None);
+        let r = codegen::native::first_stop::Run {
+            commit: "abc1234".into(),
+            ..codegen::native::first_stop::Run::not_built(600, 2, "")
+        };
         let t = r.write_metrics("hard_holes = 2\n").unwrap();
         std::fs::write(lift.join("metrics.toml"), t).unwrap();
         assert_eq!(
-            first_stop(&dir, "g").as_deref(),
+            first_stop(&dir, "g", "abc1234").as_deref(),
             Some("didn't build: 2 hard holes")
+        );
+        // A lift made at another commit says so.
+        assert_eq!(
+            first_stop(&dir, "g", "def5678").as_deref(),
+            Some("didn't build: 2 hard holes (lifted at abc1234)")
+        );
+        std::fs::write(lift.join("metrics.toml"), "[run]\nframes_run = \"x\"\n").unwrap();
+        assert_eq!(
+            first_stop(&dir, "g", "abc1234").as_deref(),
+            Some("unreadable (run.functions: not an array)")
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }

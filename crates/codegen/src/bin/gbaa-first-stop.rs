@@ -11,14 +11,22 @@
 //! printing it. N defaults to 600, SECONDS to 120; a program still running
 //! 15 s after its time limit is killed.
 //!
-//! `--not-built` runs nothing: the crate's build failed (`just lift` says
-//! so), and the stop is the lift's hard holes, counted from
-//! `metrics.toml`. Without it a program that isn't there is an error: an
-//! older build's binary must never stand in for one that failed.
+//! A lift with hard holes can't build (each is a `compile_error!`), so
+//! nothing is run: the stop is `not-built`, the holes counted from
+//! `metrics.toml`, whatever binary an older lift left. `--not-built` says
+//! the build failed (`just lift` passes it): with hard holes that is the
+//! same stop; with none the build may only have been refused for RAM or
+//! killed at its cap, which is no finding about the game, so no run is
+//! recorded and an earlier one is removed. Otherwise the program must be
+//! there and no older than the crate's `Cargo.toml`, `rom.gba` and
+//! `src/`: an older build's binary never stands in for one that failed.
 //!
-//! Exits 0 when the run is recorded, whether or not the program stopped: a
-//! stop is a finding, not a failure of the lift. Exits 2 when it couldn't
-//! run or record.
+//! The run keeps the commit it was made at (`[run]`'s `commit`).
+//!
+//! Exits 0 when the run is recorded (or, with `--not-built`, there is
+//! none to record), whether or not the program stopped: a stop is a
+//! finding, not a failure of the lift. Exits 2 when it couldn't run or
+//! record.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
@@ -167,36 +175,77 @@ fn run(bin: &Path, a: &Args, log: &Path) -> Result<Ended, String> {
     })
 }
 
-fn first_stop(a: &Args) -> Result<Run, String> {
+/// The newest change time among the files of OUT a build reads:
+/// `Cargo.toml`, `rom.gba` and `src/`'s.
+fn newest_source(out: &Path) -> Result<std::time::SystemTime, String> {
+    let time = |p: &Path| {
+        std::fs::metadata(p)
+            .and_then(|m| m.modified())
+            .map_err(|e| format!("{}: {e}", p.display()))
+    };
+    let mut newest = time(&out.join("Cargo.toml"))?.max(time(&out.join("rom.gba"))?);
+    let src = out.join("src");
+    for e in std::fs::read_dir(&src).map_err(|e| format!("{}: {e}", src.display()))? {
+        let p = e.map_err(|e| format!("{}: {e}", src.display()))?.path();
+        newest = newest.max(time(&p)?);
+    }
+    Ok(newest)
+}
+
+fn first_stop(a: &Args) -> Result<(), String> {
     let name = crate_name(&a.out)?;
     let metrics_path = a.out.join("metrics.toml");
     let report_path = a.out.join("report.txt");
     let read = |p: &Path| std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()));
+    let write =
+        |p: &Path, t: String| std::fs::write(p, t).map_err(|e| format!("{}: {e}", p.display()));
     let metrics = read(&metrics_path)?;
     let report = read(&report_path)?;
-    let r = if a.not_built {
-        let m =
-            Metrics::from_toml(&metrics).map_err(|e| format!("{}: {e}", metrics_path.display()))?;
-        Run::not_built(a.frames, m.get("hard_holes").unwrap_or(0), &report)
+    let bad_metrics = |e: String| format!("{}: {e}", metrics_path.display());
+    let hard_holes = Metrics::from_toml(&metrics)
+        .map_err(bad_metrics)?
+        .get("hard_holes")
+        .ok_or_else(|| bad_metrics("no hard_holes: not a lift's metrics".into()))?;
+    let mut r = if hard_holes > 0 {
+        Run::not_built(a.frames, hard_holes, &report)
+    } else if a.not_built {
+        // Refused, killed, or code that doesn't compile: the build's own
+        // output says which. Nothing about where the game stops.
+        write(
+            &metrics_path,
+            Run::clear_metrics(&metrics).map_err(bad_metrics)?,
+        )?;
+        write(&report_path, Run::clear_report(&report))?;
+        println!(
+            "gbaa-first-stop: {name}: no run recorded: the build failed with no hard hole in the lift (refused for RAM, killed at its cap, or code that doesn't compile: see the build's output)"
+        );
+        return Ok(());
     } else {
         let bin = a
             .bin
             .clone()
             .unwrap_or_else(|| Path::new("target/recompiled/release").join(&name));
-        if !bin.is_file() {
+        let built = std::fs::metadata(&bin)
+            .and_then(|m| m.modified())
+            .map_err(|e| {
+                format!(
+                    "{}: {e} (`just build-recompiled {}`; a build that failed is `--not-built`)",
+                    bin.display(),
+                    a.out.display()
+                )
+            })?;
+        if built < newest_source(&a.out)? {
             return Err(format!(
-                "{}: not built (`just build-recompiled {}`; a build that failed is `--not-built`)",
+                "{}: older than {}'s sources, so not this lift's build (`just build-recompiled {}`; a build that failed is `--not-built`)",
                 bin.display(),
+                a.out.display(),
                 a.out.display()
             ));
         }
         Run::of(a.frames, &run(&bin, a, &a.out.join("first-stop.log"))?)
     };
-    let write =
-        |p: &Path, t: String| std::fs::write(p, t).map_err(|e| format!("{}: {e}", p.display()));
-    let with_run = r
-        .write_metrics(&metrics)
-        .map_err(|e| format!("{}: {e}", metrics_path.display()))?;
+    r.commit = analysis::numbers_doc::commit();
+    let with_run = r.write_metrics(&metrics).map_err(bad_metrics)?;
     write(&metrics_path, with_run)?;
     write(&report_path, r.write_report(&report))?;
     let mut lines = r.lines().into_iter();
@@ -207,7 +256,7 @@ fn first_stop(a: &Args) -> Result<Run, String> {
     for l in lines {
         println!("  {l}");
     }
-    Ok(r)
+    Ok(())
 }
 
 fn main() -> ExitCode {
@@ -219,7 +268,7 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     };
     match first_stop(&a) {
-        Ok(_) => ExitCode::SUCCESS,
+        Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("gbaa-first-stop: {e}");
             ExitCode::from(2)

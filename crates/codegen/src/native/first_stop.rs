@@ -74,6 +74,9 @@ pub struct Run {
     pub detail: String,
     /// The lifted functions on the stack, innermost first (keys).
     pub functions: Vec<u32>,
+    /// The commit the run was made at (`analysis::numbers_doc::commit`),
+    /// empty when not known: what tells a reader an old run from a new one.
+    pub commit: String,
 }
 
 /// The first `0x…` number in `s`.
@@ -115,34 +118,30 @@ fn place(at: &str) -> &str {
 }
 
 impl Run {
-    /// The crate didn't build, with `hard_holes` hard holes in its lift,
-    /// `report` the lift's `report.txt`, which names each (the first is
-    /// quoted: its function and address are where to start).
+    /// The crate can't build: its lift has `hard_holes` hard holes (one
+    /// or more; a build that failed with none isn't a stop, it may only
+    /// have been refused or killed). `report` is the lift's `report.txt`,
+    /// which names each; the first is quoted, its function and address
+    /// where to start.
     pub fn not_built(frames_asked: u64, hard_holes: u64, report: &str) -> Run {
         let first = report
             .lines()
             .map(str::trim)
             .find(|l| l.starts_with("hard hole in "));
-        let (what, detail) = match (hard_holes, first) {
-            (0, _) => (
-                "the build failed".to_string(),
-                "the lift has no hard hole, yet its crate didn't build".to_string(),
-            ),
-            (n, first) => (
-                format!("{n} hard hole{}", if n == 1 { "" } else { "s" }),
-                format!(
-                    "{}each is a compile_error! in the crate, named in the lift's report",
-                    first.map_or(String::new(), |f| format!("the first: {f}; "))
-                ),
-            ),
-        };
         Run {
             frames_run: 0,
             frames_asked,
             stop: kind::NOT_BUILT.into(),
-            what,
-            detail,
+            what: format!(
+                "{hard_holes} hard hole{}",
+                if hard_holes == 1 { "" } else { "s" }
+            ),
+            detail: format!(
+                "{}each is a compile_error! in the crate, named in the lift's report",
+                first.map_or(String::new(), |f| format!("the first: {f}; "))
+            ),
             functions: Vec::new(),
+            commit: String::new(),
         }
     }
 
@@ -155,6 +154,7 @@ impl Run {
             what,
             detail,
             functions,
+            commit: String::new(),
         };
         if let Some(s) = Stop::find(&e.stderr) {
             return match s.why {
@@ -170,7 +170,9 @@ impl Run {
                     s.frames,
                     kind::TIME,
                     format!("{t} s"),
-                    format!("still running after {t} s: a loop that reaches no frame"),
+                    format!(
+                        "still running after {t} s: a loop that reaches no frame, or a run too slow for the limit"
+                    ),
                     s.functions,
                 ),
             };
@@ -273,9 +275,25 @@ impl Run {
         t["detail"] = toml_edit::value(&self.detail);
         let fs: toml_edit::Array = self.function_names().into_iter().collect();
         t["functions"] = toml_edit::value(fs);
+        t["commit"] = toml_edit::value(&self.commit);
         d.remove("run");
         d.insert("run", toml_edit::Item::Table(t));
         Ok(d.to_string())
+    }
+
+    /// `metrics`' text with no `[run]` table: no run is recorded.
+    pub fn clear_metrics(metrics: &str) -> Result<String, String> {
+        let mut d: toml_edit::DocumentMut = metrics.parse().map_err(|e| format!("{e}"))?;
+        d.remove("run");
+        Ok(d.to_string())
+    }
+
+    /// `report`'s text without a run's part.
+    pub fn clear_report(report: &str) -> String {
+        match report.find(REPORT_HEAD) {
+            Some(i) => report[..i].to_string(),
+            None => report.to_string(),
+        }
     }
 
     /// The `[run]` table of a lift's `metrics.toml`, if it has one.
@@ -315,6 +333,12 @@ impl Run {
             what: s("what")?,
             detail: s("detail")?,
             functions,
+            // A run recorded before the commit was kept has none.
+            commit: r
+                .get("commit")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string(),
         }))
     }
 
@@ -322,10 +346,7 @@ impl Run {
     /// place of an earlier one: its lines, then `frames_run N` and `stop
     /// KIND` as the metrics above them are written.
     pub fn write_report(&self, report: &str) -> String {
-        let mut s = match report.find(REPORT_HEAD) {
-            Some(i) => report[..i].to_string(),
-            None => report.to_string(),
-        };
+        let mut s = Run::clear_report(report);
         if !s.is_empty() && !s.ends_with('\n') {
             s.push('\n');
         }
@@ -471,10 +492,6 @@ mod tests {
             Run::not_built(600, 1, "").summary(),
             "didn't build: 1 hard hole"
         );
-        assert_eq!(
-            Run::not_built(600, 0, report).summary(),
-            "didn't build: the build failed"
-        );
     }
 
     #[test]
@@ -486,7 +503,10 @@ mod tests {
             "hw: I/O register 0x134 isn't modelled",
             vec![0x0300_0001],
         );
-        let r = Run::of(600, &e);
+        let r = Run {
+            commit: "abc1234".into(),
+            ..Run::of(600, &e)
+        };
         let t = r.write_metrics(metrics).unwrap();
         assert!(t.starts_with(metrics), "{t}");
         assert_eq!(Run::read(&t).unwrap(), Some(r.clone()));
@@ -500,6 +520,13 @@ mod tests {
         assert_eq!(Run::read(&t2).unwrap(), Some(again));
         assert_eq!(t2.matches("[run]").count(), 1);
         assert_eq!(t2.matches("Written by gbaa-first-stop").count(), 1);
+        // A run recorded without its commit reads, the commit empty.
+        let old = t2.replace("commit = \"\"\n", "");
+        assert_ne!(old, t2);
+        assert_eq!(Run::read(&old).unwrap(), Run::read(&t2).unwrap());
+        // No run: the lift's own text again.
+        assert_eq!(Run::clear_metrics(&t2).unwrap(), metrics);
+        assert_eq!(Run::clear_metrics(metrics).unwrap(), metrics);
     }
 
     #[test]
@@ -524,6 +551,8 @@ mod tests {
         let t2 = Run::not_built(600, 4, "").write_report(&t);
         assert!(t2.starts_with(report), "{t2}");
         assert_eq!(t2.matches("first stop").count(), 1);
+        assert_eq!(Run::clear_report(&t2), report);
+        assert_eq!(Run::clear_report(report), report);
         assert!(
             t2.ends_with("frames_run 0\nframes_asked 600\nstop not-built\n"),
             "{t2}"
