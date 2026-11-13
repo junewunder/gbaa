@@ -16,3 +16,6 @@ png = "0.18"
 # ROM's code copies, which it skips.
 native-record = { path = "../native-record" }
 analysis = { path = "../analysis" }
+# The lifter's holes file (`codegen::native::Holes`): its `[[copy]]`
+# entries, code the game copies to RAM itself, which `--native` skips too.
+codegen = { path = "../codegen" }

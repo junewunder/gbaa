@@ -89,12 +89,16 @@
 //!   (`IntrWait`, `VBlankIntrWait` as `hw::halt` until the game's handler
 //!   sets the flag; `Halt`, `Stop`), `CpuSet`, `CpuFastSet` and LZ77 with
 //!   their time (`hw::spend`), RL, `Div`, `Sqrt`, `ArcTan2`, `SoundBias`,
-//!   `MidiKey2Freq`, `MultiBoot` (unit `native/lift-bios-calls`).
+//!   `MidiKey2Freq`, `MultiBoot` (unit `native/lift-bios-calls`),
+//!   `BgAffineSet`, `ObjAffineSet` (unit `native/lift-bios-affine`).
 //! - An idle loop's back edge calls `hw::idle`, a spin loop's `hw::spin`
 //!   (`analysis::idle`, `runtime::spins`, as the play build's
 //!   `--timing native` marks them).
 //! - Function pointers are their keys (ROM or IWRAM address, Thumb bit):
-//!   `call_fn` (prelude) looks them up in `FNS`. Stage A has no dense IDs
+//!   `call_fn` (prelude) looks them up in `FNS`; a RAM key that isn't
+//!   there but holds one of the flash save library's stack routines is
+//!   that routine's `hw::flash` call (unit `native/lift-flash-routines`).
+//!   Stage A has no dense IDs
 //!   (`--fn-ids rom` only): a literal lift loads pointers from ROM bytes
 //!   and RAM, so it can't renumber them. [`fnref`] follows every function
 //!   address to its uses and reports the ROM words dense IDs could rewrite
@@ -1442,6 +1446,17 @@ impl FnPrinter<'_, '_> {
                 "CPU state: a stack switch (sp set to a value not made from the frame's)",
             );
         }
+        // sp set to a constant (a fresh stack, the SDK's `SoftReset`) is
+        // the guest's bytes from there on, as lifted; only a return could
+        // reach the frames left behind.
+        if sum.is_none_or(|s| s.returns) {
+            for &at in self.frame.map(|fr| &fr.fresh).into_iter().flatten() {
+                self.hole(
+                    at,
+                    "CPU state: a stack switch (sp set to a constant in a function that returns)",
+                );
+            }
+        }
         // The plain entry, for calls, and the extended one, for a fall or
         // jump from another function, which passes its registers and flags.
         // A shaped function's plain entry takes its parameters and gives
@@ -2109,6 +2124,9 @@ impl FnPrinter<'_, '_> {
                 };
                 let n = runtime::bios::number(comment, thumb);
                 let call = match n {
+                    // The restart is `main`'s (the prelude's `soft_reset`).
+                    0x00 => "soft_reset(g)?;".to_string(),
+                    0x01 => "register_ram_reset(g, r0);".to_string(),
                     // `Stop` is a halt, as in the play build.
                     0x02 | 0x03 => "g.sp = r13; hw::halt(g)?;".to_string(),
                     0x04 => "r0 = intr_wait(g, r13, r0 != 0, r1)?;".to_string(),
@@ -2122,10 +2140,16 @@ impl FnPrinter<'_, '_> {
                         .to_string(),
                     0x0B => "let mut r = [r0, r1, r2, r3]; cpu_set(g, r13, &mut r)?; [r0, r1, r2, r3] = r;".to_string(),
                     0x0C => "let mut r = [r0, r1, r2, r3]; cpu_fast_set(g, r13, &mut r)?; [r0, r1, r2, r3] = r;".to_string(),
+                    0x0E | 0x0F => format!(
+                        "let mut r = [r0, r1, r2, r3]; affine_set(g, &mut r, {}); [r0, r1, r2, r3] = r;",
+                        n == 0x0E
+                    ),
                     0x11 | 0x12 => format!(
                         "let mut r = [r0, r1, r2, r3]; lz77(g, r13, &mut r, {}, {at:#010x}, {thumb})?; [r0, r1, r2, r3] = r;",
                         n == 0x12
                     ),
+                    0x13 => "let mut r = [r0, r1, r2, r3]; huff(g, &mut r); [r0, r1, r2, r3] = r;"
+                        .to_string(),
                     0x14 | 0x15 => format!(
                         "let mut r = [r0, r1, r2, r3]; rl(g, &mut r, {}); [r0, r1, r2, r3] = r;",
                         n == 0x15
@@ -2135,13 +2159,22 @@ impl FnPrinter<'_, '_> {
                         .to_string(),
                     // No link cable: no client answers (the play build's).
                     0x25 => "r0 = 1;".to_string(),
+                    // `SoundDriverVSyncOff`: the play build's BIOS has no
+                    // sound driver, so does nothing.
+                    0x28 => String::new(),
                     _ => {
                         debug_assert!(!BIOS.contains(&n));
                         self.hole(at, format!("BIOS call {n:#04x}, which the library doesn't have"));
                         return s;
                     }
                 };
-                let c = self.call_then(call, next, at);
+                // The BIOS region then reads the opcode after the call's
+                // return, as the play build's (`swi_done`). After a halt too:
+                // the IRQ that wakes it returns into the BIOS's Halt, which
+                // then returns from the call (the play build finishes its
+                // pending call there; mGBA agrees, agb/native-bios-region's
+                // slot 10).
+                let c = self.call_then(format!("{call} swi_done(g);"), next, at);
                 writeln!(s, "{ind}{c}").unwrap();
             }
             Plan::Undefined => self.hole(at, "an undefined instruction"),

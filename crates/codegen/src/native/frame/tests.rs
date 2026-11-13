@@ -421,6 +421,23 @@ fn a_stack_switch_is_named_at_the_instruction_its_sp_came_from() {
 }
 
 #[test]
+fn sp_set_to_a_constant_is_a_fresh_stack() {
+    // The SDK's SoftReset: `ldr r3, =0x03007ffa`, `subs r3, #250`, `mov
+    // sp, r3`: a fresh stack, not a switch.
+    let mut b = B::default();
+    b.op(Op::Insn(0x300));
+    let top = b.k(0x0300_7ffa);
+    b.op(Op::Insn(0x304));
+    let k = b.k(0xfa);
+    let sp = b.op(Op::Bin(BinOp::Sub, top, k));
+    b.op(Op::Insn(0x308));
+    b.set(13, sp);
+    let f = one(b, Edge::Return);
+    assert!(f.switches.is_empty(), "{:?}", f.switches);
+    assert_eq!(f.fresh, BTreeSet::from([0x300]));
+}
+
+#[test]
 fn sp_from_the_frame_is_no_stack_switch() {
     // `sub sp, #16`, a frame pointer's `mov sp, r7` with r7 = sp + a run-time
     // amount (a variable-length array), and `add sp, #16`.

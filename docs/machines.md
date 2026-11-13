@@ -18,7 +18,7 @@ The scripts read this table (`factory/machines.sh`); keep its columns.
 
 | Machine | ssh | Lanes | Takes | Checkout | Can | Cache | Heavy | Reserve | GPU |
 |---|---|---|---|---|---|---|---|---|---|
-| quack | quack | 2 | any | ~/Documents/homelab/gbaa | — | 100G | 2 | 3G | 0 |
+| quack | quack | 2 | any | ~/Documents/homelab/gbaa | — | 100G | 4 | 3G | 0 |
 | pyon | pyon | 0 | any | ~/Documents/homelab/gbaa | — | 100G | 1 | 3G | 0 |
 
 - **Machine:** its short hostname (`hostname -s`). A unit pinned with
