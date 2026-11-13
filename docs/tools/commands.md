@@ -622,7 +622,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   printing the counts without the sets too. About 5 s on an agb program;
   on Emerald (`just long start NAME --mem 4G`; 2026-11-13) it no longer
   stops at its token bound (24M held of 48M, 1.5 GB), but a round reruns
-  15,000 functions in 3 to 9 minutes and seven hadn't settled it: no set
+  15,000 functions in 2 to 10 minutes and seven hadn't settled it: no set
   counts as complete yet: `native/fnref-flow-emerald`'s work.
   fn-diff's summary line gives the same count and
   how many picks call a proven function. Emerald, `just fn-diff ROM 2000

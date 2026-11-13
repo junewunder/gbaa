@@ -82,7 +82,7 @@
 //! entry, a result, a call by value's, a kept read or expansion) are now
 //! found by content ([`Sets`]), so equal ones are one set, and the bound
 //! counts every one of them ([`G::held`]); where the first run stopped
-//! (27,776 functions run) this one holds about 5 million. An op on a
+//! (27,776 functions run) this one holds about 4 million. An op on a
 //! large value is kept by its operands' sets ([`G::op_kept`]), and a call
 //! by value joins each distinct result set once ([`Once`]): Emerald's
 //! first round takes 31 s (88 before), and its second, which the run
@@ -613,28 +613,41 @@ impl Val {
     /// nothing, without the cap (a large callee set's results, joined
     /// one by one, capped each time, was most of a large game's run).
     ///
-    /// Nor when the cap would drop again all it adds ([`Val::takes_in`]):
+    /// Nor when the cap would drop again all it adds ([`Val::takes_in`],
+    /// and the pointers it adds don't make the cap widen those it holds):
     /// the join made a copy of the set to add them to, equal to the set
     /// when capped, and the entries held those copies apart
     /// (`native/fnref-flow-emerald`). So what is left does change it,
     /// whatever its length after (seventeen pointers widened to sixteen
     /// "from here on" are as many tokens as the sixteen before).
     fn join_capped(&mut self, o: &Val) -> bool {
+        let roms = |v: &Val| v.toks.range(Tok::Rom(0)..=Tok::Rom(u32::MAX)).count();
         let adds = (o.mem && !self.mem)
             || (o.unk && !self.unk)
             || (o.lost_rom && !self.lost_rom)
             || !(o.toks.is_empty()
                 || std::rc::Rc::ptr_eq(&self.toks.0, &o.toks.0)
-                || o.toks.iter().all(|t| self.takes_in(*t)));
+                || o.toks.iter().all(|t| self.takes_in(*t))
+                    // Past ROMS exact pointers between them, the cap
+                    // widens the ones this holds too.
+                    && (roms(self) == 0
+                        || roms(self)
+                            + o.toks
+                                .range(Tok::Rom(0)..=Tok::Rom(u32::MAX))
+                                .filter(|t| !self.toks.contains(t))
+                                .count()
+                            <= ROMS));
         if adds {
             self.join(o);
         }
         adds
     }
 
-    /// Whether this, as the cap leaves it, joined with `t` and capped is
-    /// itself: it holds `t`, or `t` is a number and it is unknown, or a
-    /// ROM pointer one of its "from here on" takes in.
+    /// Whether this, as the cap leaves it, takes token `t` in with no more
+    /// than the cap dropping `t` again: it holds `t`, or `t` is a number
+    /// and it is unknown, or a ROM pointer one of its "from here on"
+    /// takes in (which still counts toward the cap's ROMS:
+    /// [`Val::join_capped`]).
     fn takes_in(&self, t: Tok) -> bool {
         self.toks.contains(&t)
             || match t {
@@ -2559,6 +2572,7 @@ impl Run<'_, '_> {
         self.at = at;
         self.g.now = (self.f.entry, at);
         let mut vals: Vec<Val> = vec![Val::default(); b.insts.len()];
+        let none = Val::default();
         for (i, inst) in b.insts.iter().enumerate() {
             let site = Origin::Code(key, i as u32);
             let holes_before = self.g.flow.holes.len();
@@ -2590,9 +2604,9 @@ impl Run<'_, '_> {
                 Op::Adc { a, b, .. } if large(a) || large(b) => Some((12, None, a, Some(b))),
                 _ => None,
             };
-            // (Not under `GBAA_FNREF_WATCH`, which says what each op makes.)
-            let op = op.filter(|_| self.g.watch.is_empty() && !self.g.roads);
-            let none = Val::default();
+            // (Not under `GBAA_FNREF_WATCH`, which says what each op makes,
+            // nor `GBAA_FNREF_OFF`, whose ops read more than these keys.)
+            let op = op.filter(|_| self.g.watch.is_empty() && !self.g.roads && self.g.off == 0);
             let mut kept = match op.map(|(op, n, a, b)| {
                 let b = b.map_or(&none, |b| &vals[b.index()]);
                 self.g.op_kept(op, n, [&vals[a.index()], b])
