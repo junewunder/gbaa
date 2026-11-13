@@ -75,6 +75,19 @@
 //! that memory, rerunning when it grows. A small one (under 64 tokens) is
 //! expanded where an op makes it, as before.
 //!
+//! **Equal sets kept once** (`native/fnref-flow-emerald`). Emerald's run
+//! stopped at [`TOKENS`] holding copies: values that grew to the same
+//! tokens by different joins each had their own set, 44 million tokens of
+//! which 3 million were distinct. The sets a value is kept in for long (an
+//! entry, a result, a call by value's, a kept read or expansion) are now
+//! found by content ([`Sets`]), so equal ones are one set, and the bound
+//! counts every one of them ([`G::held`]); where the first run stopped
+//! (27,776 functions run) this one holds about 5 million. An op on a
+//! large value is kept by its operands' sets ([`G::op_kept`]), and a call
+//! by value joins each distinct result set once ([`Once`]): Emerald's
+//! first round takes 31 s (88 before), and its second, which the run
+//! never finished before, ends at 177 s.
+//!
 //! **The closed world.** Function and ROM addresses enter values only
 //! from the sources above; a number made by arithmetic the run doesn't
 //! follow, or read from I/O, is never one. So an unknown value is never a
@@ -447,8 +460,9 @@ impl Drop for CodeGuard {
     }
 }
 
-/// The most tokens the run holds (each distinct set once, and memory's)
-/// before it stops, unsettled, as when its rounds run out: proving
+/// The most tokens the run holds (each distinct set once, the kept reads'
+/// and expansions' too, and memory's: [`G::held`]) before it stops,
+/// unsettled, as when its rounds run out: proving
 /// nothing then, as a lift without the flow (`skip_fn_flow`). Metroid
 /// settles holding about 30 million at a peak of 1.4 GB; Kirby -
 /// Nightmare in Dream Land and Minish Cap held over 100 million in a
