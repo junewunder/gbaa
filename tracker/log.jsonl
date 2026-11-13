@@ -2741,3 +2741,4 @@
 {"at":"2026-11-13T04:50:26Z","actor":"session","tag":"34d57864","host":"quack","cmd":"claim","id":"native/hw-serial-registers","text":"Serial registers kept in the hardware library: claimed"}
 {"at":"2026-11-13T04:50:28Z","actor":"session","tag":"ae52d6ac","host":"quack","cmd":"claim","id":"native/fnref-unknown-addrs","text":"Function flow: loads through unknown addresses: claimed"}
 {"at":"2026-11-13T04:50:31Z","actor":"session","tag":"8eda0ebb","host":"quack","cmd":"claim","id":"native/native-check-spike-packed","text":"just native-check passes again: the spike's packed record: claimed"}
+{"at":"2026-11-13T05:22:02Z","actor":"session","tag":"34d57864","host":"quack","cmd":"add-unit","id":"native/serial-no-partner-as-mgba","text":"new unit: Unplugged serial port answers as mGBA's does"}
