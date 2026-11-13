@@ -1868,13 +1868,10 @@
       "check": "recorded",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "34d57864",
-        "session": "34d57864-956a-4832-9a45-ef91a450bec5",
-        "host": "quack",
-        "pid": 12294,
-        "start": "30124",
-        "at": "2026-11-13T04:50:26Z"
+        "at": "2026-11-13T08:54:05Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/7, head 8e37b0e0 (main merged at 3a88c78d). runtime::hw keeps 0x120-0x15F but KEYINPUT in its I/O block through the play build's masks (a started SIOCNT transfer keeps its start bit, no IRQ, as the play build off a link); the prelude's RegisterRamReset resets them on flag 0x20; route-check --native now compares them. New agb/native-serial stores and loads every register as halfwords, words and bytes. just lift-check, whole, on that head (03:36-03:53): 'lift-check: passed', 15 programs each 0 differences, 9 planted faults and 2 planted holes caught; 'native native-serial-600: pass (600 frames, 0 differences in pictures, RAM, I/O, palette, VRAM and OAM; audio the same in 600 frames; the play layout draws the same 600 frames, its records the same; planted fault caught (frame 1: EWRAM byte 0x02000100: play 0x81, native 0x82))'. just check on that head: exit 0. Earlier, two merges back: just native-check 3 passes; just unit native-serial-600 pass. lines_prelude 1201 = main's 1195 + 6 net lines (decision recorded); just lift-metrics 0 over, 0 under. Known mGBA mismatch recorded in the route with each cause, shown to be the whole difference (both draw 67ad2572c48f1e9b with them masked); follow-up filed: {unit:native/serial-no-partner-as-mgba}. Fresh subagent review of the PR diff and logs: no bugs, check met as worded; its doc nits fixed (comments and counts only, ROM byte-identical). Not rerun: Nightmare's own lift."
       },
       "round": "2026-11-13T04:50:26Z"
     },
