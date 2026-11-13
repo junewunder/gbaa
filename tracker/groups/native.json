@@ -1725,14 +1725,14 @@
       "minMinutes": 90,
       "record": {
         "state": "claimed",
-        "by": "77aa5fbf",
-        "session": "77aa5fbf-b416-45f2-a48d-d2a67bcf68d8",
+        "by": "7e93e2be",
+        "session": "7e93e2be-e416-470a-957c-a9f1a60442b5",
         "host": "quack",
-        "pid": 11545,
-        "start": "29000",
-        "at": "2026-11-13T04:50:16Z",
-        "resumed": "74679aef",
-        "prevSession": "74679aef-e087-4107-ae60-ffc062168b01",
+        "pid": 1247572,
+        "start": "1952922",
+        "at": "2026-11-13T10:10:49Z",
+        "resumed": "77aa5fbf",
+        "prevSession": "77aa5fbf-b416-45f2-a48d-d2a67bcf68d8",
         "pushed": true
       },
       "notes": [
