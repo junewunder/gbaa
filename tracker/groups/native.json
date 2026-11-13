@@ -2036,6 +2036,13 @@
       "title": "An agb program whose function takes r8 from its caller",
       "detail": "From {unit:native/metroid-entry-reads}: no lifted program that runs under the native check has a function that takes r4-r11 from its callers (every agb program's report says 0 functions take), and Metroid's 600 frames from boot don't reach its save writer. So the printed passing call, the named indirect call's match and a taker's stopping plain entry are checked by unit tests of the summaries and by the crate building, not by a run against the interpreter. Add an agb test program with a hand-written assembly function that reads r8 and r9 as its caller left them (one called by bl, one through a pointer named in holes/<name>.toml's [[takes]]), draws what it read, and add it to crates/codegen/lift-check.toml with a planted control. Done when: just lift-check passes with it, and its report says 2 functions take.",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/fnref-bios-reads",
+      "title": "Function flow: a BIOS call holes only what it reads",
+      "detail": "From {unit:native/fnref-c-game-words} (docs/research/fnref-held-words.md, 'A C game'). The flow (crates/codegen/src/native/fnref.rs, Run::exit, Edge::Swi) holes all of r0-r3 at every swi as given to the BIOS. On Metroid 429 of 804 function words have that as their only use not allowed, all at one swi, VBlankIntrWait's wrapper (0x080051ce), which takes no arguments: handlers left in r0-r3 by the bx-rN call stub travel there. Measured on main with GBAA_FNREF_OFF=bios (fnref.rs bios_reads, a table of which registers each BIOS call reads): fn_words_proven 37 to 466, fn_words_not_proven 767 to 338, nothing else moves. Make that the rule, not a switch: a swi holes only the registers its call reads. Settle what r0-r3 hold after the swi (the flow makes all four unknown; a register the BIOS leaves as it came must keep its tokens, or be shown clobbered). On main; needs nothing of the branch unit/native/fnref-unknown-addrs. Done when: the rule is on by default with a unit test (a function address left in r3 at VBlankIntrWait stays proven; one in r0 at CpuSet is still a hole), Metroid's lift (just capped --mem 2G, about a minute) reports fn_words_not_proven at or under 338, the agb programs' bars in crates/codegen/lift-check.toml hold or are lowered, just lift-check and just check pass.",
+      "check": "independent",
+      "uses": ["heavy"]
     }
   ]
 }
