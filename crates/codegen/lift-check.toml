@@ -968,3 +968,68 @@ call_fn_four_complete = 58
 jumps_by_value = 9
 fn_words_not_proven = 58
 gap_targets = 5
+
+[program.native-irq-wrapper]
+rom = "agb/native-irq-wrapper.gba"
+route = "units/native-irq-wrapper-600.toml"
+# Printed PSR statements, run (native/lift-irq-wrapper-tail): no IRQ wrapper
+# has a stand-in here. agb's own runs for 32 frames, then the program's
+# iw_main, which calls its handler as agbcc games' wrappers do, with `add lr,
+# pc, #0; bx r0`, and has half its msr and mrs after that call; a second
+# iw_main nests in it at the msr that clears I every other frame. Planted,
+# the store that puts IE back, in the half after the call, stores one more;
+# agb/native-irq-wrapper/src/main.rs.
+planted_store = 0x080001f4
+
+[program.native-irq-wrapper.bars]
+lines = 71444
+lines_prelude = 1201
+functions = 117
+functions_iwram = 3
+functions_lifted = 115
+functions_unrecognised = 117
+functions_replaced = 2
+standins = 2
+functions_summary_hole = 81
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 50
+hard_holes = 0
+blocks = 1740
+load_const_ram = 0
+load_const_io = 17
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 275
+load_computed_ram = 0
+load_computed_io = 11
+load_computed_rom = 69
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 710
+store_const_ram = 0
+store_const_io = 36
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 454
+store_computed_ram = 0
+store_computed_io = 12
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 355
+pointer_unexplained = 0
+ref_unexplained = 36
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 722
+sp_accesses_callers_frame = 7
+call_fn_calls = 65
+call_fn_four_complete = 60
+jumps_by_value = 8
+fn_words_not_proven = 60
+gap_targets = 5
