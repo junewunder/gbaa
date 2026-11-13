@@ -2278,6 +2278,12 @@
       "detail": "The alternating loop: what the lifter can do for every game shouldn't be left to Claude. From the pilot's rewrites, list each transformation Claude made in more than one function (loop shapes, struct access, compiler idioms, flag use), say whether the lifter could prove it, and file one unit per pattern that could, with the pilot's functions as examples by address. Done when: the list is in docs/research/llm-pilot.md and a unit is filed for each provable pattern.",
       "check": "recorded",
       "needs": ["native/llm-pilot-metroid"]
+    },
+    {
+      "id": "native/c-test-programs",
+      "title": "C test programs built with agbcc and modern GCC",
+      "detail": "Owner (2026-11-13): the agb programs are Rust compiled by LLVM, but every commercial game is C from agbcc (old GCC 2.95, pret's games, Metroid) or modern GCC, so lifter work tuned on agb fights shapes no game has (agb's allocator and heap, trait vtables, stack addresses passed everywhere). Add a C test-program template next to agb/template: a crt0, linker script and a tiny hardware header of our own (no game code, no libtonc or libgba unless its licence suits a public repo), built twice, with agbcc and with arm-none-eabi-gcc. Both are already in $GBAA_DATA via scripts/fetch-decomps.sh (src/agbcc-jzw, toolchains/arm-gnu-toolchain-15.2.rel1). Source only in git, ROMs built like the agb ones. Port three programs whose shapes the lifter's code-shape work needs: function pointers in a struct table and a callback list, a switch that compiles to a jump table, and a struct passed by pointer through a call chain. Each runs in the play build and joins just lift-check (0 differences, a planted fault caught). Done when: the template builds with both compilers in one recipe; the three programs, six ROMs, pass just lift-check; just lift-metrics reports them; docs/tools/commands.md has the entry; just check passes.",
+      "check": "recorded"
     }
   ]
 }
