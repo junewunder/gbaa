@@ -2841,3 +2841,4 @@
 {"at":"2026-11-13T17:27:11Z","actor":"session","tag":"c4272a60","host":"quack","cmd":"add-unit","id":"native/window-keeps-save","text":"new unit: A native program's window keeps the game's save"}
 {"at":"2026-11-13T17:36:59Z","actor":"session","tag":"1ce67823","host":"quack","cmd":"overseer","text":"overseer c29bb6 on quack attached, replacing cf4018 on quack"}
 {"at":"2026-11-13T17:37:42Z","actor":"loop","tag":"9ecf2205","host":"quack","cmd":"claim","id":"native/nightmare-task-switch","text":"Kirby - Nightmare's task switcher as host coroutines: claimed (picking up after eb7b70bf)"}
+{"at":"2026-11-13T17:37:51Z","actor":"loop","tag":"debeff8d","host":"quack","cmd":"claim","id":"native/window-keeps-save","text":"A native program's window keeps the game's save: claimed"}

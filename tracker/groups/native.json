@@ -2218,7 +2218,19 @@
     {
       "id": "native/window-keeps-save",
       "title": "A native program's window keeps the game's save",
-      "detail": "Since 5bb6efdc a native program run without --headless opens gbaa-desktop's window (crates/native-host, Windowed). Nothing writes the save chip's bytes to a file or reads them back, so every run starts from an empty save. The window's menu still offers save states, rewind and netplay, which do nothing here: keep the save as gbaa-desktop does (the .sav in the game's folder), and hide or wire the menu rows that don't apply. Check: save in Metroid's native build, close the window, reopen, and the file is there."
+      "detail": "Since 5bb6efdc a native program run without --headless opens gbaa-desktop's window (crates/native-host, Windowed). Nothing writes the save chip's bytes to a file or reads them back, so every run starts from an empty save. The window's menu still offers save states, rewind and netplay, which do nothing here: keep the save as gbaa-desktop does (the .sav in the game's folder), and hide or wire the menu rows that don't apply. Check: save in Metroid's native build, close the window, reopen, and the file is there.",
+      "record": {
+        "state": "claimed",
+        "by": "debeff8d",
+        "session": "debeff8d-e35c-4fbb-9b95-217d30c53774",
+        "host": "quack",
+        "pid": 1860601,
+        "start": "4634915",
+        "at": "2026-11-13T17:37:51Z",
+        "branch": "unit/native/window-keeps-save",
+        "beats": true
+      },
+      "round": "2026-11-13T17:37:51Z"
     }
   ]
 }
