@@ -714,7 +714,13 @@
       "why": "june asked for the native units as a sprint, one at a time. Order: agb spike, hw library, summaries, timing-native, native check, hole report, Emerald ten, Stage-A lifter (the lifter's check needs the native check, so it goes last). Calls taken in june's place: the spike writes a new agb/native-spike that reads input; summaries measure with no bar; Emerald's lifted code stays in mods/ out of the public mirror.",
       "by": "7b10ef7b",
       "at": "2026-11-01T02:34:52Z",
-      "scope": ["group:native"]
+      "scope": ["group:native"],
+      "retired": {
+        "kind": "superseded",
+        "at": "2026-11-13T04:48:46Z",
+        "by": "9828215c",
+        "other": "d/native-units-run-side-by-side-needs-set-the"
+      }
     },
     {
       "id": "d/a-vcount-dispstat-or-timer-read-outside-a-poll",

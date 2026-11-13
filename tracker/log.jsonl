@@ -2735,3 +2735,4 @@
 {"at":"2026-11-12T19:04:27Z","actor":"session","tag":"625afd3a","host":"quack","cmd":"prune","text":"lapsed: Accept the indirect-call bar at today's values, not 0: Accept the measured bars","d":"d/accept-indirect-call-bar-today"}
 {"at":"2026-11-12T19:04:33Z","actor":"session","tag":"625afd3a","host":"quack","cmd":"checked-in","text":"checked in with the owner"}
 {"at":"2026-11-13T04:48:41Z","actor":"session","tag":"9828215c","host":"quack","cmd":"decide","text":"decided: Native units run side by side; needs set the order","d":"d/native-units-run-side-by-side-needs-set-the"}
+{"at":"2026-11-13T04:48:46Z","actor":"session","tag":"9828215c","host":"quack","cmd":"prune","text":"superseded by Native units run side by side; needs set the order: Native sprint 2026-10-31: one unit at a time, in a set order","d":"d/native-sprint-2026-10-31-one-unit-at-a-time-in","other":"d/native-units-run-side-by-side-needs-set-the"}
