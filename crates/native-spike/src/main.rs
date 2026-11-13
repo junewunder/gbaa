@@ -11,7 +11,9 @@
 //! renderer drawing the program's `Video` line by line. No window yet.
 //! Built with `--features guest-layout`, its RAM is the ROM's EWRAM and
 //! IWRAM, each global at its link address (src/game.rs, `Ram`), so the
-//! native check (`route-check --native`) compares it byte for byte.
+//! native check (`route-check --native`) compares it byte for byte. The
+//! play layout records the same image (`Ram::image`), which the check's
+//! `--packed` compares with the check layout's.
 
 mod game;
 mod host;
@@ -21,7 +23,7 @@ pub use host::AnyHost;
 fn main() -> std::process::ExitCode {
     host::main(
         "native-spike",
-        cfg!(feature = "guest-layout"),
+        true,
         |h| {
             let mut g = Box::new(game::Game {
                 ram: game::Ram::new(),

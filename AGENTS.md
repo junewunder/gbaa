@@ -48,10 +48,10 @@ are game-derived: `mods/<game>/holes.toml`). Generated code goes in
   merge gate.
 - `just check-nostd`: builds `runtime` for `riscv32imac-unknown-none-elf` to
   prove it stays no_std.
-- The build lock (`CARGO_BUILD_JOBS=6 flock /tmp/gbaa-build.lock`, the
-  justfile's `lock`) is taken by each recipe around its cargo step. Never
+- The build lock (`CARGO_BUILD_JOBS=6 scripts/build-lock`, the justfile's
+  `lock`: three builds at once) is taken by each recipe around its cargo step. Never
   wrap `just` in it (that deadlocks); a bare `cargo build/test/clippy` takes
-  it: `env CARGO_BUILD_JOBS=6 flock /tmp/gbaa-build.lock cargo …`.
+  it: `env CARGO_BUILD_JOBS=6 scripts/build-lock cargo …`.
 - `just fetch-tests`: shallow-clones the test suites, pinned by commit in
   `scripts/fetch-tests.sh`, into `$GBAA_DATA` (default
   `~/.local/share/gbaa/`): `SingleStepTests-ARM7TDMI/`, `gba-tests/`

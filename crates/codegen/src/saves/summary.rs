@@ -508,8 +508,8 @@ impl<'a> Sum<'a> {
                 self.read(s, r, Cause::Bios { n, at });
             }
         }
-        for r in 0..4 {
-            s.org[r] = Org {
+        for (r, o) in s.org[..4].iter_mut().enumerate() {
+            *o = Org {
                 own: defs & 1 << r != 0,
                 clob: defs & 1 << r == 0,
                 ..Org::default()
@@ -607,15 +607,15 @@ impl<'a> Sum<'a> {
     /// r0–r3 with bits of r4–r11's entry values is a use of them where a
     /// caller reads it ([`Summary::entry_returns`]).
     pub(super) fn ret(&mut self, s: &State, at: u32) {
-        for r in 0..4 {
-            if let Some((regs, _)) = s.regs[r].taint() {
+        for (r, v) in s.regs[..4].iter().enumerate() {
+            if let Some((regs, _)) = v.taint() {
                 for e in entry_regs(regs) {
                     self.entry_reads.insert((at, e, Via::Ret(r as u8)));
                 }
             }
         }
-        for r in 4..12 {
-            if s.regs[r] != V::Entry(r as u8) {
+        for (r, v) in s.regs[..12].iter().enumerate().skip(4) {
+            if *v != V::Entry(r as u8) {
                 self.changes |= 1 << r;
             }
         }

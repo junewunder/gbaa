@@ -1040,8 +1040,8 @@ impl Psg {
         let abs = |o: usize| now - clock.wrapping_sub(u32_at(o)) as i32 as i64;
         self.wave.playing = x & 4 != 0;
         self.noise.playing = x & 8 != 0;
-        for i in 0..8 {
-            self.wave.data[i] = u32_at(0x154 + 4 * i);
+        for (i, d) in self.wave.data.iter_mut().enumerate() {
+            *d = u32_at(0x154 + 4 * i);
         }
         self.wave.length = u32_at(0x174) as u16;
         self.wave.next_update = rel(0x178);
