@@ -1168,6 +1168,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-13T07:17:12Z",
+          "by": "ddd9a487",
+          "text": "2026-11-13 PR 3: Emerald flow finishes, 11 min, 2.4 GB (--mem 8G, not 16G); stops at TOKENS: 48.1M after 27,776 runs (gbaa-recompile prints it). To settle: raise/replace the bound. G::held() skips ref_exp/expanded/mem_log; large-Ref paths have one unit test."
+        },
+        {
           "at": "2026-11-12T10:56:36Z",
           "by": "5cf6c823",
           "text": "2026-11-12: Emerald's flow now finishes (27:37, 2.1 GB, on Function-address flow on Emerald fast enough to finish's branch) but reports 'didn't settle' after 35,409 runs: a function hit its 64*blocks+64 step bound, not the round bound. Trace prints which ('unsettled after')."
@@ -1176,11 +1181,6 @@
           "at": "2026-11-08T18:27:27Z",
           "by": "c06275d9",
           "text": "2026-11-08: Refs (b6d5ed3f) fixed memory: Emerald round 0 flat at 1.5 GB (was >10 GB), entries 5.6M tokens. Not done: too slow to finish (~60 s/500 fns). Split: {unit:native/fnref-emerald-speed} (needed); widening gap {unit:native/fnref-romfrom-absorb}. memory/ file says how to measure."
-        },
-        {
-          "at": "2026-11-07T12:41:33Z",
-          "by": "8898da77",
-          "text": "2026-11-07: measured, not fixed. Round 0 alone passes 10 GB: entries hold 100-180M tokens, copies of successive 30k-token pile reads; UnkUtil_Run's ~10k callees add 2-3 GB. Join sharing, 2-level set: not enough. Next: chunked sets or symbolic pile token (memory/ file)"
         }
       ],
       "round": "2026-11-07T12:12:38Z"
@@ -1459,13 +1459,10 @@
       "check": "recorded",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "ddd9a487",
-        "session": "ddd9a487-152d-416a-9d19-58f5068baeb6",
-        "host": "quack",
-        "pid": 10927,
-        "start": "27916",
-        "at": "2026-11-13T04:50:03Z"
+        "at": "2026-11-13T07:17:08Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/3, head ed8b08f9. gbaa-recompile --summaries --callee-sets on Emerald, under an 8 GB cap: exit 0, 11:16 wall (flow 610.8 s), 2.44 GB peak; main never finished (killed at 14 GB after 5 min, 2026-11-07). The flow stops unsettled at the 48M-token bound (48,096,722 tokens after 27,776 runs; 0 of 553 sets complete): that is the work of {unit:native/fnref-flow-emerald}. just lift-metrics at the head: 0 over, 0 under. One bar raised, native-tasks fn_words_not_proven 57 to 59, june's call (d/raise-native-tasks-unproven-function): the 57 was evaluation order, not a proof; reason beside the bar. just lift-check passed on all 14 programs (600 frames, 0 differences, planted faults caught); just check passed at the head. Reviewer reviewer-4be07d2c found a kept expansion could miss a ROM pointer (capped per store, not together), a missed finish() on the token-bound exit and an unverified doc claim; all fixed in 8f250fe9 and confirmed on a second read."
       },
       "notes": [
         {
