@@ -109,13 +109,10 @@
       "title": "Modern GCC's far-jump bl into a caller's fragment",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "838ecd32",
-        "session": "838ecd32-e929-4691-93ac-40d4e97218da",
-        "host": "quack",
-        "pid": 689524,
-        "start": "919724",
-        "at": "2026-11-13T07:18:41Z"
+        "at": "2026-11-13T10:08:57Z",
+        "evidence": "PR https://github.com/junewunder/gbaa/pull/11 (head 7eece597). Two causes: moonbeam's five are modern GCC's cold blocks reached by bl (now jumps: a late push is a prologue; a never-returning block right after the function's code is its own); Rogue 0x0820c629 and Imperium 0x0821e331 are real functions with sbcs r5, r5 (now masked, soft). holes-all hard, main f52fe115 to branch: moonbeam 11 to 6, Rogue 21 to 19, Imperium 16 to 15, corpus 112 to 104, no count higher. Final tree against main 4fb9a5cf: Rogue 48 to 46, Imperium 15 to 14, moonbeam 503 both (main's entry-reads merge made the five soft and took moonbeam to 503 itself: filed), corpus 629 to 626. Lifts' hard holes (before review fixes): moonbeam 37 to 32, Rogue 56 to 53, Imperium 29 to 28, none new; none builds. disc-pret modern: far jumps 600 to 728 of 732, 0 false; tables 560 to 572. jt-score 676/676, 610/617, far 548/548, 726/732, 0 false. disc-pret agbcc 15153/15158, 0.9555; disc-agb passes; lift-metrics 0 over; just check passes."
       },
       "notes": [
         {
@@ -125,6 +122,12 @@
         }
       ],
       "round": "2026-11-13T07:18:41Z"
+    },
+    {
+      "id": "discovery/cold-block-rule-edges",
+      "title": "Cold-block rule: variadic neighbours and stale lead-ins",
+      "detail": "From the review of {unit:discovery/gcc-far-jump-bl} (PR 11). analysis::vsa::func, the rule that a bl to a never-returning block right after a function's code is a jump: (1) a real never-returning function placed right after its caller whose start is_push_lr doesn't take for a prologue is taken for a block: a variadic one (push {r0-r3}; push {r4, lr}: is_push_lr stops at the first push), one with no saves, a lone 'b .'. The code runs the same, but the function start is lost if nothing else calls it; no corpus case seen (Rogue's 'falls and jumps into another function's entry' went 72 to 65). (2) is_push_lr decodes up to 9 instructions at a target that FuncResult::reads doesn't record, so new data over a callee's lead-in doesn't redo the caller. Done: a test each, the rule fixed or the limit written in the doc comment, disc-* and jt-score bars held, holes-all with no hard count higher.",
+      "uses": ["heavy"]
     }
   ]
 }
