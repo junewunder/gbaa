@@ -490,9 +490,9 @@ impl Run<'_, '_> {
     }
 
     fn pass(&mut self, regs: u16, s: &State, k: Kind) {
-        for r in 0..16 {
+        for (r, v) in s.regs[..16].iter().enumerate() {
             if regs & 1 << r != 0 && r != 13 {
-                self.escape(&s.regs[r], k);
+                self.escape(v, k);
             }
         }
     }

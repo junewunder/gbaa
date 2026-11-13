@@ -243,8 +243,8 @@ fn run(o: &Options, dump: bool) -> Result<Outcome, String> {
         }
     }
     out.transfers = radio.transfers;
-    for p in 0..2 {
-        let used: Vec<String> = radio.commands[p]
+    for (p, commands) in radio.commands[..2].iter().enumerate() {
+        let used: Vec<String> = commands
             .iter()
             .enumerate()
             .filter(|(_, n)| **n > 0)
