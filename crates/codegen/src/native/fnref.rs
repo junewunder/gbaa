@@ -91,8 +91,9 @@
 //! **What isn't allowed** ([`Why`]): a function's address used as an
 //! address, in arithmetic but the split and join, in an ordered compare or
 //! a bit test, its halves or bytes used as anything but stored or joined,
-//! called in part. Lost (not followed, so not proven): given to the BIOS,
-//! moved to a user-bank register. A word is **proven** when the run read
+//! called in part. Lost (not followed, so not proven): given to the BIOS
+//! (in a register the call reads: [`bios_regs`]), moved to a user-bank
+//! register. A word is **proven** when the run read
 //! it and no value it entered met either. A function word in ROM the run
 //! never read (no tracked load reaches it) isn't proven either.
 //!
@@ -2877,14 +2878,18 @@ impl Run<'_, '_> {
                 }
             }
             Edge::Swi(next) => {
-                let reads = if self.g.off & OFF_BIOS != 0 {
-                    bios_reads(out.bios)
-                } else {
-                    0xf
-                };
+                let rule = bios_regs(out.bios);
                 for (i, r) in s.regs[..4].iter().enumerate() {
-                    if reads & 1 << i != 0 {
+                    if rule.reads & 1 << i != 0 {
                         self.g.hole(r, out.at, Why::Bios, |_| true);
+                    }
+                }
+                let mut after = s.clone();
+                for (i, r) in after.regs[..4].iter_mut().enumerate() {
+                    if rule.sets & 1 << i != 0 {
+                        *r = Val::unk();
+                    } else if rule.may_set & 1 << i != 0 {
+                        r.join(&Val::unk());
                     }
                 }
                 // CpuSet and CpuFastSet from ROM copy its words to RAM: their
@@ -2895,7 +2900,8 @@ impl Run<'_, '_> {
                         ..Val::default()
                     };
                     let n = copy_len(out.bios == Some(0x0C), &s.regs[2]);
-                    for &t in &self.g.expand(&s.regs[0]).toks {
+                    let src = self.g.expand(&s.regs[0]);
+                    for &t in &src.toks {
                         match t {
                             Tok::Rom(a) => self.rom_from(a, 4, None, n, &mut got),
                             Tok::RomFrom(a) => self.rom_from(a, 4, None, None, &mut got),
@@ -2904,10 +2910,17 @@ impl Run<'_, '_> {
                     }
                     let (toks, _) = to_mem(&got, 4);
                     self.g.store(Store::Pile, &toks);
-                }
-                let mut after = s.clone();
-                for r in &mut after.regs[..4] {
-                    *r = Val::unk();
+                    // CpuFastSet leaves in r3 a word it read: the fill's, or
+                    // its last block's first. From ROM one of those; from
+                    // anywhere else, what a load the run can't place reads.
+                    if out.bios == Some(0x0C) {
+                        let rom = |t: &Tok| matches!(t, Tok::Rom(_) | Tok::RomFrom(_));
+                        if src.unk || src.mem || !src.toks.iter().all(rom) || src.toks.is_empty() {
+                            self.g.read_pile(4, &mut got);
+                            self.g.read_cells(4, &mut got);
+                        }
+                        after.regs[3].join(&got);
+                    }
                 }
                 self.flow(*next, &after);
             }
@@ -3218,14 +3231,11 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> R {
     }
 }
 
-/// `GBAA_FNREF_OFF=bios,move,flags,tables,pile,cells`: kinds of hole
+/// `GBAA_FNREF_OFF=move,flags,tables,pile,cells`: kinds of hole
 /// made not to happen, to measure what the words would be without them
 /// (`docs/research/fnref-held-words.md`). **For measuring only**, never
 /// for a lift that is built (the report's first line says which were
-/// off). `bios`: a BIOS call holes only the registers it reads
-/// ([`bios_reads`]), not all of r0-r3: right for compiled code, but the
-/// run still makes all four unknown after the call, so an address in a
-/// register the BIOS leaves as it came is neither holed nor followed;
+/// off). (Its `bios` is the rule now: [`bios_regs`].)
 /// `move`: `x + 0` with its flags set (`adds rd, rs, #0`, old GCC's move
 /// between low registers) is `x` and its carry and overflow 0, and an op
 /// on a large value and a single token runs token by token (both sound;
@@ -3251,25 +3261,85 @@ fn off_env() -> u8 {
     off
 }
 
-const OFF_KINDS: [&str; 6] = ["bios", "move", "flags", "tables", "pile", "cells"];
-const OFF_BIOS: u8 = 1;
-const OFF_MOVE: u8 = 2;
-const OFF_FLAGS: u8 = 4;
-const OFF_TABLES: u8 = 8;
-const OFF_PILE: u8 = 16;
-const OFF_CELLS: u8 = 32;
+const OFF_KINDS: [&str; 5] = ["move", "flags", "tables", "pile", "cells"];
+const OFF_MOVE: u8 = 1;
+const OFF_FLAGS: u8 = 2;
+const OFF_TABLES: u8 = 4;
+const OFF_PILE: u8 = 8;
+const OFF_CELLS: u8 = 16;
 
-/// The registers of r0-r3 BIOS call `n` reads, as bits (`GBAA_FNREF_OFF`'s
-/// `bios`): `VBlankIntrWait` and `Halt` none, `Div` r0 and r1, the copies
-/// and `BgAffineSet` r0 to r2; `ObjAffineSet`, and one this doesn't know,
-/// all four.
-fn bios_reads(n: Option<u8>) -> u8 {
-    match n {
-        Some(0x00 | 0x02 | 0x03 | 0x05 | 0x0d) => 0,
-        Some(0x01 | 0x08 | 0x09 | 0x19) => 0b0001,
-        Some(0x04 | 0x06 | 0x07 | 0x0a | 0x11..=0x18) => 0b0011,
-        Some(0x0b | 0x0c | 0x0e | 0x10 | 0x1f) => 0b0111,
-        _ => 0b1111,
+/// What a BIOS call does with r0 to r3, a bit each ([`bios_regs`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct BiosRegs {
+    /// It reads them: a function's address there is given to the BIOS.
+    reads: u8,
+    /// It always leaves a number of its own there.
+    sets: u8,
+    /// It may: on some path they are as they came.
+    may_set: u8,
+}
+
+/// What BIOS call `n` does with r0 to r3 (`native/fnref-bios-reads`). A
+/// register it doesn't read is no hole, and one it doesn't set holds after
+/// the call what it held before: a function's address left there is
+/// followed on, not lost.
+///
+/// The calls are the lifted program's: what the lifter prints for each
+/// (`native.rs`, `Plan::Swi`) and the prelude's routines, which are the
+/// play build's (`runtime::bios`), checked against it call by call. What
+/// it reads is either's (`MultiBoot`: the lifted one reads nothing). Where
+/// the console's BIOS overwrites a register these leave (r2 and r3 in the
+/// waits, r1 and r3 in most), the address is kept: it is followed further
+/// than it lives, never less. A register is only `sets` where every path
+/// writes it: the copies and the decompressors return early on a source in
+/// the BIOS, the affine sets leave r0 and r1 on a count of 0, `ArcTan2`
+/// r1 on an axis. `SoftReset` doesn't return: the code after it is
+/// followed with the registers as they were.
+///
+/// Any other call (one a native build can't make, a hard hole:
+/// [`analysis::holes::NATIVE_BIOS`]), and a number that is no call, reads
+/// all four and sets all four, as every call did before.
+fn bios_regs(n: Option<u8>) -> BiosRegs {
+    const R0: u8 = 1;
+    const R1: u8 = 2;
+    const R2: u8 = 4;
+    const R3: u8 = 8;
+    let (reads, sets, may_set) = match n {
+        // SoftReset; Halt, Stop; SoundDriverVSyncOff.
+        Some(0x00 | 0x02 | 0x03 | 0x28) => (0, 0, 0),
+        // RegisterRamReset, SoundBias: r0 the flags, the level.
+        Some(0x01 | 0x19) => (R0, 0, 0),
+        // IntrWait: r0 the flags it found.
+        Some(0x04) => (R0 | R1, R0, 0),
+        // VBlankIntrWait: IntrWait(1, 1).
+        Some(0x05) => (0, R0 | R1, 0),
+        // Div: quotient, remainder, the quotient's magnitude.
+        Some(0x06) => (R0 | R1, R0 | R1 | R3, 0),
+        // Sqrt.
+        Some(0x08) => (R0, R0, 0),
+        // ArcTan2: r0 the angle, r3 0x170, r1 a scratch value off an axis.
+        Some(0x0a) => (R0 | R1, R0 | R3, R1),
+        // CpuSet: r0 and r1 past a word copy, r3 0x170. CpuFastSet: r3 a
+        // word it read (`Run::exit` joins it).
+        Some(0x0b | 0x0c) => (R0 | R1 | R2, 0, R0 | R1 | R3),
+        // BgAffineSet: r0 and r1 past the entries, r2 the count's end.
+        Some(0x0e) => (R0 | R1 | R2, R2, R0 | R1),
+        // ObjAffineSet: r3 the stride, too.
+        Some(0x0f) => (R0 | R1 | R2 | R3, R2, R0 | R1),
+        // LZ77UnComp: r0 and r1 past the data, r3 0.
+        Some(0x11 | 0x12) => (R0 | R1, 0, R0 | R1 | R3),
+        // HuffUnComp, RLUnComp: r0 and r1 past the data.
+        Some(0x13..=0x15) => (R0 | R1, 0, R0 | R1),
+        // MidiKey2Freq: r0 the frequency.
+        Some(0x1f) => (R0 | R1 | R2, R0, 0),
+        // MultiBoot: r0 the result.
+        Some(0x25) => (R0 | R1, R0, 0),
+        _ => (0xf, 0xf, 0),
+    };
+    BiosRegs {
+        reads,
+        sets,
+        may_set,
     }
 }
 
