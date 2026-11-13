@@ -1372,6 +1372,15 @@
       "title": "Function flow: loads through unknown addresses",
       "detail": "docs/native-stage-b.md piece 3. Measured on {unit:native/fnref-context}'s branch (commit e81168f; it holds the object split and call-site context): fn_words_not_proven unmoved by either. ~640 of affine's load sites (spike 644) have an address that may be unknown (Val::unk), and each reads the pile and every RAM cell (Run::load_at's anywhere arm), so e.g. the IRQ vector word's f_03000000 is in nearly every hole. Not the cause (tried, no change): naming the allocator, dropping the pile from constant-address loads, dropping the I/O unk flag, NUMS 8->256. A seen source: main's inlined free-list walk at 0x080001a8 (affine) loads GLOBAL_ALLOC fields holding allocator-made pointers. Find where the unknown comes from (GBAA_FNREF_TRACE; print each anywhere load) and fix the first big source. Done when: fn_words_not_proven falls on every agb program, bars lowered, a unit test, just lift-check and just check pass.",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "ae52d6ac",
+        "session": "ae52d6ac-326b-48e0-96ac-c8694b013cb5",
+        "host": "quack",
+        "pid": 11956,
+        "start": "29684",
+        "at": "2026-11-13T04:50:28Z"
+      },
       "notes": [
         {
           "at": "2026-11-12T09:45:41Z",

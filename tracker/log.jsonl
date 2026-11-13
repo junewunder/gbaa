@@ -2739,3 +2739,4 @@
 {"at":"2026-11-13T04:50:03Z","actor":"session","tag":"ddd9a487","host":"quack","cmd":"claim","id":"native/fnref-emerald-speed","text":"Function-address flow on Emerald fast enough to finish: claimed"}
 {"at":"2026-11-13T04:50:16Z","actor":"session","tag":"77aa5fbf","host":"quack","cmd":"claim","id":"native/lift-undefined-insns","text":"Find why moonbeam's and Rogue's lifts decode data as code: claimed (picking up after 74679aef)"}
 {"at":"2026-11-13T04:50:26Z","actor":"session","tag":"34d57864","host":"quack","cmd":"claim","id":"native/hw-serial-registers","text":"Serial registers kept in the hardware library: claimed"}
+{"at":"2026-11-13T04:50:28Z","actor":"session","tag":"ae52d6ac","host":"quack","cmd":"claim","id":"native/fnref-unknown-addrs","text":"Function flow: loads through unknown addresses: claimed"}
