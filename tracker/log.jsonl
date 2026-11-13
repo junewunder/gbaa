@@ -2765,3 +2765,4 @@
 {"at":"2026-11-13T07:21:48Z","actor":"session","tag":"ae52d6ac","host":"quack","cmd":"add-unit","id":"native/fnref-branch-merge","text":"new unit: Function-flow branch merged with main's Ref tokens"}
 {"at":"2026-11-13T07:21:50Z","actor":"session","tag":"ae52d6ac","host":"quack","cmd":"edit","id":"native/fnref-frame-pointers","text":"Function flow: pointers into stack frames kept exact: edited (add-needs)"}
 {"at":"2026-11-13T07:21:52Z","actor":"session","tag":"ae52d6ac","host":"quack","cmd":"edit","id":"native/fnref-live-registers","text":"Function flow passes only registers a callee reads: edited (add-needs)"}
+{"at":"2026-11-13T07:21:54Z","actor":"session","tag":"ae52d6ac","host":"quack","cmd":"edit","id":"native/fnref-ram-pointers-land","text":"Function flow: the object split and RAM pointers land: edited (add-needs)"}
