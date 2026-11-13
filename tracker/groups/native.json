@@ -1960,6 +1960,11 @@
       "uses": ["heavy"],
       "notes": [
         {
+          "at": "2026-11-13T08:33:08Z",
+          "by": "afebd1b0",
+          "text": "2026-11-13: measured on Metroid (docs/research/fnref-held-words.md, 'A C game'). The swi clause is now {unit:native/fnref-bios-reads} (767 to 338, on main). Left here: results only a callee sets, 90 Metroid words, 1,373 on Emerald. Needs nothing of the branch."
+        },
+        {
           "at": "2026-11-13T08:31:03Z",
           "by": "8814ddd6",
           "text": "Since PR 8 (metroid-entry-reads) a callee may also take r4-r11 (Summary::takes/may_take): narrowing what a call gives must keep those. The flow doesn't give them yet: {unit:native/fnref-taker-regs}."
