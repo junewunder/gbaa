@@ -3107,6 +3107,10 @@ why = "a table"
         .unwrap();
         assert_eq!(h.takes[&0x0800_0015].0, vec![0x0800_0006, 0x0800_0020]);
         assert!(Holes::parse("[[takes]]\nentry = 0x08000015\nwhy = \"no sites\"\n").is_err());
+        // No sites: code only jumped into.
+        let h = Holes::parse("[[takes]]\nentry = 0x08000015\nsites = []\nwhy = \"jumped into\"\n")
+            .unwrap();
+        assert!(h.takes[&0x0800_0015].0.is_empty());
         assert_eq!(
             taking(0x0800_0015, 0b10_0010),
             "x_08000015(g, Regs { r: [r0, r1, r2, r3, 0, r5, 0, 0, 0, r9, 0, 0, 0, r13, RET], f: [false; 4] })"
