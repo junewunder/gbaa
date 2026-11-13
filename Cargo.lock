@@ -391,6 +391,7 @@ dependencies = [
  "analysis",
  "armv4t",
  "fn-diff",
+ "native-record",
  "prettyplease",
  "proc-macro2",
  "quote",
