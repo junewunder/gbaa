@@ -2855,3 +2855,4 @@
 {"at":"2026-11-13T20:09:32Z","actor":"session","tag":"ec2ee7ee","host":"quack","cmd":"add-unit","id":"native/lift-fn-names","text":"new unit: Metroid's lift uses the names file for functions and data"}
 {"at":"2026-11-13T20:09:45Z","actor":"session","tag":"ec2ee7ee","host":"quack","cmd":"add-unit","id":"native/lift-structured","text":"new unit: The native lifter uses the structuring pass"}
 {"at":"2026-11-13T20:09:50Z","actor":"session","tag":"ec2ee7ee","host":"quack","cmd":"add-unit","id":"native/fn-check-any","text":"new unit: A per-function check for any function in any game"}
+{"at":"2026-11-13T20:09:54Z","actor":"session","tag":"ec2ee7ee","host":"quack","cmd":"add-unit","id":"native/llm-pilot-metroid","text":"new unit: LLM pilot: 20 Metroid functions as plain Rust"}
