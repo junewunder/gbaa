@@ -2861,3 +2861,4 @@
 {"at":"2026-11-13T20:37:48Z","actor":"session","tag":"ec2ee7ee","host":"quack","cmd":"decide","text":"decided: A compiler's trap lifts as a named stop, not a hard hole","d":"d/a-compiler-s-trap-lifts-as-a-named-stop-not-a-2"}
 {"at":"2026-11-13T20:37:51Z","actor":"session","tag":"ec2ee7ee","host":"quack","cmd":"decide","text":"decided: Test programs may share short ARM idioms with games","d":"d/test-programs-may-share-short-arm-idioms-with"}
 {"at":"2026-11-13T20:46:04Z","actor":"session","tag":"ec2ee7ee","host":"quack","cmd":"add-unit","id":"native/c-test-programs","text":"new unit: C test programs built with agbcc and modern GCC"}
+{"at":"2026-11-13T20:46:09Z","actor":"session","tag":"ec2ee7ee","host":"quack","cmd":"add-unit","id":"native/c-bars","text":"new unit: Lifter code-shape bars judged on C programs and games"}

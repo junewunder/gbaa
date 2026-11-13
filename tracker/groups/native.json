@@ -2284,6 +2284,13 @@
       "title": "C test programs built with agbcc and modern GCC",
       "detail": "Owner (2026-11-13): the agb programs are Rust compiled by LLVM, but every commercial game is C from agbcc (old GCC 2.95, pret's games, Metroid) or modern GCC, so lifter work tuned on agb fights shapes no game has (agb's allocator and heap, trait vtables, stack addresses passed everywhere). Add a C test-program template next to agb/template: a crt0, linker script and a tiny hardware header of our own (no game code, no libtonc or libgba unless its licence suits a public repo), built twice, with agbcc and with arm-none-eabi-gcc. Both are already in $GBAA_DATA via scripts/fetch-decomps.sh (src/agbcc-jzw, toolchains/arm-gnu-toolchain-15.2.rel1). Source only in git, ROMs built like the agb ones. Port three programs whose shapes the lifter's code-shape work needs: function pointers in a struct table and a callback list, a switch that compiles to a jump table, and a struct passed by pointer through a call chain. Each runs in the play build and joins just lift-check (0 differences, a planted fault caught). Done when: the template builds with both compilers in one recipe; the three programs, six ROMs, pass just lift-check; just lift-metrics reports them; docs/tools/commands.md has the entry; just check passes.",
       "check": "recorded"
+    },
+    {
+      "id": "native/c-bars",
+      "title": "Lifter code-shape bars judged on C programs and games",
+      "detail": "Owner (2026-11-13): agb programs stay as the tests of the hardware library and the native check, but code-shape work (function flow, structuring, parameters, stack frames, typed access) is judged on the C test programs and the games, not on agb. Add the C programs' rows to crates/codegen/lift-check.toml with bars. Then edit the done-when of each open unit whose bar is an agb program's (the function-flow units: object split and RAM pointers, frame pointers, live registers, taker registers, table ends and fields, GCC moves, pile by global; and the stage-B units still aimed at agb) so a C program or a game decides it and the agb bars only must not get worse; say on each card what changed. Leave a unit whose branch is in flight alone and add a note instead. Done when: the C rows and bars are in lift-check.toml; every such card is edited or noted, listed in the evidence; just lint and just check pass.",
+      "check": "recorded",
+      "needs": ["native/c-test-programs"]
     }
   ]
 }
