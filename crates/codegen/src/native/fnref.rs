@@ -1203,10 +1203,10 @@ impl G {
 
     /// Reads `work` (and the reads it reaches through the `Ref`s memory
     /// holds, each with the forms the `Ref`s on the way give) into `e`,
-    /// those it hasn't read yet, whole. Memory is read as stored, uncapped
-    /// (it holds no numbers, so the cap at the end widens the same ROM
-    /// pointers), so that what it gains later can be added alone.
+    /// those it hasn't read yet, whole. Memory is read as stored, uncapped,
+    /// so that what it gains later can be added alone ([`exp_merge`] caps).
     fn exp_add(&mut self, e: &mut Exp, mut work: Vec<(Src, Xf)>) {
+        let mut d = Val::default();
         while let Some((src, xf)) = work.pop() {
             if !e.seen.insert((src, xf)) {
                 continue;
@@ -1223,10 +1223,9 @@ impl G {
                 Src::RomFrom(lo, end, w) => self.rom_from[&(lo, end, w)].clone(),
                 Src::Hull(lo, hi, w) => self.rom_hull[&(lo, hi, w)].clone(),
             };
-            exp_take(&mut e.v, &read, xf, &mut work);
+            exp_take(&mut d, &read, xf, &mut work);
         }
-        e.v.drop_range(REF0..);
-        e.v.cap();
+        exp_merge(e, d);
     }
 
     /// Brings `e` up to date: what was stored since it was made, read
@@ -1254,16 +1253,7 @@ impl G {
             }
         }
         e.at = self.mem_log.len();
-        d.drop_range(REF0..);
-        let v = &mut e.v;
-        if (d.mem && !v.mem)
-            || (d.unk && !v.unk)
-            || (d.lost_rom && !v.lost_rom)
-            || d.toks.iter().any(|t| !v.toks.contains(t))
-        {
-            v.union(&d);
-            v.cap();
-        }
+        exp_merge(e, d);
         work.retain(|x| !e.seen.contains(x));
         if !work.is_empty() {
             self.exp_add(e, work);
@@ -1673,10 +1663,47 @@ fn from_mem_one(t: Tok, sw: u8, w: u8, into: &mut Val) {
 #[derive(Default)]
 struct Exp {
     v: Val,
+    /// Every number and ROM pointer read into it, as read ([`exp_merge`]).
+    raw: BTreeSet<Tok>,
     seen: BTreeSet<(Src, Xf)>,
     pile: u8,
     cells: u8,
     at: usize,
+}
+
+/// Takes `d`, read uncapped, into `e`. Its numbers and ROM pointers are
+/// kept as read (`e.raw`), and `e.v` holds the cap of them all: capping
+/// what each store adds onto the capped value would widen by the order of
+/// the stores, and leave a pointer out that the capped read of memory
+/// takes in, which is what [`follow`] reruns a function by (`snap`).
+fn exp_merge(e: &mut Exp, mut d: Val) {
+    let nums = Tok::Num(0)..REF0;
+    d.drop_range(REF0..);
+    let new: Vec<Tok> = d
+        .toks
+        .range(nums.clone())
+        .filter(|t| !e.raw.contains(t))
+        .copied()
+        .collect();
+    let unk = d.unk && !e.v.unk;
+    // Functions' tokens and the flags: the cap leaves them as they are.
+    d.drop_range(nums.clone());
+    e.v.union(&d);
+    if new.is_empty() && !unk {
+        return;
+    }
+    e.raw.extend(new);
+    let mut p = Val {
+        toks: e.raw.iter().copied().collect(),
+        unk: e.v.unk,
+        ..Val::default()
+    };
+    p.cap();
+    e.v.unk |= p.unk;
+    if !p.toks.iter().eq(e.v.toks.range(nums.clone())) {
+        e.v.drop_range(nums);
+        e.v.toks.add_all(p.toks.iter().copied().collect());
+    }
 }
 
 /// Takes `read`, a read seen through forms `xf`, into `v`; the `Ref`s it
@@ -3218,7 +3245,7 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
                 if total > TOKENS {
                     g.flow.unsettled = true;
                     g.flow.over = Some((total, ran));
-                    return g.flow;
+                    return finish(g);
                 }
             }
         }
