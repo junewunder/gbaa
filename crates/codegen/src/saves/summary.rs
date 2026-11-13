@@ -1217,9 +1217,11 @@ pub fn summarize_passing(
         let mut ends: BTreeMap<(u32, u32, u8, Via), BTreeSet<u32>> = BTreeMap::new();
         // The zeroed functions whose every pass-on has such an end.
         let mut passers: BTreeSet<u32> = BTreeSet::new();
+        // (A stand-in's function runs none of its code: its hole is its
+        // own, as it was, which the lift leaves out with the function.)
         for &k in readers
             .iter()
-            .filter(|k| zeroed.contains(k) && !named.contains(k))
+            .filter(|k| zeroed.contains(k) && !named.contains(k) && !passing.replaced.contains(k))
         {
             let mut found = Vec::new();
             let mut rooted = true;
