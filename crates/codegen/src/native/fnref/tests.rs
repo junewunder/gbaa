@@ -901,6 +901,13 @@ fn play_bios(n: u8, r: [u32; 4]) -> ([u32; 4], Vec<u8>) {
     let mut m = Box::new(runtime::Machine::new(rom, runtime::platform::Headless));
     m.cpu.pc = 0x0800_0104;
     m.cpu.r[..4].copy_from_slice(&r);
+    // RAM a pattern, so a copy moves something and a clear clears it;
+    // the sources' first word 0, a decompressor's empty input.
+    let bus = &mut m.bus;
+    for (i, b) in bus.ewram.iter_mut().chain(&mut bus.iwram).enumerate() {
+        *b = (i as u8).wrapping_mul(31) | 1;
+    }
+    bus.ewram[0x100..0x104].fill(0);
     bios::swi(&mut m, (n as u32) << 16).unwrap();
     while m.cpu.pc == bios::STALL_LOOP {
         m.step();
@@ -912,12 +919,13 @@ fn play_bios(n: u8, r: [u32; 4]) -> ([u32; 4], Vec<u8>) {
 #[test]
 fn the_play_builds_bios_reads_and_leaves_what_the_rules_say() {
     // Each call from three sets of registers: a source and a destination
-    // in EWRAM (zeroes: every decompressor's empty input) with a count of
-    // 4; a source in the BIOS, which the copies refuse; and flags that
-    // make RegisterRamReset clear memory. The decompressors' and
-    // MultiBoot's own work isn't reached (the lift check's native-bios
-    // programs hold the lifted calls to the play build's on real data),
-    // nor a wait's end, and nothing here tells "sets" from "may set".
+    // in EWRAM with a count of 4 (the source's first word 0, every
+    // decompressor's empty input, then a pattern); a source in the BIOS,
+    // which the copies refuse; and flags that make RegisterRamReset clear
+    // memory. The decompressors' and MultiBoot's own work isn't reached
+    // (the lift check's native-bios programs hold the lifted calls to the
+    // play build's on real data), nor a wait's end, and nothing here tells
+    // "sets" from "may set".
     let sets = [
         [0x0200_0100, 0x0200_1000, 4, 2],
         [0, 0x0200_1000, 3, 0x0bad_f00d],
