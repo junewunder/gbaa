@@ -221,6 +221,10 @@ pub struct FuncResult {
     /// `bx rN` stub calls rN), and words stored to the BIOS's IRQ vector.
     /// Code copied to RAM runs there (decision 7).
     pub ram_entries: BTreeSet<u32>,
+    /// Constant words stored to the BIOS's IRQ vector, ROM or RAM, as ARM
+    /// keys (the BIOS enters a handler with `ldr pc`): the IRQ wrappers
+    /// the code installs.
+    pub irq_handlers: BTreeSet<u32>,
     /// The loads and stores reached, by instruction address: how their
     /// addresses are known ([`Access`]), joined over every visit.
     pub accesses: BTreeMap<u32, Access>,
@@ -538,6 +542,7 @@ impl Analysis<'_, '_> {
         {
             // The BIOS enters it with `ldr pc`: in ARM state.
             self.ram_entry(h & !3);
+            self.res.irq_handlers.insert(h & !3);
         }
         let mut out = Vec::new();
         if let Some(f) = step.fall {
