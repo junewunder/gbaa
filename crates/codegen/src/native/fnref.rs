@@ -71,7 +71,12 @@
 //! whole address its target may hold. A call whose target holds none is
 //! an incomplete callee set: its arguments go to every function that may
 //! be called that way (one with no direct caller, or whose address is
-//! taken), and its results come back from all of them. Functions rerun
+//! taken), and its results come back from all of them. A function that
+//! still has no caller in sight when the run settles (its vtable word
+//! was never read) is run again: a call of its own through a target that
+//! holds no function may be any function whose address is taken (what a
+//! load through an unknown address gave before RAM pointers were
+//! followed), and is kept complete. Functions rerun
 //! (a worklist, by rounds) until nothing they read changes: their entry,
 //! a callee's results, and of memory only what their loads gave (the pile
 //! or every cell at a width, compared with what it gave at the round's
@@ -111,21 +116,27 @@
 //! proven (barred) and proven. `GBAA_FNREF_TRACE=1` prints each round of
 //! the run and each use not allowed, with its operands.
 //!
-//! Precision (`docs/native-stage-b.md`, "Known gaps", the pile): no
-//! word moved on the agb programs from the objects, from call-site
-//! context (`native/fnref-context`, k = 1, [`Ix`]: 5 s became 21 s on
-//! affine, 445 s with each `call_fn` callee's too), nor from RAM
-//! pointers followed (`native/fnref-unknown-addrs`: the loads that read
+//! Precision (`docs/native-stage-b.md`, "Known gaps", the pile;
+//! `docs/research/fnref-held-words.md`): the agb programs moved a word
+//! at most from the objects, from call-site context
+//! (`native/fnref-context`, k = 1, [`Ix`]: 5 s became 21 s on affine,
+//! 445 s with each `call_fn` callee's too), or from RAM pointers
+//! followed (`native/fnref-unknown-addrs`: the loads that read
 //! everything, [`Flow::everything`], fell from 623 sites to 3 on
-//! affine). Each word reaches a use not allowed by several roads, any
-//! one enough: registers a callee neither reads nor sets, passed in and
-//! taken back (a function's address left in r3 crosses forty functions
-//! to a `swi`); the pile, which every load at a constant address reads;
-//! a pointer anywhere in a frame (an array of pairs read by index, a
-//! byte loop); a frame word the run didn't keep, read as everything
-//! stored in the frame. `GBAA_FNREF_WATCH=WORD[,WORD…]` (or `all`)
-//! prints each place a ROM word's function address goes ([`G::watch`]),
-//! and `GBAA_FNREF_TRACE` where a RAM pointer is lost.
+//! affine). No one kind of read holds the words; two together do: the
+//! loads that read everything left (through a pointer into a caller's
+//! frame) and a pointer anywhere in a frame (an array of pairs read by
+//! index, a byte loop). Besides those: registers a callee neither reads
+//! nor sets, passed in and taken back (a function's address left in r3
+//! crosses 26 functions to a `swi`), and the pile, which every load at
+//! a constant address reads.
+//!
+//! Tools, all by environment variable: `GBAA_FNREF_TRACE=1` prints each
+//! round, each use not allowed with its operands, where a RAM pointer is
+//! lost and why a callee set is incomplete;
+//! `GBAA_FNREF_WATCH=WORD[,WORD…]` (or `all`) each place a ROM word's
+//! function address goes ([`G::watch`]); `GBAA_FNREF_OFF` makes kinds of
+//! read give nothing, unsound, to measure ([`off_env`]).
 
 use super::frame::{Edge, Frame};
 use analysis::ir::{BinOp, Exit, Inst, Op, ValueId};
@@ -685,7 +696,7 @@ impl Val {
         }
         if froms.len() > RAM_RUNS {
             self.unk = true;
-            lost_said("more RAM runs than RAM_RUNS in a value");
+            lost_said(|| "more RAM runs than RAM_RUNS in a value".into());
             self.lost_ptr = true;
             self.drop_range(Tok::Num(RAM.start)..Tok::Num(RAM.end));
             self.drop_range(Tok::RamFrom(0)..=Tok::RamFrom(u32::MAX));
@@ -862,7 +873,9 @@ pub struct Flow {
     pub piled: BTreeSet<Origin>,
     /// The loads that read everything (`native/fnref-unknown-addrs`):
     /// through a pointer into RAM the run dropped ([`Val::lost_ptr`]), so
-    /// every RAM cell, every object and the pile.
+    /// every RAM cell, every object and the pile. In any run of their
+    /// function, an early round's too: what a load read then stays in
+    /// what the run holds.
     pub everything: BTreeSet<u32>,
     /// The run didn't settle: nothing is proven.
     pub unsettled: bool,
@@ -978,6 +991,8 @@ struct G {
     /// passed. A call of theirs through a target that holds no function
     /// may be any whose address is taken ([`Run::callees`]).
     orphans: BTreeSet<u32>,
+    /// `GBAA_FNREF_OFF`'s kinds ([`off_env`]).
+    off: u8,
     /// `GBAA_FNREF_WATCH`'s origins: each place their function address
     /// goes is printed, once ([`G::watch`]).
     watch: Vec<Origin>,
@@ -1093,7 +1108,9 @@ impl G {
     /// by the closed world, an address the run doesn't know is no
     /// object's unless it is a lost pointer into one.
     fn read_obj(&mut self, i: u32, off: i32, w: u8, into: &mut Val) {
-        if off == OBJ_ANY {
+        if off == OBJ_ANY && self.off & OFF_ANY != 0 {
+            self.read_cell(obj_addr(i, OBJ_ANY), w, into);
+        } else if off == OBJ_ANY {
             let (lo, hi) = (obj_addr(i, -OBJ_WIN), obj_addr(i, OBJ_ANY) + 3);
             self.read_range(lo, hi, w, "by a pointer anywhere in it", into);
         } else {
@@ -1216,6 +1233,9 @@ impl G {
 
     /// What a load at width `w` reads of function `f`'s spills.
     fn read_spill(&mut self, f: Ix, w: u8, into: &mut Val) {
+        if self.off & OFF_SPILL != 0 {
+            return;
+        }
         let v = self.spill_reads.entry((f, w)).or_insert_with(|| {
             let mut v = Val::default();
             if let Some(m) = self.spills.get(&f) {
@@ -1358,6 +1378,9 @@ impl G {
     /// What a load at width `w` reads of the pile (kept until the pile
     /// changes).
     fn read_pile(&mut self, w: u8, into: &mut Val) {
+        if self.off & OFF_PILE != 0 {
+            return;
+        }
         let i = w as usize;
         self.rd.pile |= 1 << w;
         if self.pile_reads[i].is_none() {
@@ -2029,7 +2052,7 @@ impl Run<'_, '_> {
                             BinOp::And | BinOp::Mul => false,
                         };
                         if moved {
-                            lost_said(&format!("{op:?} of {x:x?} and {y:x?} at {at:#010x}"));
+                            lost_said(|| format!("{op:?} of {x:x?} and {y:x?} at {at:#010x}"));
                             out.lost_ptr = true;
                         }
                     }
@@ -2086,7 +2109,10 @@ impl Run<'_, '_> {
         // passed: any function whose address is taken (what a load
         // through an unknown address gave before RAM pointers were
         // followed, `native/fnref-unknown-addrs`).
-        if callees.is_empty() && !t.lost_rom && self.g.orphans.contains(&entry_of(self.ix)) {
+        // A call only: a return that isn't proven one stays a jump with
+        // no callee.
+        if callees.is_empty() && !tail && !t.lost_rom && self.g.orphans.contains(&entry_of(self.ix))
+        {
             callees = self.g.taken.clone();
         }
         // In the closed world nothing unknown is a function's address, so
@@ -2145,7 +2171,7 @@ impl Run<'_, '_> {
                 Op::GetReg(r) => s.regs[r.index()].clone(),
                 // What a user-bank register holds isn't followed.
                 Op::GetUserReg(_) => {
-                    lost_said(&format!("a user-bank register read at {at:#010x}"));
+                    lost_said(|| format!("a user-bank register read at {at:#010x}"));
                     Val::lost()
                 }
                 Op::Bin(op, a, b) => self.bin(op, &val(a), &val(b), site, at),
@@ -2564,10 +2590,12 @@ impl Run<'_, '_> {
                 Tok::Rom(r) => self.rom_read(r, w, &mut out),
                 Tok::RomFrom(r) => self.rom_from(r, w, hull, None, &mut out),
                 Tok::Obj(o, off) if self.g.obj_up(o, off) => {
-                    lost_said(&format!(
-                        "a load at {:#010x} through {:x?} at {off}, a caller's frame",
-                        self.at, self.g.objs[o as usize]
-                    ));
+                    lost_said(|| {
+                        format!(
+                            "a load at {:#010x} through {:x?} at {off}, a caller's frame",
+                            self.at, self.g.objs[o as usize]
+                        )
+                    });
                     lost = true
                 }
                 Tok::Obj(o, off) => self.g.read_obj(o, off, w, &mut out),
@@ -2599,8 +2627,8 @@ impl Run<'_, '_> {
         if lost && self.trace {
             eprintln!("  load anywhere at {:#010x} through {a:?}", self.at);
         }
-        if lost && hull.is_none_or(|(lo, hi)| !(is_ram(lo) && is_ram(hi))) {
-            self.g.flow.everything.insert(self.at);
+        if self.g.off & OFF_LOST != 0 {
+            lost = false;
         }
         if lost || unknown {
             match hull {
@@ -2641,6 +2669,7 @@ impl Run<'_, '_> {
                                 .read_range(lo, hi, w, "in the load's bounds", &mut out);
                         }
                         None if lost => {
+                            self.g.flow.everything.insert(self.at);
                             self.g.read_pile(w, &mut out);
                             self.g.read_cells(w, &mut out);
                         }
@@ -2871,14 +2900,14 @@ impl Run<'_, '_> {
                             // it may copy are lost.
                             _ => {
                                 got.unk = true;
-                                lost_said("CpuSet from RAM");
+                                lost_said(|| "CpuSet from RAM".into());
                                 got.lost_ptr = true;
                             }
                         }
                     }
                     if src.unk || src.mem || src.lost_ptr {
                         got.unk = true;
-                        lost_said("CpuSet from an unknown source");
+                        lost_said(|| "CpuSet from an unknown source".into());
                         got.lost_ptr = true;
                     }
                     let (toks, _) = to_mem(&got, 4);
@@ -3091,7 +3120,7 @@ fn offset(v: &Val, d: Option<i64>) -> Val {
             }
             (Tok::RamFrom(_), Some(_)) => {
                 out.unk = true;
-                lost_said("a RAM run moved down");
+                lost_said(|| "a RAM run moved down".into());
                 out.lost_ptr = true;
             }
             _ => out.unk = true,
@@ -3300,13 +3329,48 @@ thread_local! {
 
 /// `GBAA_FNREF_TRACE`: print where a pointer into RAM is lost
 /// ([`Val::lost_ptr`]), each place once.
-fn lost_said(what: &str) {
-    if std::env::var_os("GBAA_FNREF_TRACE").is_some()
-        && LOST_SAID.with(|s| s.borrow_mut().insert(what.to_string()))
-    {
+fn lost_said(what: impl FnOnce() -> String) {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if !*ON.get_or_init(|| std::env::var_os("GBAA_FNREF_TRACE").is_some()) {
+        return;
+    }
+    let what = what();
+    if LOST_SAID.with(|s| s.borrow_mut().insert(what.clone())) {
         eprintln!("  pointer lost: {what}");
     }
 }
+
+/// `GBAA_FNREF_OFF=lost,pile,any,spill`: kinds of memory read made to
+/// give nothing, to measure what the words would be if that kind were
+/// exact (`docs/research/fnref-held-words.md`). **Unsound**: for
+/// measuring only, never for a lift that is built. `lost`: a load
+/// through a lost pointer; `pile`: the pile; `any`: a pointer anywhere
+/// in an object reads only the object's anywhere cell; `spill`: a
+/// function's spills.
+fn off_env() -> u8 {
+    let v = std::env::var("GBAA_FNREF_OFF").unwrap_or_default();
+    let mut off = 0;
+    for k in v.split(',').filter(|k| !k.is_empty()) {
+        match ["lost", "pile", "any", "spill"]
+            .iter()
+            .position(|n| *n == k)
+        {
+            Some(i) => off |= 1 << i,
+            None => panic!("GBAA_FNREF_OFF: {k} is none of lost, pile, any, spill"),
+        }
+    }
+    if off != 0 {
+        eprintln!(
+            "gbaa-lift: GBAA_FNREF_OFF={v}: the function flow is unsound, for measuring only"
+        );
+    }
+    off
+}
+
+const OFF_LOST: u8 = 1;
+const OFF_PILE: u8 = 2;
+const OFF_ANY: u8 = 4;
+const OFF_SPILL: u8 = 8;
 
 /// Where every program starts: the cartridge header's branch.
 const RESET: u32 = 0x0800_0000;
@@ -3365,6 +3429,7 @@ pub fn follow(
         allocs: allocs.clone(),
         objects: objects(img),
         watch: watch_env(),
+        off: off_env(),
         watch_all: std::env::var("GBAA_FNREF_WATCH").is_ok_and(|v| v == "all"),
         ..G::default()
     };
@@ -3508,7 +3573,7 @@ pub fn follow(
             // The sp it was called with; its own is its frame's start.
             let mut sp_in = std::mem::take(&mut entry[13]);
             if sp_in.toks.is_empty() {
-                lost_said("a function no call gave an sp");
+                lost_said(|| "a function no call gave an sp".into());
                 sp_in = Val::lost();
             }
             for r in &mut entry[4..] {
@@ -3603,6 +3668,7 @@ pub fn follow(
                 ..Val::default()
             }))
             .collect();
+        let taken_before = g.taken.len();
         for v in &held {
             g.taken_add(v);
         }
@@ -3616,6 +3682,11 @@ pub fn follow(
             g.taken.insert(k);
         }
         dirty = std::mem::take(&mut g.dirty_entry);
+        // More functions taken: what a function with no caller in sight
+        // may call grew ([`Run::callees`]).
+        if g.taken.len() != taken_before {
+            dirty.extend(g.orphans.iter().map(|&k| k as Ix));
+        }
         let rets = std::mem::take(&mut g.dirty_ret);
         let n_entry = dirty.len();
         let n_rets = rets.len();

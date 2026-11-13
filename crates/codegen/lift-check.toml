@@ -520,7 +520,7 @@ call_fn_four_complete = 56
 jumps_by_value = 8
 gap_targets = 7
 fn_words_not_proven = 56
-fn_loads_read_everything = 571
+fn_loads_read_everything = 533
 
 [program.native-bios-more]
 rom = "agb/native-bios-more.gba"
