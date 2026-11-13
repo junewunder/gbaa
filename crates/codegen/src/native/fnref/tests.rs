@@ -711,3 +711,34 @@ fn callees_that_shared_an_entry_share_what_a_call_by_value_gives() {
     g.give_all(&BTreeSet::from([10, 11, 12, 13]), &args);
     assert!(!g.changed);
 }
+
+/// A kept expansion holds the cap of all it has read, whatever order
+/// memory gained it in: capped a store at a time, the pointers below a
+/// widened one stayed exact, while the capped read of memory, which a
+/// function is rerun by, already took a later one in.
+#[test]
+fn a_kept_expansion_caps_all_it_read_together() {
+    let rom = |n: u32| Tok::Rom(0x0800_0800 + 4 * n);
+    let fn_tok = |key| Tok::Fn {
+        key,
+        origin: Origin::Code(key, 0),
+        form: Form::Full,
+    };
+    let of = |ts: &[Tok]| Val {
+        toks: ts.iter().copied().collect(),
+        ..Val::default()
+    };
+    // Seventeen pointers widen to "from the lowest on"; then two below it.
+    let first: Vec<Tok> = (5..22).map(rom).chain([fn_tok(1)]).collect();
+    let mut e = Exp::default();
+    exp_merge(&mut e, of(&first));
+    assert!(e.v.toks.contains(&Tok::RomFrom(0x0800_0800 + 4 * 5)));
+    exp_merge(&mut e, of(&[rom(1)]));
+    exp_merge(&mut e, of(&[rom(3), fn_tok(2)]));
+    let mut whole = of(&first);
+    whole.union(&of(&[rom(1), rom(3), fn_tok(2)]));
+    whole.cap();
+    assert_eq!(e.v, whole);
+    let toks: Vec<Tok> = e.v.toks.iter().copied().collect();
+    assert_eq!(toks, [fn_tok(1), fn_tok(2), Tok::RomFrom(0x0800_0800 + 4)]);
+}
