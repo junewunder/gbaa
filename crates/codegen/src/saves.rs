@@ -680,8 +680,9 @@ impl Walk<'_> {
                 Ok(())
             }
             Plan::Rekey(_) => self.stop(format!("0x{at:08x}: changes mode")),
-            // A compiler's trap stops the game (the BIOS's handler never
-            // comes back to the function): the path never returns.
+            // A compiler's trap: it put one where the program can't go on
+            // (a null dereference, `unreachable`), so the path never
+            // returns.
             Plan::Undefined { trap: true } => Ok(()),
             Plan::Undefined { trap: false } => {
                 self.fail(format!("0x{at:08x}: an undefined instruction"))

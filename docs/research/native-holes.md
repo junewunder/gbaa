@@ -449,19 +449,19 @@ before it (`just dis`):
 | GCC's trap after a call that doesn't return (`bl` to an abort) | 0 / 1 / 0 |
 | Run on past `SoftReset`: Rogue's reset routine ends `svc 1; svc 0`, and the lift went on through its literal pool into the ARM code after it (`e92d`, an ARM `push`'s high half) | 0 / 1 / 0 |
 
-So none was data decoded as code by gap decoding: 46 of the 47 are real
-code, GCC's `udf #255` (Thumb 0xdeff) ending a path that can only crash.
-Discovery already took these encodings as deliberate
+So none was data decoded as code by gap decoding, and none is in a
+fragment reached by modern GCC's far-jump `bl`
+(`discovery/gcc-far-jump-bl`): 46 of the 47 are real code, GCC's
+`udf #255` (Thumb 0xdeff) ending a path that can only crash. Discovery already took these encodings as deliberate
 (`analysis::vsa::func::deliberate`); the lifter didn't. Now it plans one
 (`analysis::vsa::func::is_trap`: Thumb `udf #255`/`#254`, ARM 0xe7ffdefe
 and 0xe7f000f0) as `Plan::Undefined { trap: true }`, printed as a
-`panic!` naming the address (the game stops there, as on the GBA, where
-the BIOS's undefined-instruction handler takes it), and the summaries
-end the path there instead of failing it. Any other undefined
-instruction is still a hard hole. `SoftReset` (0x00) and `HardReset`
-(0x26) have no successor (`func::no_return_swi`), so nothing after them
-is decoded as the function's; the `svc` itself stays a hard hole (the
-library has neither call).
+`panic!` naming the address (the game stops there, as `call_fn` does on
+a call to no function), and the summaries end the path there instead of
+failing the function. Any other undefined instruction is still a hard
+hole. The 47th was the lift running on past `SoftReset`, which
+`native/lift-bios-more` ended meanwhile (a `SoftReset` or `HardReset`
+has no successor, `func::successors`).
 
 ## What the Stage-A lifter should know
 
