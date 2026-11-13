@@ -1891,6 +1891,12 @@
       "title": "route-check --packed: failure names the two layouts",
       "detail": "Found reviewing {unit:native/native-check-spike-packed}. In route-check --native's --packed comparison (crates/route-check/src/native.rs, compare/frame_diff) a difference prints as 'play 0x.., native 0x..', but there the first record is the guest-layout build's and the second the play-layout (packed) build's, so the message names neither rightly. Give compare the two sides' names. Done when: a planted layout fault (a global at the wrong offset in a packed build) prints 'guest layout' and 'play layout' values; just native-check, just lift-check and just check pass.",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/native-check-in-gate",
+      "title": "just native-check runs somewhere that gates a merge",
+      "detail": "Found 2026-11-13 by {unit:native/native-check-spike-packed}: the native check is in no gate, so it stayed broken from 2026-11-06 to 2026-11-13 unseen. Put it (or the cheap part of it) where a landing runs it: just check if it fits the time, else the nightly corpus command. Done when a change that breaks the native check fails a gate, shown with a planted break.",
+      "uses": ["heavy"]
     }
   ]
 }
