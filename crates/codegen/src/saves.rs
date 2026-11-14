@@ -55,7 +55,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod summary;
 pub use summary::{
     Assume, Bits, Category, Cause, Comparison, Passing, Sets, Summaries, Summary, Verdict, compare,
-    proto_regs, summarize, summarize_passing, summarize_sets, summarize_with,
+    context_restore, proto_regs, summarize, summarize_passing, summarize_sets, summarize_with,
 };
 use summary::{Org, Sum};
 
