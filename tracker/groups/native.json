@@ -1135,7 +1135,7 @@
       "title": "Function-address flow settles on Emerald",
       "detail": "After {unit:native/fnref-flow-scale} (Metroid in 151 s), the flow on pret's Emerald (15,158 fns) through gbaa-recompile --summaries --callee-sets was still killed at a 14G cap after 5 min (quack, 2026-11-07). Make it settle under about 8 GB. Done when: that command finishes on Emerald under 8 GB (time and peak quoted) and just lift-check's bars hold.",
       "check": "independent",
-      "needs": ["native/fnref-emerald-speed"],
+      "needs": ["native/fnref-emerald-speed", "native/fnref-forms-closed"],
       "uses": ["heavy"],
       "minMinutes": 150,
       "record": {
@@ -2299,6 +2299,14 @@
           "text": "When this is done, look at the parked function-flow branch units (object split, call-site context, unknown-address loads, frame pointers, live registers): re-measure the branch (ef361daf) on the C programs and unpark what pays, or drop it."
         }
       ]
+    },
+    {
+      "id": "native/fnref-forms-closed",
+      "title": "Function flow: a large set takes every form at once",
+      "detail": "Emerald's large entry sets (over 4,096 tokens) gain other forms (Lo, LoUp, Part, Cmp) of the same 5,157 origins a step a round, and 12k entries change each round. Try: such a set holds every form of each origin it holds, without taking other sets' ROM pointers or refs (memory/fnref-flow-emerald-memory.md says what was tried and why sharing them failed). Done when: Emerald's rounds 1-4 (GBAA_FNREF_TRACE=1 GBAA_FNREF_GAINS=1) show fewer entries changed a round than 12.6k with round 4 under 1,100 s, Metroid's --callee-sets output unchanged, and lift-metrics' bars hold; numbers in the memory note.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "minMinutes": 70
     }
   ]
 }

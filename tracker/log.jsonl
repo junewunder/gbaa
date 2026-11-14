@@ -2879,3 +2879,5 @@
 {"at":"2026-11-14T07:07:10Z","actor":"loop","tag":"9cd7631e","host":"quack","cmd":"done","id":"native/metroid-native-check","text":"Metroid passes the native check on a route: done, checked by verifier-3e7a91c4"}
 {"at":"2026-11-14T07:10:34Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/metroid-native-check","text":"Metroid passes the native check on a route: on main"}
 {"at":"2026-11-14T07:10:46Z","actor":"loop","tag":"ef8559e5","host":"quack","cmd":"claim","id":"native/fnref-flow-emerald","text":"Function-address flow settles on Emerald: claimed (picking up after 81556889)"}
+{"at":"2026-11-14T09:13:16Z","actor":"loop","tag":"ef8559e5","host":"quack","cmd":"add-unit","id":"native/fnref-forms-closed","text":"new unit: Function flow: a large set takes every form at once"}
+{"at":"2026-11-14T09:13:20Z","actor":"loop","tag":"ef8559e5","host":"quack","cmd":"edit","id":"native/fnref-flow-emerald","text":"Function-address flow settles on Emerald: edited (add-needs)"}
