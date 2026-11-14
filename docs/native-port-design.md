@@ -1061,11 +1061,17 @@ with the native check and no replaced-library list.
   The 47-50 functions per program whose proof fails for other reasons
   (an indirect call, a callee that never returns) are listed in the
   report as soft.
-- Blocks are a `loop { match b }` over local labels, 0 the entry; ROM
-  addresses survive only as the labels' comments, jump-table `match`
-  arms and `FNS` keys. The structuring plan isn't used yet (stage C's
-  prettiness); `Plan::Static` is a label or, to another function's entry,
-  a tail call.
+- Blocks are printed from the structuring plan (`codegen::plan`;
+  `native/lift-structured`): labeled `loop`s and blocks, each jump inside
+  the function a `continue`, `break`, fall-through or the target's code
+  inline, an irreducible region a `loop { match b }` over local labels. A
+  function the plan doesn't take (a block no printed jump reaches) stays
+  one `loop { match b }`, 0 the entry; `functions_in_match` and
+  `blocks_in_match` count what is left in a match (barred),
+  `functions_structured_pct` and `blocks_structured_pct` the share
+  structured. ROM addresses survive only as `guest_pc` marks, jump-table
+  `match` arms and `FNS` keys; `Plan::Static` to another function's entry
+  is a tail call.
 - A return is a jump to `RET`, the value `lr` holds on entry. Compiled
   code moves `lr` through the stack, so returns are told by value, not
   by shape: `pop {pc}`, `bx lr` and `ldr pc` all work, and anything else
