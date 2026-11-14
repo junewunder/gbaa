@@ -13,7 +13,8 @@
 //!
 //! The program says where it stopped itself, in its stop line
 //! (`native_record::stop`, printed by `native-host`): the frames presented,
-//! the panic and the lifted functions on the stack. [`Run::of`] names the
+//! the panic, the lifted functions on the stack and the guest pc of the
+//! last block entered (unit `native/first-stop-guest-pc`). [`Run::of`] names the
 //! stop's kind from the panic's text, so the texts here are those of
 //! `runtime::hw`'s `write16`/`read16` and the prelude's `unmapped` and
 //! `call_fn`; one that changes there falls to `panic`, with its message.
@@ -74,6 +75,10 @@ pub struct Run {
     pub detail: String,
     /// The lifted functions on the stack, innermost first (keys).
     pub functions: Vec<u32>,
+    /// The guest address of the last block the program entered (its key:
+    /// bit 0 set for Thumb), `None` when the stop line has none (no
+    /// lifted block ran, a hand-written program, no stop line).
+    pub pc: Option<u32>,
     /// The commit the run was made at (`analysis::numbers_doc::commit`),
     /// empty when not known: what tells a reader an old run from a new one.
     pub commit: String,
@@ -141,6 +146,7 @@ impl Run {
                 first.map_or(String::new(), |f| format!("the first: {f}; "))
             ),
             functions: Vec::new(),
+            pc: None,
             commit: String::new(),
         }
     }
@@ -154,6 +160,7 @@ impl Run {
             what,
             detail,
             functions,
+            pc: None,
             commit: String::new(),
         };
         if let Some(s) = Stop::find(&e.stderr) {
@@ -164,17 +171,23 @@ impl Run {
                         "" => m,
                         at => format!("{m} ({at})"),
                     };
-                    run(s.frames, k, what, detail, s.functions)
+                    Run {
+                        pc: s.pc,
+                        ..run(s.frames, k, what, detail, s.functions)
+                    }
                 }
-                Why::TimeLimit(t) => run(
-                    s.frames,
-                    kind::TIME,
-                    format!("{t} s"),
-                    format!(
-                        "still running after {t} s: a loop that reaches no frame, or a run too slow for the limit"
-                    ),
-                    s.functions,
-                ),
+                Why::TimeLimit(t) => Run {
+                    pc: s.pc,
+                    ..run(
+                        s.frames,
+                        kind::TIME,
+                        format!("{t} s"),
+                        format!(
+                            "still running after {t} s: a loop that reaches no frame, or a run too slow for the limit"
+                        ),
+                        s.functions,
+                    )
+                },
             };
         }
         let last = e
@@ -244,16 +257,21 @@ impl Run {
             .collect()
     }
 
-    /// The lines that say it all: the summary, then the detail and the
-    /// functions when there are any.
+    /// The lines that say it all: the summary, then the detail, the
+    /// guest pc and the functions when there are any.
     pub fn lines(&self) -> Vec<String> {
         let mut l = vec![self.summary()];
         if !self.detail.is_empty() {
             l.push(self.detail.clone());
         }
+        if let Some(pc) = self.pc {
+            l.push(format!(
+                "at guest pc {pc:#010x} (the last lifted block entered: the stop is in it, or in a stand-in or the library it called; bit 0 set for Thumb)"
+            ));
+        }
         if !self.functions.is_empty() {
             l.push(format!(
-                "in {} (the lifted functions on the stack, innermost first; one inlined into its caller doesn't show, and no guest pc is kept)",
+                "in {} (the lifted functions on the stack, innermost first; one inlined into its caller doesn't show)",
                 self.function_names().join(" < ")
             ));
         }
@@ -275,6 +293,7 @@ impl Run {
         t["detail"] = toml_edit::value(&self.detail);
         let fs: toml_edit::Array = self.function_names().into_iter().collect();
         t["functions"] = toml_edit::value(fs);
+        t["pc"] = toml_edit::value(self.pc.map_or(String::new(), |p| format!("{p:#010x}")));
         t["commit"] = toml_edit::value(&self.commit);
         d.remove("run");
         d.insert("run", toml_edit::Item::Table(t));
@@ -333,6 +352,16 @@ impl Run {
             what: s("what")?,
             detail: s("detail")?,
             functions,
+            // A run recorded before the pc was kept has none, as has a
+            // run whose stop line named none ("").
+            pc: match r.get("pc").and_then(|v| v.as_str()) {
+                None | Some("") => None,
+                Some(p) => Some(
+                    p.strip_prefix("0x")
+                        .and_then(|h| u32::from_str_radix(h, 16).ok())
+                        .ok_or(format!("run.pc: {p} isn't 0x and an address"))?,
+                ),
+            },
             // A run recorded before the commit was kept has none.
             commit: r
                 .get("commit")
@@ -370,10 +399,12 @@ mod tests {
     use super::*;
 
     fn panicked(frames: u64, at: &str, m: &str, functions: Vec<u32>) -> Ended {
+        let pc = functions.first().map(|k| k + 0x40);
         let s = Stop {
             frames,
             asked: 600,
             functions,
+            pc,
             at: at.into(),
             why: Why::Panic(m.into()),
         };
@@ -407,7 +438,9 @@ mod tests {
             r.detail,
             "hw: I/O register 0x134 isn't modelled (crates/runtime/src/hw.rs:665)"
         );
-        assert!(r.lines()[2].starts_with("in f_0800a285 < f_080002d1 ("));
+        assert_eq!(r.pc, Some(0x0800_a2c5));
+        assert!(r.lines()[2].starts_with("at guest pc 0x0800a2c5 ("));
+        assert!(r.lines()[3].starts_with("in f_0800a285 < f_080002d1 ("));
         // A register with no name is its address alone.
         let e = panicked(0, "", "hw: I/O register 0x15c isn't modelled", vec![]);
         let r = Run::of(600, &e);
@@ -442,6 +475,7 @@ mod tests {
             frames: 12,
             asked: 600,
             functions: vec![],
+            pc: Some(0x0800_0300),
             at: String::new(),
             why: Why::TimeLimit(120),
         };
@@ -454,6 +488,8 @@ mod tests {
             },
         );
         assert_eq!(r.summary(), "12 of 600 frames, time-limit 120 s");
+        // The loop it was in.
+        assert_eq!(r.pc, Some(0x0800_0300));
         // No stop line: every frame, a signal, an error.
         let end = |code, signal, stderr: &str| {
             Run::of(
@@ -510,6 +546,10 @@ mod tests {
         let t = r.write_metrics(metrics).unwrap();
         assert!(t.starts_with(metrics), "{t}");
         assert_eq!(Run::read(&t).unwrap(), Some(r.clone()));
+        assert!(t.contains("pc = \"0x03000041\"\n"), "{t}");
+        // A run recorded before the pc was kept reads, with none.
+        let no_pc = t.replace("pc = \"0x03000041\"\n", "");
+        assert_eq!(Run::read(&no_pc).unwrap().unwrap().pc, None);
         assert_eq!(Run::read(metrics).unwrap(), None);
         // The lift's own metrics read as before, the table skipped.
         let m = crate::native::metrics::Metrics::from_toml(&t).unwrap();

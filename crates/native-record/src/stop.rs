@@ -6,8 +6,8 @@
 //! text last (its tabs and line ends made spaces):
 //!
 //! ```text
-//! native-stop:\tframes=0\tasked=600\tfunctions=0800a285,080002d1\tat=crates/runtime/src/hw.rs:665\tpanic=hw: I/O register 0x134 isn't modelled
-//! native-stop:\tframes=12\tasked=600\tfunctions=\tat=\ttime-limit=120
+//! native-stop:\tframes=0\tasked=600\tfunctions=0800a285,080002d1\tpc=0800a2c1\tat=crates/runtime/src/hw.rs:665\tpanic=hw: I/O register 0x134 isn't modelled
+//! native-stop:\tframes=12\tasked=600\tfunctions=\tpc=\tat=\ttime-limit=120
 //! ```
 //!
 //! `frames` is how many it presented, `asked` its `--frames`.
@@ -15,7 +15,11 @@
 //! first, as their keys (the address, bit 0 set for Thumb): read from the
 //! backtrace's symbol names ([`functions_in`]), so one the compiler
 //! inlined into its caller doesn't show, and a hand-written program has
-//! none. No guest pc: compiled code keeps none.
+//! none. `pc` is the guest address of the last block the program entered
+//! (`runtime::guest_pc`, which every lifted block sets; unit
+//! `native/first-stop-guest-pc`), the same key form, empty for a
+//! hand-written program: the block the panic is in, or the loop a time
+//! limit stopped. A line with no `pc` field (one written before it) reads.
 
 /// What every stop line starts with.
 pub const PREFIX: &str = "native-stop:";
@@ -40,6 +44,8 @@ pub struct Stop {
     pub asked: u64,
     /// Lifted functions on the stack, innermost first.
     pub functions: Vec<u32>,
+    /// The guest address of the last block entered (`runtime::guest_pc`).
+    pub pc: Option<u32>,
     /// The panic's place in the Rust source, `file:line`.
     pub at: String,
     pub why: Why,
@@ -57,8 +63,9 @@ impl Stop {
             Why::Panic(m) => format!("panic={}", one_line(m)),
             Why::TimeLimit(s) => format!("time-limit={s}"),
         };
+        let pc = self.pc.map_or(String::new(), |p| format!("{p:08x}"));
         format!(
-            "{PREFIX}\tframes={}\tasked={}\tfunctions={}\tat={}\t{why}",
+            "{PREFIX}\tframes={}\tasked={}\tfunctions={}\tpc={pc}\tat={}\t{why}",
             self.frames,
             self.asked,
             fs.join(","),
@@ -68,7 +75,7 @@ impl Stop {
 
     /// Read one line back; `None` for any other line.
     pub fn parse(line: &str) -> Option<Stop> {
-        let mut it = line.trim_end_matches(['\r', '\n']).splitn(6, '\t');
+        let mut it = line.trim_end_matches(['\r', '\n']).splitn(7, '\t');
         if it.next()? != PREFIX {
             return None;
         }
@@ -81,7 +88,19 @@ impl Stop {
             .filter(|k| !k.is_empty())
             .map(|k| u32::from_str_radix(k, 16).ok())
             .collect::<Option<_>>()?;
-        let at = it.next()?.strip_prefix("at=")?.to_string();
+        // `pc` may be missing (a line written before it was kept).
+        let mut next = it.next()?;
+        let pc = match next.strip_prefix("pc=") {
+            Some(p) => {
+                next = it.next()?;
+                match p {
+                    "" => None,
+                    p => Some(u32::from_str_radix(p, 16).ok()?),
+                }
+            }
+            None => None,
+        };
+        let at = next.strip_prefix("at=")?.to_string();
         let why = it.next()?;
         let why = match why.strip_prefix("panic=") {
             Some(m) => Why::Panic(m.to_string()),
@@ -91,6 +110,7 @@ impl Stop {
             frames,
             asked,
             functions,
+            pc,
             at,
             why,
         })
@@ -147,12 +167,15 @@ mod tests {
             frames: 3,
             asked: 600,
             functions: vec![0x0800_a285, 0x0300_0000],
+            pc: Some(0x0800_a2c1),
             at: "crates/runtime/src/hw.rs:665".into(),
             why: Why::Panic("hw: I/O register 0x134 isn't modelled".into()),
         };
         assert_eq!(Stop::parse(&s.line()), Some(s.clone()));
+        assert!(s.line().contains("\tpc=0800a2c1\t"));
         let t = Stop {
             functions: vec![],
+            pc: None,
             at: String::new(),
             why: Why::TimeLimit(120),
             ..s.clone()
@@ -162,6 +185,11 @@ mod tests {
         let err = format!("thread 'main' panicked\n{}\nnote\n{}\n", s.line(), t.line());
         assert_eq!(Stop::find(&err), Some(t));
         assert_eq!(Stop::find("thread 'main' panicked at x\n"), None);
+        // A line from before the pc was kept reads, with none.
+        let old = "native-stop:\tframes=3\tasked=600\tfunctions=0800a285\tat=x.rs:1\tpanic=p";
+        let o = Stop::parse(old).unwrap();
+        assert_eq!((o.pc, o.at.as_str()), (None, "x.rs:1"));
+        assert_eq!(o.why, Why::Panic("p".into()));
     }
 
     #[test]
@@ -170,6 +198,7 @@ mod tests {
             frames: 0,
             asked: 1,
             functions: vec![],
+            pc: None,
             at: "a\tb".into(),
             why: Why::Panic("left\n  right\tend".into()),
         };

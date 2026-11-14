@@ -15,6 +15,7 @@ pub mod debug;
 pub mod dispatch;
 pub mod dma;
 pub mod gpio;
+pub mod guest_pc;
 pub mod hw;
 pub mod io;
 pub mod link;
