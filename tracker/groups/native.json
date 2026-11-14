@@ -2371,6 +2371,11 @@
       "check": "recorded",
       "uses": ["heavy"],
       "minMinutes": 60
+    },
+    {
+      "id": "native/bios-calls-route-drift",
+      "title": "native-bios-calls' route: the interpreter's hash moved",
+      "uses": ["heavy"]
     }
   ]
 }
