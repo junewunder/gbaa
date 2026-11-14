@@ -182,6 +182,13 @@ pub struct Summary {
     pub callees: BTreeSet<u32>,
     /// Its indirect calls, by address (with a complete callee set or not).
     pub indirect_sites: BTreeSet<u32>,
+    /// Its jumps into code not in this context (m4a's `SoundMain`'s
+    /// constant `bx r3` into its IWRAM mixer), by target: the registers
+    /// of r4–r11 (bit `n - 4` for rN) that may still hold bits of their
+    /// entry values there, on some path. The lift jumps with every
+    /// register, so the target takes these from this function's callers,
+    /// which no summary here sees ([`Passing::pointed`]).
+    pub foreign: BTreeMap<u32, u8>,
     pub undefined_reads: BTreeMap<(u32, u8), Option<u32>>,
     /// The holes of entry values of r4–r11 returned in r0–r3, by the
     /// register they're in: holes where a caller's own instruction reads
@@ -241,6 +248,13 @@ pub struct Passing {
     pub named: BTreeSet<u32>,
     /// The functions a stand-in replaces: they take nothing.
     pub replaced: BTreeSet<u32>,
+    /// In a RAM copy's context, the functions a pointer may call: those
+    /// whose key the ROM holds as a word anywhere but at a constant
+    /// jump's literal into the copy (m4a's `SoundMain`'s into its IWRAM
+    /// mixer; unit `native/ram-copy-jump-only`). The rest are only
+    /// jumped into or called directly, as a ROM function whose key no
+    /// word holds. `None`: every one (no ROM to look in).
+    pub pointed: Option<BTreeSet<u32>>,
 }
 
 fn defines(params: u8, exit: &[Bits; 5]) -> u16 {
@@ -339,6 +353,8 @@ pub(super) struct Sum<'a> {
     /// The functions it falls or jumps into and goes on through, with
     /// its own registers ([`super::Walk::flow`]).
     pub(super) falls: BTreeSet<u32>,
+    /// [`Summary::foreign`].
+    pub(super) foreign: BTreeMap<u32, u8>,
     /// The functions whose summaries this run used.
     refs: BTreeSet<u32>,
     /// r4–r11 not as they came, over every return ([`Summary::changes`]).
@@ -411,6 +427,7 @@ impl<'a> Sum<'a> {
             stopped: false,
             sites: BTreeMap::new(),
             falls: BTreeSet::new(),
+            foreign: BTreeMap::new(),
             refs: BTreeSet::new(),
             changes: 0,
             entry_reads: BTreeSet::new(),
@@ -1038,6 +1055,7 @@ pub fn summarize_passing(
                 .filter(|(_, c)| c.is_none())
                 .map(|(&a, _)| a)
                 .collect(),
+            foreign: sum.foreign.clone(),
             undefined_reads: sum.undefined.clone(),
             entry_returns: returned,
         };
@@ -1139,7 +1157,8 @@ pub fn summarize_passing(
         .map(|(&k, _)| k)
         .collect();
     if !words.is_empty() {
-        // Code not in the ROM (a RAM copy's context): any pointer may.
+        // Code not in the ROM (a RAM copy's context): the ones the
+        // lift found the ROM points at, else any.
         let found: BTreeSet<u32> = if ctx.base == analysis::program::ROM_BASE {
             ctx.rom
                 .as_chunks::<4>()
@@ -1148,6 +1167,8 @@ pub fn summarize_passing(
                 .map(|&w| u32::from_le_bytes(w))
                 .filter(|w| words.contains(w))
                 .collect()
+        } else if let Some(p) = &passing.pointed {
+            words.intersection(p).copied().collect()
         } else {
             words
         };
@@ -1164,7 +1185,8 @@ pub fn summarize_passing(
     // file names: soft, `takes r4-r11 from its callers`. Any other way in
     // is `Regs::call`, which zeroes them: an indirect call (one of a
     // complete callee set, or through a pointer: the key as a word in
-    // the ROM), hard. One nothing calls is only jumped into, by functions
+    // the ROM; a RAM copy's, a word but a constant jump's literal,
+    // `Passing::pointed`), hard. One nothing calls is only jumped into, by functions
     // themselves only jumped into (agb's panic paths, discovery's entries
     // inside another function): soft. An entry value returned in r0–r3
     // isn't passed: hard wherever the function is called, or jumped into
@@ -1196,6 +1218,8 @@ pub fn summarize_passing(
                     .map(|&w| u32::from_le_bytes(w))
                     .filter(|w| sums.contains_key(w)),
             );
+        } else if let Some(p) = &passing.pointed {
+            zeroed.extend(p.iter().filter(|k| sums.contains_key(k)));
         } else {
             zeroed.extend(sums.keys().copied());
         }
