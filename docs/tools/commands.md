@@ -1282,7 +1282,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   the bytes; `--layout packed`, the play layout, puts them in the
   lifter's order with the rest of RAM as `bytes`, and `g.ram[offset]`
   finds a byte in the field that holds it, native/lift-packed-layout; names from DIR's names files for this ROM, default `names/`;
-  native/ram-globals), its registers locals, blocks a `loop { match }` over
+  native/ram-globals; and functions' entries, and constant addresses in named data, by name: native/lift-fn-names), its registers locals, blocks a `loop { match }` over
   local labels, calls Rust calls; then the recipe builds it into
   `target/recompiled` (`gbaa-native-<name>`, the native programs' headless
   flags or, with none, gbaa-desktop's window to play in: `--scale N`, `--mute`; it keeps the game's `.sav` in `saves/<name>/` as the play build does, and its menus leave out save states, rewind, scripts and netplay; `crates/native-host`). It reads `holes/<name>.toml` when there is
