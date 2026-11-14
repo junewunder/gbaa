@@ -1804,6 +1804,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-14T13:27:18Z",
+          "by": "1fa0c3f5",
+          "text": "Command done on branch (1d69ea45, main merged, just check passes). Tested: out/nightly-test/a2 (Metroid+Nightmare, all steps) and b (Metroid's lift name changed: hard 0->11 WORSE, exit 1). Full nine-game run waits on the owner's answer about how to run it."
+        },
+        {
           "at": "2026-11-13T13:12:00Z",
           "by": "9828215c",
           "text": "a lifter-rule merge passed lift-check and took moonbeam's hard holes 11 to 503 unseen. This command's diff with last night should fail on any game's hard count rising, so that can't land quietly again."
