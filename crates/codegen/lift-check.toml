@@ -652,7 +652,16 @@ gap_targets = 5
 # proof: vtable words 0x080244c8/cc counted as proven only because sp at
 # f_08000180's pop held a short-lived 5-token value early in the flow; settled,
 # it is a wide "from here on" set with or without that unit's caches.
-fn_words_not_proven = 59
+# Raised 59 to 60 (native/fnref-table-fields). A table read by a field reads
+# that field of each record now: its glyph table's records of 28 bytes
+# (0x08007eb8, an index times 28) read at +22 and +23 give the bytes there,
+# not every byte of the table. The values that come of them are smaller, so
+# a cap that widened one before doesn't, and an exact ROM pointer (0x080073dc)
+# reaches the IRQ handler's own code (f_03000000, a stand-in run as its code
+# was) through incomplete call sets; less 4, it reads the pool word
+# 0x080073d8, f_03000094, which an msr there takes. An accident of the
+# widening both ways: read without the stride the count stays 59.
+fn_words_not_proven = 60
 
 [program.native-dma]
 rom = "agb/native-dma.gba"

@@ -1266,3 +1266,107 @@ fn a_join_the_cap_undoes_leaves_the_set_itself() {
     };
     assert!(!both(&mut d, many));
 }
+
+/// A table of 12-byte records in ROM data: a byte flag at +0, a function
+/// at +4 and another at +8 (`native/fnref-table-fields`).
+const TB: u32 = 0x0800_0700;
+
+fn records_img() -> Img {
+    let mut img = Img::new();
+    // A pool word points at the table: an object's start.
+    img.words.insert(0x0800_0410, TB);
+    for (r, (flag, a, b)) in [(1, F, H), (0, H, F)].into_iter().enumerate() {
+        let at = TB + 12 * r as u32;
+        img.words.insert(at, flag);
+        img.words.insert(at + 4, a);
+        img.words.insert(at + 8, b);
+    }
+    img
+}
+
+/// `ldrb r1, [CELL]`, scaled to a record (`lsl r0, r1, #1; add r0, r1;
+/// lsl r0, #2`, 12 times r1, when `scaled`; else r1 as it is), added to
+/// the table's start and `off`.
+fn record_field(b: &mut B, scaled: bool, off: u32) -> ValueId {
+    let c = b.k(CELL);
+    let i = b.ld(Width::Byte, c);
+    b.set(1, i);
+    let i = b.get(1);
+    let x = if scaled {
+        let two = b.shift(ShiftType::Lsl, i, 1);
+        b.set(0, two);
+        let (r0, r1) = (b.get(0), b.get(1));
+        let three = b.bin(BinOp::Add, r0, r1);
+        b.shift(ShiftType::Lsl, three, 2)
+    } else {
+        i
+    };
+    let tb = b.pool(0x0800_0410, TB);
+    let p = b.bin(BinOp::Add, x, tb);
+    let o = b.k(off);
+    b.bin(BinOp::Add, p, o)
+}
+
+/// A function that reads the records' flag byte by index and shifts it
+/// (a use no function's address is allowed), stores the field at +8 to
+/// RAM, and calls the one at +4.
+fn reading_records(scaled: bool) -> Flow {
+    let mut b = B::default();
+    let a = record_field(&mut b, scaled, 0);
+    let flag = b.ld(Width::Byte, a);
+    let up = b.shift(ShiftType::Lsl, flag, 28);
+    b.set(0, up);
+    let a = record_field(&mut b, scaled, 8);
+    let h = b.ld(Width::Word, a);
+    let c = b.k(CELL + 4);
+    b.st(Width::Word, c, h);
+    let a = record_field(&mut b, scaled, 4);
+    let t = b.ld(Width::Word, a);
+    run_img(
+        &[calling(0x0800_1001, b, t)],
+        &BTreeMap::new(),
+        &records_img(),
+    )
+}
+
+#[test]
+fn a_table_of_records_read_by_one_field_reads_only_that_field() {
+    let f = reading_records(true);
+    // The flag's reads give no function's bytes, so the shift holes none.
+    for w in [TB + 4, TB + 8, TB + 16, TB + 20] {
+        assert!(f.proven(w), "{w:#x}: {f:?}");
+    }
+    // The call through the field at +4 calls only what that field holds.
+    assert_eq!(site(&f).callees, BTreeSet::from([F, H]));
+    assert!(site(&f).complete);
+    // By an index the run doesn't know the scale of, a byte read "from
+    // here on" reads every byte of the records: the shift holes them.
+    let f = reading_records(false);
+    for w in [TB + 4, TB + 8, TB + 16, TB + 20] {
+        assert!(!f.proven(w), "{w:#x}: {f:?}");
+        assert_eq!(f.holes[&Origin::Word(w)].1, Why::Arithmetic);
+    }
+}
+
+#[test]
+fn strides_follow_a_scaled_index_through_its_registers() {
+    let mut b = B::default();
+    let x = record_field(&mut b, true, 4);
+    let s = strides(&b.insts);
+    // 12 times a byte: 12; the table's start plus it, unknown: 1.
+    let Op::Bin(_, p, _) = b.insts[x.index()].op else {
+        panic!()
+    };
+    let Op::Bin(_, scaled, _) = b.insts[p.index()].op else {
+        panic!()
+    };
+    assert_eq!(s[scaled.index()], 12);
+    assert_eq!(s[x.index()], 1);
+    // A word's index scaled by 12 may wrap: only its 4 is kept.
+    let mut b = B::default();
+    let i = b.get(1);
+    let two = b.shift(ShiftType::Lsl, i, 1);
+    let three = b.bin(BinOp::Add, two, i);
+    let twelve = b.shift(ShiftType::Lsl, three, 2);
+    assert_eq!(strides(&b.insts)[twelve.index()], 4);
+}

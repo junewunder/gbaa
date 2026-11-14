@@ -524,3 +524,37 @@ the word is also stored to the pile and meets arithmetic there, so the
 count stays. In the first three its reason moved from "given to the
 BIOS" to "arithmetic" (main's reports against these); the fourth came
 to main the same morning and had no report from before to compare.
+
+## Struct tables read by one field, as landed
+
+Unit `native/fnref-table-fields`, 2026-11-14 on quack. A ROM pointer
+plus an index the block itself scales by a record's size (`lsl r0, r1,
+#1; add r0, r1; lsl r0, #3` is 24 times r1; a `mul` by a constant) is
+a pointer "from here on" every that many bytes (`Tok::RomStep`), and a
+field's offset added to it moves it to that field; a load through it
+reads that field of each record, not every byte of the table. The
+scale is exact when the index is under 2^16 (a byte or halfword load,
+a mask, a shift right by 16 or more), else only its power of two (a
+product of a word may wrap). Each value's scale is found in its block,
+through its registers (`strides` in `fnref.rs`); the value sets aren't
+used.
+
+**Metroid:** `fn_words_proven` 466 to 499, `fn_words_not_proven` 338
+to 305 (main at 4f5acee, its holes file, the lift alone). All 66 words
+of the row above left the table's hole. The 15 and 18 of the tables
+read at 0x080609b4 and 0x08069dd8 are proven; the 33 of the one at
+0x0805b4f8, the handlers at +4 and +12 of the 24-byte records, meet
+their next hole: loaded by that field and compared with 0 before they are
+called (0x0805c3c4 and 0x0805c486, `cmp r0, #0` whose carry nobody
+reads), old GCC's compare, another unit's. Callee sets the same (72
+calls, 70 complete). 12 more code constants, none proven: numbers read
+more exactly that, after a hole's arithmetic, equal a function's
+address.
+
+**The agb programs:** the same, but native-tasks, one word more not
+proven (59 to 60, its bar raised with the cause in
+`crates/codegen/lift-check.toml`): its glyph table's records (28 bytes,
+an index of unknown range times 28, so a stride of 4) read at +22 and
++23 give fewer values, a cap that widened one no longer does, and an
+exact ROM pointer reaches the IRQ handler's own code through incomplete
+call sets. Read every byte without the stride, the count stays 59.

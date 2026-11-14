@@ -30,7 +30,12 @@
 //!   the words of the object it points into: up to the next code
 //!   ([`Image::bound`]) or the next ROM data address a ROM word holds
 //!   ([`objects`]), and only those the value-set analysis bounds the
-//!   load to (`native/fnref-rom-read-bound`);
+//!   load to (`native/fnref-rom-read-bound`); through a table's start
+//!   plus an index scaled by a record's size ([`Tok::RomStep`], the
+//!   scale from the block's own shifts and adds: [`strides`]) and a
+//!   field's offset, it reads only that field of each record
+//!   (`native/fnref-table-fields`: a byte flag beside two handlers
+//!   gives the flag's bytes, not the handlers');
 //! - the program start's copies of ROM data to RAM (`Discovery::copies`
 //!   that aren't code) and `CpuSet` from ROM.
 //!
@@ -178,6 +183,12 @@ enum Tok {
     Rom(u32),
     /// Somewhere in ROM from here on.
     RomFrom(u32),
+    /// Somewhere in ROM from here on, a whole number of `step` bytes on
+    /// (`native/fnref-table-fields`): one field of a table of records,
+    /// the table's start plus a field's offset plus an index scaled by
+    /// the record's size ([`strides`]). A read through it reads that
+    /// field of each record, not the bytes between.
+    RomStep(u32, u16),
     /// What a load at width `w` reads of the pile, or of every cell, as
     /// it is when someone looks ([`G::ref_val`]), not its tokens: a large
     /// game's pile read is tens of thousands of tokens, a new set at each
@@ -194,21 +205,22 @@ enum Tok {
 }
 
 /// What a [`Tok::Ref`] stands for: a load at width `w`'s read of the pile,
-/// of every cell, of the ROM words in `lo..end` a read from `lo` on
-/// gives ([`Run::rom_from`]), or of the ROM words in `lo..=hi` (a read
-/// the value-set analysis bounds there).
+/// of every cell, of the ROM in `lo..end` a read from `lo` on gives
+/// ([`Run::rom_from`]: every word, or with a step, the field at `lo` of
+/// each record), or of the ROM words in `lo..=hi` (a read the value-set
+/// analysis bounds there).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum Src {
     Pile(u8),
     Cells(u8),
-    RomFrom(u32, u32, u8),
+    RomFrom(u32, u32, u8, u16),
     Hull(u32, u32, u8),
 }
 
 impl Src {
     fn w(self) -> u8 {
         match self {
-            Src::Pile(w) | Src::Cells(w) | Src::RomFrom(_, _, w) | Src::Hull(_, _, w) => w,
+            Src::Pile(w) | Src::Cells(w) | Src::RomFrom(_, _, w, _) | Src::Hull(_, _, w) => w,
         }
     }
 }
@@ -653,7 +665,7 @@ impl Val {
         self.toks.contains(&t)
             || match t {
                 Tok::Num(_) => self.unk,
-                Tok::Rom(x) | Tok::RomFrom(x) => self
+                Tok::Rom(x) | Tok::RomFrom(x) | Tok::RomStep(x, _) => self
                     .toks
                     .range(Tok::RomFrom(0)..=Tok::RomFrom(x))
                     .next_back()
@@ -671,15 +683,33 @@ impl Val {
     fn cap(&mut self) {
         // One pass to see what needs widening; the set (shared) is only
         // changed when something does.
-        let (mut nums, mut roms, mut froms) = (0, 0, false);
+        let (mut nums, mut roms, mut froms, mut steps) = (0, 0, false, 0);
         // Functions' tokens sort first: only those after them count.
         for t in self.toks.range(Tok::Num(0)..REF0) {
             match *t {
                 Tok::Num(_) => nums += 1,
                 Tok::Rom(_) => roms += 1,
                 Tok::RomFrom(_) => froms = true,
+                Tok::RomStep(..) => steps += 1,
                 _ => {}
             }
+        }
+        // Too many fields' pointers (a loop moving one by less than a
+        // record): each every word from its start on.
+        if steps > ROMS {
+            let los: Vec<u32> = self
+                .toks
+                .range(Tok::RomStep(0, 0)..=Tok::RomStep(u32::MAX, u16::MAX))
+                .filter_map(|t| match *t {
+                    Tok::RomStep(a, _) => Some(a),
+                    _ => None,
+                })
+                .collect();
+            self.drop_range(Tok::RomStep(0, 0)..=Tok::RomStep(u32::MAX, u16::MAX));
+            for lo in los {
+                self.toks.insert(Tok::RomFrom(lo));
+            }
+            froms = true;
         }
         if nums > NUMS {
             self.unk = true;
@@ -724,6 +754,11 @@ impl Val {
         };
         let roms = addrs(Tok::Rom(0)..=Tok::Rom(u32::MAX));
         let los = addrs(Tok::RomFrom(0)..=Tok::RomFrom(u32::MAX));
+        let fields: Vec<Tok> = self
+            .toks
+            .range(Tok::RomStep(0, 0)..=Tok::RomStep(u32::MAX, u16::MAX))
+            .copied()
+            .collect();
         let code = CODE.with(|c| c.borrow().clone());
         let mut at = 0;
         let mut bound = |a: u32| -> u32 {
@@ -734,7 +769,11 @@ impl Val {
             code.get(at).copied().unwrap_or(u32::MAX)
         };
         let mut gone: Vec<Tok> = Vec::new();
-        let (mut covered, mut ri) = (0, 0);
+        let (mut covered, mut ri, mut fi) = (0, 0, 0);
+        let field_at = |t: Tok| match t {
+            Tok::RomStep(a, _) => a,
+            _ => unreachable!(),
+        };
         for (i, &lo) in los.iter().enumerate() {
             if lo < covered {
                 continue;
@@ -747,6 +786,13 @@ impl Val {
             while ri < roms.len() && roms[ri] < end {
                 gone.push(Tok::Rom(roms[ri]));
                 ri += 1;
+            }
+            while fi < fields.len() && field_at(fields[fi]) < lo {
+                fi += 1;
+            }
+            while fi < fields.len() && field_at(fields[fi]) < end {
+                gone.push(fields[fi]);
+                fi += 1;
             }
             gone.extend(
                 los[i + 1..]
@@ -988,8 +1034,9 @@ struct G {
     loose_args: Vec<Val>,
     /// Functions whose address is taken.
     taken: BTreeSet<u32>,
-    /// What a read from ROM "from here on" gives, by (start, end, width).
-    rom_from: BTreeMap<(u32, u32, u8), Val>,
+    /// What a read from ROM "from here on" gives, by (start, end, width,
+    /// step: 1, every word).
+    rom_from: BTreeMap<(u32, u32, u8, u16), Val>,
     /// The objects in ROM data ([`objects`]).
     objects: BTreeSet<u32>,
     /// What a read the value-set analysis bounds to ROM gives, by bounds
@@ -1414,7 +1461,7 @@ impl G {
                     e.pile |= 1 << w;
                     self.pile_raw[w as usize].clone()
                 }
-                Src::RomFrom(lo, end, w) => self.rom_from[&(lo, end, w)].clone(),
+                Src::RomFrom(lo, end, w, k) => self.rom_from[&(lo, end, w, k)].clone(),
                 Src::Hull(lo, hi, w) => self.rom_hull[&(lo, hi, w)].clone(),
             };
             exp_take(&mut d, &read, xf, &mut work);
@@ -1907,7 +1954,7 @@ fn to_mem(v: &Val, w: u8) -> (Vec<(Tok, u8)>, Vec<Form>) {
                 Some(form) => out.push((Tok::Fn { key, origin, form }, w)),
                 None => bad.push(form),
             },
-            Tok::Rom(_) | Tok::RomFrom(_) if w == 4 => out.push((t, 4)),
+            Tok::Rom(_) | Tok::RomFrom(_) | Tok::RomStep(..) if w == 4 => out.push((t, 4)),
             // As it is ([`G::for_mem`] expands any other).
             Tok::Ref { .. } => {
                 debug_assert!(
@@ -2019,7 +2066,7 @@ fn from_mem_one(t: Tok, sw: u8, w: u8, into: &mut Val) {
             };
             Tok::Fn { key, origin, form }
         }
-        Tok::Rom(_) | Tok::RomFrom(_) if w == 4 => t,
+        Tok::Rom(_) | Tok::RomFrom(_) | Tok::RomStep(..) if w == 4 => t,
         // Read at the width it was stored at, it is what was stored; a
         // word from pieces, reassembled; narrower, its bytes.
         Tok::Ref { src, xf } => Tok::Ref {
@@ -2315,12 +2362,21 @@ impl Run<'_, '_> {
         len: Option<u32>,
         into: &mut Val,
     ) {
-        let v = self.rom_from_val(a, w, hull, len);
+        let v = self.rom_from_val(a, 1, w, hull, len);
         into.join(&v);
     }
 
-    /// What [`Self::rom_from`] reads.
-    fn rom_from_val(&mut self, a: u32, w: u8, hull: Option<(u32, u32)>, len: Option<u32>) -> Val {
+    /// What [`Self::rom_from`] reads; with a `step` over 1 (a
+    /// [`Tok::RomStep`]), only the field at `a` of each record: `w`
+    /// bytes at `a`, `a + step`, and so on.
+    fn rom_from_val(
+        &mut self,
+        a: u32,
+        step: u16,
+        w: u8,
+        hull: Option<(u32, u32)>,
+        len: Option<u32>,
+    ) -> Val {
         let bound = self.img.bound(a);
         let (mut lo, mut hi) = match len {
             Some(n) => (a, bound.min(a.saturating_add(n))),
@@ -2331,25 +2387,39 @@ impl Run<'_, '_> {
             && self.img.word(h).is_some()
             && l.max(lo) < hi.min(h.saturating_add(1))
         {
-            lo = l.max(lo);
+            // A step keeps its records' field: the first at or past `l`.
+            let k = step as u32;
+            lo = if l > lo && k > 1 {
+                lo.saturating_add((l - lo).div_ceil(k) * k)
+            } else {
+                l.max(lo)
+            };
             hi = hi.min(h.saturating_add(1));
         }
         let end = hi.min(lo.saturating_add(ROM_READ));
-        if let Some(v) = self.g.rom_from.get(&(lo, end, w)) {
-            return rom_ref(v, Src::RomFrom(lo, end, w));
+        if let Some(v) = self.g.rom_from.get(&(lo, end, w, step)) {
+            return rom_ref(v, Src::RomFrom(lo, end, w, step));
         }
-        let mut p = lo & !3;
         let mut v = Val {
             // Cut short: the words past the cut go unread.
             lost_rom: end < hi,
             ..Val::default()
         };
-        while p < end {
-            self.rom_read_capped(p, w.min(4), &mut v);
-            p += 4;
+        if step > 1 {
+            let mut p = lo;
+            while p < end {
+                self.rom_read_capped(p, w.min(4), &mut v);
+                p = p.saturating_add(step as u32);
+            }
+        } else {
+            let mut p = lo & !3;
+            while p < end {
+                self.rom_read_capped(p, w.min(4), &mut v);
+                p += 4;
+            }
         }
-        let r = rom_ref(&v, Src::RomFrom(lo, end, w));
-        self.g.rom_from.insert((lo, end, w), v);
+        let r = rom_ref(&v, Src::RomFrom(lo, end, w, step));
+        self.g.rom_from.insert((lo, end, w, step), v);
         r
     }
 
@@ -2435,7 +2505,9 @@ impl Run<'_, '_> {
         }
     }
 
-    fn bin(&mut self, op: BinOp, a: &Val, b: &Val, site: Origin, at: u32) -> Val {
+    /// `steps`: what each operand's unknowns are a whole number of
+    /// ([`strides`]; 1, nothing known).
+    fn bin(&mut self, op: BinOp, a: &Val, b: &Val, steps: [u32; 2], site: Origin, at: u32) -> Val {
         let mut out = Val::default();
         // Every token with every token, but for large sets: each with an
         // unknown partner (which only adds holes and unknowns).
@@ -2457,7 +2529,7 @@ impl Run<'_, '_> {
         let mut holes = Vec::new();
         for (x, y) in pairs {
             {
-                match bin_tok(self.img, op, x, y) {
+                match bin_tok(self.img, op, x, y, steps) {
                     R::T(Tok::Num(c)) => {
                         let t = self.classify(c, site);
                         toks.push(t);
@@ -2492,8 +2564,8 @@ impl Run<'_, '_> {
                         if op == BinOp::Sub
                             && matches!(
                                 (x, y),
-                                (Some(Tok::Rom(_) | Tok::RomFrom(_)), None)
-                                    | (Some(Tok::RomFrom(_)), Some(Tok::Num(_)))
+                                (Some(Tok::Rom(_) | Tok::RomFrom(_) | Tok::RomStep(..)), None)
+                                    | (Some(Tok::RomFrom(_) | Tok::RomStep(..)), Some(Tok::Num(_)))
                             )
                         {
                             out.lost_rom = true;
@@ -2573,6 +2645,7 @@ impl Run<'_, '_> {
         self.at = at;
         self.g.now = (self.f.entry, at);
         let mut vals: Vec<Val> = vec![Val::default(); b.insts.len()];
+        let strides = strides(b.insts);
         let none = Val::default();
         for (i, inst) in b.insts.iter().enumerate() {
             let site = Origin::Code(key, i as u32);
@@ -2645,7 +2718,12 @@ impl Run<'_, '_> {
                 Op::GetReg(r) => s.regs[r.index()].clone(),
                 Op::Bin(op, ra, rb) => {
                     let (a, b) = (xv(self.g, ra), xv(self.g, rb));
-                    let mut out = self.bin(op, &a, &b, site, at);
+                    // (Not for a kept op: its key has no steps.)
+                    let st = match kept {
+                        None => [strides[ra.index()], strides[rb.index()]],
+                        Some(_) => [1, 1],
+                    };
+                    let mut out = self.bin(op, &a, &b, st, site, at);
                     if op == BinOp::Sub {
                         self.cmp_refs(&mut out, &[&vals[ra.index()], &vals[rb.index()]]);
                     }
@@ -2664,7 +2742,7 @@ impl Run<'_, '_> {
                         let other_num = |v: &Val, zero: u32| {
                             v.toks.iter().any(|t| {
                                 matches!(t, Tok::Num(n) if *n != zero)
-                                    || matches!(t, Tok::Rom(_) | Tok::RomFrom(_))
+                                    || matches!(t, Tok::Rom(_) | Tok::RomFrom(_) | Tok::RomStep(..))
                             })
                         };
                         let bad = other_num(&b, 0xffff_ffff) || other_num(&a, 0);
@@ -2684,9 +2762,10 @@ impl Run<'_, '_> {
                         out
                     } else {
                         kept = None;
-                        let ab = self.bin(BinOp::Add, &a, &b, site, at);
+                        let st = [strides[ra.index()], strides[rb.index()]];
+                        let ab = self.bin(BinOp::Add, &a, &b, st, site, at);
                         let c = xv(self.g, c);
-                        self.bin(BinOp::Add, &ab, &c, site, at)
+                        self.bin(BinOp::Add, &ab, &c, [1, 1], site, at)
                     }
                 }
                 Op::Not(ra) => {
@@ -2715,7 +2794,7 @@ impl Run<'_, '_> {
                             Tok::Num(c) | Tok::Rom(c) => {
                                 out.toks.insert(num_tok(self.img, !c));
                             }
-                            Tok::RomFrom(_) => out.unk = true,
+                            Tok::RomFrom(_) | Tok::RomStep(..) => out.unk = true,
                             Tok::Ref { .. } => {
                                 debug_assert!(false, "a Ref not expanded");
                                 out.unk = true;
@@ -2764,13 +2843,17 @@ impl Run<'_, '_> {
                             },
                             // A ROM pointer through a word load's
                             // rotation stays one, as a function does.
-                            Tok::Rom(_) | Tok::RomFrom(_) | Tok::Ref { .. } if keep => toks.push(t),
+                            Tok::Rom(_) | Tok::RomFrom(_) | Tok::RomStep(..) | Tok::Ref { .. }
+                                if keep =>
+                            {
+                                toks.push(t)
+                            }
                             Tok::Num(c) | Tok::Rom(c) => match n {
                                 Some(n) => toks.push(num_tok(self.img, shift(kind, c, n))),
                                 None => out.unk = true,
                             },
                             // Shifted, it's no pointer (the closed world).
-                            Tok::RomFrom(_) => out.unk = true,
+                            Tok::RomFrom(_) | Tok::RomStep(..) => out.unk = true,
                             Tok::Ref { .. } => unreachable!("expanded"),
                         }
                     }
@@ -3020,12 +3103,17 @@ impl Run<'_, '_> {
                     self.rom_read_or_capped(r, w, &mut out, capped);
                     capped = true;
                 }
-                Tok::RomFrom(r) => {
+                Tok::RomFrom(_) | Tok::RomStep(..) => {
+                    let (r, k) = match t {
+                        Tok::RomStep(r, k) => (r, k),
+                        Tok::RomFrom(r) => (r, 1),
+                        _ => unreachable!(),
+                    };
                     // As the cap leaves it, and taking in all the read
                     // holds, `out` is the join already (a load through
                     // hundreds of pointers "from here on" capped it at
                     // each: a fifth of Emerald's second round).
-                    let v = self.rom_from_val(r, w, hull, None);
+                    let v = self.rom_from_val(r, k, w, hull, None);
                     if capped {
                         out.join_capped(&v);
                     } else {
@@ -3193,10 +3281,11 @@ impl Run<'_, '_> {
                 Tok::Num(c) | Tok::Fn { key: c, .. } if self.img.word(c).is_none() => {
                     self.g.hole(x, self.at, Why::Outside, |_| true)
                 }
-                Tok::Num(_) | Tok::Rom(_) | Tok::RomFrom(_) | Tok::Fn { .. } => {}
+                Tok::Num(_) | Tok::Rom(_) | Tok::RomFrom(_) | Tok::RomStep(..) | Tok::Fn { .. } => {
+                }
                 Tok::Ref { .. } => debug_assert!(false, "a Ref not expanded"),
             }
-            if matches!(t, Tok::RomFrom(_) | Tok::Ref { .. }) {
+            if matches!(t, Tok::RomFrom(_) | Tok::RomStep(..) | Tok::Ref { .. }) {
                 anywhere = true;
             }
         }
@@ -3285,7 +3374,9 @@ impl Run<'_, '_> {
                     for &t in &src.toks {
                         match t {
                             Tok::Rom(a) => self.rom_from(a, 4, None, n, &mut got),
-                            Tok::RomFrom(a) => self.rom_from(a, 4, None, None, &mut got),
+                            Tok::RomFrom(a) | Tok::RomStep(a, _) => {
+                                self.rom_from(a, 4, None, None, &mut got)
+                            }
                             _ => {}
                         }
                     }
@@ -3295,7 +3386,8 @@ impl Run<'_, '_> {
                     // its last block's first. From ROM one of those; from
                     // anywhere else, what a load the run can't place reads.
                     if out.bios == Some(0x0C) {
-                        let rom = |t: &Tok| matches!(t, Tok::Rom(_) | Tok::RomFrom(_));
+                        let rom =
+                            |t: &Tok| matches!(t, Tok::Rom(_) | Tok::RomFrom(_) | Tok::RomStep(..));
                         if src.unk || src.mem || !src.toks.iter().all(rom) || src.toks.is_empty() {
                             self.g.read_pile(4, &mut got);
                             self.g.read_cells(4, &mut got);
@@ -3546,7 +3638,9 @@ fn num_tok(img: &dyn Image, c: u32) -> Tok {
     }
 }
 
-fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> R {
+/// A token of `op` on tokens `x` and `y` (`None`: an unknown, a whole
+/// number of `steps[0]` for `x`, of `steps[1]` for `y`).
+fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>, steps: [u32; 2]) -> R {
     use Form::*;
     use Tok::*;
     let arith = |a: u32, b: u32| match op {
@@ -3620,9 +3714,22 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> R {
             _ => hole(Why::Arithmetic),
         };
     }
+    // A pointer "from here on" every `k` bytes, if `k` is more than 1.
+    let step = |a: u32, k: u32| match u16::try_from(k) {
+        Ok(k) if k > 1 => RomStep(a, k),
+        _ => RomFrom(a),
+    };
     let (x, y) = match (x, y) {
         (Some(x), Some(y)) => (x, y),
-        (Some(Rom(a)), None) | (None, Some(Rom(a))) if op == BinOp::Add => return R::T(RomFrom(a)),
+        // An index scaled by a record's size: that field of each record.
+        (Some(Rom(a)), None) if op == BinOp::Add => return R::T(step(a, steps[1])),
+        (None, Some(Rom(a))) if op == BinOp::Add => return R::T(step(a, steps[0])),
+        (Some(RomStep(a, k)), None) if op == BinOp::Add => {
+            return R::T(step(a, gcd(k as u32, steps[1])));
+        }
+        (None, Some(RomStep(a, k))) if op == BinOp::Add => {
+            return R::T(step(a, gcd(k as u32, steps[0])));
+        }
         (Some(RomFrom(a)), None) | (None, Some(RomFrom(a))) if op == BinOp::Add => {
             return R::T(RomFrom(a));
         }
@@ -3644,8 +3751,130 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> R {
             }
         }
         (RomFrom(a), Num(m)) if op == BinOp::And && m >= 0xffff_0000 => R::T(RomFrom(a & m)),
+        // Whole records on or back: the same field (a loop walking the
+        // table keeps it). Else a field's offset: the field `b` past this
+        // one; and back, as one "from here on" never goes back past
+        // where it is (an index from the table's start less one record
+        // is a record of the table), the field `b` modulo the record on.
+        (RomStep(a, k), Num(b)) | (Num(b), RomStep(a, k)) if op == BinOp::Add => {
+            let k = k as i32;
+            let b = b as i32;
+            let on = if b % k == 0 {
+                0
+            } else if b > 0 {
+                b
+            } else {
+                b.rem_euclid(k)
+            };
+            R::T(RomStep(a.wrapping_add(on as u32), k as u16))
+        }
+        (RomStep(a, k), Num(b)) if op == BinOp::Sub => {
+            let p = a.wrapping_sub(b);
+            if img.word(p).is_some() {
+                R::T(RomStep(p, k))
+            } else {
+                R::Unk
+            }
+        }
+        (RomStep(a, _), Num(m)) if op == BinOp::And && m >= 0xffff_0000 => R::T(RomFrom(a & m)),
         _ => R::Unk,
     }
+}
+
+fn gcd(a: u32, b: u32) -> u32 {
+    if b == 0 { a } else { gcd(b, a % b) }
+}
+
+/// What each value of a block is a whole number of, by its index
+/// (`native/fnref-table-fields`): 1, nothing known, or the stride of an
+/// index scaled by a record's size, as the block's own shifts, adds and
+/// multiplies by constants make it (`lsl r0, r1, #1; add r0, r1; lsl r0,
+/// #3` is 24 times r1). Each value is followed as `factor * root`, a
+/// value the block reads or makes otherwise, through its registers. The
+/// factor itself is the stride when the root is under 2^16 (a byte or
+/// halfword load, a mask, a shift right by 16 or more) and the factor
+/// too, so the product doesn't wrap; otherwise only the factor's power
+/// of two divides what wraps.
+fn strides(insts: &[Inst]) -> Vec<u32> {
+    // (root, factor, root under 2^16), a factor over 2^32 kept as 0.
+    let mut lin: Vec<(usize, u64, bool)> = Vec::with_capacity(insts.len());
+    let mut regs: [Option<usize>; 16] = [None; 16];
+    let konst = |x: ValueId| match insts[x.index()].op {
+        Op::Const(c) => Some(c),
+        Op::Bit(b) => Some(b as u32),
+        _ => None,
+    };
+    let times = |l: (usize, u64, bool), c: u64| (l.0, l.1.saturating_mul(c), l.2);
+    for (i, inst) in insts.iter().enumerate() {
+        let me = (i, 1, false);
+        let small = (i, 1, true);
+        let l = match inst.op {
+            Op::GetReg(r) => match regs[r.index()] {
+                Some(v) => lin[v],
+                None => {
+                    regs[r.index()] = Some(i);
+                    me
+                }
+            },
+            Op::SetReg(r, x) => {
+                regs[r.index()] = inst.guard.is_none().then_some(x.index());
+                me
+            }
+            Op::Load {
+                width: Width::Byte | Width::Half,
+                ..
+            } => small,
+            Op::Shift {
+                kind: ShiftType::Lsl,
+                v,
+                amount,
+            } => match konst(amount) {
+                Some(n) if n < 32 => times(lin[v.index()], 1 << n),
+                _ => me,
+            },
+            Op::Shift {
+                kind: ShiftType::Lsr,
+                amount,
+                ..
+            } if konst(amount).is_some_and(|n| n >= 16) => small,
+            Op::Bin(BinOp::And, a, b) if konst(a).or(konst(b)).is_some_and(|m| m <= 0xffff) => {
+                small
+            }
+            Op::Bin(BinOp::Mul, a, b) => match (konst(a), konst(b)) {
+                (Some(c), None) => times(lin[b.index()], c as u64),
+                (None, Some(c)) => times(lin[a.index()], c as u64),
+                _ => me,
+            },
+            Op::Bin(BinOp::Add, a, b) | Op::Adc { a, b, c: _ }
+                if matches!(inst.op, Op::Bin(..))
+                    || matches!(inst.op, Op::Adc { c, .. } if konst(c) == Some(0)) =>
+            {
+                let ((ra, fa, sa), (rb, fb, _)) = (lin[a.index()], lin[b.index()]);
+                if ra == rb {
+                    (ra, fa.saturating_add(fb), sa)
+                } else {
+                    me
+                }
+            }
+            _ => me,
+        };
+        lin.push(l);
+    }
+    lin.iter()
+        .map(|&(_, f, small)| {
+            if f == 0 || f > u32::MAX as u64 {
+                // (A product that saturated: nothing known.)
+                return 1;
+            }
+            let f = f as u32;
+            if small && f <= 0xffff {
+                f
+            } else {
+                // Its power of two, as a step keeps it.
+                f.isolate_lowest_one().min(0x8000)
+            }
+        })
+        .collect()
 }
 
 /// `GBAA_FNREF_OFF=move,flags,tables,pile,cells`: kinds of hole
@@ -3812,8 +4041,11 @@ fn via(r: Option<Tok>) -> String {
             let s = match src {
                 Src::Pile(w) => format!("a pile read w{w}"),
                 Src::Cells(w) => format!("an every-cell read w{w}"),
-                Src::RomFrom(lo, end, w) => {
+                Src::RomFrom(lo, end, w, 1) => {
                     format!("a ROM read by index w{w} of {lo:#010x}..{end:#010x}")
+                }
+                Src::RomFrom(lo, end, w, k) => {
+                    format!("a ROM read by index w{w} of {lo:#010x}..{end:#010x} every {k}")
                 }
                 Src::Hull(lo, hi, w) => {
                     format!("a bounded ROM read w{w} of {lo:#010x}..={hi:#010x}")
