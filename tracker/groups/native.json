@@ -2190,6 +2190,11 @@
       "uses": ["heavy"],
       "notes": [
         {
+          "at": "2026-11-14T12:44:17Z",
+          "by": "d6f46c21",
+          "text": "Amazing Mirror's lift (2026-11-14, {unit:native/mirror-lifts}) stops the same way: frame 2 of 600, a byte load at 0xe3a02004 in f_030001f8 < f_030000ef < f_03000061 (its m4a mixer copy, 0x0814f46c to 0x03000060). Likely shared m4a cause: fix once, both games recheck."
+        },
+        {
           "at": "2026-11-13T12:14:41Z",
           "by": "949481c0",
           "text": "2026-11-13: f_03001030 is lifted code now, its stand-in dropped ({unit:native/drop-psr-standins}, mods c767a0b). Stop unchanged: frame 5, same load, same stack, frames 1-5 hash the same. Past frame 5 the lifted dispatcher is unrun; the stand-in is in mods' history."
