@@ -92,11 +92,21 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   difference; `--update` rewrites the list instead. Deterministic, so a
   rerun matches. 10 to 30 minutes a game: run it as a long job.
   `--line FILE` writes the ranking line's numbers to FILE as TOML.
+- `just nightly [--out DIR] [--against DIR] [--only NAME]… [--skip STEP]…
+  [--step-minutes N]` (native/nightly-corpus; `crates/hole-report/src/nightly.rs`
+  has the whole of it): each game of `holes/corpus.toml` through the hole
+  report, its play and readable builds and `just lift` (with the corpus's
+  `lift` name), a step that fails or passes `--step-minutes` (default 120)
+  recorded and the rest run. Writes `out/nightly/<date>/summary.toml`,
+  `summary.txt` and `<name>/summary.txt` (hard holes by kind, built or not,
+  frames run and stop, changes against the last run there) and the step
+  logs; fails when a game got worse (hard holes up, a build lost, fewer
+  frames). Hours: `just long start nightly --mem 6G -- just nightly`.
 - `just holes-all [--out DIR] [--against DIR2] [--only NAME]… [--cover]
   [--write-doc FILE] [holes flags…]`: the hole report over the corpus, `holes/corpus.toml`
   (each game's short name, ROM file name under the justfile's `roms`,
-  coverage file), `gbaa-holes --corpus` (`crates/hole-report/src/corpus.rs`).
-  Runs each game in turn as its own `gbaa-holes ROM … --line` (`--holes` its holes file, found as `just lift` does), writing
+  coverage file, and the `--name` its lift takes), `gbaa-holes --corpus` (`crates/hole-report/src/corpus.rs`).
+  Runs each game in turn as its own `gbaa-holes ROM … --line` (`--holes` its holes file, found by its lift name as `just lift` does), writing
   `DIR/<name>.txt` (the report), `DIR/<name>.log` (its timings), then
   prints one table, a row per game and a total: the lift's hard holes and their kinds, then the run's only three kinds,
   bytes not discovered, seconds. The
