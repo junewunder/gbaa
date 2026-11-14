@@ -2375,7 +2375,14 @@
     {
       "id": "native/bios-calls-route-drift",
       "title": "native-bios-calls' route: the interpreter's hash moved",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-14T14:05:02Z",
+          "by": "de276265",
+          "text": "At main 27445b57 (before serial-no-partner-as-mgba), gbaa-desktop --timing exact draws 3ae8c457394c5b13 at frame 600 of native-bios-calls.gba; units/native-bios-calls-600.toml wants a2d7b94fedf1bbab. just unit native-bios-calls-600 fails. Find which change moved it."
+        }
+      ]
     }
   ]
 }
