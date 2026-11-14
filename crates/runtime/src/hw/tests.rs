@@ -505,8 +505,9 @@ fn unmodelled_registers_are_loud() {
 }
 
 /// The serial port's registers and `KEYCNT` are the play build's with no
-/// link: every store read back as its I/O block gives it, a started
-/// transfer left started, and no IRQ from it.
+/// link: every store read back as its I/O block gives it, and a transfer
+/// on the internal clock ended in the store, its IRQ handled at the next
+/// sync.
 #[test]
 fn serial_registers_are_kept_as_the_play_build_keeps_them() {
     let mut g = game(100);
@@ -532,11 +533,12 @@ fn serial_registers_are_kept_as_the_play_build_keeps_them() {
             assert_eq!(g.hw.raw16(o), io.raw16(o), "{o:#05x} as stored");
         }
     }
-    // The masks are the play build's: RCNT, JOYCNT, an unused halfword.
+    // The masks are the play build's: RCNT (its pins' levels unset),
+    // JOYCNT (its flags only a partner's), an unused halfword.
     g.hw.write16(reg::RCNT, 0xFFFF);
-    assert_eq!(g.hw.read16(reg::RCNT), 0xC1FF);
-    g.hw.write16(0x140, 0xFFFF);
-    assert_eq!(g.hw.read16(0x140), 0x0047);
+    assert_eq!(g.hw.read16(reg::RCNT), 0xC1F0);
+    g.hw.write16(reg::JOYCNT, 0xFFFF);
+    assert_eq!(g.hw.read16(reg::JOYCNT), 0x0040);
     g.hw.write16(0x12C, 0xFFFF);
     assert_eq!(g.hw.read16(0x12C), 0);
     // The keys stay the keys'.
@@ -546,15 +548,25 @@ fn serial_registers_are_kept_as_the_play_build_keeps_them() {
     assert_eq!(g.hw.read16(reg::SIOMULTI0), 0x5678);
     assert_eq!(g.hw.read16(reg::SIOMULTI0 + 2), 0x1234);
     // A transfer started with its IRQ asked for (normal mode, internal
-    // clock): nothing answers, so the start bit stays and no IRQ comes.
+    // clock): it ends in the store, SI reads 1, and the IRQ is requested,
+    // its handler run at the next sync.
+    g.hw.write16(reg::RCNT, 0);
     g.hw.irq.on(irq::SERIAL, |g| g.ram.vcounts += 1);
     g.hw.write16(reg::SIOCNT, 0x4081);
+    assert_eq!(g.hw.read16(reg::SIOCNT), 0x4005);
+    assert_ne!(g.hw.irq.flags & irq::SERIAL, 0);
     for _ in 0..3 {
         wait_vblank(&mut *g).unwrap();
     }
-    assert_eq!(g.hw.read16(reg::SIOCNT), 0x4081);
     assert_eq!(g.hw.irq.flags & irq::SERIAL, 0);
-    assert_eq!(g.ram.vcounts, 0);
+    assert_eq!(g.ram.vcounts, 1);
+    // Without its IRQ, or on the external clock: no IRQ; the external
+    // clock's transfer waits for a partner.
+    g.hw.write16(reg::SIOCNT, 0x0081);
+    assert_eq!(g.hw.read16(reg::SIOCNT), 0x0005);
+    g.hw.write16(reg::SIOCNT, 0x4080);
+    assert_eq!(g.hw.read16(reg::SIOCNT), 0x4084);
+    assert_eq!(g.hw.irq.flags & irq::SERIAL, 0);
 }
 
 /// Polls on each of `DISPSTAT`'s flags finish.

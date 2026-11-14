@@ -17,12 +17,13 @@ buffer is what agb's start-up left in VRAM, the same every run. `OUT`'s
 bytes are also compared as RAM by the native check, and the registers
 themselves as I/O.
 
-Frame 600's hash is `b0cefdd15001e46e` in our interpreter at `--timing
-exact` (2026-11-13). mGBA 0.10.5 draws `8d45278efae3c410`: its serial
-port with nothing plugged in answers where the play build's keeps what
-was stored (`SIOCNT`'s SI bit, an internal-clock transfer ended at once
-with its IRQ, multiplayer's forced bits), and it differs in `RCNT`'s low
-four bits, `JOYCNT`, `JOYSTAT` and what the unused halfwords read. With
-those left out of the pixel both draw `67ad2572c48f1e9b`; the list, read
-from mGBA's source and from both builds' `OUT`, is in
+Frame 600's hash is `56d84929d20fa3ae` in our interpreter at `--timing
+exact` (2026-11-14). mGBA 0.10.5 draws `8d45278efae3c410`. The play
+build's serial port with nothing plugged in answers as mGBA's (`SIOCNT`'s
+SI bit, an internal-clock transfer ended at once with its IRQ,
+multiplayer's forced bits, `RCNT`'s low four bits) apart from what is kept
+on purpose: `JOYCNT`'s and `JOYSTAT`'s bits outside JOY bus mode (GBATEK's
+here, every bit stored in mGBA), what the unused halfwords read (0 here,
+open bus there) and a byte store to `SIOCNT` (mGBA merges it with what was
+last stored, not the register). The list and how it was found is in
 `units/native-serial-600.toml`.
