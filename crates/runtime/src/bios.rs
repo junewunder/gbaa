@@ -703,6 +703,10 @@ fn hard_reset<P: Platform>(m: &mut Machine<P>) {
     // What `RegisterRamReset` leaves unlike power-on.
     bus.io.write16(reg::DISPCNT, 0);
     bus.io.write16(reg::KEYCNT, 0);
+    // The serial port's answers to those stores (`Io::sio_unplugged`: SI
+    // in normal mode; `JOY_TRANS`'s sent flag), which power-on hasn't.
+    bus.io.set_raw16(reg::SIOCNT, 0);
+    bus.io.set_raw16(reg::JOYSTAT, 0);
     bus.waitcnt_written();
     bus.bios_latch = BIOS_LATCH_AFTER_BOOT;
     m.cpu = boot_cpu();
