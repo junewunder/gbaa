@@ -567,6 +567,39 @@ fn before_a_callee_that_reaches_up_and_never_returns_the_locals_go_to_memory() {
     assert_eq!(fs[&1].flush, BTreeSet::from([(1, exit)]));
 }
 
+/// `push {r4, lr}; sub sp, #8`, a word at sp (the entry's -16), then a
+/// tail call to 9, which nothing here knows (a function of another
+/// context), with sp at the entry's `-16 + back`.
+fn tail_with_sp(back: i32) -> (Frame, usize) {
+    let mut b = B::default();
+    b.prologue();
+    let a = b.sp(0);
+    let x = b.get(0);
+    b.st(a, x);
+    if back != 0 {
+        let sp = b.sp(back);
+        b.set(13, sp);
+    }
+    let fns = vec![func(1, vec![(1, b, Edge::Tail(Some(9)))])];
+    let exit = fns[0].1[0].1.len() - 1;
+    (frames_of(&fns).remove(&1).unwrap(), exit)
+}
+
+#[test]
+fn a_tail_call_with_the_frame_live_writes_the_locals_to_memory_first() {
+    // m4a's SoundMain jumps into its IWRAM mixer with its frame still
+    // below it; the mixer reads the frame and pops it.
+    let (f, exit) = tail_with_sp(0);
+    assert!(f.slots.iter().all(|s| !s.escapes()), "{:?}", f.slots);
+    assert_eq!(f.flush, BTreeSet::from([(1, exit)]));
+}
+
+#[test]
+fn a_tail_call_after_the_epilogue_writes_nothing() {
+    let (f, _) = tail_with_sp(16);
+    assert!(f.flush.is_empty(), "{:?}", f.flush);
+}
+
 #[test]
 fn locals_are_the_frames_own_slots_that_dont_escape() {
     // Words at -16 and -12, a byte at -20 and a halfword at -18 (one slot
