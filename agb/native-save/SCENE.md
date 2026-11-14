@@ -9,9 +9,10 @@ what it exercises is in `src/main.rs`'s header (unit
 Mode 3, BG2 on, from the first frame of the loop. Each frame `f` (from 0)
 stores to SRAM, loads it back and draws one pixel, at row `f / 240 % 4`,
 column `f % 240`: everything it loaded (`OUT` in `src/main.rs`) folded
-into 15 bits (`colour`). So by frame 600 rows 0-3 hold frames 360-599
-(row 2 from column 120 on, and row 3, are frames 120-239 and 240-359
-from the first pass, overwritten by the second where it reached). The
+into 15 bits (`colour`). The four rows hold 960 frames, so the picture
+first wraps at frame 960: by frame 600, row 0 holds frames 0-239, row 1
+frames 240-479 and row 2 up to column 119 frames 480-599; the rest of
+row 2, and row 3, are not drawn yet. The
 rest of the frame buffer is what agb's start-up left in VRAM, the same
 every run. `OUT`'s bytes are also compared as RAM by the native check.
 

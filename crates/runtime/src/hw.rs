@@ -534,6 +534,9 @@ pub struct Hw<G: Native> {
     /// A BIOS call's stall is running ([`spend`]): one a handler's call
     /// makes inside it is spent at once, as the play build's is.
     stalling: bool,
+    /// A halt a `HALTCNT` store ran ([`write_io`]) met [`Exit`], which a
+    /// store can't return: the next [`sync`] returns it.
+    exited: bool,
 }
 
 impl<G: Native> Hw<G> {
@@ -560,6 +563,7 @@ impl<G: Native> Hw<G> {
             spins: [(0, 0); crate::sched::SPIN_SLOTS],
             spinning: false,
             stalling: false,
+            exited: false,
         }
     }
 
@@ -667,10 +671,12 @@ impl<G: Native> Hw<G> {
     /// registers (an immediate channel switched on runs at [`write_dma`]
     /// or the next sync: this can't reach the program's memory), the
     /// timers, the serial port's registers and `KEYCNT` (the play build's
-    /// with nothing plugged in), `IE`, `IF` (1s
-    /// acknowledge) and `IME`; panics on a register the library doesn't
-    /// model yet (`POSTFLG`, `HALTCNT`), which a lifted program must not
-    /// reach silently.
+    /// with nothing plugged in), `IE`, `IF` (1s acknowledge), `IME`, and
+    /// `POSTFLG` with `HALTCNT` (stored as the play build's I/O block
+    /// stores them; the halt a `HALTCNT` store makes is [`write_io`]'s, as
+    /// this can't reach the program). An offset the play build's bus has
+    /// no register at (`0x160`-`0x1FE`, past `IME`, past `HALTCNT`, the
+    /// gaps between) takes nothing, as there.
     pub fn write16(&mut self, o: u32, v: u16) {
         match o {
             reg::DISPSTAT => {
@@ -696,7 +702,12 @@ impl<G: Native> Hw<G> {
             reg::IE => self.irq.enable = v & 0x3FFF,
             reg::IF => self.irq.acknowledge(v),
             reg::IME => self.irq.master_enable = v & 1 != 0,
-            _ => panic!("hw: I/O register {o:#05x} isn't modelled"),
+            reg::POSTFLG => {
+                self.sound.io.write16(o, v);
+                // The halt event is the play build's scheduler's.
+                self.sound.io.events = 0;
+            }
+            _ => debug_assert!(is_unused(o), "hw: I/O register {o:#05x} isn't modelled"),
         }
     }
 
@@ -747,7 +758,11 @@ impl<G: Native> Hw<G> {
             reg::IE => self.irq.enable,
             reg::IF => self.irq.flags,
             reg::IME => self.irq.master_enable as u16,
-            _ => panic!("hw: I/O register {o:#05x} isn't modelled"),
+            reg::POSTFLG => self.sound.io.read16(o),
+            _ => {
+                debug_assert!(is_unused(o), "hw: I/O register {o:#05x} isn't modelled");
+                0
+            }
         }
     }
 
@@ -766,6 +781,7 @@ impl<G: Native> Hw<G> {
             reg::IE => self.irq.enable,
             reg::IF => self.irq.flags,
             reg::IME => self.irq.master_enable as u16,
+            reg::POSTFLG => self.sound.io.raw16(o),
             _ => 0,
         }
     }
@@ -779,6 +795,13 @@ impl<G: Native> Hw<G> {
 /// Whether `o` is a DMA register ([`dma_regs`]).
 fn is_dma(o: u32) -> bool {
     (dma_regs::DMA_START..dma_regs::DMA_END).contains(&o)
+}
+
+/// Whether the play build's I/O block has nothing at `o` (even): no bit a
+/// load sees or a store sets (`io::read_mask`, `io::write_mask`), or past
+/// the block, where its bus maps nothing.
+fn is_unused(o: u32) -> bool {
+    o >= io::IO_SIZE || io::read_mask(o) == 0 && io::write_mask(o) == 0
 }
 
 /// Whether `o` is one of the serial port's registers, or `KEYCNT`.
@@ -863,6 +886,9 @@ fn run_sound<G: Native>(g: &mut G) {
 /// ([`present`]); then the next event is found ([`Hw::next_event`]), and
 /// the handlers of what's requested run. Returns whether V-blank started.
 fn sync<G: Native>(g: &mut G, cycles: u32) -> Result<bool, Exit> {
+    if g.hw().exited {
+        return Err(Exit);
+    }
     // An immediate DMA a bare `Hw::write16` switched on.
     if g.hw().dma_pending() {
         dma_regs::run_pending(g);
@@ -1057,12 +1083,42 @@ pub fn idle<G: Native>(g: &mut G) -> Result<(), Exit> {
 /// as the play build's `sound::store` does before such a store), so a FIFO
 /// that came due since the last sync (an immediate DMA's price) is
 /// refilled as the play build refills it; inside [`Hw::write16`] it could
-/// not be. The prelude's `io_write16` stores here, and [`write_dma`].
+/// not be. A store to `POSTFLG` (a halfword, so `HALTCNT` too) halts
+/// ([`halt`]), as the play build's does. The prelude's `io_write16` stores
+/// here, and [`write_dma`].
 pub fn write_io<G: Native>(g: &mut G, o: u32, v: u16) {
     if crate::sound::counts_before_write(o) {
         run_sound(g);
     }
     g.hw().write16(o, v);
+    if o == reg::POSTFLG {
+        store_halt(g);
+    }
+}
+
+/// A byte store of `v` to `POSTFLG` (`o` 0x300: bit 0 kept) or `HALTCNT`
+/// (0x301: kept, and a halt, [`halt`]; bit 7, a stop, halts too, as in the
+/// play build), as the play build's I/O block takes it. The prelude's
+/// `st8` stores the pair here.
+pub fn write_postflg8<G: Native>(g: &mut G, o: u32, v: u8) {
+    assert!(
+        o & !1 == reg::POSTFLG,
+        "hw: {o:#05x} isn't POSTFLG or HALTCNT"
+    );
+    let io = &mut g.hw().sound.io;
+    io.write8(o, v);
+    io.events = 0;
+    if o & 1 != 0 {
+        store_halt(g);
+    }
+}
+
+/// A `HALTCNT` store's halt: [`halt`], its [`Exit`] kept for the next
+/// [`sync`], as a store returns nothing.
+fn store_halt<G: Native>(g: &mut G) {
+    if halt(g).is_err() {
+        g.hw().exited = true;
+    }
 }
 
 /// The way out of a busy loop (its branch not taken), as the play build's
