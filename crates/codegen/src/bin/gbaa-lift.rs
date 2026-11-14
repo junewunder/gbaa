@@ -1,7 +1,8 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
 //! [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT]
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT]
-//! [--shadow-locals] [--copies N] [--holes-only [--flow]]`:
+//! [--shadow-locals] [--copies N] [--holes-only [--flow]]
+//! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
 //! stage A). Writes the whole program as a Rust crate to OUT (`Cargo.toml`,
 //! `src/`, a copy of the ROM for its data, `report.txt`, and its metrics
@@ -63,6 +64,16 @@
 //! `--copies N` writes the modules N times over under different names: a
 //! synthetic large lift, for measuring the build of a game-sized crate.
 //!
+//! `--fn-check KEY` (repeatable; unit `native/fn-check-any`, `just
+//! fn-check`) writes the per-function check's build: function KEY's
+//! replacement (its stand-in, from the holes file or `--replace FILE`'s
+//! `[[standin]]`s, which go over the holes file's; with none, the lift
+//! itself, which `--plant` makes a planted wrong one) against its lift,
+//! both in the crate, the program run headless under the check's driver
+//! (`codegen::native::FN_CHECK_DRIVER`). Its seed and budget are the
+//! stand-in's `check = { seed, runs, digest }`, or 1 and 2000 runs;
+//! `--seed` and `--runs` override them (and drop the recorded digest).
+//!
 //! `--holes-only` finds the hard holes and writes nothing (OUT is
 //! ignored): no function-address flow, heap pointers or modules
 //! (`codegen::native::Holes::holes_only`, the hole report's lift), so not
@@ -86,7 +97,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--copies N] [--holes-only [--flow]]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N]"
         );
         ExitCode::FAILURE
     };
@@ -98,6 +109,7 @@ fn main() -> ExitCode {
     let (mut ime_at_waits, mut takes_zeroed) = (false, false);
     let (mut holes_only, mut holes_flow) = (false, false);
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
+    let (mut fn_check, mut replace, mut seed, mut runs) = (Vec::new(), None, None, None);
     let mut layout = codegen::native::globals::Layout::Guest;
     let hex = |s: &str| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok();
     let mut it = rest.iter();
@@ -151,6 +163,10 @@ fn main() -> ExitCode {
             }
             ("--drop-standin", Some(k)) if hex(k).is_some() => drop = hex(k),
             ("--plant", Some(a)) if hex(a).is_some() => plant = hex(a),
+            ("--fn-check", Some(k)) if hex(k).is_some() => fn_check.push(hex(k).unwrap()),
+            ("--replace", Some(f)) => replace = Some(PathBuf::from(f)),
+            ("--seed", Some(n)) if n.parse::<u64>().is_ok() => seed = n.parse().ok(),
+            ("--runs", Some(n)) if n.parse::<u32>().is_ok_and(|n| n > 0) => runs = n.parse().ok(),
             ("--copies", Some(n)) if n.parse::<usize>().is_ok_and(|n| n >= 1) => {
                 copies = n.parse().unwrap()
             }
@@ -183,6 +199,34 @@ fn main() -> ExitCode {
         },
         None => codegen::native::Holes::default(),
     };
+    // The per-function check's replacements (`--replace FILE`): its
+    // stand-ins, over the holes file's.
+    if let Some(p) = &replace {
+        match std::fs::read_to_string(p)
+            .map_err(|e| e.to_string())
+            .and_then(|t| codegen::native::Holes::parse(&t))
+        {
+            Ok(r) => {
+                holes.standins.extend(r.standins);
+                holes.checks.extend(r.checks);
+                holes.lr.extend(r.lr);
+            }
+            Err(e) => {
+                eprintln!("gbaa-lift: {}: {e}", p.display());
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    for k in fn_check {
+        let mut c = holes.checks.get(&k).copied().unwrap_or_default();
+        if seed.is_some() || runs.is_some() {
+            // Another seed or budget: the recorded digest isn't theirs.
+            c.digest = None;
+        }
+        c.seed = seed.unwrap_or(c.seed);
+        c.runs = runs.unwrap_or(c.runs);
+        holes.fn_check.insert(k, c);
+    }
     if let Some(k) = drop
         && holes.standins.remove(&k).is_none()
     {

@@ -1,0 +1,16 @@
+# Replacements for the per-function check (`just fn-check`, native/fn-check-any)
+# on agb/native-spike: hand-written Rust for a function, checked against its
+# lift. Not stand-ins of the program's lift (holes/native-spike.toml).
+
+[[standin]]
+entry = 0x0800017d
+why = "the V-blank closure (src/main.rs's `frame_count += 1`), by hand: the count up one. r0 is the lift's lr, RET, as the summary says r0 is a result"
+check = { seed = 1, runs = 2000 }
+code = '''
+pub fn f_0800017d(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+    let _ = sp;
+    let n = g.ram.d_020000c0.wrapping_add(1);
+    g.ram.d_020000c0 = n;
+    Ok([RET, n, a[2], a[3]])
+}
+'''
