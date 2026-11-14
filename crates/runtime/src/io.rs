@@ -469,6 +469,13 @@ impl Io {
         self.regs[reg::IE as usize / 2] & self.regs[reg::IF as usize / 2] != 0
     }
 
+    /// Whether one of the sources in `mask` is requested and enabled
+    /// (`IE & IF & mask`), whatever `IME` says.
+    #[inline]
+    pub fn irq_requested_of(&self, mask: u16) -> bool {
+        self.regs[reg::IE as usize / 2] & self.regs[reg::IF as usize / 2] & mask != 0
+    }
+
     /// Whether the CPU should take an IRQ, apart from the CPSR's I bit.
     #[inline]
     pub fn irq_pending(&self) -> bool {

@@ -1,0 +1,76 @@
+# Metroid: Zero Mission (USA): reset, Start through the intro and the title, a new game in file A on
+# Normal, the opening text, and the first room of Brinstar: run right, jump, run left, shoot. The native
+# check's first game (native/metroid-native-check, docs/native-stage-b.md, "The first game"): the stage-A
+# lift (`just lift … --name metroid`) against the play build at --timing native, by route-check --native.
+# Each checkpoint's hash is what mGBA 0.10.5 draws (mgba-dump, 2026-11-08) and our exact interpreter too;
+# checked by eye.
+rom = "$HOME/ROMs/gba/Metroid - Zero Mission (USA).gba"
+
+# Start skips the intro to the title; Start there opens SAMUS DATA (no save).
+[[press]]
+button = "start"
+at = 200
+
+[[press]]
+button = "start"
+at = 400
+
+# A on file A, Start Game, Normal, then once more.
+[[press]]
+button = "a"
+from = 550
+to = 760
+every = 70
+
+# A leaves the opening text ("Planet Zebes…").
+[[press]]
+button = "a"
+at = 1400
+
+# In the first room: right, a jump, left, two shots.
+[[press]]
+button = "right"
+at = 1900
+hold = 150
+
+[[press]]
+button = "a"
+at = 2080
+hold = 20
+
+[[press]]
+button = "left"
+at = 2200
+hold = 150
+
+[[press]]
+button = "b"
+at = 2400
+
+[[press]]
+button = "b"
+at = 2450
+
+# The title screen, PRESS START.
+[[checkpoint]]
+name = "title"
+frame = 350
+hash = "a0c2d3fe9ea3236b"
+
+# The difficulty menu over SAMUS DATA, NORMAL chosen.
+[[checkpoint]]
+name = "difficulty"
+frame = 700
+hash = "4bdbef4f7654a97e"
+
+# Samus in the first room, standing.
+[[checkpoint]]
+name = "first-room"
+frame = 1900
+hash = "ed26b9db57045594"
+
+# Samus back in the first room after a run to the next, hit by a crawler.
+[[checkpoint]]
+name = "gameplay-2700"
+frame = 2700
+hash = "0fba0effc3dce0ef"
