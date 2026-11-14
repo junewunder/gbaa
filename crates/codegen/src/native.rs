@@ -1448,6 +1448,7 @@ fn fn_ins<'a>(
         let src = c.src;
         for f in c.funcs {
             let mut blocks = BTreeMap::new();
+            let mut strides_of = BTreeMap::new();
             for (&k, gb) in &f.blocks {
                 let insts = &gb.block.insts;
                 let mut exits_of = BTreeMap::new();
@@ -1487,6 +1488,7 @@ fn fn_ins<'a>(
                 let mut at = k & !1;
                 let mut lits = BTreeMap::new();
                 let mut hulls = BTreeMap::new();
+                let mut strides = BTreeMap::new();
                 for (i, inst) in insts.iter().enumerate() {
                     match inst.op {
                         Op::Insn(a) => at = a,
@@ -1495,6 +1497,7 @@ fn fn_ins<'a>(
                                 && let (false, false, Some(h)) = (x.sp, x.top, x.hull)
                             {
                                 hulls.insert(i, h);
+                                strides.insert(i, x.stride);
                             }
                         }
                         Op::Pool(v) => {
@@ -1515,8 +1518,28 @@ fn fn_ins<'a>(
                         exits: exits_of,
                         pools: lits,
                         hulls,
+                        bases: BTreeMap::new(),
                     },
                 );
+                strides_of.insert(k, strides);
+            }
+            // The accesses whose bounds start at a literal this function
+            // loads, read by an index: tables it reads from their start.
+            let lits: BTreeSet<u32> = blocks
+                .values()
+                .flat_map(|b: &fnref::FBlock| b.insts.iter())
+                .filter_map(|inst| match inst.op {
+                    Op::Pool(v) => Some(v),
+                    _ => None,
+                })
+                .collect();
+            for (k, b) in blocks.iter_mut() {
+                b.bases = b
+                    .hulls
+                    .iter()
+                    .filter(|(_, (lo, hi))| hi > lo && lits.contains(lo))
+                    .map(|(&i, _)| (i, strides_of[k][&i]))
+                    .collect();
             }
             ins.push(fnref::FnIn {
                 entry: f.entry,
