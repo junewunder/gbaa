@@ -1732,17 +1732,30 @@
       "uses": ["heavy"],
       "minMinutes": 180,
       "record": {
-        "state": "claimed",
+        "state": "review",
         "by": "5e83e896",
-        "session": "5e83e896-94e8-45e1-b4d0-c3dbce47bc3c",
-        "host": "quack",
-        "pid": 2833770,
-        "start": "8749081",
-        "at": "2026-11-14T09:20:58Z",
+        "at": "2026-11-14T11:26:44Z",
+        "evidence": "gbaa-holes' hard count is now gbaa-lift --holes-only's, by HoleKind (out/holes/holes-match-lift, numbers doc regenerated; 110 total). Whole lift (7f42cf22) vs holes-only: same hard-hole lines on Metroid 0, WarioWare 6, Nightmare 0, moonbeam 7, Rogue 24, Imperium 20; Minish Cap 32 vs 31 and Mirror 7 vs 6 (flow's callee sets), named in docs/research/native-holes.md, and --flow matches both whole lifts line for line. Emerald's whole lift unfinished: {unit:native/holes-match-emerald}. just check passed after the main merge (main brought only tracker changes). Logs in /tmp/hml.",
         "branch": "unit/native/holes-match-lift",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-14T11:26:44Z",
+          "by": "5e83e896",
+          "host": "quack",
+          "pid": 2833770,
+          "start": "8749081",
+          "beats": true,
+          "session": "5e83e896-94e8-45e1-b4d0-c3dbce47bc3c",
+          "lane": "quack/1"
+        },
+        "pushed": true
       },
       "notes": [
+        {
+          "at": "2026-11-14T11:26:19Z",
+          "by": "5e83e896",
+          "text": "gbaa-holes' hard = gbaa-lift --holes-only's, by HoleKind. Whole lift vs holes-only: same on 8 of 9; Minish Cap and Mirror +1 summary hole each from the flow's callee sets, matched by --flow (18 min). Emerald's whole lift unfinished: {unit:native/holes-match-emerald}."
+        },
         {
           "at": "2026-11-13T08:31:01Z",
           "by": "8814ddd6",
@@ -2320,6 +2333,14 @@
       "check": "recorded",
       "uses": ["heavy"],
       "minMinutes": 70
+    },
+    {
+      "id": "native/holes-match-emerald",
+      "title": "Emerald's whole lift names the hole report's holes",
+      "detail": "Last piece of {unit:native/holes-match-lift}: Emerald's whole lift (gbaa-lift, holes file none) against gbaa-lift --holes-only (16 holes at 7f42cf22). Its flow doesn't settle, so no callee sets: expect the same. Diff the sorted 'hard hole' lines; put the result in docs/research/native-holes.md 'The report's count is the lift's' (replace 'wasn't finished'). Run the lift as a long job, --mem 4G (2.7G peak on Rogue), ~30-40 min.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "minMinutes": 60
     }
   ]
 }
