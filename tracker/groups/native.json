@@ -2320,6 +2320,14 @@
       "check": "recorded",
       "uses": ["heavy"],
       "minMinutes": 70
+    },
+    {
+      "id": "native/holes-match-emerald",
+      "title": "Emerald's whole lift names the hole report's holes",
+      "detail": "Last piece of {unit:native/holes-match-lift}: Emerald's whole lift (gbaa-lift, holes file none) against gbaa-lift --holes-only (16 holes at 7f42cf22). Its flow doesn't settle, so no callee sets: expect the same. Diff the sorted 'hard hole' lines; put the result in docs/research/native-holes.md 'The report's count is the lift's' (replace 'wasn't finished'). Run the lift as a long job, --mem 4G (2.7G peak on Rogue), ~30-40 min.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "minMinutes": 60
     }
   ]
 }
