@@ -1033,3 +1033,65 @@ call_fn_four_complete = 60
 jumps_by_value = 8
 fn_words_not_proven = 60
 gap_targets = 5
+
+[program.native-takes]
+rom = "agb/native-takes.gba"
+route = "units/native-takes-600.toml"
+# Registers by caller (native/taker-test-program): tk_a and tk_b read r8
+# and r9 as tk_set left them, tk_a called by bl, tk_b through a pointer
+# holes/native-takes.toml's [[takes]] names; the report says 2 functions
+# take. Stage A's old call (--takes-zeroed) starts both with them zeroed.
+planted_flags = ["--takes-zeroed"]
+
+[program.native-takes.bars]
+lines = 70108
+lines_prelude = 1201
+functions = 113
+functions_iwram = 3
+functions_lifted = 110
+functions_unrecognised = 113
+functions_replaced = 3
+standins = 3
+functions_summary_hole = 83
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 52
+hard_holes = 0
+blocks = 1714
+load_const_ram = 0
+load_const_io = 12
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 270
+load_computed_ram = 0
+load_computed_io = 6
+load_computed_rom = 69
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 704
+store_const_ram = 0
+store_const_io = 25
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 450
+store_computed_ram = 1
+store_computed_io = 6
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 349
+pointer_unexplained = 1
+ref_unexplained = 35
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 713
+sp_accesses_callers_frame = 7
+call_fn_calls = 63
+call_fn_four_complete = 58
+jumps_by_value = 8
+fn_words_not_proven = 55
+gap_targets = 5

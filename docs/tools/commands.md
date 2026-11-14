@@ -1347,8 +1347,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
   `agb/native-frame-locals`, `agb/native-ime-release`, `agb/native-bios-calls`,
   `agb/native-bios-more` (SoftReset too), `agb/native-tasks`, `agb/native-dma`, `agb/native-save` (SRAM),
-  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`, `agb/native-serial`, `agb/native-irq-wrapper` (both its IRQ wrappers lifted, their `msr` and `mrs` run)
-  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers, native/lift-irq-wrapper-tail) on
+  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`, `agb/native-serial`, `agb/native-irq-wrapper` (both its IRQ wrappers lifted, their `msr` and `mrs` run), `agb/native-takes` (two functions that take r8 and r9 from their caller, one called through a pointer the holes file's `[[takes]]` names)
+  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers, native/lift-irq-wrapper-tail, native/taker-test-program) on
   `units/<name>-600.toml` (the spike's is `units/native-spike.toml`,
   native-irq-hold's, native-ime-release's and native-bios-region's
   `-601`). First every program is lifted with `--bars`
@@ -1362,14 +1362,13 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   naming `f_08002728`'s `mrs`, a critical section's (left hard); native-tasks likewise (a task's store; its yield's
   stack switch); native-dma's (0x08000180, `dma_set`'s `DMAxCNT`, a unit
   more), native-save's (0x080002ac, an SRAM `strb`), native-serial's (0x0800017c, `SIOCNT`) and native-irq-wrapper's (0x080001f4, the wrapper's `IE` put back after its handler call: `frame 33: I/O byte 0x04000200`) too.
-  native-fallthrough, native-irq-hold, native-frame-locals and
-  native-ime-release lifted with their `planted_flags`
+  native-fallthrough, native-irq-hold, native-frame-locals,
+  native-ime-release and native-takes lifted with their `planted_flags`
   (`--fall-as-tail-call`, the old fall into another function;
   `--irq-at-waits`, the old IRQ run at a wait inside a critical section;
   `--plant-slot=0x08000182`, `fl_keep`'s store to a stack local made one
   more, native/frame-locals; `--ime-at-waits`, the old IRQ held past the
-  store that sets `IME` again to the next wait, native/ime-release) must
-  be caught too. Each program is lifted once more with `--layout packed`
+  store that sets `IME` again to the next wait, native/ime-release; `--takes-zeroed`, a taker's r4-r11 passed as zeroes, native/taker-test-program) must be caught too. Each program is lifted once more with `--layout packed`
   (`out/lift-<name>-packed`), passed as `--packed`: it must draw the guest
   layout's frames and record the same bytes, nothing skipped
   (native/lift-packed-layout). Passes with `every metric within its bar`,
