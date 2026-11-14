@@ -128,6 +128,11 @@ pub struct Config {
     /// (`docs/research/mod-view-without-timing.md`). One for the whole
     /// crate: the prelude's macros and `Game` take its shape.
     pub clock: Clock,
+    /// End a block at an idle loop's conditional branch, so its not-taken
+    /// way out is an exit of its own ([`Idle::Exit`]), as [`Clock::Native`]
+    /// does: the native lift's ([`Ctx::with_idle_exits`]), which syncs
+    /// there as the native-timing play build does.
+    pub idle_exits: bool,
 }
 
 /// How generated code counts its cycles.
@@ -193,6 +198,7 @@ impl Default for Config {
             callee_saves: false,
             readable: false,
             clock: Clock::Exact,
+            idle_exits: false,
         }
     }
 }
@@ -264,6 +270,16 @@ impl<'a> Ctx<'a> {
             .filter(|&k| self.is_code(k))
             .collect();
         self.entries.extend(ks);
+        self
+    }
+
+    /// This context with its blocks ended at each idle loop's conditional
+    /// branch ([`Config::idle_exits`]), as the native-timing play build's
+    /// are: the native lift's, so the loop's not-taken way out is an exit
+    /// of its own ([`Idle::Exit`]), where it syncs as the play build does
+    /// (`hw::idle_exit`).
+    pub fn with_idle_exits(mut self) -> Ctx<'a> {
+        self.cfg.idle_exits = true;
         self
     }
 
@@ -756,18 +772,18 @@ pub fn successors(ctx: &Ctx, x: &ExitInfo) -> Vec<u32> {
 /// compiled code takes it at the same instruction as the interpreter, which
 /// ticks after each one (native/ime-release). Elsewhere the store's tick
 /// would only be later by a block, as any I/O write's is. So does an idle
-/// loop's conditional branch: where it isn't taken the loop is left, and
+/// loop's conditional branch (and with [`Config::idle_exits`], the native
+/// lift's, only that): where it isn't taken the loop is left, and
 /// the interpreter syncs there ([`Idle::Exit`], `rt::idle_exit`, which
 /// brings up a clock a DMA in the loop moved); in the block's middle the
 /// not-taken path would have no exit to sync at
 /// (native/play-native-metroid-interp).
 fn build_block(ctx: &Ctx, k: u32, stops: &BTreeSet<u32>) -> GBlock {
     let gb = build_block_until(ctx, k, stops, None);
-    if ctx.cfg.clock == Clock::Native {
-        let split = [ime_store(&gb.block), idle_branch(ctx, &gb)]
-            .into_iter()
-            .flatten()
-            .min();
+    let native = ctx.cfg.clock == Clock::Native;
+    if native || ctx.cfg.idle_exits {
+        let ime = if native { ime_store(&gb.block) } else { None };
+        let split = [ime, idle_branch(ctx, &gb)].into_iter().flatten().min();
         if let Some(at) = split
             && gb.insns.last().is_some_and(|&(last, _)| last != at)
         {

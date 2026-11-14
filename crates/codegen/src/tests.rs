@@ -2670,6 +2670,29 @@ fn an_arm_ldr_pop_of_r4_restores_it() {
 }
 
 #[test]
+fn the_native_lift_ends_a_block_at_an_idle_loops_branch_only() {
+    // The DMA wait of the test below, at the default clock with idle exits
+    // (the native lift's context): the `bne` ends its block, so its way
+    // out is an exit of its own, where the lift prints `hw::idle_exit`.
+    let (rom, d) = thumb_program(
+        &[0xE000, 0x6888, 0x4020, 0x2800, 0xD1FB, 0x46C0, 0x4770],
+        &[2; 7],
+        &[0x0800_0001],
+    );
+    let ctx = Ctx::new(&rom, &d).with_idle_exits();
+    assert_eq!(ctx.cfg.clock, crate::func::Clock::Exact);
+    let f = build_func(&ctx, 0x0800_0001);
+    let x = exits(&ctx, &f.blocks[&0x0800_0005]);
+    let idle: Vec<Idle> = x.iter().map(|x| x.idle).collect();
+    assert_eq!(idle, [Idle::Edge, Idle::Exit], "{x:x?}");
+    // Without them the not-taken path runs on in the same block.
+    let plain = Ctx::new(&rom, &d);
+    let f = build_func(&plain, 0x0800_0001);
+    let x = exits(&plain, &f.blocks[&0x0800_0005]);
+    assert!(x.iter().all(|x| x.idle != Idle::Exit), "{x:x?}");
+}
+
+#[test]
 fn an_idle_loops_exit_syncs_in_native_code() {
     // `b L2; L1: ldr r0, [r1, #8]; L2: ands r0, r4; cmp r0, #0; bne L1;
     // nop; bx lr`: a DMA wait entered in its middle (Metroid's).

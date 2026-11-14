@@ -79,6 +79,14 @@ pub struct Sched {
     /// while it is, so an IRQ that the CPSR held back is taken as soon as
     /// the I bit clears.
     pub irq_line: bool,
+    /// Under native timing, the sources requested and enabled at the last
+    /// sync (`IE & IF`, with `IME` on): the held IRQs [`Machine::tick`]
+    /// takes as soon as an `msr` clears I. One requested after it, outside
+    /// a sync (a FIFO refill's, in a store's walk of the timers), waits for
+    /// the next time point, as in a native program, not for the next tick,
+    /// which compiled code and the interpreter reach at different
+    /// instructions. Not saved, as `window`.
+    pub held: u16,
     /// When a link hub's turn ends ([`crate::link`]): reaching it ends the
     /// run as the frame end does ([`Sched::frame_ended`] is set). `u64::MAX`
     /// off a hub. Not guest state: the hub sets it for each turn.
@@ -110,6 +118,7 @@ impl Default for Sched {
             halted: false,
             frame_ended: false,
             irq_line: false,
+            held: 0,
             deadline: u64::MAX,
             window: true,
             fresh: false,
@@ -164,13 +173,13 @@ impl<P: Platform> Machine<P> {
         // critical section) is taken as soon as an `msr` clears I, as the
         // hardware takes it, not at the next time point (native/lift-irq-
         // hold). One the sync found with I clear was taken in its window,
-        // so this is only ever a held one. Likewise one pending when `IME`
+        // so this is only ever a held one: of the sources the sync found
+        // ([`Sched::held`]); one a store's walk requested since waits for
+        // the next time point. Likewise one pending when `IME`
         // is set again (a critical section that clears `IME`, as agbcc
         // games' do): taken at this tick (native/ime-release).
-        if (self.sched.irq_line || ime_on)
-            && self.cpu.cpsr & I_BIT == 0
-            && self.bus.io.irq_pending()
-        {
+        let held = self.sched.irq_line && self.bus.io.irq_requested_of(self.sched.held);
+        if (held || ime_on) && self.cpu.cpsr & I_BIT == 0 && self.bus.io.irq_pending() {
             self.sched.window = true;
             return true;
         }
@@ -294,6 +303,11 @@ impl<P: Platform> Machine<P> {
             self.sched.halted = false;
         }
         self.sched.irq_line = io.irq_pending();
+        self.sched.held = if self.sched.irq_line {
+            io.raw16(reg::IE) & io.raw16(reg::IF)
+        } else {
+            0
+        };
         self.sched.window = true;
         // Time passed: every spin loop starts its count again.
         self.sched.spins = [(0, 0); SPIN_SLOTS];
@@ -464,7 +478,7 @@ crate::snap::snap!(Sched {
     halted,
     frame_ended,
     irq_line
-}; skip deadline, window, fresh, spins);
+}; skip deadline, window, fresh, spins, held);
 
 #[cfg(test)]
 mod tests;

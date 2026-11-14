@@ -498,15 +498,22 @@ fn overflowed<A: Audio>(a: &mut A, over: u8, clocks: u8, at: u64) {
     }
 }
 
+/// Whether a store to the I/O offset `o` first counts the timers and the
+/// FIFOs up to now ([`before_io_write`]): the timers', the sound's and
+/// DMA1's and DMA2's registers (FIFO DMA's channels).
+pub fn counts_before_write(o: u32) -> bool {
+    let timers = (reg::TM0CNT_L..reg::TM0CNT_L + 16).contains(&o);
+    let sound = (0x060..reg::FIFO_B + 4).contains(&o);
+    let dma12 = (reg::DMA0SAD + 12..reg::DMA0SAD + 36).contains(&o);
+    timers || sound || dma12
+}
+
 /// Before an I/O store of `bytes` at `o`: walk the overflows due before
 /// it, if it can change what a FIFO does (a timer, the sound registers,
 /// DMA1 or DMA2), and bring the PSG up to it if it's a sound register.
 #[inline]
 pub fn before_io_write<A: Audio>(a: &mut A, o: u32, bytes: u32) {
-    let timers = (reg::TM0CNT_L..reg::TM0CNT_L + 16).contains(&o);
-    let sound = (0x060..reg::FIFO_B + 4).contains(&o);
-    let dma12 = (reg::DMA0SAD + 12..reg::DMA0SAD + 36).contains(&o);
-    if timers || sound || dma12 {
+    if counts_before_write(o) {
         run_timers(a);
     }
     if (0x060..reg::WAVE_RAM + 16).contains(&o) {
@@ -564,11 +571,16 @@ pub fn store<A: Audio>(a: &mut A, o: u32, bytes: u32, v: u32) {
         }
     }
     io_written(a, o, bytes, v);
+    // The timers this store wrote, by address: not by `io.events`, whose
+    // timer bits stay set until the next sync. Under native timing a later
+    // store before it (a DMA register's, after a DMA moved the clock) would
+    // run a timer written earlier on past an overflow there, and the FIFO
+    // it clocks would miss that pop.
     let io = a.parts().0;
-    let timers = io.events & (0xF * event::TIMER0);
-    for n in 0..4 {
-        if timers & (event::TIMER0 << n) != 0 {
-            timer::control_written(io, n);
+    for n in 0..4u32 {
+        let lo = reg::TM0CNT_L + 4 * n;
+        if o < lo + 4 && lo < o + bytes {
+            timer::control_written(io, n as usize);
         }
     }
 }
