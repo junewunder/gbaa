@@ -30,8 +30,9 @@
 //! on stderr, the stop line (`native_record::stop`, unit
 //! `native/native-first-stop`): at a panic (an I/O register the library
 //! doesn't model, memory the program hasn't got), after the panic's own
-//! message, with the frames presented and the lifted functions on the
-//! stack; and when `--time-limit`'s seconds pass first (a loop that never
+//! message, with the frames presented, the lifted functions on the
+//! stack and the guest pc of the last block entered
+//! (`runtime::guest_pc`, unit `native/first-stop-guest-pc`); and when `--time-limit`'s seconds pass first (a loop that never
 //! reaches a frame), exiting [`TIME_LIMIT_EXIT`]. `gbaa-first-stop` reads it.
 
 use std::cell::RefCell;
@@ -363,6 +364,7 @@ fn say_stop(functions: Vec<u32>, at: String, why: Why) {
         frames: SHOWN.load(Ordering::Relaxed),
         asked: ASKED.load(Ordering::Relaxed),
         functions,
+        pc: runtime::guest_pc::get(),
         at,
         why,
     };
