@@ -159,6 +159,33 @@ fn pointer_scan_rejects_a_shift_by_32() {
 }
 
 #[test]
+fn pointer_scan_rejects_a_bx_to_a_shifted_register() {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        .h(0x100, 0x4770)
+        // Emerald Rogue's battle script decoded as Thumb: strb r4, [r7,
+        // #24]; lsls r1, r6, #4; lsls r1, r1, #6; movs r6, #198; bx r1.
+        .h(0x300, 0x763c)
+        .h(0x302, 0x0131)
+        .h(0x304, 0x0189)
+        .h(0x306, 0x26c6)
+        .h(0x308, 0x4708)
+        // The same with the jump's target loaded: ldr r1, [r1, #0].
+        .h(0x340, 0x763c)
+        .h(0x342, 0x0131)
+        .h(0x344, 0x6809)
+        .h(0x346, 0x26c6)
+        .h(0x348, 0x4708)
+        // Both beside a function found already.
+        .w(0x400, thumb(0x300))
+        .w(0x404, thumb(0x100))
+        .w(0x408, thumb(0x340));
+    let d = a.run();
+    assert!(!d.funcs.contains_key(&thumb(0x300)));
+    assert_eq!(d.funcs.get(&thumb(0x340)), Some(&Evidence::Scanned));
+}
+
+#[test]
 fn scanned_code_reaching_an_undefined_insn_is_data() {
     let mut a = Asm::new();
     a.entry(0x100)

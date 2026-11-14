@@ -440,10 +440,10 @@ Summary holes that are hard, before and after (`just holes-all --against`):
 | libgcc ieee754-df.S's denormal paths, r4 and r5 in (ARM) | Emerald 0x082dfd09, Rogue 0x0800cb45, Imperium 0x08003879, Kirby M. 0x0814fd35, Minish 0x080afbd1; Nightmare 0x080ce1f9 is m4a's `ChnVolSetAsm` instead (r4 the channel, r5 the track), the others not checked against it |
 | hand-written register parameters | Minish 0x080086d9 (`sub_080086D8`, r8 and r11), 0x08060ba1 (derefs r5), 0x08008a89 (r5, `ClampPlayerVelocity`'s kind); WarioWare 0x080efe51, 0x080f0ab0 |
 | modern GCC's far jump by `bl` into a fragment of the caller's, taken for a call | moonbeam 0x0801a081 and six more, Rogue 0x0820c629, Imperium 0x0821e331 (looked into since: "Modern GCC's cold blocks", below) |
-| agbcc's partly built word stored with the unset register's other bits (a struct's padding) | Emerald 0x080852d5, Kirby M. 0x08132889, WarioWare 0x080abfa5, Metroid 0x08073ce5 |
+| agbcc's partly built word stored with the unset register's other bits (a struct's padding) | Emerald 0x080852d5, Kirby M. 0x08132889, WarioWare 0x080abfa5, Metroid 0x08073ce5 (modern GCC's too since: moonbeam 0x08025a29, Rogue 0x081b42e1; "Entry readers left on moonbeam and Rogue", below) |
 | an unset register used as an index (`lsls r1, r4, #2; ldr`) | Minish 0x08037c3d |
-| data decoded as code | Emerald 0x0850dbaf, 0x085ef6a1; Metroid 0x087d8000; WarioWare 0x083db2d7 |
-| not looked into | Nightmare 0x08064759, 0x080647fd, 0x0806b411, 0x0806b671; Rogue 0x081b42e1, 0x0826c5e7; moonbeam 0x0800019b |
+| data decoded as code | Emerald 0x0850dbaf, 0x085ef6a1; Metroid 0x087d8000; WarioWare 0x083db2d7 (and Rogue 0x0826c5e7, gone since: below) |
+| not looked into | Nightmare 0x08064759, 0x080647fd, 0x0806b411, 0x0806b671; Rogue 0x081b42e1, 0x0826c5e7 (looked into since, below); moonbeam 0x0800019b |
 
 The fully masked reads (soft), by function and the op that clears the
 last bit: Emerald 0x082e14f5 (0x082e151a), 0x082e1629 (0x082e164e),
@@ -510,6 +510,46 @@ veneer to ARM `stmia r0!, {r4-r14}`, a register save as `setjmp` makes)
 and 0x08025a29 (r8 and r9 at 0x08025dec, its far jumps all taken; not
 looked into); Rogue 0x081b42e1 and 0x0826c5e7 (not looked into); libgcc's
 denormal paths in Rogue and Imperium.
+
+## Entry readers left on moonbeam and Rogue
+
+`native/entry-readers-moonbeam-rogue`, 2026-11-14: the three left above.
+
+**moonbeam 0x08025a29: a tagged value's payload unset** (r8 at 0x08025dec,
+0x08025dfc, 0x08025e00; r9 at 0x08025df0). It builds an 8-byte value in
+r8 (the low word, a pointer for some tags) and r9 (`lsls/lsrs #16` keeps
+r9's low half, `orrs` puts the tag on top: 0xfff3 here, a NaN's top) and
+stores both. With the lookup at 0x08025aec failing (r0 0) and the flags
+at 0x08025d58 making r4 7, the store is reached with neither set: a walk
+tracking r6 finds that path with no branch on it the function can decide
+(only the shorter one through 0x08025e6a is impossible, r6 -1 sending
+0x08025ac4 elsewhere). Not the summary's join: the C leaves the payload
+unset for a tag that doesn't use it, and its caller's r8 (0x08027ff9's,
+saved by the prologue) goes to memory. The interpreter (3,000 frames, no
+presses) enters it 279 times, all on the failed lookup, never reaching
+the store. Hard, rightly: agbcc's partly built word, from modern GCC.
+
+**Rogue 0x081b42e1: a struct's top half passed on unset** (r11 in r0 at
+0x081b444c). A recursive fill builds the next cell's `{s8 x, s8 y}` in
+r11 as `bics #255; orrs x; ands 0xffff00ff; orrs y << 8`, keeping bits
+16-31; on the first pass (0x081b441e to 0x081b4426) they are the entry
+r11's, and the callee stores r0 whole (`str r0, [r2, #8]`, 0x081b4322).
+Hard, rightly: the padding kind.
+
+**Rogue 0x0826c5e7: a battle script taken for code.** 0x080c52ba,
+0x080c6692 and 0x080c706c load it from their pools into r0 for
+0x080c3e1c, which stores it as the current script and pushes a callback.
+The pointer scan scored it 3 (pooled, three words), and its decode
+validated by ending in an indirect jump: `strb r4, [r7, #24]; lsls r1,
+r6, #4; …; lsls r1, r1, #6; movs r6, #198; bx r1`. A `bx` to a register
+last set by a shift left goes to ARM state at an address made only by
+the shift, which no switch does (its targets come from a table or an
+add): `analysis::discovery::scan::shifted_bx` now fails such a body. The
+pret builds' starts: Emerald's and Emerald modern's unchanged; Rogue's
+own build loses just this one, a false start by its ELF.
+
+Against main, hard holes fell on Rogue (this start's read and its `bx`)
+and rose nowhere (numbers: the unit's evidence).
 
 ## Modern GCC's unresolved jumps, by kind
 
