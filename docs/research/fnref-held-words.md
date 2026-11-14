@@ -349,7 +349,8 @@ In the order they'd pay on Metroid:
    set no r0, and the handlers left in r0 to r3 by the call stub, which
    is what feeds row one. Its card says to work on the branch; nothing
    it needs is there (the summaries are on main).
-3. **Where a ROM table ends** (`native/fnref-table-ends`, new). A table
+3. **Where a ROM table ends** (`native/fnref-table-ends`, new; landed:
+   "Where a table ends, as landed", at the end). A table
    read by a byte index is read 256 entries long and one read by a
    halfword 64 KB, through its neighbours: C lays tables of handlers
    back to back, and `object_end` doesn't stop between function words,
@@ -575,3 +576,58 @@ hole at 0x0800535a, 0x08001416, 0x080031f0, 0x08000aea, 0x08000baa or
 
 The agb programs' counts are as they were (`just lift-metrics`, every
 bar held).
+
+## Where a table ends, as landed
+
+Unit `native/fnref-table-ends`, 2026-11-14 on quack, on main at 74879dc.
+
+**The rule.** A table starts where the code indexes from it: a load or
+store whose value-set bounds start at a literal its own function loads
+(`ldr r1, =TABLE`, then an index added) and run past it. The value-set
+analysis's access record now keeps the bounds' stride, the size of the
+entries the index steps through (`Access::stride`). Such a start ends
+the object below it, inside a run of function words too, where an
+address a ROM word holds doesn't (`Run::object_end`, `tables` in
+`fnref.rs`). One less than an entry past another start (by either's
+stride) is a field of that table's records, not a new table: a struct
+table read by one field is indexed from the field's address. And a load
+whose bounds start at such a literal, which the run can't place (the
+index came out of the pile), reads the bounds only to that object's end,
+where it read all 64 KB of a halfword's bounds before.
+
+Sound as far as C's objects go: indexing past an array's end is
+undefined, so a read from a table's start stays in it. What it takes on
+trust is that a literal indexed from at an entry or more past another
+table's start is a table of its own, not `&TABLE[k]` of the same table
+indexed both ways; that the literal the bounds start at is the one the
+load indexes from, not another the function loads; and the 4 KB it
+looks back for a record. A bounded read cut at its object now also
+stops at the object starts a read "from here on" stops at, with their
+risk (font bytes that look like pointers), and a wrong cut there would
+leave a callee set complete that isn't. A bound the
+code proves with a compare needed nothing new: the value-set analysis
+narrows the index on the branch already, and the bounds the flow gets are
+the narrowed ones. Metroid's over-reads had none to use (`pose` is a
+`u8` and nothing compares it; the panel array's guard stores a clamped
+index and the read loads it again).
+
+**Checked against the decomp.** Every ROM read the Metroid run made,
+logged with and without the rule and held to the symbol sizes of
+metroidret's `mzm_us.elf` (built byte-identical to the ROM): no read
+cuts a data object with function words in it short, with the rule or
+without; the function words read past the end of the object a read
+started in fall from 654 to 3. Of the 640 table starts, 3 are fields;
+301 of the rest at a symbol's start, most others inside a function's
+code (a `switch`'s table between instructions, where reads stop at the
+code anyway), and four inside data the code indexes from a fixed offset
+into, none with function words: byte records whose stride the value
+sets lost (stride 1: `sStatusScreenGroupsPositions + 2`) and a palette's
+second half. Those were object starts, and cut there, before the rule.
+
+**Counts.** Metroid, the lift with its holes file (37 s, as before):
+`fn_words_not_proven` 338 to 274 (`GBAA_FNREF_OFF=tables` gave 273),
+`fn_words_proven` 466 to 530; the 70 complete callee sets of the 72
+`call_fn` calls from 75.4 callees on average to 59.1, the widest from 210
+to 167 (the report's line now says both). The agb programs' metrics are
+all as they were. Nightmare and Emerald were not run.
+
