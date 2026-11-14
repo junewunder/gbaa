@@ -3916,6 +3916,12 @@ fn strides(insts: &[Inst]) -> Vec<u32> {
                 regs[r.index()] = inst.guard.is_none().then_some(x.index());
                 me
             }
+            // A mode switch banks registers: none read before is known
+            // to be the one read after.
+            Op::SetCpsr { .. } | Op::SetSpsr { .. } | Op::SetUserReg(..) => {
+                regs = [None; 16];
+                me
+            }
             Op::Load {
                 width: Width::Byte | Width::Half,
                 ..
