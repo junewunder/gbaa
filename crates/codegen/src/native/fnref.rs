@@ -1895,8 +1895,18 @@ fn unused(f: &FnIn) -> BTreeMap<u32, Vec<bool>> {
             Some(v) => (v, Flags::NONE),
             None => (Vec::new(), Flags::ALL),
         };
+        let insts = f.blocks[&keys[b]].insts;
+        // A jump by value may also go where a holes file's jumps send it,
+        // into another function, which the edge doesn't list.
+        let by_value = match insts[i].op {
+            Op::Exit(Exit::Jump(t) | Exit::JumpExchange(t)) => {
+                !matches!(insts[t.index()].op, Op::Const(_) | Op::Pool(_))
+            }
+            _ => false,
+        };
         match f.blocks[&keys[b]].exits.get(&i).map(|o| &o.edge) {
-            Some(Edge::Goto(ks)) => to(ks),
+            Some(Edge::Goto(ks)) if !by_value => to(ks),
+            Some(Edge::Goto(ks)) => (to(ks).0, Flags::ALL),
             Some(Edge::Call { ret, .. }) => to(&[*ret]),
             Some(Edge::Swi(next)) => to(&[*next]),
             Some(Edge::Return) => (Vec::new(), Flags::NONE),
