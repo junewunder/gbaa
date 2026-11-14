@@ -445,6 +445,10 @@ pub struct Options {
     pub resume: bool,
     /// The menu's Save folders page, as the settings stand.
     pub saves: crate::menu::saves::SaveFolders,
+    /// The game is a native program (crates/native-host): the menus leave
+    /// out save states, rewind, scripts and netplay, which it hasn't got
+    /// ([`Menu::native`], [`crate::menubar::State::native`]).
+    pub native: bool,
 }
 
 /// `frames` side by side in `out`, a row of each in turn.
@@ -590,6 +594,8 @@ pub fn run<T: Send + 'static>(
     menu.axis_deadzones = o.axis_deadzones;
     menu.resume = o.resume;
     menu.saves = o.saves;
+    menu.native = o.native;
+    menu.remap.native = o.native;
     pads.deadzones = menu.pad_deadzones();
     menu_pad.deadzones = pads.deadzones;
     // The menu bar in KDE's global menu, where there is one
@@ -600,7 +606,10 @@ pub fn run<T: Send + 'static>(
         crate::menubar::kde::GlobalMenu::start(
             canvas.window(),
             video.current_video_driver(),
-            crate::menubar::State::default(),
+            crate::menubar::State {
+                native: o.native,
+                ..Default::default()
+            },
             Box::new(move || {
                 let _ = wake.push_custom_event(Note::Frame);
             }),
@@ -612,7 +621,10 @@ pub fn run<T: Send + 'static>(
     let global_menu = {
         let wake = events.event_sender();
         crate::menubar::macos::MenuBar::start(
-            crate::menubar::State::default(),
+            crate::menubar::State {
+                native: o.native,
+                ..Default::default()
+            },
             Box::new(move || {
                 let _ = wake.push_custom_event(Note::Frame);
             }),
@@ -1189,6 +1201,7 @@ pub fn run<T: Send + 'static>(
             g.set(crate::menubar::State {
                 undoable: menu.undoable,
                 fullscreen: menu.fullscreen,
+                native: menu.native,
             });
         }
         if let Some(t) = title {

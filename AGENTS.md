@@ -36,11 +36,11 @@ binaries; link them from outside the repo.
 
 Crates live in `crates/`: `armv4t`, `analysis`, `codegen`, `runtime`
 (`#![no_std]`), `desktop`, `native-spike` (the first native port, by
-hand), `native-host` (the native programs' headless front end), `interp` (the headless `gbaa-interp ROM
+hand), `native-host` (the native programs' front end: headless, or gbaa-desktop's window), `interp` (the headless `gbaa-interp ROM
 [--frames N] [--test]` runner), `hole-report` (`gbaa-holes`, what blocks a native
 build), and the `disc-check`, `jt-check`, `aw-check` and `mgba-dump` tools; `gbaa-dis` (`just dis`) disassembles ROM code.
 `codegen`'s `gbaa-lift` is the stage-A lifter (`just lift`, `just
-lift-check`); `holes/<game>.toml` are its stand-ins (a commercial game's
+lift-check`; `just lift` ends by running the build and recording where it stops, `just first-stop`); `holes/<game>.toml` are its stand-ins (a commercial game's
 are game-derived: `mods/<game>/holes.toml`). Generated code goes in
 `out/<game>/` (gitignored).
 
@@ -48,10 +48,10 @@ are game-derived: `mods/<game>/holes.toml`). Generated code goes in
   merge gate.
 - `just check-nostd`: builds `runtime` for `riscv32imac-unknown-none-elf` to
   prove it stays no_std.
-- The build lock (`CARGO_BUILD_JOBS=6 flock /tmp/gbaa-build.lock`, the
-  justfile's `lock`) is taken by each recipe around its cargo step. Never
+- The build lock (`CARGO_BUILD_JOBS=6 scripts/build-lock`, the justfile's
+  `lock`: three builds at once) is taken by each recipe around its cargo step. Never
   wrap `just` in it (that deadlocks); a bare `cargo build/test/clippy` takes
-  it: `env CARGO_BUILD_JOBS=6 flock /tmp/gbaa-build.lock cargo …`.
+  it: `env CARGO_BUILD_JOBS=6 scripts/build-lock cargo …`.
 - `just fetch-tests`: shallow-clones the test suites, pinned by commit in
   `scripts/fetch-tests.sh`, into `$GBAA_DATA` (default
   `~/.local/share/gbaa/`): `SingleStepTests-ARM7TDMI/`, `gba-tests/`

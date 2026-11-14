@@ -253,8 +253,8 @@ fn input_scripts() {
     let s = Script::parse("start@60, down@90+2,a@90").unwrap();
     assert_eq!(s.keys(59), 0);
     assert_eq!(s.keys(60), key::START);
-    assert_eq!(s.keys(60 + input::HOLD - 1), key::START);
-    assert_eq!(s.keys(60 + input::HOLD), 0);
+    assert_eq!(s.keys(60 + netplay::script::HOLD - 1), key::START);
+    assert_eq!(s.keys(60 + netplay::script::HOLD), 0);
     assert_eq!(s.keys(90), key::DOWN | key::A);
     assert_eq!(s.keys(91), key::DOWN | key::A);
     assert_eq!(s.keys(92), key::A);
@@ -1987,6 +1987,30 @@ fn netplay_options() {
 }
 
 #[test]
+fn wireless_options() {
+    let o = parse("g.gba --server s --wireless --host --players 3").unwrap();
+    assert!(o.wireless);
+    assert_eq!((o.role, o.players), (Some(room::Role::Host), Some(3)));
+    let o = parse("g.gba --headless --server s --wireless --join abcdef --frames 9").unwrap();
+    assert_eq!(o.role, Some(room::Role::Join(*b"ABCDEF")));
+    for (args, why) in [
+        ("--wireless", "--server"),
+        ("--wireless --server s", "--host or --join"),
+        ("--wireless --host", "--server"),
+        ("--server s --wireless --host --delay 2", "rollback"),
+        (
+            "--server s --wireless --join abcdef --state p.state",
+            "--state",
+        ),
+        ("--server s --wireless --host --link b.sav", "--link"),
+        ("--server s --wireless --host --fast-forward", "wireless"),
+    ] {
+        let e = parse(&format!("g.gba {args}")).unwrap_err();
+        assert!(e.contains(why), "{args}: {e}");
+    }
+}
+
+#[test]
 fn pads_take_seats_in_the_order_they_came() {
     use gamepad::PadEvent::*;
     use runtime::io::key;
@@ -2189,4 +2213,31 @@ fn netplay_guests_compute_what_unwinding_does_and_roll_back() {
         g.step(&[script(0, f), script(1, f)]).unwrap();
     }
     assert_eq!(g.hash(), end);
+}
+
+/// Netplay's pacer catches a late frame up, as sound pacing does, and a
+/// hold puts the next frame a period later.
+#[test]
+fn the_netplay_pacer_catches_up_and_holds() {
+    use crate::fast::Pacer;
+    use std::time::{Duration, Instant};
+    let period = Duration::from_millis(10);
+    let mut p = Pacer::default();
+    p.wait(period);
+    std::thread::sleep(Duration::from_millis(30));
+    // Two frames are overdue: neither waits (a plain clock would wait one).
+    let t = Instant::now();
+    p.wait(period);
+    p.wait(period);
+    assert!(t.elapsed() < Duration::from_millis(8), "{:?}", t.elapsed());
+    // On time again; a hold makes the next wait two periods.
+    p.wait(period);
+    p.hold(period);
+    let t = Instant::now();
+    p.wait(period);
+    assert!(
+        t.elapsed() >= Duration::from_millis(19),
+        "{:?}",
+        t.elapsed()
+    );
 }

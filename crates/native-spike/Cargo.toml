@@ -48,5 +48,6 @@ toml = "1"
 plant = []
 # The check layout (docs/native-port-design.md section 7, `--layout
 # guest`): RAM as the ROM's EWRAM and IWRAM, globals at their link
-# addresses, so `--native-record` can write it.
+# addresses, so `--native-record` writes its bytes. The spike's play
+# layout (the default) records an image of its fields laid out the same.
 guest-layout = []

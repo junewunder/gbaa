@@ -81,6 +81,7 @@ name = "analysis"
 version = "0.1.0"
 dependencies = [
  "armv4t",
+ "runtime",
 ]
 
 [[package]]
@@ -390,6 +391,7 @@ dependencies = [
  "analysis",
  "armv4t",
  "fn-diff",
+ "native-record",
  "prettyplease",
  "proc-macro2",
  "quote",
@@ -634,6 +636,7 @@ checksum = "e73ce90f54750be8672c02be0743fe47530e6f251e066f0ee2869b59eb297af5"
 name = "emerald-save"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "netplay",
  "png",
  "relay",
@@ -1370,6 +1373,7 @@ dependencies = [
 name = "netplay"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "relay",
  "runtime",
  "serde",
@@ -1789,12 +1793,16 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 [[package]]
 name = "relay"
 version = "0.1.0"
+dependencies = [
+ "runtime",
+]
 
 [[package]]
 name = "route-check"
 version = "0.1.0"
 dependencies = [
  "analysis",
+ "codegen",
  "native-record",
  "png",
  "serde",

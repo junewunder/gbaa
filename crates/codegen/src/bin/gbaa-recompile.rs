@@ -510,10 +510,12 @@ fn summaries(rom: &[u8], rest: &[String]) {
         println!(
             "callee sets (codegen::native::fnref, {:.1} s{}): {} indirect calls, {with_set} with a callee set, {complete} of them complete (on average {:.1} callees)",
             t.elapsed().as_secs_f64(),
-            if flow.unsettled {
-                ", didn't settle"
-            } else {
-                ""
+            match (flow.unsettled, flow.over) {
+                (true, Some((t, n))) => {
+                    format!(", didn't settle: {t} tokens held, over its bound, after {n} runs")
+                }
+                (true, None) => ", didn't settle".to_string(),
+                _ => String::new(),
             },
             indirect.len(),
             callees as f64 / complete.max(1) as f64,

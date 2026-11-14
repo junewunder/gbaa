@@ -64,7 +64,7 @@ use runtime::{AudioChunk, Timing};
 
 use crate::audio::Player;
 use crate::dump::{pixels_hash, write_png};
-use crate::fast::{self, Clock};
+use crate::fast::{self, Pacer};
 use crate::window::Screen;
 use crate::{Code, Desktop, Options, dump_at_path, sav_file};
 
@@ -105,13 +105,15 @@ pub enum Role {
 /// (`docs/tools/commands.md`, the server on fly.io).
 pub const DEFAULT_SERVER: &str = "37.16.3.41";
 
-/// A session the menu asked for: the server, the seat, and the seats in
-/// the room if hosting.
+/// A session the menu asked for: the server, the seat, the seats in the
+/// room if hosting, and whether it's a wireless room ([`crate::wireless`])
+/// rather than the cable's.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Ask {
     pub server: String,
     pub role: Role,
     pub players: usize,
+    pub wireless: bool,
 }
 
 /// Where this window's netplay is, as the menu shows it.
@@ -220,7 +222,7 @@ fn player(gba: &mut Gba, seat: usize) -> Option<&mut Player> {
 
 /// The server's address: a host name or IP, and a port (default 7374,
 /// `gbaa-server`'s).
-fn address(v: &str) -> Result<SocketAddr, String> {
+pub(crate) fn address(v: &str) -> Result<SocketAddr, String> {
     let with_port;
     let a = if v.contains(':') {
         v
@@ -345,9 +347,15 @@ pub fn run(
 }
 
 /// How long another player may send nothing before this peer takes
-/// them to have left: a seated peer sends every frame, and this is under
-/// the rollback window (5 s), so the game doesn't stop for someone gone.
-pub const QUIET: Duration = Duration::from_secs(3);
+/// them to have left: a seated peer sends every frame (and, in a long
+/// rollback, every [`netplay::rollback::KEEP_ALIVE`] frames run again).
+/// A machine that stalls a few seconds (a loaded one swapping, a laptop
+/// lid, a `SIGSTOP`) catches up rather than ending the session: 3 s
+/// until 2026-11-12 split a trade on wander under load, where one peer
+/// went 3.4 s without a word (multiplayer/wander-split-under-load). Past
+/// the rollback window (5 s) the game waits for them, so someone truly
+/// gone costs the others 3 s frozen before they play on alone.
+pub const QUIET: Duration = Duration::from_secs(8);
 
 /// How long the other player may send nothing before the window's mark
 /// says it hears nothing from them (before [`QUIET`] takes them to have
@@ -452,7 +460,17 @@ fn play(
         }
     }
     // Muted, the window keeps time by a frame clock.
-    let mut clock = (screen.is_some() && player(&mut gba, seat).is_none()).then(Clock::default);
+    let mut clock = (screen.is_some() && player(&mut gba, seat).is_none()).then(Pacer::default);
+    // The others' pictures are never shown here: only this seat's is drawn.
+    gba.show_only(Some(seat));
+    // How long after its turn began a frame goes to the window: frames then
+    // reach the display on the pacer's even beat, not their costs' uneven
+    // one, which a 60 Hz display shows as doubled and skipped frames
+    // (multiplayer/rollback-feel-sim; docs/research/multiplayer.md, "Feel").
+    let present = Duration::from_secs_f64(
+        opts.present_ms
+            .map_or(netplay::feel::PRESENT_US / 1e6, |ms| ms / 1e3),
+    );
     let mut s = Rollback::new(gba, net, seat, host, rollback::WINDOW);
     if let Some(f) = opts.desync_at {
         eprintln!("gbaa-desktop: forcing a desync: from frame {f} on, this peer runs A held");
@@ -487,7 +505,7 @@ fn play(
     let mut waits = 0u64;
     let mut waiting: Option<Instant> = None;
     // Headless --paced keeps the window's time without one.
-    let mut pace = (screen.is_none() && opts.paced).then(Clock::default);
+    let mut pace = (screen.is_none() && opts.paced).then(Pacer::default);
     let mut report = Report::default();
     let e = |e: netplay::Error| e.to_string();
     // Frames run: the session's, then those run alone.
@@ -501,6 +519,7 @@ fn play(
             false => opts.input.keys(n),
         };
         let local = (script | held) & key::ALL;
+        let turn = Instant::now();
         let status = if left.is_some() {
             let mut keys = vec![0; s.console().seats()];
             keys[seat] = local;
@@ -577,6 +596,9 @@ fn play(
             report.freezes.add(w.elapsed(), s.frame());
         }
         if let Some(c) = &mut pace {
+            if !stepped {
+                c.hold(fast::frame());
+            }
             c.wait(fast::frame());
         }
         let n = frames(&s, solo);
@@ -614,13 +636,29 @@ fn play(
         let Some(sc) = &screen else {
             continue;
         };
+        if stepped {
+            let at = turn + present;
+            let now = Instant::now();
+            if at > now {
+                std::thread::sleep(at - now);
+            }
+        }
         sc.show(&m.ppu.frame, false);
-        // A frame held back made no sound to wait on: the clock paces it.
-        match player(s.console_mut(), seat) {
-            Some(p) if stepped => p.wait(),
-            _ => std::thread::sleep(fast::frame()),
+        // A frame held back goes into the pacing as a frame of silence (or
+        // the clock's frame), so the next runs a frame later: held back.
+        // Until 2026-11-08 it slept a frame and the sound's pacing then
+        // ran the next at once, undoing the hold; and a muted window
+        // slept a frame after every frame on top of its clock.
+        if let Some(p) = player(s.console_mut(), seat) {
+            if !stepped {
+                p.hold();
+            }
+            p.wait();
         }
         if let Some(c) = &mut clock {
+            if !stepped {
+                c.hold(fast::frame());
+            }
             c.wait(fast::frame());
         }
         let i = sc.input();

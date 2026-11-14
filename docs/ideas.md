@@ -34,3 +34,15 @@ C to 61k of assembly), and its names are mostly placeholders
 
 - **Squeak Squad with multiplayer** (Athena's wish). That's a DS game with
   no multiplayer built in, so it's far outside what gbaa does today.
+
+## Native lifts
+
+- **Prove small rewritten functions equal to the lift.** The per-function
+  check (`native/fn-check-any`) only tests a rewritten function on inputs
+  against the machine-shaped lift. For small leaf functions with no loops,
+  or loops with a small bound, a solver could prove the two equal on every
+  input: both sides as formulas over registers and memory, an SMT query for
+  any input where they differ. Bounded, and only for leaves to start, but
+  it would turn the LLM pilot's "passed its tests" into "proved" for the
+  functions it covers. june (2026-11-13): park it until the pilot shows how
+  often tests miss.

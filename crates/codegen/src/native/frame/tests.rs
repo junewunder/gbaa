@@ -380,6 +380,94 @@ fn sp_lost_escapes_every_slot() {
     let f = one(b, Edge::Return);
     assert!(f.lost);
     assert!(f.slots.iter().all(|s| s.escapes & Kind::Lost as u8 != 0));
+    // sp set from a parameter: a stack switch, at the block's start (the
+    // hand-built block has no instruction marks).
+    assert_eq!(f.switches, BTreeSet::from([0]));
+}
+
+#[test]
+fn a_stack_switch_is_named_at_the_instruction_its_sp_came_from() {
+    // A task switcher's resume: `push {r4-r11, lr}` (a store and sp
+    // moved), `mov sp, r2`, `pop {r4-r11}`, which the IR folds into one
+    // write of sp: r2 + 32, made at the `mov`.
+    let mut b = B::default();
+    b.op(Op::Insn(0x100));
+    let sp = b.sp(-36);
+    b.set(13, sp);
+    b.op(Op::Insn(0x104));
+    let r2 = b.get(2);
+    b.op(Op::Insn(0x108));
+    let k = b.k(32);
+    let popped = b.add(r2, k);
+    b.set(13, popped);
+    // Arithmetic on the new sp after it is no second switch.
+    b.op(Op::Insn(0x10c));
+    let k = b.k(4);
+    let more = b.add(popped, k);
+    b.set(13, more);
+    let f = one(b, Edge::Return);
+    assert_eq!(f.switches, BTreeSet::from([0x104]));
+
+    // A yield's `ldr sp, [r3]`, then its pop: at the load.
+    let mut b = B::default();
+    b.op(Op::Insn(0x200));
+    let g = b.k(0x0300_4c94);
+    let main = b.ld(g);
+    b.op(Op::Insn(0x204));
+    let k = b.k(36);
+    let popped = b.add(main, k);
+    b.set(13, popped);
+    assert_eq!(one(b, Edge::Return).switches, BTreeSet::from([0x200]));
+}
+
+#[test]
+fn sp_set_to_a_constant_is_a_fresh_stack() {
+    // The SDK's SoftReset: `ldr r3, =0x03007ffa`, `subs r3, #250`, `mov
+    // sp, r3`: a fresh stack, not a switch.
+    let mut b = B::default();
+    b.op(Op::Insn(0x300));
+    let top = b.k(0x0300_7ffa);
+    b.op(Op::Insn(0x304));
+    let k = b.k(0xfa);
+    let sp = b.op(Op::Bin(BinOp::Sub, top, k));
+    b.op(Op::Insn(0x308));
+    b.set(13, sp);
+    let f = one(b, Edge::Return);
+    assert!(f.switches.is_empty(), "{:?}", f.switches);
+    assert_eq!(f.fresh, BTreeSet::from([0x300]));
+}
+
+#[test]
+fn sp_from_the_frame_is_no_stack_switch() {
+    // `sub sp, #16`, a frame pointer's `mov sp, r7` with r7 = sp + a run-time
+    // amount (a variable-length array), and `add sp, #16`.
+    let mut b = B::default();
+    b.prologue();
+    let sp = b.get(13);
+    let n = b.get(0);
+    let r7 = b.add(sp, n);
+    b.set(7, r7);
+    let r7 = b.get(7);
+    b.set(13, r7);
+    let up = b.sp(16);
+    b.set(13, up);
+    let f = one(b, Edge::Return);
+    assert!(f.switches.is_empty(), "{:?}", f.switches);
+    assert!(f.lost);
+
+    // APCS's epilogue, `ldmdb r11, {r11, sp, lr}`, with r11 a copy of sp
+    // the run lost the offset of (a conditional epilogue before it): the
+    // sp loaded through it is a restore.
+    let mut b = B::default();
+    b.prologue();
+    let sp = b.get(13);
+    let n = b.get(0);
+    let r11 = b.add(sp, n);
+    let k = b.k(4);
+    let slot = b.add(r11, k);
+    let saved = b.ld(slot);
+    b.set(13, saved);
+    assert!(one(b, Edge::Return).switches.is_empty());
 }
 
 #[test]

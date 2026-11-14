@@ -22,6 +22,9 @@
 //! ones overtake it. Spikes come at random, `spike_every_s` apart on
 //! average, on both directions at once. The randomness is seeded; the
 //! timing is the machine's, so two runs differ in detail.
+//!
+//! The model itself is [`Line`], on a clock of µs from its start, which
+//! the feel sim ([`crate::feel`]) runs on simulated time.
 
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
@@ -187,46 +190,34 @@ impl Drop for Proxy {
     }
 }
 
-/// (when it's due, order of arrival, side it goes out of, datagram)
-type Held = Reverse<(Instant, u64, usize, Vec<u8>)>;
-
-/// The proxy's state, on its thread.
-struct Wire {
+/// The profile's path, in time counted in µs from its start, whatever
+/// clock that is: the proxy's real one, or the feel sim's simulated one
+/// ([`crate::feel`]). Both directions share its spikes.
+pub struct Line {
     p: Profile,
-    socks: [UdpSocket; 2],
-    peer: [Option<SocketAddr>; 2],
-    start: Instant,
     rng: u64,
-    seq: u64,
-    held: BinaryHeap<Held>,
     /// When the last in-order datagram each way is due.
-    last: [Instant; 2],
+    last: [u64; 2],
     /// The current or next spike's start and end.
-    spike: Option<(Instant, Instant)>,
-    stats: Stats,
+    spike: Option<(u64, u64)>,
+    pub stats: Stats,
 }
 
-impl Wire {
-    fn new(p: Profile, socks: [UdpSocket; 2]) -> Wire {
-        let now = Instant::now();
+impl Line {
+    pub fn new(p: Profile) -> Line {
         let seed = p.seed;
-        let mut path = Wire {
+        let mut l = Line {
             p,
-            socks,
-            peer: [None; 2],
-            start: now,
             rng: seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1,
-            seq: 0,
-            held: BinaryHeap::new(),
-            last: [now; 2],
+            last: [0; 2],
             spike: None,
             stats: Stats {
                 min_delay_us: u64::MAX,
                 ..Stats::default()
             },
         };
-        path.spike = path.next_spike(now);
-        path
+        l.spike = l.next_spike(0);
+        l
     }
 
     /// xorshift64*: a number in `0..1`.
@@ -238,21 +229,23 @@ impl Wire {
     }
 
     /// The first spike after `after`: exponentially distributed gaps.
-    fn next_spike(&mut self, after: Instant) -> Option<(Instant, Instant)> {
+    fn next_spike(&mut self, after: u64) -> Option<(u64, u64)> {
         if self.p.spike_every_s <= 0.0 || self.p.spike_ms <= 0.0 {
             return None;
         }
         let gap = -self.p.spike_every_s * (1.0 - self.random()).ln();
-        let from = after + Duration::from_secs_f64(gap);
-        Some((
-            from,
-            from + Duration::from_secs_f64(self.p.spike_len_ms / 1000.0),
-        ))
+        let from = after + (gap * 1e6) as u64;
+        Some((from, from + (self.p.spike_len_ms * 1e3) as u64))
     }
 
-    /// The one-way delay for a datagram arriving now, ms.
-    fn delay_ms(&mut self, now: Instant) -> f64 {
-        let t = now.duration_since(self.start).as_secs_f64();
+    /// Whether a spike lasts at `now`.
+    pub fn spiking(&self, now: u64) -> bool {
+        self.spike.is_some_and(|(f, t)| now >= f && now < t)
+    }
+
+    /// The one-way delay for a datagram arriving at `now`, ms.
+    fn delay_ms(&mut self, now: u64) -> f64 {
+        let t = now as f64 / 1e6;
         let mut d = self.p.latency_ms;
         if self.p.wander_ms > 0.0 {
             d += self.p.wander_ms * (std::f64::consts::TAU * t / self.p.wander_period_s).sin();
@@ -270,34 +263,89 @@ impl Wire {
         d + self.random() * self.p.jitter_ms
     }
 
-    /// A datagram from side `side`, for the other.
-    fn arrive(&mut self, side: usize, d: Vec<u8>, now: Instant) {
+    /// A datagram sent at `now` toward side `out`: when each copy of it
+    /// arrives there (none, lost; two, duplicated).
+    pub fn route(&mut self, now: u64, out: usize) -> Vec<u64> {
         self.stats.received += 1;
         if self.random() < self.p.loss {
             self.stats.lost += 1;
-            return;
+            return Vec::new();
         }
-        let out = 1 - side;
         let copies = if self.random() < self.p.duplicate {
             self.stats.duplicated += 1;
             2
         } else {
             1
         };
+        let mut due_at = Vec::with_capacity(copies);
         for _ in 0..copies {
             let ms = self.delay_ms(now).max(0.0);
-            let mut due = now + Duration::from_secs_f64(ms / 1000.0);
+            let mut due = now + (ms * 1e3) as u64;
             if self.random() < self.p.reorder {
                 self.stats.reordered += 1;
-                due += Duration::from_secs_f64(self.p.reorder_ms / 1000.0);
+                due += (self.p.reorder_ms * 1e3) as u64;
             } else {
                 due = due.max(self.last[out]);
                 self.last[out] = due;
             }
-            let us = due.duration_since(now).as_micros() as u64;
+            let us = due - now;
             self.stats.min_delay_us = self.stats.min_delay_us.min(us);
             self.stats.max_delay_us = self.stats.max_delay_us.max(us);
+            due_at.push(due);
+        }
+        due_at
+    }
+
+    /// The counts so far, a delay never given as 0.
+    pub fn finish(&self) -> Stats {
+        let mut s = self.stats;
+        if s.min_delay_us == u64::MAX {
+            s.min_delay_us = 0;
+        }
+        s
+    }
+}
+
+/// (when it's due, order of arrival, side it goes out of, datagram)
+type Held = Reverse<(Instant, u64, usize, Vec<u8>)>;
+
+/// The proxy's state, on its thread.
+struct Wire {
+    line: Line,
+    socks: [UdpSocket; 2],
+    peer: [Option<SocketAddr>; 2],
+    start: Instant,
+    seq: u64,
+    held: BinaryHeap<Held>,
+    unaddressed: u64,
+    spikes: u64,
+}
+
+impl Wire {
+    fn new(p: Profile, socks: [UdpSocket; 2]) -> Wire {
+        Wire {
+            line: Line::new(p),
+            socks,
+            peer: [None; 2],
+            start: Instant::now(),
+            seq: 0,
+            held: BinaryHeap::new(),
+            unaddressed: 0,
+            spikes: 0,
+        }
+    }
+
+    fn us(&self, t: Instant) -> u64 {
+        t.duration_since(self.start).as_micros() as u64
+    }
+
+    /// A datagram from side `side`, for the other.
+    fn arrive(&mut self, side: usize, d: Vec<u8>, now: Instant) {
+        let out = 1 - side;
+        let at = self.us(now);
+        for due in self.line.route(at, out) {
             self.seq += 1;
+            let due = now + Duration::from_micros(due - at);
             self.held.push(Reverse((due, self.seq, out, d.clone())));
         }
     }
@@ -322,9 +370,9 @@ impl Wire {
                     }
                 }
             }
-            let in_spike = self.spike.is_some_and(|(f, t)| now >= f && now < t);
+            let in_spike = self.line.spiking(self.us(now));
             if in_spike && !spiking {
-                self.stats.spikes += 1;
+                self.spikes += 1;
             }
             spiking = in_spike;
             let now = Instant::now();
@@ -335,10 +383,10 @@ impl Wire {
                 let Reverse((_, _, out, d)) = self.held.pop().unwrap();
                 match self.peer[out] {
                     Some(addr) => {
-                        self.stats.forwarded += 1;
+                        self.line.stats.forwarded += 1;
                         let _ = self.socks[out].send_to(&d, addr);
                     }
-                    None => self.stats.unaddressed += 1,
+                    None => self.unaddressed += 1,
                 }
             }
             if !busy {
@@ -352,9 +400,10 @@ impl Wire {
                 std::thread::sleep(wait);
             }
         }
-        if self.stats.min_delay_us == u64::MAX {
-            self.stats.min_delay_us = 0;
+        Stats {
+            unaddressed: self.unaddressed,
+            spikes: self.spikes,
+            ..self.line.finish()
         }
-        self.stats
     }
 }
