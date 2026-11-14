@@ -51,3 +51,7 @@ plant = []
 # addresses, so `--native-record` writes its bytes. The spike's play
 # layout (the default) records an image of its fields laid out the same.
 guest-layout = []
+# A planted layout fault in the play layout (src/game.rs): its one global
+# recorded a word past its link address, which `route-check --packed` must
+# report (a manual control: native/packed-diff-labels).
+plant-layout = []
