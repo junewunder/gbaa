@@ -497,11 +497,83 @@ fn io_writes_by_offset_reach_the_fields() {
     assert_eq!(g.hw.read16(reg::DISPCNT), 0x1140);
 }
 
+/// The offsets the play build's I/O block has nothing at take a store
+/// and read 0, as its bus does; `POSTFLG` and `HALTCNT` are stored as it
+/// stores them; every even offset of the block, and past it, is one the
+/// library answers.
 #[test]
-#[should_panic(expected = "isn't modelled")]
-fn unmodelled_registers_are_loud() {
+fn ignored_offsets_and_postflg_as_the_play_build_has_them() {
     let mut g = game(100);
-    g.hw.write16(reg::POSTFLG, 1);
+    let mut io = Io::new();
+    let unused = (0x160u32..0x200)
+        .chain([0x206, 0x20A])
+        .chain(0x20C..0x300)
+        .chain(0x302..0x400)
+        .filter(|o| o % 2 == 0);
+    for o in unused {
+        let v = (o.wrapping_mul(0x9E37) | 1) as u16;
+        g.hw.write16(o, v);
+        io.write16(o, v);
+        assert_eq!(g.hw.read16(o), io.read16(o), "{o:#05x} read");
+        assert_eq!(g.hw.raw16(o), io.raw16(o), "{o:#05x} as stored");
+        assert_eq!(g.hw.read16(o), 0, "{o:#05x}");
+    }
+    // Past the block: nothing, as the play build's bus maps nothing.
+    g.hw.write16(0x400, 0xFFFF);
+    assert_eq!(g.hw.read16(0x400), 0);
+    // POSTFLG reads back bit 0 (1 at power-on); HALTCNT is kept, unread.
+    assert_eq!(g.hw.read16(reg::POSTFLG), io.read16(reg::POSTFLG));
+    for v in [0xFFFE, 0x0081, 0x8000] {
+        g.hw.write16(reg::POSTFLG, v);
+        io.write16(reg::POSTFLG, v);
+        assert_eq!(
+            g.hw.read16(reg::POSTFLG),
+            io.read16(reg::POSTFLG),
+            "{v:#06x}"
+        );
+        assert_eq!(g.hw.raw16(reg::POSTFLG), io.raw16(reg::POSTFLG), "{v:#06x}");
+    }
+    // A bare store moves no time: the halt is `write_io`'s.
+    assert_eq!(g.hw.frames(), 0);
+    // Every even offset answers a store and a load.
+    for o in (0..0x400).step_by(2) {
+        if o == reg::IF || o == reg::POSTFLG {
+            continue;
+        }
+        g.hw.read16(o);
+        g.hw.write16(o, 0);
+    }
+}
+
+/// A store to `HALTCNT` halts as the play build's does: a halfword store
+/// to `POSTFLG` or a byte store to `HALTCNT`, through [`write_io`] and
+/// [`write_postflg8`], runs to the next handler (or V-blank, none
+/// enabled); a byte store to `POSTFLG` alone doesn't.
+#[test]
+fn a_haltcnt_store_halts() {
+    let mut g = game(100);
+    write_postflg8(&mut *g, reg::POSTFLG, 1);
+    assert_eq!((g.hw.frames(), g.hw.line()), (0, 0));
+    assert_eq!(g.hw.read16(reg::POSTFLG), 1);
+    // No handler enabled: to V-blank.
+    write_postflg8(&mut *g, reg::POSTFLG + 1, 0);
+    assert_eq!((g.hw.frames(), g.hw.line()), (1, VBLANK_LINE));
+    write_io(&mut *g, reg::POSTFLG, 0x0001);
+    assert_eq!((g.hw.frames(), g.hw.line()), (2, VBLANK_LINE));
+    // A handler enabled: to the line it runs at.
+    g.hw.stat.vcount_irq = true;
+    g.hw.stat.vcount_line = 40;
+    g.hw.irq.enable = irq::VCOUNT;
+    g.hw.irq.master_enable = true;
+    g.hw.irq.on(irq::VCOUNT, |g| g.ram.vcounts += 1);
+    write_postflg8(&mut *g, reg::POSTFLG + 1, 0x80);
+    assert_eq!((g.hw.frames(), g.hw.line(), g.ram.vcounts), (2, 40, 1));
+    // The host's stop, met inside a store, comes at the next wait.
+    let mut g = game(1);
+    write_io(&mut *g, reg::POSTFLG, 0);
+    assert_eq!(g.hw.frames(), 1);
+    assert!(wait_vblank(&mut *g).is_err());
+    assert_eq!(g.hw.frames(), 1);
 }
 
 /// The serial port's registers and `KEYCNT` are the play build's with no
