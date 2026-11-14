@@ -47,7 +47,10 @@
 //! words there (to the object's end, where the bounds start at a
 //! literal the function loads: a table read from its start). Interprocedural: a call passes r0-r3 to its callee's entry
 //! and takes back what its returns hold; a tail call or a fall passes
-//! every register. An indirect call passes them to each function whose
+//! every register, and so does a call to a function that may take r4-r11
+//! from its callers or through a pointer the holes file's `[[takes]]`
+//! names ([`Out::takes`]: the lift passes those the caller's own). An
+//! indirect call passes them to each function whose
 //! whole address its target may hold. A call whose target holds none is
 //! an incomplete callee set: its arguments go to every function that may
 //! be called that way (one with no direct caller, or whose address is
@@ -905,6 +908,11 @@ pub struct Out {
     pub at: u32,
     /// A BIOS call's number.
     pub bios: Option<u8>,
+    /// A call that passes every register, not r0-r3 only: to a callee
+    /// that may take r4-r11 from its callers (`Summary::may_take`), or a
+    /// pointer call the holes file's `[[takes]]` names. The lift passes
+    /// such a callee the caller's own r4-r11.
+    pub takes: bool,
 }
 
 /// One block: its IR, its exits by inst index, and the ROM words its
@@ -3302,7 +3310,7 @@ impl Run<'_, '_> {
                 }
             }
             Edge::Call { target, ret } => {
-                let args = &s.regs[..4];
+                let args = if out.takes { &s.regs[..] } else { &s.regs[..4] };
                 let rets = match target {
                     Some(k) => {
                         self.g.give(*k, args);
