@@ -120,6 +120,7 @@ impl B {
             via: None,
             at: 0x0800_0100,
             bios: None,
+            takes: false,
         };
         (self.insts, out, self.pools)
     }
@@ -318,6 +319,43 @@ fn an_argument_reaches_the_callee_that_calls_it() {
     assert!(f.proven(POOL), "{f:?}");
     assert_eq!(site(&f).callees, BTreeSet::from([F]));
     assert!(site(&f).complete);
+}
+
+/// f: r8 = F; a call to g, which may take r8 (`Summary::may_take`); g
+/// calls r8. `takes`: whether the call passes every register.
+fn r8_to_a_taker(takes: bool) -> Flow {
+    let mut a = B::default();
+    let p = a.pool(POOL, F);
+    a.set(8, p);
+    let mut call = a.end(
+        None,
+        Edge::Call {
+            target: Some(0x0800_2001),
+            ret: 0x0800_1011,
+        },
+    );
+    call.1.takes = takes;
+    let caller = (
+        0x0800_1001,
+        vec![
+            (0x0800_1001, call),
+            (0x0800_1011, B::default().end(None, Edge::Return)),
+        ],
+    );
+    let mut b = B::default();
+    let t = b.get(8);
+    run(&[caller, calling(0x0800_2001, b, t)])
+}
+
+#[test]
+fn a_pointer_passed_in_r8_reaches_the_taker_that_calls_it() {
+    let f = r8_to_a_taker(true);
+    assert!(f.proven(POOL), "{f:?}");
+    assert_eq!(site(&f).callees, BTreeSet::from([F]));
+    assert!(site(&f).complete);
+    // A call that passes r0-r3 only leaves the taker's r8 empty.
+    let f = r8_to_a_taker(false);
+    assert!(!site(&f).callees.contains(&F), "{f:?}");
 }
 
 #[test]

@@ -293,8 +293,9 @@ pub struct FBlock<'a> {
 
 /// What the run needs to know of the rest of the program.
 pub trait Env {
-    /// The registers (bit `n` for rN) a call to `target` reads.
-    fn params(&self, target: Option<u32>) -> u16;
+    /// The registers (bit `n` for rN) a call to `target` reads, made by
+    /// the instruction at `at`.
+    fn params(&self, target: Option<u32>, at: u32) -> u16;
 
     /// Whether function `f`'s address may be taken: a call through a
     /// register may reach it. Every function, unless told otherwise.
@@ -312,7 +313,7 @@ pub trait Env {
 pub struct AllFour;
 
 impl Env for AllFour {
-    fn params(&self, _: Option<u32>) -> u16 {
+    fn params(&self, _: Option<u32>, _: u32) -> u16 {
         0xf
     }
 }
@@ -637,7 +638,7 @@ impl Run<'_, '_> {
                     V::Other
                 }
                 Op::Exit(_) => {
-                    self.exit((key, i), &b.edges[&i], &s);
+                    self.exit((key, i), at, &b.edges[&i], &s);
                     V::Other
                 }
                 _ => V::Other,
@@ -646,7 +647,8 @@ impl Run<'_, '_> {
         }
     }
 
-    fn exit(&mut self, at: (u32, usize), e: &Edge, s: &State) {
+    /// `addr`: the address of the instruction the exit belongs to.
+    fn exit(&mut self, at: (u32, usize), addr: u32, e: &Edge, s: &State) {
         match e {
             Edge::Goto(ks) => {
                 for &k in ks {
@@ -654,7 +656,7 @@ impl Run<'_, '_> {
                 }
             }
             Edge::Call { target, ret } => {
-                self.pass(self.env.params(*target) & 0xfff, s, Kind::Call);
+                self.pass(self.env.params(*target, addr) & 0xfff, s, Kind::Call);
                 self.raw.calls.insert(at, (Run::sp(s), *target, false));
                 let mut after = s.clone();
                 for r in [0, 1, 2, 3, 12, 14] {
@@ -673,8 +675,8 @@ impl Run<'_, '_> {
                 self.raw.calls.insert(at, (Run::sp(s), *t, true));
             }
             Edge::TailOr(ks) => {
-                self.exit(at, &Edge::Tail(None), s);
-                self.exit(at, &Edge::Goto(ks.clone()), s);
+                self.exit(at, addr, &Edge::Tail(None), s);
+                self.exit(at, addr, &Edge::Goto(ks.clone()), s);
             }
             Edge::Swi(next) => {
                 self.pass(0xf, s, Kind::Call);
@@ -966,16 +968,18 @@ pub fn frames<'a>(
 pub struct FromSummaries<'a> {
     pub sums: &'a Summaries,
     pub taken: BTreeSet<u32>,
+    /// The indirect calls a holes file's `[[takes]]` names, by address.
+    pub named: &'a BTreeSet<u32>,
 }
 
 impl Env for FromSummaries<'_> {
-    fn params(&self, target: Option<u32>) -> u16 {
+    fn params(&self, target: Option<u32>, at: u32) -> u16 {
         // And what a callee takes of r4-r11 (`Summary::takes`): the lift
-        // passes it the caller's. (A pointer call the holes file names
-        // passes them too, which these summaries can't know: the
-        // summary's run refuses a stack address there, `Sum::call`.)
+        // passes it the caller's; and at a pointer call the holes file
+        // names, all of r4-r11 (to whichever callees it names).
         let takes = |s: &Summary| (s.may_take() as u16) << 4;
         match target.and_then(|t| self.sums.get(t)) {
+            None if self.named.contains(&at) => 0xfff,
             Some(s) if s.holes.is_empty() => s.params as u16,
             Some(s) => 0xf | takes(s),
             None => 0xf,
@@ -1062,8 +1066,14 @@ pub fn edge(ctx: &Ctx, f: &Func, all: &BTreeSet<u32>, gb: &GBlock, x: &ExitInfo)
 }
 
 /// The frames of one lifted context's functions, as the lifter prints
-/// them ([`edge`]).
-pub fn of_code(ctx: &Ctx, funcs: &[Func], sums: &Summaries) -> BTreeMap<u32, Frame> {
+/// them ([`edge`]). `named`: the indirect calls a holes file's
+/// `[[takes]]` names, by address.
+pub fn of_code(
+    ctx: &Ctx,
+    funcs: &[Func],
+    sums: &Summaries,
+    named: &BTreeSet<u32>,
+) -> BTreeMap<u32, Frame> {
     let all: BTreeSet<u32> = funcs.iter().map(|f| f.entry).collect();
     let fs: Vec<(u32, BTreeMap<u32, FBlock>)> = funcs
         .iter()
@@ -1091,6 +1101,7 @@ pub fn of_code(ctx: &Ctx, funcs: &[Func], sums: &Summaries) -> BTreeMap<u32, Fra
     let env = FromSummaries {
         sums,
         taken: taken(&all, ctx.rom),
+        named,
     };
     frames(&fs, &env)
 }
