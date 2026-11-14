@@ -2905,3 +2905,4 @@
 {"at":"2026-11-14T14:05:16Z","actor":"loop","tag":"de276265","host":"quack","cmd":"decide","text":"decided: The unplugged serial port is mGBA's but for three kept items","d":"d/the-unplugged-serial-port-is-mgba-s-but-for"}
 {"at":"2026-11-14T14:05:26Z","actor":"loop","tag":"de276265","host":"quack","cmd":"done","id":"native/serial-no-partner-as-mgba","text":"Unplugged serial port answers as mGBA's does: done"}
 {"at":"2026-11-14T14:08:57Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/serial-no-partner-as-mgba","text":"Unplugged serial port answers as mGBA's does: on main"}
+{"at":"2026-11-14T14:09:10Z","actor":"loop","tag":"7b4a17a2","host":"quack","cmd":"claim","id":"native/lift-fn-names","text":"Metroid's lift uses the names file for functions and data: claimed"}

@@ -2303,7 +2303,19 @@
       "id": "native/lift-fn-names",
       "title": "Metroid's lift uses the names file for functions and data",
       "detail": "gbaa-lift --names DIR already reads $GBAA_DATA/names/<game>.toml but uses it only for RAM globals; functions still print as f_<addr>. Use its function names for each lifted function (and its calls), and its data names where code takes a ROM or RAM address as a constant, keeping the address in a comment. Names that aren't valid or unique Rust identifiers get a suffix. Metroid's names file comes from the Zero Mission decompilation (about 2,600 functions). Output is game-derived but stays in out/ (gitignored); tests use an agb program's names. Done when: Metroid lifted with --names builds and runs 600 of 600 frames headless as before; a unit test on an agb program's names; the report counts functions and data named; just lift-check and just check pass.",
-      "check": "recorded"
+      "check": "recorded",
+      "record": {
+        "state": "claimed",
+        "by": "7b4a17a2",
+        "session": "7b4a17a2-18a6-432c-b075-21f06458f672",
+        "host": "quack",
+        "pid": 2833770,
+        "start": "8749081",
+        "at": "2026-11-14T14:09:10Z",
+        "branch": "unit/native/lift-fn-names",
+        "beats": true
+      },
+      "round": "2026-11-14T14:09:10Z"
     },
     {
       "id": "native/lift-structured",
