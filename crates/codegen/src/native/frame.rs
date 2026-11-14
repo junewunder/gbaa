@@ -29,7 +29,10 @@
 //! the call (the callee never returns, or it is a tail call), where the
 //! lift writes the locals to the frame's bytes before it instead
 //! ([`Frame::flush`]). For a call through a register, every function
-//! whose address is a word of the ROM may be the callee.
+//! whose address is a word of the ROM may be the callee. A tail call made
+//! with a local still at or above its sp hands the frame on: the locals go
+//! to its bytes before it too, whatever the callee is known to read (one
+//! in another context, a RAM copy, isn't known here).
 //!
 //! The lift (`native/frame-locals`) prints the slots that don't escape, in
 //! the function's own frame, as Rust locals ([`Frame::locals`]), and their
@@ -151,7 +154,8 @@ pub struct Frame {
     /// frame's locals go to its bytes: the callee may reach up into the
     /// frame from an address above its own sp (a pointer to a stack
     /// argument), and the frame is done with after it (the callee never
-    /// returns, or it is a tail call).
+    /// returns, or it is a tail call); and every tail call made with a
+    /// slot of the frame at or above its sp, which the callee runs on.
     pub flush: BTreeSet<(u32, usize)>,
     /// Its stack switches ([`switches`](Frame::switches)): the
     /// instructions that set sp to a value not made from the frame's.
@@ -894,6 +898,15 @@ fn resolve(raw: Raw, reads: &dyn Fn(Option<u32>) -> Reads, env: &dyn Env) -> Fra
                     ups.push(sp + k);
                 }
             }
+        }
+        // A tail call made with the frame still live (a slot of its own
+        // at or above its sp, or sp unknown) hands the frame to its
+        // callee, which may read it, or pop it, past what `reads` knows (a
+        // callee in another context: m4a's SoundMain jumps into its IWRAM
+        // mixer with the SoundInfo at its sp + 24): the locals go to the
+        // frame's bytes first. The frame is done with after it.
+        if tail && sp.is_none_or(|sp| slots.iter().any(|s| s.lo < 0 && s.hi.max(s.lo + 1) > sp)) {
+            flush.insert(at);
         }
     }
     for &b in &ups {
