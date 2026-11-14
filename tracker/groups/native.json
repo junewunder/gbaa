@@ -648,18 +648,23 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "9cd7631e",
-        "session": "9cd7631e-6da4-423a-97db-ec47feb078af",
-        "host": "quack",
-        "pid": 2833770,
-        "start": "8749081",
-        "at": "2026-11-14T05:03:33Z",
+        "checker": "verifier-3e7a91c4",
+        "at": "2026-11-14T07:07:10Z",
+        "evidence": "Verifier verifier-3e7a91c4 rebuilt lift, play build (--timing native) and planted lift from 7e19046f: route-check --native --name metroid on units/metroid-native.toml: pass (2700 frames, 0 differences in pictures, RAM, I/O, palette, VRAM, OAM; audio same in 2700 frames); only skips the 5 [[copy]] ranges and the stack. Planted store --plant 0x08000252 caught: frame 4, IWRAM 0x03000c77 play 0x01 native 0x02. just check, lift-check, native-check and psg-square pass after merging main. Six timing causes fixed (idle exit sync, present at sync end, stall stepping, sound walk before store, timer re-run, held IRQ mask).",
         "branch": "unit/native/metroid-native-check",
-        "resumed": "a98172f6",
-        "prevSession": "a98172f6-c1f5-413f-8331-45de7648b568",
-        "pushed": true,
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-14T07:07:10Z",
+          "by": "9cd7631e",
+          "host": "quack",
+          "pid": 2833770,
+          "start": "8749081",
+          "beats": true,
+          "session": "9cd7631e-6da4-423a-97db-ec47feb078af",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
