@@ -253,6 +253,13 @@ pub struct Holes {
     /// (`native/ime-release`): the native check must catch it on
     /// `agb/native-ime-release`.
     pub ime_at_waits: bool,
+    /// Stage A's old call of a function that takes r4-r11 from its
+    /// callers (`gbaa-lift --takes-zeroed`): each call that passes them
+    /// (a direct call, a `[[takes]]` site) passes zeroes instead, as the
+    /// plain entry did. The taker check's planted control
+    /// (`native/taker-test-program`): the native check must catch it on
+    /// `agb/native-takes`.
+    pub takes_zeroed: bool,
     /// The stack-locals check's planted control (`gbaa-lift --plant-slot
     /// AT`, `native/frame-locals`): the store of the instruction at this
     /// address, which must be to a slot printed as a Rust local, stores
@@ -2384,6 +2391,12 @@ impl FnPrinter<'_, '_> {
         self.sums.get(k).map_or(0, Summary::passed)
     }
 
+    /// What a call passes of `m` (bits of r4-r11 its callee takes): all
+    /// of them, or none with `--takes-zeroed` ([`Holes::takes_zeroed`]).
+    fn taken(&self, m: u8) -> u8 {
+        if self.holes.takes_zeroed { 0 } else { m }
+    }
+
     /// A direct call at `at` to `k`: a hole where `k` takes r4-r11 from
     /// its callers and this call can't be shown to pass them (the
     /// summary's run never reached it, or `k` is another context's).
@@ -2413,7 +2426,7 @@ impl FnPrinter<'_, '_> {
     fn call(&self, k: u32) -> (String, String) {
         let m = self.passed(k);
         if m != 0 {
-            return ("[r0, r1, r2, r3] = ".into(), taking(k, m));
+            return ("[r0, r1, r2, r3] = ".into(), taking(k, self.taken(m)));
         }
         match self.shape(k) {
             None if self.holes.lr.contains(&k) => (
@@ -2498,7 +2511,7 @@ impl FnPrinter<'_, '_> {
                 write!(
                     t,
                     "{e:#010x} => {{ [r0, r1, r2, r3] = {}?; }} ",
-                    taking(e, m)
+                    taking(e, self.taken(m))
                 )
                 .unwrap();
             }
