@@ -39,7 +39,9 @@
 //!   a byte flag beside two handlers gives the flag's bytes, not the
 //!   handlers');
 //! - the program start's copies of ROM data to RAM (`Discovery::copies`
-//!   that aren't code) and `CpuSet` from ROM.
+//!   that aren't code) and `CpuSet` and `CpuFastSet` from ROM; from
+//!   anywhere else they copy what a load of their source reads, to the
+//!   pile ([`Run::bios_read`], `native/fnref-bios-ram-copies`).
 //!
 //! Memory: each function's own frame words, exactly where the frame's run
 //! placed the access ([`super::frame`]) and the slot doesn't escape (a
@@ -118,7 +120,8 @@
 //! address, in arithmetic but the split and join, in an ordered compare or
 //! a bit test, its halves or bytes used as anything but stored or joined,
 //! called in part. Lost (not followed, so not proven): given to the BIOS
-//! (in a register the call reads: [`bios_regs`]), moved to a user-bank
+//! (in a register the call reads: [`bios_regs`], or in memory a call
+//! computes with through a pointer: [`bios_mem`]), moved to a user-bank
 //! register. A word is **proven** when the run read
 //! it and no value it entered met either. A function word in ROM the run
 //! never read (no tracked load reaches it) isn't proven either.
@@ -3576,43 +3579,85 @@ impl Run<'_, '_> {
                         r.join(&Val::unk());
                     }
                 }
-                // CpuSet and CpuFastSet from ROM copy its words to RAM: their
-                // length's, or the source object's.
+                // CpuSet and CpuFastSet copy their source's words to RAM:
+                // what a load of it reads, to the pile.
                 if matches!(out.bios, Some(0x0B | 0x0C)) {
-                    let mut got = Val {
-                        lost_rom: s.regs[0].lost_rom,
-                        ..Val::default()
-                    };
-                    let n = copy_len(out.bios == Some(0x0C), &s.regs[2]);
-                    let src = self.g.expand(&s.regs[0]);
-                    for &t in &src.toks {
-                        match t {
-                            Tok::Rom(a) => self.rom_from(a, 4, None, n, &mut got),
-                            Tok::RomFrom(a) | Tok::RomStep(a, _) => {
-                                self.rom_from(a, 4, None, None, &mut got)
-                            }
-                            _ => {}
-                        }
-                    }
+                    let fast = out.bios == Some(0x0C);
+                    let n = copy_len(fast, &s.regs[2]);
+                    let mut got = Val::default();
+                    self.bios_read(&s.regs[0], n, &mut got);
                     let (toks, _) = to_mem(&got, 4);
                     self.g.store(Store::Pile, &toks);
                     // CpuFastSet leaves in r3 a word it read: the fill's, or
-                    // its last block's first. From ROM one of those; from
-                    // anywhere else, what a load the run can't place reads.
-                    if out.bios == Some(0x0C) {
-                        let rom =
-                            |t: &Tok| matches!(t, Tok::Rom(_) | Tok::RomFrom(_) | Tok::RomStep(..));
-                        if src.unk || src.mem || !src.toks.iter().all(rom) || src.toks.is_empty() {
-                            self.g.read_pile(4, &mut got);
-                            self.g.read_cells(4, &mut got);
-                        }
+                    // its last block's first.
+                    if fast {
                         after.regs[3].join(&got);
                     }
+                }
+                // The calls that compute with what they read through a
+                // pointer (the affine sets' parameters, the decompressors'
+                // data, MidiKey2Freq's wave header): a function's address
+                // there is lost, as one in a register they read is.
+                if let Some((r, n)) = bios_mem(out.bios, &s.regs[2]) {
+                    let mut got = Val::default();
+                    self.bios_read(&s.regs[r], n, &mut got);
+                    self.g.hole(&got, out.at, Why::Bios, |_| true);
                 }
                 self.flow(*next, &after);
             }
             Edge::Stop => {}
         }
+    }
+
+    /// What a BIOS call reads of memory at `src`, `n` bytes of it if
+    /// the run knows how many (`native/fnref-bios-ram-copies`): a load's
+    /// words, as a load at width 4 reads them. In ROM, its words to
+    /// there, or to its object's end; in RAM at a constant address, the
+    /// cells in those bytes (every cell, `n` unknown or past the region's
+    /// end) and the pile; anywhere else (a frame slot whose address was
+    /// taken, the heap, an unknown), the pile and every cell.
+    fn bios_read(&mut self, src: &Val, n: Option<u32>, into: &mut Val) {
+        let src = self.g.expand(src);
+        into.lost_rom |= src.lost_rom;
+        let mut pile = false;
+        let mut anywhere = src.unk || src.mem || src.toks.is_empty();
+        for &t in &src.toks {
+            match t {
+                Tok::Rom(a) => self.rom_from(a, 4, None, n, into),
+                Tok::RomFrom(a) | Tok::RomStep(a, _) => self.rom_from(a, 4, None, None, into),
+                Tok::Num(c) | Tok::Fn { key: c, .. } if is_ram(c) => {
+                    pile = true;
+                    let lo = ram_canon(c);
+                    let end = if lo >> 24 == 2 {
+                        0x0204_0000
+                    } else {
+                        0x0300_8000
+                    };
+                    match n.map(|n| lo.saturating_add(n.max(1))) {
+                        Some(hi) if hi <= end => {
+                            self.g.rd.ranges.push((lo.saturating_sub(3), hi - 1));
+                            for (_, m) in self.g.cells.range(lo.saturating_sub(3)..hi) {
+                                from_mem(m, 4, into);
+                            }
+                        }
+                        _ => anywhere = true,
+                    }
+                }
+                Tok::Num(c) | Tok::Fn { key: c, .. } if self.img.word(c).is_some() => {
+                    self.rom_from(c, 4, None, n, into)
+                }
+                // I/O, VRAM, OAM: nothing the run stores a function's
+                // address to but through the pile.
+                _ => anywhere = true,
+            }
+        }
+        if pile || anywhere {
+            self.g.read_pile(4, into);
+        }
+        if anywhere {
+            self.g.read_cells(4, into);
+        }
+        into.cap();
     }
 
     /// A call or tail call through `t`: give `args` to each callee, and
@@ -4203,6 +4248,35 @@ fn bios_regs(n: Option<u8>) -> BiosRegs {
         reads,
         sets,
         may_set,
+    }
+}
+
+/// Which register BIOS call `n` reads memory through, besides the
+/// copies, and how many bytes from it if `r2` (the count) says
+/// (`native/fnref-bios-ram-copies`). The affine sets read `r2` entries
+/// of 20 or 8 bytes; the decompressors their header's length, which the
+/// run doesn't know; `MidiKey2Freq` the wave header's frequency at
+/// `r0 + 4`. The other calls a native build makes read no memory the
+/// program wrote: the waits read the BIOS's IRQ flags, and `MultiBoot`'s
+/// lifted form reads nothing.
+fn bios_mem(n: Option<u8>, r2: &Val) -> Option<(usize, Option<u32>)> {
+    let count = |unit: u32| {
+        if r2.unk || r2.mem || r2.toks.is_empty() {
+            return None;
+        }
+        let mut most = 0;
+        for &t in &r2.toks {
+            let Tok::Num(m) = t else { return None };
+            most = most.max(m.saturating_mul(unit));
+        }
+        Some(most)
+    };
+    match n? {
+        0x0e => Some((0, count(20))),
+        0x0f => Some((0, count(8))),
+        0x11..=0x15 => Some((0, None)),
+        0x1f => Some((0, Some(8))),
+        _ => None,
     }
 }
 

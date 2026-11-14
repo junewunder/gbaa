@@ -479,8 +479,21 @@ What decided the columns:
   gets a constant or a number made from the ones it does.
 - **`CpuFastSet`'s r3 is data**: the fill's word, or the first word of
   the last block it copied. So after the call r3 also holds what the
-  copy read: the ROM words the flow already sends to the pile, or, from
-  a source not in ROM, what a load the run can't place reads.
+  copy read, which the flow also sends to the pile.
+- **Memory through a pointer** (`native/fnref-bios-ram-copies`). What a
+  call reads at its source is what a load there reads, as a word: in
+  ROM, the words to its length or its object's end; in RAM at a
+  constant address, the cells in its length (every cell if the run
+  doesn't know it) and the pile; anywhere else, the pile and every
+  cell. The copies (`CpuSet`, `CpuFastSet`) store that to the pile, so
+  a load of the copy gives the addresses it moved. The calls that
+  compute with what they read lose a function's address there, as one
+  in a register they read: the affine sets' parameters (`r2` entries
+  of 20 or 8 bytes), the decompressors' data (its length is in its
+  header: every cell) and `MidiKey2Freq`'s wave header (8 bytes). The
+  rest read no memory the program wrote: the waits read the BIOS's IRQ
+  flags, `MultiBoot`'s lifted form reads nothing, and the calls a native
+  build can't make (the sound driver's among them) are hard holes.
 - **Where the console's BIOS overwrites what these leave** (r1 and r3
   are its scratch in most calls; r2 its dispatcher restores,
   `runtime/src/bios/decomp.rs` on `CpuFastSet`), the address is kept.

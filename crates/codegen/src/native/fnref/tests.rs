@@ -1082,6 +1082,90 @@ fn cpu_fast_set_leaves_a_word_it_copied_in_r3() {
     assert!(site(&f).callees.contains(&F), "{f:?}");
 }
 
+/// F stored at `CELL`, then BIOS call `n` with `src` in r0, `CELL2` in
+/// r1 and `len` in r2; after it, `then` makes the target from the word
+/// loaded at `CELL2`.
+fn copied(n: u8, src: Option<u32>, len: u32, then: impl Fn(&mut B, ValueId) -> ValueId) -> Flow {
+    const CELL2: u32 = 0x0200_0400;
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let c = b.k(CELL);
+    b.st(Width::Word, c, p);
+    if let Some(src) = src {
+        let s = b.k(src);
+        b.set(0, s);
+    }
+    let to = b.k(CELL2);
+    b.set(1, to);
+    let len = b.k(len);
+    b.set(2, len);
+    let mut after = B::default();
+    let c2 = after.k(CELL2);
+    let x = after.ld(Width::Word, c2);
+    let t = then(&mut after, x);
+    run(&[swi_then(0x0800_1001, b, n, after, t)])
+}
+
+#[test]
+fn a_bios_copy_out_of_ram_carries_its_addresses() {
+    let word = 1 << 26 | 1;
+    let add = |b: &mut B, x: ValueId| {
+        let two = b.k(2);
+        b.bin(BinOp::Add, x, two)
+    };
+    // CpuSet of the cell, one word: F loaded from the copy and added to.
+    let f = copied(0x0b, Some(CELL), word, add);
+    assert_eq!(f.holes[&Origin::Word(POOL)].1, Why::Arithmetic, "{f:?}");
+    // Called through instead: followed and proven.
+    let f = copied(0x0b, Some(CELL), word, |_, x| x);
+    assert!(f.proven(POOL), "{f:?}");
+    assert_eq!(site(&f).callees, BTreeSet::from([F]));
+    // From the cell's mirror, by CpuFastSet; and from a source the run
+    // can't place (r0 as the function came: unknown).
+    for (n, src) in [(0x0c, Some(CELL + 0x8000)), (0x0b, None)] {
+        let f = copied(n, src, word, add);
+        assert_eq!(
+            f.holes[&Origin::Word(POOL)].1,
+            Why::Arithmetic,
+            "{n:#x} {src:x?}"
+        );
+    }
+    // Its length unknown: every cell.
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let c = b.k(CELL);
+    b.st(Width::Word, c, p);
+    let s = b.k(CELL - 0x40);
+    b.set(0, s);
+    let mut then = B::default();
+    let c2 = then.k(0x0200_0400);
+    let x = then.ld(Width::Word, c2);
+    let t = add(&mut then, x);
+    let f = run(&[swi_then(0x0800_1001, b, 0x0b, then, t)]);
+    assert_eq!(f.holes[&Origin::Word(POOL)].1, Why::Arithmetic, "{f:?}");
+    // A copy that ends before the cell doesn't move F.
+    let f = copied(0x0b, Some(CELL - 0x40), word, |_, x| x);
+    assert!(site(&f).callees.is_empty(), "{f:?}");
+}
+
+#[test]
+fn a_function_address_a_bios_call_computes_with_is_lost() {
+    // ObjAffineSet's parameters, BgAffineSet's, MidiKey2Freq's wave
+    // header (F its frequency), LZ77's data: through r0, from the cell.
+    for (n, src) in [
+        (0x0f, CELL),
+        (0x0e, CELL),
+        (0x1f, CELL - 4),
+        (0x11, CELL - 0x40),
+    ] {
+        let f = copied(n, Some(src), 1, |_, x| x);
+        assert_eq!(f.holes[&Origin::Word(POOL)], (SWI_AT, Why::Bios), "{n:#x}");
+    }
+    // Past what it reads, nothing: one entry of ObjAffineSet ends before.
+    let f = copied(0x0f, Some(CELL - 8), 1, |_, x| x);
+    assert!(!f.holes.contains_key(&Origin::Word(POOL)), "{f:?}");
+}
+
 /// The play build's BIOS, call `n` from an ARM `swi` with `r` in r0 to
 /// r3, and any stall it leaves: the registers after, and EWRAM and IWRAM.
 fn play_bios(n: u8, r: [u32; 4]) -> ([u32; 4], Vec<u8>) {
