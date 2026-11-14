@@ -424,7 +424,17 @@ impl Walk<'_> {
                         sum.falls.insert(to);
                     }
                 }
-                _ => return self.stop(format!("jumps to 0x{to:08x}, which has no code here")),
+                _ => {
+                    // Code in another context, maybe (a RAM copy's): what
+                    // of r4-r11 the jump hands on as it came.
+                    if let Some(sum) = &mut self.sum {
+                        let m = (4..12)
+                            .filter(|&r| s.regs[r].taint().is_some())
+                            .fold(0u8, |m, r| m | 1 << (r - 4));
+                        *sum.foreign.entry(to).or_default() |= m;
+                    }
+                    return self.stop(format!("jumps to 0x{to:08x}, which has no code here"));
+                }
             }
         }
         let next = match self.ins.get(&to) {
