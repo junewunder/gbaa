@@ -548,7 +548,12 @@ Sound as far as C's objects go: indexing past an array's end is
 undefined, so a read from a table's start stays in it. What it takes on
 trust is that a literal indexed from at an entry or more past another
 table's start is a table of its own, not `&TABLE[k]` of the same table
-indexed both ways; and the 4 KB it looks back for a record. A bound the
+indexed both ways; that the literal the bounds start at is the one the
+load indexes from, not another the function loads; and the 4 KB it
+looks back for a record. A bounded read cut at its object now also
+stops at the object starts a read "from here on" stops at, with their
+risk (font bytes that look like pointers), and a wrong cut there would
+leave a callee set complete that isn't. A bound the
 code proves with a compare needed nothing new: the value-set analysis
 narrows the index on the branch already, and the bounds the flow gets are
 the narrowed ones. Metroid's over-reads had none to use (`pose` is a

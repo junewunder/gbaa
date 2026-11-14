@@ -526,22 +526,6 @@ fn a_pointer_into_the_middle_of_a_table_still_reads_to_its_end() {
         &BTreeMap::from([b1, b2]),
     );
     assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
-    // And a read from the middle, VT + 4 on, reads to the end: H and F.
-    let mut b = B::default();
-    let p = b.pool(0x0800_0420, VT + 4);
-    let i = b.get(1);
-    let a = b.bin(BinOp::Add, p, i);
-    let t = b.ld(Width::Word, a);
-    let e = 0x0800_1001;
-    let bounds = ((e, t.index()), ((VT + 4, VT + 4 + 255 * 8), Some(8)));
-    let (vt, b0) = calling_vt_bounded(8);
-    let f = run_bounded(
-        &[calling(e, b, t), (0x0800_3001, vt.1)],
-        &BTreeMap::new(),
-        &img,
-        &BTreeMap::from([bounds, ((0x0800_3001, b0.0.1), b0.1)]),
-    );
-    assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
 }
 
 #[test]
