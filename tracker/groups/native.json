@@ -1765,15 +1765,23 @@
       "needs": ["native/lift-bios-more", "native/lift-psr-boot-irq"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "d6f46c21",
-        "session": "d6f46c21-d8c9-4fe0-ab85-3dc1b5518cf8",
-        "host": "quack",
-        "pid": 2833770,
-        "start": "8749081",
-        "at": "2026-11-14T11:55:42Z",
+        "checker": "verifier-mirror-7c3e19a2",
+        "at": "2026-11-14T12:55:52Z",
+        "evidence": "Verifier reran: gbaa-lift with mods/kirby-mirror/holes.toml exits 0, 0 hard holes, 5623 fns, 2,626,434 lines, 45.7 s at 0.62 GB; just build-recompiled under just long exit 0 (~94-107 s, 11.7 GB peak by the author); docs/native-stage-b.md quotes them; just check exit 0. Holes-file claims spot-checked on the ROM; two why-text figures fixed (mods 42294b8).",
         "branch": "unit/native/mirror-lifts",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-14T12:55:52Z",
+          "by": "d6f46c21",
+          "host": "quack",
+          "pid": 2833770,
+          "start": "8749081",
+          "beats": true,
+          "session": "d6f46c21-d8c9-4fe0-ab85-3dc1b5518cf8",
+          "lane": "quack/1"
+        }
       },
       "round": "2026-11-14T11:55:42Z"
     },
