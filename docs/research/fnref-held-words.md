@@ -267,7 +267,9 @@ same with and without the first two.
   settled what the registers hold after the call (below); the others
   are unsound, upper bounds. A report made with any of them says so in
   its first line. (`bios` is the rule since `native/fnref-bios-reads`
-  and no longer a kind: "The BIOS rule, as landed", at the end.)
+  and no longer a kind: "The BIOS rule, as landed", at the end. `move`
+  and `flags` went the same way with `native/fnref-gcc-moves`: "Old
+  GCC's moves and compares, as landed".)
 
 The run is the lift alone, no build: `just capped --mem 2G
 target/release/gbaa-lift ROM OUT --name metroid --holes
@@ -524,3 +526,52 @@ the word is also stored to the pile and meets arithmetic there, so the
 count stays. In the first three its reason moved from "given to the
 BIOS" to "arithmetic" (main's reports against these); the fourth came
 to main the same morning and had no report from before to compare.
+
+## Old GCC's moves and compares, as landed
+
+Unit `native/fnref-gcc-moves`, 2026-11-14. Follow-up 4 above is four
+rules now (`fnref.rs`), and `GBAA_FNREF_OFF` has lost `move` and
+`flags`: its kinds are `tables`, `pile` and `cells`, all unsound.
+
+- **A move.** `a + b + c` with `b` and `c` exactly 0 (old GCC's `adds
+  rd, rs, #0`), or `a` and `c`, is the other operand as it is, Refs and
+  all (`moves`). It is never kept by the large-value shortcut: it costs
+  nothing.
+- **Its flags, and a compare with 0's.** The carry and overflow of a
+  move are 0; those of `x + !0 + 1` (`cmp x, #0`) are 1 and 0, since
+  the sum is `x + 2^32`, and as signed `x - 1 + 1` (`flags_of`). Either
+  way no hole, whatever `x` holds.
+- **A function or a number compared with 0.** The Adc arm's test of
+  whether an address meets a number now looks at the other operand
+  only: a value that may be a callback or 5, compared with 0, holes
+  nothing; one compared with a value that may be 5 still does.
+- **A flag nothing reads.** Flag liveness over each function's blocks
+  as the native lift has its flags (`unused`, with
+  `analysis::ir::flags::dead_writes`): a return gives none back, a call
+  passes none and leaves the caller's as they were, a fall or jump
+  into another function passes all four. The ops only a dead flag write
+  takes (the N of `cmp r0, #0` before a `bx`) make no holes. The
+  lifter's own pass (`func.rs`) keeps every flag live at a return, for
+  the interpreter's sake, so these writes are still in the IR.
+
+The `move` switch also ran an op on a large set and one token token by
+token. That is not part of the rule: on native-tasks the run never
+settled with it (a set growing by its step each round; "didn't settle:
+nothing proven", 63 not proven against a bar of 59).
+
+**Counts.** Metroid (the lift alone, its holes file, main at df6917bc
+against this branch): `fn_words_proven` 466 to 467,
+`fn_words_not_proven` 338 to 337; every other metric the same. No word
+holes any more as an ordered compare (42 before), and none first at
+the moves and compares the table above names (124 had their first
+hole at 0x0800535a, 0x08001416, 0x080031f0, 0x08000aea, 0x08000baa or
+0x08000bea). As measured, they meet the next hole instead:
+
+| words | first hole now |
+|---|---|
+| 77 | 0x0807431c, `negs r1, r0; orrs r1, r0; lsrs r5, r1, #31` after the call with an empty callee set: old GCC's `r0 != 0` as a bit, another compare with 0 in arithmetic's clothes |
+| 34 | 0x08000b06, `cmp r0, #0` on a callback loaded from its global: the load reads the pile too, and the pile holds the functions' bytes and halves, which compared with 0 are a hole |
+| 178 | the rest of the 289 held as arithmetic: the reads past a table's end and the struct fields, as above |
+
+The agb programs' counts are as they were (`just lift-metrics`, every
+bar held).
