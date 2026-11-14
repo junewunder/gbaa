@@ -1154,6 +1154,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-14T09:20:26Z",
+          "by": "ef8559e5",
+          "text": "not pointers stepping (no new ROM reads after round 2). Large sets gain other forms of the same 5,157 origins a round. Tried, dropped: in-round reruns, saturating large sets, one shared set (worse). Next: {unit:native/fnref-forms-closed} (needed). memory/ note."
+        },
+        {
           "at": "2026-11-13T11:55:07Z",
           "by": "81556889",
           "text": "2026-11-13 PR 14: the 48M were copies (44M held, 3M distinct); sets kept once: 24M flat, 1.5 GB, bound not hit, rounds 3x faster. Still unsettled after 7 rounds/53 min: 12.3k entries change a round, memory still. Next: memory/fnref-flow-emerald-memory.md, 'Where it stands'."
@@ -1162,11 +1167,6 @@
           "at": "2026-11-13T07:17:12Z",
           "by": "ddd9a487",
           "text": "2026-11-13 PR 3: Emerald flow finishes, 11 min, 2.4 GB (--mem 8G, not 16G); stops at TOKENS: 48.1M after 27,776 runs (gbaa-recompile prints it). To settle: raise/replace the bound. G::held() skips ref_exp/expanded/mem_log; large-Ref paths have one unit test."
-        },
-        {
-          "at": "2026-11-12T10:56:36Z",
-          "by": "5cf6c823",
-          "text": "2026-11-12: Emerald's flow now finishes (27:37, 2.1 GB, on Function-address flow on Emerald fast enough to finish's branch) but reports 'didn't settle' after 35,409 runs: a function hit its 64*blocks+64 step bound, not the round bound. Trace prints which ('unsettled after')."
         }
       ],
       "round": "2026-11-07T12:12:38Z"
