@@ -23,4 +23,5 @@ Made from each file's frontmatter (`title`, `hook`, `open: true`) by `just memor
 Unsettled investigations, one per file with `open: true` and the next step in its hook.
 Drop the flag in the session that settles it.
 
-- [Why Emerald's function-address flow doesn't settle yet](fnref-flow-emerald-memory.md) — next: print what 12k entries gain a round with memory still; suspect ROM pointers stepping down
+- [Emerald's flow: what entries gain a round, and what didn't stop it](fnref-flow-emerald-tries.md) — not pointers, not forms; reruns, saturating, a shared set, closing forms all failed
+- [Why Emerald's function-address flow doesn't settle yet](fnref-flow-emerald-memory.md) — not pointers stepping, not forms (closing them changed as many entries, 2026-11-14)

@@ -2003,6 +2003,7 @@ impl G {
             Tok::Num(_) => "num",
             Tok::Rom(_) => "rom",
             Tok::RomFrom(_) => "from",
+            Tok::RomStep(..) => "step",
             Tok::Ref { src, .. } => match src {
                 Src::Pile(_) => "ref-pile",
                 Src::Cells(_) => "ref-cells",
@@ -4897,7 +4898,11 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
             // The ROM reads "from here on" new this round: how many start
             // below one already made of the same object (a pointer that
             // steps down a round), and by how much.
-            let now: BTreeSet<(u32, u32, u8)> = g.rom_from.keys().copied().collect();
+            let now: BTreeSet<(u32, u32, u8)> = g
+                .rom_from
+                .keys()
+                .map(|&(lo, end, w, _)| (lo, end, w))
+                .collect();
             let (mut new, mut down) = (0usize, BTreeMap::<u32, usize>::new());
             for &(lo, end, w) in now.difference(&rom_from_was) {
                 new += 1;
