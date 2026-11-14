@@ -631,3 +631,38 @@ second half. Those were object starts, and cut there, before the rule.
 to 167 (the report's line now says both). The agb programs' metrics are
 all as they were. Nightmare and Emerald were not run.
 
+## Struct tables read by one field, as landed
+
+Unit `native/fnref-table-fields`, 2026-11-14 on quack. A ROM pointer
+plus an index the block itself scales by a record's size (`lsl r0, r1,
+#1; add r0, r1; lsl r0, #3` is 24 times r1; a `mul` by a constant) is
+a pointer "from here on" every that many bytes (`Tok::RomStep`), and a
+field's offset added to it moves it to that field; a load through it
+reads that field of each record, not every byte of the table. The
+scale is exact when the index is under 2^16 (a byte or halfword load,
+a mask, a shift right by 16 or more), else only its power of two (a
+product of a word may wrap). Each value's scale is found in its block,
+through its registers (`strides` in `fnref.rs`); the value sets aren't
+used.
+
+**Metroid:** with `native/fnref-table-ends` (main at 41b3b5f),
+`fn_words_proven` 530 to 570 and `fn_words_not_proven` 274 to 234 (the
+lift alone, its holes file); before that unit, on 4f5acee, 466 to 499.
+The struct-table row above left that hole whole. The words main held
+at 0x080609b4 and 0x08069dd8 (15 and 17) are proven, and 8 it held at
+a byte read at 0x0807a9c0; the 33 of the table read at 0x0805b4f8, the handlers at +4 and +12 of
+the 24-byte records, meet their next hole: loaded by that field and
+compared with 0 before they are called (0x0805c3c4 and 0x0805c486, `cmp
+r0, #0` whose carry nobody reads), old GCC's compare, another unit's. No
+word proven on main is lost. The 70 complete callee sets of the 72
+`call_fn` calls from 59.1 callees on average to 50.1, the widest from
+167 to 133. 12 more code constants, none proven: numbers read more
+exactly that, after a hole's arithmetic, equal a function's address.
+
+**The agb programs:** the same, but native-tasks, one word more not
+proven (59 to 60, its bar raised with the cause in
+`crates/codegen/lift-check.toml`): its glyph table's records (28 bytes,
+an index of unknown range times 28, so a stride of 4) read at +22 and
++23 give fewer values, a cap that widened one no longer does, and an
+exact ROM pointer reaches the IRQ handler's own code through incomplete
+call sets. Read every byte without the stride, the count stays 59.
