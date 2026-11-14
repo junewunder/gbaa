@@ -1257,7 +1257,9 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   (native/hw-sound), so psg-square's FIFO A and PSG and direct-sound's
   two FIFOs with their timer-IRQ buffer swaps are compared sample for
   sample. The play layout must draw the same frames and write the same records
-  (RAM as the guest's, `Ram::image`), and the planted faults must be caught:
+  (RAM as the guest's, `Ram::image`; a difference names the guest layout's
+  value and the play layout's: the spike's `--features plant-layout`, its
+  global a word off, shows it by hand), and the planted faults must be caught:
   the spike's wrong store, psg-square's one wrong sample (`--features plant`).
   Play's sound against a native program's none (a host that records none)
   fails unless `--no-audio WHY`. A lowest sp outside IWRAM fails; a code
