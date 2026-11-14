@@ -10,12 +10,13 @@ cap := if env("FACTORY_CAPPED_IN", "") != "" { "env" } else if os() != "linux" {
 default:
     @just --list
 
-# Merge gate: format, lints, tests, and the no_std builds of `runtime` and `armv4t`.
+# Merge gate: format, lints, tests, the no_std builds of `runtime` and `armv4t`, and last the native check (`just native-check`: about a minute warm, several when runtime or codegen changed; native/native-check-in-gate, after it broke unseen for a week).
 check: check-nostd rebuildable
     cargo fmt --check
     {{lock}} cargo clippy --workspace --all-targets -- -D warnings
     {{lock}} cargo test -q --workspace --no-run
     cargo test --workspace
+    just native-check
 
 # Proves `runtime` and `armv4t` (decoder, semantics, interpreter) build without std (rust-toolchain.toml installs the target).
 check-nostd:
@@ -883,7 +884,7 @@ native-spike:
     target/release/native-spike-check crates/native-spike/check.toml out/native-spike/check \
         target/recompiled/release/gbaa-native-spike "$rom" target/release/native-spike target/release/native-spike-planted
 
-# The native check (native/oracle, native/hw-sound; docs/native-port-design.md section 7, docs/tools/commands.md): agb/native-spike, agb/psg-square and agb/direct-sound (`just agb-tests`) recompiled at --timing native and built, then route-check --native runs each with its native program (crates/native-spike, check layout) on units/native-spike.toml, units/psg-square.toml and units/direct-sound.toml and compares every frame's picture, RAM (outside the stack, code copies and crates/native-spike/check/*.replaced.toml), I/O (sound and timers too), display memories and audio samples (psg-square's FIFO A and PSG, direct-sound's two FIFOs and timer-IRQ buffer swaps, mixed by the play build's own sound path in runtime::hw); for the spike also its play layout's frame hashes and records (RAM as an image in the guest's layout) and a planted wrong store, and for psg-square a planted wrong sample, each of which must be caught. Writes out/native-check/. Heavy: builds three generated crates.
+# The native check (native/oracle, native/hw-sound; docs/native-port-design.md section 7, docs/tools/commands.md): agb/native-spike, agb/psg-square and agb/direct-sound (`just agb-tests`) recompiled at --timing native and built, then route-check --native runs each with its native program (crates/native-spike, check layout) on units/native-spike.toml, units/psg-square.toml and units/direct-sound.toml and compares every frame's picture, RAM (outside the stack, code copies and crates/native-spike/check/*.replaced.toml), I/O (sound and timers too), display memories and audio samples (psg-square's FIFO A and PSG, direct-sound's two FIFOs and timer-IRQ buffer swaps, mixed by the play build's own sound path in runtime::hw); for the spike also its play layout's frame hashes and records (RAM as an image in the guest's layout) and a planted wrong store, and for psg-square a planted wrong sample, each of which must be caught. Writes out/native-check/. Heavy: builds three generated crates. The last step of `just check`, so it gates every merge.
 native-check:
     #!/usr/bin/env bash
     set -eu

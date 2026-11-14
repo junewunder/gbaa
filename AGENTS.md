@@ -44,7 +44,8 @@ lift-check`; `just lift` ends by running the build and recording where it stops,
 are game-derived: `mods/<game>/holes.toml`). Generated code goes in
 `out/<game>/` (gitignored).
 
-- `just check`: fmt, clippy `-D warnings`, tests, `check-nostd` and `rebuildable`. The
+- `just check`: fmt, clippy `-D warnings`, tests, `check-nostd`, `rebuildable` and
+  `native-check` (needs `just agb-tests`' ROMs in `$GBAA_DATA`). The
   merge gate.
 - `just check-nostd`: builds `runtime` for `riscv32imac-unknown-none-elf` to
   prove it stays no_std.

@@ -80,7 +80,7 @@ What decides a unit is right. `just check` is the mechanical part and must pass
 before anything is marked `done`.
 
 - **`just check` runs:** fmt, clippy `-D warnings`, the workspace tests,
-  `check-nostd` and `rebuildable` (AGENTS.md). The merge gate.
+  `check-nostd`, `rebuildable` and `native-check` (AGENTS.md). The merge gate.
 - **Beyond `just check`:** **mGBA is the oracle.** A checkpoint's
   expected hash is what mGBA draws (`just mgba-diff`), never one set by eye;
   `just unit <name>` clears the unit's outputs, then needs mGBA = our
