@@ -55,7 +55,11 @@ impl Ram {
     /// layout's record is this one's, byte for byte.
     fn image(&self) -> Vec<u8> {
         let mut v = vec![0; RAM_SIZE];
-        v[FRAMES_AT..FRAMES_AT + 4].copy_from_slice(&self.frames.to_le_bytes());
+        // The planted layout fault (`--features plant-layout`): the global
+        // a word past its link address, which route-check --packed must
+        // name as the guest layout's value and the play layout's.
+        let at = FRAMES_AT + if cfg!(feature = "plant-layout") { 4 } else { 0 };
+        v[at..at + 4].copy_from_slice(&self.frames.to_le_bytes());
         v
     }
 }
