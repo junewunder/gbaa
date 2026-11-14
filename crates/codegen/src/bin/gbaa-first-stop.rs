@@ -163,6 +163,7 @@ fn run(bin: &Path, a: &Args, log: &Path) -> Result<Ended, String> {
             frames: 0,
             asked: a.frames,
             functions: Vec::new(),
+            pc: None,
             at: String::new(),
             why: Why::TimeLimit(a.time_limit + GRACE),
         };

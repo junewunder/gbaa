@@ -83,7 +83,9 @@
 //!   stops the program, so no call runs it on zeroes. A context save
 //!   (`setjmp`'s `stm`, `saves::summary`'s `context_saves`) is no read.
 //! - Blocks are the arms of a `loop { match b }` over local labels
-//!   (0 the entry); calls are Rust calls; a return is a jump to the value
+//!   (0 the entry), each starting with `runtime::guest_pc::set` of its
+//!   guest address, which a stop names (unit `native/first-stop-guest-pc`:
+//!   compiled code keeps no other pc); calls are Rust calls; a return is a jump to the value
 //!   `lr` held on entry, [`RET`] (prelude), told by value since compiled
 //!   code moves it through the stack.
 //! - Memory is `ld8/16/32` and `st8/16/32` over `Game::ram` (EWRAM then
@@ -1896,7 +1898,14 @@ impl FnPrinter<'_, '_> {
         for k in &order {
             let gb = &f.blocks[k];
             let label = self.labels[k];
-            writeln!(s, "            {label} => {{ // {:#010x}", gb.key).unwrap();
+            // The block's guest address, kept for a stop to name
+            // (`runtime::guest_pc`), on the arm's own line.
+            writeln!(
+                s,
+                "            {label} => {{ runtime::guest_pc::set({:#010x});",
+                gb.key
+            )
+            .unwrap();
             let xs = exits(self.ctx, gb);
             self.cur = *k;
             let body = self.block(&gb.block.insts, &xs, gb.block.thumb);

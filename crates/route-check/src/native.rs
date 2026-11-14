@@ -44,7 +44,8 @@
 //! byte (address, play's value, native's). `--packed BIN`: the same
 //! program's play layout must draw NATIVE's frames (frame hashes), and
 //! its records must be NATIVE's, nothing skipped (RAM as the guest lays it
-//! out, which a packed program records).
+//! out, which a packed program records); a difference there names the
+//! guest layout's value and the play layout's.
 //! `--planted BIN` (any number): a build with a planted fault (one wrong
 //! store, or an old behaviour a lifter flag brings back), which must
 //! differ; its first difference is printed. A lowest sp outside IWRAM
@@ -226,7 +227,14 @@ pub fn run(
     let mut skips = vec![stack];
     skips.extend(fixed);
 
-    compare(&out.join("play.rec"), &out.join("interp.rec"), &[], frames).map_err(|e| match e {
+    compare(
+        &out.join("play.rec"),
+        &out.join("interp.rec"),
+        ("play", "interpreter"),
+        &[],
+        frames,
+    )
+    .map_err(|e| match e {
         Differ::Fail(f) => Fail(format!(
             "the play build's compiled code differs from its interpreter (so from itself): {f}"
         )),
@@ -235,6 +243,7 @@ pub fn run(
     let (said, loud) = compare(
         &out.join("play.rec"),
         &out.join("native.rec"),
+        PLAY_NATIVE,
         &skips,
         frames,
     )
@@ -275,6 +284,7 @@ pub fn run(
         compare(
             &out.join("native.rec"),
             &out.join("packed.rec"),
+            ("guest layout", "play layout"),
             &[],
             frames,
         )
@@ -299,6 +309,7 @@ pub fn run(
         match compare(
             &out.join("play.rec"),
             &out.join(format!("{run}.rec")),
+            PLAY_NATIVE,
             &skips,
             frames,
         ) {
@@ -474,9 +485,24 @@ pub enum Differ {
     Unrun(String),
 }
 
-/// Compare two records frame by frame. Ok: what was compared, and how
+/// The two sides' names in a difference: the record compared against,
+/// then the one checked.
+pub type Sides = (&'static str, &'static str);
+
+/// The usual pair: the play build and the native program.
+pub const PLAY_NATIVE: Sides = ("play", "native");
+
+/// Compare two records frame by frame, naming a difference's values by
+/// `sides` (`a`'s name, then `b`'s). Ok: what was compared, and how
 /// many frames had sound in `a` that `b` didn't make (no audio at all).
-pub fn compare(a: &Path, b: &Path, skips: &[Skip], frames: u64) -> Result<(String, u64), Differ> {
+pub fn compare(
+    a: &Path,
+    b: &Path,
+    sides: Sides,
+    skips: &[Skip],
+    frames: u64,
+) -> Result<(String, u64), Differ> {
+    let (na, nb) = sides;
     let open =
         |p: &Path| Reader::open(p).map_err(|e| Differ::Unrun(format!("{}: {e}", p.display())));
     let (mut ra, mut rb) = (open(a)?, open(b)?);
@@ -497,12 +523,12 @@ pub fn compare(a: &Path, b: &Path, skips: &[Skip], frames: u64) -> Result<(Strin
             (x, _) => {
                 return Err(Differ::Fail(format!(
                     "{} ends after {n} frames",
-                    if x.is_none() { "play" } else { "native" }
+                    if x.is_none() { na } else { nb }
                 )));
             }
         };
         n += 1;
-        if let Some(d) = frame_diff(fa, fb, skips) {
+        if let Some(d) = frame_diff(fa, fb, sides, skips) {
             return Err(Differ::Fail(d));
         }
         match (fa.audio, fb.audio) {
@@ -535,7 +561,7 @@ pub fn compare(a: &Path, b: &Path, skips: &[Skip], frames: u64) -> Result<(Strin
 }
 
 /// The first difference between two frames' records, named.
-fn frame_diff(a: &Frame, b: &Frame, skips: &[Skip]) -> Option<String> {
+fn frame_diff(a: &Frame, b: &Frame, (na, nb): Sides, skips: &[Skip]) -> Option<String> {
     let f = a.frame;
     if a.frame != b.frame {
         return Some(format!("frame numbers {} and {}", a.frame, b.frame));
@@ -556,7 +582,7 @@ fn frame_diff(a: &Frame, b: &Frame, skips: &[Skip]) -> Option<String> {
         if let Some(i) = first {
             let addr = r.base() + i as u32;
             let mut s = format!(
-                "frame {f}: {} byte {addr:#010x}: play {:#04x}, native {:#04x}",
+                "frame {f}: {} byte {addr:#010x}: {na} {:#04x}, {nb} {:#04x}",
                 r.name(),
                 x[i],
                 y[i]
@@ -574,7 +600,7 @@ fn frame_diff(a: &Frame, b: &Frame, skips: &[Skip]) -> Option<String> {
     }
     if a.hash != b.hash {
         return Some(format!(
-            "frame {f}: the picture: play {:016x}, native {:016x}",
+            "frame {f}: the picture: {na} {:016x}, {nb} {:016x}",
             a.hash, b.hash
         ));
     }
@@ -582,7 +608,7 @@ fn frame_diff(a: &Frame, b: &Frame, skips: &[Skip]) -> Option<String> {
         && x != y
     {
         return Some(format!(
-            "frame {f}: audio: play {} samples hash {:016x}, native {} samples hash {:016x}",
+            "frame {f}: audio: {na} {} samples hash {:016x}, {nb} {} samples hash {:016x}",
             x.samples, x.hash, y.samples, y.hash
         ));
     }
@@ -627,35 +653,62 @@ mod tests {
         }];
         // In the stack: skipped.
         b.region_mut(Region::Iwram)[0x7F10] = 1;
-        assert_eq!(frame_diff(&a, &b, &skips), None);
+        assert_eq!(frame_diff(&a, &b, PLAY_NATIVE, &skips), None);
         // DMA's registers and KEYINPUT: not compared.
         b.set_io16(0x0B0, 5);
         b.set_io16(0x130, 0x03FE);
-        assert_eq!(frame_diff(&a, &b, &skips), None);
+        assert_eq!(frame_diff(&a, &b, PLAY_NATIVE, &skips), None);
         // The serial port's: compared, now the library keeps them.
         b.set_io16(0x128, 0x0080);
-        assert!(frame_diff(&a, &b, &skips).unwrap().contains("serial"));
+        assert!(
+            frame_diff(&a, &b, PLAY_NATIVE, &skips)
+                .unwrap()
+                .contains("serial")
+        );
         b.set_io16(0x128, 0);
         b.set_io16(0x134, 0x8000);
-        assert!(frame_diff(&a, &b, &skips).unwrap().contains("RCNT"));
+        assert!(
+            frame_diff(&a, &b, PLAY_NATIVE, &skips)
+                .unwrap()
+                .contains("RCNT")
+        );
         b.set_io16(0x134, 0);
         // A timer: compared, now the library has the play build's.
         b.set_io16(0x102, 0x0080);
-        assert!(frame_diff(&a, &b, &skips).unwrap().contains("timers"));
+        assert!(
+            frame_diff(&a, &b, PLAY_NATIVE, &skips)
+                .unwrap()
+                .contains("timers")
+        );
         b.set_io16(0x102, 0);
         b.region_mut(Region::Ewram)[0xC0] = 2;
         assert_eq!(
-            frame_diff(&a, &b, &skips).unwrap(),
+            frame_diff(&a, &b, PLAY_NATIVE, &skips).unwrap(),
             "frame 3: EWRAM byte 0x020000c0: play 0x00, native 0x02; 1 bytes differ in EWRAM"
         );
         let mut c = Frame::new();
         c.frame = 3;
         c.set_io16(0x82, 0x100);
-        assert!(frame_diff(&a, &c, &skips).unwrap().contains("0x04000083"));
         assert!(
-            frame_diff(&a, &c, &skips)
+            frame_diff(&a, &c, PLAY_NATIVE, &skips)
+                .unwrap()
+                .contains("0x04000083")
+        );
+        assert!(
+            frame_diff(&a, &c, PLAY_NATIVE, &skips)
                 .unwrap()
                 .contains("sound registers")
+        );
+    }
+
+    #[test]
+    fn names_the_sides_it_is_given() {
+        let (a, mut b) = (Frame::new(), Frame::new());
+        b.region_mut(Region::Ewram)[0xC4] = 1;
+        assert_eq!(
+            frame_diff(&a, &b, ("guest layout", "play layout"), &[]).unwrap(),
+            "frame 0: EWRAM byte 0x020000c4: guest layout 0x00, play layout 0x01; \
+             1 bytes differ in EWRAM"
         );
     }
 
@@ -696,9 +749,13 @@ why = "a Thumb function"
         let (a, mut b) = (Frame::new(), Frame::new());
         b.region_mut(Region::Iwram)[0xC7C] = 1;
         b.region_mut(Region::Iwram)[0xEAB] = 1;
-        assert_eq!(frame_diff(&a, &b, &skips), None);
+        assert_eq!(frame_diff(&a, &b, PLAY_NATIVE, &skips), None);
         b.region_mut(Region::Iwram)[0xEAC] = 1;
-        assert!(frame_diff(&a, &b, &skips).unwrap().contains("0x03000eac"));
+        assert!(
+            frame_diff(&a, &b, PLAY_NATIVE, &skips)
+                .unwrap()
+                .contains("0x03000eac")
+        );
     }
 
     #[test]
