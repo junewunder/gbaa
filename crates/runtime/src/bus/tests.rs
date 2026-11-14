@@ -291,6 +291,57 @@ fn io_masks() {
     assert_eq!(b.read32(IO + reg::WININ), 0x3F3F_3F3F);
 }
 
+/// The serial port with nothing plugged in answers as mGBA 0.10.5's does
+/// (`Io::sio_unplugged`), and the JOY bus's registers as no partner
+/// leaves them.
+#[test]
+fn serial_port_unplugged() {
+    let mut b = bus();
+    // GPIO mode, as the BIOS leaves RCNT: SIOCNT kept.
+    b.write16(IO + reg::SIOCNT, 0x4081);
+    assert_eq!(b.read16(IO + reg::SIOCNT), 0x4081);
+    // Normal mode: SI reads 1; the internal clock ends a transfer at
+    // once, with its IRQ if asked; the external clock's waits.
+    b.write16(IO + reg::RCNT, 0x000F);
+    assert_eq!(
+        b.read16(IO + reg::RCNT),
+        0,
+        "the pins' levels aren't stored"
+    );
+    b.io.take_events();
+    b.write16(IO + reg::SIOCNT, 0x4081);
+    assert_eq!(b.read16(IO + reg::SIOCNT), 0x4005);
+    assert_eq!(b.io.raw16(reg::IF), irq::SERIAL);
+    assert_ne!(b.io.take_events() & event::IRQ, 0);
+    b.io.set_raw16(reg::IF, 0);
+    b.write16(IO + reg::SIOCNT, 0x1081);
+    assert_eq!(b.read16(IO + reg::SIOCNT), 0x1005);
+    assert_eq!(b.io.raw16(reg::IF), 0);
+    b.write16(IO + reg::SIOCNT, 0x4080);
+    assert_eq!(b.read16(IO + reg::SIOCNT), 0x4084);
+    assert_eq!(b.io.raw16(reg::IF), 0);
+    // A byte store to the high half applies to the register as it is.
+    b.write8(IO + reg::SIOCNT + 1, 0x40);
+    assert_eq!(b.read16(IO + reg::SIOCNT), 0x4084);
+    // Multiplayer: SI and SD 1, ID and error 0, the start bit kept.
+    b.write16(IO + reg::SIOCNT, 0x60F3);
+    assert_eq!(b.read16(IO + reg::SIOCNT), 0x608F);
+    // UART: kept.
+    b.write16(IO + reg::SIOCNT, 0x7F8F);
+    assert_eq!(b.read16(IO + reg::SIOCNT), 0x7F8F);
+    // JOY bus: JOYCNT's flags and JOYSTAT's received flag only a partner
+    // sets; a JOY_TRANS store sets JOYSTAT's sent flag; 0x15A is nothing.
+    b.write16(IO + reg::JOYCNT, 0xFFFF);
+    assert_eq!(b.read16(IO + reg::JOYCNT), 0x0040);
+    b.write16(IO + reg::JOYSTAT, 0xFFFF);
+    assert_eq!(b.read16(IO + reg::JOYSTAT), 0x0030);
+    b.write32(IO + reg::JOY_TRANS, 0x1234_5678);
+    assert_eq!(b.read32(IO + reg::JOY_TRANS), 0x1234_5678);
+    assert_eq!(b.read16(IO + reg::JOYSTAT), 0x0038);
+    b.write16(IO + reg::JOYSTAT + 2, 0xFFFF);
+    assert_eq!(b.read16(IO + reg::JOYSTAT + 2), 0);
+}
+
 #[test]
 fn keyinput_is_active_low_and_read_only() {
     let mut b = bus();
