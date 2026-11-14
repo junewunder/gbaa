@@ -12,7 +12,10 @@
 //!
 //! RAM's globals (`codegen::native::globals`, unit `native/ram-globals`)
 //! take their names from the names files in DIR whose `[map]` names this
-//! ROM (default the repo's `names/`; none is fine). `--layout guest` (the
+//! ROM (default the repo's `names/`; none is fine); so do the lifted
+//! functions and the data whose address the code takes as a constant
+//! (`codegen::native::named`, unit `native/lift-fn-names`; not with
+//! `--copies`), which the report counts. `--layout guest` (the
 //! default) puts them at the guest's offsets, the native check's layout;
 //! `--layout packed` makes them fields in the lifter's order, the rest of
 //! RAM bytes, the play layout, which must draw the same frames (unit
@@ -205,6 +208,14 @@ fn main() -> ExitCode {
                 .filter_map(|(&a, item)| {
                     let id = map.ident(codegen::names::Kind::Data, a)?;
                     Some((a, (id.to_string(), item.size.unwrap_or(0) as u32)))
+                })
+                .collect();
+            holes.fn_names = map
+                .functions
+                .keys()
+                .filter_map(|&k| {
+                    let id = map.ident(codegen::names::Kind::Func, k)?;
+                    Some((k, id.to_string()))
                 })
                 .collect();
         }
