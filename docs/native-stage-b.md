@@ -372,8 +372,10 @@ What the done pieces left open, for the units that come next.
   numbers: unknown; over 16 exact ROM pointers: one "from the lowest
   on") moves each word's first reason with the code. A load bounded from
   ROM to outside it, or unbounded, reads no ROM (the closed world); a
-  ROM-bounded read over 256 KB reads nothing (flagged); RAM-to-RAM
-  `CpuSet` isn't followed; `ror` by an unknown keeps a form. A read
+  ROM-bounded read over 256 KB reads nothing (flagged); a `CpuSet` out
+  of RAM copies its cells' and the pile's words to the pile, not to the
+  destination's cells (`native/fnref-bios-ram-copies`); `ror` by an
+  unknown keeps a form. A read
   "from here on" stops at the next object (a ROM data address a ROM word
   holds), assuming no index runs past one (`native/fnref-rom-read-bound`).
   Past 48M tokens it stops, proving nothing (`native/whole-lift-memory`).
