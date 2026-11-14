@@ -513,76 +513,43 @@ denormal paths in Rogue and Imperium.
 
 ## Entry readers left on moonbeam and Rogue
 
-`native/entry-readers-moonbeam-rogue`, 2026-11-14: the three hard entry
-readers the section above left. Two are real, of a kind seen before; one
-was discovery's, now fixed.
+`native/entry-readers-moonbeam-rogue`, 2026-11-14: the three left above.
 
-**moonbeam 0x08025a29: a tagged value with its payload unset** (r8 at
-0x08025dec, 0x08025dfc and 0x08025e00, r9 at 0x08025df0). The function
-(2.8 KB, its cold blocks reached by `bl` and all taken as jumps) builds
-an 8-byte value in r8 (the low word, a pointer when the tag says so) and
-r9 (the high word: its low half kept, the tag on top), and stores both:
+**moonbeam 0x08025a29: a tagged value's payload unset** (r8 at 0x08025dec,
+0x08025dfc, 0x08025e00; r9 at 0x08025df0). It builds an 8-byte value in
+r8 (the low word, a pointer for some tags) and r9 (`lsls/lsrs #16` keeps
+r9's low half, `orrs` puts the tag on top: 0xfff3 here, a NaN's top) and
+stores both. With the lookup at 0x08025aec failing (r0 0) and the flags
+at 0x08025d58 making r4 7, the store is reached with neither set: a walk
+tracking r6 finds that path with no branch on it the function can decide
+(only the shorter one through 0x08025e6a is impossible, r6 -1 sending
+0x08025ac4 elsewhere). Not the summary's join: the C leaves the payload
+unset for a tag that doesn't use it, and its caller's r8 (0x08027ff9's,
+saved by the prologue) goes to memory. The interpreter (3,000 frames, no
+presses) enters it 279 times, all on the failed lookup, never reaching
+the store. Hard, rightly: agbcc's partly built word, from modern GCC.
 
-```
-08025ddc: mov r2, r9
-08025de0: lsls r2, r2, #16      r9's low half kept
-08025de4: lsrs r2, r2, #16
-08025de6: orrs r2, r1           tag << 16 (here 0xfff3, a NaN's top bits)
-08025dea: mov r2, r8
-08025dec: str r2, [r3, #0]
-```
+**Rogue 0x081b42e1: a struct's top half passed on unset** (r11 in r0 at
+0x081b444c). A recursive fill builds the next cell's `{s8 x, s8 y}` in
+r11 as `bics #255; orrs x; ands 0xffff00ff; orrs y << 8`, keeping bits
+16-31; on the first pass (0x081b441e to 0x081b4426) they are the entry
+r11's, and the callee stores r0 whole (`str r0, [r2, #8]`, 0x081b4322).
+Hard, rightly: the padding kind.
 
-A path from the entry reaches it with neither set: the lookup at
-0x08025aec failing (r0 0), then the flags at 0x08025d58 making r4 7.
-The shortest path, through 0x08025e6a, is impossible (it sets r6 to -1,
-which sends 0x08025ac4 elsewhere), but a walk of the code that tracks
-r6 still finds this one, with no branch on it decided by anything the
-function knows: not the summary joining in an impossible path. It is the
-C leaving a value's payload unset for a tag that doesn't use it, so the
-caller's r8 (0x08027ff9's, which the prologue saved) goes to memory. The interpreter, 3,000
-frames with no presses, enters the function 279 times, each time on the
-lookup-failed path, and never reaches the store. Hard, rightly: the
-native build would store 0 where the game stores its caller's r8. The
-same kind as agbcc's partly built struct words above, from modern GCC.
+**Rogue 0x0826c5e7: a battle script taken for code.** 0x080c52ba,
+0x080c6692 and 0x080c706c load it from their pools into r0 for
+0x080c3e1c, which stores it as the current script and pushes a callback.
+The pointer scan scored it 3 (pooled, three words), and its decode
+validated by ending in an indirect jump: `strb r4, [r7, #24]; lsls r1,
+r6, #4; …; lsls r1, r1, #6; movs r6, #198; bx r1`. A `bx` to a register
+last set by a shift left goes to ARM state at an address made only by
+the shift, which no switch does (its targets come from a table or an
+add): `analysis::discovery::scan::shifted_bx` now fails such a body. The
+pret builds' starts: Emerald's and Emerald modern's unchanged; Rogue's
+own build loses just this one, a false start by its ELF.
 
-**Rogue 0x081b42e1: a 4-byte struct's top half passed on unset** (r11,
-passed in r0 at 0x081b444c). A recursive fill: it builds the next cell's
-`{s8 x, s8 y}` in r11 for the call to itself, as `bics r1, r11, #255;
-orrs x; ands 0xffff00ff; orrs y << 8`, so bits 16-31 are r11's. The
-first time round (0x081b441e straight to 0x081b4426) r11 is still the
-entry value; the callee stores its r0 whole (`str r0, [r2, #8]` at
-0x081b4322), so the caller's r11 reaches memory. Hard, rightly; the
-padding kind again.
-
-**Rogue 0x0826c5e7: a battle script taken for code.** Three Thumb
-callers (0x080c52ba, 0x080c6692, 0x080c706c) load 0x0826c5e7 from their
-pools into r0 for 0x080c3e1c, which stores it as the current script
-pointer and pushes a callback: script bytes, at an odd address. The
-pointer scan (decision 5d) took it for a Thumb start (pooled and three
-words: score 3), and its decode validated by ending in an indirect jump
-after five instructions:
-
-```
-0826c5e6: strb r4, [r7, #24]
-0826c5ea: lsls r1, r6, #4
-0826c5f4: lsls r1, r1, #6
-0826c5f8: movs r6, #198
-0826c5fa: bx r1
-```
-
-`bx` to a register last set by a shift left goes to ARM state at an
-address made only by the shift; a switch's targets come from a table or
-an add. `analysis::discovery::scan::shifted_bx` now fails such a body
-(looking back through the straight run before the `bx`, stopping at
-anything that may branch or write the register another way). On the
-pret builds: Emerald and Emerald modern's starts unchanged, Rogue's own
-build loses this one start (a false one by its ELF: precision 0.9991 to
-0.9992, recall the same).
-
-Against the main it began from, hard holes fell on Rogue and rose nowhere
-(numbers: the unit's evidence). Still hard: moonbeam 0x08025a29 and
-Rogue 0x081b42e1, real, for a stand-in or the play build's own handling
-of a partly built word.
+Against main, hard holes fell on Rogue (this start's read and its `bx`)
+and rose nowhere (numbers: the unit's evidence).
 
 ## Modern GCC's unresolved jumps, by kind
 

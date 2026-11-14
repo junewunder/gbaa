@@ -517,7 +517,10 @@ fn shifted_bx(prog: &Program, start: u32, i: &Insn) -> bool {
             return false;
         }
         match p.instr {
-            Instr::Alu { op: AluOp::Tst | AluOp::Teq | AluOp::Cmp | AluOp::Cmn, .. } => {}
+            Instr::Alu {
+                op: AluOp::Tst | AluOp::Teq | AluOp::Cmp | AluOp::Cmn,
+                ..
+            } => {}
             Instr::Alu { rd, op, op2, .. } if rd == rm => {
                 return op == AluOp::Mov
                     && matches!(op2, Operand2::Reg { shift: Shift::Lsl(n), .. } if n > 0);
@@ -525,7 +528,9 @@ fn shifted_bx(prog: &Program, start: u32, i: &Insn) -> bool {
             Instr::Alu { .. } => {}
             Instr::Store { addr, .. } if addr.rn != rm => {}
             Instr::Load { rd, addr, .. } if rd != rm && addr.rn != rm => {}
-            Instr::Block { load: false, rn, .. } if rn != rm => {}
+            Instr::Block {
+                load: false, rn, ..
+            } if rn != rm => {}
             _ => return false,
         }
     }
