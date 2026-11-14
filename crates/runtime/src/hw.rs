@@ -96,10 +96,12 @@
 //! **The serial port** has no partner, as the play build's has none off a
 //! link hub: its registers ([`SERIAL_START`] to [`SERIAL_END`]: `SIODATA`,
 //! `SIOCNT`, `RCNT`, the JOY bus's, and `KEYCNT` among them) are kept in
-//! the sound's I/O block through the play build's masks and read back as
-//! written. A transfer started in `SIOCNT` never ends: the start bit stays
-//! set and no serial IRQ is requested, as in the play build (a keypad IRQ
-//! likewise: `KEYCNT` is only kept).
+//! the sound's I/O block, which answers as the play build's does with
+//! nothing plugged in (`Io::sio_unplugged`, mGBA's): in normal mode SI
+//! reads 1 and a transfer on the internal clock ends in the store, its
+//! serial IRQ requested if `SIOCNT` asks (handled at the next sync, as the
+//! play build's `--timing native` takes a store's IRQ at its next time
+//! point). A keypad IRQ is never requested: `KEYCNT` is only kept.
 //!
 //! What isn't here yet: [`Dma::hblank_to`]'s price on the clock, a link
 //! partner, the EEPROM's DMA. Keeping the save in a `.sav` is the host's
@@ -664,8 +666,8 @@ impl<G: Native> Hw<G> {
     /// registers, `DISPSTAT`, the sound registers and FIFOs, the DMA
     /// registers (an immediate channel switched on runs at [`write_dma`]
     /// or the next sync: this can't reach the program's memory), the
-    /// timers, the serial port's registers and `KEYCNT` (kept, through the
-    /// play build's masks: nothing answers a transfer), `IE`, `IF` (1s
+    /// timers, the serial port's registers and `KEYCNT` (the play build's
+    /// with nothing plugged in), `IE`, `IF` (1s
     /// acknowledge) and `IME`; panics on a register the library doesn't
     /// model yet (`POSTFLG`, `HALTCNT`), which a lifted program must not
     /// reach silently.
@@ -683,9 +685,12 @@ impl<G: Native> Hw<G> {
             _ if o < crate::video::REGS_END => self.ppu.write16(o, v),
             _ if Sound::<G>::has(o) => self.sound_store(o, 2, v as u32),
             _ if is_dma(o) => self.dma_store(o, 2, v as u32),
-            // No partner: kept as the play build's bus keeps them off a
-            // link, the start bit as written and no IRQ.
-            _ if is_serial(o) => self.sound.io.write16(o, v),
+            // No partner: as the play build's bus answers off a link
+            // (`Io::sio_unplugged`), the serial IRQ into `IF`.
+            _ if is_serial(o) => {
+                self.sound.io.write16(o, v);
+                self.take_sound_irqs();
+            }
             // Bit 15 is the cartridge type: read-only, 0 (GBA).
             reg::WAITCNT => self.waitcnt = v & 0x7FFF,
             reg::IE => self.irq.enable = v & 0x3FFF,
