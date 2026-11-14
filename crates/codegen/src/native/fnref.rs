@@ -70,8 +70,14 @@
 //! settles in 12 rounds, about 150 s on quack
 //! (`native/fnref-flow-scale`), holding about 30 million tokens at a
 //! peak of 1.35 GB. A run that holds more than [`TOKENS`] stops,
-//! unsettled (Kirby - Nightmare in Dream Land and Minish Cap, at about
-//! 3,000 functions run: `native/whole-lift-memory`).
+//! unsettled (Emerald, below). Kirby - Nightmare in Dream Land and Minish
+//! Cap once stopped so, at about 3,000 functions run
+//! (`native/whole-lift-memory`); with the changes below, Nightmare (5,177
+//! functions) settles: 31 to 35 minutes at 2.0 GB with the roads
+//! (`native/fnref-c-game-words`), 8 minutes at 0.45 GB in its lift
+//! (`native/nightmare-fn-flow-again`). Its lift still skips the flow, for
+//! precision, not cost: its callee sets are pile-wide (about 2,000
+//! functions each), which makes one spurious hard hole.
 //!
 //! **Large reads by reference** (`native/fnref-flow-emerald`). On a large
 //! game a read of the pile, of every cell, or of a ROM table by an unknown
@@ -485,9 +491,10 @@ impl Drop for CodeGuard {
 /// and expansions' too, and memory's: [`G::held`]) before it stops,
 /// unsettled, as when its rounds run out: proving
 /// nothing then, as a lift without the flow (`skip_fn_flow`). Metroid
-/// settles holding about 30 million at a peak of 1.4 GB; Kirby -
-/// Nightmare in Dream Land and Minish Cap held over 100 million in a
-/// round and a half, past 15 GB, before (`native/whole-lift-memory`).
+/// settles holding about 30 million at a peak of 1.4 GB, and Kirby -
+/// Nightmare in Dream Land at 0.45 GB to 2.0 GB. An earlier flow held over 100
+/// million on Nightmare and Minish Cap in a round and a half, past 15 GB
+/// (`native/whole-lift-memory`).
 const TOKENS: usize = 48_000_000;
 
 /// The lowest [`Tok::Ref`].
@@ -1706,7 +1713,7 @@ impl G {
     /// callees). Callees whose entry register held the same set before
     /// share the set it joins to: a join per callee made each its own copy
     /// of a large set, thousands of them on a large game (Minish Cap and
-    /// Nightmare ran past 15 GB; `native/whole-lift-memory`).
+    /// Nightmare ran past 15 GB before this; `native/whole-lift-memory`).
     fn give_all(&mut self, ks: &BTreeSet<u32>, regs: &[Val]) {
         if ks.len() < 2 {
             for &k in ks {
