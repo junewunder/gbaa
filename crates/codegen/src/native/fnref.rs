@@ -988,25 +988,8 @@ type Mem = BTreeSet<(Tok, u8)>;
 struct G {
     entry: BTreeMap<u32, Vec<Val>>,
     ret: BTreeMap<u32, Vec<Val>>,
-    /// Every store the run can't place (the heap, escaping frame slots)
-    /// and the value sets don't bound to RAM.
+    /// Every store the run can't place (the heap, escaping frame slots).
     pile: Mem,
-    /// The stores the run can't place that the value sets bound to RAM,
-    /// by the bounds on their address (canonical, inclusive): C keeps its
-    /// state in globals, and a store through a pointer into one stays
-    /// there (`native/fnref-pile-globals`). A load at a constant address
-    /// reads those whose bytes meet its own, not every one; a load the
-    /// run can't place reads them all, as every cell.
-    bounded: BTreeMap<(u32, u32), Mem>,
-    /// Those of [`G::bounded`] wider than [`SPAN`].
-    wide: BTreeSet<(u32, u32)>,
-    /// [`G::read_bounded`]'s, by bytes and width, and
-    /// [`G::read_bounded_all`]'s, by width: kept until a bounded store
-    /// changes.
-    bounded_reads: std::collections::HashMap<(u32, u32, u8), Val, Fx>,
-    bounded_all: [Option<Val>; 5],
-    /// The bytes of the bounded stores changed this round.
-    bounded_changed: Vec<(u32, u32)>,
     /// [`G::read_pile`]'s, by width: uncapped (grown at each store), and
     /// capped (made again when the first changes).
     pile_raw: [Val; 5],
@@ -1285,7 +1268,6 @@ impl G {
                 Store::Pile => "stored to the pile".to_string(),
                 Store::Cell(a) => format!("stored to the cell at {a:#010x}"),
                 Store::Spill(f) => format!("stored to f_{f:08x}'s spills"),
-                Store::Bounded(lo, hi) => format!("stored to RAM in {lo:#010x}..={hi:#010x}"),
             });
         }
         let m = match to {
@@ -1309,12 +1291,6 @@ impl G {
             }
             Store::Cell(a) => self.cells.entry(a).or_default(),
             Store::Spill(f) => self.spills.entry(f).or_default(),
-            Store::Bounded(lo, hi) => {
-                if hi - lo > SPAN {
-                    self.wide.insert((lo, hi));
-                }
-                self.bounded.entry((lo, hi)).or_default()
-            }
         };
         let new: Vec<(Tok, u8)> = toks.iter().copied().filter(|t| m.insert(*t)).collect();
         let c = !new.is_empty();
@@ -1349,20 +1325,6 @@ impl G {
                     self.cells_changed.insert(a);
                     Some(&mut self.cell_raw)
                 }
-                // As a cell's, to a read of every cell; and to the reads
-                // of the bytes it may reach.
-                Store::Bounded(lo, hi) => {
-                    self.cell_reads = Default::default();
-                    self.bounded_reads.clear();
-                    self.bounded_all = Default::default();
-                    for &(t, sw) in &new {
-                        if self.cells_all.insert((t, sw)) {
-                            self.mem_log.push((true, t, sw));
-                        }
-                    }
-                    self.bounded_changed.push((lo, hi.saturating_add(3)));
-                    Some(&mut self.cell_raw)
-                }
                 Store::Spill(f) => {
                     self.dirty_entry.insert(f);
                     for w in [1, 2, 4] {
@@ -1384,59 +1346,6 @@ impl G {
             }
         }
         self.mark(c);
-    }
-
-    /// What a load at width `w` from somewhere in `lo..=hi` (canonical
-    /// RAM) reads of the bounded stores whose bytes meet its own. The
-    /// caller notes the range read (`Rd::ranges`).
-    fn read_bounded(&mut self, lo: u32, hi: u32, w: u8, into: &mut Val) {
-        let (bounded, wide) = (&self.bounded, &self.wide);
-        let v = self.bounded_reads.entry((lo, hi, w)).or_insert_with(|| {
-            let e = hi.saturating_add(w as u32 - 1);
-            let mut v = Val::default();
-            let near = bounded
-                .range((lo.saturating_sub(SPAN), 0)..=(e, u32::MAX))
-                .filter(|(k, _)| !wide.contains(k));
-            let far = wide
-                .iter()
-                .filter(|&&(l, _)| l <= e)
-                .map(|k| (k, &bounded[k]));
-            for (&(l, h), m) in near.chain(far) {
-                if l > e {
-                    continue;
-                }
-                for &(t, sw) in m {
-                    if h.saturating_add(sw as u32 - 1) >= lo {
-                        from_mem_one(t, sw, w, &mut v);
-                    }
-                }
-            }
-            v.cap();
-            v
-        });
-        into.union(v);
-        if !self.watch.is_empty() {
-            let v = self.bounded_reads[&(lo, hi, w)].clone();
-            self.watch(&v, || {
-                format!("read w{w} from the bounded stores meeting {lo:#010x}..={hi:#010x}")
-            });
-        }
-    }
-
-    /// What a load at width `w` reads of every bounded store (a load
-    /// that read the whole pile before they were split from it).
-    fn read_bounded_all(&mut self, w: u8, into: &mut Val) {
-        self.rd.all_cells |= 1 << w;
-        let bounded = &self.bounded;
-        let v = self.bounded_all[w as usize].get_or_insert_with(|| {
-            let mut v = Val::default();
-            for m in bounded.values() {
-                from_mem(m, w, &mut v);
-            }
-            v.cap();
-            v
-        });
-        into.union(v);
     }
 
     /// What a load at width `w` reads of the pile (kept until the pile
@@ -1827,7 +1736,6 @@ impl G {
             .cells
             .values()
             .chain(self.spills.values())
-            .chain(self.bounded.values())
             .map(|m| m.len())
             .sum();
         vec![
@@ -1850,14 +1758,6 @@ impl G {
             count(
                 "cell_at_reads",
                 &mut self.cell_at_reads.values().map(|v| &v.toks),
-            ),
-            count(
-                "bounded_reads",
-                &mut self
-                    .bounded_reads
-                    .values()
-                    .chain(self.bounded_all.iter().flatten())
-                    .map(|v| &v.toks),
             ),
             // The kept reads and expansions (`native/fnref-flow-emerald`:
             // they held 11 million tokens the bound didn't count).
@@ -2025,52 +1925,6 @@ enum Store {
     Pile,
     Cell(u32),
     Spill(u32),
-    /// Somewhere in RAM from `lo` to `hi` (canonical, the store's
-    /// address): where the value sets bound a store the run can't place
-    /// ([`G::bounded`]).
-    Bounded(u32, u32),
-}
-
-/// A bounded store's span wider than this is kept apart
-/// ([`G::wide`]), so that a read finds the rest by a range of starts.
-const SPAN: u32 = 4096;
-
-/// `lo..=hi` as canonical RAM addresses, if both are in one RAM and no
-/// mirror boundary falls between them.
-fn ram_span(lo: u32, hi: u32) -> Option<(u32, u32)> {
-    let (cl, ch) = (ram_canon(lo), ram_canon(hi));
-    (is_ram(lo) && is_ram(hi) && lo >> 24 == hi >> 24 && hi >= lo && ch - cl == hi - lo)
-        .then_some((cl, ch))
-}
-
-/// Whether `lo..=hi` meets one of `spans` (sorted, disjoint).
-fn meets(spans: &BTreeMap<u32, u32>, lo: u32, hi: u32) -> bool {
-    spans
-        .range(..=hi)
-        .next_back()
-        .is_some_and(|(_, &e)| e >= lo)
-}
-
-/// `spans` as sorted, disjoint ones.
-fn merged(mut spans: Vec<(u32, u32)>) -> BTreeMap<u32, u32> {
-    spans.sort_unstable();
-    let mut m: BTreeMap<u32, u32> = BTreeMap::new();
-    let mut last: Option<(u32, u32)> = None;
-    for (lo, hi) in spans {
-        match &mut last {
-            Some((_, e)) if lo <= e.saturating_add(1) => *e = (*e).max(hi),
-            _ => {
-                if let Some((l, e)) = last {
-                    m.insert(l, e);
-                }
-                last = Some((lo, hi));
-            }
-        }
-    }
-    if let Some((l, e)) = last {
-        m.insert(l, e);
-    }
-    m
 }
 
 /// `v` is the number `n` and nothing else.
@@ -3124,8 +2978,7 @@ impl Run<'_, '_> {
                             !matches!(f, Form::Cmp | Form::Not) && no(f)
                         });
                     }
-                    let hull = b.hulls.get(&i).copied();
-                    self.store(&mut s, key, i, &a, w, &x, &toks, guarded, hull);
+                    self.store(&mut s, key, i, &a, w, &x, &toks, guarded);
                     Val::default()
                 }
                 Op::Exit(e) => {
@@ -3233,7 +3086,6 @@ impl Run<'_, '_> {
                     // argument), which its stores reached through the pile.
                     if esc || *o >= 0 {
                         self.g.read_pile(w, &mut out);
-                        self.g.read_bounded_all(w, &mut out);
                         out.mem = true;
                     }
                     return out;
@@ -3241,7 +3093,6 @@ impl Run<'_, '_> {
                 Some(super::frame::Place::Through(_)) => {
                     self.g.read_spill(self.f.entry, w, &mut out);
                     self.g.read_pile(w, &mut out);
-                    self.g.read_bounded_all(w, &mut out);
                     return out;
                 }
                 _ => {}
@@ -3278,10 +3129,8 @@ impl Run<'_, '_> {
                             .rd
                             .ranges
                             .push((c.saturating_sub(3), c + w as u32 - 1));
-                        // The cells the access overlaps, the bounded
-                        // stores that may reach them, and the pile.
+                        // The cells the access overlaps.
                         self.g.read_cell(c, w, &mut out);
-                        self.g.read_bounded(c, c, w, &mut out);
                         self.g.read_pile(w, &mut out);
                     } else if self.img.word(c).is_some() {
                         self.rom_read_or_capped(c, w, &mut out, capped);
@@ -3360,17 +3209,6 @@ impl Run<'_, '_> {
                             for (_, c) in self.g.cells.range(lo.saturating_sub(3)..=hi) {
                                 from_mem(c, w, &mut out);
                             }
-                            match ram_span(lo, hi) {
-                                Some((lo, hi)) => {
-                                    let e = hi.saturating_add(w as u32 - 1);
-                                    self.g.rd.ranges.push((lo.saturating_sub(3), e));
-                                    self.g.read_bounded(lo, hi, w, &mut out);
-                                }
-                                None if is_ram(lo) || is_ram(hi) => {
-                                    self.g.read_bounded_all(w, &mut out)
-                                }
-                                None => {}
-                            }
                         }
                         None => self.g.read_cells(w, &mut out),
                     }
@@ -3393,7 +3231,6 @@ impl Run<'_, '_> {
         x: &Val,
         toks: &[(Tok, u8)],
         guarded: bool,
-        hull: Option<(u32, u32)>,
     ) {
         if let Some(fr) = self.f.frame {
             match fr.places.get(&(key, i)) {
@@ -3460,12 +3297,7 @@ impl Run<'_, '_> {
             }
         }
         if anywhere {
-            // Where the value sets bound the address to RAM, there
-            // (`native/fnref-pile-globals`); else the pile.
-            match hull.and_then(|(lo, hi)| ram_span(lo, hi)) {
-                Some((lo, hi)) => self.g.store(Store::Bounded(lo, hi), toks),
-                None => self.g.store(Store::Pile, toks),
-            }
+            self.g.store(Store::Pile, toks);
         }
     }
 
@@ -4326,7 +4158,6 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
     };
     let mut snapped = snap(&mut g);
     g.cells_changed.clear();
-    g.bounded_changed.clear();
     g.pile_changed = false;
     let mut loose: BTreeSet<u32> = BTreeSet::new();
     let mut ran = 0usize;
@@ -4454,7 +4285,6 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
                     .pile
                     .iter()
                     .chain(g.cells.values().flatten())
-                    .chain(g.bounded.values().flatten())
                     .map(|(t, _)| *t)
                     .collect(),
                 ..Val::default()
@@ -4501,8 +4331,7 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
         let mut pile_w = 0u8;
         let mut cells_w = 0u8;
         let cells = std::mem::take(&mut g.cells_changed);
-        let spans = merged(std::mem::take(&mut g.bounded_changed));
-        if std::mem::take(&mut g.pile_changed) || !cells.is_empty() || !spans.is_empty() {
+        if std::mem::take(&mut g.pile_changed) || !cells.is_empty() {
             let now = snap(&mut g);
             for (i, w) in [1u8, 2, 4].into_iter().enumerate() {
                 if now[2 * i] != snapped[2 * i] {
@@ -4519,22 +4348,20 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
                 .filter(|(_, r)| {
                     r.pile & pile_w != 0
                         || r.all_cells & cells_w != 0
-                        || r.ranges.iter().any(|&(lo, hi)| {
-                            cells.range(lo..=hi).next().is_some() || meets(&spans, lo, hi)
-                        })
+                        || r.ranges
+                            .iter()
+                            .any(|&(lo, hi)| cells.range(lo..=hi).next().is_some())
                 })
                 .map(|(f, _)| *f),
         );
         if trace {
             eprintln!(
-                "fnref round {round}: {:?}; {} to rerun ({n_entry} entries changed, {n_rets} results; pile widths {pile_w:#x}, every-cell widths {cells_w:#x}, {} cells changed); pile {}, cells {}, bounded {} in {} spans, taken {}, holes {}",
+                "fnref round {round}: {:?}; {} to rerun ({n_entry} entries changed, {n_rets} results; pile widths {pile_w:#x}, every-cell widths {cells_w:#x}, {} cells changed); pile {}, cells {}, taken {}, holes {}",
                 t0.elapsed(),
                 dirty.len(),
                 cells.len(),
                 g.pile.len(),
                 g.cells.len(),
-                g.bounded.values().map(|m| m.len()).sum::<usize>(),
-                g.bounded.len(),
                 g.taken.len(),
                 g.flow.holes.len()
             );
