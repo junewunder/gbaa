@@ -22,7 +22,7 @@
 //! the flags mask reads all four, since the builder forwards no flag
 //! through it.
 
-use super::{Block, Op};
+use super::{Block, Inst, Op};
 use armv4t::sem::{Flag, PsrMask};
 
 /// A set of flags, one bit per [`Flag::index`].
@@ -50,26 +50,8 @@ impl Block {
     /// Walk the block backwards with `out(i)` live after the exit at inst
     /// `i`. Calls `dead(i)` for each `SetFlag` whose flag is dead after it,
     /// and returns the flags live at entry.
-    fn walk_flags(&self, out: impl Fn(usize) -> Flags, mut dead: impl FnMut(usize)) -> Flags {
-        let mut live = Flags::NONE;
-        for (i, inst) in self.insts.iter().enumerate().rev() {
-            let guarded = inst.guard.is_some();
-            match inst.op {
-                Op::Exit(_) if guarded => live = Flags(live.0 | out(i).0),
-                Op::Exit(_) => live = out(i),
-                Op::SetFlag(f, _) if !live.has(f) => dead(i),
-                Op::SetFlag(f, _) if !guarded => live = live.without(f),
-                Op::GetFlag(f) => live = live.with(f),
-                // In user and system mode, which have no SPSR, `GetSpsr` reads
-                // the CPSR (`Cpu::spsr`).
-                Op::GetCpsr | Op::GetSpsr => live = Flags::ALL,
-                Op::SetCpsr { mask, .. } if mask.contains(PsrMask::FLAGS) => {
-                    live = if guarded { Flags::ALL } else { Flags::NONE }
-                }
-                _ => {}
-            }
-        }
-        live
+    fn walk_flags(&self, out: impl Fn(usize) -> Flags, dead: impl FnMut(usize)) -> Flags {
+        walk(&self.insts, out, dead)
     }
 
     /// The flags the block writes, unguarded, before its first exit: those
@@ -168,4 +150,67 @@ pub fn remove_dead(
         removed += block.remove_dead_flags(|i| out(&live_in, b, i));
     }
     removed
+}
+
+/// [`Block::walk_flags`] over a block's insts.
+fn walk(insts: &[Inst], out: impl Fn(usize) -> Flags, mut dead: impl FnMut(usize)) -> Flags {
+    let mut live = Flags::NONE;
+    for (i, inst) in insts.iter().enumerate().rev() {
+        let guarded = inst.guard.is_some();
+        match inst.op {
+            Op::Exit(_) if guarded => live = Flags(live.0 | out(i).0),
+            Op::Exit(_) => live = out(i),
+            Op::SetFlag(f, _) if !live.has(f) => dead(i),
+            Op::SetFlag(f, _) if !guarded => live = live.without(f),
+            Op::GetFlag(f) => live = live.with(f),
+            // In user and system mode, which have no SPSR, `GetSpsr` reads
+            // the CPSR (`Cpu::spsr`).
+            Op::GetCpsr | Op::GetSpsr => live = Flags::ALL,
+            Op::SetCpsr { mask, .. } if mask.contains(PsrMask::FLAGS) => {
+                live = if guarded { Flags::ALL } else { Flags::NONE }
+            }
+            _ => {}
+        }
+    }
+    live
+}
+
+/// The `SetFlag`s of a function's blocks (`blocks[b]`, a block's insts)
+/// whose flag nothing reads before it is written again or the function's
+/// flags are gone: `dead[b][i]`. `out(b, i)` says what follows the exit
+/// at inst `i` of block `b`: the function's blocks it may go on at, and
+/// the flags live after it besides theirs (all four where it may reach
+/// code that reads any; none where nothing does, as a native function's
+/// return, whose caller gets no flags). Unlike [`remove_dead`], no IRQ
+/// yield keeps a flag live: for code that has none (the native lift).
+pub fn dead_writes(
+    blocks: &[&[Inst]],
+    out: impl Fn(usize, usize) -> (Vec<usize>, Flags),
+) -> Vec<Vec<bool>> {
+    let n = blocks.len();
+    let mut live_in = vec![Flags::NONE; n];
+    let after = |live_in: &[Flags], b: usize, i: usize| {
+        let (succ, extra) = out(b, i);
+        succ.iter().fold(extra, |l, &s| Flags(l.0 | live_in[s].0))
+    };
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for b in (0..n).rev() {
+            let l = walk(blocks[b], |i| after(&live_in, b, i), |_| {});
+            if l != live_in[b] {
+                live_in[b] = l;
+                changed = true;
+            }
+        }
+    }
+    blocks
+        .iter()
+        .enumerate()
+        .map(|(b, insts)| {
+            let mut dead = vec![false; insts.len()];
+            walk(insts, |i| after(&live_in, b, i), |i| dead[i] = true);
+            dead
+        })
+        .collect()
 }

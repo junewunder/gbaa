@@ -1929,6 +1929,108 @@ enum Store {
     Spill(u32),
 }
 
+/// Per block of `f`, the insts whose value only feeds flags nothing reads
+/// before they are written again or the function's are gone (old GCC's
+/// `cmp r0, #0` before a return sets N of a function's address). Flags
+/// as the native lift has them: a call passes none and leaves the
+/// caller's as they were, a return gives none back, a fall into another
+/// function passes them all.
+fn unused(f: &FnIn) -> BTreeMap<u32, Vec<bool>> {
+    use analysis::ir::flags::{Flags, dead_writes};
+    let keys: Vec<u32> = f.blocks.keys().copied().collect();
+    let index: BTreeMap<u32, usize> = keys.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+    let insts: Vec<&[Inst]> = f.blocks.values().map(|b| b.insts).collect();
+    let dead = dead_writes(&insts, |b, i| {
+        let to = |ks: &[u32]| match ks.iter().map(|k| index.get(k).copied()).collect() {
+            Some(v) => (v, Flags::NONE),
+            None => (Vec::new(), Flags::ALL),
+        };
+        let insts = f.blocks[&keys[b]].insts;
+        // A jump by value may also go where a holes file's jumps send it,
+        // into another function, which the edge doesn't list.
+        let by_value = match insts[i].op {
+            Op::Exit(Exit::Jump(t) | Exit::JumpExchange(t)) => {
+                !matches!(insts[t.index()].op, Op::Const(_) | Op::Pool(_))
+            }
+            _ => false,
+        };
+        match f.blocks[&keys[b]].exits.get(&i).map(|o| &o.edge) {
+            Some(Edge::Goto(ks)) if !by_value => to(ks),
+            Some(Edge::Goto(ks)) => (to(ks).0, Flags::ALL),
+            Some(Edge::Call { ret, .. }) => to(&[*ret]),
+            Some(Edge::Swi(next)) => to(&[*next]),
+            Some(Edge::Return) => (Vec::new(), Flags::NONE),
+            _ => (Vec::new(), Flags::ALL),
+        }
+    });
+    keys.iter()
+        .zip(insts.iter().zip(dead))
+        .map(|(&k, (insts, dead))| {
+            // What DCE keeps: `root(i)` and what it takes.
+            let used = |root: &dyn Fn(usize, &Inst) -> bool| {
+                let mut used = vec![false; insts.len()];
+                for (i, inst) in insts.iter().enumerate().rev() {
+                    if !(used[i] || root(i, inst)) {
+                        continue;
+                    }
+                    used[i] = true;
+                    for v in inst.op.operands().into_iter().chain(inst.guard) {
+                        used[v.index()] = true;
+                    }
+                }
+                used
+            };
+            // An op nothing takes at all is run as before (its holes are
+            // made): only what the dead flag writes, the yields and the
+            // timing alone take, which the native lift drops, is skipped.
+            let all = used(&|_, inst| inst.op.is_root());
+            let live = used(&|i, inst| {
+                !all[i]
+                    || inst.op.is_root()
+                        && !dead[i]
+                        && !matches!(inst.op, Op::YieldFlag(..) | Op::Timing(_))
+            });
+            (k, live.into_iter().map(|l| !l).collect())
+        })
+        .collect()
+}
+
+/// `a + b + c` that is a move (`x + 0 + 0`): the operand it moves.
+fn moves(vals: &[Val], a: ValueId, b: ValueId, c: ValueId) -> Option<ValueId> {
+    let zero = |x: ValueId| is_num(&vals[x.index()], 0);
+    if !zero(c) {
+        None
+    } else if zero(b) {
+        Some(a)
+    } else if zero(a) {
+        Some(b)
+    } else {
+        None
+    }
+}
+
+/// An `a + b + c` whose carry and overflow are known whatever the other
+/// operand holds.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Known {
+    /// `x + 0 + 0`: neither.
+    Move,
+    /// `x + !0 + 1`, `cmp x, #0`: it carries and never overflows (the sum
+    /// is `x + 2^32`, and as signed `x - 1 + 1`).
+    CmpZero,
+}
+
+fn flags_of(vals: &[Val], a: ValueId, b: ValueId, c: ValueId) -> Option<Known> {
+    let num = |x: ValueId, n: u32| is_num(&vals[x.index()], n);
+    if moves(vals, a, b, c).is_some() {
+        Some(Known::Move)
+    } else if num(c, 1) && (num(a, !0) || num(b, !0)) {
+        Some(Known::CmpZero)
+    } else {
+        None
+    }
+}
+
 /// `v` is the number `n` and nothing else.
 fn is_num(v: &Val, n: u32) -> bool {
     !v.unk && !v.mem && !v.lost_rom && v.toks.len() == 1 && v.toks.contains(&Tok::Num(n))
@@ -2203,6 +2305,9 @@ struct Run<'a, 'g> {
     rets_read: BTreeSet<u32>,
     /// The instruction being run.
     at: u32,
+    /// Per block, the insts whose value only a flag nothing reads takes
+    /// ([`unused`]): they make no holes.
+    unused: BTreeMap<u32, Vec<bool>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2530,8 +2635,10 @@ impl Run<'_, '_> {
         // Every token with every token, but for large sets: each with an
         // unknown partner (which only adds holes and unknowns).
         let (xs, ys) = (a.parts(), b.parts());
-        let one = self.g.off & OFF_MOVE != 0 && xs.len().min(ys.len()) == 1;
-        let pairs: Vec<(Option<Tok>, Option<Tok>)> = if xs.len() * ys.len() > 64 && !one {
+        // (Not token by token with a single token either: on
+        // native-tasks the run then never settles, a set growing by its
+        // step each round.)
+        let pairs: Vec<(Option<Tok>, Option<Tok>)> = if xs.len() * ys.len() > 64 {
             xs.iter()
                 .map(|&x| (x, None))
                 .chain(ys.iter().map(|&y| (None, y)))
@@ -2664,7 +2771,11 @@ impl Run<'_, '_> {
         self.g.now = (self.f.entry, at);
         let mut vals: Vec<Val> = vec![Val::default(); b.insts.len()];
         let none = Val::default();
+        let unused = self.unused[&key].clone();
         for (i, inst) in b.insts.iter().enumerate() {
+            if unused[i] {
+                continue;
+            }
             let site = Origin::Code(key, i as u32);
             let holes_before = self.g.flow.holes.len();
             let logged = self.g.hole_log.len();
@@ -2692,7 +2803,12 @@ impl Run<'_, '_> {
                 }
                 Op::Not(v) if large(v) => Some((5, None, v, None)),
                 Op::Bin(op, a, b) if large(a) || large(b) => Some((6 + op as u8, None, a, Some(b))),
-                Op::Adc { a, b, .. } if large(a) || large(b) => Some((12, None, a, Some(b))),
+                // (A move isn't kept: it is its operand.)
+                Op::Adc { a, b, c }
+                    if (large(a) || large(b)) && moves(&vals, a, b, c).is_none() =>
+                {
+                    Some((12, None, a, Some(b)))
+                }
                 _ => None,
             };
             // (Not under `GBAA_FNREF_WATCH`, which says what each op makes,
@@ -2742,41 +2858,49 @@ impl Run<'_, '_> {
                     out
                 }
                 Op::Adc { a: ra, b: rb, c } => {
-                    let (a, b) = (xv(self.g, ra), xv(self.g, rb));
-                    if self.g.off & OFF_MOVE != 0 && is_num(&b, 0) && is_num(&vals[c.index()], 0) {
-                        // `GBAA_FNREF_OFF`'s `move`: `x + 0 + 0` is `x`.
-                        val(ra)
-                    } else if a.fns().next().is_some() || b.fns().next().is_some() {
-                        // A compare `a + !b + 1` (or an add, a hole when
-                        // used): of whole addresses, with each other, 0 or
-                        // an unknown.
-                        let mut out = Val::unk();
-                        let other_num = |v: &Val, zero: u32| {
-                            v.toks.iter().any(|t| {
-                                matches!(t, Tok::Num(n) if *n != zero)
-                                    || matches!(t, Tok::Rom(_) | Tok::RomFrom(_))
-                            })
-                        };
-                        let bad = other_num(&b, 0xffff_ffff) || other_num(&a, 0);
-                        let mut cmps = Vec::new();
-                        for v in [&a, &b] {
-                            self.g.hole(v, at, Why::Arithmetic, |f| {
-                                bad || !matches!(f, Form::Full | Form::Not)
-                            });
-                            cmps.extend(v.fns().map(|(key, origin, _)| Tok::Fn {
-                                key,
-                                origin,
-                                form: Form::Cmp,
-                            }));
-                        }
-                        out.toks.add_all(cmps);
-                        self.cmp_refs(&mut out, &[&vals[ra.index()], &vals[rb.index()]]);
-                        out
+                    if let Some(x) = moves(&vals, ra, rb, c) {
+                        // `x + 0 + 0` is `x` (old GCC's `adds rd, rs, #0`,
+                        // a move between low registers).
+                        val(x)
                     } else {
-                        kept = None;
-                        let ab = self.bin(BinOp::Add, &a, &b, site, at);
-                        let c = xv(self.g, c);
-                        self.bin(BinOp::Add, &ab, &c, site, at)
+                        let (a, b) = (xv(self.g, ra), xv(self.g, rb));
+                        if a.fns().next().is_some() || b.fns().next().is_some() {
+                            // A compare `a + !b + 1` (or an add, a hole when
+                            // used): of whole addresses, with each other, 0 or
+                            // an unknown.
+                            let mut out = Val::unk();
+                            let other_num = |v: &Val, zero: u32| {
+                                v.toks.iter().any(|t| {
+                                    matches!(t, Tok::Num(n) if *n != zero)
+                                        || matches!(t, Tok::Rom(_) | Tok::RomFrom(_))
+                                })
+                            };
+                            // An address is compared with 0 or an address, or
+                            // added to an unknown: the other operand's numbers
+                            // say (`a + !b + 1`: a's 0 is b's `!0`). A value that
+                            // may be a function or a number is still compared
+                            // with 0.
+                            let bad = [other_num(&b, 0xffff_ffff), other_num(&a, 0)];
+                            let mut cmps = Vec::new();
+                            for (v, bad) in [&a, &b].into_iter().zip(bad) {
+                                self.g.hole(v, at, Why::Arithmetic, |f| {
+                                    bad || !matches!(f, Form::Full | Form::Not)
+                                });
+                                cmps.extend(v.fns().map(|(key, origin, _)| Tok::Fn {
+                                    key,
+                                    origin,
+                                    form: Form::Cmp,
+                                }));
+                            }
+                            out.toks.add_all(cmps);
+                            self.cmp_refs(&mut out, &[&vals[ra.index()], &vals[rb.index()]]);
+                            out
+                        } else {
+                            kept = None;
+                            let ab = self.bin(BinOp::Add, &a, &b, site, at);
+                            let c = xv(self.g, c);
+                            self.bin(BinOp::Add, &ab, &c, site, at)
+                        }
                     }
                 }
                 Op::Not(ra) => {
@@ -2888,22 +3012,13 @@ impl Run<'_, '_> {
                     });
                     Val::unk()
                 }
-                // `move`: neither carries nor overflows.
-                Op::AdcCarry { b, c, .. } | Op::AdcOverflow { b, c, .. }
-                    if self.g.off & OFF_MOVE != 0
-                        && is_num(&vals[b.index()], 0)
-                        && is_num(&vals[c.index()], 0) =>
+                // A move neither carries nor overflows; a compare with 0
+                // (`x + !0 + 1`) always carries and never overflows.
+                Op::AdcCarry { a, b, c } | Op::AdcOverflow { a, b, c }
+                    if let Some(k) = flags_of(&vals, a, b, c) =>
                 {
-                    Val::of(Tok::Num(0))
-                }
-                Op::AdcCarry { .. }
-                | Op::AdcOverflow { .. }
-                | Op::MulCarry { .. }
-                | Op::ShiftCarry { .. }
-                | Op::TestBit { .. }
-                    if self.g.off & OFF_FLAGS != 0 =>
-                {
-                    Val::unk()
+                    let carry = matches!(inst.op, Op::AdcCarry { .. });
+                    Val::of(Tok::Num(u32::from(carry && k == Known::CmpZero)))
                 }
                 Op::AdcCarry { a, b, .. } | Op::AdcOverflow { a, b, .. } => {
                     self.g.hole(&val(a), at, Why::Ordered, |_| true);
@@ -3746,21 +3861,17 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> R {
     }
 }
 
-/// `GBAA_FNREF_OFF=move,flags,tables,pile,cells`: kinds of hole
-/// made not to happen, to measure what the words would be without them
+/// `GBAA_FNREF_OFF=tables,pile,cells`: kinds of hole made not to
+/// happen, to measure what the words would be without them
 /// (`docs/research/fnref-held-words.md`). **For measuring only**, never
 /// for a lift that is built (the report's first line says which were
-/// off). (Its `bios` is the rule now: [`bios_regs`].)
-/// `move`: `x + 0` with its flags set (`adds rd, rs, #0`, old GCC's move
-/// between low registers) is `x` and its carry and overflow 0, and an op
-/// on a large value and a single token runs token by token (both sound;
-/// a word followed further may meet a hole it didn't before). The rest
-/// are unsound, to see what an exact rule could prove at most: `flags`:
-/// a carry, overflow or bit test of a function's address is no hole;
+/// off). All unsound, to see what an exact rule could prove at most:
 /// `tables`: a ROM read by index, or one the value sets bound, stops at
 /// the next object's start even between function words (it reads fewer
 /// words, so more are never read); `pile`, `cells`: a pile read, an
-/// every-cell read, gives nothing.
+/// every-cell read, gives nothing. (Its `bios` is the rule now:
+/// [`bios_regs`]; so are `move`, old GCC's `adds rd, rs, #0`, and of
+/// `flags` what is sound: [`flags_of`], [`unused`].)
 fn off_env() -> u8 {
     let v = std::env::var("GBAA_FNREF_OFF").unwrap_or_default();
     let mut off = 0;
@@ -3776,12 +3887,10 @@ fn off_env() -> u8 {
     off
 }
 
-const OFF_KINDS: [&str; 5] = ["move", "flags", "tables", "pile", "cells"];
-const OFF_MOVE: u8 = 1;
-const OFF_FLAGS: u8 = 2;
-const OFF_TABLES: u8 = 4;
-const OFF_PILE: u8 = 8;
-const OFF_CELLS: u8 = 16;
+const OFF_KINDS: [&str; 3] = ["tables", "pile", "cells"];
+const OFF_TABLES: u8 = 1;
+const OFF_PILE: u8 = 2;
+const OFF_CELLS: u8 = 4;
 
 /// What a BIOS call does with r0 to r3, a bit each ([`bios_regs`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -4215,6 +4324,7 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
                 trace,
                 rets_read: BTreeSet::new(),
                 at: 0,
+                unused: unused(f),
             };
             if f.blocks.contains_key(&f.entry) {
                 run.ins.insert(
