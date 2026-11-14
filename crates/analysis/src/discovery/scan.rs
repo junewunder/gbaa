@@ -15,7 +15,8 @@
 //! found already validates if code loads the candidate. Undefined instructions, lone halves of a Thumb
 //! `bl`, BIOS calls that don't exist, long runs of one word, instructions
 //! no game runs (user-bank `ldm`), Thumb shifts by 32 (a ROM pointer's
-//! upper half), and a first instruction that is
+//! upper half), a Thumb `bx` to a register last set by a shift left
+//! ([`shifted_bx`]), and a first instruction that is
 //! conditional or pops fail it. An ARM body must be mostly unconditional.
 //! Then the value-set analysis from the candidate must return with sp
 //! where it started: data decoded as code usually pops its caller's frame.
@@ -426,6 +427,13 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
                         work.push((next, soft));
                     }
                 } else if writes_pc(&i.instr) {
+                    if thumb && shifted_bx(prog, start, &i) {
+                        if !soft {
+                            return None;
+                        }
+                        closed = false;
+                        continue;
+                    }
                     closed = false;
                     // Only a pop through sp counts as returning: `ldm rN,
                     // {…, pc}` is how ARM-decoded text often ends.
@@ -484,6 +492,44 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
         && prog.decode(start, thumb).is_some_and(|i| is_push_lr(&i));
     let own = ends || (jumps && hard.len() >= JUMP_BODY_MIN) || endless;
     (own || into).then_some((hard, own))
+}
+
+/// Whether `i` is a Thumb `bx rM` whose rM was last set, in the straight
+/// run of instructions before it (back to `start`), by a shift left by an
+/// immediate: a jump into ARM state to an address made only by a shift.
+/// No switch does that (a switch's targets come from a table or an add);
+/// data does: Emerald Rogue's battle-script pointer 0x0826c5e7, loaded for
+/// its script pusher and taken for a Thumb start, ends in `lsls r1, r1, #6`
+/// a few instructions before `bx r1`. Anything in the run that may write
+/// rM some other way, or may branch, ends the search with no.
+fn shifted_bx(prog: &Program, start: u32, i: &Insn) -> bool {
+    use armv4t::decode::{AluOp, Operand2, Shift};
+    let Instr::Bx { rm, .. } = i.instr else {
+        return false;
+    };
+    let mut a = i.addr;
+    while a >= start + 2 {
+        a -= 2;
+        let Some(p) = prog.decode(a, true) else {
+            return false;
+        };
+        if p.size != 2 {
+            return false;
+        }
+        match p.instr {
+            Instr::Alu { op: AluOp::Tst | AluOp::Teq | AluOp::Cmp | AluOp::Cmn, .. } => {}
+            Instr::Alu { rd, op, op2, .. } if rd == rm => {
+                return op == AluOp::Mov
+                    && matches!(op2, Operand2::Reg { shift: Shift::Lsl(n), .. } if n > 0);
+            }
+            Instr::Alu { .. } => {}
+            Instr::Store { addr, .. } if addr.rn != rm => {}
+            Instr::Load { rd, addr, .. } if rd != rm && addr.rn != rm => {}
+            Instr::Block { load: false, rn, .. } if rn != rm => {}
+            _ => return false,
+        }
+    }
+    false
 }
 
 /// The fewest instructions a body ending in an indirect jump needs.
