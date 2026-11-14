@@ -6,10 +6,12 @@
 #   path       from the repo root
 #   max_lines  the most lines it may have
 
-# The stage-B plan, cut from 810 lines to a plan on 2026-11-06.
+# The stage-B plan, cut from 810 lines to a plan on 2026-11-06; 410 after
+# native/mirror-lifts (its card asks for its lift's numbers here, as each
+# game's lift unit's).
 [[doc]]
 path = "docs/native-stage-b.md"
-max_lines = 400
+max_lines = 410
 
 # The hole report's method and findings, cut from 667 lines on 2026-11-06;
 # 390 after native/nightmare-cpu-state added Nightmare's task switcher

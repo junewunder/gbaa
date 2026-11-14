@@ -290,6 +290,11 @@ first tests stage A and the shortcuts on a real agbcc game that builds.
   `mods/kirby-nightmare/holes.toml`, `skip_fn_flow`; a `[[jump]]`'s
   targets are now followed and decoded): 1,552,382 lines in 428 modules,
   lift 48 s at 0.38 GB, the crate alone builds in 80 s, rustc 6.78 GB.
+- **Kirby Amazing Mirror lifts with no hard holes and builds**
+  (`native/mirror-lifts`). Done (2026-11-14, quack;
+  `mods/kirby-mirror/holes.toml`, `skip_fn_flow`: 37 min without):
+  2,626,434 lines in 751 files, lift 45 s at 0.62 GB, the crate built in
+  107 s at 11.7 GB; first stop frame 2, the m4a mixer as Nightmare's.
 
 Emerald comes after typed RAM and pointers, typed from pret's DWARF (the
 gaps Emerald's ten listed: fills, bitfields, retyping from access widths,
