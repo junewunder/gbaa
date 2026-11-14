@@ -511,6 +511,8 @@ pub fn st8(g: &mut Game, a: u32, v: u32) {
         return;
     }
     match a >> 24 {
+        // POSTFLG and HALTCNT: a byte, not a halfword, as only one halts.
+        4 if io_at(a) & !1 == runtime::io::reg::POSTFLG => hw::write_postflg8(g, io_at(a), v),
         4 => {
             let o = io_at(a);
             let shift = (o & 1) * 8;
