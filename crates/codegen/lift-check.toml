@@ -987,23 +987,25 @@ route = "units/native-irq-wrapper-600.toml"
 # pc, #0; bx r0`, and has half its msr and mrs after that call; a second
 # iw_main nests in it at the msr that clears I every other frame. Planted,
 # the store that puts IE back, in the half after the call, stores one more;
-# agb/native-irq-wrapper/src/main.rs.
+# agb/native-irq-wrapper/src/main.rs. iw_main acknowledges the IRQ through a
+# call (iw_ack, an I/O store) made in IRQ mode, which banks sp by mode
+# (native/irq-mode-sp-bank).
 planted_store = 0x080001f4
 
 [program.native-irq-wrapper.bars]
-lines = 71450
+lines = 71484
 lines_prelude = 1203
-functions = 117
+functions = 118
 functions_iwram = 3
-functions_lifted = 115
-functions_unrecognised = 117
+functions_lifted = 116
+functions_unrecognised = 118
 functions_replaced = 2
 standins = 2
 functions_summary_hole = 81
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
-blocks = 1742
+blocks = 1744
 load_const_ram = 0
 load_const_io = 17
 load_const_rom = 0
