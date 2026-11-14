@@ -1,7 +1,7 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
 //! [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT]
-//! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--plant-slot=AT] [--shadow-locals]
-//! [--copies N] [--holes-only [--flow]]`:
+//! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT]
+//! [--shadow-locals] [--copies N] [--holes-only [--flow]]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
 //! stage A). Writes the whole program as a Rust crate to OUT (`Cargo.toml`,
 //! `src/`, a copy of the ROM for its data, `report.txt`, and its metrics
@@ -42,7 +42,10 @@
 //! leaves an IRQ pending when a store sets `IME` again to the next wait,
 //! as stage A first did, where the hardware takes it at once, which the
 //! native check must catch on `agb/native-ime-release` (unit
-//! `native/ime-release`); `--plant-slot=AT`
+//! `native/ime-release`); `--takes-zeroed` starts a function that takes
+//! r4-r11 from its callers with them zeroed at every call that passes
+//! them, as stage A first did, which the native check must catch on
+//! `agb/native-takes` (unit `native/taker-test-program`); `--plant-slot=AT`
 //! makes the store of the instruction at AT, which must be to a stack slot
 //! printed as a Rust local, store its value plus one, which the native
 //! check must catch on `agb/native-frame-locals` (unit
@@ -83,7 +86,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--plant-slot=AT] [--shadow-locals] [--copies N] [--holes-only [--flow]]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--copies N] [--holes-only [--flow]]"
         );
         ExitCode::FAILURE
     };
@@ -92,7 +95,7 @@ fn main() -> ExitCode {
     };
     let (mut name, mut holes, mut bars, mut names) = (None, None, None, None);
     let (mut drop, mut plant, mut tail, mut irq_at_waits) = (None, None, false, false);
-    let mut ime_at_waits = false;
+    let (mut ime_at_waits, mut takes_zeroed) = (false, false);
     let (mut holes_only, mut holes_flow) = (false, false);
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
     let mut layout = codegen::native::globals::Layout::Guest;
@@ -109,6 +112,10 @@ fn main() -> ExitCode {
         }
         if a == "--ime-at-waits" {
             ime_at_waits = true;
+            continue;
+        }
+        if a == "--takes-zeroed" {
+            takes_zeroed = true;
             continue;
         }
         if a == "--holes-only" {
@@ -186,6 +193,7 @@ fn main() -> ExitCode {
     holes.fall_as_tail_call = tail;
     holes.irq_at_waits = irq_at_waits;
     holes.ime_at_waits = ime_at_waits;
+    holes.takes_zeroed = takes_zeroed;
     holes.plant_slot = plant_slot;
     holes.shadow_locals = shadow;
     holes.copies = copies;
