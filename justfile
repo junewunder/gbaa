@@ -1422,6 +1422,12 @@ holes-all *args:
     {{lock}} cargo build -q --release -p hole-report
     {{cap}} MemoryMax=3G target/release/gbaa-holes --corpus holes/corpus.toml --roms {{quote(roms)}} "$@"
 
+# The nightly run over the corpus (native/nightly-corpus; holes/corpus.toml; crates/hole-report/src/nightly.rs; docs/tools/commands.md): each game in turn through the hole report, its play build (`just recompile --timing instant`, `just build-recompiled`), its readable build (every function readable) and its lift (`just lift` with the corpus's `lift` name: built, then run headless, `just first-stop`); a step that fails or passes --step-minutes (default 120) is recorded and the rest go on. Writes out/nightly/<date>/summary.toml, summary.txt and <game>/summary.txt (hard holes by kind, built or not, frames run and the stop, what changed against the run before), logs beside them; the crates in out/nightly/{play,readable,lift}-<game>. Fails when a game got worse than the run before (hard holes up, a build lost, fewer frames). ARGS: --out DIR, --against DIR, --only NAME, --skip STEP (holes, play, readable, lift), --step-minutes N. Hours: run it with `just long start nightly --mem 6G -- just nightly`. Heavy: builds generated crates.
+[positional-arguments]
+nightly *args:
+    {{lock}} cargo build -q --release -p hole-report
+    {{cap}} MemoryMax=6G target/release/gbaa-holes --nightly holes/corpus.toml --roms {{quote(roms)}} "$@"
+
 # Emerald's ten native functions against the play build (native/emerald-ten; scores in docs/native-port-design.md, "Emerald's ten"): the hand-lifted Rust in mods/emerald/native-ten/ run by crates/native-fn-diff from 600 no-input frames' entry states (borrowed for functions not entered) in 96 variants each, against the interpreter untimed; then one byte of Random's literal pool changed must be caught. Fails unless it prints `native 0 of 10 differ` and the fault is caught. ROM defaults to pret's build. About 30 s (the function summaries are most of it), capped at 3 GB of RAM and no swap. Private: mods/ isn't in the public mirror.
 [positional-arguments]
 native-ten rom=(gbaa_data / "src/pokeemerald/pokeemerald.gba"):

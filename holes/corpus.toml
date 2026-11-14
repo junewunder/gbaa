@@ -4,47 +4,59 @@
 #   name    the short name: the report is DIR/<name>.txt, `--only NAME` picks it
 #   rom     the ROM's file name in the ROM directory (the justfile's `roms`)
 #   cover   its coverage runs (holes/coverage/), played with `holes-all --cover`
+#   lift    the --name its lift is made with (`just lift`, `just nightly`): it
+#           names the crate and finds the holes file (holes/<lift>.toml, else
+#           mods/<lift>/holes.toml)
 
 [[game]]
 name = "metroid"
 rom = "Metroid - Zero Mission (USA).gba"
 cover = "holes/coverage/metroid-zero-mission.toml"
+lift = "metroid"
 
 [[game]]
 name = "warioware"
 rom = "WarioWare, Inc. - Mega Microgame$!.gba"
 cover = "holes/coverage/warioware.toml"
+lift = "warioware"
 
 [[game]]
 name = "kirby-mirror"
 rom = "Kirby & The Amazing Mirror.gba"
 cover = "holes/coverage/kirby-the-amazing-mirror.toml"
+lift = "kirby-mirror"
 
 [[game]]
 name = "kirby-nightmare"
 rom = "Kirby - Nightmare in Dream Land.gba"
 cover = "holes/coverage/kirby-nightmare-in-dream-land.toml"
+lift = "kirby-nightmare"
 
 [[game]]
 name = "moonbeam"
 rom = "moonbeam.gba"
 cover = "holes/coverage/moonbeam.toml"
+lift = "moonbeam"
 
 [[game]]
 name = "emerald"
 rom = "Pokemon - Emerald Version.gba"
 cover = "holes/coverage/pokemon-emerald-version.toml"
+lift = "emerald"
 
 [[game]]
 name = "minish-cap"
 rom = "Legend of Zelda, The - The Minish Cap (USA).gba"
 cover = "holes/coverage/minish-cap.toml"
+lift = "minish-cap"
 
 [[game]]
 name = "emerald-rogue"
 rom = "Emerald Rogue.gba"
 cover = "holes/coverage/emerald-rogue.toml"
+lift = "emerald-rogue"
 
 [[game]]
 name = "imperium"
 rom = "Emerald Imperium.gba"
+lift = "imperium"

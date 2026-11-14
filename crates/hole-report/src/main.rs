@@ -34,7 +34,10 @@
 //!
 //! `--line FILE` also writes the ranking line's numbers to FILE as TOML
 //! ([`corpus::Line`]). `gbaa-holes --corpus FILE …` runs every game of a
-//! corpus file and prints one table ([`corpus`], `just holes-all`).
+//! corpus file and prints one table ([`corpus`], `just holes-all`);
+//! `gbaa-holes --nightly FILE …` takes each game through the hole report,
+//! its play and readable builds and its lift, and diffs that with the run
+//! before ([`nightly`], `just nightly`).
 //!
 //! What the run records, per instruction executed: the address and
 //! instruction set, its first raw value (and whether a later one differed:
@@ -52,6 +55,7 @@ use std::process::ExitCode;
 
 mod corpus;
 mod cover;
+mod nightly;
 
 use analysis::holes::{self, CpuWhere, RetArith, Run, STACK_SWITCH, Seen};
 use armv4t::decode::{Instr, Reg, decode_arm, decode_thumb};
@@ -719,6 +723,9 @@ fn main() -> ExitCode {
     if args.first().is_some_and(|a| a == "--corpus") {
         return corpus::main(&args[1..]);
     }
+    if args.first().is_some_and(|a| a == "--nightly") {
+        return nightly::main(&args[1..]);
+    }
     let (mut rom_path, mut frames, mut presses) = (None, 5400u32, Vec::new());
     let (mut sums, mut show, mut run_roots) = (true, 12usize, true);
     let (mut cover_path, mut update, mut line_path) = (None, false, None);
@@ -1384,7 +1391,7 @@ fn main() -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: gbaa-holes ROM [--holes FILE] [--flow] [--frames N] [--press KEY@F | KEY@F-G/E]... [--cover FILE [--update]] [--no-summaries] [--no-run-roots] [--show N] [--line FILE]\n       gbaa-holes --corpus FILE --roms DIR [--out DIR] [--against DIR] [--only NAME]... [--cover] [--write-doc FILE] [flags above...]\n       gbaa-holes --corpus FILE --from DIR [--write-doc FILE]"
+        "usage: gbaa-holes ROM [--holes FILE] [--flow] [--frames N] [--press KEY@F | KEY@F-G/E]... [--cover FILE [--update]] [--no-summaries] [--no-run-roots] [--show N] [--line FILE]\n       gbaa-holes --corpus FILE --roms DIR [--out DIR] [--against DIR] [--only NAME]... [--cover] [--write-doc FILE] [flags above...]\n       gbaa-holes --corpus FILE --from DIR [--write-doc FILE]\n       gbaa-holes --nightly FILE --roms DIR [--out DIR] [--against DIR] [--only NAME]... [--skip STEP]... [--step-minutes N]"
     );
     ExitCode::from(2)
 }

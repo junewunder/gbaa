@@ -164,16 +164,31 @@ pub fn write_line(path: &str, l: &Line) -> Result<(), String> {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct CorpusFile {
-    game: Vec<Game>,
+pub struct CorpusFile {
+    pub game: Vec<Game>,
 }
 
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Game {
-    name: String,
-    rom: String,
-    cover: Option<String>,
+pub struct Game {
+    pub name: String,
+    pub rom: String,
+    pub cover: Option<String>,
+    /// The `--name` its lift is made with (`just lift`), which names the
+    /// crate and finds its holes file; the game's name when absent.
+    pub lift: Option<String>,
+}
+
+/// The lift's holes file for `name`, where `just lift` finds it:
+/// `holes/<name>.toml`, else `mods/<name>/holes.toml` (a commercial
+/// game's is game-derived).
+pub fn holes_file(name: &str) -> Option<PathBuf> {
+    [
+        PathBuf::from("holes").join(format!("{name}.toml")),
+        PathBuf::from("mods").join(name).join("holes.toml"),
+    ]
+    .into_iter()
+    .find(|p| p.exists())
 }
 
 /// One game's run, as `summary.toml` keeps it.
@@ -519,15 +534,8 @@ pub fn main(args: &[String]) -> ExitCode {
         if let (true, Some(f)) = (cover, &g.cover) {
             c.args(["--cover", f]);
         }
-        // The lift's holes file, where `just lift` finds it: holes/<name>.toml,
-        // else mods/<name>/holes.toml (a commercial game's is game-derived).
-        if let Some(h) = [
-            PathBuf::from("holes").join(format!("{}.toml", g.name)),
-            PathBuf::from("mods").join(&g.name).join("holes.toml"),
-        ]
-        .into_iter()
-        .find(|p| p.exists())
-        {
+        // The lift's holes file, where `just lift` finds it.
+        if let Some(h) = holes_file(g.lift.as_deref().unwrap_or(&g.name)) {
             c.arg("--holes").arg(h);
         }
         let exit = match c.stdout(Stdio::from(txt)).stderr(Stdio::from(log)).status() {
