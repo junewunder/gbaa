@@ -303,7 +303,11 @@ fn serial_port_unplugged() {
     // Normal mode: SI reads 1; the internal clock ends a transfer at
     // once, with its IRQ if asked; the external clock's waits.
     b.write16(IO + reg::RCNT, 0x000F);
-    assert_eq!(b.read16(IO + reg::RCNT), 0, "the pins' levels aren't stored");
+    assert_eq!(
+        b.read16(IO + reg::RCNT),
+        0,
+        "the pins' levels aren't stored"
+    );
     b.io.take_events();
     b.write16(IO + reg::SIOCNT, 0x4081);
     assert_eq!(b.read16(IO + reg::SIOCNT), 0x4005);
