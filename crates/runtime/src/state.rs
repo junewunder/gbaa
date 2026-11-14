@@ -351,6 +351,7 @@ impl<P: Platform> Machine<P> {
             halted,
             frame_ended: false,
             irq_line: false,
+            held: 0,
             // A link hub's, not the state's.
             deadline: self.sched.deadline,
             window: true,

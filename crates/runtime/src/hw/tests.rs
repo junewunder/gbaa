@@ -636,6 +636,45 @@ fn spin_takes_half_a_line_past_its_budget() {
 }
 
 #[test]
+fn an_idle_loops_way_out_syncs_only_past_the_next_event() {
+    let mut g = game(10);
+    // Nothing due: the clock stays.
+    idle_exit(&mut *g).unwrap();
+    assert_eq!((g.hw.line(), g.hw.in_hblank), (0, false));
+    // A DMA's price moved the clock past H-blank's start (no sync, as the
+    // play build's store adds it): the way out brings the beam up to it.
+    g.hw.sound.io.now += HBLANK_DOT as u64 + 5;
+    idle_exit(&mut *g).unwrap();
+    assert_eq!((g.hw.line(), g.hw.in_hblank), (0, true));
+}
+
+#[test]
+fn a_frame_is_presented_at_its_syncs_end() {
+    let mut g = game(10);
+    g.hw.on_frame_end(|g: &mut Game| g.ram.seen_line = g.hw.line());
+    // To just short of V-blank, then a price that runs two lines past it
+    // in one sync (a DMA's, no stall): presented after the whole walk, at
+    // line 162, as the play build presents when its sync returns.
+    spend(&mut *g, VBLANK_LINE as u32 * LINE_DOTS - 1).unwrap();
+    assert_eq!(g.hw.frames(), 0);
+    g.hw.sound.io.now += 2 * LINE_DOTS as u64 + 1;
+    idle_exit(&mut *g).unwrap();
+    assert_eq!((g.hw.frames(), g.ram.seen_line), (1, VBLANK_LINE + 2));
+}
+
+#[test]
+fn a_short_spend_runs_at_once() {
+    let mut g = game(10);
+    g.hw.stat.hblank_irq = true;
+    g.hw.irq.on(irq::HBLANK, |g: &mut Game| g.ram.hblanks += 1);
+    // Under `MIN_STALL` cycles the play build spends at once, not at its
+    // stall loop: one sync, whatever it crosses.
+    spend(&mut *g, HBLANK_DOT - 1).unwrap();
+    spend(&mut *g, crate::bios::MIN_STALL - 1).unwrap();
+    assert_eq!((g.hw.line(), g.hw.in_hblank, g.ram.hblanks), (0, true, 1));
+}
+
+#[test]
 fn spend_moves_the_beam_by_cycles_through_its_events() {
     let mut g = game(10);
     g.hw.stat.hblank_irq = true;
@@ -646,11 +685,11 @@ fn spend_moves_the_beam_by_cycles_through_its_events() {
     // One more cycle reaches it: drawn, its handler run.
     spend(&mut *g, 1).unwrap();
     assert_eq!((g.hw.line(), g.ram.hblanks), (0, 1));
-    // Three lines on: their H-blanks' requests merge in `IF`, and one
-    // handler runs after them, as the play build takes one IRQ after its
-    // sync.
+    // Three lines on, a stall (`MIN_STALL` cycles or more): run event by
+    // event as the play build's stall loop runs it, so each H-blank's
+    // handler runs at its own event.
     spend(&mut *g, 3 * LINE_DOTS).unwrap();
-    assert_eq!((g.hw.line(), g.ram.hblanks), (3, 2));
+    assert_eq!((g.hw.line(), g.ram.hblanks), (3, 4));
     // The play build's CpuSet price: 92 halfwords ROM to EWRAM at reset
     // wait states, as agb's crt0 copies its `.ewram`.
     assert_eq!(bios::cpu_set_cycles(0, 0x0800_0000, 0x0200_0000, 92), 1221);

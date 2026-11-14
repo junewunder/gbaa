@@ -69,7 +69,7 @@ pub const SWI_VECTOR: u32 = 0x08;
 /// `StallCall` loop, in its HLE BIOS): see [`swi`].
 pub const STALL_LOOP: u32 = 0x34C;
 /// The shortest time mGBA runs as a stall rather than at once.
-const MIN_STALL: u32 = 18;
+pub const MIN_STALL: u32 = 18;
 /// A `bx lr` in mGBA's HLE BIOS (its `NopCall`), which the stubbed sound
 /// driver's calls and `SoundDriverGetJumpList`'s table point at. The runner
 /// returns from it ([`nop_call`]).

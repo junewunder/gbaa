@@ -504,8 +504,8 @@ pub struct Hw<G: Native> {
     /// program sets its kind ([`crate::save::Kind::detect`] on its ROM).
     pub save: crate::save::Save,
     pub host: G::Host,
-    /// Run at each V-blank's start just before the present, after V-blank
-    /// DMA ([`Hw::on_frame_end`]).
+    /// Run just before each present, after V-blank DMA
+    /// ([`Hw::on_frame_end`]).
     frame_end: Option<fn(&mut G)>,
     /// The line the beam is on, 0-227.
     line: u16,
@@ -529,6 +529,9 @@ pub struct Hw<G: Native> {
     spins: [(usize, u32); crate::sched::SPIN_SLOTS],
     /// The beam is moving for a stuck [`spin`]: the counts stay.
     spinning: bool,
+    /// A BIOS call's stall is running ([`spend`]): one a handler's call
+    /// makes inside it is spent at once, as the play build's is.
+    stalling: bool,
 }
 
 impl<G: Native> Hw<G> {
@@ -554,6 +557,7 @@ impl<G: Native> Hw<G> {
             renderer: Ppu::new(),
             spins: [(0, 0); crate::sched::SPIN_SLOTS],
             spinning: false,
+            stalling: false,
         }
     }
 
@@ -584,11 +588,12 @@ impl<G: Native> Hw<G> {
         self.next_event = self.next_line_event;
     }
 
-    /// Call `f` at each V-blank's start, after V-blank DMA and just
-    /// before the frame is presented ([`Hw::frames`] already counts it, and
-    /// the frame's sound has gone to [`Host::audio`]): what the play build
-    /// holds when it presents, for a check build to record (the native
-    /// check, `route-check --native`). Not for game code.
+    /// Call `f` just before each frame is presented, at the end of the
+    /// sync whose walk started V-blank (after V-blank DMA and any events
+    /// the clock had passed beyond it; [`Hw::frames`] already counts it,
+    /// and the frame's sound has gone to [`Host::audio`]): what the play
+    /// build holds when it presents, for a check build to record (the
+    /// native check, `route-check --native`). Not for game code.
     pub fn on_frame_end(&mut self, f: fn(&mut G)) {
         self.frame_end = Some(f);
     }
@@ -848,10 +853,10 @@ fn run_sound<G: Native>(g: &mut G) {
 
 /// Bring everything up to the clock moved on by `cycles`, as the play
 /// build's `Machine::sync` does: each beam event due ([`line_event`]: a
-/// line drawn, H-blank DMA, V-blank's DMA and present), with the sound
-/// brought up to the clock before each and after; then the next event is
-/// found ([`Hw::next_event`]), and the handlers of what's requested run.
-/// Returns whether V-blank started.
+/// line drawn, H-blank DMA, V-blank's DMA), with the sound brought up to
+/// the clock before each and after; the frame presented if V-blank started
+/// ([`present`]); then the next event is found ([`Hw::next_event`]), and
+/// the handlers of what's requested run. Returns whether V-blank started.
 fn sync<G: Native>(g: &mut G, cycles: u32) -> Result<bool, Exit> {
     // An immediate DMA a bare `Hw::write16` switched on.
     if g.hw().dma_pending() {
@@ -868,6 +873,10 @@ fn sync<G: Native>(g: &mut G, cycles: u32) -> Result<bool, Exit> {
     if crate::sound::half_full(&hw.sound.mixer) {
         hand_off(hw);
     }
+    if vblank {
+        present(g)?;
+    }
+    let hw = g.hw();
     let io = &hw.sound.io;
     hw.next_event = crate::timer::next_event(io, crate::sound::clocks(io))
         .map_or(hw.next_line_event, |t| t.min(hw.next_line_event));
@@ -889,7 +898,8 @@ fn hand_off<G: Native>(hw: &mut Hw<G>) {
 /// The beam's next event, at the clock: H-blank's start (the line drawn if
 /// visible, H-blank DMA, its IRQ requested), or the next line's (its
 /// V-count match; at line 160, V-blank: V-blank DMA and its price, the
-/// sound handed off, the present, the keys). Returns whether V-blank
+/// sound handed off; the present and the keys come at the sync's end,
+/// [`present`]). Returns whether V-blank
 /// started.
 fn line_event<G: Native>(g: &mut G) -> Result<bool, Exit> {
     let hw = g.hw();
@@ -949,19 +959,20 @@ fn line_event<G: Native>(g: &mut G) -> Result<bool, Exit> {
             cycles += f(g) as u64;
         }
     }
-    let by_regs = dma_regs::trigger(g, crate::dma::Timing::VBlank) as u64;
-    cycles += by_regs;
+    cycles += dma_regs::trigger(g, crate::dma::Timing::VBlank) as u64;
     let hw = g.hw();
     hw.sound.io.now += cycles;
     hand_off(hw);
-    // The play build records the frame after its sync's last walk of the
-    // timers, which reaches past the V-blank DMA's price: a FIFO refill
-    // (and its IRQ request) that fell in it is in the record. Only for the
-    // channels set up by their registers: the typed copies' programs keep
-    // the timing they were checked at.
-    if by_regs != 0 {
-        run_sound(g);
-    }
+    Ok(true)
+}
+
+/// The frame presented, at the end of the [`sync`] whose walk started
+/// V-blank, as the play build presents it when its sync returns: after
+/// every event the clock had passed (a DMA's or a BIOS copy's price that
+/// ran past line 160, the V-blank DMA's own) and the sound brought up to
+/// it, so the record holds the beam's line, the RAM and the samples as
+/// the play build's does. Then the keys are latched.
+fn present<G: Native>(g: &mut G) -> Result<(), Exit> {
     let hw = g.hw();
     hw.frames += 1;
     if let Some(f) = hw.frame_end {
@@ -971,8 +982,7 @@ fn line_event<G: Native>(g: &mut G) -> Result<bool, Exit> {
     hw.host.save(&mut hw.save);
     let shown = hw.host.present(&hw.renderer.frame);
     hw.keys.held = hw.host.keys() & key::ALL;
-    shown?;
-    Ok(true)
+    shown
 }
 
 /// Run the clock to the next event ([`Hw::next_event`]: the beam's half
@@ -1035,6 +1045,35 @@ pub fn idle<G: Native>(g: &mut G) -> Result<(), Exit> {
     half_step(g).map(|_| ())
 }
 
+/// A store of `v` to the I/O register at offset `o` (even) by the
+/// program: [`Hw::write16`], but a store to the timers', the sound's or
+/// DMA1's and DMA2's registers first counts the timers and FIFOs up to the
+/// clock through the program's memory ([`crate::sound::counts_before_write`],
+/// as the play build's `sound::store` does before such a store), so a FIFO
+/// that came due since the last sync (an immediate DMA's price) is
+/// refilled as the play build refills it; inside [`Hw::write16`] it could
+/// not be. The prelude's `io_write16` stores here, and [`write_dma`].
+pub fn write_io<G: Native>(g: &mut G, o: u32, v: u16) {
+    if crate::sound::counts_before_write(o) {
+        run_sound(g);
+    }
+    g.hw().write16(o, v);
+}
+
+/// The way out of a busy loop (its branch not taken), as the play build's
+/// `--timing native` leaves one (`Machine::idle_exit`): if a DMA in the
+/// loop moved the clock past the next event (an immediate DMA's price, as
+/// a fill's poll on `DMA3CNT`'s busy bit has it), everything is brought up
+/// to it ([`sync`]: a V-blank it crossed presents its frame here); else
+/// nothing.
+pub fn idle_exit<G: Native>(g: &mut G) -> Result<(), Exit> {
+    let hw = g.hw();
+    if hw.sound.io.now >= hw.next_event {
+        sync(g, 0)?;
+    }
+    Ok(())
+}
+
 /// The back edge of a loop that calls functions and may be waiting through
 /// them for an interrupt (Emerald's `DoMapLoadLoop`,
 /// `while !load_map_in_steps_local(g, state, false) { hw::spin(g)?; }`;
@@ -1063,12 +1102,33 @@ pub fn spin<G: Native>(g: &mut G) -> Result<(), Exit> {
 
 /// Work that takes time (a BIOS copy's, as the play build's `--timing
 /// native` charges it, [`bios::cpu_set_cycles`]): the clock moves
-/// `cycles` on and everything due by then is brought up to it ([`sync`]:
-/// each event passed runs at the new time, then the handlers), as the
-/// play build's `Machine::spend`. The only time a native program's work
-/// takes (docs/native-port-design.md, section 7).
+/// `cycles` on and everything due by then is brought up to it ([`sync`]),
+/// as the play build runs a BIOS call's stall (`bios::stall_step`): one of
+/// [`crate::bios::MIN_STALL`] cycles or more event by event, each step a
+/// sync, so a V-blank it crosses is presented at its line and each
+/// handler runs at its event; a shorter one, or one a handler's call makes
+/// inside a stall, at once (each event passed runs at the new time, then
+/// the handlers). The only time a native program's work takes
+/// (docs/native-port-design.md, section 7).
 pub fn spend<G: Native>(g: &mut G, cycles: u32) -> Result<(), Exit> {
-    sync(g, cycles).map(|_| ())
+    if cycles < crate::bios::MIN_STALL || g.hw().stalling {
+        return sync(g, cycles).map(|_| ());
+    }
+    g.hw().stalling = true;
+    let mut left = cycles;
+    let mut r = Ok(());
+    while left > 0 {
+        let hw = g.hw();
+        let room = hw.next_event.saturating_sub(hw.sound.io.now).max(1);
+        let n = (left as u64).min(room) as u32;
+        left -= n;
+        if let Err(e) = sync(g, n) {
+            r = Err(e);
+            break;
+        }
+    }
+    g.hw().stalling = false;
+    r
 }
 
 /// `Halt`: the clock runs event by event until a handler has run, or to

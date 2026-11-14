@@ -104,9 +104,10 @@
 //!   their time (`hw::spend`), RL, `Div`, `Sqrt`, `ArcTan2`, `SoundBias`,
 //!   `MidiKey2Freq`, `MultiBoot` (unit `native/lift-bios-calls`),
 //!   `BgAffineSet`, `ObjAffineSet` (unit `native/lift-bios-affine`).
-//! - An idle loop's back edge calls `hw::idle`, a spin loop's `hw::spin`
-//!   (`analysis::idle`, `runtime::spins`, as the play build's
-//!   `--timing native` marks them).
+//! - An idle loop's back edge calls `hw::idle`, its way out (the branch
+//!   not taken, an exit of its own: `Ctx::with_idle_exits`)
+//!   `hw::idle_exit`, a spin loop's back edge `hw::spin` (`analysis::idle`,
+//!   `runtime::spins`, as the play build's `--timing native` marks them).
 //! - Function pointers are their keys (ROM or IWRAM address, Thumb bit):
 //!   `call_fn` (prelude) looks them up in `FNS`; a RAM key that isn't
 //!   there but holds one of the flash save library's stack routines is
@@ -438,7 +439,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let given = || holes.jumps.iter().map(|(&a, (ts, _))| (a, ts.as_slice()));
     let mut gaps = BTreeSet::new();
     for _ in 0..64 {
-        let ctx = Ctx::new(rom, &disc).with_library().with_jumps(given());
+        let ctx = Ctx::new(rom, &disc)
+            .with_library()
+            .with_idle_exits()
+            .with_jumps(given());
         let funcs: Vec<Func> = ctx.entries.iter().map(|&e| build_func(&ctx, e)).collect();
         let mut missing = missing(&ctx, &funcs);
         missing.extend(
@@ -494,13 +498,17 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     }
     let overlays = overlays;
     let mut codes = vec![code(
-        Ctx::new(rom, &disc).with_library().with_jumps(given()),
+        Ctx::new(rom, &disc)
+            .with_library()
+            .with_idle_exits()
+            .with_jumps(given()),
     )];
     for o in &overlays {
         let o_rom = &rom[(o.src - 0x0800_0000) as usize..][..o.len as usize];
         codes.push(code(
             Ctx::at(o.dst, o_rom, &o.disc)
                 .with_library()
+                .with_idle_exits()
                 .with_jumps(given()),
         ));
     }
@@ -2341,6 +2349,8 @@ impl FnPrinter<'_, '_> {
             (Idle::Spin, false) => "g.sp = r13; hw::spin(g)?; ",
             (Idle::Edge, true) => "bank_sp(g, r13); hw::idle(g)?; ",
             (Idle::Spin, true) => "bank_sp(g, r13); hw::spin(g)?; ",
+            (Idle::Exit, false) => "g.sp = r13; hw::idle_exit(g)?; ",
+            (Idle::Exit, true) => "bank_sp(g, r13); hw::idle_exit(g)?; ",
             _ => "",
         };
         match x.plan {

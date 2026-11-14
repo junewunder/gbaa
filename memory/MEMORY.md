@@ -8,6 +8,7 @@ Made from each file's frontmatter (`title`, `hook`, `open: true`) by `just memor
 - [Emerald battles by RAM pokes, and why a move doesn't animate](emerald-battle-pokes.md) — a foreign OT above level 10 ignores orders (set 0x86E); moves that fail or miss skip their animation
 - [Emerald Rogue and Imperium against mGBA](emerald-hacks.md) — timelines, menus that A doesn't leave, where ours differed, and Rogue's main loop (2026-10-23)
 - [Emerald's function-address flow: the memory fix (Ref tokens) and speed-ups](fnref-flow-emerald-history.md) — a large read is one Ref token; five slow spots; don't absorb to the object end
+- [Finding where a native program and its play build part in time](native-check-divergence.md) — diff the records frame by frame in Python, then trace each sync's clock in both builds (a temporary `extern crate std` in runtime)
 - [Generated-crate builds that hang or outlive their job](generated-crate-gotchas.md) — a name error can look like a 30-minute build; `just long stop` leaves rustc holding the lock; SLP crash on p37
 - [Kirby & the Amazing Mirror: decomp, player struct, scripts](kirby-amazing-mirror.md) — katam matches our ROM; gKirbys at 0x02020EE0; Lua keysRead drives Kirby once stateFn = 0x0803FF65
 - [mGBA's blending quirks (windows and sprites)](mgba-blend-quirks.md) — with the OBJ window on, mGBA brightens non-target sprites; semi sprites ignore the window's effect bit
