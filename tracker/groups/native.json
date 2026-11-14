@@ -1796,13 +1796,25 @@
       "check": "independent",
       "needs": ["native/native-first-stop"],
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "1fa0c3f5",
+        "session": "1fa0c3f5-1ae9-477c-b83c-4681dba0045f",
+        "host": "quack",
+        "pid": 2833770,
+        "start": "8749081",
+        "at": "2026-11-14T12:59:06Z",
+        "branch": "unit/native/nightly-corpus",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-13T13:12:00Z",
           "by": "9828215c",
           "text": "a lifter-rule merge passed lift-check and took moonbeam's hard holes 11 to 503 unseen. This command's diff with last night should fail on any game's hard count rising, so that can't land quietly again."
         }
-      ]
+      ],
+      "round": "2026-11-14T12:59:06Z"
     },
     {
       "id": "native/spike-entry-read-hole",
