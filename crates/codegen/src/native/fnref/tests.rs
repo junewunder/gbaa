@@ -109,6 +109,7 @@ impl B {
             via: None,
             at: 0x0800_0100,
             bios: None,
+            takes: false,
         };
         (self.insts, out, self.pools)
     }
@@ -126,6 +127,22 @@ fn run_with(fns: &[Built], frames: &BTreeMap<u32, Frame>) -> Flow {
 }
 
 fn run_img(fns: &[Built], frames: &BTreeMap<u32, Frame>, img: &Img) -> Flow {
+    run_bounded(fns, frames, img, &BTreeMap::new())
+}
+
+/// The value-set analysis's bounds on a load, as [`FBlock::hulls`] has
+/// them, and the stride if they start at a literal the function loads
+/// ([`FBlock::bases`]).
+type Bounds = ((u32, u32), Option<u32>);
+
+/// [`run_img`] with the value-set bounds of some loads, by block and inst.
+fn run_bounded(
+    fns: &[Built],
+    frames: &BTreeMap<u32, Frame>,
+    img: &Img,
+    bounds: &BTreeMap<(u32, usize), Bounds>,
+) -> Flow {
+    let of = |k: u32| bounds.range((k, 0)..=(k, usize::MAX));
     let ins: Vec<FnIn> = fns
         .iter()
         .map(|(e, bs)| FnIn {
@@ -139,7 +156,10 @@ fn run_img(fns: &[Built], frames: &BTreeMap<u32, Frame>, img: &Img) -> Flow {
                             insts,
                             exits: BTreeMap::from([(insts.len() - 1, out.clone())]),
                             pools: pools.clone(),
-                            hulls: BTreeMap::new(),
+                            hulls: of(*k).map(|(&(_, i), &(h, _))| (i, h)).collect(),
+                            bases: of(*k)
+                                .filter_map(|(&(_, i), &(_, s))| Some((i, s?)))
+                                .collect(),
                         },
                     )
                 })
@@ -309,6 +329,43 @@ fn an_argument_reaches_the_callee_that_calls_it() {
     assert!(site(&f).complete);
 }
 
+/// f: r8 = F; a call to g, which may take r8 (`Summary::may_take`); g
+/// calls r8. `takes`: whether the call passes every register.
+fn r8_to_a_taker(takes: bool) -> Flow {
+    let mut a = B::default();
+    let p = a.pool(POOL, F);
+    a.set(8, p);
+    let mut call = a.end(
+        None,
+        Edge::Call {
+            target: Some(0x0800_2001),
+            ret: 0x0800_1011,
+        },
+    );
+    call.1.takes = takes;
+    let caller = (
+        0x0800_1001,
+        vec![
+            (0x0800_1001, call),
+            (0x0800_1011, B::default().end(None, Edge::Return)),
+        ],
+    );
+    let mut b = B::default();
+    let t = b.get(8);
+    run(&[caller, calling(0x0800_2001, b, t)])
+}
+
+#[test]
+fn a_pointer_passed_in_r8_reaches_the_taker_that_calls_it() {
+    let f = r8_to_a_taker(true);
+    assert!(f.proven(POOL), "{f:?}");
+    assert_eq!(site(&f).callees, BTreeSet::from([F]));
+    assert!(site(&f).complete);
+    // A call that passes r0-r3 only leaves the taker's r8 empty.
+    let f = r8_to_a_taker(false);
+    assert!(!site(&f).callees.contains(&F), "{f:?}");
+}
+
 #[test]
 fn arithmetic_on_a_function_address_is_a_hole() {
     let mut b = B::default();
@@ -423,6 +480,124 @@ fn a_pointer_into_a_table_of_handlers_doesnt_cut_it() {
     img.words.insert(VT + 20, F);
     img.words.insert(0x0800_0420, VT + 16);
     let f = run_img(&[calling_vt_entry()], &BTreeMap::new(), &img);
+    assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
+}
+
+/// A function at `e` that reads the table at `t` by an unknown index
+/// (`ldr r0, =t` from the pool word `w`; `ldr r0, [r0, r1]`) and returns,
+/// and its load's bounds: 256 entries of `stride` bytes from `t`, a table
+/// read from its start.
+fn reading(e: u32, w: u32, t: u32, stride: u32) -> (Built, ((u32, usize), Bounds)) {
+    let mut b = B::default();
+    let p = b.pool(w, t);
+    let i = b.get(1);
+    let a = b.bin(BinOp::Add, p, i);
+    let x = b.ld(Width::Word, a);
+    b.set(0, x);
+    let bounds = ((e, x.index()), ((t, t + 255 * stride), Some(stride)));
+    ((e, vec![(e, b.end(None, Edge::Return))]), bounds)
+}
+
+/// `ldr r0, =VT; ldr r3, [r0, r1]` with r1 unknown, calling r3, and that
+/// load's bounds: 256 entries of `stride` bytes from VT.
+fn calling_vt_bounded(stride: u32) -> (Built, ((u32, usize), Bounds)) {
+    let (e, b) = (0x0800_1001, calling_vt_entry());
+    let i = b.1[0]
+        .1
+        .0
+        .iter()
+        .position(|x| matches!(x.op, Op::Load { .. }));
+    let bounds = ((e, i.unwrap()), ((VT, VT + 255 * stride), Some(stride)));
+    (b, bounds)
+}
+
+#[test]
+fn a_table_ends_where_one_the_code_indexes_from_starts() {
+    // Two tables of handlers back to back, as C lays them: F, F, F, F
+    // from VT and H, H from VT + 16. A run of function words, so no
+    // object start ends the first; but other code indexes from VT + 16
+    // (native/fnref-table-ends).
+    let mut img = Img::new();
+    for k in 0..4 {
+        img.words.insert(VT + 4 * k, F);
+    }
+    img.words.insert(VT + 16, H);
+    img.words.insert(VT + 20, H);
+    img.words.insert(0x0800_0420, VT + 16);
+    let (call, b1) = calling_vt_bounded(4);
+    let (other, b2) = reading(0x0800_2001, 0x0800_0420, VT + 16, 4);
+    let f = run_bounded(
+        &[call.clone(), other.clone()],
+        &BTreeMap::new(),
+        &img,
+        &BTreeMap::from([b1, b2]),
+    );
+    assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
+    assert!(site(&f).complete, "{f:?}");
+    // A pointer to it that nothing indexes from doesn't end the first.
+    let f = run_bounded(
+        &[call, other],
+        &BTreeMap::new(),
+        &img,
+        &BTreeMap::from([b1]),
+    );
+    assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
+}
+
+#[test]
+fn a_pointer_into_the_middle_of_a_table_still_reads_to_its_end() {
+    // Records of 8 bytes from VT, a handler and a number each: F, 7 and
+    // H, 7 (and VT + 12's F). Code reads the handlers from VT, and the
+    // numbers from VT + 4 (`ldr r0, =VT+4`, a struct table read by one
+    // field): VT + 4 is in the first record, not a table of its own.
+    let mut img = Img::new();
+    img.words.insert(VT, F);
+    img.words.insert(VT + 4, 7);
+    img.words.insert(VT + 8, H);
+    img.words.insert(0x0800_0420, VT + 4);
+    let (call, b1) = calling_vt_bounded(8);
+    let (other, b2) = reading(0x0800_2001, 0x0800_0420, VT + 4, 8);
+    let f = run_bounded(
+        &[call, other],
+        &BTreeMap::new(),
+        &img,
+        &BTreeMap::from([b1, b2]),
+    );
+    assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
+}
+
+#[test]
+fn bounds_from_a_table_s_start_end_with_its_object() {
+    // A load whose address the run can't place at all (r1, unknown),
+    // which the value sets bound to 2 KB from VT, a literal its function
+    // loads: VT's bytes, not the 2 KB. VT + 12's F is in it; H at
+    // VT + 0x40 is past VT + 0x20, where other code indexes from.
+    let mut img = Img::new();
+    img.words.insert(VT + 0x40, H);
+    let mut b = B::default();
+    b.pool(0x0800_0408, VT);
+    let a = b.get(1);
+    let t = b.ld(Width::Word, a);
+    let e = 0x0800_1001;
+    let call = calling(e, b, t);
+    let hull = ((e, t.index()), ((VT, VT + 0x7ff), Some(1)));
+    let (other, b2) = reading(0x0800_2001, 0x0800_0424, VT + 0x20, 4);
+    let f = run_bounded(
+        &[call.clone(), other.clone()],
+        &BTreeMap::new(),
+        &img,
+        &BTreeMap::from([hull, b2]),
+    );
+    assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
+    assert!(site(&f).complete, "{f:?}");
+    // Bounds that don't start at a literal it loads read all 2 KB.
+    let hull = ((e, t.index()), ((VT, VT + 0x7ff), None));
+    let f = run_bounded(
+        &[call, other],
+        &BTreeMap::new(),
+        &img,
+        &BTreeMap::from([hull, b2]),
+    );
     assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
 }
 

@@ -28,14 +28,16 @@
 //! - a load through a ROM pointer, of a word holding a function's key
 //!   (agb's vtables, tables of handlers); a load "from here on" reads
 //!   the words of the object it points into: up to the next code
-//!   ([`Image::bound`]) or the next ROM data address a ROM word holds
-//!   ([`objects`]), and only those the value-set analysis bounds the
-//!   load to (`native/fnref-rom-read-bound`); through a table's start
-//!   plus an index scaled by a record's size ([`Tok::RomStep`], the
-//!   scale from the block's own shifts and adds: [`strides`]) and a
-//!   field's offset, it reads only that field of each record
-//!   (`native/fnref-table-fields`: a byte flag beside two handlers
-//!   gives the flag's bytes, not the handlers');
+//!   ([`Image::bound`]), the next ROM data address a ROM word holds
+//!   ([`objects`]) outside a run of function words, or the next table
+//!   the code indexes from ([`tables`], `native/fnref-table-ends`), and
+//!   only those the value-set analysis bounds the load to
+//!   (`native/fnref-rom-read-bound`); through a table's start plus an
+//!   index scaled by a record's size ([`Tok::RomStep`], the scale from
+//!   the block's own shifts and adds: [`strides`]) and a field's offset,
+//!   it reads only that field of each record (`native/fnref-table-fields`:
+//!   a byte flag beside two handlers gives the flag's bytes, not the
+//!   handlers');
 //! - the program start's copies of ROM data to RAM (`Discovery::copies`
 //!   that aren't code) and `CpuSet` from ROM.
 //!
@@ -47,9 +49,13 @@
 //! (the heap, escaping frame slots, anything computed). A load reads its
 //! cell and the pile, or, at an address the run can't place, the pile and
 //! every cell, or, where the value-set analysis bounds it to ROM, the
-//! words there. Interprocedural: a call passes r0-r3 to its callee's entry
+//! words there (to the object's end, where the bounds start at a
+//! literal the function loads: a table read from its start). Interprocedural: a call passes r0-r3 to its callee's entry
 //! and takes back what its returns hold; a tail call or a fall passes
-//! every register. An indirect call passes them to each function whose
+//! every register, and so does a call to a function that may take r4-r11
+//! from its callers or through a pointer the holes file's `[[takes]]`
+//! names ([`Out::takes`]: the lift passes those the caller's own). An
+//! indirect call passes them to each function whose
 //! whole address its target may hold. A call whose target holds none is
 //! an incomplete callee set: its arguments go to every function that may
 //! be called that way (one with no direct caller, or whose address is
@@ -546,7 +552,8 @@ fn copy_len(fast: bool, r2: &Val) -> Option<u32> {
 /// records and strings ran 110 KB to the next code, into agb's vtables
 /// (`native/fnref-rom-read-bound`). Font bytes that look like pointers
 /// add starts too; only cutting a table of handlers short would be
-/// wrong, so [`Run::object_end`] doesn't stop between function words.
+/// wrong, so [`Run::object_end`] doesn't stop at these between function
+/// words, only at a table the code indexes from ([`tables`]).
 fn objects(img: &dyn Image) -> BTreeSet<u32> {
     let mut o = BTreeSet::new();
     let mut p = 0x0800_0000u32;
@@ -557,6 +564,42 @@ fn objects(img: &dyn Image) -> BTreeSet<u32> {
         p = p.wrapping_add(4);
     }
     o
+}
+
+/// The tables in ROM the code reads by an index from their start: the
+/// low bound of every access [`FBlock::bases`] names, with its stride (the
+/// largest, where several read one table).
+///
+/// Such a start ends the object below it even inside a run of function
+/// words, where [`objects`]' starts don't: C lays its tables of handlers
+/// back to back, and indexing one past its end is undefined, so a read
+/// "from here on" from below stays below. Not every such start is a new
+/// object, though: a struct table read by one field is indexed from the
+/// field's address (`ldr r1, =TABLE+4`), inside the table's first record.
+/// So a start less than one entry past another (by either one's stride)
+/// is a field of that one's records, not an end ([`Run::object_end`]).
+///
+/// What this takes on trust: that a literal the code indexes from at an
+/// entry's stride or more past another table's start is not `&TABLE[k]`
+/// of that table with both indexed. C allows it; it is rare, and a read
+/// it cuts short would leave the callee set it fed incomplete without
+/// saying so. Bounds the code proves with a compare need nothing here:
+/// the value-set analysis narrows the index on the branch, and `hulls`
+/// already holds the narrowed bounds.
+fn tables(fns: &[FnIn], img: &dyn Image) -> BTreeMap<u32, u32> {
+    let mut t: BTreeMap<u32, u32> = BTreeMap::new();
+    for f in fns {
+        for b in f.blocks.values() {
+            for (i, &stride) in &b.bases {
+                let (lo, _) = b.hulls[i];
+                if img.word(lo).is_some() && stride > 0 {
+                    let e = t.entry(lo).or_default();
+                    *e = (*e).max(stride);
+                }
+            }
+        }
+    }
+    t
 }
 
 impl Val {
@@ -911,6 +954,11 @@ pub struct Out {
     pub at: u32,
     /// A BIOS call's number.
     pub bios: Option<u8>,
+    /// A call that passes every register, not r0-r3 only: to a callee
+    /// that may take r4-r11 from its callers (`Summary::may_take`), or a
+    /// pointer call the holes file's `[[takes]]` names. The lift passes
+    /// such a callee the caller's own r4-r11.
+    pub takes: bool,
 }
 
 /// One block: its IR, its exits by inst index, and the ROM words its
@@ -923,6 +971,10 @@ pub struct FBlock<'a> {
     /// The value-set analysis's bounds on the addresses of the loads and
     /// stores it bounds, by inst index.
     pub hulls: BTreeMap<usize, (u32, u32)>,
+    /// Of those, the ones whose bounds start at a literal the function
+    /// loads (so they read a table from its start on, by an index), with
+    /// the bounds' stride: the size of the table's entries.
+    pub bases: BTreeMap<usize, u32>,
 }
 
 /// One function.
@@ -1039,6 +1091,11 @@ struct G {
     rom_from: BTreeMap<(u32, u32, u8, u16), Val>,
     /// The objects in ROM data ([`objects`]).
     objects: BTreeSet<u32>,
+    /// The tables in ROM the code reads by an index from their start
+    /// ([`FBlock::bases`]), by start: the size of their entries (the
+    /// largest stride any such read steps by). Where one starts, the
+    /// table below it ends ([`tables`]).
+    tables: BTreeMap<u32, u32>,
     /// What a read the value-set analysis bounds to ROM gives, by bounds
     /// and width.
     rom_hull: BTreeMap<(u32, u32, u8), Val>,
@@ -2330,7 +2387,9 @@ impl Run<'_, '_> {
     /// Where the object a read "from here on" at `a` is in ends, before
     /// `hi`: the next object start ([`objects`]) past `a` that isn't
     /// inside a table of handlers (function words in the 16 bytes before
-    /// it and the 16 from it on), or `hi`.
+    /// it and the 16 from it on), or the next table start ([`tables`])
+    /// past `a`, wherever it is; or `hi`. Neither ends it where it is a
+    /// field of a table below: less than one entry past a table's start.
     fn object_end(&self, a: u32, hi: u32) -> u32 {
         let img = self.img;
         let fns_in = |lo: u32, hi: u32| {
@@ -2338,13 +2397,42 @@ impl Run<'_, '_> {
                 .step_by(4)
                 .any(|p| img.word(p).is_some_and(|x| img.is_fn(x)))
         };
-        self.g
+        let tables = &self.g.tables;
+        // Records longer than this aren't looked for.
+        const RECORD: u32 = 0x1000;
+        let field = |c: u32| {
+            let own = tables.get(&c).copied().unwrap_or(0);
+            tables
+                .range(c.saturating_sub(RECORD)..c)
+                .any(|(x, s)| c - x < (*s).max(own))
+        };
+        let mut run = self
+            .g
             .objects
             .range(a.saturating_add(1)..hi)
             .copied()
+            .peekable();
+        let mut starts = tables
+            .range(a.saturating_add(1)..hi)
+            .map(|(c, _)| *c)
+            .peekable();
+        // Both, in order, once each.
+        let cuts = std::iter::from_fn(|| match (run.peek().copied(), starts.peek().copied()) {
+            (Some(o), Some(t)) if o == t => {
+                run.next();
+                starts.next()
+            }
+            (Some(o), Some(t)) if t < o => starts.next(),
+            (Some(_), _) => run.next(),
+            (None, _) => starts.next(),
+        });
+        cuts.into_iter()
             .find(|&c| {
                 self.g.off & OFF_TABLES != 0
-                    || !(fns_in(c.saturating_sub(16), c) && fns_in(c, c.saturating_add(16)))
+                    || !field(c)
+                        && (tables.contains_key(&c)
+                            || !(fns_in(c.saturating_sub(16), c)
+                                && fns_in(c, c.saturating_add(16))))
             })
             .unwrap_or(hi)
     }
@@ -3150,10 +3238,18 @@ impl Run<'_, '_> {
             anywhere = true;
         }
         if anywhere {
-            // `GBAA_FNREF_OFF`'s `tables`: only the object the bounds start in.
+            // Bounds that start at a table the code indexes from its
+            // start (`FBlock::bases`): only that table, to where its object
+            // ends. (`GBAA_FNREF_OFF`'s `tables`: any bounds, and they end
+            // at every object start.)
+            let based = self
+                .f
+                .blocks
+                .get(&key)
+                .is_some_and(|b| b.bases.contains_key(&i));
             let hull = match hull {
                 Some((lo, hi))
-                    if self.g.off & OFF_TABLES != 0
+                    if (based || self.g.off & OFF_TABLES != 0)
                         && self.img.word(lo).is_some()
                         && self.img.word(hi).is_some() =>
                 {
@@ -3303,7 +3399,7 @@ impl Run<'_, '_> {
                 }
             }
             Edge::Call { target, ret } => {
-                let args = &s.regs[..4];
+                let args = if out.takes { &s.regs[..] } else { &s.regs[..4] };
                 let rets = match target {
                     Some(k) => {
                         self.g.give(*k, args);
@@ -4229,6 +4325,7 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
     let mut g = G {
         loose_args: vec![Val::default(); 4],
         objects: objects(img),
+        tables: tables(fns, img),
         watch: watch_env(img),
         off: off_env(),
         roads: std::env::var_os("GBAA_FNREF_WATCH").is_some(),
@@ -4543,9 +4640,21 @@ impl Flow {
             .filter(|(a, _)| call_fn.contains(a))
             .collect();
         let complete = calls.iter().filter(|(_, s)| s.complete).count();
+        let widths: Vec<usize> = calls
+            .iter()
+            .filter(|(_, s)| s.complete)
+            .map(|(_, s)| s.callees.len())
+            .collect();
+        let width = match widths.iter().max() {
+            Some(m) => format!(
+                " (on average {:.1} callees, the widest {m})",
+                widths.iter().sum::<usize>() as f64 / widths.len() as f64
+            ),
+            None => String::new(),
+        };
         writeln!(
             s,
-            "function addresses (native/fnref.rs){}: {} function words in ROM ({pools} in literal pools, {} other data), {proven} proven, {} not: {unread} never read{} ({piled} of the {} not proven stored where the run can't place them, the heap's pile); {} code constants, {} proven; {} call_fn calls with a callee set, {complete} of them complete; {} other jumps by value to a function",
+            "function addresses (native/fnref.rs){}: {} function words in ROM ({pools} in literal pools, {} other data), {proven} proven, {} not: {unread} never read{} ({piled} of the {} not proven stored where the run can't place them, the heap's pile); {} code constants, {} proven; {} call_fn calls with a callee set, {complete} of them complete{width}; {} other jumps by value to a function",
             match (self.unsettled, self.over) {
                 (true, Some((t, n))) => format!(
                     " (stopped holding {t} tokens, over its bound of {TOKENS}, after {n} functions run: nothing proven)"

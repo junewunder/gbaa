@@ -592,11 +592,19 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         });
     }
     let overlays = overlays;
+    // The indirect calls the holes file's `[[takes]]` names: they pass
+    // their callees the caller's r4-r11.
+    let named_sites: BTreeSet<u32> = holes
+        .takes
+        .values()
+        .flat_map(|(sites, _)| sites.iter().copied())
+        .collect();
     let mut codes = vec![code(
         Ctx::new(rom, &disc)
             .with_library()
             .with_idle_exits()
             .with_jumps(given()),
+        &named_sites,
     )];
     for o in &overlays {
         let o_rom = &rom[(o.src - 0x0800_0000) as usize..][..o.len as usize];
@@ -605,6 +613,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 .with_library()
                 .with_idle_exits()
                 .with_jumps(given()),
+            &named_sites,
         ));
     }
     let holes = &library_standins(holes, &codes);
@@ -662,13 +671,14 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             },
             funcs: &c.funcs,
             frames: &c.frames,
+            sums: &c.sums,
         })
         .collect();
     let no_flow = holes.holes_only && !holes.holes_flow;
     let (ins, pools, call_fn) = if no_flow {
         Default::default()
     } else {
-        fn_ins(&flow_ins, &all)
+        fn_ins(&flow_ins, &all, &named_sites)
     };
     let fnrefs = match &holes.skip_fn_flow {
         None if !no_flow => {
@@ -859,7 +869,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 func: k,
                 at,
                 kind: HoleKind::HolesFile,
-                what: "the holes file's takes matches no indirect call (printed through call_fn) to a function that takes one of r4-r11 from its callers, or the call passes a stack address in one".into(),
+                what: "the holes file's takes matches no indirect call (printed through call_fn) to a function that takes one of r4-r11 from its callers".into(),
             });
         }
         // One with no sites names a function only jumped into: stale if
@@ -1371,6 +1381,9 @@ struct FlowIn<'a> {
     src: u32,
     funcs: &'a [Func],
     frames: &'a BTreeMap<u32, Frame>,
+    /// The summaries the frames were made from: a direct call to one that
+    /// may take r4-r11 passes every register ([`fnref::Out::takes`]).
+    sums: &'a Summaries,
 }
 
 /// [`fnref::follow`] over every context's functions: the flow, every
@@ -1419,11 +1432,14 @@ fn fn_flow(
 
 /// Every context's functions as the flows take them ([`fnref::FnIn`]),
 /// the ROM words literal pools read that hold a function's key, and the
-/// addresses of the calls printed through `call_fn`.
+/// addresses of the calls printed through `call_fn`. `named`: the
+/// indirect calls a holes file's `[[takes]]` names, which pass every
+/// register.
 #[allow(clippy::type_complexity)]
 fn fn_ins<'a>(
     codes: &[FlowIn<'a>],
     all: &BTreeSet<u32>,
+    named: &BTreeSet<u32>,
 ) -> (Vec<fnref::FnIn<'a>>, BTreeSet<u32>, BTreeSet<u32>) {
     let mut ins = Vec::new();
     let mut pools = BTreeSet::new();
@@ -1432,6 +1448,7 @@ fn fn_ins<'a>(
         let src = c.src;
         for f in c.funcs {
             let mut blocks = BTreeMap::new();
+            let mut strides_of = BTreeMap::new();
             for (&k, gb) in &f.blocks {
                 let insts = &gb.block.insts;
                 let mut exits_of = BTreeMap::new();
@@ -1443,6 +1460,13 @@ fn fn_ins<'a>(
                     let via = match x.plan {
                         Plan::CallVia { reg, .. } => Some(reg.index() as u8),
                         _ => None,
+                    };
+                    let takes = match e {
+                        frame::Edge::Call {
+                            target: Some(k), ..
+                        } => c.sums.get(k).is_some_and(|s| s.may_take() != 0),
+                        frame::Edge::Call { target: None, .. } => named.contains(&x.at),
+                        _ => false,
                     };
                     let bios = match insts[x.index].op {
                         Op::Exit(Exit::Swi { comment, .. }) => {
@@ -1457,12 +1481,14 @@ fn fn_ins<'a>(
                             via,
                             at: x.at,
                             bios,
+                            takes,
                         },
                     );
                 }
                 let mut at = k & !1;
                 let mut lits = BTreeMap::new();
                 let mut hulls = BTreeMap::new();
+                let mut strides = BTreeMap::new();
                 for (i, inst) in insts.iter().enumerate() {
                     match inst.op {
                         Op::Insn(a) => at = a,
@@ -1471,6 +1497,7 @@ fn fn_ins<'a>(
                                 && let (false, false, Some(h)) = (x.sp, x.top, x.hull)
                             {
                                 hulls.insert(i, h);
+                                strides.insert(i, x.stride);
                             }
                         }
                         Op::Pool(v) => {
@@ -1491,8 +1518,28 @@ fn fn_ins<'a>(
                         exits: exits_of,
                         pools: lits,
                         hulls,
+                        bases: BTreeMap::new(),
                     },
                 );
+                strides_of.insert(k, strides);
+            }
+            // The accesses whose bounds start at a literal this function
+            // loads, read by an index: tables it reads from their start.
+            let lits: BTreeSet<u32> = blocks
+                .values()
+                .flat_map(|b: &fnref::FBlock| b.insts.iter())
+                .filter_map(|inst| match inst.op {
+                    Op::Pool(v) => Some(v),
+                    _ => None,
+                })
+                .collect();
+            for (k, b) in blocks.iter_mut() {
+                b.bases = b
+                    .hulls
+                    .iter()
+                    .filter(|(_, (lo, hi))| hi > lo && lits.contains(lo))
+                    .map(|(&i, _)| (i, strides_of[k][&i]))
+                    .collect();
             }
             ins.push(fnref::FnIn {
                 entry: f.entry,
@@ -1543,10 +1590,13 @@ fn library_standins(holes: &Holes, codes: &[Code]) -> Holes {
     h
 }
 
-fn code(ctx: Ctx<'_>) -> Code<'_> {
+/// One context's functions, summaries and frames. `named`: the indirect
+/// calls a holes file's `[[takes]]` names, where a stack address in a
+/// register the callees take escapes.
+fn code<'a>(ctx: Ctx<'a>, named: &BTreeSet<u32>) -> Code<'a> {
     let funcs: Vec<Func> = ctx.entries.iter().map(|&e| build_func(&ctx, e)).collect();
     let sums = summarize(&ctx, &funcs);
-    let frames = frame::of_code(&ctx, &funcs, &sums);
+    let frames = frame::of_code(&ctx, &funcs, &sums, named);
     Code {
         ctx,
         funcs,
@@ -2812,7 +2862,8 @@ pub fn callee_sets(
     funcs: &[Func],
     sums: &Summaries,
 ) -> (fnref::Flow, Sets) {
-    let frames = frame::of_code(ctx, funcs, sums);
+    let none = BTreeSet::new();
+    let frames = frame::of_code(ctx, funcs, sums, &none);
     let all: BTreeSet<u32> = funcs.iter().map(|f| f.entry).collect();
     let overlays = discovery::overlays(rom, disc);
     let ins = [FlowIn {
@@ -2820,8 +2871,9 @@ pub fn callee_sets(
         src: 0x0800_0000,
         funcs,
         frames: &frames,
+        sums,
     }];
-    let (ins, pools, _) = fn_ins(&ins, &all);
+    let (ins, pools, _) = fn_ins(&ins, &all, &none);
     let (flow, _) = fn_flow(rom, disc, &overlays, &ins, &pools, &all);
     let sets = complete_sets(&flow);
     (flow, sets)

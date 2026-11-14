@@ -102,7 +102,7 @@ fn frames_of(fns: &Fns) -> BTreeMap<u32, Frame> {
 fn frames_9_never_returns(fns: &Fns) -> BTreeMap<u32, Frame> {
     struct NeverReturns;
     impl Env for NeverReturns {
-        fn params(&self, _: Option<u32>) -> u16 {
+        fn params(&self, _: Option<u32>, _: u32) -> u16 {
             0xf
         }
         fn returns(&self, t: Option<u32>) -> bool {
@@ -638,4 +638,50 @@ fn locals_are_the_frames_own_slots_that_dont_escape() {
         .name(),
         "l16"
     );
+}
+
+/// One function whose block `b` ends in an indirect call at 0x100, its
+/// frame with `named` the holes file's named sites.
+fn one_named(b: B, named: &BTreeSet<u32>) -> Frame {
+    let mut b = b;
+    b.op(Op::Insn(0x100));
+    b.exit();
+    let edge = Edge::Call {
+        target: None,
+        ret: 2,
+    };
+    let fs = vec![(
+        1,
+        BTreeMap::from([(
+            1,
+            FBlock {
+                insts: &b.insts,
+                edges: BTreeMap::from([(b.insts.len() - 1, edge)]),
+            },
+        )]),
+    )];
+    let sums = Summaries::default();
+    let env = FromSummaries {
+        sums: &sums,
+        taken: BTreeSet::new(),
+        named,
+    };
+    frames(&fs, &env).remove(&1).unwrap()
+}
+
+#[test]
+fn a_stack_address_in_r8_escapes_at_a_named_pointer_call_only() {
+    let make = || {
+        let mut b = B::default();
+        b.prologue();
+        let p = b.sp(0);
+        b.set(8, p);
+        b
+    };
+    // A pointer call the holes file names passes the callee r4-r11.
+    let f = one_named(make(), &BTreeSet::from([0x100]));
+    assert_eq!(kinds(&f, -16), vec![Kind::Call]);
+    // Any other passes r0-r3 only: nothing escapes.
+    let f = one_named(make(), &BTreeSet::new());
+    assert!(f.slots.iter().all(|s| !s.escapes()), "{:?}", f.slots);
 }
