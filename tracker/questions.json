@@ -1585,6 +1585,37 @@
         "at": "2026-11-12T18:55:57Z",
         "decision": "d/raise-native-tasks-unproven-function"
       }
+    },
+    {
+      "id": "q/full-nightly-corpus-run-done",
+      "title": "How should the full nightly corpus run be done and checked?",
+      "context": "The nightly command is built and on its branch: just nightly takes each corpus game through the hole report, play and readable builds and the lift, and diffs with the run before. Tested on Metroid and Kirby: Nightmare (all steps, 13 min); a second run with a change named it and failed (hard 0 to 11). The card's check wants a full nine-game run, which is hours (the whole lifts alone are most of three; Emerald's over 45 min). A lane session is split at two hours and its long jobs stop when it ends, so no lane session can run it.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Check on the two-game runs; run the nine overnight outside the loop",
+          "changes": "{unit:native/nightly-corpus} is checked on the Metroid and Nightmare runs and lands; june or the overseer starts the full run with just long start nightly at night, and its first diff is the next night's"
+        },
+        {
+          "key": "b",
+          "label": "Make a night resumable per game, one unit per game",
+          "changes": "--out of an existing night merges a game in; nine units each run one game's steps (Emerald's may still pass an hour); the check waits until all nine have run twice"
+        },
+        {
+          "key": "c",
+          "label": "One long session for this unit in an overnight run",
+          "changes": "{unit:native/nightly-corpus} gets a run of its own of about 5 hours, exempt from the two-hour split, and runs the nine twice"
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/nightly-corpus"],
+      "asked": {
+        "at": "2026-11-14T13:27:12Z",
+        "by": "1fa0c3f5",
+        "host": "quack",
+        "unit": "native/nightly-corpus"
+      },
+      "answer": null
     }
   ]
 }

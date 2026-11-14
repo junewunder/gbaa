@@ -1797,15 +1797,10 @@
       "needs": ["native/native-first-stop"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "blocked",
+        "on": "q/full-nightly-corpus-run-done",
         "by": "1fa0c3f5",
-        "session": "1fa0c3f5-1ae9-477c-b83c-4681dba0045f",
-        "host": "quack",
-        "pid": 2833770,
-        "start": "8749081",
-        "at": "2026-11-14T12:59:06Z",
-        "branch": "unit/native/nightly-corpus",
-        "beats": true
+        "at": "2026-11-14T13:27:12Z"
       },
       "notes": [
         {

@@ -2897,3 +2897,4 @@
 {"at":"2026-11-14T12:55:52Z","actor":"loop","tag":"d6f46c21","host":"quack","cmd":"done","id":"native/mirror-lifts","text":"Kirby Amazing Mirror lifts with no hard holes and builds: done, checked by verifier-mirror-7c3e19a2"}
 {"at":"2026-11-14T12:59:01Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/mirror-lifts","text":"Kirby Amazing Mirror lifts with no hard holes and builds: on main"}
 {"at":"2026-11-14T12:59:06Z","actor":"loop","tag":"1fa0c3f5","host":"quack","cmd":"claim","id":"native/nightly-corpus","text":"A nightly command over the corpus, diffed with last night: claimed"}
+{"at":"2026-11-14T13:27:12Z","actor":"loop","tag":"1fa0c3f5","host":"quack","cmd":"ask","text":"asked the owner: How should the full nightly corpus run be done and checked?","q":"q/full-nightly-corpus-run-done"}
