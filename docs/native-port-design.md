@@ -851,11 +851,9 @@ The library mixes with the play build's own sound path, not a copy:
   check, each start set up by address, with a planted wrong `DMAxCNT`.
   Not yet: the EEPROM's DMA.
 - **The serial port's registers** (native/hw-serial-registers): `0x120`-
-  `0x15F` but `KEYINPUT`, the play build's `Io` with nothing plugged in
-  (`Io::sio_unplugged`, as mGBA's: SI set in normal mode, an internal-clock
-  transfer ended in the store with its IRQ, requested into `Irq::flags`
-  and handled at the next sync), compared by the native check
-  (native/serial-no-partner-as-mgba). `agb/native-serial`.
+  `0x15F` but `KEYINPUT`, the play build's `Io` unplugged (`Io::sio_unplugged`,
+  mGBA's: a transfer on the internal clock ends in the store, its IRQ handled
+  at the next sync), compared by the native check. `agb/native-serial`.
 
 Once a mod edits the program, none of this applies: a mod is meant to
 differ. The oracle is for the unmodded native port, and a mod is checked
