@@ -2878,3 +2878,4 @@
 {"at":"2026-11-14T05:18:55Z","actor":"session","tag":"1854895d","host":"quack","cmd":"overseer","text":"overseer fc5e2d on quack attached, replacing c29bb6 on quack"}
 {"at":"2026-11-14T07:07:10Z","actor":"loop","tag":"9cd7631e","host":"quack","cmd":"done","id":"native/metroid-native-check","text":"Metroid passes the native check on a route: done, checked by verifier-3e7a91c4"}
 {"at":"2026-11-14T07:10:34Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/metroid-native-check","text":"Metroid passes the native check on a route: on main"}
+{"at":"2026-11-14T07:10:46Z","actor":"loop","tag":"ef8559e5","host":"quack","cmd":"claim","id":"native/fnref-flow-emerald","text":"Function-address flow settles on Emerald: claimed (picking up after 81556889)"}

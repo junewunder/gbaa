@@ -1140,16 +1140,17 @@
       "minMinutes": 150,
       "record": {
         "state": "claimed",
-        "by": "81556889",
-        "session": "81556889-1b57-4a78-a2a5-c1c2c69e2aec",
+        "by": "ef8559e5",
+        "session": "ef8559e5-9c2c-411a-8bdc-00f948b870ec",
         "host": "quack",
-        "pid": 1028184,
-        "start": "1500576",
-        "at": "2026-11-13T08:55:31Z",
-        "resumed": "c06275d9",
-        "prevSession": "c06275d9-b496-4ead-9bf1-0085c8ece768",
+        "pid": 2833770,
+        "start": "8749081",
+        "at": "2026-11-14T07:10:46Z",
+        "branch": "unit/native/fnref-flow-emerald",
+        "resumed": "81556889",
+        "prevSession": "81556889-1b57-4a78-a2a5-c1c2c69e2aec",
         "pushed": true,
-        "handedBack": "2026-11-13T11:55:09Z"
+        "beats": true
       },
       "notes": [
         {
