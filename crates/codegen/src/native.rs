@@ -26,7 +26,7 @@
 //!    the [`metrics`].
 //! 4. `FnPrinter`, one function's Rust: `print` (signature, locals, the
 //!    block loop); `block` (a block's IR as statements: memory accesses,
-//!    typed fields via `typed_as`, `g.sp = r13` before I/O stores; `count`
+//!    typed fields via `typed_as`, `bank_sp(g, r13)` before I/O stores; `count`
 //!    tallies each access for the metrics; `used` drops what nothing
 //!    printed needs); stack locals (`local`, `declare_locals`, `flush`);
 //!    control flow (`goto`, `fall_into`, `call`, `call_then`, `tail`,
@@ -2178,12 +2178,11 @@ impl FnPrinter<'_, '_> {
                                     Where::Const(r) => metrics::REGIONS[r] == "io",
                                     _ => true,
                                 };
-                            if io && self.psr.is_some() {
-                                // The reset or the IRQ wrapper may be in
-                                // another mode: sp is that mode's.
+                            if io {
+                                // sp goes to the current mode's bank: the
+                                // reset, an IRQ wrapper or what they call
+                                // may be in another mode than system.
                                 format!("bank_sp(g, r13); {mem}")
-                            } else if io {
-                                format!("g.sp = r13; {mem}")
                             } else {
                                 mem
                             }
@@ -2553,14 +2552,11 @@ impl FnPrinter<'_, '_> {
         let at = x.at;
         let regs = "[r0, r1, r2, r3]";
         let mut s = String::new();
-        // In the reset or the IRQ wrapper sp is its mode's, as at a store.
-        let wait = match (x.idle, self.psr.is_some()) {
-            (Idle::Edge, false) => "g.sp = r13; hw::idle(g)?; ",
-            (Idle::Spin, false) => "g.sp = r13; hw::spin(g)?; ",
-            (Idle::Edge, true) => "bank_sp(g, r13); hw::idle(g)?; ",
-            (Idle::Spin, true) => "bank_sp(g, r13); hw::spin(g)?; ",
-            (Idle::Exit, false) => "g.sp = r13; hw::idle_exit(g)?; ",
-            (Idle::Exit, true) => "bank_sp(g, r13); hw::idle_exit(g)?; ",
+        // sp goes to the current mode's bank, as at a store.
+        let wait = match x.idle {
+            Idle::Edge => "bank_sp(g, r13); hw::idle(g)?; ",
+            Idle::Spin => "bank_sp(g, r13); hw::spin(g)?; ",
+            Idle::Exit => "bank_sp(g, r13); hw::idle_exit(g)?; ",
             _ => "",
         };
         match x.plan {
@@ -2672,8 +2668,7 @@ impl FnPrinter<'_, '_> {
                     0x00 => "soft_reset(g)?;".to_string(),
                     0x01 => "register_ram_reset(g, r0);".to_string(),
                     // `Stop` is a halt, as in the play build.
-                    0x02 | 0x03 if self.psr.is_some() => "bank_sp(g, r13); hw::halt(g)?;".to_string(),
-                    0x02 | 0x03 => "g.sp = r13; hw::halt(g)?;".to_string(),
+                    0x02 | 0x03 => "bank_sp(g, r13); hw::halt(g)?;".to_string(),
                     0x04 => "r0 = intr_wait(g, r13, r0 != 0, r1)?;".to_string(),
                     0x05 => "r0 = intr_wait(g, r13, true, 1)?; r1 = 1;".to_string(),
                     0x06 => {
