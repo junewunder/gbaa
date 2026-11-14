@@ -862,7 +862,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 func: k,
                 at,
                 kind: HoleKind::HolesFile,
-                what: "the holes file's takes matches no indirect call (printed through call_fn) to a function that takes one of r4-r11 from its callers, or the call passes a stack address in one".into(),
+                what: "the holes file's takes matches no indirect call (printed through call_fn) to a function that takes one of r4-r11 from its callers".into(),
             });
         }
         // One with no sites names a function only jumped into: stale if
