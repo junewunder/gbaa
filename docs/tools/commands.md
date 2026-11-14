@@ -92,11 +92,21 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   difference; `--update` rewrites the list instead. Deterministic, so a
   rerun matches. 10 to 30 minutes a game: run it as a long job.
   `--line FILE` writes the ranking line's numbers to FILE as TOML.
+- `just nightly [--out DIR] [--against DIR] [--only NAME]… [--skip STEP]…
+  [--step-minutes N]` (native/nightly-corpus; `crates/hole-report/src/nightly.rs`
+  has the whole of it): each game of `holes/corpus.toml` through the hole
+  report, its play and readable builds and `just lift` (with the corpus's
+  `lift` name), a step that fails or passes `--step-minutes` (default 120)
+  recorded and the rest run. Writes `out/nightly/<date>/summary.toml`,
+  `summary.txt` and `<name>/summary.txt` (hard holes by kind, built or not,
+  frames run and stop, changes against the last run there) and the step
+  logs; fails when a game got worse (hard holes up, a build lost, fewer
+  frames). Hours: `just long start nightly --mem 6G -- just nightly`.
 - `just holes-all [--out DIR] [--against DIR2] [--only NAME]… [--cover]
   [--write-doc FILE] [holes flags…]`: the hole report over the corpus, `holes/corpus.toml`
   (each game's short name, ROM file name under the justfile's `roms`,
-  coverage file), `gbaa-holes --corpus` (`crates/hole-report/src/corpus.rs`).
-  Runs each game in turn as its own `gbaa-holes ROM … --line` (`--holes` its holes file, found as `just lift` does), writing
+  coverage file, and the `--name` its lift takes), `gbaa-holes --corpus` (`crates/hole-report/src/corpus.rs`).
+  Runs each game in turn as its own `gbaa-holes ROM … --line` (`--holes` its holes file, found by its lift name as `just lift` does), writing
   `DIR/<name>.txt` (the report), `DIR/<name>.log` (its timings), then
   prints one table, a row per game and a total: the lift's hard holes and their kinds, then the run's only three kinds,
   bytes not discovered, seconds. The
@@ -1337,8 +1347,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
   `agb/native-frame-locals`, `agb/native-ime-release`, `agb/native-bios-calls`,
   `agb/native-bios-more` (SoftReset too), `agb/native-tasks`, `agb/native-dma`, `agb/native-save` (SRAM),
-  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`, `agb/native-serial`, `agb/native-irq-wrapper` (both its IRQ wrappers lifted, their `msr` and `mrs` run)
-  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers, native/lift-irq-wrapper-tail) on
+  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`, `agb/native-serial`, `agb/native-irq-wrapper` (both its IRQ wrappers lifted, their `msr` and `mrs` run), `agb/native-takes` (two functions that take r8 and r9 from their caller, one called through a pointer the holes file's `[[takes]]` names)
+  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers, native/lift-irq-wrapper-tail, native/taker-test-program) on
   `units/<name>-600.toml` (the spike's is `units/native-spike.toml`,
   native-irq-hold's, native-ime-release's and native-bios-region's
   `-601`). First every program is lifted with `--bars`
@@ -1352,14 +1362,13 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   naming `f_08002728`'s `mrs`, a critical section's (left hard); native-tasks likewise (a task's store; its yield's
   stack switch); native-dma's (0x08000180, `dma_set`'s `DMAxCNT`, a unit
   more), native-save's (0x080002ac, an SRAM `strb`), native-serial's (0x0800017c, `SIOCNT`) and native-irq-wrapper's (0x080001f4, the wrapper's `IE` put back after its handler call: `frame 33: I/O byte 0x04000200`) too.
-  native-fallthrough, native-irq-hold, native-frame-locals and
-  native-ime-release lifted with their `planted_flags`
+  native-fallthrough, native-irq-hold, native-frame-locals,
+  native-ime-release and native-takes lifted with their `planted_flags`
   (`--fall-as-tail-call`, the old fall into another function;
   `--irq-at-waits`, the old IRQ run at a wait inside a critical section;
   `--plant-slot=0x08000182`, `fl_keep`'s store to a stack local made one
   more, native/frame-locals; `--ime-at-waits`, the old IRQ held past the
-  store that sets `IME` again to the next wait, native/ime-release) must
-  be caught too. Each program is lifted once more with `--layout packed`
+  store that sets `IME` again to the next wait, native/ime-release; `--takes-zeroed`, a taker's r4-r11 passed as zeroes, native/taker-test-program) must be caught too. Each program is lifted once more with `--layout packed`
   (`out/lift-<name>-packed`), passed as `--packed`: it must draw the guest
   layout's frames and record the same bytes, nothing skipped
   (native/lift-packed-layout). Passes with `every metric within its bar`,
