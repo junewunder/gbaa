@@ -1266,13 +1266,13 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `runtime::hw` mixes with the play build's own sound path
   (native/hw-sound), so psg-square's FIFO A and PSG and direct-sound's
   two FIFOs with their timer-IRQ buffer swaps are compared sample for
-  sample. The play layout must draw the same frames and write the same records
-  (RAM as the guest's, `Ram::image`), and the planted faults must be caught:
+  sample. The play layout must draw the same frames and records (`Ram::image`;
+  a difference names both layouts, see `plant-layout`), and planted faults are caught:
   the spike's wrong store, psg-square's one wrong sample (`--features plant`).
   Play's sound against a native program's none (a host that records none)
   fails unless `--no-audio WHY`. A lowest sp outside IWRAM fails; a code
-  copy's skip covers any variables copied with the code. Passes with 0
-  differences and audio the same in every frame for all three (2026-11-13).
+  copy's skip covers any variables copied with the code. `just check`'s
+  last step: about 1 minute warm, 9 from a cold `target/` (2026-11-14).
   Writes `out/native-check/`. Heavy: builds three generated crates.
 - `just lift ROM [OUT] [FLAGS]` (native/lift-stage-a;
   `docs/native-port-design.md`, "The stage-A lifter as built"): the
