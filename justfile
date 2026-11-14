@@ -1404,7 +1404,7 @@ emerald-netplay-trade profile="calm" rom=(roms / "Pokemon - Emerald Version.gba"
     {{lock}} cargo build -q --release -p emerald-save -p desktop
     target/release/emerald-trade target/release/gbaa-desktop {{quote(rom)}} {{quote(gbaa_data / "saves/emerald")}} --netplay --profile crates/netplay/profiles/{{profile}}.toml {{args}}
 
-# The hole report (`docs/research/native-holes.md`): what blocks a native build of ROM. Discovery, a 5,400-frame interpreter run with the research press script, the function summaries; prints the ranking line and the holes by kind. About a minute a game; the run is capped at 3 GB of RAM and no swap.
+# The hole report (`docs/research/native-holes.md`): what blocks a native build of ROM. The hard holes are the lifter's (`gbaa-lift --holes-only`, with --holes FILE as its holes file: give the game's mods/<game>/holes.toml); then discovery, a 5,400-frame interpreter run with the research press script, the function summaries, for what only a run shows; prints the ranking line and the holes by kind. One to four minutes a game; the run is capped at 3 GB of RAM and no swap.
 [positional-arguments]
 holes rom *args:
     {{lock}} cargo build -q --release -p hole-report

@@ -1,8 +1,18 @@
-//! `gbaa-holes ROM [--frames N] [--press KEY@F | KEY@F-G/E]… [--cover FILE [--update]] [--no-summaries]
+//! `gbaa-holes ROM [--holes FILE] [--flow] [--frames N] [--press KEY@F | KEY@F-G/E]… [--cover FILE [--update]] [--no-summaries]
 //! [--no-run-roots] [--show N] [--line FILE]`: what blocks a native build of ROM
 //! (`docs/native-port-design.md`, section 6; `docs/research/native-holes.md`).
 //!
-//! Discovers the ROM and its IWRAM overlays, runs it in the interpreter
+//! The hard holes are the lifter's: `codegen::native::lift` in its
+//! holes-only mode, with FILE as its holes file (the game's
+//! `mods/<game>/holes.toml`, which `--corpus` finds by the game's name),
+//! counted by kind ([`codegen::native::HoleKind`]; native/holes-match-lift),
+//! so the report's hard count is the lift's, but for the summary holes
+//! that rest on the function-address flow's callee sets, which `--flow`
+//! adds at the flow's cost ([`codegen::native::Holes::holes_only`]). What only a run shows (return
+//! arithmetic, RAM code that changed, calls to non-entries) is counted
+//! beside them, not in them.
+//!
+//! Then it discovers the ROM and its IWRAM overlays, runs it in the interpreter
 //! (instant timing, no save file) for N frames (default 5,400) with a press
 //! script (default: the one of `docs/research/code-without-rom-addresses.md`,
 //! [`DEFAULT_PRESSES`]), discovers the ROM again with the ROM targets of
@@ -712,6 +722,7 @@ fn main() -> ExitCode {
     let (mut rom_path, mut frames, mut presses) = (None, 5400u32, Vec::new());
     let (mut sums, mut show, mut run_roots) = (true, 12usize, true);
     let (mut cover_path, mut update, mut line_path) = (None, false, None);
+    let (mut holes_path, mut flow) = (None, false);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -735,7 +746,12 @@ fn main() -> ExitCode {
                 Some(p) => line_path = Some(p.clone()),
                 None => return usage(),
             },
+            "--holes" => match it.next() {
+                Some(p) => holes_path = Some(p.clone()),
+                None => return usage(),
+            },
             "--update" => update = true,
+            "--flow" => flow = true,
             "--no-summaries" => sums = false,
             "--no-run-roots" => run_roots = false,
             _ if rom_path.is_none() && !a.starts_with("--") => rom_path = Some(a.clone()),
@@ -776,6 +792,34 @@ fn main() -> ExitCode {
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or(rom_path.clone());
+
+    // The lift's hard holes first, so its memory is given back before the
+    // run's.
+    let lift_holes = match holes_path.as_deref().map(|p| {
+        std::fs::read_to_string(p)
+            .map_err(|e| e.to_string())
+            .and_then(|t| codegen::native::Holes::parse(&t))
+            .map_err(|e| format!("{p}: {e}"))
+    }) {
+        Some(Err(e)) => {
+            eprintln!("{e}");
+            return ExitCode::from(2);
+        }
+        Some(Ok(h)) => h,
+        None => codegen::native::Holes::default(),
+    };
+    let t = std::time::Instant::now();
+    let lifted = codegen::native::lift(
+        rom,
+        &game,
+        &codegen::native::Holes {
+            holes_only: true,
+            holes_flow: flow,
+            ..lift_holes
+        },
+    );
+    let lift = lifted.holes;
+    eprintln!("lift (holes only): {:.1} s", t.elapsed().as_secs_f64());
 
     let t = std::time::Instant::now();
     let disc = analysis::discovery::discover(rom.to_vec());
@@ -988,14 +1032,39 @@ fn main() -> ExitCode {
         overlays.push(c.overlay);
     }
     let r = holes::classify(rom, &disc, &overlays, &run, summaries.as_ref());
+    let line = corpus::Line::of(&r, &lift);
     if let Some(p) = &line_path
-        && let Err(e) = corpus::write_line(p, &r)
+        && let Err(e) = corpus::write_line(p, &line)
     {
         eprintln!("{e}");
         return ExitCode::FAILURE;
     }
 
-    println!("{}", r.line(&game));
+    println!("{}", line.text(&game));
+    println!(
+        "the lift's hard holes (codegen::native::lift, holes only{}; holes file {}): {}",
+        if flow {
+            ", with the function-address flow"
+        } else {
+            ", no function-address flow: not the summary holes its callee sets add"
+        },
+        holes_path.as_deref().unwrap_or("none"),
+        lift.len()
+    );
+    let by_kind = codegen::native::holes_by_kind(&lift);
+    for (k, n) in codegen::native::HoleKind::ALL.iter().zip(by_kind) {
+        if n == 0 {
+            continue;
+        }
+        println!("  {}: {n}", k.name());
+        for h in lift.iter().filter(|h| h.kind == *k).take(show) {
+            println!("    {h}");
+        }
+    }
+    println!(
+        "the run's view (analysis::holes::classify; its counts of the lift's kinds are not the hard ones): {}",
+        r.line(&game)
+    );
     println!(
         "run roots: {} ROM targets of calls through a register, {lacked} not discovered{}",
         roots.len(),
@@ -1315,7 +1384,7 @@ fn main() -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: gbaa-holes ROM [--frames N] [--press KEY@F | KEY@F-G/E]... [--cover FILE [--update]] [--no-summaries] [--no-run-roots] [--show N] [--line FILE]\n       gbaa-holes --corpus FILE --roms DIR [--out DIR] [--against DIR] [--only NAME]... [--cover] [--write-doc FILE] [flags above...]\n       gbaa-holes --corpus FILE --from DIR [--write-doc FILE]"
+        "usage: gbaa-holes ROM [--holes FILE] [--flow] [--frames N] [--press KEY@F | KEY@F-G/E]... [--cover FILE [--update]] [--no-summaries] [--no-run-roots] [--show N] [--line FILE]\n       gbaa-holes --corpus FILE --roms DIR [--out DIR] [--against DIR] [--only NAME]... [--cover] [--write-doc FILE] [flags above...]\n       gbaa-holes --corpus FILE --from DIR [--write-doc FILE]"
     );
     ExitCode::from(2)
 }
