@@ -88,7 +88,7 @@ rom = "agb/mosaic-modes.gba"
 route = "units/mosaic-modes-600.toml"
 
 [program.mosaic-modes.bars]
-lines = 49227
+lines = 49498
 lines_prelude = 1203
 functions = 102
 functions_iwram = 3
@@ -151,7 +151,7 @@ planted_store = 0x08000186
 planted_hole = { drop_standin = 0x08002728, names = "error: hard hole in f_08002728 at 0x08002730: CPU state: mrs" }
 
 [program.native-spike.bars]
-lines = 71806
+lines = 72079
 lines_prelude = 1203
 functions = 110
 functions_iwram = 3
@@ -529,7 +529,7 @@ route = "units/native-bios-more-600.toml"
 # restarts the program.
 
 [program.native-bios-more.bars]
-lines = 70166
+lines = 70431
 lines_prelude = 1203
 functions = 104
 functions_iwram = 3
@@ -672,7 +672,7 @@ route = "units/native-dma-600.toml"
 planted_store = 0x08000180
 
 [program.native-dma.bars]
-lines = 48433
+lines = 48698
 lines_prelude = 1203
 functions = 107
 functions_iwram = 3
