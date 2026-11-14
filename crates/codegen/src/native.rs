@@ -277,6 +277,20 @@ pub struct Holes {
     /// stage B's metrics, and on a game it doesn't settle in a session
     /// (Metroid: 68 s a round, rounds growing). `None`: followed.
     pub skip_fn_flow: Option<String>,
+    /// Find the hard holes only (`gbaa-lift --holes-only`; the hole
+    /// report's lift, native/holes-match-lift): no heap pointers, no
+    /// modules, and unless [`Holes::holes_flow`], no function-address
+    /// flow. The heap changes no hole. The flow's complete callee sets
+    /// can: the second summaries take each such indirect call as calling
+    /// exactly those, so a summary hole may rest on one (one each in
+    /// Minish Cap and Kirby & the Amazing Mirror, of the corpus). Without
+    /// it this is the lift's [`Lifted::holes`] but those, in seconds to a
+    /// few minutes; [`Lifted::files`] is empty and the report one line.
+    pub holes_only: bool,
+    /// With [`Holes::holes_only`], follow the function addresses too
+    /// (`--flow`): the whole lift's holes exactly, at the flow's cost (up
+    /// to about 20 minutes a game).
+    pub holes_flow: bool,
 }
 
 impl Holes {
@@ -384,12 +398,76 @@ pub struct SeenCopy {
     pub why: String,
 }
 
-/// A hard hole: the function, the instruction, and what it is.
+/// A hard hole: the function, the instruction, its kind, and what it is.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Hole {
     pub func: u32,
     pub at: u32,
+    pub kind: HoleKind,
     pub what: String,
+}
+
+/// What kind of hard hole: the lift's count by kind, which the hole
+/// report (`gbaa-holes`, native/holes-match-lift) prints as its own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum HoleKind {
+    /// An indirect jump Recovery left unresolved and the holes file
+    /// gives no targets for.
+    Jump,
+    /// A jump to ROM where discovery (and the gap decoding) found no code.
+    NoCode,
+    /// An undefined instruction that isn't a compiler's trap.
+    Undefined,
+    /// `msr`, `mrs`, a user-bank transfer, an exception return or a stack
+    /// switch outside the reset and the IRQ wrappers.
+    Cpu,
+    /// A BIOS call the library doesn't have.
+    Bios,
+    /// A function whose summary has a hard hole
+    /// (`analysis::holes::SUMMARY_HARD`), once.
+    Summary,
+    /// A call to a function that takes r4-r11 from its callers that
+    /// can't pass them.
+    Takes,
+    /// The holes file names something that isn't there (a stand-in, a
+    /// `[[takes]]`, a `[[copy]]`), or a check's plant missed.
+    HolesFile,
+}
+
+impl HoleKind {
+    pub const ALL: [HoleKind; 8] = [
+        HoleKind::Jump,
+        HoleKind::NoCode,
+        HoleKind::Undefined,
+        HoleKind::Cpu,
+        HoleKind::Bios,
+        HoleKind::Summary,
+        HoleKind::Takes,
+        HoleKind::HolesFile,
+    ];
+
+    /// The kind's short name: a column of the hole report's table.
+    pub fn name(self) -> &'static str {
+        match self {
+            HoleKind::Jump => "jumps",
+            HoleKind::NoCode => "no code",
+            HoleKind::Undefined => "undefined",
+            HoleKind::Cpu => "CPU state",
+            HoleKind::Bios => "BIOS",
+            HoleKind::Summary => "summaries",
+            HoleKind::Takes => "r4-r11 not passed",
+            HoleKind::HolesFile => "holes file",
+        }
+    }
+}
+
+/// `holes`' count of each kind, in [`HoleKind::ALL`]'s order.
+pub fn holes_by_kind(holes: &[Hole]) -> [usize; 8] {
+    let mut n = [0; 8];
+    for h in holes {
+        n[HoleKind::ALL.iter().position(|&k| k == h.kind).unwrap()] += 1;
+    }
+    n
 }
 
 impl std::fmt::Display for Hole {
@@ -483,6 +561,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             bad_copies.push(Hole {
                 func: c.dst,
                 at: c.dst,
+                kind: HoleKind::HolesFile,
                 what: "the holes file's copy is outside the ROM, EWRAM or IWRAM, has a root outside it, or overlaps another copy"
                     .into(),
             });
@@ -569,13 +648,18 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             frames: &c.frames,
         })
         .collect();
-    let (ins, pools, call_fn) = fn_ins(&flow_ins, &all);
+    let no_flow = holes.holes_only && !holes.holes_flow;
+    let (ins, pools, call_fn) = if no_flow {
+        Default::default()
+    } else {
+        fn_ins(&flow_ins, &all)
+    };
     let fnrefs = match &holes.skip_fn_flow {
-        None => {
+        None if !no_flow => {
             let (flow, words) = fn_flow(rom, &disc, &overlays, &ins, &pools, &all);
             Some((flow, words, call_fn))
         }
-        Some(_) => None,
+        _ => None,
     };
     // Heap pointers as `Ref<T>` (native/ref-heap): RAM at the start is
     // the program start's copies, else 0.
@@ -612,13 +696,17 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         let end = if o < 0x4_0000 { 0x4_0000 } else { 0x4_8000 };
         globals.0.range(..end).any(|(_, g)| g.lo + g.len > o)
     };
-    let heap = heap::follow(
-        &ins,
-        settled.map_or(&no_sites, |(f, _, _)| &f.sites),
-        taken.as_ref(),
-        &ram_init,
-        &global_from,
-    );
+    let heap = if holes.holes_only {
+        heap::Heap::default()
+    } else {
+        heap::follow(
+            &ins,
+            settled.map_or(&no_sites, |(f, _, _)| &f.sites),
+            taken.as_ref(),
+            &ram_init,
+            &global_from,
+        )
+    };
     drop(ins);
     drop(flow_ins);
     // The summaries again, each indirect call with a complete callee set
@@ -732,6 +820,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         hard.push(Hole {
             func: *k,
             at: *k,
+            kind: HoleKind::HolesFile,
             what: "the holes file's stand-in matches no function".into(),
         });
     }
@@ -743,6 +832,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             hard.push(Hole {
                 func: f,
                 at: f,
+                kind: HoleKind::HolesFile,
                 what: format!("the stand-in calls f_{k:08x}, which takes r4-r11 from its callers and stops the program when called so"),
             });
         }
@@ -752,6 +842,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             hard.push(Hole {
                 func: k,
                 at,
+                kind: HoleKind::HolesFile,
                 what: "the holes file's takes matches no indirect call (printed through call_fn) to a function that takes one of r4-r11 from its callers, or the call passes a stack address in one".into(),
             });
         }
@@ -761,9 +852,22 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             hard.push(Hole {
                 func: k,
                 at: k,
+                kind: HoleKind::HolesFile,
                 what: "the holes file's takes, with no sites, names a function that takes none of r4-r11 from its callers".into(),
             });
         }
+    }
+    if holes.holes_only {
+        return Lifted {
+            files: Vec::new(),
+            report: format!(
+                "gbaa-lift: {name}: {} functions; {} hard holes (--holes-only)\n",
+                fns.len(),
+                hard.len()
+            ),
+            holes: hard,
+            metrics: Metrics::default(),
+        };
     }
     fns.sort_unstable();
     let mut table = String::new();
@@ -987,6 +1091,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         let h = Hole {
             func: at,
             at,
+            kind: HoleKind::HolesFile,
             what: "--plant-slot: no store to a stack local there".into(),
         };
         writeln!(report, "  {h}").unwrap();
@@ -1580,10 +1685,11 @@ fn is_bit(op: &Op) -> bool {
 }
 
 impl FnPrinter<'_, '_> {
-    fn hole(&mut self, at: u32, what: impl Into<String>) {
+    fn hole(&mut self, at: u32, kind: HoleKind, what: impl Into<String>) {
         self.found.push(Hole {
             func: self.f.entry,
             at,
+            kind,
             what: what.into(),
         });
     }
@@ -1630,7 +1736,7 @@ impl FnPrinter<'_, '_> {
                 .iter()
                 .find(|h| analysis::holes::summary_hard(&analysis::holes::summary_kind(h)))
             {
-                self.hole(f.entry, format!("summary: {h}"));
+                self.hole(f.entry, HoleKind::Summary, format!("summary: {h}"));
             } else if sum.returns && !sum.keeps {
                 self.soft.unproven.push((
                     f.entry,
@@ -1645,6 +1751,7 @@ impl FnPrinter<'_, '_> {
         for &at in self.frame.map(|fr| &fr.switches).into_iter().flatten() {
             self.hole(
                 at,
+                HoleKind::Cpu,
                 "CPU state: a stack switch (sp set to a value not made from the frame's)",
             );
         }
@@ -1655,6 +1762,7 @@ impl FnPrinter<'_, '_> {
             for &at in self.frame.map(|fr| &fr.fresh).into_iter().flatten() {
                 self.hole(
                     at,
+                    HoleKind::Cpu,
                     "CPU state: a stack switch (sp set to a constant in a function that returns)",
                 );
             }
@@ -1837,14 +1945,16 @@ impl FnPrinter<'_, '_> {
                 Op::SetFlag(fl, x) => stmt(&mut s, format!("{} = {};", flag(fl), v(x))),
                 Op::GetReg(r) => writeln!(s, "{ind}let {}: u32 = r{};", v(id), r.index()).unwrap(),
                 Op::GetFlag(fl) => writeln!(s, "{ind}let {}: bool = {};", v(id), flag(fl)).unwrap(),
-                Op::GetUserReg(_) | Op::SetUserReg(..) => {
-                    self.hole(at, "CPU state: a user-bank register transfer")
-                }
+                Op::GetUserReg(_) | Op::SetUserReg(..) => self.hole(
+                    at,
+                    HoleKind::Cpu,
+                    "CPU state: a user-bank register transfer",
+                ),
                 Op::GetCpsr | Op::GetSpsr if self.psr.is_none() => {
-                    self.hole(at, "CPU state: mrs (reads a PSR)")
+                    self.hole(at, HoleKind::Cpu, "CPU state: mrs (reads a PSR)")
                 }
                 Op::SetCpsr { .. } | Op::SetSpsr { .. } if self.psr.is_none() => {
-                    self.hole(at, "CPU state: msr (writes a PSR)")
+                    self.hole(at, HoleKind::Cpu, "CPU state: msr (writes a PSR)")
                 }
                 // The reset's and the IRQ wrapper's ([`PsrFns`]).
                 Op::GetCpsr => {
@@ -2180,7 +2290,11 @@ impl FnPrinter<'_, '_> {
         } else if self.all.contains(&k) {
             self.fall_into(k)
         } else {
-            self.hole(at, format!("a jump to {k:#010x}, where there's no code"));
+            self.hole(
+                at,
+                HoleKind::NoCode,
+                format!("a jump to {k:#010x}, where there's no code"),
+            );
             String::new()
         }
     }
@@ -2226,7 +2340,7 @@ impl FnPrinter<'_, '_> {
             .get(self.f.entry)
             .is_some_and(|s| s.passes.contains(&(at, k)));
         if self.passed(k) == 0 || !seen {
-            self.hole(at, format!("a call to {k:#010x}, which takes r4-r11 from its callers, that the summaries didn't see pass them (past a hole in this function, or from another code context)"));
+            self.hole(at, HoleKind::Takes, format!("a call to {k:#010x}, which takes r4-r11 from its callers, that the summaries didn't see pass them (past a hole in this function, or from another code context)"));
         }
     }
 
@@ -2377,7 +2491,11 @@ impl FnPrinter<'_, '_> {
                 let t = match e {
                     Exit::Jump(t) | Exit::JumpExchange(t) => v(t),
                     Exit::ExceptionReturn(_) => {
-                        self.hole(at, "CPU state: an exception return (CPSR = SPSR)");
+                        self.hole(
+                            at,
+                            HoleKind::Cpu,
+                            "CPU state: an exception return (CPSR = SPSR)",
+                        );
                         return s;
                     }
                     _ => unreachable!("a dynamic exit jumps"),
@@ -2405,7 +2523,7 @@ impl FnPrinter<'_, '_> {
                                 .get(self.f.entry)
                                 .is_some_and(|s| s.passes.contains(&(at, tk)))
                             {
-                                self.hole(at, format!("a call through a register to {tk:#010x}, which takes r4-r11 from its callers: not passed (the holes file's takes can name the call)"));
+                                self.hole(at, HoleKind::Takes, format!("a call through a register to {tk:#010x}, which takes r4-r11 from its callers: not passed (the holes file's takes can name the call)"));
                             }
                             self.call_fn(at, &k)
                         }
@@ -2421,7 +2539,7 @@ impl FnPrinter<'_, '_> {
                     Ok(ts) => ts,
                     Err(a) => {
                         self.hole(
-                            a,
+                            a, HoleKind::Jump,
                             "an indirect jump Recovery didn't resolve (give its targets in the holes file)",
                         );
                         target.into_iter().collect()
@@ -2495,7 +2613,7 @@ impl FnPrinter<'_, '_> {
                     0x28 => String::new(),
                     _ => {
                         debug_assert!(!BIOS.contains(&n));
-                        self.hole(at, format!("BIOS call {n:#04x}, which the library doesn't have"));
+                        self.hole(at, HoleKind::Bios, format!("BIOS call {n:#04x}, which the library doesn't have"));
                         return s;
                     }
                 };
@@ -2518,7 +2636,9 @@ impl FnPrinter<'_, '_> {
                 )
                 .unwrap()
             }
-            Plan::Undefined { trap: false } => self.hole(at, "an undefined instruction"),
+            Plan::Undefined { trap: false } => {
+                self.hole(at, HoleKind::Undefined, "an undefined instruction")
+            }
         }
         s
     }
