@@ -368,7 +368,8 @@ In the order they'd pay on Metroid:
    reads that field only. 66 words, left with every switch off. The
    frames unit has the same idea for arrays of pairs in a stack frame;
    only that half of it carries over.
-6. **The pile split by global** (`native/fnref-pile-globals`, new; with
+6. **The pile split by global** (`native/fnref-pile-globals`; measured,
+   no gain: "The pile split by global, measured", at the end; with
    it item 4 of the list above, a load at a constant RAM address reads
    its cell and not the pile). On Metroid at most 62 words after `bios`
    (338 to 276), the same ones `tables` reaches; on Nightmare and
@@ -580,3 +581,65 @@ second half. Those were object starts, and cut there, before the rule.
 to 167 (the report's line now says both). The agb programs' metrics are
 all as they were. Nightmare and Emerald were not run.
 
+## The pile split by global, measured
+
+Unit `native/fnref-pile-globals`, 2026-11-14 on quack, main at 8678f76.
+Not kept: the split is sound and moves nothing. The code is commit
+8892dee (reverted in the next), for the follow-up below to start from.
+
+**What was tried.** Item 6 above: a store the run can't place, which
+the value-set analysis bounds to RAM, goes to a span of its own (its
+bounds), not the pile. A load at a constant address reads its cell, the
+spans that meet it and the rest of the pile; a load the run can't place
+reads them all, as every cell; a load the value sets bound to RAM reads
+the spans that meet its bounds. A unit test held two globals apart.
+
+**Counts**, with the roads (`GBAA_FNREF_WATCH=roads`):
+
+| | before | after |
+|---|---|---|
+| Metroid, `fn_words_not_proven` | 274 | 274 |
+| Metroid, held by a pile read | 16 | 16 |
+| Metroid, the lift | 67 s | 110 s |
+| Nightmare, held | 2,728 | 2,728 |
+| Nightmare, held by a pile read | 2,529 | 2,530 |
+| Nightmare, the flow | 512 s | 661 s (with the trace) |
+
+Nightmare's flow settles in 16 rounds now, 9 to 11 minutes under 4 GB
+(the 31 to 35 minutes above were before table ends). Its held words
+were 4,054 then.
+
+**Why nothing moved.** The value sets bound few of the stores the run
+can't place. Metroid's 8,582 stores bounded to one global are nearly all
+at addresses the flow already places (constants, frame slots): of the
+3,898 store sites it can't place, the value sets bound 246 to RAM (88
+more outside it) and 3,564 not at all. Nightmare's bounded spans: 76,
+holding 628 tokens, where the pile holds 3,626.
+
+What the pile holds, and how:
+
+- **On Nightmare, function words stored at a RAM array's literal plus
+  an index.** The two largest roads (763 words at 0x08006162, 269 at
+  0x0800582a) are stores at 0x030025f0 + 4i (a table of callbacks) and
+  0x03002790 + 144i (records), the index a byte out of the pile. The
+  value sets give Top (the index is a parameter, or loaded), so the
+  flow piles them, and the words are then read at 0x03002490 and
+  0x03002494, constant addresses below both arrays. With every-cell
+  reads off (`GBAA_FNREF_OFF=cells`), 2,485 words are still held by
+  pile reads: this, not the copying below, is Nightmare's pile.
+- **On Metroid, every cell, copied.** The pile holds `Ref`s of reads of
+  every cell, stored by 1,695 instruction sites: a struct copied
+  through a pointer loaded from RAM (`ldr r1, [r4]`, then a load and a
+  store through it, `ldmia`/`stmia` too). A pointer read from RAM is
+  unknown to the flow, so both the read and the store can't be placed,
+  and the pile then holds every cell's words. That is what the parked
+  RAM-pointer work on the branch (`native/fnref-ram-pointers-land`)
+  would place, and only 16 of Metroid's words wait on it.
+
+**The follow-up** (`native/fnref-ram-array-bases`): as table ends does
+for ROM, a load or store whose address is a RAM literal its function
+loads plus an index the run can't place stays in the object from that
+literal to the next RAM literal the code indexes from. It must settle
+first what C allows that this would cut short: a struct's array field
+indexed from the struct's address while other code indexes from the
+field's, and `&arr[k]` indexed from.

@@ -1274,7 +1274,9 @@ impl G {
             // One pile: splitting it by the value-set analysis's bounds on
             // the stores' addresses proved nothing more on the agb programs
             // (their heap stores aren't bounded) and cost nine times the
-            // time.
+            // time; nor on Metroid or Nightmare, whose unplaced stores the
+            // value sets seldom bound (`native/fnref-pile-globals`, commit
+            // 8892dee).
             Store::Pile => {
                 for (t, _) in toks {
                     match t {
