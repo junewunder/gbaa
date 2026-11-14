@@ -1763,7 +1763,19 @@
       "detail": "As {unit:native/metroid-lifts} and {unit:native/nightmare-lifts}. The overnight lift (2026-11-11, just lift --name kirby-mirror, runs/long/overnight-lift.log) gave 5613 functions and 5 hard holes: 2 msr in the reset (0x080000c4, 0x080000d0; gone with {unit:native/lift-psr-boot-irq}), swi 0x01 and 0x00 at 0x08159326/0x08159328 (gone with {unit:native/lift-bios-more}), and an unresolved jump at 0x080001bc in f_080000fc. Write mods/kirby-mirror/holes.toml with that jump's targets from a run (holes/coverage) and skip_fn_flow if the fn flow needs it. Done when: the lift exits 0 and its crate builds in release under just long; lines, build time and peak RAM quoted in docs/native-stage-b.md; just check passes.",
       "check": "independent",
       "needs": ["native/lift-bios-more", "native/lift-psr-boot-irq"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "d6f46c21",
+        "session": "d6f46c21-d8c9-4fe0-ab85-3dc1b5518cf8",
+        "host": "quack",
+        "pid": 2833770,
+        "start": "8749081",
+        "at": "2026-11-14T11:55:42Z",
+        "branch": "unit/native/mirror-lifts",
+        "beats": true
+      },
+      "round": "2026-11-14T11:55:42Z"
     },
     {
       "id": "native/native-first-stop",
