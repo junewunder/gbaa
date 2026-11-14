@@ -1731,6 +1731,17 @@
       "check": "independent",
       "uses": ["heavy"],
       "minMinutes": 180,
+      "record": {
+        "state": "claimed",
+        "by": "5e83e896",
+        "session": "5e83e896-94e8-45e1-b4d0-c3dbce47bc3c",
+        "host": "quack",
+        "pid": 2833770,
+        "start": "8749081",
+        "at": "2026-11-14T09:20:58Z",
+        "branch": "unit/native/holes-match-lift",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-13T08:31:01Z",
