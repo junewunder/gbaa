@@ -777,8 +777,8 @@ showed:
   WHY`.
 - **Gaps the next programs will hit:** a code copy is skipped whole, so
   an agb `.iwram` static copied with the code isn't compared (the skip's
-  line says so); a lowest sp outside IWRAM (r13 as a scratch register, a
-  stack in EWRAM) fails the check rather than skip other RAM.
+  line says so); an sp outside IWRAM (r13 as a scratch register) fails the check rather than skip other RAM,
+  unless a holes file's `[[stack]]` holds all the interpreter saw (`Machine::out_sp`; Nightmare's task stacks).
 - **Library fixes it forced:** `IF` is requested as V-blank's line
   starts, before the present, and handled after (the record saw `IF` 0
   where the play build had 1); `hw::spend` moves the beam by cycles

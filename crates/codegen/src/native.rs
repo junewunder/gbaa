@@ -231,6 +231,13 @@ pub struct Holes {
     /// or an earlier one, leaves the ROM or its RAM region, or has a root
     /// outside it is a hard hole.
     pub copies_seen: Vec<SeenCopy>,
+    /// RAM the game keeps stacks in outside IWRAM (`[[stack]] start =
+    /// 0x…, end = 0x…, why = "…"`): a task switcher's stacks (Kirby -
+    /// Nightmare's in EWRAM). The lift doesn't use them; the native check
+    /// (`route-check --native`) skips them as it skips IWRAM's stack, and
+    /// fails unless every `sp` outside IWRAM the play build's interpreter
+    /// saw lies in one (`start..=end`, an empty stack's `sp` its end).
+    pub stacks: Vec<SeenStack>,
     /// A check's planted wrong store (`gbaa-lift --plant AT`): the store
     /// of the instruction at this address stores its value plus one, which
     /// the native check must catch.
@@ -312,8 +319,9 @@ pub struct Holes {
 impl Holes {
     /// Parse a holes file: `[[standin]] entry = 0x…, why = "…", code =
     /// '''…'''` (and `lr = true` for [`Holes::lr`]), `[[jump]] at = 0x…, targets = [0x…], why = "…"`,
-    /// `[[takes]]` ([`Holes::takes`]), and at
-    /// the top, `skip_fn_flow = "why"`.
+    /// `[[takes]]` ([`Holes::takes`]), `[[copy]]` ([`Holes::copies_seen`]),
+    /// `[[stack]]` ([`Holes::stacks`]), and at the top, `skip_fn_flow =
+    /// "why"`.
     pub fn parse(text: &str) -> Result<Holes, String> {
         let t: toml::Table = text.parse().map_err(|e| format!("{e}"))?;
         let mut h = Holes::default();
@@ -396,6 +404,20 @@ impl Holes {
                             why: str_of(e, "why")?,
                         });
                     }
+                    "stack" => {
+                        let field = |f: &str| -> Result<u32, String> {
+                            int(e.get(f).ok_or(format!("stack: missing {f}"))?, f)
+                        };
+                        let (start, end) = (field("start")?, field("end")?);
+                        if start >= end {
+                            return Err(format!("stack: {start:#010x} not below {end:#010x}"));
+                        }
+                        h.stacks.push(SeenStack {
+                            start,
+                            end,
+                            why: str_of(e, "why")?,
+                        });
+                    }
                     _ => return Err(format!("unknown table {k}")),
                 }
             }
@@ -411,6 +433,14 @@ pub struct SeenCopy {
     pub dst: u32,
     pub len: u32,
     pub roots: Vec<u32>,
+    pub why: String,
+}
+
+/// One `[[stack]]` of the holes file ([`Holes::stacks`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SeenStack {
+    pub start: u32,
+    pub end: u32,
     pub why: String,
 }
 
@@ -3355,6 +3385,20 @@ why = "a table"
             }]
         );
         assert!(Holes::parse("[[copy]]\nsrc = 0x08000104\nwhy = \"x\"\n").is_err());
+        let h = Holes::parse(
+            "[[stack]]\nstart = 0x0203bee0\nend = 0x0203ffe0\nwhy = \"task stacks\"\n",
+        )
+        .unwrap();
+        assert_eq!(
+            h.stacks,
+            vec![SeenStack {
+                start: 0x0203_bee0,
+                end: 0x0203_ffe0,
+                why: "task stacks".into(),
+            }]
+        );
+        assert!(Holes::parse("[[stack]]\nstart = 0x10\nend = 0x10\nwhy = \"x\"\n").is_err());
+        assert!(Holes::parse("[[stack]]\nstart = 0x10\nwhy = \"x\"\n").is_err());
         let h = Holes::parse(
             "[[takes]]\nentry = 0x08000015\nsites = [0x08000006, 0x08000020]\nwhy = \"its caller's r5\"\n",
         )

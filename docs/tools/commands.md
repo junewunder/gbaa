@@ -1270,7 +1270,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   a difference names both layouts, see `plant-layout`), and planted faults are caught:
   the spike's wrong store, psg-square's one wrong sample (`--features plant`).
   Play's sound against a native program's none (a host that records none)
-  fails unless `--no-audio WHY`. A lowest sp outside IWRAM fails; a code
+  fails unless `--no-audio WHY`. An sp outside IWRAM fails unless the holes file's `[[stack]]`s hold them all (skipped whole); a code
   copy's skip covers any variables copied with the code. `just check`'s
   last step: about 1 minute warm, 9 from a cold `target/` (2026-11-14).
   Writes `out/native-check/`. Heavy: builds three generated crates.
@@ -1304,7 +1304,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   and why), `[[jump]]` (an unresolved jump's targets as keys, its cases), `[[copy]]` (code
   the game copies to RAM that discovery's static copies don't have:
   `src`, `dst`, `len`, `roots` and why, as `just holes` prints its run's
-  copies; lifted at its RAM keys like a static copy, native/lift-ram-copies), `[[takes]]` (`entry`, `sites`, why: the indirect calls, each by the address the report gives it, that reach a function reading one of r4-r11 as its caller left it; they pass it theirs, as every direct call and tail call does, and any other pointer call to it stops the program, native/metroid-entry-reads; `sites = []` for code only jumped into, which no pointer call reaches, native/nightmare-entry-reads)
+  copies; lifted at its RAM keys like a static copy, native/lift-ram-copies), `[[takes]]` (`entry`, `sites`, why: the indirect calls, each by the address the report gives it, that reach a function reading one of r4-r11 as its caller left it; they pass it theirs, as every direct call and tail call does, and any other pointer call to it stops the program, native/metroid-entry-reads; `sites = []` for code only jumped into, which no pointer call reaches, native/nightmare-entry-reads), `[[stack]]` (`start`, `end`, why: stacks outside IWRAM, a task switcher's, which the lift ignores and the native check skips, native/nightmare-task-switch)
   and, at the top,
   `skip_fn_flow = "why"` (the function-address flow left out, saving
   the minutes it runs before its token bound stops it). A hard hole no stand-in

@@ -267,6 +267,7 @@ impl<P: Platform> Machine<P> {
             timing: _,
             spin_list: _,
             low_sp: _,
+            out_sp: _,
         } = self;
         cpu.snap(v);
         bus.snap(v);

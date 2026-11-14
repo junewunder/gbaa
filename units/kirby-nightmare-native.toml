@@ -1,0 +1,14 @@
+# Kirby - Nightmare in Dream Land: reset and the opening, no presses, up to where the stage-A lift
+# stops today (frame 147, m4a's command table: native/m4a-ply-table-entries). From frame 87 one task
+# runs on the switcher (started, then resumed and yielding each frame; none exits yet), so its
+# stand-ins (host coroutines, native/nightmare-task-switch) run 54 frames here. The lift (`just lift … --name kirby-nightmare`) against the play build at --timing
+# native, by route-check --native, with the planted store `--plant 0x080caaee` (a countdown in the
+# task's body) caught at frame 87. Lengthen through gameplay once the lift runs further.
+rom = "$HOME/ROMs/gba/Kirby - Nightmare in Dream Land.gba"
+
+# The opening's picture: the hash the play build draws at --timing native (2026-11-14), not yet checked
+# against mGBA or by eye.
+[[checkpoint]]
+name = "opening-140"
+frame = 140
+hash = "e0b7f18fb80ac6a5"

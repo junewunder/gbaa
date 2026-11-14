@@ -345,7 +345,7 @@ The counts are the numbers file's; what they are, beyond the summary's:
 Nightmare's three CPU-state holes (2026-11-07) are its object-task
 switcher, ARM routines at 0x08000234-0x080002a4 reached from Thumb by
 `bx pc` veneers (0x080cfdc4, 0x080cfdcc, 0x080cfdd4). Each object's task
-has its own IWRAM stack and is run once a frame:
+has its own stack (64 slots of 0x100 bytes in EWRAM from 0x0203bf00) and is run once a frame:
 
 - **Resume** (0x08000244, `mov sp, r2`), called only by the scheduler
   (0x08005364), r1 the task's resume address, r2 its saved sp: saves lr,
@@ -357,19 +357,18 @@ has its own IWRAM stack and is run once a frame:
 - **Exit** (0x08000298, `ldr sp, [r3]`): frees the task (0x08005655),
   then returns to the scheduler the same way.
 
-A byte scan finds 11,063 Thumb `bl`s to yield and 232 to exit (not
-checked against discovery); a typical task is `loop { update();
-yield(1) }` (0x080093fc). sp is already a parameter and the stacks IWRAM
-bytes, so the guest side is a store and a load; the host stack is the
-hole, since a yield must keep the task's frames while the scheduler goes
-on. The fix is a stand-in running each task's lifted code on a stackful
-coroutine (`corosensei`, as `crates/desktop/src/coro.rs`), keyed by its
-saved sp; a new task starts with the r4-r11 the game put on its stack.
-A state machine would split functions at 11,063 sites. Filed as
-`native/nightmare-task-switch`. No other corpus game switches stacks
-(Amazing Mirror doesn't); the rule finds one anywhere. The lifter flags
-them too, and has the coroutines (`native/task-coroutines`). Stand-ins: its
-holes file; resume's `bx pc` after a `pop {pc}` is a jump now (`classify`).
+A byte scan finds 11,063 Thumb `bl`s to yield and 232 to exit (not checked against discovery); a
+typical task is `loop { update(); yield(1) }` (0x080093fc). sp is already a parameter and the stacks
+RAM bytes, so the guest side is a store and a load; the host stack is the hole, since a yield must
+keep the task's frames while the scheduler goes on. The fix is a stand-in running each task's lifted
+code on a stackful coroutine (`corosensei`, as `crates/desktop/src/coro.rs`), keyed by its saved sp;
+a new task starts with the r4-r11 the game put on its stack. A state machine would split functions
+at 11,063 sites. Filed as `native/nightmare-task-switch`. No other corpus game switches stacks
+(Amazing Mirror doesn't); the rule finds one anywhere. The lifter flags them too, and has the
+coroutines (`native/task-coroutines`). Stand-ins: its holes file; resume's `bx pc` after a `pop
+{pc}` is a jump now (`classify`). Run (2026-11-14): the native check passes
+`units/kirby-nightmare-native.toml`'s 140 frames, a task on its coroutine from frame 87 (a planted
+store in it caught); gameplay waits for the lift to pass frame 147.
 
 ## Functions that change r4-r11 or sp
 
