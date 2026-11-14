@@ -649,17 +649,17 @@
       "minMinutes": 120,
       "record": {
         "state": "claimed",
-        "by": "a98172f6",
-        "session": "a98172f6-c1f5-413f-8331-45de7648b568",
+        "by": "9cd7631e",
+        "session": "9cd7631e-6da4-423a-97db-ec47feb078af",
         "host": "quack",
-        "pid": 3349068,
-        "start": "14822266",
-        "at": "2026-11-08T20:48:18Z",
+        "pid": 2833770,
+        "start": "8749081",
+        "at": "2026-11-14T05:03:33Z",
         "branch": "unit/native/metroid-native-check",
-        "beats": true,
-        "handedBack": "2026-11-08T21:25:42Z",
+        "resumed": "a98172f6",
+        "prevSession": "a98172f6-c1f5-413f-8331-45de7648b568",
         "pushed": true,
-        "ended": "2026-11-08T21:26:07Z"
+        "beats": true
       },
       "notes": [
         {
