@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use armv4t::decode::{AluOp, Index, Instr, Operand2, Reg as DReg, Shift};
 use armv4t::sem::Reg;
 
-use super::domain::{AbsVal, CLOBBER, Dom, JOIN, MAX_SET, Src, Sym};
+use super::domain::{AbsVal, CLOBBER, Dom, JOIN, MAX_SET, Src, Sym, gcd};
 use super::exec::{self, Exit, ExitKind, State, writes_pc};
 use crate::program::{Insn, Program};
 
@@ -263,6 +263,9 @@ pub struct Access {
     /// The lowest and highest address of the accesses that aren't
     /// sp-relative and are known.
     pub hull: Option<(u32, u32)>,
+    /// Every known address is `hull`'s lowest plus a multiple of this (0:
+    /// one address): the size of the records an index steps through.
+    pub stride: u32,
 }
 
 impl Access {
@@ -274,16 +277,20 @@ impl Access {
                 ..Access::default()
             };
         }
-        let hull = match dom {
-            Dom::Top => None,
-            Dom::Const(k) => Some((*k, *k)),
-            Dom::Set(v) => Some((v[0], v[v.len() - 1])),
-            Dom::Si { lo, hi, .. } => Some((*lo, *hi)),
+        let (hull, stride) = match dom {
+            Dom::Top => (None, 0),
+            Dom::Const(k) => (Some((*k, *k)), 0),
+            Dom::Set(v) => (
+                Some((v[0], v[v.len() - 1])),
+                v.iter().fold(0, |g, x| gcd(g, x - v[0])),
+            ),
+            Dom::Si { s, lo, hi } => (Some((*lo, *hi)), *s),
         };
         Access {
             sp: false,
             top: hull.is_none(),
             hull,
+            stride,
         }
     }
 
@@ -294,6 +301,11 @@ impl Access {
             hull: match (self.hull, o.hull) {
                 (Some((a, b)), Some((c, d))) => Some((a.min(c), b.max(d))),
                 (h, None) | (None, h) => h,
+            },
+            stride: match (self.hull, o.hull) {
+                (Some((a, _)), Some((c, _))) => gcd(gcd(self.stride, o.stride), a.abs_diff(c)),
+                (Some(_), None) => self.stride,
+                (None, _) => o.stride,
             },
         }
     }
