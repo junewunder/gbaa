@@ -1073,8 +1073,8 @@ with the native check and no replaced-library list.
   through `call_fn`.
 - The stack stays where the game has it: `sp` is a parameter and the
   frames are IWRAM bytes. A frame recovered as Rust locals is stage B's
-  (section 1). `Game::sp` is the stack pointer at the last wait, where a
-  handler that switches to system mode puts its frames.
+  (section 1). `bank_sp` puts sp in its mode's bank at a wait or I/O store;
+  `Game::sp`, system mode's, is where a handler's frames go.
 - Memory is `ld8/16/32` and `st8/16/32` over `Game::ram` (EWRAM then
   IWRAM: the check layout is the only layout a byte program has), the
   library's I/O (`Hw::read16`/`write16`; the I/O block's unused

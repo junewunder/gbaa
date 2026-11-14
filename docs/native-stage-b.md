@@ -101,7 +101,7 @@ any real game.
   acts on the write taking `IME` from 0 to 1 (`event::IME_ON`), and the
   recompiler at `--timing native` ends a block after a store that folds
   to `IME`; the lift's `hw::write_ime` runs what's pending, and the lift
-  sets `g.sp = r13;` before every store that may reach I/O so the
+  sets `bank_sp(g, r13);` (the current mode's bank) before every store that may reach I/O so the
   handler runs on the right stack. Control `--ime-at-waits`; program
   `agb/native-ime-release` (frame 601 matches mGBA).
 - **Task switchers on host coroutines** (`native/task-coroutines`). Done:

@@ -87,19 +87,19 @@ impl Native for Game {
 pub const IRQ_HOLD: bool = true;
 
 /// A store that sets `IME` again runs what's pending at once, on the
-/// stack the lifted code put in `Game::sp` before the store (`false`:
+/// stack the lifted code banked (`bank_sp`) before the store (`false`:
 /// `gbaa-lift --ime-at-waits`, held to the next wait).
 pub const IME_RELEASE: bool = true;
 
 /// `msr cpsr_c, v` (a critical section's end, a stand-in's): the control
 /// byte as written. Clearing the I bit runs the handlers of the IRQs it
 /// held at once, as the hardware takes them, on the stack the program is
-/// on (`sp`), as system mode's banked sp would be.
+/// on (`sp`, put in the current mode's bank as [`bank_sp`]).
 pub fn msr_cpsr_c(g: &mut Game, sp: u32, v: u32) {
     let held = g.cpsr & 0x80 != 0;
     g.cpsr = g.cpsr & !0xFF | v & 0xFF;
     if held && v & 0x80 == 0 {
-        g.sp = sp;
+        bank_sp(g, sp);
         hw::irq_release(g);
     }
 }
@@ -137,9 +137,9 @@ pub fn msr_cpsr(g: &mut Game, sp: u32, v: u32) -> u32 {
     sp
 }
 
-/// sp (`sp`, the lifted code's r13) before a store that may set `IME`
-/// again, in the reset or the IRQ wrapper: the current mode's bank, where
-/// a handler it releases nests (`Game::sp` in system mode, as elsewhere).
+/// sp (`sp`, r13) before an I/O store, a wait or a helper that may run a
+/// handler: the current mode's bank, where the handler nests (`Game::sp`
+/// in system mode; the reset, an IRQ wrapper and their callees may not be).
 pub fn bank_sp(g: &mut Game, sp: u32) {
     *banked_sp(g, g.cpsr & 0x1F) = sp;
 }
@@ -627,7 +627,7 @@ pub fn intr_wait(g: &mut Game, sp: u32, discard: bool, mask: u32) -> Result<u32,
             }
         }
         check = true;
-        g.sp = sp;
+        bank_sp(g, sp);
         hw::halt(g)?;
     }
 }
@@ -671,7 +671,7 @@ pub fn cpu_set(g: &mut Game, sp: u32, r: &mut [u32; 4]) -> Result<(), Exit> {
         }
     }
     r[3] = 0x170;
-    g.sp = sp;
+    bank_sp(g, sp);
     hw::spend(g, cycles)
 }
 
@@ -746,7 +746,7 @@ pub fn cpu_fast_set(g: &mut Game, sp: u32, r: &mut [u32; 4]) -> Result<(), Exit>
             r[1] = r[1].wrapping_add(4);
         }
     }
-    g.sp = sp;
+    bank_sp(g, sp);
     hw::spend(g, cycles)
 }
 
@@ -809,7 +809,7 @@ pub fn lz77(
         }
     }
     (r[0], r[1], r[3]) = (s, d, 0);
-    g.sp = sp;
+    bank_sp(g, sp);
     hw::spend(g, cycles)
 }
 

@@ -19,7 +19,11 @@
 //!    system mode with I clear (`mrs`, `bic`, `orr`, `msr`), calls the
 //!    handler from a table, then switches back to IRQ mode with I set and
 //!    puts `IE` and the SPSR back. Code discovery once took that `bx`
-//!    for a jump, so the half after it was in no lift.
+//!    for a jump, so the half after it was in no lift. It acknowledges
+//!    the IRQ by calling `iw_ack`, an I/O store, while still in IRQ mode:
+//!    a lift that banked sp there as system mode's put the IRQ stack in
+//!    `Game::sp`, where the `msr` hands it to the handler
+//!    (native/irq-mode-sp-bank).
 //!
 //! The main loop alternates the V-count line (`DISPSTAT`'s LYC)
 //! between 100 and 160:
@@ -72,8 +76,9 @@ core::arch::global_asm!(
     "    ldrne r0, [r12]",
     "    moveq r3, #1",
     "    ldreq r0, [r12, #4]",
-    // Acknowledge it; of the others, only V-blank may nest.
-    "    strh r3, [r1, #2]",
+    // Acknowledge it, through a call made in IRQ mode (iw_ack, below);
+    // of the others, only V-blank may nest.
+    "    bl iw_ack",
     "    bic r3, r2, r3",
     "    and r3, r3, #1",
     "    strh r3, [r1]",
@@ -184,6 +189,15 @@ core::arch::global_asm!(
     "    bne 1b",
     "    bx lr",
     ".ltorg",
+    // iw_ack: IF's write, `strh r3, [r1, #2]`, called by iw_main before
+    // it switches to system mode. Last in the section, so iw_main's
+    // addresses are those it had with the store inline.
+    ".balign 4",
+    ".arm",
+    ".type iw_ack, %function",
+    "iw_ack:",
+    "    strh r3, [r1, #2]",
+    "    bx lr",
 );
 
 unsafe extern "C" {
