@@ -18,7 +18,7 @@ The scripts read this table (`factory/machines.sh`); keep its columns.
 
 | Machine | ssh | Lanes | Takes | Checkout | Can | Cache | Heavy | Reserve | GPU |
 |---|---|---|---|---|---|---|---|---|---|
-| quack | quack | 2 | any | ~/Documents/homelab/gbaa | — | 100G | 6 | 3G | 0 |
+| quack | quack | 2 | any | ~/Documents/homelab/gbaa | — | 100G | 6 | 3G | 7G |
 | pyon | pyon | 0 | any | ~/Documents/homelab/gbaa | — | 100G | 1 | 3G | 0 |
 
 - **Machine:** its short hostname (`hostname -s`). A unit pinned with
@@ -75,6 +75,10 @@ from it. ROMs never go in git.
   build-lock waits stay under ~10% of unit time. Heavy 6 (2026-11-13: six sweep workers left load at 6 of 24 threads with 4), was 2, june's choice
   (2026-11-05): 24 threads, and the memory budget gates each job. Each lane clone has its own
   `target/`.
+- **GPU 7G (2026-11-14, temporary):** room kept for the Rivals 2 editor that
+  rivals-forge's pivot sprint runs on quack (~6.5 GB, outside gbaa's budget).
+  Set back to 0 once that sprint stops using quack's editor. Overnight run
+  2026-11-14 is one lane (june).
 
 ## pyon
 
