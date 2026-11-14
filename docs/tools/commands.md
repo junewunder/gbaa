@@ -63,19 +63,20 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   architectures), objdump's Thumb-2 (`it` blocks, 32-bit pairs), and
   encodings with should-be bits off (`canonical_arm`), which objdump reads
   strictly. Fails on any other mismatch. About 5 s.
-- `just holes ROM [--frames N] [--press KEY@F-G/E]… [--no-summaries]
+- `just holes ROM [--holes FILE] [--flow] [--frames N] [--press KEY@F-G/E]… [--no-summaries]
   [--no-run-roots] [--show N]`: the hole report
-  (`docs/research/native-holes.md`): discovery, a 5,400-frame
+  (`docs/research/native-holes.md`): first the hard holes, the lifter's (`gbaa-lift --holes-only`'s, with FILE as its holes file; native/holes-match-lift), by kind; `--flow` adds the summary holes resting on the function-address flow's callee sets, at its cost. Then discovery, a 5,400-frame
   instant-timing interpreter run with the research press script,
   discovery again with the ROM targets of the run's calls through a
   register as function starts (`discover_with`; `--no-run-roots` skips
   it), the function summaries, the RAM copies found with the run
   (`analysis::holes::ram_copies`: BIOS copies given the run's entries,
   copies by DMA or the game's loops found by their bytes), then
-  `analysis::holes::classify`. Prints one ranking line (hard holes by
-  kind; bytes reached but not discovered; busy loops that call
+  `analysis::holes::classify`. Prints one ranking line (the lift's hard
+  holes by kind; return arithmetic, RAM code changed and calls to non-entries, only a run's, not in `hard`; bytes
+  reached but not discovered; busy loops that call
   functions; the flash library's stack routines stood in for,
-  `analysis::flash`) and each list, the RAM copies among them (the ones
+  `analysis::flash`), the lift's holes, the run's classification's own line (not the hard count) and each list, the RAM copies among them (the ones
   only the run shows also as `[[copy]]` tables for the lift's holes
   file), and last the runs of ROM code run but not discovered, with what
   discovery has around each (code before it, data over it). About a
@@ -95,11 +96,10 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   [--write-doc FILE] [holes flags…]`: the hole report over the corpus, `holes/corpus.toml`
   (each game's short name, ROM file name under the justfile's `roms`,
   coverage file), `gbaa-holes --corpus` (`crates/hole-report/src/corpus.rs`).
-  Runs each game in turn as its own `gbaa-holes ROM … --line`, writing
+  Runs each game in turn as its own `gbaa-holes ROM … --line` (`--holes` its holes file, found as `just lift` does), writing
   `DIR/<name>.txt` (the report), `DIR/<name>.log` (its timings), then
-  prints one table, a row per game and a total: hard holes, ROM and
-  overlay jumps, return arithmetic, RAM code changed, CPU state, BIOS,
-  calls to non-entries, summaries, bytes not discovered, seconds. The
+  prints one table, a row per game and a total: the lift's hard holes and their kinds, then the run's only three kinds,
+  bytes not discovered, seconds. The
   numbers come from the report's own counts, saved in `DIR/summary.toml`
   (`[[game]]` each). `--against DIR2` reads DIR2's `summary.toml` and
   shows each change in brackets, `4 (-3)`, `10 (0)`. DIR defaults to
@@ -1268,7 +1268,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `docs/native-port-design.md`, "The stage-A lifter as built"): the
   stage-A lifter. `gbaa-lift ROM OUT [--name NAME] [--holes FILE]
   [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY]
-  [--plant AT] [--copies N]` (`codegen::native`) writes the whole
+  [--plant AT] [--copies N] [--holes-only]` (`codegen::native`) writes the whole
   program to OUT (default `out/lift-<name>`) as `src/`: `main.rs` (the
   prelude, RAM, `ENTRY`), `fns.rs` (`FNS`) and the functions in modules
   of about 4,000 lines, `m_<first key>.rs`, which rustc builds in parallel
@@ -1326,7 +1326,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   to return). `--drop-standin KEY` and `--plant AT` are the check's planted
   hard hole and wrong store; `--fall-as-tail-call` prints a fall into
   another function's entry as the old tail call (r4-r12 and the flags
-  zeroed, native/lift-fallthrough), the fallthrough control. About 6 s to lift, 15 s-2 min to build.
+  zeroed, native/lift-fallthrough), the fallthrough control. `--holes-only` (the hole report's lift, native/holes-match-lift) writes nothing and exits 0: no function-address flow (unless `--flow`: its callee sets can add summary holes), heap pointers or modules, it prints each kind's count (`codegen::native::HoleKind`) and each hole, 9 s to 3.5 min on the corpus under 0.6 GB. About 6 s to lift, 15 s-2 min to build.
   The lift runs capped at 16 GB, no swap (a commercial game's needs several). Last, the first stop (native/native-first-stop; `codegen::native::first_stop`): `gbaa-first-stop OUT` (alone: `just first-stop OUT [--frames N] [--time-limit SECONDS] [--bin FILE] [--not-built]`) runs the built program `--headless --frames 600 --time-limit 120` in its own 3 GB scope, stderr in `OUT/first-stop.log`, and writes how far it got to `OUT/metrics.toml` (a `[run]` table: `frames_run`, `frames_asked`, `stop`, `what`, `detail`, `functions`) and the end of `report.txt` (the same, then `frames_run N`, `stop KIND`), printing `gbaa-first-stop: NAME: 600 of 600 frames, no stop`, or the stop: `0 of 600 frames, unmodelled-register 0x04000134 RCNT` and under it the panic's message and place and the lifted functions on the stack, innermost first (from the panic's backtrace, which the program prints as its stop line, `native_record::stop`; an inlined function doesn't show and no guest pc is kept). Kinds: `none`, `not-built` (the build failed: `didn't build: N hard holes`), `unmodelled-register` (`Hw::write16`/`read16`), `no-memory` and `no-function` (the prelude's), `panic`, `time-limit` (no stop within SECONDS: a loop that reaches no frame), `killed` (a signal; 9 is the cap's), `failed`. A lift with hard holes is `not-built` whatever binary an older lift left; a build that failed with none (refused for RAM, killed, code that doesn't compile) records no run; a binary older than OUT's sources is refused. `[run]`'s `commit` is the commit the run was made at. A stop is a finding: the recipe still exits 0 if the lift and build did. A new lift clears the `[run]` table until it is run again.
 - `just lift-check [--only NAME]` (native/lift-stage-a, native/lift-bars):
   the lifter's check, `gbaa-lift-check` driven by
