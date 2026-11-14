@@ -1732,20 +1732,23 @@
       "uses": ["heavy"],
       "minMinutes": 180,
       "record": {
-        "state": "claimed",
-        "by": "e9dcabe4",
-        "session": "e9dcabe4-d225-44e2-8c60-5384e225a358",
-        "host": "quack",
-        "pid": 2833770,
-        "start": "8749081",
-        "at": "2026-11-14T11:30:50Z",
+        "state": "done",
+        "by": "5e83e896",
+        "checker": "e9dcabe4",
+        "at": "2026-11-14T11:55:05Z",
+        "evidence": "Checked at HEAD d5fcce22 (fresh build): gbaa-holes' hard holes are codegen::native::lift holes-only's, counted by HoleKind (code read). gbaa-lift --holes-only on all 9 corpus games: per-kind counts equal native-holes.numbers.md's rows (110 total). Whole lift at HEAD vs holes-only, sorted hole lines: Metroid 0, Nightmare 0, WarioWare 6, moonbeam 7 identical. Against 7f42cf22 whole-lift logs: Rogue 24, Imperium 20 identical; Minish Cap and Mirror differ only by f_080af909 / f_0814fa89 (flow callee-set summary holes, named in native-holes.md), which the --flow logs include (32, 7). Emerald's whole-lift comparison is split into its own unit, {unit:native/holes-match-emerald}. just check passed (rc 0) after merging main (tracker-only fast-forward). Logs /tmp/chk.",
         "branch": "unit/native/holes-match-lift",
-        "reviewing": {
-          "by": "5e83e896",
-          "at": "2026-11-14T11:26:44Z",
-          "evidence": "gbaa-holes' hard count is now gbaa-lift --holes-only's, by HoleKind (out/holes/holes-match-lift, numbers doc regenerated; 110 total). Whole lift (7f42cf22) vs holes-only: same hard-hole lines on Metroid 0, WarioWare 6, Nightmare 0, moonbeam 7, Rogue 24, Imperium 20; Minish Cap 32 vs 31 and Mirror 7 vs 6 (flow's callee sets), named in docs/research/native-holes.md, and --flow matches both whole lifts line for line. Emerald's whole lift unfinished: {unit:native/holes-match-emerald}. just check passed after the main merge (main brought only tracker changes). Logs in /tmp/hml."
-        },
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-14T11:55:05Z",
+          "by": "e9dcabe4",
+          "host": "quack",
+          "pid": 2833770,
+          "start": "8749081",
+          "beats": true,
+          "session": "e9dcabe4-d225-44e2-8c60-5384e225a358",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
