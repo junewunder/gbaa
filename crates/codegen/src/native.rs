@@ -520,11 +520,32 @@ pub struct Lifted {
 /// in the jump's block, which no store there writes anywhere. Such a word
 /// is a way in by a jump, which passes every register, not a pointer a
 /// call may take ([`Passing::pointed`]; m4a's `SoundMain`, `ldr r3, =…;
-/// bx r3` into its IWRAM mixer).
-fn jump_literals(ctx: &Ctx, funcs: &[Func]) -> BTreeSet<u32> {
-    let mut out = BTreeSet::new();
+/// bx r3` into its IWRAM mixer). Returned with the bytes every other
+/// pc-relative load in `funcs` reads: a compiler shares one pool entry
+/// between all the loads of a constant in a function, so a literal one
+/// of those loads also reads may be stored, passed or called through,
+/// and is not only a jump's ([`literals_only_jumped`]).
+fn jump_literals(ctx: &Ctx, funcs: &[Func]) -> (BTreeSet<u32>, BTreeSet<u32>) {
+    // Each pc-relative load, by the instruction's address: the word it
+    // reads, and whether some block has it as a qualifying jump's load.
+    let mut loads: BTreeMap<u32, (u32, u32, bool)> = BTreeMap::new();
     for gb in funcs.iter().flat_map(|f| f.blocks.values()) {
         let b = &gb.block;
+        let read = |a: u32, instr| {
+            let insn = analysis::program::Insn {
+                addr: a,
+                thumb: b.thumb,
+                size: if b.thumb { 2 } else { 4 },
+                instr,
+                bl: None,
+            };
+            analysis::vsa::func::pool_read(&insn)
+        };
+        for &(a, instr) in &gb.insns {
+            if let Some((p, e)) = read(a, instr) {
+                loads.entry(a).or_insert((p, e, false));
+            }
+        }
         for x in exits(ctx, gb) {
             let t = match x.plan {
                 Plan::Static(t)
@@ -545,26 +566,42 @@ fn jump_literals(ctx: &Ctx, funcs: &[Func]) -> BTreeSet<u32> {
                 continue;
             }
             for &(a, instr) in &gb.insns {
-                let insn = analysis::program::Insn {
-                    addr: a,
-                    thumb: x.thumb,
-                    size: if x.thumb { 2 } else { 4 },
-                    instr,
-                    bl: None,
-                };
                 // A word's load, of the target.
-                if let Some((p, e)) = analysis::vsa::func::pool_read(&insn)
+                if let Some((p, e)) = read(a, instr)
                     && e.wrapping_sub(p) == 4
                     && p.checked_sub(ctx.base)
                         .is_some_and(|o| (o as usize) + 4 <= ctx.rom.len())
                     && ctx.read(p, 4) == t
                 {
-                    out.insert(p);
+                    loads.insert(a, (p, e, true));
                 }
             }
         }
     }
-    out
+    let mut jumps = BTreeSet::new();
+    let mut other = BTreeSet::new();
+    for (p, e, jump) in loads.into_values() {
+        if jump {
+            jumps.insert(p);
+        } else {
+            let mut q = p;
+            while q != e {
+                other.insert(q);
+                q = q.wrapping_add(1);
+            }
+        }
+    }
+    (jumps, other)
+}
+
+/// The jump literals ([`jump_literals`]' first set, ROM addresses) no
+/// other load reads a byte of (its second): only those words are a jump's
+/// alone, and dropped from the words a pointer may call through.
+fn literals_only_jumped(jumps: BTreeSet<u32>, other: &BTreeSet<u32>) -> BTreeSet<u32> {
+    jumps
+        .into_iter()
+        .filter(|&p| !(0..4).any(|i| other.contains(&p.wrapping_add(i))))
+        .collect()
 }
 
 /// One code context: the ROM, or an IWRAM copy at its destination.
@@ -680,14 +717,14 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // A RAM copy's functions a pointer may call: the ROM words that hold
     // a RAM address, but a constant jump's literal.
     let pointed = {
-        let mut literals = BTreeSet::new();
+        let (mut jumps, mut other) = (BTreeSet::new(), BTreeSet::new());
         for ((ctx, src), funcs) in ctxs.iter().zip(&built) {
-            literals.extend(
-                jump_literals(ctx, funcs)
-                    .into_iter()
-                    .map(|p| p.wrapping_sub(ctx.base).wrapping_add(*src)),
-            );
+            let to_rom = |p: u32| p.wrapping_sub(ctx.base).wrapping_add(*src);
+            let (j, o) = jump_literals(ctx, funcs);
+            jumps.extend(j.into_iter().map(to_rom));
+            other.extend(o.into_iter().map(to_rom));
         }
+        let literals = literals_only_jumped(jumps, &other);
         rom.as_chunks::<4>()
             .0
             .iter()
@@ -3394,6 +3431,14 @@ mod tests {
     fn jump_into_a_copy(first: u32, before_jump: u32, pointer: bool) -> Vec<Hole> {
         let mut words = vec![0xE1A0_0000u32; 0x48];
         words[0] = first;
+        if first == BL_SHARER {
+            // The called function loads the jump's literal too (one pool
+            // entry shared) and stores it: `ldr r1, [pc, #-0x14]` (the word
+            // at 0x14); `str r1, [r0]`; `bx lr`.
+            words[8] = 0xE51F_1014;
+            words[9] = 0xE580_1000;
+            words[10] = 0xE12F_FF1E;
+        }
         words[1] = 0xE59F_3008; // ldr r3, [pc, #8]: the word at 0x14
         words[2] = before_jump;
         words[3] = 0xE12F_FF13; // bx r3
@@ -3410,6 +3455,10 @@ mod tests {
         holes.holes_only = true;
         lift(&rom, "t", &holes).holes
     }
+
+    /// `bl 0x08000020`, the start of a function [`jump_into_a_copy`] gives
+    /// a load and store of the jump's literal.
+    const BL_SHARER: u32 = 0xEB00_0006;
 
     #[test]
     fn code_in_a_copy_only_jumped_into_takes_the_jumpers_registers() {
@@ -3430,6 +3479,14 @@ mod tests {
         );
         // The literal stored too (`str r3, [r0]`): the address escapes.
         let hs = text(jump_into_a_copy(SET_R4, 0xE580_3000, false));
+        assert!(
+            hs.iter().any(|h| h.contains("reads r4-r11 at entry: r4")),
+            "{hs:?}"
+        );
+        // Another function loads the same pool entry and stores it: the
+        // literal isn't the jump's alone (the jumper sets r4 just before
+        // the jump, so only the pointer call zeroes it).
+        let hs = text(jump_into_a_copy(BL_SHARER, SET_R4, false));
         assert!(
             hs.iter().any(|h| h.contains("reads r4-r11 at entry: r4")),
             "{hs:?}"
