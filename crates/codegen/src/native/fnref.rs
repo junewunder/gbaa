@@ -1927,7 +1927,6 @@ enum Store {
     Spill(u32),
 }
 
-/// `v` is the number `n` and nothing else.
 /// Per block of `f`, the insts whose value only feeds flags nothing reads
 /// before they are written again or the function's are gone (old GCC's
 /// `cmp r0, #0` before a return sets N of a function's address). Flags
@@ -2030,6 +2029,7 @@ fn flags_of(vals: &[Val], a: ValueId, b: ValueId, c: ValueId) -> Option<Known> {
     }
 }
 
+/// `v` is the number `n` and nothing else.
 fn is_num(v: &Val, n: u32) -> bool {
     !v.unk && !v.mem && !v.lost_rom && v.toks.len() == 1 && v.toks.contains(&Tok::Num(n))
 }
