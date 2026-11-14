@@ -1,6 +1,6 @@
 ---
 title: Why Emerald's function-address flow doesn't settle yet
-hook: next: print what 12k entries gain a round with memory still; suspect ROM pointers stepping down
+hook: not pointers stepping; big sets gain forms of the same 5,157 origins a round; saturating them (tried 2026-11-14) made it worse
 open: true
 ---
 
@@ -90,3 +90,30 @@ output, 20 rounds, the same end counts and hole addresses; 15.1 s against
 inexact where pointers a "from here on" covers push the cap past its 16
 exact pointers (fixed; the test now compares each case with `join`), and
 the op memo wrong under `GBAA_FNREF_OFF=move` (off under any of them).
+
+**What the entries gain (2026-11-14, `GBAA_FNREF_GAINS=1`).** Not ROM
+pointers stepping down: no ROM read "from here on" is new after round 2
+(3,700, 3,152, 66, then 0), and only 5 ever start below one of their
+object's. The origins all entries and results hold between them stop at
+5,153 after round 1 (5,157 later); their function tokens keep growing
+(12.4k, 14.9k, ...): the large sets (13-15k tokens; 17,900 registers over
+4,096 after round 1, 38,500 after round 2) each gain other *forms* of
+addresses already there (Lo, LoUp, Part, Cmp) and refs other sets already
+hold, a step a round, and every entry sharing one changes. Memory still
+grows too (pile 22.4k, 23.5k, 24.4k after rounds 2-4), so every round
+reruns ~14.5k functions.
+
+**Tried, didn't help (code not kept; `/tmp` copies gone).** (1) Running a
+function dirtied mid-round in the same round when it comes later (order
+alternating up and down by round): Metroid's output identical (27 rounds
+against 23, same time), Emerald's rounds no shorter (r1 170 s, r2 406, r3
+718, r4 1,063). (2) Saturating: an entry or result over 4,096 tokens takes
+every form of every origin large ones hold: each became its own 32k-token
+set (different refs and ROM pointers beside), held tokens headed for the
+48M bound in round 2. (3) Making them all one shared set (every token any
+holds, capped, forms closed): Metroid identical (largest set 664 tokens),
+but on Emerald the shared set dragged its ROM pointers into every large
+value: 9,251 new ROM reads in round 2, pile 56k, round 2 took 1,226 s, 47.5M
+tokens held. So the next try must not hand ROM pointers and refs around:
+close forms only, or collapse a large value's function tokens to a mark
+("every function's every form") the ops and holes know.

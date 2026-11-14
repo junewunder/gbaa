@@ -115,7 +115,10 @@
 //! Nothing printed changes: the report lists the words, the holes and the
 //! callee sets ([`Flow::report`]), and the metrics count the words not
 //! proven (barred) and proven. `GBAA_FNREF_TRACE=1` prints each round of
-//! the run and each use not allowed, with its operands.
+//! the run and each use not allowed, with its operands; with
+//! `GBAA_FNREF_GAINS=1` too, what entries and results gained each round,
+//! by kind ([`G::gain`]), the ROM reads new that round, and the function
+//! tokens all of them hold between them.
 //! `GBAA_FNREF_WATCH=WORD[,WORD…]` prints each place those ROM words'
 //! function addresses go ([`G::watch`]), and (`roads` alone turns only
 //! this on) at each instruction that makes a use not allowed, what its
@@ -1033,6 +1036,9 @@ struct G {
     hole_log: Vec<Origin>,
     /// `GBAA_FNREF_OFF`'s kinds ([`off_env`]).
     off: u8,
+    /// `GBAA_FNREF_GAINS`: what entries and results gained this round, by
+    /// kind ([`G::gain`]), and the samples said of each kind.
+    gains: Option<BTreeMap<String, (usize, usize)>>,
 }
 
 /// A kept op's key ([`G::op_kept`]): the op, a shift's amount, each
@@ -1585,11 +1591,18 @@ impl G {
             .entry(f)
             .or_insert_with(|| vec![Val::default(); 16]);
         let mut c = false;
-        for (a, b) in e.iter_mut().zip(regs) {
+        let mut gained = Vec::new();
+        for (i, (a, b)) in e.iter_mut().zip(regs).enumerate() {
+            let old = a.clone();
             if a.join_capped(b) {
                 self.sets.share(&mut a.toks);
+                gained.push((i, old));
                 c = true;
             }
+        }
+        for (i, old) in gained {
+            let a = self.entry[&f][i].clone();
+            self.gain("entry", f, i, &old, &a);
         }
         if c {
             self.dirty_entry.insert(f);
@@ -1621,6 +1634,7 @@ impl G {
             Fx,
         > = Default::default();
         let mut c_any = false;
+        let mut gained = Vec::new();
         for &f in ks {
             let e = self
                 .entry
@@ -1643,9 +1657,13 @@ impl G {
                     }
                     None => {
                         let old = a.toks.clone();
+                        let was = a.clone();
                         let grew = a.join_capped(b);
                         if grew {
                             self.sets.share(&mut a.toks);
+                            if self.gains.is_some() {
+                                gained.push((f, i, was, a.clone()));
+                            }
                         }
                         memo.insert(key, (old, a.clone(), grew));
                         c |= grew;
@@ -1656,6 +1674,9 @@ impl G {
                 self.dirty_entry.insert(f);
             }
             c_any |= c;
+        }
+        for (f, i, old, new) in gained {
+            self.gain("entry (set)", f, i, &old, &new);
         }
         self.mark(c_any);
     }
@@ -1837,11 +1858,18 @@ impl G {
         self.watch_regs(regs, |r| format!("returned in r{r} by f_{f:08x}"));
         let e = self.ret.entry(f).or_insert_with(|| vec![Val::default(); 4]);
         let mut c = false;
-        for (a, b) in e.iter_mut().zip(regs) {
+        let mut gained = Vec::new();
+        for (i, (a, b)) in e.iter_mut().zip(regs).enumerate() {
+            let old = a.clone();
             if a.join_capped(b) {
                 self.sets.share(&mut a.toks);
+                gained.push((i, old));
                 c = true;
             }
+        }
+        for (i, old) in gained {
+            let a = self.ret[&f][i].clone();
+            self.gain("result", f, i, &old, &a);
         }
         if c {
             self.dirty_ret.insert(f);
@@ -1852,6 +1880,90 @@ impl G {
             }
         }
         self.mark(c);
+    }
+
+    /// `GBAA_FNREF_GAINS`: count what register `i` of `f`'s entry or
+    /// result gained (`old` to `new`) by the kinds of tokens added and
+    /// taken out and the flags set, and print a few of each kind, with
+    /// each ROM pointer added and the nearest the register held beside
+    /// it (does a pointer step a round?).
+    fn gain(&mut self, what: &str, f: u32, i: usize, old: &Val, new: &Val) {
+        let Some(gains) = &mut self.gains else {
+            return;
+        };
+        let kind = |t: &Tok| match t {
+            Tok::Fn { .. } => "fn",
+            Tok::Num(_) => "num",
+            Tok::Rom(_) => "rom",
+            Tok::RomFrom(_) => "from",
+            Tok::Ref { src, .. } => match src {
+                Src::Pile(_) => "ref-pile",
+                Src::Cells(_) => "ref-cells",
+                Src::RomFrom(..) => "ref-romfrom",
+                Src::Hull(..) => "ref-hull",
+            },
+        };
+        let added: Vec<Tok> = new.toks.difference(&old.toks).copied().collect();
+        let gone: Vec<Tok> = old.toks.difference(&new.toks).copied().collect();
+        let kinds = |ts: &[Tok]| -> String {
+            let k: BTreeSet<&str> = ts.iter().map(kind).collect();
+            k.into_iter().collect::<Vec<_>>().join(",")
+        };
+        let mut key = format!("{what} r{i} +[{}] -[{}]", kinds(&added), kinds(&gone));
+        for (on, was, name) in [
+            (new.mem, old.mem, " mem"),
+            (new.unk, old.unk, " unk"),
+            (new.lost_rom, old.lost_rom, " lost"),
+        ] {
+            if on && !was {
+                key.push_str(name);
+            }
+        }
+        let n = gains.entry(key.clone()).or_default();
+        n.0 += 1;
+        if n.1 >= 4 {
+            return;
+        }
+        n.1 += 1;
+        let near = |a: u32| -> String {
+            let addr = |t: &Tok| match *t {
+                Tok::Rom(x) | Tok::RomFrom(x) => Some(x),
+                _ => None,
+            };
+            let below = old
+                .toks
+                .range(Tok::Rom(0)..REF0)
+                .filter_map(addr)
+                .filter(|&x| x < a)
+                .max();
+            let above = old
+                .toks
+                .range(Tok::Rom(0)..REF0)
+                .filter_map(addr)
+                .filter(|&x| x > a)
+                .min();
+            format!("{a:#x} (held {below:x?} below, {above:x?} above)")
+        };
+        let show = |ts: &[Tok]| -> String {
+            ts.iter()
+                .take(4)
+                .map(|t| match *t {
+                    Tok::Rom(a) => format!("rom {}", near(a)),
+                    Tok::RomFrom(a) => format!("from {}", near(a)),
+                    Tok::Num(n) => format!("num {n:#x}"),
+                    t => format!("{t:?}"),
+                })
+                .collect::<Vec<_>>()
+                .join("; ")
+        };
+        eprintln!(
+            "gain f_{f:08x} {key}: {} added: {}; {} gone: {}; now {} tokens",
+            added.len(),
+            show(&added),
+            gone.len(),
+            show(&gone),
+            new.toks.len()
+        );
     }
 
     fn taken_add(&mut self, v: &Val) {
@@ -4000,6 +4112,7 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
         watch: watch_env(img),
         off: off_env(),
         roads: std::env::var_os("GBAA_FNREF_WATCH").is_some(),
+        gains: std::env::var_os("GBAA_FNREF_GAINS").map(|_| BTreeMap::new()),
         ..G::default()
     };
     if g.off != 0 {
@@ -4064,6 +4177,7 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
     g.pile_changed = false;
     let mut loose: BTreeSet<u32> = BTreeSet::new();
     let mut ran = 0usize;
+    let mut rom_from_was: BTreeSet<(u32, u32, u8)> = BTreeSet::new();
     for round in 0..=256 {
         g.changed = false;
         let was = std::mem::replace(
@@ -4257,6 +4371,80 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
                 })
                 .map(|(f, _)| *f),
         );
+        if g.gains.is_some() {
+            // The ROM reads "from here on" new this round: how many start
+            // below one already made of the same object (a pointer that
+            // steps down a round), and by how much.
+            let now: BTreeSet<(u32, u32, u8)> = g.rom_from.keys().copied().collect();
+            let (mut new, mut down) = (0usize, BTreeMap::<u32, usize>::new());
+            for &(lo, end, w) in now.difference(&rom_from_was) {
+                new += 1;
+                if let Some(&(l2, _, _)) = rom_from_was
+                    .iter()
+                    .filter(|&&(l, e, w2)| e == end && w2 == w && l > lo)
+                    .min()
+                {
+                    *down.entry(l2 - lo).or_default() += 1;
+                }
+            }
+            let n_down: usize = down.values().sum();
+            let mut by: Vec<_> = down.iter().map(|(d, n)| (*n, *d)).collect();
+            by.sort_by(|a, b| b.cmp(a));
+            eprintln!(
+                "gains round {round}: {new} new ROM reads from here on, {n_down} below one of their object's (by step: {:?})",
+                &by[..by.len().min(12)]
+            );
+            if new < 40 {
+                for k in now.difference(&rom_from_was) {
+                    eprintln!(
+                        "gains round {round}: new ROM read {:#x}..{:#x} w{}",
+                        k.0, k.1, k.2
+                    );
+                }
+            }
+            rom_from_was = now;
+            // The function tokens all entries and results hold between
+            // them, their origins, and the largest set: does what they
+            // hold grow, or only who holds it?
+            let mut seen = std::collections::HashSet::new();
+            let mut all: std::collections::HashSet<Tok, Fx> = Default::default();
+            let mut big = 0usize;
+            let mut nbig = 0usize;
+            for v in g.entry.values().chain(g.ret.values()).flatten() {
+                big = big.max(v.toks.len());
+                if v.toks.len() > 4096 {
+                    nbig += 1;
+                }
+                if seen.insert(std::rc::Rc::as_ptr(&v.toks.0)) {
+                    all.extend(
+                        v.toks
+                            .iter()
+                            .filter(|t| matches!(t, Tok::Fn { .. }))
+                            .copied(),
+                    );
+                }
+            }
+            let origins: std::collections::HashSet<Origin> = all
+                .iter()
+                .filter_map(|t| match *t {
+                    Tok::Fn { origin, .. } => Some(origin),
+                    _ => None,
+                })
+                .collect();
+            eprintln!(
+                "gains round {round}: entries and results hold {} function tokens of {} origins between them; the largest set {big} tokens, {nbig} over 4096",
+                all.len(),
+                origins.len()
+            );
+        }
+        if let Some(gains) = &mut g.gains {
+            let mut by: Vec<_> = gains.iter().map(|(k, n)| (n.0, k.clone())).collect();
+            by.sort_by(|a, b| b.cmp(a));
+            for (n, k) in by.iter().take(40) {
+                eprintln!("gains round {round}: {n} {k}");
+            }
+            gains.clear();
+        }
         if trace {
             eprintln!(
                 "fnref round {round}: {:?}; {} to rerun ({n_entry} entries changed, {n_rets} results; pile widths {pile_w:#x}, every-cell widths {cells_w:#x}, {} cells changed); pile {}, cells {}, taken {}, holes {}",
