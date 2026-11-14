@@ -84,7 +84,7 @@ where `first stop` is how far each game's last lift ran once built (`just lift`)
 | Indirect jump not resolved | Recovery's, ROM and copies, that the holes file gives no `[[jump]]` targets | jumps |
 | Jump to no code | a constant jump into ROM or RAM where discovery, the gap decoding and the copies (static, and the holes file's `[[copy]]`) have none | no code |
 | Undefined instruction | one that isn't a compiler's trap | undefined |
-| CPU state | `msr`, `mrs`, a user-bank transfer, an exception return, a stack switch, outside the reset and the IRQ wrappers (`PsrFns`) | CPU state |
+| CPU state | `msr`, `mrs`, a user-bank transfer, an exception return, a stack switch (a context restore, `longjmp`'s `ldm`, named so), outside the reset and the IRQ wrappers (`PsrFns`) | CPU state |
 | BIOS call | a `swi` the library lacks (`analysis::holes::NATIVE_BIOS`) | BIOS |
 | Summary hole | `analysis::holes::SUMMARY_HARD` on the lift's summaries (with the holes file's `[[takes]]`): each function once | summaries |
 | r4-r11 not passed | a call to a function taking r4-r11 from its callers that can't pass them | r4-r11 |

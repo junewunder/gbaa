@@ -828,30 +828,48 @@ fn context_saves(funcs: &[Func]) -> BTreeSet<u32> {
             .iter()
             .flat_map(|f| f.blocks.values())
             .flat_map(|b| &b.insns)
-            .filter_map(move |&(at, i)| match i {
-                Instr::Block {
-                    cond: Cond::Al,
-                    load: l,
-                    mode,
-                    rn,
-                    regs,
-                    psr: false,
-                    ..
-                } if l == load
-                    && regs & CONTEXT == CONTEXT
-                    && rn != DReg::Sp
-                    && regs & 1 << rn as u16 == 0 =>
-                {
-                    Some((at, mode, regs))
-                }
-                _ => None,
-            })
+            .filter_map(move |&(at, i)| context_block(&i, load).map(|(m, r)| (at, m, r)))
     };
     let restores: Vec<(BlockMode, u16)> = blocks(true).map(|(_, m, r)| (m, r)).collect();
     blocks(false)
         .filter(|&(_, m, r)| restores.contains(&(m, r)))
         .map(|(at, ..)| at)
         .collect()
+}
+
+/// `i`'s way and registers if it is a context block transfer the way
+/// `load` says: an unconditional ARM `stm` (a save) or `ldm` (a restore,
+/// `longjmp`'s) of r4–r11, sp and lr through a register that isn't sp
+/// and isn't in the list ([`context_saves`]).
+fn context_block(i: &Instr, load: bool) -> Option<(BlockMode, u16)> {
+    match *i {
+        Instr::Block {
+            cond: Cond::Al,
+            load: l,
+            mode,
+            rn,
+            regs,
+            psr: false,
+            ..
+        } if l == load
+            && regs & CONTEXT == CONTEXT
+            && rn != DReg::Sp
+            && regs & 1 << rn as u16 == 0 =>
+        {
+            Some((mode, regs))
+        }
+        _ => None,
+    }
+}
+
+/// Whether `i` is a context restore: `longjmp`'s `ldm r0!, {r4-r12, sp,
+/// lr}`, which sets sp and lr to the ones its save stored, so its
+/// return goes back into the frame of the function that called the save
+/// (`setjmp`). Natively that frame's r4–r11 and sp are that function's
+/// Rust locals, out of the restore's reach: the lift names the stack
+/// switch it makes as this.
+pub fn context_restore(i: &Instr) -> bool {
+    context_block(i, true).is_some()
 }
 
 /// Every function's summary, by entry.

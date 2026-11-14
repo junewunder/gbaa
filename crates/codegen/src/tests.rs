@@ -1747,6 +1747,49 @@ fn jump_buffer(first: u32, save: u32, restore: u32) -> (Vec<u8>, Discovery) {
     (rom, d)
 }
 
+/// The lift's hard holes in a ROM of `words` from reset, by what each says.
+fn lift_holes(words: &[u32]) -> Vec<(u32, String)> {
+    let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let lifted = crate::native::lift(&rom, "t", &crate::native::Holes::default());
+    lifted.holes.into_iter().map(|h| (h.at, h.what)).collect()
+}
+
+#[test]
+fn a_context_restore_is_a_named_hard_hole() {
+    // newlib's `longjmp`, called from reset: its `ldm` sets sp and lr to
+    // the ones its save stored, a return into another frame. A hard hole,
+    // named as the restore it is (moonbeam's, 0x08038328).
+    let jump = |restore: u32| {
+        lift_holes(&[
+            0xE3A0_0403, // 0x00 mov r0, #0x03000000
+            0xEB00_0002, // 0x04 bl 0x14
+            0xEAFF_FFFE, // 0x08 b .
+            0xE1A0_0000, // 0x0c nop
+            0xE1A0_0000, // 0x10 nop
+            restore,     // 0x14 longjmp: (restore)
+            0xE1B0_0001, // 0x18 movs r0, r1
+            0x03A0_0001, // 0x1c moveq r0, #1
+            0xE12F_FF1E, // 0x20 bx lr
+        ])
+    };
+    let cpu = |hs: Vec<(u32, String)>| -> Vec<(u32, String)> {
+        hs.into_iter()
+            .filter(|(_, w)| w.starts_with("CPU state"))
+            .collect()
+    };
+    let restore = cpu(jump(0xE8B0_7FF0)); // ldm r0!, {r4-r12, sp, lr}
+    assert_eq!(restore.len(), 1, "{restore:?}");
+    assert_eq!(restore[0].0, ROM_BASE + 0x14);
+    assert!(
+        restore[0].1.contains("a context restore (longjmp"),
+        "{restore:?}"
+    );
+    // Any other sp from a register is the plain stack switch.
+    let switch = cpu(jump(0xE1A0_D000)); // mov sp, r0
+    assert_eq!(switch.len(), 1, "{switch:?}");
+    assert!(switch[0].1.contains("a stack switch"), "{switch:?}");
+}
+
 #[test]
 fn a_context_save_its_restore_reloads_takes_nothing() {
     const NOP: u32 = 0xE1A0_0000;

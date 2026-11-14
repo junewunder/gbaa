@@ -1831,11 +1831,24 @@ impl FnPrinter<'_, '_> {
         // natively, so the frames the guest left on the stack it leaves
         // would be lost. A stand-in runs such code on host coroutines
         // (the prelude's `task_resume`, `task_yield`, `task_exit`).
+        // A context restore (`longjmp`'s `ldm`) is one too, named: its
+        // return goes into the frame of its save's caller (`setjmp`'s),
+        // whose r4-r11 and sp are that function's locals natively.
         for &at in self.frame.map(|fr| &fr.switches).into_iter().flatten() {
+            let restore = f
+                .blocks
+                .values()
+                .flat_map(|b| &b.insns)
+                .any(|(a, i)| *a == at && crate::saves::context_restore(i));
             self.hole(
                 at,
                 HoleKind::Cpu,
-                "CPU state: a stack switch (sp set to a value not made from the frame's)",
+                if restore {
+                    "CPU state: a context restore (longjmp: a return into its save's caller's frame, \
+                     whose r4-r11 and sp are that function's locals)"
+                } else {
+                    "CPU state: a stack switch (sp set to a value not made from the frame's)"
+                },
             );
         }
         // sp set to a constant (a fresh stack, the SDK's `SoftReset`) is
