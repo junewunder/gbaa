@@ -15,6 +15,7 @@ use crate::audio::Player;
 use crate::dump::{pixels_hash, write_png_wide};
 use crate::fast::{self, Clock};
 use crate::input::Script;
+use crate::present::Hold;
 use crate::window::{Screen, side_by_side};
 use crate::{Options, dump_at_path, sav_file};
 use runtime::io::key;
@@ -32,16 +33,16 @@ pub struct Seat {
     /// Scripted presses, on top of what the window holds.
     script: Script,
     /// What the window's keyboard and pad hold for this player.
-    held: u16,
+    pub(crate) held: u16,
     /// Frames presented.
     shown: u64,
     /// The last frame presented.
     pub frame: Box<Frame>,
-    player: Option<Player>,
+    pub(crate) player: Option<Player>,
 }
 
 impl Seat {
-    fn new(script: Script, player: Option<Player>) -> Seat {
+    pub(crate) fn new(script: Script, player: Option<Player>) -> Seat {
         Seat {
             script,
             held: 0,
@@ -123,6 +124,8 @@ pub fn run(opts: &Options, timing: Timing, screen: Option<Screen>) -> Result<(),
         .flatten();
     // Muted, the window keeps time by a frame clock.
     let mut clock = (screen.is_some() && sound.is_none()).then(Clock::default);
+    // Frames go to the window on the pacer's beat ([`crate::present`]).
+    let mut hold = Hold::default();
     let mut a = Box::new(Machine::new(rom, Seat::new(opts.input.clone(), sound)));
     let mut b = Box::new(Machine::new(rom, Seat::new(opts.input2.clone(), None)));
     a.set_timing(timing);
@@ -171,6 +174,7 @@ pub fn run(opts: &Options, timing: Timing, screen: Option<Screen>) -> Result<(),
         let Some(s) = &screen else {
             continue;
         };
+        hold.before_show();
         s.show_screens(&[&a.platform.frame, &b.platform.frame], false);
         if let Some(p) = &mut a.platform.player {
             p.wait();
@@ -178,7 +182,9 @@ pub fn run(opts: &Options, timing: Timing, screen: Option<Screen>) -> Result<(),
         if let Some(c) = &mut clock {
             c.wait(fast::frame());
         }
+        hold.started();
         if s.paused() {
+            hold.reset();
             // The sound stops (the queue emptied) until the menu lets go.
             if let Some(p) = &mut a.platform.player {
                 p.silence();

@@ -1,0 +1,21 @@
+# agb/native-bios-affine for 600 frames with no input: the affine-BIOS program
+# of the native lifter's check (native/lift-bios-affine; `just lift-check`), its
+# lift (gbaa-lift) against the play build at --timing native by route-check
+# --native. What it draws: agb/native-bios-affine/SCENE.md.
+rom = "$GBAA_DATA/agb/native-bios-affine.gba"
+
+[[checkpoint]]
+name = "native-bios-affine-600"
+frame = 600
+hash = "3c8f0c19beb7cb84"
+mgba_hash = "040f7f809c3a43f1"
+mgba_why = "its HLE BgAffineSet and ObjAffineSet compute in floats and leave r0-r2 as given, where the play build follows the real BIOS's sine table and registers (rows 0-20)"
+# Our interpreter at --timing exact and --timing native (2026-11-12).
+# Known mGBA mismatch: mGBA 0.10.5 (`mgba-dump ROM --frames 600 --hash`)
+# draws 040f7f809c3a43f1: every call's row (0, 4, 8, 12, 16, 20). Its HLE
+# BIOS (src/gba/bios.c, _BgAffineSet, _ObjAffineSet) takes cosf/sinf of
+# the angle and doesn't write r0-r2 back; the play build's
+# (runtime::bios::math) is the real BIOS's: a 256-entry sine table, r0 and
+# r1 past the last entry, r2 -1. With the registers left out of the
+# colours mGBA still differs on every row's outputs but call 2's (the
+# identity, into BG2's write-only registers).

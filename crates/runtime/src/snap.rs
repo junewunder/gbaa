@@ -36,9 +36,9 @@ use armv4t::interp::Cpu;
 /// What our states start with.
 pub const MAGIC: [u8; 8] = *b"GBAAstat";
 /// The payload's layout. Bump it with any change to what [`snap!`] lists.
-pub const VERSION: u32 = 3;
+pub const VERSION: u32 = 4;
 /// The oldest version a state of ours may be and still load. Version 2
-/// lacks the EEPROM's serial state (3).
+/// lacks the EEPROM's serial state (3), version 3 `MultiBoot`'s (4).
 pub const OLDEST: u32 = 2;
 /// The header's size.
 pub const HEADER: usize = 24;
@@ -345,6 +345,9 @@ impl<P: Platform> Machine<P> {
     fn migrate(&mut self, version: u32) {
         if version < 3 {
             self.bus.save.reset_eeprom();
+        }
+        if version < 4 {
+            self.bios.multiboot = crate::bios::multiboot::MultiBoot::default();
         }
     }
 

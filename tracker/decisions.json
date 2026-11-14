@@ -714,7 +714,13 @@
       "why": "june asked for the native units as a sprint, one at a time. Order: agb spike, hw library, summaries, timing-native, native check, hole report, Emerald ten, Stage-A lifter (the lifter's check needs the native check, so it goes last). Calls taken in june's place: the spike writes a new agb/native-spike that reads input; summaries measure with no bar; Emerald's lifted code stays in mods/ out of the public mirror.",
       "by": "7b10ef7b",
       "at": "2026-11-01T02:34:52Z",
-      "scope": ["group:native"]
+      "scope": ["group:native"],
+      "retired": {
+        "kind": "superseded",
+        "at": "2026-11-13T04:48:46Z",
+        "by": "9828215c",
+        "other": "d/native-units-run-side-by-side-needs-set-the"
+      }
     },
     {
       "id": "d/a-vcount-dispstat-or-timer-read-outside-a-poll",
@@ -989,7 +995,8 @@
       "by": "owner",
       "at": "2026-11-07T04:27:11Z",
       "question": "q/accept-indirect-call-bar-today",
-      "via": "8f498bd1"
+      "via": "8f498bd1",
+      "until": "2026-11-07T05:00:00Z"
     },
     {
       "id": "d/covered-controls-page-your-deck",
@@ -1061,6 +1068,192 @@
       "by": "29ee78be",
       "at": "2026-11-08T20:49:34Z",
       "scope": ["multiplayer/*"]
+    },
+    {
+      "id": "d/raise-lift-bars-rom-widening",
+      "title": "Raise lift bars for the ROM-widening fix's honest rise: Raise the bars to the new values",
+      "why": "the fix lands; the ref_unexplained and native-spike fn_words_not_proven bars go up to what the sound run measures, and later heap units lower them from there",
+      "by": "owner",
+      "at": "2026-11-08T23:18:08Z",
+      "question": "q/raise-lift-bars-rom-widening",
+      "via": "d06a24f2"
+    },
+    {
+      "id": "d/netplay-waits-8-s-for-a-silent-peer-before-it",
+      "title": "Netplay waits 8 s for a silent peer before it has left",
+      "why": "From Emerald's netplay trade split once on wander, under load ({unit:multiplayer/wander-split-under-load}): room::QUIET was 3 s, and a loaded machine (a 3.4 s rollback) or a 4 s SIGSTOP ended the session. 8 s lets a stall of a few seconds catch up; past the 5 s window the others freeze, so a truly gone peer costs 3 s frozen before they play on alone (the mark says 'not hearing' after 0.75 s). The owner may prefer shorter.",
+      "by": "18d209b3",
+      "at": "2026-11-12T06:34:01Z",
+      "scope": ["group:multiplayer"]
+    },
+    {
+      "id": "d/a-constant-jump-to-a-ram-copy-s-function-is",
+      "title": "A constant jump to a RAM copy's function is resolved",
+      "why": "From Discover code past m4a's and Nightmare's copy sources ({unit:native/copy-tail-discovery}): a jump to one constant RAM address (m4a's SoundMain into its IWRAM copy, Minish Cap's ROM-to-IWRAM veneers) is Recovery's JumpRes::Ram. It is no more a hole than a constant call: the hole report doesn't count it where an overlay discovered a function at the target, and the lifter jumps to that function (a hole if none is there). Hard total over the corpus 106 to 103. Code discovery then finds that hides a real hole counts it: Nightmare's resume bx r1 (0x08000254) takes it 9 to 10, covered by its task switcher's stand-in.",
+      "by": "b67b3cd7",
+      "at": "2026-11-12T06:37:44Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/a-networked-adapter-lists-only-the-hosts-the",
+      "title": "A networked adapter lists only the hosts the server says are open",
+      "why": "From {unit:multiplayer/wireless-radio-netplay}: the local radio's 3 s host memory (a guess beyond afska's docs) sent the first Connect to a host's ID from before it reopened; without it the sim trade connects first try at 22 and 200 ms each way, and calm passes. --heard-ms N brings it back.",
+      "by": "8f376444",
+      "at": "2026-11-12T07:42:04Z",
+      "scope": ["multiplayer/wireless-*"]
+    },
+    {
+      "id": "d/a-networked-adapter-keeps-the-3-s-host-memory",
+      "title": "A networked adapter keeps the 3 s host memory",
+      "why": "Rerun of the latency sweep (multiplayer.md, 'The radio on the server'): without HEARD_FOR, 100 and 120 ms each way lost BOB's offer from ALICE's board; with it 0-200 ms all trade. Cost: a first Connect to a stale host ID is refused and retried (~100 frames). --heard-ms 0 turns it off.",
+      "by": "4d69fe66",
+      "at": "2026-11-12T08:18:42Z",
+      "scope": ["multiplayer/wireless-*"],
+      "replaces": "d/a-networked-adapter-lists-only-the-hosts-the"
+    },
+    {
+      "id": "d/lift-bars-agents-may-raise-a-count-with-the",
+      "title": "Lift bars: agents may raise a count, with the cause named",
+      "why": "june, 2026-11-12. The bars in crates/codegen/lift-check.toml measure how plain the lifted code is; they are not the correctness check. Correctness stays june's: the native check (the lifted build draws its route's frames as the interpreter does), hard_holes and the planted controls never loosen without her. Any other bar may be raised by the unit's own session, with no question, when the native check stays green and the unit's evidence gives each raised bar, its old and new value, and the cause (the old value was unsound or an accident, or counts moved between categories). The loop's review judges that explanation. Each raise is also recorded with 'just tracker decide --for-run', so the morning report shows it. Still ask june when the bar that would rise is the metric the unit's own done-when says must fall, or when a rise is large and its cause isn't found. Replaces 'only lowered': six raise questions in a week, the first five all answered yes, each holding finished work for hours.",
+      "by": "owner",
+      "at": "2026-11-12T18:55:48Z",
+      "scope": ["group:native"],
+      "replaces": "d/stage-b-checks-are-bars-in-one-committed-file"
+    },
+    {
+      "id": "d/raise-native-tasks-unproven-function",
+      "title": "Raise native-tasks' unproven-function-words bar 57 to 59: Raise it to 59",
+      "why": "june, 2026-11-12: raise to 59. The 57 recorded an ordering accident, not a proof. Decided under the new standing rule on lift bars (d/lift-bars-agents-may-raise-a-count-with-the).",
+      "by": "owner",
+      "at": "2026-11-12T18:55:57Z",
+      "question": "q/raise-native-tasks-unproven-function",
+      "via": "625afd3a"
+    },
+    {
+      "id": "d/lift-bars-agents-may-raise-a-count-with-the-2",
+      "title": "Lift bars: agents may raise a count, with the cause named",
+      "why": "x",
+      "by": "owner",
+      "at": "2026-11-12T18:55:59Z",
+      "scope": ["group:native"],
+      "replaces": "d/a-bar-may-rise-only-when-accesses-move-out-of",
+      "retired": {
+        "kind": "merged",
+        "at": "2026-11-12T18:56:10Z",
+        "by": "625afd3a",
+        "other": "d/lift-bars-agents-may-raise-a-count-with-the"
+      }
+    },
+    {
+      "id": "d/unknown-address-step-land-without",
+      "title": "Should the unknown-address step land without the fall it was to show: Land the step",
+      "why": "june, 2026-11-12: land it, judged by the loads-that-read-everything count. Before it lands, native-irq-hold must get its 16 typed heap accesses (ref_accesses) back: that is a real loss, not a counting accident. The 1-3 unproven words on the three IRQ programs fall under the new lift-bars rule (d/lift-bars-agents-may-raise-a-count-with-the): raise only with the cause named.",
+      "by": "owner",
+      "at": "2026-11-12T18:59:55Z",
+      "question": "q/unknown-address-step-land-without",
+      "via": "625afd3a"
+    },
+    {
+      "id": "d/lift-counts-are-the-agents-call-correctness",
+      "title": "Lift counts are the agents' call; correctness stays june's",
+      "why": "june, 2026-11-12. The bars in crates/codegen/lift-check.toml and the counts a unit's done-when names measure precision: how much the analysis proves, how plain the lift is. They are not the correctness check. Correctness stays june's: the native check (the lifted build draws its route's frames as the interpreter does), hard_holes and the planted controls never loosen without her. Two things are the unit's own call, with no question. (1) Raising a bar: allowed when the native check stays green and the evidence gives each raised bar, its old and new value, and the cause (the old value was unsound or an accident, or counts moved between categories). (2) A target count that doesn't move: the unit may land on a direct measure of what it did, when the native check stays green, the direct measure becomes a new bar in every program's table, the original target is handed to a named follow-up unit (filed, or an existing one's done-when), and the independent checker agrees the swap is fair and says so in its verdict. Either is recorded with 'just tracker decide --for-run' so the morning report shows it, and the loop's review judges the explanation. Still ask june when a unit can show no direct measure of what it did, or a large rise has no cause found. Why: seven such questions in a week, all answered with the default, each holding finished work for hours.",
+      "by": "owner",
+      "at": "2026-11-12T19:01:57Z",
+      "scope": ["group:native"],
+      "replaces": "d/lift-bars-agents-may-raise-a-count-with-the"
+    },
+    {
+      "id": "d/native-units-run-side-by-side-needs-set-the",
+      "title": "Native units run side by side; needs set the order",
+      "why": "june, 2026-11-12, asked the sweep's foreman to judge whether native units may go out of the sprint order. Both sprint orders named units that are all done now. What is ready today has no needs between its units; the real orderings are in the tracker as needs. Kept by hand: the hole report matching the lifter waits for the reset/IRQ msr work and the data-as-code fix, and the two function-flow units warn each other about fnref.rs.",
+      "by": "9828215c",
+      "at": "2026-11-13T04:48:41Z",
+      "scope": ["group:native"],
+      "replaces": "d/stage-b-sprint-2026-11-01-one-unit-at-a-time"
+    },
+    {
+      "id": "d/a-native-stop-names-functions-from-the",
+      "title": "A native stop names functions from the backtrace; no guest pc yet",
+      "why": "Each built native game runs headless; report where it stops ({unit:native/native-first-stop}): the card asks for the guest function and pc when known. Lifted code keeps no pc, so the stop line gives the lifted functions the panic's backtrace names (innermost first; one inlined into its caller doesn't show). A pc is filed as {unit:native/first-stop-guest-pc}. A stop doesn't fail just lift; a build that failed with no hard hole records no run (it may only have been refused or killed).",
+      "by": "3d525e2f",
+      "at": "2026-11-13T06:57:03Z",
+      "scope": ["native/native-first-stop"]
+    },
+    {
+      "id": "d/a-direct-call-passes-the-r4-r11-its-callee",
+      "title": "A direct call passes the r4-r11 its callee reads at entry; a pointer call only where the holes file names it",
+      "why": "From {unit:native/metroid-entry-reads}: Metroid's save writer 0x08073ce5 stores the top of its caller's r9; r9 is the sprite updater's, three calls up through its AI table, 0x082b0cac or 0x8000001c by the loop, so no constant stand-in is exact. The summaries now give each function what it takes (Summary::takes); a bl or tail call is the callee's x_ entry with the caller's own registers, and a caller that still has one as it came takes it in turn. Such a reader is soft (takes r4-r11 from its callers); one a pointer may call stays hard unless the holes file's [[takes]] names the indirect calls that reach it, which then pass theirs. A taker's plain entry (call_fn's, a stand-in's) panics, so nothing runs it on zeroes: exact or a named stop. An entry value only returned in r0-r3 is not passed and stays as it was.",
+      "by": "8814ddd6",
+      "at": "2026-11-13T07:50:24Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/prelude-bar-1131-to-1137-registerramreset-s",
+      "title": "Prelude bar 1131 to 1137: RegisterRamReset's serial flag",
+      "why": "From {unit:native/hw-serial-registers}: the prelude's register_ram_reset now resets the serial registers on flag 0x20 as the play build's does (7 lines added, 1 doc line less: 6 net), so lines_prelude rose from 1131 to 1137 in every program's table of crates/codegen/lift-check.toml. Hand-written runtime code, not lifted output. The native check stays green: just lift-check passed whole, 15 programs with 0 differences, every planted fault caught.",
+      "by": "34d57864",
+      "at": "2026-11-13T08:10:34Z",
+      "scope": ["native/hw-serial-registers"],
+      "until": "2026-11-14T05:00:00Z"
+    },
+    {
+      "id": "d/prelude-bar-plus-6-registerramreset-s-serial",
+      "title": "Prelude bar plus 6: RegisterRamReset's serial flag",
+      "why": "From {unit:native/hw-serial-registers}: the prelude's register_ram_reset now resets the serial registers on flag 0x20 as the play build's does (7 lines added, 1 doc line less: 6 net). lines_prelude is 1201 in every table of crates/codegen/lift-check.toml: main's 1195 (after the reset and IRQ-wrapper msr work) plus these 6; before that merge it was 1131 to 1137. Hand-written runtime code, not lifted output. just lift-metrics measures 0 over, 0 under; the native check stays green (just lift-check passed whole, 15 programs, 0 differences, every planted fault caught).",
+      "by": "34d57864",
+      "at": "2026-11-13T08:54:00Z",
+      "scope": ["native/hw-serial-registers"],
+      "replaces": "d/prelude-bar-1131-to-1137-registerramreset-s",
+      "until": "2026-11-14T05:00:00Z"
+    },
+    {
+      "id": "d/a-compiler-s-trap-lifts-as-a-named-stop-not-a",
+      "title": "A compiler's trap lifts as a named stop, not a hard hole",
+      "why": "From {unit:native/lift-undefined-insns}: 46 of the 47 undefined-instruction holes in moonbeam, Rogue and Imperium are GCC's udf #255 ending a path it proved can only crash. gbaa-lift knows a trap by its encoding alone (Thumb 0xdeff/0xdefe, ARM 0xe7ffdefe/0xe7f000f0, as discovery's deliberate does) and prints a panic! naming the address, listed in the report; the play build faults there too. Data read as code that held one of these words would be a named stop, not a hole: exact or a named stop, as a taker's plain entry. The hard_holes bars are untouched (0); what counts as a hard hole is narrower by this one kind, and the traps are a report line, not a metric.",
+      "by": "7e93e2be",
+      "at": "2026-11-13T11:45:22Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/a-context-save-takes-nothing-a-broken-taker",
+      "title": "A context save takes nothing; a broken taker chain's hole is its reader's",
+      "why": "From {unit:native/moonbeam-taker-chain} (PR 16), adding to the decision that a direct call passes the r4-r11 its callee reads. (1) An unconditional ARM stm of r4-r11 with sp and lr through another register, each of r4-r11 whole and as it came, in a program with the matching ldm (same list, same way: setjmp and longjmp), is a save, not a use; with sp and lr it is a point to resume at. Any other store through a pointer is still a use (Metroid's half of r9). Not proven: that nothing reads the block as data; natively its words are zeroes, like a stack frame's saved registers. (2) A function a pointer call enters that only passes a register on is soft (passes on r4-r11 a pointer call zeroes); the read at the end of its chain is the hard hole, once (zeroed through 0x...). One hole a reader, as before calls passed registers; the lift prints the same code. Corpus hard holes 615 to 85, moonbeam 503 to 4.",
+      "by": "c5c06b25",
+      "at": "2026-11-13T12:44:54Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/llm-passes-may-alternate-with-the-algorithmic",
+      "title": "LLM passes may alternate with the algorithmic lift",
+      "why": "june, 2026-11-13, after playing Metroid's native build: she is fine with the lift alternating between the algorithmic lifter and an LLM (Claude). Either the lifter goes as far as it can, Claude reads the result and finds what unblocks the lifter, and the two iterate; or the lifter goes as far as it can and Claude brings the code the rest of the way. Either is OK with her. She set no rule for how LLM-written code is checked.",
+      "by": "owner",
+      "at": "2026-11-13T18:32:21Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/a-compiler-s-trap-lifts-as-a-named-stop-not-a-2",
+      "title": "A compiler's trap lifts as a named stop, not a hard hole",
+      "why": "june confirmed the sweep's call (2026-11-13): GCC's udf trap (Thumb 0xdeff/0xdefe, ARM 0xe7ffdefe/0xe7f000f0) lifts as a panic! naming its address, listed in the lift report, not counted as a hard hole; the play build faults there too.",
+      "by": "owner",
+      "at": "2026-11-13T20:37:48Z",
+      "scope": ["group:native"],
+      "replaces": "d/a-compiler-s-trap-lifts-as-a-named-stop-not-a"
+    },
+    {
+      "id": "d/test-programs-may-share-short-arm-idioms-with",
+      "title": "Test programs may share short ARM idioms with games",
+      "why": "june (2026-11-13): agb/native-irq-wrapper's few-instruction mode switch and handler call matches the games' IRQ wrappers; a standard idiom of a few instructions is not game-derived and may be public. Whole functions or game-specific sequences still go in mods/.",
+      "by": "owner",
+      "at": "2026-11-13T20:37:51Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/code-shape-lifter-work-is-judged-on-c-programs",
+      "title": "Code-shape lifter work is judged on C programs and games",
+      "why": "june (2026-11-13): agb programs are Rust from LLVM; the games are C from agbcc or modern GCC. agb programs stay as tests of the hardware library and the native check, but lifter code-shape work must not be steered by agb-only shapes (allocator, heap, vtables). Until the C test programs exist, agb bars still hold. The lifter's output stays Rust.",
+      "by": "owner",
+      "at": "2026-11-13T20:46:13Z",
+      "scope": ["group:native"]
     }
   ]
 }

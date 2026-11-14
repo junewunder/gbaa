@@ -1512,7 +1512,79 @@
         "host": "quack",
         "unit": "native/fnref-romfrom-absorb"
       },
-      "answer": null
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "d06a24f2",
+        "at": "2026-11-08T23:18:08Z",
+        "decision": "d/raise-lift-bars-rom-widening"
+      }
+    },
+    {
+      "id": "q/unknown-address-step-land-without",
+      "title": "Should the unknown-address step land without the fall it was to show?",
+      "context": "On its branch, Function flow: loads through unknown addresses ({unit:native/fnref-unknown-addrs}) makes RAM pointers followable: affine's loads that read everything fell from 623 sites to 8. Its check, fn_words_not_proven falling on every agb program, did not move: the flow now stops at ROM reads that run past a table into the vtables ({unit:native/fnref-rom-read-bound}) and at shared helpers like memcpy without call-site context ({unit:native/fnref-context}). Measured: each fix alone moves affine by 0-1 word. As it stands the branch also costs three IRQ test programs 1-3 proven words and native-irq-hold its 16 typed heap accesses, so either way it must hold every bar before it lands.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Land the step",
+          "changes": "This unit is done when its loads-that-read-everything count falls on every agb program (a new metric, barred) with every other bar held; the fn_words fall becomes the check of the ROM-read-bound unit and the call-site context unit after it"
+        },
+        {
+          "key": "b",
+          "label": "Keep the check",
+          "changes": "This unit waits until the ROM-read-bound unit is done, then carries on, on its branch, until fn_words_not_proven falls; the work can't land before then"
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/fnref-unknown-addrs"],
+      "asked": {
+        "at": "2026-11-12T08:30:17Z",
+        "by": "3454f93a",
+        "host": "quack",
+        "unit": "native/fnref-unknown-addrs"
+      },
+      "answer": {
+        "key": "a",
+        "note": "june, 2026-11-12: land it, judged by the loads-that-read-everything count. Before it lands, native-irq-hold must get its 16 typed heap accesses (ref_accesses) back: that is a real loss, not a counting accident. The 1-3 unproven words on the three IRQ programs fall under the new lift-bars rule (d/lift-bars-agents-may-raise-a-count-with-the): raise only with the cause named.",
+        "by": "owner",
+        "via": "625afd3a",
+        "at": "2026-11-12T18:59:55Z",
+        "decision": "d/unknown-address-step-land-without"
+      }
+    },
+    {
+      "id": "q/raise-native-tasks-unproven-function",
+      "title": "Raise native-tasks' unproven-function-words bar 57 to 59?",
+      "context": "The Emerald speed work ({unit:native/fnref-emerald-speed}) is done: Emerald's function-address flow now finishes in 11.5 min at 2.4 GB peak (round 0 was 20 min alone). One lift bar is over: native-tasks' count of function words in ROM not proven is 59, bar 57. The 2 words are a vtable's methods. On main they count as proven only because an early, short-lived value of a stack pointer happens to point at that vtable. Once the flow settles, that value is a wide junk set on main and the branch alike. The branch evaluates in a different order and never makes that early value. Neither run proves the words through a real call. A fix tried here (stop a 'from here on' ROM pointer swallowing pointers past its object) put 9 other bars far over (ref_unexplained 35->93). Raising a bar is yours to decide.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Raise it to 59",
+          "changes": "The speed work lands now; native-tasks' bar reads 59 until a precision unit lowers it"
+        },
+        {
+          "key": "b",
+          "label": "Keep 57",
+          "changes": "The speed work waits on main until someone makes native-tasks prove those 2 words again (an hour or more of tracing evaluation order)"
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/fnref-emerald-speed"],
+      "asked": {
+        "at": "2026-11-12T11:23:37Z",
+        "by": "d258b190",
+        "host": "quack",
+        "unit": "native/fnref-emerald-speed"
+      },
+      "answer": {
+        "key": "a",
+        "note": "june, 2026-11-12: raise to 59. The 57 recorded an ordering accident, not a proof. Decided under the new standing rule on lift bars (d/lift-bars-agents-may-raise-a-count-with-the).",
+        "by": "owner",
+        "via": "625afd3a",
+        "at": "2026-11-12T18:55:57Z",
+        "decision": "d/raise-native-tasks-unproven-function"
+      }
     }
   ]
 }

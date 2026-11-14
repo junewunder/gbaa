@@ -44,12 +44,12 @@ mode.
    summary hole") is a metric of its own with bar 0. A unit's check names
    the bar it lowers and to what; a fraction ("a quarter") is of the bar's
    value when the unit is claimed, since earlier units move the baseline.
-   Bars are only lowered: raising one to make a check pass is changing the
-   oracle, so it goes to june (`just ask`). The one exception is
-   `lines_prelude`, the hand-written prelude, which may rise with the
-   unit's evidence saying how many lines and why; `lines` is the rest and
-   only goes down. How to read and lower bars: `docs/tools/commands.md`,
-   `just lift-check` and `just lift-metrics`.
+   Bars and target counts measure precision, not whether the lift is right:
+   the native check, `hard_holes` and planted controls never loosen without
+   june. A unit may itself raise another bar (evidence: bar, both values,
+   cause), or land on a direct measure when its target doesn't move (it
+   becomes a bar; a named unit takes the target; the checker agrees). Then
+   `just tracker decide --for-run`. No direct measure: ask june. `commands.md`.
 3. **The old behaviour is a planted control** wherever the stack is
    involved or the change could pass by not running: the native check
    skips the guest stack, so a wrong stack slot only shows where it reaches
@@ -104,6 +104,9 @@ any real game.
   sets `g.sp = r13;` before every store that may reach I/O so the
   handler runs on the right stack. Control `--ime-at-waits`; program
   `agb/native-ime-release` (frame 601 matches mGBA).
+- **Task switchers on host coroutines** (`native/task-coroutines`). Done:
+  a stack switch is a hard hole; the prelude's `task_resume` and kin run
+  tasks on coroutines for the stand-ins. Program `agb/native-tasks`.
 
 ### 2. Recognising the agb library
 
@@ -223,24 +226,24 @@ typed pointers, below; until then they are soft holes, counted.
   registers, RAM cells at constant addresses, objects' word fields and
   frame words that don't escape, across calls and the callee sets of
   `native/fnref-flow`. An object is made where a pointer is added to an
-  amount the run doesn't know: agb's allocator, inlined where
-  `Box::new` is, adds the alignment's padding to its cursor. An access
-  the value sets don't bound whose address is, but for nulls and the
-  unknown, one object type (union-find over the sites that meet) at one
-  aligned offset prints as `g.at(Ref::<H_…>::new(p)).f_8` (or `at_mut`),
-  through the pointer the address adds a constant to, so that addition
-  isn't printed; `H_<site>` is a `#[repr(C, packed)]` struct of the fields seen
-  through it, one line each. The prelude's `Ref<T>` keeps the guest
+  amount the run doesn't know: agb's allocator, inlined where `Box::new`
+  is, adds the alignment's padding to its cursor. An access the value
+  sets don't bound whose address is, but for nulls and the unknown, one
+  object type (union-find over the sites that meet) at one aligned
+  offset prints as `g.at(Ref::<H_…>::new(p)).f_8` (or `at_mut`), through
+  the pointer the address adds a constant to, so that addition isn't
+  printed; `H_<site>` is a `#[repr(C, packed)]` struct of the fields
+  seen through it, one line each. The prelude's `Ref<T>` keeps the guest
   address; `Game::at` checks it is RAM, the object fits its region (and,
-  packed, one piece of `Ram`) and is aligned, else stops naming it. On
-  the agb programs it finds `InterruptInner` (next, root, closure,
-  vtable: the IRQ list `__RUST_INTERRUPT_HANDLER` walks every V-blank)
-  and two others; 11-16 accesses a program typed (`ref_accesses`, no
-  bar), `computed_unknown` down as much (the owner's bar: what moves),
-  `ref_unexplained` the soft hole (34-93: several offsets, a byte loop
-  through an object, `Any`). The allocator stays lifted: its free list
-  holds pointers the run can't follow (a freed pointer comes from an
-  escaping slot), so replacing it waits on frame escapes narrowing.
+  packed, one piece of `Ram`) and is aligned, else stops naming it. A
+  static array's element stays bytes (`native/ref-heap-static-arrays`:
+  packed, the globals in it are apart). On the agb programs it finds
+  `InterruptInner` (the IRQ list `__RUST_INTERRUPT_HANDLER` walks) and
+  two others; 11-16 accesses a program typed (`ref_accesses`, no bar),
+  `computed_unknown` down as much, `ref_unexplained` the soft hole
+  (several offsets, a byte loop, `Any`, a static array). The allocator
+  stays lifted: its free list holds pointers the run can't follow, so
+  replacing it waits on frame escapes narrowing.
 - **Lifted programs at the packed layout draw the same**
   (`native/lift-packed-layout`). Done: `gbaa-lift --layout packed`
   (`Globals::ram_struct`, `native/prelude_packed.rs`) orders `Ram`'s
@@ -267,15 +270,13 @@ and the shortcuts above at game scale.
   (`native/lift-modules`). Done (`codegen::native::modules`): modules of
   about 4,000 lines, so rustc's codegen runs on several cores.
 - **Metroid lifts with no hard holes and builds**
-  (`native/metroid-lifts`). Needs the discovery units, the shortcuts and
-  the module split. The ROM's file name has spaces, so it lifts with
-  `--name metroid`; its holes file is `mods/metroid/holes.toml` (private:
-  its stand-ins port the game's own code). Done (2026-11-08, quack): the
-  stand-ins (the reset, the IRQ dispatcher, the classic NES Metroid the
-  ROM carries), five IWRAM copies (`[[copy]]`, `native/lift-ram-copies`)
-  and the prelude's BIOS calls leave no hard hole: 2,624 functions,
-  a 3-minute lift at 2.06 GB and a 960,068-line crate that builds in
-  32 s at 3.95 GB (the numbers in the unit's evidence).
+  (`native/metroid-lifts`). Done (2026-11-08, quack): `--name metroid`
+  (the file name has spaces), `mods/metroid/holes.toml` (private: its
+  stand-ins port the game's code), five IWRAM copies (`[[copy]]`) and the
+  prelude's BIOS calls; 2,624 functions, 960,068 lines in 266 modules,
+  the lift 3 min 6 s at 2.06 GB (the flow settles in 12 rounds), the
+  crate alone builds in 32.4 s, rustc 3.95 GB, as the synthetic crate
+  predicted.
 - **Metroid passes the native check on a route**
   (`native/metroid-native-check`). A route `units/metroid-native.toml`
   from boot into gameplay, compared every frame with sound
@@ -290,6 +291,11 @@ and the shortcuts above at game scale.
   (`native/lift-bios-region`), the play build straying from its own
   interpreter at frame 1 (`native/play-native-metroid-interp`) and the
   holes file's copies unskipped (`native/check-holes-copies`).
+- **Kirby Nightmare lifts with no hard holes and builds**
+  (`native/nightmare-lifts`). Done (2026-11-08, quack;
+  `mods/kirby-nightmare/holes.toml`, `skip_fn_flow`; a `[[jump]]`'s
+  targets are now followed and decoded): 1,552,382 lines in 428 modules,
+  lift 48 s at 0.38 GB, the crate alone builds in 80 s, rustc 6.78 GB.
 
 Emerald comes after typed RAM and pointers, typed from pret's DWARF (the
 gaps Emerald's ten listed: fills, bitfields, retyping from access widths,
@@ -351,27 +357,27 @@ What the done pieces left open, for the units that come next.
   code) calls them, and a jump by value the run didn't prove a return
   adds r0 to every function. `native/indirect-call-args` and the stack
   units narrow those as the summaries' holes close.
-- **The pile** (piece 3, function addresses). agb keeps closures and
-  trait objects on the heap, and every heap store goes to one pile, so a
-  load through any heap pointer may give every function address stored
-  there, and one such load used as a number marks them all: most words
-  aren't proven, and each `call_fn` set, though complete, is every
-  address-taken function (17 on the spike). Splitting the pile by the
-  value-set bounds on each store proved nothing more (agb's heap stores
-  aren't bounded) and was nine times slower; the heap by allocation site
-  and field (`native/fnref-heap-sites`) is what dense IDs need.
+- **The pile** (piece 3, function addresses). Most words aren't proven
+  and nearly every `call_fn` set is every address-taken function. No one
+  kind of read holds them (`research/fnref-held-words.md`, measured
+  before main's `Ref` tokens). Objects by allocation site, call-site
+  context and RAM pointers followed are unlanded on
+  `native/fnref-unknown-addrs`'s branch, which merges main first
+  (`native/fnref-branch-merge`); then frames (`native/fnref-frame-pointers`),
+  registers a callee doesn't read (`native/fnref-live-registers`), and
+  it lands (`native/fnref-ram-pointers-land`).
 - **Function-address flow, smaller gaps** (for `native/fnref-dense`).
-  Proofs are per origin, and a pool load folded from a non-pc-relative
-  address gets a code-constant origin, so dense needs per-site constant
-  rewriting. Words no tracked load reaches ("never read") stay ROM keys.
-  The widening (more than 8 numbers are unknown, more than 16 exact ROM
-  pointers become one "from the lowest on") makes the first reason given
-  per word move with the code. A load whose bounds start in ROM and end
-  outside it, or have none, reads no ROM and flags nothing (the closed
-  world); a ROM-bounded read wider than 256 KB reads nothing (flagged); a
-  RAM-to-RAM `CpuSet` isn't followed; `ror` by an unknown amount keeps a
-  function's form. On a whole game the run doesn't settle in minutes yet
-  (`native/fnref-flow-scale`).
+  Proofs are per origin; a pool load folded from a non-pc-relative
+  address gets a code-constant origin (dense needs per-site constant
+  rewriting); "never read" words stay ROM keys. The widening (over 8
+  numbers: unknown; over 16 exact ROM pointers: one "from the lowest
+  on") moves each word's first reason with the code. A load bounded from
+  ROM to outside it, or unbounded, reads no ROM (the closed world); a
+  ROM-bounded read over 256 KB reads nothing (flagged); RAM-to-RAM
+  `CpuSet` isn't followed; `ror` by an unknown keeps a form. A read
+  "from here on" stops at the next object (a ROM data address a ROM word
+  holds), assuming no index runs past one (`native/fnref-rom-read-bound`).
+  Past 48M tokens it stops, proving nothing (`native/whole-lift-memory`).
 - **Escape analysis** (piece 4). An escaping address marks only the
   slots at and above it; walking down too would leave about three times
   the accesses in memory, so it stays open and `--shadow-locals` checks

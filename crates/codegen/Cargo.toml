@@ -9,6 +9,7 @@ runtime = { path = "../runtime" }
 analysis = { path = "../analysis" }
 armv4t = { path = "../armv4t" }
 fn-diff = { path = "../fn-diff" }
+native-record = { path = "../native-record" }
 prettyplease = "0.2"
 proc-macro2 = "1"
 quote = "1"

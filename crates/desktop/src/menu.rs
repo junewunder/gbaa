@@ -35,9 +35,12 @@
 //! unless another is set, and then remembered in [`crate::settings`]), and
 //! leaves it. A field is typed on the keyboard, or on a pad: up and down
 //! step the letter at the cursor, left and right move it ([`Edit`]); A or
-//! Enter keeps it, B or Escape drops it. In a session it shows the room,
-//! the seats, the round trip, how far ahead or behind, the rollbacks and
-//! the frames run again.
+//! Enter keeps it, B or Escape drops it. Its Link row picks the cable's
+//! rooms (rollback netplay) or wireless ones ([`crate::wireless`]: the
+//! adapter's radio on the server, each window its own GBA, from reset).
+//! In a session it shows the room, the seats, the round trip, how far
+//! ahead or behind, the rollbacks and the frames run again (a wireless
+//! room: the radio's traffic).
 
 use crate::audio::MAX_VOLUME;
 use crate::console::{self, Console, ScriptCmd};
@@ -442,6 +445,10 @@ const SCRIPTS_ROW: usize = 7;
 const NETPLAY_ROW: usize = 8;
 /// Its Save folders row.
 const SAVES_ROW: usize = 10;
+/// The main page's rows a native program's window leaves out
+/// ([`Menu::native`]): Undo load state, Scripts, Netplay and Resume on
+/// launch.
+const NOT_NATIVE: [usize; 4] = [4, SCRIPTS_ROW, NETPLAY_ROW, 9];
 
 /// A field of the Netplay page.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -614,6 +621,9 @@ pub struct Menu {
     code: String,
     /// The seats in a room the Netplay page hosts (2-4).
     players: usize,
+    /// The Netplay page's rooms are wireless ([`crate::wireless`]), not
+    /// the cable's.
+    wireless: bool,
     /// The Netplay page's field being typed in.
     edit: Option<Edit>,
     pub quit: bool,
@@ -644,6 +654,10 @@ pub struct Menu {
     saved: Option<String>,
     /// The Save folders page's settings ([`saves`]).
     pub saves: saves::SaveFolders,
+    /// The window plays a native program (crates/native-host), which has
+    /// no save states, rewind, scripts or netplay: the main page leaves
+    /// out their rows ([`NOT_NATIVE`]), the Controls page their shortcuts.
+    pub native: bool,
     /// Its folder picker, while open.
     picker: Option<saves::Picker>,
     /// What setting a folder did, for the page turned back to.
@@ -688,6 +702,7 @@ impl Menu {
             server: room::DEFAULT_SERVER.into(),
             code: String::new(),
             players: room::SEATS,
+            wireless: false,
             edit: None,
             quit: false,
             controls,
@@ -702,6 +717,7 @@ impl Menu {
             resume: false,
             saved: None,
             saves: saves::SaveFolders::default(),
+            native: false,
             picker: None,
             folder_said: None,
             console: Console::default(),
@@ -828,6 +844,16 @@ impl Menu {
         self.saved = None;
     }
 
+    /// The main page's row `row` (one of the `_ROW`s, counted with every
+    /// row shown) as it is shown: in a native program's window, less the
+    /// rows left out before it ([`NOT_NATIVE`]).
+    fn main_row(&self, row: usize) -> usize {
+        match self.native {
+            true => row - NOT_NATIVE.iter().filter(|&&r| r < row).count(),
+            false => row,
+        }
+    }
+
     /// Take a move. Arrows and Ok go to egui as keys pressed and let go.
     pub fn nav(&mut self, n: Nav) {
         if let Some(e) = &mut self.edit {
@@ -850,10 +876,14 @@ impl Menu {
                 self.remap.listen = None;
                 return;
             }
-            Nav::Back if self.page == Page::Remap => return self.turn(Page::Main, CONTROLS_ROW),
+            Nav::Back if self.page == Page::Remap => {
+                return self.turn(Page::Main, self.main_row(CONTROLS_ROW));
+            }
             Nav::Back if self.page == Page::Scripts => return self.turn(Page::Main, SCRIPTS_ROW),
             Nav::Back if self.page == Page::Netplay => return self.turn(Page::Main, NETPLAY_ROW),
-            Nav::Back if self.page == Page::Saves => return self.turn(Page::Main, SAVES_ROW),
+            Nav::Back if self.page == Page::Saves => {
+                return self.turn(Page::Main, self.main_row(SAVES_ROW));
+            }
             Nav::Back if self.page == Page::Folder => {
                 let row = match self.picker.as_ref().map(|p| p.target) {
                     Some(saves::Target::All) => 1,
@@ -1132,14 +1162,16 @@ impl Menu {
                 self.sound_changed = true;
             }
             // Greyed, it's no focus stop: the arrows pass over it.
-            let undo = ui
-                .add_enabled_ui(self.undoable, |ui| rows.row(ui, "Undo load state", ""))
-                .inner;
-            // Undone, the game goes on to show it.
-            if self.undoable && undo.step != 0 {
-                self.undo = true;
-                self.undoable = false;
-                self.set_open(false);
+            if !self.native {
+                let undo = ui
+                    .add_enabled_ui(self.undoable, |ui| rows.row(ui, "Undo load state", ""))
+                    .inner;
+                // Undone, the game goes on to show it.
+                if self.undoable && undo.step != 0 {
+                    self.undo = true;
+                    self.undoable = false;
+                    self.set_open(false);
+                }
             }
             if rows.link(ui, "Controls").step != 0 {
                 self.turn(Page::Remap, 0);
@@ -1148,19 +1180,21 @@ impl Menu {
             if rows.row(ui, "Fullscreen", full).step != 0 {
                 self.fullscreen_asked = true;
             }
-            if rows.link(ui, "Scripts").step != 0 {
-                self.turn(Page::Scripts, 0);
-            }
-            if rows.link(ui, "Netplay").step != 0 {
-                self.turn(Page::Netplay, 0);
-            }
-            let resume = rows.row(
-                ui,
-                "Resume on launch",
-                if self.resume { "on" } else { "off" },
-            );
-            if resume.step != 0 {
-                self.set_resume(!self.resume);
+            if !self.native {
+                if rows.link(ui, "Scripts").step != 0 {
+                    self.turn(Page::Scripts, 0);
+                }
+                if rows.link(ui, "Netplay").step != 0 {
+                    self.turn(Page::Netplay, 0);
+                }
+                let resume = rows.row(
+                    ui,
+                    "Resume on launch",
+                    if self.resume { "on" } else { "off" },
+                );
+                if resume.step != 0 {
+                    self.set_resume(!self.resume);
+                }
             }
             if rows.link(ui, "Save folders").step != 0 {
                 // The game's row is greyed when the launcher has it.
@@ -1244,8 +1278,8 @@ impl Menu {
 }
 
 impl Menu {
-    /// The Netplay page: out of a room, the server, Host, the code and
-    /// Join; in one, where it is (the code big while the host waits) and
+    /// The Netplay page: out of a room, the server, the players, the
+    /// link (cable or wireless), Host, the code and Join; in one, where it is (the code big while the host waits) and
     /// Leave.
     fn netplay_page(&mut self, ui: &mut egui::Ui, rows: &mut Rows) {
         title(ui, "Netplay");
@@ -1275,11 +1309,23 @@ impl Menu {
                         self.players =
                             2 + (self.players as i32 - 2 + players).rem_euclid(n as i32) as usize;
                     }
+                    let link = if self.wireless { "Wireless" } else { "Cable" };
+                    if rows.row(ui, "Link", link).step != 0 {
+                        self.wireless = !self.wireless;
+                    }
+                    if self.wireless {
+                        said(
+                            ui,
+                            "A wireless room (Union Room, wireless club) starts the game \
+                             from reset: save in the game first.",
+                        );
+                    }
                     if rows.row(ui, "Host a room", "").step != 0 {
                         self.netplay_ask = Some(room::Ask {
                             server: self.server.clone(),
                             role: room::Role::Host,
                             players: self.players,
+                            wireless: self.wireless,
                         });
                     }
                     let code = match self.edit.as_ref().filter(|e| e.field == Field::Code) {
@@ -1297,6 +1343,7 @@ impl Menu {
                                     server: self.server.clone(),
                                     role: room::Role::Join(c),
                                     players: 0,
+                                    wireless: self.wireless,
                                 })
                             }
                             Err(_) => {
@@ -1986,6 +2033,31 @@ mod tests {
             m.nav(n);
             pass(m);
         }
+    }
+
+    #[test]
+    fn a_native_window_leaves_out_states_scripts_and_netplay() {
+        let mut m = Menu::new(4.0, 100, Controls::default());
+        m.native = true;
+        pass(&mut m);
+        go(&mut m, &[Nav::Toggle]);
+        for gone in ["Undo load state", "Scripts", "Netplay", "Resume on launch"] {
+            assert!(!shows(&mut m, gone), "{gone}");
+        }
+        assert!(shows(&mut m, "Save folders"));
+        // Controls is the fifth row, Save folders the seventh; back from
+        // their pages to them.
+        go(&mut m, &[Nav::Down; 4]);
+        go(&mut m, &[Nav::Ok]);
+        assert_eq!(m.page, Page::Remap);
+        m.nav(Nav::Back);
+        assert_eq!((m.page, m.focus), (Page::Main, Some(4)));
+        pass(&mut m);
+        go(&mut m, &[Nav::Down; 2]);
+        go(&mut m, &[Nav::Ok]);
+        assert_eq!(m.page, Page::Saves);
+        m.nav(Nav::Back);
+        assert_eq!((m.page, m.focus), (Page::Main, Some(6)));
     }
 
     /// A menu for ROM `rom`, open on the Controls page.
@@ -2965,11 +3037,18 @@ mod tests {
         go(&mut m, &[Nav::Ok]);
         assert_eq!(m.page, Page::Netplay);
         pass(&mut m);
-        // Server, Players, Host a room, Room code, Join, Back. Join with no
-        // code asks for one.
+        // Server, Players, Link, Host a room, Room code, Join, Back. Join
+        // with no code asks for one.
         go(
             &mut m,
-            &[Nav::Down, Nav::Down, Nav::Down, Nav::Down, Nav::Ok],
+            &[
+                Nav::Down,
+                Nav::Down,
+                Nav::Down,
+                Nav::Down,
+                Nav::Down,
+                Nav::Ok,
+            ],
         );
         assert_eq!(m.netplay_ask, None);
         assert!(m.saved.as_deref().unwrap().contains("code"));
@@ -2992,6 +3071,7 @@ mod tests {
                 server: room::DEFAULT_SERVER.into(),
                 role: room::Role::Join(*b"B9CDEF"),
                 players: 0,
+                wireless: false,
             })
         );
         // Hosting: the code shows big while it waits; the session begun
@@ -3004,16 +3084,39 @@ mod tests {
             &mut m,
             &[
                 Nav::Up,
+                Nav::Up,
                 Nav::Ok,
                 Nav::Ok,
                 Nav::Ok,
                 Nav::Left,
                 Nav::Down,
+                Nav::Down,
                 Nav::Ok,
             ],
         );
         let ask = m.netplay_ask.take().unwrap();
-        assert_eq!((ask.role, ask.players), (room::Role::Host, 4));
+        assert_eq!(
+            (ask.role, ask.players, ask.wireless),
+            (room::Role::Host, 4, false)
+        );
+        // Link steps cable and wireless: a wireless room's host, then its
+        // join.
+        go(&mut m, &[Nav::Up, Nav::Ok, Nav::Down, Nav::Ok]);
+        let ask = m.netplay_ask.take().unwrap();
+        assert_eq!(
+            (ask.role, ask.players, ask.wireless),
+            (room::Role::Host, 4, true)
+        );
+        go(&mut m, &[Nav::Down, Nav::Down, Nav::Ok]);
+        assert_eq!(
+            m.netplay_ask.take(),
+            Some(room::Ask {
+                server: room::DEFAULT_SERVER.into(),
+                role: room::Role::Join(*b"B9CDEF"),
+                players: 0,
+                wireless: true,
+            })
+        );
         m.set_netplay(room::State::Waiting {
             code: "QWERTY".into(),
             filled: 3,

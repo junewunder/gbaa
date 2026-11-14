@@ -89,7 +89,7 @@ fn the_layout_is_versioned() {
     let s = bytes(&mut machine_with(&COUNTER));
     assert_eq!(
         (VERSION, s.len() - HEADER),
-        (3, 642_706),
+        (4, 642_753),
         "the payload changed: bump snap::VERSION"
     );
 }
@@ -121,6 +121,24 @@ fn an_older_state_loads() {
     let mut cut = v2.clone();
     cut.pop();
     assert_eq!(n.load_state(&cut), Err(SnapError::Damaged));
+}
+
+/// A state of version 3 (before `MultiBoot`'s state), pinned from the
+/// build before version 4 (559f1d2: `counter`'s state, zlib), loads into
+/// this build as the state this build saves, with no exchange running even
+/// on a machine that had one.
+#[test]
+fn a_v3_state_loads() {
+    let v3 = miniz_oxide::inflate::decompress_to_vec_zlib(include_bytes!("v3-counter.state.zz"))
+        .unwrap();
+    assert_eq!(v3[8..12], 3u32.to_le_bytes());
+    let mut n = machine_with(&COUNTER);
+    n.bios.multiboot.role = crate::bios::multiboot::role::CHILD;
+    n.load_state(&v3).unwrap();
+    assert!(
+        bytes(&mut n) == bytes(&mut counter()),
+        "v3 didn't load as v4"
+    );
 }
 
 /// The ROM's CRC-32 is kept, but a machine given another ROM hashes that.

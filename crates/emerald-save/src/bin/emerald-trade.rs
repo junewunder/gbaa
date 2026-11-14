@@ -21,9 +21,13 @@
 //! player's path to the server through the variable-ping simulator
 //! (`netplay::proxy`, a profile from crates/netplay/profiles/), so they
 //! see two hops of it. It passes only if, besides the trade, both ended on
-//! the same hash of both consoles, with no desync. It plays by
-//! rollback at no input delay (the desktop's default), so the presses land
-//! on the frames they name, as in the linked run.
+//! the same hash of both consoles, with no desync and neither player
+//! taken to have left. It plays by rollback at no input delay (the
+//! desktop's default), so the presses land on the frames they name, as in
+//! the linked run. `--stop SEAT@SECS+DUR` stops player SEAT's desktop
+//! (`SIGSTOP`) SECS seconds after it starts, for DUR seconds, then lets it
+//! go on (`SIGCONT`): a machine that stalls, which must catch up rather
+//! than end the session (multiplayer/wander-split-under-load).
 
 use std::io::{BufRead, BufReader, Read};
 use std::net::{SocketAddr, UdpSocket};
@@ -34,8 +38,33 @@ use std::time::{Duration, Instant};
 use emerald_save::{party, read};
 use netplay::proxy::{Profile, Proxy};
 
-const USAGE: &str =
-    "usage: emerald-trade DESKTOP ROM SAVE_DIR [--keep DIR] [--netplay [--profile FILE]]";
+const USAGE: &str = "usage: emerald-trade DESKTOP ROM SAVE_DIR [--keep DIR] \
+                     [--netplay [--profile FILE] [--stop SEAT@SECS+DUR]]";
+
+/// `--stop`'s player (from 0), when (after it starts) and for how long.
+#[derive(Clone, Copy)]
+struct Stop {
+    seat: usize,
+    at: Duration,
+    hold: Duration,
+}
+
+fn parse_stop(s: &str) -> Option<Stop> {
+    let (seat, rest) = s.split_once('@')?;
+    let (at, hold) = rest.split_once('+')?;
+    let seat: usize = seat.parse().ok()?;
+    let secs = |t: &str| {
+        t.parse::<f64>()
+            .ok()
+            .filter(|t| t.is_finite() && *t >= 0.0)
+            .map(Duration::from_secs_f64)
+    };
+    (1..=2).contains(&seat).then_some(Stop {
+        seat: seat - 1,
+        at: secs(at)?,
+        hold: secs(hold)?,
+    })
+}
 
 /// Both players' presses: continue (Start, A, A), Up at the attendant and A
 /// every 60 frames through her lines, the Trade Center, the save's two
@@ -65,13 +94,17 @@ fn input(p: usize) -> String {
 fn run() -> Result<bool, String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut pos = Vec::new();
-    let (mut keep, mut netplay, mut profile) = (None, false, None);
+    let (mut keep, mut netplay, mut profile, mut stop) = (None, false, None, None);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--keep" => keep = Some(PathBuf::from(it.next().ok_or(USAGE)?)),
             "--netplay" => netplay = true,
             "--profile" => profile = Some(PathBuf::from(it.next().ok_or(USAGE)?)),
+            "--stop" => {
+                let a = it.next().ok_or(USAGE)?;
+                stop = Some(parse_stop(a).ok_or(format!("--stop {a}: not SEAT@SECS+DUR"))?);
+            }
             s if s.starts_with('-') => return Err(USAGE.into()),
             _ => pos.push(Path::new(a)),
         }
@@ -79,8 +112,8 @@ fn run() -> Result<bool, String> {
     let [desktop, rom, saves] = pos[..] else {
         return Err(USAGE.into());
     };
-    if profile.is_some() && !netplay {
-        return Err("--profile is --netplay's".into());
+    if (profile.is_some() || stop.is_some()) && !netplay {
+        return Err("--profile and --stop are --netplay's".into());
     }
     let dir = match &keep {
         Some(d) => d.clone(),
@@ -101,7 +134,7 @@ fn run() -> Result<bool, String> {
             Some(p) => Some(Profile::load(p)?),
             None => None,
         };
-        play_netplay(desktop, rom, &dir, profile, keep.is_some())?;
+        play_netplay(desktop, rom, &dir, profile, stop, keep.is_some())?;
     } else {
         play_linked(desktop, rom, &dir, keep.is_some())?;
     }
@@ -171,6 +204,7 @@ fn play_netplay(
     rom: &Path,
     dir: &Path,
     profile: Option<Profile>,
+    stop: Option<Stop>,
     keep: bool,
 ) -> Result<(), String> {
     let any: SocketAddr = "127.0.0.1:0".parse().unwrap();
@@ -236,6 +270,21 @@ fn play_netplay(
             return Err(e);
         }
     };
+    if let Some(st) = stop {
+        let pid = [&host, &guest][st.seat].id() as libc::pid_t;
+        let seat = st.seat + 1;
+        std::thread::spawn(move || {
+            std::thread::sleep(st.at);
+            // SAFETY: plain signals to a child this process started (and
+            // hasn't reaped: the waits below come after its end).
+            if unsafe { libc::kill(pid, libc::SIGSTOP) } != 0 {
+                return;
+            }
+            println!("stopped player {seat} for {:.1} s", st.hold.as_secs_f64());
+            std::thread::sleep(st.hold);
+            unsafe { libc::kill(pid, libc::SIGCONT) };
+        });
+    }
     let guest_out = BufReader::new(guest.stdout.take().unwrap());
     let outs: [Box<dyn Read + Send>; 2] = [Box::new(host_out), Box::new(guest_out)];
     let readers = outs.map(|mut r| {
@@ -284,6 +333,10 @@ fn play_netplay(
             println!("player {}: {l}", seat + 1);
             if l.starts_with("desync") {
                 failed.push(format!("player {} went apart: {l}", seat + 1));
+            }
+            // The other player was taken to have left: each played on alone.
+            if l.starts_with("left player") {
+                failed.push(format!("player {}: {l}", seat + 1));
             }
         }
         // The desktop's last line: `netplay: room …, end HASH, …`.

@@ -134,8 +134,8 @@ harness was OOM-killed twice at 8.8 and 10.4 GB, taking june's desktop with
 it (a self-jump case looped inside generated code while the harness logged
 every access; fixed in #39 by making every case end after one exit).
 
-1. **Every compile** runs under `CARGO_BUILD_JOBS=6 flock
-   /tmp/gbaa-build.lock`. The recipes take it themselves (the justfile's
+1. **Every compile** runs under `CARGO_BUILD_JOBS=6
+   scripts/build-lock` (three at once). The recipes take it themselves (the justfile's
    `lock`), around the cargo step only, so a built binary runs without
    waiting; a bare `cargo build/test/clippy` takes it the same way. Never
    wrap `just` in it: a recipe taking it under a caller holding it deadlocks.

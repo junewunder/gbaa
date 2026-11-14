@@ -1,0 +1,118 @@
+# The stage-A lift's holes for agb/native-tasks (`just lift`, crates/codegen/src/native.rs):
+# hand-written stand-ins for the functions the lifter can't print, each
+# with why. agb 0.25's own code, the same in every agb program but for its
+# addresses (`nm agb/native-tasks.elf`).
+
+[[standin]]
+entry = 0x080026e4
+why = "portable_atomic's interrupt::disable (ARM): `mrs r0, cpsr; orr r1, r0, #0x80; msr cpsr_c, r1`, a critical section's start. The program's CPSR is Game::cpsr; while its I bit is set the waits hold IRQs (Native::irq_masked)"
+code = '''
+pub fn f_080026e4(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+    let r0 = g.cpsr;
+    g.cpsr = r0 | 0x80;
+    Ok([r0, r0 | 0x80, a[2], a[3]])
+}
+'''
+
+[[standin]]
+entry = 0x08002700
+why = "portable_atomic's interrupt::restore (ARM): `msr cpsr_c, r0`, a critical section's end: clearing I runs the IRQs it held (msr_cpsr_c)"
+code = '''
+pub fn f_08002700(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+    msr_cpsr_c(g, sp, a[0]);
+    Ok(a)
+}
+'''
+
+[[standin]]
+entry = 0x03000000
+why = "agb's InterruptHandler (interrupt_handler.s, ARM, in IWRAM): the IRQ wrapper, which switches to system mode around its call with msr. Its I/O and RAM effects as written; the call runs on the stack the program waited on (Game::sp), as system mode's banked sp would. Game::cpsr stays as the IRQ entry set it, IRQ mode with I set, where the wrapper's msr runs the call in system mode with I clear: IME is off there, so no IRQ could be taken either way"
+code = '''
+pub fn f_03000000(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+    // ldr r3, [0x0400_0200]: IE and IF; r0 = what's enabled and requested.
+    let ie_if = ld32(g, 0x0400_0200);
+    let due = ie_if & (ie_if >> 16);
+    st16(g, 0x0400_0200, ie_if & !due); // IE without them
+    st16(g, 0x0400_0202, due); // IF: acknowledged
+    let f = ld16(g, 0x0300_7FF8); // the BIOS's flags, for IntrWait
+    st16(g, 0x0300_7FF8, f | due);
+    let ime = ld32(g, 0x0400_0208); // swp: IME off
+    st32(g, 0x0400_0208, 0);
+    // System mode: `push {lr}`, then __RUST_INTERRUPT_HANDLER(due).
+    f_08002745(g, g.sp.wrapping_sub(4), [due, 0x08002745, ime, ie_if])?;
+    st32(g, 0x0400_0208, 0x0400_0000); // IME's low half 0
+    st32(g, 0x0400_0208, ime); // IME as it was
+    st16(g, 0x0400_0200, ie_if); // IE as it was
+    Ok([0x0400_0000, a[1], ime, ie_if])
+}
+'''
+
+# The program's task switcher (src/main.rs; native/task-coroutines): each
+# routine's Thumb veneer (`bx pc`) is what the tasks and the scheduler
+# call, so the stand-ins are there; the ARM routines behind them are
+# entered only through the veneers. Its globals: ts_cur at 0x020000b8,
+# ts_main_sp at 0x020000bc (`nm agb/native-tasks.elf`).
+
+[[standin]]
+entry = 0x0800017d
+why = "ts_resume(task, pc, sp)'s veneer: pushes r4-r11 and lr (nine words natively unknown, not written: the native check skips the stack), stores the main sp at ts_main_sp and the task at ts_cur, then `mov sp, r2` (a stack switch), pops the task's r4-r11 and `bx r1`. Natively the task runs on a host coroutine keyed by the sp it saved (task_resume), started at pc on the guest stack above the eight words popped; it comes back here when it yields or exits, with the registers the switcher hands the scheduler"
+code = '''
+pub fn f_0800017d(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+    st32(g, 0x0200_00bc, sp.wrapping_sub(36));
+    st32(g, 0x0200_00b8, a[0]);
+    task_resume(g, a[2], a[1], a[2].wrapping_add(32), [a[0], a[1], a[2], 0x0200_00b8])
+}
+'''
+
+[[standin]]
+entry = 0x08000180
+why = "ts_resume's ARM routine: entered only through its veneer, 0x0800017d, whose stand-in runs it"
+code = '''
+pub fn f_08000180(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+    unreachable!("ts_resume's ARM routine, entered only through its veneer")
+}
+'''
+
+[[standin]]
+entry = 0x080001a1
+lr = true
+why = "ts_yield(frames)'s veneer: pushes r4-r11 (not written, as ts_resume's push), stores sp, lr (where the task goes on) and frames in ts_cur's task, then `ldr sp, [ts_main_sp]` (a stack switch), pops the scheduler's r4-r11 and lr and returns past its call of ts_resume, r3 = &ts_main_sp. Natively the task's coroutine suspends under the sp it saved (task_yield); its next resume gives it the registers ts_resume's `bx r1` lands with"
+code = '''
+pub fn f_080001a1(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+    let saved = sp.wrapping_sub(32);
+    let t = ld32(g, 0x0200_00b8);
+    st32(g, t, saved);
+    st32(g, t.wrapping_add(4), g.lr);
+    st32(g, t.wrapping_add(8), a[0]);
+    Ok(task_yield(g, saved, [a[0], a[1], a[2], 0x0200_00bc]))
+}
+'''
+
+[[standin]]
+entry = 0x080001a4
+why = "ts_yield's ARM routine: entered only through its veneer, 0x080001a1, whose stand-in runs it"
+code = '''
+pub fn f_080001a4(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+    unreachable!("ts_yield's ARM routine, entered only through its veneer")
+}
+'''
+
+[[standin]]
+entry = 0x080001cd
+why = "ts_exit()'s veneer: clears ts_cur's task's alive word, then `ldr sp, [ts_main_sp]` (a stack switch), pops the scheduler's r4-r11 and lr and returns past its call of ts_resume, r0 = 0, r3 = &ts_main_sp. Natively the task's coroutine ends there (task_exit)"
+code = '''
+pub fn f_080001cd(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+    let t = ld32(g, 0x0200_00b8);
+    st32(g, t.wrapping_add(12), 0);
+    task_exit(g, [0, a[1], a[2], 0x0200_00bc])
+}
+'''
+
+[[standin]]
+entry = 0x080001d0
+why = "ts_exit's ARM routine: entered only through its veneer, 0x080001cd, whose stand-in runs it"
+code = '''
+pub fn f_080001d0(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+    unreachable!("ts_exit's ARM routine, entered only through its veneer")
+}
+'''

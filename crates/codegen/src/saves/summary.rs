@@ -29,10 +29,12 @@
 //! the gate the stage-A lifter's parameter lists and return values rest
 //! on.
 
-use super::{State, V, Walk, prove, walk};
+use super::{State, V, Walk, prove, walk, width_mask};
 use crate::func::{Ctx, Func};
 use crate::names::SourceMap;
 use analysis::ir::{Inst, Op};
+use armv4t::decode::{BlockMode, Cond, Instr, Reg as DReg};
+use armv4t::sem::Width;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 /// The registers a summary tracks, by slot: r0–r3 and r12.
@@ -150,10 +152,21 @@ pub struct Summary {
     /// other than they came: hand-written code's scratch registers. The
     /// lift keeps its callers' r4–r11 in their own locals, so that is
     /// sound only where no caller reads one before writing it (a hole at
-    /// the reader, as is one of the function's own reading one of r4–r11
-    /// as it came, other than to save it), and nothing calls it through a
-    /// pointer, where callers aren't known.
+    /// the reader), and nothing calls it through a pointer, where callers
+    /// aren't known. A function's own read of one of r4–r11 as it came is
+    /// a hole whether it changes them or not ([`Sum::entry_uses`]).
     pub changes: u16,
+    /// The registers of r4–r11 (bit `n - 4` for rN) it reads as they came,
+    /// some bit reaching a use: its own, or a callee's it passes them on
+    /// to ([`Sum::call`]). Parameters by register: the lift passes them at
+    /// each direct call and tail call, and at the indirect calls a holes
+    /// file names ([`Passing`]); any other way in zeroes them, a hole.
+    /// One only returned in r0–r3 isn't here ([`Summary::entry_returns`]).
+    pub takes: u8,
+    /// The calls its run saw pass a callee what it takes: (the call's
+    /// address, the callee). The lift passes at no other: a call the run
+    /// never reached (code past a hole) had its registers unread.
+    pub passes: BTreeSet<(u32, u32)>,
     /// Why the summary may be incomplete: what the proof fails on, and
     /// each read of a register a callee (`Some`) or a BIOS or indirect
     /// call (`None`) left undefined, by the reading instruction.
@@ -170,6 +183,11 @@ pub struct Summary {
     /// Its indirect calls, by address (with a complete callee set or not).
     pub indirect_sites: BTreeSet<u32>,
     pub undefined_reads: BTreeMap<(u32, u8), Option<u32>>,
+    /// The holes of entry values of r4–r11 returned in r0–r3, by the
+    /// register they're in: holes where a caller's own instruction reads
+    /// it (`read_after`, `forwarded_after`; agbcc's epilogue `pop {r3};
+    /// mov r8, r3` leaves the entry r8 in r3, unread).
+    pub entry_returns: BTreeMap<u8, BTreeSet<String>>,
 }
 
 impl Summary {
@@ -179,6 +197,50 @@ impl Summary {
     pub fn defines(&self) -> u16 {
         defines(self.params, &self.exit)
     }
+
+    /// [`Summary::takes`] where its callers pass them (a `takes r4-r11
+    /// from its callers` hole): 0 for one whose read is a hard hole, or
+    /// that nothing calls.
+    pub fn passed(&self) -> u8 {
+        if self.holes.iter().any(|h| h.contains(TAKES_READ)) {
+            self.takes
+        } else {
+            0
+        }
+    }
+
+    /// [`Summary::takes`] where a call may pass them: [`Summary::passed`],
+    /// or a hard hole a holes file may yet name the callers of. 0 for one
+    /// nothing calls.
+    pub fn may_take(&self) -> u8 {
+        let called = |h: &String| {
+            h.contains(TAKES_READ) || h.contains(ENTRY_READ) || h.contains(PASSES_READ)
+        };
+        if self.holes.iter().any(called) {
+            self.takes
+        } else {
+            0
+        }
+    }
+}
+
+/// What the lift passes of r4–r11 besides a direct call's: the holes
+/// file's part of a summary's run.
+#[derive(Clone, Debug, Default)]
+pub struct Passing {
+    /// By an indirect call's address: the functions it passes what they
+    /// take (`[[takes]]`). The lift prints the call to one of them with
+    /// the caller's registers, and their plain entries stop the program,
+    /// so no other pointer call reaches one with zeroes.
+    pub sites: BTreeMap<u32, BTreeSet<u32>>,
+    /// Every function a `[[takes]]` names, one with no `sites` too: no
+    /// pointer call reaches that one (code only jumped into, with the
+    /// jumper's registers: m4a's mixer in IWRAM, from `SoundMain`'s
+    /// constant `bx r3`), and its plain entry stops the program all the
+    /// same (unit `native/nightmare-entry-reads`).
+    pub named: BTreeSet<u32>,
+    /// The functions a stand-in replaces: they take nothing.
+    pub replaced: BTreeSet<u32>,
 }
 
 fn defines(params: u8, exit: &[Bits; 5]) -> u16 {
@@ -256,6 +318,11 @@ pub(super) struct Sum<'a> {
     assume: Assume,
     /// The indirect calls whose callee sets are complete.
     sets: &'a Sets,
+    passing: &'a Passing,
+    /// The program's context saves, by address ([`context_saves`]).
+    saves: &'a BTreeSet<u32>,
+    /// The functions proven to keep r4–r11 and sp ([`super::Proof`]).
+    kept: &'a BTreeSet<u32>,
     params: BTreeMap<u8, Cause>,
     /// r0–r3 and r12's origins, joined over every return.
     exit: Option<Vec<Org>>,
@@ -269,21 +336,73 @@ pub(super) struct Sum<'a> {
     pub(super) stopped: bool,
     /// Each call site's callee, `None` for an indirect one.
     sites: BTreeMap<u32, Option<u32>>,
+    /// The functions it falls or jumps into and goes on through, with
+    /// its own registers ([`super::Walk::flow`]).
+    pub(super) falls: BTreeSet<u32>,
     /// The functions whose summaries this run used.
     refs: BTreeSet<u32>,
     /// r4–r11 not as they came, over every return ([`Summary::changes`]).
     changes: u16,
-    /// Reads of r4–r11 as they came, other than to save them: (the
-    /// instruction, the register).
-    entry_reads: BTreeSet<(u32, u8)>,
+    /// Reads of r4–r11 as they came whose bits reach a use: (the
+    /// instruction, the register, how).
+    entry_reads: BTreeSet<(u32, u8, Via)>,
+    /// [`Summary::passes`].
+    passes: BTreeSet<(u32, u32)>,
+    /// Reads of r4–r11 as they came whose every bit an op masks away:
+    /// (the op's instruction, the register).
+    masked: BTreeSet<(u32, u8)>,
+    /// The frame pointers (bit `n` for rN, r7 or r11) it points at the
+    /// stack word it saved them in: a frame record, whose entry value is
+    /// the caller's frame pointer ([`Sum::frame_record`]).
+    frames: u16,
+}
+
+/// How bits of an entry value of r4–r11 reach a use.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Via {
+    /// The instruction's own: an address, a value stored, a condition.
+    Own,
+    /// In this register, to a callee (or BIOS call) that reads it.
+    Arg(u8),
+    /// In this register, returned.
+    Ret(u8),
+    /// As it came, to this callee, which takes it ([`Summary::takes`]),
+    /// in this register of the callee's.
+    Takes(u32, u8),
+}
+
+impl Via {
+    fn text(self) -> String {
+        match self {
+            Via::Own => String::new(),
+            Via::Arg(r) => format!(", passed in r{r}"),
+            Via::Ret(r) => format!(", returned in r{r}"),
+            Via::Takes(c, _) => format!(", which 0x{c:08x} takes"),
+        }
+    }
+}
+
+/// Each register of r4–r11 in `regs` (bit `n - 4` for rN).
+fn entry_regs(regs: u8) -> impl Iterator<Item = u8> {
+    (4..12u8).filter(move |r| regs & 1 << (r - 4) != 0)
 }
 
 impl<'a> Sum<'a> {
-    fn new(sums: &'a BTreeMap<u32, Summary>, assume: Assume, sets: &'a Sets) -> Sum<'a> {
+    fn new(
+        sums: &'a BTreeMap<u32, Summary>,
+        assume: Assume,
+        sets: &'a Sets,
+        passing: &'a Passing,
+        saves: &'a BTreeSet<u32>,
+        kept: &'a BTreeSet<u32>,
+    ) -> Sum<'a> {
         Sum {
             sums,
             assume,
             sets,
+            passing,
+            saves,
+            kept,
             params: BTreeMap::new(),
             exit: None,
             used: BTreeMap::new(),
@@ -291,9 +410,13 @@ impl<'a> Sum<'a> {
             holes: BTreeSet::new(),
             stopped: false,
             sites: BTreeMap::new(),
+            falls: BTreeSet::new(),
             refs: BTreeSet::new(),
             changes: 0,
             entry_reads: BTreeSet::new(),
+            passes: BTreeSet::new(),
+            masked: BTreeSet::new(),
+            frames: 0,
         }
     }
 
@@ -345,6 +468,21 @@ impl<'a> Sum<'a> {
         }
     }
 
+    /// `callee`'s summary so far finds no return, and no path of its run
+    /// ended at a hole, which may have hidden one ([`Summary::stopped`]):
+    /// a call to it doesn't come back.
+    pub(super) fn never_returns(&self, callee: u32) -> bool {
+        self.sums
+            .get(&callee)
+            .is_some_and(|s| !s.returns && !s.stopped)
+    }
+
+    /// `callee` is proven to keep r4–r11: a caller's constant in one is
+    /// the same after a call to it ([`super::State::called`]).
+    pub(super) fn keeps(&self, callee: u32) -> bool {
+        self.kept.contains(&callee)
+    }
+
     /// No return found, and a hole that may be why.
     fn lost(s: &Summary) -> bool {
         !s.returns && !s.holes.is_empty()
@@ -352,6 +490,15 @@ impl<'a> Sum<'a> {
 
     /// Register `r` read in state `s`, for `cause`.
     pub(super) fn read(&mut self, s: &State, r: usize, cause: Cause) {
+        // A callee's or a BIOS call's argument holding bits of r4–r11's
+        // entry values (`mov r0, r8; bl f`).
+        if !matches!(cause, Cause::Reads(_))
+            && let Some((regs, _)) = s.regs[r].taint()
+        {
+            for e in entry_regs(regs) {
+                self.entry_reads.insert((cause.at(), e, Via::Arg(r as u8)));
+            }
+        }
         if let Some(&c) = s.chg.get(r.wrapping_sub(4))
             && c != 0
         {
@@ -420,6 +567,49 @@ impl<'a> Sum<'a> {
                 self.read(s, r, cause);
             }
         }
+        // What a callee takes of r4–r11 is this call's own registers (the
+        // lift passes them): one still as it came is taken in turn.
+        let takers: Vec<u32> = match callee {
+            Some(c) => vec![c],
+            None => self
+                .passing
+                .sites
+                .get(&at)
+                .into_iter()
+                .flatten()
+                .copied()
+                .collect(),
+        };
+        for c in takers {
+            self.refs.insert(c);
+            let takes = match self.sums.get(&c) {
+                Some(x) if !self.passing.replaced.contains(&c) => x.takes,
+                _ => 0,
+            };
+            // A stack address through a named pointer call: the frames
+            // (`native::frame`, made before the holes file is read) don't
+            // see it escape, so the call isn't one the lift passes at.
+            let frame = callee.is_none()
+                && entry_regs(takes).any(|n| matches!(s.regs[n as usize], V::Sp(_)));
+            if takes != 0 && !frame {
+                self.passes.insert((at, c));
+            }
+            for n in entry_regs(takes) {
+                if let Some((regs, _)) = s.regs[n as usize].taint() {
+                    for e in entry_regs(regs) {
+                        self.entry_reads.insert((at, e, Via::Takes(c, n)));
+                    }
+                }
+                // The lift's local is as it was before an earlier callee
+                // changed the register: not what the machine passes.
+                let by = s.chg[n as usize - 4];
+                if by != 0 {
+                    self.holes.insert(format!(
+                        "0x{at:08x}: reads r4-r11 a callee changed: r{n}, by 0x{by:08x}"
+                    ));
+                }
+            }
+        }
         self.sites.insert(at, callee);
         let changes = callee
             .and_then(|c| self.sums.get(&c))
@@ -445,8 +635,8 @@ impl<'a> Sum<'a> {
                 self.read(s, r, Cause::Bios { n, at });
             }
         }
-        for r in 0..4 {
-            s.org[r] = Org {
+        for (r, o) in s.org[..4].iter_mut().enumerate() {
+            *o = Org {
                 own: defs & 1 << r != 0,
                 clob: defs & 1 << r == 0,
                 ..Org::default()
@@ -454,41 +644,115 @@ impl<'a> Sum<'a> {
         }
     }
 
-    /// Inst `i` (of instruction `at`), with the values up to its own: a use of
-    /// one of r4–r11 as it came, other than to copy it to a register or
-    /// store it on the stack (saving it). In a function that changes
-    /// r4–r11 (one with a convention of its own: hand-written code) it is
-    /// a register parameter the lift doesn't pass, a hard hole. In one
-    /// that keeps them it is most often compiled C's local it never set
-    /// (agbcc builds a word byte by byte in a register, `ands r4, r0;
-    /// orrs r4, r1`, every bit of the old value masked away), but it can
-    /// be a register parameter too (TMC's `sub_080086D8` takes r8 and r11
-    /// from its hand-written callers): soft, as main never looked, until
-    /// the run tells the masked bits apart (`native/entry-read-masking`).
+    /// Inst `i` (of instruction `at`), with the values up to its own:
+    /// where bits of r4–r11's entry values reach a use. The run follows
+    /// which bits of each value may hold them ([`V::Part`]): a pure op
+    /// passes on the bits that survive it, a copy to a register or a flag
+    /// or a word stored on the stack or by a context save
+    /// ([`context_saves`]) keeps them, and the rest is a use:
+    /// an address, a value stored elsewhere, a condition (a guard, a
+    /// select's), a jump's target. A use is a register parameter the lift
+    /// doesn't pass (`Regs::call` zeroes r4–r12), a hard hole: TMC's
+    /// `sub_080086D8` takes r8 and r11 from its hand-written callers. So
+    /// is passing them to a callee ([`Sum::read`]) or returning them
+    /// ([`Sum::ret`]). A pure op whose operand holds some and whose value
+    /// holds none masked every bit away (agbcc builds a word byte by byte
+    /// in a register it never set, `ands r4, r0; orrs r4, r1`): soft,
+    /// recorded as `masked`.
     pub(super) fn entry_uses(&mut self, insts: &[Inst], i: usize, at: u32, vals: &[V]) {
         let op = insts[i].op;
-        // `vals[i]` is the inst's own value: an op that passes its
-        // operand on (a select of it, a shift by 0) is the copy's use.
-        let saves = |v: analysis::ir::ValueId| match op {
-            Op::Store { addr, value, .. } => v == value && matches!(vals[addr.index()], V::Sp(_)),
-            Op::SetReg(_, x) => v == x,
-            // The builder's merge of a register written under a guard.
-            Op::Select { a, b, .. } => v == a || v == b,
-            _ => vals[i] == vals[v.index()],
-        };
-        for v in op.operands().into_iter().chain(insts[i].guard) {
-            if let V::Entry(r @ 4..=11) = vals[v.index()]
-                && !saves(v)
-            {
-                self.entry_reads.insert((at, r));
+        let taint = |v: analysis::ir::ValueId| vals[v.index()].taint();
+        let mut uses = insts[i].guard.and_then(taint).map_or(0, |t| t.0);
+        let pure = op.is_pure_bit()
+            || matches!(
+                op,
+                Op::Bin(..)
+                    | Op::Not(_)
+                    | Op::MulLongLo { .. }
+                    | Op::MulLongHi { .. }
+                    | Op::Adc { .. }
+                    | Op::Shift { .. }
+                    | Op::Rrx { .. }
+                    | Op::Sext { .. }
+                    | Op::Select { .. }
+                    | Op::BitToWord(_)
+            );
+        let mut held = 0;
+        for v in op.operands() {
+            let Some((regs, bits)) = taint(v) else {
+                continue;
+            };
+            let kept = match op {
+                Op::Store { addr, value, width } => {
+                    v == value
+                        && v != addr
+                        && match vals[addr.index()] {
+                            // A word on the stack keeps them (a save).
+                            V::Sp(_) if width == Width::Word => true,
+                            // So does a context save's word: the
+                            // register whole, still as it came.
+                            _ if width == Width::Word
+                                && self.saves.contains(&at)
+                                && matches!(insts[v.index()].op, Op::GetReg(r)
+                                    if vals[v.index()] == V::Entry(r.index() as u8)) =>
+                            {
+                                true
+                            }
+                            _ => bits & width_mask(width) == 0,
+                        }
+                }
+                Op::SetReg(..) | Op::SetFlag(..) | Op::YieldFlag(..) => true,
+                Op::Select { c, .. } | Op::BSelect { c, .. } => v != c,
+                _ => pure,
+            };
+            if kept {
+                held |= regs;
+            } else {
+                uses |= regs;
+            }
+        }
+        for r in entry_regs(uses) {
+            self.entry_reads.insert((at, r, Via::Own));
+        }
+        // A select of one that holds them and one that doesn't is a
+        // merge of paths, unknown as [`V::join`] takes it, not a mask.
+        let merge = matches!(op, Op::Select { .. } | Op::BSelect { .. });
+        if pure && !merge && vals[i].taint().is_none() {
+            for r in entry_regs(held & !uses) {
+                self.masked.insert((at, r));
             }
         }
     }
 
-    /// A return to the caller with `s`.
-    pub(super) fn ret(&mut self, s: &State) {
-        for r in 4..12 {
-            if s.regs[r] != V::Entry(r as u8) {
+    /// Register `r` set to `x` in `s`: `add r7, sp, #12` after `push {r4,
+    /// r5, r6, r7, lr}` points r7 at the word it saved r7 in, the frame
+    /// record of code built with frame pointers (agb's: r7 in Thumb, r11
+    /// in ARM). There every caller's r7 is its frame pointer, never a
+    /// parameter, and a read of the entry r7 walks the chain of frames (a
+    /// backtrace, agb's on a panic): natively r7 comes in as 0 (`Regs::call`),
+    /// so the walk finds no frames. A hole of its own, soft.
+    pub(super) fn frame_record(&mut self, s: &State, r: usize, x: V) {
+        if let V::Sp(k) = x
+            && matches!(r, 7 | 11)
+            && s.slots.get(&k) == Some(&V::Entry(r as u8))
+        {
+            self.frames |= 1 << r;
+        }
+    }
+
+    /// A return to the caller with `s`, at `at`. A value returned in
+    /// r0–r3 with bits of r4–r11's entry values is a use of them where a
+    /// caller reads it ([`Summary::entry_returns`]).
+    pub(super) fn ret(&mut self, s: &State, at: u32) {
+        for (r, v) in s.regs[..4].iter().enumerate() {
+            if let Some((regs, _)) = v.taint() {
+                for e in entry_regs(regs) {
+                    self.entry_reads.insert((at, e, Via::Ret(r as u8)));
+                }
+            }
+        }
+        for (r, v) in s.regs[..12].iter().enumerate().skip(4) {
+            if *v != V::Entry(r as u8) {
                 self.changes |= 1 << r;
             }
         }
@@ -529,6 +793,68 @@ impl<'a> Sum<'a> {
         }
         out
     }
+}
+
+/// An entry read's hole, after its address: hard
+/// (`analysis::holes::SUMMARY_HARD`).
+const ENTRY_READ: &str = ": reads r4-r11 at entry: ";
+/// [`ENTRY_READ`] in a function nothing enters by `Regs::call`, nor by
+/// a tail call or fall from one so entered: soft.
+const JUMPED_READ: &str = ": reads r4-r11 at entry, only jumped into: ";
+/// [`ENTRY_READ`] where every way in passes the register
+/// ([`Summary::takes`]): soft.
+const TAKES_READ: &str = ": takes r4-r11 from its callers: ";
+
+/// A pass-on read ([`Via::Takes`]) in a function a pointer call enters
+/// with r4–r11 zeroed: soft, the hole is the reader's at the chain's end.
+const PASSES_READ: &str = ": passes on r4-r11 a pointer call zeroes: ";
+
+/// r4–r11, sp and lr: what a context save stores (bit `n` for rN).
+const CONTEXT: u16 = 0x6ff0;
+
+/// The context saves of `funcs`, by address: an unconditional ARM `stm`
+/// of r4–r11 with sp and lr through another register (newlib's `setjmp`:
+/// `stm r0!, {r4-r12, sp, lr}`), where some function of `funcs` has the
+/// matching restore, an `ldm` of the same registers the same way
+/// (`longjmp`'s), so each word is read back into the register it came
+/// from. With sp and lr beside them the block is a point to resume at,
+/// and r4–r11 there are what any callee keeps for its caller: stored
+/// whole and as they came they are saved, as a `push` saves them, not
+/// used. A value stored for its bits isn't stored so: Metroid's save
+/// writer stores half of r9, alone. Nothing shows that no other code
+/// reads a context block's words as data (a collector scanning a
+/// `jmp_buf` for pointers would): such a reader finds the lift's zeroes
+/// there, as it does in a stack frame's saved registers.
+fn context_saves(funcs: &[Func]) -> BTreeSet<u32> {
+    let blocks = |load: bool| {
+        funcs
+            .iter()
+            .flat_map(|f| f.blocks.values())
+            .flat_map(|b| &b.insns)
+            .filter_map(move |&(at, i)| match i {
+                Instr::Block {
+                    cond: Cond::Al,
+                    load: l,
+                    mode,
+                    rn,
+                    regs,
+                    psr: false,
+                    ..
+                } if l == load
+                    && regs & CONTEXT == CONTEXT
+                    && rn != DReg::Sp
+                    && regs & 1 << rn as u16 == 0 =>
+                {
+                    Some((at, mode, regs))
+                }
+                _ => None,
+            })
+    };
+    let restores: Vec<(BlockMode, u16)> = blocks(true).map(|(_, m, r)| (m, r)).collect();
+    blocks(false)
+        .filter(|&(_, m, r)| restores.contains(&(m, r)))
+        .map(|(at, ..)| at)
+        .collect()
 }
 
 /// Every function's summary, by entry.
@@ -598,7 +924,20 @@ pub fn summarize_with(ctx: &Ctx, funcs: &[Func], assume: Assume) -> Summaries {
 /// leaves what they leave, and what is read after it is read after each.
 /// `assume` holds for the rest.
 pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) -> Summaries {
+    summarize_passing(ctx, funcs, assume, sets, &Passing::default())
+}
+
+/// [`summarize_sets`], with what a holes file says of r4–r11's passing
+/// ([`Passing`]).
+pub fn summarize_passing(
+    ctx: &Ctx,
+    funcs: &[Func],
+    assume: Assume,
+    sets: &Sets,
+    passing: &Passing,
+) -> Summaries {
     let proof = prove(ctx, funcs);
+    let saves = context_saves(funcs);
     let by_entry: BTreeMap<u32, &Func> = funcs.iter().map(|f| (f.entry, f)).collect();
     let mut sums: BTreeMap<u32, Summary> =
         by_entry.keys().map(|&k| (k, Summary::default())).collect();
@@ -610,7 +949,14 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
         sums.insert(k, library_summary(k));
     }
     let mut used: BTreeMap<u32, BTreeMap<(u32, u8), Cause>> = BTreeMap::new();
+    // Each function's `bl` callees (a tail call's site is its callee).
+    let mut bl: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
+    // Each function's tail callees and the functions it falls into: they
+    // take its own r4-r11.
+    let mut jumps: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
     let mut callers: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
+    // Each function's reads of r4-r11 as they came that make it a taker.
+    let mut reads: BTreeMap<u32, Vec<(u32, u8, Via)>> = BTreeMap::new();
     let mut work: VecDeque<u32> = by_entry
         .keys()
         .copied()
@@ -637,19 +983,40 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
             ctx,
             &by_entry,
             by_entry[&k],
-            Some(Sum::new(&sums, assume, sets)),
+            Some(Sum::new(&sums, assume, sets, passing, &saves, &proof.kept)),
         )
         .expect("a summary's run records what the proof fails on");
         let mut sum = w.sum.expect("a summary's run");
-        for &(at, r) in &sum.entry_reads {
-            sum.holes.insert(if sum.changes != 0 {
-                format!("0x{at:08x}: reads r4-r11 at entry: r{r}")
+        let mut returned: BTreeMap<u8, BTreeSet<String>> = BTreeMap::new();
+        for &(at, r, via) in &sum.entry_reads {
+            let hole = if sum.frames & 1 << r != 0 {
+                format!("0x{at:08x}: reads the caller's frame pointer: r{r}")
             } else {
-                format!("0x{at:08x}: reads r4-r11 at entry and keeps them: r{r}")
-            });
+                format!("0x{at:08x}{ENTRY_READ}r{r}{}", via.text())
+            };
+            match via {
+                Via::Ret(x) => {
+                    returned.entry(x).or_default().insert(hole);
+                }
+                _ => {
+                    sum.holes.insert(hole);
+                }
+            }
+        }
+        for &(at, r) in &sum.masked {
+            sum.holes
+                .insert(format!("0x{at:08x}: masks away r4-r11's entry bits: r{r}"));
         }
         let exit = sum.exit_bits();
         let params = sum.params.keys().fold(0, |m, &r| m | 1 << r);
+        let taking: Vec<(u32, u8, Via)> = sum
+            .entry_reads
+            .iter()
+            .filter(|&&(_, r, via)| !matches!(via, Via::Ret(_)) && sum.frames & 1 << r == 0)
+            .copied()
+            .collect();
+        let takes = taking.iter().fold(0, |m, &(_, r, _)| m | 1 << (r - 4));
+        reads.insert(k, taking);
         let new = Summary {
             params,
             causes: sum.params.clone(),
@@ -663,6 +1030,8 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
             forwards: sum.forwards(),
             keeps: proof.kept.contains(&k),
             changes: sum.changes,
+            takes,
+            passes: sum.passes.clone(),
             holes: sum.holes.clone(),
             stopped: sum.stopped,
             callees: sum.refs.clone(),
@@ -673,15 +1042,33 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
                 .map(|(&a, _)| a)
                 .collect(),
             undefined_reads: sum.undefined.clone(),
+            entry_returns: returned,
         };
         for &c in &sum.refs {
             callers.entry(c).or_default().insert(k);
         }
+        bl.insert(
+            k,
+            sum.sites
+                .iter()
+                .filter_map(|(&at, &c)| c.filter(|&c| c != at))
+                .collect(),
+        );
+        jumps.insert(
+            k,
+            sum.sites
+                .iter()
+                .filter_map(|(&at, &c)| c.filter(|&c| c == at))
+                .chain(sum.falls.iter().copied())
+                .collect(),
+        );
         used.insert(k, sum.used);
         let old = &sums[&k];
         let grew = old.params != new.params
             || old.exit != new.exit
             || old.changes != new.changes
+            || old.takes != new.takes
+            || old.returns != new.returns
             || Sum::lost(old) != Sum::lost(&new);
         sums.insert(k, new);
         if grew {
@@ -736,6 +1123,15 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
     for s in sums.values_mut() {
         let read = s.read_after | s.passed_after | s.forwarded_after;
         s.results = s.defines() & read & 0xf;
+        // Passed on unset to the next callee isn't enough: a callee's
+        // parameters may be more than it uses (Emerald's 0x080e24cc passes
+        // the r3 a callee's `pop {r3}; mov r8, r3` left).
+        let own = s.read_after | s.forwarded_after;
+        for (&r, hs) in &s.entry_returns {
+            if own & 1 << r != 0 {
+                s.holes.extend(hs.iter().cloned());
+            }
+        }
     }
     // A function that changes r4–r11 and may be called through a pointer:
     // its callers aren't all known, so none can be trusted not to read
@@ -761,6 +1157,140 @@ pub fn summarize_sets(ctx: &Ctx, funcs: &[Func], assume: Assume, sets: &Sets) ->
         for k in found {
             sums.get_mut(&k).expect("a summary").holes.insert(format!(
                 "0x{k:08x}: changes r4-r11 and may be called through a pointer"
+            ));
+        }
+    }
+    // An entry read of r4–r11 is a parameter by register. The lift passes
+    // it at a `bl` and a tail call or fall (the extended entry, with the
+    // caller's registers; one the caller still has as it came is the
+    // caller's read too, `Sum::call`), and at the indirect calls a holes
+    // file names: soft, `takes r4-r11 from its callers`. Any other way in
+    // is `Regs::call`, which zeroes them: an indirect call (one of a
+    // complete callee set, or through a pointer: the key as a word in
+    // the ROM), hard. One nothing calls is only jumped into, by functions
+    // themselves only jumped into (agb's panic paths, discovery's entries
+    // inside another function): soft. An entry value returned in r0–r3
+    // isn't passed: hard wherever the function is called, or jumped into
+    // from one that is.
+    //
+    // A function a pointer call enters that only passes the register on
+    // (`…, which 0x… takes`) uses nothing itself: the zero is wrong where
+    // it is read, in the reader at the end of the chain of pass-ons. That
+    // read is the hard hole, once (`…, zeroed through 0x…`), and the
+    // pass-on soft (`passes on r4-r11 a pointer call zeroes`): one hole a
+    // reader, as before calls passed registers, not one for every function
+    // above it (moonbeam's `setjmp` made 499, before `context_saves`).
+    // What the lift passes is as it was: by a `bl`, never by `call_fn`.
+    let readers: BTreeSet<u32> = sums
+        .iter()
+        .filter(|(_, s)| s.holes.iter().any(|h| h.contains(ENTRY_READ)))
+        .map(|(&k, _)| k)
+        .collect();
+    if !readers.is_empty() {
+        let mut named: BTreeSet<u32> = passing.sites.values().flatten().copied().collect();
+        named.extend(passing.named.iter().copied());
+        let mut zeroed: BTreeSet<u32> = sets.values().flatten().copied().collect();
+        if ctx.base == analysis::program::ROM_BASE {
+            zeroed.extend(
+                ctx.rom
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|&w| u32::from_le_bytes(w))
+                    .filter(|w| sums.contains_key(w)),
+            );
+        } else {
+            zeroed.extend(sums.keys().copied());
+        }
+        let mut called: BTreeSet<u32> = bl.values().flatten().copied().collect();
+        called.extend(zeroed.iter().copied());
+        let mut todo: Vec<u32> = called.iter().copied().collect();
+        while let Some(f) = todo.pop() {
+            for &c in jumps.get(&f).into_iter().flatten() {
+                if called.insert(c) {
+                    todo.push(c);
+                }
+            }
+        }
+        // The reads at the ends of the chains from each function entered
+        // zeroed, and the functions each is zeroed through.
+        let mut ends: BTreeMap<(u32, u32, u8, Via), BTreeSet<u32>> = BTreeMap::new();
+        // The zeroed functions whose every pass-on has such an end.
+        let mut passers: BTreeSet<u32> = BTreeSet::new();
+        // (A stand-in's function runs none of its code: its hole is its
+        // own, as it was, which the lift leaves out with the function.)
+        for &k in readers
+            .iter()
+            .filter(|k| zeroed.contains(k) && !named.contains(k) && !passing.replaced.contains(k))
+        {
+            let mut found = Vec::new();
+            let mut rooted = true;
+            for &(_, _, via) in &reads[&k] {
+                let Via::Takes(c, n) = via else { continue };
+                let (mut todo, mut seen, mut any) = (vec![(c, n)], BTreeSet::new(), false);
+                while let Some((c, n)) = todo.pop() {
+                    if !seen.insert((c, n)) {
+                        continue;
+                    }
+                    for &(at, r, via) in reads.get(&c).into_iter().flatten() {
+                        match via {
+                            _ if r != n => {}
+                            Via::Takes(c2, n2) => todo.push((c2, n2)),
+                            _ => {
+                                any = true;
+                                found.push((c, at, r, via));
+                            }
+                        }
+                    }
+                }
+                rooted &= any;
+            }
+            if rooted {
+                passers.insert(k);
+                for end in found {
+                    ends.entry(end).or_default().insert(k);
+                }
+            }
+        }
+        for k in &readers {
+            let s = sums.get_mut(k).expect("a summary");
+            s.holes = std::mem::take(&mut s.holes)
+                .into_iter()
+                .filter_map(|h| {
+                    let to = if !called.contains(k) && !named.contains(k) {
+                        // Its jumpers' pass-on reads say no more than its own.
+                        if h.contains(ENTRY_READ) && h.contains(", which 0x") {
+                            return None;
+                        }
+                        JUMPED_READ
+                    } else if h.contains(", returned in r") {
+                        ENTRY_READ
+                    } else if zeroed.contains(k) && !named.contains(k) {
+                        if passers.contains(k) && h.contains(", which 0x") {
+                            PASSES_READ
+                        } else {
+                            ENTRY_READ
+                        }
+                    } else {
+                        TAKES_READ
+                    };
+                    Some(h.replace(ENTRY_READ, to))
+                })
+                .collect();
+        }
+        for ((f, at, r, via), through) in ends {
+            // One entered zeroed itself has the read hard already.
+            if zeroed.contains(&f) && !named.contains(&f) {
+                continue;
+            }
+            let first = through.first().expect("a function it is zeroed through");
+            let more = match through.len() - 1 {
+                0 => String::new(),
+                n => format!(" and {n} more"),
+            };
+            sums.get_mut(&f).expect("a summary").holes.insert(format!(
+                "0x{at:08x}{ENTRY_READ}r{r}{}, zeroed through 0x{first:08x}{more}",
+                via.text()
             ));
         }
     }

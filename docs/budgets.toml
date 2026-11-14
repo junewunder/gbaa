@@ -15,18 +15,36 @@ max_lines = 400
 # 390 after native/nightmare-cpu-state added Nightmare's task switcher
 # (31 lines: what each of its three CPU-state holes is, the card asked);
 # 420 after native/modern-gcc-jumps added Imperium's and Rogue's
-# unresolved jumps sorted by kind (30 lines: the card asks for them here).
+# unresolved jumps sorted by kind (30 lines: the card asks for them here);
+# 470 after native/entry-read-masking listed the corpus's entry reads of
+# r4-r11 by kind (48 lines: the card asks for the fully masked ones);
+# 525 after discovery/gcc-far-jump-bl added modern GCC's cold blocks and
+# `sbcs rN, rN` (55 lines: the card asks for the pattern and its
+# recogniser's rule here; the measured numbers are in its evidence);
+# 550 after native/lift-undefined-insns sorted the lifts' undefined
+# instructions by kind (25 lines: the card asks for each kind's cause here).
 [[doc]]
 path = "docs/research/native-holes.md"
-max_lines = 420
+max_lines = 550
 
+# 1962 after multiplayer/rollback-feel-sim added the feel sim's entry
+# (12 lines, its other options left to the justfile's comment); 1971 after
+# multiplayer/wireless-radio-netplay's emerald-radio entry (8 lines, its
+# numbers in docs/research/multiplayer.md); 1978 after
+# multiplayer/desktop-wireless-radio's --wireless entry (7 lines, its
+# check's numbers in the tracker's evidence); 1981 after
+# multiplayer/menu-wireless-room's Link row (3 lines, its check in the
+# tracker's evidence).
 [[doc]]
 path = "docs/tools/commands.md"
-max_lines = 1950
+max_lines = 1981
 
+# 1254 after native/hw-serial-registers added the serial registers' entry
+# to section 7's as-built list (4 lines: what the library keeps and that
+# nothing answers; the rest is in runtime::hw's docs and the route file).
 [[doc]]
 path = "docs/native-port-design.md"
-max_lines = 1250
+max_lines = 1254
 
 [[doc]]
 path = "AGENTS.md"

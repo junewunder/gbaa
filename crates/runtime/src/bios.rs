@@ -57,6 +57,7 @@ use armv4t::interp::{Bank, Cpu, T_BIT, mode};
 
 pub(crate) mod decomp;
 pub(crate) mod math;
+pub mod multiboot;
 
 /// Where the game's IRQ handler records the interrupts it serviced, for
 /// `IntrWait` (the BIOS's `IF` mirror). The handler's own address is the
@@ -284,6 +285,9 @@ pub struct Bios {
     /// returns to.
     stall: u32,
     stall_ret: u32,
+    /// A `MultiBoot` exchange in progress, as the parent or as a machine
+    /// with no cartridge waiting for its program ([`multiboot`]).
+    pub multiboot: multiboot::MultiBoot,
 }
 
 impl Bios {
@@ -344,9 +348,22 @@ pub struct Pending {
 /// frame, and run at once it starved Emerald's link of serial IRQs (the
 /// trade screen's Summary).
 pub fn swi<P: Platform>(m: &mut Machine<P>, comment: u32) -> Result<(), Unimplemented> {
-    if number(comment, m.cpu.thumb()) == call::HARD_RESET {
-        hard_reset(m);
-        return Ok(());
+    match number(comment, m.cpu.thumb()) {
+        call::HARD_RESET => {
+            hard_reset(m);
+            return Ok(());
+        }
+        call::MULTI_BOOT => {
+            // Sending runs at `multiboot::LOOP`; the call's entry is mGBA's
+            // 45 cycles, as every call's.
+            multiboot::start(m);
+            m.bus.bios_latch = BIOS_LATCH_AFTER_SWI;
+            if m.timing != crate::Timing::Native {
+                m.tick(45);
+            }
+            return Ok(());
+        }
+        _ => {}
     }
     let (mut cycles, stall) = call(&mut m.cpu, &mut m.bus, &mut m.bios, comment)?;
     // A stall inside a handler that interrupted one runs at once.
@@ -571,9 +588,8 @@ fn call(
             r[1] = 0;
             r[3] = NOP_CALL;
         }
-        // No link cable here, so no client answers: GBATEK's failure
-        // (mGBA's HLE BIOS does nothing, leaving r0 as it was).
-        call::MULTI_BOOT => r[0] = 1,
+        // Run by `swi` (`multiboot::start`), which needs the machine.
+        call::MULTI_BOOT => unreachable!("MultiBoot runs in swi"),
         number => {
             let size = if thumb { 2 } else { 4 };
             return Err(Unimplemented {
@@ -674,7 +690,9 @@ fn sound_bias(bus: &mut Bus, level: u32) {
 /// and the registers and boots the cartridge again; the LCD and the clock
 /// run on through it. So this resets the machine in place rather than
 /// building a new one: the clock never goes back under a run in progress.
-/// The boot logo isn't shown, as `Machine::new` doesn't show it.
+/// The boot logo isn't shown, as `Machine::new` doesn't show it. With no
+/// cartridge, the BIOS waits for a program over the cable again
+/// ([`multiboot::boot_cartless`]).
 fn hard_reset<P: Platform>(m: &mut Machine<P>) {
     let bus = &mut m.bus;
     register_ram_reset(bus, 0xFF);
@@ -692,6 +710,10 @@ fn hard_reset<P: Platform>(m: &mut Machine<P>) {
     m.ppu.reset();
     m.sched.halted = false;
     m.prefetch.at = u64::MAX;
+    if m.bus.rom.is_empty() {
+        // No cartridge: the BIOS waits for a program over the cable again.
+        multiboot::boot_cartless(m);
+    }
 }
 
 /// `RegisterRamReset` (r0: what to reset), with the register values mGBA
@@ -762,7 +784,8 @@ crate::snap::snap!(Bios {
     len,
     irq_depth,
     stall,
-    stall_ret
+    stall_ret,
+    multiboot
 });
 crate::snap::snap!(Pending { pc, depth, mask });
 
