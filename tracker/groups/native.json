@@ -1737,19 +1737,7 @@
         "checker": "e9dcabe4",
         "at": "2026-11-14T11:55:05Z",
         "evidence": "Checked at HEAD d5fcce22 (fresh build): gbaa-holes' hard holes are codegen::native::lift holes-only's, counted by HoleKind (code read). gbaa-lift --holes-only on all 9 corpus games: per-kind counts equal native-holes.numbers.md's rows (110 total). Whole lift at HEAD vs holes-only, sorted hole lines: Metroid 0, Nightmare 0, WarioWare 6, moonbeam 7 identical. Against 7f42cf22 whole-lift logs: Rogue 24, Imperium 20 identical; Minish Cap and Mirror differ only by f_080af909 / f_0814fa89 (flow callee-set summary holes, named in native-holes.md), which the --flow logs include (32, 7). Emerald's whole-lift comparison is split into its own unit, {unit:native/holes-match-emerald}. just check passed (rc 0) after merging main (tracker-only fast-forward). Logs /tmp/chk.",
-        "branch": "unit/native/holes-match-lift",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-14T11:55:05Z",
-          "by": "e9dcabe4",
-          "host": "quack",
-          "pid": 2833770,
-          "start": "8749081",
-          "beats": true,
-          "session": "e9dcabe4-d225-44e2-8c60-5384e225a358",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "host": "quack"
       },
       "notes": [
         {
@@ -1767,8 +1755,7 @@
           "by": "5b99a863",
           "text": "Lift holes are found while printing (FnPrinter::hole, native.rs ~1380-2156): no cheap scan. Full lift is 15G/minutes (heap 370s). Idea: Hole gets a kind enum; lift() holes-only mode skipping fn_flow+heap+modules, called by gbaa-holes; check summaries w/o sets match."
         }
-      ],
-      "round": "2026-11-14T11:30:50Z"
+      ]
     },
     {
       "id": "native/mirror-lifts",
