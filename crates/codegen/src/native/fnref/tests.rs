@@ -602,6 +602,56 @@ fn bounds_from_a_table_s_start_end_with_its_object() {
 }
 
 #[test]
+fn stores_bounded_to_two_globals_stay_apart() {
+    // One function stores F through a pointer the run can't place (r1, a
+    // parameter), which the value sets bound to a struct at G1, and a
+    // number through another (r2) bound to one at G2. Another adds 1 to
+    // G2's first word and calls G1 + 4's (native/fnref-pile-globals).
+    const G1: u32 = 0x0300_0200;
+    const G2: u32 = 0x0300_0300;
+    let e = 0x0800_1001;
+    let mut a = B::default();
+    let p = a.pool(POOL, F);
+    let r1 = a.get(1);
+    a.st(Width::Word, r1, p);
+    let s1 = a.insts.len() - 1;
+    let r2 = a.get(2);
+    let n = a.k(5);
+    a.st(Width::Word, r2, n);
+    let s2 = a.insts.len() - 1;
+    let store = (e, vec![(e, a.end(None, Edge::Return))]);
+    let mut b = B::default();
+    let c = b.k(G2);
+    let x = b.ld(Width::Word, c);
+    let one = b.k(1);
+    let y = b.bin(BinOp::Add, x, one);
+    b.set(0, y);
+    let c = b.k(G1 + 4);
+    let t = b.ld(Width::Word, c);
+    let call = calling(0x0800_2001, b, t);
+    let bounds = BTreeMap::from([
+        ((e, s1), ((G1, G1 + 0x10), None)),
+        ((e, s2), ((G2, G2 + 0x10), None)),
+    ]);
+    let fns = [store, call];
+    let f = run_bounded(&fns, &BTreeMap::new(), &Img::new(), &bounds);
+    assert!(f.proven(POOL), "{f:?}");
+    assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
+    assert!(f.piled.is_empty(), "{f:?}");
+    // F's bounds reaching G2: G2's word may be F, and adding 1 to it is
+    // a hole.
+    let mut meet = bounds.clone();
+    meet.insert((e, s1), ((G1, G2), None));
+    let f = run_bounded(&fns, &BTreeMap::new(), &Img::new(), &meet);
+    assert!(!f.proven(POOL), "{f:?}");
+    // Unbounded, both go to the pile, which every load reads: the same.
+    let f = run_bounded(&fns, &BTreeMap::new(), &Img::new(), &BTreeMap::new());
+    assert!(!f.proven(POOL), "{f:?}");
+    assert!(f.piled.contains(&Origin::Word(POOL)), "{f:?}");
+    assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
+}
+
+#[test]
 fn a_bios_copy_reads_its_length() {
     let n = |m: u32| Val::of(Tok::Num(m));
     // CpuSet: halfwords, words with bit 26, one unit with the fill bit.
