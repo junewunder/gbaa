@@ -1732,11 +1732,20 @@
       "uses": ["heavy"],
       "minMinutes": 180,
       "record": {
-        "state": "review",
-        "by": "5e83e896",
-        "at": "2026-11-14T11:26:44Z",
-        "evidence": "gbaa-holes' hard count is now gbaa-lift --holes-only's, by HoleKind (out/holes/holes-match-lift, numbers doc regenerated; 110 total). Whole lift (7f42cf22) vs holes-only: same hard-hole lines on Metroid 0, WarioWare 6, Nightmare 0, moonbeam 7, Rogue 24, Imperium 20; Minish Cap 32 vs 31 and Mirror 7 vs 6 (flow's callee sets), named in docs/research/native-holes.md, and --flow matches both whole lifts line for line. Emerald's whole lift unfinished: {unit:native/holes-match-emerald}. just check passed after the main merge (main brought only tracker changes). Logs in /tmp/hml.",
-        "host": "quack"
+        "state": "claimed",
+        "by": "e9dcabe4",
+        "session": "e9dcabe4-d225-44e2-8c60-5384e225a358",
+        "host": "quack",
+        "pid": 2833770,
+        "start": "8749081",
+        "at": "2026-11-14T11:30:50Z",
+        "branch": "unit/native/holes-match-lift",
+        "reviewing": {
+          "by": "5e83e896",
+          "at": "2026-11-14T11:26:44Z",
+          "evidence": "gbaa-holes' hard count is now gbaa-lift --holes-only's, by HoleKind (out/holes/holes-match-lift, numbers doc regenerated; 110 total). Whole lift (7f42cf22) vs holes-only: same hard-hole lines on Metroid 0, WarioWare 6, Nightmare 0, moonbeam 7, Rogue 24, Imperium 20; Minish Cap 32 vs 31 and Mirror 7 vs 6 (flow's callee sets), named in docs/research/native-holes.md, and --flow matches both whole lifts line for line. Emerald's whole lift unfinished: {unit:native/holes-match-emerald}. just check passed after the main merge (main brought only tracker changes). Logs in /tmp/hml."
+        },
+        "beats": true
       },
       "notes": [
         {
@@ -1754,7 +1763,8 @@
           "by": "5b99a863",
           "text": "Lift holes are found while printing (FnPrinter::hole, native.rs ~1380-2156): no cheap scan. Full lift is 15G/minutes (heap 370s). Idea: Hole gets a kind enum; lift() holes-only mode skipping fn_flow+heap+modules, called by gbaa-holes; check summaries w/o sets match."
         }
-      ]
+      ],
+      "round": "2026-11-14T11:30:50Z"
     },
     {
       "id": "native/mirror-lifts",
