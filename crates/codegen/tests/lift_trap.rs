@@ -82,3 +82,36 @@ fn another_undefined_instruction_is_still_a_hard_hole() {
     assert!(!l.files.iter().any(|(_, t)| t.contains("a compiler's trap")));
     assert!(!l.report.contains("compilers' traps"));
 }
+
+/// The hole report's lift (`Holes::holes_only`, native/holes-match-lift)
+/// finds the same hard holes as the whole lift, each with its kind, and
+/// writes no crate.
+#[test]
+fn the_holes_only_lift_finds_the_same_holes() {
+    use codegen::native::{HoleKind, holes_by_kind};
+    let mut rom = vec![0u8; 0xd4];
+    rom[..4].copy_from_slice(&0xEA00_002Eu32.to_le_bytes());
+    rom[0xc0..0xc4].copy_from_slice(&0xE28F_0001u32.to_le_bytes());
+    rom[0xc4..0xc8].copy_from_slice(&0xE12F_FF10u32.to_le_bytes());
+    for (i, h) in [0x2300u16, 0x2800, 0xd101, 0x681b, 0xde00, 0xe7fe]
+        .into_iter()
+        .enumerate()
+    {
+        rom[0xc8 + 2 * i..0xca + 2 * i].copy_from_slice(&h.to_le_bytes());
+    }
+    let whole = lift(&rom, "trap", &Holes::default());
+    let only = lift(
+        &rom,
+        "trap",
+        &Holes {
+            holes_only: true,
+            ..Holes::default()
+        },
+    );
+    assert_eq!(only.holes, whole.holes);
+    assert!(only.files.is_empty() && !whole.files.is_empty());
+    assert_eq!(whole.holes[0].kind, HoleKind::Undefined);
+    let n = holes_by_kind(&only.holes);
+    assert_eq!(n[2], 1, "{n:?}");
+    assert_eq!(n.iter().sum::<usize>(), only.holes.len());
+}

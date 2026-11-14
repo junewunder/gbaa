@@ -61,45 +61,49 @@ tracker evidence has the before and after (`just show <id> --full`).
 
 ## The tool
 
-`just holes ROM` (`crates/hole-report`, `gbaa-holes`; its steps are in
-the command entry, `docs/tools/commands.md`): discovery and its IWRAM
-overlays, a 5,400-frame instant-timing run with the research press
-script (Start, A and B tapped, then right, up and left held 1,000 frames
-each from frame 2000), discovery again with the run's call targets
-("With the run's call targets"), the summaries, the RAM copies with the
-run ("RAM copies"), then `analysis::holes::classify` (in the analysis
-crate so the lifter reuses it). About a minute a game; `just holes-all`
-runs the corpus into one table (about 10 minutes), where `first stop` is how far each game's last lift ran once built (`just lift`): its next hole.
+`just holes ROM --holes FILE` (`crates/hole-report`, `gbaa-holes`; its
+steps are in the command entry, `docs/tools/commands.md`). **The hard
+holes are the lifter's** (native/holes-match-lift): `codegen::native::lift`
+in its holes-only mode with the game's holes file, counted by
+`codegen::native::HoleKind`, so the report and `just lift` give one
+answer ("The report's count is the lift's", below). Then what only a run
+shows: discovery and its IWRAM overlays, a 5,400-frame instant-timing
+run with the research press script (Start, A and B tapped, then right,
+up and left held 1,000 frames each from frame 2000), discovery again with
+the run's call targets ("With the run's call targets"), the summaries,
+the RAM copies with the run ("RAM copies"), then
+`analysis::holes::classify`. One to four minutes a game (Imperium's
+lift is 3.5 of its 10); `just holes-all` runs the corpus into one table
+(about 27 minutes), finding each game's holes file as `just lift` does,
+where `first stop` is how far each game's last lift ran once built (`just lift`): its next hole.
 
 ### What counts as a hard hole
 
-| Hole | How it's found | Counted |
+| Hole | How the lift finds it | Table column |
 |---|---|---|
-| Indirect jump not resolved | Recovery's `Unresolved` and `Rejected`, ROM and overlays; its `Ram` (one constant RAM target) where no overlay has a function there | every one, reached or not ("jumps A+B": ROM + overlays) |
-| Return-address arithmetic | the run: a return (`bx`, `pop {pc}`, `mov pc, lr`, `ldr pc, [sp]`) landing 64 bytes before to 1 KiB after the innermost open call's return site, not on it, not on another call's return site, not on a function start, not inside the callee's own function; statically: a function doing arithmetic on lr, or loading through it, before writing lr | where Recovery doesn't resolve the call site as a jump |
-| RAM code that changed | the run: an address run again with different bytes or instruction set | each run of addresses (gaps up to 16 bytes) |
-| CPU state | `msr`, `mrs`, `ldm`/`stm` with the S bit, `s` writes to pc, stack switches (sp moved 4 KiB or more by one instruction other than sp-relative arithmetic) | outside the IRQ wrapper (code run at the top level of an IRQ, and the rest of its function; for a copy made by the game's loop, at the RAM address) and boot (code run only in the first frame, and its function) |
-| BIOS call outside the library | `swi` numbers the native lifter doesn't print (the ones not in `analysis::holes::NATIVE_BIOS`) | each site |
-| Call to a non-entry | the run: a call through a register (`mov lr, pc` or `adr lr, …` then `bx rN`, or a `bl` to a `bx rN` stub other than `bx pc`) to an address not a discovered function start or RAM entry | each target |
-| Summary hole | `analysis::holes::SUMMARY_HARD`: a return with sp changed (moved by a run-time amount, as a variable-length array does), a read of r4-r11 a callee changed or that came in as a parameter, a function that changes r4-r11 whose key is a word in the ROM (below) | each function, once |
+| Indirect jump not resolved | Recovery's, ROM and copies, that the holes file gives no `[[jump]]` targets | jumps |
+| Jump to no code | a constant jump into ROM or RAM where discovery, the gap decoding and the copies (static, and the holes file's `[[copy]]`) have none | no code |
+| Undefined instruction | one that isn't a compiler's trap | undefined |
+| CPU state | `msr`, `mrs`, a user-bank transfer, an exception return, a stack switch, outside the reset and the IRQ wrappers (`PsrFns`) | CPU state |
+| BIOS call | a `swi` the library lacks (`analysis::holes::NATIVE_BIOS`) | BIOS |
+| Summary hole | `analysis::holes::SUMMARY_HARD` on the lift's summaries (with the holes file's `[[takes]]`): each function once | summaries |
+| r4-r11 not passed | a call to a function taking r4-r11 from its callers that can't pass them | r4-r11 |
+| Holes file | a stand-in, `[[takes]]` or `[[copy]]` naming what isn't there | holes file |
 
-A place can be counted under two kinds: a routine copied onto the stack
-that isn't recognised would be RAM code that changed and, at each entry,
-a call to a non-entry. A ROM source and its RAM copy are classified once,
-at the copy (an indirect jump too: the ROM source's is dropped where the
-copy's analysis has it); a `bl` to a switch helper that Recovery rejects
-counts as a jump only.
+Beside them, not in `hard` (the lift can't see them; a run can):
 
-CPU-state and BIOS items in code only the pointer scan found and the run
-never ran aren't counted (Emerald's 0x087f22xx: data that decodes as
-`swi 0x64` and `ldm ^`). Other summary holes are counted elsewhere (an
-unknown jump, a mode change, RAM code) or aren't holes for a native build
-(an indirect call is an `FnRef`), and are printed but not counted.
+| Hole | How the run finds it | Counted |
+|---|---|---|
+| Return-address arithmetic | a return (`bx`, `pop {pc}`, `mov pc, lr`, `ldr pc, [sp]`) landing 64 bytes before to 1 KiB after the innermost open call's return site, not on it, not on another call's return site, not on a function start, not inside the callee's own function; statically: a function doing arithmetic on lr, or loading through it, before writing lr | where Recovery doesn't resolve the call site as a jump |
+| RAM code that changed | an address run again with different bytes or instruction set | each run of addresses (gaps up to 16 bytes) |
+| Call to a non-entry | a call through a register (`mov lr, pc` or `adr lr, …` then `bx rN`, or a `bl` to a `bx rN` stub other than `bx pc`) to an address not a discovered function start or RAM entry | each target |
 
-**The BIOS count is the interpreter's, not the lifter's** (against
-`runtime::bios`; Metroid's lift found 9 the report counts as 0;
-`native/lift-bios-calls`). **Not discovered** is the bytes of code the
-run executed that discovery (or an overlay's) didn't find, ROM and RAM.
+The run's classification of the lift's kinds (Recovery's jumps, reached
+or not; CPU state with Boot and Wrapper places; BIOS calls; its own
+summaries) is printed on its own line and in the lists, as the run's
+view: which are reached, and where they go. Its counts aren't the hard
+ones. **Not discovered** is the bytes of code the run executed that
+discovery (or an overlay's) didn't find, ROM and RAM.
 
 ### The flash library's stack routines
 
@@ -156,6 +160,52 @@ didn't halt, loaded RAM an IRQ handler had written, and made the same
 stores as the iteration before (no progress of their own). At 8 in a row
 the same rule also caught pure loops over short lists (Rogue's `FlagGet`
 per item, 27); at 64 only the map-load loops remain.
+
+## The report's count is the lift's
+
+native/holes-match-lift. Until 2026-11-14 the report classified holes
+its own way, and it and the lift disagreed on every game (2026-11-10:
+Minish Cap 30 against 53, Rogue 23 against 55, moonbeam 3 against 28,
+Imperium 20 against 30). The report didn't count undefined instructions
+(47, most now compilers' traps, native/lift-undefined-insns); took the
+reset's and IRQ wrappers' `msr`/`mrs` as recognised before the lift did
+(native/lift-psr-boot-irq); found RAM copies with its run where the
+lift needs `[[copy]]`; didn't read the holes file; and its summaries
+were plain `summarize`'s, not the lift's passing ones
+(native/metroid-entry-reads).
+
+Now `gbaa-holes` runs the lift itself, holes only: the printing (where
+the lift finds every hole) without the function-address flow, the heap
+pointers or the modules, 9 s to 3.5 min a game under 0.6 GB, where the
+whole lift took 54 s to 50 min (Minish Cap 20, its flow most of it;
+Kirby & the Amazing Mirror's heap 30). Each hole carries its kind. On
+the corpus, holes files applied, the whole lift (the commit before) and
+the holes-only one name the same holes, line for line, but two: Metroid
+0, WarioWare 6, Nightmare 0, moonbeam 7, Rogue 24, Imperium 20; Minish
+Cap 32 and the Amazing Mirror 7 against 31 and 6 (below). Emerald's
+whole lift (16 holes-only; its flow doesn't settle, so no sets) wasn't
+finished when this was written.
+
+The differences left, each right:
+
+- **What only a run shows isn't in `hard`.** Return arithmetic
+  (WarioWare 2), RAM code that changed (Rogue's mixer, Imperium's) and
+  calls to non-entries (none now) are counted beside it. The lift can't
+  see them; its build would run into them (the first stop).
+- **Copies only a run finds are holes until the holes file has them.**
+  Minish Cap's 21 "no code" are its veneers into IWRAM code it copies
+  itself: the report prints the `[[copy]]` tables that fill them, and
+  counts them, as the lift does, until the file takes them.
+- **The flow's callee sets: the two.** The whole lift's second summaries
+  take each indirect call with a complete callee set as calling exactly
+  those; the holes-only lift has none (as with `skip_fn_flow`, or a flow
+  that doesn't settle, Emerald's). In Minish Cap (0x080af909) and Kirby
+  & the Amazing Mirror (0x0814fa89) a function then reads r8 at entry
+  through such a callee and returns it: a summary hole the report
+  doesn't count. `--flow` (`gbaa-holes`, `gbaa-lift --holes-only`) runs
+  the flow too and counts them, at its cost: 18 minutes each for those two, the same holes as the
+  whole lift, line for line. The table is
+  without it, as the flow costs more than the rest of the report.
 
 ## With the run's call targets
 
@@ -516,9 +566,9 @@ is a hard hole still. `native/lift-bios-more` ended the 47th (`SoftReset`).
 
 ## What the Stage-A lifter should know
 
-- Take holes from `analysis::holes::classify`; its `Report` lists each
-  site. The IRQ wrapper and boot `msr`/`mrs` come back as `CpuWhere::Wrapper`
-  and `Boot`: recognised, not holes; the lifter prints them (`PsrFns`).
+- The hard holes are the lifter's own (`codegen::native::HoleKind`), and
+  the report's are the same. `classify`'s `Report` is the run's view of
+  each site: reached or not, where it went.
 - The run's call targets (`Run::call_targets`, `indirect_calls`) are the
   roots discovery lacks. The RAM copies are `analysis::holes::ram_copies`
   (each an `Overlay`, with the roots it was given), which needs a run; a

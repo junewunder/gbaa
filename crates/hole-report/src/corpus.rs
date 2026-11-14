@@ -3,7 +3,8 @@
 //! over every game of FILE (`holes/corpus.toml`), one table at the end.
 //!
 //! Each game is its own `gbaa-holes ROM FLAGS… --line OUT/<name>.toml`
-//! child, one at a time (so one memory cap holds the whole run), its
+//! child (with `--holes` its lift's holes file, `holes/<name>.toml` or
+//! `mods/<name>/holes.toml`, as `just lift` finds it), one at a time (so one memory cap holds the whole run), its
 //! report in `OUT/<name>.txt` and its timings in `OUT/<name>.log`. With
 //! `--cover` each game with a `cover` file gets `--cover FILE` too (10 to
 //! 30 minutes a game). The child writes its ranking line's numbers
@@ -38,19 +39,30 @@ use std::process::{Command, ExitCode, Stdio};
 use analysis::holes::Report;
 use serde::{Deserialize, Serialize};
 
-/// The ranking line's numbers ([`Report::line`]).
+/// The ranking line's numbers: the lift's hard holes by kind
+/// ([`codegen::native::HoleKind`]), then what only the run shows
+/// ([`Report`]'s return arithmetic, RAM code that changed, calls to
+/// non-entries), not counted in `hard`. A summary from before
+/// native/holes-match-lift reads with its old fields dropped (its `hard`
+/// and `jumps` were the run's classification's).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Line {
+    /// The lift's hard holes: what stops its crate building.
     pub hard: usize,
-    /// Indirect jumps Recovery leaves unresolved: ROM, then the overlays.
+    /// The lift's, by kind.
     pub jumps: usize,
-    pub overlay_jumps: usize,
-    pub return_arithmetic: usize,
-    pub ram_changed: usize,
+    pub no_code: usize,
+    pub undefined: usize,
     pub cpu_state: usize,
     pub bios: usize,
-    pub non_entries: usize,
     pub summaries: usize,
+    pub takes: usize,
+    pub holes_file: usize,
+    /// What only the run shows.
+    pub return_arithmetic: usize,
+    pub ram_changed: usize,
+    pub non_entries: usize,
     /// Bytes reached but not discovered, ROM and RAM.
     pub undiscovered: u32,
     pub undiscovered_rom: u32,
@@ -61,17 +73,31 @@ pub struct Line {
 }
 
 impl Line {
-    pub fn of(r: &Report) -> Line {
+    /// The line of the run's report `r` and the lift's hard holes `lift`.
+    pub fn of(r: &Report, lift: &[codegen::native::Hole]) -> Line {
+        let [
+            jumps,
+            no_code,
+            undefined,
+            cpu_state,
+            bios,
+            summaries,
+            takes,
+            holes_file,
+        ] = codegen::native::holes_by_kind(lift);
         Line {
-            hard: r.hard(),
-            jumps: r.unresolved.len(),
-            overlay_jumps: r.overlay_unresolved.len(),
+            hard: lift.len(),
+            jumps,
+            no_code,
+            undefined,
+            cpu_state,
+            bios,
+            summaries,
+            takes,
+            holes_file,
             return_arithmetic: r.hard_ret(),
             ram_changed: r.ram_changed.len(),
-            cpu_state: r.hard_cpu(),
-            bios: r.bios.len(),
             non_entries: r.indirect_non_entry.len(),
-            summaries: r.hard_summary(),
             undiscovered: r.undiscovered_bytes(),
             undiscovered_rom: r.rom_undiscovered_bytes,
             undiscovered_ram: r.ram_undiscovered_bytes,
@@ -82,25 +108,57 @@ impl Line {
     }
 
     /// The table's columns: (heading, value).
-    fn columns(&self) -> [(&'static str, i64); 10] {
+    fn columns(&self) -> [(&'static str, i64); 13] {
         [
             ("hard", self.hard as i64),
             ("jumps", self.jumps as i64),
-            ("ovl jumps", self.overlay_jumps as i64),
-            ("ret arith", self.return_arithmetic as i64),
-            ("RAM changed", self.ram_changed as i64),
+            ("no code", self.no_code as i64),
+            ("undefined", self.undefined as i64),
             ("CPU state", self.cpu_state as i64),
             ("BIOS", self.bios as i64),
-            ("non-entries", self.non_entries as i64),
             ("summaries", self.summaries as i64),
+            ("r4-r11", self.takes as i64),
+            ("holes file", self.holes_file as i64),
+            ("ret arith", self.return_arithmetic as i64),
+            ("RAM changed", self.ram_changed as i64),
+            ("non-entries", self.non_entries as i64),
             ("undiscovered", self.undiscovered as i64),
         ]
     }
+
+    /// The report's first line: the hard holes by kind, then the run's.
+    pub fn text(&self, game: &str) -> String {
+        format!(
+            "{game}: hard {} (the lift's: jumps {}, no code {}, undefined {}, CPU state {}, \
+             BIOS {}, summaries {}, r4-r11 not passed {}, holes file {}); \
+             the run's only, not counted: return arithmetic {}, RAM code changed {}, \
+             calls to non-entries {}; not discovered {} bytes ({} ROM, {} RAM) of {} reached; \
+             busy loops calling functions {}; flash library stand-ins {}",
+            self.hard,
+            self.jumps,
+            self.no_code,
+            self.undefined,
+            self.cpu_state,
+            self.bios,
+            self.summaries,
+            self.takes,
+            self.holes_file,
+            self.return_arithmetic,
+            self.ram_changed,
+            self.non_entries,
+            self.undiscovered,
+            self.undiscovered_rom,
+            self.undiscovered_ram,
+            self.reached,
+            self.busy_loops,
+            self.flash,
+        )
+    }
 }
 
-/// Write `r`'s line to `path` (`gbaa-holes --line FILE`).
-pub fn write_line(path: &str, r: &Report) -> Result<(), String> {
-    let t = toml::to_string(&Line::of(r)).map_err(|e| e.to_string())?;
+/// Write `l` to `path` (`gbaa-holes --line FILE`).
+pub fn write_line(path: &str, l: &Line) -> Result<(), String> {
+    let t = toml::to_string(l).map_err(|e| e.to_string())?;
     std::fs::write(path, t).map_err(|e| format!("{path}: {e}"))
 }
 
@@ -285,13 +343,16 @@ pub fn table(now: &Summary, against: Option<&Summary>) -> String {
 fn add(t: &mut Line, l: &Line) {
     t.hard += l.hard;
     t.jumps += l.jumps;
-    t.overlay_jumps += l.overlay_jumps;
-    t.return_arithmetic += l.return_arithmetic;
-    t.ram_changed += l.ram_changed;
+    t.no_code += l.no_code;
+    t.undefined += l.undefined;
     t.cpu_state += l.cpu_state;
     t.bios += l.bios;
-    t.non_entries += l.non_entries;
     t.summaries += l.summaries;
+    t.takes += l.takes;
+    t.holes_file += l.holes_file;
+    t.return_arithmetic += l.return_arithmetic;
+    t.ram_changed += l.ram_changed;
+    t.non_entries += l.non_entries;
     t.undiscovered += l.undiscovered;
     t.undiscovered_rom += l.undiscovered_rom;
     t.undiscovered_ram += l.undiscovered_ram;
@@ -457,6 +518,17 @@ pub fn main(args: &[String]) -> ExitCode {
             .arg(&line_path);
         if let (true, Some(f)) = (cover, &g.cover) {
             c.args(["--cover", f]);
+        }
+        // The lift's holes file, where `just lift` finds it: holes/<name>.toml,
+        // else mods/<name>/holes.toml (a commercial game's is game-derived).
+        if let Some(h) = [
+            PathBuf::from("holes").join(format!("{}.toml", g.name)),
+            PathBuf::from("mods").join(&g.name).join("holes.toml"),
+        ]
+        .into_iter()
+        .find(|p| p.exists())
+        {
+            c.arg("--holes").arg(h);
         }
         let exit = match c.stdout(Stdio::from(txt)).stderr(Stdio::from(log)).status() {
             Ok(s) => s.code().unwrap_or(-1),

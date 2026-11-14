@@ -1,7 +1,7 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
 //! [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT]
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--plant-slot=AT] [--shadow-locals]
-//! [--copies N]`:
+//! [--copies N] [--holes-only [--flow]]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
 //! stage A). Writes the whole program as a Rust crate to OUT (`Cargo.toml`,
 //! `src/`, a copy of the ROM for its data, `report.txt`, and its metrics
@@ -56,6 +56,13 @@
 //! file there from an earlier lift that this one didn't write is removed.
 //! `--copies N` writes the modules N times over under different names: a
 //! synthetic large lift, for measuring the build of a game-sized crate.
+//!
+//! `--holes-only` finds the hard holes and writes nothing (OUT is
+//! ignored): no function-address flow, heap pointers or modules
+//! (`codegen::native::Holes::holes_only`, the hole report's lift), so not
+//! the summary holes that rest on the flow's callee sets; `--flow` follows
+//! the function addresses too, for the whole lift's holes exactly. Prints
+//! the count of each kind and each hole, and exits 0 whatever it found.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -73,7 +80,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--plant-slot=AT] [--shadow-locals] [--copies N]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--plant-slot=AT] [--shadow-locals] [--copies N] [--holes-only [--flow]]"
         );
         ExitCode::FAILURE
     };
@@ -83,6 +90,7 @@ fn main() -> ExitCode {
     let (mut name, mut holes, mut bars, mut names) = (None, None, None, None);
     let (mut drop, mut plant, mut tail, mut irq_at_waits) = (None, None, false, false);
     let mut ime_at_waits = false;
+    let (mut holes_only, mut holes_flow) = (false, false);
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
     let mut layout = codegen::native::globals::Layout::Guest;
     let hex = |s: &str| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok();
@@ -98,6 +106,14 @@ fn main() -> ExitCode {
         }
         if a == "--ime-at-waits" {
             ime_at_waits = true;
+            continue;
+        }
+        if a == "--holes-only" {
+            holes_only = true;
+            continue;
+        }
+        if a == "--flow" {
+            holes_flow = true;
             continue;
         }
         if a == "--shadow-locals" {
@@ -171,6 +187,11 @@ fn main() -> ExitCode {
     holes.shadow_locals = shadow;
     holes.copies = copies;
     holes.layout = layout;
+    if holes_flow && !holes_only {
+        return usage();
+    }
+    holes.holes_only = holes_only;
+    holes.holes_flow = holes_flow;
     let names = names.unwrap_or_else(|| crates_dir().parent().expect("the repo").join("names"));
     let sha = codegen::names::sha1_hex(&bytes);
     match codegen::names::files_for(&names, &sha)
@@ -207,6 +228,17 @@ fn main() -> ExitCode {
         None => None,
     };
     let lifted = codegen::native::lift(&bytes, &name, &holes);
+    if holes_only {
+        print!("{}", lifted.report);
+        let n = codegen::native::holes_by_kind(&lifted.holes);
+        for (k, n) in codegen::native::HoleKind::ALL.iter().zip(n) {
+            println!("  {}: {n}", k.name());
+        }
+        for h in &lifted.holes {
+            println!("  {h}");
+        }
+        return ExitCode::SUCCESS;
+    }
     let out = Path::new(out);
     let crates = crates_dir();
     let cargo = format!(

@@ -22,10 +22,13 @@ max_lines = 400
 # `sbcs rN, rN` (55 lines: the card asks for the pattern and its
 # recogniser's rule here; the measured numbers are in its evidence);
 # 550 after native/lift-undefined-insns sorted the lifts' undefined
-# instructions by kind (25 lines: the card asks for each kind's cause here).
+# instructions by kind (25 lines: the card asks for each kind's cause here);
+# 600 after native/holes-match-lift made the report's hard holes the lift's
+# (50 lines: two tables of what counts, and the card asks for each
+# remaining difference from the lift, and why, here).
 [[doc]]
 path = "docs/research/native-holes.md"
-max_lines = 550
+max_lines = 600
 
 # 1962 after multiplayer/rollback-feel-sim added the feel sim's entry
 # (12 lines, its other options left to the justfile's comment); 1971 after
