@@ -1966,21 +1966,8 @@
         "by": "de276265",
         "at": "2026-11-14T14:05:26Z",
         "evidence": "Branch 9dce7f82+fixes, main merged (8aeb95f8). Io::sio_unplugged + masks; hw moves the serial IRQ into its IF. just unit native-serial-600 passes after the merge (interp 56d84929d20fa3ae; mgba_why now names only the 3 kept items, each with why). just lift-check passed (native-serial: 600 frames, 0 differences, planted fault caught). just check passes. A masked build of the program matched mGBA frames 2-600, proving the kept items are the whole gap. Every other route's interpreter hash unchanged (36 OK); native-bios-calls already drifted at main before this change, filed {unit:native/bios-calls-route-drift}. ~35 min of work.",
-        "branch": "unit/native/serial-no-partner-as-mgba",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-14T14:05:26Z",
-          "by": "de276265",
-          "host": "quack",
-          "pid": 2833770,
-          "start": "8749081",
-          "beats": true,
-          "session": "de276265-47dd-4f92-b1b5-32b4b4f26bae",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-14T13:27:35Z"
+        "host": "quack"
+      }
     },
     {
       "id": "native/packed-diff-labels",
