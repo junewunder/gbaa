@@ -2209,6 +2209,11 @@
       "uses": ["heavy"],
       "notes": [
         {
+          "at": "2026-11-14T12:44:19Z",
+          "by": "d6f46c21",
+          "text": "Amazing Mirror's holes file (mods/kirby-mirror) has five sites = [] entries for its m4a mixer copy (0x03000061, 0x0300006c, 0x030000ef, 0x030001f8, 0x030003e1) that this would drop."
+        },
+        {
           "at": "2026-11-13T10:50:42Z",
           "by": "d2717a37",
           "text": "Review of PR 12: a jump into a no-sites taker isn't checked against the jumper. A jumper that never set the register (another code context, or one whose run stops at the jump) hands on its own zeroes, no hole. Nightmare's SoundMain was checked by hand; a rule must check jumpers."
