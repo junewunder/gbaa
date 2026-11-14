@@ -1,7 +1,7 @@
 import 'factory/factory.just'
 
-# The machine's build lock: every compile takes it, at 6 jobs, so lanes take turns. Recipes take it around the compile only, so running a built binary never waits; never run `just` under it (a recipe taking it under a caller that holds it deadlocks).
-lock := "env CARGO_BUILD_JOBS=6 flock /tmp/gbaa-build.lock"
+# The machine's build lock: every compile takes one of its slots (scripts/build-lock: 3, GBAA_BUILD_SLOTS), at 6 jobs, so lanes take turns three at a time. Recipes take it around the compile only, so running a built binary never waits; never run `just` under it (a recipe taking it under callers that hold every slot deadlocks).
+lock := "env CARGO_BUILD_JOBS=6 " + justfile_directory() + "/scripts/build-lock"
 
 # A memory cap for a heavy tool: `{{cap}} MemoryMax=8G <cmd>` runs it in a systemd scope of its own with that cap and no swap. gbaa-lift, gbaa-recompile, gbaa-holes, gbaa-lift-check and route-check (but its --args and --missing) refuse to run without one (crates/analysis/src/cap.rs; GBAA_UNCAPPED=1 skips that). Inside a factory job (`just capped`, `just long start`: FACTORY_CAPPED_IN is set) it makes no scope, so the tool stays in the job's, under its cap and in its peak (a `systemd-run --scope` would leave it); off Linux there is no systemd. Either way `env MemoryMax=…` just runs the command.
 cap := if env("FACTORY_CAPPED_IN", "") != "" { "env" } else if os() != "linux" { "env" } else { "systemd-run --user --scope -q -p MemorySwapMax=0 -p" }
@@ -10,12 +10,13 @@ cap := if env("FACTORY_CAPPED_IN", "") != "" { "env" } else if os() != "linux" {
 default:
     @just --list
 
-# Merge gate: format, lints, tests, and the no_std builds of `runtime` and `armv4t`.
+# Merge gate: format, lints, tests, the no_std builds of `runtime` and `armv4t`, and last the native check (`just native-check`: about a minute warm, several when runtime or codegen changed; native/native-check-in-gate, after it broke unseen for a week).
 check: check-nostd rebuildable
     cargo fmt --check
     {{lock}} cargo clippy --workspace --all-targets -- -D warnings
     {{lock}} cargo test -q --workspace --no-run
     cargo test --workspace
+    just native-check
 
 # Proves `runtime` and `armv4t` (decoder, semantics, interpreter) build without std (rust-toolchain.toml installs the target).
 check-nostd:
@@ -883,7 +884,7 @@ native-spike:
     target/release/native-spike-check crates/native-spike/check.toml out/native-spike/check \
         target/recompiled/release/gbaa-native-spike "$rom" target/release/native-spike target/release/native-spike-planted
 
-# The native check (native/oracle, native/hw-sound; docs/native-port-design.md section 7, docs/tools/commands.md): agb/native-spike, agb/psg-square and agb/direct-sound (`just agb-tests`) recompiled at --timing native and built, then route-check --native runs each with its native program (crates/native-spike, check layout) on units/native-spike.toml, units/psg-square.toml and units/direct-sound.toml and compares every frame's picture, RAM (outside the stack, code copies and crates/native-spike/check/*.replaced.toml), I/O (sound and timers too), display memories and audio samples (psg-square's FIFO A and PSG, direct-sound's two FIFOs and timer-IRQ buffer swaps, mixed by the play build's own sound path in runtime::hw); for the spike also its play layout's frame hashes and a planted wrong store, and for psg-square a planted wrong sample, each of which must be caught. Writes out/native-check/. Heavy: builds three generated crates.
+# The native check (native/oracle, native/hw-sound; docs/native-port-design.md section 7, docs/tools/commands.md): agb/native-spike, agb/psg-square and agb/direct-sound (`just agb-tests`) recompiled at --timing native and built, then route-check --native runs each with its native program (crates/native-spike, check layout) on units/native-spike.toml, units/psg-square.toml and units/direct-sound.toml and compares every frame's picture, RAM (outside the stack, code copies and crates/native-spike/check/*.replaced.toml), I/O (sound and timers too), display memories and audio samples (psg-square's FIFO A and PSG, direct-sound's two FIFOs and timer-IRQ buffer swaps, mixed by the play build's own sound path in runtime::hw); for the spike also its play layout's frame hashes and records (RAM as an image in the guest's layout) and a planted wrong store, and for psg-square a planted wrong sample, each of which must be caught. Writes out/native-check/. Heavy: builds three generated crates. The last step of `just check`, so it gates every merge.
 native-check:
     #!/usr/bin/env bash
     set -eu
@@ -916,7 +917,7 @@ native-check:
     {{cap}} MemoryMax=8G target/release/route-check --native target/release/native-direct-sound target/recompiled/release/gbaa-direct-sound \
         units/direct-sound.toml --replaced crates/native-spike/check/direct-sound.replaced.toml
 
-# The stage-A lifter (native/lift-stage-a; docs/native-port-design.md, "The stage-A lifter as built"; docs/tools/commands.md): gbaa-lift writes ROM whole as plain Rust over byte RAM and runtime::hw to OUT (default out/lift-<name>), with the stand-ins of holes/<name>.toml if there is one, else of mods/<name>/holes.toml (a commercial game's, game-derived and private) (<name> is --name NAME's if given, else the ROM's file name lowercased), then builds it into target/recompiled. FLAGS go to gbaa-lift (--name, --holes, --bars, --drop-standin, --plant). Fails, naming each, on a hard hole no stand-in covers. Heavy: builds a generated crate.
+# The stage-A lifter (native/lift-stage-a; docs/native-port-design.md, "The stage-A lifter as built"; docs/tools/commands.md): gbaa-lift writes ROM whole as plain Rust over byte RAM and runtime::hw to OUT (default out/lift-<name>), with the stand-ins of holes/<name>.toml if there is one, else of mods/<name>/holes.toml (a commercial game's, game-derived and private) (<name> is --name NAME's if given, else the ROM's file name lowercased), then builds it into target/recompiled and runs it headless for 600 frames in a 3 GB scope (`just first-stop`: how far it got, or that it didn't build, goes in OUT's report.txt and metrics.toml; a stop doesn't fail the recipe). FLAGS go to gbaa-lift (--name, --holes, --bars, --drop-standin, --plant). Fails, naming each, on a hard hole no stand-in covers. Heavy: builds a generated crate.
 [positional-arguments]
 lift rom out="" *flags:
     #!/usr/bin/env bash
@@ -933,14 +934,25 @@ lift rom out="" *flags:
     # A game's holes file is game-derived, so it lives in the private mods/<name>/.
     if [ -f "holes/$name.toml" ]; then holes=(--holes "holes/$name.toml")
     elif [ -f "mods/$name/holes.toml" ]; then holes=(--holes "mods/$name/holes.toml"); fi
-    {{lock}} cargo build -q --release -p codegen --bin gbaa-lift
+    {{lock}} cargo build -q --release -p codegen --bin gbaa-lift --bin gbaa-first-stop
     # A hard hole fails the lift, and the build too (a compile_error! names each).
     lifted=0
     {{cap}} MemoryMax=16G target/release/gbaa-lift "$rom" "$out" "${holes[@]}" "$@" || lifted=$?
-    just build-recompiled "$out"
-    exit $lifted
+    built=0
+    just build-recompiled "$out" || built=$?
+    # Where the built program stops, or that it didn't build: into OUT's report.txt and metrics.toml.
+    first=0
+    if [ "$built" = 0 ]; then target/release/gbaa-first-stop "$out" || first=$?; else target/release/gbaa-first-stop "$out" --not-built || first=$?; fi
+    [ "$built" = 0 ] || exit "$built"
+    [ "$lifted" = 0 ] || exit "$lifted"
+    exit "$first"
 
-# The stage-A lifter's check (native/lift-stage-a, native/lift-bars; docs/native-stage-b.md, "How every piece is checked"): gbaa-lift-check runs the programs of crates/codegen/lift-check.toml (one table each: ROM under $GBAA_DATA, route, flags, bars; today agb/native-spike, agb/affine, agb/mosaic-modes, agb/native-fallthrough, agb/native-irq-hold, agb/native-frame-locals, agb/native-ime-release, agb/native-bios-calls and agb/native-tasks from `just agb-tests`). First each is lifted with `--bars`, failing on any metric over its bar, named with both numbers; then each lift and its play build (--timing native) are built and route-check --native compares them for the route's 600 frames (601 for native-irq-hold and native-ime-release) with no replaced-library list: pictures, RAM outside the stack and code copies, I/O, display memories. Controls from the file: the spike lifted with a planted wrong store (planted_store, the V-blank handler's frame count) must be caught, and with its IRQ wrapper's stand-in dropped (planted_hole) the lift and the crate's build must fail naming f_03000000's mrs (native-tasks likewise: task_fib's store made one more, and its yield's stand-in dropped, naming its stack switch); native-fallthrough, native-irq-hold, native-frame-locals and native-ime-release lifted with each of their planted_flags (--fall-as-tail-call: the old fall into another function as a tail call; --irq-at-waits: the old IRQ at a wait inside a critical section; --plant-slot=0x08000182: a store to a stack local, fl_keep's x + 7, made one more; --ime-at-waits: the old IRQ held past the store that sets IME again) must be caught by the native check. Each program is also lifted at the play layout (--layout packed: globals in the lifter's order; native/lift-packed-layout), which route-check --packed holds to the guest layout's frames and records. ARGS: --only NAME. Writes out/lift-*. Heavy: builds thirty-three generated crates (about 12 minutes).
+# Where a built lift stops (native/native-first-stop; codegen::native::first_stop; docs/tools/commands.md): runs OUT's program (a lift `just lift` built into target/recompiled) headless for 600 frames in its own 3 GB scope and writes how far it got to OUT/metrics.toml ([run]: frames_run, stop, what, detail, functions) and the end of OUT/report.txt: every frame, or the stop's kind (an unmodelled I/O register by address and name, memory the program hasn't got, a call to no function, another panic, the time limit, killed) with the lifted functions on the stack. `just lift` ends with it. ARGS: --frames N, --time-limit SECONDS, --bin FILE, --not-built (the build failed). A lift with hard holes can't build, so its stop is not-built and nothing is run; a build that failed with none records no run (it may only have been refused or killed); a binary older than OUT's sources is refused. A stop isn't a failure: exits 0 once recorded.
+first-stop out *args:
+    {{lock}} cargo build -q --release -p codegen --bin gbaa-first-stop
+    target/release/gbaa-first-stop {{quote(out)}} {{args}}
+
+# The stage-A lifter's check (native/lift-stage-a, native/lift-bars; docs/native-stage-b.md, "How every piece is checked"): gbaa-lift-check runs the programs of crates/codegen/lift-check.toml (one table each: ROM under $GBAA_DATA, route, flags, bars; today agb/native-spike, agb/affine, agb/mosaic-modes, agb/native-fallthrough, agb/native-irq-hold, agb/native-frame-locals, agb/native-ime-release, agb/native-bios-calls, agb/native-bios-more, agb/native-tasks, agb/native-dma, agb/native-save, agb/native-bios-region, agb/native-bios-affine, agb/native-serial, agb/native-irq-wrapper and agb/native-takes from `just agb-tests`). First each is lifted with `--bars`, failing on any metric over its bar, named with both numbers; then each lift and its play build (--timing native) are built and route-check --native compares them for the route's 600 frames (601 for native-irq-hold, native-ime-release and native-bios-region) with no replaced-library list: pictures, RAM outside the stack and code copies, I/O, display memories. Controls from the file: the spike lifted with a planted wrong store (planted_store, the V-blank handler's frame count) must be caught, and with portable_atomic's interrupt::disable stand-in dropped (planted_hole) the lift and the crate's build must fail naming f_08002728's mrs, a critical section's (native-tasks likewise: task_fib's store made one more, and its yield's stand-in dropped, naming its stack switch; native-dma's dma_set DMAxCNT store made one more; native-save's an SRAM strb; native-serial's sio_set SIOCNT store; native-irq-wrapper's IE put back after its wrapper's handler call); native-fallthrough, native-irq-hold, native-frame-locals, native-ime-release and native-takes lifted with each of their planted_flags (--fall-as-tail-call: the old fall into another function as a tail call; --irq-at-waits: the old IRQ at a wait inside a critical section; --plant-slot=0x08000182: a store to a stack local, fl_keep's x + 7, made one more; --ime-at-waits: the old IRQ held past the store that sets IME again; --takes-zeroed: the old call of a function that takes r4-r11 from its callers, with them zeroed) must be caught by the native check. Each program is also lifted at the play layout (--layout packed: globals in the lifter's order; native/lift-packed-layout), which route-check --packed holds to the guest layout's frames and records. ARGS: --only NAME. Writes out/lift-*. Heavy: builds sixty generated crates (each program's lift, packed lift and play build, eleven planted lifts, and the two planted holes' builds that must fail; about 26 minutes: the nine programs besides native-spike, native-save, native-bios-region and native-bios-more took 17 on quack).
 lift-check *args:
     {{lock}} cargo build -q --release -p route-check
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift --bin gbaa-lift-check
@@ -1393,7 +1405,7 @@ emerald-netplay-trade profile="calm" rom=(roms / "Pokemon - Emerald Version.gba"
     {{lock}} cargo build -q --release -p emerald-save -p desktop
     target/release/emerald-trade target/release/gbaa-desktop {{quote(rom)}} {{quote(gbaa_data / "saves/emerald")}} --netplay --profile crates/netplay/profiles/{{profile}}.toml {{args}}
 
-# The hole report (`docs/research/native-holes.md`): what blocks a native build of ROM. Discovery, a 5,400-frame interpreter run with the research press script, the function summaries; prints the ranking line and the holes by kind. About a minute a game; the run is capped at 3 GB of RAM and no swap.
+# The hole report (`docs/research/native-holes.md`): what blocks a native build of ROM. The hard holes are the lifter's (`gbaa-lift --holes-only`, with --holes FILE as its holes file: give the game's mods/<game>/holes.toml); then discovery, a 5,400-frame interpreter run with the research press script, the function summaries, for what only a run shows; prints the ranking line and the holes by kind. One to four minutes a game; the run is capped at 3 GB of RAM and no swap.
 [positional-arguments]
 holes rom *args:
     {{lock}} cargo build -q --release -p hole-report
@@ -1410,6 +1422,12 @@ softfloat-check rom *args:
 holes-all *args:
     {{lock}} cargo build -q --release -p hole-report
     {{cap}} MemoryMax=3G target/release/gbaa-holes --corpus holes/corpus.toml --roms {{quote(roms)}} "$@"
+
+# The nightly run over the corpus (native/nightly-corpus; holes/corpus.toml; crates/hole-report/src/nightly.rs; docs/tools/commands.md): each game in turn through the hole report, its play build (`just recompile --timing instant`, `just build-recompiled`), its readable build (every function readable) and its lift (`just lift` with the corpus's `lift` name: built, then run headless, `just first-stop`); a step that fails or passes --step-minutes (default 120) is recorded and the rest go on. Writes out/nightly/<date>/summary.toml, summary.txt and <game>/summary.txt (hard holes by kind, built or not, frames run and the stop, what changed against the run before), logs beside them; the crates in out/nightly/{play,readable,lift}-<game>. Fails when a game got worse than the run before (hard holes up, a build lost, fewer frames). ARGS: --out DIR, --against DIR, --only NAME, --skip STEP (holes, play, readable, lift), --step-minutes N. Hours: run it with `just long start nightly --mem 6G -- just nightly`. Heavy: builds generated crates.
+[positional-arguments]
+nightly *args:
+    {{lock}} cargo build -q --release -p hole-report
+    {{cap}} MemoryMax=6G target/release/gbaa-holes --nightly holes/corpus.toml --roms {{quote(roms)}} "$@"
 
 # Emerald's ten native functions against the play build (native/emerald-ten; scores in docs/native-port-design.md, "Emerald's ten"): the hand-lifted Rust in mods/emerald/native-ten/ run by crates/native-fn-diff from 600 no-input frames' entry states (borrowed for functions not entered) in 96 variants each, against the interpreter untimed; then one byte of Random's literal pool changed must be caught. Fails unless it prints `native 0 of 10 differ` and the fault is caught. ROM defaults to pret's build. About 30 s (the function summaries are most of it), capped at 3 GB of RAM and no swap. Private: mods/ isn't in the public mirror.
 [positional-arguments]

@@ -31,9 +31,8 @@ tracker evidence has the before and after (`just show <id> --full`).
 - **What's left is mostly indirect jumps Recovery leaves unresolved**,
   most in Minish Cap and Emerald Rogue, and most never reached by any run:
   coverage runs (`native/hole-coverage`, "Coverage runs" below) tell real
-  tables from dead code. The reached ones are Minish Cap's ROM-to-IWRAM
-  veneers, jumps into RAM code, and a few real switch tables Recovery
-  misses (Rogue's, moonbeam's). The summaries' holes were mostly the
+  tables from dead code. The reached ones are jumps into RAM code and
+  a few real switch tables Recovery misses (Rogue's, moonbeam's). The summaries' holes were mostly the
   analysis being too cautious ("Functions that change r4-r11 or sp",
   below; `native/callee-save-breaks`): 31 then, 14 after, all real
   convention breaks in hand-written code or data taken for code.
@@ -62,45 +61,49 @@ tracker evidence has the before and after (`just show <id> --full`).
 
 ## The tool
 
-`just holes ROM` (`crates/hole-report`, `gbaa-holes`; its steps are in
-the command entry, `docs/tools/commands.md`): discovery and its IWRAM
-overlays, a 5,400-frame instant-timing run with the research press
-script (Start, A and B tapped, then right, up and left held 1,000 frames
-each from frame 2000), discovery again with the run's call targets
-("With the run's call targets"), the summaries, the RAM copies with the
-run ("RAM copies"), then `analysis::holes::classify` (in the analysis
-crate so the lifter reuses it). About a minute a game; `just holes-all`
-runs the corpus into one table (about 10 minutes).
+`just holes ROM --holes FILE` (`crates/hole-report`, `gbaa-holes`; its
+steps are in the command entry, `docs/tools/commands.md`). **The hard
+holes are the lifter's** (native/holes-match-lift): `codegen::native::lift`
+in its holes-only mode with the game's holes file, counted by
+`codegen::native::HoleKind`, so the report and `just lift` give one
+answer ("The report's count is the lift's", below). Then what only a run
+shows: discovery and its IWRAM overlays, a 5,400-frame instant-timing
+run with the research press script (Start, A and B tapped, then right,
+up and left held 1,000 frames each from frame 2000), discovery again with
+the run's call targets ("With the run's call targets"), the summaries,
+the RAM copies with the run ("RAM copies"), then
+`analysis::holes::classify`. One to four minutes a game (Imperium's
+lift is 3.5 of its 10); `just holes-all` runs the corpus into one table
+(about 27 minutes), finding each game's holes file as `just lift` does,
+where `first stop` is how far each game's last lift ran once built (`just lift`): its next hole.
 
 ### What counts as a hard hole
 
-| Hole | How it's found | Counted |
+| Hole | How the lift finds it | Table column |
 |---|---|---|
-| Indirect jump not resolved | Recovery's `Unresolved` and `Rejected`, ROM and overlays | every one, reached or not ("jumps A+B": ROM + overlays) |
-| Return-address arithmetic | the run: a return (`bx`, `pop {pc}`, `mov pc, lr`, `ldr pc, [sp]`) landing 64 bytes before to 1 KiB after the innermost open call's return site, not on it, not on another call's return site, not on a function start, not inside the callee's own function; statically: a function doing arithmetic on lr, or loading through it, before writing lr | where Recovery doesn't resolve the call site as a jump |
-| RAM code that changed | the run: an address run again with different bytes or instruction set | each run of addresses (gaps up to 16 bytes) |
-| CPU state | `msr`, `mrs`, `ldm`/`stm` with the S bit, `s` writes to pc, stack switches (sp moved 4 KiB or more by one instruction other than sp-relative arithmetic) | outside the IRQ wrapper (code run at the top level of an IRQ, and the rest of its function; for a copy made by the game's loop, at the RAM address) and boot (code run only in the first frame, and its function) |
-| BIOS call outside the library | `swi` numbers the native lifter doesn't print (the ones not in `analysis::holes::NATIVE_BIOS`) | each site |
-| Call to a non-entry | the run: a call through a register (`mov lr, pc` or `adr lr, …` then `bx rN`, or a `bl` to a `bx rN` stub other than `bx pc`) to an address not a discovered function start or RAM entry | each target |
-| Summary hole | `analysis::holes::SUMMARY_HARD`: a return with sp changed (moved by a run-time amount, as a variable-length array does), a read of r4-r11 a callee changed or that came in as a parameter, a function that changes r4-r11 whose key is a word in the ROM (below) | each function, once |
+| Indirect jump not resolved | Recovery's, ROM and copies, that the holes file gives no `[[jump]]` targets | jumps |
+| Jump to no code | a constant jump into ROM or RAM where discovery, the gap decoding and the copies (static, and the holes file's `[[copy]]`) have none | no code |
+| Undefined instruction | one that isn't a compiler's trap | undefined |
+| CPU state | `msr`, `mrs`, a user-bank transfer, an exception return, a stack switch, outside the reset and the IRQ wrappers (`PsrFns`) | CPU state |
+| BIOS call | a `swi` the library lacks (`analysis::holes::NATIVE_BIOS`) | BIOS |
+| Summary hole | `analysis::holes::SUMMARY_HARD` on the lift's summaries (with the holes file's `[[takes]]`): each function once | summaries |
+| r4-r11 not passed | a call to a function taking r4-r11 from its callers that can't pass them | r4-r11 |
+| Holes file | a stand-in, `[[takes]]` or `[[copy]]` naming what isn't there | holes file |
 
-A place can be counted under two kinds: a routine copied onto the stack
-that isn't recognised would be RAM code that changed and, at each entry,
-a call to a non-entry. A ROM source and its RAM copy are classified once,
-at the copy (an indirect jump too: the ROM source's is dropped where the
-copy's analysis has it); a `bl` to a switch helper that Recovery rejects
-counts as a jump only.
+Beside them, not in `hard` (the lift can't see them; a run can):
 
-CPU-state and BIOS items in code only the pointer scan found and the run
-never ran aren't counted (Emerald's 0x087f22xx: data that decodes as
-`swi 0x64` and `ldm ^`). Other summary holes are counted elsewhere (an
-unknown jump, a mode change, RAM code) or aren't holes for a native build
-(an indirect call is an `FnRef`), and are printed but not counted.
+| Hole | How the run finds it | Counted |
+|---|---|---|
+| Return-address arithmetic | a return (`bx`, `pop {pc}`, `mov pc, lr`, `ldr pc, [sp]`) landing 64 bytes before to 1 KiB after the innermost open call's return site, not on it, not on another call's return site, not on a function start, not inside the callee's own function; statically: a function doing arithmetic on lr, or loading through it, before writing lr | where Recovery doesn't resolve the call site as a jump |
+| RAM code that changed | an address run again with different bytes or instruction set | each run of addresses (gaps up to 16 bytes) |
+| Call to a non-entry | a call through a register (`mov lr, pc` or `adr lr, …` then `bx rN`, or a `bl` to a `bx rN` stub other than `bx pc`) to an address not a discovered function start or RAM entry | each target |
 
-**The BIOS count is the interpreter's, not the lifter's** (against
-`runtime::bios`; Metroid's lift found 9 the report counts as 0;
-`native/lift-bios-calls`). **Not discovered** is the bytes of code the
-run executed that discovery (or an overlay's) didn't find, ROM and RAM.
+The run's classification of the lift's kinds (Recovery's jumps, reached
+or not; CPU state with Boot and Wrapper places; BIOS calls; its own
+summaries) is printed on its own line and in the lists, as the run's
+view: which are reached, and where they go. Its counts aren't the hard
+ones. **Not discovered** is the bytes of code the run executed that
+discovery (or an overlay's) didn't find, ROM and RAM.
 
 ### The flash library's stack routines
 
@@ -112,7 +115,8 @@ call into RAM (`Run::ram_calls`); a target whose every version is one
 GCC's two) is a call of `runtime::hw::flash::{read_byte, read, verify}`
 on `Hw::save`, listed as a "flash library stand-in", and its RAM isn't
 changed code, undiscovered code nor a non-entry. Six of the eight call
-them (not moonbeam, Minish Cap); no stage-A build lifts one yet.
+them (not moonbeam, Minish Cap). A lifted program's `call_fn` makes the
+same call at a RAM target with no function (native/lift-flash-routines).
 
 ### RAM copies
 
@@ -156,6 +160,52 @@ didn't halt, loaded RAM an IRQ handler had written, and made the same
 stores as the iteration before (no progress of their own). At 8 in a row
 the same rule also caught pure loops over short lists (Rogue's `FlagGet`
 per item, 27); at 64 only the map-load loops remain.
+
+## The report's count is the lift's
+
+native/holes-match-lift. Until 2026-11-14 the report classified holes
+its own way, and it and the lift disagreed on every game (2026-11-10:
+Minish Cap 30 against 53, Rogue 23 against 55, moonbeam 3 against 28,
+Imperium 20 against 30). The report didn't count undefined instructions
+(47, most now compilers' traps, native/lift-undefined-insns); took the
+reset's and IRQ wrappers' `msr`/`mrs` as recognised before the lift did
+(native/lift-psr-boot-irq); found RAM copies with its run where the
+lift needs `[[copy]]`; didn't read the holes file; and its summaries
+were plain `summarize`'s, not the lift's passing ones
+(native/metroid-entry-reads).
+
+Now `gbaa-holes` runs the lift itself, holes only: the printing (where
+the lift finds every hole) without the function-address flow, the heap
+pointers or the modules, 9 s to 3.5 min a game under 0.6 GB, where the
+whole lift took 54 s to 50 min (Minish Cap 20, its flow most of it;
+Kirby & the Amazing Mirror's heap 30). Each hole carries its kind. On
+the corpus, holes files applied, the whole lift (the commit before) and
+the holes-only one name the same holes, line for line, but two: Metroid
+0, WarioWare 6, Nightmare 0, moonbeam 7, Rogue 24, Imperium 20; Minish
+Cap 32 and the Amazing Mirror 7 against 31 and 6 (below). Emerald's
+whole lift (16 holes-only; its flow doesn't settle, so no sets) wasn't
+finished when this was written.
+
+The differences left, each right:
+
+- **What only a run shows isn't in `hard`.** Return arithmetic
+  (WarioWare 2), RAM code that changed (Rogue's mixer, Imperium's) and
+  calls to non-entries (none now) are counted beside it. The lift can't
+  see them; its build would run into them (the first stop).
+- **Copies only a run finds are holes until the holes file has them.**
+  Minish Cap's 21 "no code" are its veneers into IWRAM code it copies
+  itself: the report prints the `[[copy]]` tables that fill them, and
+  counts them, as the lift does, until the file takes them.
+- **The flow's callee sets: the two.** The whole lift's second summaries
+  take each indirect call with a complete callee set as calling exactly
+  those; the holes-only lift has none (as with `skip_fn_flow`, or a flow
+  that doesn't settle, Emerald's). In Minish Cap (0x080af909) and Kirby
+  & the Amazing Mirror (0x0814fa89) a function then reads r8 at entry
+  through such a callee and returns it: a summary hole the report
+  doesn't count. `--flow` (`gbaa-holes`, `gbaa-lift --holes-only`) runs
+  the flow too and counts them, at its cost: 18 minutes each for those two, the same holes as the
+  whole lift, line for line. The table is
+  without it, as the flow costs more than the rest of the report.
 
 ## With the run's call targets
 
@@ -238,28 +288,29 @@ them.
 
 ## What discovery misses
 
-Bytes run but not discovered, listed at the report's end with what
-discovery has around each run (`native/kirby-undiscovered`, 2026-11-07).
-The coverage runs reach more but miss no more (Nightmare 1,748 bytes,
-as the press script; Mirror 372, 362): discovery's misses, none a jump
-into a function's middle or the wrong instruction set. Bytes, Nightmare
-/ Mirror:
+Bytes run but not discovered (the report lists each run with what
+discovery has around it). The coverage runs miss no more than the press
+script (2026-11-07), none a jump into a function's middle or the wrong
+instruction set. Bytes, Nightmare / Mirror:
 
-| Cause | Before | After |
-|---|---|---|
-| a task run as a coroutine (`push {…, lr}`, then an endless loop that yields each frame), reached only from a table of (kind, task) words: the scan wanted a return; five tasks and the function only one calls | 1,622 / 0 | 0 / 0 |
-| a BIOS copy whose length reads on into ROM code a `bl` calls (Mirror: 0x1c0 bytes from 0x08158f14 over its heap allocator), and the code after the calls | 0 / 312 | 0 / 0 |
-| m4a's `SoundMainRAM` copy ends in the `bx r3` that `SoundMain` calls in ROM (a stub), so `SoundMain`'s tail after the call (every m4a game: Emerald and Minish Cap too) | 38 / 38 | 38 / 38 |
-| the return from the scheduler's call to resume ("Kirby: Nightmare's task switcher", below: it comes back through a yield) | 44 / 0 | 44 / 0 |
-| crt0's copy (0x08000108, 0x140 bytes) reads on into the switcher, which a veneer's ARM `b` enters | 36 / 0 | 36 / 0 |
-| agbcc's `_call_via_rN` stubs: a `bl` to one calls rN, and the stub isn't kept as code | 8 / 12 | 8 / 12 |
+| Cause | Before | After | Now |
+|---|---|---|---|
+| a task run as a coroutine (`push {…, lr}`, then an endless loop that yields each frame), reached only from a table of (kind, task) words: the scan wanted a return; five tasks and the function only one calls | 1,622 / 0 | 0 / 0 | 0 / 0 |
+| a BIOS copy whose length reads on into ROM code a `bl` calls (Mirror: 0x1c0 bytes from 0x08158f14 over its heap allocator), and the code after the calls | 0 / 312 | 0 / 0 | 0 / 0 |
+| m4a's `SoundMainRAM` copy ends in the `bx r3` that `SoundMain` calls in ROM (a stub), so `SoundMain`'s tail after the call (every m4a game: Emerald and Minish Cap too) | 38 / 38 | 38 / 38 | 0 / 0 |
+| the return from the scheduler's call to resume ("Kirby: Nightmare's task switcher", below), through a `bx pc` veneer taken for a computed return | 44 / 0 | 44 / 0 | 0 / 0 |
+| crt0's copy (0x08000108, 0x140 bytes) reads on into the switcher, which a veneer's ARM `b` enters | 36 / 0 | 36 / 0 | 0 / 0 |
+| `bx rN` stubs (agbcc's `_call_via_rN`, m4a's): a `bl` to one calls rN, and the stub isn't kept as code | 8 / 12 | 8 / 12 | 10 / 14 |
 
-The fixes: the scan takes a body that opens with `push {…, lr}` and
-whose every path loops back into it; a BIOS copy's source ends at a `bl`
-target inside it called from outside (`discovery::copy_cuts`). Not at
-the stub or the `b`: the code there adds a real hard hole each
-(`SoundMain`'s constant jump into its IWRAM copy, which the lift needs
-in the holes file; resume's `bx r1`): `native/copy-tail-discovery`.
+After: `native/kirby-undiscovered` (endless tasks; `discovery::copy_cuts`
+at a `bl` target). Now: `native/copy-tail-discovery`: cuts at `b` and
+stub targets too (a `bl` to a stub returns); a Thumb `bx pc` is never a
+return (`classify` took the veneer's linear predecessor, a `pop {…, pc}`,
+for its own); a constant jump into RAM, Recovery's `JumpRes::Ram`, is
+resolved where an overlay has a function there: `SoundMain`'s, Minish
+Cap's two reached ones, one each in Rogue and Imperium (hard 139 to
+136 over the corpus, main at 878cf4a). Resume's `bx r1` (0x08000254), found now, is real: Nightmare 14 to 15, its
+lift stopped there until the switcher's stand-in covers it.
 
 ## Each game's worst holes
 
@@ -362,14 +413,15 @@ the game's holes file), the others as written. libgcc's `__muldf3` and
 (`codegen::saves`) now follows which bits of each value may hold r4-r11's
 entry values (`V::Part`): an `and` or `orr` with a constant clears bits, a
 shift moves them, an add carries them up, a copy to a register, a flag or
-a stack word keeps them. A use is an address, a value stored elsewhere, a
-condition, a callee's or BIOS call's argument (`mov r0, r8; bl`), or a
+a stack word keeps them, and so does a context save (`entry-read-takers.md`). A use is an
+address, a value stored elsewhere, a condition, a callee's or BIOS call's argument (`mov r0, r8; bl`), or a
 value returned in r0-r3 that a caller's own instruction reads (agbcc's
 `pop {r3}; mov r8, r3` leaves the entry r8 in r3, unread). The kinds:
 
-- `reads r4-r11 at entry` (hard): a use, in a function entered by a call
-  (`bl`, a complete indirect set, or a pointer: the key as a ROM word),
-  whose `Regs::call` zeroes r4-r12.
+- `reads r4-r11 at entry` (hard): a use, in a function entered through a pointer (a complete indirect set, or the key as a ROM word),
+  whose `Regs::call` zeroes r4-r12. Not after a `bl` to a function that
+  never returns: agb's panic paths, branched into with the caller's r6.
+- `takes r4-r11 from its callers` (soft, native/metroid-entry-reads): the same use where every call the lift prints passes the register (any other stops the program). A `bl` or tail call is the callee's extended entry with the caller's own; a caller that still has it as it came takes it in turn (`…, which 0x… takes`), up to one that set it, or to one a pointer call enters: there the chain is broken, and the hole is the read at its end, once, however many functions are above it (hard: `reads r4-r11 at entry: …, zeroed through 0x… and N more`; each pass-on above it soft, `passes on r4-r11 a pointer call zeroes`: native/moonbeam-taker-chain, `entry-read-takers.md`). The holes file's `[[takes]] entry, sites, why` names the indirect calls that reach such a function: they pass theirs, and its plain entry (`call_fn`'s) stops the program; with `sites = []` no pointer call reaches it (code only jumped into, which gets the jumper's every register: m4a's IWRAM mixer from `SoundMain`'s constant `bx r3`, native/nightmare-entry-reads). Metroid's 0x08073ce5: r9 is the sprite updater's, three calls up and through its AI table (0x082b0cac or 0x8000001c by the loop), so no constant stand-in is exact. The lift check's `agb/native-takes` runs both kinds of call against the interpreter (native/taker-test-program): `tk_a` by `bl`, `tk_b` through a `[[takes]]` site, each reading r8 and r9, and `gbaa-lift --takes-zeroed` (zeroes passed) as its planted control. One finding there: an entry value only returned in r0-r3 is a hard hole, not a take, so its readers store what they read.
 - `masks away r4-r11's entry bits` (soft): every bit cleared before any
   use, agbcc's word built byte by byte in an unset register.
 - `reads r4-r11 at entry, only jumped into` (soft): no `bl` or pointer
@@ -378,9 +430,8 @@ value returned in r0-r3 that a caller's own instruction reads (agbcc's
   from a frame record (`add r7, sp, #12` at the saved r7); natively the
   walk finds no frames. Only the agb programs have it.
 
-A value that holds entry bits on one path and not another is unknown at
-the merge, as before (a path that can't happen, or a C local never set):
-counting those made LLVM's paths in agb hard.
+A value with entry bits on one path only is unknown at the merge, as
+before (an impossible path, an unset C local): counting them made agb hard. A branch whose condition is a certain constant on the run's path is taken one way (native/nightmare-entry-reads): certain is made of constants in the function, through no load from memory, and kept by every call since (callees proven to keep r4-r11). agbcc's `if (best == -1) { best = i; low = …; } else if (low > …)` reads `low` (r6, still holding the r8 the prologue saved) only once `best` is set; the first pass has `best` -1, and at the merge `low` is unknown as above (Nightmare's 0x08064759 and 0x080647fd, and the six pointer-entered functions that reach them).
 
 Summary holes that are hard, before and after (`just holes-all --against`):
 3 entry readers (of 5 summary holes) and 36; corpus hard 130 and 139. The 36, from the report:
@@ -389,7 +440,7 @@ Summary holes that are hard, before and after (`just holes-all --against`):
 |---|---|
 | libgcc ieee754-df.S's denormal paths, r4 and r5 in (ARM) | Emerald 0x082dfd09, Rogue 0x0800cb45, Imperium 0x08003879, Kirby M. 0x0814fd35, Minish 0x080afbd1; Nightmare 0x080ce1f9 is m4a's `ChnVolSetAsm` instead (r4 the channel, r5 the track), the others not checked against it |
 | hand-written register parameters | Minish 0x080086d9 (`sub_080086D8`, r8 and r11), 0x08060ba1 (derefs r5), 0x08008a89 (r5, `ClampPlayerVelocity`'s kind); WarioWare 0x080efe51, 0x080f0ab0 |
-| modern GCC's far jump by `bl` into a fragment of the caller's, taken for a call | moonbeam 0x0801a081 and six more, Rogue 0x0820c629, Imperium 0x0821e331 (not looked into one by one) |
+| modern GCC's far jump by `bl` into a fragment of the caller's, taken for a call | moonbeam 0x0801a081 and six more, Rogue 0x0820c629, Imperium 0x0821e331 (looked into since: "Modern GCC's cold blocks", below) |
 | agbcc's partly built word stored with the unset register's other bits (a struct's padding) | Emerald 0x080852d5, Kirby M. 0x08132889, WarioWare 0x080abfa5, Metroid 0x08073ce5 |
 | an unset register used as an index (`lsls r1, r4, #2; ldr`) | Minish 0x08037c3d |
 | data decoded as code | Emerald 0x0850dbaf, 0x085ef6a1; Metroid 0x087d8000; WarioWare 0x083db2d7 |
@@ -405,6 +456,61 @@ moonbeam 0x0801a081 (r7, four); WarioWare 0x0807f6e5, 0x0808e325,
 Only jumped into: Rogue's 0x080ba12b-0x080bbfff fragments (15, past
 unresolved jumps), Nightmare 0x0804c489, moonbeam 0x08038310. A tail call
 or fall from a called function counting as a call (2026-11-12) left the 36.
+
+## Modern GCC's cold blocks, and `sbcs rN, rN`
+
+`discovery/gcc-far-jump-bl`, 2026-11-13: the "far jump by `bl` into a
+fragment" entry readers above, one by one. Two causes, neither the probe's.
+
+**A cold block of the caller's, reached by `bl`** (moonbeam's five:
+0x0801a081, 0x0801ae57, 0x0801ae5d, 0x0802f111, 0x0802f117). Modern GCC
+puts a function's unlikely blocks last, each ending in a call that never
+returns, and a function over 2 KB reaches them by `bl`:
+
+```
+080195d0: movs r3, #180
+080195d2: push {r4, r5, r6, r7, lr}
+08019884: bge 0x0801988a
+08019886: bl 0x0801a080
+0801a080: ldr r0, [r7, #80]
+0801a082: bl 0x08033d4a        (never returns)
+```
+
+The far-jump probe (decision 5a) reaches no return from 0x0801a080, so
+no frame is popped and its answer is "never returns": the `bl` was a
+call, the block a function, and the lift entered it with r4-r12 zeroed
+(the error routine's argument loaded through a zero r7). Only its place
+makes it the caller's, `analysis::vsa::func`'s rule that functions don't
+nest (a `bl` from a function with a prologue into the span of its own
+code is a jump, unless the target looks like a function). As built now:
+
+- A prologue is `push {…, lr}` at the entry or after up to 8
+  instructions that write neither sp, lr nor pc (`is_push_lr`), for the
+  caller and for a target. Modern GCC schedules the body's start ahead
+  of the push: 125 of moonbeam's 1,050 pushing Thumb starts, the latest
+  after 7. The rule used to ask for the push first.
+- A target right where the function's reached code and pools end is a
+  jump too, if its probe says nothing returns from it: the last cold
+  blocks lie past everything a branch reaches (one rerun a block, 16 at
+  most). Only then, since the next function starts there as well. A
+  never-returning function taken for a block runs the same code with
+  the same registers; the opposite mistake zeroes them.
+
+**`sbcs rN, rN` after a compare** (Rogue 0x0820c629, r5; Imperium
+0x0821e331, r5 holding the entry r8): GCC's 0 or -1 of a condition,
+`cmp r3, r7; sbcs r5, r5`, in real functions. The value is the carry
+extended to a word whatever rN held, and the summaries took it for a use.
+`codegen::saves::spread` gives `a + !a + c`, its carry and its overflow
+the carry's bits only (the IR reads rN once, so `a` is one value): the
+entry bits are masked away, a soft hole.
+
+Against the main it began from, hard holes fell on the three games and
+rose nowhere (numbers: the unit's evidence). Still hard then: moonbeam 0x0800019b
+(crt0's copy loop takes the end address in r4), 0x0803830d (a `bx pc`
+veneer to ARM `stmia r0!, {r4-r14}`, a register save as `setjmp` makes)
+and 0x08025a29 (r8 and r9 at 0x08025dec, its far jumps all taken; not
+looked into); Rogue 0x081b42e1 and 0x0826c5e7 (not looked into); libgcc's
+denormal paths in Rogue and Imperium.
 
 ## Modern GCC's unresolved jumps, by kind
 
@@ -434,11 +540,36 @@ from 584 to 610 of 617 (agbcc 676/676, 0 wrong). What's left is mostly
 not tables: data decoded as code, and stubs and veneers a native build
 could call through `FnRef`.
 
+## The lift's undefined instructions, by kind
+
+`native/lift-undefined-insns`: the lift of 2026-11-11 had 21 "an
+undefined instruction" hard holes in moonbeam, 24 in Emerald Rogue and 2
+in Imperium (`gbaa-holes` doesn't count undefined instructions). By the
+halfword at each and the instructions before it (`just dis`):
+
+| Kind | moonbeam / Rogue / Imperium |
+|---|---|
+| GCC's trap after a load through a register proved null (`movs r3, #0; ldr r3, [r3, #k]; udf #255`: `-fisolate-erroneous-paths-dereference`, on at `-O2`) | 16 / 20 / 2 |
+| GCC's trap reached by a branch, after a store, or with the null pointer already in a register (the same isolation, laid out apart) | 5 / 2 / 0 |
+| GCC's trap after a call that doesn't return (`bl` to an abort) | 0 / 1 / 0 |
+| Run on past `SoftReset`: Rogue's reset routine ends `svc 1; svc 0`, and the lift went on through its literal pool into the ARM code after it (`e92d`, an ARM `push`'s high half) | 0 / 1 / 0 |
+
+So none was data decoded as code by gap decoding, and none is in a
+fragment reached by modern GCC's far-jump `bl`
+(`discovery/gcc-far-jump-bl`): 46 are real code, GCC's `udf #255` (Thumb
+0xdeff) ending a path it proved can only crash. Discovery took these
+encodings as deliberate (`vsa::func::deliberate`); the lifter didn't. Now
+it plans one (`is_trap`: Thumb `udf #255`/`#254`, ARM 0xe7ffdefe and
+0xe7f000f0) as `Plan::Undefined { trap: true }`: a `panic!` naming the
+address (the play build faults there too, `Fault::Bios`), listed in the
+report; the summaries end the path there. Any other undefined instruction
+is a hard hole still. `native/lift-bios-more` ended the 47th (`SoftReset`).
+
 ## What the Stage-A lifter should know
 
-- Take holes from `analysis::holes::classify`; its `Report` lists each
-  site. The IRQ wrapper and boot `msr`/`mrs` come back as `CpuWhere::Wrapper`
-  and `Boot`: recognised, not holes.
+- The hard holes are the lifter's own (`codegen::native::HoleKind`), and
+  the report's are the same. `classify`'s `Report` is the run's view of
+  each site: reached or not, where it went.
 - The run's call targets (`Run::call_targets`, `indirect_calls`) are the
   roots discovery lacks. The RAM copies are `analysis::holes::ram_copies`
   (each an `Overlay`, with the roots it was given), which needs a run; a

@@ -80,7 +80,7 @@ What decides a unit is right. `just check` is the mechanical part and must pass
 before anything is marked `done`.
 
 - **`just check` runs:** fmt, clippy `-D warnings`, the workspace tests,
-  `check-nostd` and `rebuildable` (AGENTS.md). The merge gate.
+  `check-nostd`, `rebuildable` and `native-check` (AGENTS.md). The merge gate.
 - **Beyond `just check`:** **mGBA is the oracle.** A checkpoint's
   expected hash is what mGBA draws (`just mgba-diff`), never one set by eye;
   `just unit <name>` clears the unit's outputs, then needs mGBA = our
@@ -257,7 +257,7 @@ moves on to the next workable unit. Don't guess.
   lanes take other units meanwhile. This project has none yet.
 - **Display, devices, shared state:** headless runs need no display; the build lock
   is shared by every lane: the recipes take it themselves
-  (`CARGO_BUILD_JOBS=6 flock /tmp/gbaa-build.lock`, the justfile's `lock`),
+  (`CARGO_BUILD_JOBS=6 scripts/build-lock`, the justfile's `lock`: three at once),
   around the compile only. Never wrap `just` in it (a recipe taking it under
   a caller holding it deadlocks); a bare `cargo build/test/clippy` takes it
   the same way; generated or new harness binaries under `systemd-run --user

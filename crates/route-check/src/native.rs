@@ -1,5 +1,5 @@
-//! `route-check --native NATIVE PLAY ROUTE [--replaced FILE] [--packed
-//! BIN] [--planted BIN]`: a native program against its play build
+//! `route-check --native NATIVE PLAY ROUTE [--replaced FILE] [--holes
+//! FILE] [--name NAME] [--packed BIN] [--planted BIN]`: a native program against its play build
 //! (docs/native-port-design.md, section 7; `just native-check`).
 //!
 //! Runs PLAY (the ROM's recompiled build, at `--timing native`; then again
@@ -15,15 +15,22 @@
 //!   build reached, which its interpreter reports, to IWRAM's end: the
 //!   stacks and the BIOS's words above them), the destinations of code copies
 //!   (`Discovery::copies` that a RAM entry lies in: the native program runs
-//!   that code as Rust and copies none of it) and the ranges FILE names
+//!   that code as Rust and copies none of it), the destinations of the
+//!   lifter's holes file's `[[copy]]` entries (the code a game copies to
+//!   RAM itself, which the native program likewise runs as Rust and never
+//!   writes; the file is `--holes FILE`, else found as `just lift` finds
+//!   it, by the game's name: `holes/<name>.toml`, else
+//!   `mods/<name>/holes.toml`, the name `--name NAME`'s or the ROM's file
+//!   name lowercased) and the ranges `--replaced` FILE names
 //!   (`[[replaced]]`: the globals of a library the native program replaces,
 //!   each with its why);
 //! - the I/O registers the library models ([`IO`]): the display's,
 //!   `DISPSTAT`'s writable bits, `VCOUNT`, the sound registers (with
 //!   `SOUNDCNT_X`'s channel status, which the shared mixer sets), wave
-//!   RAM, the FIFOs' last stores, the timers' reloads and controls, `IE`,
-//!   `IF`, `WAITCNT`, `IME`. Not DMA, serial or the keypad's (`KEYINPUT`
-//!   is latched after the present, when the play build records);
+//!   RAM, the FIFOs' last stores, the timers' reloads and controls, the
+//!   serial port's registers and `KEYCNT` (kept as stored, with no
+//!   partner), `IE`, `IF`, `WAITCNT`, `IME`. Not DMA or `KEYINPUT` (latched
+//!   after the present, when the play build records);
 //! - palette, VRAM and OAM, but FILE's ranges there too (a replaced
 //!   library's state kept in VRAM: agb's tile allocator's free list);
 //! - each frame's audio (its samples' count and hash), when both make
@@ -37,7 +44,8 @@
 //! byte (address, play's value, native's). `--packed BIN`: the same
 //! program's play layout must draw NATIVE's frames (frame hashes), and
 //! its records must be NATIVE's, nothing skipped (RAM as the guest lays it
-//! out, which a packed program records).
+//! out, which a packed program records); a difference there names the
+//! guest layout's value and the play layout's.
 //! `--planted BIN` (any number): a build with a planted fault (one wrong
 //! store, or an old behaviour a lifter flag brings back), which must
 //! differ; its first difference is printed. A lowest sp outside IWRAM
@@ -65,6 +73,8 @@ pub const IO: &[(u32, u32, u16, &str)] = &[
     (0x086, 0x0A0, 0xFFFF, "SOUNDBIAS and wave RAM"),
     (0x0A0, 0x0A8, 0xFFFF, "the FIFOs' last stores"),
     (0x100, 0x110, 0xFFFF, "the timers' reloads and controls"),
+    (0x120, 0x130, 0xFFFF, "the serial registers"),
+    (0x132, 0x160, 0xFFFF, "KEYCNT, RCNT and the JOY bus"),
     (0x200, 0x204, 0xFFFF, "IE and IF"),
     (0x204, 0x206, 0xFFFF, "WAITCNT"),
     (0x208, 0x20A, 0xFFFF, "IME"),
@@ -100,6 +110,12 @@ struct Replaced {
 #[derive(Default)]
 pub struct Extra {
     pub replaced: Option<String>,
+    /// `--holes FILE`: the lifter's holes file, whose `[[copy]]`
+    /// destinations are skipped. Without it, found by the game's name.
+    pub holes: Option<String>,
+    /// `--name NAME`: the game's name, as `gbaa-lift --name` takes it, to
+    /// find its holes file (default: the ROM's file name lowercased).
+    pub name: Option<String>,
     pub packed: Option<String>,
     pub planted: Vec<String>,
     /// `--no-audio WHY`: the native program makes no audio and the run may
@@ -114,6 +130,8 @@ pub fn parse_extra(rest: &[String]) -> Result<Extra, String> {
         let v = it.next().ok_or(format!("{a} needs a value"))?.clone();
         match a.as_str() {
             "--replaced" => e.replaced = Some(v),
+            "--holes" => e.holes = Some(v),
+            "--name" => e.name = Some(v),
             "--packed" => e.packed = Some(v),
             "--planted" => e.planted.push(v),
             "--no-audio" => e.no_audio = Some(v),
@@ -150,6 +168,27 @@ pub fn run(
     std::fs::create_dir_all(&out).map_err(|e| Unrun(format!("{}: {e}", out.display())))?;
     let frames = r.frames();
 
+    // What the native program never writes, known before any run: code
+    // copies and replaced libraries. Printed now, so they show even when
+    // a run fails.
+    let rom = std::fs::read(&r.rom).map_err(|e| Unrun(format!("{}: {e}", r.rom.display())))?;
+    let mut fixed = code_copies(rom);
+    if let Some(f) = holes_file(Path::new(""), &r.rom, extra) {
+        let text = std::fs::read_to_string(&f).map_err(|e| Bad(format!("{}: {e}", f.display())))?;
+        let h = codegen::native::Holes::parse(&text)
+            .map_err(|e| Bad(format!("{}: {e}", f.display())))?;
+        fixed.extend(holes_copies(&h, &f));
+    }
+    if let Some(f) = &extra.replaced {
+        fixed.extend(replaced(f)?);
+    }
+    for s in &fixed {
+        println!(
+            "native {name}: not compared {:#010x}..{:#010x}: {}",
+            s.start, s.end, s.why
+        );
+    }
+
     runner(&out, "play", play, &r, &["--timing", "native"], true)?;
     // Only the interpreter keeps the lowest sp (runtime::Machine::low_sp):
     // the same binary again, interpreted, which must hold the same state.
@@ -176,24 +215,26 @@ pub fn run(
              swallow other RAM"
         )));
     }
-    let rom = std::fs::read(&r.rom).map_err(|e| Unrun(format!("{}: {e}", r.rom.display())))?;
-    let mut skips = vec![Skip {
+    let stack = Skip {
         start: low_sp,
         end: IWRAM_END,
         why: format!("the guest stack, from the lowest sp {low_sp:#010x}"),
-    }];
-    skips.extend(code_copies(rom));
-    if let Some(f) = &extra.replaced {
-        skips.extend(replaced(f)?);
-    }
-    for s in &skips {
-        println!(
-            "native {name}: not compared {:#010x}..{:#010x}: {}",
-            s.start, s.end, s.why
-        );
-    }
+    };
+    println!(
+        "native {name}: not compared {:#010x}..{:#010x}: {}",
+        stack.start, stack.end, stack.why
+    );
+    let mut skips = vec![stack];
+    skips.extend(fixed);
 
-    compare(&out.join("play.rec"), &out.join("interp.rec"), &[], frames).map_err(|e| match e {
+    compare(
+        &out.join("play.rec"),
+        &out.join("interp.rec"),
+        ("play", "interpreter"),
+        &[],
+        frames,
+    )
+    .map_err(|e| match e {
         Differ::Fail(f) => Fail(format!(
             "the play build's compiled code differs from its interpreter (so from itself): {f}"
         )),
@@ -202,6 +243,7 @@ pub fn run(
     let (said, loud) = compare(
         &out.join("play.rec"),
         &out.join("native.rec"),
+        PLAY_NATIVE,
         &skips,
         frames,
     )
@@ -242,6 +284,7 @@ pub fn run(
         compare(
             &out.join("native.rec"),
             &out.join("packed.rec"),
+            ("guest layout", "play layout"),
             &[],
             frames,
         )
@@ -266,6 +309,7 @@ pub fn run(
         match compare(
             &out.join("play.rec"),
             &out.join(format!("{run}.rec")),
+            PLAY_NATIVE,
             &skips,
             frames,
         ) {
@@ -375,6 +419,46 @@ fn code_copies(rom: Vec<u8>) -> Vec<Skip> {
         .collect()
 }
 
+/// The holes file the lifter takes for this ROM: `--holes FILE`, else
+/// `holes/<name>.toml`, else `mods/<name>/holes.toml` (a commercial game's,
+/// private), under ROOT (the checkout: `just lift` looks there); `None`
+/// if there is none.
+fn holes_file(root: &Path, rom: &Path, extra: &Extra) -> Option<PathBuf> {
+    if let Some(f) = &extra.holes {
+        return Some(PathBuf::from(f));
+    }
+    let name = match &extra.name {
+        Some(n) => n.clone(),
+        None => rom.file_stem()?.to_string_lossy().to_lowercase(),
+    };
+    [
+        root.join(format!("holes/{name}.toml")),
+        root.join(format!("mods/{name}/holes.toml")),
+    ]
+    .into_iter()
+    .find(|p| p.is_file())
+}
+
+/// The holes file's `[[copy]]` destinations: code the game copies to RAM
+/// itself (by DMA, its own loop), which the lifter lifts at its RAM keys
+/// and the native program runs as Rust, never writing the bytes. The
+/// lifter refuses one that overlaps a static copy, so none is skipped
+/// twice. As with [`code_copies`], the whole copy is skipped.
+fn holes_copies(h: &codegen::native::Holes, file: &Path) -> Vec<Skip> {
+    h.copies_seen
+        .iter()
+        .map(|c| Skip {
+            start: c.dst,
+            end: c.dst + c.len,
+            why: format!(
+                "code the game copies from ROM {:#010x} ({}'s [[copy]])",
+                c.src,
+                file.display()
+            ),
+        })
+        .collect()
+}
+
 fn replaced(path: &str) -> Result<Vec<Skip>, Stop> {
     let text = std::fs::read_to_string(path).map_err(|e| Bad(format!("{path}: {e}")))?;
     let f: ReplacedFile = toml::from_str(&text).map_err(|e| Bad(format!("{path}: {e}")))?;
@@ -401,9 +485,24 @@ pub enum Differ {
     Unrun(String),
 }
 
-/// Compare two records frame by frame. Ok: what was compared, and how
+/// The two sides' names in a difference: the record compared against,
+/// then the one checked.
+pub type Sides = (&'static str, &'static str);
+
+/// The usual pair: the play build and the native program.
+pub const PLAY_NATIVE: Sides = ("play", "native");
+
+/// Compare two records frame by frame, naming a difference's values by
+/// `sides` (`a`'s name, then `b`'s). Ok: what was compared, and how
 /// many frames had sound in `a` that `b` didn't make (no audio at all).
-pub fn compare(a: &Path, b: &Path, skips: &[Skip], frames: u64) -> Result<(String, u64), Differ> {
+pub fn compare(
+    a: &Path,
+    b: &Path,
+    sides: Sides,
+    skips: &[Skip],
+    frames: u64,
+) -> Result<(String, u64), Differ> {
+    let (na, nb) = sides;
     let open =
         |p: &Path| Reader::open(p).map_err(|e| Differ::Unrun(format!("{}: {e}", p.display())));
     let (mut ra, mut rb) = (open(a)?, open(b)?);
@@ -424,12 +523,12 @@ pub fn compare(a: &Path, b: &Path, skips: &[Skip], frames: u64) -> Result<(Strin
             (x, _) => {
                 return Err(Differ::Fail(format!(
                     "{} ends after {n} frames",
-                    if x.is_none() { "play" } else { "native" }
+                    if x.is_none() { na } else { nb }
                 )));
             }
         };
         n += 1;
-        if let Some(d) = frame_diff(fa, fb, skips) {
+        if let Some(d) = frame_diff(fa, fb, sides, skips) {
             return Err(Differ::Fail(d));
         }
         match (fa.audio, fb.audio) {
@@ -462,7 +561,7 @@ pub fn compare(a: &Path, b: &Path, skips: &[Skip], frames: u64) -> Result<(Strin
 }
 
 /// The first difference between two frames' records, named.
-fn frame_diff(a: &Frame, b: &Frame, skips: &[Skip]) -> Option<String> {
+fn frame_diff(a: &Frame, b: &Frame, (na, nb): Sides, skips: &[Skip]) -> Option<String> {
     let f = a.frame;
     if a.frame != b.frame {
         return Some(format!("frame numbers {} and {}", a.frame, b.frame));
@@ -483,7 +582,7 @@ fn frame_diff(a: &Frame, b: &Frame, skips: &[Skip]) -> Option<String> {
         if let Some(i) = first {
             let addr = r.base() + i as u32;
             let mut s = format!(
-                "frame {f}: {} byte {addr:#010x}: play {:#04x}, native {:#04x}",
+                "frame {f}: {} byte {addr:#010x}: {na} {:#04x}, {nb} {:#04x}",
                 r.name(),
                 x[i],
                 y[i]
@@ -501,7 +600,7 @@ fn frame_diff(a: &Frame, b: &Frame, skips: &[Skip]) -> Option<String> {
     }
     if a.hash != b.hash {
         return Some(format!(
-            "frame {f}: the picture: play {:016x}, native {:016x}",
+            "frame {f}: the picture: {na} {:016x}, {nb} {:016x}",
             a.hash, b.hash
         ));
     }
@@ -509,7 +608,7 @@ fn frame_diff(a: &Frame, b: &Frame, skips: &[Skip]) -> Option<String> {
         && x != y
     {
         return Some(format!(
-            "frame {f}: audio: play {} samples hash {:016x}, native {} samples hash {:016x}",
+            "frame {f}: audio: {na} {} samples hash {:016x}, {nb} {} samples hash {:016x}",
             x.samples, x.hash, y.samples, y.hash
         ));
     }
@@ -554,28 +653,62 @@ mod tests {
         }];
         // In the stack: skipped.
         b.region_mut(Region::Iwram)[0x7F10] = 1;
-        assert_eq!(frame_diff(&a, &b, &skips), None);
-        // DMA's and serial's registers: not compared.
+        assert_eq!(frame_diff(&a, &b, PLAY_NATIVE, &skips), None);
+        // DMA's registers and KEYINPUT: not compared.
         b.set_io16(0x0B0, 5);
+        b.set_io16(0x130, 0x03FE);
+        assert_eq!(frame_diff(&a, &b, PLAY_NATIVE, &skips), None);
+        // The serial port's: compared, now the library keeps them.
         b.set_io16(0x128, 0x0080);
-        assert_eq!(frame_diff(&a, &b, &skips), None);
+        assert!(
+            frame_diff(&a, &b, PLAY_NATIVE, &skips)
+                .unwrap()
+                .contains("serial")
+        );
+        b.set_io16(0x128, 0);
+        b.set_io16(0x134, 0x8000);
+        assert!(
+            frame_diff(&a, &b, PLAY_NATIVE, &skips)
+                .unwrap()
+                .contains("RCNT")
+        );
+        b.set_io16(0x134, 0);
         // A timer: compared, now the library has the play build's.
         b.set_io16(0x102, 0x0080);
-        assert!(frame_diff(&a, &b, &skips).unwrap().contains("timers"));
+        assert!(
+            frame_diff(&a, &b, PLAY_NATIVE, &skips)
+                .unwrap()
+                .contains("timers")
+        );
         b.set_io16(0x102, 0);
         b.region_mut(Region::Ewram)[0xC0] = 2;
         assert_eq!(
-            frame_diff(&a, &b, &skips).unwrap(),
+            frame_diff(&a, &b, PLAY_NATIVE, &skips).unwrap(),
             "frame 3: EWRAM byte 0x020000c0: play 0x00, native 0x02; 1 bytes differ in EWRAM"
         );
         let mut c = Frame::new();
         c.frame = 3;
         c.set_io16(0x82, 0x100);
-        assert!(frame_diff(&a, &c, &skips).unwrap().contains("0x04000083"));
         assert!(
-            frame_diff(&a, &c, &skips)
+            frame_diff(&a, &c, PLAY_NATIVE, &skips)
+                .unwrap()
+                .contains("0x04000083")
+        );
+        assert!(
+            frame_diff(&a, &c, PLAY_NATIVE, &skips)
                 .unwrap()
                 .contains("sound registers")
+        );
+    }
+
+    #[test]
+    fn names_the_sides_it_is_given() {
+        let (a, mut b) = (Frame::new(), Frame::new());
+        b.region_mut(Region::Ewram)[0xC4] = 1;
+        assert_eq!(
+            frame_diff(&a, &b, ("guest layout", "play layout"), &[]).unwrap(),
+            "frame 0: EWRAM byte 0x020000c4: guest layout 0x00, play layout 0x01; \
+             1 bytes differ in EWRAM"
         );
     }
 
@@ -584,5 +717,66 @@ mod tests {
         let log = "x\ngbaa-desktop: lowest sp 0x03007e40\n";
         assert_eq!(lowest_sp(log), Some(0x0300_7E40));
         assert_eq!(lowest_sp("nothing"), None);
+    }
+
+    #[test]
+    fn skips_the_holes_files_copies() {
+        let text = r#"
+[[copy]]
+src = 0x08000104
+dst = 0x03000c7c
+len = 0x230
+roots = [0x03000c7c]
+why = "a dispatcher"
+
+[[copy]]
+src = 0x08004464
+dst = 0x02010000
+len = 0x10
+roots = [0x02010001]
+why = "a Thumb function"
+"#;
+        let h = codegen::native::Holes::parse(text).unwrap();
+        let f = Path::new("mods/x/holes.toml");
+        let skips = holes_copies(&h, f);
+        assert_eq!(
+            skips.iter().map(|s| (s.start, s.end)).collect::<Vec<_>>(),
+            [(0x0300_0C7C, 0x0300_0EAC), (0x0201_0000, 0x0201_0010)]
+        );
+        assert!(skips[0].why.contains("0x08000104"));
+        assert!(skips[0].why.contains("mods/x/holes.toml"));
+        // Inside a copy: skipped; just past its end: compared.
+        let (a, mut b) = (Frame::new(), Frame::new());
+        b.region_mut(Region::Iwram)[0xC7C] = 1;
+        b.region_mut(Region::Iwram)[0xEAB] = 1;
+        assert_eq!(frame_diff(&a, &b, PLAY_NATIVE, &skips), None);
+        b.region_mut(Region::Iwram)[0xEAC] = 1;
+        assert!(
+            frame_diff(&a, &b, PLAY_NATIVE, &skips)
+                .unwrap()
+                .contains("0x03000eac")
+        );
+    }
+
+    #[test]
+    fn finds_the_holes_file_by_name() {
+        let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
+        let rom = Path::new("/roms/No Such Game.gba");
+        let given = Extra {
+            holes: Some("h.toml".into()),
+            ..Extra::default()
+        };
+        assert_eq!(holes_file(root, rom, &given), Some(PathBuf::from("h.toml")));
+        // A name with no file: none.
+        assert_eq!(holes_file(root, rom, &Extra::default()), None);
+        // By the ROM's file name lowercased, or --name: native-spike's.
+        let spike = Some(root.join("holes/native-spike.toml"));
+        let found = holes_file(root, Path::new("/x/Native-Spike.gba"), &Extra::default());
+        assert_eq!(found, spike);
+        let named = Extra {
+            name: Some("native-spike".into()),
+            ..Extra::default()
+        };
+        assert_eq!(holes_file(root, rom, &named), spike);
     }
 }

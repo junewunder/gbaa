@@ -29,7 +29,10 @@
 //! the call (the callee never returns, or it is a tail call), where the
 //! lift writes the locals to the frame's bytes before it instead
 //! ([`Frame::flush`]). For a call through a register, every function
-//! whose address is a word of the ROM may be the callee.
+//! whose address is a word of the ROM may be the callee. A tail call made
+//! with a local still at or above its sp hands the frame on: the locals go
+//! to its bytes before it too, whatever the callee is known to read (one
+//! in another context, a RAM copy, isn't known here).
 //!
 //! The lift (`native/frame-locals`) prints the slots that don't escape, in
 //! the function's own frame, as Rust locals ([`Frame::locals`]), and their
@@ -52,7 +55,7 @@
 //! context's functions.
 
 use crate::func::{Ctx, ExitInfo, Func, GBlock, Plan, exits, successors};
-use crate::saves::Summaries;
+use crate::saves::{Summaries, Summary};
 use analysis::ir::{BinOp, Exit, Inst, Op, ValueId};
 use armv4t::sem::Width;
 use std::collections::{BTreeMap, BTreeSet};
@@ -151,11 +154,17 @@ pub struct Frame {
     /// frame's locals go to its bytes: the callee may reach up into the
     /// frame from an address above its own sp (a pointer to a stack
     /// argument), and the frame is done with after it (the callee never
-    /// returns, or it is a tail call).
+    /// returns, or it is a tail call); and every tail call made with a
+    /// slot of the frame at or above its sp, which the callee runs on.
     pub flush: BTreeSet<(u32, usize)>,
     /// Its stack switches ([`switches`](Frame::switches)): the
     /// instructions that set sp to a value not made from the frame's.
     pub switches: BTreeSet<u32>,
+    /// Its fresh stacks: the instructions that set sp, made from the
+    /// frame's until then, to a constant (the SDK's `SoftReset`, `mov sp,
+    /// r3` with r3 the stack's top, before a reset). Nothing on the old
+    /// stack is reached after one in a function that never returns.
+    pub fresh: BTreeSet<u32>,
 }
 
 impl Frame {
@@ -288,8 +297,9 @@ pub struct FBlock<'a> {
 
 /// What the run needs to know of the rest of the program.
 pub trait Env {
-    /// The registers (bit `n` for rN) a call to `target` reads.
-    fn params(&self, target: Option<u32>) -> u16;
+    /// The registers (bit `n` for rN) a call to `target` reads, made by
+    /// the instruction at `at`.
+    fn params(&self, target: Option<u32>, at: u32) -> u16;
 
     /// Whether function `f`'s address may be taken: a call through a
     /// register may reach it. Every function, unless told otherwise.
@@ -307,7 +317,7 @@ pub trait Env {
 pub struct AllFour;
 
 impl Env for AllFour {
-    fn params(&self, _: Option<u32>) -> u16 {
+    fn params(&self, _: Option<u32>, _: u32) -> u16 {
         0xf
     }
 }
@@ -445,9 +455,12 @@ struct Raw {
     lost: bool,
     /// Stack switches, by instruction: sp, made from the frame's sp until
     /// then, set to a value made from no frame address (`mov sp, r2` with
-    /// r2 a parameter, `ldr sp, [r3]` from a global). A mode change's own
-    /// sp isn't one: the `msr` is a hole of its own.
+    /// r2 a parameter, `ldr sp, [r3]` from a global). Not sp set after a
+    /// mode change, another mode's: the `msr` is a hole of its own, but
+    /// in the reset and the IRQ wrappers, which print it (`PsrFns`).
     switches: BTreeSet<u32>,
+    /// Those whose value is a constant ([`Frame::fresh`]), apart.
+    fresh: BTreeSet<u32>,
 }
 
 struct Run<'a, 'e> {
@@ -483,9 +496,9 @@ impl Run<'_, '_> {
     }
 
     fn pass(&mut self, regs: u16, s: &State, k: Kind) {
-        for r in 0..16 {
+        for (r, v) in s.regs[..16].iter().enumerate() {
             if regs & 1 << r != 0 && r != 13 {
-                self.escape(&s.regs[r], k);
+                self.escape(v, k);
             }
         }
     }
@@ -610,7 +623,11 @@ impl Run<'_, '_> {
                     let restored = matches!(b.insts[root.index()].op,
                         Op::Load { addr, .. } if framed(&vals[addr.index()]));
                     if r == 13 && framed(&s.regs[13]) && !framed(&x) && !restored {
-                        self.raw.switches.insert(born[root.index()]);
+                        let set = match x {
+                            V::Const(_) => &mut self.raw.fresh,
+                            _ => &mut self.raw.switches,
+                        };
+                        set.insert(born[root.index()]);
                     }
                     s.regs[r] = if guarded { s.regs[r].join(&x) } else { x };
                     if r == 13 && !matches!(s.regs[13], V::Sp(_)) {
@@ -625,7 +642,7 @@ impl Run<'_, '_> {
                     V::Other
                 }
                 Op::Exit(_) => {
-                    self.exit((key, i), &b.edges[&i], &s);
+                    self.exit((key, i), at, &b.edges[&i], &s);
                     V::Other
                 }
                 _ => V::Other,
@@ -634,7 +651,8 @@ impl Run<'_, '_> {
         }
     }
 
-    fn exit(&mut self, at: (u32, usize), e: &Edge, s: &State) {
+    /// `addr`: the address of the instruction the exit belongs to.
+    fn exit(&mut self, at: (u32, usize), addr: u32, e: &Edge, s: &State) {
         match e {
             Edge::Goto(ks) => {
                 for &k in ks {
@@ -642,7 +660,7 @@ impl Run<'_, '_> {
                 }
             }
             Edge::Call { target, ret } => {
-                self.pass(self.env.params(*target) & 0xf, s, Kind::Call);
+                self.pass(self.env.params(*target, addr) & 0xfff, s, Kind::Call);
                 self.raw.calls.insert(at, (Run::sp(s), *target, false));
                 let mut after = s.clone();
                 for r in [0, 1, 2, 3, 12, 14] {
@@ -661,8 +679,8 @@ impl Run<'_, '_> {
                 self.raw.calls.insert(at, (Run::sp(s), *t, true));
             }
             Edge::TailOr(ks) => {
-                self.exit(at, &Edge::Tail(None), s);
-                self.exit(at, &Edge::Goto(ks.clone()), s);
+                self.exit(at, addr, &Edge::Tail(None), s);
+                self.exit(at, addr, &Edge::Goto(ks.clone()), s);
             }
             Edge::Swi(next) => {
                 self.pass(0xf, s, Kind::Call);
@@ -695,7 +713,7 @@ fn origin(insts: &[Inst], mut x: ValueId) -> ValueId {
 /// One function's run, from `entry` over `blocks`.
 fn run(entry: u32, blocks: &BTreeMap<u32, FBlock>, env: &dyn Env) -> Raw {
     let mut held = BTreeMap::new();
-    let mut switches = BTreeSet::new();
+    let (mut switches, mut fresh) = (BTreeSet::new(), BTreeSet::new());
     // Each pass's `holds` only grows, and feeds the next: rerun until it
     // stops.
     for _ in 0..8 {
@@ -725,11 +743,13 @@ fn run(entry: u32, blocks: &BTreeMap<u32, FBlock>, env: &dyn Env) -> Raw {
         }
         held = std::mem::take(&mut r.raw.holds);
         switches = std::mem::take(&mut r.raw.switches);
+        fresh = std::mem::take(&mut r.raw.fresh);
     }
     Raw {
         lost: true,
         holds: held,
         switches,
+        fresh,
         ..Raw::default()
     }
 }
@@ -879,6 +899,15 @@ fn resolve(raw: Raw, reads: &dyn Fn(Option<u32>) -> Reads, env: &dyn Env) -> Fra
                 }
             }
         }
+        // A tail call made with the frame still live (a slot of its own
+        // at or above its sp, or sp unknown) hands the frame to its
+        // callee, which may read it, or pop it, past what `reads` knows (a
+        // callee in another context: m4a's SoundMain jumps into its IWRAM
+        // mixer with the SoundInfo at its sp + 24): the locals go to the
+        // frame's bytes first. The frame is done with after it.
+        if tail && sp.is_none_or(|sp| slots.iter().any(|s| s.lo < 0 && s.hi.max(s.lo + 1) > sp)) {
+            flush.insert(at);
+        }
     }
     for &b in &ups {
         unplaced(&mut slots, b);
@@ -925,6 +954,7 @@ fn resolve(raw: Raw, reads: &dyn Fn(Option<u32>) -> Reads, env: &dyn Env) -> Fra
         places: raw.places,
         flush,
         switches: raw.switches,
+        fresh: raw.fresh,
     }
 }
 
@@ -951,13 +981,21 @@ pub fn frames<'a>(
 pub struct FromSummaries<'a> {
     pub sums: &'a Summaries,
     pub taken: BTreeSet<u32>,
+    /// The indirect calls a holes file's `[[takes]]` names, by address.
+    pub named: &'a BTreeSet<u32>,
 }
 
 impl Env for FromSummaries<'_> {
-    fn params(&self, target: Option<u32>) -> u16 {
+    fn params(&self, target: Option<u32>, at: u32) -> u16 {
+        // And what a callee takes of r4-r11 (`Summary::takes`): the lift
+        // passes it the caller's; and at a pointer call the holes file
+        // names, all of r4-r11 (to whichever callees it names).
+        let takes = |s: &Summary| (s.may_take() as u16) << 4;
         match target.and_then(|t| self.sums.get(t)) {
+            None if self.named.contains(&at) => 0xfff,
             Some(s) if s.holes.is_empty() => s.params as u16,
-            _ => 0xf,
+            Some(s) => 0xf | takes(s),
+            None => 0xf,
         }
     }
 
@@ -1036,13 +1074,19 @@ pub fn edge(ctx: &Ctx, f: &Func, all: &BTreeSet<u32>, gb: &GBlock, x: &ExitInfo)
             }
         }
         Plan::Swi { next } => Edge::Swi(next),
-        Plan::Undefined => Edge::Stop,
+        Plan::Undefined { .. } => Edge::Stop,
     }
 }
 
 /// The frames of one lifted context's functions, as the lifter prints
-/// them ([`edge`]).
-pub fn of_code(ctx: &Ctx, funcs: &[Func], sums: &Summaries) -> BTreeMap<u32, Frame> {
+/// them ([`edge`]). `named`: the indirect calls a holes file's
+/// `[[takes]]` names, by address.
+pub fn of_code(
+    ctx: &Ctx,
+    funcs: &[Func],
+    sums: &Summaries,
+    named: &BTreeSet<u32>,
+) -> BTreeMap<u32, Frame> {
     let all: BTreeSet<u32> = funcs.iter().map(|f| f.entry).collect();
     let fs: Vec<(u32, BTreeMap<u32, FBlock>)> = funcs
         .iter()
@@ -1070,6 +1114,7 @@ pub fn of_code(ctx: &Ctx, funcs: &[Func], sums: &Summaries) -> BTreeMap<u32, Fra
     let env = FromSummaries {
         sums,
         taken: taken(&all, ctx.rom),
+        named,
     };
     frames(&fs, &env)
 }

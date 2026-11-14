@@ -26,7 +26,7 @@
 //!    the [`metrics`].
 //! 4. `FnPrinter`, one function's Rust: `print` (signature, locals, the
 //!    block loop); `block` (a block's IR as statements: memory accesses,
-//!    typed fields via `typed_as`, `g.sp = r13` before I/O stores; `count`
+//!    typed fields via `typed_as`, `bank_sp(g, r13)` before I/O stores; `count`
 //!    tallies each access for the metrics; `used` drops what nothing
 //!    printed needs); stack locals (`local`, `declare_locals`, `flush`);
 //!    control flow (`goto`, `fall_into`, `call`, `call_then`, `tail`,
@@ -43,7 +43,8 @@
 //! function addresses and callee sets, [`fnref`]; RAM's globals, `pin`
 //! and `ix`, both layouts, [`globals`]; heap pointers as `Ref<T>`, the
 //! prelude's `Game::at`, [`heap`]; metric names and bars,
-//! [`metrics`]; the crate's files, [`modules`]; `lift-check.toml`'s
+//! [`metrics`]; the crate's files, [`modules`]; functions and data by the
+//! names file's names, [`named`]; `lift-check.toml`'s
 //! programs, [`lift_check`]. A function's blocks and IR come from
 //! [`crate::func`], its summary from [`crate::saves`].
 //!
@@ -68,8 +69,23 @@
 //!   `lr` [`RET`]. A fall or jump into another function's entry (or a
 //!   call's return into one) runs on in its `x_` with this one's registers
 //!   and flags, as the hardware does (unit `native/lift-fallthrough`).
+//! - A function that reads one of r4-r11 as it came (a parameter by
+//!   register: hand-written code's, or agbcc's word built in an unset
+//!   register and stored) takes it from its callers
+//!   ([`crate::saves::Summary::takes`], unit `native/metroid-entry-reads`):
+//!   a direct call is its `x_` with r0-r3 and the caller's own of those
+//!   registers ([`taking`]), and a caller that still has one as it came
+//!   takes it in turn. A pointer call can't (`call_fn` passes r0-r3): the
+//!   read its zeroes reach is a hard hole unless the holes file names the
+//!   indirect calls that reach the function (`[[takes]]`,
+//!   [`Holes::takes`]), which then pass it theirs (none, `sites = []`,
+//!   for code only jumped into: a jump passes every register). Its `f_`
+//!   stops the program, so no call runs it on zeroes. A context save
+//!   (`setjmp`'s `stm`, `saves::summary`'s `context_saves`) is no read.
 //! - Blocks are the arms of a `loop { match b }` over local labels
-//!   (0 the entry); calls are Rust calls; a return is a jump to the value
+//!   (0 the entry), each starting with `runtime::guest_pc::set` of its
+//!   guest address, which a stop names (unit `native/first-stop-guest-pc`:
+//!   compiled code keeps no other pc); calls are Rust calls; a return is a jump to the value
 //!   `lr` held on entry, [`RET`] (prelude), told by value since compiled
 //!   code moves it through the stack.
 //! - Memory is `ld8/16/32` and `st8/16/32` over `Game::ram` (EWRAM then
@@ -89,12 +105,17 @@
 //!   (`IntrWait`, `VBlankIntrWait` as `hw::halt` until the game's handler
 //!   sets the flag; `Halt`, `Stop`), `CpuSet`, `CpuFastSet` and LZ77 with
 //!   their time (`hw::spend`), RL, `Div`, `Sqrt`, `ArcTan2`, `SoundBias`,
-//!   `MidiKey2Freq`, `MultiBoot` (unit `native/lift-bios-calls`).
-//! - An idle loop's back edge calls `hw::idle`, a spin loop's `hw::spin`
-//!   (`analysis::idle`, `runtime::spins`, as the play build's
-//!   `--timing native` marks them).
+//!   `MidiKey2Freq`, `MultiBoot` (unit `native/lift-bios-calls`),
+//!   `BgAffineSet`, `ObjAffineSet` (unit `native/lift-bios-affine`).
+//! - An idle loop's back edge calls `hw::idle`, its way out (the branch
+//!   not taken, an exit of its own: `Ctx::with_idle_exits`)
+//!   `hw::idle_exit`, a spin loop's back edge `hw::spin` (`analysis::idle`,
+//!   `runtime::spins`, as the play build's `--timing native` marks them).
 //! - Function pointers are their keys (ROM or IWRAM address, Thumb bit):
-//!   `call_fn` (prelude) looks them up in `FNS`. Stage A has no dense IDs
+//!   `call_fn` (prelude) looks them up in `FNS`; a RAM key that isn't
+//!   there but holds one of the flash save library's stack routines is
+//!   that routine's `hw::flash` call (unit `native/lift-flash-routines`).
+//!   Stage A has no dense IDs
 //!   (`--fn-ids rom` only): a literal lift loads pointers from ROM bytes
 //!   and RAM, so it can't renumber them. [`fnref`] follows every function
 //!   address to its uses and reports the ROM words dense IDs could rewrite
@@ -110,12 +131,15 @@
 //! unless the game's holes file gives a stand-in or, for an unresolved
 //! jump, its targets ([`Holes`]):
 //!
-//! - CPU state: `mrs`, `msr`, user-bank transfers, exception returns,
-//!   stack switches ([`Frame::switches`]: a task switcher's, which a stand-in
+//! - CPU state: `mrs` and `msr` outside the reset and the IRQ wrappers
+//!   (theirs are printed: [`PsrFns`]), user-bank transfers, exception
+//!   returns, stack switches ([`Frame::switches`]: a task switcher's, which a stand-in
 //!   runs on the prelude's host coroutines, `task_resume`);
 //! - an indirect jump Recovery didn't resolve;
 //! - a BIOS call the prelude doesn't have;
-//! - an undefined instruction, a jump to no code;
+//! - an undefined instruction, a jump to no code (but a compiler's trap,
+//!   `udf #255` and the like, which the lift prints as a `panic!`: modern
+//!   GCC ends a path it proved dereferences null with one);
 //! - a function that returns without keeping r4-r11 and sp.
 //!
 //! Soft holes (counted in the report): every RAM access but the globals'
@@ -123,15 +147,16 @@
 //! ROM read at run time.
 
 use crate::func::{Ctx, ExitInfo, Func, Idle, Plan, build_func, exits, key};
-use crate::saves::{Assume, Sets, Summaries, Summary, summarize, summarize_sets};
+use crate::saves::{Assume, Passing, Sets, Summaries, Summary, summarize, summarize_passing};
 use analysis::discovery::{self, Discovery};
 use analysis::ir::{BinOp, BitOp, Exit, Inst, Op, ValueId};
 use analysis::vsa::func::JumpRes;
-use armv4t::sem::{Flag, ShiftType, Width};
+use armv4t::sem::{Flag, PsrMask, ShiftType, Width};
 use frame::{Frame, Kind, Local};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
+pub mod first_stop;
 pub mod fnref;
 pub mod frame;
 pub mod globals;
@@ -139,6 +164,7 @@ pub mod heap;
 pub mod lift_check;
 pub mod metrics;
 pub mod modules;
+pub mod named;
 pub mod shape;
 
 use globals::{Globals, Layout, Obj, Place};
@@ -187,6 +213,14 @@ pub struct Holes {
     pub lr: BTreeSet<u32>,
     /// By the jump's instruction address: its targets (keys), and why.
     pub jumps: BTreeMap<u32, (Vec<u32>, String)>,
+    /// By function key: the indirect calls (their addresses) that reach a
+    /// function reading one of r4-r11 as it came, and why (`[[takes]]
+    /// entry = 0x…, sites = [0x…], why = "…"`): each passes it the
+    /// caller's ([`crate::saves::Passing`]), and its plain entry stops the
+    /// program, so a pointer call the file doesn't name can't run it on
+    /// zeroes. With no sites (`sites = []`) no pointer call reaches it:
+    /// code only jumped into, which gets the jumper's registers.
+    pub takes: BTreeMap<u32, (Vec<u32>, String)>,
     /// Code the game copies to RAM itself that discovery's static copies
     /// don't have (by DMA, by its own loop, through a pointer):
     /// `[[copy]] src = 0x…, dst = 0x…, len = 0x…, roots = [0x…], why = "…"`
@@ -219,6 +253,13 @@ pub struct Holes {
     /// (`native/ime-release`): the native check must catch it on
     /// `agb/native-ime-release`.
     pub ime_at_waits: bool,
+    /// Stage A's old call of a function that takes r4-r11 from its
+    /// callers (`gbaa-lift --takes-zeroed`): each call that passes them
+    /// (a direct call, a `[[takes]]` site) passes zeroes instead, as the
+    /// plain entry did. The taker check's planted control
+    /// (`native/taker-test-program`): the native check must catch it on
+    /// `agb/native-takes`.
+    pub takes_zeroed: bool,
     /// The stack-locals check's planted control (`gbaa-lift --plant-slot
     /// AT`, `native/frame-locals`): the store of the instruction at this
     /// address, which must be to a slot printed as a Rust local, stores
@@ -239,6 +280,11 @@ pub struct Holes {
     /// starts at one is named so, else `d_<address>`, and spans a sized
     /// datum an access reaches ([`globals`]).
     pub names: BTreeMap<u32, (String, u32)>,
+    /// Function names by key, from the same files: each lifted function's
+    /// entry is printed so, and a constant address in a named datum as
+    /// its name ([`named`]; unit `native/lift-fn-names`). Not with
+    /// `--copies`, whose copies would repeat them.
+    pub fn_names: BTreeMap<u32, String>,
     /// Where `Ram`'s globals are (`gbaa-lift --layout`): the guest's
     /// offsets, or the play layout's order ([`globals::Layout`]).
     pub layout: Layout,
@@ -247,11 +293,26 @@ pub struct Holes {
     /// stage B's metrics, and on a game it doesn't settle in a session
     /// (Metroid: 68 s a round, rounds growing). `None`: followed.
     pub skip_fn_flow: Option<String>,
+    /// Find the hard holes only (`gbaa-lift --holes-only`; the hole
+    /// report's lift, native/holes-match-lift): no heap pointers, no
+    /// modules, and unless [`Holes::holes_flow`], no function-address
+    /// flow. The heap changes no hole. The flow's complete callee sets
+    /// can: the second summaries take each such indirect call as calling
+    /// exactly those, so a summary hole may rest on one (one each in
+    /// Minish Cap and Kirby & the Amazing Mirror, of the corpus). Without
+    /// it this is the lift's [`Lifted::holes`] but those, in seconds to a
+    /// few minutes; [`Lifted::files`] is empty and the report one line.
+    pub holes_only: bool,
+    /// With [`Holes::holes_only`], follow the function addresses too
+    /// (`--flow`): the whole lift's holes exactly, at the flow's cost (up
+    /// to about 20 minutes a game).
+    pub holes_flow: bool,
 }
 
 impl Holes {
     /// Parse a holes file: `[[standin]] entry = 0x…, why = "…", code =
-    /// '''…'''` (and `lr = true` for [`Holes::lr`]), `[[jump]] at = 0x…, targets = [0x…], why = "…"`, and at
+    /// '''…'''` (and `lr = true` for [`Holes::lr`]), `[[jump]] at = 0x…, targets = [0x…], why = "…"`,
+    /// `[[takes]]` ([`Holes::takes`]), and at
     /// the top, `skip_fn_flow = "why"`.
     pub fn parse(text: &str) -> Result<Holes, String> {
         let t: toml::Table = text.parse().map_err(|e| format!("{e}"))?;
@@ -303,6 +364,19 @@ impl Holes {
                             .collect::<Result<Vec<_>, _>>()?;
                         h.jumps.insert(at, (targets, str_of(e, "why")?));
                     }
+                    "takes" => {
+                        let entry = int(e.get("entry").ok_or("takes: missing entry")?, "entry")?;
+                        let sites = e
+                            .get("sites")
+                            .and_then(|v| v.as_array())
+                            .ok_or("takes: missing sites")?
+                            .iter()
+                            .map(|v| int(v, "sites"))
+                            .collect::<Result<Vec<_>, _>>()?;
+                        if h.takes.insert(entry, (sites, str_of(e, "why")?)).is_some() {
+                            return Err(format!("takes: {entry:#010x} twice"));
+                        }
+                    }
                     "copy" => {
                         let field = |f: &str| -> Result<u32, String> {
                             int(e.get(f).ok_or(format!("copy: missing {f}"))?, f)
@@ -340,12 +414,76 @@ pub struct SeenCopy {
     pub why: String,
 }
 
-/// A hard hole: the function, the instruction, and what it is.
+/// A hard hole: the function, the instruction, its kind, and what it is.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Hole {
     pub func: u32,
     pub at: u32,
+    pub kind: HoleKind,
     pub what: String,
+}
+
+/// What kind of hard hole: the lift's count by kind, which the hole
+/// report (`gbaa-holes`, native/holes-match-lift) prints as its own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum HoleKind {
+    /// An indirect jump Recovery left unresolved and the holes file
+    /// gives no targets for.
+    Jump,
+    /// A jump to ROM where discovery (and the gap decoding) found no code.
+    NoCode,
+    /// An undefined instruction that isn't a compiler's trap.
+    Undefined,
+    /// `msr`, `mrs`, a user-bank transfer, an exception return or a stack
+    /// switch outside the reset and the IRQ wrappers.
+    Cpu,
+    /// A BIOS call the library doesn't have.
+    Bios,
+    /// A function whose summary has a hard hole
+    /// (`analysis::holes::SUMMARY_HARD`), once.
+    Summary,
+    /// A call to a function that takes r4-r11 from its callers that
+    /// can't pass them.
+    Takes,
+    /// The holes file names something that isn't there (a stand-in, a
+    /// `[[takes]]`, a `[[copy]]`), or a check's plant missed.
+    HolesFile,
+}
+
+impl HoleKind {
+    pub const ALL: [HoleKind; 8] = [
+        HoleKind::Jump,
+        HoleKind::NoCode,
+        HoleKind::Undefined,
+        HoleKind::Cpu,
+        HoleKind::Bios,
+        HoleKind::Summary,
+        HoleKind::Takes,
+        HoleKind::HolesFile,
+    ];
+
+    /// The kind's short name: a column of the hole report's table.
+    pub fn name(self) -> &'static str {
+        match self {
+            HoleKind::Jump => "jumps",
+            HoleKind::NoCode => "no code",
+            HoleKind::Undefined => "undefined",
+            HoleKind::Cpu => "CPU state",
+            HoleKind::Bios => "BIOS",
+            HoleKind::Summary => "summaries",
+            HoleKind::Takes => "r4-r11 not passed",
+            HoleKind::HolesFile => "holes file",
+        }
+    }
+}
+
+/// `holes`' count of each kind, in [`HoleKind::ALL`]'s order.
+pub fn holes_by_kind(holes: &[Hole]) -> [usize; 8] {
+    let mut n = [0; 8];
+    for h in holes {
+        n[HoleKind::ALL.iter().position(|&k| k == h.kind).unwrap()] += 1;
+    }
+    n
 }
 
 impl std::fmt::Display for Hole {
@@ -395,7 +533,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let given = || holes.jumps.iter().map(|(&a, (ts, _))| (a, ts.as_slice()));
     let mut gaps = BTreeSet::new();
     for _ in 0..64 {
-        let ctx = Ctx::new(rom, &disc).with_library().with_jumps(given());
+        let ctx = Ctx::new(rom, &disc)
+            .with_library()
+            .with_idle_exits()
+            .with_jumps(given());
         let funcs: Vec<Func> = ctx.entries.iter().map(|&e| build_func(&ctx, e)).collect();
         let mut missing = missing(&ctx, &funcs);
         missing.extend(
@@ -436,6 +577,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             bad_copies.push(Hole {
                 func: c.dst,
                 at: c.dst,
+                kind: HoleKind::HolesFile,
                 what: "the holes file's copy is outside the ROM, EWRAM or IWRAM, has a root outside it, or overlaps another copy"
                     .into(),
             });
@@ -450,15 +592,28 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         });
     }
     let overlays = overlays;
+    // The indirect calls the holes file's `[[takes]]` names: they pass
+    // their callees the caller's r4-r11.
+    let named_sites: BTreeSet<u32> = holes
+        .takes
+        .values()
+        .flat_map(|(sites, _)| sites.iter().copied())
+        .collect();
     let mut codes = vec![code(
-        Ctx::new(rom, &disc).with_library().with_jumps(given()),
+        Ctx::new(rom, &disc)
+            .with_library()
+            .with_idle_exits()
+            .with_jumps(given()),
+        &named_sites,
     )];
     for o in &overlays {
         let o_rom = &rom[(o.src - 0x0800_0000) as usize..][..o.len as usize];
         codes.push(code(
             Ctx::at(o.dst, o_rom, &o.disc)
                 .with_library()
+                .with_idle_exits()
                 .with_jumps(given()),
+            &named_sites,
         ));
     }
     let holes = &library_standins(holes, &codes);
@@ -467,6 +622,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     for c in &codes {
         all.extend(c.funcs.iter().map(|f| f.entry));
     }
+    // The reset (the ROM's entry) and the IRQ wrappers the code installs,
+    // whose `msr` and `mrs` are printed ([`PsrFns`]).
+    let psr_fns = PsrFns::of(&disc, &overlays);
     // RAM's globals: what the constant-address accesses of the functions
     // printed (a stand-in's code is its own) reach.
     // And what their computed ones reach, where the value sets bound it
@@ -513,15 +671,21 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             },
             funcs: &c.funcs,
             frames: &c.frames,
+            sums: &c.sums,
         })
         .collect();
-    let (ins, pools, call_fn) = fn_ins(&flow_ins, &all);
+    let no_flow = holes.holes_only && !holes.holes_flow;
+    let (ins, pools, call_fn) = if no_flow {
+        Default::default()
+    } else {
+        fn_ins(&flow_ins, &all, &named_sites)
+    };
     let fnrefs = match &holes.skip_fn_flow {
-        None => {
+        None if !no_flow => {
             let (flow, words) = fn_flow(rom, &disc, &overlays, &ins, &pools, &all);
             Some((flow, words, call_fn))
         }
-        Some(_) => None,
+        _ => None,
     };
     // Heap pointers as `Ref<T>` (native/ref-heap): RAM at the start is
     // the program start's copies, else 0.
@@ -548,12 +712,27 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             .copied()
             .collect()
     });
-    let heap = heap::follow(
-        &ins,
-        settled.map_or(&no_sites, |(f, _, _)| &f.sites),
-        taken.as_ref(),
-        &ram_init,
-    );
+    // Whether a global ends past a guest RAM address in its region: an
+    // object an unknown index makes from there may share bytes with it
+    // (native/ref-heap-static-arrays).
+    let global_from = |a: u32| -> bool {
+        let Some(o) = globals::ram_at(a) else {
+            return false;
+        };
+        let end = if o < 0x4_0000 { 0x4_0000 } else { 0x4_8000 };
+        globals.0.range(..end).any(|(_, g)| g.lo + g.len > o)
+    };
+    let heap = if holes.holes_only {
+        heap::Heap::default()
+    } else {
+        heap::follow(
+            &ins,
+            settled.map_or(&no_sites, |(f, _, _)| &f.sites),
+            taken.as_ref(),
+            &ram_init,
+            &global_from,
+        )
+    };
     drop(ins);
     drop(flow_ins);
     // The summaries again, each indirect call with a complete callee set
@@ -564,13 +743,38 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .as_ref()
         .map(|f| complete_sets(&f.0))
         .unwrap_or_default();
-    if !sets.is_empty() {
+    // And with what the holes file says of r4-r11's passing: its
+    // `[[takes]]`, and a stand-in takes nothing.
+    let mut passing = Passing {
+        replaced: holes.standins.keys().copied().collect(),
+        ..Passing::default()
+    };
+    for (&k, (sites, _)) in &holes.takes {
+        passing.named.insert(k);
+        for &at in sites {
+            passing.sites.entry(at).or_default().insert(k);
+        }
+    }
+    let replaced_takes = codes.iter().any(|c| {
+        let takes = |k| c.sums.get(k).is_some_and(|s| s.takes != 0);
+        passing.replaced.iter().any(|&k| takes(k))
+    });
+    if !sets.is_empty() || !passing.named.is_empty() || replaced_takes {
         for c in &mut codes {
-            c.sums = summarize_sets(&c.ctx, &c.funcs, Assume::default(), &sets);
+            c.sums = summarize_passing(&c.ctx, &c.funcs, Assume::default(), &sets, &passing);
         }
     }
     let shapes = shapes_of(&codes, &all, holes);
     let args = call_fn_args(&sets, &codes, &shapes.shaped);
+    // The functions that take r4-r11 from their callers, over all
+    // contexts; a stand-in that calls one by its plain entry would run
+    // into its stop.
+    let takers: BTreeSet<u32> = codes
+        .iter()
+        .flat_map(|c| c.sums.by_entry.iter())
+        .filter(|(k, s)| s.passed() != 0 && !holes.standins.contains_key(k))
+        .map(|(&k, _)| k)
+        .collect();
     // Each function's text by key, in print order: the modules' contents.
     let mut out: Vec<(u32, String)> = Vec::new();
     let mut report = String::new();
@@ -599,6 +803,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 ctx: &c.ctx,
                 f,
                 all: &all,
+                sums: &c.sums,
+                takers: &takers,
                 shapes: &shapes.shaped,
                 me: shapes.shaped.get(&f.entry).copied(),
                 holes,
@@ -615,6 +821,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 globals: &globals,
                 args: &args,
                 heap: &heap,
+                psr: psr_fns.place(f.entry),
             };
             let s = c.sums.get(f.entry);
             let text = p.print(s);
@@ -639,8 +846,54 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         hard.push(Hole {
             func: *k,
             at: *k,
+            kind: HoleKind::HolesFile,
             what: "the holes file's stand-in matches no function".into(),
         });
+    }
+    for (&f, (code, _)) in &holes.standins {
+        for &k in takers
+            .iter()
+            .filter(|k| code.contains(&format!("f_{k:08x}(")))
+        {
+            hard.push(Hole {
+                func: f,
+                at: f,
+                kind: HoleKind::HolesFile,
+                what: format!("the stand-in calls f_{k:08x}, which takes r4-r11 from its callers and stops the program when called so"),
+            });
+        }
+    }
+    for (&k, (sites, _)) in &holes.takes {
+        for &at in sites.iter().filter(|&&at| !soft.passes.contains(&(at, k))) {
+            hard.push(Hole {
+                func: k,
+                at,
+                kind: HoleKind::HolesFile,
+                what: "the holes file's takes matches no indirect call (printed through call_fn) to a function that takes one of r4-r11 from its callers".into(),
+            });
+        }
+        // One with no sites names a function only jumped into: stale if
+        // the function takes nothing.
+        if sites.is_empty() && !takers.contains(&k) {
+            hard.push(Hole {
+                func: k,
+                at: k,
+                kind: HoleKind::HolesFile,
+                what: "the holes file's takes, with no sites, names a function that takes none of r4-r11 from its callers".into(),
+            });
+        }
+    }
+    if holes.holes_only {
+        return Lifted {
+            files: Vec::new(),
+            report: format!(
+                "gbaa-lift: {name}: {} functions; {} hard holes (--holes-only)\n",
+                fns.len(),
+                hard.len()
+            ),
+            holes: hard,
+            metrics: Metrics::default(),
+        };
     }
     fns.sort_unstable();
     let mut table = String::new();
@@ -652,7 +905,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let n_funcs = fns.len();
     let mut main = String::new();
     main.push_str("// Generated by gbaa-lift (crates/codegen/src/native.rs). Don't edit; rerun `just lift`.\n");
-    main.push_str("#![allow(unused_mut, unused_parens, unused_variables, unused_imports, unused_assignments, unreachable_code, non_snake_case, dead_code, clippy::all)]\n\n");
+    main.push_str("#![allow(unused_mut, unused_parens, unused_variables, unused_imports, unused_assignments, unreachable_code, non_snake_case, non_upper_case_globals, dead_code, clippy::all)]\n\n");
     let mut pre = prelude(holes.layout);
     for (on, flag) in [
         (holes.irq_at_waits, "IRQ_HOLD"),
@@ -666,7 +919,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     }
     main.push_str(&pre);
     main.push('\n');
-    main.push_str(&globals.ram_struct(holes.layout));
+    let ram_struct = globals.ram_struct(holes.layout);
+    main.push_str(&ram_struct);
     for &t in &soft.ref_tys {
         main.push_str(&heap.types[t].decl());
     }
@@ -677,6 +931,18 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         plain(&shapes.shaped, entry)
     )
     .unwrap();
+    let named =
+        (holes.copies <= 1 && !(holes.fn_names.is_empty() && holes.names.is_empty())).then(|| {
+            named::apply(
+                &mut main,
+                &ram_struct,
+                &mut table,
+                &mut out,
+                &fns,
+                &holes.fn_names,
+                &holes.names,
+            )
+        });
     let plains: Vec<String> = fns.iter().map(|&k| plain(&shapes.shaped, k)).collect();
     let files = modules::split(main, table, &plains, &out, holes.copies);
     let blocks: usize = codes
@@ -799,6 +1065,24 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     .unwrap();
     writeln!(
         report,
+        "registers by caller (native/metroid-entry-reads): {} functions take one of r4-r11 as it came, passed by each direct call and tail call{}; {} indirect calls pass them as the holes file says",
+        soft.takers.len(),
+        soft.takers
+            .iter()
+            .map(|&(k, m)| {
+                let regs: Vec<String> = (4..12)
+                    .filter(|r| m & 1 << (r - 4) != 0)
+                    .map(|r| format!("r{r}"))
+                    .collect();
+                format!(" f_{k:08x} {}", regs.join(" "))
+            })
+            .collect::<Vec<_>>()
+            .concat(),
+        soft.passes.len(),
+    )
+    .unwrap();
+    writeln!(
+        report,
         "stack locals (native/frame-locals): {} slots in {} functions printed as Rust locals, {} loads and stores to them; {} calls write the locals to the frame first",
         soft.local_slots,
         soft.local_fns,
@@ -806,6 +1090,17 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         frames.iter().map(|f| f.flush.len()).sum::<usize>(),
     )
     .unwrap();
+    if !soft.traps.is_empty() {
+        let at: BTreeSet<u32> = soft.traps.iter().copied().collect();
+        let at: Vec<String> = at.iter().map(|a| format!("{a:#010x}")).collect();
+        writeln!(
+            report,
+            "compilers' traps (native/lift-undefined-insns): {} `udf`s the compiler ends a path with, known by their encoding alone; each is a panic naming it, not a hard hole (printed where its function has no hard hole, which is a `compile_error!` whole): {}",
+            at.len(),
+            at.join(" "),
+        )
+        .unwrap();
+    }
     let objs = |st| soft.access.get(&(st, Where::Object)).copied().unwrap_or(0);
     writeln!(
         report,
@@ -818,11 +1113,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let refs = |st| soft.access.get(&(st, Where::Ref)).copied().unwrap_or(0);
     writeln!(
         report,
-        "heap pointers (native/ref-heap): {} loads and {} stores through a Ref<T>, {} types; {} accesses through an object's pointer no type explains (left as bytes); the run took {} rounds, {:.1} s{}",
+        "heap pointers (native/ref-heap): {} loads and {} stores through a Ref<T>, {} types; {} accesses through an object's pointer no type explains (left as bytes; {} sites' objects may be in a static array); the run took {} rounds, {:.1} s{}",
         refs(false),
         refs(true),
         soft.ref_tys.len(),
         soft.ref_unexplained,
+        heap.statics.len(),
         heap.rounds,
         heap.secs,
         if heap.unsettled { " and didn't settle: nothing typed" } else { "" },
@@ -834,6 +1130,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         let h = Hole {
             func: at,
             at,
+            kind: HoleKind::HolesFile,
             what: "--plant-slot: no store to a stack local there".into(),
         };
         writeln!(report, "  {h}").unwrap();
@@ -846,7 +1143,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // included) only goes down.
     let prelude = pre.lines().count();
     let all_lines: usize = files.files.iter().map(|(_, t)| t.lines().count()).sum();
-    m.push("lines", n(all_lines - files.wiring - prelude));
+    let const_lines = named.map_or(0, |n| n.const_lines);
+    m.push("lines", n(all_lines - files.wiring - prelude - const_lines));
     m.push("lines_prelude", n(prelude));
     m.push("functions", n(n_funcs));
     m.push(
@@ -911,6 +1209,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         }
     )
     .unwrap();
+    if let Some(n) = named {
+        writeln!(report, "{}", n.line()).unwrap();
+    }
     writeln!(
         report,
         "metrics (`name value`; bars: crates/codegen/lift-check.toml):"
@@ -1080,6 +1381,9 @@ struct FlowIn<'a> {
     src: u32,
     funcs: &'a [Func],
     frames: &'a BTreeMap<u32, Frame>,
+    /// The summaries the frames were made from: a direct call to one that
+    /// may take r4-r11 passes every register ([`fnref::Out::takes`]).
+    sums: &'a Summaries,
 }
 
 /// [`fnref::follow`] over every context's functions: the flow, every
@@ -1128,11 +1432,14 @@ fn fn_flow(
 
 /// Every context's functions as the flows take them ([`fnref::FnIn`]),
 /// the ROM words literal pools read that hold a function's key, and the
-/// addresses of the calls printed through `call_fn`.
+/// addresses of the calls printed through `call_fn`. `named`: the
+/// indirect calls a holes file's `[[takes]]` names, which pass every
+/// register.
 #[allow(clippy::type_complexity)]
 fn fn_ins<'a>(
     codes: &[FlowIn<'a>],
     all: &BTreeSet<u32>,
+    named: &BTreeSet<u32>,
 ) -> (Vec<fnref::FnIn<'a>>, BTreeSet<u32>, BTreeSet<u32>) {
     let mut ins = Vec::new();
     let mut pools = BTreeSet::new();
@@ -1141,6 +1448,7 @@ fn fn_ins<'a>(
         let src = c.src;
         for f in c.funcs {
             let mut blocks = BTreeMap::new();
+            let mut strides_of = BTreeMap::new();
             for (&k, gb) in &f.blocks {
                 let insts = &gb.block.insts;
                 let mut exits_of = BTreeMap::new();
@@ -1152,6 +1460,13 @@ fn fn_ins<'a>(
                     let via = match x.plan {
                         Plan::CallVia { reg, .. } => Some(reg.index() as u8),
                         _ => None,
+                    };
+                    let takes = match e {
+                        frame::Edge::Call {
+                            target: Some(k), ..
+                        } => c.sums.get(k).is_some_and(|s| s.may_take() != 0),
+                        frame::Edge::Call { target: None, .. } => named.contains(&x.at),
+                        _ => false,
                     };
                     let bios = match insts[x.index].op {
                         Op::Exit(Exit::Swi { comment, .. }) => {
@@ -1166,12 +1481,14 @@ fn fn_ins<'a>(
                             via,
                             at: x.at,
                             bios,
+                            takes,
                         },
                     );
                 }
                 let mut at = k & !1;
                 let mut lits = BTreeMap::new();
                 let mut hulls = BTreeMap::new();
+                let mut strides = BTreeMap::new();
                 for (i, inst) in insts.iter().enumerate() {
                     match inst.op {
                         Op::Insn(a) => at = a,
@@ -1180,6 +1497,7 @@ fn fn_ins<'a>(
                                 && let (false, false, Some(h)) = (x.sp, x.top, x.hull)
                             {
                                 hulls.insert(i, h);
+                                strides.insert(i, x.stride);
                             }
                         }
                         Op::Pool(v) => {
@@ -1200,8 +1518,28 @@ fn fn_ins<'a>(
                         exits: exits_of,
                         pools: lits,
                         hulls,
+                        bases: BTreeMap::new(),
                     },
                 );
+                strides_of.insert(k, strides);
+            }
+            // The accesses whose bounds start at a literal this function
+            // loads, read by an index: tables it reads from their start.
+            let lits: BTreeSet<u32> = blocks
+                .values()
+                .flat_map(|b: &fnref::FBlock| b.insts.iter())
+                .filter_map(|inst| match inst.op {
+                    Op::Pool(v) => Some(v),
+                    _ => None,
+                })
+                .collect();
+            for (k, b) in blocks.iter_mut() {
+                b.bases = b
+                    .hulls
+                    .iter()
+                    .filter(|(_, (lo, hi))| hi > lo && lits.contains(lo))
+                    .map(|(&i, _)| (i, strides_of[k][&i]))
+                    .collect();
             }
             ins.push(fnref::FnIn {
                 entry: f.entry,
@@ -1252,10 +1590,13 @@ fn library_standins(holes: &Holes, codes: &[Code]) -> Holes {
     h
 }
 
-fn code(ctx: Ctx<'_>) -> Code<'_> {
+/// One context's functions, summaries and frames. `named`: the indirect
+/// calls a holes file's `[[takes]]` names, where a stack address in a
+/// register the callees take escapes.
+fn code<'a>(ctx: Ctx<'a>, named: &BTreeSet<u32>) -> Code<'a> {
     let funcs: Vec<Func> = ctx.entries.iter().map(|&e| build_func(&ctx, e)).collect();
     let sums = summarize(&ctx, &funcs);
-    let frames = frame::of_code(&ctx, &funcs, &sums);
+    let frames = frame::of_code(&ctx, &funcs, &sums, named);
     Code {
         ctx,
         funcs,
@@ -1299,11 +1640,19 @@ struct Soft {
     /// of r0-r3 still.
     indirect_complete: usize,
     indirect_four_complete: usize,
+    /// The holes file's `[[takes]]` printed: (the indirect call, the
+    /// function it passes r4-r11 to).
+    passes: BTreeSet<(u32, u32)>,
+    /// The functions that take one of r4-r11 from their callers.
+    takers: Vec<(u32, u8)>,
     dyn_jumps: usize,
     /// Falls and jumps into another function's entry, printed through its
     /// extended entry.
     falls: usize,
     standins: usize,
+    /// The compilers' traps planned as a stop of the game, by address
+    /// (printed so unless the function has a hard hole).
+    traps: Vec<u32>,
     /// Functions whose callee-saves the summaries don't prove, and why.
     unproven: Vec<(u32, String)>,
 }
@@ -1312,6 +1661,10 @@ struct FnPrinter<'a, 'b> {
     ctx: &'a Ctx<'a>,
     f: &'a Func,
     all: &'a BTreeSet<u32>,
+    /// This context's summaries.
+    sums: &'a Summaries,
+    /// Every context's functions that take r4-r11 from their callers.
+    takers: &'a BTreeSet<u32>,
     /// Every shaped function's parameters and results.
     shapes: &'a BTreeMap<u32, Shape>,
     /// This one's, `None` for the four-register form.
@@ -1333,6 +1686,59 @@ struct FnPrinter<'a, 'b> {
     args: &'a Args,
     /// The heap's types and the accesses through them.
     heap: &'a heap::Heap,
+    /// Whether it is the reset or an IRQ wrapper, whose `msr` and `mrs`
+    /// are printed ([`PsrFns`]); elsewhere they are hard holes.
+    psr: Option<PsrPlace>,
+}
+
+/// Where an `msr` or `mrs` the lifter prints is: the hole report's
+/// `CpuWhere::Boot` and `CpuWhere::Wrapper`, known without a run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PsrPlace {
+    /// The reset, the ROM's entry: its mode switches set each mode's sp,
+    /// the program's start.
+    Boot,
+    /// An IRQ handler the code installs (a constant stored to the BIOS's
+    /// IRQ vector): its PSR saves and its switch to system mode and back
+    /// around the call.
+    Wrapper,
+}
+
+/// The functions whose `msr` and `mrs` the lifter prints (the
+/// `native/lift-psr-boot-irq` unit; `docs/research/native-holes.md`, "What
+/// the Stage-A lifter should know"): the reset at the ROM's entry, and the
+/// IRQ handlers the code installs, ROM or RAM (discovery's
+/// `irq_handlers`). Their `msr cpsr` is the prelude's `msr_cpsr`, which
+/// banks sp by mode as the hardware does and runs the IRQs a cleared I bit
+/// releases; `mrs cpsr` is `mrs_cpsr` (the flags from the locals); the
+/// SPSR is `Game::spsr`, which the prelude's IRQ entry sets. Anywhere else
+/// they stay hard holes: a critical section's or a mode switch elsewhere
+/// needs a stand-in.
+struct PsrFns {
+    wrappers: BTreeSet<u32>,
+}
+
+/// The reset's key: ARM code at the ROM's start.
+const RESET: u32 = 0x0800_0000;
+
+impl PsrFns {
+    fn of(disc: &Discovery, overlays: &[discovery::Overlay]) -> PsrFns {
+        let mut wrappers = disc.irq_handlers.clone();
+        for o in overlays {
+            wrappers.extend(&o.disc.irq_handlers);
+        }
+        PsrFns { wrappers }
+    }
+
+    fn place(&self, k: u32) -> Option<PsrPlace> {
+        if self.wrappers.contains(&k) {
+            Some(PsrPlace::Wrapper)
+        } else if k == RESET {
+            Some(PsrPlace::Boot)
+        } else {
+            None
+        }
+    }
 }
 
 fn v(i: ValueId) -> String {
@@ -1362,10 +1768,11 @@ fn is_bit(op: &Op) -> bool {
 }
 
 impl FnPrinter<'_, '_> {
-    fn hole(&mut self, at: u32, what: impl Into<String>) {
+    fn hole(&mut self, at: u32, kind: HoleKind, what: impl Into<String>) {
         self.found.push(Hole {
             func: self.f.entry,
             at,
+            kind,
             what: what.into(),
         });
     }
@@ -1412,7 +1819,7 @@ impl FnPrinter<'_, '_> {
                 .iter()
                 .find(|h| analysis::holes::summary_hard(&analysis::holes::summary_kind(h)))
             {
-                self.hole(f.entry, format!("summary: {h}"));
+                self.hole(f.entry, HoleKind::Summary, format!("summary: {h}"));
             } else if sum.returns && !sum.keeps {
                 self.soft.unproven.push((
                     f.entry,
@@ -1427,8 +1834,21 @@ impl FnPrinter<'_, '_> {
         for &at in self.frame.map(|fr| &fr.switches).into_iter().flatten() {
             self.hole(
                 at,
+                HoleKind::Cpu,
                 "CPU state: a stack switch (sp set to a value not made from the frame's)",
             );
+        }
+        // sp set to a constant (a fresh stack, the SDK's `SoftReset`) is
+        // the guest's bytes from there on, as lifted; only a return could
+        // reach the frames left behind.
+        if sum.is_none_or(|s| s.returns) {
+            for &at in self.frame.map(|fr| &fr.fresh).into_iter().flatten() {
+                self.hole(
+                    at,
+                    HoleKind::Cpu,
+                    "CPU state: a stack switch (sp set to a constant in a function that returns)",
+                );
+            }
         }
         // The plain entry, for calls, and the extended one, for a fall or
         // jump from another function, which passes its registers and flags.
@@ -1439,6 +1859,22 @@ impl FnPrinter<'_, '_> {
         let k = f.entry;
         let ty = ret_ty(self.me);
         match self.me {
+            // What it takes of r4-r11 comes through the extended entry
+            // ([`taking`]); the plain one would zero it.
+            None if self.passed(k) != 0 => {
+                let m = self.passed(k);
+                self.soft.takers.push((k, m));
+                let regs: Vec<String> = (4..12)
+                    .filter(|r| m & 1 << (r - 4) != 0)
+                    .map(|r| format!("r{r}"))
+                    .collect();
+                writeln!(
+                    s,
+                    "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ let _ = (g, sp, a); panic!(\"0x{k:08x} takes {} from its caller, and this call (through a pointer the holes file's takes doesn't name, or a stand-in's) passes none\") }}",
+                    regs.join(", ")
+                )
+                .unwrap()
+            }
             None => writeln!(
                 s,
                 "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ x_{k:08x}(g, Regs::call(sp, a)) }}"
@@ -1492,7 +1928,14 @@ impl FnPrinter<'_, '_> {
         for k in &order {
             let gb = &f.blocks[k];
             let label = self.labels[k];
-            writeln!(s, "            {label} => {{ // {:#010x}", gb.key).unwrap();
+            // The block's guest address, kept for a stop to name
+            // (`runtime::guest_pc`), on the arm's own line.
+            writeln!(
+                s,
+                "            {label} => {{ runtime::guest_pc::set({:#010x});",
+                gb.key
+            )
+            .unwrap();
             let xs = exits(self.ctx, gb);
             self.cur = *k;
             let body = self.block(&gb.block.insts, &xs, gb.block.thumb);
@@ -1592,12 +2035,43 @@ impl FnPrinter<'_, '_> {
                 Op::SetFlag(fl, x) => stmt(&mut s, format!("{} = {};", flag(fl), v(x))),
                 Op::GetReg(r) => writeln!(s, "{ind}let {}: u32 = r{};", v(id), r.index()).unwrap(),
                 Op::GetFlag(fl) => writeln!(s, "{ind}let {}: bool = {};", v(id), flag(fl)).unwrap(),
-                Op::GetUserReg(_) | Op::SetUserReg(..) => {
-                    self.hole(at, "CPU state: a user-bank register transfer")
+                Op::GetUserReg(_) | Op::SetUserReg(..) => self.hole(
+                    at,
+                    HoleKind::Cpu,
+                    "CPU state: a user-bank register transfer",
+                ),
+                Op::GetCpsr | Op::GetSpsr if self.psr.is_none() => {
+                    self.hole(at, HoleKind::Cpu, "CPU state: mrs (reads a PSR)")
                 }
-                Op::GetCpsr | Op::GetSpsr => self.hole(at, "CPU state: mrs (reads a PSR)"),
-                Op::SetCpsr { .. } | Op::SetSpsr { .. } => {
-                    self.hole(at, "CPU state: msr (writes a PSR)")
+                Op::SetCpsr { .. } | Op::SetSpsr { .. } if self.psr.is_none() => {
+                    self.hole(at, HoleKind::Cpu, "CPU state: msr (writes a PSR)")
+                }
+                // The reset's and the IRQ wrapper's ([`PsrFns`]).
+                Op::GetCpsr => {
+                    writeln!(s, "{ind}let {}: u32 = mrs_cpsr(g, nf, zf, cf, vf);", v(id)).unwrap()
+                }
+                Op::GetSpsr => writeln!(s, "{ind}let {}: u32 = g.spsr;", v(id)).unwrap(),
+                Op::SetCpsr { v: x, mask } => {
+                    let x = v(x);
+                    let mut body = String::new();
+                    if mask.contains(PsrMask::FLAGS) {
+                        for (fl, bit) in Flag::ALL.into_iter().zip([31, 30, 29, 28]) {
+                            write!(body, "{} = {x} & 1 << {bit} != 0; ", flag(fl)).unwrap();
+                        }
+                    }
+                    if mask.contains(PsrMask::CONTROL) {
+                        write!(body, "r13 = msr_cpsr(g, r13, {x});").unwrap();
+                    }
+                    if !body.is_empty() {
+                        stmt(&mut s, body.trim_end().to_string());
+                    }
+                }
+                Op::SetSpsr { v: x, mask } => {
+                    let m = mask.bits();
+                    stmt(
+                        &mut s,
+                        format!("g.spsr = g.spsr & !{m:#x} | {} & {m:#x};", v(x)),
+                    );
                 }
                 Op::Load { width, addr } => {
                     let (f, m) = match width {
@@ -1705,7 +2179,10 @@ impl FnPrinter<'_, '_> {
                                     _ => true,
                                 };
                             if io {
-                                format!("g.sp = r13; {mem}")
+                                // sp goes to the current mode's bank: the
+                                // reset, an IRQ wrapper or what they call
+                                // may be in another mode than system.
+                                format!("bank_sp(g, r13); {mem}")
                             } else {
                                 mem
                             }
@@ -1902,7 +2379,11 @@ impl FnPrinter<'_, '_> {
         } else if self.all.contains(&k) {
             self.fall_into(k)
         } else {
-            self.hole(at, format!("a jump to {k:#010x}, where there's no code"));
+            self.hole(
+                at,
+                HoleKind::NoCode,
+                format!("a jump to {k:#010x}, where there's no code"),
+            );
             String::new()
         }
     }
@@ -1925,6 +2406,39 @@ impl FnPrinter<'_, '_> {
         self.tail(callee.map(|c| c.results), &lhs, &call)
     }
 
+    /// What `k` takes of r4-r11 from its callers (bit `n - 4` for rN,
+    /// [`Summary::passed`]): 0 for a stand-in, or a function of another
+    /// context (its summary isn't this one's, so this caller's reads of
+    /// what it passes went unseen; the plain entry stops the program).
+    fn passed(&self, k: u32) -> u8 {
+        if self.holes.standins.contains_key(&k) {
+            return 0;
+        }
+        self.sums.get(k).map_or(0, Summary::passed)
+    }
+
+    /// What a call passes of `m` (bits of r4-r11 its callee takes): all
+    /// of them, or none with `--takes-zeroed` ([`Holes::takes_zeroed`]).
+    fn taken(&self, m: u8) -> u8 {
+        if self.holes.takes_zeroed { 0 } else { m }
+    }
+
+    /// A direct call at `at` to `k`: a hole where `k` takes r4-r11 from
+    /// its callers and this call can't be shown to pass them (the
+    /// summary's run never reached it, or `k` is another context's).
+    fn passes_at(&mut self, at: u32, k: u32) {
+        if !self.takers.contains(&k) {
+            return;
+        }
+        let seen = self
+            .sums
+            .get(self.f.entry)
+            .is_some_and(|s| s.passes.contains(&(at, k)));
+        if self.passed(k) == 0 || !seen {
+            self.hole(at, HoleKind::Takes, format!("a call to {k:#010x}, which takes r4-r11 from its callers, that the summaries didn't see pass them (past a hole in this function, or from another code context)"));
+        }
+    }
+
     /// `k`'s shape, `None` for a four-register function or a stand-in.
     fn shape(&self, k: u32) -> Option<Shape> {
         if self.holes.standins.contains_key(&k) {
@@ -1936,6 +2450,10 @@ impl FnPrinter<'_, '_> {
     /// A plain call of `k` with this function's registers: what it
     /// assigns its results to, and the call (without `?`).
     fn call(&self, k: u32) -> (String, String) {
+        let m = self.passed(k);
+        if m != 0 {
+            return ("[r0, r1, r2, r3] = ".into(), taking(k, self.taken(m)));
+        }
         match self.shape(k) {
             None if self.holes.lr.contains(&k) => (
                 "[r0, r1, r2, r3] = ".into(),
@@ -1999,6 +2517,33 @@ impl FnPrinter<'_, '_> {
                 self.soft.indirect_four_complete += 1;
             }
         }
+        // The functions the holes file says this call reaches that take
+        // one of r4-r11 (`[[takes]]`): to those, with this function's.
+        let named: Vec<(u32, u8)> = self
+            .holes
+            .takes
+            .iter()
+            .filter(|(_, (sites, _))| sites.contains(&at))
+            .map(|(&e, _)| (e, self.passed(e)))
+            .filter(|&(e, m)| {
+                let seen = |s: &Summary| s.passes.contains(&(at, e));
+                m != 0 && self.sums.get(self.f.entry).is_some_and(seen)
+            })
+            .collect();
+        if !named.is_empty() {
+            let mut t = format!("match {k} {{ ");
+            for (e, m) in named {
+                self.soft.passes.insert((at, e));
+                write!(
+                    t,
+                    "{e:#010x} => {{ [r0, r1, r2, r3] = {}?; }} ",
+                    taking(e, self.taken(m))
+                )
+                .unwrap();
+            }
+            write!(t, "k => {{ {} }} }}", call_fn_text("k", pass, back)).unwrap();
+            return t;
+        }
         call_fn_text(k, pass, back)
     }
 
@@ -2007,9 +2552,11 @@ impl FnPrinter<'_, '_> {
         let at = x.at;
         let regs = "[r0, r1, r2, r3]";
         let mut s = String::new();
+        // sp goes to the current mode's bank, as at a store.
         let wait = match x.idle {
-            Idle::Edge => "g.sp = r13; hw::idle(g)?; ",
-            Idle::Spin => "g.sp = r13; hw::spin(g)?; ",
+            Idle::Edge => "bank_sp(g, r13); hw::idle(g)?; ",
+            Idle::Spin => "bank_sp(g, r13); hw::spin(g)?; ",
+            Idle::Exit => "bank_sp(g, r13); hw::idle_exit(g)?; ",
             _ => "",
         };
         match x.plan {
@@ -2018,6 +2565,7 @@ impl FnPrinter<'_, '_> {
                 writeln!(s, "{ind}{wait}{j}").unwrap();
             }
             Plan::Call { target, ret } => {
+                self.passes_at(at, target);
                 let c = self.call_stmt(target);
                 let c = self.call_then(c, ret, at);
                 writeln!(s, "{ind}{wait}{c}").unwrap();
@@ -2035,7 +2583,11 @@ impl FnPrinter<'_, '_> {
                 let t = match e {
                     Exit::Jump(t) | Exit::JumpExchange(t) => v(t),
                     Exit::ExceptionReturn(_) => {
-                        self.hole(at, "CPU state: an exception return (CPSR = SPSR)");
+                        self.hole(
+                            at,
+                            HoleKind::Cpu,
+                            "CPU state: an exception return (CPSR = SPSR)",
+                        );
                         return s;
                     }
                     _ => unreachable!("a dynamic exit jumps"),
@@ -2050,8 +2602,23 @@ impl FnPrinter<'_, '_> {
                 };
                 if let Some(ret) = ret {
                     // An indirect call.
+                    // (One that takes r4-r11 from its callers goes by
+                    // `call_fn` all the same: the summaries took this for
+                    // an indirect call, so what it would pass went unread.)
                     let c = match target {
-                        Some(tk) if self.all.contains(&tk) => self.call_stmt(tk),
+                        Some(tk) if self.all.contains(&tk) && !self.takers.contains(&tk) => {
+                            self.call_stmt(tk)
+                        }
+                        Some(tk) if self.all.contains(&tk) => {
+                            if !self
+                                .sums
+                                .get(self.f.entry)
+                                .is_some_and(|s| s.passes.contains(&(at, tk)))
+                            {
+                                self.hole(at, HoleKind::Takes, format!("a call through a register to {tk:#010x}, which takes r4-r11 from its callers: not passed (the holes file's takes can name the call)"));
+                            }
+                            self.call_fn(at, &k)
+                        }
                         _ => self.call_fn(at, &k),
                     };
                     let c = self.call_then(c, ret, at);
@@ -2064,7 +2631,7 @@ impl FnPrinter<'_, '_> {
                     Ok(ts) => ts,
                     Err(a) => {
                         self.hole(
-                            a,
+                            a, HoleKind::Jump,
                             "an indirect jump Recovery didn't resolve (give its targets in the holes file)",
                         );
                         target.into_iter().collect()
@@ -2097,8 +2664,11 @@ impl FnPrinter<'_, '_> {
                 };
                 let n = runtime::bios::number(comment, thumb);
                 let call = match n {
+                    // The restart is `main`'s (the prelude's `soft_reset`).
+                    0x00 => "soft_reset(g)?;".to_string(),
+                    0x01 => "register_ram_reset(g, r0);".to_string(),
                     // `Stop` is a halt, as in the play build.
-                    0x02 | 0x03 => "g.sp = r13; hw::halt(g)?;".to_string(),
+                    0x02 | 0x03 => "bank_sp(g, r13); hw::halt(g)?;".to_string(),
                     0x04 => "r0 = intr_wait(g, r13, r0 != 0, r1)?;".to_string(),
                     0x05 => "r0 = intr_wait(g, r13, true, 1)?; r1 = 1;".to_string(),
                     0x06 => {
@@ -2110,10 +2680,16 @@ impl FnPrinter<'_, '_> {
                         .to_string(),
                     0x0B => "let mut r = [r0, r1, r2, r3]; cpu_set(g, r13, &mut r)?; [r0, r1, r2, r3] = r;".to_string(),
                     0x0C => "let mut r = [r0, r1, r2, r3]; cpu_fast_set(g, r13, &mut r)?; [r0, r1, r2, r3] = r;".to_string(),
+                    0x0E | 0x0F => format!(
+                        "let mut r = [r0, r1, r2, r3]; affine_set(g, &mut r, {}); [r0, r1, r2, r3] = r;",
+                        n == 0x0E
+                    ),
                     0x11 | 0x12 => format!(
                         "let mut r = [r0, r1, r2, r3]; lz77(g, r13, &mut r, {}, {at:#010x}, {thumb})?; [r0, r1, r2, r3] = r;",
                         n == 0x12
                     ),
+                    0x13 => "let mut r = [r0, r1, r2, r3]; huff(g, &mut r); [r0, r1, r2, r3] = r;"
+                        .to_string(),
                     0x14 | 0x15 => format!(
                         "let mut r = [r0, r1, r2, r3]; rl(g, &mut r, {}); [r0, r1, r2, r3] = r;",
                         n == 0x15
@@ -2123,16 +2699,37 @@ impl FnPrinter<'_, '_> {
                         .to_string(),
                     // No link cable: no client answers (the play build's).
                     0x25 => "r0 = 1;".to_string(),
+                    // `SoundDriverVSyncOff`: the play build's BIOS has no
+                    // sound driver, so does nothing.
+                    0x28 => String::new(),
                     _ => {
                         debug_assert!(!BIOS.contains(&n));
-                        self.hole(at, format!("BIOS call {n:#04x}, which the library doesn't have"));
+                        self.hole(at, HoleKind::Bios, format!("BIOS call {n:#04x}, which the library doesn't have"));
                         return s;
                     }
                 };
-                let c = self.call_then(call, next, at);
+                // The BIOS region then reads the opcode after the call's
+                // return, as the play build's (`swi_done`). After a halt too:
+                // the IRQ that wakes it returns into the BIOS's Halt, which
+                // then returns from the call (the play build finishes its
+                // pending call there; mGBA agrees, agb/native-bios-region's
+                // slot 10).
+                let c = self.call_then(format!("{call} swi_done(g);"), next, at);
                 writeln!(s, "{ind}{c}").unwrap();
             }
-            Plan::Undefined => self.hole(at, "an undefined instruction"),
+            // A compiler's trap: the game stops there, as `call_fn` does
+            // on a call to no function.
+            Plan::Undefined { trap: true } => {
+                self.soft.traps.push(at);
+                writeln!(
+                    s,
+                    "{ind}panic!(\"{at:#010x}: a compiler's trap (undefined instruction), which stops the game\");"
+                )
+                .unwrap()
+            }
+            Plan::Undefined { trap: false } => {
+                self.hole(at, HoleKind::Undefined, "an undefined instruction")
+            }
         }
         s
     }
@@ -2260,7 +2857,8 @@ pub fn callee_sets(
     funcs: &[Func],
     sums: &Summaries,
 ) -> (fnref::Flow, Sets) {
-    let frames = frame::of_code(ctx, funcs, sums);
+    let none = BTreeSet::new();
+    let frames = frame::of_code(ctx, funcs, sums, &none);
     let all: BTreeSet<u32> = funcs.iter().map(|f| f.entry).collect();
     let overlays = discovery::overlays(rom, disc);
     let ins = [FlowIn {
@@ -2268,8 +2866,9 @@ pub fn callee_sets(
         src: 0x0800_0000,
         funcs,
         frames: &frames,
+        sums,
     }];
-    let (ins, pools, _) = fn_ins(&ins, &all);
+    let (ins, pools, _) = fn_ins(&ins, &all, &none);
     let (flow, _) = fn_flow(rom, disc, &overlays, &ins, &pools, &all);
     let sets = complete_sets(&flow);
     (flow, sets)
@@ -2288,6 +2887,25 @@ fn complete_sets(flow: &fnref::Flow) -> Sets {
         .filter(|(_, s)| s.complete && !s.tail)
         .map(|(&a, s)| (a, s.callees.clone()))
         .collect()
+}
+
+/// A call of `k`, which takes the registers of `m` (bit `n - 4` for rN,
+/// of r4-r11) from its callers: its extended entry with r0-r3 and those
+/// of the caller's, the rest as `Regs::call` gives them (without `?`).
+fn taking(k: u32, m: u8) -> String {
+    let hi: Vec<String> = (4..12)
+        .map(|r| {
+            if m & 1 << (r - 4) != 0 {
+                format!("r{r}")
+            } else {
+                "0".into()
+            }
+        })
+        .collect();
+    format!(
+        "x_{k:08x}(g, Regs {{ r: [r0, r1, r2, r3, {}, 0, r13, RET], f: [false; 4] }})",
+        hi.join(", ")
+    )
 }
 
 /// A `call_fn` call to key `k` passing the registers of `pass` (0 for the
@@ -2380,9 +2998,11 @@ fn shapes_of(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> Shapes {
 }
 
 /// The known targets of a jump by value at `at` (not a call): its own
-/// (`target`), a resolved table's cases, the holes file's for one
-/// Recovery didn't resolve. `Err` with the jump's address where it's
-/// unresolved and the holes file gives none.
+/// (`target`), a resolved table's cases, the constant RAM address of a
+/// jump into a copy's code ([`JumpRes::Ram`]: a function of an overlay,
+/// or a hole where the jump goes), the holes file's for one Recovery
+/// didn't resolve. `Err` with the jump's address where it's unresolved
+/// and the holes file gives none.
 fn dyn_targets(
     ctx: &Ctx,
     holes: &Holes,
@@ -2399,6 +3019,10 @@ fn dyn_targets(
         Some((_, JumpRes::Resolved(_))) => {
             targets.extend(ctx.table_targets(at, thumb).unwrap_or_default());
         }
+        Some((a, JumpRes::Ram(t))) => match holes.jumps.get(&a) {
+            Some((ts, _)) => targets.extend(ts),
+            None => targets.push(*t),
+        },
         Some((a, JumpRes::Unresolved | JumpRes::Rejected(_))) => match holes.jumps.get(&a) {
             Some((ts, _)) => targets.extend(ts),
             None => return Err(a),
@@ -2679,6 +3303,18 @@ mod tests {
     }
 
     #[test]
+    fn the_reset_and_installed_irq_handlers_print_their_psr_ops() {
+        let p = PsrFns {
+            wrappers: BTreeSet::from([0x0300_0c7c, 0x0800_0104]),
+        };
+        assert_eq!(p.place(RESET), Some(PsrPlace::Boot));
+        assert_eq!(p.place(0x0800_0104), Some(PsrPlace::Wrapper));
+        assert_eq!(p.place(0x0300_0c7c), Some(PsrPlace::Wrapper));
+        // A critical section's elsewhere stays a hole.
+        assert_eq!(p.place(0x0800_2728), None);
+    }
+
+    #[test]
     fn holes_file_parses_standins_and_jumps() {
         let h = Holes::parse(
             r#"
@@ -2719,6 +3355,20 @@ why = "a table"
             }]
         );
         assert!(Holes::parse("[[copy]]\nsrc = 0x08000104\nwhy = \"x\"\n").is_err());
+        let h = Holes::parse(
+            "[[takes]]\nentry = 0x08000015\nsites = [0x08000006, 0x08000020]\nwhy = \"its caller's r5\"\n",
+        )
+        .unwrap();
+        assert_eq!(h.takes[&0x0800_0015].0, vec![0x0800_0006, 0x0800_0020]);
+        assert!(Holes::parse("[[takes]]\nentry = 0x08000015\nwhy = \"no sites\"\n").is_err());
+        // No sites: code only jumped into.
+        let h = Holes::parse("[[takes]]\nentry = 0x08000015\nsites = []\nwhy = \"jumped into\"\n")
+            .unwrap();
+        assert!(h.takes[&0x0800_0015].0.is_empty());
+        assert_eq!(
+            taking(0x0800_0015, 0b10_0010),
+            "x_08000015(g, Regs { r: [r0, r1, r2, r3, 0, r5, 0, 0, 0, r9, 0, 0, 0, r13, RET], f: [false; 4] })"
+        );
         assert!(Holes::parse("[[nothing]]\nx = 1\n").is_err());
         assert!(Holes::parse("[[standin]]\nwhy = \"no entry\"\n").is_err());
         assert_eq!(h.skip_fn_flow, None);

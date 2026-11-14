@@ -102,7 +102,7 @@ fn frames_of(fns: &Fns) -> BTreeMap<u32, Frame> {
 fn frames_9_never_returns(fns: &Fns) -> BTreeMap<u32, Frame> {
     struct NeverReturns;
     impl Env for NeverReturns {
-        fn params(&self, _: Option<u32>) -> u16 {
+        fn params(&self, _: Option<u32>, _: u32) -> u16 {
             0xf
         }
         fn returns(&self, t: Option<u32>) -> bool {
@@ -421,6 +421,23 @@ fn a_stack_switch_is_named_at_the_instruction_its_sp_came_from() {
 }
 
 #[test]
+fn sp_set_to_a_constant_is_a_fresh_stack() {
+    // The SDK's SoftReset: `ldr r3, =0x03007ffa`, `subs r3, #250`, `mov
+    // sp, r3`: a fresh stack, not a switch.
+    let mut b = B::default();
+    b.op(Op::Insn(0x300));
+    let top = b.k(0x0300_7ffa);
+    b.op(Op::Insn(0x304));
+    let k = b.k(0xfa);
+    let sp = b.op(Op::Bin(BinOp::Sub, top, k));
+    b.op(Op::Insn(0x308));
+    b.set(13, sp);
+    let f = one(b, Edge::Return);
+    assert!(f.switches.is_empty(), "{:?}", f.switches);
+    assert_eq!(f.fresh, BTreeSet::from([0x300]));
+}
+
+#[test]
 fn sp_from_the_frame_is_no_stack_switch() {
     // `sub sp, #16`, a frame pointer's `mov sp, r7` with r7 = sp + a run-time
     // amount (a variable-length array), and `add sp, #16`.
@@ -550,6 +567,39 @@ fn before_a_callee_that_reaches_up_and_never_returns_the_locals_go_to_memory() {
     assert_eq!(fs[&1].flush, BTreeSet::from([(1, exit)]));
 }
 
+/// `push {r4, lr}; sub sp, #8`, a word at sp (the entry's -16), then a
+/// tail call to 9, which nothing here knows (a function of another
+/// context), with sp at the entry's `-16 + back`.
+fn tail_with_sp(back: i32) -> (Frame, usize) {
+    let mut b = B::default();
+    b.prologue();
+    let a = b.sp(0);
+    let x = b.get(0);
+    b.st(a, x);
+    if back != 0 {
+        let sp = b.sp(back);
+        b.set(13, sp);
+    }
+    let fns = vec![func(1, vec![(1, b, Edge::Tail(Some(9)))])];
+    let exit = fns[0].1[0].1.len() - 1;
+    (frames_of(&fns).remove(&1).unwrap(), exit)
+}
+
+#[test]
+fn a_tail_call_with_the_frame_live_writes_the_locals_to_memory_first() {
+    // m4a's SoundMain jumps into its IWRAM mixer with its frame still
+    // below it; the mixer reads the frame and pops it.
+    let (f, exit) = tail_with_sp(0);
+    assert!(f.slots.iter().all(|s| !s.escapes()), "{:?}", f.slots);
+    assert_eq!(f.flush, BTreeSet::from([(1, exit)]));
+}
+
+#[test]
+fn a_tail_call_after_the_epilogue_writes_nothing() {
+    let (f, _) = tail_with_sp(16);
+    assert!(f.flush.is_empty(), "{:?}", f.flush);
+}
+
 #[test]
 fn locals_are_the_frames_own_slots_that_dont_escape() {
     // Words at -16 and -12, a byte at -20 and a halfword at -18 (one slot
@@ -621,4 +671,50 @@ fn locals_are_the_frames_own_slots_that_dont_escape() {
         .name(),
         "l16"
     );
+}
+
+/// One function whose block `b` ends in an indirect call at 0x100, its
+/// frame with `named` the holes file's named sites.
+fn one_named(b: B, named: &BTreeSet<u32>) -> Frame {
+    let mut b = b;
+    b.op(Op::Insn(0x100));
+    b.exit();
+    let edge = Edge::Call {
+        target: None,
+        ret: 2,
+    };
+    let fs = vec![(
+        1,
+        BTreeMap::from([(
+            1,
+            FBlock {
+                insts: &b.insts,
+                edges: BTreeMap::from([(b.insts.len() - 1, edge)]),
+            },
+        )]),
+    )];
+    let sums = Summaries::default();
+    let env = FromSummaries {
+        sums: &sums,
+        taken: BTreeSet::new(),
+        named,
+    };
+    frames(&fs, &env).remove(&1).unwrap()
+}
+
+#[test]
+fn a_stack_address_in_r8_escapes_at_a_named_pointer_call_only() {
+    let make = || {
+        let mut b = B::default();
+        b.prologue();
+        let p = b.sp(0);
+        b.set(8, p);
+        b
+    };
+    // A pointer call the holes file names passes the callee r4-r11.
+    let f = one_named(make(), &BTreeSet::from([0x100]));
+    assert_eq!(kinds(&f, -16), vec![Kind::Call]);
+    // Any other passes r0-r3 only: nothing escapes.
+    let f = one_named(make(), &BTreeSet::new());
+    assert!(f.slots.iter().all(|s| !s.escapes()), "{:?}", f.slots);
 }

@@ -12,6 +12,9 @@ struct Rec {
     frames: Vec<Box<Frame>>,
     stop_after: usize,
     keys: Vec<u16>,
+    /// The save chip's first byte at each [`Host::save`], and the frames
+    /// presented before it.
+    saves: Vec<(u8, usize)>,
 }
 
 impl Host for Rec {
@@ -24,6 +27,9 @@ impl Host for Rec {
     }
     fn keys(&mut self) -> u16 {
         self.keys.get(self.frames.len() - 1).copied().unwrap_or(0)
+    }
+    fn save(&mut self, save: &mut crate::save::Save) {
+        self.saves.push((save.data[0], self.frames.len()));
     }
 }
 
@@ -62,6 +68,7 @@ fn game(stop_after: usize) -> Box<Game> {
             frames: Vec::new(),
             stop_after,
             keys: Vec::new(),
+            saves: Vec::new(),
         }),
     })
 }
@@ -154,6 +161,17 @@ fn template_scene_from_fields_alone() {
     }
     // The scene never changes: every frame is the same picture.
     assert!(frames.iter().all(|fr| fr[..] == f[..]));
+}
+
+/// The host is handed the save chip at each V-blank, before the frame is presented.
+#[test]
+fn the_host_sees_the_save_before_each_present() {
+    let mut g = game(3);
+    g.hw.save.data[0] = 0x5A;
+    assert_eq!(wait_vblank(&mut *g), Ok(()));
+    g.hw.save.data[0] = 0xA5;
+    while wait_vblank(&mut *g).is_ok() {}
+    assert_eq!(g.hw.host.saves, [(0x5A, 0), (0xA5, 1), (0xA5, 2)]);
 }
 
 /// The play build's renderer, on the same scene stored at addresses
@@ -479,11 +497,148 @@ fn io_writes_by_offset_reach_the_fields() {
     assert_eq!(g.hw.read16(reg::DISPCNT), 0x1140);
 }
 
+/// The offsets the play build's I/O block has nothing at take a store
+/// and read 0, as its bus does; `POSTFLG` and `HALTCNT` are stored as it
+/// stores them; every even offset of the block, and past it, is one the
+/// library answers.
 #[test]
-#[should_panic(expected = "isn't modelled")]
-fn unmodelled_registers_are_loud() {
+fn ignored_offsets_and_postflg_as_the_play_build_has_them() {
     let mut g = game(100);
-    g.hw.write16(reg::DMA0SAD, 1);
+    let mut io = Io::new();
+    let unused = (0x160u32..0x200)
+        .chain([0x206, 0x20A])
+        .chain(0x20C..0x300)
+        .chain(0x302..0x400)
+        .filter(|o| o % 2 == 0);
+    for o in unused {
+        let v = (o.wrapping_mul(0x9E37) | 1) as u16;
+        g.hw.write16(o, v);
+        io.write16(o, v);
+        assert_eq!(g.hw.read16(o), io.read16(o), "{o:#05x} read");
+        assert_eq!(g.hw.raw16(o), io.raw16(o), "{o:#05x} as stored");
+        assert_eq!(g.hw.read16(o), 0, "{o:#05x}");
+    }
+    // Past the block: nothing, as the play build's bus maps nothing.
+    g.hw.write16(0x400, 0xFFFF);
+    assert_eq!(g.hw.read16(0x400), 0);
+    // POSTFLG reads back bit 0 (1 at power-on); HALTCNT is kept, unread.
+    assert_eq!(g.hw.read16(reg::POSTFLG), io.read16(reg::POSTFLG));
+    for v in [0xFFFE, 0x0081, 0x8000] {
+        g.hw.write16(reg::POSTFLG, v);
+        io.write16(reg::POSTFLG, v);
+        assert_eq!(
+            g.hw.read16(reg::POSTFLG),
+            io.read16(reg::POSTFLG),
+            "{v:#06x}"
+        );
+        assert_eq!(g.hw.raw16(reg::POSTFLG), io.raw16(reg::POSTFLG), "{v:#06x}");
+    }
+    // A bare store moves no time: the halt is `write_io`'s.
+    assert_eq!(g.hw.frames(), 0);
+    // Every even offset answers a store and a load.
+    for o in (0..0x400).step_by(2) {
+        if o == reg::IF || o == reg::POSTFLG {
+            continue;
+        }
+        g.hw.read16(o);
+        g.hw.write16(o, 0);
+    }
+}
+
+/// A store to `HALTCNT` halts as the play build's does: a halfword store
+/// to `POSTFLG` or a byte store to `HALTCNT`, through [`write_io`] and
+/// [`write_postflg8`], runs to the next handler (or V-blank, none
+/// enabled); a byte store to `POSTFLG` alone doesn't.
+#[test]
+fn a_haltcnt_store_halts() {
+    let mut g = game(100);
+    write_postflg8(&mut *g, reg::POSTFLG, 1);
+    assert_eq!((g.hw.frames(), g.hw.line()), (0, 0));
+    assert_eq!(g.hw.read16(reg::POSTFLG), 1);
+    // No handler enabled: to V-blank.
+    write_postflg8(&mut *g, reg::POSTFLG + 1, 0);
+    assert_eq!((g.hw.frames(), g.hw.line()), (1, VBLANK_LINE));
+    write_io(&mut *g, reg::POSTFLG, 0x0001);
+    assert_eq!((g.hw.frames(), g.hw.line()), (2, VBLANK_LINE));
+    // A handler enabled: to the line it runs at.
+    g.hw.stat.vcount_irq = true;
+    g.hw.stat.vcount_line = 40;
+    g.hw.irq.enable = irq::VCOUNT;
+    g.hw.irq.master_enable = true;
+    g.hw.irq.on(irq::VCOUNT, |g| g.ram.vcounts += 1);
+    write_postflg8(&mut *g, reg::POSTFLG + 1, 0x80);
+    assert_eq!((g.hw.frames(), g.hw.line(), g.ram.vcounts), (2, 40, 1));
+    // The host's stop, met inside a store, comes at the next wait.
+    let mut g = game(1);
+    write_io(&mut *g, reg::POSTFLG, 0);
+    assert_eq!(g.hw.frames(), 1);
+    assert!(wait_vblank(&mut *g).is_err());
+    assert_eq!(g.hw.frames(), 1);
+}
+
+/// The serial port's registers and `KEYCNT` are the play build's with no
+/// link: every store read back as its I/O block gives it, and a transfer
+/// on the internal clock ended in the store, its IRQ handled at the next
+/// sync.
+#[test]
+fn serial_registers_are_kept_as_the_play_build_keeps_them() {
+    let mut g = game(100);
+    let mut io = Io::new();
+    // Power-on: RCNT as the BIOS leaves it, the rest zero.
+    assert_eq!(g.hw.read16(reg::RCNT), 0x8000);
+    assert_eq!(g.hw.read16(reg::SIOCNT), 0);
+    // Every halfword of the range, the unused ones too, twice over.
+    for pass in 0..2u32 {
+        for o in (SERIAL_START..SERIAL_END).step_by(2) {
+            if o == reg::KEYINPUT {
+                continue;
+            }
+            let v = (o.wrapping_mul(0x9E37) ^ (0xFFFF * pass)) as u16;
+            g.hw.write16(o, v);
+            io.write16(o, v);
+        }
+        for o in (SERIAL_START..SERIAL_END).step_by(2) {
+            if o == reg::KEYINPUT {
+                continue;
+            }
+            assert_eq!(g.hw.read16(o), io.read16(o), "{o:#05x} read");
+            assert_eq!(g.hw.raw16(o), io.raw16(o), "{o:#05x} as stored");
+        }
+    }
+    // The masks are the play build's: RCNT (its pins' levels unset),
+    // JOYCNT (its flags only a partner's), an unused halfword.
+    g.hw.write16(reg::RCNT, 0xFFFF);
+    assert_eq!(g.hw.read16(reg::RCNT), 0xC1F0);
+    g.hw.write16(reg::JOYCNT, 0xFFFF);
+    assert_eq!(g.hw.read16(reg::JOYCNT), 0x0040);
+    g.hw.write16(0x12C, 0xFFFF);
+    assert_eq!(g.hw.read16(0x12C), 0);
+    // The keys stay the keys'.
+    assert_eq!(g.hw.read16(reg::KEYINPUT), key::ALL);
+    // A word store is two halfwords (SIODATA32).
+    g.hw.write32(reg::SIOMULTI0, 0x1234_5678);
+    assert_eq!(g.hw.read16(reg::SIOMULTI0), 0x5678);
+    assert_eq!(g.hw.read16(reg::SIOMULTI0 + 2), 0x1234);
+    // A transfer started with its IRQ asked for (normal mode, internal
+    // clock): it ends in the store, SI reads 1, and the IRQ is requested,
+    // its handler run at the next sync.
+    g.hw.write16(reg::RCNT, 0);
+    g.hw.irq.on(irq::SERIAL, |g| g.ram.vcounts += 1);
+    g.hw.write16(reg::SIOCNT, 0x4081);
+    assert_eq!(g.hw.read16(reg::SIOCNT), 0x4005);
+    assert_ne!(g.hw.irq.flags & irq::SERIAL, 0);
+    for _ in 0..3 {
+        wait_vblank(&mut *g).unwrap();
+    }
+    assert_eq!(g.hw.irq.flags & irq::SERIAL, 0);
+    assert_eq!(g.ram.vcounts, 1);
+    // Without its IRQ, or on the external clock: no IRQ; the external
+    // clock's transfer waits for a partner.
+    g.hw.write16(reg::SIOCNT, 0x0081);
+    assert_eq!(g.hw.read16(reg::SIOCNT), 0x0005);
+    g.hw.write16(reg::SIOCNT, 0x4080);
+    assert_eq!(g.hw.read16(reg::SIOCNT), 0x4084);
+    assert_eq!(g.hw.irq.flags & irq::SERIAL, 0);
 }
 
 /// Polls on each of `DISPSTAT`'s flags finish.
@@ -565,6 +720,45 @@ fn spin_takes_half_a_line_past_its_budget() {
 }
 
 #[test]
+fn an_idle_loops_way_out_syncs_only_past_the_next_event() {
+    let mut g = game(10);
+    // Nothing due: the clock stays.
+    idle_exit(&mut *g).unwrap();
+    assert_eq!((g.hw.line(), g.hw.in_hblank), (0, false));
+    // A DMA's price moved the clock past H-blank's start (no sync, as the
+    // play build's store adds it): the way out brings the beam up to it.
+    g.hw.sound.io.now += HBLANK_DOT as u64 + 5;
+    idle_exit(&mut *g).unwrap();
+    assert_eq!((g.hw.line(), g.hw.in_hblank), (0, true));
+}
+
+#[test]
+fn a_frame_is_presented_at_its_syncs_end() {
+    let mut g = game(10);
+    g.hw.on_frame_end(|g: &mut Game| g.ram.seen_line = g.hw.line());
+    // To just short of V-blank, then a price that runs two lines past it
+    // in one sync (a DMA's, no stall): presented after the whole walk, at
+    // line 162, as the play build presents when its sync returns.
+    spend(&mut *g, VBLANK_LINE as u32 * LINE_DOTS - 1).unwrap();
+    assert_eq!(g.hw.frames(), 0);
+    g.hw.sound.io.now += 2 * LINE_DOTS as u64 + 1;
+    idle_exit(&mut *g).unwrap();
+    assert_eq!((g.hw.frames(), g.ram.seen_line), (1, VBLANK_LINE + 2));
+}
+
+#[test]
+fn a_short_spend_runs_at_once() {
+    let mut g = game(10);
+    g.hw.stat.hblank_irq = true;
+    g.hw.irq.on(irq::HBLANK, |g: &mut Game| g.ram.hblanks += 1);
+    // Under `MIN_STALL` cycles the play build spends at once, not at its
+    // stall loop: one sync, whatever it crosses.
+    spend(&mut *g, HBLANK_DOT - 1).unwrap();
+    spend(&mut *g, crate::bios::MIN_STALL - 1).unwrap();
+    assert_eq!((g.hw.line(), g.hw.in_hblank, g.ram.hblanks), (0, true, 1));
+}
+
+#[test]
 fn spend_moves_the_beam_by_cycles_through_its_events() {
     let mut g = game(10);
     g.hw.stat.hblank_irq = true;
@@ -575,11 +769,11 @@ fn spend_moves_the_beam_by_cycles_through_its_events() {
     // One more cycle reaches it: drawn, its handler run.
     spend(&mut *g, 1).unwrap();
     assert_eq!((g.hw.line(), g.ram.hblanks), (0, 1));
-    // Three lines on: their H-blanks' requests merge in `IF`, and one
-    // handler runs after them, as the play build takes one IRQ after its
-    // sync.
+    // Three lines on, a stall (`MIN_STALL` cycles or more): run event by
+    // event as the play build's stall loop runs it, so each H-blank's
+    // handler runs at its own event.
     spend(&mut *g, 3 * LINE_DOTS).unwrap();
-    assert_eq!((g.hw.line(), g.ram.hblanks), (3, 2));
+    assert_eq!((g.hw.line(), g.ram.hblanks), (3, 4));
     // The play build's CpuSet price: 92 halfwords ROM to EWRAM at reset
     // wait states, as agb's crt0 copies its `.ewram`.
     assert_eq!(bios::cpu_set_cycles(0, 0x0800_0000, 0x0200_0000, 92), 1221);
@@ -606,6 +800,7 @@ fn vblank_is_requested_before_the_present() {
             frames: Vec::new(),
             stop_after: 2,
             keys: Vec::new(),
+            saves: Vec::new(),
         }),
         seen: Seen(0),
     });
@@ -617,4 +812,196 @@ fn vblank_is_requested_before_the_present() {
     wait_vblank(&mut *g).unwrap();
     assert_eq!(g.seen.0, irq::VBLANK);
     assert_eq!(g.hw.irq.flags, 0);
+}
+
+/// A program whose memory is EWRAM, the I/O registers and the palette:
+/// what DMA by its registers moves through.
+struct Mem {
+    hw: Hw<Mem>,
+    ewram: Vec<u8>,
+}
+
+impl Native for Mem {
+    type Host = Rec;
+    fn hw(&mut self) -> &mut Hw<Mem> {
+        &mut self.hw
+    }
+    fn irq_masked(&self) -> bool {
+        false
+    }
+    fn dma_load(&mut self, a: u32, word: bool) -> u32 {
+        let half = |g: &mut Mem, a: u32| -> u32 {
+            let o = (a & 0xFF_FFFF) as usize;
+            match a >> 24 {
+                2 => u16::from_le_bytes([g.ewram[o], g.ewram[o + 1]]) as u32,
+                4 => g.hw.read16(o as u32) as u32,
+                5 => u16::from_le_bytes([g.hw.ppu.palette[o], g.hw.ppu.palette[o + 1]]) as u32,
+                _ => panic!("no memory at {a:#x}"),
+            }
+        };
+        if word {
+            half(self, a) | half(self, a + 2) << 16
+        } else {
+            half(self, a)
+        }
+    }
+    fn dma_store(&mut self, a: u32, v: u32, word: bool) {
+        let half = |g: &mut Mem, a: u32, v: u16| {
+            let o = (a & 0xFF_FFFF) as usize;
+            match a >> 24 {
+                2 => g.ewram[o..o + 2].copy_from_slice(&v.to_le_bytes()),
+                4 => write_dma(g, o as u32, v),
+                5 => g.hw.ppu.palette[o..o + 2].copy_from_slice(&v.to_le_bytes()),
+                _ => panic!("no memory at {a:#x}"),
+            }
+        };
+        half(self, a, v as u16);
+        if word {
+            half(self, a + 2, (v >> 16) as u16);
+        }
+    }
+}
+
+fn mem(stop_after: usize) -> Box<Mem> {
+    let mut g = Box::new(Mem {
+        hw: Hw::new(Rec {
+            frames: Vec::new(),
+            stop_after,
+            keys: Vec::new(),
+            saves: Vec::new(),
+        }),
+        ewram: std::vec![0; 0x4_0000],
+    });
+    for (i, b) in g.ewram[..0x400].iter_mut().enumerate() {
+        *b = i as u8;
+    }
+    g
+}
+
+/// Store a channel's four registers as a program does: source, destination,
+/// then count and control as one word (the control written last).
+fn dma_set(g: &mut Mem, n: u32, src: u32, dst: u32, count: u16, control: u16) {
+    let b = reg::DMA0SAD + 12 * n;
+    for (o, v) in [
+        (b, src),
+        (b + 4, dst),
+        (b + 8, count as u32 | (control as u32) << 16),
+    ] {
+        write_dma(g, o, v as u16);
+        write_dma(g, o + 2, (v >> 16) as u16);
+    }
+}
+
+use crate::dma::ctl as dctl;
+
+/// An immediate DMA by its registers: the same bytes, price on the clock,
+/// IRQ and registers after as the play build's bus.
+#[test]
+fn immediate_dma_by_registers_is_the_play_builds() {
+    const EW: u32 = 0x0200_0000;
+    let mut m = crate::test_util::machine();
+    let mut g = mem(100);
+    for i in 0..0x400 {
+        m.bus.write8(EW + i, i as u8);
+    }
+    let io = crate::test_util::IO;
+    // Words up, IRQ; then halfwords down from a fixed source to the
+    // palette (a fill), the count 0 meaning the maximum is not used.
+    let runs = [
+        (3, EW, EW + 0x800, 16, dctl::ENABLE | dctl::WORD | dctl::IRQ),
+        (
+            0,
+            EW + 6,
+            0x0500_0020,
+            8,
+            dctl::ENABLE | 2 << dctl::SRC_SHIFT,
+        ),
+        (
+            2,
+            EW + 0x40,
+            EW + 0x900,
+            5,
+            dctl::ENABLE | 1 << dctl::DST_SHIFT,
+        ),
+    ];
+    for (n, src, dst, count, control) in runs {
+        let (m0, g0) = (m.bus.io.now, g.hw.now());
+        let b = io + reg::DMA0SAD + 12 * n;
+        m.bus.write32(b, src);
+        m.bus.write32(b + 4, dst);
+        m.bus.write32(b + 8, count as u32 | (control as u32) << 16);
+        dma_set(&mut g, n, src, dst, count, control);
+        assert_eq!(m.bus.io.now - m0, g.hw.now() - g0, "channel {n}'s price");
+        for o in (reg::DMA0SAD..reg::DMA0SAD + 48).step_by(2) {
+            assert_eq!(m.bus.io.raw16(o), g.hw.raw16(o), "{o:#x}");
+            assert_eq!(m.bus.io.read16(o), g.hw.read16(o), "{o:#x} read");
+        }
+    }
+    assert_eq!(&m.bus.ewram[..0x1000], &g.ewram[..0x1000]);
+    assert_eq!(m.bus.video.palette[..0x40], g.hw.ppu.palette[..0x40]);
+    assert_eq!(m.bus.io.raw16(reg::IF), irq::DMA0 << 3);
+    assert_eq!(g.hw.irq.flags, irq::DMA0 << 3);
+    // Done and switched off: the enable bit reads clear.
+    assert_eq!(g.hw.read16(reg::DMA0SAD + 36 + 10) & dctl::ENABLE, 0);
+    assert_eq!(&g.ewram[0x800..0x840], &g.ewram[..0x40]);
+}
+
+/// H-blank and V-blank channels repeat at the beam's events: one unit a
+/// visible line to a fixed palette entry, and a block reloaded at each
+/// V-blank, each priced on the clock.
+#[test]
+fn hblank_and_vblank_dma_by_registers_repeat() {
+    const EW: u32 = 0x0200_0000;
+    let mut g = mem(100);
+    let mut plain = mem(100);
+    let hb = dctl::ENABLE | 2 << dctl::TIMING_SHIFT | dctl::REPEAT | 2 << dctl::DST_SHIFT;
+    dma_set(&mut g, 0, EW, 0x0500_0000, 1, hb);
+    let vb =
+        dctl::ENABLE | 1 << dctl::TIMING_SHIFT | dctl::REPEAT | dctl::WORD | 3 << dctl::DST_SHIFT;
+    dma_set(&mut g, 2, EW + 0x200, EW + 0x1000, 4, vb);
+    // Nothing runs at the stores.
+    assert_eq!(g.hw.ppu.palette[..2], [0, 0]);
+    wait_vblank(&mut *g).unwrap();
+    wait_vblank(&mut *plain).unwrap();
+    // 160 H-blanks, a halfword each: the last read EWRAM 0x13E.
+    assert_eq!(g.hw.ppu.palette[..2], [0x3E, 0x3F]);
+    assert_eq!(g.hw.dma.regs.ch[0].src, EW + 320);
+    assert_eq!(&g.ewram[0x1000..0x1010], &g.ewram[0x200..0x210]);
+    // The destination reloads, the source goes on.
+    let ch = g.hw.dma.regs.ch[2];
+    assert_eq!((ch.src, ch.dst, ch.count), (EW + 0x210, EW + 0x1000, 4));
+    // Each H-blank's price fits in its idle half line; V-blank's comes
+    // after the line's events, as the play build adds it.
+    let v = dma_cycles(0, 4, EW + 0x200, EW + 0x1000, 4) as u64;
+    assert_eq!(g.hw.now() - plain.hw.now(), v);
+    // Off: the channels stop.
+    write_dma(&mut *g, reg::DMA0SAD + 10, 0);
+    wait_vblank(&mut *g).unwrap();
+    assert_eq!(g.hw.dma.regs.ch[0].src, EW + 320);
+}
+
+/// A special start aimed at a FIFO feeds it from the program's memory;
+/// switched off, it stops.
+#[test]
+fn special_dma_by_registers_feeds_a_fifo() {
+    const EW: u32 = 0x0200_0000;
+    let mut g = mem(100);
+    let c = dctl::ENABLE | 3 << dctl::TIMING_SHIFT | dctl::REPEAT | dctl::WORD | dctl::IRQ;
+    dma_set(&mut g, 1, EW, crate::sound::FIFO_ADDR[1], 0, c);
+    let d = g.hw.sound.dma[0].expect("DMA1 feeds a FIFO");
+    assert_eq!((d.fifo, d.src, d.control), (1, EW, c));
+    // Timer 0 clocks FIFO B; its first pop asks for 4 words.
+    g.hw.write16(reg::SOUNDCNT_H, 0x3000);
+    g.hw.write16(reg::SOUNDCNT_X, 0x80);
+    g.hw.write16(reg::TM0CNT_L, 0xFF00);
+    g.hw.write16(reg::TM0CNT_L + 2, crate::timer::ctl::ENABLE);
+    spend(&mut *g, 0x100).unwrap();
+    assert_eq!(g.hw.sound.dma[0].unwrap().src, EW + 16);
+    assert_eq!(g.hw.dma.regs.ch[1].src, EW + 16);
+    assert_eq!(g.hw.irq.flags & irq::DMA0 << 1, irq::DMA0 << 1);
+    // A special start aimed elsewhere feeds nothing.
+    write_dma(&mut *g, reg::DMA0SAD + 12 + 10, 0);
+    assert!(g.hw.sound.dma[0].is_none());
+    dma_set(&mut g, 2, EW, EW + 0x100, 4, c);
+    assert!(g.hw.sound.dma[1].is_none());
 }

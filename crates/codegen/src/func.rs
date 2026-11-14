@@ -128,6 +128,11 @@ pub struct Config {
     /// (`docs/research/mod-view-without-timing.md`). One for the whole
     /// crate: the prelude's macros and `Game` take its shape.
     pub clock: Clock,
+    /// End a block at an idle loop's conditional branch, so its not-taken
+    /// way out is an exit of its own ([`Idle::Exit`]), as [`Clock::Native`]
+    /// does: the native lift's ([`Ctx::with_idle_exits`]), which syncs
+    /// there as the native-timing play build does.
+    pub idle_exits: bool,
 }
 
 /// How generated code counts its cycles.
@@ -193,6 +198,7 @@ impl Default for Config {
             callee_saves: false,
             readable: false,
             clock: Clock::Exact,
+            idle_exits: false,
         }
     }
 }
@@ -264,6 +270,16 @@ impl<'a> Ctx<'a> {
             .filter(|&k| self.is_code(k))
             .collect();
         self.entries.extend(ks);
+        self
+    }
+
+    /// This context with its blocks ended at each idle loop's conditional
+    /// branch ([`Config::idle_exits`]), as the native-timing play build's
+    /// are: the native lift's, so the loop's not-taken way out is an exit
+    /// of its own ([`Idle::Exit`]), where it syncs as the play build does
+    /// (`hw::idle_exit`).
+    pub fn with_idle_exits(mut self) -> Ctx<'a> {
+        self.cfg.idle_exits = true;
         self
     }
 
@@ -509,10 +525,7 @@ pub enum Plan {
     Static(u32),
     /// Call the recompiled function whose entry is `target`, then continue
     /// at whatever it returns to (normally `ret`).
-    Call {
-        target: u32,
-        ret: u32,
-    },
+    Call { target: u32, ret: u32 },
     /// A call through a `bx rN` stub at `stub` (a `bl` to it): take the
     /// `bx` as the stub would, then call whatever block rN names
     /// (`rt::call`) and continue at whatever it returns to (normally
@@ -539,10 +552,11 @@ pub enum Plan {
         local: bool,
     },
     /// `swi`; continues at `next` unless the BIOS sends it elsewhere.
-    Swi {
-        next: u32,
-    },
-    Undefined,
+    Swi { next: u32 },
+    /// An undefined instruction. `trap`: a compiler's trap
+    /// ([`analysis::vsa::func::is_trap`]), which a lift prints as a stop of
+    /// the game, not a hole.
+    Undefined { trap: bool },
 }
 
 /// An exit of a block, with what codegen needs to lower it.
@@ -682,7 +696,9 @@ pub fn exits(ctx: &Ctx, gb: &GBlock) -> Vec<ExitInfo> {
             Exit::Swi { next, .. } => Plan::Swi {
                 next: key(next, thumb),
             },
-            Exit::Undefined => Plan::Undefined,
+            Exit::Undefined => Plan::Undefined {
+                trap: analysis::vsa::func::is_trap(ctx.read(at, size as usize), thumb),
+            },
         };
         let plan = match plan {
             Plan::Static(k) if writes_control => Plan::Rekey(k),
@@ -729,8 +745,20 @@ pub fn successors(ctx: &Ctx, x: &ExitInfo) -> Vec<u32> {
         Plan::Static(k) | Plan::Rekey(k) => vec![k],
         Plan::Call { ret, .. } | Plan::CallVia { ret, .. } => vec![ret],
         Plan::Dynamic { ret, target, .. } => ret.into_iter().chain(target).collect(),
-        Plan::Swi { next } => vec![next],
-        Plan::Undefined => vec![],
+        // `SoftReset` and `HardReset` restart the program: no code runs
+        // after them (a compiler may put a trap or data there).
+        Plan::Swi { next } => match ctx.decode(x.at, x.thumb, 2).first() {
+            Some(&(_, Instr::Swi { comment, .. }))
+                if matches!(
+                    runtime::bios::number(comment, x.thumb),
+                    runtime::bios::call::SOFT_RESET | runtime::bios::call::HARD_RESET
+                ) =>
+            {
+                vec![]
+            }
+            _ => vec![next],
+        },
+        Plan::Undefined { .. } => vec![],
     };
     out.extend(x.ret);
     out.extend(ctx.table_targets(x.at, x.thumb).unwrap_or_default());
@@ -743,16 +771,49 @@ pub fn successors(ctx: &Ctx, x: &ExitInfo) -> Vec<u32> {
 /// block too: an IRQ it lets through is taken at the tick after it, so the
 /// compiled code takes it at the same instruction as the interpreter, which
 /// ticks after each one (native/ime-release). Elsewhere the store's tick
-/// would only be later by a block, as any I/O write's is.
+/// would only be later by a block, as any I/O write's is. So does an idle
+/// loop's conditional branch (and with [`Config::idle_exits`], the native
+/// lift's, only that): where it isn't taken the loop is left, and
+/// the interpreter syncs there ([`Idle::Exit`], `rt::idle_exit`, which
+/// brings up a clock a DMA in the loop moved); in the block's middle the
+/// not-taken path would have no exit to sync at
+/// (native/play-native-metroid-interp).
 fn build_block(ctx: &Ctx, k: u32, stops: &BTreeSet<u32>) -> GBlock {
     let gb = build_block_until(ctx, k, stops, None);
-    if ctx.cfg.clock == Clock::Native
-        && let Some(at) = ime_store(&gb.block)
-        && gb.insns.last().is_some_and(|&(last, _)| last != at)
-    {
-        return build_block_until(ctx, k, stops, Some(at));
+    let native = ctx.cfg.clock == Clock::Native;
+    if native || ctx.cfg.idle_exits {
+        let ime = if native { ime_store(&gb.block) } else { None };
+        let split = [ime, idle_branch(ctx, &gb)].into_iter().flatten().min();
+        if let Some(at) = split
+            && gb.insns.last().is_some_and(|&(last, _)| last != at)
+        {
+            return build_block_until(ctx, k, stops, Some(at));
+        }
     }
     gb
+}
+
+/// The address of the first conditional branch in `gb` that is an idle
+/// loop's back edge, as [`exits`] finds one (ROM code only).
+fn idle_branch(ctx: &Ctx, gb: &GBlock) -> Option<u32> {
+    if ctx.base != ROM_BASE {
+        return None;
+    }
+    let size = if gb.block.thumb { 2 } else { 4 };
+    let fetch = |a: u32| ctx.read(a, size);
+    gb.insns.iter().find_map(|&(at, instr)| match instr {
+        Instr::Branch {
+            link: false,
+            target,
+            cond,
+        } if cond != Cond::Al
+            && runtime::machine::is_rom(at)
+            && analysis::idle::is_idle_edge(fetch, at, target, gb.block.thumb) =>
+        {
+            Some(at)
+        }
+        _ => None,
+    })
 }
 
 /// The address of the first instruction in `b` that stores to `IME`.
