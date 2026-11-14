@@ -1254,6 +1254,14 @@
       "by": "owner",
       "at": "2026-11-13T20:46:13Z",
       "scope": ["group:native"]
+    },
+    {
+      "id": "d/the-unplugged-serial-port-is-mgba-s-but-for",
+      "title": "The unplugged serial port is mGBA's but for three kept items",
+      "why": "From {unit:native/serial-no-partner-as-mgba}, 2026-11-14. Play build and hw take mGBA 0.10.5's no-partner answers (sio.c dummy drivers): SI 1 in normal mode, an internal-clock transfer ended in the store (hardware takes 8/32 bit times; GBATEK doesn't say what an unplugged port receives) with its IRQ, multiplayer bits 2-6 forced, RCNT low four bits never stored (no unplugged pin level in GBATEK), 0x15A not a register. Kept, hardware first: JOYCNT/JOYSTAT keep GBATEK's bits in every mode (mGBA stores all 16 outside JOY bus); unused I/O reads 0 block-wide; a byte store to SIOCNT merges with the register, not mGBA's unanswered copy. A masked build showed these three are the whole remaining mGBA difference.",
+      "by": "de276265",
+      "at": "2026-11-14T14:05:16Z",
+      "scope": ["group:native"]
     }
   ]
 }
