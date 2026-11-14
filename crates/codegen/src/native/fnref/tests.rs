@@ -4,7 +4,7 @@
 //! doesn't (arithmetic, an address, an ordered compare), each a hole.
 
 use super::*;
-use armv4t::sem::Reg;
+use armv4t::sem::{Flag, Reg};
 
 /// A function's key, Thumb.
 const F: u32 = 0x0800_0201;
@@ -89,6 +89,17 @@ impl B {
     fn shift(&mut self, kind: ShiftType, v: ValueId, n: u32) -> ValueId {
         let amount = self.k(n);
         self.op(Op::Shift { kind, v, amount })
+    }
+    /// Sets flag `f` to `v` and reads it (a branch on it would).
+    fn flag(&mut self, f: Flag, v: ValueId) {
+        self.op(Op::SetFlag(f, v));
+        self.read_flag(f);
+    }
+    /// Reads flag `f` into r2.
+    fn read_flag(&mut self, f: Flag) {
+        let x = self.op(Op::GetFlag(f));
+        let w = self.op(Op::BitToWord(x));
+        self.set(2, w);
     }
     fn ld(&mut self, width: Width, addr: ValueId) -> ValueId {
         self.op(Op::Load { width, addr })
@@ -225,7 +236,7 @@ fn an_equality_compare_is_allowed() {
     let one = b.op(Op::Bit(true));
     let d = b.op(Op::Adc { a: p, b: n, c: one });
     let z = b.op(Op::IsZero(d));
-    b.op(Op::SetFlag(armv4t::sem::Flag::Z, z));
+    b.flag(Flag::Z, z);
     let f = run(&[(0x0800_1001, vec![(0x0800_1001, b.end(None, Edge::Return))])]);
     assert!(f.proven(POOL), "{f:?}");
 }
@@ -238,7 +249,7 @@ fn an_ordered_compare_is_a_hole() {
     let n = b.op(Op::Not(x));
     let one = b.op(Op::Bit(true));
     let c = b.op(Op::AdcCarry { a: p, b: n, c: one });
-    b.op(Op::SetFlag(armv4t::sem::Flag::C, c));
+    b.flag(Flag::C, c);
     let f = run(&[(0x0800_1001, vec![(0x0800_1001, b.end(None, Edge::Return))])]);
     assert!(!f.proven(POOL));
     assert_eq!(f.holes[&Origin::Word(POOL)].1, Why::Ordered);
@@ -1544,4 +1555,164 @@ fn strides_follow_a_scaled_index_through_its_registers() {
     let three = b.bin(BinOp::Add, two, i);
     let twelve = b.shift(ShiftType::Lsl, three, 2);
     assert_eq!(strides(&b.insts)[twelve.index()], 4);
+}
+
+/// One block of one function at 0x0800_1001, ending in `edge`.
+fn alone(b: B, edge: Edge) -> Built {
+    (0x0800_1001, vec![(0x0800_1001, b.end(None, edge))])
+}
+
+/// `cmp p, #0` (`p + !0 + 1`): its result, carry and overflow.
+fn cmp_zero(b: &mut B, p: ValueId) -> [ValueId; 3] {
+    let n = b.k(!0);
+    let one = b.op(Op::Bit(true));
+    [
+        b.op(Op::Adc { a: p, b: n, c: one }),
+        b.op(Op::AdcCarry { a: p, b: n, c: one }),
+        b.op(Op::AdcOverflow { a: p, b: n, c: one }),
+    ]
+}
+
+#[test]
+fn an_add_of_zero_is_a_move() {
+    // adds r1, r0, #0 (old GCC's move), its C and V read; then a call
+    // through r1.
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let (z, z2) = (b.k(0), b.k(0));
+    let c = b.op(Op::Bit(false));
+    let m = b.op(Op::Adc { a: p, b: z, c });
+    let carry = b.op(Op::AdcCarry { a: p, b: z, c });
+    let over = b.op(Op::AdcOverflow { a: z2, b: p, c });
+    b.flag(Flag::C, carry);
+    b.flag(Flag::V, over);
+    let f = run(&[calling(0x0800_1001, b, m)]);
+    assert!(f.proven(POOL), "{f:?}");
+    assert_eq!(site(&f).callees, BTreeSet::from([F]));
+    assert!(site(&f).complete);
+}
+
+#[test]
+fn an_add_of_one_is_still_arithmetic() {
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let z = b.k(0);
+    let c = b.op(Op::Bit(true));
+    let m = b.op(Op::Adc { a: p, b: z, c });
+    let f = run(&[calling(0x0800_1001, b, m)]);
+    assert!(!f.proven(POOL));
+}
+
+#[test]
+fn a_compare_with_zero_carries_and_never_overflows() {
+    // cmp r0, #0 on a callback, C and V read: no ordered compare.
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let [d, carry, over] = cmp_zero(&mut b, p);
+    let z = b.op(Op::IsZero(d));
+    b.flag(Flag::Z, z);
+    b.flag(Flag::C, carry);
+    b.flag(Flag::V, over);
+    let f = run(&[alone(b, Edge::Return)]);
+    assert!(f.proven(POOL), "{f:?}");
+}
+
+#[test]
+fn the_carry_of_a_compare_with_a_number_is_still_ordered() {
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let n = b.k(!5);
+    let one = b.op(Op::Bit(true));
+    let carry = b.op(Op::AdcCarry { a: p, b: n, c: one });
+    b.flag(Flag::C, carry);
+    let f = run(&[alone(b, Edge::Return)]);
+    assert!(!f.proven(POOL));
+    assert_eq!(f.holes[&Origin::Word(POOL)].1, Why::Ordered);
+}
+
+#[test]
+fn a_function_or_a_number_compared_with_zero_is_allowed() {
+    // r0 is F or 5 (a callback or a default), compared with 0.
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let five = b.k(5);
+    let g = b.op(Op::GetFlag(Flag::Z));
+    let x = b.op(Op::Select {
+        c: g,
+        a: p,
+        b: five,
+    });
+    let [d, ..] = cmp_zero(&mut b, x);
+    let z = b.op(Op::IsZero(d));
+    b.flag(Flag::Z, z);
+    let f = run(&[alone(b, Edge::Return)]);
+    assert!(f.proven(POOL), "{f:?}");
+    // With 5 in the other operand it is a compare with 5.
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let five = b.k(!5);
+    let g = b.op(Op::GetFlag(Flag::Z));
+    let n = b.k(!0);
+    let y = b.op(Op::Select {
+        c: g,
+        a: n,
+        b: five,
+    });
+    let one = b.op(Op::Bit(true));
+    let d = b.op(Op::Adc { a: p, b: y, c: one });
+    let z = b.op(Op::IsZero(d));
+    b.flag(Flag::Z, z);
+    let f = run(&[alone(b, Edge::Return)]);
+    assert!(!f.proven(POOL));
+}
+
+/// `cmp r0, #0` on F setting N (bit 31 of the result), then `edge`;
+/// with `read`, N is read after it.
+fn n_flag_then(edge: Edge, read: bool) -> Flow {
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let [d, ..] = cmp_zero(&mut b, p);
+    let n = b.op(Op::TestBit { v: d, n: 31 });
+    b.op(Op::SetFlag(Flag::N, n));
+    // Returned (r0 as it came).
+    b.set(0, p);
+    if read {
+        b.read_flag(Flag::N);
+    }
+    run(&[alone(b, edge)])
+}
+
+#[test]
+fn a_flag_nothing_reads_before_the_return_holes_nothing() {
+    let f = n_flag_then(Edge::Return, false);
+    assert!(f.proven(POOL), "{f:?}");
+    // Read, it is a bit test.
+    let f = n_flag_then(Edge::Return, true);
+    assert_eq!(f.holes[&Origin::Word(POOL)].1, Why::BitTest);
+    // A jump into another function passes it the flags.
+    let f = n_flag_then(Edge::Tail(None), false);
+    assert_eq!(f.holes[&Origin::Word(POOL)].1, Why::BitTest);
+}
+
+#[test]
+fn a_flag_read_after_a_call_is_live_across_it() {
+    // N set, a call, N read in the block the call returns to.
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let [d, ..] = cmp_zero(&mut b, p);
+    let n = b.op(Op::TestBit { v: d, n: 31 });
+    b.op(Op::SetFlag(Flag::N, n));
+    let t = b.k(H);
+    let e = 0x0800_1001;
+    let ret = e + 0x10;
+    let mut r = B::default();
+    r.read_flag(Flag::N);
+    let f = run(&[(
+        e,
+        vec![
+            (e, b.end(Some(t), Edge::Call { target: None, ret })),
+            (ret, r.end(None, Edge::Return)),
+        ],
+    )]);
+    assert_eq!(f.holes[&Origin::Word(POOL)].1, Why::BitTest);
 }
