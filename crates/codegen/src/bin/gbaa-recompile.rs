@@ -309,6 +309,7 @@ fn options(args: &[String], clock: Clock) -> Option<Opts> {
         callee_saves: has("--callee-saves"),
         readable: false,
         clock,
+        idle_exits: false,
     };
     Some(Opts {
         cfg,

@@ -9,7 +9,8 @@
 //! addresses and count are taken; an immediate one is marked to run, which
 //! [`write_dma`] (or the next [`super::sync`]) does through the program's
 //! memory ([`Native::dma_load`], [`Native::dma_store`]), its price going
-//! on the clock with no sync, as the play build's `io_write` adds it. V-
+//! on the clock with no sync and the sound not counted up to it, as the
+//! play build's `io_write` adds it. V-
 //! blank and H-blank channels run at the beam's events ([`trigger`]); a
 //! special-start DMA1 or DMA2 aimed at a sound FIFO becomes the FIFO's
 //! [`super::FifoDma`] ([`Hw::fifo_dma`]). Each transfer requests its IRQ at the
@@ -158,16 +159,16 @@ impl<G: Native> Hw<G> {
 /// build's `io_write`). The prelude's `io_write16` routes the DMA
 /// registers here.
 pub fn write_dma<G: Native>(g: &mut G, o: u32, v: u16) {
-    g.hw().write16(o, v);
+    super::write_io(g, o, v);
     run_pending(g);
 }
 
 /// Run each immediate channel switched on and not yet run, lowest first,
-/// each one's price on the clock as it ends; then the sound brought up to
-/// the clock, so a FIFO that came due in the transfers is refilled from
-/// the program's memory (a later store can't reach it).
+/// each one's price on the clock as it ends. The sound isn't brought up to
+/// it: as in the play build, the timers and FIFOs are counted at the next
+/// sync, or before the next store to their registers ([`super::write_io`]),
+/// either of which refills a FIFO through the program's memory.
 pub(super) fn run_pending<G: Native>(g: &mut G) {
-    let mut ran = false;
     loop {
         let regs = &mut g.hw().dma.regs;
         if regs.pending == 0 {
@@ -177,10 +178,6 @@ pub(super) fn run_pending<G: Native>(g: &mut G) {
         regs.pending &= !(1 << n);
         let c = transfer(g, n);
         g.hw().sound.io.now += c as u64;
-        ran = true;
-    }
-    if ran {
-        super::run_sound(g);
     }
 }
 

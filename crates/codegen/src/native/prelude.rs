@@ -424,7 +424,7 @@ fn io_write16(g: &mut Game, o: u32, v: u32) {
     if (hw::dma_regs::DMA_START..hw::dma_regs::DMA_END).contains(&o) {
         return hw::write_dma(g, o, v as u16);
     }
-    g.hw.write16(o, v as u16);
+    hw::write_io(g, o, v as u16);
 }
 
 fn rom16(o: usize) -> u32 {

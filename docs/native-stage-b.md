@@ -258,33 +258,33 @@ kind for stage B) is measured here for the first time.
 
 **Metroid: Zero Mission at stage A, then Emerald at stage B** (the
 default of the question to june; see the tracker). The hole report
-(`research/native-holes.md`; its current numbers are
-[native-holes.numbers.md](research/native-holes.numbers.md)) ranked
-Metroid closest when this was chosen. Emerald is the game june's
-romhacks are built on and the one with types (pret's DWARF), but it has
-15,158 functions, so a literal lift of it is the largest build there is.
-Metroid first tests stage A on a real agbcc game at a size that builds,
-and the shortcuts above at game scale.
+(`research/native-holes.md`, [its numbers](research/native-holes.numbers.md))
+ranked Metroid closest. Emerald (the base of june's romhacks, typed by
+pret's DWARF) has 15,158 functions, the largest literal lift; Metroid
+first tests stage A and the shortcuts on a real agbcc game that builds.
 
 - **Lifted crates split into modules that build**
-  (`native/lift-modules`). Done (`codegen::native::modules`): `main.rs`
-  (prelude, `Ram`, `ENTRY`), `fns.rs` and `m_<first key>.rs` modules of
-  about 4,000 lines, so rustc's codegen runs on several cores. The
-  synthetic million-line crate (`gbaa-lift --copies 14`) builds in under
-  a minute and 4 GB.
+  (`native/lift-modules`). Done (`codegen::native::modules`): modules of
+  about 4,000 lines, so rustc's codegen runs on several cores.
 - **Metroid lifts with no hard holes and builds**
-  (`native/metroid-lifts`). Done (2026-11-08, quack): `--name metroid`
-  (the file name has spaces), `mods/metroid/holes.toml` (private: its
-  stand-ins port the game's code), five IWRAM copies (`[[copy]]`) and the
-  prelude's BIOS calls; 2,624 functions, 960,068 lines in 266 modules,
-  the lift 3 min 6 s at 2.06 GB (the flow settles in 12 rounds), the
-  crate alone builds in 32.4 s, rustc 3.95 GB, as the synthetic crate
-  predicted.
+  (`native/metroid-lifts`). Done (2026-11-08, quack): `--name metroid`,
+  `mods/metroid/holes.toml` (private: its stand-ins port the game's code),
+  five IWRAM copies (`[[copy]]`) and the prelude's BIOS calls; 2,624
+  functions, 960,068 lines in 266 modules, lifted in 3 min 6 s at
+  2.06 GB, the crate built in 32.4 s at 3.95 GB.
 - **Metroid passes the native check on a route**
-  (`native/metroid-native-check`). A route `units/metroid-native.toml`
-  from boot into gameplay, compared every frame with sound
-  (`native/hw-sound`). If the first run shows more than a session's worth
-  of differences, the unit files one unit per cause and stops.
+  (`native/metroid-native-check`). Done (2026-11-14, quack): route-check
+  `--native --name metroid` on `units/metroid-native.toml` (reset to the
+  first room, 2,700 frames) finds 0 differences, audio too, and catches a
+  planted wrong store (`--plant 0x08000252`, the main loop's frame count:
+  frame 4, IWRAM 0x03000c77). The first run's causes were units of their
+  own (DMA by address, the save chip, `hw::flash`, BIOS-region loads, the
+  play build's own interpreter, the holes file's copies); the rest were
+  time: an idle loop's way out syncs (`hw::idle_exit`, a DMA-busy poll); a
+  frame is presented at its sync's end, as the play build's is; a long
+  BIOS stall runs event by event; the sound is walked before a store to
+  its registers, not after a DMA; a play-build store re-ran only the
+  timers it wrote; an IRQ a store's walk raises waits for a time point.
 - **Kirby Nightmare lifts with no hard holes and builds**
   (`native/nightmare-lifts`). Done (2026-11-08, quack;
   `mods/kirby-nightmare/holes.toml`, `skip_fn_flow`; a `[[jump]]`'s
