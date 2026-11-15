@@ -367,8 +367,8 @@ at 11,063 sites. Filed as `native/nightmare-task-switch`. No other corpus game s
 (Amazing Mirror doesn't); the rule finds one anywhere. The lifter flags them too, and has the
 coroutines (`native/task-coroutines`). Stand-ins: its holes file; resume's `bx pc` after a `pop
 {pc}` is a jump now (`classify`). Run (2026-11-14): the native check passes
-`units/kirby-nightmare-native.toml`'s 140 frames, a task on its coroutine from frame 87 (a planted
-store in it caught); gameplay waits for the lift to pass frame 147.
+`units/kirby-nightmare-native.toml`'s 900 frames, tasks on their coroutines from frame 87 (a planted
+store in one caught) into Vegetable Valley; the lift stops at frame 902 (`native/nightmare-stop-34a88`).
 
 ## Functions that change r4-r11 or sp
 

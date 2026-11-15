@@ -1,10 +1,25 @@
-# Kirby - Nightmare in Dream Land: reset and the opening, no presses, up to where the stage-A lift
-# stops today (frame 147, m4a's command table: native/m4a-ply-table-entries). From frame 87 one task
-# runs on the switcher (started, then resumed and yielding each frame; none exits yet), so its
-# stand-ins (host coroutines, native/nightmare-task-switch) run 54 frames here. The lift (`just lift … --name kirby-nightmare`) against the play build at --timing
-# native, by route-check --native, with the planted store `--plant 0x080caaee` (a countdown in the
-# task's body) caught at frame 87. Lengthen through gameplay once the lift runs further.
+# Kirby - Nightmare in Dream Land: reset, the opening, Start through the title, A through game select
+# and the file, into Vegetable Valley's first room, walking right with a jump, up to where the stage-A
+# lift stops today (frame 902, a call to 0x08034a89 that is no function's entry). From frame 87 the
+# object tasks run on the switcher (started, resumed, yielding each frame), so its stand-ins (host
+# coroutines, native/nightmare-task-switch) run the rest of the route. The lift (`just lift … --name
+# kirby-nightmare`) against the play build at --timing native, by route-check --native, with the
+# planted store `--plant 0x080caaee` (a countdown in a task's body) caught at frame 87.
 rom = "$HOME/ROMs/gba/Kirby - Nightmare in Dream Land.gba"
+
+# Start skips the opening to the title, then the title to game select.
+[[press]]
+button = "start"
+from = 250
+to = 640
+every = 60
+
+# A on One Player, the file, and on through the level's opening.
+[[press]]
+button = "a"
+from = 700
+to = 1000
+every = 50
 
 # The opening's picture: the hash the play build draws at --timing native (2026-11-14), not yet checked
 # against mGBA or by eye.
@@ -12,3 +27,10 @@ rom = "$HOME/ROMs/gba/Kirby - Nightmare in Dream Land.gba"
 name = "opening-140"
 frame = 140
 hash = "e0b7f18fb80ac6a5"
+
+# Kirby in Vegetable Valley's first room (by eye, the lift's picture, 2026-11-14); the hash is the
+# play build's at --timing native, not yet checked against mGBA.
+[[checkpoint]]
+name = "vegetable-valley-900"
+frame = 900
+hash = "ed750fdea00af9e5"
