@@ -2057,6 +2057,30 @@ fn moves(vals: &[Val], a: ValueId, b: ValueId, c: ValueId) -> Option<ValueId> {
     }
 }
 
+/// `a | b` that is `x | -x`, one operand `0 + !x + 1` (`negs`) of the
+/// other: that `x`. Old GCC's `x != 0` as a bit, `negs r1, r0; orrs r1,
+/// r0; lsrs r5, r1, #31` (`native/fnref-gcc-ne-bit`).
+fn ne_or(insts: &[Inst], vals: &[Val], op: BinOp, a: ValueId, b: ValueId) -> Option<ValueId> {
+    if op != BinOp::Or {
+        return None;
+    }
+    let neg_of = |n: ValueId, x: ValueId| match insts[n.index()].op {
+        Op::Adc { a: p, b: q, c } if is_num(&vals[c.index()], 1) => {
+            [(p, q), (q, p)].into_iter().any(|(z, m)| {
+                is_num(&vals[z.index()], 0) && matches!(insts[m.index()].op, Op::Not(y) if y == x)
+            })
+        }
+        _ => false,
+    };
+    if neg_of(a, b) {
+        Some(b)
+    } else if neg_of(b, a) {
+        Some(a)
+    } else {
+        None
+    }
+}
+
 /// An `a + b + c` whose carry and overflow are known whatever the other
 /// operand holds.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -2844,6 +2868,7 @@ impl Run<'_, '_> {
         self.g.now = (self.f.entry, at);
         let mut vals: Vec<Val> = vec![Val::default(); b.insts.len()];
         let strides = strides(b.insts);
+        let b_insts = b.insts;
         let none = Val::default();
         let unused = self.unused[&key].clone();
         for (i, inst) in b.insts.iter().enumerate() {
@@ -2876,7 +2901,12 @@ impl Run<'_, '_> {
                     (!keep).then_some((1 + kind as u8, n, v, None))
                 }
                 Op::Not(v) if large(v) => Some((5, None, v, None)),
-                Op::Bin(op, a, b) if large(a) || large(b) => Some((6 + op as u8, None, a, Some(b))),
+                // (Nor `x | -x`: a number, whatever `x` is.)
+                Op::Bin(op, a, b)
+                    if (large(a) || large(b)) && ne_or(b_insts, &vals, op, a, b).is_none() =>
+                {
+                    Some((6 + op as u8, None, a, Some(b)))
+                }
                 // (A move isn't kept: it is its operand.)
                 Op::Adc { a, b, c }
                     if (large(a) || large(b)) && moves(&vals, a, b, c).is_none() =>
@@ -2923,6 +2953,28 @@ impl Run<'_, '_> {
                 }
                 Op::Bit(x) => Val::of(Tok::Num(x as u32)),
                 Op::GetReg(r) => s.regs[r.index()].clone(),
+                Op::Bin(op, ra, rb) if ne_or(b_insts, &vals, op, ra, rb).is_some() => {
+                    // `x | -x` (old GCC's `x != 0` as bit 31: `negs r1, r0;
+                    // orrs r1, r0; lsrs r5, r1, #31`) is 0 or has bit 31
+                    // set, so it is never a function's address, whatever
+                    // `x` holds: a number, exact where `x` is.
+                    let x = ne_or(b_insts, &vals, op, ra, rb).expect("matched");
+                    let x = xv(self.g, x);
+                    let mut out = Val {
+                        unk: x.unk || x.mem || x.lost_rom,
+                        ..Val::default()
+                    };
+                    let mut toks = Vec::new();
+                    for &t in &x.toks {
+                        match t {
+                            Tok::Num(n) | Tok::Rom(n) => toks.push(Tok::Num(n | n.wrapping_neg())),
+                            _ => out.unk = true,
+                        }
+                    }
+                    out.toks.add_all(toks);
+                    out.cap();
+                    out
+                }
                 Op::Bin(op, ra, rb) => {
                     let (a, b) = (xv(self.g, ra), xv(self.g, rb));
                     // (Not for a kept op: its key has no steps.)
