@@ -5,14 +5,16 @@
 //! **Validation** ([`validate`]) decodes forward from the candidate,
 //! following fallthrough and direct branches, as Ghidra's
 //! `checkValidSubroutine` does (`docs/research/discovery-prior-art.md`). It
-//! must reach a return (a pop through sp, `bx lr`, …), an indirect jump
+//! must reach a return (a pop through sp, `bx lr`, a `bx rN` through the
+//! `mov rN, lr` it opens with, as m4a's command routines do), an indirect jump
 //! after a few instructions (a switch whose cases hold the returns), or,
 //! after a `push {…, lr}`, loop forever with every path closed (a task run
 //! as a coroutine),
 //! without running into a known literal pool or table, out of ROM, or into
 //! code found already other than at one of its instruction starts in the
 //! same instruction set. A body that only runs into a function start
-//! found already validates if code loads the candidate. Undefined instructions, lone halves of a Thumb
+//! found already validates if code loads the candidate or a table holds it
+//! next to a known start (m4a's `ply_patt`, a branch into `ply_goto`). Undefined instructions, lone halves of a Thumb
 //! `bl`, BIOS calls that don't exist, long runs of one word, instructions
 //! no game runs (user-bank `ldm`), Thumb shifts by 32 (a ROM pointer's
 //! upper half), a Thumb `bx` to a register last set by a shift left
@@ -122,7 +124,7 @@ pub fn batch(
             }
             Some(_) => continue,
             None => match validate(prog, view, a, thumb) {
-                Some((b, own)) if own || c.pooled => b,
+                Some((b, own)) if own || c.pooled || c.table => b,
                 _ => continue,
             },
         };
@@ -346,6 +348,28 @@ fn is_push_lr(i: &Insn) -> bool {
     )
 }
 
+/// The register `i` copies lr into, if it is an unconditional `mov rN, lr`
+/// (rN not sp, lr or pc): m4a's command routines (`ply_*`, called through
+/// the `MPlayJumpTable` m4a copies to RAM) open with `mov r12, lr`, call a
+/// shared helper with `bl` and return with `bx r12`.
+fn saved_lr(i: &Insn) -> Option<Reg> {
+    use armv4t::decode::{AluOp, Operand2, Shift};
+    match i.instr {
+        Instr::Alu {
+            op: AluOp::Mov,
+            rd,
+            op2:
+                Operand2::Reg {
+                    rm: Reg::Lr,
+                    shift: Shift::Lsl(0),
+                },
+            cond: Cond::Al,
+            ..
+        } if !matches!(rd, Reg::Sp | Reg::Lr | Reg::Pc) => Some(rd),
+        _ => None,
+    }
+}
+
 /// Decode forward from `start`: the body's instructions as (address,
 /// size), if it validates, and whether it ends on its own: a body that
 /// reaches no return or jump of its own but runs straight into a function
@@ -371,6 +395,9 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
     // Every path, soft ones too, ended by coming back to an instruction
     // of the body: no return, jump, bad decode or code found already.
     let mut closed = true;
+    // The register a body opening `mov rN, lr` keeps its return address
+    // in ([`saved_lr`]).
+    let kept = prog.decode(start, thumb).and_then(|i| saved_lr(&i));
     while let Some((a, soft)) = work.pop() {
         if let Some(&(_, s)) = seen.get(&a) {
             if s && !soft {
@@ -442,6 +469,15 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
                     // cases hold every return.
                     match classify(prog, &i) {
                         Ctl::Return if pop => ends = true,
+                        // `bx rN` through the opening copy of lr returns,
+                        // soft or not: a body that keeps lr in a register
+                        // expects its `bl`s to come back.
+                        Ctl::Jump
+                            if kept.is_some()
+                                && matches!(i.instr, Instr::Bx { rm, .. } if Some(rm) == kept) =>
+                        {
+                            ends = true
+                        }
                         Ctl::Jump if !soft => jumps = true,
                         Ctl::Return | Ctl::Jump => {}
                         Ctl::Call => work.push((next, true)),
