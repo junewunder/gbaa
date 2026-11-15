@@ -1676,6 +1676,43 @@ fn an_add_of_zero_is_a_move() {
     assert!(site(&f).complete);
 }
 
+/// `negs r1, x; orrs r1, y` (`0 + !x + 1`, or'd with `y`), then `lsrs
+/// r5, r1, #31` into r5.
+fn ne_bit(b: &mut B, x: ValueId, y: ValueId) {
+    let z = b.k(0);
+    let n = b.op(Op::Not(x));
+    let one = b.op(Op::Bit(true));
+    let neg = b.op(Op::Adc { a: z, b: n, c: one });
+    let or = b.bin(BinOp::Or, neg, y);
+    let bit = b.shift(ShiftType::Lsr, or, 31);
+    b.set(5, bit);
+}
+
+#[test]
+fn old_gcc_s_not_zero_bit_is_no_arithmetic() {
+    // (r0 | -r0) >> 31 on a callback, which is then called.
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    ne_bit(&mut b, p, p);
+    let f = run(&[calling(0x0800_1001, b, p)]);
+    assert!(f.proven(POOL), "{f:?}");
+    assert_eq!(site(&f).callees, BTreeSet::from([F]));
+    // With another value or'd in it is arithmetic.
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let r = b.get(2);
+    ne_bit(&mut b, p, r);
+    let f = run(&[calling(0x0800_1001, b, p)]);
+    assert!(!f.proven(POOL));
+    // So is `p | -r`.
+    let mut b = B::default();
+    let p = b.pool(POOL, F);
+    let r = b.get(2);
+    ne_bit(&mut b, r, p);
+    let f = run(&[calling(0x0800_1001, b, p)]);
+    assert!(!f.proven(POOL));
+}
+
 #[test]
 fn an_add_of_one_is_still_arithmetic() {
     let mut b = B::default();
