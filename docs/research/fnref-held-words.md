@@ -701,3 +701,22 @@ of a call's result with an empty callee set. That's a mask's rule, and
 another unit's (`native/fnref-bit-test-mask`): a mask of a half or a
 byte is a split that may be joined again, so `&` with a constant isn't
 a number in general.
+
+## A test of high bits by a constant mask, as landed
+
+Unit `native/fnref-bit-test-mask`, 2026-11-14 on quack. `x & m`, `m` a
+constant with no bit in the bottom half and every bit of it clear in
+the function's address (whole, a half, or the top half in place), is
+the number 0: 0 for the address, and 0 for any dense ID, whose top half
+is 0 (`high_clear` in `fnref.rs`). So any use of it is allowed, not only
+a compare with 0. A mask reaching into the bottom half (a byte or half
+split) or a bit the address has set stays arithmetic. `bin` now pairs
+an `&` with one exact constant token by token even on a large set,
+the mask kept.
+
+**Metroid** (the lift with its holes file): `fn_words_proven` 604 and
+`fn_words_not_proven` 200, the same. The 90 words held at 0x0805aef6
+(bit 24 of a call's result) meet their next hole at 0x08060468: `subs
+r0, r1, #1; cmp r0, #4; bhi` on the result of the call to 0x0808ac00, a
+switch on a call's result, which holds function addresses only through
+the empty callee sets' over-approximation. agb lift bars all held.
