@@ -505,6 +505,46 @@ fn bx_through_a_copy_of_lr_is_a_return() {
     assert_eq!(r.jumps[&(ROM_BASE + 0x02)], JumpRes::Unresolved);
 }
 
+/// A `bl` to an interworking veneer (`bx pc; nop`, then ARM code)
+/// placed right after another function's `pop {pc}` is a call that
+/// returns: the `bx pc` isn't `pop {rN}; bx rN`'s return.
+#[test]
+fn bx_pc_after_pop_pc_is_a_veneer() {
+    let mut a = Asm::new();
+    a.bl(0x00, 0x10)
+        .h(0x04, 0x2001) // movs r0, #1
+        .h(0x06, 0x4770) // bx lr
+        .h(0x0c, 0x2000) // movs r0, #0 (the function before the veneer)
+        .h(0x0e, 0xbd00) // pop {pc}
+        .h(0x10, 0x4778) // bx pc
+        .h(0x12, 0x46c0) // nop
+        .w(0x14, 0xe12fff1e); // ARM: bx lr
+    let r = |a: u32| ROM_BASE + a;
+    let region = |s: u32, e: u32, thumb: bool| Region {
+        start: r(s),
+        end: r(e),
+        thumb,
+    };
+    let func = |s: u32, e: u32, thumb: bool| Func {
+        start: r(s),
+        end: r(e),
+        thumb,
+    };
+    let p = Program::new(
+        a.0.clone(),
+        vec![region(0, 0x14, true), region(0x14, 0x18, false)],
+        vec![
+            func(0, 0x08, true),
+            func(0x0c, 0x10, true),
+            func(0x10, 0x14, true),
+            func(0x14, 0x18, false),
+        ],
+    );
+    let res = crate::vsa::func::analyze(&p, ROM_BASE, true, &mut |_, _| Bl::Call);
+    assert!(res.jumps.is_empty(), "{:?}", res.jumps);
+    assert_eq!(res.ret_sp, [Some(0)]);
+}
+
 /// The same through a `bl` to a helper that branches (m4a's
 /// `ld_r3_tp_adr_i`) but never writes r12: the call keeps r12, so the
 /// `bx r12` after it is still a return. A helper that writes r12 doesn't.

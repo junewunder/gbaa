@@ -173,11 +173,14 @@ pub fn run(
     // a run fails.
     let rom = std::fs::read(&r.rom).map_err(|e| Unrun(format!("{}: {e}", r.rom.display())))?;
     let mut fixed = code_copies(rom);
+    let mut stacks = Vec::new();
     if let Some(f) = holes_file(Path::new(""), &r.rom, extra) {
         let text = std::fs::read_to_string(&f).map_err(|e| Bad(format!("{}: {e}", f.display())))?;
         let h = codegen::native::Holes::parse(&text)
             .map_err(|e| Bad(format!("{}: {e}", f.display())))?;
         fixed.extend(holes_copies(&h, &f));
+        stacks = holes_stacks(&h, &f);
+        fixed.extend(stacks.iter().cloned());
     }
     if let Some(f) = &extra.replaced {
         fixed.extend(replaced(f)?);
@@ -206,14 +209,17 @@ pub fn run(
     )))?;
     runner(&out, "native", native, &r, &[], true)?;
 
-    // The skip runs from the lowest sp to IWRAM's end: below IWRAM it
-    // would take EWRAM with it (r13 used as a scratch register, or a stack
-    // in EWRAM), which this check doesn't handle.
+    // The skip runs from the lowest sp in IWRAM to IWRAM's end. An sp
+    // outside IWRAM (r13 used as a scratch register, or a task's stack in
+    // EWRAM) passes only inside a stack the holes file names, which is
+    // skipped whole.
     if !(IWRAM_BASE..=IWRAM_END).contains(&low_sp) {
         return Err(Fail(format!(
-            "the play build's lowest sp {low_sp:#010x} is outside IWRAM: the stack skip would \
-             swallow other RAM"
+            "the play build's sp was never in IWRAM (lowest {low_sp:#010x}): no guest stack to skip"
         )));
+    }
+    if let Some(out_sp) = outside_sp(&interp_log) {
+        outside_held(out_sp, &stacks).map_err(Fail)?;
     }
     let stack = Skip {
         start: low_sp,
@@ -394,6 +400,50 @@ fn lowest_sp(log: &str) -> Option<u32> {
         .lines()
         .find_map(|l| l.strip_prefix("gbaa-desktop: lowest sp 0x"))?;
     u32::from_str_radix(l.trim(), 16).ok()
+}
+
+/// gbaa-desktop's `sp outside IWRAM 0x…..=0x…` line: the lowest and
+/// highest sp it saw outside IWRAM (none: no line).
+fn outside_sp(log: &str) -> Option<(u32, u32)> {
+    let l = log
+        .lines()
+        .find_map(|l| l.strip_prefix("gbaa-desktop: sp outside IWRAM 0x"))?;
+    let (lo, hi) = l.trim().split_once("..=0x")?;
+    Some((
+        u32::from_str_radix(lo, 16).ok()?,
+        u32::from_str_radix(hi, 16).ok()?,
+    ))
+}
+
+/// Every sp outside IWRAM, `lo..=hi`, lies in one of the holes file's
+/// `[[stack]]`s (`start..=end`: an empty stack's sp is its end); else the
+/// failure, naming them.
+fn outside_held((lo, hi): (u32, u32), stacks: &[Skip]) -> Result<(), String> {
+    if stacks.iter().any(|s| s.start <= lo && hi <= s.end) {
+        return Ok(());
+    }
+    Err(format!(
+        "the play build's sp went outside IWRAM, {lo:#010x}..={hi:#010x}, and no [[stack]] of \
+         the holes file holds it all (a task's stack elsewhere names its range there; else r13 \
+         as a scratch register, which this check doesn't handle)"
+    ))
+}
+
+/// The holes file's `[[stack]]`s: stacks outside IWRAM (a task
+/// switcher's), skipped whole as IWRAM's stack is below its lowest sp.
+fn holes_stacks(h: &codegen::native::Holes, file: &Path) -> Vec<Skip> {
+    h.stacks
+        .iter()
+        .map(|s| Skip {
+            start: s.start,
+            end: s.end,
+            why: format!(
+                "a stack outside IWRAM ({}'s [[stack]]): {}",
+                file.display(),
+                s.why
+            ),
+        })
+        .collect()
 }
 
 /// The copies of code out of ROM into IWRAM (agb's `.iwram`): the native
@@ -717,6 +767,26 @@ mod tests {
         let log = "x\ngbaa-desktop: lowest sp 0x03007e40\n";
         assert_eq!(lowest_sp(log), Some(0x0300_7E40));
         assert_eq!(lowest_sp("nothing"), None);
+        assert_eq!(outside_sp(log), None);
+        let log = "gbaa-desktop: lowest sp 0x03007e40\ngbaa-desktop: sp outside IWRAM 0x0203bfc0..=0x0203cbe0\n";
+        assert_eq!(outside_sp(log), Some((0x0203_bfc0, 0x0203_cbe0)));
+    }
+
+    #[test]
+    fn stacks_outside_iwram_must_be_named() {
+        let h = codegen::native::Holes::parse(
+            "[[stack]]\nstart = 0x0203bee0\nend = 0x0203ffe0\nwhy = \"task stacks\"\n",
+        )
+        .unwrap();
+        let stacks = holes_stacks(&h, Path::new("mods/x/holes.toml"));
+        assert_eq!((stacks[0].start, stacks[0].end), (0x0203_bee0, 0x0203_ffe0));
+        assert!(stacks[0].why.contains("task stacks"));
+        // Inside, an empty stack's sp at the end included: held.
+        assert!(outside_held((0x0203_bfc0, 0x0203_ffe0), &stacks).is_ok());
+        // Past either end, or with no [[stack]]: not.
+        assert!(outside_held((0x0203_bed0, 0x0203_c000), &stacks).is_err());
+        assert!(outside_held((0x0203_bfc0, 0x0203_ffe4), &stacks).is_err());
+        assert!(outside_held((0x0203_bfc0, 0x0203_c000), &[]).is_err());
     }
 
     #[test]

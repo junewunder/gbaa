@@ -2135,6 +2135,12 @@ pub fn run(
         // Only the interpreter sees every sp (runtime::Machine::low_sp).
         if code.is_none() {
             eprintln!("gbaa-desktop: lowest sp {:#010x}", m.low_sp);
+            if m.out_sp.0 <= m.out_sp.1 {
+                eprintln!(
+                    "gbaa-desktop: sp outside IWRAM {:#010x}..={:#010x}",
+                    m.out_sp.0, m.out_sp.1
+                );
+            }
         } else {
             eprintln!("gbaa-desktop: lowest sp not kept by compiled code (run with --interp)");
         }
