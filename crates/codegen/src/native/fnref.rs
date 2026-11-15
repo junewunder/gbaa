@@ -2738,20 +2738,22 @@ impl Run<'_, '_> {
         // But an `&` with one exact constant (a mask, whose results are
         // bounded by it) is token by token, the mask kept.
         let mask = |v: &Val| {
-            !v.mem && !v.unk && v.toks.len() == 1 && matches!(v.toks.iter().next(), Some(Tok::Num(_)))
+            !v.mem
+                && !v.unk
+                && v.toks.len() == 1
+                && matches!(v.toks.iter().next(), Some(Tok::Num(_)))
         };
-        let pairs: Vec<(Option<Tok>, Option<Tok>)> = if xs.len() * ys.len() > 64
-            && !(op == BinOp::And && (mask(a) || mask(b)))
-        {
-            xs.iter()
-                .map(|&x| (x, None))
-                .chain(ys.iter().map(|&y| (None, y)))
-                .collect()
-        } else {
-            xs.iter()
-                .flat_map(|&x| ys.iter().map(move |&y| (x, y)))
-                .collect()
-        };
+        let pairs: Vec<(Option<Tok>, Option<Tok>)> =
+            if xs.len() * ys.len() > 64 && !(op == BinOp::And && (mask(a) || mask(b))) {
+                xs.iter()
+                    .map(|&x| (x, None))
+                    .chain(ys.iter().map(|&y| (None, y)))
+                    .collect()
+            } else {
+                xs.iter()
+                    .flat_map(|&x| ys.iter().map(move |&y| (x, y)))
+                    .collect()
+            };
         // Gathered, and added at the end (a large set's one at a time was
         // most of a large game's run), as the holes of functions' tokens.
         let mut toks = Vec::new();
@@ -4033,9 +4035,7 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>, steps: [u
             // A test of high bits the address has clear (`movs r1, #128;
             // lsls r1, #17; ands r1, r0`: bit 24): 0, and 0 when dense too,
             // a dense ID being below 2^16 (`native/fnref-bit-test-mask`).
-            (BinOp::And, Full | Lo | Hi | HiUp, Some(Num(m)))
-                if high_clear(fx, kx, m) =>
-            {
+            (BinOp::And, Full | Lo | Hi | HiUp, Some(Num(m))) if high_clear(fx, kx, m) => {
                 R::T(Num(0))
             }
             (
