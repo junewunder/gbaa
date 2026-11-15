@@ -80,7 +80,12 @@
 //!   indirect calls that reach the function (`[[takes]]`,
 //!   [`Holes::takes`]), which then pass it theirs (none, `sites = []`,
 //!   for code only jumped into: a jump passes every register). Its `f_`
-//!   stops the program, so no call runs it on zeroes. A context save
+//!   stops the program, so no call runs it on zeroes. A RAM copy's
+//!   function whose key the ROM holds only as a constant jump's literal
+//!   (m4a's mixer, from `SoundMain`'s `bx r3`) needs no `[[takes]]`: no
+//!   pointer reaches it ([`jump_literals`]), and a jumper that hands on a
+//!   register it takes as it came is a hard hole (unit
+//!   `native/ram-copy-jump-only`). A context save
 //!   (`setjmp`'s `stm`, `saves::summary`'s `context_saves`) is no read.
 //! - Blocks are the arms of a `loop { match b }` over local labels
 //!   (0 the entry), each starting with `runtime::guest_pc::set` of its
@@ -147,7 +152,7 @@
 //! ROM read at run time.
 
 use crate::func::{Ctx, ExitInfo, Func, Idle, Plan, build_func, exits, key};
-use crate::saves::{Assume, Passing, Sets, Summaries, Summary, summarize, summarize_passing};
+use crate::saves::{Assume, Passing, Sets, Summaries, Summary, summarize_passing};
 use analysis::discovery::{self, Discovery};
 use analysis::ir::{BinOp, BitOp, Exit, Inst, Op, ValueId};
 use analysis::vsa::func::JumpRes;
@@ -540,6 +545,95 @@ pub struct Lifted {
     pub metrics: Metrics,
 }
 
+/// The literals of `funcs`' constant jumps (not calls) to a RAM
+/// address, by their address in `ctx`: a pc-relative load of the target
+/// in the jump's block, which no store there writes anywhere. Such a word
+/// is a way in by a jump, which passes every register, not a pointer a
+/// call may take ([`Passing::pointed`]; m4a's `SoundMain`, `ldr r3, =…;
+/// bx r3` into its IWRAM mixer). Returned with the bytes every other
+/// pc-relative load in `funcs` reads: a compiler shares one pool entry
+/// between all the loads of a constant in a function, so a literal one
+/// of those loads also reads may be stored, passed or called through,
+/// and is not only a jump's ([`literals_only_jumped`]).
+fn jump_literals(ctx: &Ctx, funcs: &[Func]) -> (BTreeSet<u32>, BTreeSet<u32>) {
+    // Each pc-relative load, by the instruction's address: the word it
+    // reads, and whether some block has it as a qualifying jump's load.
+    let mut loads: BTreeMap<u32, (u32, u32, bool)> = BTreeMap::new();
+    for gb in funcs.iter().flat_map(|f| f.blocks.values()) {
+        let b = &gb.block;
+        let read = |a: u32, instr| {
+            let insn = analysis::program::Insn {
+                addr: a,
+                thumb: b.thumb,
+                size: if b.thumb { 2 } else { 4 },
+                instr,
+                bl: None,
+            };
+            analysis::vsa::func::pool_read(&insn)
+        };
+        for &(a, instr) in &gb.insns {
+            if let Some((p, e)) = read(a, instr) {
+                loads.entry(a).or_insert((p, e, false));
+            }
+        }
+        for x in exits(ctx, gb) {
+            let t = match x.plan {
+                Plan::Static(t)
+                | Plan::Dynamic {
+                    ret: None,
+                    target: Some(t),
+                    ..
+                } if x.ret.is_none() => t,
+                _ => continue,
+            };
+            if !analysis::vsa::func::is_ram(t & !1) {
+                continue;
+            }
+            let stored = b.insts.iter().any(
+                |i| matches!(i.op, Op::Store { value, .. } if crate::func::fold(b, value) == Some(t)),
+            );
+            if stored {
+                continue;
+            }
+            for &(a, instr) in &gb.insns {
+                // A word's load, of the target.
+                if let Some((p, e)) = read(a, instr)
+                    && e.wrapping_sub(p) == 4
+                    && p.checked_sub(ctx.base)
+                        .is_some_and(|o| (o as usize) + 4 <= ctx.rom.len())
+                    && ctx.read(p, 4) == t
+                {
+                    loads.insert(a, (p, e, true));
+                }
+            }
+        }
+    }
+    let mut jumps = BTreeSet::new();
+    let mut other = BTreeSet::new();
+    for (p, e, jump) in loads.into_values() {
+        if jump {
+            jumps.insert(p);
+        } else {
+            let mut q = p;
+            while q != e {
+                other.insert(q);
+                q = q.wrapping_add(1);
+            }
+        }
+    }
+    (jumps, other)
+}
+
+/// The jump literals ([`jump_literals`]' first set, ROM addresses) no
+/// other load reads a byte of (its second): only those words are a jump's
+/// alone, and dropped from the words a pointer may call through.
+fn literals_only_jumped(jumps: BTreeSet<u32>, other: &BTreeSet<u32>) -> BTreeSet<u32> {
+    jumps
+        .into_iter()
+        .filter(|&p| !(0..4).any(|i| other.contains(&p.wrapping_add(i))))
+        .collect()
+}
+
 /// One code context: the ROM, or an IWRAM copy at its destination.
 struct Code<'a> {
     ctx: Ctx<'a>,
@@ -629,23 +723,56 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .values()
         .flat_map(|(sites, _)| sites.iter().copied())
         .collect();
-    let mut codes = vec![code(
+    let mut ctxs = vec![(
         Ctx::new(rom, &disc)
             .with_library()
             .with_idle_exits()
             .with_jumps(given()),
-        &named_sites,
+        0x0800_0000,
     )];
     for o in &overlays {
         let o_rom = &rom[(o.src - 0x0800_0000) as usize..][..o.len as usize];
-        codes.push(code(
+        ctxs.push((
             Ctx::at(o.dst, o_rom, &o.disc)
                 .with_library()
                 .with_idle_exits()
                 .with_jumps(given()),
-            &named_sites,
+            o.src,
         ));
     }
+    let built: Vec<Vec<Func>> = ctxs
+        .iter()
+        .map(|(ctx, _)| ctx.entries.iter().map(|&e| build_func(ctx, e)).collect())
+        .collect();
+    // A RAM copy's functions a pointer may call: the ROM words that hold
+    // a RAM address, but a constant jump's literal.
+    let pointed = {
+        let (mut jumps, mut other) = (BTreeSet::new(), BTreeSet::new());
+        for ((ctx, src), funcs) in ctxs.iter().zip(&built) {
+            let to_rom = |p: u32| p.wrapping_sub(ctx.base).wrapping_add(*src);
+            let (j, o) = jump_literals(ctx, funcs);
+            jumps.extend(j.into_iter().map(to_rom));
+            other.extend(o.into_iter().map(to_rom));
+        }
+        let literals = literals_only_jumped(jumps, &other);
+        rom.as_chunks::<4>()
+            .0
+            .iter()
+            .enumerate()
+            .map(|(i, &w)| (0x0800_0000 + 4 * i as u32, u32::from_le_bytes(w)))
+            .filter(|&(p, w)| analysis::vsa::func::is_ram(w & !1) && !literals.contains(&p))
+            .map(|(_, w)| w)
+            .collect()
+    };
+    let first = Passing {
+        pointed: Some(pointed),
+        ..Passing::default()
+    };
+    let mut codes: Vec<Code> = ctxs
+        .into_iter()
+        .zip(built)
+        .map(|((ctx, _), funcs)| code(ctx, funcs, &named_sites, &first))
+        .collect();
     let holes = &library_standins(holes, &codes);
     // Every function, by key, over all contexts.
     let mut all: BTreeSet<u32> = BTreeSet::new();
@@ -777,7 +904,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // `[[takes]]`, and a stand-in takes nothing.
     let mut passing = Passing {
         replaced: holes.standins.keys().copied().collect(),
-        ..Passing::default()
+        ..first
     };
     for (&k, (sites, _)) in &holes.takes {
         passing.named.insert(k);
@@ -911,6 +1038,43 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 kind: HoleKind::HolesFile,
                 what: "the holes file's takes, with no sites, names a function that takes none of r4-r11 from its callers".into(),
             });
+        }
+    }
+    // A jump into another context's function passes every register, but
+    // its summary there can't see what this one hands on as it came
+    // (`Summary::foreign`): a register the target reads at entry must be
+    // the jumper's own (m4a's SoundMain sets r4, r5, r6 and r8 before its
+    // jump into the IWRAM mixer), else it is the jumper's caller's, which
+    // no summary passes.
+    for c in &codes {
+        for (&f, s) in &c.sums.by_entry {
+            if holes.standins.contains_key(&f) {
+                continue;
+            }
+            for (&k, &m) in &s.foreign {
+                let Some(t) = codes
+                    .iter()
+                    .find_map(|o| o.sums.get(k))
+                    .filter(|_| !holes.standins.contains_key(&k))
+                else {
+                    continue;
+                };
+                if t.takes & m != 0 {
+                    let regs: Vec<String> = (4..12)
+                        .filter(|r| t.takes & m & 1 << (r - 4) != 0)
+                        .map(|r| format!("r{r}"))
+                        .collect();
+                    hard.push(Hole {
+                        func: f,
+                        at: f,
+                        kind: HoleKind::Takes,
+                        what: format!(
+                            "a jump into {k:#010x}, another code context's, with {} as they came, which {k:#010x} reads at entry",
+                            regs.join(", ")
+                        ),
+                    });
+                }
+            }
         }
     }
     if holes.holes_only {
@@ -1623,9 +1787,8 @@ fn library_standins(holes: &Holes, codes: &[Code]) -> Holes {
 /// One context's functions, summaries and frames. `named`: the indirect
 /// calls a holes file's `[[takes]]` names, where a stack address in a
 /// register the callees take escapes.
-fn code<'a>(ctx: Ctx<'a>, named: &BTreeSet<u32>) -> Code<'a> {
-    let funcs: Vec<Func> = ctx.entries.iter().map(|&e| build_func(&ctx, e)).collect();
-    let sums = summarize(&ctx, &funcs);
+fn code<'a>(ctx: Ctx<'a>, funcs: Vec<Func>, named: &BTreeSet<u32>, passing: &Passing) -> Code<'a> {
+    let sums = summarize_passing(&ctx, &funcs, Assume::default(), &Sets::new(), passing);
     let frames = frame::of_code(&ctx, &funcs, &sums, named);
     Code {
         ctx,
@@ -1861,11 +2024,24 @@ impl FnPrinter<'_, '_> {
         // natively, so the frames the guest left on the stack it leaves
         // would be lost. A stand-in runs such code on host coroutines
         // (the prelude's `task_resume`, `task_yield`, `task_exit`).
+        // A context restore (`longjmp`'s `ldm`) is one too, named: its
+        // return goes into the frame of its save's caller (`setjmp`'s),
+        // whose r4-r11 and sp are that function's locals natively.
         for &at in self.frame.map(|fr| &fr.switches).into_iter().flatten() {
+            let restore = f
+                .blocks
+                .values()
+                .flat_map(|b| &b.insns)
+                .any(|(a, i)| *a == at && crate::saves::context_restore(i));
             self.hole(
                 at,
                 HoleKind::Cpu,
-                "CPU state: a stack switch (sp set to a value not made from the frame's)",
+                if restore {
+                    "CPU state: a context restore (longjmp: a return into its save's caller's frame, \
+                     whose r4-r11 and sp are that function's locals)"
+                } else {
+                    "CPU state: a stack switch (sp set to a value not made from the frame's)"
+                },
             );
         }
         // sp set to a constant (a fresh stack, the SDK's `SoftReset`) is
@@ -3289,6 +3465,84 @@ fn expr(op: &Op) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A ROM whose reset jumps by `ldr r3, =0x03000000; bx r3` into code
+    /// a `[[copy]]` puts in IWRAM, `ldr r0, [r4]; bx lr`: it reads r4 as
+    /// it came. `first` and `before_jump` are the reset's first
+    /// instruction and the one before its `bx`; `pointer`, whether the
+    /// copy's address is also a word of the ROM besides the jump's literal.
+    fn jump_into_a_copy(first: u32, before_jump: u32, pointer: bool) -> Vec<Hole> {
+        let mut words = vec![0xE1A0_0000u32; 0x48];
+        words[0] = first;
+        if first == BL_SHARER {
+            // The called function loads the jump's literal too (one pool
+            // entry shared) and stores it: `ldr r1, [pc, #-0x14]` (the word
+            // at 0x14); `str r1, [r0]`; `bx lr`.
+            words[8] = 0xE51F_1014;
+            words[9] = 0xE580_1000;
+            words[10] = 0xE12F_FF1E;
+        }
+        words[1] = 0xE59F_3008; // ldr r3, [pc, #8]: the word at 0x14
+        words[2] = before_jump;
+        words[3] = 0xE12F_FF13; // bx r3
+        words[4] = 0xEAFF_FFFE; // b .
+        words[5] = 0x0300_0000;
+        words[6] = if pointer { 0x0300_0000 } else { 0 };
+        words[0x40] = 0xE594_0000; // ldr r0, [r4]
+        words[0x41] = 0xE12F_FF1E; // bx lr
+        let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let mut holes = Holes::parse(
+            "[[copy]]\nsrc = 0x08000100\ndst = 0x03000000\nlen = 8\nroots = [0x03000000]\nwhy = \"t\"\n",
+        )
+        .unwrap();
+        holes.holes_only = true;
+        lift(&rom, "t", &holes).holes
+    }
+
+    /// `bl 0x08000020`, the start of a function [`jump_into_a_copy`] gives
+    /// a load and store of the jump's literal.
+    const BL_SHARER: u32 = 0xEB00_0006;
+
+    #[test]
+    fn code_in_a_copy_only_jumped_into_takes_the_jumpers_registers() {
+        const NOP: u32 = 0xE1A0_0000;
+        const SET_R4: u32 = 0xE3A0_4402; // mov r4, #0x02000000
+        let text = |hs: Vec<Hole>| hs.iter().map(|h| h.to_string()).collect::<Vec<_>>();
+        // The jumper sets r4, and no word but the jump's literal holds the
+        // copy's address: no pointer call reaches it.
+        assert_eq!(
+            text(jump_into_a_copy(SET_R4, NOP, false)),
+            Vec::<String>::new()
+        );
+        // A pointer may call it: r4 zeroed.
+        let hs = text(jump_into_a_copy(SET_R4, NOP, true));
+        assert!(
+            hs.iter().any(|h| h.contains("reads r4-r11 at entry: r4")),
+            "{hs:?}"
+        );
+        // The literal stored too (`str r3, [r0]`): the address escapes.
+        let hs = text(jump_into_a_copy(SET_R4, 0xE580_3000, false));
+        assert!(
+            hs.iter().any(|h| h.contains("reads r4-r11 at entry: r4")),
+            "{hs:?}"
+        );
+        // Another function loads the same pool entry and stores it: the
+        // literal isn't the jump's alone (the jumper sets r4 just before
+        // the jump, so only the pointer call zeroes it).
+        let hs = text(jump_into_a_copy(BL_SHARER, SET_R4, false));
+        assert!(
+            hs.iter().any(|h| h.contains("reads r4-r11 at entry: r4")),
+            "{hs:?}"
+        );
+        // The jumper hands on the r4 it came with: its callers', which no
+        // summary passes.
+        let hs = text(jump_into_a_copy(NOP, NOP, false));
+        assert!(
+            hs.iter().any(|h| h
+                .contains("a jump into 0x03000000, another code context's, with r4 as they came")),
+            "{hs:?}"
+        );
+    }
 
     #[test]
     fn a_flow_that_did_not_settle_gives_no_callee_sets() {

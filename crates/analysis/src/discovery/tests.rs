@@ -850,3 +850,36 @@ fn code_copied_to_iwram_is_discovered_where_it_runs() {
     let code: Vec<u32> = o.disc.code.keys().copied().collect();
     assert_eq!(code, [0x0300_0000, 0x0300_0010, 0x0300_0018]);
 }
+
+#[test]
+fn pointer_scan_takes_m4a_command_routines() {
+    let b = |at: u32, to: u32| 0xe000 | ((to as i32 - (at as i32 + 4)) >> 1) as u16 & 0x7ff;
+    let mut a = Asm::new();
+    a.entry(0x100)
+        .h(0x100, 0x4770) // main: bx lr
+        // ply_*: mov r12, lr; bl helper; strb r3, [r1, #29]; bx r12.
+        .h(0x300, 0x46f4)
+        .bl(0x302, 0x380)
+        .h(0x306, 0x774b)
+        .h(0x308, 0x4760)
+        // The same without the copy of lr: its `bx r12` returns nowhere.
+        .h(0x320, 0x2000) // movs r0, #0
+        .bl(0x322, 0x380)
+        .h(0x326, 0x774b)
+        .h(0x328, 0x4760)
+        // A command that only branches into another (`ply_patt` into
+        // `ply_goto`): movs r2, #0; b main.
+        .h(0x340, 0x2200)
+        .h(0x342, b(0x342, 0x100))
+        .h(0x380, 0x2301) // helper: movs r3, #1
+        .h(0x382, 0x4770) // bx lr
+        // m4a's `MPlayJumpTable`, read only as its RAM copy.
+        .w(0x400, thumb(0x100))
+        .w(0x404, thumb(0x300))
+        .w(0x408, thumb(0x340))
+        .w(0x40c, thumb(0x320));
+    let d = a.run();
+    assert_eq!(d.funcs.get(&thumb(0x300)), Some(&Evidence::Scanned));
+    assert_eq!(d.funcs.get(&thumb(0x340)), Some(&Evidence::Scanned));
+    assert!(!d.funcs.contains_key(&thumb(0x320)));
+}

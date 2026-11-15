@@ -407,7 +407,7 @@ impl<'a> Ctx<'a> {
         self.code_at(k & !1, k & 1 != 0).is_some()
     }
 
-    fn read(&self, a: u32, bytes: usize) -> u32 {
+    pub(crate) fn read(&self, a: u32, bytes: usize) -> u32 {
         let o = (a - self.base) as usize;
         self.rom[o..o + bytes]
             .iter()

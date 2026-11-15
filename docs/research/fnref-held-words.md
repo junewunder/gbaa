@@ -479,8 +479,21 @@ What decided the columns:
   gets a constant or a number made from the ones it does.
 - **`CpuFastSet`'s r3 is data**: the fill's word, or the first word of
   the last block it copied. So after the call r3 also holds what the
-  copy read: the ROM words the flow already sends to the pile, or, from
-  a source not in ROM, what a load the run can't place reads.
+  copy read, which the flow also sends to the pile.
+- **Memory through a pointer** (`native/fnref-bios-ram-copies`). What a
+  call reads at its source is what a load there reads, as a word: in
+  ROM, the words to its length or its object's end; in RAM at a
+  constant address, the cells in its length (every cell if the run
+  doesn't know it) and the pile; anywhere else, the pile and every
+  cell. The copies (`CpuSet`, `CpuFastSet`) store that to the pile, so
+  a load of the copy gives the addresses it moved. The calls that
+  compute with what they read lose a function's address there, as one
+  in a register they read: the affine sets' parameters (`r2` entries
+  of 20 or 8 bytes), the decompressors' data (its length is in its
+  header: every cell) and `MidiKey2Freq`'s wave header (8 bytes). The
+  rest read no memory the program wrote: the waits read the BIOS's IRQ
+  flags, `MultiBoot`'s lifted form reads nothing, and the calls a native
+  build can't make (the sound driver's among them) are hard holes.
 - **Where the console's BIOS overwrites what these leave** (r1 and r3
   are its scratch in most calls; r2 its dispatcher restores,
   `runtime/src/bios/decomp.rs` on `CpuFastSet`), the address is kept.
@@ -666,3 +679,25 @@ an index of unknown range times 28, so a stride of 4) read at +22 and
 +23 give fewer values, a cap that widened one no longer does, and an
 exact ROM pointer reaches the IRQ handler's own code through incomplete
 call sets. Read every byte without the stride, the count stays 59.
+
+## Old GCC's `r0 != 0` as a bit, as landed
+
+Unit `native/fnref-gcc-ne-bit`, 2026-11-14 on quack. `negs r1, r0;
+orrs r1, r0; lsrs r5, r1, #31` is old GCC's `r5 = (r0 != 0)`. The
+flow now reads `x | (0 + !x + 1)`, either way round, as `x | -x`
+(`ne_or` in `fnref.rs`): a number, exact where `x` is one, whatever
+else `x` holds, and no hole. Sound for any `x`, not just before the
+shift: `x | -x` sets every bit from `x`'s lowest set bit up, so it is 0
+or at least 2^31, never a function's address. The `negs` alone already
+made none (`0 + !x + 1` of a whole address is a compare with 0); the
+hole was the `orrs` of that compare with `x`.
+
+**Metroid** (the lift with its holes file, main at dc453ab against this
+branch): `fn_words_proven` 604 and `fn_words_not_proven` 200, the same.
+The 77 words held at 0x0807431c meet their next hole at 0x0805aef6
+(where 13 more already stopped): `movs r1, #128; lsls r1, r1, #17;
+ands r1, r0; cmp r1, #0` after the call to 0x08057df8, a test of bit 24
+of a call's result with an empty callee set. That's a mask's rule, and
+another unit's (`native/fnref-bit-test-mask`): a mask of a half or a
+byte is a split that may be joined again, so `&` with a constant isn't
+a number in general.
