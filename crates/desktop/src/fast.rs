@@ -118,14 +118,23 @@ impl Pacer {
 
     /// Wait until the next frame is due.
     pub fn wait(&mut self, period: Duration) {
-        let now = Instant::now();
+        let sleep = self.step(Instant::now(), period);
+        if !sleep.is_zero() {
+            std::thread::sleep(sleep);
+        }
+    }
+
+    /// [`Pacer::wait`] at `now`, without the sleep: schedules the frame
+    /// after this one and says how long until this one is due (zero when
+    /// it is due or late). Apart so a test can run it on its own clock.
+    pub fn step(&mut self, now: Instant, period: Duration) -> Duration {
         let mut due = *self.next.get_or_insert(now);
-        if due > now {
-            std::thread::sleep(due - now);
-        } else if now - due > Pacer::SLACK {
+        let sleep = due.saturating_duration_since(now);
+        if now > due && now - due > Pacer::SLACK {
             due = now - Pacer::SLACK;
         }
         self.next = Some(due + period);
+        sleep
     }
 
     /// A frame held back (netplay's time sync): the next is due a period
