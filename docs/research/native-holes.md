@@ -233,8 +233,8 @@ What the run's targets were: m4a's command table
 (`gMPlayJumpTableTemplate` and its copies in RAM: Emerald, both Kirbys,
 Minish Cap, Rogue), leaf routines without a `push {lr}` that the scan's
 score passes over, and WarioWare's pointers computed at run time (three
-targets no ROM word points at). The lifter doesn't take run roots yet:
-`discover_with` is what it would call.
+targets no ROM word points at). The lifter takes no run roots
+(`discover_with`); the scan finds the table (native/m4a-ply-table-entries).
 
 ## Coverage runs
 
