@@ -3,9 +3,11 @@
 gbaa is a static recompiler for Game Boy Advance games. It translates a
 ROM's ARM and Thumb machine code ahead of time into a Rust crate, and
 compiles that crate with a small runtime (the bus, the PPU, sound, timers,
-DMA and the BIOS calls) into a native program. Pokémon Emerald and two
-romhacks of it play this way, and I've played one of them, Emerald
-Imperium, for half an hour on a Steam Deck.
+DMA and the BIOS calls) into a native program. The program still keeps
+the GBA's machine state (CPU registers, the memory map, the hardware);
+what's gone is the emulator's instruction-by-instruction loop. Pokémon
+Emerald and two romhacks of it play this way, and I've played one of
+them, Emerald Imperium, for half an hour on a Steam Deck.
 
 Agents wrote most of the code. What decides whether their work is right is
 a check against the [mGBA](https://github.com/mgba-emu/mgba) emulator. A
@@ -47,8 +49,8 @@ agent-written code be trusted. More [about me](#about-me) at the end.
 
 | Check | What it compares | How often |
 |---|---|---|
-| Routes (`just unit NAME`, the 40 files in [units/](units/)) | mGBA 0.10.5's screen hash against our interpreter's; then the recompiled build's screen hash against the interpreter's | mGBA at each checkpoint; the recompiled build on every frame, plus the CPU registers at the end |
-| CPU ([SingleStepTests' ARM7TDMI suite](https://github.com/SingleStepTests/ARM7TDMI), generated with NanoBoyAdvance, not mGBA) | registers and bus transactions after one instruction | every case: 40 of its 45 files pass all 50,000. The other five are cases where NanoBoyAdvance does something ARMv4T leaves unpredictable or undefined, plus ARMv5 `blx` cases left uncounted; the causes are noted in [crates/armv4t/tests/common/sst.rs](crates/armv4t/tests/common/sst.rs) |
+| Routes (`just unit NAME`: 19 of the files in [units/](units/), 58 checkpoints) | mGBA 0.10.5's screen hash against our interpreter's; then the recompiled build's screen hash against the interpreter's | mGBA at each checkpoint (the test ROMs have one, at the end; the game routes 4 to 10); the recompiled build on every frame, except frames a route excuses with `block_timed` (one today, frame 1 of `affine`, with its reason), plus the CPU registers at the end |
+| CPU ([SingleStepTests' ARM7TDMI suite](https://github.com/SingleStepTests/ARM7TDMI), generated with NanoBoyAdvance, not mGBA) | registers and data-bus transactions after one instruction (instruction fetches aren't compared) | every case: 40 of its 45 files pass all 50,000. The other five are cases where NanoBoyAdvance does something ARMv4T leaves unpredictable or undefined, plus ARMv5 `blx` cases left uncounted; the causes are noted in [crates/armv4t/tests/common/sst.rs](crates/armv4t/tests/common/sst.rs) |
 | Hardware test ROMs (jsmolka's gba-tests, armwrestler) | the ROM's own pass/fail result | each test |
 | Sound (`just mgba-audio-diff`) | mGBA's direct-sound and PSG samples against ours, byte for byte | every sample, on a few test programs, starting from an mGBA save state |
 | Native ports (`just native-check`) | a lifted program against the recompiled build: picture, RAM, the I/O registers, palette, VRAM, OAM and the audio samples | every frame, with a planted fault that must be caught |
@@ -59,13 +61,18 @@ has six checkpoints from reset to the title screen. At two of them mGBA's
 32-bit build rounds blended colours up by one 5-bit step, so the expected
 hash there is ours, with mGBA's hash and the reason kept beside it; our
 interpreter, tried once with mGBA's rounding (2026-10-22; it isn't a
-standing test), drew mGBA's hash exactly. Across all 40
-routes there are 83 checkpoints, and at 16 of them mGBA is overridden this
-way: 9 for that colour rounding in blends and fades, 3 for jsmolka's tests
-that mGBA 0.10.5 fails (also listed in
-[crates/mgba-dump/known-mismatches.tsv](crates/mgba-dump/known-mismatches.tsv)),
-and 4 for details of mGBA's high-level BIOS, SRAM and serial port. Each
-says why in its route file.
+standing test), drew mGBA's hash exactly. Of the 58
+checkpoints `just unit` checks, mGBA is overridden this way at 12: 9 for
+that colour rounding in blends and fades, and 3 for jsmolka's tests that
+mGBA 0.10.5 fails (also listed in
+[crates/mgba-dump/known-mismatches.tsv](crates/mgba-dump/known-mismatches.tsv)).
+Each says why in its route file.
+
+The other 21 files in `units/` are native-port routes. Their check is the
+lifted program against the recompiled build, and it doesn't run mGBA.
+Their hashes were compared with mGBA by hand where the file says so (with
+4 more overrides, for mGBA's high-level BIOS, SRAM and serial port);
+Kirby's haven't been yet.
 
 What isn't compared with mGBA:
 
@@ -75,6 +82,10 @@ What isn't compared with mGBA:
   in `out/units/jsmolka-memory/`). Frame 1 differs on a single
   scanline (row 126 is black in mGBA's frame and white in ours), which I
   haven't traced yet. Only the checkpoints decide.
+- A bug in an instruction's semantics, between checkpoints. The
+  interpreter and the code generator share one definition of each
+  instruction, so they share its bugs; only the mGBA checkpoints and the
+  CPU test suites can see one.
 - Timing, except through what it draws and plays. gbaa isn't cycle-exact
   against mGBA: from reset, a program built with agb boots faster in ours,
   which is why the sound checks start from an mGBA save state.
@@ -122,12 +133,16 @@ plan and the numbers are in
 ## Who it's for
 
 - **Modders, and people starting a decompilation or a native port of a
-  GBA game.** gbaa gives you a Rust crate of the whole game that builds and
+  GBA game.** If your game already has a decompilation, that is the better
+  base for a port today, and no Pokémon game has a native port in gbaa
+  yet. gbaa is for games without one, or for when you want the whole game
+  running from the first day while you work on parts of it. It gives you a Rust crate of the whole game that builds and
   runs like the original from day one, so you can change one function and
   play the result. With a decompilation's symbols it names functions: for
   Emerald, `just fetch-pret` builds pokeemerald from pret's source and
   `just pret-names` turns its symbols into names (the same goes for
-  FireRed; `just rogue-names` and `just decomp-names` cover Emerald Rogue,
+  FireRed, though it has no route and I haven't played it recompiled;
+  `just rogue-names` and `just decomp-names` cover Emerald Rogue,
   The Minish Cap, Metroid: Zero Mission and Kirby & The Amazing Mirror). Then `just mod-cut`
   copies a function out as readable Rust for you to edit, and the game is
   rebuilt with your copy in place. An agent's first small Emerald mod, and
