@@ -49,11 +49,26 @@ agent-written code be trusted. More [about me](#about-me) at the end.
 
 | Check | What it compares | How often |
 |---|---|---|
-| Routes (`just unit NAME`: 19 of the files in [units/](units/), 58 checkpoints) | mGBA 0.10.5's screen hash against our interpreter's; then the recompiled build's screen hash against the interpreter's | mGBA at each checkpoint (most test-ROM routes have one, at the end; armwrestler and the game routes have 4 to 10); the recompiled build on every frame, except frames a route excuses with `block_timed` (one today, frame 1 of `affine`, with its reason), plus the CPU registers at the end |
-| CPU ([SingleStepTests' ARM7TDMI suite](https://github.com/SingleStepTests/ARM7TDMI), generated with NanoBoyAdvance, not mGBA) | registers and data-bus transactions after one instruction (instruction fetches aren't compared) | every case: 40 of its 45 files pass all 50,000. The other five are cases where NanoBoyAdvance does something ARMv4T leaves unpredictable or undefined, plus ARMv5 `blx` cases left uncounted; the causes are noted in [crates/armv4t/tests/common/sst.rs](crates/armv4t/tests/common/sst.rs) |
+| Routes (`just unit NAME`) | mGBA 0.10.5's screen against our interpreter's; then the recompiled build's screen against the interpreter's | mGBA at each checkpoint; the recompiled build on every frame |
+| CPU ([SingleStepTests' ARM7TDMI suite](https://github.com/SingleStepTests/ARM7TDMI)) | registers and data-bus transactions after one instruction | every case |
 | Hardware test ROMs (jsmolka's gba-tests, armwrestler) | the ROM's own pass/fail result | each test |
 | Sound (`just mgba-audio-diff`) | mGBA's direct-sound and PSG samples against ours, byte for byte | every sample, on a few test programs, starting from an mGBA save state |
 | Native ports (`just native-check`) | a lifted program against the recompiled build: picture, RAM, the I/O registers, palette, VRAM, OAM and the audio samples | every frame, with a planted fault that must be caught |
+
+Routes are 19 of the files in [units/](units/), with 58 checkpoints
+between them: most test-ROM routes have one, at the end, and armwrestler
+and the game routes have 4 to 10. A screen is compared as a 64-bit hash
+of its 15-bit pixels (mGBA's 8-bit channels are cut to 5 bits first). The
+recompiled build's frames must all match the interpreter's, except frames
+a route excuses with `block_timed` (one today, frame 1 of `affine`, with
+its reason), and its CPU registers must match at the end.
+
+The CPU suite was generated with NanoBoyAdvance, not mGBA, and its
+instruction fetches aren't compared. 40 of its 45 files pass all 50,000
+cases. The other five are cases where NanoBoyAdvance does something
+ARMv4T leaves unpredictable or undefined, plus ARMv5 `blx` cases left
+uncounted; the causes are noted in
+[crates/armv4t/tests/common/sst.rs](crates/armv4t/tests/common/sst.rs).
 
 Where mGBA itself is wrong, the route says so instead of quietly trusting
 it. Emerald's intro route ([units/emerald-intro.toml](units/emerald-intro.toml))
