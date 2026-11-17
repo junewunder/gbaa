@@ -17,7 +17,7 @@ holes files applied (`mods/<game>/holes.toml`), one job each:
 | Minish Cap | 1,218 s (flow most of it) | 0.5 GB | 18 s | 1,076 s |
 | Emerald Rogue | 1,838 s | 2.7 GB | 107 s | |
 | Imperium | 1,641 s | 2.8 GB | 214 s | |
-| Emerald | over 45 min, unfinished | | 60 s | |
+| Emerald (25fa1c4e, 2026-11-17; flow stops at its bound) | 1,358 s | 3.0 GB | 60 s | |
 
 - `just lift`'s 16G cap is far above any of these: `just long start …
   --mem 4G` is enough, and a 16G reservation queues every other job.
