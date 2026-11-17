@@ -59,17 +59,22 @@ has six checkpoints from reset to the title screen. At two of them mGBA's
 32-bit build rounds blended colours up by one 5-bit step, so the expected
 hash there is ours, with mGBA's hash and the reason kept beside it; our
 interpreter, tried once with mGBA's rounding (2026-10-22; it isn't a
-standing test), drew mGBA's hash exactly. Three of
-jsmolka's tests that mGBA 0.10.5 fails are listed the same way in
-[crates/mgba-dump/known-mismatches.tsv](crates/mgba-dump/known-mismatches.tsv).
+standing test), drew mGBA's hash exactly. Across all 40
+routes there are 83 checkpoints, and at 16 of them mGBA is overridden this
+way: 9 for that colour rounding in blends and fades, 3 for jsmolka's tests
+that mGBA 0.10.5 fails (also listed in
+[crates/mgba-dump/known-mismatches.tsv](crates/mgba-dump/known-mismatches.tsv)),
+and 4 for details of mGBA's high-level BIOS, SRAM and serial port. Each
+says why in its route file.
 
 What isn't compared with mGBA:
 
 - Frames between checkpoints. Our builds write every frame's hash, so it's
   easy to look: on the `jsmolka-memory` route below, mGBA and both our
   builds agree on 299 of its 300 frames (compare the `*-hashes.txt` files
-  in `out/units/jsmolka-memory/`). Frame 1 differs, and I haven't looked
-  into why. Only the checkpoints decide.
+  in `out/units/jsmolka-memory/`). Frame 1 differs on a single
+  scanline (row 126 is black in mGBA's frame and white in ours), which I
+  haven't traced yet. Only the checkpoints decide.
 - Timing, except through what it draws and plays. gbaa isn't cycle-exact
   against mGBA: from reset, a program built with agb boots faster in ours,
   which is why the sound checks start from an mGBA save state.
