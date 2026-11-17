@@ -29,14 +29,15 @@ game and random things go wrong, a sprite in the wrong place, a sound that
 cuts out, a save that doesn't load. Nobody wants to find all of those by
 reading the code, me included.
 
-So in gbaa every unit of work ends in a check a machine runs, and the check
-decides when the unit is done, not the agent that did it and not me. When
+So in gbaa every unit of work ends in a check a machine runs, and that
+check, rather than the agent that did the work or me, decides when the
+unit is done. When
 Metroid's native port first ran against the recompiled build, for
 example, the check stopped at the first byte that differed, and each cause
 became a unit of its own: DMA by address, the save chip, loads from the
-BIOS region, and a run of timing details. The check catches most bugs.
-The ones it misses are the useful part: each one
-says where the check, or the factory around it, needs tuning. One example:
+BIOS region, and a run of timing details. The check catches most bugs,
+and each one it misses shows where the check, or the factory around it,
+needs tuning. One example:
 the check for native ports (below) wasn't in the merge gate, and it stayed
 broken from 2026-11-06 to 2026-11-13 without anyone seeing. Now
 `just check` runs it, and a deliberately planted break shows that it fails
@@ -70,14 +71,13 @@ ARMv4T leaves unpredictable or undefined, plus ARMv5 `blx` cases left
 uncounted; the causes are noted in
 [crates/armv4t/tests/common/sst.rs](crates/armv4t/tests/common/sst.rs).
 
-Where mGBA itself is wrong, the route says so instead of quietly trusting
-it. Emerald's intro route ([units/emerald-intro.toml](units/emerald-intro.toml))
+Where mGBA itself is wrong, the route file records it. Emerald's intro route ([units/emerald-intro.toml](units/emerald-intro.toml))
 has six checkpoints from reset to the title screen. At two of them mGBA's
 32-bit build rounds blended colours up by one 5-bit step, so the expected
 hash there is ours, with mGBA's hash and the reason kept beside it; our
 interpreter, tried once with mGBA's rounding (2026-10-22; it isn't a
-standing test), drew mGBA's hash exactly. Of the 58
-checkpoints `just unit` checks, mGBA is overridden this way at 12: 9 for
+standing test), drew mGBA's hash exactly. Of the 58 checkpoints
+`just unit` checks, mGBA is overridden this way at 12: 9 for
 that colour rounding in blends and fades, and 3 for jsmolka's tests that
 mGBA 0.10.5 fails (also listed in
 [crates/mgba-dump/known-mismatches.tsv](crates/mgba-dump/known-mismatches.tsv)).
@@ -120,12 +120,12 @@ As of 2026-11-15, from the [tracker](tracker/):
   interpreter fallback.
 - There are builds for Linux, macOS and Windows; I played the macOS and
   Windows builds on real machines on 2026-10-28.
-- **Two forms of output.** A flat one, and a structured one (loops and
+- Two forms of output: a flat one, and a structured one (loops and
   `if`s rather than a block dispatcher) that passes the same routes. For
   Emerald the structured binary is 4.2% smaller (128.1 MB against
   133.8 MB) and the whole build took 255 s against 294 s, one measurement
   on a busy machine ([docs/structured-codegen-design.md](docs/structured-codegen-design.md)).
-- **Native ports**, where a game becomes a Rust program with no emulated
+- Native ports, where a game becomes a Rust program with no emulated
   CPU or dispatcher, are the current work. So far the output is literal
   (registers as Rust locals, RAM as bytes), and each game needs a few
   hand-written stand-ins for code the lifter can't handle yet. Metroid:
@@ -134,10 +134,10 @@ As of 2026-11-15, from the [tracker](tracker/):
   the recompiled build. Kirby: Nightmare in Dream Land passes the same
   check for 900 frames, into its first level; Kirby & The Amazing Mirror
   lifts and builds. Those stand-ins (8 for Metroid, 5 for Nightmare) port
-the game's own code, so they live in the private, gitignored `mods/`. The
-plan and the numbers are in
+  the game's own code, so they live in the private, gitignored `mods/`.
+  The plan and the numbers are in
   [docs/native-stage-b.md](docs/native-stage-b.md).
-- **Side projects on the same runtime**: an mGBA-compatible Lua scripting
+- Side projects on the same runtime: an mGBA-compatible Lua scripting
   host, and linked multiplayer over the internet with rollback (Emerald's
   trade check passes over a simulated bad connection; I haven't yet traded
   with a friend for real).
@@ -151,15 +151,15 @@ plan and the numbers are in
   GBA game.** If your game already has a decompilation, that is the better
   base for a port today, and no Pokémon game has a native port in gbaa
   yet. gbaa is for games without one, or for when you want the whole game
-  running from the first day while you work on parts of it. It gives you a Rust crate of the whole game that builds and
-  runs like the original from day one, so you can change one function and
-  play the result. With a decompilation's symbols it names functions: for
+  running from the first day while you work on parts of it. It gives you
+  a Rust crate of the whole game that builds and runs like the original,
+  so you can change one function and play the result. With a decompilation's symbols it names functions: for
   Emerald, `just fetch-pret` builds pokeemerald from pret's source and
   `just pret-names` turns its symbols into names (the same goes for
   FireRed, though it has no route and I haven't played it recompiled;
   `just rogue-names` and `just decomp-names` cover Emerald Rogue,
-  The Minish Cap, Metroid: Zero Mission and Kirby & The Amazing Mirror). Then `just mod-cut`
-  copies a function out as readable Rust for you to edit, and the game is
+  The Minish Cap, Metroid: Zero Mission and Kirby & The Amazing Mirror).
+  Then `just mod-cut` copies a function out as readable Rust for you to edit, and the game is
   rebuilt with your copy in place. An agent's first small Emerald mod, and
   what was hard about it, is in
   [docs/research/agent-first-mod.md](docs/research/agent-first-mod.md).
@@ -219,8 +219,8 @@ The built binary carries the ROM inside it and plays it when started with
 no arguments. The Emerald routes expect the US ROM that pokeemerald builds
 (SHA-1 `f3ae088181bf583e55daf962a92bb46f4f1d07b7`). Building Emerald's
 crate is heavy: on my machine it took about four minutes with six build
-jobs, and the compilers together peaked at about 5 GB of RAM. Every command is described in
-[docs/tools/commands.md](docs/tools/commands.md).
+jobs, and the compilers together peaked at about 5 GB of RAM. Every
+command is described in [docs/tools/commands.md](docs/tools/commands.md).
 
 ## How it works
 
