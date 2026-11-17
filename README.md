@@ -1,59 +1,163 @@
 # GBA Advanced (gbaa)
 
-gbaa is a static recompiler for Game Boy Advance games. It reads a ROM's ARM
-and Thumb machine code, translates it ahead of time into a Rust crate, and
-compiles that crate together with a small runtime (the bus, the PPU, sound,
-timers, DMA and the BIOS calls) into a native program. The game then runs as
-ordinary compiled code instead of through an emulator's interpreter loop.
+gbaa is a static recompiler for Game Boy Advance games. It translates a
+ROM's ARM and Thumb machine code ahead of time into a Rust crate, and
+compiles that crate with a small runtime (the bus, the PPU, sound, timers,
+DMA and the BIOS calls) into a native program. Pokémon Emerald and two
+romhacks of it play this way, and I've played one of them, Emerald
+Imperium, for half an hour on a Steam Deck.
+
+Agents wrote most of the code. What decides whether their work is right is
+a check against the [mGBA](https://github.com/mgba-emu/mgba) emulator: along
+a scripted run of a game, the screen mGBA draws at each checkpoint has to be
+the screen gbaa draws, and the recompiled build has to draw the same frame
+as gbaa's own interpreter on every frame of the run.
 
 > **Not ready for general use.** This is public so people can watch it
 > being built. It plays Pokémon Emerald and a couple of romhacks well for
-> me; everything else is in progress, and nothing is stable. Give it time.
+> me; everything else is in progress, and nothing is stable.
 
-## Who it's for
+## Why it's built around a check
 
-Eventually, two kinds of people:
+Writing code got cheap. Reviewing it didn't. A recompiler is a lot of
+code, and a mistake in it doesn't crash where you can see it: you boot a
+game and random things go wrong, a sprite in the wrong place, a sound that
+cuts out, a save that doesn't load. Nobody wants to find all of those by
+reading the code, me included.
 
-- **People who want to play their own games without an emulator.** I'm
-  building a front end for this because I'd rather not deal with an
-  emulator layer, and for me it already works nicely. The UI is ugly right
-  now. Making it nice is next, and when it is, there'll be a GIF here.
-- **Modders, and people starting a decompilation or a native port of a GBA
-  game.** gbaa gives you a Rust crate of the whole game that builds and runs
-  exactly like the original from day one, so you can change a piece and
-  play the result right away. It won't name functions or variables for
-  you. Tools that recognize library code and make it easy for LLMs to fill
-  in readable code are being built, but aren't ready. If you want to make a
-  native port of Emerald or any other GBA game, I'm trying to make this a
-  good place to start.
+So in gbaa every unit of work ends in a check a machine runs, and the check
+decides when the unit is done, not the agent that did it and not me. The
+check catches most bugs. The ones it misses are the useful part: each one
+says where the check, or the factory around it, needs tuning. One example:
+the check for native ports (below) wasn't in the merge gate, and it stayed
+broken from 2026-11-06 to 2026-11-13 without anyone seeing. Now
+`just check` runs it, and a deliberately planted break shows that it fails
+when it should.
 
+## What's compared, exactly
+
+| Check | What it compares | How often |
+|---|---|---|
+| Routes (`just unit NAME`, the 40 files in [units/](units/)) | mGBA 0.10.5's screen hash against our interpreter's; then the recompiled build's screen hash against the interpreter's | mGBA at each checkpoint; the recompiled build on every frame, plus the CPU registers at the end |
+| CPU ([SingleStepTests' ARM7TDMI suite](https://github.com/SingleStepTests/ARM7TDMI)) | registers and bus transactions after one instruction | every case: 40 of its 45 files pass all 50,000; the other five, and why, are in [crates/armv4t/tests/common/sst.rs](crates/armv4t/tests/common/sst.rs) |
+| Hardware test ROMs (jsmolka's gba-tests, armwrestler) | the ROM's own pass/fail result | each test |
+| Native ports (`just native-check`) | a lifted program against the recompiled build: picture, RAM, the I/O registers, palette, VRAM, OAM and the audio samples | every frame, with a planted fault that must be caught |
+
+Where mGBA itself is wrong, the route says so instead of quietly trusting
+it. Emerald's intro route ([units/emerald-intro.toml](units/emerald-intro.toml))
+has six checkpoints from reset to the title screen. At two of them mGBA's
+32-bit build rounds blended colours up by one 5-bit step, so the expected
+hash there is ours, with mGBA's hash and the reason kept beside it; our
+interpreter, given mGBA's rounding, draws mGBA's hash exactly. Three of
+jsmolka's tests that mGBA 0.10.5 fails are listed the same way in
+[crates/mgba-dump/known-mismatches.tsv](crates/mgba-dump/known-mismatches.tsv).
+
+What the routes don't cover: anything past their last frame. Past that,
+the games were checked by playing them, at gates that only I could pass
+(the Steam Deck play test below is one).
 
 ## Where it is
 
-- **Pokémon Emerald and two romhacks of it (Emerald Rogue, Emerald
-  Imperium) play recompiled**, including saving, save states, fast-forward,
-  rewind and controller input. Emerald's intro runs frame for frame the same
-  as mGBA with 99.7% of guest time in compiled code. Imperium has been
-  played for half an hour on a Steam Deck in Game Mode.
-- The hardware test ROMs (jsmolka's, armwrestler) and a set of small Rust
-  (agb) programs written here, one per hardware feature, also run
-  recompiled. Games past Emerald are next; Kirby: Nightmare in Dream Land
-  is the first.
-- The output has two forms: a flat one that is fast to build, and a
-  structured one (loops and `if`s rather than a block dispatcher) that is
-  just as exact, builds about 15% faster and is 4% smaller. A third,
-  readable form close to the [pokeemerald](https://github.com/pret/pokeemerald)
-  decompilation's C is in progress, aimed at modding.
-- Side projects on the same runtime: an mGBA-compatible Lua scripting host,
-  linked multiplayer over the internet, and builds for Linux and the Steam
-  Deck (macOS and Windows builds exist but haven't been tried on real
-  machines yet).
+As of 2026-11-15, from the [tracker](tracker/):
+
+- **Pokémon Emerald, Emerald Rogue and Emerald Imperium play recompiled**,
+  with in-game saves, save states, fast-forward, rewind and a controller
+  (passed 2026-10-24). On 2026-10-24 I played Imperium on a Steam Deck in
+  Game Mode from 21:52 to 22:25: no problems, no audio underruns, and
+  98.9% of the guest's cycles ran in compiled code rather than the
+  interpreter fallback.
+- There are builds for Linux, macOS and Windows; I played the macOS and
+  Windows builds on real machines on 2026-10-28.
+- **Two forms of output.** A flat one, and a structured one (loops and
+  `if`s rather than a block dispatcher) that passes the same routes. For
+  Emerald the structured binary is 4.2% smaller (128.1 MB against
+  133.8 MB) and the whole build took 255 s against 294 s, one measurement
+  on a busy machine ([docs/structured-codegen-design.md](docs/structured-codegen-design.md)).
+- **Native ports**, where a game becomes a Rust program with no emulated
+  CPU or dispatcher, are the current work. So far the output is literal
+  (registers as Rust locals, RAM as bytes), and each game needs a few
+  hand-written stand-ins for code the lifter can't handle yet. Metroid:
+  Zero Mission lifts to 2,624 functions that build, and runs the 2,700
+  frames of its route (reset to the first room) with no difference from
+  the recompiled build. Kirby: Nightmare in Dream Land passes the same
+  check for 900 frames, into its first level; Kirby & The Amazing Mirror
+  lifts and builds. The plan and the numbers are in
+  [docs/native-stage-b.md](docs/native-stage-b.md).
+- **Side projects on the same runtime**: an mGBA-compatible Lua scripting
+  host, and linked multiplayer over the internet with rollback (Emerald's
+  trade check passes over a simulated bad connection; I haven't yet traded
+  with a friend for real).
+- The tracker holds 473 units of work: 394 done, 27 open, the rest
+  parked, dropped, blocked or in progress.
+
+## Who it's for
+
+- **Modders, and people starting a decompilation or a native port of a
+  GBA game.** gbaa gives you a Rust crate of the whole game that builds and
+  runs like the original from day one, so you can change one function and
+  play the result. With a decompilation's symbols (pret's pokeemerald, for
+  Emerald) it names functions, and `just mod-cut` copies one function out
+  as readable Rust for you to edit; an agent's first small Emerald mod, and
+  what was hard about it, is in
+  [docs/research/agent-first-mod.md](docs/research/agent-first-mod.md).
+  Without symbols it won't name anything for you, and the readable form
+  doesn't read like the decompilation's C yet.
+- **People who want to play their own games natively.** For the three
+  Emerald games it already works nicely for me. The UI is plain, and other
+  games aren't there yet.
+
+## Try it
+
+You need Rust (the toolchain is pinned in `rust-toolchain.toml`),
+[just](https://just.systems), CMake and a C compiler (SDL3 and Lua are
+built from source). Most of it is Linux-first: the heavy recipes run
+under a systemd memory cap.
+
+Without a ROM of your own, the hardware test suites show the whole method
+end to end:
+
+```sh
+git clone https://github.com/junewunder/gbaa && cd gbaa
+just fetch-tests            # the CPU and hardware test suites, about 1.3 GB, into ~/.local/share/gbaa
+cargo test --workspace      # unit and integration tests
+just gba-tests              # jsmolka's five test ROMs in the interpreter
+just unit jsmolka-memory    # one route: mGBA, the interpreter and the recompiled build
+```
+
+On a fresh clone (Linux, two build jobs, 2026-11-17) the tests reported
+1,165 passed, 0 failed and 11 ignored, after about six minutes of building.
+`just gba-tests` printed `pass` for all five ROMs. The route builds mGBA
+0.10.5 from source the first time (about eight minutes in all), then
+prints:
+
+```
+unit jsmolka-memory: mGBA and the interpreter draw every checkpoint
+cycles: 84185037 compiled (100.0%, ...), 0 in the interpreter fallback (0.0%, ...)
+unit jsmolka-memory: pass (jsmolka-memory to frame 300; mGBA matches; recompiled = interpreted)
+```
+
+`just check`, the merge gate, needs more than a fresh clone has (agb test
+programs built into `~/.local/share/gbaa`, and the game ROMs the routes
+name), so it isn't the place to start.
+
+**No ROMs are included**, and none ever were. To recompile a game, bring
+your own dump:
+
+```sh
+just recompile path/to/game.gba          # writes a crate to out/<name>/
+just run-recompiled out/<name>            # builds it and plays it
+```
+
+The built binary carries the ROM inside it and plays it when started with
+no arguments. Building Emerald's crate is heavy (several minutes and
+several GB of RAM). Every command is described in
+[docs/tools/commands.md](docs/tools/commands.md).
 
 ## How it works
 
 1. **Decode** (`crates/armv4t`): every ARMv4T instruction, with its semantics
    written once against a `Sem` trait. The same definition drives the
-   interpreter, an IR builder, and the code generator, so there is one
+   interpreter, an IR builder and the code generator, so there is one
    description of what each instruction does.
 2. **Discover** (`crates/analysis`): find the code. Telling code from data in
    a ROM is undecidable in general, so discovery combines recursive descent,
@@ -64,85 +168,57 @@ Eventually, two kinds of people:
    with `quote!` and `prettyplease`, with the runtime's memory accessors
    inlined. Code the game copies into RAM is handled too.
 4. **Run** (`crates/runtime`, `#![no_std]`; `crates/desktop` for the SDL
-   frontend).
+   front end).
 
-The reasoning behind each of these choices, with the alternatives and what
-would change our minds, is in [docs/decisions.md](docs/decisions.md).
-
-## How it's checked
-
-Correctness is defined by comparison, not by eye:
-
-- The interpreter is checked against SingleStepTests' ARM7TDMI suite,
-  jsmolka's gba-tests and armwrestler.
-- The recompiled build must match mGBA and the interpreter frame for frame
-  at fixed checkpoints in each game ("routes": scripted input to a point,
-  then compare the screen and state). `just unit <route>` runs one.
-- Code discovery and jump-table recovery are scored against ground truth
-  from the pokeemerald decompilation's symbols.
+The reasoning behind each choice, with the alternatives and what would
+change my mind, is in [docs/decisions.md](docs/decisions.md).
 
 ## How it was built
 
-Most of this code was written by Claude agents over about a week, working
-from a tracker of small units of work. Each unit had a check that decided
-whether it was done, usually the mGBA comparison above, and lanes of agents
-claimed, implemented, checked and merged units unattended. I made the
-design decisions, wrote the specs, and played the games at gates that only
-a person could pass. The setup is
-[WFactory](https://github.com/junewunder/wfactory); how this project uses it
-is in [docs/factory.md](docs/factory.md). The interesting part, to me, is that it
-works because the oracle is exact: a recompiled frame either matches mGBA
-or it doesn't.
-
-## Building
-
-Needs Rust (pinned in `rust-toolchain.toml`) and [just](https://just.systems).
-`just check` runs formatting, clippy, the tests and the `no_std` build.
-`just recompile ROM` writes a crate for a ROM to `out/<name>/` and
-`just run-recompiled out/<name>` builds and runs it. The built binary
-carries the ROM inside it and plays it when started with no arguments;
-give it a ROM path to run that instead. Every command is
-described in [docs/tools/commands.md](docs/tools/commands.md).
-
-**No ROMs are included**, and none ever were. Bring your own dumps.
-
-gbaa isn't affiliated with Nintendo, Game Freak, The Pokémon Company or
-HAL Laboratory. Their games and names belong to them.
+Claude agents wrote most of this code between mid-October and mid-November
+2026, working from a tracker of small units of work. Each unit names the
+check that decides it's done, usually a route like the ones above, and
+lanes of agents on several machines claimed, implemented, checked and
+merged units unattended. I made the design decisions, wrote the specs,
+pruned the tracker, and played the games at the gates that only a person
+could pass. The setup is [WFactory](https://github.com/junewunder/wfactory);
+how this project uses it is in [docs/factory.md](docs/factory.md). It works
+here because the oracle is exact: a frame either matches or it doesn't.
 
 ## Developed in the open
 
 The tracker (`tracker/`), the agents' instructions (`AGENTS.md`) and their
-notes (`memory/`) are all here, as the agents use them. Earlier history
-lives in a private repo, because it held code translated from the games.
-Game-derived code (mod copies, hand ports, snapshots of the output on a
-real game) stays out of git.
+notes (`memory/`) are all here, as the agents use them; that's why the
+commit log is mostly tracker commits. Earlier history lives in a private
+repo, because it held code translated from the games. Game-derived code
+(mod copies, hand ports, snapshots of the output on a real game) stays out
+of git, so the Emerald, Metroid and Kirby results above need your own ROM
+to reproduce.
+
+gbaa isn't affiliated with Nintendo, Game Freak, The Pokémon Company or
+HAL Laboratory. Their games and names belong to them.
 
 Issues are welcome. I'm not taking pull requests yet.
 
-## License
-
-[MIT](LICENSE).
-
 ## About me
 
-I'm june wunder, and I'm looking for work. gbaa is built with
+I'm june wunder, and I'm looking for work. I build machine-driven checks
+for code that people and agents write. gbaa is built with
 [WFactory](https://github.com/junewunder/wfactory), my setup for running
-agents through a project unattended. Another project of mine is
-[Willow to React](https://github.com/junewunder/willow-to-react).
+agents through a project unattended.
 
 ## References and thanks
 
 gbaa is built on other people's work, and most of it was done for free.
 This is what we used, roughly in order of how much we leaned on it. The
-full reading list, about two hundred papers and projects, is in
-[docs/references.md](docs/references.md), and what we took from each is in
+full reading list is in [docs/references.md](docs/references.md), and what we took from each is in
 the notes under [docs/research/](docs/research/).
 
 ### What we check against
 
 - **[mGBA](https://github.com/mgba-emu/mgba)**, by Vicki Pfau (endrift) and
-  its contributors. It is the oracle: the recompiled build has to match it
-  frame for frame. Its source was our reference for the PPU, sound, DMA,
+  its contributors. It is the oracle: at each checkpoint of a route, gbaa
+  has to draw the screen it draws. Its source was our reference for the PPU, sound, DMA,
   timers and its HLE BIOS, its Lua API is the one our scripting host
   copies, and its demo scripts are among our tests.
 - **[GBATEK](https://problemkaputt.de/gbatek.htm)**, by Martin Korth: the
@@ -311,7 +387,12 @@ and the rest listed there.
 
 ### Tools
 
-The code was written by Claude (Anthropic) through Claude Code.
+The code was written by Claude (Anthropic) through Claude Code. Claude
+also wrote this README, from my notes and decisions.
 
 If we used your work and you aren't here, that's our mistake. Please
 open an issue and we'll add you.
+
+## License
+
+[MIT](LICENSE).
