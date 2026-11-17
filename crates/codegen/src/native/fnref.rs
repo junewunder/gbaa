@@ -2735,16 +2735,25 @@ impl Run<'_, '_> {
         // (Not token by token with a single token either: on
         // native-tasks the run then never settles, a set growing by its
         // step each round.)
-        let pairs: Vec<(Option<Tok>, Option<Tok>)> = if xs.len() * ys.len() > 64 {
-            xs.iter()
-                .map(|&x| (x, None))
-                .chain(ys.iter().map(|&y| (None, y)))
-                .collect()
-        } else {
-            xs.iter()
-                .flat_map(|&x| ys.iter().map(move |&y| (x, y)))
-                .collect()
+        // But an `&` with one exact constant (a mask, whose results are
+        // bounded by it) is token by token, the mask kept.
+        let mask = |v: &Val| {
+            !v.mem
+                && !v.unk
+                && v.toks.len() == 1
+                && matches!(v.toks.iter().next(), Some(Tok::Num(_)))
         };
+        let pairs: Vec<(Option<Tok>, Option<Tok>)> =
+            if xs.len() * ys.len() > 64 && !(op == BinOp::And && (mask(a) || mask(b))) {
+                xs.iter()
+                    .map(|&x| (x, None))
+                    .chain(ys.iter().map(|&y| (None, y)))
+                    .collect()
+            } else {
+                xs.iter()
+                    .flat_map(|&x| ys.iter().map(move |&y| (x, y)))
+                    .collect()
+            };
         // Gathered, and added at the end (a large set's one at a time was
         // most of a large game's run), as the holes of functions' tokens.
         let mut toks = Vec::new();
@@ -3949,6 +3958,21 @@ fn num_tok(img: &dyn Image, c: u32) -> Tok {
     }
 }
 
+/// Whether mask `m` holds bits of the top half only and function `key`
+/// in form `f` has every one of them clear: then `& m` gives 0 for it,
+/// and for any dense ID, whose top half is 0 (a byte or half mask, which
+/// may split an address to be joined again, isn't one).
+fn high_clear(f: Form, key: u32, m: u32) -> bool {
+    let v = match f {
+        Form::Full => key,
+        Form::Lo => key & 0xffff,
+        Form::Hi => key >> 16,
+        Form::HiUp => key & 0xffff_0000,
+        _ => return false,
+    };
+    m != 0 && m & 0xffff == 0 && v & m == 0
+}
+
 /// A token of `op` on tokens `x` and `y` (`None`: an unknown, a whole
 /// number of `steps[0]` for `x`, of `steps[1]` for `y`).
 fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>, steps: [u32; 2]) -> R {
@@ -4008,6 +4032,12 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>, steps: [u
                 fnt(fx)
             }
             (BinOp::And, Full | Lo, Some(Num(0xffff))) => fnt(Lo),
+            // A test of high bits the address has clear (`movs r1, #128;
+            // lsls r1, #17; ands r1, r0`: bit 24): 0, and 0 when dense too,
+            // a dense ID being below 2^16 (`native/fnref-bit-test-mask`).
+            (BinOp::And, Full | Lo | Hi | HiUp, Some(Num(m))) if high_clear(fx, kx, m) => {
+                R::T(Num(0))
+            }
             (
                 BinOp::Or | BinOp::Add,
                 HiUp,
