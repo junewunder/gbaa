@@ -2219,25 +2219,32 @@ fn netplay_guests_compute_what_unwinding_does_and_roll_back() {
 /// hold puts the next frame a period later.
 #[test]
 fn the_netplay_pacer_catches_up_and_holds() {
+    // On a made-up clock, so a busy machine can't move it (the wall clock
+    // did: a gate test once saw 18.9 ms where 19 were due).
     use crate::fast::Pacer;
     use std::time::{Duration, Instant};
-    let period = Duration::from_millis(10);
+    let ms = Duration::from_millis;
+    let period = ms(10);
+    let t0 = Instant::now();
     let mut p = Pacer::default();
-    p.wait(period);
-    std::thread::sleep(Duration::from_millis(30));
-    // Two frames are overdue: neither waits (a plain clock would wait one).
-    let t = Instant::now();
-    p.wait(period);
-    p.wait(period);
-    assert!(t.elapsed() < Duration::from_millis(8), "{:?}", t.elapsed());
-    // On time again; a hold makes the next wait two periods.
-    p.wait(period);
+    // The first frame is due at once; the next at 10 ms.
+    assert_eq!(p.step(t0, period), Duration::ZERO);
+    // At 40 ms, three frames are overdue (10, 20, 30): none waits (a plain
+    // clock would wait for the second), and the fourth, due at 40, is on time.
+    assert_eq!(p.step(t0 + ms(40), period), Duration::ZERO);
+    assert_eq!(p.step(t0 + ms(40), period), Duration::ZERO);
+    assert_eq!(p.step(t0 + ms(40), period), Duration::ZERO);
+    assert_eq!(p.step(t0 + ms(40), period), Duration::ZERO);
+    // On time again: the next, due at 50, waits its period.
+    assert_eq!(p.step(t0 + ms(40), period), ms(10));
+    // A hold makes the next wait two periods: due at 70, not 60.
     p.hold(period);
-    let t = Instant::now();
-    p.wait(period);
-    assert!(
-        t.elapsed() >= Duration::from_millis(19),
-        "{:?}",
-        t.elapsed()
-    );
+    assert_eq!(p.step(t0 + ms(50), period), ms(20));
+    // More than SLACK behind, it starts afresh SLACK back: at 500 ms, the
+    // five frames of the last 50 ms run at once, and the sixth waits.
+    let late = t0 + ms(500);
+    for _ in 0..6 {
+        assert_eq!(p.step(late, period), Duration::ZERO);
+    }
+    assert_eq!(p.step(late, period), ms(10));
 }
