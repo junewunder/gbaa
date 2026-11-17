@@ -182,12 +182,9 @@ Kirby & the Amazing Mirror's heap 30). Each hole carries its kind. On
 the corpus, holes files applied, the whole lift (the commit before) and
 the holes-only one name the same holes, line for line, but two: Metroid
 0, WarioWare 6, Nightmare 0, moonbeam 7, Rogue 24, Imperium 20, Emerald
-14; Minish Cap 32 and the Amazing Mirror 7 against 31 and 6 (below).
-Emerald's whole lift (25fa1c4e, 2026-11-17, no holes file) took 22.6 min
-at a 3.0 GB peak: its function-address flow stops at its bound (69.9M
-tokens held against 48M) with nothing proven, so it has no callee sets,
-and its 14 hard holes (jumps 3, no code 3, summaries 8) are the
-holes-only lift's (60 s, 0.5 GB), line for line.
+14 (its flow stops at its bound, nothing proven, so no callee sets;
+22.6 min, 3.0 GB, 2026-11-17); Minish Cap 32 and the Amazing Mirror 7
+against 31 and 6 (below).
 
 The differences left, each right:
 
