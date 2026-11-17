@@ -12,7 +12,8 @@ a check against the [mGBA](https://github.com/mgba-emu/mgba) emulator. A
 route is a scripted run of a game with a few checkpoint frames. At each
 checkpoint, gbaa's interpreter has to draw the screen mGBA draws, and on
 every frame of the run the recompiled build has to draw what the
-interpreter draws.
+interpreter draws. (That second part checks the recompiler against our own
+interpreter, not against mGBA.)
 
 > **Not ready for general use.** This is public so people can watch it
 > being built. It plays Pokémon Emerald and a couple of romhacks well for
@@ -27,20 +28,27 @@ cuts out, a save that doesn't load. Nobody wants to find all of those by
 reading the code, me included.
 
 So in gbaa every unit of work ends in a check a machine runs, and the check
-decides when the unit is done, not the agent that did it and not me. The
-check catches most bugs. The ones it misses are the useful part: each one
+decides when the unit is done, not the agent that did it and not me. When
+Metroid's native port first ran against the recompiled build, for
+example, the check stopped at the first byte that differed, and each cause
+became a unit of its own: DMA by address, the save chip, loads from the
+BIOS region, and a run of timing details. The check catches most bugs.
+The ones it misses are the useful part: each one
 says where the check, or the factory around it, needs tuning. One example:
 the check for native ports (below) wasn't in the merge gate, and it stayed
 broken from 2026-11-06 to 2026-11-13 without anyone seeing. Now
 `just check` runs it, and a deliberately planted break shows that it fails
 when it should.
 
+That's the work I'm looking for: building the checks that let
+agent-written code be trusted. More [about me](#about-me) at the end.
+
 ## What's compared, exactly
 
 | Check | What it compares | How often |
 |---|---|---|
 | Routes (`just unit NAME`, the 40 files in [units/](units/)) | mGBA 0.10.5's screen hash against our interpreter's; then the recompiled build's screen hash against the interpreter's | mGBA at each checkpoint; the recompiled build on every frame, plus the CPU registers at the end |
-| CPU ([SingleStepTests' ARM7TDMI suite](https://github.com/SingleStepTests/ARM7TDMI)) | registers and bus transactions after one instruction | every case: 40 of its 45 files pass all 50,000; the other five, and why, are in [crates/armv4t/tests/common/sst.rs](crates/armv4t/tests/common/sst.rs) |
+| CPU ([SingleStepTests' ARM7TDMI suite](https://github.com/SingleStepTests/ARM7TDMI), generated with NanoBoyAdvance, not mGBA) | registers and bus transactions after one instruction | every case: 40 of its 45 files pass all 50,000. The other five are cases where NanoBoyAdvance does something ARMv4T leaves unpredictable or undefined, plus ARMv5 `blx` cases left uncounted; the causes are noted in [crates/armv4t/tests/common/sst.rs](crates/armv4t/tests/common/sst.rs) |
 | Hardware test ROMs (jsmolka's gba-tests, armwrestler) | the ROM's own pass/fail result | each test |
 | Sound (`just mgba-audio-diff`) | mGBA's direct-sound and PSG samples against ours, byte for byte | every sample, on a few test programs, starting from an mGBA save state |
 | Native ports (`just native-check`) | a lifted program against the recompiled build: picture, RAM, the I/O registers, palette, VRAM, OAM and the audio samples | every frame, with a planted fault that must be caught |
@@ -50,7 +58,8 @@ it. Emerald's intro route ([units/emerald-intro.toml](units/emerald-intro.toml))
 has six checkpoints from reset to the title screen. At two of them mGBA's
 32-bit build rounds blended colours up by one 5-bit step, so the expected
 hash there is ours, with mGBA's hash and the reason kept beside it; our
-interpreter, given mGBA's rounding, draws mGBA's hash exactly. Three of
+interpreter, tried once with mGBA's rounding (2026-10-22; it isn't a
+standing test), drew mGBA's hash exactly. Three of
 jsmolka's tests that mGBA 0.10.5 fails are listed the same way in
 [crates/mgba-dump/known-mismatches.tsv](crates/mgba-dump/known-mismatches.tsv).
 
@@ -58,8 +67,9 @@ What isn't compared with mGBA:
 
 - Frames between checkpoints. Our builds write every frame's hash, so it's
   easy to look: on the `jsmolka-memory` route below, mGBA and both our
-  builds agree on 299 of its 300 frames, all but the first. But only the
-  checkpoints decide.
+  builds agree on 299 of its 300 frames (compare the `*-hashes.txt` files
+  in `out/units/jsmolka-memory/`). Frame 1 differs, and I haven't looked
+  into why. Only the checkpoints decide.
 - Timing, except through what it draws and plays. gbaa isn't cycle-exact
   against mGBA: from reset, a program built with agb boots faster in ours,
   which is why the sound checks start from an mGBA save state.
@@ -111,7 +121,9 @@ plan and the numbers are in
   runs like the original from day one, so you can change one function and
   play the result. With a decompilation's symbols it names functions: for
   Emerald, `just fetch-pret` builds pokeemerald from pret's source and
-  `just pret-names` turns its symbols into names. Then `just mod-cut`
+  `just pret-names` turns its symbols into names (the same goes for
+  FireRed; `just rogue-names` and `just decomp-names` cover Emerald Rogue,
+  The Minish Cap, Metroid: Zero Mission and Kirby & The Amazing Mirror). Then `just mod-cut`
   copies a function out as readable Rust for you to edit, and the game is
   rebuilt with your copy in place. An agent's first small Emerald mod, and
   what was hard about it, is in
@@ -119,7 +131,9 @@ plan and the numbers are in
   What you don't get: matching C, or anything agbcc could build. The Rust
   stays close to the machine code (locals named `v7` and `v11`, pointer
   arithmetic, with field names only where pret's types reach), and
-  without symbols nothing is named.
+  without symbols nothing is named. Of the agent's complaints, bitfield
+  writes and `#define` values now print by name; enums still print as
+  numbers.
 - **People who want to play their own games natively.** For the three
   Emerald games it already works nicely for me. The UI is plain, and other
   games aren't there yet.
