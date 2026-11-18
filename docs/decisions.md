@@ -259,6 +259,15 @@ switch, but it counts toward the trickle.
   0.9996/0.7872); a looser rule (any pointer two words from a start) found
   6 and 40 more true starts there but one more false one, and took the lone
   `movs r0, #0; bx lr` the scan's tests keep out.
+  **A task's late switch** (2026-11-18, native/nightmare-stop-34a88): a
+  body opening with `push {…, lr}` whose only way on is an indirect jump
+  after a `bl` (a path the scan calls soft: the call may never return)
+  validates when code loads it from a pool or a table holds it, as one
+  that runs into a known start does. Nightmare's stage task 0x08034a89
+  calls a setup, then switches on a state byte into cases that loop and
+  yield; the native lift stopped at frame 902 calling it. Emerald 0.9997 /
+  0.9575 (16 more true starts, none false; 5 more jump tables), modern GCC
+  0.9996 / 0.7873 (1 more), agb's unchanged; Nightmare 5 more starts.
 - **Checking discovery:** precision and recall of function starts against
   the pokeemerald ELF, specified in `research/discovery-prior-art.md`
   ("Proposed discovery-accuracy check"). Baseline to beat: 99.87% precision,

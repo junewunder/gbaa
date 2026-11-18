@@ -19,8 +19,26 @@
 // state goes back and the reference runs the call for real, so the
 // program stays on the lift's path.
 //
-// A run whose reference panics or stops (`Exit`) isn't compared: it is
-// counted as skipped. What's kept is a seed, a count and a digest (of the
+// The interpreter is a second reference (unit native/fn-check-interp):
+// every [`crate::FN_CHECK_INTERP`]th compared run (`gbaa-lift
+// --interp-every N`; 0, never), the run's input state becomes a `Machine`
+// ([`interp_load`]: RAM, I/O as stored, the display's memories, the save
+// chip, the CPSR, sp and the banked sps, r0-r3) and the interpreter runs
+// the ROM's code from the function's key to its return, untimed, as
+// native-fn-diff's reference does; its end is compared with the lift's
+// ([`compare_interp`]). It catches a wrong lift, which the replacement's
+// compare can't: the lift is the replacement's reference. A run the
+// interpreter can't follow (a fault, the BIOS, no return in 4,000,000
+// instructions: a wait, which takes time the untimed run never gives) is
+// counted, not compared. The return is pc at the sentinel's word in either
+// state: `bx lr` lands in Thumb, an ARM `mov pc, lr` or `ldm …, {pc}` in
+// ARM (no interworking on ARMv4T).
+//
+// A run whose reference panics, stops (`Exit`) or presents more than
+// [`RUN_FRAMES_MAX`] frames (a variant that never returns: a random size
+// that makes a DMA repeat, which the function then waits on for ever)
+// isn't compared: it is counted as skipped. A replacement past the cap
+// where its reference returned is a difference. What's kept is a seed, a count and a digest (of the
 // reference's ends), not the states: the same seed and budget give the
 // same digest while the lift and the program's path don't change.
 // Generated: don't edit; rerun `just fn-check`.
@@ -31,6 +49,14 @@ use std::time::{Duration, Instant};
 
 /// Runs per call of the program's: the call as it came, then variants.
 pub const VARIANTS: u32 = 8;
+
+/// The frames one run may present: past them it is stopped, as a panic
+/// ([`CAPPED`]). A run that loops without letting time pass stops at
+/// the prelude's `ACCESSES_MAX` instead.
+pub const RUN_FRAMES_MAX: u32 = 600;
+
+/// The start of a capped run's panic message.
+const CAPPED: &str = "fn-check: past the cap";
 
 /// The stack below the entry sp that may be the function's frames: an
 /// IWRAM store this far below it or less moves the compare's floor.
@@ -69,9 +95,17 @@ struct Tally {
     differ: u32,
     ref_panics: u32,
     ref_exits: u32,
+    ref_capped: u32,
     shown: Vec<String>,
     digest: u64,
     time: Duration,
+    /// Runs the interpreter also ran, those whose end differed from the
+    /// lift's, and those it couldn't follow (with the first reason).
+    interp_runs: u32,
+    interp_differ: u32,
+    interp_skipped: u32,
+    interp_why: Option<String>,
+    interp_shown: Vec<String>,
 }
 
 const FNV: u64 = 0xcbf2_9ce4_8422_2325;
@@ -277,11 +311,16 @@ fn vary(g: &mut Game, rng: &mut Rng, args: &mut [u32; 4], params: u8, loads: &[u
     }
 }
 
-/// The host while a run runs: the keys held as they were.
-struct Quiet(u16);
+/// The host while a run runs: the keys held as they were, and the frames
+/// presented, which stop the run past [`RUN_FRAMES_MAX`].
+struct Quiet(u16, u32);
 
 impl runtime::hw::Host for Quiet {
     fn present(&mut self, _: &runtime::platform::Frame) -> Result<(), Exit> {
+        self.1 += 1;
+        if self.1 > RUN_FRAMES_MAX {
+            panic!("{CAPPED} of {RUN_FRAMES_MAX} frames in one run");
+        }
         Ok(())
     }
     fn keys(&mut self) -> u16 {
@@ -312,7 +351,7 @@ fn run(
     // A host that shows, plays and saves nothing: a run that lets time
     // pass (a wait, a spin) presents frames, which the program's host
     // would count, record and hash; the state goes back, the host can't.
-    let quiet = native_host::AnyHost(Box::new(Quiet(g.hw.keys.held())));
+    let quiet = native_host::AnyHost(Box::new(Quiet(g.hw.keys.held(), 0)));
     let host = std::mem::replace(&mut g.hw.host, quiet);
     let hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
@@ -328,6 +367,157 @@ fn run(
             .unwrap_or_else(|| "?".into())
     });
     (r, acc)
+}
+
+/// The interpreter, the second reference.
+type M = runtime::Machine<runtime::platform::Headless>;
+
+/// Where the interpreter's run returns to: no function's address (a
+/// Thumb key in the ROM header's entry branch).
+const SENTINEL: u32 = 0x0800_0001;
+
+/// The interpreter, made once ([`main`], on the program's own stack: a
+/// `Machine` is too big for a task's).
+static INTERP: Mutex<Option<Box<M>>> = Mutex::new(None);
+
+/// The machine at `g`'s state, about to run function `key` from `sp` with
+/// `a` in r0-r3 (the rest zero) and lr the [`SENTINEL`].
+fn interp_load(m: &mut M, g: &Game, key: u32, sp: u32, a: [u32; 4]) {
+    use armv4t::interp::{Bank, T_BIT};
+    m.bus.ewram.copy_from_slice(&g.ram[..EWRAM]);
+    m.bus.iwram.copy_from_slice(&g.ram[EWRAM..EWRAM + IWRAM]);
+    m.bus.video.clone_from(&g.hw.ppu);
+    for o in (0..runtime::io::IO_SIZE).step_by(2) {
+        m.bus.io.set_raw16(o, g.hw.raw16(o));
+    }
+    m.bus.waitcnt_written();
+    m.bus.save.clone_from(&g.hw.save);
+    m.bus.bios_latch = g.bios_latch;
+    m.bios = Default::default();
+    m.fault = None;
+    let c = &mut m.cpu;
+    c.r = [0; 15];
+    c.r[..4].copy_from_slice(&a);
+    c.r[13] = sp;
+    c.r[14] = SENTINEL;
+    c.cpsr = g.cpsr & 0xDF | 0x10 | if key & 1 != 0 { T_BIT } else { 0 };
+    c.banks = [[0; 7]; 6];
+    c.banks[Bank::User as usize][5] = g.sp;
+    c.banks[Bank::Irq as usize][5] = g.banked[0];
+    c.banks[Bank::Svc as usize][5] = g.banked[1];
+    for b in [Bank::Fiq, Bank::Abt, Bank::Und] {
+        c.banks[b as usize][5] = g.banked[2];
+    }
+    c.spsr = [0; 6];
+    c.spsr[Bank::Irq as usize] = g.spsr;
+    runtime::dispatch::set_pc(c, key);
+}
+
+/// The interpreter from [`interp_load`]'s state to the return, untimed:
+/// the lowest sp it saw, or why it didn't return.
+fn interp_run(m: &mut M) -> Result<u32, String> {
+    let mut low = m.cpu.r[13];
+    for _ in 0..4_000_000 {
+        if let Some(f) = m.fault {
+            return Err(format!("a fault ({f:?})"));
+        }
+        // Either state: `bx lr` lands in Thumb at the sentinel, an ARM
+        // `mov pc, lr` or `ldm …, {pc}` (no interworking on ARMv4T) in
+        // ARM at its word.
+        if m.cpu.pc & !3 == SENTINEL & !3 {
+            return Ok(low);
+        }
+        if (m.cpu.pc as usize) < runtime::bus::BIOS_SIZE {
+            return Err(format!("a jump into the BIOS at {:#x}", m.cpu.pc));
+        }
+        m.step_untimed();
+        low = low.min(m.cpu.r[13]);
+    }
+    Err("no return in 4,000,000 instructions".into())
+}
+
+/// The first difference between the lift's end (`r`, `out`; `input` the
+/// state both started from) and the interpreter's (`m`), skipping RAM
+/// offsets `skip`. An I/O register is compared where either side changed
+/// it (`DISPSTAT`'s and `VCOUNT`'s beam bits aside); a register the lift
+/// returns its `lr` in holds [`SENTINEL`] in the interpreter, `RET` in
+/// the lift.
+fn compare_interp(
+    m: &M,
+    input: &Snap,
+    r: &Snap,
+    out: [u32; 4],
+    sp: u32,
+    results: u8,
+    skip: (usize, usize),
+) -> Option<String> {
+    let byte = |o: usize| {
+        if o < EWRAM {
+            m.bus.ewram[o]
+        } else {
+            m.bus.iwram[o - EWRAM]
+        }
+    };
+    if let Some(o) =
+        (0..EWRAM + IWRAM).find(|&o| byte(o) != r.ram[o] && !(skip.0..skip.1).contains(&o))
+    {
+        let region = if o < EWRAM { "EWRAM" } else { "IWRAM" };
+        return Some(format!(
+            "{region} byte {:#010x}: {:#04x} lift, {:#04x} interpreter",
+            addr(o),
+            r.ram[o],
+            byte(o)
+        ));
+    }
+    for (i, o) in (0..0x400u32).step_by(2).enumerate() {
+        if o == 0x004 || o == 0x006 {
+            continue;
+        }
+        let (before, lift, int) = (input.io[i], r.io[i], m.bus.io.raw16(o));
+        if lift != int && (lift != before || int != before) {
+            return Some(format!(
+                "I/O register {o:#05x}: {before:#06x} before, {lift:#06x} lift, {int:#06x} interpreter"
+            ));
+        }
+    }
+    let v = &m.bus.video;
+    for (what, a, b) in [
+        ("palette", &r.hw.ppu().palette[..], &v.palette[..]),
+        ("VRAM", &r.hw.ppu().vram[..], &v.vram[..]),
+        ("OAM", &r.hw.ppu().oam[..], &v.oam[..]),
+    ] {
+        if let Some(o) = (0..a.len()).find(|&o| a[o] != b[o]) {
+            return Some(format!(
+                "{what} byte {o:#x}: {:#04x} lift, {:#04x} interpreter",
+                a[o], b[o]
+            ));
+        }
+    }
+    if m.cpu.r[13] != sp {
+        return Some(format!(
+            "sp on return: {sp:#010x} entry (the lift's), {:#010x} interpreter",
+            m.cpu.r[13]
+        ));
+    }
+    let (lc, ic) = (r.regs[1] & 0xDF, m.cpu.cpsr & 0xDF);
+    if lc != ic {
+        return Some(format!(
+            "CPSR's control bits: {lc:#04x} lift, {ic:#04x} interpreter"
+        ));
+    }
+    for n in (0..4).filter(|n| results & 1 << n != 0) {
+        let iv = match m.cpu.r[n] {
+            SENTINEL => RET,
+            v => v,
+        };
+        if out[n] != iv {
+            return Some(format!(
+                "r{n} on return: {:#010x} lift, {:#010x} interpreter",
+                out[n], m.cpu.r[n]
+            ));
+        }
+    }
+    None
 }
 
 /// A checked function's `f_<key>`: the check at the program's calls while
@@ -406,6 +596,10 @@ pub fn call(
             loads.dedup();
         }
         let out = match r {
+            Err(p) if p.starts_with(CAPPED) => {
+                local.ref_capped += 1;
+                continue;
+            }
             Err(_) => {
                 local.ref_panics += 1;
                 continue;
@@ -419,6 +613,42 @@ pub fn call(
         let mut after = Snap::take(g);
         after.regs[8] = g.hw.frames() as u32;
         input.put(g);
+        // The interpreter, every FN_CHECK_INTERP'th compared run: from the
+        // same input, its end against the lift's.
+        let nth = s.runs - left;
+        if crate::FN_CHECK_INTERP > 0 && nth % crate::FN_CHECK_INTERP == 0 {
+            let mut im = INTERP.lock().unwrap();
+            let m = im.as_mut().expect("the interpreter, made in main");
+            interp_load(m, g, s.key, sp, args);
+            match interp_run(m) {
+                Err(why) => {
+                    local.interp_skipped += 1;
+                    local.interp_why.get_or_insert(why);
+                }
+                Ok(low) => {
+                    local.interp_runs += 1;
+                    let low = if low >> 24 == 3 {
+                        EWRAM + (low & 0x7FFF) as usize
+                    } else {
+                        sp_off
+                    };
+                    let skip = (low.min(acc.lowest_store as usize), sp_off);
+                    if let Some(w) = compare_interp(m, &input, &after, out, sp, s.results, skip) {
+                        local.interp_differ += 1;
+                        if local.interp_shown.len() < 3 {
+                            let args: Vec<String> = (0..4)
+                                .filter(|n| s.params & 1 << n != 0)
+                                .map(|n| format!("r{n}={:#x}", args[n]))
+                                .collect();
+                            local.interp_shown.push(format!(
+                                "call {entry} variant {v} ({}): {w}",
+                                args.join(" ")
+                            ));
+                        }
+                    }
+                }
+            }
+        }
         let (n, nacc) = run(
             g,
             replacement,
@@ -473,8 +703,18 @@ pub fn call(
         t.differ += local.differ;
         t.ref_panics += local.ref_panics;
         t.ref_exits += local.ref_exits;
+        t.ref_capped += local.ref_capped;
         let room = 3usize.saturating_sub(t.shown.len());
         t.shown.extend(local.shown.into_iter().take(room));
+        t.interp_runs += local.interp_runs;
+        t.interp_differ += local.interp_differ;
+        t.interp_skipped += local.interp_skipped;
+        if t.interp_why.is_none() {
+            t.interp_why = local.interp_why;
+        }
+        let room = 3usize.saturating_sub(t.interp_shown.len());
+        t.interp_shown
+            .extend(local.interp_shown.into_iter().take(room));
         t.digest = fnv(t.digest ^ FNV, &local.digest.to_le_bytes());
         t.time += t0.elapsed();
         FN_CHECKS
@@ -523,6 +763,9 @@ fn report(frames: Option<u64>) -> i32 {
         let verdict = if t.differ > 0 {
             ok = false;
             format!("{} DIFFER", t.differ)
+        } else if t.interp_differ > 0 {
+            ok = false;
+            format!("the lift and the interpreter DIFFER in {}", t.interp_differ)
         } else if t.runs == 0 {
             ok = false;
             "NOT RUN (never called, or every run's reference stopped)".to_string()
@@ -544,14 +787,39 @@ fn report(frames: Option<u64>) -> i32 {
             s.name, s.key, t.runs, s.runs, t.entries, t.calls, t.time, s.seed, t.digest
         );
         println!("      replacement: {}; {}", s.replacement, s.sig);
-        if t.ref_panics + t.ref_exits > 0 {
+        if t.ref_panics + t.ref_exits + t.ref_capped > 0 {
             println!(
-                "      skipped: {} runs whose reference panicked, {} that stopped the program",
-                t.ref_panics, t.ref_exits
+                "      skipped: {} runs whose reference panicked, {} that stopped the program, {} capped (past {RUN_FRAMES_MAX} frames)",
+                t.ref_panics, t.ref_exits, t.ref_capped
             );
         }
         for w in &t.shown {
             println!("      {w}");
+        }
+        if crate::FN_CHECK_INTERP > 0 {
+            // No run compared is no agreement: say so.
+            let agreed = if t.interp_runs == 0 {
+                "none compared".to_string()
+            } else if t.interp_differ == 0 {
+                "agreed with the lift".to_string()
+            } else {
+                format!("{} DIFFER with the lift", t.interp_differ)
+            };
+            let skipped = match &t.interp_why {
+                Some(why) if t.interp_skipped > 0 => format!(
+                    "; {} it couldn't follow (first: {why})",
+                    t.interp_skipped
+                ),
+                _ => String::new(),
+            };
+            println!(
+                "      interpreter (every {}th run, untimed): {} runs also checked: {agreed}{skipped}",
+                crate::FN_CHECK_INTERP,
+                t.interp_runs
+            );
+            for w in &t.interp_shown {
+                println!("      {w}");
+            }
         }
     }
     let wall = START.lock().unwrap().map(|t| t.elapsed());
@@ -569,6 +837,9 @@ fn report(frames: Option<u64>) -> i32 {
 /// checks; exits with the report when every budget is spent, or here when
 /// the program ends first (or after, under `GBAA_FN_CHECK_RUN_ON`).
 pub fn main(play: fn() -> std::process::ExitCode) -> std::process::ExitCode {
+    if crate::FN_CHECK_INTERP > 0 {
+        *INTERP.lock().unwrap() = Some(Box::new(M::new(ROM, runtime::platform::Headless)));
+    }
     // A stop (a panic: what the lift can't run yet) ends the program as
     // the frames running out does; the report says what was checked.
     let _ = std::panic::catch_unwind(play);
