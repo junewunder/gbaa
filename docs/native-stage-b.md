@@ -102,7 +102,8 @@ any real game.
   recompiler at `--timing native` ends a block after a store that folds
   to `IME`; the lift's `hw::write_ime` runs what's pending, and the lift
   sets `bank_sp(g, r13);` (the current mode's bank) before every store that may reach I/O so the
-  handler runs on the right stack. Control `--ime-at-waits`; program
+  handler runs on the right stack (once per run of such stores at one sp,
+  native/lift-bank-sp-once). Control `--ime-at-waits`; program
   `agb/native-ime-release` (frame 601 matches mGBA).
 - **Task switchers on host coroutines** (`native/task-coroutines`). Done:
   a stack switch is a hard hole; the prelude's `task_resume` and kin run

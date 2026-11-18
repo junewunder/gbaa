@@ -26,7 +26,8 @@
 //!    the [`metrics`].
 //! 4. `FnPrinter`, one function's Rust: `print` (signature, locals, the
 //!    block loop); `block` (a block's IR as statements: memory accesses,
-//!    typed fields via `typed_as`, `bank_sp(g, r13)` before I/O stores; `count`
+//!    typed fields via `typed_as`, `bank_sp(g, r13)` before I/O stores
+//!    but where the bank already holds it (`redundant_banks`); `count`
 //!    tallies each access for the metrics; `used` drops what nothing
 //!    printed needs); stack locals (`local`, `declare_locals`, `flush`);
 //!    control flow (`goto`, `fall_into`, `call`, `call_then`, `tail`,
@@ -171,6 +172,7 @@ use frame::{Frame, Kind, Local};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
+pub mod banks;
 pub mod first_stop;
 pub mod fnref;
 pub mod frame;
@@ -1105,6 +1107,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     psr: psr_fns.place(f.entry),
                     lr_ret: lr_ret.contains(&f.entry),
                     dead: BTreeMap::new(),
+                    banked: BTreeMap::new(),
                 };
                 let text = p.print(c.sums.get(f.entry));
                 (text, p.found)
@@ -1318,6 +1321,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         } else {
             ""
         }
+    )
+    .unwrap();
+    writeln!(
+        report,
+        "bank_sp calls printed: {} ({} stores' left out, the bank already holding their sp)",
+        soft.bank_sp_calls, soft.banks_left_out
     )
     .unwrap();
     writeln!(
@@ -1539,6 +1548,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // Flag writes printed that nothing reads (native/lift-dead-writes):
     // none, but with --keep-dead-writes.
     m.push("dead_flag_writes", soft.dead_flag_writes);
+    // `bank_sp` calls printed: one per run of stores at one sp
+    // (native/lift-bank-sp-once).
+    m.push("bank_sp_calls", soft.bank_sp_calls);
     m.push_accesses(&soft.access);
     m.push("ram_globals", n(globals.0.len()));
     m.push("pointer_unexplained", soft.unexplained);
@@ -2293,6 +2305,11 @@ struct Soft {
     /// ([`FnPrinter::dead_writes`]: none but with `--keep-dead-writes`).
     flag_writes: u64,
     dead_flag_writes: u64,
+    /// `bank_sp` calls printed (before a store, a wait, a halt), and the
+    /// stores' left out as the bank already held sp
+    /// ([`FnPrinter::redundant_banks`]).
+    bank_sp_calls: u64,
+    banks_left_out: u64,
 }
 
 struct FnPrinter<'a, 'b> {
@@ -2341,6 +2358,21 @@ struct FnPrinter<'a, 'b> {
     /// The writes of registers and flags nothing printed reads, by block
     /// ([`FnPrinter::dead_writes`]): left out.
     dead: BTreeMap<u32, Vec<bool>>,
+    /// The stores whose `bank_sp` the bank already holds, by block
+    /// ([`FnPrinter::redundant_banks`]): printed without it.
+    banked: BTreeMap<u32, Vec<bool>>,
+}
+
+/// Whether an untyped store at `w` ([`FnPrinter::vsa_where`]) may reach
+/// I/O, where it may set `IME` again and run a handler on the current
+/// stack: so the lift banks sp before it. Not a stack store, nor one at a
+/// constant address outside I/O.
+fn store_may_reach_io(w: Where) -> bool {
+    match w {
+        Where::Sp => false,
+        Where::Const(r) => metrics::REGIONS[r] == "io",
+        _ => true,
+    }
 }
 
 /// Where an `msr` or `mrs` the lifter prints is: the hole report's
@@ -2586,6 +2618,7 @@ impl FnPrinter<'_, '_> {
         order.extend(f.blocks.keys().copied().filter(|&k| k != f.entry));
         self.labels = order.iter().enumerate().map(|(i, &k)| (k, i)).collect();
         self.dead = self.dead_writes();
+        self.banked = self.redundant_banks();
         if let Some(p) = self.plan(&order) {
             self.soft.fns_structured += 1;
             self.soft.blocks_match += p.region_blocks;
@@ -2718,6 +2751,95 @@ impl FnPrinter<'_, '_> {
             }
         });
         keys.into_iter().zip(dead).collect()
+    }
+
+    /// Which stores of a block print a `bank_sp` before them (`cur` the
+    /// block; `typed`, `objs` and `refs` from [`FnPrinter::accesses`]):
+    /// those that may reach I/O ([`store_may_reach_io`]), as
+    /// [`FnPrinter::block`] prints them, but a stack local's.
+    fn store_banks(
+        &self,
+        insts: &[Inst],
+        typed: &[Option<Place>],
+        objs: &[Option<Obj>],
+        refs: &[Option<HeapRef>],
+    ) -> Vec<bool> {
+        let mut pc = 0;
+        insts
+            .iter()
+            .enumerate()
+            .map(|(i, inst)| {
+                if let Op::Insn(a) = inst.op {
+                    pc = a;
+                }
+                let Op::Store { addr, .. } = inst.op else {
+                    return false;
+                };
+                let local = self
+                    .frame
+                    .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
+                !local
+                    && typed[i].is_none()
+                    && objs[i].is_none()
+                    && refs[i].is_none()
+                    && store_may_reach_io(self.vsa_where(insts, addr, pc))
+            })
+            .collect()
+    }
+
+    /// The stores whose `bank_sp` is redundant, by block ([`banks::redundant`];
+    /// unit `native/lift-bank-sp-once`): on every way to it the bank holds
+    /// the same `r13`. Only a plain jump to one of the function's blocks
+    /// keeps the bank; a call, a `swi`, a wait or anything leaving the
+    /// function doesn't.
+    fn redundant_banks(&mut self) -> BTreeMap<u32, Vec<bool>> {
+        let keys: Vec<u32> = self.f.blocks.keys().copied().collect();
+        // Block 0 is the entry.
+        let mut order = vec![self.f.entry];
+        order.extend(keys.iter().copied().filter(|&k| k != self.f.entry));
+        let index: BTreeMap<u32, usize> = order.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+        let cur = self.cur;
+        let mut banks = Vec::new();
+        for &k in &order {
+            self.cur = k;
+            let insts = &self.f.blocks[&k].block.insts;
+            let (typed, objs, refs) = self.accesses(insts);
+            banks.push(self.store_banks(insts, &typed, &objs, &refs));
+        }
+        self.cur = cur;
+        let xs: Vec<Vec<ExitInfo>> = order
+            .iter()
+            .map(|k| exits(self.ctx, &self.f.blocks[k]))
+            .collect();
+        let insts: Vec<&[Inst]> = order
+            .iter()
+            .map(|k| &self.f.blocks[k].block.insts[..])
+            .collect();
+        let redundant = banks::redundant(&insts, &banks, |b, i| {
+            let Some(x) = xs[b].iter().find(|x| x.index == i) else {
+                return Vec::new();
+            };
+            let at = |k: u32, keeps: bool| index.get(&k).map(|&s| (s, keeps));
+            match x.plan {
+                Plan::Static(k) | Plan::Rekey(k) => at(k, x.idle == Idle::No).into_iter().collect(),
+                Plan::Call { ret, .. }
+                | Plan::CallVia { ret, .. }
+                | Plan::Dynamic { ret: Some(ret), .. }
+                | Plan::Swi { next: ret } => at(ret, false).into_iter().collect(),
+                Plan::Dynamic {
+                    ret: None, target, ..
+                } => {
+                    let thumb = self.f.blocks[&order[b]].block.thumb;
+                    dyn_targets(self.ctx, self.holes, x.at, thumb, target)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter_map(|t| at(t, false))
+                        .collect()
+                }
+                Plan::Undefined { .. } => Vec::new(),
+            }
+        });
+        order.into_iter().zip(redundant).collect()
     }
 
     /// The function's structuring plan ([`plan::plan`], as the mod view's
@@ -2897,13 +3019,15 @@ impl FnPrinter<'_, '_> {
         format!("{set}{then}")
     }
 
-    fn block(&mut self, insts: &[Inst], xs: &[ExitInfo], thumb: bool) -> String {
-        let mut s = String::new();
-        let mut at = 0u32;
-        let ind = "                ";
-        // The accesses printed as a typed global's field, and the address
-        // arithmetic only they used, which isn't printed; and the values
-        // nothing printed uses (a stack local's address among them).
+    /// A block's accesses printed as a typed global's field, and the
+    /// address arithmetic only they used, which isn't printed; the
+    /// computed accesses into one global; and those through a heap
+    /// `Ref<T>` ([`FnPrinter::block`]; `cur` the block).
+    #[allow(clippy::type_complexity)]
+    fn accesses(
+        &self,
+        insts: &[Inst],
+    ) -> (Vec<Option<Place>>, Vec<Option<Obj>>, Vec<Option<HeapRef>>) {
         let typed: Vec<Option<Place>> = insts
             .iter()
             .map(|inst| {
@@ -2964,6 +3088,19 @@ impl FnPrinter<'_, '_> {
                 Some(HeapRef { f, base })
             })
             .collect();
+        (typed, objs, refs)
+    }
+
+    fn block(&mut self, insts: &[Inst], xs: &[ExitInfo], thumb: bool) -> String {
+        let mut s = String::new();
+        let mut at = 0u32;
+        let ind = "                ";
+        let (typed, objs, refs) = self.accesses(insts);
+        let banks = self.store_banks(insts, &typed, &objs, &refs);
+        let banked = match self.banked.get(&self.cur) {
+            Some(r) if r.len() == insts.len() => r.clone(),
+            _ => vec![false; insts.len()],
+        };
         self.soft
             .ref_tys
             .extend(refs.iter().flatten().map(|r| r.f.ty));
@@ -3142,23 +3279,22 @@ impl FnPrinter<'_, '_> {
                                 true,
                                 typed_as(&typed[i], &objs[i], refs[i].is_some()),
                             );
-                            // A store that may reach I/O may set `IME` again,
-                            // which runs a pending IRQ's handler on the
-                            // current stack.
-                            let io = typed[i].is_none()
-                                && objs[i].is_none()
-                                && refs[i].is_none()
-                                && match w {
-                                    Where::Sp => false,
-                                    Where::Const(r) => metrics::REGIONS[r] == "io",
-                                    _ => true,
-                                };
-                            if io {
+                            assert_eq!(
+                                banks[i],
+                                typed[i].is_none()
+                                    && objs[i].is_none()
+                                    && refs[i].is_none()
+                                    && store_may_reach_io(w),
+                                "{at:#010x}: the bank plan's store isn't the printed one"
+                            );
+                            if banks[i] && !banked[i] {
                                 // sp goes to the current mode's bank: the
                                 // reset, an IRQ wrapper or what they call
                                 // may be in another mode than system.
+                                self.soft.bank_sp_calls += 1;
                                 format!("bank_sp(g, r13); {mem}")
                             } else {
+                                self.soft.banks_left_out += u64::from(banks[i]);
                                 mem
                             }
                         }
@@ -3559,6 +3695,7 @@ impl FnPrinter<'_, '_> {
             Idle::Exit => "bank_sp(g, r13); hw::idle_exit(g)?; ",
             _ => "",
         };
+        self.soft.bank_sp_calls += u64::from(!wait.is_empty());
         match x.plan {
             Plan::Static(k) | Plan::Rekey(k) => {
                 let j = self.goto(k, at);
@@ -3685,7 +3822,10 @@ impl FnPrinter<'_, '_> {
                     0x00 => "soft_reset(g)?;".to_string(),
                     0x01 => "register_ram_reset(g, r0);".to_string(),
                     // `Stop` is a halt, as in the play build.
-                    0x02 | 0x03 => "bank_sp(g, r13); hw::halt(g)?;".to_string(),
+                    0x02 | 0x03 => {
+                        self.soft.bank_sp_calls += 1;
+                        "bank_sp(g, r13); hw::halt(g)?;".to_string()
+                    }
                     0x04 => "r0 = intr_wait(g, r13, r0 != 0, r1)?;".to_string(),
                     0x05 => "r0 = intr_wait(g, r13, true, 1)?; r1 = 1;".to_string(),
                     0x06 => {
