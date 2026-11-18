@@ -332,6 +332,50 @@ agb-tests:
         echo "$out/$name.gba"
     done
 
+# Builds the C test programs in this repo's c/ (source only; c/README.md), each twice: with agbcc (GCC 2.95, jiangzhengwenjz's, $GBAA_DATA/src/agbcc-jzw) and with modern arm-none-eabi-gcc ($GBAA_DATA/toolchains/arm-gnu-toolchain-15.2.rel1), both from scripts/fetch-decomps.sh. Each links c/common's crt0.s and draw.c with its compiler's libgcc.a. Writes $GBAA_DATA/c/c-<name>-agbcc.{elf,gba} and c-<name>-gcc.{elf,gba}; objects in $GBAA_DATA/c/build/.
+c-tests:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    data={{quote(gbaa_data)}}
+    out="$data/c"
+    tc="$data/toolchains/arm-gnu-toolchain-15.2.rel1-x86_64-arm-none-eabi/bin"
+    agbcc="$data/src/agbcc-jzw"
+    for f in "$tc/arm-none-eabi-gcc" "$agbcc/agbcc" "$agbcc/libgcc.a"; do
+        [ -e "$f" ] || { echo "no $f: run scripts/fetch-decomps.sh" >&2; exit 1; }
+    done
+    {{lock}} cargo build -q --release -p disc-check
+    disc="$PWD/target/release/disc-check"
+    as=("$tc/arm-none-eabi-as" -mcpu=arm7tdmi -mthumb-interwork)
+    gcc=("$tc/arm-none-eabi-gcc" -mcpu=arm7tdmi -mthumb -mthumb-interwork -O2 -g -ffreestanding -nostdlib -fno-tree-loop-distribute-patterns -Wall -Werror -Ic/common)
+    gcclib=$("${gcc[@]}" -print-libgcc-file-name)
+    for dir in c/*/; do
+        name=$(basename "$dir")
+        [ "$name" = common ] && continue
+        for cc in agbcc gcc; do
+            obj="$out/build/$name-$cc"
+            rm -rf "$obj" && mkdir -p "$obj"
+            "${as[@]}" -o "$obj/crt0.o" c/common/crt0.s
+            objs=("$obj/crt0.o")
+            for src in c/common/*.c "$dir"*.c; do
+                o="$obj/$(basename "$(dirname "$src")")-$(basename "$src" .c)"
+                if [ $cc = agbcc ]; then
+                    # pret's way: the C preprocessor, agbcc's cc1 to Thumb assembly, then as.
+                    "$tc/arm-none-eabi-cpp" -nostdinc -undef -DAGBCC -Ic/common "$src" -o "$o.i"
+                    "$agbcc/agbcc" -mthumb-interwork -Wimplicit -Wparentheses -Werror -O2 -fhex-asm -g -o "$o.s" "$o.i"
+                    "${as[@]}" -o "$o.o" "$o.s"
+                else
+                    "${gcc[@]}" -c -o "$o.o" "$src"
+                fi
+                objs+=("$o.o")
+            done
+            lib=$([ $cc = agbcc ] && echo "$agbcc/libgcc.a" || echo "$gcclib")
+            elf="$out/c-$name-$cc.elf"
+            "$tc/arm-none-eabi-ld" -T c/common/gba.ld -o "$elf" "${objs[@]}" "$lib"
+            "$disc" rom "$elf" "$out/c-$name-$cc.gba" > /dev/null
+            echo "$out/c-$name-$cc.gba"
+        done
+    done
+
 # Discovery on the agb (rustc/LLVM) ROMs, scored against their ELFs: the one from `just agb-build` and the LLVM jump-table sample. Prints precision/recall (failing below each ROM's bar), then the far jumps (failing on a false one) and code discovery found. The functions agb's crt0 copies to IWRAM/EWRAM aren't in ROM's truth: the BIOS copy lines show them.
 disc-agb:
     #!/usr/bin/env bash
@@ -979,7 +1023,7 @@ first-stop out *args:
     {{lock}} cargo build -q --release -p codegen --bin gbaa-first-stop
     target/release/gbaa-first-stop {{quote(out)}} {{args}}
 
-# The stage-A lifter's check (native/lift-stage-a, native/lift-bars; docs/native-stage-b.md, "How every piece is checked"): gbaa-lift-check runs the programs of crates/codegen/lift-check.toml (one table each: ROM under $GBAA_DATA, route, flags, bars; today agb/native-spike, agb/affine, agb/mosaic-modes, agb/native-fallthrough, agb/native-irq-hold, agb/native-frame-locals, agb/native-ime-release, agb/native-bios-calls, agb/native-bios-more, agb/native-tasks, agb/native-dma, agb/native-save, agb/native-bios-region, agb/native-bios-affine, agb/native-serial, agb/native-irq-wrapper and agb/native-takes from `just agb-tests`). First each is lifted with `--bars`, failing on any metric over its bar, named with both numbers; then each lift and its play build (--timing native) are built and route-check --native compares them for the route's 600 frames (601 for native-irq-hold, native-ime-release and native-bios-region) with no replaced-library list: pictures, RAM outside the stack and code copies, I/O, display memories. Controls from the file: the spike lifted with a planted wrong store (planted_store, the V-blank handler's frame count) must be caught, and with portable_atomic's interrupt::disable stand-in dropped (planted_hole) the lift and the crate's build must fail naming f_08002728's mrs, a critical section's (native-tasks likewise: task_fib's store made one more, and its yield's stand-in dropped, naming its stack switch; native-dma's dma_set DMAxCNT store made one more; native-save's an SRAM strb; native-serial's sio_set SIOCNT store; native-irq-wrapper's IE put back after its wrapper's handler call); native-fallthrough, native-irq-hold, native-frame-locals, native-ime-release and native-takes lifted with each of their planted_flags (--fall-as-tail-call: the old fall into another function as a tail call; --irq-at-waits: the old IRQ at a wait inside a critical section; --plant-slot=0x08000182: a store to a stack local, fl_keep's x + 7, made one more; --ime-at-waits: the old IRQ held past the store that sets IME again; --takes-zeroed: the old call of a function that takes r4-r11 from its callers, with them zeroed) must be caught by the native check. Each program is also lifted at the play layout (--layout packed: globals in the lifter's order; native/lift-packed-layout), which route-check --packed holds to the guest layout's frames and records. ARGS: --only NAME. Writes out/lift-*. Heavy: builds sixty generated crates (each program's lift, packed lift and play build, eleven planted lifts, and the two planted holes' builds that must fail; about 26 minutes: the nine programs besides native-spike, native-save, native-bios-region and native-bios-more took 17 on quack).
+# The stage-A lifter's check (native/lift-stage-a, native/lift-bars; docs/native-stage-b.md, "How every piece is checked"): gbaa-lift-check runs the programs of crates/codegen/lift-check.toml (one table each: ROM under $GBAA_DATA, route, flags, bars; today agb/native-spike, agb/affine, agb/mosaic-modes, agb/native-fallthrough, agb/native-irq-hold, agb/native-frame-locals, agb/native-ime-release, agb/native-bios-calls, agb/native-bios-more, agb/native-tasks, agb/native-dma, agb/native-save, agb/native-bios-region, agb/native-bios-affine, agb/native-serial, agb/native-irq-wrapper and agb/native-takes from `just agb-tests`, and the C programs c-fnptr, c-switch and c-chain, each built by agbcc and by modern GCC, from `just c-tests`). First each is lifted with `--bars`, failing on any metric over its bar, named with both numbers; then each lift and its play build (--timing native) are built and route-check --native compares them for the route's 600 frames (601 for native-irq-hold, native-ime-release and native-bios-region) with no replaced-library list: pictures, RAM outside the stack and code copies, I/O, display memories. Controls from the file: the spike lifted with a planted wrong store (planted_store, the V-blank handler's frame count) must be caught, and with portable_atomic's interrupt::disable stand-in dropped (planted_hole) the lift and the crate's build must fail naming f_08002728's mrs, a critical section's (native-tasks likewise: task_fib's store made one more, and its yield's stand-in dropped, naming its stack switch; native-dma's dma_set DMAxCNT store made one more; native-save's an SRAM strb; native-serial's sio_set SIOCNT store; native-irq-wrapper's IE put back after its wrapper's handler call; each C program's store of a global counter); native-fallthrough, native-irq-hold, native-frame-locals, native-ime-release and native-takes lifted with each of their planted_flags (--fall-as-tail-call: the old fall into another function as a tail call; --irq-at-waits: the old IRQ at a wait inside a critical section; --plant-slot=0x08000182: a store to a stack local, fl_keep's x + 7, made one more; --ime-at-waits: the old IRQ held past the store that sets IME again; --takes-zeroed: the old call of a function that takes r4-r11 from its callers, with them zeroed) must be caught by the native check. Each program is also lifted at the play layout (--layout packed: globals in the lifter's order; native/lift-packed-layout), which route-check --packed holds to the guest layout's frames and records. ARGS: --only NAME. Writes out/lift-*. Heavy: builds about eighty generated crates (each program's lift, packed lift and play build, seventeen planted lifts, and the two planted holes' builds that must fail; about 26 minutes: the nine programs besides native-spike, native-save, native-bios-region and native-bios-more took 17 on quack).
 lift-check *args:
     {{lock}} cargo build -q --release -p route-check
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift --bin gbaa-lift-check
@@ -1397,7 +1441,7 @@ room-sim profile="calm" *args:
     {{lock}} cargo build -q --release -p netplay --bin gbaa-pingsim
     target/release/gbaa-pingsim room crates/netplay/profiles/{{profile}}.toml {{args}}
 
-# Rollback, felt (multiplayer/rollback-design): two gbaa-desktop netplay windows on ROM through a local server, the joiner's path through the profile's proxy (crates/netplay/profiles/NAME.toml: calm, wander, spiky, rough), so the profile is the whole trip between the players. The keyboard drives the window with focus; a gamepad drives both. Add --headless --paced --frames N --input1 S --input2 S for numbers instead (each peer's end line: rollbacks, frames run again, freezes, frame times). ARGS: --delay D (0 by default), --save1/--save2 F, --menu1/--menu2 SPANS (headless: when each seat's menu is open, as frame[+frames] or from-to/every+frames).
+# Rollback, felt (multiplayer/rollback-design): two gbaa-desktop netplay windows on ROM through a local server, the joiner's path through the profile's proxy (crates/netplay/profiles/NAME.toml: calm, wander, spiky, rough), so the profile is the whole trip between the players. The keyboard drives the window with focus; a gamepad drives both. Add --headless --paced --frames N --input1 S --input2 S for numbers instead (each peer's end line: rollbacks, frames run again, freezes, frame times, the longest stretch 10+ frames apart); --stop SEAT@SECS+DUR SIGSTOPs a player and fails unless all are level again within 10 s of its return. ARGS: --delay D (0 by default), --save1/--save2 F, --menu1/--menu2 SPANS (headless: when each seat's menu is open, as frame[+frames] or from-to/every+frames).
 rollback-feel profile="wander" rom=(roms / "Kirby & The Amazing Mirror.gba") *args:
     {{lock}} cargo build -q --release -p netplay --bin gbaa-pingsim -p desktop --bin gbaa-desktop
     target/release/gbaa-pingsim desktop crates/netplay/profiles/{{profile}}.toml {{quote(rom)}} -- {{args}}

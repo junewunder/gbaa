@@ -42,11 +42,13 @@ max_lines = 640
 # check's numbers in the tracker's evidence); 1981 after
 # multiplayer/menu-wireless-room's Link row (3 lines, its check in the
 # tracker's evidence); 1991 after native/nightly-corpus's `just nightly`
-# (10 lines, the rest in its module's docs); 2002 after native/fn-check-any's
-# `just fn-check` (11 lines, its numbers in the tracker's evidence).
+# (10 lines, the rest in its module's docs); 1995 after
+# native/c-test-programs' `just c-tests` (4 lines, the rest in c/README.md);
+# 2007 after native/fn-check-any's `just fn-check` (11 lines, its numbers in
+# the tracker's evidence) and the merge of the two.
 [[doc]]
 path = "docs/tools/commands.md"
-max_lines = 2002
+max_lines = 2007
 
 # 1254 after native/hw-serial-registers added the serial registers' entry
 # to section 7's as-built list (4 lines: what the library keeps and that

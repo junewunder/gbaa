@@ -99,6 +99,37 @@ fn pointer_scan_takes_validated_candidates() {
 }
 
 #[test]
+fn pointer_scan_takes_a_struct_table_of_pointer_pairs() {
+    // c/fnptr's sObjOps as modern GCC builds it: structs of two function
+    // pointers and a word of data, the leaves with no push.
+    let leaf = |a: &mut Asm, at: u32| {
+        a.h(at, 0x2001).h(at + 2, 0x4770); // movs r0, #1; bx lr
+    };
+    let table = |pair: bool| {
+        let mut a = Asm::new();
+        a.entry(0x100).h(0x100, 0x4770);
+        leaf(&mut a, 0x300);
+        leaf(&mut a, 0x320);
+        leaf(&mut a, 0x340);
+        a.w(0x400, if pair { thumb(0x300) } else { 0 })
+            .w(0x404, thumb(0x320))
+            .w(0x408, 8)
+            .w(0x40c, thumb(0x100))
+            .w(0x410, thumb(0x340))
+            .w(0x414, 8);
+        a.run()
+    };
+    let d = table(true);
+    for f in [0x300, 0x320, 0x340] {
+        assert_eq!(d.funcs.get(&thumb(f)), Some(&Evidence::Scanned), "0x{f:x}");
+    }
+    // Two words from a start, but with nothing beside it: no table.
+    let d = table(false);
+    assert!(!d.funcs.contains_key(&thumb(0x320)));
+    assert_eq!(d.funcs.get(&thumb(0x340)), Some(&Evidence::Scanned));
+}
+
+#[test]
 fn pointer_scan_takes_a_lone_pool_getter() {
     let mut a = Asm::new();
     a.entry(0x100)
@@ -312,6 +343,38 @@ fn a_run_of_cold_blocks_after_a_function_is_all_its_own() {
         assert!(!d.funcs.contains_key(&thumb(0x138 + 6 * k)), "block {k}");
     }
     assert!(d.funcs.contains_key(&thumb(0x200)));
+}
+
+/// main: `push {r4, lr}; cmp r0, #0; bne 1f; bl next; 1: pop {r4, pc}`,
+/// with the function `next` right after it, never returning.
+fn main_then(next: &[u16]) -> Discovery {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        .h(0x100, 0xb510)
+        .h(0x102, 0x2800)
+        .bcond(0x104, 1, 0x10a)
+        .bl(0x106, 0x10c)
+        .h(0x10a, 0xbd10);
+    for (k, &h) in next.iter().enumerate() {
+        a.h(0x10c + 2 * k as u32, h);
+    }
+    a.run()
+}
+
+#[test]
+fn a_variadic_function_after_its_caller_is_its_own() {
+    // push {r0-r3}; push {r4, lr}; b .
+    let d = main_then(&[0xb40f, 0xb510, 0xe7fe]);
+    assert!(!d.rec.far_jumps.contains(&(B + 0x106)));
+    assert!(d.funcs.contains_key(&thumb(0x10c)), "{:x?}", d.funcs);
+}
+
+#[test]
+fn a_lone_idle_loop_after_its_caller_is_its_own() {
+    // b .
+    let d = main_then(&[0xe7fe]);
+    assert!(!d.rec.far_jumps.contains(&(B + 0x106)));
+    assert!(d.funcs.contains_key(&thumb(0x10c)), "{:x?}", d.funcs);
 }
 
 #[test]

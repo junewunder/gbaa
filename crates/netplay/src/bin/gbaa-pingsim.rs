@@ -39,8 +39,11 @@
 //!   as `--desync-at` (a forced desync); `--delay D` and `--players N` to
 //!   the host; `--exe BIN` runs BIN for all instead of `gbaa-desktop` (a
 //!   recompiled game's binary, `gbaa-<game>`). The joiners start a second
-//!   apart, so each takes the seat its options name. Prints each peer's
-//!   end lines; fails if their end hashes differ. Without `--headless`,
+//!   apart, so each takes the seat its options name. `--stop SEAT@SECS+DUR`
+//!   SIGSTOPs player SEAT (from 1) SECS in for DUR seconds, and then fails
+//!   unless every player is back within 10 frames of the others inside
+//!   10 s of its return (multiplayer/stall-catch-up-paced). Prints each
+//!   peer's end lines; fails if their end hashes differ. Without `--headless`,
 //!   windows: how it
 //!   feels.
 //!
@@ -595,6 +598,7 @@ fn desktop(profile_path: &Path, rom: &str, extra: &[&str]) -> Result<(), String>
     let mut both = Vec::new();
     let mut own: [Vec<String>; MAX] = Default::default();
     let mut players = 2;
+    let mut stop: Option<Stop> = None;
     let mut it = extra.iter();
     while let Some(&a) = it.next() {
         let mut one = |seat: usize, flag: &str| -> Result<(), String> {
@@ -633,6 +637,10 @@ fn desktop(profile_path: &Path, rom: &str, extra: &[&str]) -> Result<(), String>
                 own[0].extend(["--players".to_string(), v.to_string()]);
             }
             "--exe" => exe = it.next().ok_or("--exe needs a value")?.into(),
+            "--stop" => {
+                let v = it.next().ok_or("--stop needs a value")?;
+                stop = Some(parse_stop(v).ok_or(format!("--stop {v}: not SEAT@SECS+DUR"))?);
+            }
             a => both.push(a.to_string()),
         }
     }
@@ -680,6 +688,30 @@ fn desktop(profile_path: &Path, rom: &str, extra: &[&str]) -> Result<(), String>
             &["--join".into(), code.clone()],
         )?);
     }
+    if let Some(st) = stop {
+        if st.seat >= players {
+            return Err(format!("--stop: no player {}", st.seat + 1));
+        }
+        let pid = match st.seat {
+            0 => host.id(),
+            n => guests[n - 1].id(),
+        } as libc::pid_t;
+        std::thread::spawn(move || {
+            std::thread::sleep(st.at);
+            // SAFETY: plain signals to a child this process started (and
+            // hasn't reaped: the waits below come after its end).
+            if unsafe { libc::kill(pid, libc::SIGSTOP) } != 0 {
+                return;
+            }
+            println!(
+                "stopped player {} for {:.1} s",
+                st.seat + 1,
+                st.hold.as_secs_f64()
+            );
+            std::thread::sleep(st.hold);
+            unsafe { libc::kill(pid, libc::SIGCONT) };
+        });
+    }
     let mut rest = String::new();
     std::io::Read::read_to_string(&mut out, &mut rest).map_err(|e| e.to_string())?;
     let _ = host.wait();
@@ -707,10 +739,68 @@ fn desktop(profile_path: &Path, rom: &str, extra: &[&str]) -> Result<(), String>
     }
     match ends.as_slice() {
         // Windows closed early say nothing to compare.
-        e if e.len() < players => Ok(()),
-        [a, rest @ ..] if rest.iter().all(|e| e == a) => Ok(()),
-        e => Err(format!("the peers ended apart: {}", e.join(", "))),
+        e if e.len() < players => return Ok(()),
+        [a, rest @ ..] if rest.iter().all(|e| e == a) => {}
+        e => return Err(format!("the peers ended apart: {}", e.join(", "))),
     }
+    // Stopped, a player is back level with the others (within
+    // feel::APART frames) inside CAUGHT_UP of coming back; the others' stretch
+    // apart takes in the stop too (multiplayer/stall-catch-up-paced).
+    if let Some(st) = stop {
+        for (seat, o) in outs.iter().enumerate() {
+            let apart = o
+                .lines()
+                .filter_map(|l| l.split(" apart for ").nth(1))
+                .filter_map(|r| r.split(' ').next()?.parse::<f64>().ok())
+                .next()
+                .ok_or(format!("player {}: no time apart said", seat + 1))?;
+            let most = match seat == st.seat {
+                true => CAUGHT_UP,
+                false => CAUGHT_UP + st.hold.as_secs_f64(),
+            };
+            if apart > most {
+                return Err(format!(
+                    "player {} ran {} frames or more apart for {apart:.1} s, over {most:.1} s",
+                    seat + 1,
+                    netplay::feel::APART
+                ));
+            }
+        }
+        println!("caught up: every player level again within {CAUGHT_UP:.0} s of the stop's end");
+    }
+    Ok(())
+}
+
+/// `--stop`'s check: a stopped player is back within `feel::APART` frames
+/// of the others this soon after it resumes, seconds.
+const CAUGHT_UP: f64 = 10.0;
+
+/// `desktop --stop SEAT@SECS+DUR`: SIGSTOP player SEAT (from 1) SECS after
+/// the start, for DUR seconds.
+#[derive(Clone, Copy)]
+struct Stop {
+    seat: usize,
+    at: Duration,
+    hold: Duration,
+}
+
+fn parse_stop(s: &str) -> Option<Stop> {
+    let (seat, rest) = s.split_once('@')?;
+    let (at, hold) = rest.split_once('+')?;
+    let seat: usize = seat.parse().ok()?;
+    let secs = |t: &str| {
+        t.parse::<f64>()
+            .ok()
+            .filter(|t| t.is_finite() && *t >= 0.0)
+            .map(Duration::from_secs_f64)
+    };
+    (1..=runtime::link::MAX_PLAYERS)
+        .contains(&seat)
+        .then_some(Stop {
+            seat: seat - 1,
+            at: secs(at)?,
+            hold: secs(hold)?,
+        })
 }
 
 fn main() -> ExitCode {
