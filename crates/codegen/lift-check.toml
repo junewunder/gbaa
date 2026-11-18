@@ -31,7 +31,7 @@ rom = "agb/affine.gba"
 route = "units/affine-600.toml"
 
 [program.affine.bars]
-lines = 26664
+lines = 26663
 lines_prelude = 1265
 functions = 109
 functions_iwram = 3
@@ -47,7 +47,8 @@ blocks = 1714
 functions_in_match = 1
 blocks_in_match = 206
 dead_flag_writes = 0
-value_lets = 9356
+shift_pairs_left = 0
+value_lets = 9355
 bank_sp_calls = 257
 load_const_ram = 0
 load_const_io = 11
@@ -94,7 +95,7 @@ rom = "agb/mosaic-modes.gba"
 route = "units/mosaic-modes-600.toml"
 
 [program.mosaic-modes.bars]
-lines = 19293
+lines = 19292
 lines_prelude = 1265
 functions = 102
 functions_iwram = 3
@@ -110,7 +111,8 @@ blocks = 1238
 functions_in_match = 1
 blocks_in_match = 46
 dead_flag_writes = 0
-value_lets = 6520
+shift_pairs_left = 0
+value_lets = 6519
 bank_sp_calls = 214
 load_const_ram = 0
 load_const_io = 11
@@ -165,7 +167,7 @@ planted_store = 0x08000186
 planted_hole = { drop_standin = 0x08002728, names = "error: hard hole in f_08002728 at 0x08002730: CPU state: mrs" }
 
 [program.native-spike.bars]
-lines = 27763
+lines = 27762
 lines_prelude = 1265
 functions = 110
 functions_iwram = 3
@@ -181,7 +183,8 @@ blocks = 1745
 functions_in_match = 1
 blocks_in_match = 206
 dead_flag_writes = 0
-value_lets = 10115
+shift_pairs_left = 0
+value_lets = 10114
 bank_sp_calls = 263
 load_const_ram = 0
 load_const_io = 18
@@ -232,7 +235,7 @@ route = "units/native-fallthrough-600.toml"
 planted_flags = ["--fall-as-tail-call"]
 
 [program.native-fallthrough.bars]
-lines = 26218
+lines = 26217
 lines_prelude = 1265
 functions = 112
 functions_iwram = 3
@@ -248,7 +251,8 @@ blocks = 1712
 functions_in_match = 1
 blocks_in_match = 206
 dead_flag_writes = 0
-value_lets = 9321
+shift_pairs_left = 0
+value_lets = 9320
 bank_sp_calls = 260
 load_const_ram = 0
 load_const_io = 12
@@ -300,7 +304,7 @@ route = "units/native-irq-hold-601.toml"
 planted_flags = ["--irq-at-waits"]
 
 [program.native-irq-hold.bars]
-lines = 26480
+lines = 26479
 lines_prelude = 1265
 functions = 114
 functions_iwram = 3
@@ -316,7 +320,8 @@ blocks = 1734
 functions_in_match = 1
 blocks_in_match = 206
 dead_flag_writes = 0
-value_lets = 9403
+shift_pairs_left = 0
+value_lets = 9402
 bank_sp_calls = 267
 load_const_ram = 0
 load_const_io = 17
@@ -370,7 +375,7 @@ route = "units/native-frame-locals-600.toml"
 planted_flags = ["--plant-slot=0x08000182"]
 
 [program.native-frame-locals.bars]
-lines = 26242
+lines = 26241
 lines_prelude = 1265
 functions = 113
 functions_iwram = 3
@@ -386,7 +391,8 @@ blocks = 1714
 functions_in_match = 1
 blocks_in_match = 206
 dead_flag_writes = 0
-value_lets = 9322
+shift_pairs_left = 0
+value_lets = 9321
 bank_sp_calls = 261
 load_const_ram = 0
 load_const_io = 12
@@ -437,7 +443,7 @@ route = "units/native-ime-release-601.toml"
 planted_flags = ["--ime-at-waits"]
 
 [program.native-ime-release.bars]
-lines = 26459
+lines = 26458
 lines_prelude = 1265
 functions = 113
 functions_iwram = 3
@@ -453,7 +459,8 @@ blocks = 1731
 functions_in_match = 1
 blocks_in_match = 206
 dead_flag_writes = 0
-value_lets = 9388
+shift_pairs_left = 0
+value_lets = 9387
 bank_sp_calls = 271
 load_const_ram = 0
 load_const_io = 17
@@ -508,7 +515,7 @@ route = "units/native-bios-calls-600.toml"
 # (native/ref-heap-static-arrays).
 
 [program.native-bios-calls.bars]
-lines = 26595
+lines = 26594
 lines_prelude = 1265
 functions = 109
 functions_iwram = 3
@@ -524,7 +531,8 @@ blocks = 1724
 functions_in_match = 1
 blocks_in_match = 206
 dead_flag_writes = 0
-value_lets = 9419
+shift_pairs_left = 0
+value_lets = 9418
 bank_sp_calls = 259
 load_const_ram = 0
 load_const_io = 13
@@ -579,7 +587,7 @@ route = "units/native-bios-more-600.toml"
 # restarts the program.
 
 [program.native-bios-more.bars]
-lines = 27732
+lines = 27731
 lines_prelude = 1265
 functions = 104
 functions_iwram = 3
@@ -595,7 +603,8 @@ blocks = 1673
 functions_in_match = 2
 blocks_in_match = 512
 dead_flag_writes = 0
-value_lets = 10445
+shift_pairs_left = 0
+value_lets = 10444
 bank_sp_calls = 265
 load_const_ram = 0
 load_const_io = 19
@@ -655,7 +664,7 @@ planted_store = 0x08000288
 planted_hole = { drop_standin = 0x080001a4, names = "error: hard hole in f_080001a4 at 0x080001c0: CPU state: a stack switch" }
 
 [program.native-tasks.bars]
-lines = 26740
+lines = 26739
 lines_prelude = 1265
 functions = 122
 functions_iwram = 3
@@ -671,7 +680,8 @@ blocks = 1752
 functions_in_match = 1
 blocks_in_match = 206
 dead_flag_writes = 0
-value_lets = 9448
+shift_pairs_left = 0
+value_lets = 9447
 bank_sp_calls = 270
 load_const_ram = 0
 load_const_io = 13
@@ -736,7 +746,7 @@ route = "units/native-dma-600.toml"
 planted_store = 0x08000180
 
 [program.native-dma.bars]
-lines = 19172
+lines = 19171
 lines_prelude = 1265
 functions = 107
 functions_iwram = 3
@@ -752,7 +762,8 @@ blocks = 1259
 functions_in_match = 1
 blocks_in_match = 46
 dead_flag_writes = 0
-value_lets = 6526
+shift_pairs_left = 0
+value_lets = 6525
 bank_sp_calls = 220
 load_const_ram = 0
 load_const_io = 21
@@ -808,7 +819,7 @@ route = "units/native-save-600.toml"
 planted_store = 0x080002ac
 
 [program.native-save.bars]
-lines = 26498
+lines = 26497
 lines_prelude = 1265
 functions = 112
 functions_iwram = 3
@@ -824,7 +835,8 @@ blocks = 1723
 functions_in_match = 1
 blocks_in_match = 206
 dead_flag_writes = 0
-value_lets = 9428
+shift_pairs_left = 0
+value_lets = 9427
 bank_sp_calls = 263
 load_const_ram = 0
 load_const_io = 12
@@ -876,7 +888,7 @@ route = "units/native-bios-region-601.toml"
 # (nowhere); agb/native-bios-region/src/main.rs.
 
 [program.native-bios-region.bars]
-lines = 26386
+lines = 26385
 lines_prelude = 1265
 functions = 114
 functions_iwram = 3
@@ -892,7 +904,8 @@ blocks = 1724
 functions_in_match = 1
 blocks_in_match = 206
 dead_flag_writes = 0
-value_lets = 9361
+shift_pairs_left = 0
+value_lets = 9360
 bank_sp_calls = 268
 load_const_ram = 0
 load_const_io = 15
@@ -945,7 +958,7 @@ route = "units/native-bios-affine-600.toml"
 # agb/native-bios-affine/src/main.rs.
 
 [program.native-bios-affine.bars]
-lines = 26704
+lines = 26703
 lines_prelude = 1265
 functions = 110
 functions_iwram = 3
@@ -961,7 +974,8 @@ blocks = 1726
 functions_in_match = 1
 blocks_in_match = 206
 dead_flag_writes = 0
-value_lets = 9521
+shift_pairs_left = 0
+value_lets = 9520
 bank_sp_calls = 258
 load_const_ram = 0
 load_const_io = 12
@@ -1016,7 +1030,7 @@ route = "units/native-serial-600.toml"
 planted_store = 0x0800017c
 
 [program.native-serial.bars]
-lines = 27327
+lines = 27326
 lines_prelude = 1265
 functions = 117
 functions_iwram = 3
@@ -1032,7 +1046,8 @@ blocks = 1758
 functions_in_match = 1
 blocks_in_match = 206
 dead_flag_writes = 0
-value_lets = 9744
+shift_pairs_left = 0
+value_lets = 9743
 bank_sp_calls = 270
 load_const_ram = 0
 load_const_io = 16
@@ -1089,7 +1104,7 @@ route = "units/native-irq-wrapper-600.toml"
 planted_store = 0x080001f4
 
 [program.native-irq-wrapper.bars]
-lines = 26798
+lines = 26797
 lines_prelude = 1265
 functions = 118
 functions_iwram = 3
@@ -1105,7 +1120,8 @@ blocks = 1744
 functions_in_match = 1
 blocks_in_match = 206
 dead_flag_writes = 0
-value_lets = 9505
+shift_pairs_left = 0
+value_lets = 9504
 bank_sp_calls = 273
 load_const_ram = 0
 load_const_io = 17
@@ -1157,7 +1173,7 @@ route = "units/native-takes-600.toml"
 planted_flags = ["--takes-zeroed"]
 
 [program.native-takes.bars]
-lines = 26236
+lines = 26235
 lines_prelude = 1265
 functions = 113
 functions_iwram = 3
@@ -1173,7 +1189,8 @@ blocks = 1714
 functions_in_match = 1
 blocks_in_match = 206
 dead_flag_writes = 0
-value_lets = 9328
+shift_pairs_left = 0
+value_lets = 9327
 bank_sp_calls = 262
 load_const_ram = 0
 load_const_io = 12
@@ -1241,6 +1258,7 @@ blocks = 68
 functions_in_match = 0
 blocks_in_match = 0
 dead_flag_writes = 0
+shift_pairs_left = 0
 value_lets = 250
 bank_sp_calls = 13
 load_const_ram = 0
@@ -1309,6 +1327,7 @@ blocks = 78
 functions_in_match = 0
 blocks_in_match = 0
 dead_flag_writes = 0
+shift_pairs_left = 0
 value_lets = 288
 bank_sp_calls = 18
 load_const_ram = 0
@@ -1377,6 +1396,7 @@ blocks = 77
 functions_in_match = 0
 blocks_in_match = 0
 dead_flag_writes = 0
+shift_pairs_left = 0
 value_lets = 291
 bank_sp_calls = 31
 load_const_ram = 0
@@ -1445,6 +1465,7 @@ blocks = 80
 functions_in_match = 0
 blocks_in_match = 0
 dead_flag_writes = 0
+shift_pairs_left = 0
 value_lets = 333
 bank_sp_calls = 39
 load_const_ram = 0
@@ -1513,6 +1534,7 @@ blocks = 63
 functions_in_match = 0
 blocks_in_match = 0
 dead_flag_writes = 0
+shift_pairs_left = 0
 value_lets = 358
 bank_sp_calls = 17
 load_const_ram = 0
@@ -1581,6 +1603,7 @@ blocks = 64
 functions_in_match = 0
 blocks_in_match = 0
 dead_flag_writes = 0
+shift_pairs_left = 0
 value_lets = 358
 bank_sp_calls = 19
 load_const_ram = 0
