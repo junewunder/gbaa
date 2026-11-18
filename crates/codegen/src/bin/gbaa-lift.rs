@@ -1,7 +1,7 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
 //! [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT]
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT]
-//! [--shadow-locals] [--copies N] [--holes-only [--flow]]
+//! [--shadow-locals] [--keep-dead-writes] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
 //! [--plant-reference]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
@@ -58,6 +58,12 @@
 //! local differs from them: something the escape analysis didn't see
 //! wrote the frame. A check by hand, not part of the lift check.
 //!
+//! `--keep-dead-writes` prints every write of a register or flag, as
+//! stage A first did, also those nothing reads after them (unit
+//! `native/lift-dead-writes`), which the lift leaves out: the report and
+//! `dead_flag_writes` count the flag writes among them. A measure by
+//! hand: they change nothing the native check sees.
+//!
 //! `src/` is `main.rs` (the prelude, RAM, `ENTRY`), `fns.rs` (`FNS`) and
 //! the functions in modules of about 4,000 lines (`codegen::native::modules`,
 //! unit `native/lift-modules`), so rustc builds them in parallel; a `.rs`
@@ -104,7 +110,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference]"
         );
         ExitCode::FAILURE
     };
@@ -113,7 +119,7 @@ fn main() -> ExitCode {
     };
     let (mut name, mut holes, mut bars, mut names) = (None, None, None, None);
     let (mut drop, mut plant, mut tail, mut irq_at_waits) = (None, None, false, false);
-    let (mut ime_at_waits, mut takes_zeroed) = (false, false);
+    let (mut ime_at_waits, mut takes_zeroed, mut keep_dead) = (false, false, false);
     let (mut holes_only, mut holes_flow) = (false, false);
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
     let (mut fn_check, mut replace, mut seed, mut runs) = (Vec::new(), None, None, None);
@@ -136,6 +142,10 @@ fn main() -> ExitCode {
         }
         if a == "--takes-zeroed" {
             takes_zeroed = true;
+            continue;
+        }
+        if a == "--keep-dead-writes" {
+            keep_dead = true;
             continue;
         }
         if a == "--holes-only" {
@@ -259,6 +269,7 @@ fn main() -> ExitCode {
     holes.irq_at_waits = irq_at_waits;
     holes.ime_at_waits = ime_at_waits;
     holes.takes_zeroed = takes_zeroed;
+    holes.keep_dead_writes = keep_dead;
     holes.plant_slot = plant_slot;
     holes.shadow_locals = shadow;
     holes.copies = copies;
