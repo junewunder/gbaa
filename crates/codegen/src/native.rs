@@ -1867,11 +1867,6 @@ fn fn_ins<'a>(
     (ins, pools, call_fn)
 }
 
-/// `holes` with a stand-in for each library routine the code has
-/// (`Ctx::library`: libgcc's `__muldf3` and `__divdf3`, a call of
-/// `runtime::softfloat`) and for each function inside one's code (its
-/// special-case paths, which only it calls: never run), unless the holes
-/// file has its own.
 /// The prelude of a checked lift (`--fn-check`): its RAM accesses noted
 /// (the prelude's `FN_CHECK`), the driver's module, the checks' list, and
 /// `main` the driver's, over the program's own (`play`).
@@ -2038,6 +2033,11 @@ fn fn_check_texts(
     (t, found)
 }
 
+/// `holes` with a stand-in for each library routine the code has
+/// (`Ctx::library`: libgcc's `__muldf3` and `__divdf3`, a call of
+/// `runtime::softfloat`) and for each function inside one's code (its
+/// special-case paths, which only it calls: never run), unless the holes
+/// file has its own.
 fn library_standins(holes: &Holes, codes: &[Code]) -> Holes {
     let mut h = holes.clone();
     for c in codes {

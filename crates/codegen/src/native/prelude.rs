@@ -266,7 +266,6 @@ fn bios_read(g: &Game, a: u32, n: u32) -> u32 {
 /// program doesn't keep.
 const BIOS_SIZE: u32 = 0x4000;
 
-/// The RAM offset of a guest EWRAM or IWRAM address (mirrors included).
 /// The per-function check's build (`gbaa-lift --fn-check`, its driver
 /// `fn_check.rs`): RAM loads and stores are noted while it runs a
 /// function ([`Accesses`]). False in every other build, where the notes
@@ -311,6 +310,7 @@ fn note_access(o: usize, n: usize, store: bool) {
     });
 }
 
+/// The RAM offset of a guest EWRAM or IWRAM address (mirrors included).
 #[inline(always)]
 fn ram_at(a: u32) -> Option<usize> {
     match a >> 24 {

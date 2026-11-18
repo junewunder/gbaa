@@ -89,6 +89,9 @@ fn fnv(mut h: u64, bytes: &[u8]) -> u64 {
 
 static TALLIES: Mutex<Vec<(u32, Tally)>> = Mutex::new(Vec::new());
 static START: Mutex<Option<Instant>> = Mutex::new(None);
+/// The frame by which every budget was spent, once it was
+/// (`GBAA_FN_CHECK_RUN_ON` runs on past it).
+static SPENT_AT: Mutex<Option<u64>> = Mutex::new(None);
 
 #[derive(Clone, Copy, PartialEq)]
 enum Side {
@@ -479,8 +482,11 @@ pub fn call(
     };
     // `GBAA_FN_CHECK_RUN_ON=1`: on to the program's end (its frames or
     // its stop), to compare where it ends with `GBAA_FN_CHECK_OFF`'s.
-    if all_spent && std::env::var_os("GBAA_FN_CHECK_RUN_ON").is_none() {
-        std::process::exit(report(Some(g.hw.frames())));
+    if all_spent {
+        let frames = *SPENT_AT.lock().unwrap().get_or_insert(g.hw.frames());
+        if std::env::var_os("GBAA_FN_CHECK_RUN_ON").is_none() {
+            std::process::exit(report(Some(frames)));
+        }
     }
     reference(g, sp, a)
 }
@@ -560,10 +566,17 @@ fn report(frames: Option<u64>) -> i32 {
 
 /// The program run headless (`play`, the lift's own main) under the
 /// checks; exits with the report when every budget is spent, or here when
-/// the frames run out first.
+/// the program ends first (or after, under `GBAA_FN_CHECK_RUN_ON`).
 pub fn main(play: fn() -> std::process::ExitCode) -> std::process::ExitCode {
     // A stop (a panic: what the lift can't run yet) ends the program as
     // the frames running out does; the report says what was checked.
     let _ = std::panic::catch_unwind(play);
-    std::process::ExitCode::from(report(None).max(1) as u8)
+    // Every budget spent (`GBAA_FN_CHECK_RUN_ON` ran on past it): the
+    // report's verdict is the exit code. Otherwise the program stopped
+    // short of the budgets, a failure whatever the runs so far showed.
+    let spent = *SPENT_AT.lock().unwrap();
+    match spent {
+        Some(frames) => std::process::ExitCode::from(report(Some(frames)) as u8),
+        None => std::process::ExitCode::from(report(None).max(1) as u8),
+    }
 }
