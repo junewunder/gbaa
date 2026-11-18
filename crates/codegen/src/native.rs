@@ -2027,7 +2027,15 @@ fn fn_check_texts(
     .unwrap();
     writeln!(
         t,
-        "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ fn_check::call(g, sp, a, &CHECK_{k:08x}, ref_f_{k:08x}, new_f_{k:08x}) }}\n"
+        "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ fn_check::call(g, sp, a, &CHECK_{k:08x}, ref_f_{k:08x}, new_f_{k:08x}) }}"
+    )
+    .unwrap();
+    // The wrapper already has the adapter's shape; a stand-in elsewhere
+    // that calls `a_KEY` by name (Metroid's IWRAM copy of a ROM function)
+    // reaches the check through it.
+    writeln!(
+        t,
+        "pub fn a_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ f_{k:08x}(g, sp, a) }}\n"
     )
     .unwrap();
     (t, found)
