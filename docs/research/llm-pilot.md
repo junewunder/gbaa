@@ -177,7 +177,7 @@ open unit that already covers it.
 | `pop {pc}` / `pop {r0}; bx r0` of the entry lr as a plain return | 15 | yes | done: `native/lift-pop-return` |
 | Branch conditions as comparisons and bit tests | 12 | yes | new: `native/lift-branch-conditions` |
 | Compiler narrowing idioms as casts and masks | 6 | yes | new: `native/lift-narrowing-casts` |
-| Single-use temporaries inline, constants at their use | all 20 | yes | new: `native/lift-inline-temps` |
+| Single-use temporaries inline, constants at their use | all 20 | yes | done: `native/lift-inline-temps` |
 | One `bank_sp` per run of stores at the same sp | 10 | yes, with care | new: `native/lift-bank-sp-once` |
 | A counted loop as `for` over a range | 2 | yes | new: `native/lift-for-loops` |
 | A compare tree on one value as `match` | 3 | yes | new: `native/lift-switch-match` |
