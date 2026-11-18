@@ -47,11 +47,16 @@ fn bus() -> Option<Bus> {
     Some(Bus { daemon, address })
 }
 
-fn connect(bus: &Bus) -> Connection {
+/// A connection to `bus`, whose calls fail after a minute without a reply
+/// rather than wait for good.
+fn builder(bus: &Bus) -> connection::Builder<'static> {
     connection::Builder::address(bus.address.as_str())
         .unwrap()
-        .build()
-        .unwrap()
+        .method_timeout(std::time::Duration::from_secs(60))
+}
+
+fn connect(bus: &Bus) -> Connection {
+    builder(bus).build().unwrap()
 }
 
 /// An item as the reader sees it.
@@ -147,7 +152,7 @@ fn a_private_bus_walks_and_clicks_the_menu() {
     let woken = Arc::new(AtomicUsize::new(0));
     let w = woken.clone();
     let export = Export::serve(
-        connect(&bus),
+        builder(&bus),
         State::default(),
         Box::new(move || {
             w.fetch_add(1, Ordering::SeqCst);
