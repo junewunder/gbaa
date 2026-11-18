@@ -1,10 +1,11 @@
 # Kirby - Nightmare in Dream Land: reset, the opening, Start through the title, A through game select
-# and the file, into Vegetable Valley's first room, walking right with a jump, up to where the stage-A
-# lift stops today (frame 902, a call to 0x08034a89 that is no function's entry). From frame 87 the
-# object tasks run on the switcher (started, resumed, yielding each frame), so its stand-ins (host
-# coroutines, native/nightmare-task-switch) run the rest of the route. The lift (`just lift … --name
-# kirby-nightmare`) against the play build at --timing native, by route-check --native, with the
-# planted store `--plant 0x080caaee` (a countdown in a task's body) caught at frame 87.
+# and the file, into Vegetable Valley's hub, Up through the first door into stage 1-1, then right with
+# jumps for 3,000 frames. From frame 87 the object tasks run on the switcher (started, resumed,
+# yielding each frame), so its stand-ins (host coroutines, native/nightmare-task-switch) run the rest
+# of the route. Frame 902's stop (a pointer call to the stage task 0x08034a89 that discovery's pointer
+# scan didn't take, its only switch after a call) is gone with native/nightmare-stop-34a88; the lift
+# runs 10,000 frames of this input held on, the play build's pictures the same. The lift (`just lift
+# … --name kirby-nightmare`) against the play build at --timing native, by route-check --native.
 rom = "$HOME/ROMs/gba/Kirby - Nightmare in Dream Land.gba"
 
 # Start skips the opening to the title, then the title to game select.
@@ -21,6 +22,23 @@ from = 700
 to = 1000
 every = 50
 
+# Up into the first door, then right through stage 1-1, jumping now and then.
+[[press]]
+button = "up"
+at = 1060
+
+[[press]]
+button = "right"
+at = 1300
+hold = 1700
+
+[[press]]
+button = "a"
+from = 1400
+to = 2900
+every = 150
+hold = 20
+
 # The opening's picture: the hash the play build draws at --timing native (2026-11-14), not yet checked
 # against mGBA or by eye.
 [[checkpoint]]
@@ -34,3 +52,16 @@ hash = "e0b7f18fb80ac6a5"
 name = "vegetable-valley-900"
 frame = 900
 hash = "ed750fdea00af9e5"
+
+# Stage 1-1's start, through the door (by eye, the lift's picture, 2026-11-18); the play build's hash
+# at --timing native, not yet checked against mGBA.
+[[checkpoint]]
+name = "stage-1-1-1400"
+frame = 1400
+hash = "a8f99d2857d779cd"
+
+# Further right in stage 1-1 (the play build's hash at --timing native, the lift's the same).
+[[checkpoint]]
+name = "stage-1-1-3000"
+frame = 3000
+hash = "a726c6cb4d8e9def"
