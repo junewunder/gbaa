@@ -184,9 +184,18 @@ pub fn build_all(ctx: &Ctx) -> Recompiled {
 /// constant the cartridge holds ([`Ctx::cart`]; const-prop folds exactly
 /// those), at its `0x08` address, sorted, touching ranges merged.
 pub fn folded(ctx: &Ctx, funcs: &[Func]) -> Vec<(u32, u32)> {
-    let rom = ctx.cart();
     let mut loads = Vec::new();
-    for gb in funcs.iter().flat_map(|f| f.blocks.values()) {
+    for f in funcs {
+        baked_loads(ctx, f, &mut loads);
+    }
+    merge(loads)
+}
+
+/// Pushes onto `out` the ROM ranges const-prop folded loads from in `f`
+/// ([`folded`]'s), unsorted.
+fn baked_loads(ctx: &Ctx, f: &Func, out: &mut Vec<(u32, u32)>) {
+    let rom = ctx.cart();
+    for gb in f.blocks.values() {
         let insts = &gb.block.insts;
         for i in insts {
             let Op::Load { width, addr } = i.op else {
@@ -197,19 +206,95 @@ pub fn folded(ctx: &Ctx, funcs: &[Func]) -> Vec<(u32, u32)> {
             };
             if rom.load(width, a).is_some() {
                 let a = 0x0800_0000 | a & 0x01FF_FFFF & !(width.bytes() - 1);
-                loads.push((a, a + width.bytes()));
+                out.push((a, a + width.bytes()));
             }
         }
     }
-    loads.sort_unstable();
+}
+
+/// `ranges` sorted, touching ones merged.
+fn merge(mut ranges: Vec<(u32, u32)>) -> Vec<(u32, u32)> {
+    ranges.sort_unstable();
     let mut out: Vec<(u32, u32)> = Vec::new();
-    for (a, b) in loads {
+    for (a, b) in ranges {
         match out.last_mut() {
             Some(last) if a <= last.1 => last.1 = last.1.max(b),
             _ => out.push((a, b)),
         }
     }
     out
+}
+
+/// One compiled function's ROM bytes (`runtime::dispatch::FnBytes`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FnRec {
+    pub entry: u32,
+    pub hash: u64,
+    /// At `0x08` addresses, sorted and merged.
+    pub ranges: Vec<(u32, u32)>,
+    /// Indices of its direct callees in the list.
+    pub calls: Vec<u32>,
+    /// Its block starts, sorted.
+    pub keys: Vec<u32>,
+}
+
+/// Every function of `all`'s ROM bytes, sorted by entry
+/// (`runtime::dispatch::stale`): the ROM instructions of its blocks, the
+/// ROM stubs it calls through and its baked loads, hashed in `rom`; its
+/// direct callees, and for a function a mod replaces (in `cut`), every
+/// function the mod's code calls (`added`) as well; and its block starts.
+/// IWRAM code needs no bytes here: its overlays' guards check them.
+pub fn fn_bytes(
+    rom: &[u8],
+    all: &[(&Ctx, &Func)],
+    cut: &std::collections::BTreeSet<u32>,
+    added: &std::collections::BTreeSet<u32>,
+) -> Vec<FnRec> {
+    let in_rom = |a: u32| (0x0800_0000..0x0E00_0000).contains(&a);
+    let at = |a: u32| 0x0800_0000 | a & 0x01FF_FFFF;
+    let mut order: Vec<usize> = (0..all.len()).collect();
+    order.sort_by_key(|&i| all[i].1.entry);
+    let mut index: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+    for (n, &i) in order.iter().enumerate() {
+        index.entry(all[i].1.entry).or_default().push(n as u32);
+    }
+    order
+        .iter()
+        .map(|&i| {
+            let (ctx, f) = all[i];
+            let mut ranges = Vec::new();
+            for gb in f.blocks.values() {
+                let n = if gb.block.thumb { 2 } else { 4 };
+                ranges.extend(
+                    gb.insns
+                        .iter()
+                        .filter(|(a, _)| in_rom(*a))
+                        .map(|(a, _)| (at(*a), at(*a) + n)),
+                );
+            }
+            ranges.extend(f.stubs.iter().filter(|&&k| in_rom(k)).map(|&k| {
+                let a = at(k & !1);
+                (a, a + if k & 1 != 0 { 2 } else { 4 })
+            }));
+            baked_loads(ctx, f, &mut ranges);
+            let ranges = merge(ranges);
+            let hash = runtime::dispatch::fn_hash(rom, &ranges).expect("its bytes are in the ROM");
+            let callees = f.calls.iter();
+            let callees = callees.chain(added.iter().filter(|_| cut.contains(&f.entry)));
+            let mut calls: Vec<u32> = callees
+                .flat_map(|e| index.get(e).into_iter().flatten().copied())
+                .collect();
+            calls.sort_unstable();
+            calls.dedup();
+            FnRec {
+                entry: f.entry,
+                hash,
+                ranges,
+                calls,
+                keys: f.blocks.keys().copied().collect(),
+            }
+        })
+        .collect()
 }
 
 /// The dispatch keys of `funcs`, each with the function it runs in, and
@@ -1364,6 +1449,29 @@ pub fn write_crate(
         })
         .collect();
     let n_folded = folded.len();
+    let fns: Vec<_> = fn_bytes(rom, &all, &cut, &added)
+        .into_iter()
+        .map(|f| {
+            let (entry, hash) = (hex(f.entry), proc_macro2::Literal::u64_unsuffixed(f.hash));
+            let ranges = f.ranges.iter().map(|&(a, b)| {
+                let (a, b) = (hex(a), hex(b));
+                quote!((#a, #b))
+            });
+            let calls = f
+                .calls
+                .iter()
+                .map(|&c| proc_macro2::Literal::u32_unsuffixed(c));
+            let keys = f.keys.iter().map(|&k| hex(k));
+            quote!(runtime::dispatch::FnBytes {
+                entry: #entry,
+                hash: #hash,
+                ranges: &[#(#ranges),*],
+                calls: &[#(#calls),*],
+                keys: &[#(#keys),*],
+            })
+        })
+        .collect();
+    let n_fns = fns.len();
     let extent = |e: &Extent| {
         let (len, stub) = (proc_macro2::Literal::u16_unsuffixed(e.len), hex(e.stub));
         quote!(runtime::dispatch::Extent { len: #len, stub: #stub })
@@ -1451,6 +1559,9 @@ pub fn write_crate(
         pub static MODDED: [u32; #n_modded] = [#(#modded_keys),*];
         /// The ROM ranges const-prop folded loads from, sorted and merged.
         pub static FOLDED: [(u32, u32); #n_folded] = [#(#folded),*];
+        /// Every function's ROM bytes, sorted by entry: what a changed
+        /// ROM must keep for it to run compiled.
+        pub static FNS: [runtime::dispatch::FnBytes; #n_fns] = [#(#fns),*];
         /// The mod's functions, by symbol (`modded`).
         mod modded_ext {
             use crate::prelude::*;
@@ -1534,6 +1645,7 @@ pub fn write_crate(
             modded: &table::MODDED,
             folded: &table::FOLDED,
             rom_hash: #hash,
+            fns: &table::FNS,
             timing: runtime::Timing::#timing,
             seeds_file: Some(#seeds),
             spins: &[#(#spins),*],
@@ -1833,7 +1945,9 @@ const CALL: &str = r#"//! Generated by gbaa-recompile.
 //!
 //! call-NAME ROM KEY R0 [--interp] [--frames N]: call the guest function at KEY
 //! (bit 0 set for Thumb) with r0 = R0 and lr pointing at IWRAM, stop when
-//! it returns there, and print the CPU state.
+//! it returns there, and print the CPU state. A ROM other than the one
+//! recompiled runs with the functions its bytes made stale interpreted
+//! (`runtime::dispatch::stale`), and says how many.
 
 use runtime::dispatch::{self, Stats};
 use runtime::Machine;
@@ -1854,7 +1968,16 @@ fn main() {
     };
     let rom: &'static [u8] = std::fs::read(rom_path).expect("ROM").leak();
     let code = &GEN::CODE;
-    assert_eq!(dispatch::rom_hash(rom), code.rom_hash, "not the ROM this was recompiled from");
+    let mut stale = vec![false; code.fns.len()];
+    let mut keys: Vec<u32> = Vec::new();
+    if dispatch::rom_hash(rom) != code.rom_hash {
+        assert!(!code.fns.is_empty(), "not the ROM this was recompiled from");
+        let n = code.mark_stale(rom, &mut stale);
+        keys = code.stale_keys(&stale).collect();
+        keys.sort_unstable();
+        keys.dedup();
+        println!("stale {} changed {} callers {}", n.total(), n.changed, n.callers);
+    }
     let interp = args.iter().any(|a| a == "--interp");
     let frames = args
         .iter()
@@ -1864,6 +1987,7 @@ fn main() {
     let mut m = Box::new(Machine::new(rom, desktop::Desktop::headless()));
     m.set_timing(code.timing);
     m.spin_list = code.spins;
+    m.bus.stale = keys.leak();
     m.cpu.r[0] = num(r0) as u32;
     m.cpu.r[14] = 0x0300_0000;
     let t = if key & 1 != 0 { armv4t::interp::T_BIT } else { 0 };

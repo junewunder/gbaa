@@ -363,6 +363,8 @@ pub struct Code<P: Platform + 'static> {
     /// The overlays' guards: the IWRAM bytes each was compiled from.
     pub overlays: &'static [Overlay],
     pub rom_hash: u64,
+    /// Every function's ROM bytes, for a changed ROM (below).
+    pub fns: &'static [FnBytes],
     /// Where the desktop writes the fallback's ROM entries (seeds).
     pub seeds_file: Option<&'static str>,
 }
@@ -478,6 +480,21 @@ out/<name>/
 - The ROM is not embedded: the binary takes its path, as `gbaa-desktop`
   does, and refuses a ROM whose hash doesn't match `CODE.rom_hash` (FNV-1a
   64, no dependency).
+- **A changed ROM** (a randomizer's copy, `docs/research/randomized-roms.md`
+  option a; `runtime::dispatch::stale`): `CODE.fns` holds, per compiled
+  function, the ROM ranges it was compiled from (its instructions, the `bx
+  rN` stubs it calls through, every load const-prop baked in), their hash,
+  its direct callees and its keys. `Code::mark_stale` hashes those ranges
+  in the given ROM; a function whose bytes differ is stale, and so is every
+  function that calls a stale one directly, transitively, since a direct
+  call is a Rust call the dispatcher never sees (Kaizo Emerald: about 155
+  functions, an upper bound; the exact ROM pays nothing, where a stale bit
+  checked at every call would cost every build). The stale functions' keys,
+  sorted, go in `Bus::stale`, and the dispatcher, `rt::call` and `settle`
+  treat them as keys without code: the interpreter runs them. IWRAM
+  overlays need no entry: their guards already check their bytes. The
+  generated `call-<name>` takes a changed ROM this way; the desktop's
+  loader doesn't yet (it still refuses one).
 - `run-recompiled` builds with `--target-dir target/recompiled`, shared
   between games so `runtime`, `armv4t` and the desktop deps build once, in
   release. The generated `[workspace]` keeps cargo from treating it as a
