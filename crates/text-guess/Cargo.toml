@@ -1,0 +1,18 @@
+[package]
+name = "text-guess"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# Works out a game's text encoding from what its screens show (unit
+# mod/text-from-screen; docs/research/text-from-screen.md).
+
+[[bin]]
+name = "gbaa-text-guess"
+path = "src/main.rs"
+
+[dependencies]
+armv4t = { path = "../armv4t" }
+runtime = { path = "../runtime" }
+codegen = { path = "../codegen" }
+png = "0.18"

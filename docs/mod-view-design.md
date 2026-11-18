@@ -301,7 +301,10 @@ live outside the repo, like ROMs), its syntax (pret's `charmap.txt`, or
 the community's Thingy `.tbl`: `41=A`, `/FF=` the end, `*FE=` a new
 line, `[NAME]` a code), its layout and its source. `SourceMap::load`
 loads it (`codegen::text::Table`) over any `[text]` the maps carry; a
-missing file leaves the game's byte previews.
+missing file leaves the game's byte previews. A game with no table can
+have one worked out from its screens and font (`gbaa-text-guess`,
+`docs/research/text-from-screen.md`: 99.4% of Metroid's characters
+right with its table hidden).
 
 - **Layout** (`codegen::text::Encoding`): bytes a character takes (a
   2-byte table's `8100` is the bytes `00 81`), the unit that ends a
