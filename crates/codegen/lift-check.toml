@@ -31,7 +31,7 @@ rom = "agb/affine.gba"
 route = "units/affine-600.toml"
 
 [program.affine.bars]
-lines = 69267
+lines = 69057
 lines_prelude = 1262
 functions = 109
 functions_iwram = 3
@@ -91,7 +91,7 @@ rom = "agb/mosaic-modes.gba"
 route = "units/mosaic-modes-600.toml"
 
 [program.mosaic-modes.bars]
-lines = 47965
+lines = 47773
 lines_prelude = 1262
 functions = 102
 functions_iwram = 3
@@ -159,7 +159,7 @@ planted_store = 0x08000186
 planted_hole = { drop_standin = 0x08002728, names = "error: hard hole in f_08002728 at 0x08002730: CPU state: mrs" }
 
 [program.native-spike.bars]
-lines = 70132
+lines = 69924
 lines_prelude = 1262
 functions = 110
 functions_iwram = 3
@@ -223,7 +223,7 @@ route = "units/native-fallthrough-600.toml"
 planted_flags = ["--fall-as-tail-call"]
 
 [program.native-fallthrough.bars]
-lines = 68133
+lines = 67921
 lines_prelude = 1262
 functions = 112
 functions_iwram = 3
@@ -288,7 +288,7 @@ route = "units/native-irq-hold-601.toml"
 planted_flags = ["--irq-at-waits"]
 
 [program.native-irq-hold.bars]
-lines = 68786
+lines = 68570
 lines_prelude = 1262
 functions = 114
 functions_iwram = 3
@@ -355,7 +355,7 @@ route = "units/native-frame-locals-600.toml"
 planted_flags = ["--plant-slot=0x08000182"]
 
 [program.native-frame-locals.bars]
-lines = 68206
+lines = 67988
 lines_prelude = 1262
 functions = 113
 functions_iwram = 3
@@ -419,7 +419,7 @@ route = "units/native-ime-release-601.toml"
 planted_flags = ["--ime-at-waits"]
 
 [program.native-ime-release.bars]
-lines = 68771
+lines = 68553
 lines_prelude = 1262
 functions = 113
 functions_iwram = 3
@@ -487,7 +487,7 @@ route = "units/native-bios-calls-600.toml"
 # (native/ref-heap-static-arrays).
 
 [program.native-bios-calls.bars]
-lines = 69227
+lines = 69017
 lines_prelude = 1262
 functions = 109
 functions_iwram = 3
@@ -555,7 +555,7 @@ route = "units/native-bios-more-600.toml"
 # restarts the program.
 
 [program.native-bios-more.bars]
-lines = 68873
+lines = 68683
 lines_prelude = 1262
 functions = 104
 functions_iwram = 3
@@ -628,7 +628,7 @@ planted_store = 0x08000288
 planted_hole = { drop_standin = 0x080001a4, names = "error: hard hole in f_080001a4 at 0x080001c0: CPU state: a stack switch" }
 
 [program.native-tasks.bars]
-lines = 69508
+lines = 69290
 lines_prelude = 1262
 functions = 122
 functions_iwram = 3
@@ -706,7 +706,7 @@ route = "units/native-dma-600.toml"
 planted_store = 0x08000180
 
 [program.native-dma.bars]
-lines = 47107
+lines = 46905
 lines_prelude = 1262
 functions = 107
 functions_iwram = 3
@@ -775,7 +775,7 @@ route = "units/native-save-600.toml"
 planted_store = 0x080002ac
 
 [program.native-save.bars]
-lines = 68884
+lines = 68668
 lines_prelude = 1262
 functions = 112
 functions_iwram = 3
@@ -840,7 +840,7 @@ route = "units/native-bios-region-601.toml"
 # (nowhere); agb/native-bios-region/src/main.rs.
 
 [program.native-bios-region.bars]
-lines = 68564
+lines = 68344
 lines_prelude = 1262
 functions = 114
 functions_iwram = 3
@@ -906,7 +906,7 @@ route = "units/native-bios-affine-600.toml"
 # agb/native-bios-affine/src/main.rs.
 
 [program.native-bios-affine.bars]
-lines = 69625
+lines = 69415
 lines_prelude = 1262
 functions = 110
 functions_iwram = 3
@@ -974,7 +974,7 @@ route = "units/native-serial-600.toml"
 planted_store = 0x0800017c
 
 [program.native-serial.bars]
-lines = 71118
+lines = 70892
 lines_prelude = 1262
 functions = 117
 functions_iwram = 3
@@ -1044,7 +1044,7 @@ route = "units/native-irq-wrapper-600.toml"
 planted_store = 0x080001f4
 
 [program.native-irq-wrapper.bars]
-lines = 69448
+lines = 69222
 lines_prelude = 1262
 functions = 118
 functions_iwram = 3
@@ -1109,7 +1109,7 @@ route = "units/native-takes-600.toml"
 planted_flags = ["--takes-zeroed"]
 
 [program.native-takes.bars]
-lines = 68140
+lines = 67922
 lines_prelude = 1262
 functions = 113
 functions_iwram = 3
@@ -1174,7 +1174,7 @@ route = "units/c-fnptr-agbcc-600.toml"
 planted_store = 0x080005d4
 
 [program.c-fnptr-agbcc.bars]
-lines = 2534
+lines = 2502
 lines_prelude = 1262
 functions = 18
 functions_iwram = 0
@@ -1239,7 +1239,7 @@ route = "units/c-fnptr-gcc-600.toml"
 planted_store = 0x08000390
 
 [program.c-fnptr-gcc.bars]
-lines = 2581
+lines = 2549
 lines_prelude = 1262
 functions = 18
 functions_iwram = 0
@@ -1304,7 +1304,7 @@ route = "units/c-switch-agbcc-600.toml"
 planted_store = 0x08000548
 
 [program.c-switch-agbcc.bars]
-lines = 2265
+lines = 2251
 lines_prelude = 1262
 functions = 9
 functions_iwram = 0
@@ -1369,7 +1369,7 @@ route = "units/c-switch-gcc-600.toml"
 planted_store = 0x08000568
 
 [program.c-switch-gcc.bars]
-lines = 2447
+lines = 2433
 lines_prelude = 1262
 functions = 9
 functions_iwram = 0
@@ -1434,7 +1434,7 @@ route = "units/c-chain-agbcc-600.toml"
 planted_store = 0x0800058e
 
 [program.c-chain-agbcc.bars]
-lines = 2992
+lines = 2970
 lines_prelude = 1262
 functions = 13
 functions_iwram = 0
@@ -1499,7 +1499,7 @@ route = "units/c-chain-gcc-600.toml"
 planted_store = 0x08000550
 
 [program.c-chain-gcc.bars]
-lines = 2761
+lines = 2739
 lines_prelude = 1262
 functions = 13
 functions_iwram = 0
