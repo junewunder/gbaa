@@ -34,6 +34,16 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `$GBAA_DATA/truth/<name>.funcs.tsv` from any ELF (default the pokeemerald
   one), then scores a discovered-starts file against a truth file (default
   Emerald's). `just check` doesn't need them.
+- `gbaa-text-guess` (`crates/text-guess`, `cargo build --release -p
+  text-guess`): works out a game's text table from its screens
+  (`docs/research/text-from-screen.md`). `find ROM [--relative] LINE…`
+  looks for a line read off a screenshot in the ROM; `font ROM STRINGS
+  --frames A-B [--press KEY@F]…` runs the scene in the interpreter with
+  its loads watched and fits the tables the renderer indexes by code;
+  `glyphs ROM BASE,STRIDE,WIDE,TALL,ROW LO-HI OUT.png` draws those codes'
+  4bpp glyphs in a grid to read; `unknown ROM TBL` lists codes the text
+  uses that a Thingy table lacks; `score ROM TBL` scores the table against
+  the game's own in `crates/codegen/text-tables.toml`.
 - `just dis ROM ADDR [LEN] [--arm] [--names FILE]`: the disassembler,
   `gbaa-dis` (`crates/codegen/src/bin/gbaa-dis.rs`). LEN bytes (hex,
   default 0x40) at ROM address ADDR (hex, 0x08000000 and up), one
