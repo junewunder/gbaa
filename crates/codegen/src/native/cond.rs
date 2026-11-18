@@ -142,28 +142,14 @@ impl Form {
         let mut uses = Vec::new();
         l.uses(&mut uses);
         r.uses(&mut uses);
-        Form::new(
-            F::Cmp {
-                l,
-                rel,
-                r,
-                signed,
-            },
-            uses,
-        )
+        Form::new(F::Cmp { l, rel, r, signed }, uses)
     }
 
     /// The constant on the right, decided where both sides are constants
     /// or the constant is the type's least or greatest (so no comparison
     /// prints that is always true or false).
     fn normal(self) -> Form {
-        let F::Cmp {
-            l,
-            rel,
-            r,
-            signed,
-        } = self.f
-        else {
+        let F::Cmp { l, rel, r, signed } = self.f else {
             return self;
         };
         let (l, rel, r) = match (l, r) {
@@ -215,12 +201,7 @@ impl Form {
                 r,
                 signed,
             },
-            _ => F::Cmp {
-                l,
-                rel,
-                r,
-                signed,
-            },
+            _ => F::Cmp { l, rel, r, signed },
         };
         let uses = if matches!(f, F::Bool(_)) {
             Vec::new()
@@ -232,12 +213,7 @@ impl Form {
 
     fn not(&self) -> Form {
         let f = match &self.f {
-            F::Cmp {
-                l,
-                rel,
-                r,
-                signed,
-            } => F::Cmp {
+            F::Cmp { l, rel, r, signed } => F::Cmp {
                 l: l.clone(),
                 rel: rel.not(),
                 r: r.clone(),
@@ -266,12 +242,7 @@ impl Form {
     /// The Rust expression.
     pub fn text(&self) -> String {
         match &self.f {
-            F::Cmp {
-                l,
-                rel,
-                r,
-                signed,
-            } => format!(
+            F::Cmp { l, rel, r, signed } => format!(
                 "{} {} {}",
                 side(l, *signed, true),
                 rel.text(),
@@ -489,23 +460,19 @@ fn form(insts: &[Inst], done: &[Option<Form>], op: Op) -> Option<Form> {
         },
         Op::TestBit { v: x, n } => match insts[x.index()].op {
             Op::Adc { a, b, c } if n == 31 => match arith(insts, a, b, c) {
-                Some(Arith::Sub(l, Side::Const(0))) => {
-                    Form::cmp(l, Rel::Lt, Side::Const(0), true)
+                Some(Arith::Sub(l, Side::Const(0))) => Form::cmp(l, Rel::Lt, Side::Const(0), true),
+                _ => bit(insts, x, n),
+            },
+            Op::Shift { kind, v: y, amount } if konst(insts, x).is_none() => {
+                match (kind, konst(insts, amount).map(|k| k & 0xff)) {
+                    (ShiftType::Lsl, Some(k @ 0..=31)) if n >= k => bit(insts, y, n - k),
+                    (ShiftType::Lsl, Some(0..=31)) => Form::new(F::Bool(false), Vec::new()),
+                    (ShiftType::Lsr, Some(k @ 0..=31)) if n + k < 32 => bit(insts, y, n + k),
+                    (ShiftType::Lsr, Some(0..=31)) => Form::new(F::Bool(false), Vec::new()),
+                    (ShiftType::Asr, Some(k @ 0..=31)) => bit(insts, y, (n + k).min(31)),
+                    _ => bit(insts, x, n),
                 }
-                _ => bit(insts, x, n),
-            },
-            Op::Shift {
-                kind,
-                v: y,
-                amount,
-            } if konst(insts, x).is_none() => match (kind, konst(insts, amount).map(|k| k & 0xff)) {
-                (ShiftType::Lsl, Some(k @ 0..=31)) if n >= k => bit(insts, y, n - k),
-                (ShiftType::Lsl, Some(0..=31)) => Form::new(F::Bool(false), Vec::new()),
-                (ShiftType::Lsr, Some(k @ 0..=31)) if n + k < 32 => bit(insts, y, n + k),
-                (ShiftType::Lsr, Some(0..=31)) => Form::new(F::Bool(false), Vec::new()),
-                (ShiftType::Asr, Some(k @ 0..=31)) => bit(insts, y, (n + k).min(31)),
-                _ => bit(insts, x, n),
-            },
+            }
             _ => bit(insts, x, n),
         },
         // A constant shift's carry out (`prim::shift`).
@@ -774,7 +741,12 @@ mod tests {
                         if got.is_none() {
                             continue;
                         }
-                        assert_eq!(got, Some(cpu.cond_passes(cond)), "{op:#06x} {cond:?} `{}`", f.text());
+                        assert_eq!(
+                            got,
+                            Some(cpu.cond_passes(cond)),
+                            "{op:#06x} {cond:?} `{}`",
+                            f.text()
+                        );
                     }
                 }
             }
@@ -787,6 +759,9 @@ mod tests {
         let b = block(&[0x2980, 0xDC04]);
         let forms = forms(&b.insts);
         let g = b.insts.iter().find_map(|i| i.guard).unwrap();
-        assert_eq!(forms[g.index()].as_ref().unwrap().text(), "(v1 as i32) > 128");
+        assert_eq!(
+            forms[g.index()].as_ref().unwrap().text(),
+            "(v1 as i32) > 128"
+        );
     }
 }
