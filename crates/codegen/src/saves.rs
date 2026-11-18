@@ -404,6 +404,7 @@ impl Walk<'_> {
             if func && s.kept() && s.regs[14] == V::Entry(14) {
                 self.callees.insert(to);
                 if let Some(sum) = &mut self.sum {
+                    sum.lr_into.entry(to).or_insert(true);
                     // A call, then a return.
                     let mut after = s.clone();
                     sum.call(&mut after, Some(to), to);
@@ -420,6 +421,11 @@ impl Walk<'_> {
                     for (&k, b) in &r.blocks {
                         self.blocks.entry(k).or_insert(b);
                     }
+                    // Whether r14 is still the entry lr here is known
+                    // once the run settles (its in-state at `to`).
+                    if let Some(sum) = &mut self.sum {
+                        sum.inlined.insert(to);
+                    }
                     if func && let Some(sum) = &mut self.sum {
                         sum.falls.insert(to);
                     }
@@ -432,6 +438,7 @@ impl Walk<'_> {
                             .filter(|&r| s.regs[r].taint().is_some())
                             .fold(0u8, |m, r| m | 1 << (r - 4));
                         *sum.foreign.entry(to).or_default() |= m;
+                        *sum.lr_into.entry(to).or_insert(true) &= s.regs[14] == V::Entry(14);
                     }
                     return self.stop(format!("jumps to 0x{to:08x}, which has no code here"));
                 }
@@ -717,7 +724,13 @@ impl Walk<'_> {
                 local: false,
             } => {
                 if t != V::Entry(14) {
+                    if let Some(sum) = &mut self.sum {
+                        sum.not_rets.insert(at);
+                    }
                     return self.stop(format!("0x{at:08x}: a jump to an unknown place"));
+                }
+                if let Some(sum) = &mut self.sum {
+                    sum.rets.insert(at);
                 }
                 if !s.kept() {
                     let what = if s.regs[13] == V::Sp(0) {

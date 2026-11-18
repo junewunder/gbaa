@@ -49,6 +49,12 @@
 //! Function words (`super::fnref`): the words of ROM outside code that hold
 //! a function's key, `fn_words_not_proven` those the flow didn't prove
 //! (barred), `fn_words_proven` the rest (no bar: it should rise).
+//!
+//! Returns (`native/lift-pop-return`): the jumps by value the summaries
+//! proved a jump to the function's entry lr (`pop {pc}`, `pop {r0}; bx
+//! r0`), printed as a plain return where the entry lr is proven `RET`,
+//! `entry_lr_returns` (no bar: it should rise), and those still through
+//! `call_fn`, `entry_lr_returns_call_fn` (barred, at 0).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -221,6 +227,7 @@ pub const UNBARRED: &[&str] = &[
     "functions_structured_pct",
     "blocks_structured",
     "blocks_structured_pct",
+    "entry_lr_returns",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each
