@@ -34,6 +34,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `$GBAA_DATA/truth/<name>.funcs.tsv` from any ELF (default the pokeemerald
   one), then scores a discovered-starts file against a truth file (default
   Emerald's). `just check` doesn't need them.
+- `gbaa-text-guess`: a text table from screens (docs/research/text-from-screen.md).
 - `just dis ROM ADDR [LEN] [--arm] [--names FILE]`: the disassembler,
   `gbaa-dis` (`crates/codegen/src/bin/gbaa-dis.rs`). LEN bytes (hex,
   default 0x40) at ROM address ADDR (hex, 0x08000000 and up), one
@@ -1444,8 +1445,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   native port's timing, decision 11), then the two PNGs must be identical. The recompiled
   run's `cycles:` line (in `out/<name>/recompiled.log`) splits guest time
   between compiled code and the fallback, how much of each ran in RAM
-  (decisions 1 and 7; code copied to IWRAM is compiled as overlays, #54),
-  and the log ends with `overlay invalidations: N`. It passes on june's ROM
+  (decisions 1 and 7; IWRAM copies compile as overlays, #54), then the
+  fallback's RAM time by entry key (`Stats::ram_seeds`), and the log ends with `overlay invalidations: N`. It passes on june's ROM
   (`$GBAA_DATA/agb/gba-cart1.gba`), jsmolka's `arm`/`thumb`, and the agb
   sprite example (`$GBAA_DATA/tools/obj-sprites/obj-sprites.gba 120`,
   hash `afc0b93200e5577f`).

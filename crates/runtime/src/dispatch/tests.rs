@@ -126,6 +126,11 @@ fn fallback_in_ram_is_counted() {
     assert_eq!(stats.interpreted_ram_cycles, m.now());
     assert_eq!(stats.interpreted_cycles, m.now());
     assert_eq!(stats.n_seeds, 0);
+    // Split by the key it was entered at.
+    assert_eq!(
+        &stats.ram_seeds[..stats.n_ram_seeds],
+        &[(0x0200_0000, m.now())]
+    );
 }
 
 #[test]

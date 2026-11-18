@@ -2157,6 +2157,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "text-guess"
+version = "0.1.0"
+dependencies = [
+ "armv4t",
+ "codegen",
+ "png",
+ "runtime",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
