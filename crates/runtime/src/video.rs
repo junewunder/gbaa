@@ -219,7 +219,8 @@ impl Video {
     /// leaves them.
     pub fn new() -> Video {
         Video {
-            dispcnt: DispCnt(0),
+            // Bit 3: unwritten since power-on ([`Io::new`]).
+            dispcnt: DispCnt(8),
             green_swap: 0,
             bg: [Bg::default(); 4],
             affine: [Affine::default(); 2],
@@ -345,7 +346,9 @@ impl Video {
     /// write mask, as [`Io::write16`] stores it.
     pub fn write16(&mut self, o: u32, v: u16) {
         let m = io::write_mask(o);
-        self.set_raw16(o, (self.raw16(o) & !m) | (v & m));
+        // A write ends `DISPCNT`'s power-on bit 3 ([`Io::new`]).
+        let keep = if o == 0 { !m & !8 } else { !m };
+        self.set_raw16(o, (self.raw16(o) & keep) | (v & m));
     }
 
     /// Write one byte of a register, the other byte left alone.
@@ -353,7 +356,8 @@ impl Video {
         let shift = (o & 1) * 8;
         let m = io::write_mask(o & !1) & (0xFF << shift);
         let o = o & !1;
-        self.set_raw16(o, (self.raw16(o) & !m) | (((v as u16) << shift) & m));
+        let keep = if o == 0 { !m & !8 } else { !m };
+        self.set_raw16(o, (self.raw16(o) & keep) | (((v as u16) << shift) & m));
     }
 
     /// Read the register halfword at `o` as the CPU does: through its read

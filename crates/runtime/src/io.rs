@@ -332,6 +332,9 @@ impl Io {
         ] {
             io.regs[o as usize / 2] = v;
         }
+        io.regs[reg::VCOUNT as usize / 2] = crate::sched::START_LINE;
+        // Unwritten since power-on (see `write_masked`).
+        io.regs[reg::DISPCNT as usize / 2] = 8;
         io
     }
 
@@ -400,6 +403,13 @@ impl Io {
             }
             // A `JOY_TRANS` store sets `JOYSTAT`'s sent flag (GBATEK, and
             // mGBA's `GBAIOWrite`); with no partner nothing clears it.
+            // Bit 3 (CGB mode), set only by [`Io::new`], says no write has
+            // come since power-on: the PPU draws forced blank until one does,
+            // as mGBA's renderer, whose copy starts at 0x80.
+            reg::DISPCNT => {
+                self.regs[i] = (old & !m & !8) | (v & m);
+                return;
+            }
             o if o & !2 == reg::JOY_TRANS => self.regs[reg::JOYSTAT as usize / 2] |= 8,
             // Writing 1 acknowledges an interrupt.
             reg::IF => {

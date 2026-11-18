@@ -60,8 +60,10 @@ impl Native for Game {
     }
 }
 
+/// A game with the beam at line 0's start (the tests were written for
+/// it), not [`crate::sched::START_LINE`].
 fn game(stop_after: usize) -> Box<Game> {
-    Box::new(Game {
+    let mut g = Box::new(Game {
         masked: false,
         ram: Ram::default(),
         hw: Hw::new(Rec {
@@ -70,7 +72,9 @@ fn game(stop_after: usize) -> Box<Game> {
             keys: Vec::new(),
             saves: Vec::new(),
         }),
-    })
+    });
+    g.hw.set_beam(0, false);
+    g
 }
 
 fn px(f: &Frame, x: usize, y: usize) -> u16 {
@@ -872,6 +876,8 @@ fn mem(stop_after: usize) -> Box<Mem> {
         }),
         ewram: std::vec![0; 0x4_0000],
     });
+    // At line 0's start, as [`game`].
+    g.hw.set_beam(0, false);
     for (i, b) in g.ewram[..0x400].iter_mut().enumerate() {
         *b = i as u8;
     }

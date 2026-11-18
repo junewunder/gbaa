@@ -9,11 +9,14 @@ use std::vec::Vec;
 
 pub const IO: u32 = 0x0400_0000;
 
-/// A machine whose ROM is `code` (ARM words), at the cartridge's entry.
+/// A machine whose ROM is `code` (ARM words), at the cartridge's entry,
+/// the beam at line 0's start ([`Machine::start_at_line_0`]).
 pub fn machine_with(code: &[u32]) -> Box<Machine<Headless>> {
     let bytes: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
     let rom: &'static [u8] = Box::leak(bytes.into_boxed_slice());
-    Box::new(Machine::new(rom, Headless))
+    let mut m = Box::new(Machine::new(rom, Headless));
+    m.start_at_line_0();
+    m
 }
 
 /// A machine spinning on `b .`.
