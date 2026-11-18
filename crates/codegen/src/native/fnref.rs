@@ -72,8 +72,14 @@
 //! settles in 12 rounds, about 150 s on quack
 //! (`native/fnref-flow-scale`), holding about 30 million tokens at a
 //! peak of 1.35 GB. A run that holds more than [`TOKENS`] stops,
-//! unsettled (Kirby - Nightmare in Dream Land and Minish Cap, at about
-//! 3,000 functions run: `native/whole-lift-memory`).
+//! unsettled (Emerald, below). Kirby - Nightmare in Dream Land and Minish
+//! Cap once stopped so, at about 3,000 functions run
+//! (`native/whole-lift-memory`); with the changes below, Nightmare (5,177
+//! functions) settles: 31 to 35 minutes at 2.0 GB with the roads
+//! (`native/fnref-c-game-words`), 8 minutes at 0.45 GB in its lift
+//! (`native/nightmare-fn-flow-again`). Its lift still skips the flow, for
+//! precision, not cost: its callee sets are pile-wide (about 2,000
+//! functions each), which makes one spurious hard hole.
 //!
 //! **Large reads by reference** (`native/fnref-flow-emerald`). On a large
 //! game a read of the pile, of every cell, or of a ROM table by an unknown
@@ -488,9 +494,10 @@ impl Drop for CodeGuard {
 /// and expansions' too, and memory's: [`G::held`]) before it stops,
 /// unsettled, as when its rounds run out: proving
 /// nothing then, as a lift without the flow (`skip_fn_flow`). Metroid
-/// settles holding about 30 million at a peak of 1.4 GB; Kirby -
-/// Nightmare in Dream Land and Minish Cap held over 100 million in a
-/// round and a half, past 15 GB, before (`native/whole-lift-memory`).
+/// settles holding about 30 million at a peak of 1.4 GB, and Kirby -
+/// Nightmare in Dream Land at 0.45 GB to 2.0 GB. An earlier flow held over 100
+/// million on Nightmare and Minish Cap in a round and a half, past 15 GB
+/// (`native/whole-lift-memory`).
 const TOKENS: usize = 48_000_000;
 
 /// The lowest [`Tok::Ref`].
@@ -1709,7 +1716,7 @@ impl G {
     /// callees). Callees whose entry register held the same set before
     /// share the set it joins to: a join per callee made each its own copy
     /// of a large set, thousands of them on a large game (Minish Cap and
-    /// Nightmare ran past 15 GB; `native/whole-lift-memory`).
+    /// Nightmare ran past 15 GB before this; `native/whole-lift-memory`).
     fn give_all(&mut self, ks: &BTreeSet<u32>, regs: &[Val]) {
         if ks.len() < 2 {
             for &k in ks {
@@ -2052,6 +2059,30 @@ fn moves(vals: &[Val], a: ValueId, b: ValueId, c: ValueId) -> Option<ValueId> {
         Some(a)
     } else if zero(a) {
         Some(b)
+    } else {
+        None
+    }
+}
+
+/// `a | b` that is `x | -x`, one operand `0 + !x + 1` (`negs`) of the
+/// other: that `x`. Old GCC's `x != 0` as a bit, `negs r1, r0; orrs r1,
+/// r0; lsrs r5, r1, #31` (`native/fnref-gcc-ne-bit`).
+fn ne_or(insts: &[Inst], vals: &[Val], op: BinOp, a: ValueId, b: ValueId) -> Option<ValueId> {
+    if op != BinOp::Or {
+        return None;
+    }
+    let neg_of = |n: ValueId, x: ValueId| match insts[n.index()].op {
+        Op::Adc { a: p, b: q, c } if is_num(&vals[c.index()], 1) => {
+            [(p, q), (q, p)].into_iter().any(|(z, m)| {
+                is_num(&vals[z.index()], 0) && matches!(insts[m.index()].op, Op::Not(y) if y == x)
+            })
+        }
+        _ => false,
+    };
+    if neg_of(a, b) {
+        Some(b)
+    } else if neg_of(b, a) {
+        Some(a)
     } else {
         None
     }
@@ -2711,16 +2742,25 @@ impl Run<'_, '_> {
         // (Not token by token with a single token either: on
         // native-tasks the run then never settles, a set growing by its
         // step each round.)
-        let pairs: Vec<(Option<Tok>, Option<Tok>)> = if xs.len() * ys.len() > 64 {
-            xs.iter()
-                .map(|&x| (x, None))
-                .chain(ys.iter().map(|&y| (None, y)))
-                .collect()
-        } else {
-            xs.iter()
-                .flat_map(|&x| ys.iter().map(move |&y| (x, y)))
-                .collect()
+        // But an `&` with one exact constant (a mask, whose results are
+        // bounded by it) is token by token, the mask kept.
+        let mask = |v: &Val| {
+            !v.mem
+                && !v.unk
+                && v.toks.len() == 1
+                && matches!(v.toks.iter().next(), Some(Tok::Num(_)))
         };
+        let pairs: Vec<(Option<Tok>, Option<Tok>)> =
+            if xs.len() * ys.len() > 64 && !(op == BinOp::And && (mask(a) || mask(b))) {
+                xs.iter()
+                    .map(|&x| (x, None))
+                    .chain(ys.iter().map(|&y| (None, y)))
+                    .collect()
+            } else {
+                xs.iter()
+                    .flat_map(|&x| ys.iter().map(move |&y| (x, y)))
+                    .collect()
+            };
         // Gathered, and added at the end (a large set's one at a time was
         // most of a large game's run), as the holes of functions' tokens.
         let mut toks = Vec::new();
@@ -2844,6 +2884,7 @@ impl Run<'_, '_> {
         self.g.now = (self.f.entry, at);
         let mut vals: Vec<Val> = vec![Val::default(); b.insts.len()];
         let strides = strides(b.insts);
+        let b_insts = b.insts;
         let none = Val::default();
         let unused = self.unused[&key].clone();
         for (i, inst) in b.insts.iter().enumerate() {
@@ -2876,7 +2917,12 @@ impl Run<'_, '_> {
                     (!keep).then_some((1 + kind as u8, n, v, None))
                 }
                 Op::Not(v) if large(v) => Some((5, None, v, None)),
-                Op::Bin(op, a, b) if large(a) || large(b) => Some((6 + op as u8, None, a, Some(b))),
+                // (Nor `x | -x`: a number, whatever `x` is.)
+                Op::Bin(op, a, b)
+                    if (large(a) || large(b)) && ne_or(b_insts, &vals, op, a, b).is_none() =>
+                {
+                    Some((6 + op as u8, None, a, Some(b)))
+                }
                 // (A move isn't kept: it is its operand.)
                 Op::Adc { a, b, c }
                     if (large(a) || large(b)) && moves(&vals, a, b, c).is_none() =>
@@ -2923,6 +2969,28 @@ impl Run<'_, '_> {
                 }
                 Op::Bit(x) => Val::of(Tok::Num(x as u32)),
                 Op::GetReg(r) => s.regs[r.index()].clone(),
+                Op::Bin(op, ra, rb) if ne_or(b_insts, &vals, op, ra, rb).is_some() => {
+                    // `x | -x` (old GCC's `x != 0` as bit 31: `negs r1, r0;
+                    // orrs r1, r0; lsrs r5, r1, #31`) is 0 or has bit 31
+                    // set, so it is never a function's address, whatever
+                    // `x` holds: a number, exact where `x` is.
+                    let x = ne_or(b_insts, &vals, op, ra, rb).expect("matched");
+                    let x = xv(self.g, x);
+                    let mut out = Val {
+                        unk: x.unk || x.mem || x.lost_rom,
+                        ..Val::default()
+                    };
+                    let mut toks = Vec::new();
+                    for &t in &x.toks {
+                        match t {
+                            Tok::Num(n) | Tok::Rom(n) => toks.push(Tok::Num(n | n.wrapping_neg())),
+                            _ => out.unk = true,
+                        }
+                    }
+                    out.toks.add_all(toks);
+                    out.cap();
+                    out
+                }
                 Op::Bin(op, ra, rb) => {
                     let (a, b) = (xv(self.g, ra), xv(self.g, rb));
                     // (Not for a kept op: its key has no steps.)
@@ -3897,6 +3965,21 @@ fn num_tok(img: &dyn Image, c: u32) -> Tok {
     }
 }
 
+/// Whether mask `m` holds bits of the top half only and function `key`
+/// in form `f` has every one of them clear: then `& m` gives 0 for it,
+/// and for any dense ID, whose top half is 0 (a byte or half mask, which
+/// may split an address to be joined again, isn't one).
+fn high_clear(f: Form, key: u32, m: u32) -> bool {
+    let v = match f {
+        Form::Full => key,
+        Form::Lo => key & 0xffff,
+        Form::Hi => key >> 16,
+        Form::HiUp => key & 0xffff_0000,
+        _ => return false,
+    };
+    m != 0 && m & 0xffff == 0 && v & m == 0
+}
+
 /// A token of `op` on tokens `x` and `y` (`None`: an unknown, a whole
 /// number of `steps[0]` for `x`, of `steps[1]` for `y`).
 fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>, steps: [u32; 2]) -> R {
@@ -3956,6 +4039,12 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>, steps: [u
                 fnt(fx)
             }
             (BinOp::And, Full | Lo, Some(Num(0xffff))) => fnt(Lo),
+            // A test of high bits the address has clear (`movs r1, #128;
+            // lsls r1, #17; ands r1, r0`: bit 24): 0, and 0 when dense too,
+            // a dense ID being below 2^16 (`native/fnref-bit-test-mask`).
+            (BinOp::And, Full | Lo | Hi | HiUp, Some(Num(m))) if high_clear(fx, kx, m) => {
+                R::T(Num(0))
+            }
             (
                 BinOp::Or | BinOp::Add,
                 HiUp,

@@ -679,3 +679,44 @@ an index of unknown range times 28, so a stride of 4) read at +22 and
 +23 give fewer values, a cap that widened one no longer does, and an
 exact ROM pointer reaches the IRQ handler's own code through incomplete
 call sets. Read every byte without the stride, the count stays 59.
+
+## Old GCC's `r0 != 0` as a bit, as landed
+
+Unit `native/fnref-gcc-ne-bit`, 2026-11-14 on quack. `negs r1, r0;
+orrs r1, r0; lsrs r5, r1, #31` is old GCC's `r5 = (r0 != 0)`. The
+flow now reads `x | (0 + !x + 1)`, either way round, as `x | -x`
+(`ne_or` in `fnref.rs`): a number, exact where `x` is one, whatever
+else `x` holds, and no hole. Sound for any `x`, not just before the
+shift: `x | -x` sets every bit from `x`'s lowest set bit up, so it is 0
+or at least 2^31, never a function's address. The `negs` alone already
+made none (`0 + !x + 1` of a whole address is a compare with 0); the
+hole was the `orrs` of that compare with `x`.
+
+**Metroid** (the lift with its holes file, main at dc453ab against this
+branch): `fn_words_proven` 604 and `fn_words_not_proven` 200, the same.
+The 77 words held at 0x0807431c meet their next hole at 0x0805aef6
+(where 13 more already stopped): `movs r1, #128; lsls r1, r1, #17;
+ands r1, r0; cmp r1, #0` after the call to 0x08057df8, a test of bit 24
+of a call's result with an empty callee set. That's a mask's rule, and
+another unit's (`native/fnref-bit-test-mask`): a mask of a half or a
+byte is a split that may be joined again, so `&` with a constant isn't
+a number in general.
+
+## A test of high bits by a constant mask, as landed
+
+Unit `native/fnref-bit-test-mask`, 2026-11-14 on quack. `x & m`, `m` a
+constant with no bit in the bottom half and every bit of it clear in
+the function's address (whole, a half, or the top half in place), is
+the number 0: 0 for the address, and 0 for any dense ID, whose top half
+is 0 (`high_clear` in `fnref.rs`). So any use of it is allowed, not only
+a compare with 0. A mask reaching into the bottom half (a byte or half
+split) or a bit the address has set stays arithmetic. `bin` now pairs
+an `&` with one exact constant token by token even on a large set,
+the mask kept.
+
+**Metroid** (the lift with its holes file): `fn_words_proven` 604 and
+`fn_words_not_proven` 200, the same. The 90 words held at 0x0805aef6
+(bit 24 of a call's result) meet their next hole at 0x08060468: `subs
+r0, r1, #1; cmp r0, #4; bhi` on the result of the call to 0x0808ac00, a
+switch on a call's result, which holds function addresses only through
+the empty callee sets' over-approximation. agb lift bars all held.
