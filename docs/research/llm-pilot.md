@@ -173,8 +173,8 @@ open unit that already covers it.
 
 | Pattern | In | Provable? | Lifter unit |
 |---|---|---|---|
-| Flag and register writes nothing reads dropped | all 20 | yes | new: `native/lift-dead-writes` |
-| `pop {pc}` / `pop {r0}; bx r0` of the entry lr as a plain return | 15 | yes | `native/lift-pop-return` (done) |
+| Flag and register writes nothing reads dropped | all 20 | yes | done: `native/lift-dead-writes` |
+| `pop {pc}` / `pop {r0}; bx r0` of the entry lr as a plain return | 15 | yes | done: `native/lift-pop-return` |
 | Branch conditions as comparisons and bit tests | 12 | yes | new: `native/lift-branch-conditions` |
 | Compiler narrowing idioms as casts and masks | 6 | yes | new: `native/lift-narrowing-casts` |
 | Single-use temporaries inline, constants at their use | all 20 | yes | new: `native/lift-inline-temps` |
