@@ -1038,13 +1038,13 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   room and the timing lab's walk (the route phase), sends Kirby through
   a door to its share of the 983 rooms and gives him its share of the 26
   copy abilities (game functions called between frames,
-  `core::call`), plays its share of 17 screens the rooms don't open in
-  each of the six languages (assets/kirby-fuzz-screens: the logo, title,
-  intro, menus, the four sub-games, the endings, game over, the link
-  screen, the pause menu and the collection room with every treasure,
-  reached through the game's own fade to a screen, `gLanguage` patched
-  in a copy of the ROM) and the pause menu's help with each ability in
-  each language, then fuzzes from kept states with RAM pokes (a warp,
+  `core::call`), plays its share of 35 screens the rooms don't open in
+  six languages (title, menus, sub-games, endings, link, pause,
+  collection room and more: the game's own fade to a screen, RAM pokes,
+  a screen's task put in a state; `gLanguage` patched in a ROM copy;
+  assets/kirby-fuzz-screens, assets/kirby-fuzz-last-misses) and the
+  pause help's 30 slots (each ability and three past the last), each
+  language, then fuzzes from kept states with RAM pokes (a warp,
   an ability, a refill, visited doors and treasures). The workers share
   `crates/fuzz/src/core.rs` with Emerald's. Then `gbaa-assets scan
   --run out/fuzz/NAME --curve 300` scores it against the static scan's

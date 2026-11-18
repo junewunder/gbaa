@@ -345,6 +345,38 @@ fn a_run_of_cold_blocks_after_a_function_is_all_its_own() {
     assert!(d.funcs.contains_key(&thumb(0x200)));
 }
 
+/// main: `push {r4, lr}; cmp r0, #0; bne 1f; bl next; 1: pop {r4, pc}`,
+/// with the function `next` right after it, never returning.
+fn main_then(next: &[u16]) -> Discovery {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        .h(0x100, 0xb510)
+        .h(0x102, 0x2800)
+        .bcond(0x104, 1, 0x10a)
+        .bl(0x106, 0x10c)
+        .h(0x10a, 0xbd10);
+    for (k, &h) in next.iter().enumerate() {
+        a.h(0x10c + 2 * k as u32, h);
+    }
+    a.run()
+}
+
+#[test]
+fn a_variadic_function_after_its_caller_is_its_own() {
+    // push {r0-r3}; push {r4, lr}; b .
+    let d = main_then(&[0xb40f, 0xb510, 0xe7fe]);
+    assert!(!d.rec.far_jumps.contains(&(B + 0x106)));
+    assert!(d.funcs.contains_key(&thumb(0x10c)), "{:x?}", d.funcs);
+}
+
+#[test]
+fn a_lone_idle_loop_after_its_caller_is_its_own() {
+    // b .
+    let d = main_then(&[0xe7fe]);
+    assert!(!d.rec.far_jumps.contains(&(B + 0x106)));
+    assert!(d.funcs.contains_key(&thumb(0x10c)), "{:x?}", d.funcs);
+}
+
 #[test]
 fn bl_to_a_bx_stub_calls_the_register() {
     let mut a = Asm::new();
