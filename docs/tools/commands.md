@@ -1457,9 +1457,9 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   run untimed every Nth (8), also checked against the lift and whether
   it agreed (`--plant-reference`: the planted store in the lift too, which
   only it catches). Fails on a difference, or a budget not spent before
-  the program stops or `--frames` (18000) run out.
-  Replacements: `holes/fn-check/` (our agb programs),
-  `mods/<game>/fn-check.toml` (private). Heavy: builds a generated crate.
+  the program stops or `--frames` (18000) run out. Replacements:
+  `holes/fn-check/` (agb), `mods/<game>/fn-check.toml`. ARM returns
+  without `bx`: `agb/native-arm-return`. Heavy: builds a generated crate.
 - `just first-frame ROM [FRAMES] [TIMING]` (#32, milestone 2's check):
   `recompile-check` (at TIMING, exact by default; `native` for the
   native port's timing, decision 11), then the two PNGs must be identical. The recompiled

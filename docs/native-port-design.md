@@ -1196,11 +1196,11 @@ as a seed, a budget and a digest, never as states.
 - The interpreter is a second reference (`native/fn-check-interp`): every
   8th compared run (`--interp-every N`) the run's input becomes a
   `Machine` (RAM, I/O as stored, display memories, save chip, CPSR, sp and
-  banked sps, r0-r3) and the interpreter runs the ROM's code to the
-  return, untimed, as native-fn-diff's reference; its end must be the
-  lift's. So a wrong lift is caught too (`--plant-reference` plants the
-  store in the reference). A run it can't follow (a wait: no time passes)
-  is counted, not compared.
+  banked sps, r0-r3, lr a sentinel) and the interpreter runs the ROM's
+  code to the return (the sentinel's word, in ARM state too: `mov pc, lr`
+  doesn't interwork), untimed; its end must be the lift's. So a wrong lift
+  is caught too (`--plant-reference`). A run it can't follow (a wait: no
+  time passes) is counted, not compared ("none compared" if all).
 - Not yet: a function first called past the lift's stop can't be checked.
 
 ## The units that follow

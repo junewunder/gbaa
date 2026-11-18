@@ -30,7 +30,9 @@
 // compare can't: the lift is the replacement's reference. A run the
 // interpreter can't follow (a fault, the BIOS, no return in 4,000,000
 // instructions: a wait, which takes time the untimed run never gives) is
-// counted, not compared.
+// counted, not compared. The return is pc at the sentinel's word in either
+// state: `bx lr` lands in Thumb, an ARM `mov pc, lr` or `ldm …, {pc}` in
+// ARM (no interworking on ARMv4T).
 //
 // A run whose reference panics or stops (`Exit`) isn't compared: it is
 // counted as skipped. What's kept is a seed, a count and a digest (of the
@@ -402,7 +404,10 @@ fn interp_run(m: &mut M) -> Result<u32, String> {
         if let Some(f) = m.fault {
             return Err(format!("a fault ({f:?})"));
         }
-        if runtime::dispatch::key(&m.cpu) == SENTINEL {
+        // Either state: `bx lr` lands in Thumb at the sentinel, an ARM
+        // `mov pc, lr` or `ldm …, {pc}` (no interworking on ARMv4T) in
+        // ARM at its word.
+        if m.cpu.pc & !3 == SENTINEL & !3 {
             return Ok(low);
         }
         if (m.cpu.pc as usize) < runtime::bus::BIOS_SIZE {
@@ -770,10 +775,13 @@ fn report(frames: Option<u64>) -> i32 {
             println!("      {w}");
         }
         if crate::FN_CHECK_INTERP > 0 {
-            let agreed = if t.interp_differ == 0 {
-                "agreed".to_string()
+            // No run compared is no agreement: say so.
+            let agreed = if t.interp_runs == 0 {
+                "none compared".to_string()
+            } else if t.interp_differ == 0 {
+                "agreed with the lift".to_string()
             } else {
-                format!("{} DIFFER", t.interp_differ)
+                format!("{} DIFFER with the lift", t.interp_differ)
             };
             let skipped = match &t.interp_why {
                 Some(why) if t.interp_skipped > 0 => format!(
@@ -783,7 +791,7 @@ fn report(frames: Option<u64>) -> i32 {
                 _ => String::new(),
             };
             println!(
-                "      interpreter (every {}th run, untimed): {} runs also checked: {agreed} with the lift{skipped}",
+                "      interpreter (every {}th run, untimed): {} runs also checked: {agreed}{skipped}",
                 crate::FN_CHECK_INTERP,
                 t.interp_runs
             );
