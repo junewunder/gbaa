@@ -99,6 +99,37 @@ fn pointer_scan_takes_validated_candidates() {
 }
 
 #[test]
+fn pointer_scan_takes_a_struct_table_of_pointer_pairs() {
+    // c/fnptr's sObjOps as modern GCC builds it: structs of two function
+    // pointers and a word of data, the leaves with no push.
+    let leaf = |a: &mut Asm, at: u32| {
+        a.h(at, 0x2001).h(at + 2, 0x4770); // movs r0, #1; bx lr
+    };
+    let table = |pair: bool| {
+        let mut a = Asm::new();
+        a.entry(0x100).h(0x100, 0x4770);
+        leaf(&mut a, 0x300);
+        leaf(&mut a, 0x320);
+        leaf(&mut a, 0x340);
+        a.w(0x400, if pair { thumb(0x300) } else { 0 })
+            .w(0x404, thumb(0x320))
+            .w(0x408, 8)
+            .w(0x40c, thumb(0x100))
+            .w(0x410, thumb(0x340))
+            .w(0x414, 8);
+        a.run()
+    };
+    let d = table(true);
+    for f in [0x300, 0x320, 0x340] {
+        assert_eq!(d.funcs.get(&thumb(f)), Some(&Evidence::Scanned), "0x{f:x}");
+    }
+    // Two words from a start, but with nothing beside it: no table.
+    let d = table(false);
+    assert!(!d.funcs.contains_key(&thumb(0x320)));
+    assert_eq!(d.funcs.get(&thumb(0x340)), Some(&Evidence::Scanned));
+}
+
+#[test]
 fn pointer_scan_takes_a_lone_pool_getter() {
     let mut a = Asm::new();
     a.entry(0x100)
