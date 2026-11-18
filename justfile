@@ -888,15 +888,18 @@ windows-check name through="":
 windows-image:
     podman build -q -t gbaa-windows -f scripts/windows.Containerfile scripts > /dev/null
 
-# Recompiles ROM, builds it, and runs it headless for FRAMES frames both recompiled and with --interp, at TIMING (exact, mGBA's, or native, docs/native-port-design.md section 7); fails unless the last frame and the registers match. Writes out/<name>/{recompiled,interp}.{txt,png}, and the recompiled run's stderr (the dispatcher's stats) to recompiled.log.
-recompile-check rom frames="60" timing="exact":
+# Recompiles ROM, builds it, and runs it headless for FRAMES frames both recompiled and with --interp, at TIMING (exact, mGBA's, or native, docs/native-port-design.md section 7); fails unless the last frame and the registers match. With PLAY, both runs play that ROM instead, a changed copy of ROM (a randomized one): the build interprets the functions it changed (docs/codegen-design.md, "A changed ROM") and recompiled.log says how many. Further ARGS go to both runs (`--input …`). Writes out/<name>/{recompiled,interp}.{txt,png}, and the recompiled run's stderr (the dispatcher's stats) to recompiled.log.
+[positional-arguments]
+recompile-check rom frames="60" timing="exact" play="" *args:
     #!/usr/bin/env bash
     set -eu
+    shift $(( $# < 4 ? $# : 4 ))
     rom={{quote(join(invocation_directory(), rom))}}
     name=$(basename "$rom" .gba | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')
     out=out/"$name"
     just recompile "$rom" "$out" --timing {{timing}} | grep -v '^  uncovered'
-    args=("$rom" --headless --timing {{timing}} --frames {{frames}} --hash --regs)
+    play={{ if play == "" { "\"$rom\"" } else { quote(join(invocation_directory(), play)) } }}
+    args=("$play" --headless --timing {{timing}} --frames {{frames}} --hash --regs "$@")
     just build-recompiled "$out"
     bin=(systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 target/recompiled/release/gbaa-"$name")
     t0=$(date +%s%N)
@@ -1383,6 +1386,28 @@ script-check rom=(roms / "Pokemon - Emerald Version.gba") bin="":
 emerald-saves rom=(roms / "Pokemon - Emerald Version.gba"):
     {{lock}} cargo build -q --release -p emerald-save
     target/release/emerald-save {{quote(rom)}} {{quote(gbaa_data / "saves/emerald")}}
+
+# A Kaizo Ironmon Emerald (scripting/randomized-rom, docs/research/randomized-roms.md): downloads the Universal Pokemon Randomizer ZX 4.6.1 release into $GBAA_DATA/tools/upr-zx-4.6.1 if it isn't there, and runs its CLI twice on ROM, as the Emerald Kaizo rules (pastebin z3Q8hVa9) say: their 60% level boost, then their Kaizo settings string. Writes $GBAA_DATA/randomized/emerald-kaizo.gba and the randomizer's log beside it; each run is a new random seed (the log names it). Needs java; seconds. Then `just recompile-check ROM 3600 exact $GBAA_DATA/randomized/emerald-kaizo.gba --input …` plays it recompiled against --interp.
+randomize-emerald rom=(roms / "Pokemon - Emerald Version.gba"):
+    #!/usr/bin/env bash
+    set -eu
+    upr={{quote(gbaa_data / "tools/upr-zx-4.6.1")}}
+    out={{quote(gbaa_data / "randomized")}}
+    mkdir -p "$upr" "$out"
+    if [ ! -f "$upr/unz/PokeRandoZX.jar" ]; then
+        curl -sSL -o "$upr/PokeRandoZX-v4_6_1.zip" https://github.com/Ajarmar/universal-pokemon-randomizer-zx/releases/download/v4.6.1/PokeRandoZX-v4_6_1.zip
+        echo "26051fe8a6665ea0582dfcd4d1c3e4889da42a2f731f5fc530fff0cb691a43fd  $upr/PokeRandoZX-v4_6_1.zip" | sha256sum -c --quiet
+        unzip -o -q "$upr/PokeRandoZX-v4_6_1.zip" -d "$upr/unz"
+    fi
+    # A .rnqs file: the settings version (321, 4.6.0) and the string's length, big-endian, then the string without its "321".
+    rnqs() { local n=${#1}; printf "$(printf '\\x%02x' 0 0 1 65 $((n>>24&255)) $((n>>16&255)) $((n>>8&255)) $((n&255)))%s" "$1"; }
+    rnqs 'AAgEAQT8AP8AAgEEAAEeRAABFAAAFABABAABAAAAAAAAAAAAuAS4AQAICTIGBAAyAAIAC0VtZXJhbGQgKFUpunJmsePDOIo=' > "$upr/boost60.rnqs"
+    rnqs 'WRIEEjL8AP8AAgGRAAKeBhsECQEAFAACCQAuEgAAAAAABBC45ATkAYYICTIGBAIyAAUYC0VtZXJhbGQgKFUpY5koIePDOIo=' > "$upr/kaizo.rnqs"
+    upr_run() { {{cap}} MemoryMax=5G java -Xmx4608M -jar "$upr/unz/PokeRandoZX.jar" cli -s "$1" -i "$2" -o "$3" -l 2>&1 | grep -v 'older randomizer version\|attempt to open it anyway\|re-save your settings'; }
+    upr_run "$upr/boost60.rnqs" {{quote(rom)}} "$out/emerald-boost60.gba"
+    upr_run "$upr/kaizo.rnqs" "$out/emerald-boost60.gba" "$out/emerald-kaizo.gba"
+    grep -m1 'Random Seed' "$out/emerald-kaizo.gba.log"
+    sha1sum "$out/emerald-kaizo.gba"
 
 # Story-point saves for the fuzzer (assets/fuzz-story-seeds): alice.sav (`just emerald-saves`) moved along the main story by crates/emerald-save/story.toml's points (flags, vars, key items and HMs as pret's scripts leave them, the party's level, where the player stands), each point with every one before it applied; names resolved against pret's headers (`just fetch-pret`). Writes $GBAA_DATA/saves/emerald/story/NN-name.sav (crates/emerald-save/src/bin/emerald-story.rs). Seconds.
 emerald-story rom=(roms / "Pokemon - Emerald Version.gba"):
