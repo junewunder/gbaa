@@ -961,7 +961,7 @@ native-check:
     {{cap}} MemoryMax=8G target/release/route-check --native target/release/native-direct-sound target/recompiled/release/gbaa-direct-sound \
         units/direct-sound.toml --replaced crates/native-spike/check/direct-sound.replaced.toml
 
-# The stage-A lifter (native/lift-stage-a; docs/native-port-design.md, "The stage-A lifter as built"; docs/tools/commands.md): gbaa-lift writes ROM whole as plain Rust over byte RAM and runtime::hw to OUT (default out/lift-<name>), with the stand-ins of holes/<name>.toml if there is one, else of mods/<name>/holes.toml (a commercial game's, game-derived and private) (<name> is --name NAME's if given, else the ROM's file name lowercased), then builds it into target/recompiled and runs it headless for 600 frames in a 3 GB scope (`just first-stop`: how far it got, or that it didn't build, goes in OUT's report.txt and metrics.toml; a stop doesn't fail the recipe). FLAGS go to gbaa-lift (--name, --holes, --bars, --drop-standin, --plant). Fails, naming each, on a hard hole no stand-in covers. Heavy: builds a generated crate.
+# The stage-A lifter (native/lift-stage-a; docs/native-port-design.md, "The stage-A lifter as built"; docs/tools/commands.md): gbaa-lift writes ROM whole as plain Rust over byte RAM and runtime::hw to OUT (default out/lift-<name>), with the stand-ins of holes/<name>.toml if there is one, else of mods/<name>/holes.toml (a commercial game's, game-derived and private) (<name> is --name NAME's if given, else the ROM's file name lowercased), held to mods/<name>/bars.toml's [program.<name>.bars] if there is one (a game's private bars, as lift-check.toml's; --bars FILE instead), then builds it into target/recompiled and runs it headless for 600 frames in a 3 GB scope (`just first-stop`: how far it got, or that it didn't build, goes in OUT's report.txt and metrics.toml; a stop doesn't fail the recipe). FLAGS go to gbaa-lift (--name, --holes, --bars, --drop-standin, --plant). Fails, naming each, on a hard hole no stand-in covers. Heavy: builds a generated crate.
 [positional-arguments]
 lift rom out="" *flags:
     #!/usr/bin/env bash
@@ -978,10 +978,13 @@ lift rom out="" *flags:
     # A game's holes file is game-derived, so it lives in the private mods/<name>/.
     if [ -f "holes/$name.toml" ]; then holes=(--holes "holes/$name.toml")
     elif [ -f "mods/$name/holes.toml" ]; then holes=(--holes "mods/$name/holes.toml"); fi
+    # A commercial game's bars (its lift-check table's, private too): mods/<name>/bars.toml.
+    bars=()
+    if [ -f "mods/$name/bars.toml" ] && [[ " $* " != *" --bars "* ]]; then bars=(--bars "mods/$name/bars.toml"); fi
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift --bin gbaa-first-stop
     # A hard hole fails the lift, and the build too (a compile_error! names each).
     lifted=0
-    {{cap}} MemoryMax=16G target/release/gbaa-lift "$rom" "$out" "${holes[@]}" "$@" || lifted=$?
+    {{cap}} MemoryMax=16G target/release/gbaa-lift "$rom" "$out" "${holes[@]}" "${bars[@]}" "$@" || lifted=$?
     built=0
     just build-recompiled "$out" || built=$?
     # Where the built program stops, or that it didn't build: into OUT's report.txt and metrics.toml.

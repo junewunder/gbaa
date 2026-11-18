@@ -3,8 +3,11 @@
 `just c-tests` builds this into `$GBAA_DATA/c/c-switch-agbcc.gba` and
 `c-switch-gcc.gba`; both draw the same frames. The lifter's check runs both
 (`just lift-check`, tables `c-switch-agbcc` and `c-switch-gcc`, on
-`units/c-switch-<cc>-600.toml`). Both compilers make each switch a jump
-table (`mov pc` through a word table after the code).
+`units/c-switch-<cc>-600.toml`). Both compilers make the two dense
+switches jump tables (`mov pc` through a word table after the code), and
+the sparse one in `tally` (cases 1, 5, 40 and 100) a binary search of
+compares on its value, which the lift prints as a `match`
+(native/lift-switch-match).
 
 Mode 3, BG2 on, black. Each frame `script_run` runs `sScript`'s byte
 commands until one waits: a yellow 10x10 box at (20, 20), then four green
@@ -13,6 +16,7 @@ pen's state (zigzag, spiral, colour cycling, the square round the screen),
 clears (16, 16)-(127, 79) and jumps back. `pen_update` moves a 2x2 pen
 (orange, later cycling colours) by its state. A bar at (4, 150) is as long
 as the commands run so far, low 7 bits, in a colour cycling every frame.
+Each frame `tally` updates a RAM word by its case (nothing drawn).
 
 Frame 600: hash `972d4d564237041d`, the same in mGBA 0.10.5 and our
 interpreter (`just mgba-diff`, 2026-11-18).

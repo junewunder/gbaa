@@ -37,7 +37,7 @@ Source only in git.
 |-------------|----------------------------------------------------------|
 | `template/` | the starter: a bouncing square; copy it for a new program |
 | `fnptr/`    | function pointers in a const struct table, a callback list, a main callback |
-| `switch/`   | switches compiled to jump tables: a script interpreter, a state machine |
+| `switch/`   | switches compiled to jump tables: a script interpreter, a state machine; a sparse one compiled to compares |
 | `chain/`    | a stack struct passed by pointer down a call chain; a struct returned by value |
 
 The three programs (six ROMs) are in the lifter's check (`just
