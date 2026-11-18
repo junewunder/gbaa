@@ -1066,6 +1066,14 @@ with the native check and no replaced-library list.
   no printed jump reaches, a `loop { match b }` (`blocks_in_match`). ROM
   addresses survive as `guest_pc` marks, jump-table arms and `FNS` keys;
   `Plan::Static` to another function's entry is a tail call.
+- The compilers' narrowing idioms print as casts (`native::narrow`,
+  native/lift-narrowing-casts): `lsl #24; lsr #24` is `x as u8 as u32`,
+  `lsl #16; asr #16` `x as i16 as u32`, and an `and` with 0xff or 0xffff,
+  a constant in the block or carried into it in a register (the play
+  build's `lower::known` over the printed edges), `as u8`/`as u16`. Other
+  shifts by a constant print as `<<`, `>>`. `shift_pairs_left` (barred)
+  counts the guest's pairs still printed as two shifts; `narrowing_casts`
+  the casts.
 - A return is a jump to `RET`, the value `lr` holds on entry. Compiled
   code moves `lr` through the stack, so returns are told by value, not
   by shape: `pop {pc}`, `bx lr` and `ldr pc` all work, and anything else

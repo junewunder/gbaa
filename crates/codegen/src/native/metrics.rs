@@ -214,6 +214,7 @@ pub const UNBARRED: &[&str] = &[
     "functions_structured_pct",
     "blocks_structured",
     "blocks_structured_pct",
+    "narrowing_casts",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each
