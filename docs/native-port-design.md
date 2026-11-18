@@ -1073,16 +1073,8 @@ with the native check and no replaced-library list.
   through `call_fn`.
 - The stack stays where the game has it: `sp` is a parameter and the
   frames are IWRAM bytes. A frame recovered as Rust locals is stage B's
-  (section 1). `bank_sp` puts sp in its mode's bank at a wait or I/O store;
-  `Game::sp`, system mode's, is where a handler's frames go.
-- A store's `bank_sp` is left out where the bank already holds its sp
-  (`codegen::native::banks`; native/lift-bank-sp-once): on every way to it
-  within the function the last bank was of the same `r13`, with no write
-  of `r13`, no `msr`, and no call, `swi` or wait between (only a plain
-  jump keeps it). A handler the store itself runs doesn't end the run: the
-  prelude's `irq_entry` puts the stopped mode's banked sp back, as the
-  hardware's `r13` comes back to the code an IRQ stopped. `bank_sp_calls`
-  (barred) counts the calls printed.
+  (section 1). `bank_sp` puts sp in its mode's bank at a wait or I/O store
+  (once a run: `native::banks`); `Game::sp`, system mode's, is a handler's.
 - Memory is `ld8/16/32` and `st8/16/32` over `Game::ram` (EWRAM then
   IWRAM: the check layout is the only layout a byte program has), the
   library's I/O (`Hw::read16`/`write16`; the I/O block's unused
