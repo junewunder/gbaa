@@ -595,11 +595,19 @@ fn play(
         {
             report.freezes.add(w.elapsed(), s.frame());
         }
+        // Far behind the other player (back from a stall): the next frame
+        // at once, unpaced and unheard, until caught up; the pacing then
+        // starts over (multiplayer/stall-catch-up-paced).
+        let catching = stepped && left.is_none() && s.catching_up();
         if let Some(c) = &mut pace {
-            if !stepped {
-                c.hold(fast::frame());
+            if catching {
+                *c = Pacer::default();
+            } else {
+                if !stepped {
+                    c.hold(fast::frame());
+                }
+                c.wait(fast::frame());
             }
-            c.wait(fast::frame());
         }
         let n = frames(&s, solo);
         // The menu doesn't pause a session (the others would wait): while
@@ -636,30 +644,40 @@ fn play(
         let Some(sc) = &screen else {
             continue;
         };
-        if stepped {
+        if stepped && !catching {
             let at = turn + present;
             let now = Instant::now();
             if at > now {
                 std::thread::sleep(at - now);
             }
         }
-        sc.show(&m.ppu.frame, false);
+        sc.show(&m.ppu.frame, catching);
         // A frame held back goes into the pacing as a frame of silence (or
         // the clock's frame), so the next runs a frame later: held back.
         // Until 2026-11-08 it slept a frame and the sound's pacing then
         // ran the next at once, undoing the hold; and a muted window
         // slept a frame after every frame on top of its clock.
         if let Some(p) = player(s.console_mut(), seat) {
-            if !stepped {
-                p.hold();
+            if catching {
+                // What's queued no longer keeps up: silence, refilled to
+                // the target once caught up.
+                p.silence();
+            } else {
+                if !stepped {
+                    p.hold();
+                }
+                p.wait();
             }
-            p.wait();
         }
         if let Some(c) = &mut clock {
-            if !stepped {
-                c.hold(fast::frame());
+            if catching {
+                *c = Pacer::default();
+            } else {
+                if !stepped {
+                    c.hold(fast::frame());
+                }
+                c.wait(fast::frame());
             }
-            c.wait(fast::frame());
         }
         let i = sc.input();
         open = i.open && !i.leave;
@@ -777,6 +795,10 @@ struct Report {
     /// The lead (frames ahead of the other player) over the frames run:
     /// its sum, least and most.
     lead: Option<(f64, f32, f32)>,
+    /// Since when this peer has run [`APART`] or more frames ahead of the
+    /// other player or behind, and the longest such stretch over.
+    apart_since: Option<Instant>,
+    apart: Duration,
 }
 
 impl Report {
@@ -788,7 +810,20 @@ impl Report {
             *sum += l as f64;
             *lo = lo.min(l);
             *hi = hi.max(l);
+            let now = Instant::now();
+            if l.abs() >= netplay::feel::APART {
+                self.apart_since.get_or_insert(now);
+            } else if let Some(since) = self.apart_since.take() {
+                self.apart = self.apart.max(now - since);
+            }
         }
+    }
+
+    /// The longest stretch apart ([`Report::apart`]), one still going
+    /// included.
+    fn apart(&self) -> Duration {
+        let open = self.apart_since.map_or(Duration::ZERO, |t| t.elapsed());
+        self.apart.max(open)
     }
 
     /// The menu's few lines: the other player's seat, the round trip, how
@@ -878,8 +913,10 @@ impl Report {
         };
         let lead = match (Some(s.lead()), self.lead) {
             (Some(now), Some((sum, lo, hi))) => format!(
-                "; ahead of the other player by {now:.1} frames now, {:.1} on average, {lo:.1} to {hi:.1}",
-                sum / self.times.len().max(1) as f64
+                "; ahead of the other player by {now:.1} frames now, {:.1} on average, {lo:.1} to {hi:.1}; {} frames or more apart for {:.1} s at most",
+                sum / self.times.len().max(1) as f64,
+                netplay::feel::APART,
+                self.apart().as_secs_f64()
             ),
             _ => String::new(),
         };
