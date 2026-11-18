@@ -224,6 +224,10 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `SCENE.md` lists (it matches mGBA and first-frame at frame 10). VRAM,
   palette and OAM take halfword stores only, in ROMs and in the runtime's
   PPU tests alike (`test_util::ppu`'s `fill16`, `tile4`, `store_bytes`).
+- C test programs (native/c-test-programs): `just c-tests` builds each of
+  `c/`'s with agbcc (GCC 2.95) and with modern arm-none-eabi-gcc into
+  `$GBAA_DATA/c/c-<name>-{agbcc,gcc}.{elf,gba}`, in seconds; how, and what
+  a new one needs: `c/README.md`.
 - `cargo run -p desktop -- ROM` (`gbaa-desktop`) plays a ROM through the
   interpreter in a window (arrows, X/Z = A/B, A/S = L/R, Enter/Backspace =
   Start/Select, Ctrl+Q quits; Escape never does, as Steam's desktop
@@ -1349,7 +1353,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `agb/native-frame-locals`, `agb/native-ime-release`, `agb/native-bios-calls`,
   `agb/native-bios-more` (SoftReset too), `agb/native-tasks`, `agb/native-dma`, `agb/native-save` (SRAM),
   `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`, `agb/native-serial`, `agb/native-irq-wrapper` (both its IRQ wrappers lifted, their `msr` and `mrs` run), `agb/native-takes` (two functions that take r8 and r9 from their caller, one called through a pointer the holes file's `[[takes]]` names)
-  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers, native/lift-irq-wrapper-tail, native/taker-test-program) on
+  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers, native/lift-irq-wrapper-tail, native/taker-test-program), and the C programs `c-fnptr`, `c-switch` and `c-chain`, each built by agbcc and by modern GCC (`c-fnptr-agbcc`, `c-fnptr-gcc`, …: six ROMs from `just c-tests`, native/c-test-programs; each with a `planted_store`) on
   `units/<name>-600.toml` (the spike's is `units/native-spike.toml`,
   native-irq-hold's, native-ime-release's and native-bios-region's
   `-601`). First every program is lifted with `--bars`
@@ -1381,7 +1385,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   play 0x00, native 0x01 …)`, `(…-ime-at-waits: frame 2: EWRAM byte
   0x020000cc: play 0x01, native 0x00 …)`, `planted hard hole caught` and
   `lift-check: passed`. Logs in `out/lift-*.txt`. About 30 minutes on
-  quack. Heavy: builds sixty generated crates; gbaa-lift-check runs capped at 8 GB (its lifts in its scope; route-check in a 3 GB scope and the builds in their own).
+  quack. Heavy: builds about eighty generated crates; gbaa-lift-check runs capped at 8 GB (its lifts in its scope; route-check in a 3 GB scope and the builds in their own).
 
   `gbaa-lift --shadow-locals` (native/frame-locals; by hand, not part of
   the check) keeps every stack local in the frame's bytes too and prints
@@ -1440,6 +1444,18 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `$GBAA_DATA/src/pokeemerald/`. Passes with `native 0 of 10 differ`
   (2026-11-01). About 30 s, most of it discovery and summaries; capped at
   3 GB. Not heavy (no generated crate).
+- `just fn-check ROM [--name NAME] --fn-check KEY... [--replace FILE]
+  [--seed N] [--runs N] [--plant AT] [--frames N]` (native/fn-check-any;
+  `docs/native-port-design.md`, "The per-function check"): a function's
+  replacement (its stand-in, from the holes file or `--replace FILE`; with
+  none, the lift, which `--plant AT` makes a planted wrong one) against
+  its lift, both native, from the program's own calls and seeded variants
+  of them, headless with no input, until each budget is spent. Prints per
+  function its runs, budget, time, seed and digest, and the first
+  differences, each naming the byte. Fails on a difference, or a budget
+  not spent before the program stops or `--frames` (18000) run out.
+  Replacements: `holes/fn-check/` (our agb programs),
+  `mods/<game>/fn-check.toml` (private). Heavy: builds a generated crate.
 - `just first-frame ROM [FRAMES] [TIMING]` (#32, milestone 2's check):
   `recompile-check` (at TIMING, exact by default; `native` for the
   native port's timing, decision 11), then the two PNGs must be identical. The recompiled

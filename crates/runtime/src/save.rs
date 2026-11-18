@@ -127,6 +127,7 @@ enum Seq {
     Continue,
 }
 
+#[derive(Clone)]
 pub struct Save {
     pub kind: Kind,
     /// The whole save. SRAM and the 512 Kbit chip use the first 64 KB.

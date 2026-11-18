@@ -1,0 +1,12 @@
+# c/chain built by gcc (`just c-tests`) for 600 frames with no input: a C
+# program of the stage-A lifter's check (native/c-test-programs; `just
+# lift-check`), its lift (gbaa-lift) against the play build at --timing
+# native by route-check --native. What it draws: c/chain/SCENE.md.
+rom = "$GBAA_DATA/c/c-chain-gcc.gba"
+
+[[checkpoint]]
+name = "c-chain-gcc-600"
+frame = 600
+hash = "33230e1c837269b5"
+# Verified: mGBA 0.10.5 (`just mgba-diff`) draws the same at frame 600,
+# as does the program's other compiler's build (2026-11-18).

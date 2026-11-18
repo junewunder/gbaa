@@ -1,0 +1,12 @@
+# c/switch built by agbcc (`just c-tests`) for 600 frames with no input: a C
+# program of the stage-A lifter's check (native/c-test-programs; `just
+# lift-check`), its lift (gbaa-lift) against the play build at --timing
+# native by route-check --native. What it draws: c/switch/SCENE.md.
+rom = "$GBAA_DATA/c/c-switch-agbcc.gba"
+
+[[checkpoint]]
+name = "c-switch-agbcc-600"
+frame = 600
+hash = "972d4d564237041d"
+# Verified: mGBA 0.10.5 (`just mgba-diff`) draws the same at frame 600,
+# as does the program's other compiler's build (2026-11-18).

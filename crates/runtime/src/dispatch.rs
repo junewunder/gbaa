@@ -20,6 +20,9 @@ use crate::platform::Platform;
 use armv4t::interp::{Cpu, Exit};
 
 pub mod modcall;
+pub mod stale;
+
+pub use stale::{FnBytes, Staleness, fn_hash};
 
 /// How a generated function was left.
 #[must_use]
@@ -72,6 +75,10 @@ pub struct Code<P: Platform + 'static> {
     pub folded: &'static [(u32, u32)],
     /// [`rom_hash`] of the ROM it was recompiled from.
     pub rom_hash: u64,
+    /// Every compiled function's ROM bytes, sorted by entry, for running
+    /// a changed copy of the ROM ([`stale`]; empty in a build without
+    /// them, which runs only its own ROM).
+    pub fns: &'static [FnBytes],
     /// The timing it was generated with (`gbaa-recompile --timing`): what
     /// a front end runs its interpreter fallback with unless told otherwise
     /// ([`crate::Machine::timing`]).
@@ -114,6 +121,9 @@ impl<P: Platform> Code<P> {
     /// [`blocks`](Code::blocks).
     #[inline]
     fn find(&self, bus: &mut Bus, key: u32) -> Option<(GuestFn<P>, (bool, usize))> {
+        if is_stale(bus, key) {
+            return None;
+        }
         if is_ram(key) {
             let i = self.ram_blocks.binary_search_by_key(&key, |e| e.0).ok()?;
             let (_, f, o, n) = self.ram_blocks[i];
@@ -128,10 +138,12 @@ impl<P: Platform> Code<P> {
             .map(|i| (self.blocks[i].1, (false, i)))
     }
 
-    /// The index of `key` in [`inner`](Code::inner).
+    /// The index of `key` in [`inner`](Code::inner), unless its function
+    /// is stale.
     #[inline]
-    fn find_inner(&self, key: u32) -> Option<usize> {
-        self.inner.binary_search(&key).ok()
+    fn find_inner(&self, bus: &Bus, key: u32) -> Option<usize> {
+        let i = self.inner.binary_search(&key).ok()?;
+        (!is_stale(bus, key)).then_some(i)
     }
 
     /// Whether `key` is a block of a modded function past its entry.
@@ -150,6 +162,13 @@ impl<P: Platform> Code<P> {
         };
         i == 0 || self.blocks[i - 1].1 as usize != self.blocks[i].1 as usize
     }
+}
+
+/// Whether `key` runs code of a function the ROM's bytes made stale
+/// ([`Bus::stale`]).
+#[inline(always)]
+fn is_stale(bus: &Bus, key: u32) -> bool {
+    !bus.stale.is_empty() && bus.stale.binary_search(&key).is_ok()
 }
 
 fn is_ram(addr: u32) -> bool {
@@ -762,7 +781,7 @@ fn run_inner<P: Platform>(
             }
             continue;
         }
-        let inner = code.and_then(|c| c.find_inner(k));
+        let inner = code.and_then(|c| c.find_inner(&m.bus, k));
         // The block-timed interpreter runs a structured function's inner
         // blocks as blocks too.
         if blocks && let (Some(i), Some(c)) = (inner, code) {
@@ -836,8 +855,10 @@ fn run_inner<P: Platform>(
                 ram += m.now() - before;
             }
             let k = key(&m.cpu);
-            let inside = |k| is_rom(k) && code.is_some_and(|c| c.find_inner(k).is_some());
-            if !resumed && inside(k) {
+            let inside = |m: &Machine<P>, k| {
+                is_rom(k) && code.is_some_and(|c| c.find_inner(&m.bus, k).is_some())
+            };
+            if !resumed && inside(m, k) {
                 // A timed resume runs it as a block.
                 if m.nest.timed_resumes {
                     break;

@@ -249,6 +249,16 @@ switch, but it counts toward the trickle.
   (the interpreter fallback and seed logging, decision 6, catch it).
   Measured: Emerald precision 0.9992, recall 0.9555; modern GCC 0.9985 /
   0.7750, where most misses are dead functions.
+  **A struct table's pair** (2026-11-18, native/c-test-programs): "beside
+  it" also covers a Thumb pointer whose neighbour is another Thumb pointer
+  and which is two words from a known function pointer: a table of structs
+  of two function pointers and a word of data, where modern GCC's leaves
+  (no push) have no other evidence (`c/fnptr`'s `sObjOps`, which the native
+  lift otherwise calls into a function it doesn't have). Emerald and
+  modern-GCC Emerald score the same as before (0.9997/0.9565 and
+  0.9996/0.7872); a looser rule (any pointer two words from a start) found
+  6 and 40 more true starts there but one more false one, and took the lone
+  `movs r0, #0; bx lr` the scan's tests keep out.
 - **Checking discovery:** precision and recall of function starts against
   the pokeemerald ELF, specified in `research/discovery-prior-art.md`
   ("Proposed discovery-accuracy check"). Baseline to beat: 99.87% precision,
