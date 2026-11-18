@@ -1,6 +1,6 @@
 ---
 title: Finding where a native program and its play build part in time
-hook: diff the records frame by frame in Python, then trace each sync's clock in both builds (a temporary `extern crate std` in runtime)
+hook: diff the records frame by frame in Python, then trace each sync's clock in both builds
 ---
 
 What found Metroid's six timing causes in one session (native/metroid-native-check, 2026-11-14).
