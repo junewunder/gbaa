@@ -244,6 +244,13 @@ IntroHandler 0x0808117d's test of a callee's `u8` result). The shift
 pairs are bit identities; the register mask needs the register's
 constant carried into the block (the mod view's `lower::known` does this
 for the play build).
+The lifter now prints them so (`native/lift-narrowing-casts`,
+`native::narrow`): a pair as `x as u8 as u32`, `as i8`, `as u16`, `as
+i16` (other widths a mask or `prim::sext`), an `and` with 0xff or 0xffff
+as a cast, the register's constant carried in by `lower::known` over the
+native printer's edges. Metroid: 3,183 guest pairs, none left as two
+shifts (`shift_pairs_left`, barred; a pair on a ROM literal folds to its
+constant), 3,319 casts.
 
 **Single-use temporaries.** Every lifted value is its own `let vN`, and
 constants are their own lines (`let v5 = 0xfffffff8u32; let v6 =
