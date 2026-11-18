@@ -1625,7 +1625,7 @@ struct Carry {
 /// Each edge is (from, to, sets): what the edge's block writes each
 /// register on its way out and whether it is the call, `None` for an edge
 /// after which nothing is known. The native lifter's narrowing casts use
-/// it too (`native::Known`).
+/// it too ([`crate::native::narrow::starts`]).
 pub(crate) fn known(
     entry: u32,
     steps: &[(u32, u32, Option<&Sets>)],

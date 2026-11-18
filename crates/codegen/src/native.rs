@@ -4434,8 +4434,6 @@ mod tests {
         lift(&rom, "t", &holes).holes
     }
 
-    /// A reset that counts r0 down from 10 in a loop and then spins
-    /// prints from its structuring plan: a labeled `loop` and no `match b`.
     /// A shift pair prints as a cast, and an `and` with a register a block
     /// before set to 0xff as `as u8` (native/lift-narrowing-casts).
     #[test]
@@ -4467,6 +4465,8 @@ mod tests {
         );
     }
 
+    /// A reset that counts r0 down from 10 in a loop and then spins
+    /// prints from its structuring plan: a labeled `loop` and no `match b`.
     #[test]
     fn a_loop_lifts_as_a_rust_loop() {
         let mut words = [0xE1A0_0000u32; 0x10];
