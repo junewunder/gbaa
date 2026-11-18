@@ -1151,7 +1151,7 @@ route = "units/c-fnptr-agbcc-600.toml"
 planted_store = 0x080005d4
 
 [program.c-fnptr-agbcc.bars]
-lines = 2696
+lines = 2534
 lines_prelude = 1203
 functions = 18
 functions_iwram = 0
@@ -1164,6 +1164,8 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 2
 hard_holes = 0
 blocks = 68
+functions_in_match = 0
+blocks_in_match = 0
 load_const_ram = 0
 load_const_io = 1
 load_const_rom = 0
@@ -1213,7 +1215,7 @@ route = "units/c-fnptr-gcc-600.toml"
 planted_store = 0x08000390
 
 [program.c-fnptr-gcc.bars]
-lines = 2754
+lines = 2581
 lines_prelude = 1203
 functions = 18
 functions_iwram = 0
@@ -1226,6 +1228,8 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 2
 hard_holes = 0
 blocks = 78
+functions_in_match = 0
+blocks_in_match = 0
 load_const_ram = 0
 load_const_io = 1
 load_const_rom = 0
@@ -1275,7 +1279,7 @@ route = "units/c-switch-agbcc-600.toml"
 planted_store = 0x08000548
 
 [program.c-switch-agbcc.bars]
-lines = 2375
+lines = 2265
 lines_prelude = 1203
 functions = 9
 functions_iwram = 0
@@ -1288,6 +1292,8 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 0
 hard_holes = 0
 blocks = 77
+functions_in_match = 0
+blocks_in_match = 0
 load_const_ram = 0
 load_const_io = 1
 load_const_rom = 0
@@ -1337,7 +1343,7 @@ route = "units/c-switch-gcc-600.toml"
 planted_store = 0x08000568
 
 [program.c-switch-gcc.bars]
-lines = 2560
+lines = 2447
 lines_prelude = 1203
 functions = 9
 functions_iwram = 0
@@ -1350,6 +1356,8 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 0
 hard_holes = 0
 blocks = 80
+functions_in_match = 0
+blocks_in_match = 0
 load_const_ram = 0
 load_const_io = 1
 load_const_rom = 0
@@ -1399,7 +1407,7 @@ route = "units/c-chain-agbcc-600.toml"
 planted_store = 0x0800058e
 
 [program.c-chain-agbcc.bars]
-lines = 3115
+lines = 2992
 lines_prelude = 1203
 functions = 13
 functions_iwram = 0
@@ -1412,6 +1420,8 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 0
 hard_holes = 0
 blocks = 63
+functions_in_match = 0
+blocks_in_match = 0
 load_const_ram = 0
 load_const_io = 1
 load_const_rom = 0
@@ -1461,7 +1471,7 @@ route = "units/c-chain-gcc-600.toml"
 planted_store = 0x08000550
 
 [program.c-chain-gcc.bars]
-lines = 2883
+lines = 2761
 lines_prelude = 1203
 functions = 13
 functions_iwram = 0
@@ -1474,6 +1484,8 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 0
 hard_holes = 0
 blocks = 64
+functions_in_match = 0
+blocks_in_match = 0
 load_const_ram = 0
 load_const_io = 1
 load_const_rom = 0
