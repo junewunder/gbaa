@@ -1050,7 +1050,7 @@ with the native check and no replaced-library list.
   summary has a hole: the rest take their parameters and give their
   results, `docs/native-stage-b.md`, piece 3.) r0-r3 go in and come back; r4-r12, `lr` and
   NZCV are Rust locals (a write nothing reads left out: `native::live`); each block's IR values
-  are `let`s. Because every function keeps r4-r11 in its own locals, a callee can't change its
+  are `let`s, but a pure one used once, or a constant, prints inside its use (native/lift-inline-temps). Because every function keeps r4-r11 in its own locals, a callee can't change its
   caller's, so the lift is exact for any callee that follows AAPCS,
   whatever the summary proof says. The summary is printed above each
   function (`/// Reads {r0, r1}; returns {r0}`), and a function whose
