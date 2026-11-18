@@ -23,4 +23,5 @@ Made from each file's frontmatter (`title`, `hook`, `open: true`) by `just memor
 Unsettled investigations, one per file with `open: true` and the next step in its hook.
 Drop the flag in the session that settles it.
 
+- [Where mGBA's beam is at the hand-over, and why ours differs](mgba-boot-beam.md) — mGBA hands over on line 126, H-blank ~91 cycles off (ours: line 0); moving ours alone puts Metroid a frame off (2026-11-18)
 - [Why Emerald's function-address flow doesn't settle yet](fnref-flow-emerald-memory.md) — next: print what 12k entries gain a round with memory still; suspect ROM pointers stepping down
