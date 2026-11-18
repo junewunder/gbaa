@@ -1302,10 +1302,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `target/recompiled` (`gbaa-native-<name>`, the native programs' headless
   flags or, with none, gbaa-desktop's window to play in: `--scale N`, `--mute`; it keeps the game's `.sav` in `saves/<name>/` as the play build does, and its menus leave out save states, rewind, scripts and netplay; `crates/native-host`). It reads `holes/<name>.toml` when there is
   one, else `mods/<name>/holes.toml` (a commercial game's, private: its
-  stand-ins are ports of the game's code), and holds the lift to
-  `mods/<name>/bars.toml`'s `[program.<name>.bars]` when there is one (a
-  game's bars, private as its holes file is; unless FLAGS give `--bars`);
-  `<name>` is `--name`'s when
+  stand-ins are ports of the game's code), and holds it to `mods/<name>/bars.toml` (private bars) if there is one; `<name>` is `--name`'s when
   given (a file name with spaces: `just lift "…/Metroid - Zero Mission
   (USA).gba" out/lift-metroid --name metroid`), else the ROM's file name
   lowercased. The file has `[[standin]]` (a function's hand-written Rust,
@@ -1335,13 +1332,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   heap's run types is a heap object's field through `Ref<T>`, counted in
   `ref_accesses` and `ref_types`, unbarred, and `ref_unexplained` those
   through an object's pointer no type explains, native/ref-heap); `call_fn` calls; jumps by value;
-  gap targets; compare trees (a block's run of guarded exits each comparing
-  one unchanged value against a constant, as agbcc's binary search for a
-  small switch, `codegen::native::switch`, native/lift-switch-match)
-  printed as one `match` on the value with each leaf an arm
-  (`compare_trees_matched`, and `compare_tree_blocks` the blocks a tree
-  took in besides its first, both unbarred) and blocks with two or more
-  such compares left as `if`s (`compare_trees_left`, barred). `--bars FILE` fails the lift (after writing it) on any
+  gap targets; compare trees on one value printed as a `match` (`compare_trees_matched`, `compare_tree_blocks` the blocks taken in, unbarred; `compare_trees_left` barred; native/lift-switch-match). `--bars FILE` fails the lift (after writing it) on any
   metric over `[program.NAME.bars]`'s maximum, each named with both
   numbers (`gbaa-lift: affine: load_computed_unknown is 755, over its
   bar of 754`), and lists the metrics under their bars. Discovery's
