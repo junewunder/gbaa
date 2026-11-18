@@ -412,6 +412,11 @@ pub struct Stats {
     pub n_ram_seeds: usize,
     /// Guest cycles the CPU spent halted (`Halt`, `VBlankIntrWait`).
     pub halted_cycles: u64,
+    /// Guest cycles a BIOS call's stall took ([`crate::bios::STALL_LOOP`]:
+    /// the time of `CpuSet`, `CpuFastSet` and LZ77, burned where mGBA's HLE
+    /// BIOS burns it). The call's time, not the fallback's: like a halt,
+    /// it is in neither `compiled_cycles` nor `interpreted_cycles`.
+    pub stalled_cycles: u64,
     /// Distinct ROM keys the fallback was entered at, the first
     /// [`MAX_SEEDS`] of them.
     pub seeds: [u32; MAX_SEEDS],
@@ -456,6 +461,7 @@ impl Default for Stats {
             ram_seeds: [(0, 0); MAX_RAM_SEEDS],
             n_ram_seeds: 0,
             halted_cycles: 0,
+            stalled_cycles: 0,
             seeds: [0; MAX_SEEDS],
             n_seeds: 0,
             settles: 0,
@@ -807,7 +813,8 @@ fn run_inner<P: Platform>(
         if let Some((f, (ram, i))) = code.and_then(|c| c.find(&mut m.bus, k)) {
             // What runs nested in the call ([`settle`]) counts itself.
             let counted = |s: &Stats| {
-                let all = s.compiled_cycles + s.interpreted_cycles + s.halted_cycles;
+                let all =
+                    s.compiled_cycles + s.interpreted_cycles + s.halted_cycles + s.stalled_cycles;
                 (all, s.compiled_ram_cycles)
             };
             let (t, r, n) = (m.now(), m.bus.overlays.cycles, counted(m.nest.stats()));
@@ -846,11 +853,16 @@ fn run_inner<P: Platform>(
             m.nest.stats().seed(k);
         }
         let t = m.now();
-        let mut ram = 0;
+        let (mut ram, mut stalled) = (0, 0);
         loop {
             let (pc, before) = (m.cpu.pc, m.now());
             let yield_ = m.step();
-            m.nest.stats().interpreted += 1;
+            if pc == crate::bios::STALL_LOOP {
+                // A BIOS call's time, not an instruction the fallback ran.
+                stalled += m.now() - before;
+            } else {
+                m.nest.stats().interpreted += 1;
+            }
             if (0x0200_0000..0x0400_0000).contains(&pc) {
                 ram += m.now() - before;
             }
@@ -880,7 +892,10 @@ fn run_inner<P: Platform>(
                 m.nest.stats().mod_resumes += 1;
             }
         }
-        m.nest.stats().interpreted_cycles += m.now() - t;
+        let ran = m.now() - t;
+        let s = m.nest.stats();
+        s.interpreted_cycles += ran - stalled;
+        s.stalled_cycles += stalled;
         if ram > 0 {
             let s = m.nest.stats();
             s.interpreted_ram_cycles += ram;
