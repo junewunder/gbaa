@@ -1452,12 +1452,12 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   none, the lift, which `--plant AT` makes a planted wrong one) against
   its lift, both native, from the program's own calls and seeded variants
   of them, headless with no input, until each budget is spent. Prints per
-  function its runs, budget, time, seed and digest, and the first
-  differences, each naming the byte; and how many runs the interpreter,
-  run untimed every Nth (8), also checked against the lift and whether
-  it agreed (`--plant-reference`: the planted store in the lift too, which
-  only it catches). Fails on a difference, or a budget not spent before
-  the program stops or `--frames` (18000) run out. Replacements:
+  function its runs, budget, time, seed, digest, runs skipped (past 600
+  frames), the first differences, each naming the byte, and how many
+  runs the interpreter (untimed, every Nth: 8) checked against the lift
+  and whether it agreed (`--plant-reference`: the planted store in the
+  lift too, which only it catches). Fails on a difference, or a budget
+  unspent when the program stops or `--frames` (18000) runs out. Stand-ins:
   `holes/fn-check/` (agb), `mods/<game>/fn-check.toml`. ARM returns
   without `bx`: `agb/native-arm-return`. Heavy: builds a generated crate.
 - `just first-frame ROM [FRAMES] [TIMING]` (#32, milestone 2's check):
