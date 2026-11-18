@@ -332,13 +332,13 @@ impl<P: Seat> Gba<P> {
     /// again too) together. With [`Turns`], compiled code suspended
     /// mid-run, or ended by a restore, never returned to the dispatcher to
     /// count its cycles, so the compiled ones are every cycle run but the
-    /// interpreter's and the halts'.
+    /// interpreter's, the halts' and the BIOS stalls'.
     pub fn stats(&self) -> Stats {
         let mut s = (*self.stats).clone();
         if self.turns.is_some() {
             s.compiled_cycles = self
                 .ran
-                .saturating_sub(s.interpreted_cycles + s.halted_cycles);
+                .saturating_sub(s.interpreted_cycles + s.halted_cycles + s.stalled_cycles);
         }
         s
     }
