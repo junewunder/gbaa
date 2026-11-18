@@ -45,6 +45,7 @@ static CODE: Code<Headless> = Code {
     folded: &[],
     overlays: &[],
     rom_hash: 0,
+    fns: &[],
     timing: crate::Timing::Exact,
     seeds_file: None,
     spins: &[],
@@ -98,6 +99,7 @@ fn entries_are_each_functions_first_block() {
         folded: &[],
         overlays: &[],
         rom_hash: 0,
+        fns: &[],
         timing: crate::Timing::Exact,
         seeds_file: None,
         spins: &[],
@@ -208,6 +210,7 @@ static SETTLE: Code<Headless> = Code {
     folded: &[],
     overlays: &[],
     rom_hash: 0,
+    fns: &[],
     timing: crate::Timing::Exact,
     seeds_file: None,
     spins: &[],
@@ -342,6 +345,7 @@ static LOOP: Code<Headless> = Code {
     folded: &[],
     overlays: &[],
     rom_hash: 0,
+    fns: &[],
     timing: crate::Timing::Exact,
     seeds_file: None,
     spins: &[],
@@ -509,6 +513,7 @@ static OVERLAY_CODE: Code<Headless> = Code {
         },
     ],
     rom_hash: 0,
+    fns: &[],
     timing: crate::Timing::Exact,
     seeds_file: None,
     spins: &[],
@@ -656,6 +661,7 @@ static TWO: Code<Headless> = Code {
     folded: &[],
     overlays: &[],
     rom_hash: 0,
+    fns: &[],
     timing: crate::Timing::Exact,
     seeds_file: None,
     spins: &[],
@@ -850,4 +856,98 @@ fn a_mod_call_key_with_no_record_faults() {
     let mut stats = Stats::default();
     assert_eq!(run(&mut m, Some(&MOD_CALL), None, &mut stats), Stop::Fault);
     assert_eq!(m.fault, Some(crate::machine::Fault::ModCall(MOD_KEY)));
+}
+
+/// [`CODE`] with its one function's ROM bytes (`stale`), as codegen
+/// emits them for `rom`.
+fn code_with_bytes(rom: &[u8]) -> &'static Code<Headless> {
+    let ranges: &'static [(u32, u32)] = &[(0x0800_0000, 0x0800_0004)];
+    let fns = Box::leak(Box::new([FnBytes {
+        entry: 0x0800_0000,
+        hash: fn_hash(rom, ranges).unwrap(),
+        ranges,
+        calls: &[],
+        keys: &[0x0800_0000],
+    }]));
+    Box::leak(Box::new(Code { fns, ..CODE }))
+}
+
+#[test]
+fn a_changed_function_runs_interpreted_as_the_interpreter_does() {
+    let code = code_with_bytes(machine().bus.rom);
+    // The exact ROM: nothing stale, the compiled block runs.
+    let mut m = machine();
+    let mut stale = [false];
+    assert_eq!(code.mark_stale(m.bus.rom, &mut stale), Staleness::default());
+    assert_eq!(code.stale_keys(&stale).count(), 0);
+    let mut stats = Stats::default();
+    assert_eq!(run(&mut m, Some(code), None, &mut stats), Stop::FrameEnd);
+    assert!(stats.calls > 0);
+    // One bit of its `mov r0, r0` flipped, to `mov r0, #0`: it runs in the
+    // interpreter, which the compiled `r0 += 1` would show, and the frame
+    // ends as the interpreter's alone.
+    let mut rom = machine().bus.rom.to_vec();
+    rom[3] ^= 0x02;
+    let rom: &'static [u8] = Box::leak(rom.into_boxed_slice());
+    let changed = || Box::new(Machine::new(rom, Headless));
+    let mut m = changed();
+    let n = code.mark_stale(rom, &mut stale);
+    assert_eq!((n.changed, n.callers), (1, 0));
+    let keys: Vec<u32> = code.stale_keys(&stale).collect();
+    assert_eq!(keys, [0x0800_0000]);
+    m.bus.stale = Box::leak(keys.into_boxed_slice());
+    let mut stats = Stats::default();
+    assert_eq!(run(&mut m, Some(code), None, &mut stats), Stop::FrameEnd);
+    assert_eq!(stats.calls, 0, "{stats:?}");
+    assert!(code.lookup(&mut m.bus, 0x0800_0000).is_none());
+    let mut interp = changed();
+    assert_eq!(
+        run(&mut interp, None, None, &mut Stats::default()),
+        Stop::FrameEnd
+    );
+    assert_eq!(m.cpu.r[0], 0);
+    assert_eq!(m.cpu.r, interp.cpu.r);
+    assert_eq!(m.cpu.cpsr, interp.cpu.cpsr);
+    assert_eq!(m.now(), interp.now());
+}
+
+#[test]
+fn a_stale_functions_callers_are_stale_to_the_top() {
+    // 0 calls 1 calls 2 (changed); 3 calls 4 and itself, both fine; 5's
+    // bytes run past the ROM's end.
+    let rom: &[u8] = &[1, 2, 3, 4, 5, 6, 7, 8];
+    let at = |a: u32| 0x0800_0000 + a;
+    let r: &'static [(u32, u32)] = &[(0x0800_0000, 0x0800_0002), (0x0800_0006, 0x0800_0008)];
+    let past: &'static [(u32, u32)] = &[(0x0800_0006, 0x0800_0009)];
+    let f = |entry, calls: &'static [u32], hash| FnBytes {
+        entry: at(entry),
+        hash,
+        ranges: r,
+        calls,
+        keys: Box::leak(Box::new([at(entry), at(entry) + 2])),
+    };
+    let h = fn_hash(rom, r).unwrap();
+    assert_eq!(fn_hash(rom, past), None);
+    let fns = Box::leak(Box::new([
+        f(0x00, &[1], h),
+        f(0x10, &[2], h),
+        f(0x20, &[], h ^ 1),
+        f(0x30, &[4, 3], h),
+        f(0x40, &[], h),
+        FnBytes {
+            ranges: past,
+            ..f(0x50, &[], h)
+        },
+    ]));
+    let code = Code { fns, ..CODE };
+    let mut stale = [false; 6];
+    let n = code.mark_stale(rom, &mut stale);
+    assert_eq!(stale, [true, true, true, false, false, true]);
+    assert_eq!((n.changed, n.callers, n.total()), (2, 2, 4));
+    let mut keys: Vec<u32> = code.stale_keys(&stale).collect();
+    keys.sort_unstable();
+    assert_eq!(
+        keys,
+        [0x00, 0x02, 0x10, 0x12, 0x20, 0x22, 0x50, 0x52].map(at)
+    );
 }

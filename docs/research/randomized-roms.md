@@ -102,7 +102,9 @@ randomized.gba` counts the bytes that differ and the functions they hit.
 ## What each option costs
 
 **a) Per-function check at load, interpreter fallback** (keeps compiled
-code where the randomizer left it alone).
+code where the randomizer left it alone). Chosen; the table and the stale
+set are built, with every direct caller stale (`docs/codegen-design.md`,
+"A changed ROM").
 
 - Codegen emits, per function, a hash of its instruction bytes and its
   baked loads' bytes (15,158 entries, ~120 KB with the ranges). At load

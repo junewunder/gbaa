@@ -317,6 +317,7 @@ pub fn write(
                     folded: &[],
                     overlays: &[],
                     rom_hash: #hash,
+                    fns: &[],
                     timing: runtime::Timing::Exact,
                     seeds_file: None,
                     spins: &[],
