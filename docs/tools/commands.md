@@ -1445,8 +1445,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   native port's timing, decision 11), then the two PNGs must be identical. The recompiled
   run's `cycles:` line (in `out/<name>/recompiled.log`) splits guest time
   between compiled code and the fallback, how much of each ran in RAM
-  (decisions 1 and 7; code copied to IWRAM is compiled as overlays, #54),
-  and the log ends with `overlay invalidations: N`. It passes on june's ROM
+  (decisions 1 and 7; IWRAM copies compile as overlays, #54), then the
+  fallback's RAM time by entry key (`Stats::ram_seeds`), and the log ends with `overlay invalidations: N`. It passes on june's ROM
   (`$GBAA_DATA/agb/gba-cart1.gba`), jsmolka's `arm`/`thumb`, and the agb
   sprite example (`$GBAA_DATA/tools/obj-sprites/obj-sprites.gba 120`,
   hash `afc0b93200e5577f`).

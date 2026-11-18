@@ -775,6 +775,8 @@ build now runs as much compiled under rollback as v1 and about as fast,
 on v1's hash (the 2026-10-31 table below). What's left of either
 build's time is its own interpreter fallback: about 29% of its cycles,
 most of them code it copies to RAM that codegen doesn't cover.
+(Measured again 2026-11-18, multiplayer/kirby-ram-code: that gap has
+closed, below.)
 
 Kirby two-player, both peers on quack, 2026-10-31, the same command as
 the 2026-10-29 table below; other sessions were building beside some
@@ -850,6 +852,36 @@ the re-run headroom**, and a third off the p99 under rollback. One
 console alone: 1.5-1.7 ms a frame v1, 2.6-2.9 ms interpreted (menus and
 play alike). Not measured yet on june's Mac (no Mac among the factory's
 machines; multiplayer/recompiled-netplay-mac).
+
+**Kirby's RAM code, 2026-11-18 (multiplayer/kirby-ram-code).** The
+29% above was m4a's IWRAM mixer (`SoundMainRAM` and its pieces,
+0x03000060..0x03000460, copied from ROM 0x0814f46c), which codegen didn't
+find: a main build of 2026-11-08 compiles 4 overlays (the IRQ dispatcher's
+copy and 0x03006c50), and main on 2026-11-18 finds the mixer's copy too,
+58 overlays (54 of them the mixer's 41 blocks and their versions). Which
+change between them did it wasn't pinned down. The same commands as the
+tables above, v1 and structured, on quack with two other lanes' jobs
+beside it (load about 15 of 24):
+
+| build | timing | run | compiled | in RAM, compiled / fallback | frame p50, p99 | end hash |
+|---|---|---|---|---|---|---|
+| v1 | instant | alone, 3600 frames, single-player menus | 98.9% | 30.0% / 0.0 pts | 0.9 ms (host) | `ef43bdf1…` |
+| v1 | instant | alone, the multi menus above | 99.2% | 26.4% / 0.0 pts | | |
+| structured | exact | `just recompile-check ROM 1800` (matches `--interp`) | 98.7% | 33.7% / 0.1 pts | 1.2 ms (host) | `805f03d0…` |
+| v1 | instant | wander, 0, both peers | 97.2% | | 3.1-3.2 ms, 16-18 ms | `fba2e040…` |
+| structured | exact | wander, 0, both peers | 97.4% | | 3.0-3.3 ms, 17-22 ms | `1b555a08…` |
+
+The fallback's RAM time left (0.1 points) is entered at 0x03007d19..
+0x03007da1, near IWRAM's top where the stack lives: most likely code
+run in the live stack, which `codegen::seen` leaves to the interpreter by
+design (as agb_flash's `ReadFlash_Core`). The rest of netplay's 2.6-2.8% is resumes past a
+function's entry after a restore (about 40,000 a session). The frame's
+p50 barely moved for 70% to 97% compiled (3.5 ms then, 3.0-3.3 now, on a
+busier machine). Why isn't measured: the interpreter's share of a
+netplay frame's host time may have been smaller than its share of guest
+cycles, or the load hides the gain; a quiet rerun would tell. The exact end hash isn't 2026-10-31's
+`a9e16c05…`: the emulator has changed since, and every run's two peers
+still end on one hash.
 
 ### What made Kirby laggy (multiplayer/lag-report)
 
