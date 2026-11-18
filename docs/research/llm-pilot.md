@@ -121,8 +121,10 @@ check makes up; none was a wrong reading of what a function does.
   `ref_f_080032b5` in `hw::sync`). There is no cap inside a run, and the
   binary prints nothing until it ends, so the first sign was a run at
   100% CPU for 43 minutes. Both pass at 24 runs (the first three or four
-  calls). Filed: The per-function check caps a run that never returns
-  (`native/fn-check-run-cap`).
+  calls). Fixed by The per-function check caps a run that never returns
+  (`native/fn-check-run-cap`, 2026-11-18): a run stops past 600 frames and
+  a capped reference is skipped and counted; at 1000 runs each, DmaTransfer
+  passes with 7 capped (59 s) and BitFill with 24 (10 s).
 - **Functions past the stop.** Only what the no-input run reaches before
   frame 2,998 can be checked; gameplay code (Samus, sprites, rooms) can't
   until the lift's stop is fixed or the check takes input.
