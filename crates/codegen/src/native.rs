@@ -168,6 +168,7 @@ use frame::{Frame, Kind, Local};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
+pub mod cond;
 pub mod first_stop;
 pub mod fnref;
 pub mod frame;
@@ -1530,6 +1531,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("call_fn_complete", n(soft.indirect_complete));
     m.push("call_fn_four_complete", n(soft.indirect_four_complete));
     m.push("jumps_by_value", n(soft.dyn_jumps));
+    m.push("branches_on_raw_flags", soft.raw_flag_branches);
     if let Some(f) = &fnrefs {
         let fn_proven = f.1.keys().filter(|w| f.0.proven(**w)).count();
         m.push("fn_words_proven", n(fn_proven));
@@ -2159,6 +2161,8 @@ struct Soft {
     local_fns: usize,
     /// The `--plant-slot` store printed.
     planted_slot: bool,
+    /// Conditions resting on a raw flag ([`cond::raw`]).
+    raw_flag_branches: u64,
     /// Lifted functions whose summary has a hole, or that have none.
     summary_holes: usize,
     /// Lifted functions taking and returning all of r0-r3 whose summary
@@ -2787,7 +2791,10 @@ impl FnPrinter<'_, '_> {
             .ref_tys
             .extend(refs.iter().flatten().map(|r| r.f.ty));
         let dead = dead_addresses(insts, &typed);
-        let used = self.used(insts, &typed, &refs);
+        // Conditions as comparisons and bit tests (native/lift-branch-conditions).
+        let forms = cond::forms(insts);
+        self.soft.raw_flag_branches += cond::raw(insts, &forms);
+        let used = self.used(insts, &typed, &refs, &forms);
         for (i, inst) in insts.iter().enumerate() {
             let id = ValueId(i as u32);
             if dead[i] || (pure(&inst.op) && !used[i]) {
@@ -2983,7 +2990,10 @@ impl FnPrinter<'_, '_> {
                 }
                 ref op => {
                     let ty = if is_bit(op) { "bool" } else { "u32" };
-                    let e = expr(op);
+                    let e = match &forms[i] {
+                        Some(f) => f.text(),
+                        None => expr(op),
+                    };
                     writeln!(s, "{ind}let {}: {ty} = {e};", v(id)).unwrap();
                 }
             }
@@ -3050,7 +3060,13 @@ impl FnPrinter<'_, '_> {
     /// frame's bytes too) or a typed global's (`typed`) doesn't use its
     /// address, so the arithmetic only the address needed isn't printed
     /// ([`pure`]).
-    fn used(&self, insts: &[Inst], typed: &[Option<Place>], refs: &[Option<HeapRef>]) -> Vec<bool> {
+    fn used(
+        &self,
+        insts: &[Inst],
+        typed: &[Option<Place>],
+        refs: &[Option<HeapRef>],
+        forms: &[Option<cond::Form>],
+    ) -> Vec<bool> {
         let mut used = vec![false; insts.len()];
         for (i, inst) in insts.iter().enumerate().rev() {
             if pure(&inst.op) && !used[i] {
@@ -3069,6 +3085,7 @@ impl FnPrinter<'_, '_> {
                 Op::Store { value, .. } if base.is_some() => {
                     base.into_iter().chain([value]).collect()
                 }
+                _ if forms[i].is_some() => forms[i].as_ref().unwrap().uses.clone(),
                 ref op => op.operands(),
             };
             for x in ops.into_iter().chain(inst.guard) {

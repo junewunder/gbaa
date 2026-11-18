@@ -223,7 +223,9 @@ cmp r0, #0; beq` is `x & 0x80 == 0`, DoSoundAction 0x080027f9; N after
 DoSoundAction 0x080027f9, AudioCommand_Voice 0x080022cd, DmaTransfer
 0x080031e5, BitFill 0x080032b5, TitleScreenProcessOam 0x08076d91,
 GetNoteDelay 0x080020d5,
-IntroHandler 0x0808117d.
+IntroHandler 0x0808117d. Done (`crates/codegen/src/native/cond.rs`):
+every condition with such a form prints as it; the rest are counted in
+`branches_on_raw_flags` (barred; 0 on the C programs).
 
 **Narrowing idioms.** agbcc narrows with shift pairs and masks:
 `lsls #16; asrs #16` is `as i16 as i32` (FixedInverse 0x08000a81, both
