@@ -612,133 +612,6 @@ fn bounds_from_a_table_s_start_end_with_its_object() {
     assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
 }
 
-/// `ldr rN, =base` (a RAM literal) plus `rI << sh`, plus `k`: an
-/// address [`ram_indexed`] places in `base`'s object.
-fn indexed(b: &mut B, base: u32, i: u8, sh: u32, k: u32) -> ValueId {
-    let lit = b.pool(0x0800_0410, base);
-    let r = b.get(i);
-    let x = b.shift(ShiftType::Lsl, r, sh);
-    let a = b.bin(BinOp::Add, x, lit);
-    let k = b.k(k);
-    b.bin(BinOp::Add, a, k)
-}
-
-#[test]
-fn stores_indexed_from_two_ram_arrays_stay_apart() {
-    // One function stores F at A1[r1] and H at A2[r2], 24-byte records'
-    // field +4, each index a parameter: the value sets bound neither
-    // (native/fnref-ram-array-bases). Another calls A1[r3]'s, and a word
-    // below both arrays.
-    const A1: u32 = 0x0300_0200;
-    const A2: u32 = 0x0300_0300;
-    let e = 0x0800_1001;
-    let mut a = B::default();
-    let p = a.pool(POOL, F);
-    let x = indexed(&mut a, A1, 1, 2, 0);
-    a.st(Width::Word, x, p);
-    let lo = a.get(1);
-    let r = a.k(24);
-    let r = a.bin(BinOp::Mul, lo, r);
-    let lit = a.pool(0x0800_0414, A2);
-    let x = a.bin(BinOp::Add, lit, r);
-    let four = a.k(4);
-    let x = a.bin(BinOp::Add, x, four);
-    let p = a.pool(0x0800_0404, H);
-    a.st(Width::Word, x, p);
-    let store = (e, vec![(e, a.end(None, Edge::Return))]);
-    let mut b = B::default();
-    let x = indexed(&mut b, A1, 3, 2, 0);
-    let t = b.ld(Width::Word, x);
-    let c = b.k(CELL);
-    let y = b.ld(Width::Word, c);
-    b.set(4, y);
-    let call = calling(0x0800_2001, b, t);
-    let fns = [store, call];
-    let f = run(&fns);
-    assert!(f.proven(POOL), "{f:?}");
-    assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
-    assert!(!f.piled.contains(&Origin::Word(POOL)), "{f:?}");
-}
-
-#[test]
-fn a_ram_index_is_followed_to_the_next_block() {
-    // r4 = A1 + r1 * 4 in one block; the next stores F through r4; the
-    // block after a call stores H through it, which a callee may have
-    // changed. A load of A2[r3] reads H alone.
-    const A1: u32 = 0x0300_0200;
-    const A2: u32 = 0x0300_0300;
-    let e = 0x0800_1001;
-    let mut a = B::default();
-    let x = indexed(&mut a, A1, 1, 2, 0);
-    a.set(4, x);
-    let y = indexed(&mut a, A2, 2, 2, 0);
-    let _ = a.ld(Width::Word, y);
-    let one = a.end(None, Edge::Goto(vec![e + 0x10]));
-    let mut b = B::default();
-    let r4 = b.get(4);
-    let p = b.pool(POOL, F);
-    b.st(Width::Word, r4, p);
-    let two = b.end(
-        None,
-        Edge::Call {
-            target: Some(0x0800_3001),
-            ret: e + 0x20,
-        },
-    );
-    let mut c = B::default();
-    let r4 = c.get(4);
-    let p = c.pool(0x0800_0404, H);
-    c.st(Width::Word, r4, p);
-    let three = c.end(None, Edge::Return);
-    let store = (e, vec![(e, one), (e + 0x10, two), (e + 0x20, three)]);
-    let leaf = (
-        0x0800_3001,
-        vec![(0x0800_3001, B::default().end(None, Edge::Return))],
-    );
-    let mut b = B::default();
-    let x = indexed(&mut b, A2, 3, 2, 0);
-    let t = b.ld(Width::Word, x);
-    let call = calling(0x0800_2001, b, t);
-    let f = run(&[store, leaf, call]);
-    assert!(f.proven(POOL), "{f:?}");
-    assert_eq!(site(&f).callees, BTreeSet::from([H]), "{f:?}");
-}
-
-#[test]
-fn a_ram_index_s_offset_past_its_step_stays_in_the_pile() {
-    // `s.a[i]` from `&s`, the array field 8 bytes in, of words: the
-    // offset is two steps, so the store isn't placed in s's object; a
-    // load from another literal's array reads it.
-    const S: u32 = 0x0300_0200;
-    let mut a = B::default();
-    let x = indexed(&mut a, S, 1, 2, 8);
-    let p = a.pool(POOL, F);
-    a.st(Width::Word, x, p);
-    let at = a.insts.len() - 1;
-    let x = indexed(&mut a, S, 1, 2, 3);
-    a.st(Width::Word, x, p);
-    let fit = a.insts.len() - 1;
-    let e = 0x0800_1001;
-    let store = (e, vec![(e, a.end(None, Edge::Return))]);
-    let (insts, out, pools) = &store.1[0].1;
-    let b = FBlock {
-        insts,
-        exits: BTreeMap::from([(insts.len() - 1, out.clone())]),
-        pools: pools.clone(),
-        hulls: BTreeMap::new(),
-        bases: BTreeMap::new(),
-    };
-    let found = ram_indexed_block(&b, [RamIx::Other; 16]).0;
-    assert_eq!(found.get(&at), None);
-    assert_eq!(found.get(&fit), Some(&(S, 4)));
-    let mut b = B::default();
-    let x = indexed(&mut b, S + 0x40, 3, 2, 0);
-    let t = b.ld(Width::Word, x);
-    let call = calling(0x0800_2001, b, t);
-    let f = run(&[store, call]);
-    assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
-}
-
 #[test]
 fn a_bios_copy_reads_its_length() {
     let n = |m: u32| Val::of(Tok::Num(m));
@@ -1446,7 +1319,7 @@ fn the_bound_counts_the_kept_expansions() {
     g.cell_reads[4] = Some(val(800));
     g.loose_args = vec![val(900)];
     g.loose_rets = Some(vec![val(1000)]);
-    g.mem_log.push((PILE, r, 4));
+    g.mem_log.push((false, r, 4));
     // Eleven sets of ten, the expansion's raw tokens and the log's one.
     assert_eq!(g.held().iter().map(|h| h.2).sum::<usize>(), 110 + 10 + 1);
 }

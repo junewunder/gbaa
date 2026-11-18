@@ -47,13 +47,10 @@
 //! placed the access ([`super::frame`]) and the slot doesn't escape (a
 //! saved register's slot reads as unknown, the register as it came; one
 //! at or above the entry sp, a stack argument, reads the pile too); RAM words at
-//! constant addresses, one cell each; the objects in RAM the code indexes
-//! from ([`ram_objects`]: a store at a RAM literal plus an index stays in
-//! that literal's object, `native/fnref-ram-array-bases`); and one pile
-//! for every other store (the heap, escaping frame slots, anything
-//! computed). A load reads its cell, the objects that may hold its bytes
-//! and the pile, or, at an address the run can't place, the pile, every
-//! cell and every object, or, where the value-set analysis bounds it to ROM, the
+//! constant addresses, one cell each; and one pile for every other store
+//! (the heap, escaping frame slots, anything computed). A load reads its
+//! cell and the pile, or, at an address the run can't place, the pile and
+//! every cell, or, where the value-set analysis bounds it to ROM, the
 //! words there (to the object's end, where the bounds start at a
 //! literal the function loads: a table read from its start). Interprocedural: a call passes r0-r3 to its callee's entry
 //! and takes back what its returns hold; a tail call or a fall passes
@@ -233,21 +230,12 @@ enum Src {
     Cells(u8),
     RomFrom(u32, u32, u8, u16),
     Hull(u32, u32, u8),
-    /// The object in RAM at a start ([`G::objs`]).
-    Obj(u32, u8),
-    /// Every object in RAM.
-    Objs(u8),
 }
 
 impl Src {
     fn w(self) -> u8 {
         match self {
-            Src::Pile(w)
-            | Src::Cells(w)
-            | Src::RomFrom(_, _, w, _)
-            | Src::Hull(_, _, w)
-            | Src::Obj(_, w)
-            | Src::Objs(w) => w,
+            Src::Pile(w) | Src::Cells(w) | Src::RomFrom(_, _, w, _) | Src::Hull(_, _, w) => w,
         }
     }
 }
@@ -523,11 +511,6 @@ const REF0: Tok = Tok::Ref {
     },
 };
 
-/// [`G::mem_log`]'s tag of a store to the pile, and to a cell; one to an
-/// object is tagged by its start.
-const PILE: u32 = 0;
-const CELLS: u32 = 1;
-
 /// A load at width `w` of the pile's, or every cell's, words.
 fn mem_ref(cells: bool, w: u8) -> Tok {
     Tok::Ref {
@@ -627,254 +610,6 @@ fn tables(fns: &[FnIn], img: &dyn Image) -> BTreeMap<u32, u32> {
         }
     }
     t
-}
-
-/// What [`ram_indexed`] knows of a value.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum RamIx {
-    /// A constant.
-    K(u32),
-    /// A RAM literal, plus an offset, plus indexes of this step (0: none
-    /// yet).
-    B(u32, u32, u32),
-    Other,
-}
-
-impl RamIx {
-    /// Either, where two paths meet.
-    fn join(self, o: RamIx) -> RamIx {
-        match (self, o) {
-            (a, b) if a == b => a,
-            (RamIx::B(l, k, s), RamIx::B(m, j, t)) if l == m && k == j => RamIx::B(l, k, gcd(s, t)),
-            _ => RamIx::Other,
-        }
-    }
-}
-
-/// The loads and stores of a function whose address is a RAM literal it
-/// loads, a constant offset, and an index it scales
-/// (`native/fnref-ram-array-bases`): `ldr r2, =ARRAY; lsls r3, r1, #2;
-/// adds r2, r3, r2; str r0, [r2]`. By block and inst index: the literal
-/// and the index's step (the record's size: the factor [`factors`]
-/// finds, taken as exact, as an index into the array can't wrap). The
-/// offset is less than one step, a field of a record; one more (a
-/// struct's array field indexed from the struct's address, `s.a[i]` from
-/// `&s`) isn't kept. Followed through the registers from block to block
-/// of the function, where every path in agrees; not across a call or a
-/// BIOS call (a callee needn't keep a register).
-fn ram_indexed(f: &FnIn) -> BTreeMap<(u32, usize), (u32, u32)> {
-    let mut ins: BTreeMap<u32, [RamIx; 16]> = BTreeMap::new();
-    let mut out = BTreeMap::new();
-    let first = f.blocks.keys().next().copied();
-    ins.insert(f.entry, [RamIx::Other; 16]);
-    if let Some(k) = first {
-        ins.entry(k).or_insert([RamIx::Other; 16]);
-    }
-    let mut work: BTreeSet<u32> = ins.keys().copied().collect();
-    while let Some(k) = work.pop_first() {
-        let Some(b) = f.blocks.get(&k) else { continue };
-        let (found, exits) = ram_indexed_block(b, ins[&k]);
-        for (i, x) in found {
-            out.insert((k, i), x);
-        }
-        for (to, regs) in exits {
-            if !f.blocks.contains_key(&to) {
-                continue;
-            }
-            let new = match ins.get(&to) {
-                Some(old) => {
-                    let mut j = *old;
-                    for (a, b) in j.iter_mut().zip(regs) {
-                        *a = a.join(b);
-                    }
-                    (j != *old).then_some(j)
-                }
-                None => Some(regs),
-            };
-            if let Some(j) = new {
-                ins.insert(to, j);
-                work.insert(to);
-            }
-        }
-    }
-    out
-}
-
-/// One block of [`ram_indexed`], from the registers `regs` in: what it
-/// finds, and the registers at each block of the function it goes on to.
-#[allow(clippy::type_complexity)]
-fn ram_indexed_block(
-    b: &FBlock,
-    mut regs: [RamIx; 16],
-) -> (BTreeMap<usize, (u32, u32)>, Vec<(u32, [RamIx; 16])>) {
-    use RamIx::*;
-    let insts = b.insts;
-    let fac = factors(insts);
-    // The step an index adds: its factor, 1 if nothing is known.
-    let step = |x: ValueId| match fac[x.index()].1 {
-        f @ 1..=0xffff_ffff => f as u32,
-        _ => 1,
-    };
-    let mut v: Vec<RamIx> = Vec::with_capacity(insts.len());
-    let mut found = BTreeMap::new();
-    let mut exits = Vec::new();
-    let add = |a: RamIx, b: RamIx, bx: ValueId| match (a, b) {
-        (K(x), K(y)) => K(x.wrapping_add(y)),
-        (B(l, k, s), K(c)) => B(l, k.wrapping_add(c), s),
-        (B(l, k, s), Other) => B(l, k, gcd(s, step(bx))),
-        _ => Other,
-    };
-    for (i, inst) in insts.iter().enumerate() {
-        let r = match inst.op {
-            Op::Const(c) => K(c),
-            Op::Bit(b) => K(b as u32),
-            Op::Pool(c) if is_ram(c) => B(c, 0, 0),
-            Op::Pool(c) => K(c),
-            Op::GetReg(r) => regs[r.index()],
-            Op::SetReg(r, x) => {
-                let x = v[x.index()];
-                let r = &mut regs[r.index()];
-                *r = if inst.guard.is_none() { x } else { r.join(x) };
-                Other
-            }
-            Op::SetCpsr { .. } | Op::SetSpsr { .. } | Op::SetUserReg(..) => {
-                regs = [Other; 16];
-                Other
-            }
-            Op::Bin(BinOp::Add, a, b) => match (v[a.index()], v[b.index()]) {
-                (y, x @ B(..)) => add(x, y, a),
-                (x, y) => add(x, y, b),
-            },
-            Op::Adc { a, b, c } if v[c.index()] == K(0) => match (v[a.index()], v[b.index()]) {
-                (y, x @ B(..)) => add(x, y, a),
-                (x, y) => add(x, y, b),
-            },
-            Op::Bin(BinOp::Sub, a, b) => match (v[a.index()], v[b.index()]) {
-                (K(x), K(y)) => K(x.wrapping_sub(y)),
-                (B(l, k, s), K(c)) => B(l, k.wrapping_sub(c), s),
-                _ => Other,
-            },
-            Op::Load { addr, .. } | Op::Store { addr, .. } => {
-                if let B(l, k, s) = v[addr.index()]
-                    && s > 0
-                    && k < s
-                {
-                    found.insert(i, (l, s));
-                }
-                Other
-            }
-            Op::Exit(_) => {
-                match b.exits.get(&i).map(|o| &o.edge) {
-                    Some(Edge::Goto(ks) | Edge::TailOr(ks)) => {
-                        exits.extend(ks.iter().map(|&k| (k, regs)));
-                    }
-                    Some(Edge::Call { ret: k, .. } | Edge::Swi(k)) => exits.push((*k, [Other; 16])),
-                    _ => {}
-                }
-                Other
-            }
-            _ => Other,
-        };
-        v.push(r);
-    }
-    (found, exits)
-}
-
-/// The objects in RAM the code indexes from: the start of each, its
-/// largest step, and where it ends, by start. A start is a literal
-/// [`ram_indexed`] finds, or the low bound of an access [`FBlock::bases`]
-/// names in RAM. An object ends at the next start that isn't a field of
-/// one below (less than one entry past it, by either one's step, as
-/// [`Run::object_end`] has it in ROM), or at its RAM's end.
-///
-/// What this takes on trust is the ROM rule's: that a literal the code
-/// indexes from at an entry or more past another start is an object of
-/// its own, not `&ARRAY[k]` of the array below indexed both ways; and
-/// that an index stays in its array, as C has it. A store the run
-/// can't place stays in its object ([`Store::Bounded`]), so a read of
-/// that array from below it, or past its object's end, misses it.
-#[allow(clippy::type_complexity)]
-fn ram_objects(
-    fns: &[FnIn],
-    indexed: &[BTreeMap<(u32, usize), (u32, u32)>],
-) -> BTreeMap<u32, (u32, u32)> {
-    let mut steps: BTreeMap<u32, u32> = BTreeMap::new();
-    let mut add = |lo: u32, s: u32| {
-        let e = steps.entry(ram_canon(lo)).or_default();
-        *e = (*e).max(s);
-    };
-    for (f, ix) in fns.iter().zip(indexed) {
-        for &(l, s) in ix.values() {
-            add(l, s);
-        }
-        for b in f.blocks.values() {
-            for (i, &s) in &b.bases {
-                let (lo, _) = b.hulls[i];
-                if is_ram(lo) && s > 0 {
-                    add(lo, s);
-                }
-            }
-        }
-    }
-    // Records longer than this aren't looked for (as in ROM).
-    const RECORD: u32 = 0x1000;
-    let field = |c: u32| {
-        let own = steps[&c];
-        steps
-            .range(c.saturating_sub(RECORD)..c)
-            .any(|(x, s)| c - x < (*s).max(own))
-    };
-    steps
-        .iter()
-        .map(|(&lo, &s)| {
-            let top = if lo >> 24 == 2 {
-                0x0204_0000
-            } else {
-                0x0300_8000
-            };
-            let end = steps
-                .range(lo + 1..top)
-                .map(|(c, _)| *c)
-                .find(|&c| !field(c))
-                .unwrap_or(top);
-            (lo, (s, end))
-        })
-        .collect()
-}
-
-/// [`G::objs`], [`G::obj_at`] and [`G::ram_at`].
-#[allow(clippy::type_complexity)]
-fn ram_places(
-    fns: &[FnIn],
-) -> (
-    BTreeMap<u32, u32>,
-    BTreeMap<u32, Vec<u32>>,
-    BTreeMap<(u32, u32, usize), u32>,
-) {
-    let indexed: Vec<_> = fns.iter().map(ram_indexed).collect();
-    let objs: BTreeMap<u32, u32> = ram_objects(fns, &indexed)
-        .into_iter()
-        .map(|(o, (_, end))| (o, end))
-        .collect();
-    let mut at = BTreeMap::new();
-    for (f, ix) in fns.iter().zip(indexed) {
-        for ((k, i), (l, _)) in ix {
-            at.insert((f.entry, k, i), ram_canon(l));
-        }
-    }
-    let cuts: BTreeSet<u32> = objs.iter().flat_map(|(&o, &e)| [o, e]).collect();
-    let obj_at = cuts
-        .into_iter()
-        .map(|c| {
-            let os = objs
-                .range(..=c)
-                .filter(|&(_, &e)| e > c)
-                .map(|(&o, _)| o)
-                .collect();
-            (c, os)
-        })
-        .collect();
-    (objs, obj_at, at)
 }
 
 impl Val {
@@ -1309,29 +1044,8 @@ type Mem = BTreeSet<(Tok, u8)>;
 struct G {
     entry: BTreeMap<u32, Vec<Val>>,
     ret: BTreeMap<u32, Vec<Val>>,
-    /// Every store the run can't place (the heap, escaping frame slots)
-    /// and the value sets don't bound to RAM.
+    /// Every store the run can't place (the heap, escaping frame slots).
     pile: Mem,
-    /// The objects in RAM the code indexes from ([`ram_objects`]), by
-    /// start: where each ends. A store the run can't place whose address
-    /// is a RAM literal plus an index stays in that literal's object
-    /// (`native/fnref-ram-array-bases`): C keeps its state in globals.
-    objs: BTreeMap<u32, u32>,
-    /// The objects that may hold each byte, by the first of each run of
-    /// bytes the same objects hold (a byte no object holds, none).
-    obj_at: BTreeMap<u32, Vec<u32>>,
-    /// What was stored in each object, by its start.
-    obj_mem: BTreeMap<u32, Mem>,
-    /// A load's read of each object at a width, as [`G::pile_raw`] and
-    /// [`G::pile_reads`] are the pile's, and of every object.
-    obj_raw: BTreeMap<u32, [Val; 5]>,
-    obj_reads: std::collections::HashMap<(u32, u8), Val, Fx>,
-    objs_raw: [Val; 5],
-    objs_reads: [Option<Val>; 5],
-    /// The objects changed this round, and each one's capped read by
-    /// width as the round began (reruns are by those).
-    objs_changed: BTreeSet<u32>,
-    obj_snapped: std::collections::HashMap<(u32, u8), Val, Fx>,
     /// [`G::read_pile`]'s, by width: uncapped (grown at each store), and
     /// capped (made again when the first changes).
     pile_raw: [Val; 5],
@@ -1344,12 +1058,12 @@ struct G {
     /// [`G::ref_val`]'s, brought up to date with [`G::mem_log`] when
     /// looked at again.
     ref_exp: std::collections::HashMap<Tok, Exp, Fx>,
-    /// Each token stored new to the pile ([`PILE`]), a cell ([`CELLS`])
-    /// or an object (its start), with the width stored, in order: what a
-    /// kept [`Exp`] hasn't read. A cell's (an object's, too) the first
-    /// time any cell gets it (`cells_all`: a read of every cell holds it
-    /// once, and Emerald's four thousand cells get the same tokens).
-    mem_log: Vec<(u32, Tok, u8)>,
+    /// Each token stored new to the pile (`false`) or a cell (`true`),
+    /// with the width stored, in order: what a kept [`Exp`] hasn't read.
+    /// A cell's the first time any cell gets it (`cells_all`: a read of
+    /// every cell holds it once, and Emerald's four thousand cells get
+    /// the same tokens).
+    mem_log: Vec<(bool, Tok, u8)>,
     cells_all: Mem,
     /// Those that read ROM alone, kept for good.
     ref_rom: std::collections::HashMap<Tok, Val, Fx>,
@@ -1392,10 +1106,6 @@ struct G {
     /// largest stride any such read steps by). Where one starts, the
     /// table below it ends ([`tables`]).
     tables: BTreeMap<u32, u32>,
-    /// The loads and stores whose address is a RAM literal plus an index
-    /// ([`ram_indexed`]), by function, block and inst: the object that
-    /// literal starts ([`G::objs`]).
-    ram_at: BTreeMap<(u32, u32, usize), u32>,
     /// What a read the value-set analysis bounds to ROM gives, by bounds
     /// and width.
     rom_hull: BTreeMap<(u32, u32, u8), Val>,
@@ -1502,10 +1212,6 @@ struct Rd {
     pile: u8,
     all_cells: u8,
     ranges: Vec<(u32, u32)>,
-    /// The objects in RAM read, by start and width, and every object at
-    /// some widths.
-    objs: BTreeSet<(u32, u8)>,
-    all_objs: u8,
     /// It made a call whose callee set is incomplete (it reads every
     /// loose function's results).
     incomplete: bool,
@@ -1619,7 +1325,6 @@ impl G {
                 Store::Pile => "stored to the pile".to_string(),
                 Store::Cell(a) => format!("stored to the cell at {a:#010x}"),
                 Store::Spill(f) => format!("stored to f_{f:08x}'s spills"),
-                Store::Obj(o) => format!("stored to the RAM object at {o:#010x}"),
             });
         }
         let m = match to {
@@ -1643,7 +1348,6 @@ impl G {
             }
             Store::Cell(a) => self.cells.entry(a).or_default(),
             Store::Spill(f) => self.spills.entry(f).or_default(),
-            Store::Obj(o) => self.obj_mem.entry(o).or_default(),
         };
         let new: Vec<(Tok, u8)> = toks.iter().copied().filter(|t| m.insert(*t)).collect();
         let c = !new.is_empty();
@@ -1652,7 +1356,7 @@ impl G {
                 Store::Pile => {
                     self.pile_reads = Default::default();
                     self.mem_log
-                        .extend(new.iter().map(|&(t, sw)| (PILE, t, sw)));
+                        .extend(new.iter().map(|&(t, sw)| (false, t, sw)));
                     self.pile_changed = true;
                     Some(&mut self.pile_raw)
                 }
@@ -1660,7 +1364,7 @@ impl G {
                     self.cell_reads = Default::default();
                     for &(t, sw) in &new {
                         if self.cells_all.insert((t, sw)) {
-                            self.mem_log.push((CELLS, t, sw));
+                            self.mem_log.push((true, t, sw));
                         }
                     }
                     // The kept reads of the addresses this cell overlaps.
@@ -1677,22 +1381,6 @@ impl G {
                     }
                     self.cells_changed.insert(a);
                     Some(&mut self.cell_raw)
-                }
-                // To the object's reads, and to a read of every object.
-                Store::Obj(o) => {
-                    self.objs_reads = Default::default();
-                    for w in [1u8, 2, 4] {
-                        self.obj_reads.remove(&(o, w));
-                    }
-                    let raw = self.obj_raw.entry(o).or_default();
-                    for &(t, sw) in &new {
-                        self.mem_log.push((o, t, sw));
-                        for w in [1, 2, 4] {
-                            from_mem_one(t, sw, w, &mut raw[w as usize]);
-                        }
-                    }
-                    self.objs_changed.insert(o);
-                    Some(&mut self.objs_raw)
                 }
                 Store::Spill(f) => {
                     self.dirty_entry.insert(f);
@@ -1715,112 +1403,6 @@ impl G {
             }
         }
         self.mark(c);
-    }
-
-    /// What a load at width `w` from somewhere in `lo..=hi` (canonical
-    /// RAM) reads of the objects that may hold its bytes: each one's
-    /// [`Tok::Ref`] and the read's flags (`native/fnref-ram-array-bases`).
-    /// Noted as a read of their bytes (`Rd::ranges`).
-    fn read_objs(&mut self, lo: u32, hi: u32, w: u8, into: &mut Val) {
-        let e = hi.saturating_add(w as u32 - 1);
-        let mut os: Vec<u32> = self
-            .obj_at
-            .range(..=lo)
-            .next_back()
-            .into_iter()
-            .chain(self.obj_at.range((
-                std::ops::Bound::Excluded(lo),
-                std::ops::Bound::Included(e.max(lo)),
-            )))
-            .flat_map(|(_, os)| os.iter().copied())
-            .collect();
-        os.sort_unstable();
-        os.dedup();
-        for o in os {
-            if !self.obj_raw.contains_key(&o) {
-                // Nothing stored: nothing to read, but a store may come.
-                self.rd.objs.insert((o, w));
-                continue;
-            }
-            self.read_obj(o, w, into);
-        }
-    }
-
-    /// A load at width `w` reads object `o`: what it holds, if that is
-    /// small (as [`rom_ref`] has a ROM read), else its [`Tok::Ref`] and
-    /// the read's flags. (Most objects hold a few numbers, and a Ref of
-    /// each in the values of the loads at constant addresses inside it
-    /// made Metroid's run five times as long.)
-    fn read_obj(&mut self, o: u32, w: u8, into: &mut Val) {
-        self.rd.objs.insert((o, w));
-        let r = self.obj_read(o, w);
-        if r.toks.len() < 64 {
-            let r = r.clone();
-            into.union(&r);
-            return;
-        }
-        let r = self.obj_read(o, w);
-        let (mem, unk, lost_rom) = (r.mem, r.unk, r.lost_rom);
-        into.join(&Val {
-            toks: [Tok::Ref {
-                src: Src::Obj(o, w),
-                xf: Xf::ID,
-            }]
-            .into_iter()
-            .collect(),
-            mem,
-            unk,
-            lost_rom,
-        });
-    }
-
-    /// What a load at width `w` reads of object `o` (kept until it
-    /// changes).
-    fn obj_read(&mut self, o: u32, w: u8) -> &Val {
-        let raw = &self.obj_raw;
-        self.obj_reads.entry((o, w)).or_insert_with(|| {
-            let mut v = raw
-                .get(&o)
-                .map(|r| r[w as usize].clone())
-                .unwrap_or_default();
-            v.cap();
-            v
-        })
-    }
-
-    /// What a load at width `w` from anywhere reads of every object
-    /// (kept until one changes).
-    fn objs_read(&mut self, w: u8) -> &Val {
-        let i = w as usize;
-        self.rd.all_objs |= 1 << w;
-        if self.objs_reads[i].is_none() {
-            let mut v = self.objs_raw[i].clone();
-            v.cap();
-            self.objs_reads[i] = Some(v);
-        }
-        self.objs_reads[i].as_ref().unwrap()
-    }
-
-    /// A load at width `w` from anywhere reads every object, as it reads
-    /// every cell: the [`Tok::Ref`] and the read's flags.
-    fn read_objs_all(&mut self, w: u8, into: &mut Val) {
-        let r = self.objs_read(w);
-        if r.toks.is_empty() && !(r.mem || r.unk || r.lost_rom) {
-            // Nothing stored yet; a store reruns it.
-            return;
-        }
-        let (mem, unk, lost_rom) = (r.mem, r.unk, r.lost_rom);
-        into.join(&Val {
-            toks: [Tok::Ref {
-                src: Src::Objs(w),
-                xf: Xf::ID,
-            }]
-            .into_iter()
-            .collect(),
-            mem,
-            unk,
-            lost_rom,
-        });
     }
 
     /// What a load at width `w` reads of the pile (kept until the pile
@@ -1891,8 +1473,6 @@ impl G {
         {
             self.rd.pile |= e.pile;
             self.rd.all_cells |= e.cells;
-            self.rd.objs.extend(e.objs.iter().copied());
-            self.rd.all_objs |= e.objs_all;
             return e.v.clone();
         }
         let mut e = match self.ref_exp.remove(&r) {
@@ -1908,7 +1488,7 @@ impl G {
                 self.exp_add(&mut e, vec![(src, xf)]);
                 self.sets.share(&mut e.v.toks);
                 // Of ROM alone: it never changes.
-                if e.pile | e.cells | e.objs_all == 0 && e.objs.is_empty() {
+                if e.pile | e.cells == 0 {
                     self.ref_rom.insert(r, e.v.clone());
                     return e.v;
                 }
@@ -1924,8 +1504,6 @@ impl G {
         }
         self.rd.pile |= e.pile;
         self.rd.all_cells |= e.cells;
-        self.rd.objs.extend(e.objs.iter().copied());
-        self.rd.all_objs |= e.objs_all;
         let v = e.v.clone();
         self.ref_exp.insert(r, e);
         v
@@ -1952,14 +1530,6 @@ impl G {
                 }
                 Src::RomFrom(lo, end, w, k) => self.rom_from[&(lo, end, w, k)].clone(),
                 Src::Hull(lo, hi, w) => self.rom_hull[&(lo, hi, w)].clone(),
-                Src::Obj(o, w) => {
-                    e.objs.insert((o, w));
-                    self.obj_raw[&o][w as usize].clone()
-                }
-                Src::Objs(w) => {
-                    e.objs_all |= 1 << w;
-                    self.objs_raw[w as usize].clone()
-                }
             };
             exp_take(&mut d, &read, xf, &mut work);
         }
@@ -1975,12 +1545,7 @@ impl G {
         let mems: Vec<(Src, Xf)> = e
             .seen
             .iter()
-            .filter(|(s, _)| {
-                matches!(
-                    s,
-                    Src::Pile(_) | Src::Cells(_) | Src::Obj(..) | Src::Objs(_)
-                )
-            })
+            .filter(|(s, _)| matches!(s, Src::Pile(_) | Src::Cells(_)))
             .copied()
             .collect();
         // What each read gained (the pile's or every cell's, at a width),
@@ -1991,15 +1556,8 @@ impl G {
         for &(src, xf) in &mems {
             let read = gained.entry(src).or_insert_with(|| {
                 let mut read = Val::default();
-                let tag = match src {
-                    Src::Pile(_) => PILE,
-                    Src::Cells(_) => CELLS,
-                    Src::Obj(o, _) => o,
-                    // Any object's.
-                    _ => u32::MAX,
-                };
-                for &(at, t, sw) in &self.mem_log[e.at..] {
-                    if at == tag || tag == u32::MAX && at > CELLS {
+                for &(cells, t, sw) in &self.mem_log[e.at..] {
+                    if cells == matches!(src, Src::Cells(_)) {
                         from_mem_one(t, sw, src.w(), &mut read);
                     }
                 }
@@ -2235,7 +1793,6 @@ impl G {
             .cells
             .values()
             .chain(self.spills.values())
-            .chain(self.obj_mem.values())
             .map(|m| m.len())
             .sum();
         vec![
@@ -2258,14 +1815,6 @@ impl G {
             count(
                 "cell_at_reads",
                 &mut self.cell_at_reads.values().map(|v| &v.toks),
-            ),
-            count(
-                "obj_reads",
-                &mut self
-                    .obj_reads
-                    .values()
-                    .chain(self.obj_raw.values().flatten())
-                    .map(|v| &v.toks),
             ),
             // The kept reads and expansions (`native/fnref-flow-emerald`:
             // they held 11 million tokens the bound didn't count).
@@ -2433,16 +1982,6 @@ enum Store {
     Pile,
     Cell(u32),
     Spill(u32),
-    /// Somewhere in the RAM object at a start ([`G::objs`]).
-    Obj(u32),
-}
-
-/// `lo..=hi` as canonical RAM addresses, if both are in one RAM and no
-/// mirror boundary falls between them.
-fn ram_span(lo: u32, hi: u32) -> Option<(u32, u32)> {
-    let (cl, ch) = (ram_canon(lo), ram_canon(hi));
-    (is_ram(lo) && is_ram(hi) && lo >> 24 == hi >> 24 && hi >= lo && ch - cl == hi - lo)
-        .then_some((cl, ch))
 }
 
 /// Per block of `f`, the insts whose value only feeds flags nothing reads
@@ -2757,10 +2296,6 @@ struct Exp {
     seen: BTreeSet<(Src, Xf)>,
     pile: u8,
     cells: u8,
-    /// The objects in RAM it read, by start and width, and every object
-    /// at some widths.
-    objs: BTreeSet<(u32, u8)>,
-    objs_all: u8,
     at: usize,
 }
 
@@ -3774,13 +3309,6 @@ impl Run<'_, '_> {
 
     /// What a load at width `w` through `a` reads, widened once
     /// ([`from_mem`] doesn't: a load may read thousands of cells).
-    /// Where an access at width `w` that [`G::ram_at`] places may be: its
-    /// object's first address and its last.
-    fn ram_span(&self, key: u32, i: usize, w: u8) -> Option<(u32, u32)> {
-        let o = *self.g.ram_at.get(&(self.f.entry, key, i))?;
-        Some((o, (self.g.objs[&o] - w as u32).max(o)))
-    }
-
     fn load(
         &mut self,
         s: &St,
@@ -3878,10 +3406,8 @@ impl Run<'_, '_> {
                             .rd
                             .ranges
                             .push((c.saturating_sub(3), c + w as u32 - 1));
-                        // The cells the access overlaps, the objects that
-                        // may hold its bytes, and the pile.
+                        // The cells the access overlaps.
                         self.g.read_cell(c, w, &mut out);
-                        self.g.read_objs(c, c, w, &mut out);
                         self.g.read_pile(w, &mut out);
                     } else if self.img.word(c).is_some() {
                         self.rom_read_or_capped(c, w, &mut out, capped);
@@ -3901,19 +3427,6 @@ impl Run<'_, '_> {
             anywhere = true;
         }
         if anywhere {
-            // A RAM literal plus an index, unbounded by the value sets: the
-            // objects that may hold its bytes, and every cell (their
-            // object may span thousands), with the pile
-            // (`native/fnref-ram-array-bases`).
-            if hull.is_none()
-                && let Some((lo, hi)) = self.ram_span(key, i, w)
-            {
-                self.g.read_pile(w, &mut out);
-                self.g.read_cells(w, &mut out);
-                self.g.read_objs(lo, hi, w, &mut out);
-                out.unk = true;
-                return out;
-            }
             // Bounds that start at a table the code indexes from its
             // start (`FBlock::bases`): only that table, to where its object
             // ends. (`GBAA_FNREF_OFF`'s `tables`: any bounds, and they end
@@ -3973,20 +3486,8 @@ impl Run<'_, '_> {
                             for (_, c) in self.g.cells.range(lo.saturating_sub(3)..=hi) {
                                 from_mem(c, w, &mut out);
                             }
-                            // And the objects that may hold its bytes.
-                            match ram_span(lo, hi) {
-                                Some((lo, hi)) => self.g.read_objs(lo, hi, w, &mut out),
-                                None if is_ram(lo) || is_ram(hi) => {
-                                    self.g.read_cells(w, &mut out);
-                                    self.g.read_objs_all(w, &mut out);
-                                }
-                                None => {}
-                            }
                         }
-                        None => {
-                            self.g.read_cells(w, &mut out);
-                            self.g.read_objs_all(w, &mut out);
-                        }
+                        None => self.g.read_cells(w, &mut out),
                     }
                     // An I/O read, too.
                     out.unk = true;
@@ -4074,12 +3575,7 @@ impl Run<'_, '_> {
             }
         }
         if anywhere {
-            // A RAM literal plus an index: in that literal's object
-            // (`native/fnref-ram-array-bases`); else the pile.
-            match self.g.ram_at.get(&(self.f.entry, key, i)) {
-                Some(&o) => self.g.store(Store::Obj(o), toks),
-                None => self.g.store(Store::Pile, toks),
-            }
+            self.g.store(Store::Pile, toks);
         }
     }
 
@@ -4211,8 +3707,6 @@ impl Run<'_, '_> {
                             for (_, m) in self.g.cells.range(lo.saturating_sub(3)..hi) {
                                 from_mem(m, 4, into);
                             }
-                            // And the objects that may hold them.
-                            self.g.read_objs(lo, hi.saturating_sub(4).max(lo), 4, into);
                         }
                         _ => anywhere = true,
                     }
@@ -4230,7 +3724,6 @@ impl Run<'_, '_> {
         }
         if anywhere {
             self.g.read_cells(4, into);
-            self.g.read_objs_all(4, into);
         }
         into.cap();
     }
@@ -4651,27 +4144,6 @@ fn gcd(a: u32, b: u32) -> u32 {
 /// too, so the product doesn't wrap; otherwise only the factor's power
 /// of two divides what wraps.
 fn strides(insts: &[Inst]) -> Vec<u32> {
-    factors(insts)
-        .iter()
-        .map(|&(_, f, small)| {
-            if f == 0 || f > u32::MAX as u64 {
-                // (A product that saturated: nothing known.)
-                return 1;
-            }
-            let f = f as u32;
-            if small && f <= 0xffff {
-                f
-            } else {
-                // Its power of two, as a step keeps it.
-                f.isolate_lowest_one().min(0x8000)
-            }
-        })
-        .collect()
-}
-
-/// Each value of a block as `factor * root` ([`strides`]): (root,
-/// factor, root under 2^16), a factor over 2^32 kept as 0.
-fn factors(insts: &[Inst]) -> Vec<(usize, u64, bool)> {
     // (root, factor, root under 2^16), a factor over 2^32 kept as 0.
     let mut lin: Vec<(usize, u64, bool)> = Vec::with_capacity(insts.len());
     let mut regs: [Option<usize>; 16] = [None; 16];
@@ -4742,7 +4214,21 @@ fn factors(insts: &[Inst]) -> Vec<(usize, u64, bool)> {
         };
         lin.push(l);
     }
-    lin
+    lin.iter()
+        .map(|&(_, f, small)| {
+            if f == 0 || f > u32::MAX as u64 {
+                // (A product that saturated: nothing known.)
+                return 1;
+            }
+            let f = f as u32;
+            if small && f <= 0xffff {
+                f
+            } else {
+                // Its power of two, as a step keeps it.
+                f.isolate_lowest_one().min(0x8000)
+            }
+        })
+        .collect()
 }
 
 /// `GBAA_FNREF_OFF=tables,pile,cells`: kinds of hole made not to
@@ -4941,8 +4427,6 @@ fn via(r: Option<Tok>) -> String {
                 Src::Hull(lo, hi, w) => {
                     format!("a bounded ROM read w{w} of {lo:#010x}..={hi:#010x}")
                 }
-                Src::Obj(o, w) => format!("a read w{w} of the RAM object at {o:#010x}"),
-                Src::Objs(w) => format!("a read w{w} of every RAM object"),
             };
             if xf == Xf::ID {
                 s
@@ -5119,11 +4603,7 @@ impl G {
 /// program start's copies of ROM data to RAM (source, destination, bytes).
 pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow {
     let _code = CodeGuard::set(img);
-    let (objs, obj_at, ram_at) = ram_places(fns);
     let mut g = G {
-        objs,
-        obj_at,
-        ram_at,
         loose_args: vec![Val::default(); 4],
         objects: objects(img),
         tables: tables(fns, img),
@@ -5186,13 +4666,11 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
             let (p, c) = (g.pile_read(w).clone(), g.cells_read(w).clone());
             v.push(p);
             v.push(c);
-            v.push(g.objs_read(w).clone());
         }
         v
     };
     let mut snapped = snap(&mut g);
     g.cells_changed.clear();
-    g.objs_changed.clear();
     g.pile_changed = false;
     let mut loose: BTreeSet<u32> = BTreeSet::new();
     let mut ran = 0usize;
@@ -5321,7 +4799,6 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
                     .pile
                     .iter()
                     .chain(g.cells.values().flatten())
-                    .chain(g.obj_mem.values().flatten())
                     .map(|(t, _)| *t)
                     .collect(),
                 ..Val::default()
@@ -5367,58 +4844,38 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow
         // the cells that did.
         let mut pile_w = 0u8;
         let mut cells_w = 0u8;
-        let mut objs_w = 0u8;
         let cells = std::mem::take(&mut g.cells_changed);
-        let objs = std::mem::take(&mut g.objs_changed);
-        if std::mem::take(&mut g.pile_changed) || !cells.is_empty() || !objs.is_empty() {
+        if std::mem::take(&mut g.pile_changed) || !cells.is_empty() {
             let now = snap(&mut g);
             for (i, w) in [1u8, 2, 4].into_iter().enumerate() {
-                for (j, x) in [&mut pile_w, &mut cells_w, &mut objs_w]
-                    .into_iter()
-                    .enumerate()
-                {
-                    if now[3 * i + j] != snapped[3 * i + j] {
-                        *x |= 1 << w;
-                    }
+                if now[2 * i] != snapped[2 * i] {
+                    pile_w |= 1 << w;
+                }
+                if now[2 * i + 1] != snapped[2 * i + 1] {
+                    cells_w |= 1 << w;
                 }
             }
             snapped = now;
-        }
-        // The objects whose read at a width changed, as the round began
-        // and now.
-        let mut objs_read: BTreeSet<(u32, u8)> = BTreeSet::new();
-        for o in objs {
-            for w in [1u8, 2, 4] {
-                let now = g.obj_read(o, w).clone();
-                if g.obj_snapped.get(&(o, w)) != Some(&now) {
-                    objs_read.insert((o, w));
-                    g.obj_snapped.insert((o, w), now);
-                }
-            }
         }
         dirty.extend(
             rds.iter()
                 .filter(|(_, r)| {
                     r.pile & pile_w != 0
                         || r.all_cells & cells_w != 0
-                        || r.all_objs & objs_w != 0
                         || r.ranges
                             .iter()
                             .any(|&(lo, hi)| cells.range(lo..=hi).next().is_some())
-                        || r.objs.iter().any(|x| objs_read.contains(x))
                 })
                 .map(|(f, _)| *f),
         );
         if trace {
             eprintln!(
-                "fnref round {round}: {:?}; {} to rerun ({n_entry} entries changed, {n_rets} results; pile widths {pile_w:#x}, every-cell widths {cells_w:#x}, {} cells changed); pile {}, cells {}, objects {} in {}, taken {}, holes {}",
+                "fnref round {round}: {:?}; {} to rerun ({n_entry} entries changed, {n_rets} results; pile widths {pile_w:#x}, every-cell widths {cells_w:#x}, {} cells changed); pile {}, cells {}, taken {}, holes {}",
                 t0.elapsed(),
                 dirty.len(),
                 cells.len(),
                 g.pile.len(),
                 g.cells.len(),
-                g.obj_mem.values().map(|m| m.len()).sum::<usize>(),
-                g.obj_mem.len(),
                 g.taken.len(),
                 g.flow.holes.len()
             );
