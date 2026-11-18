@@ -60,6 +60,9 @@
 //!   `f_<key>(g, sp, a: [u32; 4]) -> Result<[u32; 4], Exit>`, with the
 //!   summary printed above it.
 //! - Registers and NZCV are Rust locals; each block's IR values are `let`s.
+//!   A write of one nothing reads after it is left out ([`live`], unit
+//!   `native/lift-dead-writes`: a return reads its results, a call its
+//!   parameters, a fall into another function everything).
 //!   r4-r11 outlive a call because callees keep them, or change only
 //!   what no caller reads (the summaries' `keeps` and `changes`; a
 //!   function that breaks that, `analysis::holes::SUMMARY_HARD`, is a
@@ -174,6 +177,7 @@ pub mod frame;
 pub mod globals;
 pub mod heap;
 pub mod lift_check;
+pub mod live;
 pub mod metrics;
 pub mod modules;
 pub mod named;
@@ -264,6 +268,10 @@ pub struct Holes {
     /// planted control (`native/lift-fallthrough`): the native check must
     /// catch it on `agb/native-fallthrough`.
     pub fall_as_tail_call: bool,
+    /// Stage A's old dead writes (`gbaa-lift --keep-dead-writes`): every
+    /// write of a register or flag printed, read or not, those nothing
+    /// reads counted in `dead_flag_writes` (`native/lift-dead-writes`).
+    pub keep_dead_writes: bool,
     /// Stage A's old IRQs (`gbaa-lift --irq-at-waits`): `Game::cpsr` as
     /// bookkeeping only, so an IRQ due at a wait inside a critical section
     /// runs there, where the hardware holds it until the I bit clears. The
@@ -1086,6 +1094,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     args: &args,
                     heap: &heap,
                     psr: psr_fns.place(f.entry),
+                    dead: BTreeMap::new(),
                 };
                 let text = p.print(c.sums.get(f.entry));
                 (text, p.found)
@@ -1301,6 +1310,18 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         }
     )
     .unwrap();
+    writeln!(
+        report,
+        "flag writes printed: {}, of which nothing reads {}{}",
+        soft.flag_writes,
+        soft.dead_flag_writes,
+        if holes.keep_dead_writes {
+            " (--keep-dead-writes: every write of a register or flag printed)"
+        } else {
+            ""
+        }
+    )
+    .unwrap();
     if holes.irq_at_waits {
         writeln!(
             report,
@@ -1505,6 +1526,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("blocks_structured", n(bs));
     m.push("blocks_structured_pct", pct(bs, bs + bm));
     m.push("blocks_in_match", n(bm));
+    // Flag writes printed that nothing reads (native/lift-dead-writes):
+    // none, but with --keep-dead-writes.
+    m.push("dead_flag_writes", soft.dead_flag_writes);
     m.push_accesses(&soft.access);
     m.push("ram_globals", n(globals.0.len()));
     m.push("pointer_unexplained", soft.unexplained);
@@ -2175,6 +2199,10 @@ struct Soft {
     fns_match: usize,
     blocks_structured: usize,
     blocks_match: usize,
+    /// Flag writes printed, and of them those nothing reads
+    /// ([`FnPrinter::dead_writes`]: none but with `--keep-dead-writes`).
+    flag_writes: u64,
+    dead_flag_writes: u64,
 }
 
 struct FnPrinter<'a, 'b> {
@@ -2217,6 +2245,9 @@ struct FnPrinter<'a, 'b> {
     /// Whether it is the reset or an IRQ wrapper, whose `msr` and `mrs`
     /// are printed ([`PsrFns`]); elsewhere they are hard holes.
     psr: Option<PsrPlace>,
+    /// The writes of registers and flags nothing printed reads, by block
+    /// ([`FnPrinter::dead_writes`]): left out.
+    dead: BTreeMap<u32, Vec<bool>>,
 }
 
 /// Where an `msr` or `mrs` the lifter prints is: the hole report's
@@ -2461,6 +2492,7 @@ impl FnPrinter<'_, '_> {
         let mut order: Vec<u32> = vec![f.entry];
         order.extend(f.blocks.keys().copied().filter(|&k| k != f.entry));
         self.labels = order.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+        self.dead = self.dead_writes();
         if let Some(p) = self.plan(&order) {
             self.soft.fns_structured += 1;
             self.soft.blocks_match += p.region_blocks;
@@ -2517,6 +2549,82 @@ impl FnPrinter<'_, '_> {
         let xs = exits(self.ctx, gb);
         self.cur = k;
         self.block(&gb.block.insts, &xs, gb.block.thumb)
+    }
+
+    /// The writes of r0-r12 and the flags nothing printed reads after
+    /// them, by block ([`live::dead`]; unit `native/lift-dead-writes`), as
+    /// [`FnPrinter::exit`] prints each exit: a jump to a block reads what
+    /// it does; a return its results; a direct call its parameters (all
+    /// of r0-r3, which is more than a shaped callee's) and the r4-r11 its
+    /// callee takes, then what its return site reads; a call through
+    /// `call_fn` r0-r11 (a `[[takes]]` site passes some of r4-r11); a
+    /// `swi` r0-r3; anything into another function's extended entry, or
+    /// that this function can't follow, everything. `--keep-dead-writes`
+    /// prints them all the same, counted (`dead_flag_writes`).
+    fn dead_writes(&self) -> BTreeMap<u32, Vec<bool>> {
+        let keys: Vec<u32> = self.f.blocks.keys().copied().collect();
+        let index: BTreeMap<u32, usize> = keys.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+        let xs: Vec<Vec<ExitInfo>> = self
+            .f
+            .blocks
+            .values()
+            .map(|gb| exits(self.ctx, gb))
+            .collect();
+        let insts: Vec<&[Inst]> = self
+            .f
+            .blocks
+            .values()
+            .map(|gb| &gb.block.insts[..])
+            .collect();
+        let results = live::low(self.me.map_or(0xf, |m| m.results));
+        let dead = live::dead(&insts, |b, i| {
+            let Some(x) = xs[b].iter().find(|x| x.index == i) else {
+                return (Vec::new(), live::ALL);
+            };
+            // Going on at `k`: its block, or (into another function, a
+            // hole) everything.
+            let to = |k: u32| match index.get(&k) {
+                Some(&s) => (vec![s], 0),
+                None => (Vec::new(), live::ALL),
+            };
+            let then = |k: u32, reads: live::Live| {
+                let (s, l) = to(k);
+                (s, l | reads)
+            };
+            match x.plan {
+                Plan::Static(k) | Plan::Rekey(k) => to(k),
+                Plan::Call { target, ret } => {
+                    then(ret, live::low(0xf) | live::high(self.passed(target)))
+                }
+                Plan::CallVia { reg, ret, .. } => then(
+                    ret,
+                    live::low(0xf) | live::high(0xff) | live::reg(reg.index()),
+                ),
+                Plan::Dynamic { ret: Some(ret), .. } => {
+                    then(ret, live::low(0xf) | live::high(0xff))
+                }
+                Plan::Dynamic {
+                    ret: None, target, ..
+                } => {
+                    let thumb = self.f.blocks[&keys[b]].block.thumb;
+                    let Ok(ts) = dyn_targets(self.ctx, self.holes, x.at, thumb, target) else {
+                        return (Vec::new(), live::ALL);
+                    };
+                    // The return, or a tail call through `call_fn`.
+                    let mut out = (Vec::new(), results | live::low(0xf));
+                    for t in ts {
+                        let (s, l) = to(t);
+                        out.0.extend(s);
+                        out.1 |= l;
+                    }
+                    out
+                }
+                Plan::Swi { next } => then(next, live::low(0xf)),
+                Plan::Undefined { trap: true } => (Vec::new(), 0),
+                Plan::Undefined { trap: false } => (Vec::new(), live::ALL),
+            }
+        });
+        keys.into_iter().zip(dead).collect()
     }
 
     /// The function's structuring plan ([`plan::plan`], as the mod view's
@@ -2767,11 +2875,35 @@ impl FnPrinter<'_, '_> {
             .ref_tys
             .extend(refs.iter().flatten().map(|r| r.f.ty));
         let dead = dead_addresses(insts, &typed);
-        let used = self.used(insts, &typed, &refs);
+        // The writes of registers and flags nothing reads after them
+        // (`dead_writes`), left out but with `--keep-dead-writes`.
+        let unread: Vec<bool> = match self.dead.get(&self.cur) {
+            Some(d) if d.len() == insts.len() => d.clone(),
+            _ => vec![false; insts.len()],
+        };
+        let keep = self.holes.keep_dead_writes;
+        let skip: Vec<bool> = unread.iter().map(|&u| u && !keep).collect();
+        let used = self.used(insts, &typed, &refs, &skip);
         for (i, inst) in insts.iter().enumerate() {
             let id = ValueId(i as u32);
-            if dead[i] || (pure(&inst.op) && !used[i]) {
+            if dead[i] || skip[i] || (pure(&inst.op) && !used[i]) {
                 continue;
+            }
+            // A load of a stack local nothing uses (a callee-saved
+            // register's restore before a return) reads a Rust local:
+            // nothing to print.
+            if matches!(inst.op, Op::Load { .. })
+                && !used[i]
+                && !self.holes.shadow_locals
+                && self
+                    .frame
+                    .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some())
+            {
+                continue;
+            }
+            if let Op::SetFlag(..) = inst.op {
+                self.soft.flag_writes += 1;
+                self.soft.dead_flag_writes += u64::from(unread[i]);
             }
             let guard = inst.guard.map(v);
             let stmt = |s: &mut String, body: String| match &guard {
@@ -3029,11 +3161,18 @@ impl FnPrinter<'_, '_> {
     /// printed as a stack local's (unless `--shadow-locals` reads the
     /// frame's bytes too) or a typed global's (`typed`) doesn't use its
     /// address, so the arithmetic only the address needed isn't printed
-    /// ([`pure`]).
-    fn used(&self, insts: &[Inst], typed: &[Option<Place>], refs: &[Option<HeapRef>]) -> Vec<bool> {
+    /// ([`pure`]), and neither does a write `skip` leaves out (a dead
+    /// one's, [`FnPrinter::dead_writes`]).
+    fn used(
+        &self,
+        insts: &[Inst],
+        typed: &[Option<Place>],
+        refs: &[Option<HeapRef>],
+        skip: &[bool],
+    ) -> Vec<bool> {
         let mut used = vec![false; insts.len()];
         for (i, inst) in insts.iter().enumerate().rev() {
-            if pure(&inst.op) && !used[i] {
+            if skip[i] || (pure(&inst.op) && !used[i]) {
                 continue;
             }
             let local = !self.holes.shadow_locals
