@@ -1466,7 +1466,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   run's `cycles:` line (in `out/<name>/recompiled.log`) splits guest time
   between compiled code and the fallback, how much of each ran in RAM
   (decisions 1 and 7; IWRAM copies compile as overlays, #54), then the
-  fallback's RAM time by entry key (`Stats::ram_seeds`), and the log ends with `overlay invalidations: N`. It passes on june's ROM
+  fallback's RAM time by entry key (`Stats::ram_seeds`), BIOS calls' stalls (`bios::STALL_LOOP`) apart, in neither share, and the log ends with `overlay invalidations: N`. It passes on june's ROM
   (`$GBAA_DATA/agb/gba-cart1.gba`), jsmolka's `arm`/`thumb`, and the agb
   sprite example (`$GBAA_DATA/tools/obj-sprites/obj-sprites.gba 120`,
   hash `afc0b93200e5577f`).
@@ -1985,7 +1985,7 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   the recompiled picture may differ from the interpreter's because compiled
   code ticks once per block (an I/O store mid-block lands before the
   scanlines catch up), with `block_timed_why`; it fails once one of them
-  matches again). The format, with an
+  matches again; the last checkpoint's `regs_block_timed_why` lets the last registers differ if `--interp-blocks` ends with the recompiled build's). The format, with an
   example, is in `crates/route-check/src/route.rs`; comments say how each
   hash was verified. A ROM may have several routes where paths diverge
   (the intro untouched, a new game). It clears `out/units/NAME/`, runs

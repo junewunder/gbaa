@@ -951,3 +951,54 @@ fn a_stale_functions_callers_are_stale_to_the_top() {
         [0x00, 0x02, 0x10, 0x12, 0x20, 0x22, 0x50, 0x52].map(at)
     );
 }
+
+/// A block that makes a long `CpuSet` (EWRAM to VRAM, 0x2000 halfwords),
+/// which leaves its time as a stall at [`crate::bios::STALL_LOOP`], then
+/// goes on at 0x0800_0004 once the stall is over.
+fn f_cpu_set(m: &mut M, _: u32) -> Flow {
+    m.cpu.r[..3].copy_from_slice(&[0x0200_0000, 0x0600_0000, 1 << 24 | 0x2000]);
+    m.cpu.pc = 0x0800_0004;
+    crate::bios::swi(m, (crate::bios::call::CPU_SET as u32) << 16).unwrap();
+    tick(m, 1);
+    Flow::Jump(m.cpu.pc)
+}
+
+/// A BIOS call's stall is the call's time, not the fallback's: it counts
+/// apart, in neither share.
+#[test]
+fn a_bios_stall_is_not_the_fallbacks() {
+    static STALL: Code<Headless> = Code {
+        blocks: &[(0x0800_0000, f_cpu_set)],
+        ram_blocks: &[],
+        extents: &[],
+        ram_extents: &[],
+        inner: &[],
+        inner_extents: &[],
+        modded: &[],
+        folded: &[],
+        overlays: &[],
+        rom_hash: 0,
+        fns: &[],
+        timing: crate::Timing::Exact,
+        seeds_file: None,
+        spins: &[],
+    };
+    let mut m = machine();
+    let mut stats = Stats::default();
+    assert_eq!(run(&mut m, Some(&STALL), None, &mut stats), Stop::FrameEnd);
+    assert!(
+        stats.stalled_cycles > 2 * crate::sched::LINE_CYCLES,
+        "{stats:?}"
+    );
+    assert_eq!(
+        stats.compiled_cycles + stats.interpreted_cycles + stats.stalled_cycles,
+        m.now()
+    );
+    // The fallback ran only `mov r1, #5; b 0x08000000`, two instructions
+    // a round.
+    assert!(
+        stats.calls.abs_diff(stats.interpreted / 2) <= 1,
+        "{stats:?}"
+    );
+    assert!(stats.interpreted_cycles < stats.stalled_cycles, "{stats:?}");
+}
