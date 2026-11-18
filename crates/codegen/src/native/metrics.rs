@@ -223,6 +223,7 @@ pub const UNBARRED: &[&str] = &[
     "entry_lr_returns",
     "compare_trees_matched",
     "compare_tree_blocks",
+    "loops_for",
     "narrowing_casts",
 ];
 

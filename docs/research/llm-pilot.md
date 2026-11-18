@@ -179,7 +179,7 @@ open unit that already covers it.
 | Compiler narrowing idioms as casts and masks | 6 | yes | new: `native/lift-narrowing-casts` |
 | Single-use temporaries inline, constants at their use | all 20 | yes | done: `native/lift-inline-temps` |
 | One `bank_sp` per run of stores at the same sp | 10 | yes, with care | done: `native/lift-bank-sp-once` |
-| A counted loop as `for` over a range | 2 | yes | new: `native/lift-for-loops` |
+| A counted loop as `for` over a range | 2 | yes | done: `native/lift-for-loops` (a constant start only: DoSoundAction's, not ResetFreeOam's) |
 | A compare tree on one value as `match` | 3 | yes | done: `native/lift-switch-match` |
 | `if`/`while`/early return in place of the block match | 12 | yes | `native/lift-structured` (in progress) |
 | Table and array indexing (`base + i * size`) | 5 | yes | `native/rom-statics` (ROM), done `native/ref-in-object` (RAM) |
@@ -279,7 +279,13 @@ handler, so a store that runs one doesn't. Metroid 6588 calls to 2484.
 127) and DoSoundAction 0x080027f9 (an s8 count from 11 down to 0). The
 mod view's `lower::For` (`mod/readable-for-loops`) recognises exactly
 this on the play build's structured form; the native lift should reuse
-it once `native/lift-structured` lands, not design it again.
+it once `native/lift-structured` lands, not design it again. Done
+(`native/lift-for-loops`, `codegen::native::counted`): the same proof,
+a one-block loop run over its range from a constant start, shares
+`lower::counted`; DoSoundAction's countdown prints as `for r0 in
+(0..=11).rev()`, ResetFreeOam's loop, whose start is a value read from
+RAM, stays a `loop` (no proof of its range without one). Metroid: 95 of
+696 loops; the C programs: their startup's clear of IWRAM.
 
 **Compare trees as `match`.** agbcc compiles a small switch as a
 binary search of `cmp`/`beq`/`bgt` on one register (IntroHandler

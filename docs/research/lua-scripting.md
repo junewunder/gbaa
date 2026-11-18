@@ -192,10 +192,12 @@ V-blank. So most of the API runs between frames, outside generated code.
   (mGBA warns against it too); allow it, without firing `frame` inside.
 - `currentCycle` mid-frame isn't meaningful; between frames it is
   `Sched`'s clock.
-- Writes to `cart0` (ROM): mGBA patches its copy; ours is
-  `&'static [u8]`. Data patches would need a mutable ROM copy; code
-  patches would never run in compiled code. Rare in scripts; ignore with a
-  console warning.
+- Writes to `cart0` (ROM): mGBA patches its copy. Since
+  scripting/load-changed-rom ours do too: the cartridge domains read a
+  script's writes back at once, and when it returns (or runs the machine)
+  the desktop swaps in a patched copy of the ROM (a ROM-sized copy each
+  time, leaked) and runs the patched functions interpreted, as for a
+  changed ROM. `emu:write8` to the ROM goes through the bus, as mGBA's.
 
 **Can't, or costs:**
 
@@ -216,8 +218,8 @@ V-blank. So most of the API runs between frames, outside generated code.
   changed (`WRITE_CHANGE` at frame granularity): free when no watch is set,
   but late and blind to values that changed back. Or (a) above: watch in
   the interpreter.
-- **`emu:loadFile` of another ROM**: a recompiled build refuses any ROM
-  but its own (`crates/desktop/src/lib.rs:486-493`). Ironmon's whole
+- **`emu:loadFile` of another ROM**: a recompiled build refused any ROM
+  but its own (it now runs a changed copy, `crates/desktop/src/changed.rs`). Ironmon's whole
   loop is "randomize the ROM, load it": a randomized Emerald keeps
   Emerald's code and changes its data tables, mostly. Options: run other
   ROMs in the interpreter (`gbaa-desktop` already does), or accept a ROM
