@@ -330,8 +330,14 @@ pub struct Export {
 }
 
 impl Export {
-    /// Serve the menu for `state` on `conn`'s bus at [`PATH`].
-    pub fn serve(conn: Connection, state: State, wake: Wake) -> zbus::Result<Export> {
+    /// Connect with `bus` and serve the menu for `state` at [`PATH`].
+    ///
+    /// The menu goes on the builder, not on the built connection's object
+    /// server: there zbus subscribes to method calls from a task of its
+    /// own, so a reader's first call could arrive before it and go
+    /// unanswered for good. Built this way, the subscription is in place
+    /// before the connection's name is handed out.
+    pub fn serve(bus: connection::Builder<'_>, state: State, wake: Wake) -> zbus::Result<Export> {
         let shown = Arc::new(Mutex::new(Shown {
             state,
             root: root(&tree(state)),
@@ -343,7 +349,7 @@ impl Export {
             clicks: tx,
             wake,
         };
-        conn.object_server().at(PATH, bar)?;
+        let conn = bus.serve_at(PATH, bar)?.build()?;
         Ok(Export {
             conn,
             shown,
@@ -353,7 +359,7 @@ impl Export {
 
     /// Connect to the session bus and serve the menu there.
     pub fn session(state: State, wake: Wake) -> zbus::Result<Export> {
-        Export::serve(connection::Builder::session()?.build()?, state, wake)
+        Export::serve(connection::Builder::session()?, state, wake)
     }
 
     /// The bus connection's unique name: the service name a window hands

@@ -7,12 +7,13 @@ rom = "$GBAA_DATA/agb/native-bios-calls.gba"
 [[checkpoint]]
 name = "native-bios-calls-600"
 frame = 600
-hash = "a2d7b94fedf1bbab"
-mgba_hash = "e5c3533e9bf7cdeb"
+hash = "3ae8c457394c5b13"
+mgba_hash = "044e17b1f64c1e53"
 mgba_why = "its MultiBoot leaves r0 as given where the play build returns 1, GBATEK's failure (row 11)"
-# Our interpreter at --timing exact and --timing native (2026-11-08, after CpuFastSet left r2 as given, bios/fast-set-r2).
+# Our interpreter at --timing exact and --timing native (2026-11-14, the program as
+# native/ref-heap-static-arrays left it: its pixels read OUT's regs, not a copy).
 # Known mGBA mismatch: mGBA 0.10.5 (`mgba-dump ROM --frames 600 --hash`)
-# draws e5c3533e9bf7cdeb, row 11 only: its MultiBoot leaves r0 as given,
+# draws 044e17b1f64c1e53, row 11 only: its MultiBoot leaves r0 as given,
 # where the play build returns 1, GBATEK's failure. Every other row, the
 # CpuFastSet rows (3, 4, 12) and the LZ77 and RL rows of the frame buffer
 # included, is mGBA's.

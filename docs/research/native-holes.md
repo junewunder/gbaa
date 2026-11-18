@@ -181,10 +181,10 @@ whole lift took 54 s to 50 min (Minish Cap 20, its flow most of it;
 Kirby & the Amazing Mirror's heap 30). Each hole carries its kind. On
 the corpus, holes files applied, the whole lift (the commit before) and
 the holes-only one name the same holes, line for line, but two: Metroid
-0, WarioWare 6, Nightmare 0, moonbeam 7, Rogue 24, Imperium 20; Minish
-Cap 32 and the Amazing Mirror 7 against 31 and 6 (below). Emerald's
-whole lift (16 holes-only; its flow doesn't settle, so no sets) wasn't
-finished when this was written.
+0, WarioWare 6, Nightmare 0, moonbeam 7, Rogue 24, Imperium 20, Emerald
+14 (its flow stops at its bound, nothing proven, so no callee sets;
+22.6 min, 3.0 GB, 2026-11-17); Minish Cap 32 and the Amazing Mirror 7
+against 31 and 6 (below).
 
 The differences left, each right:
 
@@ -233,8 +233,8 @@ What the run's targets were: m4a's command table
 (`gMPlayJumpTableTemplate` and its copies in RAM: Emerald, both Kirbys,
 Minish Cap, Rogue), leaf routines without a `push {lr}` that the scan's
 score passes over, and WarioWare's pointers computed at run time (three
-targets no ROM word points at). The lifter doesn't take run roots yet:
-`discover_with` is what it would call.
+targets no ROM word points at). The lifter takes no run roots
+(`discover_with`); the scan finds the table (native/m4a-ply-table-entries).
 
 ## Coverage runs
 
@@ -345,7 +345,7 @@ The counts are the numbers file's; what they are, beyond the summary's:
 Nightmare's three CPU-state holes (2026-11-07) are its object-task
 switcher, ARM routines at 0x08000234-0x080002a4 reached from Thumb by
 `bx pc` veneers (0x080cfdc4, 0x080cfdcc, 0x080cfdd4). Each object's task
-has its own IWRAM stack and is run once a frame:
+has its own stack (64 slots of 0x100 bytes in EWRAM from 0x0203bf00) and is run once a frame:
 
 - **Resume** (0x08000244, `mov sp, r2`), called only by the scheduler
   (0x08005364), r1 the task's resume address, r2 its saved sp: saves lr,
@@ -357,18 +357,18 @@ has its own IWRAM stack and is run once a frame:
 - **Exit** (0x08000298, `ldr sp, [r3]`): frees the task (0x08005655),
   then returns to the scheduler the same way.
 
-A byte scan finds 11,063 Thumb `bl`s to yield and 232 to exit (not
-checked against discovery); a typical task is `loop { update();
-yield(1) }` (0x080093fc). sp is already a parameter and the stacks IWRAM
-bytes, so the guest side is a store and a load; the host stack is the
-hole, since a yield must keep the task's frames while the scheduler goes
-on. The fix is a stand-in running each task's lifted code on a stackful
-coroutine (`corosensei`, as `crates/desktop/src/coro.rs`), keyed by its
-saved sp; a new task starts with the r4-r11 the game put on its stack.
-A state machine would split functions at 11,063 sites. Filed as
-`native/nightmare-task-switch`. No other corpus game switches stacks
-(Amazing Mirror doesn't); the rule finds one anywhere. The lifter flags
-them too, and has the coroutines (`native/task-coroutines`).
+A byte scan finds 11,063 Thumb `bl`s to yield and 232 to exit (not checked against discovery); a
+typical task is `loop { update(); yield(1) }` (0x080093fc). sp is already a parameter and the stacks
+RAM bytes, so the guest side is a store and a load; the host stack is the hole, since a yield must
+keep the task's frames while the scheduler goes on. The fix is a stand-in running each task's lifted
+code on a stackful coroutine (`corosensei`, as `crates/desktop/src/coro.rs`), keyed by its saved sp;
+a new task starts with the r4-r11 the game put on its stack. A state machine would split functions
+at 11,063 sites. Filed as `native/nightmare-task-switch`. No other corpus game switches stacks
+(Amazing Mirror doesn't); the rule finds one anywhere. The lifter flags them too, and has the
+coroutines (`native/task-coroutines`). Stand-ins: its holes file; resume's `bx pc` after a `pop
+{pc}` is a jump now (`classify`). Run (2026-11-14): the native check passes
+`units/kirby-nightmare-native.toml`'s 900 frames, tasks on their coroutines from frame 87 (a planted
+store in one caught) into Vegetable Valley; the lift stops at frame 902 (`native/nightmare-stop-34a88`).
 
 ## Functions that change r4-r11 or sp
 
@@ -437,7 +437,7 @@ Summary holes that are hard, before and after (`just holes-all --against`):
 
 | Cause | Functions |
 |---|---|
-| libgcc ieee754-df.S's denormal paths, r4 and r5 in (ARM) | Emerald 0x082dfd09, Rogue 0x0800cb45, Imperium 0x08003879, Kirby M. 0x0814fd35, Nightmare 0x080ce1f9, Minish 0x080afbd1 |
+| libgcc ieee754-df.S's denormal paths, r4 and r5 in (ARM) | Emerald 0x082dfd09, Rogue 0x0800cb45, Imperium 0x08003879, Kirby M. 0x0814fd35, Minish 0x080afbd1; Nightmare 0x080ce1f9 is m4a's `ChnVolSetAsm` instead (r4 the channel, r5 the track), the others not checked against it |
 | hand-written register parameters | Minish 0x080086d9 (`sub_080086D8`, r8 and r11), 0x08060ba1 (derefs r5), 0x08008a89 (r5, `ClampPlayerVelocity`'s kind); WarioWare 0x080efe51, 0x080f0ab0 |
 | modern GCC's far jump by `bl` into a fragment of the caller's, taken for a call | moonbeam 0x0801a081 and six more, Rogue 0x0820c629, Imperium 0x0821e331 (looked into since: "Modern GCC's cold blocks", below) |
 | agbcc's partly built word stored with the unset register's other bits (a struct's padding) | Emerald 0x080852d5, Kirby M. 0x08132889, WarioWare 0x080abfa5, Metroid 0x08073ce5 (modern GCC's too since: moonbeam 0x08025a29, Rogue 0x081b42e1; "Entry readers left on moonbeam and Rogue", below) |
@@ -487,13 +487,13 @@ code is a jump, unless the target looks like a function). As built now:
   instructions that write neither sp, lr nor pc (`is_push_lr`), for the
   caller and for a target. Modern GCC schedules the body's start ahead
   of the push: 125 of moonbeam's 1,050 pushing Thumb starts, the latest
-  after 7. The rule used to ask for the push first.
+  after 7 (a variadic one's `push {r0-r3}` may come first, too).
 - A target right where the function's reached code and pools end is a
   jump too, if its probe says nothing returns from it: the last cold
   blocks lie past everything a branch reaches (one rerun a block, 16 at
   most). Only then, since the next function starts there as well. A
-  never-returning function taken for a block runs the same code with
-  the same registers; the opposite mistake zeroes them.
+  never-returning function taken for a block runs the same code with the
+  same registers; the opposite zeroes them (limits: the rule's comment).
 
 **`sbcs rN, rN` after a compare** (Rogue 0x0820c629, r5; Imperium
 0x0821e331, r5 holding the entry r8): GCC's 0 or -1 of a condition,

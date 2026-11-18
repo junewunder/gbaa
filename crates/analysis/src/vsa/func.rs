@@ -379,9 +379,21 @@ pub fn analyze_capped(
     // in a call that never returns, reached only by `bl` (too far for a
     // `b`) and reading the function's registers. Rerun the fixpoint with
     // those taken as jumps until no new one turns up.
+    //
+    // The limit: a real function that never returns, placed right after
+    // its caller, whose start [`is_push_lr`] doesn't take for a prologue
+    // (one that saves nothing and ends in a call that never returns) is
+    // taken for such a block. The code runs the same, but its start is
+    // lost if nothing else calls it. A variadic prologue (`push {r0-r3};
+    // push {r4, lr}`) and a lone `b .` are told apart.
+    //
+    // What the rule decodes at a target outside the code reached (a
+    // prologue's lead-in, a stub, a leaf) goes in the result's reads, so
+    // that new data there redoes the caller.
     let mut inner = BTreeSet::new();
+    let mut rule_reads = Vec::new();
     let (mut tries, mut tails) = (0, 0);
-    let prologue = thumb && is_push_lr(prog, entry);
+    let prologue = thumb && is_push_lr(prog, entry, &mut rule_reads);
     let (mut a, states) = loop {
         let (mut a, states) = fixpoint(prog, entry, thumb, far, cap, inner.clone());
         let mut more = Vec::new();
@@ -402,9 +414,10 @@ pub fn analyze_capped(
                     && lo < t
                     && t <= hi
                     && !inner.contains(&t)
-                    && !is_stub(prog, t)
-                    && !is_push_lr(prog, t)
-                    && !is_leaf(&mut a, t)
+                    && !is_stub(prog, t, &mut rule_reads)
+                    && !is_idle(prog, t)
+                    && !is_push_lr(prog, t, &mut rule_reads)
+                    && !is_leaf(&mut a, t, &mut rule_reads)
                     && match (a.far)(t, true) {
                         Bl::Balanced => false,
                         Bl::NoReturn => true,
@@ -442,6 +455,7 @@ pub fn analyze_capped(
         }
     }
     a.res.span = a.span;
+    a.res.reads.extend(rule_reads);
     a.res.reads.sort_unstable();
     a.res.reads.dedup();
     a.res
@@ -1011,9 +1025,12 @@ impl Analysis<'_, '_> {
 /// Whether Thumb code at `t` starts with a prologue: `push {…, lr}`, at
 /// `t` or after up to [`LEAD_MAX`] instructions that touch neither the
 /// frame nor pc (modern GCC schedules the body's first instructions ahead
-/// of the push: `movs r3, #180; push {r4-r7, lr}`).
-fn is_push_lr(prog: &Program, mut t: u32) -> bool {
+/// of the push: `movs r3, #180; push {r4-r7, lr}`). A variadic
+/// function's spill of its argument registers (`push {r0-r3}`) may come
+/// first. Each instruction decoded goes in `reads`.
+fn is_push_lr(prog: &Program, mut t: u32, reads: &mut Vec<(u32, u32)>) -> bool {
     for _ in 0..=LEAD_MAX {
+        reads.push((t, t.wrapping_add(4)));
         let Some(i) = prog.decode(t, true) else {
             return false;
         };
@@ -1025,7 +1042,13 @@ fn is_push_lr(prog: &Program, mut t: u32) -> bool {
                 regs,
                 ..
             } => {
-                return regs & 1 << 14 != 0;
+                if regs & 1 << 14 != 0 {
+                    return true;
+                }
+                if regs & !0xf != 0 {
+                    return false;
+                }
+                t = i.next();
             }
             Instr::Undefined { .. } | Instr::Swi { .. } => return false,
             _ if i.bl.is_some() || writes_pc(&i.instr) || touches_frame(&i.instr) => return false,
@@ -1036,8 +1059,9 @@ fn is_push_lr(prog: &Program, mut t: u32) -> bool {
 }
 
 /// Whether Thumb code at `t` is a lone `bx rN` (rN not lr): a
-/// call-via-register stub.
-fn is_stub(prog: &Program, t: u32) -> bool {
+/// call-via-register stub. Its word goes in `reads`.
+fn is_stub(prog: &Program, t: u32, reads: &mut Vec<(u32, u32)>) -> bool {
+    reads.push((t, t.wrapping_add(4)));
     matches!(
         prog.decode(t, true).map(|i| i.instr),
         Some(Instr::Bx { rm, cond: armv4t::decode::Cond::Al }) if rm != DReg::Lr && rm != DReg::Pc
@@ -1066,11 +1090,27 @@ fn bios_copy(prog: &Program, insn: &Insn, st: &State) -> Option<(u32, u32, u32)>
         .then_some((src, dst, bytes))
 }
 
+/// Whether Thumb code at `t` is a `b .`, a function that only waits
+/// (for an interrupt, or forever). A cold block ends in a call. (The rule
+/// reads `t` already in [`is_stub`].)
+fn is_idle(prog: &Program, t: u32) -> bool {
+    matches!(
+        prog.decode(t, true).map(|i| i.instr),
+        Some(Instr::Branch { target, link: false, cond: armv4t::decode::Cond::Al, .. }) if target == t
+    )
+}
+
 /// Whether `t` is a short straight-line leaf that leaves lr and sp alone
 /// and returns with an unconditional `bx lr`. (LLVM's ARMv4T epilogue
 /// `pop {…}; pop {r0}; mov lr, r0; bx lr` is a case block's, not a leaf's.)
-fn is_leaf(a: &mut Analysis, t: u32) -> bool {
-    a.leaf(t).is_some_and(|body| {
+/// What it decodes goes in `reads`.
+fn is_leaf(a: &mut Analysis, t: u32, reads: &mut Vec<(u32, u32)>) -> bool {
+    let (record, n) = (a.record, a.res.reads.len());
+    a.record = true;
+    let body = a.leaf(t);
+    a.record = record;
+    reads.extend(a.res.reads.drain(n..));
+    body.is_some_and(|body| {
         matches!(
             body.last().map(|i| i.instr),
             Some(Instr::Bx {

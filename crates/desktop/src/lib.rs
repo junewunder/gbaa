@@ -2135,6 +2135,12 @@ pub fn run(
         // Only the interpreter sees every sp (runtime::Machine::low_sp).
         if code.is_none() {
             eprintln!("gbaa-desktop: lowest sp {:#010x}", m.low_sp);
+            if m.out_sp.0 <= m.out_sp.1 {
+                eprintln!(
+                    "gbaa-desktop: sp outside IWRAM {:#010x}..={:#010x}",
+                    m.out_sp.0, m.out_sp.1
+                );
+            }
         } else {
             eprintln!("gbaa-desktop: lowest sp not kept by compiled code (run with --interp)");
         }
@@ -2204,6 +2210,26 @@ pub fn run(
             pct(stats.interpreted_ram_cycles),
             stats.halted_cycles,
         );
+        if stats.n_ram_seeds > 0 {
+            // Where the fallback's RAM time went, by the key it was entered
+            // at: the RAM code the overlays miss.
+            let mut hot = stats.ram_seeds[..stats.n_ram_seeds].to_vec();
+            hot.sort_by_key(|e| core::cmp::Reverse(e.1));
+            let top: Vec<String> = hot
+                .iter()
+                .take(12)
+                .map(|&(k, c)| format!("0x{k:08x} {:.1}", pct(c)))
+                .collect();
+            eprintln!(
+                "fallback in RAM by entry key (points): {}{}",
+                top.join(", "),
+                if stats.n_ram_seeds == runtime::dispatch::MAX_RAM_SEEDS {
+                    " (key list full)"
+                } else {
+                    ""
+                }
+            );
+        }
         eprintln!(
             "settled: {} calls run on to their return site in place ({} left \
              elsewhere and unwound), {} IRQs and halts taken in the tick ({} \

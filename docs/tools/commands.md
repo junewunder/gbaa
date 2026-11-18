@@ -34,6 +34,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `$GBAA_DATA/truth/<name>.funcs.tsv` from any ELF (default the pokeemerald
   one), then scores a discovered-starts file against a truth file (default
   Emerald's). `just check` doesn't need them.
+- `gbaa-text-guess`: a text table from screens (docs/research/text-from-screen.md).
 - `just dis ROM ADDR [LEN] [--arm] [--names FILE]`: the disassembler,
   `gbaa-dis` (`crates/codegen/src/bin/gbaa-dis.rs`). LEN bytes (hex,
   default 0x40) at ROM address ADDR (hex, 0x08000000 and up), one
@@ -1024,13 +1025,13 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   room and the timing lab's walk (the route phase), sends Kirby through
   a door to its share of the 983 rooms and gives him its share of the 26
   copy abilities (game functions called between frames,
-  `core::call`), plays its share of 17 screens the rooms don't open in
-  each of the six languages (assets/kirby-fuzz-screens: the logo, title,
-  intro, menus, the four sub-games, the endings, game over, the link
-  screen, the pause menu and the collection room with every treasure,
-  reached through the game's own fade to a screen, `gLanguage` patched
-  in a copy of the ROM) and the pause menu's help with each ability in
-  each language, then fuzzes from kept states with RAM pokes (a warp,
+  `core::call`), plays its share of 35 screens the rooms don't open in
+  six languages (title, menus, sub-games, endings, link, pause,
+  collection room and more: the game's own fade to a screen, RAM pokes,
+  a screen's task put in a state; `gLanguage` patched in a ROM copy;
+  assets/kirby-fuzz-screens, assets/kirby-fuzz-last-misses) and the
+  pause help's 30 slots (each ability and three past the last), each
+  language, then fuzzes from kept states with RAM pokes (a warp,
   an ability, a refill, visited doors and treasures). The workers share
   `crates/fuzz/src/core.rs` with Emerald's. Then `gbaa-assets scan
   --run out/fuzz/NAME --curve 300` scores it against the static scan's
@@ -1270,7 +1271,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   a difference names both layouts, see `plant-layout`), and planted faults are caught:
   the spike's wrong store, psg-square's one wrong sample (`--features plant`).
   Play's sound against a native program's none (a host that records none)
-  fails unless `--no-audio WHY`. A lowest sp outside IWRAM fails; a code
+  fails unless `--no-audio WHY`. An sp outside IWRAM fails unless the holes file's `[[stack]]`s hold them all (skipped whole); a code
   copy's skip covers any variables copied with the code. `just check`'s
   last step: about 1 minute warm, 9 from a cold `target/` (2026-11-14).
   Writes `out/native-check/`. Heavy: builds three generated crates.
@@ -1304,7 +1305,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   and why), `[[jump]]` (an unresolved jump's targets as keys, its cases), `[[copy]]` (code
   the game copies to RAM that discovery's static copies don't have:
   `src`, `dst`, `len`, `roots` and why, as `just holes` prints its run's
-  copies; lifted at its RAM keys like a static copy, native/lift-ram-copies), `[[takes]]` (`entry`, `sites`, why: the indirect calls, each by the address the report gives it, that reach a function reading one of r4-r11 as its caller left it; they pass it theirs, as every direct call and tail call does, and any other pointer call to it stops the program, native/metroid-entry-reads; `sites = []` for code only jumped into, which no pointer call reaches, native/nightmare-entry-reads; a RAM copy's code entered only by a constant jump needs none, native/ram-copy-jump-only)
+  copies; lifted at its RAM keys like a static copy, native/lift-ram-copies), `[[takes]]` (`entry`, `sites`, why: the indirect calls, each by the address the report gives it, that reach a function reading one of r4-r11 as its caller left it; they pass it theirs, as every direct call and tail call does, and any other pointer call to it stops the program, native/metroid-entry-reads; `sites = []` for code only jumped into, which no pointer call reaches, native/nightmare-entry-reads; a RAM copy's code entered only by a constant jump needs none, native/ram-copy-jump-only), `[[stack]]` (`start`, `end`, why: stacks outside IWRAM, a task switcher's, which the lift ignores and the native check skips, native/nightmare-task-switch)
   and, at the top,
   `skip_fn_flow = "why"` (the function-address flow left out, saving
   the minutes it runs before its token bound stops it). A hard hole no stand-in
@@ -1444,8 +1445,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   native port's timing, decision 11), then the two PNGs must be identical. The recompiled
   run's `cycles:` line (in `out/<name>/recompiled.log`) splits guest time
   between compiled code and the fallback, how much of each ran in RAM
-  (decisions 1 and 7; code copied to IWRAM is compiled as overlays, #54),
-  and the log ends with `overlay invalidations: N`. It passes on june's ROM
+  (decisions 1 and 7; IWRAM copies compile as overlays, #54), then the
+  fallback's RAM time by entry key (`Stats::ram_seeds`), and the log ends with `overlay invalidations: N`. It passes on june's ROM
   (`$GBAA_DATA/agb/gba-cart1.gba`), jsmolka's `arm`/`thumb`, and the agb
   sprite example (`$GBAA_DATA/tools/obj-sprites/obj-sprites.gba 120`,
   hash `afc0b93200e5577f`).
