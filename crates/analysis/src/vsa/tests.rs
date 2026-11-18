@@ -211,6 +211,25 @@ fn reads_note_code_outside_the_function() {
     }
 }
 
+#[test]
+fn reads_note_a_callees_lead_in() {
+    // push {r4, lr}; cmp r0, #0; bne 1f; bl f; 1: pop {r4, pc};
+    // f: movs r3, #1; movs r2, #2; push {r4, lr}; b .
+    let p = thumb(&[
+        0xb510, 0x2800, 0xd101, 0xf000, 0xf801, 0xbd10, 0x2301, 0x2202, 0xb510, 0xe7fe,
+    ]);
+    let r = super::func::analyze(&p, ROM_BASE, true, &mut |_, _| Bl::NoReturn);
+    // The far-jump rule took f's lead-in for a prologue's: new data over
+    // it would change the result.
+    assert!(r.far_jumps.is_empty());
+    for a in [ROM_BASE + 12, ROM_BASE + 14, ROM_BASE + 16] {
+        assert!(
+            r.reads.iter().any(|&(lo, hi)| (lo..hi).contains(&a)),
+            "{a:x}"
+        );
+    }
+}
+
 /// The BIOS copy `swi n` makes with r2 = `ctl`, copying from the start of
 /// ROM to IWRAM.
 fn copy(n: u16, ctl: u32) -> Vec<(u32, u32, u32)> {

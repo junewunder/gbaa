@@ -487,13 +487,18 @@ code is a jump, unless the target looks like a function). As built now:
   instructions that write neither sp, lr nor pc (`is_push_lr`), for the
   caller and for a target. Modern GCC schedules the body's start ahead
   of the push: 125 of moonbeam's 1,050 pushing Thumb starts, the latest
-  after 7. The rule used to ask for the push first.
+  after 7. The rule used to ask for the push first. A variadic
+  function's `push {r0-r3}` may come ahead of it.
 - A target right where the function's reached code and pools end is a
   jump too, if its probe says nothing returns from it: the last cold
   blocks lie past everything a branch reaches (one rerun a block, 16 at
   most). Only then, since the next function starts there as well. A
   never-returning function taken for a block runs the same code with
-  the same registers; the opposite mistake zeroes them.
+  the same registers; the opposite mistake zeroes them. A lone `b .`
+  stays a function; one that saves nothing and ends in a call that never
+  returns is still taken for a block, losing its start if nothing else
+  calls it (no corpus case seen). What the rule decodes at a target
+  goes in the caller's reads, so new data there redoes it.
 
 **`sbcs rN, rN` after a compare** (Rogue 0x0820c629, r5; Imperium
 0x0821e331, r5 holding the entry r8): GCC's 0 or -1 of a condition,
