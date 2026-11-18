@@ -21,6 +21,13 @@
 //!   their frames than they see of its), it holds back one frame now and
 //!   then ([`Status::Skipped`]), so both guess about as far and neither
 //!   rolls back much more than the other.
+//! - **Catching up**: a peer far behind (back from a stall: a frozen
+//!   process, a machine under load) would take time sync a minute to
+//!   level, one hold in 13 frames, each changed input of its a rollback
+//!   that deep on the others. From [`CATCH_UP_FROM`] frames behind until
+//!   [`CATCH_UP_TO`], [`Rollback::catching_up`] says so, and its front end
+//!   runs frames as fast as it can, unpaced and their sound dropped
+//!   (multiplayer/stall-catch-up-paced).
 //! - **Inputs** travel unreliably: each message repeats every input from
 //!   the first one some other seat still lacks, as each seat's
 //!   [`Msg::Input::have`] tells, so a lost or late message costs nothing
@@ -55,6 +62,8 @@ pub struct Stats {
     pub stalls: u64,
     /// Frames held back for time sync.
     pub skips: u64,
+    /// Frames run while catching up ([`Rollback::catching_up`]).
+    pub caught_up: u64,
 }
 
 pub struct Rollback<C: Snapshot, T: Transport> {
@@ -92,8 +101,15 @@ pub struct Rollback<C: Snapshot, T: Transport> {
     said: Vec<(u32, u32)>,
     /// How far ahead of each seat this peer runs, smoothed, in frames.
     lead: Vec<f32>,
+    /// Each seat's inputs' one-way trip here, in this peer's frames at
+    /// its usual pace, smoothed: while catching up its lead is taken as
+    /// this seat's inputs it lacks less this, since the two sides'
+    /// counts, as time sync weighs them, lag by its own faster pace.
+    trip: Vec<f32>,
     /// Frames until time sync may hold one back again.
     cooldown: u32,
+    /// Far behind another seat: the front end runs unpaced.
+    catching: bool,
     /// A test's forced desync ([`Rollback::skew`]): from this frame on,
     /// this peer's consoles see this seat's input as the one given.
     skew: Option<(u32, C::Input)>,
@@ -102,6 +118,16 @@ pub struct Rollback<C: Snapshot, T: Transport> {
 
 /// Frames between two held back.
 const SKIP_EVERY: u32 = 12;
+
+/// How far behind another seat (frames, unsmoothed) a peer starts
+/// catching up: a third of a second, past what time sync levels quickly
+/// and far past any lead the network's jitter makes (a late message makes
+/// a peer look ahead, not behind).
+pub const CATCH_UP_FROM: f32 = 20.0;
+
+/// How near (frames behind, unsmoothed) catching up stops; time sync
+/// does the rest.
+pub const CATCH_UP_TO: f32 = 2.0;
 
 /// In a rollback, how many frames run again between two sends of this
 /// seat's inputs: a deep one (hundreds of frames, seconds on a loaded
@@ -149,7 +175,9 @@ impl<C: Snapshot, T: Transport> Rollback<C, T> {
             desyncs: Vec::new(),
             said: vec![(0, 0); seats],
             lead: vec![0.0; seats],
+            trip: vec![0.0; seats],
             cooldown: 0,
+            catching: false,
             skew: None,
             stats: Stats::default(),
         };
@@ -199,6 +227,13 @@ impl<C: Snapshot, T: Transport> Rollback<C, T> {
             .map(|s| self.lead[s])
             .reduce(f32::max)
             .unwrap_or(0.0)
+    }
+
+    /// Whether this peer is far behind another and catching up: its front
+    /// end runs the next frame at once, not when the pacer says, and drops
+    /// its sound (see the module's "Catching up").
+    pub fn catching_up(&self) -> bool {
+        self.catching
     }
 
     /// For a test, a desync: from frame `from` on, this peer's consoles
@@ -432,15 +467,30 @@ impl<C: Snapshot, T: Transport> Rollback<C, T> {
     fn hold_back(&mut self) -> bool {
         let me = self.inputs[self.seat].len() as f32;
         let mut ahead = 0f32;
+        // The lead over the furthest-ahead seat, unsmoothed.
+        let mut least = 0f32;
         for s in (0..self.seats).filter(|&s| s != self.seat) {
             // Each side's lead over the other, as each sees it; if both
             // run alike, both are the one-way trip.
             let mine = me - self.inputs[s].len() as f32;
             let theirs = self.said[s].0 as f32 - self.said[s].1 as f32;
+            let t = &mut self.trip[s];
+            let raw = if self.catching {
+                mine - *t
+            } else {
+                *t += ((mine + theirs) / 2.0 - *t) * 0.1;
+                (mine - theirs) / 2.0
+            };
+            least = least.min(raw);
             let l = &mut self.lead[s];
-            *l += ((mine - theirs) / 2.0 - *l) * 0.1;
+            *l += (raw - *l) * 0.1;
             ahead = ahead.max(*l);
         }
+        self.catching = if self.catching {
+            least < -CATCH_UP_TO
+        } else {
+            least <= -CATCH_UP_FROM
+        };
         if self.cooldown > 0 {
             self.cooldown -= 1;
             return false;
@@ -530,6 +580,7 @@ impl<C: Snapshot, T: Transport> Netplay for Rollback<C, T> {
         }
         self.console.step(&now).map_err(Error::Console)?;
         self.frame += 1;
+        self.stats.caught_up += self.catching as u64;
         Ok(Status::Stepped)
     }
 
@@ -568,8 +619,8 @@ impl<C: Snapshot, T: Transport> Netplay for Rollback<C, T> {
     fn summary(&self) -> String {
         let st = self.stats;
         format!(
-            "{} rollbacks, {} frames run again, deepest {}, {} stalls, {} held back",
-            st.rollbacks, st.rerun, st.deepest, st.stalls, st.skips
+            "{} rollbacks, {} frames run again, deepest {}, {} stalls, {} held back, {} run catching up",
+            st.rollbacks, st.rerun, st.deepest, st.stalls, st.skips, st.caught_up
         )
     }
 }
