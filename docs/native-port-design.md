@@ -1170,6 +1170,32 @@ indirect calls through `call_fn`, 8 jumps by value.
   play build hands to its interpreter wherever it reaches them. Fixing discovery's `bl`-pair
   and scanned-fragment cases would make the lifter's decoding a no-op.
 
+## The per-function check (`native/fn-check-any`)
+
+`just fn-check` (2026-11-14) tests a replacement for one function (a
+hand or LLM rewrite, as a `[[standin]]`) against the function as the
+lifter prints it: tests, not proof (june, 2026-11-13), bounded and kept
+as a seed, a budget and a digest, never as states.
+
+- `gbaa-lift --fn-check KEY` prints the lift twice: the reference
+  `ref_f_KEY` (never planted) and the replacement `new_f_KEY`; `f_KEY` is
+  the driver's wrapper (`native/fn_check.rs`). Callers treat it as a
+  stand-in.
+- The program runs headless; at each call, while the budget lasts, the
+  driver copies the state (RAM, `Hw::checkpoint`, the CPSR and banked
+  sps) and runs 8 variants (the call as it came, then its parameters and
+  RAM it read changed by the seeded generator), the reference then the
+  replacement from the same state, under a host that shows nothing. Then
+  the state goes back and the reference runs the call, so the program's
+  path doesn't move (`GBAA_FN_CHECK_OFF`/`_RUN_ON` compare it).
+- Compared: RAM but the stack below the entry sp, I/O, palette, VRAM,
+  OAM, frames, sp, the CPSR and what callers read (the unreplaced shape;
+  all four registers after a summary hole). The digest is of the
+  reference's ends: the same seed and budget give it again while the
+  lift and the program's path stay.
+- Not yet: the interpreter as a second reference (its own unit); a
+  function first called past the lift's stop can't be checked.
+
 ## The units that follow
 
 All are filed in the group (`native`); the ones this design added are

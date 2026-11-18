@@ -991,6 +991,33 @@ lift rom out="" *flags:
     [ "$lifted" = 0 ] || exit "$lifted"
     exit "$first"
 
+# The per-function check (native/fn-check-any; codegen::native's fn_check_texts and native/fn_check.rs; docs/tools/commands.md): lifts ROM with `gbaa-lift --fn-check KEY` for each KEY given (with the holes file as `just lift` finds it, and FLAGS: --replace FILE for replacements outside it, --seed N, --runs N, --plant AT for a planted wrong replacement of a function with no stand-in), into out/fn-check-<name>, builds it and runs it headless: each function's replacement against its lift from the program's own calls and their variants, until every budget is spent. Prints per function its runs, budget, time, seed and digest, and the first differences with the byte named. --frames N (default 18000) is where it gives up waiting for calls. Fails on a difference or a budget not spent. Heavy: builds a generated crate.
+[positional-arguments]
+fn-check rom *flags:
+    #!/usr/bin/env bash
+    set -eu
+    rom={{quote(join(invocation_directory(), rom))}}
+    name=$(basename "$rom" .gba | tr '[:upper:]' '[:lower:]')
+    shift
+    frames=18000
+    args=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --frames) frames=$2; shift 2 ;;
+            --name) name=$2; shift 2 ;;
+            *) args+=("$1"); shift ;;
+        esac
+    done
+    out=out/fn-check-$name
+    holes=()
+    if [ -f "holes/$name.toml" ]; then holes=(--holes "holes/$name.toml")
+    elif [ -f "mods/$name/holes.toml" ]; then holes=(--holes "mods/$name/holes.toml"); fi
+    {{lock}} cargo build -q --release -p codegen --bin gbaa-lift
+    mkdir -p "$out"
+    {{cap}} MemoryMax=4G target/release/gbaa-lift "$rom" "$out" --name "fn-check-$name" "${holes[@]}" "${args[@]}" > "$out.lift.txt" || { tail -5 "$out.lift.txt"; exit 1; }
+    just build-recompiled "$out"
+    {{cap}} MemoryMax=3G target/recompiled/release/gbaa-native-fn-check-"$name" --headless --frames "$frames"
+
 # Where a built lift stops (native/native-first-stop; codegen::native::first_stop; docs/tools/commands.md): runs OUT's program (a lift `just lift` built into target/recompiled) headless for 600 frames in its own 3 GB scope and writes how far it got to OUT/metrics.toml ([run]: frames_run, stop, what, detail, functions) and the end of OUT/report.txt: every frame, or the stop's kind (an unmodelled I/O register by address and name, memory the program hasn't got, a call to no function, another panic, the time limit, killed) with the lifted functions on the stack. `just lift` ends with it. ARGS: --frames N, --time-limit SECONDS, --bin FILE, --not-built (the build failed). A lift with hard holes can't build, so its stop is not-built and nothing is run; a build that failed with none records no run (it may only have been refused or killed); a binary older than OUT's sources is refused. A stop isn't a failure: exits 0 once recorded.
 first-stop out *args:
     {{lock}} cargo build -q --release -p codegen --bin gbaa-first-stop
