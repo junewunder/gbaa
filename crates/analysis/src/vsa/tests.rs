@@ -263,3 +263,36 @@ fn bios_copies_through_a_wrapper() {
         [(ROM_BASE, 0x0300_0000, 16)]
     );
 }
+
+/// The compilers' trap encodings are traps; other undefined encodings
+/// (Thumb 0xde00, an ARM `push`'s high half read as Thumb) are not.
+#[test]
+fn compiler_traps_are_known_by_encoding() {
+    use super::func::is_trap;
+    assert!(is_trap(0xdeff, true));
+    assert!(is_trap(0xdefe, true));
+    assert!(is_trap(0xe7ff_defe, false));
+    assert!(is_trap(0xe7f0_00f0, false));
+    assert!(!is_trap(0xde00, true));
+    assert!(!is_trap(0xe92d, true));
+    assert!(!is_trap(0xdeff, false));
+}
+
+#[test]
+fn an_access_keeps_the_stride_its_addresses_step_by() {
+    use super::func::Access;
+    let si = Dom::Si {
+        s: 24,
+        lo: 0x0834_5d04,
+        hi: 0x0834_5d04 + 24 * 255,
+    };
+    let a = Access::of(false, &si);
+    assert_eq!((a.hull, a.stride), (Some((0x0834_5d04, 0x0834_74ec)), 24));
+    // A constant has none; joined with the table, they step by what both do.
+    let k = Access::of(false, &Dom::Const(0x0834_5d10));
+    assert_eq!(k.stride, 0);
+    assert_eq!(a.join(k).stride, 12);
+    assert_eq!(k.join(a).stride, 12);
+    let set = Dom::from_vals(vec![0x0800_0010, 0x0800_0018, 0x0800_0030]);
+    assert_eq!(Access::of(false, &set).stride, 8);
+}

@@ -2,8 +2,9 @@
 //! section 6): the hole classification the hole report prints and the
 //! lifter reuses.
 //!
-//! Inputs are the ROM's [`Discovery`], its IWRAM overlays
-//! ([`crate::discovery::overlays`]), what a coverage run saw ([`Run`]:
+//! Inputs are the ROM's [`Discovery`], its RAM overlays
+//! ([`crate::discovery::overlays`], or with the run's evidence
+//! [`ram_copies`]), what a coverage run saw ([`Run`]:
 //! filled by `gbaa-holes`, which runs the interpreter) and, optionally, the
 //! holes the function summaries recorded (`codegen::saves::summarize`).
 //! [`classify`] sorts them into [`Report`]'s lists.
@@ -27,11 +28,21 @@
 //!   the run executed at the top level of an IRQ, and the rest of its
 //!   function) and outside boot (code that ran only in the first frame, and
 //!   the rest of its function: crt0 setting up the stacks);
-//! - a BIOS call the library doesn't implement ([`bios_implemented`]);
+//! - a BIOS call the native lifter doesn't print ([`bios_implemented`]);
 //! - a call through a register the run saw land on an address that isn't
 //!   a known function start;
-//! - a function summary whose hole is a return with r4-r11 or sp changed
-//!   (a run-time sp adjustment: a variable-length array).
+//! - a function summary whose hole breaks the lift's calling convention
+//!   ([`SUMMARY_HARD`]): a return with sp changed (a run-time sp
+//!   adjustment: a variable-length array), a read of r4-r11 a callee
+//!   changed or that came in as a parameter.
+//!
+//! The flash save library's stack routines ([`crate::flash`]) are none of
+//! these: a call into RAM whose target held a recognised routine every time
+//! it was called is a hardware-library call ([`Report::flash`]), and the
+//! RAM it ran (changed or not, discovered or not) isn't counted. The
+//! exemption is by address: other code run there without a call into it
+//! (a fall-through, a plain `bx`) would go uncounted too; the run keeps
+//! only each address's first bytes, so it can't tell.
 //!
 //! **Not discovered** ([`Report::undiscovered_bytes`]) is the bytes of code
 //! the run executed that discovery (or an overlay's) didn't find. It ranks
@@ -113,7 +124,15 @@ pub struct Run {
     /// progress of their own. By the branch's address: the longest such
     /// streak.
     pub busy_loops: BTreeMap<u32, u32>,
+    /// Calls into RAM: by target (interworking form), the distinct
+    /// [`RAM_CALL_BYTES`] bytes there when called. The flash library's
+    /// stack routines are recognised from these ([`crate::flash`]).
+    pub ram_calls: BTreeMap<u32, BTreeSet<Vec<u8>>>,
 }
+
+/// How many bytes at a RAM call's target the run keeps: more than the
+/// longest routine [`crate::flash`] recognises.
+pub const RAM_CALL_BYTES: u32 = 64;
 
 /// How many qualifying iterations in a row make a busy-wait loop. A wait
 /// spins until the interrupt comes, up to a frame's worth of iterations
@@ -121,11 +140,23 @@ pub struct Run {
 /// `FlagGet` per item: 27) stops sooner.
 pub const BUSY_ITERATIONS: u32 = 64;
 
-/// Whether the runtime's BIOS (`runtime::bios`, decision 12) implements
-/// call `n`: everything up to `SoundGetJumpList` (0x2A) except
-/// `HardReset` (0x26).
+/// The BIOS calls the native lifter prints (`gbaa-lift`'s prelude,
+/// `crates/codegen/src/native/prelude.rs`): `SoftReset`,
+/// `RegisterRamReset`, `Halt`, `Stop`, `IntrWait`, `VBlankIntrWait`,
+/// `Div`, `Sqrt`, `ArcTan2`, `CpuSet`, `CpuFastSet`, `BgAffineSet`,
+/// `ObjAffineSet`, the LZ77, Huffman and RL decompressors, `SoundBias`,
+/// `MidiKey2Freq`, `MultiBoot` and `SoundDriverVSyncOff`. Every other call
+/// is a hard hole in a native build, though the play build's BIOS
+/// (`runtime::bios`) has nearly all of them.
+pub const NATIVE_BIOS: &[u8] = &[
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x08, 0x0A, 0x0B, 0x0C, 0x0E, 0x0F, 0x11, 0x12, 0x13,
+    0x14, 0x15, 0x19, 0x1F, 0x25, 0x28,
+];
+
+/// Whether a native build can make BIOS call `n`: the lifter prints it
+/// ([`NATIVE_BIOS`]).
 pub fn bios_implemented(n: u32) -> bool {
-    n <= 0x2A && n != 0x26
+    u8::try_from(n).is_ok_and(|n| NATIVE_BIOS.contains(&n))
 }
 
 /// An indirect jump Recovery doesn't resolve.
@@ -214,6 +245,16 @@ pub struct RamRun {
     pub rom_src: Option<u32>,
 }
 
+/// A call into RAM the hardware library stands in for: the flash
+/// library's stack routine `routine` at `target` (interworking form),
+/// `len` bytes of code.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FlashCall {
+    pub target: u32,
+    pub routine: crate::flash::Routine,
+    pub len: u32,
+}
+
 /// Summary holes of one kind.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SummaryKind {
@@ -228,11 +269,21 @@ pub struct Report {
     pub unresolved: Vec<Unresolved>,
     /// The overlays' Recovery.
     pub overlay_unresolved: Vec<Unresolved>,
+    /// Jumps to one constant RAM address ([`JumpRes::Ram`]) where an
+    /// overlay discovered a function: resolved, a tail call into it (m4a's
+    /// `SoundMain` into its IWRAM copy). Not holes.
+    pub ram_jumps: Vec<(u32, u32)>,
     pub ret: Vec<RetHole>,
-    /// RAM code that changed while it ran.
+    /// RAM code that changed while it ran, but for the flash routines'.
     pub ram_changed: Vec<RamRun>,
+    /// Calls into RAM that are the flash library's stack routines: not
+    /// holes, the hardware library's calls.
+    pub flash: Vec<FlashCall>,
     /// RAM code the run executed that no overlay discovered.
     pub ram_undiscovered: Vec<RamRun>,
+    /// ROM code the run executed that discovery didn't find, as runs
+    /// (`rom_src` is `None`).
+    pub rom_undiscovered: Vec<RamRun>,
     pub cpu: Vec<CpuHole>,
     /// `swi`s the library doesn't implement: (address, number).
     pub bios: Vec<(u32, u32)>,
@@ -245,9 +296,13 @@ pub struct Report {
     /// not counted as hard until the owner decides how a native program
     /// lets time pass in them.
     pub busy_loops: Vec<(u32, u32)>,
-    /// CPU-state instructions and unimplemented `swi`s left out because
-    /// only the pointer scan found their code and the run never ran it.
+    /// CPU-state instructions left out because only the pointer scan
+    /// found their code and the run never ran it.
     pub scanned_skipped: usize,
+    /// BIOS calls the lifter doesn't print left out the same way: the
+    /// lifter lifts that code, so its BIOS holes are [`Report::bios`]
+    /// and these.
+    pub scanned_bios: usize,
     /// Bytes of ROM code executed that discovery didn't find.
     pub rom_undiscovered_bytes: u32,
     /// Bytes of RAM code executed that no overlay discovered.
@@ -276,12 +331,15 @@ impl Report {
             .count()
     }
 
+    /// The functions with a hard summary hole, each once whatever kinds
+    /// it has.
     pub fn hard_summary(&self) -> usize {
         self.summary
             .values()
             .filter(|k| k.hard)
-            .map(|k| k.funcs.len())
-            .sum()
+            .flat_map(|k| &k.funcs)
+            .collect::<BTreeSet<_>>()
+            .len()
     }
 
     /// Every hard hole, counted once per site of each kind (a function,
@@ -298,6 +356,16 @@ impl Report {
             + self.hard_summary()
     }
 
+    /// The flash library's routines the run called on the stack, each
+    /// once however many places it was copied to.
+    pub fn flash_routines(&self) -> usize {
+        self.flash
+            .iter()
+            .map(|f| f.routine)
+            .collect::<BTreeSet<_>>()
+            .len()
+    }
+
     pub fn undiscovered_bytes(&self) -> u32 {
         self.rom_undiscovered_bytes + self.ram_undiscovered_bytes
     }
@@ -309,7 +377,7 @@ impl Report {
             "{game}: hard {} (jumps {}+{}, return arithmetic {}, RAM code changed {}, \
              CPU state {}, BIOS {}, calls to non-entries {}, summaries {}); \
              not discovered {} bytes ({} ROM, {} RAM) of {} reached; \
-             busy loops calling functions {}",
+             busy loops calling functions {}; flash library stand-ins {}",
             self.hard(),
             self.unresolved.len(),
             self.overlay_unresolved.len(),
@@ -324,6 +392,7 @@ impl Report {
             self.ram_undiscovered_bytes,
             self.reached_bytes,
             self.busy_loops.len(),
+            self.flash_routines(),
         )
     }
 }
@@ -420,25 +489,50 @@ fn cpu_kind(i: &Instr) -> Option<CpuKind> {
     }
 }
 
-/// The text of a summary hole with its addresses taken out, for grouping.
-/// The callee-saves proof's holes (`callee-saves: …`) group with the
-/// summary's own of the same kind.
+/// The text of a summary hole with its addresses and detail taken out,
+/// for grouping: `0x08001234: returns with r4-r11 changed: r4 = unknown`
+/// is `returns with r4-r11 changed`. The callee-saves proof's holes
+/// (`callee-saves: …`) group with the summary's own of the same kind.
 pub fn summary_kind(hole: &str) -> String {
     let hole = hole.strip_prefix("callee-saves: ").unwrap_or(hole);
     let words: Vec<&str> = hole
         .split_whitespace()
         .filter(|w| !w.starts_with("0x"))
         .collect();
-    words.join(" ").trim_end_matches(',').to_string()
+    let kind = words.join(" ");
+    let kind = kind.split_once(": ").map_or(kind.as_str(), |(k, _)| k);
+    kind.trim_end_matches(',').to_string()
 }
 
-/// Whether a summary hole of this kind is hard: a return with r4-r11 or
-/// sp changed (sp moved by a run-time amount, as a variable-length array
-/// does). The other kinds are counted under other holes (an unknown jump,
-/// a mode change, RAM code) or aren't holes for a native build (an
-/// indirect call is an `FnRef`).
+/// The summary hole kinds that are hard (`codegen::saves`): the lift keeps
+/// each caller's r4-r11 and sp in its own locals and passes only r0-r3,
+/// so it is wrong where a function returns with sp moved (by a run-time
+/// amount, as a variable-length array does), where a caller reads one of
+/// r4-r11 that a callee changed, where a function entered through a
+/// pointer reads one of r4-r11 as it came and some of its bits reach a use
+/// (a register parameter: an address, a condition, a value stored, passed
+/// on or returned; a direct call passes it, `takes r4-r11 from its
+/// callers`, soft; the zero of a function that only passes it on is the
+/// hole of the read it reaches), or where a function that changes them
+/// may be called through a pointer. A return with r4-r11 changed (hand-written code's
+/// scratch registers) is not itself hard: the reads are. Nor is a read
+/// whose every bit is masked away (`masks away r4-r11's entry bits`), the
+/// caller's frame pointer read through a frame record, or a read in a
+/// function only jumped into, which takes every register (nothing
+/// called tail-calls or falls into it). The other kinds are counted under other
+/// holes (an unknown jump, a mode change, RAM code) or aren't holes for a
+/// native build (an indirect call is an `FnRef`).
+pub const SUMMARY_HARD: [&str; 4] = [
+    "returns with sp changed",
+    "reads r4-r11 a callee changed",
+    "reads r4-r11 at entry",
+    "changes r4-r11 and may be called through a pointer",
+];
+
+/// Whether a summary hole of this kind ([`summary_kind`]) is hard
+/// ([`SUMMARY_HARD`]).
 pub fn summary_hard(kind: &str) -> bool {
-    kind.contains("returns with r4-r11 or sp changed")
+    SUMMARY_HARD.contains(&kind)
 }
 
 /// One instruction known from any source.
@@ -446,6 +540,34 @@ pub fn summary_hard(kind: &str) -> bool {
 struct Known {
     thumb: bool,
     raw: u32,
+}
+
+/// The flash library's stack routines the run called: a RAM target is one
+/// only if every version of its bytes the run saw called was recognised.
+pub fn flash_calls(run: &Run) -> Vec<FlashCall> {
+    let mut flash: BTreeSet<FlashCall> = BTreeSet::new();
+    for (&target, versions) in &run.ram_calls {
+        let sigs: Option<Vec<_>> = versions
+            .iter()
+            .map(|b| crate::flash::recognise(b))
+            .collect();
+        for s in sigs.unwrap_or_default() {
+            flash.insert(FlashCall {
+                target,
+                routine: s.routine,
+                len: s.len,
+            });
+        }
+    }
+    flash.into_iter().collect()
+}
+
+/// Whether `a` is in one of `flash`'s routines.
+fn in_flash(flash: &[FlashCall], a: u32) -> bool {
+    flash.iter().any(|f| {
+        let start = f.target & !1;
+        a >= start && a < start + f.len
+    })
 }
 
 /// Sort what discovery, the overlays, the run and the summaries say into
@@ -460,13 +582,20 @@ pub fn classify(
     let mut r = Report::default();
     let reached = |a: u32| run.code.contains_key(&(a & !1));
 
-    // Indirect jumps.
+    let flash = flash_calls(run);
+    let flash_targets: BTreeSet<u32> = flash.iter().map(|f| f.target).collect();
+    let in_flash = |a: u32| in_flash(&flash, a);
+
+    // Indirect jumps. One to a constant RAM address an overlay has a
+    // function at is a tail call into it.
+    let overlay_func = |t: u32| overlays.iter().any(|o| o.disc.funcs.contains_key(&t));
     let unres = |rec: &crate::jumptable::Recovery| -> Vec<Unresolved> {
         rec.jumps
             .iter()
             .filter_map(|(&at, j)| match j {
                 JumpRes::Resolved(_) => None,
-                JumpRes::Unresolved => Some(Unresolved {
+                JumpRes::Ram(t) if overlay_func(*t) => None,
+                JumpRes::Unresolved | JumpRes::Ram(_) => Some(Unresolved {
                     at,
                     rejected: false,
                     reached: reached(at),
@@ -480,8 +609,27 @@ pub fn classify(
             .collect()
     };
     r.unresolved = unres(&disc.rec);
+    let ram_jumps = |rec: &crate::jumptable::Recovery| -> Vec<(u32, u32)> {
+        rec.jumps
+            .iter()
+            .filter_map(|(&at, j)| match j {
+                JumpRes::Ram(t) if overlay_func(*t) => Some((at, *t)),
+                _ => None,
+            })
+            .collect()
+    };
+    r.ram_jumps = ram_jumps(&disc.rec);
     for o in overlays {
+        r.ram_jumps.extend(ram_jumps(&o.disc.rec));
         r.overlay_unresolved.extend(unres(&o.disc.rec));
+        // A ROM source and its RAM copy count once, at the copy: the
+        // copy's analysis of the jump is the one that runs (unless the
+        // run ran the ROM original too).
+        r.unresolved.retain(|u| {
+            u.reached
+                || !(o.src..o.src + o.len).contains(&u.at)
+                || !o.disc.rec.jumps.contains_key(&(o.dst + (u.at - o.src)))
+        });
     }
 
     // Every instruction known: discovered (ROM, overlays) and run.
@@ -517,6 +665,7 @@ pub fn classify(
             }
         }
     }
+    let mut rom_missed: Vec<(u32, &Seen)> = Vec::new();
     for (&a, s) in &run.code {
         let size = if s.thumb { 2 } else { 4 };
         let k = known.entry(a).or_insert(Known {
@@ -535,6 +684,9 @@ pub fn classify(
         if !is_ram(a) {
             r.rom_reached_bytes += size;
         }
+        if in_flash(a) {
+            continue;
+        }
         let new = (a..a + size)
             .step_by(2)
             .filter(|h| !covered.contains(h))
@@ -544,8 +696,12 @@ pub fn classify(
             r.ram_undiscovered_bytes += new;
         } else {
             r.rom_undiscovered_bytes += new;
+            if new > 0 {
+                rom_missed.push((a, s));
+            }
         }
     }
+    r.rom_undiscovered = runs(rom_missed.into_iter(), |_| None);
 
     // Function starts, for grouping: discovered, overlays', run's call
     // targets and IRQ handlers.
@@ -575,7 +731,7 @@ pub fn classify(
     let ram: Vec<(u32, &Seen)> = run
         .code
         .iter()
-        .filter(|(a, _)| is_ram(**a))
+        .filter(|(a, _)| is_ram(**a) && !in_flash(**a))
         .map(|(a, s)| (*a, s))
         .collect();
     r.ram_changed = runs(
@@ -672,7 +828,7 @@ pub fn classify(
             };
             if bios_implemented(n) {
             } else if skip {
-                r.scanned_skipped += 1;
+                r.scanned_bios += 1;
             } else {
                 r.bios.push((a, n));
             }
@@ -791,12 +947,13 @@ pub fn classify(
         .map(|a| a & !1)
         .collect();
     for (&t, &site) in &run.indirect_calls {
-        if !entries.contains(&(t & !1)) {
+        if !entries.contains(&(t & !1)) && !flash_targets.contains(&t) {
             r.indirect_non_entry.push((t, site));
         }
     }
 
     r.busy_loops = run.busy_loops.iter().map(|(&a, &n)| (a, n)).collect();
+    r.flash = flash;
 
     if let Some(sums) = summaries {
         for (&f, holes) in sums {
@@ -861,6 +1018,9 @@ fn runs<'a>(
         })
         .collect()
 }
+
+mod copies;
+pub use copies::{RamCopy, ram_copies};
 
 #[cfg(test)]
 mod tests;

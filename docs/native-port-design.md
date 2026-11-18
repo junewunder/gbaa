@@ -268,7 +268,23 @@ g.hw.sound.fifo_a.stream(Ref::of(&g.gSoundInfo.pcmBuffer));
   `g.hw.save.read(sector, &mut buf)`/`write`, persisted as the same `.sav`
   file the play build writes, so the two read each other's saves. A game
   whose save code isn't recognised keeps its chip protocol, through
-  `hw.save.cmd8(addr, v)`, the chip emulation's own entry.
+  `hw.save.cmd8(addr, v)`, the chip emulation's own entry. Built so far
+  (native/flash-stack-standin): `Hw::save` is the chip emulation itself,
+  and the three routines `AgbFlash` copies onto the stack and calls there
+  (`ReadFlash1`, `ReadFlash_Core`, `VerifyFlashSector_Core`; recognised at
+  the call by their bytes, `hw::flash::recognise`) are `hw::flash::{read_byte, read,
+  verify}` over it. A lifted program's `call_fn` makes that call when a
+  call into RAM finds no function there but one of the routines
+  (native/lift-flash-routines; Metroid's SRAM library calls the same
+  agbcc code).
+- **Library code with its own convention is the runtime's.** libgcc's
+  soft-float `__muldf3` and `__divdf3` (modern GCC's games: moonbeam,
+  Emerald Rogue, Imperium) call their special-case paths with r4 and r5
+  coming back changed, which the lift's calling convention can't carry.
+  `analysis::softfloat` recognises them by their code, and every lift
+  prints each as a call of `runtime::softfloat::{muldf3, divdf3}`,
+  bit-exact on libgcc's results (native/libgcc-df-standins;
+  `just softfloat-check ROM` pins them against the game's own copy).
 
 **Prior art.** The PC ports of Super Mario 64 (`sm64-port`, `sm64ex`) and
 Ocarina of Time (Ship of Harkinian, on `libultraship`) compile the
@@ -385,6 +401,11 @@ mode and calling `gIntrTable[n]`), agb's handler, or a game's own.
   recognises the standard prologue and epilogue (save SPSR, switch to
   system mode, re-enable IRQs, call, restore) and drops them, leaving
   the call. Unrecognised mode switches are holes.
+  *As built* (native/lift-psr-boot-irq): printed, not dropped, in the
+  reset and each handler stored to `IRQ_HANDLER_PTR`, over the prelude's
+  `msr_cpsr` (banks sp by mode, runs the IRQs a cleared I releases),
+  `mrs_cpsr` and `Game::spsr` (`codegen::native`, `PsrFns`); such a
+  wrapper nests. An agbcc wrapper's `add lr, pc, #0; bx r0` is a call to discovery, so the half after it is lifted (native/lift-irq-wrapper-tail; `agb/native-irq-wrapper` runs both).
 - **No nesting.** Handlers run to completion at the points above (and
   when a library copy's cost crosses an event, section 7), never
   inside another handler or inside game code. A real GBA can take the
@@ -565,6 +586,22 @@ one), `defines()`, `keeps` and `holes` (a call to a callee whose run lost
 its returns to a hole is one, and takes it to leave r0–r3 unknown);
 `Summaries::root` follows a pass-on chain.
 
+**With callee sets** (`native/indirect-call-args`, 2026-11-06):
+`gbaa-recompile --summaries --callee-sets` takes an indirect call whose
+callee set the function-address flow proves complete
+(`codegen::native::fnref`) as calling exactly those
+(`codegen::saves::summarize_sets`). Not measured on Emerald yet: of its
+553 indirect calls, none has a set, because the flow didn't finish on
+its 15,158 functions in 35 minutes (past 8 GB and growing). With
+`native/fnref-flow-scale` landed (Metroid settles in 151 s) it still
+didn't: killed at a 14 GB cap after 5 minutes (2026-11-07). Since
+2026-11-13 the run no longer dies or stops at its token bound (those 48M
+were copies; equal sets kept once, it holds 24M at 1.5 GB), but seven
+rounds in 53 minutes hadn't settled it: still no set is complete. Making it
+settle on Emerald is `native/fnref-flow-emerald`; the re-measurement
+of the 656, and what keeps sets incomplete (callbacks stored through RAM
+globals such as `gMain.callback1`), is `native/indirect-call-args-emerald`.
+
 ## 6. Holes
 
 There is no interpreter to run what the lift doesn't cover, so every gap
@@ -675,8 +712,9 @@ with the same key presses, frame by frame:
   `route-check` does today, `crates/route-check/src/main.rs`);
 - EWRAM and IWRAM equal outside the guest stack, below the lowest `sp`
   the play build's run reached (it reports it), and outside the
-  destinations of code copies (`Discovery::copies`, the copies seen
-  running): the native program runs that code as Rust functions and
+  destinations of code copies (`Discovery::copies`, and the copies seen
+  running that the lifter's holes file lists as `[[copy]]`, which
+  `route-check --native` reads from it): the native program runs that code as Rust functions and
   doesn't copy it, so those bytes are the one other range it leaves
   empty. A copy that also carries data (agb's `.iwram` holds variables
   too) has its data's globals in `Ram` as usual, initialised from the
@@ -730,17 +768,17 @@ showed:
   compared. A lift of the library itself (stage A without recognition)
   would hold them and need no list. The recogniser should emit the list.
 - **Not compared:** `KEYINPUT` (the play build records after the
-  present's key latch), `SOUNDCNT_X`'s channel status (only a mixer sets
-  it), the FIFOs, timers, DMA and serial registers (the library has none
-  of them), and psg-square's audio: the library plays nothing, so its
-  sound registers are compared and its samples are reported "NOT
-  compared". The spike's audio is silence in the play build, which the
-  check counts as equal to the native program's none; play's sound
-  against none fails unless the run gives `--no-audio WHY`.
+  present's key latch), and the DMA registers (the typed copies store
+  none; the serial port's are compared). At first the sound wasn't
+  either: the library had no mixer, so psg-square's samples were reported "NOT compared". Since
+  native/hw-sound (below) every frame's samples are, with `SOUNDCNT_X`'s
+  status, the FIFOs' last stores and the timers. Play's sound against a
+  host that records none still fails unless the run gives `--no-audio
+  WHY`.
 - **Gaps the next programs will hit:** a code copy is skipped whole, so
   an agb `.iwram` static copied with the code isn't compared (the skip's
-  line says so); a lowest sp outside IWRAM (r13 as a scratch register, a
-  stack in EWRAM) fails the check rather than skip other RAM.
+  line says so); an sp outside IWRAM (r13 as a scratch register) fails the check rather than skip other RAM,
+  unless a holes file's `[[stack]]` holds all the interpreter saw (`Machine::out_sp`; Nightmare's task stacks).
 - **Library fixes it forced:** `IF` is requested as V-blank's line
   starts, before the present, and handled after (the record saw `IF` 0
   where the play build had 1); `hw::spend` moves the beam by cycles
@@ -748,6 +786,74 @@ showed:
   is the play build's own `CpuSet` price, so agb's crt0 copies take the
   play build's three lines before `main` (psg-square's first frame shows
   them: three black lines, then forced-blank white).
+
+### Sound in the library as built (`native/hw-sound`, 2026-11-06)
+
+The library mixes with the play build's own sound path, not a copy:
+
+- **One path, two hosts.** Every function of `runtime::sound` (the timers'
+  overflow walk, the FIFOs' pops and refills, the PSG, the mixer, a
+  store's effects: `sound::store`) runs on a `sound::Audio`: the I/O
+  block's sound and timer registers with the clock and `IF` (an `Io`),
+  the `Sound` state, and whatever refills a FIFO. The play build's `Bus`
+  is one (DMA1/2 refill, as before; its behaviour is unchanged, the
+  functions only generic). `hw::Sound` is the other: an `Io` used for
+  the sound registers (`0x60`-`0xA7`) and timers (`0x100`-`0x10F`) only,
+  stored and read as the play build stores and reads them, the mixer,
+  and `hw::FifoDma` for DMA1/2 aimed at a FIFO (`Hw::fifo_dma`), whose
+  `read: fn(&mut G, u32) -> u32` takes words from the program's memory
+  (ROM data, or the buffers a mixer fills). Timer and FIFO-DMA IRQs move
+  from that `IF` into `Irq::flags`. The chunks go to `Host::audio`, and
+  the native host records them as the play build's capture does.
+- **The library keeps the play build's clock.** Samples are exact to the
+  cycle, so the library's time is `Hw::now`, cycles since power-on, and
+  its waits run the play build's `Machine::sync` step for step: events
+  are the beam's half lines and the overflows of a timer something
+  listens to; each sync brings the sound up to the clock before each beam
+  event and after, hands the sound off when a buffer is half full, finds
+  the next event, then runs the handlers. A V-blank DMA callback returns
+  its price (`hw::dma_cycles`, the play build's), added after the
+  channels run, which moves where the frame's samples end; a FIFO refill
+  adds 10 cycles, as the play build's does. The waits start with a sync
+  where they are (the play build's halt store's), so a timer just set up
+  is an event. What changed for programs without sound: `halt` and
+  `wait_irq` return at the event whose handler ran (an H-blank's, not the
+  next line's start), and a `spend` across several events runs one
+  handler pass after them, as the play build takes one IRQ after its sync.
+  The lifter's check passed unchanged on all its programs.
+- **A store never refills.** A store (`Hw::write16`) has no `&mut G`, so it
+  can't read the program's memory; it doesn't need to, since every
+  overflow up to the clock was walked when the clock last moved (in a
+  sync, which can). One that found a FIFO due would panic.
+- **The checks:** psg-square now plays FIFO A from `WAVE` (and on into
+  `SCORE`, which follows it in ROM) through DMA1 on timer 0, and its
+  V-blank copy writes words at the copy's price; `agb/direct-sound` (new)
+  drives both FIFOs as a software mixer does, IWRAM double buffers
+  swapped by a cascaded timer's IRQ, whose handler re-latches DMA1/2 and
+  fills the buffer just played (its sound matches mGBA's for 299 frames).
+  Both pass `route-check --native` with audio equal every frame, and a
+  planted wrong sample in psg-square is caught. The card asked for "a
+  native bios-sound"; agb/bios-sound only calls the BIOS sound driver's
+  no-op stubs and plays nothing, so direct-sound is the direct-sound case.
+- **Not yet:** the price of `Dma::hblank_to`'s H-blank DMA on the clock
+  (no program needs it with sound yet).
+- **DMA by its registers** (native/hw-dma-registers, 2026-11-12):
+  `runtime::hw::dma_regs`. A lifted program that sets a channel up by
+  address (m4a's `SoundInit`, agbcc games' copy and fill macros) gets the
+  play build's channels: the registers stored in the sound's I/O block
+  through its masks, latched on enable as `dma::control_written`, an
+  immediate one run in the store through the program's memory
+  (`Native::dma_load`/`dma_store`; the prelude's `io_write16` calls
+  `hw::write_dma`) and priced as the play build's `io_write` (the clock
+  moves, no sync), V-blank and H-blank ones repeated at the beam's events
+  and priced there, a special DMA1/2 aimed at a FIFO becoming its
+  `FifoDma`, the IRQ at the end. Checked by `agb/native-dma` in the lift
+  check, each start set up by address, with a planted wrong `DMAxCNT`.
+  Not yet: the EEPROM's DMA.
+- **The serial port's registers** (native/hw-serial-registers): `0x120`-
+  `0x15F` but `KEYINPUT`, the play build's `Io` unplugged (`Io::sio_unplugged`,
+  mGBA's: a transfer on the internal clock ends in the store, its IRQ handled
+  at the next sync), compared by the native check. `agb/native-serial`.
 
 Once a mod edits the program, none of this applies: a mod is meant to
 differ. The oracle is for the unmodded native port, and a mod is checked
@@ -931,20 +1037,27 @@ macros, which DWARF doesn't carry.
 Built 2026-11-01 on quack: `codegen::native` (`crates/codegen/src/native.rs`,
 its prelude `native/prelude.rs`), the `gbaa-lift` binary, `just lift` and
 `just lift-check`. It prints a whole program from discovery, the IR and
-the summaries as one `src/main.rs`, with no `Machine`, CPU, cycles or
+the summaries as one `src/main.rs` (since `native/lift-modules`, a
+`main.rs` and modules of about 4,000 lines; `docs/native-stage-b.md`,
+"The first game"), with no `Machine`, CPU, cycles or
 dispatcher, and it is checked against the `--timing native` play build
 with the native check and no replaced-library list.
 
 **What it prints.**
 
 - Every function is `fn f_<key>(g: &mut Game, sp: u32, a: [u32; 4]) ->
-  Result<[u32; 4], Exit>`. r0-r3 go in and come back; r4-r12, `lr` and
+  Result<[u32; 4], Exit>`. (Since `native/lift-params`, only those whose
+  summary has a hole: the rest take their parameters and give their
+  results, `docs/native-stage-b.md`, piece 3.) r0-r3 go in and come back; r4-r12, `lr` and
   NZCV are Rust locals; each block's IR values are `let`s. Because every
   function keeps r4-r11 in its own locals, a callee can't change its
   caller's, so the lift is exact for any callee that follows AAPCS,
   whatever the summary proof says. The summary is printed above each
   function (`/// Reads {r0, r1}; returns {r0}`), and a function whose
-  summary says it really returns r4-r11 or sp changed is a hard hole.
+  summary breaks that (`analysis::holes::SUMMARY_HARD`: it returns sp
+  changed, reads r4-r11 a callee changed, or changes them and reads one
+  as it came, a register parameter) is a hard hole. One that only uses
+  r4-r11 as scratch, where no caller reads them after, is lifted as is.
   The 47-50 functions per program whose proof fails for other reasons
   (an indirect call, a callee that never returns) are listed in the
   report as soft.
@@ -960,8 +1073,8 @@ with the native check and no replaced-library list.
   through `call_fn`.
 - The stack stays where the game has it: `sp` is a parameter and the
   frames are IWRAM bytes. A frame recovered as Rust locals is stage B's
-  (section 1). `Game::sp` is the stack pointer at the last wait, where a
-  handler that switches to system mode puts its frames.
+  (section 1). `bank_sp` puts sp in its mode's bank at a wait or I/O store;
+  `Game::sp`, system mode's, is where a handler's frames go.
 - Memory is `ld8/16/32` and `st8/16/32` over `Game::ram` (EWRAM then
   IWRAM: the check layout is the only layout a byte program has), the
   library's I/O (`Hw::read16`/`write16`; the I/O block's unused
@@ -975,8 +1088,21 @@ with the native check and no replaced-library list.
   spends `cpu_set_cycles`; `Div`. Idle edges get `hw::idle`, spin edges
   `hw::spin` (`ExitInfo::idle`, the play build's own marks). IRQs go
   through the word at `0x0300_7FFC`, as the BIOS's stub calls it.
-- **Holes.** `holes/<game>.toml` gives stand-ins (`[[standin]]`, Rust
-  for one function, with why) and unresolved jumps' targets (`[[jump]]`).
+  The prelude has every call `analysis::holes::NATIVE_BIOS` lists
+  (native/lift-bios-calls, native/lift-bios-more). `SoftReset` clears
+  IWRAM's top 0x200 bytes, sets `Game::reset` and returns `Err(Exit)`,
+  which unwinds to `main`; `main` restarts the entry (or the EWRAM
+  function, if the reset flag says so) on the same `Game`, as the
+  hardware keeps EWRAM, VRAM and the registers, with sp, the CPSR and the
+  tasks fresh. One in an IRQ handler panics: the handler's caller drops
+  its `Err`. Code after a `SoftReset` or `HardReset` `swi` isn't the
+  function's (`func::successors`), and sp set to a constant in a function
+  that never returns (the SDK's reset) is no stack switch.
+- **Holes.** `holes/<game>.toml` (a commercial game's in the private
+  `mods/<game>/holes.toml`) gives stand-ins (`[[standin]]`, Rust
+  for one function, with why), unresolved jumps' targets (`[[jump]]`)
+  and code the game copies to RAM that only a run shows (`[[copy]]`, as
+  `just holes` prints it; lifted at its RAM keys, native/lift-ram-copies).
   Every agb program needs four stand-ins: portable_atomic's
   `interrupt::disable` and `restore` (`mrs`/`msr cpsr_c`, a critical
   section: `Game::cpsr`), agb's `InterruptHandler` (the IRQ wrapper's

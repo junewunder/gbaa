@@ -111,6 +111,11 @@ nothing that touches the world rewinds for free. No middle ground for now:
   hardware as a library, time only at waits, function pointers as IDs,
   holes as build errors, the play build as the oracle. Today's mod copies
   (cut functions running on `Machine`) are the older form.
+- **The native port replaces the mod view once it's ready (june,
+  2026-11-06).** Modding a game will mean editing its native port. The
+  mod view's readable form and mod copies are a stopgap until then, so
+  don't extend them past what's needed now. Source maps and names carry
+  over, because the native port takes its names from them.
 - **Settles the stack questions for mods:** no resumable mod functions, no
   replay-from-checkpoint, no held frame hand-off. The guest-RAM record that
   re-runs a lost mod call's block (`rt::modcall::resume`) is unsound under
@@ -609,11 +614,11 @@ BIOS wait, hangs, no time passing in it, until it is listed in
 timer 3 while storing to `RCNT` (listed, `0x082e2b6a`); the hole report
 only finds loops that call. A long loop of real work with a
 call passes its budget and takes half a line a pass. An H-blank handler
-runs at H-blank's start, and code after a wait it ends resumes there;
-`hw::wait_irq` returns at the next line's start instead, half a line
-later, and the library's half-line steps (`hw::dispstat`, `hw::spin`)
-don't run the H-blank handler where the play build does (the native
-check settles both). `route-check --timing native` serves
+runs at H-blank's start, and code after a wait it ends resumes there.
+(The library's waits once stepped whole lines, returning half a line
+later; since native/hw-sound they run event by event on the play build's
+clock, as its scheduler does, timer overflows included, and resume where
+it does.) `route-check --timing native` serves
 `--same-states`; a unit's own run still compares with mGBA's hashes, made
 at exact timing, so it fails there. Netplay's timed resumes
 (`interp_block`) don't see idle or spin edges.

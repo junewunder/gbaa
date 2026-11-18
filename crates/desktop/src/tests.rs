@@ -253,8 +253,8 @@ fn input_scripts() {
     let s = Script::parse("start@60, down@90+2,a@90").unwrap();
     assert_eq!(s.keys(59), 0);
     assert_eq!(s.keys(60), key::START);
-    assert_eq!(s.keys(60 + input::HOLD - 1), key::START);
-    assert_eq!(s.keys(60 + input::HOLD), 0);
+    assert_eq!(s.keys(60 + netplay::script::HOLD - 1), key::START);
+    assert_eq!(s.keys(60 + netplay::script::HOLD), 0);
     assert_eq!(s.keys(90), key::DOWN | key::A);
     assert_eq!(s.keys(91), key::DOWN | key::A);
     assert_eq!(s.keys(92), key::A);
@@ -1756,7 +1756,7 @@ fn rewound_runs() {
             rom.display(),
             out.display()
         );
-        run(&parse(&args).unwrap(), None, None).unwrap();
+        run(&parse(&args).unwrap(), None, None, &mut None).unwrap();
         let text = std::fs::read_to_string(out).unwrap();
         text.lines().map(String::from).collect::<Vec<_>>()
     };
@@ -1955,7 +1955,19 @@ fn netplay_options() {
     assert_eq!(o.save, Some(sav_in_folder("g")));
     let o = parse("g.gba --headless --server 127.0.0.1:7374 --host --delay 5").unwrap();
     assert_eq!((o.role, o.delay), (Some(room::Role::Host), Some(5)));
+    let o = parse("g.gba --headless --server s --host --players 4").unwrap();
+    assert_eq!(o.players, Some(4));
+    // A seat may start from a state, as a window's game goes on into its
+    // session (multiplayer/join-without-restart); --state-out stays out.
+    let o = parse("g.gba --headless --server s --join abcdef --state p2.state").unwrap();
+    assert_eq!(o.state.as_deref(), Some(Path::new("p2.state")));
+    let e = parse("g.gba --headless --server s --host --state-out x").unwrap_err();
+    assert!(e.contains("--state-out"), "{e}");
     for (args, why) in [
+        ("--server s --host --players 5", "--players"),
+        ("--server s --host --players 1", "--players"),
+        ("--server s --join abcdef --players 3", "host's"),
+        ("--players 3", "with --server"),
         ("--host", "--server"),
         ("--server s", "--host or --join"),
         ("--server s --join abc", "room code"),
@@ -1968,6 +1980,30 @@ fn netplay_options() {
         ("--server s --host --rewind 1+2", "netplay"),
         ("--server s --host --fast-forward", "netplay"),
         ("--delay 3", "with --server"),
+    ] {
+        let e = parse(&format!("g.gba {args}")).unwrap_err();
+        assert!(e.contains(why), "{args}: {e}");
+    }
+}
+
+#[test]
+fn wireless_options() {
+    let o = parse("g.gba --server s --wireless --host --players 3").unwrap();
+    assert!(o.wireless);
+    assert_eq!((o.role, o.players), (Some(room::Role::Host), Some(3)));
+    let o = parse("g.gba --headless --server s --wireless --join abcdef --frames 9").unwrap();
+    assert_eq!(o.role, Some(room::Role::Join(*b"ABCDEF")));
+    for (args, why) in [
+        ("--wireless", "--server"),
+        ("--wireless --server s", "--host or --join"),
+        ("--wireless --host", "--server"),
+        ("--server s --wireless --host --delay 2", "rollback"),
+        (
+            "--server s --wireless --join abcdef --state p.state",
+            "--state",
+        ),
+        ("--server s --wireless --host --link b.sav", "--link"),
+        ("--server s --wireless --host --fast-forward", "wireless"),
     ] {
         let e = parse(&format!("g.gba {args}")).unwrap_err();
         assert!(e.contains(why), "{args}: {e}");
@@ -2177,4 +2213,38 @@ fn netplay_guests_compute_what_unwinding_does_and_roll_back() {
         g.step(&[script(0, f), script(1, f)]).unwrap();
     }
     assert_eq!(g.hash(), end);
+}
+
+/// Netplay's pacer catches a late frame up, as sound pacing does, and a
+/// hold puts the next frame a period later.
+#[test]
+fn the_netplay_pacer_catches_up_and_holds() {
+    // On a made-up clock, so a busy machine can't move it (the wall clock
+    // did: a gate test once saw 18.9 ms where 19 were due).
+    use crate::fast::Pacer;
+    use std::time::{Duration, Instant};
+    let ms = Duration::from_millis;
+    let period = ms(10);
+    let t0 = Instant::now();
+    let mut p = Pacer::default();
+    // The first frame is due at once; the next at 10 ms.
+    assert_eq!(p.step(t0, period), Duration::ZERO);
+    // At 40 ms, three frames are overdue (10, 20, 30): none waits (a plain
+    // clock would wait for the second), and the fourth, due at 40, is on time.
+    assert_eq!(p.step(t0 + ms(40), period), Duration::ZERO);
+    assert_eq!(p.step(t0 + ms(40), period), Duration::ZERO);
+    assert_eq!(p.step(t0 + ms(40), period), Duration::ZERO);
+    assert_eq!(p.step(t0 + ms(40), period), Duration::ZERO);
+    // On time again: the next, due at 50, waits its period.
+    assert_eq!(p.step(t0 + ms(40), period), ms(10));
+    // A hold makes the next wait two periods: due at 70, not 60.
+    p.hold(period);
+    assert_eq!(p.step(t0 + ms(50), period), ms(20));
+    // More than SLACK behind, it starts afresh SLACK back: at 500 ms, the
+    // five frames of the last 50 ms run at once, and the sixth waits.
+    let late = t0 + ms(500);
+    for _ in 0..6 {
+        assert_eq!(p.step(late, period), Duration::ZERO);
+    }
+    assert_eq!(p.step(late, period), ms(10));
 }

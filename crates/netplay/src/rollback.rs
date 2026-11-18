@@ -94,11 +94,21 @@ pub struct Rollback<C: Snapshot, T: Transport> {
     lead: Vec<f32>,
     /// Frames until time sync may hold one back again.
     cooldown: u32,
+    /// A test's forced desync ([`Rollback::skew`]): from this frame on,
+    /// this peer's consoles see this seat's input as the one given.
+    skew: Option<(u32, C::Input)>,
     pub stats: Stats,
 }
 
 /// Frames between two held back.
 const SKIP_EVERY: u32 = 12;
+
+/// In a rollback, how many frames run again between two sends of this
+/// seat's inputs: a deep one (hundreds of frames, seconds on a loaded
+/// machine) would otherwise send nothing while it runs, and the other
+/// peers would take this one to have gone quiet
+/// (multiplayer/wander-split-under-load: 3.4 s under load).
+pub const KEEP_ALIVE: u32 = 16;
 
 impl<C: Snapshot, T: Transport> Rollback<C, T> {
     /// Join as `seat`, `console` holding this seat's own state (the others'
@@ -140,6 +150,7 @@ impl<C: Snapshot, T: Transport> Rollback<C, T> {
             said: vec![(0, 0); seats],
             lead: vec![0.0; seats],
             cooldown: 0,
+            skew: None,
             stats: Stats::default(),
         };
         if let Some(c) = host {
@@ -188,6 +199,22 @@ impl<C: Snapshot, T: Transport> Rollback<C, T> {
             .map(|s| self.lead[s])
             .reduce(f32::max)
             .unwrap_or(0.0)
+    }
+
+    /// For a test, a desync: from frame `from` on, this peer's consoles
+    /// run this seat's input as `input`, while the others are sent (and
+    /// run) the real one. The consoles then differ from the other peers'
+    /// as soon as the game reads it, and the hashes say so.
+    pub fn skew(&mut self, from: u32, input: C::Input) {
+        self.skew = Some((from, input));
+    }
+
+    /// Seat `s`'s input `i` for frame `f`, as this peer's consoles run it.
+    fn run_as(&self, s: usize, f: u32, i: C::Input) -> C::Input {
+        match self.skew {
+            Some((from, input)) if s == self.seat && f >= from => input,
+            _ => i,
+        }
     }
 
     /// The frames whose hashes differed between peers.
@@ -304,7 +331,11 @@ impl<C: Snapshot, T: Transport> Rollback<C, T> {
     fn guess(&self, f: u32) -> Vec<C::Input> {
         self.inputs
             .iter()
-            .map(|i| i.get(f as usize).or(i.last()).copied().unwrap_or_default())
+            .enumerate()
+            .map(|(s, i)| {
+                let i = i.get(f as usize).or(i.last()).copied().unwrap_or_default();
+                self.run_as(s, f, i)
+            })
             .collect()
     }
 
@@ -316,7 +347,8 @@ impl<C: Snapshot, T: Transport> Rollback<C, T> {
             let have = self.inputs[s].len().min(self.frame as usize);
             let from = self.checked[s].max(self.base as usize);
             for f in from..have {
-                if self.inputs[s][f] != self.used[f - self.base as usize][s] {
+                let real = self.run_as(s, f as u32, self.inputs[s][f]);
+                if real != self.used[f - self.base as usize][s] {
                     wrong = Some(wrong.map_or(f as u32, |w| w.min(f as u32)));
                     break;
                 }
@@ -340,6 +372,9 @@ impl<C: Snapshot, T: Transport> Rollback<C, T> {
             let i = (g - self.base) as usize;
             if g > f {
                 self.console.snapshot(&mut self.snaps[i]);
+                if (g - f) % KEEP_ALIVE == 0 {
+                    self.send_inputs();
+                }
             }
             self.used[i] = self.guess(g);
             r = self.console.step(&self.used[i]);

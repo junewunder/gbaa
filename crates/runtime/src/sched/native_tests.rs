@@ -147,21 +147,45 @@ fn a_96k_cpu_fast_set_crosses_a_vblank() {
     assert!(took > 10 * LINE_CYCLES && took < exact.now(), "{took}");
 }
 
-/// An IRQ that becomes takeable between time points (`IME` written with
-/// one pending) waits for the next one, as the native program's handlers
-/// run only inside the library's steps.
+/// An IRQ requested between time points (with `IME` already on) waits
+/// for the next one, as the native program's handlers run only inside
+/// the library's steps.
 #[test]
 fn irqs_are_taken_only_where_time_passed() {
     let mut m = native(&[NOP, NOP, B_SELF]);
     m.bus.write16(IO + reg::IE, irq::VBLANK);
     m.bus.write16(IO + reg::IF, 0);
+    m.bus.write16(IO + reg::IME, 1);
+    m.step();
+    m.bus.io.request_irq(irq::VBLANK);
+    m.step();
+    assert!(!m.irq_takeable());
+    m.step(); // the idle edge
+    assert!(m.irq_takeable());
+}
+
+/// An IRQ pending when `IME` is set again (a critical section that clears
+/// `IME`, as agbcc games' do) is taken at the next tick, as the hardware
+/// takes it at once, not at the next time point (native/ime-release).
+#[test]
+fn an_irq_pending_when_ime_is_set_is_taken_at_once() {
+    let mut m = native(&[NOP, NOP, B_SELF]);
+    m.bus.write16(IO + reg::IE, irq::VBLANK);
+    m.bus.write16(IO + reg::IF, 0);
+    m.bus.io.request_irq(irq::VBLANK);
+    m.bus.write16(IO + reg::IME, 1);
+    assert!(m.step(), "the tick after the IME write yields to take it");
+    assert_eq!(m.now(), 0, "no time passed");
+    assert!(m.irq_takeable());
+    // A write that leaves IME on releases nothing new.
+    let mut m = native(&[NOP, NOP, B_SELF]);
+    m.bus.write16(IO + reg::IME, 1);
+    m.step();
+    m.bus.write16(IO + reg::IE, irq::VBLANK);
     m.bus.io.request_irq(irq::VBLANK);
     m.bus.write16(IO + reg::IME, 1);
     m.step();
     assert!(!m.irq_takeable());
-    m.step();
-    m.step(); // the idle edge
-    assert!(m.irq_takeable());
 }
 
 /// An IRQ that comes due at a time point while the CPSR's I bit is set

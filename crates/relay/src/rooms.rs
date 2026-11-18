@@ -4,14 +4,16 @@
 //!
 //! Every datagram is a tag byte, then:
 //!
-//! - `H` seats build[32], player to server: make a room of `seats`
-//!   (2-4) for this build and take seat 0. Sent again until answered;
-//!   the same address asking again gets the same room.
-//! - `J` code[6] build[32]: take the next free seat in room `code`.
+//! - `H` seats build[32] version[u32 LE], player to server: make a room
+//!   of `seats` (2-4) for this build and take seat 0. Sent again until
+//!   answered; the same address asking again gets the same room.
+//! - `J` code[6] build[32] version[u32 LE]: take the next free seat in
+//!   room `code`.
 //! - `R` code[6] seat seats filled, server to player: the room, this
 //!   player's seat, and how many seats are taken; sent at each `H`/`J`,
 //!   and to everyone each time a seat fills.
-//! - `E` text: why the server said no (no such room, full, another build).
+//! - `E` text: why the server said no (no such room, full, another
+//!   build, too old a version).
 //! - `D` seat payload: player to server, `seat` the one it's for; server
 //!   to player, `seat` the one it's from. Passed on as it is.
 //! - `K`: keep-alive, player to server, so the room and the player's NAT
@@ -21,9 +23,22 @@
 //!   player has left. A goodbye sent while this player wasn't reading
 //!   (its machine stopped, its buffer full) may be lost; this isn't, as
 //!   the next datagram for that seat asks again.
+//! - `W` channel-datagram: the wireless adapter's radio
+//!   ([`crate::radio`]), each way between a seated player and the room's
+//!   radio on the server: the player's adapter says what it does, the
+//!   radio what it hears. A room has a radio from its first `W`.
 //! - `Q`, player to server: how many rooms are open; the answer is `Q`
 //!   rooms[u32 LE] players[u32 LE] (`gbaa-server --rooms ADDR` asks). The
 //!   codes aren't given: a code is what lets a player in.
+//!
+//! `version` is the client's netplay version (`netplay::VERSION`), a
+//! number its builds raise by hand whenever a change can split peers or
+//! change the wire. A server started with a minimum ([`Rooms::new`],
+//! `gbaa-server --min-version N`) refuses a `H` or `J` from an older one,
+//! with an `E` naming both numbers, so a player on a stale build is told
+//! to update rather than joining and desyncing. A build from before
+//! versions sends none and counts as version 0; it reads the `E` as any
+//! other refusal. The number means nothing else to the server.
 //!
 //! A player who says nothing for [`IDLE`] has left too (a crash, a lost
 //! connection, a machine stopped). A room closes when its last player
@@ -35,6 +50,9 @@ use std::io::ErrorKind;
 use std::net::{SocketAddr, UdpSocket};
 use std::time::{Duration, Instant};
 
+use runtime::link::rfu::air::{Air, Down, MAX_MSG, Up};
+
+use crate::radio::Channel;
 use crate::{CODE_ALPHABET, CODE_LEN};
 
 pub const HOST: u8 = b'H';
@@ -46,6 +64,7 @@ pub const KEEP: u8 = b'K';
 pub const LEAVE: u8 = b'L';
 pub const QUERY: u8 = b'Q';
 pub const GONE: u8 = b'G';
+pub const RADIO: u8 = b'W';
 
 /// How long a player may send nothing before its seat is freed. Seated
 /// players send every frame, and waiting ones ask again twice a second.
@@ -59,6 +78,39 @@ struct Room {
     seats: Vec<Option<(SocketAddr, Instant)>>,
     /// Every seat has filled: the game is on, and a freed seat stays empty.
     began: bool,
+    /// The wireless radio, once a player speaks to it.
+    radio: Option<Radio>,
+}
+
+/// A room's radio, and each seat's channel to it (once that seat has
+/// spoken).
+#[derive(Default)]
+struct Radio {
+    air: Air,
+    chans: Vec<Option<Channel>>,
+}
+
+impl Radio {
+    /// Queue what the air said to each seat.
+    fn tell(&mut self, downs: Vec<(usize, Down)>) {
+        let mut b = [0u8; MAX_MSG];
+        for (s, d) in downs {
+            if let Some(Some(c)) = self.chans.get_mut(s) {
+                let n = d.encode(&mut b);
+                c.send(&b[..n]);
+            }
+        }
+    }
+
+    /// Seat `seat` (whose player is gone) is out of the radio.
+    fn gone(&mut self, seat: usize) {
+        let mut downs = Vec::new();
+        self.air.gone(seat, &mut |s, d| downs.push((s, d)));
+        if let Some(c) = self.chans.get_mut(seat) {
+            *c = None;
+        }
+        self.tell(downs);
+    }
 }
 
 impl Room {
@@ -75,6 +127,9 @@ impl Room {
 
 #[derive(Default)]
 pub struct Rooms {
+    /// The oldest client version let in ([`Rooms::new`]); 0 lets every
+    /// one in.
+    min_version: u32,
     rooms: HashMap<Code, Room>,
     /// Each player's room and seat.
     players: HashMap<SocketAddr, (Code, u8)>,
@@ -86,7 +141,41 @@ pub struct Rooms {
     log: Vec<String>,
 }
 
+/// What the server says to a client of `version` when it needs `min`.
+pub fn too_old(version: u32, min: u32) -> String {
+    format!(
+        "this game is too old for the server (version {version}, needs {min}): get the new build"
+    )
+}
+
+/// The version after a `H`'s or `J`'s build ID (`rest`), 0 if there's
+/// none (a build from before versions).
+fn version_of(rest: &[u8]) -> u32 {
+    rest.get(..4)
+        .map_or(0, |v| u32::from_le_bytes(v.try_into().unwrap()))
+}
+
 impl Rooms {
+    /// Rooms that refuse clients older than netplay version `min_version`.
+    pub fn new(min_version: u32) -> Rooms {
+        Rooms {
+            min_version,
+            ..Rooms::default()
+        }
+    }
+
+    /// Whether a client of `version` is too old: the refusal to send it,
+    /// noted in the log.
+    fn refuse(&mut self, version: u32) -> Option<String> {
+        (version < self.min_version).then(|| {
+            self.log.push(format!(
+                "refused a client of version {version} (needs {})",
+                self.min_version
+            ));
+            too_old(version, self.min_version)
+        })
+    }
+
     fn new_code(&mut self) -> Code {
         if self.seed == 0 {
             self.seed = std::time::SystemTime::now()
@@ -142,6 +231,9 @@ impl Rooms {
                 let (Some(&seats), Some(build)) = (rest.first(), rest.get(1..33)) else {
                     return no("bad request");
                 };
+                if let Some(why) = self.refuse(version_of(&rest[33..])) {
+                    return no(&why);
+                }
                 if !(2..=4).contains(&seats) {
                     return no("a room has 2 to 4 seats");
                 }
@@ -158,6 +250,7 @@ impl Rooms {
                                 build: build.try_into().unwrap(),
                                 seats: s,
                                 began: false,
+                                radio: None,
                             },
                         );
                         self.players.insert(from, (code, 0));
@@ -175,6 +268,9 @@ impl Rooms {
                 else {
                     return no("bad request");
                 };
+                if let Some(why) = self.refuse(version_of(&rest[CODE_LEN + 32..])) {
+                    return no(&why);
+                }
                 let code: Code = code.try_into().unwrap();
                 let Some(room) = self.rooms.get_mut(&code) else {
                     return no("no such room");
@@ -190,7 +286,7 @@ impl Rooms {
                     return no("the room's game has begun");
                 }
                 let Some(seat) = room.seats.iter().position(Option::is_none) else {
-                    return no("the room is full");
+                    return no("the room is full (the host sets its seats)");
                 };
                 // A player in another room leaves it for this one.
                 self.leave(from, "joined another room");
@@ -229,6 +325,35 @@ impl Rooms {
                 self.passed += 1;
                 vec![(addr, m)]
             }
+            RADIO => {
+                let Some(&(code, seat)) = self.players.get(&from) else {
+                    return Vec::new();
+                };
+                self.heard(from, now);
+                let Some(room) = self.rooms.get_mut(&code) else {
+                    return Vec::new();
+                };
+                let seats = room.seats.len();
+                let r = room.radio.get_or_insert_with(|| Radio {
+                    air: Air::new(),
+                    chans: (0..seats).map(|_| None).collect(),
+                });
+                let seat = seat as usize;
+                let mut downs = Vec::new();
+                if r.chans[seat].is_none() {
+                    r.chans[seat] = Some(Channel::new());
+                    r.air.hello(seat, &mut |s, d| downs.push((s, d)));
+                }
+                let msgs = r.chans[seat].as_mut().unwrap().take(rest, now);
+                for m in msgs {
+                    if let Some(up) = Up::decode(&m) {
+                        r.air.take(seat, up, &mut |s, d| downs.push((s, d)));
+                    }
+                }
+                r.tell(downs);
+                self.passed += 1;
+                Self::flush(room, now)
+            }
             KEEP => {
                 self.heard(from, now);
                 Vec::new()
@@ -258,6 +383,9 @@ impl Rooms {
         };
         if room.seats[seat as usize].is_some_and(|(a, _)| a == who) {
             room.seats[seat as usize] = None;
+            if let Some(r) = &mut room.radio {
+                r.gone(seat as usize);
+            }
         }
         self.log.push(format!(
             "room {}: player {} {why}",
@@ -269,6 +397,34 @@ impl Rooms {
             self.log
                 .push(format!("room {} closed: every player gone", show(&code)));
         }
+    }
+
+    /// A room's radio datagrams due now, to each seat that has spoken to it.
+    fn flush(room: &mut Room, now: Instant) -> Vec<(SocketAddr, Vec<u8>)> {
+        let mut out = Vec::new();
+        let Some(r) = &mut room.radio else {
+            return out;
+        };
+        for (s, c) in r.chans.iter_mut().enumerate() {
+            let (Some(c), Some(Some((addr, _)))) = (c, room.seats.get(s)) else {
+                continue;
+            };
+            for d in c.flush(now) {
+                let mut m = Vec::with_capacity(d.len() + 1);
+                m.push(RADIO);
+                m.extend_from_slice(&d);
+                out.push((*addr, m));
+            }
+        }
+        out
+    }
+
+    /// What every room's radio has to send or send again now.
+    pub fn tick(&mut self, now: Instant) -> Vec<(SocketAddr, Vec<u8>)> {
+        self.rooms
+            .values_mut()
+            .flat_map(|r| Self::flush(r, now))
+            .collect()
     }
 
     /// Free the seats of players who have sent nothing for [`IDLE`], and
@@ -340,11 +496,13 @@ pub fn query(server: SocketAddr) -> std::io::Result<(u32, u32)> {
     ))
 }
 
-/// Serve rooms on `sock` until it fails, saying on stderr as rooms open
-/// and close.
-pub fn serve(sock: UdpSocket) -> std::io::Result<()> {
-    sock.set_read_timeout(Some(Duration::from_secs(1)))?;
-    let mut rooms = Rooms::default();
+/// Serve rooms on `sock` until it fails, refusing clients older than
+/// netplay version `min_version` (0 refuses none), saying on stderr as
+/// rooms open and close.
+pub fn serve(sock: UdpSocket, min_version: u32) -> std::io::Result<()> {
+    // Often enough for the radio's resends.
+    sock.set_read_timeout(Some(Duration::from_millis(10)))?;
+    let mut rooms = Rooms::new(min_version);
     let mut buf = vec![0u8; 65536];
     let mut swept = Instant::now();
     loop {
@@ -363,6 +521,9 @@ pub fn serve(sock: UdpSocket) -> std::io::Result<()> {
                     ErrorKind::ConnectionRefused | ErrorKind::ConnectionReset
                 ) => {}
             Err(e) => return Err(e),
+        }
+        for (to, m) in rooms.tick(Instant::now()) {
+            let _ = sock.send_to(&m, to);
         }
         if swept.elapsed() >= Duration::from_secs(1) {
             swept = Instant::now();
@@ -464,5 +625,92 @@ mod tests {
         r.take(a(1), &[LEAVE], now + IDLE);
         assert_eq!(count(&mut r), (0, 0));
         assert!(r.is_empty());
+    }
+
+    fn host(version: Option<u32>) -> Vec<u8> {
+        let mut m = vec![HOST, 2];
+        m.extend_from_slice(&[7; 32]);
+        m.extend(version.map(u32::to_le_bytes).into_iter().flatten());
+        m
+    }
+
+    fn join(code: &Code, version: Option<u32>) -> Vec<u8> {
+        let mut m = vec![JOIN];
+        m.extend_from_slice(code);
+        m.extend_from_slice(&[7; 32]);
+        m.extend(version.map(u32::to_le_bytes).into_iter().flatten());
+        m
+    }
+
+    fn said(out: &[(SocketAddr, Vec<u8>)]) -> String {
+        assert_eq!(out.len(), 1, "{out:?}");
+        assert_eq!(out[0].1[0], ERROR, "{out:?}");
+        String::from_utf8_lossy(&out[0].1[1..]).into_owned()
+    }
+
+    #[test]
+    fn old_versions_are_refused() {
+        let now = Instant::now();
+        let mut r = Rooms::new(3);
+        // Older, and from before versions: told why, with both numbers.
+        assert_eq!(
+            said(&r.take(a(1), &host(Some(2)), now)),
+            "this game is too old for the server (version 2, needs 3): get the new build"
+        );
+        assert_eq!(said(&r.take(a(1), &host(None), now)), too_old(0, 3));
+        assert!(r.is_empty());
+        // Equal and newer are let in.
+        let out = r.take(a(1), &host(Some(3)), now);
+        assert_eq!(out[0].1[0], ROOM);
+        let code: Code = out[0].1[1..7].try_into().unwrap();
+        assert_eq!(
+            said(&r.take(a(2), &join(&code, Some(1)), now)),
+            too_old(1, 3)
+        );
+        assert_eq!(said(&r.take(a(2), &join(&code, None), now)), too_old(0, 3));
+        let out = r.take(a(2), &join(&code, Some(4)), now);
+        assert_eq!(out.len(), 2);
+        assert!(out.iter().all(|(_, m)| m[0] == ROOM && m[9] == 2));
+        let mut r2 = Rooms::new(3);
+        assert_eq!(r2.take(a(1), &host(Some(9)), now)[0].1[0], ROOM);
+        let log = r.take_log();
+        assert!(
+            log.iter()
+                .any(|l| l == "refused a client of version 0 (needs 3)"),
+            "{log:?}"
+        );
+        // No minimum: every version, and none, is let in.
+        let mut r = Rooms::default();
+        let code: Code = r.take(a(1), &host(None), now)[0].1[1..7]
+            .try_into()
+            .unwrap();
+        assert_eq!(r.take(a(2), &join(&code, Some(0)), now).len(), 2);
+    }
+
+    #[test]
+    fn four_players_take_seats_in_order() {
+        let mut r = Rooms::default();
+        let now = Instant::now();
+        let mut host = vec![HOST, 4];
+        host.extend_from_slice(&[7; 32]);
+        let code: Code = r.take(a(1), &host, now)[0].1[1..7].try_into().unwrap();
+        let mut join = vec![JOIN];
+        join.extend_from_slice(&code);
+        join.extend_from_slice(&[7; 32]);
+        for p in 2..=4u16 {
+            let out = r.take(a(p), &join, now);
+            // Everyone seated hears the count; the newcomer its seat.
+            assert_eq!(out.len(), p as usize);
+            assert!(out.iter().all(|(_, m)| m[8] == 4 && m[9] == p as u8));
+            let mine = out.iter().find(|(to, _)| *to == a(p)).unwrap();
+            assert_eq!(mine.1[7], p as u8 - 1);
+        }
+        assert_eq!(r.take(a(5), &join, now)[0].1[0], ERROR);
+        // Seat 3 to seat 1, and back.
+        assert_eq!(r.take(a(4), &[DATA, 1, 9], now), [(a(2), vec![DATA, 3, 9])]);
+        assert_eq!(r.take(a(2), &[DATA, 3, 8], now), [(a(4), vec![DATA, 1, 8])]);
+        let mut five = host.clone();
+        five[1] = 5;
+        assert_eq!(r.take(a(6), &five, now)[0].1[0], ERROR);
     }
 }

@@ -31,11 +31,19 @@ the web (sources at the end).
   has, the fix is speed (recompiled code for netplay, no drawing on
   re-run frames), not delay. Build it, play it, find what's bad, fix
   that. The older lockstep reasoning below is kept as history.
+- **Which games netplay covers:** every game that links in multiplayer
+  mode, with nothing per game. The cable assumes no lag, so its bytes
+  can't cross the internet; inputs can. Normal mode, single-pak MultiBoot,
+  UART, JOY bus and the wireless adapter aren't emulated yet. See "The
+  cable over the internet: modes, timing, games" (2026-11-08).
 - **The wireless adapter is the exception.** Its games talk to the adapter
   in packets, with radio-sized delays built in, and the Union Room gathers
   more players than one peer should simulate. For wireless the recommended
   shape is the opposite: each player runs only their own console, and the
-  adapter is emulated as a device whose "radio" is the server. Later work.
+  adapter is emulated as a device whose "radio" is the server. The device
+  runs locally (2026-11-08, multiplayer/wireless-adapter-local,
+  `runtime::link::rfu`): two Emeralds in one process meet in the Union
+  Room and trade. Putting the radio on the server is the next step.
 - **A relay server first, on a machine june runs.** Clients make only
   outbound connections, so there is no NAT traversal to do. Rooms with a
   short code are the matchmaking. Plain UDP for transport (QUIC, the
@@ -289,7 +297,7 @@ state; the battle presses A every 30 frames from its state.
  ───────────────────────────────────────────────────────────────────
  console adapter (per console)      trait Console
    GBA: runtime::link hub (no_std) — N Machines, one serial bus,
-        multiplayer and normal modes; later the wireless adapter device
+        multiplayer mode; the wireless adapter device (runtime::link::rfu)
  ───────────────────────────────────────────────────────────────────
  gbaa-server (std, console-neutral): rooms, codes, relay of opaque payloads
 ```
@@ -362,7 +370,8 @@ broadcast, parent and child slots, packets. Each peer runs only its own
 console, so a Union Room can hold many players. Needs the device emulated
 first locally (two machines in one hub, adapter to adapter), then the
 radio moved onto the network, then a measurement of how much latency
-librfu's timeouts allow.
+librfu's timeouts allow. All three done (2026-11-08, 2026-11-12; "The
+wireless adapter, locally", "The radio on the server").
 
 **Presence, later.** A shared overworld is not a link feature. Each game
 reports where its player is (map, coordinates, facing, sprite) by reading
@@ -575,10 +584,33 @@ tokio + quinn.
 - **Not yet:** rejoining after a dropped connection, a room expiry
   beyond "empty", NAT hole punching.
 
+### Versions (multiplayer/server-version-cutoff)
+
+Built 2026-10-31, june's ask (2026-10-30): a friend on a stale binary is
+told to update, not let in to desync. `netplay::VERSION`
+(crates/netplay/src/lib.rs) is a number every client sends after its
+build ID in the rooms' `H` and `J` (a `u32`, little-endian; a build from
+before versions sends none and counts as 0). `gbaa-server --min-version
+N` refuses an older one with an `E`: "this game is too old for the
+server (version 1, needs 2): get the new build", which a pre-version
+client prints as any refusal, and the desktop window's netplay page
+shows as "The server said no: …", not a timeout. Without the flag every
+version is let in (the room-sim's and tests' in-process servers). The
+server compares the number and nothing more; the build ID still keeps
+two different builds out of one room.
+
+**When to raise it:** by hand, by one, in the commit of any change that
+can split peers (two builds stepping a console, the link or rollback
+differently) or changes the wire (the session's messages, `udp`'s
+datagrams, the rooms'). Then raise `--min-version` in
+deploy/fly/Dockerfile to match (a netplay test fails until they agree)
+and redeploy fly once the new build is with the friends.
+
 ## Desktop netplay
 
 Built 2026-10-25 (multiplayer/desktop-netplay), `crates/desktop/src/room.rs`:
-`gbaa-desktop ROM --server ADDR --host` or `--join CODE`, two seats, the
+`gbaa-desktop ROM --server ADDR --host` or `--join CODE`, two seats
+(2 to 4 since 2026-10-31, `--players N`: "Four players" below), the
 host the cable's parent. Each peer opens its own cartridge save into its
 seat's machine, the session swaps the states and runs both GBAs; the
 window draws its seat's PPU, writes its seat's save as it changes and
@@ -595,7 +627,7 @@ host's wall clock (sent in `Start`), headless the fixed clock.
   resync), and two windows in a private `cu session` through a real
   `gbaa-server`, each showing its own seat through the trade at 60 fps.
 - **Not yet:** sound (`netplay::gba`'s machines drop it), more than two
-  seats, spectating, a room-code prompt in the menu (the code is a
+  seats (since 2026-10-31: up to four), spectating, a room-code prompt in the menu (the code is a
   flag), and leaving: a player who closes the window ends the other's
   session ("player N left").
 
@@ -768,6 +800,12 @@ the 2026-10-29 table's. Instant, they don't: a structured build and its
 v1 build tick on different clocks there. That splits no session, since
 the build ID refuses a peer on another build.
 
+Rerun 2026-11-08 (multiplayer/timing-in-build-id, the build ID's timing
+byte and code hash on main; `just recompile ROM OUT --no-structured`,
+instant by default; two other lanes' heavy jobs beside it): v1, instant,
+wander at delay 0, 69.6% compiled, frame p50 3.9-4.0 ms, p99 36 ms,
+both peers `2c3e0981…`, the hash above.
+
 Before that, Kirby two-player, both peers on quack, 2026-10-29 (lane 1 running judge
 jobs beside it, so ±0.3 ms): `just rollback-feel PROFILE ROM --exe BIN
 --headless --paced --frames 3600 --delay D --input1
@@ -892,6 +930,327 @@ fly pairs' round trip was about 52 ms (least 32-35, most 139-217). If
 a playtest's report file shows thousands resent again, the cause is
 still open: note what the session did (a menu open, a slow start, the
 machine swapping).
+
+### Four players (multiplayer/four-seats)
+
+From june's Kirby playtest (2026-10-29): a third player joining was told
+the room was full, as rooms had two seats. Since 2026-10-31 a room has 2
+to 4: the host picks how many (`gbaa-desktop --players N`, the menu's
+Players row), joiners take the next free seat in the order they arrive,
+and the session starts once every seat is taken (one more is told the
+room is full). The server had always taken 2-4 (`relay::rooms`), and
+the session core and `runtime::link` were already N-seat; the desktop
+was what fixed two. The room's build ID leaves out the seat count (byte
+28), which a joiner learns from the room before it makes its consoles.
+`runtime::link`'s `four_players_share_one_bus` test runs four machines
+on one cable: every player gets all four halfwords at one cycle, with
+its own ID.
+
+Checked on quack, 2026-10-31: `gbaa-pingsim room --players 3|4`, toy
+and GBA consoles on wander, every seat on the straight run's hashes;
+three and then four windows of the recompiled Kirby in a private `cu
+session` through a local `gbaa-server`, each showing its own seat (P1
+to P4 on Kirby's cable screen, then its own Kirby's colour in Rainbow
+Route), all ending on one hash (three: `929be1bd…` at 3000 frames;
+four: `2749087a…` at 3600).
+
+Brought onto the public main on 2026-11-05, over peer-leaves and the
+desync report, and checked again on quack (interpreted): `just room-sim
+wander --players 4 --console gba` and `--players 3` pass on every seat;
+three and four Kirby windows in a private `cu session` (calm, delay 2),
+titled player 1 to 4, the corner mark `Connected · 3/3` and `4/4`, each
+window on its own Kirby in Rainbow Route, ending on one hash (three:
+`27f2caeb…` at 3000; four: `245b958b…` at 3600). With peer-leaves, a
+headless four-peer run first ended apart: a peer that finished early
+said goodbye while a slower one (four interpreted consoles run behind
+real time) was 200 frames back, and that one unplugged its cable. A
+peer at `--frames`' end now waits (up to 30 s, `room::CATCH_UP`) until
+every seat has run as far before it lingers and leaves; headless, four
+peers then ended on `c894de98…` (calm, delay 2, 3000 frames) and three
+on `71a8ed2d…` (wander, delay 0). With three or four players, one leaving
+unplugs everyone's cable: each remaining peer plays on alone.
+
+Frame cost, four Kirbys a peer, quack, 3600 frames paced through `just
+rollback-feel PROFILE ROM --exe BIN [--interp] --headless --paced
+--players 4` with the menu presses above on all four, then from 2200
+`right`/`left` every 18, 18, 30 and 24 frames on players 1 to 4. All four
+peers ran on quack at once (16 consoles, three proxies), so each peer
+shares the machine's cores and caches with three others, as a real
+session's wouldn't: these are upper bounds. The structured build, its
+default instant timing:
+
+| players | build | profile, delay | frame p50 | frame p99 | frames over 16.7 ms | end hash |
+|---|---|---|---|---|---|---|
+| 2 | recompiled | calm, 2 | 3.5-3.8 ms | 6.7-9.2 ms | 1 | `db772d4f…` |
+| 2 | interpreted | calm, 2 | 6.8-7.1 ms | 10.8-10.9 ms | 2 | `b67bf1e1…` |
+| 2 | recompiled | wander, 0 | 3.7 ms | 27 ms | 94-100 | `41fb45c8…` |
+| 4 | recompiled | calm, 2 | 7.0-7.3 ms | 19-26 ms | 79-145 | `47aeef69…` |
+| 4 | interpreted | calm, 2 | 17.9-20.8 ms | 35-62 ms | 2160-3400 | `9d6fb426…` |
+| 4 | recompiled | wander, 0 | 7.1-7.3 ms | 69-81 ms | 290-360 | `531a181f…` |
+| 4 | interpreted | wander, 0 | 14.5-18.4 ms | 150-166 ms | 860-2430 | `d5a8ecef…` |
+
+Every run's peers ended on one hash, and each setting on the same hash
+every time it ran; none froze once playing. A frame of four Kirbys costs
+about twice two, so the **re-run headroom** (frames a 16.7 ms frame has
+room to run again) falls from about 3.5 to about 1.3 recompiled, and
+the interpreter has none: at four it runs behind real time on quack
+even with no rollbacks (most frames over budget). With four, a late
+input from any of three others means a rollback, so at delay 0 on
+wander each peer ran about 2100-2500 frames again a minute (deepest 14
+to 107 frames), against about 830 for two; the p99 is a hitch of 4-5
+frames. On the Deck (2-2.5x slower than quack, "Latency over the
+internet" above) four recompiled Kirbys would take about 14-18 ms a
+frame: about one frame's budget, no re-runs. An estimate, not measured
+there: june decided on 2026-11-01 to leave the Deck's runs for later
+("May a lane SSH onto your Deck to time four Kirbys' netplay": leave the
+Deck for later), so they are their own unit (multiplayer/four-kirbys-deck),
+run whenever june next says yes.
+
+### Feel (multiplayer/rollback-feel-sim)
+
+From june's Kirby playtest (2026-10-29, june hosting, Athena on june's
+Deck, both through fly): "a little framey sometimes", "skipped frames";
+it played well otherwise. `ping-sim` checks hashes, not feel, so this
+unit built a sim of what each window shows (`netplay::feel`; `just
+rollback-feel-sim PROFILE`, docs/tools/commands.md) and fixed what it
+found worst. Beside it, multiplayer/lag-report still wants a real
+session's report files.
+
+**The sim.** Every peer is a `Rollback` on its own consoles, as in a
+session, in one process and in simulated time, joined by a network whose
+every path follows a ping-sim profile (the proxy's own delay model,
+`netplay::proxy::Line`). Each peer is driven as the desktop's netplay
+loop (`crates/desktop/src/room.rs`) drives it: paced by its sound (the
+device takes it at a steady rate, so a frame late for one reason lets
+the next ones run at once), by a frame clock when muted, or headless
+`--paced`; each turn costs what a cost model says, and each finished
+frame is handed to a display refreshing at 60 Hz on a phase of its own.
+The costs are either a model of two recompiled Kirbys on quack (3.5 ms
+a frame, 3.0 run again, a snapshot 0.35, a restore 0.7, each ±30%), or
+a game's own cost frame by frame (`feel::Trace`: `gbaa-pingsim feel
+--rom` first runs the game's consoles straight on the same presses,
+timing each frame on the thread's CPU clock three ways from one snapshot:
+every picture drawn, only seat 0's, none), so every version runs on the
+same costs however busy the machine was. Never the wall clock: a run
+repeats exactly and takes milliseconds. Measuring Kirby by each turn's
+wall time was tried first and dropped: on a loaded quack the same work
+measured 6.2 to 11.7 ms a frame from one run to the next, more than the
+fixes changed. Two new profiles: `wifi` (two players on one home
+Wi-Fi: 3 ms + 8 of jitter, a 40 ms stall of 100 ms every 3 s or so, 1%
+lost) and `fly` (the playtest's path: each player on home Wi-Fi to
+gbaa-server on fly, 17 ms + 20 of jitter one way, from the round trips
+measured 2026-10-29, and 60 ms stalls of 120 ms every 3 s; 1% lost).
+
+What each window shows, per seat: **late** (a frame finished more than
+a frame after it was due), **doubled** (a refresh showing the frame the
+one before showed; a 60 Hz display shows 59.73 Hz frames with one
+doubled every 3.7 s whatever the network does, 16 a minute, the
+"beat"), **skipped** (finished, never shown), rollbacks and their depth,
+frames run again, **holds** (time sync holding a frame back), stalls,
+sound underruns, **jumps** (shown frames a rollback rewrote since the
+last shown one: the other Kirby moves that many frames at once; "4+"
+counts the ones a player sees as a teleport), and how long after due a
+frame reaches the screen.
+
+**What it found**, worst first:
+
+1. **Time sync's holds were undone by the sound.** A held frame slept a
+   frame, and the sound's pacing, finding the queue a frame short, ran
+   the next frame at once: a doubled frame, then a skipped one, and the
+   peer no further back than before. So time sync held again 12 frames
+   later, and again: on fly the host held back 271 times a minute (the
+   most it can, one in 12), and since it never fell back it guessed
+   further ahead than the joiner and rolled back deeper (depth p99 7
+   against 5; on wander 18 against 5). The headless `--paced` runs of
+   the earlier tables pace by a clock, where a hold works, which is why
+   they showed tens of holds, not hundreds. Since this unit a hold
+   queues a frame of silence (`audio::Player::hold`), so the pacer runs
+   the next frame a frame later: the peer really falls back.
+2. **Frames reached the display unevenly.** A frame went to the window
+   the moment it was done, so its time against the 60 Hz refresh moved
+   with its cost, and every frame whose finish crossed a refresh made a
+   doubled frame and a skipped one: about 200 a minute on calm with no
+   frame late at all, against the beat's 16. Rollback turns (two or
+   three frames of work in one) make it worse. Since this unit a frame
+   goes to the window 8 ms after its turn began, or when done if later
+   (`--present-ms`, `feel::PRESENT_US`), so frames arrive on the
+   pacer's even beat. It costs display lag: a frame is on screen 17.5
+   ms after due on average instead of 13.7. Each 2 ms more takes about
+   half the remaining judder off and adds 1.9 ms: at 4 ms 162
+   doubled a minute on calm, 8 ms 73, 12 ms 25, 14 ms 16 (the beat
+   alone).
+3. **A muted window ran at 45 fps.** Without sound it slept a frame
+   after every frame and then waited on its clock, which never waited
+   after that: a frame took its cost plus a frame, 971 doubled a minute.
+   The other peer, running at 60, ran ahead until time sync held it
+   back. Since this unit it paces by a clock that catches up, as sound
+   does (`fast::Pacer`, also headless `--paced`'s).
+4. **Every seat's picture was drawn.** A peer shows one, but drew all:
+   0.44 ms of a 6.14 ms frame of two interpreted Kirbys (7%). Since this
+   unit only the shown seat draws (`netplay::gba::Gba::show_only`; the
+   picture is outside snapshots and hashes, so the peers still agree).
+
+Model costs (two recompiled Kirbys), a minute of the lag report's play
+(`feel::PLAY`: both moving and jumping, every 9-18 frames a new input),
+delay 0, the window with sound, the worse seat of each run:
+
+| profile | loop | late | doubled | skipped | holds | depth p99 | jumps 4+ | on screen after due |
+|---|---|---|---|---|---|---|---|---|
+| calm | before | 0 | 202 | 185 | 0 | 2 | 0 | 13.7 ms |
+| calm | after | 0 | 73 | 56 | 0 | 2 | 0 | 17.7 ms |
+| wifi | before | 3 | 150 | 133 | 1 | 4 | 8 | 13.5 ms |
+| wifi | after | 6 | 33 | 14 | 2 | 4 | 9 | 17.5 ms |
+| fly | before | 407 | 512 | 495 | 271 | 7 | 127 | 16.0 ms |
+| fly | after | 42 | 102 | 77 | 8 | 6 | 12 | 17.6 ms |
+| wander | before | 885 | 826 | 801 | 300 | 18 | 272 | 20.5 ms |
+| wander | after | 225 | 243 | 212 | 14 | 15 | 189 | 18.8 ms |
+| fly, muted | before | 21 | 971 | 0 | 11 | 5 | 11 | 13.7 ms |
+| fly, muted | after | 42 | 102 | 77 | 8 | 6 | 12 | 17.6 ms |
+| wifi, 4 players | before | 1394 | 858 | 839 | 300 | 7 | 203 | 27.0 ms |
+| wifi, 4 players | after | 351 | 340 | 301 | 29 | 4 | 17 | 19.6 ms |
+
+Kirby's own costs (a trace of two interpreted Kirbys on quack,
+2026-11-08: a frame p50 5.70 ms drawn, 6.14 with both pictures, 5.29
+undrawn; a snapshot 0.19 ms, a restore 0.27), 5400 frames (the menus to
+2-player Rainbow Route, then 50 s of the lag report's play), scaled
+x0.7 for a recompiled build on quack and x1.5 for one on the Deck (an
+estimate: the Deck about 2.2 times slower):
+
+| profile, cost | loop | late | doubled | skipped | holds | depth p99 | jumps 4+ | on screen after due |
+|---|---|---|---|---|---|---|---|---|
+| calm, x0.7 | before | 6 | 163 | 138 | 0 | 2 | 0 | 14.0 ms |
+| calm, x0.7 | after | 5 | 74 | 49 | 0 | 2 | 0 | 17.5 ms |
+| wifi, x0.7 | before | 7 | 123 | 98 | 0 | 4 | 8 | 14.0 ms |
+| wifi, x0.7 | after | 5 | 42 | 17 | 0 | 4 | 8 | 17.4 ms |
+| fly, x0.7 | before | 453 | 557 | 532 | 330 | 7 | 99 | 15.7 ms |
+| fly, x0.7 | after | 51 | 99 | 71 | 3 | 6 | 15 | 17.6 ms |
+| wander, x0.7 | before | 1098 | 1021 | 987 | 450 | 20 | 275 | 19.7 ms |
+| wander, x0.7 | after | 222 | 239 | 200 | 14 | 15 | 193 | 18.2 ms |
+| calm, x1.5 | before | 567 | 315 | 289 | 1 | 3 | 1 | 20.5 ms |
+| calm, x1.5 | after | 446 | 270 | 244 | 1 | 3 | 0 | 19.9 ms |
+| wifi, x1.5 | before | 618 | 303 | 279 | 93 | 4 | 5 | 20.3 ms |
+| wifi, x1.5 | after | 223 | 172 | 147 | 1 | 4 | 6 | 19.3 ms |
+| fly, x1.5 | before | 752 | 425 | 397 | 82 | 7 | 54 | 21.7 ms |
+| fly, x1.5 | after | 573 | 360 | 320 | 14 | 6 | 16 | 20.5 ms |
+| wander, x1.5 | before | 1361 | 759 | 648 | 152 | 19 | 213 | 25.9 ms |
+| wander, x1.5 | after | 1050 | 648 | 538 | 30 | 15 | 191 | 24.5 ms |
+
+Real windows agree. Two `gbaa-desktop` windows with sound (to the
+silent sink) in a private `cu session` on quack, interpreted Kirby,
+3000 frames through the fly profile with the lag report's presses
+(`gbaa-pingsim desktop crates/netplay/profiles/fly.toml ROM -- --frames
+3000 --input1 … --input2 …`), main's build (`364eea7`, before this unit) and
+this one alternating, twice each; the window's own end lines (presents:
+the gaps between the frames it drew), each seat:
+
+| build | run | held back | present gaps over 25 ms | present p99 | frames run again |
+|---|---|---|---|---|---|
+| before | 1 | 0, 226 | 41, 184 | 31, 44 ms | 86, 221 |
+| before | 2 | 14, 102 | 62, 99 | 34, 40 ms | 148, 198 |
+| after | 1 | 10, 9 | 57, 54 | 41, 36 ms | 135, 155 |
+| after | 2 | 2, 2 | 54, 53 | 38, 34 ms | 147, 143 |
+
+Every run's two windows ended on one hash. Before, one seat in each
+run held back on and on, and drew 3100-3200 presents for 3000 frames
+(a held frame drawn again); after, both seats hold a few times and draw
+about one present a frame. The present gaps can't show judder against
+the display (they're the window's own draws, not the display's
+refreshes); the sim's doubled and skipped counts are for that.
+
+**What's left is the ceiling june named.** On a machine with room
+(quack, recompiled) the fixes take the doubled and skipped frames on
+fly from about one frame in five to one in 30, most of what's left the
+beat and the rollback turns. On the Deck's estimate a turn that runs two or three
+frames again costs more than a frame on any line, so nearly every
+rollback is a late frame and the next ones are caught up (a skipped
+frame): calm's 446 late in 90 s are that, and the game's own heavy
+frames (the trace's slowest, 34-48 ms interpreted, in the menus and
+loads). Without input delay, the rollbacks themselves are set by the
+round trip and how often the other player's input changes; what's
+left to win is speed (a frame run again for less), or the per-game mod
+(docs/ideas.md).
+
+**Budgets** (`netplay::feel` tests, in `just check`): a minute of the
+model on calm, wifi, fly and wander, and wifi with four players, with
+sound, muted and headless-paced, must stay under these on every seat
+(about 1.3 times the after column, so a change that makes feel worse
+fails), and the loop before this unit's fixes must break them on fly:
+
+| profile | late | doubled | skipped | depth p99 | holds | jumps 4+ | on screen after due |
+|---|---|---|---|---|---|---|---|
+| calm | 5 | 80 | 70 | 3 | 5 | 0 | 20 ms |
+| wifi | 15 | 45 | 25 | 5 | 6 | 15 | 20 ms |
+| fly | 60 | 130 | 100 | 7 | 15 | 20 | 20 ms |
+| wander | 300 | 300 | 280 | 17 | 20 | 250 | 22 ms |
+| wifi, 4 players | 450 | 420 | 380 | 5 | 40 | 25 | 22 ms |
+
+The sim models the desktop's loop; it doesn't run it. When `room.rs`'s
+pacing or presenting changes, change `feel::run` to match.
+
+### A stall isn't a goodbye (multiplayer/wander-split-under-load)
+
+The link-cable survey's Emerald trade on wander (2026-11-08, quack at load
+average 18) split once: player 1 took player 2 to have left at frame 1119,
+and player 2, hearing its goodbye, left at 1144; each played on alone and
+the end hashes differed. Two things together:
+
+- **The quiet timeout was 3 s** (`room::QUIET`), not the "5 s freeze
+  plus 15 s" of the old lockstep days; player 2 had sent nothing for 3.4 s.
+- **A deep rollback sent nothing.** Headless runs aren't paced, so time
+  sync's holding back costs no time and the faster peer runs to the
+  window's edge (300 frames ahead); each changed input of the slower one
+  is then a rollback of up to 300 frames of two Emeralds, 1.1 s calm and
+  3.7 s on a loaded quack, with no datagram out until it ends. That was
+  player 2's 3.4 s frame.
+
+Fixed: a rollback sends this seat's inputs every 16 frames it runs again
+(`rollback::KEEP_ALIVE`; `a_deep_rollback_keeps_sending_while_it_runs`:
+1 send in a 200-frame rollback before, 13 after), and `QUIET` is 8 s, so a
+machine stopped a few seconds catches up (past the 5 s window the others
+wait for it; someone truly gone costs them 3 s frozen). `emerald-trade
+--stop SEAT@SECS+DUR` SIGSTOPs one player's desktop mid-run, and the check
+now also fails on a `left player` line. Before: `--stop 2@20+4` on wander
+split (each took the other to have left). After, 2026-11-12 on quack:
+five in a row, player 2 or 1 stopped 4 s at 20 s, every one passing on
+`35d6b1be…`, 104-135 s each; the longest frames 2.3-6.2 s (the stop, or a
+300-frame rollback) and the longest freeze 4.7 s, with nobody taken to
+have left. A paced peer back from a stall still trails by the stall
+(time sync holds the one ahead back a frame in 13):
+multiplayer/stall-catch-up-paced.
+
+### The other players' sound (multiplayer/other-seat-sound)
+
+From june's Kirby playtest (2026-10-29, through fly): her friend couldn't
+hear june's Kirby. The window plays its own seat's console, as your own
+GBA would, and rollback runs frames again quietly (`Pad::quiet`), so
+either Kirby doesn't sound the other Kirbys, or rollback drops them.
+**It's the game: Kirby & the Amazing Mirror's console plays only its own
+Kirby's sounds**, even with the other Kirby on screen; rollback drops
+none.
+
+Measured 2026-11-08 on quack by `crates/netplay/tests/seat_sound.rs`
+(ignored: it needs the ROM and its save; `cargo test --release -p
+netplay --test seat_sound -- --ignored --nocapture`, about 3 minutes):
+two GBAs on a cable in the interpreter, both on the same save, the menu
+presses of the runs above, then from frame 2400 seat 1 jumps in place (A
+for 10 frames every 60) or stands still, seat 0 idle throughout:
+
+- **Straight** (no rollback, as two GBAs on a real cable): seat 1's own
+  sound differs on 258 of the 1200 frames (each jump, 9 frames, and its
+  landing, 3-4), and seat 0's picture differs (on 1180 frames; 598 pixels
+  20 frames in, the yellow Kirby in the air beside the red one), but seat
+  0's sound is the same on every frame, sample for sample.
+- **Rollback** (60 ± 40 ms one way, 2% loss; 52 rollbacks, 293 frames run
+  again on seat 0's peer): what seat 0's speaker heard is the straight
+  run's seat 0 sound on all 3600 frames, and the end hash is the straight
+  run's.
+
+So there's nothing to make play: the other player's jumps make no sound
+on your GBA either, and the netplay window is as faithful as a cable.
+Hearing the others would be a mod (mixing in another seat's sound, or
+the game's), not a fix. Rollback can still cut the start of a sound in a
+game where your console does sound the other players: a sound started on
+a frame run again plays from where the re-run left it.
 
 ## Playing a friend (the play gate)
 
@@ -1023,6 +1382,122 @@ numbers, sizes and packet flags above match. Not yet tried against a real
 mGBA with the assistant (Windows only): a run against C ENet 1.3.17
 built here would be the cheap check.
 
+## The cable over the internet: modes, timing, games (multiplayer/link-cable-survey)
+
+june's question (2026-10-29): can netplay stand in for any game's link
+cable, and does the cable assume no lag? Short answers, worked out on
+quack on 2026-11-08:
+
+- **The cable assumes no lag.** A transfer finishes in microseconds,
+  and the games' protocols are built on that: Emerald's parent flags a
+  link error in the very frame it gets fewer than 9 of its serial
+  interrupts back. Sending the cable's bytes over the internet can't
+  work. What netplay sends instead is button presses, and every peer
+  runs every console, so each peer has the whole cable in its own
+  process, with no lag (see Summary).
+- **So netplay covers any game that uses a mode the link hub emulates,
+  and nothing else is per game.** Today that is multiplayer mode, the
+  mode of almost every GBA-to-GBA cable game. Normal mode, UART, JOY
+  bus and the wireless adapter aren't emulated: a game that uses one of
+  them sees no partner, just as with no cable plugged in.
+- **Tried through two local peers** (`gbaa-pingsim desktop`, headless,
+  paced): Emerald's trade, Kirby & the Amazing Mirror's multiplayer and
+  Nightmare in Dream Land's Quick Draw all work, with both seats on one
+  end hash and no desyncs.
+
+### Each mode, and how fast it is
+
+A frame is 280,896 cycles (16.74 ms). Transfer times are for one
+transfer, from GBATEK and mGBA's `src/gba/sio.c`; the "link error"
+column is what a game does when transfers stop coming.
+
+| mode | how a transfer works | one transfer takes | when the game calls it a link error | `runtime::link` |
+|------|---------------------|-------------------|-------------------------------------|-----------------|
+| Multiplayer (16-bit, 2–4 GBAs) | the parent starts it; every console's halfword reaches every console at once | 3,194 cycles (190 µs) for 2 players at 115,200 bps, 11,863 (707 µs) for 4; 8.5 ms for 4 at 9,600 bps | Emerald (`src/link.c`, `LinkVSync`): the parent in the frame its V-blank sees fewer than 9 serial IRQs (`LAG_MASTER`), a child after 10 V-blanks with none (`LAG_SLAVE`), a player-data exchange after 600 frames. Not measured in the others | **yes** (2026-10-25; 2–4 players, 2026-10-31) |
+| Normal 8-bit / 32-bit | one side clocks a shift register, the other is clocked | internal clock 256 kHz: 524 cycles (8-bit), 2,097 (32-bit); 2 MHz: 67 and 268 | the hardware waits forever for an outside clock; any timeout is the game's | no: no partner |
+| MultiBoot (single-pak) | BIOS `MultiBoot` (SWI 0x25) sends a program of up to 256 KB to children that have no cartridge, over multiplayer mode at 115,200 bps or normal 32-bit mode; a child boots it from RAM | in multiplayer mode a halfword per transfer, about 190 µs, so 256 KB would take about 25 s; real single-pak programs are smaller and send in a few seconds (from memory) | the BIOS's handshake retries, and the game's own screen times out | **yes, multiplayer mode** (2026-11-12): a seat with no cartridge waits in its BIOS and boots what the parent's `MultiBoot` sends (`runtime::bios::multiboot`, both ends HLE: GBATEK's handshake rows as games see them, the main transfer unencrypted with a check value of our own); `gbaa-pingsim run PROFILE --console single-pak` plays a homebrew sender to a cartless seat. Normal mode's `MultiBoot` fails. No commercial single-pak game tried (none of june's) |
+| UART | RS-232-style bytes, a 4-byte FIFO, CTS flow control | 10 bits a byte: 87 µs at 115,200 bps | the game's | no: no partner |
+| JOY bus | a GameCube polls; the GBA's hardware answers reset, status, read and write commands | a few hundred µs per command, clocked by the GameCube (from memory, not checked) | the GameCube game's | no; needs a GameCube on the other end, which we don't run |
+| General purpose | the four pins as plain I/O | — | — | not linking |
+| Wireless adapter | a small computer on the port; the game sends it commands over normal 32-bit mode (librfu's "STWI"), and the adapter does the radio | each command is a few 32-bit transfers at 2 MHz; the adapter answers within a frame or so (afska's `gba-link-connection` docs) | librfu's per-command timeouts, then the game's (not measured) | no: no adapter answers, so games say none is attached |
+
+Why every peer runs every console, in one line each:
+
+- **Forwarding the cable's bytes needs a round trip per transfer.**
+  Emerald does 8 a frame, each needing every console's halfword. Even a
+  20 ms ping is more than a whole frame per transfer, and Emerald's
+  parent gives up the first frame it falls short. mGBA's maintainer says
+  the same of naive network link, and it is why VBA-M's network link
+  times out.
+- **Inputs are a few bytes a frame and can arrive late.** Rollback
+  re-runs the frames a late press changed (see "Rollback"), so each
+  console sees a cable with no lag. What the network's lag costs is the
+  other players' Kirbys and trainers jumping into place, never a link
+  error.
+- **The same hub serves every multiplayer-mode game.** Nothing in the
+  hub or the netplay session knows which game it runs: Nightmare in Dream
+  Land's Quick Draw worked through two peers on its first try. Most
+  link games use multiplayer mode, so netplay is a generic replacement
+  for those. Each other mode needs its own emulation in the hub, once,
+  and then it works for every game that uses that mode.
+- **Not a fit for the wireless adapter.** Its Union Room gathers more
+  players than one peer should run (see Summary), so the wireless
+  adapter would have each player run only their own console, with the
+  server as the adapter's radio.
+
+### Popular link games, by mode
+
+From memory and from each game's manual text; not checked against the
+ROMs unless the game is in the table of games tried below.
+
+| game | mode | what it needs that we lack |
+|------|------|----------------------------|
+| Pokémon Ruby, Sapphire, FireRed, LeafGreen, Emerald | multiplayer mode (trades, battles, Record Mixing, Berry Blender, contests); FireRed, LeafGreen and Emerald also the wireless adapter (Union Room); JOY bus to Colosseum, XD and Box | the adapter; JOY bus means a GameCube |
+| The Legend of Zelda: Four Swords (with A Link to the Past) | multiplayer mode, 2–4, every player needs a cartridge | nothing, in principle (not tried: no ROM) |
+| Mario Kart: Super Circuit | multiplayer mode with every player's cartridge (all tracks); single-pak MultiBoot (fewer tracks) | the multi-pak game: nothing (not tried); single-pak: nothing in principle (not tried: no ROM) |
+| Bomberman Tournament, Bomberman Max 2 | multiplayer mode, multi-pak; Tournament also single-pak | single-pak: nothing in principle (not tried: no ROM) |
+| Super Mario Advance 1–4 (Mario Bros. Classic), many puzzle games (Puyo Pop, Tetris Worlds) | single-pak MultiBoot, 2–4 | nothing in principle (not tried: no ROM) |
+| Kirby & the Amazing Mirror | multiplayer mode, 2–4, every player needs a cartridge | nothing: works |
+| Kirby: Nightmare in Dream Land (sub-games) | multiplayer mode; the parent sends the sub-game ("Transmitting…") | nothing when every seat has the cartridge: works |
+| Final Fantasy Crystal Chronicles, Four Swords Adventures, Metroid Fusion with Prime, Wind Waker's Tingle Tuner | JOY bus, a GBA as a GameCube controller or screen | a GameCube; out of scope |
+
+### Games tried through two local peers
+
+On quack, 2026-11-08, through `gbaa-pingsim desktop PROFILE ROM --
+--headless --paced`, both peers interpreted on one machine (loaded:
+other lanes' jobs, load average 10–18). The serial mode is what
+`SIOCNT` read each frame (an mGBA Lua script, run unlinked: `--script`
+isn't for `--link`).
+
+| game | mode seen | run | result |
+|------|-----------|-----|--------|
+| Pokémon Emerald | multiplayer, 115,200 bps (`src/link.c`) | `just emerald-netplay-trade calm`, then `wander` twice: alice.sav and bob.sav through the cable club to a trade, 8,400 frames | **works.** calm: both end `35d6b1be…`, 43,960 transfers, the trade in both saves. wander: once the same pass, once the peers split at frame 1,119 (a 3.4 s stall on one, then each played on alone), on a loaded machine; filed as its own unit |
+| Kirby & the Amazing Mirror | multiplayer, 115,200 bps (`SIOCNT` 0x6003 at the cable screen) | wander, 3,000 frames, the menu presses from "Four players", then left and right | **works.** both end `47204b2e…`, 18,186 transfers, no desync, p50 7.0 ms a frame |
+| Kirby: Nightmare in Dream Land | multiplayer, 115,200 bps (`SIOCNT` 0x6003 at "Transmitting…") | wander, 7,000 frames: `start@300,a@1000,a@1300,down@1500,a@1600,a@1900,down@2100,a@2200` on both (file 1, Sub-Games, Quick Draw, Multiplayer), `a@3700` on player 1 ("OK?"), then A presses through the duel | **works.** both end `24d71dde…`, 17,937 transfers, no desync; the duel's screen shows both Kirbys on each seat. p50 23 ms a frame, interpreted, on the loaded machine: slower than real time. On one local hub (`--link`) the same presses reach Quick Draw's title |
+| Emerald Rogue, Emerald Imperium | Emerald's cable code (hacks of it) | not tried: they need saves standing at a cable club. Rogue's own multiplayer goes through Rogue Assistant, not the cable (see "Rogue Assistant") | — |
+| Minish Cap, Metroid Zero Mission, WarioWare | no GBA-to-GBA link play | — | — |
+
+Gaps filed as units, each with what it changes:
+
+- **The wireless adapter** (multiplayer/wireless-adapter-local): Emerald's
+  Union Room, first with both consoles in one process. This is the gap
+  that matters for june's games. It also needs normal 32-bit mode on the
+  hub.
+- **Single-pak MultiBoot** (multiplayer/single-pak-multiboot), done
+  2026-11-12: a seat with no cartridge boots the program the parent
+  sends (the BIOS's `MultiBoot` over the hub, `runtime::bios::multiboot`;
+  `netplay::gba::Gba::single_pak`). Checked with a homebrew sender
+  (`netplay::demo::single_pak_sender`) through two ping-sim peers. For
+  Mario Kart's and Bomberman's single-pak modes and the Mario Bros.
+  Classic games, none tried (none of june's ROMs need it); the desktop
+  has no cartless seat yet.
+- **Emerald's netplay trade splitting on wander under load**
+  (multiplayer/wander-split-under-load): the one failure above.
+
+Not filed: plain normal-mode GBA-to-GBA play (we found no popular game
+that uses it, and the adapter unit covers its 32-bit form), UART (no
+games), and JOY bus (it needs a recompiled GameCube on the other end).
+
 ## Risks
 
 - **Determinism.** Anything that differs between peers desyncs: the build,
@@ -1043,7 +1518,8 @@ built here would be the cheap check.
   after constant I/O stores", only for the link hub's machines.
 - **The wireless adapter** is undocumented hardware with timeouts we
   haven't measured; Union Room could turn out to need option C-style
-  hooks after all.
+  hooks after all. Locally (no latency) it needs none: see "The wireless
+  adapter, locally" below.
 - **Test saves.** The cable club needs a save past the first Pokémon
   Center. None is on quack for Emerald, so `just emerald-saves` crafts
   two (docs/tools/commands.md): the game's own new-game save blocks,
@@ -1090,9 +1566,147 @@ the 3-hour cap.
 8. **june trades and battles with a friend over the internet**: the play
    gate (recorded by june).
 9. Later, each its own research or unit when wanted: the wireless adapter
-   locally, then networked (Union Room); rollback; spectating in the UI;
+   locally (done 2026-11-08), then networked (Union Room); rollback; spectating in the UI;
    shared overworld presence (after the Lua research); what Rogue
    Assistant talks to; two different games in one session.
+
+## The wireless adapter, locally
+
+multiplayer/wireless-adapter-local (2026-11-08): `runtime::link::rfu`
+emulates the adapter on each console's port and the radio between them,
+in one process, from librfu's game side (pret's `librfu_stwi.c`,
+`librfu_intr.c`, `librfu_rfu.c`) and afska's `wireless_adapter.md`:
+
+- **The port.** Normal 32-bit mode. The "NINTENDO" handshake at 256 kHz
+  after each reset (`RCNT` in GPIO mode pulls SD high), then commands at
+  2 MHz with the SI/SO handshake between words: after a GBA-clocked word
+  the adapter raises SI until the GBA raises SO; while the adapter
+  clocks (after `0x25`, `0x27`, `0x35`, `0x37`) SI follows SO. Each
+  `SIOCNT` write is a sync point for a console with an adapter
+  (`Io::sio_wireless`), so busy-waits on SI see the answer at once.
+- **The radio.** Hosts, searches, connections, `SendData` and
+  `ReceiveData` as afska describes them: a child's packet waits for the
+  host's next `SendData`; a host hears `0x28` at once after its own; a
+  waiting child hears it when the host's packet comes. IDs count up from
+  `0x2001` instead of being random, so runs repeat.
+- **One guess beyond the docs:** a searching adapter keeps listing a host
+  it heard for 3 seconds, across searches. Emerald's Union Room switches
+  each console between hosting and searching every second or so; with
+  only what's open at the instant of each poll, BOB's trading-board offer
+  reached ALICE too rarely to check the board (2026-11-08). afska's note
+  that a vanished host drops off after 3 s is the basis; whether a real
+  adapter keeps the list across `0x1C`-`0x1E` rounds is unmeasured.
+- **Timing.** A word takes 256 cycles at 2 MHz, 2048 at 256 kHz; the
+  adapter clocks a word 700 cycles after the GBA arms. librfu's own
+  timeouts (80 to 130 ms a word) never come near. A wait times out after
+  `Setup`'s frames (Emerald: 32).
+- **The check:** `just emerald-wireless` (`docs/tools/commands.md`):
+  ALICE and BOB walk into Oldale's Union Room, BOB registers his Torchic
+  at the trading board, ALICE offers her Mudkip, BOB accepts, and the
+  trade and its save complete, identically twice.
+
+Not done: Berry Crush and the other wireless games, a check with more
+than two adapters, and the adapter's state in save states. The radio
+across the network is the next section.
+
+## The radio on the server
+
+multiplayer/wireless-radio-netplay (2026-11-12): each player runs only
+their own Emerald and adapter (`Wireless::networked`), and the radio
+is a `gbaa-server` room's (option F):
+
+- **Who decides.** The server's `runtime::link::rfu::air::Air` (no_std,
+  so the server and any test share it) is the one place that says who
+  hosts with which broadcast, who is whose child in which slot, and
+  where packets go. Each adapter tells it what it does (`Up`: host,
+  leave, connect, kick, a packet) and keeps a view of what it heard
+  (`Down`: the open hosts, joined or refused, a host's children,
+  dropped, a packet), from which it answers its GBA at once, as a real
+  adapter answers from what it last heard. A `Connect` is pending
+  (`IsConnectionComplete` gives status 1, which `AgbRfu_LinkManager.c`
+  polls until its `connect_period` runs out) until the server answers.
+  Host IDs are the adapter's own, `0x1000 * (seat + 1)` counting up, so
+  no two seats collide without asking; a child's ID is the server's,
+  from `0x8001`.
+- **The wire.** Rooms' `W` datagrams (`relay::rooms`), each a
+  `relay::radio::Channel` datagram: reliable and in order (a number per
+  message, a cumulative ack, resent after twice the smoothed round
+  trip), so a lost `Connect` or packet costs a resend, never a radio out
+  of step. The player's side is `netplay::radio::Radio`, pumped four
+  times a frame and while the frame waits for its turn.
+- **Packets.** A host's packet goes to every child and a child's to its
+  host as each is sent, queued (eight deep) and read one per
+  `ReceiveData`. The local radio's rhythm, a child's packet waiting for
+  the host's next, lost packets here: the host numbers its children's
+  packets (`link_rfu_2.c`, `childRecvIds`, three bits) and calls five
+  out of turn in a row a link error (`0x8100`, F_RFU_ERROR_8 | 1), and
+  under calm's jitter a child often sent twice before the host's next
+  packet came, the first overwritten.
+- **The guess beyond afska's docs** (a search lists a host it heard
+  within 3 s, `HEARD_FOR`): the networked radio still needs it, and
+  keeps it (`--heard-ms 0` turns it off). Without it, at 100 and 120 ms
+  each way BOB's offer never showed on ALICE's board (her presses found
+  it empty; nothing connected), though 0-80 and 150-200 ms passed: a
+  host is open only part of the time, between searches of its own, and
+  whether ALICE's board reads it while the server last said "open"
+  depends on the delay. With it every latency to 200 ms trades. Its
+  cost: the first `Connect` can go to the host's ID from before it last
+  reopened (each `StartHost` takes a new one) and be refused, so the
+  trade connects one retry later (22 ms: frame 6812, not 6718).
+  Remembered hosts are kept one per adapter (the ID's top four bits),
+  as the local radio's index does.
+- **The check:** `just emerald-radio` (`docs/tools/commands.md`): two
+  processes through a server in the check's, each path through the ping
+  simulator's calm (20-25 ms each way). 2026-11-12: connected at frame
+  6812, the trade on screen at 7981 (the local radio: 6715 and 7883),
+  back in the room by 10284; about 3300 messages each way, none resent,
+  no frame late.
+
+How much latency it takes (`emerald-wireless --sim-ms N`: the same two
+consoles and the server's `Air` in one process on simulated time, N ms
+each way between each console and the server, so twice that between
+the consoles; no jitter or loss; 20000 frames, both pressing A every
+second from 9400 so a late trade can finish). Rerun 2026-11-12 with the
+adapter as it ships (the 3 s memory); the last column is the same run
+with `--heard-ms 0`:
+
+| each way | connected | trade on screen | back in the room | without the memory |
+|---|---|---|---|---|
+| 0 ms | 6714 | 7882 | 10166 | the same |
+| 22 ms | 6812 | 7909 | 10215 | traded (connected 6718) |
+| 45 ms | 6815 | 7999 | 10330 | traded |
+| 60 ms | 6816 | 7955 | 10304 | traded |
+| 80 ms | 6819 | 8039 | 10428 | traded |
+| 100 ms | 6821 | 9752 | 12178 | no: BOB's offer never on ALICE's board |
+| 120 ms | 6824 | 9778 | 12245 | no: the same |
+| 150 ms | 6827 | 9810 | 12326 | traded |
+| 175 ms | 6830 | 9962 | 12525 | traded |
+| 200 ms | 6833 | 9992 | 12600 | traded |
+| 250 ms | 6839 | no | no: BOB's side gave the connection up at 7080 | no: the same (connected 6772) |
+| 300 ms | 6845 | no | no: both gave it up at 7086 | no: the same (connected 6784) |
+| 400 ms | no | no | no: BOB's walk blocked, see below | the same |
+
+(Frames are each player's own, which start together in the sim; no run
+had a link error. "Connected" is ALICE's adapter becoming BOB's child.)
+
+At 400 ms the fixed presses no longer fit at all: ALICE's avatar comes
+into the room at a different moment and stands in BOB's path (he stops
+at 3,6, not 3,3, short of the attendant), so his presses talk to her
+instead of registering. Without the memory that talk connected (BOB
+ALICE's child at frame 4660, dropped at 4901), which is the "4660" an
+earlier version of this table showed; it is not the trade's connection.
+So 400 ms says nothing about the link, only about the script.
+
+So librfu's own timeouts are not what limits it: the link held at 200
+ms each way (about 800 ms round trip between the consoles) with no
+error. What gives out first is the Union Room's handshake after
+connecting: between 200 and 250 ms each way, with the adapter as it
+ships, the connection made but given up within about 4 seconds, with
+no link error. From 100 ms on, every exchange in the room takes longer
+(the trade screen 30 seconds later), so the check's fixed presses no
+longer fit and the trade finishes on the later presses. Real paths add
+jitter and loss, which the sim leaves out; calm's (5 ms) passed in real
+time.
 
 ## Questions for june
 

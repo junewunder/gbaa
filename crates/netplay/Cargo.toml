@@ -15,6 +15,7 @@ relay = { path = "../relay" }
 runtime = { path = "../runtime" }
 serde = { version = "1", features = ["derive"] }
 toml = "1"
+libc = "0.2"
 
 # The variable-ping simulator (multiplayer/ping-sim): two peer processes
 # through a UDP proxy that follows a profile in profiles/.

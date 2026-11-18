@@ -5,8 +5,9 @@
 //! and show their console ([`crate::console`], drawn in the same egui
 //! pass), host or join a netplay room (its Netplay page), close it, or
 //! quit. In netplay it reports how the session has gone ([`Menu::report`])
-//! at the screen's foot. It opens on a pad with Start and Select held
-//! together, or F10 on the keyboard.
+//! at the screen's foot, under the Main page, which fits above it. It
+//! opens on a pad with Start and Select held together, or F10 on the
+//! keyboard.
 //!
 //! With it shut, the volume keys ([`SoundKey`]) step the volume and mute
 //! it as its rows do, and a toast shows the level for [`TOAST_TIME`].
@@ -34,9 +35,12 @@
 //! unless another is set, and then remembered in [`crate::settings`]), and
 //! leaves it. A field is typed on the keyboard, or on a pad: up and down
 //! step the letter at the cursor, left and right move it ([`Edit`]); A or
-//! Enter keeps it, B or Escape drops it. In a session it shows the room,
-//! the seats, the round trip, how far ahead or behind, the rollbacks and
-//! the frames run again.
+//! Enter keeps it, B or Escape drops it. Its Link row picks the cable's
+//! rooms (rollback netplay) or wireless ones ([`crate::wireless`]: the
+//! adapter's radio on the server, each window its own GBA, from reset).
+//! In a session it shows the room, the seats, the round trip, how far
+//! ahead or behind, the rollbacks and the frames run again (a wireless
+//! room: the radio's traffic).
 
 use crate::audio::MAX_VOLUME;
 use crate::console::{self, Console, ScriptCmd};
@@ -61,7 +65,8 @@ pub const VOLUME_STEP: u32 = 10;
 /// How long the volume keys' toast stays up.
 pub const TOAST_TIME: Duration = Duration::from_secs(1);
 
-/// How long the toast saying the other netplay player left stays up.
+/// How long the toast saying the other netplay player left, or that the
+/// players' games went out of sync, stays up.
 pub const LEFT_TOAST_TIME: Duration = Duration::from_secs(8);
 
 /// How a netplay room is, as the mark over the game shows it.
@@ -75,6 +80,9 @@ pub enum Mark {
     Connected,
     /// Playing, but the other player has sent nothing for a while.
     Quiet,
+    /// Playing, but the peers' consoles have gone apart (a desync): the
+    /// players' games may differ.
+    Desynced,
     /// The other player has left: this one plays on alone.
     Lost,
 }
@@ -85,32 +93,42 @@ impl Mark {
         Some(match state {
             room::State::Off | room::State::Ended(_) => return None,
             room::State::Making | room::State::Joining(_) => Mark::Connecting,
-            room::State::Waiting(_) => Mark::Waiting,
+            room::State::Waiting { .. } => Mark::Waiting,
             room::State::Playing { left: Some(_), .. } => Mark::Lost,
+            room::State::Playing {
+                desync: Some(_), ..
+            } => Mark::Desynced,
             room::State::Playing { quiet: true, .. } => Mark::Quiet,
             room::State::Playing { .. } => Mark::Connected,
         })
     }
 
-    /// What it says: how it is, and the players in the room of
-    /// [`room::SEATS`].
-    pub fn text(self) -> String {
+    /// What it says: how it is, and the players in the room at `state`
+    /// (the one it's the mark of) of its seats.
+    pub fn text(self, state: &room::State) -> String {
+        let (filled, seats) = match state {
+            room::State::Waiting { filled, seats, .. } => (*filled, *seats),
+            room::State::Playing { seats, .. } => (*seats, *seats),
+            _ => (1, room::SEATS),
+        };
         let (said, n) = match self {
             Mark::Connecting => return "Connecting…".into(),
-            Mark::Waiting => ("Waiting for players", 1),
-            Mark::Connected => ("Connected", room::SEATS),
-            Mark::Quiet => ("Not hearing from them", room::SEATS),
+            Mark::Waiting => ("Waiting for players", filled),
+            Mark::Connected => ("Connected", seats),
+            Mark::Quiet => ("Not hearing from them", seats),
+            Mark::Desynced => ("Out of sync", seats),
             Mark::Lost => ("Lost: playing alone", 1),
         };
-        format!("{said} · {n}/{}", room::SEATS)
+        format!("{said} · {n}/{seats}")
     }
 
-    /// Its dot's colour: green connected, amber waiting, red lost.
+    /// Its dot's colour: green connected, amber waiting, red lost or out
+    /// of sync.
     pub fn colour(self) -> egui::Color32 {
         match self {
             Mark::Connected => egui::Color32::from_rgb(80, 200, 100),
             Mark::Connecting | Mark::Waiting | Mark::Quiet => egui::Color32::from_rgb(230, 170, 50),
-            Mark::Lost => egui::Color32::from_rgb(220, 70, 60),
+            Mark::Lost | Mark::Desynced => egui::Color32::from_rgb(220, 70, 60),
         }
     }
 }
@@ -427,6 +445,10 @@ const SCRIPTS_ROW: usize = 7;
 const NETPLAY_ROW: usize = 8;
 /// Its Save folders row.
 const SAVES_ROW: usize = 10;
+/// The main page's rows a native program's window leaves out
+/// ([`Menu::native`]): Undo load state, Scripts, Netplay and Resume on
+/// launch.
+const NOT_NATIVE: [usize; 4] = [4, SCRIPTS_ROW, NETPLAY_ROW, 9];
 
 /// A field of the Netplay page.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -597,6 +619,11 @@ pub struct Menu {
     pub server: String,
     /// The room code typed to join.
     code: String,
+    /// The seats in a room the Netplay page hosts (2-4).
+    players: usize,
+    /// The Netplay page's rooms are wireless ([`crate::wireless`]), not
+    /// the cable's.
+    wireless: bool,
     /// The Netplay page's field being typed in.
     edit: Option<Edit>,
     pub quit: bool,
@@ -627,6 +654,10 @@ pub struct Menu {
     saved: Option<String>,
     /// The Save folders page's settings ([`saves`]).
     pub saves: saves::SaveFolders,
+    /// The window plays a native program (crates/native-host), which has
+    /// no save states, rewind, scripts or netplay: the main page leaves
+    /// out their rows ([`NOT_NATIVE`]), the Controls page their shortcuts.
+    pub native: bool,
     /// Its folder picker, while open.
     picker: Option<saves::Picker>,
     /// What setting a folder did, for the page turned back to.
@@ -670,6 +701,8 @@ impl Menu {
             leave: false,
             server: room::DEFAULT_SERVER.into(),
             code: String::new(),
+            players: room::SEATS,
+            wireless: false,
             edit: None,
             quit: false,
             controls,
@@ -684,6 +717,7 @@ impl Menu {
             resume: false,
             saved: None,
             saves: saves::SaveFolders::default(),
+            native: false,
             picker: None,
             folder_said: None,
             console: Console::default(),
@@ -738,7 +772,8 @@ impl Menu {
     }
 
     /// Where netplay is now. A session begun closes the menu, so the game
-    /// goes on; the other player leaving says so over the game.
+    /// goes on; the other player leaving, or the games going out of sync,
+    /// says so over the game.
     pub fn set_netplay(&mut self, state: room::State) {
         let playing = |s: &room::State| matches!(s, room::State::Playing { .. });
         let began = playing(&state) && !playing(&self.netplay);
@@ -750,6 +785,15 @@ impl Menu {
             && left(&self.netplay).as_ref() != Some(&l)
         {
             self.toast = Some((l, Instant::now() + LEFT_TOAST_TIME));
+        }
+        let desync = |s: &room::State| match s {
+            room::State::Playing { desync, .. } => *desync,
+            _ => None,
+        };
+        if let Some(f) = desync(&state)
+            && desync(&self.netplay).is_none()
+        {
+            self.toast = Some((room::desync_note(f), Instant::now() + LEFT_TOAST_TIME));
         }
         // The page's rows change with it: the focus goes to the first.
         if std::mem::discriminant(&state) != std::mem::discriminant(&self.netplay)
@@ -800,6 +844,16 @@ impl Menu {
         self.saved = None;
     }
 
+    /// The main page's row `row` (one of the `_ROW`s, counted with every
+    /// row shown) as it is shown: in a native program's window, less the
+    /// rows left out before it ([`NOT_NATIVE`]).
+    fn main_row(&self, row: usize) -> usize {
+        match self.native {
+            true => row - NOT_NATIVE.iter().filter(|&&r| r < row).count(),
+            false => row,
+        }
+    }
+
     /// Take a move. Arrows and Ok go to egui as keys pressed and let go.
     pub fn nav(&mut self, n: Nav) {
         if let Some(e) = &mut self.edit {
@@ -822,10 +876,14 @@ impl Menu {
                 self.remap.listen = None;
                 return;
             }
-            Nav::Back if self.page == Page::Remap => return self.turn(Page::Main, CONTROLS_ROW),
+            Nav::Back if self.page == Page::Remap => {
+                return self.turn(Page::Main, self.main_row(CONTROLS_ROW));
+            }
             Nav::Back if self.page == Page::Scripts => return self.turn(Page::Main, SCRIPTS_ROW),
             Nav::Back if self.page == Page::Netplay => return self.turn(Page::Main, NETPLAY_ROW),
-            Nav::Back if self.page == Page::Saves => return self.turn(Page::Main, SAVES_ROW),
+            Nav::Back if self.page == Page::Saves => {
+                return self.turn(Page::Main, self.main_row(SAVES_ROW));
+            }
             Nav::Back if self.page == Page::Folder => {
                 let row = match self.picker.as_ref().map(|p| p.target) {
                     Some(saves::Target::All) => 1,
@@ -1004,7 +1062,7 @@ impl Menu {
                     });
             }
             if let Some(mark) = Mark::of(&self.netplay) {
-                draw_mark(ui.ctx(), mark);
+                draw_mark(ui.ctx(), mark, &self.netplay);
             }
             return;
         }
@@ -1013,6 +1071,24 @@ impl Menu {
         ui.painter()
             .rect_filled(screen, 0.0, egui::Color32::from_black_alpha(140));
         let page = self.page;
+        // In netplay the Main page has the session's report at the
+        // screen's foot: it's laid out first, and the box fits above it,
+        // so it never covers the bottom rows.
+        let mut room = screen;
+        if page == Page::Main && !self.report.is_empty() {
+            let report = egui::Area::new(egui::Id::unique("report"))
+                .anchor(egui::Align2::CENTER_BOTTOM, [0.0, -EDGE])
+                .interactable(false)
+                .show(ui.ctx(), |ui| {
+                    egui::Frame::popup(ui.style()).show(ui, |ui| {
+                        ui.set_max_width(screen.width() - 40.0);
+                        for l in &self.report {
+                            ui.label(egui::RichText::new(l).small());
+                        }
+                    });
+                });
+            room.max.y = report.response.rect.top().max(screen.top() + ROW_HEIGHT);
+        }
         // Every page is the same box, so turning one doesn't move or
         // resize it: the title stays put, the hints stay at the foot.
         let frame = egui::Frame::window(ui.style()).inner_margin(MARGIN);
@@ -1024,8 +1100,8 @@ impl Menu {
             PAGE_WIDTH
         };
         let size = egui::vec2(
-            width.min(screen.width() - edge),
-            PAGE_HEIGHT.min(screen.height() - edge),
+            width.min(room.width() - edge),
+            PAGE_HEIGHT.min(room.height() - edge),
         )
         .max(egui::vec2(ROW_HEIGHT, ROW_HEIGHT));
         egui::Window::new("menu")
@@ -1033,7 +1109,7 @@ impl Menu {
             .collapsible(false)
             .resizable(false)
             .frame(frame)
-            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .anchor(egui::Align2::CENTER_CENTER, room.center() - screen.center())
             .show(ui.ctx(), |ui| {
                 ui.set_width(size.x);
                 ui.set_height(size.y);
@@ -1055,19 +1131,6 @@ impl Menu {
                 }
                 self.shown = rows.shown;
             });
-        if page == Page::Main && !self.report.is_empty() {
-            egui::Area::new(egui::Id::unique("report"))
-                .anchor(egui::Align2::CENTER_BOTTOM, [0.0, -8.0])
-                .interactable(false)
-                .show(ui.ctx(), |ui| {
-                    egui::Frame::popup(ui.style()).show(ui, |ui| {
-                        ui.set_max_width(screen.width() - 40.0);
-                        for l in &self.report {
-                            ui.label(egui::RichText::new(l).small());
-                        }
-                    });
-                });
-        }
     }
 
     fn main_page(&mut self, ui: &mut egui::Ui, rows: &mut Rows) {
@@ -1099,14 +1162,16 @@ impl Menu {
                 self.sound_changed = true;
             }
             // Greyed, it's no focus stop: the arrows pass over it.
-            let undo = ui
-                .add_enabled_ui(self.undoable, |ui| rows.row(ui, "Undo load state", ""))
-                .inner;
-            // Undone, the game goes on to show it.
-            if self.undoable && undo.step != 0 {
-                self.undo = true;
-                self.undoable = false;
-                self.set_open(false);
+            if !self.native {
+                let undo = ui
+                    .add_enabled_ui(self.undoable, |ui| rows.row(ui, "Undo load state", ""))
+                    .inner;
+                // Undone, the game goes on to show it.
+                if self.undoable && undo.step != 0 {
+                    self.undo = true;
+                    self.undoable = false;
+                    self.set_open(false);
+                }
             }
             if rows.link(ui, "Controls").step != 0 {
                 self.turn(Page::Remap, 0);
@@ -1115,19 +1180,21 @@ impl Menu {
             if rows.row(ui, "Fullscreen", full).step != 0 {
                 self.fullscreen_asked = true;
             }
-            if rows.link(ui, "Scripts").step != 0 {
-                self.turn(Page::Scripts, 0);
-            }
-            if rows.link(ui, "Netplay").step != 0 {
-                self.turn(Page::Netplay, 0);
-            }
-            let resume = rows.row(
-                ui,
-                "Resume on launch",
-                if self.resume { "on" } else { "off" },
-            );
-            if resume.step != 0 {
-                self.set_resume(!self.resume);
+            if !self.native {
+                if rows.link(ui, "Scripts").step != 0 {
+                    self.turn(Page::Scripts, 0);
+                }
+                if rows.link(ui, "Netplay").step != 0 {
+                    self.turn(Page::Netplay, 0);
+                }
+                let resume = rows.row(
+                    ui,
+                    "Resume on launch",
+                    if self.resume { "on" } else { "off" },
+                );
+                if resume.step != 0 {
+                    self.set_resume(!self.resume);
+                }
             }
             if rows.link(ui, "Save folders").step != 0 {
                 // The game's row is greyed when the launcher has it.
@@ -1211,8 +1278,8 @@ impl Menu {
 }
 
 impl Menu {
-    /// The Netplay page: out of a room, the server, Host, the code and
-    /// Join; in one, where it is (the code big while the host waits) and
+    /// The Netplay page: out of a room, the server, the players, the
+    /// link (cable or wireless), Host, the code and Join; in one, where it is (the code big while the host waits) and
     /// Leave.
     fn netplay_page(&mut self, ui: &mut egui::Ui, rows: &mut Rows) {
         title(ui, "Netplay");
@@ -1235,10 +1302,30 @@ impl Menu {
                     if rows.row(ui, "Server", &server).response.clicked() {
                         self.edit = Some(Edit::new(Field::Server, &self.server));
                     }
+                    let players = rows.row(ui, "Players", &self.players.to_string()).step;
+                    if players != 0 {
+                        // 2, 3, 4 and round: A steps on, as right does.
+                        let n = room::MAX_SEATS - 1;
+                        self.players =
+                            2 + (self.players as i32 - 2 + players).rem_euclid(n as i32) as usize;
+                    }
+                    let link = if self.wireless { "Wireless" } else { "Cable" };
+                    if rows.row(ui, "Link", link).step != 0 {
+                        self.wireless = !self.wireless;
+                    }
+                    if self.wireless {
+                        said(
+                            ui,
+                            "A wireless room (Union Room, wireless club) starts the game \
+                             from reset: save in the game first.",
+                        );
+                    }
                     if rows.row(ui, "Host a room", "").step != 0 {
                         self.netplay_ask = Some(room::Ask {
                             server: self.server.clone(),
                             role: room::Role::Host,
+                            players: self.players,
+                            wireless: self.wireless,
                         });
                     }
                     let code = match self.edit.as_ref().filter(|e| e.field == Field::Code) {
@@ -1255,6 +1342,8 @@ impl Menu {
                                 self.netplay_ask = Some(room::Ask {
                                     server: self.server.clone(),
                                     role: room::Role::Join(c),
+                                    players: 0,
+                                    wireless: self.wireless,
                                 })
                             }
                             Err(_) => {
@@ -1267,12 +1356,19 @@ impl Menu {
                     }
                 }
                 room::State::Making => said(ui, "Asking the server for a room…"),
-                room::State::Waiting(code) => {
-                    said(ui, "Your room's code, for player 2 to join with:");
+                room::State::Waiting {
+                    code,
+                    filled,
+                    seats,
+                } => {
+                    said(ui, "Your room's code, for the others to join with:");
                     ui.vertical_centered(|ui| {
                         ui.label(egui::RichText::new(code).size(44.0).monospace().strong());
                     });
-                    said(ui, "Waiting for player 2…");
+                    said(
+                        ui,
+                        &format!("{filled} of {seats} players in; waiting for the rest…"),
+                    );
                 }
                 room::State::Joining(code) => said(ui, &format!("Joining room {code}…")),
                 room::State::Playing { code, lines, .. } => {
@@ -1558,7 +1654,7 @@ pub fn pixels_per_point(scale: usize) -> f32 {
 
 /// Draw `mark` small in the top right corner, over the game: a dot in its
 /// colour and its text, on a dim backing, out of the way of play.
-fn draw_mark(ctx: &egui::Context, mark: Mark) {
+fn draw_mark(ctx: &egui::Context, mark: Mark, state: &room::State) {
     egui::Area::new(egui::Id::unique("netplay mark"))
         .anchor(egui::Align2::RIGHT_TOP, [-6.0, 6.0])
         .interactable(false)
@@ -1574,7 +1670,7 @@ fn draw_mark(ctx: &egui::Context, mark: Mark) {
                             ui.allocate_painter(egui::vec2(8.0, 8.0), egui::Sense::hover());
                         p.circle_filled(r.rect.center(), 4.0, mark.colour());
                         ui.label(
-                            egui::RichText::new(mark.text())
+                            egui::RichText::new(mark.text(state))
                                 .size(11.0)
                                 .color(egui::Color32::from_gray(230)),
                         );
@@ -1752,9 +1848,11 @@ mod tests {
         let playing = |left: Option<&str>, quiet| room::State::Playing {
             code: "QWERTY".into(),
             seat: 0,
+            seats: 2,
             lines: Vec::new(),
             left: left.map(Into::into),
             quiet,
+            desync: None,
         };
         let marks = [
             (room::State::Making, Mark::Connecting, "Connecting…"),
@@ -1764,9 +1862,22 @@ mod tests {
                 "Connecting…",
             ),
             (
-                room::State::Waiting("QWERTY".into()),
+                room::State::Waiting {
+                    code: "QWERTY".into(),
+                    filled: 1,
+                    seats: 2,
+                },
                 Mark::Waiting,
                 "Waiting for players · 1/2",
+            ),
+            (
+                room::State::Waiting {
+                    code: "QWERTY".into(),
+                    filled: 3,
+                    seats: 4,
+                },
+                Mark::Waiting,
+                "Waiting for players · 3/4",
             ),
             (playing(None, false), Mark::Connected, "Connected · 2/2"),
             (
@@ -1779,11 +1890,24 @@ mod tests {
                 Mark::Lost,
                 "Lost: playing alone · 1/2",
             ),
+            (
+                room::State::Playing {
+                    code: "QWERTY".into(),
+                    seat: 0,
+                    seats: 2,
+                    lines: Vec::new(),
+                    left: None,
+                    quiet: true,
+                    desync: Some(240),
+                },
+                Mark::Desynced,
+                "Out of sync · 2/2",
+            ),
         ];
         let bare = pass(&mut m);
         for (state, mark, text) in marks {
             assert_eq!(Mark::of(&state), Some(mark));
-            assert_eq!(mark.text(), text);
+            assert_eq!(mark.text(&state), text);
             m.set_netplay(state);
             m.toast = None;
             assert!(m.drawn());
@@ -1800,9 +1924,11 @@ mod tests {
         m.set_netplay(room::State::Playing {
             code: "QWERTY".into(),
             seat: 1,
+            seats: 2,
             lines: Vec::new(),
             left: None,
             quiet: false,
+            desync: None,
         });
         pass(&mut m);
         m.nav(Nav::Toggle);
@@ -1907,6 +2033,31 @@ mod tests {
             m.nav(n);
             pass(m);
         }
+    }
+
+    #[test]
+    fn a_native_window_leaves_out_states_scripts_and_netplay() {
+        let mut m = Menu::new(4.0, 100, Controls::default());
+        m.native = true;
+        pass(&mut m);
+        go(&mut m, &[Nav::Toggle]);
+        for gone in ["Undo load state", "Scripts", "Netplay", "Resume on launch"] {
+            assert!(!shows(&mut m, gone), "{gone}");
+        }
+        assert!(shows(&mut m, "Save folders"));
+        // Controls is the fifth row, Save folders the seventh; back from
+        // their pages to them.
+        go(&mut m, &[Nav::Down; 4]);
+        go(&mut m, &[Nav::Ok]);
+        assert_eq!(m.page, Page::Remap);
+        m.nav(Nav::Back);
+        assert_eq!((m.page, m.focus), (Page::Main, Some(4)));
+        pass(&mut m);
+        go(&mut m, &[Nav::Down; 2]);
+        go(&mut m, &[Nav::Ok]);
+        assert_eq!(m.page, Page::Saves);
+        m.nav(Nav::Back);
+        assert_eq!((m.page, m.focus), (Page::Main, Some(6)));
     }
 
     /// A menu for ROM `rom`, open on the Controls page.
@@ -2459,6 +2610,17 @@ mod tests {
         assert!(!texts(&mut m).iter().any(|t| t == line));
         m.nav(Nav::Toggle);
         assert!(texts(&mut m).iter().any(|t| t == line));
+        // Below the box, not over its bottom rows (multiplayer/overlay-
+        // hides-menu: on the Deck it covered them), even when it's long.
+        m.report = vec![line.repeat(4); 4];
+        texts(&mut m);
+        let rect = |id| m.ctx.memory(|mem| mem.area_rect(id)).unwrap();
+        let menu = rect(egui::Id::unique(Some("menu")));
+        let report = rect(egui::Id::unique("report"));
+        assert!(
+            menu.bottom() <= report.top() && menu.top() >= 0.0,
+            "{menu:?} over {report:?}"
+        );
         // Not over the remap screen.
         go(
             &mut m,
@@ -2875,9 +3037,19 @@ mod tests {
         go(&mut m, &[Nav::Ok]);
         assert_eq!(m.page, Page::Netplay);
         pass(&mut m);
-        // Server, Host a room, Room code, Join, Back. Join with no code
-        // asks for one.
-        go(&mut m, &[Nav::Down, Nav::Down, Nav::Down, Nav::Ok]);
+        // Server, Players, Link, Host a room, Room code, Join, Back. Join
+        // with no code asks for one.
+        go(
+            &mut m,
+            &[
+                Nav::Down,
+                Nav::Down,
+                Nav::Down,
+                Nav::Down,
+                Nav::Down,
+                Nav::Ok,
+            ],
+        );
         assert_eq!(m.netplay_ask, None);
         assert!(m.saved.as_deref().unwrap().contains("code"));
         // The code, typed on a pad: A on its row, up for each new letter.
@@ -2898,31 +3070,100 @@ mod tests {
             Some(room::Ask {
                 server: room::DEFAULT_SERVER.into(),
                 role: room::Role::Join(*b"B9CDEF"),
+                players: 0,
+                wireless: false,
             })
         );
         // Hosting: the code shows big while it waits; the session begun
         // closes the menu.
         go(&mut m, &[Nav::Up, Nav::Up, Nav::Ok]);
-        assert_eq!(m.netplay_ask.take().unwrap().role, room::Role::Host);
-        m.set_netplay(room::State::Waiting("QWERTY".into()));
+        let ask = m.netplay_ask.take().unwrap();
+        assert_eq!((ask.role, ask.players), (room::Role::Host, 2));
+        // Players steps 2, 3, 4 and round, A as right; left goes back.
+        go(
+            &mut m,
+            &[
+                Nav::Up,
+                Nav::Up,
+                Nav::Ok,
+                Nav::Ok,
+                Nav::Ok,
+                Nav::Left,
+                Nav::Down,
+                Nav::Down,
+                Nav::Ok,
+            ],
+        );
+        let ask = m.netplay_ask.take().unwrap();
+        assert_eq!(
+            (ask.role, ask.players, ask.wireless),
+            (room::Role::Host, 4, false)
+        );
+        // Link steps cable and wireless: a wireless room's host, then its
+        // join.
+        go(&mut m, &[Nav::Up, Nav::Ok, Nav::Down, Nav::Ok]);
+        let ask = m.netplay_ask.take().unwrap();
+        assert_eq!(
+            (ask.role, ask.players, ask.wireless),
+            (room::Role::Host, 4, true)
+        );
+        go(&mut m, &[Nav::Down, Nav::Down, Nav::Ok]);
+        assert_eq!(
+            m.netplay_ask.take(),
+            Some(room::Ask {
+                server: room::DEFAULT_SERVER.into(),
+                role: room::Role::Join(*b"B9CDEF"),
+                players: 0,
+                wireless: true,
+            })
+        );
+        m.set_netplay(room::State::Waiting {
+            code: "QWERTY".into(),
+            filled: 3,
+            seats: 4,
+        });
         pass(&mut m);
         assert!(m.open);
         m.set_netplay(room::State::Playing {
             code: "QWERTY".into(),
             seat: 0,
+            seats: 2,
             lines: vec!["Round trip 40 ms".into()],
             left: None,
             quiet: false,
+            desync: None,
         });
         assert!(!m.open);
+        assert!(m.toast.is_none());
+        // The games go out of sync: a toast says so over the game, once,
+        // and the Netplay page's lines with it.
+        let apart = room::State::Playing {
+            code: "QWERTY".into(),
+            seat: 0,
+            seats: 2,
+            lines: vec![format!("{}: your games may differ", room::desync_note(240))],
+            left: None,
+            quiet: false,
+            desync: Some(240),
+        };
+        m.set_netplay(apart.clone());
+        assert_eq!(
+            m.toast.as_ref().unwrap().0,
+            "Out of sync with the other player since frame 240"
+        );
+        assert_eq!(Mark::of(&apart), Some(Mark::Desynced));
+        m.toast = None;
+        m.set_netplay(apart);
         assert!(m.toast.is_none());
         // The other player leaves: a toast says so over the game, once.
         let alone = room::State::Playing {
             code: "QWERTY".into(),
             seat: 0,
+            seats: 2,
             lines: vec!["Player 2 left the room.".into()],
             left: Some("Player 2 left the room".into()),
             quiet: false,
+            desync: Some(240),
         };
         m.set_netplay(alone.clone());
         assert_eq!(m.toast.as_ref().unwrap().0, "Player 2 left the room");

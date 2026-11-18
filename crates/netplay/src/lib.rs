@@ -20,18 +20,35 @@
 //!   directly or through `gbaa-server`'s rooms; [`proxy`]: the
 //!   variable-ping simulator between two of them, from a TOML profile
 //!   (`gbaa-pingsim`). [`demo`]: what the tests play.
+//! - [`feel`]: the feel sim, what each player's window shows (frames
+//!   late, doubled, skipped; rollbacks, holds, the other player's jumps)
+//!   in simulated time through a profile, and the budgets on it.
+//!   [`script`]: headless input scripts, the desktop's and the sim's.
 
 pub mod demo;
+pub mod feel;
 pub mod gba;
 pub mod msg;
 pub mod proxy;
+pub mod radio;
 pub mod rollback;
+pub mod script;
 pub mod session;
 pub mod sim;
 pub mod udp;
 
 pub use rollback::Rollback;
 pub use session::{Config, Error, Status};
+
+/// The netplay version, sent to the rooms server with every `H` and `J`
+/// so a server started with `--min-version` can turn away builds too old
+/// to play with today's (`relay::rooms`). Raise it by hand, by one,
+/// whenever a change can split peers (a console, rollback or link change
+/// that makes two builds step differently) or changes the wire (these
+/// messages, [`udp`]'s datagrams, the rooms server's); then raise
+/// `--min-version` in deploy/fly/Dockerfile to match and redeploy, once
+/// the new build is out. docs/research/multiplayer.md, "Versions".
+pub const VERSION: u32 = 1;
 
 /// One seat's input for one frame: a button bitmask or a pad's whole
 /// reading, fixed-size on the wire.

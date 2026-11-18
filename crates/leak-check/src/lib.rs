@@ -13,6 +13,8 @@
 //! A hit is fixed at its source: say it another way, or move the fact to an
 //! ignored file (`docs/machines.private.md`, `mods/`).
 
+pub mod budgets;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 

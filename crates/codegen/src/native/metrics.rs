@@ -9,17 +9,39 @@
 //! lowered. One exception: `lines_prelude` counts the prelude
 //! (`native/prelude.rs`, hand-written runtime code in every lifted crate),
 //! which may rise when a unit adds to it, its evidence saying how many
-//! lines and why; `lines` counts everything else the lift writes, and only
-//! goes down.
+//! lines and why; `lines` counts everything else the lift writes but the
+//! modules' wiring (`super::modules`), and only goes down.
 //!
 //! Memory accesses are split by how their address is known and by region,
 //! so that a bar on one family means something:
 //! - `const`: the address is a constant within its block (a literal, a
-//!   pool word, arithmetic on them), by the region it is in;
+//!   pool word, arithmetic on them), by the region it is in, a byte
+//!   access; one in RAM that is printed as a typed global's field
+//!   (`super::globals`) is `ram_global` instead, which has no bar (it
+//!   should rise), and `ram_globals` counts the globals;
 //! - `sp`: sp-relative (the value-set analysis says it is the function's
 //!   entry sp plus a constant);
 //! - `computed`: anything else, by region where the value-set analysis
-//!   bounds it to one, else `computed_unknown`.
+//!   bounds it to one, else `computed_unknown`; one in RAM the value sets
+//!   bound to one typed global (`super::globals::Obj`) is `ram_object`
+//!   instead (no bar: it should rise), and `pointer_unexplained` counts
+//!   the computed RAM accesses that aren't (native/ref-in-object: they
+//!   reach several globals, or one at a width not its element's). One
+//!   the value sets don't bound but the heap's run types
+//!   (`super::heap`, native/ref-heap) is a field through a `Ref<T>`,
+//!   counted in `ref_accesses` (no bar: it should rise) with `ref_types`
+//!   the types; `ref_unexplained` counts those through an object's
+//!   pointer the types don't explain (left as bytes, in
+//!   `computed_unknown` too).
+//!
+//! The sp-relative ones are split again by whether the stack slot they
+//! reach escapes (`super::frame`): `sp_accesses_local_slot` and
+//! `sp_accesses_escaping_slot` (one the frame's run didn't place counts as
+//! escaping).
+//!
+//! Function words (`super::fnref`): the words of ROM outside code that hold
+//! a function's key, `fn_words_not_proven` those the flow didn't prove
+//! (barred), `fn_words_proven` the rest (no bar: it should rise).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -54,6 +76,15 @@ pub fn region_of(lo: u32, hi: u32) -> Option<usize> {
 pub enum Where {
     /// A constant in this region.
     Const(usize),
+    /// A constant in RAM, printed as a typed global's field
+    /// (`super::globals`): not a byte access.
+    Global,
+    /// Computed, into one typed global (`super::globals::Obj`): not a
+    /// byte access.
+    Object,
+    /// Computed, a field of a heap object's type through its `Ref<T>`
+    /// (`super::heap`): not a byte access.
+    Ref,
     /// sp-relative.
     Sp,
     /// Computed, bounded to this region.
@@ -84,6 +115,8 @@ impl Metrics {
             for (r, name) in REGIONS.iter().enumerate() {
                 self.push(format!("{dir}_const_{name}"), n(Where::Const(r)));
             }
+            self.push(format!("{dir}_ram_global"), n(Where::Global));
+            self.push(format!("{dir}_ram_object"), n(Where::Object));
             self.push(format!("{dir}_sp"), n(Where::Sp));
             for (r, name) in REGIONS.iter().enumerate() {
                 self.push(format!("{dir}_computed_{name}"), n(Where::Computed(r)));
@@ -100,10 +133,84 @@ impl Metrics {
         }
         s
     }
+
+    /// The metrics as TOML, `name = value` in report order: what
+    /// `gbaa-lift` writes beside `report.txt` as `metrics.toml`.
+    pub fn to_toml(&self) -> String {
+        let mut s = String::from("# Written by gbaa-lift: the lift's metrics, as in report.txt.\n");
+        for (n, v) in &self.0 {
+            writeln!(s, "{n} = {v}").unwrap();
+        }
+        s
+    }
+
+    /// Read [`Metrics::to_toml`]'s text back, in its order. A table isn't
+    /// a metric: `[run]` is the built program's run (`super::first_stop`).
+    pub fn from_toml(text: &str) -> Result<Metrics, String> {
+        let d: toml_edit::DocumentMut = text.parse().map_err(|e| format!("{e}"))?;
+        d.iter()
+            .filter(|(_, v)| !v.is_table())
+            .map(|(k, v)| {
+                v.as_integer()
+                    .and_then(|i| u64::try_from(i).ok())
+                    .map(|i| (k.to_string(), i))
+                    .ok_or(format!("{k}: not a whole number"))
+            })
+            .collect::<Result<_, _>>()
+            .map(Metrics)
+    }
+}
+
+/// Lower bars in a bars file's `text`, keeping its comments and order:
+/// each (program, metric, value) sets `[program.<program>.bars]`'s
+/// `metric` to `value`. Only lowers: a value at or over its bar, or a bar
+/// that isn't there, is an error (raising a bar is a hand edit with a
+/// reason). The new text and a line per bar changed.
+pub fn lower_bars(
+    text: &str,
+    lower: &[(String, String, u64)],
+) -> Result<(String, Vec<String>), String> {
+    let mut d: toml_edit::DocumentMut = text.parse().map_err(|e| format!("{e}"))?;
+    let mut changed = Vec::new();
+    for (p, m, x) in lower {
+        let at = format!("program.{p}.bars.{m}");
+        let v = d
+            .get_mut("program")
+            .and_then(|t| t.get_mut(p.as_str()))
+            .and_then(|t| t.get_mut("bars"))
+            .and_then(|t| t.get_mut(m.as_str()))
+            .and_then(|v| v.as_value_mut())
+            .ok_or(format!("{at}: no such bar"))?;
+        let bar = v
+            .as_integer()
+            .and_then(|i| u64::try_from(i).ok())
+            .ok_or(format!("{at}: not a whole number"))?;
+        if *x >= bar {
+            return Err(format!(
+                "{at}: {x} isn't under its bar of {bar}; bars are only lowered"
+            ));
+        }
+        let decor = v.decor().clone();
+        *v = toml_edit::Value::from(*x as i64);
+        *v.decor_mut() = decor;
+        changed.push(format!("{p}: {m} {bar} -> {x}"));
+    }
+    Ok((d.to_string(), changed))
 }
 
 /// The metrics with no bar: they are meant to rise.
-pub const UNBARRED: &[&str] = &["functions_recognised"];
+pub const UNBARRED: &[&str] = &[
+    "functions_recognised",
+    "ram_globals",
+    "load_ram_global",
+    "store_ram_global",
+    "fn_words_proven",
+    "call_fn_complete",
+    "load_ram_object",
+    "store_ram_object",
+    "ref_accesses",
+    "ref_types",
+];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each
 /// `metric = maximum`.
@@ -197,6 +304,36 @@ mod tests {
         );
         assert!(v.failures.is_empty());
         assert_eq!(v.lowerable, vec![("lines".to_string(), 100, 120)]);
+    }
+
+    #[test]
+    fn metrics_toml_reads_back_in_order() {
+        let mut m = Metrics::default();
+        m.push("lines", 100);
+        m.push("blocks", 7);
+        m.push("functions", 3);
+        assert_eq!(Metrics::from_toml(&m.to_toml()).unwrap(), m);
+    }
+
+    #[test]
+    fn lowering_bars_keeps_the_file() {
+        let text = "# The bars.\n\n[program.p]\nrom = \"p.gba\"\n\n[program.p.bars]\n\
+                    lines = 120 # a note\nload_sp = 7\n\n# q's.\n[program.q.bars]\nlines = 50\n";
+        let low = |p: &str, m: &str, x| (p.to_string(), m.to_string(), x);
+        let (t, changed) =
+            lower_bars(text, &[low("p", "lines", 100), low("q", "lines", 40)]).unwrap();
+        assert_eq!(
+            t,
+            text.replace("lines = 120 #", "lines = 100 #")
+                .replace("lines = 50", "lines = 40")
+        );
+        assert_eq!(changed, vec!["p: lines 120 -> 100", "q: lines 50 -> 40"]);
+        assert_eq!(bars(&t, "p").unwrap()["lines"], 100);
+        // Never raised, never equal, never a bar that isn't there.
+        assert!(lower_bars(text, &[low("p", "load_sp", 8)]).is_err());
+        assert!(lower_bars(text, &[low("p", "load_sp", 7)]).is_err());
+        assert!(lower_bars(text, &[low("p", "blocks", 1)]).is_err());
+        assert!(lower_bars(text, &[low("r", "lines", 1)]).is_err());
     }
 
     #[test]

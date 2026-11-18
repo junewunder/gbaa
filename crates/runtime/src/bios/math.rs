@@ -311,11 +311,18 @@ pub fn exp2f(x: f32) -> f32 {
 /// changes.
 pub fn midi_key2freq(bus: &mut Bus, r: &mut [u32; 15]) {
     let freq = bus.read32(r[0].wrapping_add(4));
-    let e = (180.0 - r[1] as i32 as f32 - r[2] as i32 as f32 / 256.0) / 12.0;
+    r[0] = key2freq(freq, r[1], r[2]);
+}
+
+/// `MidiKey2Freq` over values: the frequency word, the key (r1) and the
+/// fine adjust (r2) in; the r0 [`midi_key2freq`] leaves out (a native
+/// program's `bios::midi_key2freq`).
+pub fn key2freq(freq: u32, key: u32, fine: u32) -> u32 {
+    let e = (180.0 - key as i32 as f32 - fine as i32 as f32 / 256.0) / 12.0;
     let q = freq as f32 / exp2f(e);
-    r[0] = if q < 2_147_483_648.0 {
+    if q < 2_147_483_648.0 {
         q as i32 as u32
     } else {
         0x8000_0000
-    };
+    }
 }

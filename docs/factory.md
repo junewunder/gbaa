@@ -69,7 +69,9 @@ states in `states/`); `~/ROMs/gba/` read only. Never june's own checkouts.
 **What it produces, and where:** code and tests in `crates/`, a
 route `units/<name>.toml` per ROM path (its checkpoints, one check;
 `docs/tools/commands.md`), agb test programs in `agb/<name>/`
-(source only; builds go to `$GBAA_DATA/agb/`), docs in `docs/`. Outputs go
+(source only; builds go to `$GBAA_DATA/agb/`), docs in `docs/` (plan docs
+hold the plan: a unit's measured numbers go in the tracker or a generated
+`*.numbers.md`, and `docs/budgets.toml` caps their lines). Outputs go
 in `out/units/<name>/`, generated crates in `out/<game>/`.
 
 ## The oracle
@@ -78,7 +80,7 @@ What decides a unit is right. `just check` is the mechanical part and must pass
 before anything is marked `done`.
 
 - **`just check` runs:** fmt, clippy `-D warnings`, the workspace tests,
-  `check-nostd` and `rebuildable` (AGENTS.md). The merge gate.
+  `check-nostd`, `rebuildable` and `native-check` (AGENTS.md). The merge gate.
 - **Beyond `just check`:** **mGBA is the oracle.** A checkpoint's
   expected hash is what mGBA draws (`just mgba-diff`), never one set by eye;
   `just unit <name>` clears the unit's outputs, then needs mGBA = our
@@ -100,7 +102,8 @@ context compares our frame with the test's `.asm`, a `SCENE.md` or GBATEK)
 where mGBA is known wrong, or when a hash is recorded without mGBA.
 - *mechanical*: `just check` passing is enough; the worker records the unit done.
 - *independent*: a context that didn't do the work checks it. In a session,
-  spawn a verifier subagent with a fresh context (give it the unit, its
+  spawn a verifier subagent with a fresh context and wait for it in the
+  same call (`run_in_background: false`; give it the unit, its
   acceptance criteria and where the output is; ask for a verdict with
   evidence; a cheaper model is fine for mechanical checks). In the headless
   loop the next iteration picks up `review` units. The tracker enforces this
@@ -230,6 +233,10 @@ moves on to the next workable unit. Don't guess.
   through `just capped <cmd>`, or a recipe that already uses it. A runaway
   child must die in its own scope, not take the desktop and every other agent
   down.
+  The heavy tools enforce it: `gbaa-lift`, `gbaa-recompile`, `gbaa-holes`,
+  `gbaa-lift-check` and `route-check` exit 2 unless they run under a
+  memory cap of their own (one shared with the session's shell doesn't
+  count; `crates/analysis/src/cap.rs`); `GBAA_UNCAPPED=1` runs one anyway.
   A command killed for going over the cap says "killed: out of memory at
   <cap>": that's the cap, not the pipeline, so record it as such.
 - **CPU:** a capped or long job is a heavy one, and a machine runs only as
@@ -250,7 +257,7 @@ moves on to the next workable unit. Don't guess.
   lanes take other units meanwhile. This project has none yet.
 - **Display, devices, shared state:** headless runs need no display; the build lock
   is shared by every lane: the recipes take it themselves
-  (`CARGO_BUILD_JOBS=6 flock /tmp/gbaa-build.lock`, the justfile's `lock`),
+  (`CARGO_BUILD_JOBS=6 scripts/build-lock`, the justfile's `lock`: three at once),
   around the compile only. Never wrap `just` in it (a recipe taking it under
   a caller holding it deadlocks); a bare `cargo build/test/clippy` takes it
   the same way; generated or new harness binaries under `systemd-run --user

@@ -261,6 +261,33 @@ fn a_desync_is_seen_by_every_peer() {
 }
 
 #[test]
+fn a_skewed_input_is_a_desync_both_peers_see() {
+    let frames = 600;
+    let consoles = (0..2).map(|s| Toy::peer(2, s)).collect();
+    // Over a bad network, so rollbacks run the skewed frames again too.
+    let (mut peers, net) = rollback_session(consoles, BAD, 4, Config::default());
+    peers[1].skew(200, 0x155);
+    play(&mut peers, &net, frames, script, |_, _| {}).unwrap();
+    settle(&mut peers, &net);
+    let want = straight(Toy::new(2), 0, frames);
+    let (a, b) = (peers[0].hashes(), peers[1].hashes());
+    // Seat 0's peer ran the real inputs: the straight run.
+    let real: Vec<_> = a.iter().filter(|(f, _)| *f < frames).collect();
+    let straight: Vec<_> = want.iter().filter(|(f, _)| *f < frames).collect();
+    assert_eq!(real, straight);
+    // Seat 1's, right up to the skew and apart after it.
+    assert_eq!(b[..4], want[..4]);
+    assert_ne!(b[5], want[5]);
+    assert_eq!(peers[0].desyncs(), peers[1].desyncs());
+    assert!(
+        peers[0]
+            .desyncs()
+            .first()
+            .is_some_and(|&f| f > 200 && f <= 300)
+    );
+}
+
+#[test]
 fn rollback_keeps_two_peers_level() {
     // 50 ms each way: both peers should guess about as far, ~3 frames.
     let cond = Conditions {
@@ -272,6 +299,42 @@ fn rollback_keeps_two_peers_level() {
         let per = p.stats.rerun as f64 / p.stats.rollbacks.max(1) as f64;
         assert!(per < 5.0, "seat {}: {:?}", p.seat(), p.stats);
     }
+}
+
+#[test]
+fn a_deep_rollback_keeps_sending_while_it_runs() {
+    // Seat 1 stops (a loaded machine, a SIGSTOP) while seat 0 runs 200
+    // frames on, guessing; seat 1's first input then differs, and seat 0
+    // runs all 200 again. Its inputs must go out as it does, or seat 1
+    // hears nothing for that long and takes it to have left
+    // (multiplayer/wander-split-under-load).
+    let consoles = (0..2).map(|s| Toy::peer(2, s)).collect();
+    let (mut peers, net) = rollback_session(consoles, Conditions::LOCAL, 1, Config::default());
+    while !peers.iter().all(|p| p.started()) {
+        let t = net.borrow().now() + 1000;
+        net.borrow_mut().advance_to(t);
+        for p in peers.iter_mut() {
+            p.pump().unwrap();
+            if !p.started() {
+                p.advance(0).unwrap();
+            }
+        }
+    }
+    // Time sync holds a frame back now and then; it runs on regardless.
+    while peers[0].frame() < 200 {
+        assert_ne!(peers[0].advance(0).unwrap(), Status::Waiting);
+    }
+    assert_eq!(peers[1].advance(1).unwrap(), Status::Stepped);
+    let t = net.borrow().now() + 1000;
+    net.borrow_mut().advance_to(t);
+    let before = net.borrow().stats.sent;
+    peers[0].pump().unwrap();
+    let sent = net.borrow().stats.sent - before;
+    assert!(peers[0].stats.deepest >= 190, "{:?}", peers[0].stats);
+    assert!(
+        sent >= (200 / rollback::KEEP_ALIVE) as u64,
+        "{sent} sent in a 200-frame rollback"
+    );
 }
 
 #[test]
@@ -557,11 +620,11 @@ fn a_room_whose_players_leave_closes() {
     use std::time::Duration;
     let sock = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
     let server = sock.local_addr().unwrap();
-    std::thread::spawn(move || relay::rooms::serve(sock));
+    std::thread::spawn(move || relay::rooms::serve(sock, 0));
     let build = [5; 32];
     let (tx, rx) = std::sync::mpsc::channel();
     let host = std::thread::spawn(move || {
-        udp::Udp::host(server, 2, &build, |c| tx.send(c).unwrap(), || true).unwrap()
+        udp::Udp::host(server, 2, &build, |c, _, _| tx.send(c).unwrap(), || true).unwrap()
     });
     let code = rx.recv_timeout(Duration::from_secs(10)).unwrap();
     let (mut b, _) = udp::Udp::join(server, code, &build, || true).unwrap();
@@ -587,4 +650,105 @@ fn a_room_whose_players_leave_closes() {
     settles_at((1, 1));
     b.leave();
     settles_at((0, 0));
+}
+
+#[test]
+fn a_server_too_new_for_this_build_refuses_it_plainly() {
+    use std::time::Duration;
+    let sock = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    let server = sock.local_addr().unwrap();
+    std::thread::spawn(move || relay::rooms::serve(sock, crate::VERSION + 1));
+    let start = std::time::Instant::now();
+    let Err(e) = udp::Udp::host(server, 2, &[5; 32], |_, _, _| {}, || true) else {
+        panic!("seated by a server that needs a newer version");
+    };
+    assert!(start.elapsed() < Duration::from_secs(5), "{e}");
+    let v = crate::VERSION;
+    assert_eq!(
+        e,
+        format!(
+            "{}this game is too old for the server (version {v}, needs {}): get the new build",
+            udp::REFUSED,
+            v + 1
+        )
+    );
+}
+
+/// fly's server lets in this build and refuses the one before.
+#[test]
+fn fly_refuses_versions_before_this_one() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../deploy/fly/Dockerfile");
+    let docker = std::fs::read_to_string(path).unwrap();
+    let want = format!("\"--min-version\", \"{}\"", crate::VERSION);
+    assert!(
+        docker.contains(&want),
+        "deploy/fly/Dockerfile's CMD should pass {want}: netplay::VERSION changed"
+    );
+}
+
+/// Single-pak: the sender in seat 0 sends its program over the cable to
+/// seat 1, which has no cartridge; seat 1 boots it from EWRAM and plays on
+/// its own player's keys.
+#[test]
+fn a_cartless_seat_boots_what_the_sender_sends() {
+    use crate::demo::{MB_MARK, MB_MARK_AT, MB_PARAMS, gba_single_pak};
+    let mut g = gba_single_pak();
+    for f in 0..60 {
+        g.step(&[script(0, f), script(1, f)]).unwrap();
+    }
+    let ms = g.machines_mut();
+    // MultiBoot returned 0: the child took it.
+    assert_eq!(ms[0].bus.read32(MB_PARAMS + 0x40), 0, "MultiBoot failed");
+    let c = &ms[1];
+    assert!(
+        (0x0200_00C0..0x0200_01C0).contains(&c.cpu.pc),
+        "the child runs its program: pc {:#x}",
+        c.cpu.pc
+    );
+    assert_eq!(c.bus.read16(MB_MARK_AT), MB_MARK);
+    // The header, its boot mode (3, multiplayer) and player ID.
+    let rom = crate::demo::single_pak_sender();
+    assert_eq!(
+        c.bus.read32(0x0200_0000),
+        u32::from_le_bytes(rom[..4].try_into().unwrap())
+    );
+    assert_eq!(c.bus.read8(0x0200_00C4), 3);
+    assert_eq!(c.bus.read8(0x0200_00C5), 1);
+    for o in (0xC8..0x1C0).step_by(4) {
+        assert_eq!(
+            c.bus.read32(0x0200_0000 + o),
+            u32::from_le_bytes(rom[o as usize..o as usize + 4].try_into().unwrap()),
+            "program word {o:#x}"
+        );
+    }
+    // Each folds its own keys.
+    assert_ne!(c.bus.read32(0x0300_0000), 0);
+    assert_ne!(ms[0].bus.read32(MB_PARAMS + 0x44), 0);
+}
+
+/// A single-pak session, rolled back over a bad network, is the straight
+/// run; and it is another build than the two-cartridge one.
+#[test]
+fn a_single_pak_session_rolls_back_to_the_straight_run() {
+    use crate::demo::gba_single_pak;
+    let frames = 120;
+    let mut g = gba_single_pak();
+    g.set_clock(Config::default().clock);
+    let want = straight(g, 0, frames);
+    let consoles = (0..2).map(|_| gba_single_pak()).collect();
+    let (mut peers, net) = rollback_session(consoles, BAD, 9, Config::default());
+    play(&mut peers, &net, frames, script, |_, _| {}).unwrap();
+    settle(&mut peers, &net);
+    assert_rolled_straight(&mut peers, &want, frames);
+    assert!(peers.iter().all(|p| p.stats.rollbacks > 0));
+    for p in &peers {
+        let c = &p.console().machines()[1];
+        assert!(
+            (0x0200_00C0..0x0200_01C0).contains(&c.cpu.pc),
+            "seat {} booted",
+            p.seat()
+        );
+    }
+    let two = gba(crate::demo::single_pak_sender(), 2, None);
+    assert_ne!(gba_single_pak().build_id(), two.build_id());
 }

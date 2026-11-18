@@ -79,6 +79,14 @@ pub struct Sched {
     /// while it is, so an IRQ that the CPSR held back is taken as soon as
     /// the I bit clears.
     pub irq_line: bool,
+    /// Under native timing, the sources requested and enabled at the last
+    /// sync (`IE & IF`, with `IME` on): the held IRQs [`Machine::tick`]
+    /// takes as soon as an `msr` clears I. One requested after it, outside
+    /// a sync (a FIFO refill's, in a store's walk of the timers), waits for
+    /// the next time point, as in a native program, not for the next tick,
+    /// which compiled code and the interpreter reach at different
+    /// instructions. Not saved, as `window`.
+    pub held: u16,
     /// When a link hub's turn ends ([`crate::link`]): reaching it ends the
     /// run as the frame end does ([`Sched::frame_ended`] is set). `u64::MAX`
     /// off a hub. Not guest state: the hub sets it for each turn.
@@ -110,6 +118,7 @@ impl Default for Sched {
             halted: false,
             frame_ended: false,
             irq_line: false,
+            held: 0,
             deadline: u64::MAX,
             window: true,
             fresh: false,
@@ -146,7 +155,8 @@ impl<P: Platform> Machine<P> {
 
     /// [`Machine::tick`] under [`crate::Timing::Native`], where code takes
     /// no time: the cycles are dropped, and only a halt (a `HALTCNT`
-    /// store) or a serial start is acted on. A clock a DMA moved is
+    /// store), a serial start, or an IRQ that an `msr` or an `IME` write
+    /// let through is acted on. A clock a DMA moved is
     /// brought up to date at the next point where time passes (an idle
     /// back edge, a BIOS call or wait), the same instruction in generated
     /// code and the interpreter, so IRQs are taken at the same places in
@@ -154,6 +164,8 @@ impl<P: Platform> Machine<P> {
     #[inline(never)]
     pub fn tick_native(&mut self) -> bool {
         self.bus.take_data_cycles();
+        let ime_on = self.bus.io.events & event::IME_ON != 0;
+        self.bus.io.events &= !event::IME_ON;
         if core::mem::take(&mut self.sched.fresh) {
             return self.sched.halted || self.sched.frame_ended || self.irq_takeable();
         }
@@ -161,8 +173,13 @@ impl<P: Platform> Machine<P> {
         // critical section) is taken as soon as an `msr` clears I, as the
         // hardware takes it, not at the next time point (native/lift-irq-
         // hold). One the sync found with I clear was taken in its window,
-        // so this is only ever a held one.
-        if self.sched.irq_line && self.cpu.cpsr & I_BIT == 0 && self.bus.io.irq_pending() {
+        // so this is only ever a held one: of the sources the sync found
+        // ([`Sched::held`]); one a store's walk requested since waits for
+        // the next time point. Likewise one pending when `IME`
+        // is set again (a critical section that clears `IME`, as agbcc
+        // games' do): taken at this tick (native/ime-release).
+        let held = self.sched.irq_line && self.bus.io.irq_requested_of(self.sched.held);
+        if (held || ime_on) && self.cpu.cpsr & I_BIT == 0 && self.bus.io.irq_pending() {
             self.sched.window = true;
             return true;
         }
@@ -286,6 +303,11 @@ impl<P: Platform> Machine<P> {
             self.sched.halted = false;
         }
         self.sched.irq_line = io.irq_pending();
+        self.sched.held = if self.sched.irq_line {
+            io.raw16(reg::IE) & io.raw16(reg::IF)
+        } else {
+            0
+        };
         self.sched.window = true;
         // Time passed: every spin loop starts its count again.
         self.sched.spins = [(0, 0); SPIN_SLOTS];
@@ -301,8 +323,11 @@ impl<P: Platform> Machine<P> {
             // STOP is treated as halt; nothing here powers down.
             self.halt();
         }
-        if events & event::SERIAL != 0 && crate::link::start_requested(&self.bus.io) {
-            // The hub starts the transfer between turns: end this one.
+        if events & event::SERIAL != 0
+            && (self.bus.io.sio_wireless || crate::link::start_requested(&self.bus.io))
+        {
+            // The hub starts the transfer, or answers the wireless
+            // adapter's terminals, between turns: end this one.
             self.sched.deadline = 0;
         }
     }
@@ -453,7 +478,7 @@ crate::snap::snap!(Sched {
     halted,
     frame_ended,
     irq_line
-}; skip deadline, window, fresh, spins);
+}; skip deadline, window, fresh, spins, held);
 
 #[cfg(test)]
 mod tests;

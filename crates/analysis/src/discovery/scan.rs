@@ -5,14 +5,20 @@
 //! **Validation** ([`validate`]) decodes forward from the candidate,
 //! following fallthrough and direct branches, as Ghidra's
 //! `checkValidSubroutine` does (`docs/research/discovery-prior-art.md`). It
-//! must reach a return (a pop through sp, `bx lr`, …), or an indirect jump
-//! after a few instructions (a switch whose cases hold the returns),
+//! must reach a return (a pop through sp, `bx lr`, a `bx rN` through the
+//! `mov rN, lr` it opens with, as m4a's command routines do), an indirect jump
+//! after a few instructions (a switch whose cases hold the returns), or,
+//! after a `push {…, lr}`, loop forever with every path closed (a task run
+//! as a coroutine),
 //! without running into a known literal pool or table, out of ROM, or into
 //! code found already other than at one of its instruction starts in the
 //! same instruction set. A body that only runs into a function start
-//! found already validates if code loads the candidate. Undefined instructions, lone halves of a Thumb
+//! found already validates if code loads the candidate or a table holds it
+//! next to a known start (m4a's `ply_patt`, a branch into `ply_goto`). Undefined instructions, lone halves of a Thumb
 //! `bl`, BIOS calls that don't exist, long runs of one word, instructions
-//! no game runs (user-bank `ldm`), and a first instruction that is
+//! no game runs (user-bank `ldm`), Thumb shifts by 32 (a ROM pointer's
+//! upper half), a Thumb `bx` to a register last set by a shift left
+//! ([`shifted_bx`]), and a first instruction that is
 //! conditional or pops fail it. An ARM body must be mostly unconditional.
 //! Then the value-set analysis from the candidate must return with sp
 //! where it started: data decoded as code usually pops its caller's frame.
@@ -118,7 +124,7 @@ pub fn batch(
             }
             Some(_) => continue,
             None => match validate(prog, view, a, thumb) {
-                Some((b, own)) if own || c.pooled => b,
+                Some((b, own)) if own || c.pooled || c.table => b,
                 _ => continue,
             },
         };
@@ -158,7 +164,14 @@ pub fn batch(
             }
         }
         if log {
-            eprintln!("scan: take 0x{w:08x}, score {score}, body {}", body.len());
+            let c = cands[&w];
+            eprintln!(
+                "scan: take 0x{w:08x}, score {score}, body {}, refs {} pooled {} table {}",
+                body.len(),
+                c.refs,
+                c.pooled,
+                c.table
+            );
         }
         out.push(w);
     }
@@ -202,6 +215,27 @@ fn implausible(i: &Instr) -> bool {
         }
         _ => false,
     }
+}
+
+/// Whether `i` is a Thumb `lsrs`/`asrs` by 32 (the shift field's 0): a
+/// compiler writes `movs rd, #0` or `asrs rd, rm, #31` for those, and
+/// `lsrs`'s halfwords 0x0800 to 0x083f are the upper halves of pointers
+/// into ROM's first 4 MB, so a body holding one is most likely a table of
+/// pointers. A word pointing into byte-aligned data (a script, a
+/// string) is odd half the time, and often loaded from a pool.
+fn shift_32(i: &Instr) -> bool {
+    use armv4t::decode::{AluOp, Operand2, Shift};
+    matches!(
+        *i,
+        Instr::Alu {
+            op: AluOp::Mov,
+            op2: Operand2::Reg {
+                shift: Shift::Lsr(32) | Shift::Asr(32),
+                ..
+            },
+            ..
+        }
+    )
 }
 
 /// Whether code found already runs straight into `a`: the instruction
@@ -314,6 +348,28 @@ fn is_push_lr(i: &Insn) -> bool {
     )
 }
 
+/// The register `i` copies lr into, if it is an unconditional `mov rN, lr`
+/// (rN not sp, lr or pc): m4a's command routines (`ply_*`, called through
+/// the `MPlayJumpTable` m4a copies to RAM) open with `mov r12, lr`, call a
+/// shared helper with `bl` and return with `bx r12`.
+fn saved_lr(i: &Insn) -> Option<Reg> {
+    use armv4t::decode::{AluOp, Operand2, Shift};
+    match i.instr {
+        Instr::Alu {
+            op: AluOp::Mov,
+            rd,
+            op2:
+                Operand2::Reg {
+                    rm: Reg::Lr,
+                    shift: Shift::Lsl(0),
+                },
+            cond: Cond::Al,
+            ..
+        } if !matches!(rd, Reg::Sp | Reg::Lr | Reg::Pc) => Some(rd),
+        _ => None,
+    }
+}
+
 /// Decode forward from `start`: the body's instructions as (address,
 /// size), if it validates, and whether it ends on its own: a body that
 /// reaches no return or jump of its own but runs straight into a function
@@ -336,6 +392,12 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
     let mut halves: HashSet<u32> = HashSet::new();
     // Pool words the body's own pc-relative loads read.
     let mut pools: HashSet<u32> = HashSet::new();
+    // Every path, soft ones too, ended by coming back to an instruction
+    // of the body: no return, jump, bad decode or code found already.
+    let mut closed = true;
+    // The register a body opening `mov rN, lr` keeps its return address
+    // in ([`saved_lr`]).
+    let kept = prog.decode(start, thumb).and_then(|i| saved_lr(&i));
     while let Some((a, soft)) = work.pop() {
         if let Some(&(_, s)) = seen.get(&a) {
             if s && !soft {
@@ -353,9 +415,13 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
             // count as reaching a return.
             Step::Known => {
                 into |= !soft && view.funcs.contains(&(a | thumb as u32));
+                closed = false;
                 continue;
             }
-            Step::Bad if soft => continue,
+            Step::Bad if soft => {
+                closed = false;
+                continue;
+            }
             Step::Bad => return None,
             Step::Insn(i) => {
                 seen.insert(a, (i.size, soft));
@@ -368,13 +434,17 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
                 let next = i.next();
                 let cond = i.instr.cond() != Cond::Al;
                 if let Some(t) = i.bl {
-                    if !prog.in_rom(t) && !soft {
-                        return None;
+                    if !prog.in_rom(t) {
+                        if !soft {
+                            return None;
+                        }
+                        closed = false;
                     }
                     work.push((next, true));
                 } else if let Instr::Branch { target, .. } = i.instr {
                     if !prog.in_rom(target) {
                         if soft {
+                            closed = false;
                             continue;
                         }
                         return None;
@@ -384,6 +454,14 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
                         work.push((next, soft));
                     }
                 } else if writes_pc(&i.instr) {
+                    if thumb && shifted_bx(prog, start, &i) {
+                        if !soft {
+                            return None;
+                        }
+                        closed = false;
+                        continue;
+                    }
+                    closed = false;
                     // Only a pop through sp counts as returning: `ldm rN,
                     // {…, pc}` is how ARM-decoded text often ends.
                     let pop = !matches!(i.instr, Instr::Block { rn, .. } if rn != Reg::Sp);
@@ -391,6 +469,15 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
                     // cases hold every return.
                     match classify(prog, &i) {
                         Ctl::Return if pop => ends = true,
+                        // `bx rN` through the opening copy of lr returns,
+                        // soft or not: a body that keeps lr in a register
+                        // expects its `bl`s to come back.
+                        Ctl::Jump
+                            if kept.is_some()
+                                && matches!(i.instr, Instr::Bx { rm, .. } if Some(rm) == kept) =>
+                        {
+                            ends = true
+                        }
                         Ctl::Jump if !soft => jumps = true,
                         Ctl::Return | Ctl::Jump => {}
                         Ctl::Call => work.push((next, true)),
@@ -431,9 +518,59 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
         }
     }
     // An indirect jump stands in for a return only after a few
-    // instructions: data has short runs ending in one.
-    let own = ends || (jumps && hard.len() >= JUMP_BODY_MIN);
+    // instructions: data has short runs ending in one. So does a body
+    // that never leaves itself, if it opens with `push {…, lr}`: a task
+    // run as a coroutine (Kirby: Nightmare in Dream Land's game states,
+    // each an endless loop that yields every frame, listed in a table of
+    // pointers).
+    let endless = closed
+        && hard.len() >= JUMP_BODY_MIN
+        && prog.decode(start, thumb).is_some_and(|i| is_push_lr(&i));
+    let own = ends || (jumps && hard.len() >= JUMP_BODY_MIN) || endless;
     (own || into).then_some((hard, own))
+}
+
+/// Whether `i` is a Thumb `bx rM` whose rM was last set, in the straight
+/// run of instructions before it (back to `start`), by a shift left by an
+/// immediate: a jump into ARM state to an address made only by a shift.
+/// No switch does that (a switch's targets come from a table or an add);
+/// data does: Emerald Rogue's battle-script pointer 0x0826c5e7, loaded for
+/// its script pusher and taken for a Thumb start, ends in `lsls r1, r1, #6`
+/// a few instructions before `bx r1`. Anything in the run that may write
+/// rM some other way, or may branch, ends the search with no.
+fn shifted_bx(prog: &Program, start: u32, i: &Insn) -> bool {
+    use armv4t::decode::{AluOp, Operand2, Shift};
+    let Instr::Bx { rm, .. } = i.instr else {
+        return false;
+    };
+    let mut a = i.addr;
+    while a >= start + 2 {
+        a -= 2;
+        let Some(p) = prog.decode(a, true) else {
+            return false;
+        };
+        if p.size != 2 {
+            return false;
+        }
+        match p.instr {
+            Instr::Alu {
+                op: AluOp::Tst | AluOp::Teq | AluOp::Cmp | AluOp::Cmn,
+                ..
+            } => {}
+            Instr::Alu { rd, op, op2, .. } if rd == rm => {
+                return op == AluOp::Mov
+                    && matches!(op2, Operand2::Reg { shift: Shift::Lsl(n), .. } if n > 0);
+            }
+            Instr::Alu { .. } => {}
+            Instr::Store { addr, .. } if addr.rn != rm => {}
+            Instr::Load { rd, addr, .. } if rd != rm && addr.rn != rm => {}
+            Instr::Block {
+                load: false, rn, ..
+            } if rn != rm => {}
+            _ => return false,
+        }
+    }
+    false
 }
 
 /// The fewest instructions a body ending in an indirect jump needs.
@@ -498,6 +635,7 @@ fn decode(
         || (first && (i.instr.cond() != Cond::Al || pops))
         || repeated(prog, &i)
         || implausible(&i.instr)
+        || (thumb && shift_32(&i.instr))
     {
         return Step::Bad;
     }

@@ -4,8 +4,8 @@ Static recompiler: GBA ROMs (ARM7TDMI) to Rust, plus a runtime crate.
 
 Visibility: public (github.com/junewunder/gbaa). History before 2026-11-01
 is in the private github.com/junewunder/gbaa-private (remote `private`,
-branch `private-main` in june's checkout); the public root commit has the
-same files as its last commit. A branch begun before the switch moves over
+branch `private-main` in june's checkout); the public root commit is
+those files with private details taken out, not an exact copy. A branch begun before the switch moves over
 with `git rebase --onto main private-main <branch>`; a pre-push hook refuses
 to push the old history to the public repo.
 
@@ -36,21 +36,23 @@ binaries; link them from outside the repo.
 
 Crates live in `crates/`: `armv4t`, `analysis`, `codegen`, `runtime`
 (`#![no_std]`), `desktop`, `native-spike` (the first native port, by
-hand), `native-host` (the native programs' headless front end), `interp` (the headless `gbaa-interp ROM
+hand), `native-host` (the native programs' front end: headless, or gbaa-desktop's window), `interp` (the headless `gbaa-interp ROM
 [--frames N] [--test]` runner), `hole-report` (`gbaa-holes`, what blocks a native
-build), and the `disc-check`, `jt-check`, `aw-check` and `mgba-dump` tools.
+build), and the `disc-check`, `jt-check`, `aw-check` and `mgba-dump` tools; `gbaa-dis` (`just dis`) disassembles ROM code.
 `codegen`'s `gbaa-lift` is the stage-A lifter (`just lift`, `just
-lift-check`); `holes/<game>.toml` are its stand-ins. Generated code goes in
+lift-check`; `just lift` ends by running the build and recording where it stops, `just first-stop`); `holes/<game>.toml` are its stand-ins (a commercial game's
+are game-derived: `mods/<game>/holes.toml`). Generated code goes in
 `out/<game>/` (gitignored).
 
-- `just check`: fmt, clippy `-D warnings`, tests, `check-nostd` and `rebuildable`. The
+- `just check`: fmt, clippy `-D warnings`, tests, `check-nostd`, `rebuildable` and
+  `native-check` (needs `just agb-tests`' ROMs in `$GBAA_DATA`). The
   merge gate.
 - `just check-nostd`: builds `runtime` for `riscv32imac-unknown-none-elf` to
   prove it stays no_std.
-- The build lock (`CARGO_BUILD_JOBS=6 flock /tmp/gbaa-build.lock`, the
-  justfile's `lock`) is taken by each recipe around its cargo step. Never
+- The build lock (`CARGO_BUILD_JOBS=6 scripts/build-lock`, the justfile's
+  `lock`: three builds at once) is taken by each recipe around its cargo step. Never
   wrap `just` in it (that deadlocks); a bare `cargo build/test/clippy` takes
-  it: `env CARGO_BUILD_JOBS=6 flock /tmp/gbaa-build.lock cargo …`.
+  it: `env CARGO_BUILD_JOBS=6 scripts/build-lock cargo …`.
 - `just fetch-tests`: shallow-clones the test suites, pinned by commit in
   `scripts/fetch-tests.sh`, into `$GBAA_DATA` (default
   `~/.local/share/gbaa/`): `SingleStepTests-ARM7TDMI/`, `gba-tests/`
@@ -60,6 +62,7 @@ lift-check`); `holes/<game>.toml` are its stand-ins. Generated code goes in
   `recompile*` and `first-frame`; sound and `audio-*`; `mgba-diff` and
   `mgba-oracle`) is in `docs/tools/commands.md`. Read the entry before
   running or changing one.
+- Comparing across games or programs: `just holes-all`, `just lift-metrics`.
 
 ## Factory
 

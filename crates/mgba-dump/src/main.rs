@@ -550,6 +550,8 @@ mod mgba {
     ) -> Result<Run, String> {
         Err("built without libmgba: run scripts/fetch-mgba.sh, then rebuild".into())
     }
+
+    pub fn record_audio(_: bool) {}
 }
 
 #[cfg(test)]

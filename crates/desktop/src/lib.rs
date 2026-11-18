@@ -25,6 +25,7 @@ pub mod link;
 pub mod menu;
 pub mod menubar;
 mod platform;
+pub mod present;
 #[cfg(feature = "provenance")]
 mod prov_report;
 pub mod remap;
@@ -40,6 +41,7 @@ pub mod state_file;
 #[cfg(feature = "timing-lab")]
 mod timing_lab;
 pub mod window;
+pub mod wireless;
 
 pub use capture::{Capture, wav};
 pub use dump::{frame_hash, write_png, write_png_over};
@@ -243,22 +245,29 @@ usage: gbaa-desktop ROM [options]
                    --scale, --fullscreen, --pad-config, --pad-script
   --input2 PRESSES with --link: player 2's presses, as --input
   --server ADDR    netplay through gbaa-server at ADDR (host:port, its
-                   default port 7374), with --host or --join: the same
-                   two GBAs on one cable as --link, each player in their
-                   own window, maybe on another machine. Both peers run
-                   both GBAs and swap only inputs (and at the start each
-                   player's console, save included); the window shows
-                   your seat, keeps your save as --save keeps it and
-                   discards the other player's. Your save goes to the
-                   other player for the session. Muted; no fast-forward,
-                   rewind, save states or scripts. With --frames, --input,
+                   default port 7374), with --host or --join: 2 to 4
+                   GBAs on one cable, as --link links two, each player
+                   in their own window, maybe on another machine. Every
+                   peer runs every GBA and they swap only inputs (and at
+                   the start each player's console, save included); the
+                   window shows your seat, keeps your save as --save
+                   keeps it and discards the others'. Your save goes to
+                   the other players for the session. Muted; no fast-forward,
+                   rewind, save states or scripts. Your console starts
+                   where your game is: the window's, as it was when you
+                   asked for the room (and after the session the game
+                   alone goes on from where the session left it), or
+                   --state's. With --frames, --input, --state,
                    --save, --dump, --hash, --dump-at/--dump-dir (your
                    screen), --scale, --fullscreen, --pad-config,
                    --pad-script
-  --host           netplay: make a two-seat room, print `room CODE` and
-                   wait for the other player (headless, 10 minutes); you
-                   are player 1, the cable's parent
-  --join CODE      netplay: take the other seat in the room CODE.
+  --host           netplay: make a room (--players seats, 2 by default),
+                   print `room CODE` and wait until every seat is taken
+                   (headless, 10 minutes); you are player 1, the
+                   cable's parent
+  --players N      netplay, the host's: seats in the room, 2-4; the
+                   session starts once all N are in
+  --join CODE      netplay: take the next free seat in the room CODE.
                    Netplay is by rollback: your game never waits for the
                    other player's input; it guesses (their last input),
                    and when the real one differs it goes back and runs
@@ -267,6 +276,9 @@ usage: gbaa-desktop ROM [options]
                    player
   --delay N        netplay, the host's: input delay in frames (default
                    0; 0-30)
+  --present-ms N   netplay: a frame goes to the window N ms after it was
+                   due (default 8; 0: as soon as it's done), so frames
+                   reach the display evenly, whatever a rollback cost
   --paced          netplay, headless: run at the GBA's frame rate, as the
                    window does, not flat out; the end line counts the
                    freezes (waits over a frame) and the frame times
@@ -275,6 +287,20 @@ usage: gbaa-desktop ROM [options]
                    left out), frame maybe `from-to/every`, e.g.
                    '600-3000/90+20': your presses let go and the menu's
                    report brought up to date while it's open
+  --desync-at N    netplay, for a check: from frame N on, this peer's
+                   consoles see your seat holding A, while the other
+                   peer gets your real presses: a desync, which the
+                   window, the end lines and the kept report then show
+  --wireless       with --server and --host or --join: not the cable but
+                   a wireless adapter (Emerald's Union Room, FireRed's
+                   wireless club), whose radio is the server room's.
+                   Each window runs only its own GBA, in real time, in
+                   the interpreter; nothing is rolled back, the menu
+                   doesn't pause, and the game starts from reset.
+                   --players seats (2 by default). With --frames,
+                   --input, --save, --dump, --hash, --dump-at/--dump-dir,
+                   --mute, --scale, --fullscreen, --pad-config,
+                   --pad-script
   --rogue ADDR     Emerald Rogue's co-op (Multiplayer Adventures) with
                    Rogue Assistant built in: when the game hosts, listen on
                    ADDR's port; when it joins, connect to ADDR (host[:port],
@@ -467,10 +493,20 @@ pub struct Options {
     pub role: Option<room::Role>,
     /// `--delay`: netplay's input delay, in frames.
     pub delay: Option<u8>,
+    /// `--players`: the seats in the host's room (2-4).
+    pub players: Option<usize>,
     /// `--paced`: headless netplay at the GBA's frame rate, not flat out.
     pub paced: bool,
+    /// `--present-ms`: netplay, how long after a frame was due it goes to
+    /// the window (`netplay::feel::PRESENT_US` unless given).
+    pub present_ms: Option<f64>,
     /// `--menu`: headless netplay, when the menu is open.
     pub menu: input::Spans,
+    /// `--desync-at`: netplay, a forced desync from this frame on.
+    pub desync_at: Option<u32>,
+    /// `--wireless`: with `--server`, a wireless adapter whose radio is
+    /// the server's ([`wireless`]), not netplay's cable.
+    pub wireless: bool,
 }
 
 impl Options {
@@ -619,8 +655,12 @@ impl Options {
             rogue: None,
             role: None,
             delay: None,
+            players: None,
             paced: false,
+            present_ms: None,
             menu: input::Spans::default(),
+            desync_at: None,
+            wireless: false,
         };
         let mut args = args.into_iter();
         while let Some(a) = args.next() {
@@ -690,8 +730,22 @@ impl Options {
                 "--join" => o.role = Some(room::Role::Join(room::parse_code(&value("--join")?)?)),
                 // Rollback is the only netplay; the old flag still parses.
                 "--rollback" => {}
+                "--wireless" => o.wireless = true,
                 "--paced" => o.paced = true,
                 "--menu" => o.menu = input::Spans::parse(&value("--menu")?)?,
+                "--desync-at" => {
+                    let v = value("--desync-at")?;
+                    o.desync_at = Some(v.parse().map_err(|_| format!("bad frame {v:?}"))?);
+                }
+                "--players" => {
+                    let v = value("--players")?;
+                    o.players = Some(
+                        v.parse()
+                            .ok()
+                            .filter(|n| (2..=room::MAX_SEATS).contains(n))
+                            .ok_or(format!("bad --players {v:?} (2-{})", room::MAX_SEATS))?,
+                    );
+                }
                 "--delay" => {
                     let v = value("--delay")?;
                     o.delay = Some(
@@ -699,6 +753,15 @@ impl Options {
                             .ok()
                             .filter(|d| (0..=30).contains(d))
                             .ok_or(format!("bad delay {v:?} (0-30 frames)"))?,
+                    );
+                }
+                "--present-ms" => {
+                    let v = value("--present-ms")?;
+                    o.present_ms = Some(
+                        v.parse()
+                            .ok()
+                            .filter(|ms: &f64| (0.0..=16.0).contains(ms))
+                            .ok_or(format!("bad --present-ms {v:?} (0-16)"))?,
                     );
                 }
                 "--dump" => o.dump = Some(value("--dump")?.into()),
@@ -792,10 +855,24 @@ impl Options {
         if o.link.is_none() && o.input2 != Script::default() {
             return Err("--input2 is player 2's, with --link".into());
         }
-        if o.server.is_some() || o.role.is_some() {
+        if o.wireless && (o.server.is_none() || o.role.is_none()) {
+            return Err("--wireless needs --server ADDR and --host or --join CODE".into());
+        }
+        if o.wireless {
+            wireless::check(&o)?;
             room::check(&o)?;
-        } else if o.delay.is_some() || o.paced || o.menu != input::Spans::default() {
-            return Err("--delay, --paced and --menu are netplay's, with --server".into());
+        } else if o.server.is_some() || o.role.is_some() {
+            room::check(&o)?;
+        } else if o.delay.is_some()
+            || o.players.is_some()
+            || o.paced
+            || o.menu != input::Spans::default()
+            || o.desync_at.is_some()
+        {
+            return Err(
+                "--delay, --players, --paced, --menu and --desync-at are netplay's, with --server"
+                    .into(),
+            );
         } else if o.link.is_some() {
             link::check(&o)?;
         }
@@ -1084,40 +1161,16 @@ pub fn main(code: Option<&'static Code>, rom: Option<Embedded>) -> ExitCode {
     // is reported as the window starts.)
     let mut placing = Placing::default();
     if !opts.headless {
-        let s = settings::load(settings::path().as_deref()).unwrap_or_default();
-        let conf = gamepad::config_dir().map(|c| game_dir::GameConf::path(&c, &opts.game));
-        let game = game_dir::GameConf::load(conf.as_deref()).unwrap_or_else(|e| {
-            eprintln!("gbaa-desktop: {e}");
-            Default::default()
-        });
-        placing = Placing {
-            game,
-            global: s.save_dir,
-            previous_global: s.previous_save_dir,
-        };
-        opts.place(&placing, game_dir::data_dir().as_deref());
-        let dirs = [opts.save.as_deref(), Some(opts.states.as_path())];
-        for dir in dirs.into_iter().flatten().filter_map(Path::parent) {
-            if let Err(e) = std::fs::create_dir_all(dir) {
-                eprintln!("gbaa-desktop: {}: {e}", dir.display());
-                return ExitCode::FAILURE;
-            }
-        }
-        let moved: Result<Vec<_>, _> = opts.move_in.iter().map(|m| game_dir::move_in(m)).collect();
-        match moved.map(|m| m.concat()) {
-            Ok(copied) => {
-                for p in copied {
-                    eprintln!("gbaa-desktop: copied in: {}", p.display());
-                }
-            }
+        placing = match place_window(&mut opts) {
+            Ok(p) => p,
             Err(e) => {
                 eprintln!("gbaa-desktop: {e}");
                 return ExitCode::FAILURE;
             }
-        }
+        };
     }
     let result = if opts.headless {
-        game_thread(move || run(&opts, code, None))
+        game_thread(move || run(&opts, code, None, &mut None))
             .join()
             .unwrap_or_else(|_| Err("the run thread panicked".into()))
     } else {
@@ -1161,14 +1214,8 @@ pub fn main(code: Option<&'static Code>, rom: Option<Embedded>) -> ExitCode {
                     deadzone_axes_apart,
                     axis_deadzones,
                     resume,
-                    saves: menu::saves::save_folders(
-                        &opts.game,
-                        opts.save.as_deref(),
-                        &placing.game,
-                        placing.global.clone(),
-                        // --save names the .sav itself.
-                        opts.save_dir.is_some() || (opts.save.is_some() && !opts.save_placed),
-                    ),
+                    saves: save_folders(&opts, &placing),
+                    native: false,
                 };
                 window::run(o, move |screen| run_window(&opts, code, screen))
             })
@@ -1183,9 +1230,65 @@ pub fn main(code: Option<&'static Code>, rom: Option<Embedded>) -> ExitCode {
     }
 }
 
+/// A window's files placed in the game's folder by the settings
+/// ([`Options::place`]), the folders made and the game's files from
+/// before copied in ([`game_dir::move_in`]). The settings it went by. (A
+/// settings file that won't parse is reported as the window starts.)
+fn place_window(opts: &mut Options) -> Result<Placing, String> {
+    let s = settings::load(settings::path().as_deref()).unwrap_or_default();
+    let conf = gamepad::config_dir().map(|c| game_dir::GameConf::path(&c, &opts.game));
+    let game = game_dir::GameConf::load(conf.as_deref()).unwrap_or_else(|e| {
+        eprintln!("gbaa-desktop: {e}");
+        Default::default()
+    });
+    let placing = Placing {
+        game,
+        global: s.save_dir,
+        previous_global: s.previous_save_dir,
+    };
+    opts.place(&placing, game_dir::data_dir().as_deref());
+    let dirs = [opts.save.as_deref(), Some(opts.states.as_path())];
+    for dir in dirs.into_iter().flatten().filter_map(Path::parent) {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    let moved: Result<Vec<_>, _> = opts.move_in.iter().map(|m| game_dir::move_in(m)).collect();
+    for p in moved?.concat() {
+        eprintln!("gbaa-desktop: copied in: {}", p.display());
+    }
+    Ok(placing)
+}
+
+/// The menu's Save folders page for a window placed by `placing`.
+fn save_folders(opts: &Options, placing: &Placing) -> menu::saves::SaveFolders {
+    menu::saves::save_folders(
+        &opts.game,
+        opts.save.as_deref(),
+        &placing.game,
+        placing.global.clone(),
+        // --save names the .sav itself.
+        opts.save_dir.is_some() || (opts.save.is_some() && !opts.save_placed),
+    )
+}
+
+/// Where a native program's window (crates/native-host) keeps the save
+/// of the game `name`: where a play build of it would, beside the binary
+/// ([`embedded_path`]), in the game's folder ([`place_window`], which
+/// makes it and copies in the game's files from before); beside the
+/// binary with no data folder to put it in. The `.sav`, and the menu's
+/// Save folders page for it.
+pub fn native_saves(name: &str) -> Result<(PathBuf, menu::saves::SaveFolders), String> {
+    let exe = std::env::current_exe().map_err(|e| format!("the program's path: {e}"))?;
+    let rom = embedded_path(&exe, &runtime::name::GameName(name).to_string());
+    let arg = rom.to_str().ok_or("the program's path isn't UTF-8")?;
+    let mut opts = Options::parse_for([arg.to_owned()], None, Some(&exe))?;
+    let placing = place_window(&mut opts)?;
+    let sav = opts.save.clone().ok_or("no .sav placed")?;
+    Ok((sav, save_folders(&opts, &placing)))
+}
+
 /// On closing the window: copy the save at `sav` to its backups, and prune
 /// them ([`sav_file::backup`]).
-fn back_up_save(sav: &Path) {
+pub fn back_up_save(sav: &Path) {
     match sav_file::backup(sav, &sav_file::stamp_now()) {
         Ok(Some(p)) => eprintln!("gbaa-desktop: save backed up to {}", p.display()),
         Ok(None) => {}
@@ -1395,25 +1498,37 @@ fn asset_overrides(
 /// Run in the window `screen` as `opts` says; then, while the window is
 /// open, each netplay session its menu asks for, and the game alone again
 /// after it. `--frames` bounds each run, and the window closes at a
-/// session's end.
+/// session's end. Each run starts where the one before it ended, as a GBA
+/// does when its cable goes in or out (multiplayer/join-without-restart):
+/// a session's seat from the game alone's state (a wireless room's from
+/// reset, as the adapter is looked for there), and the game alone after
+/// it from that seat's.
 fn run_window(
     opts: &Options,
     code: Option<&'static Code>,
     screen: window::Screen,
 ) -> Result<(), String> {
     let mut o = opts.clone();
+    let mut carry = None;
     loop {
         let netplay = o.server.is_some();
-        let r = run(&o, code, Some(screen.clone()));
+        let r = run(&o, code, Some(screen.clone()), &mut carry);
         let ended = r.is_ok();
         if netplay {
             screen.end_session(match &r {
                 Ok(()) => room::State::Ended("You left the room.".into()),
-                Err(e) => room::State::Ended(format!("The session ended: {e}")),
+                // The server turning the game away (too old a build, no
+                // such room) is said as it is: no session began.
+                Err(e) => match e.strip_prefix(netplay::udp::REFUSED) {
+                    Some(why) => room::State::Ended(format!("The server said no: {why}")),
+                    None => room::State::Ended(format!("The session ended: {e}")),
+                },
             });
             if let Err(e) = &r {
                 eprintln!("gbaa-desktop: {e}");
             }
+            // The game alone goes on: the room's title goes.
+            screen.set_title("gbaa");
         } else {
             r?;
         }
@@ -1424,6 +1539,8 @@ fn run_window(
         o = Options {
             server: None,
             role: None,
+            players: None,
+            wireless: false,
             ..opts.clone()
         };
         let Some(ask) = screen.take_netplay_ask() else {
@@ -1434,10 +1551,18 @@ fn run_window(
         };
         let asked = Options {
             server: Some(ask.server),
+            players: (ask.role == room::Role::Host).then_some(ask.players),
             role: Some(ask.role),
+            wireless: ask.wireless,
+            // A wireless room starts its game from reset.
+            state: o.state.clone().filter(|_| !ask.wireless),
             ..o.clone()
         };
-        match room::check(&asked) {
+        let checked = match asked.wireless {
+            true => wireless::check(&asked).and_then(|()| room::check(&asked)),
+            false => room::check(&asked),
+        };
+        match checked {
             Ok(()) => o = asked,
             Err(e) => screen.end_session(room::State::Ended(format!("No netplay: {e}"))),
         }
@@ -1456,11 +1581,15 @@ pub fn spin_list(rom: &[u8]) -> &'static [u32] {
 }
 
 /// Load the ROM, run it as `opts` says (in the window `screen`, unless
-/// headless), and write what it asks for at the end.
+/// headless), and write what it asks for at the end. `carry`: the
+/// machine's state to start from, if any (taken: the window's last run's,
+/// [`run_window`]); a window's run leaves the state it ended in there,
+/// for the next.
 pub fn run(
     opts: &Options,
     code: Option<&'static Code>,
     screen: Option<window::Screen>,
+    carry: &mut Option<Vec<u8>>,
 ) -> Result<(), String> {
     let timing = opts.timing(code);
     // Native timing's generated code ticks nothing and its interpreter
@@ -1477,8 +1606,11 @@ pub fn run(
     if opts.link.is_some() {
         return link::run(opts, timing, screen);
     }
+    if opts.server.is_some() && opts.wireless {
+        return wireless::run(opts, timing, screen, carry);
+    }
     if opts.server.is_some() {
-        return room::run(opts, code.filter(|_| !opts.interp), timing, screen);
+        return room::run(opts, code.filter(|_| !opts.interp), timing, screen, carry);
     }
     #[cfg(feature = "timing-lab")]
     timing_lab::install()?;
@@ -1547,6 +1679,13 @@ pub fn run(
     if let Some(path) = &opts.state {
         slots::load(&mut m, path)?;
     }
+    // Where the window's last run (a netplay session's seat) ended. Its
+    // cartridge save is the one just flushed to the .sav, read above.
+    let carried = carry.take();
+    if let Some(s) = &carried {
+        m.load_state(s)
+            .map_err(|e| format!("the game's state as the session left it: {e}"))?;
+    }
     // A state from another ROM just loaded, put back if it faults
     // ([`slots::watch`]).
     let mut trial = None;
@@ -1560,6 +1699,7 @@ pub fn run(
     .map(|on| resume::Auto::new(&opts.states, on));
     if auto.as_ref().is_some_and(|_| m.platform.resume_on())
         && opts.state.is_none()
+        && carried.is_none()
         && !opts.no_resume
         && let Some(said) = resume::load(&mut m, &opts.states, opts.save.as_deref(), &mut trial)
     {
@@ -1995,6 +2135,12 @@ pub fn run(
         // Only the interpreter sees every sp (runtime::Machine::low_sp).
         if code.is_none() {
             eprintln!("gbaa-desktop: lowest sp {:#010x}", m.low_sp);
+            if m.out_sp.0 <= m.out_sp.1 {
+                eprintln!(
+                    "gbaa-desktop: sp outside IWRAM {:#010x}..={:#010x}",
+                    m.out_sp.0, m.out_sp.1
+                );
+            }
         } else {
             eprintln!("gbaa-desktop: lowest sp not kept by compiled code (run with --interp)");
         }
@@ -2125,6 +2271,10 @@ pub fn run(
         for (i, r) in c.r.iter().enumerate() {
             print!("r{i}={r:08x}{}", if i % 5 == 4 { "\n" } else { " " });
         }
+    }
+    // The next run in the window (a netplay session) starts from here.
+    if !opts.headless && m.fault.is_none() {
+        *carry = Some(slots::state(&mut m));
     }
     match (m.fault, pace) {
         (Some(fault), _) => Err(format!("stopped after {frames} frames: {fault}")),

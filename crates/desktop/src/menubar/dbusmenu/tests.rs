@@ -257,6 +257,7 @@ fn a_private_bus_walks_and_clicks_the_menu() {
     export.set(State {
         undoable: true,
         fullscreen: true,
+        native: false,
     });
     let update = updates.next().unwrap().unwrap();
     let (revision, parent): (u32, i32) = update.body().deserialize().unwrap();

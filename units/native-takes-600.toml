@@ -1,0 +1,12 @@
+# agb/native-takes for 600 frames with no input: the taker program of the
+# stage-A lifter's check (native/taker-test-program; `just lift-check`),
+# its lift (gbaa-lift) against the play build at --timing native by
+# route-check --native. What it draws: agb/native-takes/SCENE.md.
+rom = "$GBAA_DATA/agb/native-takes.gba"
+
+[[checkpoint]]
+name = "native-takes-600"
+frame = 600
+hash = "26d7d8f6a36ab6e3"
+# Verified: mGBA 0.10.5 (`just mgba-diff`) draws the same at frame 600
+# (2026-11-14).

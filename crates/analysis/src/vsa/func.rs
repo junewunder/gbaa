@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use armv4t::decode::{AluOp, Index, Instr, Operand2, Reg as DReg, Shift};
 use armv4t::sem::Reg;
 
-use super::domain::{AbsVal, CLOBBER, Dom, JOIN, MAX_SET, Src, Sym};
+use super::domain::{AbsVal, CLOBBER, Dom, JOIN, MAX_SET, Src, Sym, gcd};
 use super::exec::{self, Exit, ExitKind, State, writes_pc};
 use crate::program::{Insn, Program};
 
@@ -21,8 +21,19 @@ pub const STEP_CAP: u64 = 2_000_000;
 /// How often [`analyze_capped`] reruns the fixpoint for `bl`s into the
 /// function's own code.
 const INNER_TRIES: u32 = 4;
+/// How many more reruns it makes for the cold blocks after a function's
+/// code: each is found only once the one before it is the function's.
+const TAIL_TRIES: u32 = 16;
+/// The most instructions ahead of a prologue's `push {…, lr}`
+/// ([`is_push_lr`]). moonbeam's longest is 7.
+const LEAD_MAX: usize = 8;
 /// The longest straight-line callee run inline at its call.
 const LEAF_MAX: usize = 24;
+/// The most instructions [`Analysis::kept`] reads of a callee.
+const KEPT_MAX: usize = 64;
+/// The registers a call may change under the AAPCS that [`Analysis::kept`]
+/// can keep: r0-r3 and r12.
+const CALLER_SAVED: u16 = 0b1_0000_0000_1111;
 
 /// How control leaves an instruction that writes pc indirectly.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -39,18 +50,37 @@ fn plain_reg(op2: &Operand2, r: DReg) -> bool {
 /// Classify an instruction that writes pc, other than `b` and `bl`
 /// (`docs/research/jump-tables.md`, "Definitions"). Returns: `bx lr`,
 /// `mov pc, lr`, any `ldm`/`pop` loading pc, `ldr pc, [sp], #4`, and
-/// `bx rN` right after a `pop` that loads rN. Calls: `bx`/`mov pc` right
-/// after `mov lr, pc`, and a lone second half of Thumb `bl`. Everything
-/// else is a jump.
+/// `bx rN` (not pc) right after a `pop` that loads rN. Calls: `bx`/`mov pc` right
+/// after the instruction that sets lr to the address after the pc write
+/// (`mov lr, pc`, or agbcc's IRQ wrapper's `add lr, pc, #0`), and a lone
+/// second half of Thumb `bl`. Everything else is a jump: a tail jump
+/// leaves lr its caller's, so nothing right before it sets lr there.
 pub fn classify(prog: &Program, insn: &Insn) -> Ctl {
     let p = prog.prev(insn.addr, insn.thumb);
     let after_mov_lr_pc = matches!(
         p,
         Some(Insn { instr: Instr::Alu { op: AluOp::Mov, rd: DReg::Lr, op2, .. }, .. })
             if plain_reg(&op2, DReg::Pc)
+    ) || matches!(
+        p,
+        Some(Insn {
+            instr: Instr::Alu {
+                op: AluOp::Add,
+                rd: DReg::Lr,
+                rn: DReg::Pc,
+                op2: Operand2::Imm { value: 0, .. },
+                ..
+            },
+            thumb: false,
+            ..
+        })
     );
     match insn.instr {
         Instr::Bx { rm: DReg::Lr, .. } => Ctl::Return,
+        // An interworking veneer's `bx pc` goes on into its own ARM code,
+        // whatever the instruction before (the end of the function before
+        // it, read linearly, may be a `pop {…, pc}`).
+        Instr::Bx { rm: DReg::Pc, .. } => Ctl::Jump,
         Instr::Bx { rm, .. } => match p {
             Some(Insn {
                 instr:
@@ -111,8 +141,49 @@ pub enum JumpRes {
     Resolved(Jump),
     /// The target isn't a small finite set of ROM addresses.
     Unresolved,
+    /// The target is one constant address in RAM, outside the image
+    /// (interworking form): code a BIOS copy put there, entered at one of
+    /// the image's [`ram_entries`](FuncResult::ram_entries) (m4a's
+    /// `SoundMain` ends in a jump into its IWRAM copy). Unresolved here;
+    /// resolved where that copy's code is known (the hole report's
+    /// overlays, the lifter's functions).
+    Ram(u32),
     /// A table with a target that doesn't decode or leaves the function.
     Rejected(Jump),
+}
+
+/// Whether `word` (a halfword in Thumb) is a compiler's trap: Thumb
+/// `udf #255` from GCC or `udf #254` from LLVM, ARM 0xe7ffdefe from LLVM
+/// or 0xe7f000f0 from GCC. Modern GCC ends a path it proved dereferences
+/// null (`-fisolate-erroneous-paths-dereference`) or reaches
+/// `__builtin_unreachable` with one, so it is real code, never data.
+pub fn is_trap(word: u32, thumb: bool) -> bool {
+    if thumb {
+        matches!(word, 0xdeff | 0xdefe)
+    } else {
+        matches!(word, 0xe7ff_defe | 0xe7f0_00f0)
+    }
+}
+
+/// Whether code may hold the undefined instruction `insn` on purpose, so
+/// that it doesn't make the code data ([`FuncResult::undefined`]): a
+/// compiler's trap (`__builtin_trap`, a Rust abort: Thumb `udf #255`
+/// from GCC or `udf #254` from LLVM, ARM 0xe7ffdefe from LLVM or
+/// 0xe7f000f0 from GCC), or the word after an unconditional `bl`, which
+/// may be a call that never returns (Super Mariomon's assert ends in
+/// 0xefff after its print).
+pub fn deliberate(prog: &Program, insn: &Insn) -> bool {
+    let trap = prog
+        .read(insn.addr, if insn.thumb { 2 } else { 4 })
+        .is_some_and(|w| is_trap(w, insn.thumb));
+    let before = insn.addr.checked_sub(4);
+    trap || before
+        .and_then(|p| prog.decode(p, insn.thumb))
+        .is_some_and(|b| {
+            b.next() == insn.addr
+                && b.instr.cond() == armv4t::decode::Cond::Al
+                && (b.bl.is_some() || matches!(b.instr, Instr::Branch { link: true, .. }))
+        })
 }
 
 #[derive(Debug, Default)]
@@ -131,6 +202,10 @@ pub struct FuncResult {
     /// Some path ran into data, an undefined instruction or bytes that
     /// don't decode.
     pub stopped: bool,
+    /// An undefined instruction some path reached, other than a trap
+    /// ([`deliberate`]), the lowest. Code doesn't hold one; data decoded as
+    /// code often does, so discovery drops a scanned root that reaches one.
+    pub undefined: Option<u32>,
     /// Hit the step cap ([`STEP_CAP`] by default); the results aren't a
     /// fixpoint.
     pub capped: bool,
@@ -167,6 +242,10 @@ pub struct FuncResult {
     /// `bx rN` stub calls rN), and words stored to the BIOS's IRQ vector.
     /// Code copied to RAM runs there (decision 7).
     pub ram_entries: BTreeSet<u32>,
+    /// Constant words stored to the BIOS's IRQ vector, ROM or RAM, as ARM
+    /// keys (the BIOS enters a handler with `ldr pc`): the IRQ wrappers
+    /// the code installs.
+    pub irq_handlers: BTreeSet<u32>,
     /// The loads and stores reached, by instruction address: how their
     /// addresses are known ([`Access`]), joined over every visit.
     pub accesses: BTreeMap<u32, Access>,
@@ -184,6 +263,9 @@ pub struct Access {
     /// The lowest and highest address of the accesses that aren't
     /// sp-relative and are known.
     pub hull: Option<(u32, u32)>,
+    /// Every known address is `hull`'s lowest plus a multiple of this (0:
+    /// one address): the size of the records an index steps through.
+    pub stride: u32,
 }
 
 impl Access {
@@ -195,16 +277,20 @@ impl Access {
                 ..Access::default()
             };
         }
-        let hull = match dom {
-            Dom::Top => None,
-            Dom::Const(k) => Some((*k, *k)),
-            Dom::Set(v) => Some((v[0], v[v.len() - 1])),
-            Dom::Si { lo, hi, .. } => Some((*lo, *hi)),
+        let (hull, stride) = match dom {
+            Dom::Top => (None, 0),
+            Dom::Const(k) => (Some((*k, *k)), 0),
+            Dom::Set(v) => (
+                Some((v[0], v[v.len() - 1])),
+                v.iter().fold(0, |g, x| gcd(g, x - v[0])),
+            ),
+            Dom::Si { s, lo, hi } => (Some((*lo, *hi)), *s),
         };
         Access {
             sp: false,
             top: hull.is_none(),
             hull,
+            stride,
         }
     }
 
@@ -215,6 +301,11 @@ impl Access {
             hull: match (self.hull, o.hull) {
                 (Some((a, b)), Some((c, d))) => Some((a.min(c), b.max(d))),
                 (h, None) | (None, h) => h,
+            },
+            stride: match (self.hull, o.hull) {
+                (Some((a, _)), Some((c, _))) => gcd(gcd(self.stride, o.stride), a.abs_diff(c)),
+                (Some(_), None) => self.stride,
+                (None, _) => o.stride,
             },
         }
     }
@@ -283,17 +374,20 @@ pub fn analyze_capped(
     // target looks like a function of its own (a prologue, a `bx rN`
     // stub, a short leaf returning with `bx lr`, a target the probe says
     // returns balanced; a case block ending in the epilogue pops a frame
-    // it didn't push). Rerun the fixpoint with those taken as jumps
-    // until no new one turns up.
+    // it didn't push). So is one to right where that span ends, if nothing
+    // returns from there: the cold blocks modern GCC puts last, each ending
+    // in a call that never returns, reached only by `bl` (too far for a
+    // `b`) and reading the function's registers. Rerun the fixpoint with
+    // those taken as jumps until no new one turns up.
     let mut inner = BTreeSet::new();
-    let mut tries = 0;
+    let (mut tries, mut tails) = (0, 0);
     let prologue = thumb && is_push_lr(prog, entry);
     let (mut a, states) = loop {
         let (mut a, states) = fixpoint(prog, entry, thumb, far, cap, inner.clone());
         let mut more = Vec::new();
+        // The span of the code reached and the pools it reads.
+        let (mut lo, mut hi) = (u32::MAX, 0);
         if prologue && !a.res.capped && tries < INNER_TRIES {
-            // The span of the code reached and the pools it reads.
-            let (mut lo, mut hi) = (u32::MAX, 0);
             let mut bls = Vec::new();
             for &at in states.keys() {
                 let Some(i) = a.decode(at) else { continue };
@@ -306,12 +400,16 @@ pub fn analyze_capped(
             for t in bls {
                 if t != entry
                     && lo < t
-                    && t < hi
+                    && t <= hi
                     && !inner.contains(&t)
                     && !is_stub(prog, t)
                     && !is_push_lr(prog, t)
                     && !is_leaf(&mut a, t)
-                    && (a.far)(t, true) != Bl::Balanced
+                    && match (a.far)(t, true) {
+                        Bl::Balanced => false,
+                        Bl::NoReturn => true,
+                        _ => t < hi,
+                    }
                 {
                     more.push(t);
                 }
@@ -322,8 +420,13 @@ pub fn analyze_capped(
         if more.is_empty() {
             break (a, states);
         }
+        // A round that found only the block after the span.
+        if more == [hi] && tails < TAIL_TRIES {
+            tails += 1;
+        } else {
+            tries += 1;
+        }
         inner.extend(more);
-        tries += 1;
     };
     // The results come from the final states only: an earlier visit may
     // have resolved a jump with a narrower state than the fixpoint allows.
@@ -367,7 +470,9 @@ fn fixpoint<'p, 'f>(
         prog,
         thumb,
         sp0: State::sp0(entry),
+        lr0: State::lr0(entry),
         decoded: HashMap::new(),
+        kept: HashMap::new(),
         far,
         inner,
         record: false,
@@ -421,7 +526,11 @@ struct Analysis<'p, 'f> {
     prog: &'p Program,
     thumb: bool,
     sp0: Sym,
+    /// lr's value on entry: a jump to it unchanged is a return.
+    lr0: Sym,
     decoded: HashMap<u32, Option<Insn>>,
+    /// [`Analysis::kept`]'s answers, with the bytes each read.
+    kept: HashMap<u32, (u16, Vec<(u32, u32)>)>,
     far: &'f mut dyn FnMut(u32, bool) -> Bl,
     /// `bl` targets the function reaches by itself: jumps.
     inner: BTreeSet<u32>,
@@ -478,6 +587,7 @@ impl Analysis<'_, '_> {
         {
             // The BIOS enters it with `ldr pc`: in ARM state.
             self.ram_entry(h & !3);
+            self.res.irq_handlers.insert(h & !3);
         }
         let mut out = Vec::new();
         if let Some(f) = step.fall {
@@ -496,7 +606,13 @@ impl Analysis<'_, '_> {
             mut state,
         } = e;
         match kind {
-            ExitKind::Undefined => self.res.stopped = true,
+            ExitKind::Undefined => {
+                self.res.stopped = true;
+                if !deliberate(self.prog, insn) {
+                    let u = self.res.undefined.get_or_insert(insn.addr);
+                    *u = (*u).min(insn.addr);
+                }
+            }
             // BIOS calls return, clobbering r0 to r3.
             ExitKind::Swi => {
                 if self.record
@@ -515,7 +631,19 @@ impl Analysis<'_, '_> {
                 if self.record {
                     self.res.reads.push((insn.addr.wrapping_sub(4), insn.addr));
                 }
-                match classify(self.prog, insn) {
+                let ctl = match classify(self.prog, insn) {
+                    // A jump through a copy of the entry lr (m4a's `mov
+                    // r12, lr; ... bx r12`) is a return.
+                    Ctl::Jump
+                        if target
+                            .as_ref()
+                            .is_some_and(|v| v.sym == self.lr0 && v.off == 0) =>
+                    {
+                        Ctl::Return
+                    }
+                    c => c,
+                };
+                match ctl {
                     Ctl::Return => {
                         if self.record {
                             self.res.ret_sp.push(state.sp_offset(self.sp0));
@@ -604,13 +732,19 @@ impl Analysis<'_, '_> {
     ) {
         let Some(ts) = self.targets(v, kind) else {
             if self.record {
-                self.res.jumps.insert(at, JumpRes::Unresolved);
-                if let Some(k) = v.dom.konst() {
-                    self.ram_entry(match kind {
-                        ExitKind::Exchange => k,
-                        _ if self.thumb => k | 1,
-                        _ => k & !3,
-                    });
+                let k = v.dom.konst().map(|k| match kind {
+                    ExitKind::Exchange => k,
+                    _ if self.thumb => k | 1,
+                    _ => k & !3,
+                });
+                let ram = k.filter(|&k| {
+                    kind != ExitKind::ExceptionReturn && is_ram(k & !1) && !self.prog.in_rom(k & !1)
+                });
+                self.res
+                    .jumps
+                    .insert(at, ram.map_or(JumpRes::Unresolved, JumpRes::Ram));
+                if let Some(k) = k {
+                    self.ram_entry(k);
                 }
             }
             return;
@@ -692,9 +826,94 @@ impl Analysis<'_, '_> {
                 return out;
             }
         }
+        let kept = self.kept(target);
+        // A kept value may be one this call made last time round a loop:
+        // renamed first, as clobber_call does.
+        st.retire(insn.addr, 0);
+        let old = st.clone();
         st.clobber_call(insn.addr, 0);
+        for r in 0..15 {
+            if kept & 1 << r != 0 {
+                st.regs[r] = old.regs[r].clone();
+            }
+        }
         out.push((next, st));
         out
+    }
+
+    /// The caller-saved registers (r0-r3, r12) a callee at `t` never
+    /// writes, as a mask: what a `bl` to it keeps (m4a's `ply_*` hold the
+    /// return address in r12 across `bl ld_r3_tp_adr_i`). Read from the
+    /// callee's own code, up to [`KEPT_MAX`] instructions following
+    /// branches to its returns; none where it calls, jumps through a
+    /// register, traps or runs longer.
+    fn kept(&mut self, t: u32) -> u16 {
+        if !self.kept.contains_key(&t) {
+            let mut reads = Vec::new();
+            let mask = self
+                .callee_writes(t, &mut reads)
+                .map_or(0, |w| CALLER_SAVED & !w);
+            self.kept.insert(t, (mask, reads));
+        }
+        let (mask, reads) = &self.kept[&t];
+        if self.record {
+            self.res.reads.extend_from_slice(reads);
+        }
+        *mask
+    }
+
+    /// The registers the code at `t` may write before it returns, if it is
+    /// a short callee with no calls (see [`Analysis::kept`]).
+    fn callee_writes(&self, t: u32, reads: &mut Vec<(u32, u32)>) -> Option<u16> {
+        let sp0 = State::sp0(t);
+        let entry = State::entry(t);
+        let mut seen = BTreeSet::new();
+        let mut work = vec![t];
+        let mut written = 0u16;
+        while let Some(a) = work.pop() {
+            if !seen.insert(a) {
+                continue;
+            }
+            if seen.len() > KEPT_MAX {
+                return None;
+            }
+            reads.push((a, a.wrapping_add(4)));
+            let i = self.prog.decode(a, self.thumb)?;
+            if i.bl.is_some()
+                || matches!(
+                    i.instr,
+                    Instr::Undefined { .. } | Instr::Swi { .. } | Instr::ThumbBlLo { .. }
+                )
+            {
+                return None;
+            }
+            let s = exec::step(self.prog, sp0, 0, &i, entry.clone());
+            let states = s.fall.iter().chain(s.exits.iter().map(|e| &e.state));
+            for st in states {
+                for r in 0..15 {
+                    if st.regs[r] != entry.regs[r] {
+                        written |= 1 << r;
+                    }
+                }
+            }
+            if s.fall.is_some() {
+                work.push(i.next());
+            }
+            for e in &s.exits {
+                match i.instr {
+                    Instr::Branch { target, .. } => work.push(target),
+                    _ if e.kind == ExitKind::ExceptionReturn => return None,
+                    _ => {
+                        // classify reads the instruction before.
+                        reads.push((a.wrapping_sub(4), a));
+                        if classify(self.prog, &i) != Ctl::Return {
+                            return None;
+                        }
+                    }
+                }
+            }
+        }
+        Some(written)
     }
 
     /// Record what a `bl` to `target` calls: the target, or, if it is a
@@ -789,12 +1008,31 @@ impl Analysis<'_, '_> {
     }
 }
 
-/// Whether Thumb code at `t` starts with `push {…, lr}`: a prologue.
-fn is_push_lr(prog: &Program, t: u32) -> bool {
-    matches!(
-        prog.decode(t, true).map(|i| i.instr),
-        Some(Instr::Block { load: false, rn: DReg::Sp, writeback: true, regs, .. }) if regs & 1 << 14 != 0
-    )
+/// Whether Thumb code at `t` starts with a prologue: `push {…, lr}`, at
+/// `t` or after up to [`LEAD_MAX`] instructions that touch neither the
+/// frame nor pc (modern GCC schedules the body's first instructions ahead
+/// of the push: `movs r3, #180; push {r4-r7, lr}`).
+fn is_push_lr(prog: &Program, mut t: u32) -> bool {
+    for _ in 0..=LEAD_MAX {
+        let Some(i) = prog.decode(t, true) else {
+            return false;
+        };
+        match i.instr {
+            Instr::Block {
+                load: false,
+                rn: DReg::Sp,
+                writeback: true,
+                regs,
+                ..
+            } => {
+                return regs & 1 << 14 != 0;
+            }
+            Instr::Undefined { .. } | Instr::Swi { .. } => return false,
+            _ if i.bl.is_some() || writes_pc(&i.instr) || touches_frame(&i.instr) => return false,
+            _ => t = i.next(),
+        }
+    }
+    false
 }
 
 /// Whether Thumb code at `t` is a lone `bx rN` (rN not lr): a

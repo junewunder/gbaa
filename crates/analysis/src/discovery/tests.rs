@@ -137,6 +137,97 @@ fn pointer_scan_rejects_an_unbalanced_body() {
 }
 
 #[test]
+fn pointer_scan_rejects_a_shift_by_32() {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        .h(0x100, 0x4770)
+        // movs r0, #1; lsrs r0, r5, #32 (a ROM pointer's upper half); bx lr.
+        .h(0x300, 0x2001)
+        .h(0x302, 0x0828)
+        .h(0x304, 0x4770)
+        // The same with a real shift: lsrs r0, r5, #1.
+        .h(0x340, 0x2001)
+        .h(0x342, 0x0868)
+        .h(0x344, 0x4770)
+        // Both beside a function found already.
+        .w(0x400, thumb(0x300))
+        .w(0x404, thumb(0x100))
+        .w(0x408, thumb(0x340));
+    let d = a.run();
+    assert!(!d.funcs.contains_key(&thumb(0x300)));
+    assert_eq!(d.funcs.get(&thumb(0x340)), Some(&Evidence::Scanned));
+}
+
+#[test]
+fn pointer_scan_rejects_a_bx_to_a_shifted_register() {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        .h(0x100, 0x4770)
+        // Emerald Rogue's battle script decoded as Thumb: strb r4, [r7,
+        // #24]; lsls r1, r6, #4; lsls r1, r1, #6; movs r6, #198; bx r1.
+        .h(0x300, 0x763c)
+        .h(0x302, 0x0131)
+        .h(0x304, 0x0189)
+        .h(0x306, 0x26c6)
+        .h(0x308, 0x4708)
+        // The same with the jump's target loaded: ldr r1, [r1, #0].
+        .h(0x340, 0x763c)
+        .h(0x342, 0x0131)
+        .h(0x344, 0x6809)
+        .h(0x346, 0x26c6)
+        .h(0x348, 0x4708)
+        // Both beside a function found already.
+        .w(0x400, thumb(0x300))
+        .w(0x404, thumb(0x100))
+        .w(0x408, thumb(0x340));
+    let d = a.run();
+    assert!(!d.funcs.contains_key(&thumb(0x300)));
+    assert_eq!(d.funcs.get(&thumb(0x340)), Some(&Evidence::Scanned));
+}
+
+#[test]
+fn scanned_code_reaching_an_undefined_insn_is_data() {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        // main: push {lr}; bl trap; pop {pc}. A confirmed function may
+        // hold a trap.
+        .h(0x100, 0xb500)
+        .bl(0x102, 0x180)
+        .h(0x106, 0xbd00)
+        // trap: udf
+        .h(0x180, 0xde00)
+        // A scanned candidate that jumps into ARM-decoded data: movs r1,
+        // #0; movs r2, #0; ldr r0, =data; bx r0.
+        .h(0x300, 0x2100)
+        .h(0x302, 0x2200)
+        .h(0x304, 0x4801)
+        .h(0x306, 0x4700)
+        .w(0x30c, B + 0x340)
+        // data: mov r0, #1; then an undefined word that isn't a trap.
+        .w(0x340, 0xe3a0_0001)
+        .w(0x344, 0xe600_0010)
+        // A scanned candidate calling a function that never returns into
+        // data: push {lr}; bl stop; pop {pc}. stop: movs r0, #1; udf.
+        .h(0x380, 0xb500)
+        .bl(0x382, 0x3c0)
+        .h(0x386, 0xbd00)
+        .h(0x3c0, 0x2001)
+        .h(0x3c2, 0xde00)
+        .w(0x400, thumb(0x100))
+        .w(0x404, thumb(0x300))
+        .w(0x408, thumb(0x380));
+    let d = a.run();
+    assert_eq!(d.funcs.get(&thumb(0x180)), Some(&Evidence::Confirmed));
+    assert!(!d.funcs.contains_key(&thumb(0x300)));
+    assert!(!d.funcs.contains_key(&(B + 0x340)) && !d.entries.contains_key(&(B + 0x340)));
+    assert!(!d.code.contains_key(&(B + 0x344)));
+    assert_eq!(d.undefined, 2);
+    // What a function calls is a function, whatever follows its call.
+    assert_eq!(d.funcs.get(&thumb(0x380)), Some(&Evidence::Scanned));
+    assert_eq!(d.funcs.get(&thumb(0x3c0)), Some(&Evidence::Scanned));
+}
+
+#[test]
 fn far_jump_bl_is_not_a_call() {
     let mut a = Asm::new();
     a.entry(0x100)
@@ -152,6 +243,75 @@ fn far_jump_bl_is_not_a_call() {
     assert!(d.rec.far_jumps.contains(&(B + 0x106)));
     assert!(!d.funcs.contains_key(&thumb(0x10c)));
     assert!(d.code.contains_key(&(B + 0x10c)));
+}
+
+#[test]
+fn modern_gcc_cold_blocks_are_the_callers() {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        // main: movs r3, #180; push {r4, lr}; cmp r0, #0; bge 1f; bl cold1;
+        // 1: cmp r0, #1; bne 2f; bl cold2; 2: movs r0, #0; b 3f;
+        // cold1: movs r0, r4; bl die; 3: pop {r4, pc};
+        // cold2: movs r0, r4; bl die
+        .h(0x100, 0x23b4)
+        .h(0x102, 0xb510)
+        .h(0x104, 0x2800)
+        .bcond(0x106, 0xa, 0x10c)
+        .bl(0x108, 0x118)
+        .h(0x10c, 0x2801)
+        .bcond(0x10e, 1, 0x114)
+        .bl(0x110, 0x120)
+        .h(0x114, 0x2000)
+        .h(0x116, 0xe002) // b 0x11e
+        .h(0x118, 0x0020)
+        .bl(0x11a, 0x126)
+        .h(0x11e, 0xbd10)
+        .h(0x120, 0x0020)
+        .bl(0x122, 0x126)
+        // die: movs r1, #5; push {r4, lr}; b .
+        .h(0x126, 0x2105)
+        .h(0x128, 0xb510)
+        .h(0x12a, 0xe7fe);
+    let d = a.run();
+    // The push comes second, so main still has a prologue; cold1 is
+    // inside its code and cold2 right after it, and neither returns.
+    assert!(d.rec.far_jumps.contains(&(B + 0x108)));
+    assert!(d.rec.far_jumps.contains(&(B + 0x110)));
+    assert!(!d.funcs.contains_key(&thumb(0x118)), "{:x?}", d.funcs);
+    assert!(!d.funcs.contains_key(&thumb(0x120)), "{:x?}", d.funcs);
+    assert!(d.code.contains_key(&(B + 0x118)) && d.code.contains_key(&(B + 0x120)));
+    // A function with a prologue of its own stays one, wherever it is.
+    assert!(!d.rec.far_jumps.contains(&(B + 0x11a)));
+    assert!(!d.rec.far_jumps.contains(&(B + 0x122)));
+    assert_eq!(d.funcs.get(&thumb(0x126)), Some(&Evidence::Confirmed));
+}
+
+#[test]
+fn a_run_of_cold_blocks_after_a_function_is_all_its_own() {
+    let mut a = Asm::new();
+    // main: movs r3, #180; push {r4, lr}; six of `cmp r0, #k; bne 1f;
+    // bl cold_k; 1:`; movs r0, #0; pop {r4, pc}; then the six blocks, each
+    // `movs r0, r4; bl die`, found one a rerun.
+    a.entry(0x100).h(0x100, 0x23b4).h(0x102, 0xb510);
+    for k in 0..6 {
+        let (at, cold) = (0x104 + 8 * k, 0x138 + 6 * k);
+        a.h(at, 0x2800 | k as u16)
+            .bcond(at + 2, 1, at + 8)
+            .bl(at + 4, cold)
+            .h(cold, 0x0020)
+            .bl(cold + 2, 0x200);
+    }
+    a.h(0x134, 0x2000)
+        .h(0x136, 0xbd10)
+        // die: push {r4, lr}; b .
+        .h(0x200, 0xb510)
+        .h(0x202, 0xe7fe);
+    let d = a.run();
+    for k in 0..6 {
+        assert!(d.rec.far_jumps.contains(&(B + 0x108 + 8 * k)), "block {k}");
+        assert!(!d.funcs.contains_key(&thumb(0x138 + 6 * k)), "block {k}");
+    }
+    assert!(d.funcs.contains_key(&thumb(0x200)));
 }
 
 #[test]
@@ -341,6 +501,36 @@ fn new_data_over_a_jump_target_redoes_the_jump() {
     );
 }
 
+/// The entry with `set_lr` before its `bx r0`, and whether discovery has
+/// code at the `bx`'s return site (0xc) and whether it took the `bx` for
+/// a jump.
+fn entry_bx_after(set_lr: u32) -> (bool, bool) {
+    let mut a = Asm::new();
+    a.entry(0x100).w(0x4, set_lr).h(0x100, 0x4770); // main: bx lr
+    let d = a.run();
+    assert_eq!(d.funcs.get(&thumb(0x100)), Some(&Evidence::Confirmed));
+    (
+        d.code.contains_key(&(B + 0xc)),
+        d.rec.jumps.contains_key(&(B + 0x8)),
+    )
+}
+
+#[test]
+fn bx_after_lr_set_to_its_return_site_is_a_call() {
+    // `mov lr, pc` and agbcc's IRQ wrapper's `add lr, pc, #0` both leave
+    // lr at the address after the `bx`: a call, and the code after it is
+    // the same function's.
+    for set_lr in [0xe1a0_e00f, 0xe28f_e000] {
+        assert_eq!(entry_bx_after(set_lr), (true, false), "{set_lr:#x}");
+    }
+    // A tail jump: the instruction before doesn't set lr (`mov r12, pc`),
+    // or sets it somewhere else (`add lr, pc, #4`, `add lr, r1, #0`).
+    // Nothing follows it.
+    for other in [0xe1a0_c00f, 0xe28f_e004, 0xe281_e000] {
+        assert_eq!(entry_bx_after(other), (false, true), "{other:#x}");
+    }
+}
+
 #[test]
 fn nothing_follows_a_call_that_never_returns() {
     let mut a = Asm::new();
@@ -410,6 +600,180 @@ fn crt0_copies_and_jumps_over_its_pool() {
 }
 
 #[test]
+fn extra_starts_are_confirmed_and_cut_a_copy_source() {
+    let mut a = Asm::new();
+    // crt0_copies_and_jumps_over_its_pool's crt0, copying 4 words from
+    // 0x300; a run saw calls to 0x308 (inside the copy's source: m4a's
+    // `SoundMainRAM` copy reads past its end) and to 0x400, which nothing
+    // in ROM points at.
+    a.w(0x00, 0xe59f_0010)
+        .w(0x04, 0xe59f_1010)
+        .w(0x08, 0xe59f_2010)
+        .w(0x0c, 0xef0b_0000)
+        .w(0x10, 0xe59f_300c)
+        .w(0x14, 0xe12f_ff13)
+        .w(0x18, B + 0x300)
+        .w(0x1c, 0x0300_0000)
+        .w(0x20, 0x0400_0004)
+        .w(0x24, thumb(0x100))
+        .h(0x100, 0x4770)
+        .h(0x308, 0x2001) // movs r0, #1
+        .h(0x30a, 0x4770) // bx lr
+        .h(0x400, 0x2002) // movs r0, #2
+        .h(0x402, 0x4770); // bx lr
+    let plain = a.run();
+    assert!(!plain.funcs.contains_key(&thumb(0x308)));
+    assert!(!plain.funcs.contains_key(&thumb(0x400)));
+    let d = discover_with(a.0.clone(), &[thumb(0x308), thumb(0x400)]);
+    for f in [thumb(0x100), thumb(0x308), thumb(0x400)] {
+        assert_eq!(d.funcs.get(&f), Some(&Evidence::Confirmed), "{f:x}");
+    }
+    assert!(d.code.contains_key(&(B + 0x30a)));
+    assert!(d.code.contains_key(&(B + 0x402)));
+    assert!(d.data.contains(&(B + 0x300, B + 0x308)), "{:x?}", d.data);
+    // The copy itself is unchanged.
+    assert_eq!(
+        d.copies.iter().copied().collect::<Vec<_>>(),
+        [(B + 0x300, 0x0300_0000, 16)]
+    );
+}
+
+#[test]
+fn a_bl_into_a_copy_source_cuts_it() {
+    let mut a = Asm::new();
+    // crt0_copies_and_jumps_over_its_pool's crt0, copying 4 words from
+    // 0x300, and main calls 0x308 in ROM: the copy's length reads on into
+    // ROM code (Kirby & the Amazing Mirror's heap allocator).
+    a.w(0x00, 0xe59f_0010)
+        .w(0x04, 0xe59f_1010)
+        .w(0x08, 0xe59f_2010)
+        .w(0x0c, 0xef0b_0000)
+        .w(0x10, 0xe59f_300c)
+        .w(0x14, 0xe12f_ff13)
+        .w(0x18, B + 0x300)
+        .w(0x1c, 0x0300_0000)
+        .w(0x20, 0x0400_0004)
+        .w(0x24, thumb(0x100))
+        // main: push {lr}; bl 0x308; pop {pc}
+        .h(0x100, 0xb500)
+        .bl(0x102, 0x308)
+        .h(0x106, 0xbd00)
+        .h(0x308, 0x2001) // movs r0, #1
+        .h(0x30a, 0x4770); // bx lr
+    let d = a.run();
+    assert_eq!(d.funcs.get(&thumb(0x308)), Some(&Evidence::Confirmed));
+    assert!(d.code.contains_key(&(B + 0x106)), "the call returns");
+    assert!(d.code.contains_key(&(B + 0x30a)));
+    assert!(d.data.contains(&(B + 0x300, B + 0x308)), "{:x?}", d.data);
+    assert!(!d.code.contains_key(&(B + 0x300)));
+    assert_eq!(
+        d.copies.iter().copied().collect::<Vec<_>>(),
+        [(B + 0x300, 0x0300_0000, 16)]
+    );
+}
+
+/// crt0_copies_and_jumps_over_its_pool's crt0, copying 4 words from 0x300
+/// to IWRAM; main at 0x100.
+fn copy_crt0(a: &mut Asm) -> &mut Asm {
+    a.w(0x00, 0xe59f_0010)
+        .w(0x04, 0xe59f_1010)
+        .w(0x08, 0xe59f_2010)
+        .w(0x0c, 0xef0b_0000)
+        .w(0x10, 0xe59f_300c)
+        .w(0x14, 0xe12f_ff13)
+        .w(0x18, B + 0x300)
+        .w(0x1c, 0x0300_0000)
+        .w(0x20, 0x0400_0004)
+        .w(0x24, thumb(0x100))
+}
+
+#[test]
+fn a_bl_to_a_stub_in_a_copy_source_returns() {
+    let mut a = Asm::new();
+    // m4a's SoundMain: a `bl` to the `bx r3` stub its SoundMainRAM copy
+    // ends in, then a constant jump into the copy.
+    copy_crt0(&mut a)
+        // main: push {lr}; ldr r3, =callee; bl stub; ldr r3, =0x03000001; bx r3
+        .h(0x100, 0xb500)
+        .h(0x102, 0x4b02) // ldr r3, [pc, #8] -> 0x10c
+        .bl(0x104, 0x30c)
+        .h(0x108, 0x4b01) // ldr r3, [pc, #4] -> 0x110
+        .h(0x10a, 0x4718) // bx r3
+        .w(0x10c, thumb(0x200))
+        .w(0x110, 0x0300_0001)
+        .h(0x200, 0x4770) // callee: bx lr
+        .h(0x300, 0x4770) // the copy's code: bx lr
+        .h(0x30c, 0x4718); // stub: bx r3
+    let d = a.run();
+    assert!(d.code.contains_key(&(B + 0x10a)), "the call returns");
+    assert_eq!(
+        d.rec.jumps.get(&(B + 0x10a)),
+        Some(&JumpRes::Ram(0x0300_0001))
+    );
+    assert!(d.funcs.contains_key(&thumb(0x200)), "the stub calls r3");
+    assert!(!d.funcs.contains_key(&thumb(0x30c)), "the stub stays out");
+    assert!(d.data.contains(&(B + 0x300, B + 0x30c)), "{:x?}", d.data);
+    assert!(d.ram_entries.contains(&0x0300_0001));
+    let ov = overlays(&a.0, &d);
+    assert!(ov[0].disc.funcs.contains_key(&0x0300_0001));
+}
+
+#[test]
+fn a_veneers_b_into_a_copy_source_cuts_it() {
+    let mut a = Asm::new();
+    // Kirby: Nightmare in Dream Land: main calls a veneer (bx pc; nop; b)
+    // into ARM code the copy's length reads on into. The function before
+    // the veneer ends in `pop {pc}`, which isn't the veneer's return.
+    copy_crt0(&mut a)
+        // main: push {lr}; bl veneer; pop {pc}
+        .h(0x100, 0xb500)
+        .bl(0x102, 0x180)
+        .h(0x106, 0xbd00)
+        .h(0x17e, 0xbd00) // pop {pc}
+        .h(0x180, 0x4778) // veneer: bx pc
+        .h(0x182, 0x46c0) // nop
+        .w(0x184, 0xea00_005f) // b 0x308
+        .w(0x308, 0xe12f_ff1e); // bx lr
+    let d = a.run();
+    assert!(d.code.contains_key(&(B + 0x106)), "the call returns");
+    assert!(d.code.contains_key(&(B + 0x184)));
+    assert!(d.code.contains_key(&(B + 0x308)));
+    assert!(!d.code[&(B + 0x308)].thumb);
+    assert!(d.data.contains(&(B + 0x300, B + 0x308)), "{:x?}", d.data);
+}
+
+#[test]
+fn pointer_scan_takes_an_endless_task() {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        .h(0x100, 0x4770) // main: bx lr
+        // A task run as a coroutine: push {lr}; loop: bl yield; b loop.
+        .h(0x300, 0xb500)
+        .h(0x302, 0x2000) // movs r0, #0
+        .h(0x304, 0x2101) // movs r1, #1
+        .bl(0x306, 0x380)
+        .h(0x30a, 0xe7fc) // b 0x306
+        .h(0x380, 0x4770) // yield: bx lr
+        // The same loop without the push: not taken.
+        .h(0x340, 0x2000)
+        .h(0x342, 0x2101)
+        .bl(0x344, 0x380)
+        .h(0x348, 0xe7fc) // b 0x344
+        // One word points at each, beside nothing found (Kirby: Nightmare
+        // in Dream Land's table of (kind, task) pairs); the second sits
+        // next to main's start.
+        .w(0x400, 0)
+        .w(0x404, thumb(0x300))
+        .w(0x408, 0)
+        .w(0x40c, thumb(0x100))
+        .w(0x410, thumb(0x340));
+    let d = a.run();
+    assert_eq!(d.funcs.get(&thumb(0x300)), Some(&Evidence::Scanned));
+    assert!(d.code.contains_key(&(B + 0x30a)));
+    assert!(!d.funcs.contains_key(&thumb(0x340)));
+}
+
+#[test]
 fn a_leaf_inside_the_callers_span_is_still_called() {
     let mut a = Asm::new();
     a.entry(0x100)
@@ -469,6 +833,11 @@ fn code_copied_to_iwram_is_discovered_where_it_runs() {
         d.ram_entries.iter().copied().collect::<Vec<_>>(),
         [0x0300_0000, 0x0300_0010]
     );
+    // The word stored to the IRQ vector is the IRQ wrapper.
+    assert_eq!(
+        d.irq_handlers.iter().copied().collect::<Vec<_>>(),
+        [0x0300_0000]
+    );
     // ROM discovery is as it was: the stub isn't a function.
     assert!(!d.funcs.contains_key(&thumb(0x180)));
     let ov = overlays(&a.0, &d);
@@ -480,4 +849,37 @@ fn code_copied_to_iwram_is_discovered_where_it_runs() {
     assert_eq!(funcs, [0x0300_0000, 0x0300_0010]);
     let code: Vec<u32> = o.disc.code.keys().copied().collect();
     assert_eq!(code, [0x0300_0000, 0x0300_0010, 0x0300_0018]);
+}
+
+#[test]
+fn pointer_scan_takes_m4a_command_routines() {
+    let b = |at: u32, to: u32| 0xe000 | ((to as i32 - (at as i32 + 4)) >> 1) as u16 & 0x7ff;
+    let mut a = Asm::new();
+    a.entry(0x100)
+        .h(0x100, 0x4770) // main: bx lr
+        // ply_*: mov r12, lr; bl helper; strb r3, [r1, #29]; bx r12.
+        .h(0x300, 0x46f4)
+        .bl(0x302, 0x380)
+        .h(0x306, 0x774b)
+        .h(0x308, 0x4760)
+        // The same without the copy of lr: its `bx r12` returns nowhere.
+        .h(0x320, 0x2000) // movs r0, #0
+        .bl(0x322, 0x380)
+        .h(0x326, 0x774b)
+        .h(0x328, 0x4760)
+        // A command that only branches into another (`ply_patt` into
+        // `ply_goto`): movs r2, #0; b main.
+        .h(0x340, 0x2200)
+        .h(0x342, b(0x342, 0x100))
+        .h(0x380, 0x2301) // helper: movs r3, #1
+        .h(0x382, 0x4770) // bx lr
+        // m4a's `MPlayJumpTable`, read only as its RAM copy.
+        .w(0x400, thumb(0x100))
+        .w(0x404, thumb(0x300))
+        .w(0x408, thumb(0x340))
+        .w(0x40c, thumb(0x320));
+    let d = a.run();
+    assert_eq!(d.funcs.get(&thumb(0x300)), Some(&Evidence::Scanned));
+    assert_eq!(d.funcs.get(&thumb(0x340)), Some(&Evidence::Scanned));
+    assert!(!d.funcs.contains_key(&thumb(0x320)));
 }

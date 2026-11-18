@@ -22,7 +22,13 @@
 //!
 //! Bits a register doesn't let you read come back 0, as do unused
 //! addresses inside the block. (On hardware unused addresses read open bus;
-//! jsmolka's `unsafe` tests are where that would show.)
+//! jsmolka's `unsafe` tests are where that would show, and mGBA reads it
+//! too, from the serial port's unused halfwords among others.)
+//!
+//! The serial port has nothing plugged in unless a link hub says so
+//! ([`Io::sio_linked`], [`Io::sio_wireless`]): `SIOCNT` answers as
+//! [`Io::sio_unplugged`] says, the JOY bus's flags as no partner leaves
+//! them.
 
 use crate::timer::Timer;
 
@@ -62,6 +68,10 @@ pub mod reg {
     pub const KEYINPUT: u32 = 0x130;
     pub const KEYCNT: u32 = 0x132;
     pub const RCNT: u32 = 0x134;
+    pub const JOYCNT: u32 = 0x140;
+    /// `JOY_TRANS`, the word the JOY bus sends.
+    pub const JOY_TRANS: u32 = 0x154;
+    pub const JOYSTAT: u32 = 0x158;
     pub const IE: u32 = 0x200;
     pub const IF: u32 = 0x202;
     pub const WAITCNT: u32 = 0x204;
@@ -112,6 +122,10 @@ pub mod event {
     pub const STOP: u32 = 1 << 9;
     /// `IE`, `IF` or `IME` changed: an interrupt may now be due.
     pub const IRQ: u32 = 1 << 10;
+    /// `IME` went from 0 to 1. Under native timing a pending IRQ is taken
+    /// at the next tick, as the hardware takes it at once, not at the
+    /// next time point (native/ime-release).
+    pub const IME_ON: u32 = 1 << 11;
     /// A sound register other than the FIFOs was written.
     pub const SOUND: u32 = 1 << 13;
     /// `SOUNDCNT_H` was written with bit 11 set: reset FIFO A. (The bit
@@ -211,12 +225,21 @@ const fn masks(o: u32) -> (u16, u16) {
                 (0x00C7, 0x00C7)
             }
         }
-        // Serial and joybus, stored as is; a link hub owns some of SIOCNT
+        // Serial and joybus. With nothing plugged in, `SIOCNT` answers as
+        // `Io::sio_unplugged` says; a link hub owns some of it
         // (`Io::sio_owned`, `crate::link`).
         0x120..=0x12A => RW,
-        0x134 => (0xC1FF, 0xC1FF),
-        0x140 => (0x0047, 0x0047),
-        0x150..=0x15A => RW,
+        // RCNT: the low four bits are the pins' levels, which no store
+        // sets (mGBA keeps them; GBATEK gives no unplugged level).
+        0x134 => (0xC1FF, 0xC1F0),
+        // JOYCNT: bits 0-2 are the JOY bus's flags, which only a partner
+        // sets (a 1 acknowledges one), bit 6 its IRQ (GBATEK).
+        0x140 => (0x0047, 0x0040),
+        0x150..=0x156 => RW,
+        // JOYSTAT: bit 1 (received) only a partner sets, bit 3 (sent) a
+        // `JOY_TRANS` store sets (`write_masked`); bits 4-5 are the
+        // program's (GBATEK). Its high halfword is no register.
+        0x158 => (0x003A, 0x0030),
         0x130 => (0x03FF, 0),
         0x132 => (0xC3FF, 0xC3FF),
         0x200 | 0x202 => (0x3FFF, 0x3FFF),
@@ -270,6 +293,10 @@ pub struct Io {
     /// The `SIOCNT` bits the link hub owns (the terminals, the player ID,
     /// a busy flag), which the CPU's writes leave alone. 0 off a link.
     pub sio_owned: u16,
+    /// The machine's link port holds a wireless adapter
+    /// ([`crate::link::rfu`]): every `SIOCNT` write is a sync point, as
+    /// the adapter answers the terminals the CPU sets. Not guest state.
+    pub sio_wireless: bool,
 }
 
 impl Default for Io {
@@ -290,6 +317,7 @@ impl Io {
             now: 0,
             sio_linked: false,
             sio_owned: 0,
+            sio_wireless: false,
         };
         io.set_keys(0);
         for (o, v) in [
@@ -365,14 +393,26 @@ impl Io {
                 if self.sio_linked {
                     self.events |= event::SERIAL;
                 }
+                self.regs[i] = (old & !m) | (v & m);
+                self.sio_unplugged();
+                return;
             }
+            // A `JOY_TRANS` store sets `JOYSTAT`'s sent flag (GBATEK, and
+            // mGBA's `GBAIOWrite`); with no partner nothing clears it.
+            o if o & !2 == reg::JOY_TRANS => self.regs[reg::JOYSTAT as usize / 2] |= 8,
             // Writing 1 acknowledges an interrupt.
             reg::IF => {
                 self.regs[i] = old & !(v & m);
                 self.events |= event::IRQ;
                 return;
             }
-            reg::IE | reg::IME => self.events |= event::IRQ,
+            reg::IE => self.events |= event::IRQ,
+            reg::IME => {
+                self.events |= event::IRQ;
+                if old & 1 == 0 && v & m & 1 != 0 {
+                    self.events |= event::IME_ON;
+                }
+            }
             0x0BA | 0x0C6 | 0x0D2 | 0x0DE => {
                 self.events |= event::DMA0 << ((o - 0x0BA) / 12);
             }
@@ -407,6 +447,42 @@ impl Io {
             // counts at once.
             self.set_vcount(self.vcount());
         }
+    }
+
+    /// `SIOCNT` as the serial port leaves it after a store with nothing
+    /// plugged in, as mGBA 0.10.5's dummy drivers answer
+    /// (`GBASIOWriteSIOCNT`, src/gba/sio.c), unless a link hub answers it
+    /// instead (multiplayer mode on a [`Io::sio_linked`] machine, or any
+    /// mode on a [`Io::sio_wireless`] one). In normal mode SI reads 1 (the
+    /// pulled-up line), and a transfer started on the internal clock ends
+    /// at once (mGBA's; on hardware it takes 8 or 32 bit times), its data
+    /// as it was, with the serial IRQ if bit 14 asks. In multiplayer mode
+    /// SI and SD read 1 (no parent grounds SI, so this is a child), the ID
+    /// and error bits 0, and a started transfer stays started. In UART,
+    /// GPIO and JOY bus modes the store is kept.
+    fn sio_unplugged(&mut self) {
+        if self.sio_wireless {
+            return;
+        }
+        let i = reg::SIOCNT as usize / 2;
+        let mut v = self.regs[i];
+        if self.regs[reg::RCNT as usize / 2] & 0x8000 != 0 {
+            return;
+        }
+        match v >> 12 & 3 {
+            0 | 1 => {
+                v |= 1 << 2;
+                if v & 0x81 == 0x81 {
+                    v &= !0x80;
+                    if v & 0x4000 != 0 {
+                        self.request_irq(irq::SERIAL);
+                    }
+                }
+            }
+            2 if !self.sio_linked => v = v & 0xFF83 | 0xC,
+            _ => return,
+        }
+        self.regs[i] = v;
     }
 
     #[inline(always)]
@@ -454,6 +530,13 @@ impl Io {
         self.regs[reg::IE as usize / 2] & self.regs[reg::IF as usize / 2] != 0
     }
 
+    /// Whether one of the sources in `mask` is requested and enabled
+    /// (`IE & IF & mask`), whatever `IME` says.
+    #[inline]
+    pub fn irq_requested_of(&self, mask: u16) -> bool {
+        self.regs[reg::IE as usize / 2] & self.regs[reg::IF as usize / 2] & mask != 0
+    }
+
     /// Whether the CPU should take an IRQ, apart from the CPSR's I bit.
     #[inline]
     pub fn irq_pending(&self) -> bool {
@@ -472,4 +555,4 @@ crate::snap::snap!(Io {
     events,
     timers,
     now
-}; skip sio_linked, sio_owned);
+}; skip sio_linked, sio_owned, sio_wireless);

@@ -51,15 +51,21 @@ pub struct Machine<P: Platform> {
     /// ([`crate::dispatch::Code::spins`]). Native timing only. Not guest
     /// state.
     pub spin_list: &'static [u32],
-    /// The lowest `sp` the interpreter has seen after an instruction since
-    /// power-on ([`Machine::note_sp`]). Compiled code doesn't keep it:
-    /// its pushes and pops may never write the lowest value to r13 (a
-    /// block's balanced push and pop leave r13 as it was), so a run
-    /// wanting it is interpreted (`gbaa-desktop --interp`). The native
-    /// check leaves the guest stack, from here to IWRAM's end, out of its
-    /// RAM compare (docs/native-port-design.md, section 7). Not guest
-    /// state.
+    /// The lowest `sp` in IWRAM (0x03000000 to 0x03008000) the
+    /// interpreter has seen after an instruction since power-on
+    /// ([`Machine::note_sp`]). Compiled code doesn't keep it: its pushes
+    /// and pops may never write the lowest value to r13 (a block's
+    /// balanced push and pop leave r13 as it was), so a run wanting it is
+    /// interpreted (`gbaa-desktop --interp`). The native check leaves the
+    /// guest stack, from here to IWRAM's end, out of its RAM compare
+    /// (docs/native-port-design.md, section 7). Not guest state.
     pub low_sp: u32,
+    /// The lowest and highest `sp` outside IWRAM seen the same way
+    /// (`(u32::MAX, 0)`: none): task stacks elsewhere (Kirby -
+    /// Nightmare's in EWRAM), or r13 used as a scratch register. The
+    /// native check passes only if a holes file's `[[stack]]` holds them
+    /// all. Not guest state.
+    pub out_sp: (u32, u32),
 }
 
 /// How cycles are counted (`--timing`, `docs/decisions.md` 11), the
@@ -204,13 +210,20 @@ impl<P: Platform> Machine<P> {
             timing: Timing::Exact,
             spin_list: &[],
             low_sp: u32::MAX,
+            out_sp: (u32::MAX, 0),
         }
     }
 
-    /// `sp` was set to `sp`: keep the lowest ([`Machine::low_sp`]).
+    /// `sp` was set to `sp`: keep the lowest in IWRAM
+    /// ([`Machine::low_sp`]), else the span outside it
+    /// ([`Machine::out_sp`]).
     #[inline(always)]
     pub fn note_sp(&mut self, sp: u32) {
-        self.low_sp = self.low_sp.min(sp);
+        if (0x0300_0000..=0x0300_8000).contains(&sp) {
+            self.low_sp = self.low_sp.min(sp);
+        } else {
+            self.out_sp = (self.out_sp.0.min(sp), self.out_sp.1.max(sp));
+        }
     }
 
     /// Set how cycles are counted ([`Machine::timing`]).
@@ -468,6 +481,7 @@ impl<P: Platform> Machine<P> {
                 self.tick(3)
             }
             bios::STALL_LOOP if let Some(n) = bios::stall_step(self) => self.spend(n),
+            bios::multiboot::LOOP if let Some(n) = bios::multiboot::step(self) => self.spend(n),
             // A `swi` that took the hardware exception (an exit applied
             // with `Cpu::apply_exit`) rather than coming through `swi`.
             bios::SWI_VECTOR if self.cpu.cpsr & 0x1F == mode::SVC => {

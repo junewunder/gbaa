@@ -161,14 +161,14 @@ fn channel_3_plays_the_selected_bank_and_writes_reach_the_other() {
     assert_eq!(m.bus.io.raw16(reg::SOUNDCNT_X) & 4, 4);
     run_to(&mut m, 80 * 512 + 512);
     let psg = &m.bus.sound.psg;
-    for k in 0..80 {
+    for (k, &o) in psg.out[..80].iter().enumerate() {
         let t = 512 * k as i64;
         let v = if t < 1048 {
             0
         } else {
             ((t - 1048) / 1024 % 16) as i16 * 16
         };
-        assert_eq!(psg.out[k], (v, v), "sample {k}");
+        assert_eq!(o, (v, v), "sample {k}");
     }
     // The DAC off stops it.
     m.bus.write16(IO + 0x070, 0x40);
@@ -187,11 +187,11 @@ fn channel_4_outputs_the_bits_its_lfsr_shifts_out() {
     let psg = &m.bus.sound.psg;
     let (mut lfsr, mut seen) = (0x7FFFu32, [0; 2]);
     assert_eq!(psg.out[0], (0, 0));
-    for k in 1..200 {
+    for (k, &o) in psg.out[..200].iter().enumerate().skip(1) {
         let lsb = lfsr & 1;
         lfsr = (lfsr >> 1) ^ (lsb * 0x6000);
         let v = lsb as i16 * 240;
-        assert_eq!(psg.out[k], (v, v), "sample {k}");
+        assert_eq!(o, (v, v), "sample {k}");
         seen[lsb as usize] += 1;
     }
     assert!(seen[0] > 0 && seen[1] > 0);

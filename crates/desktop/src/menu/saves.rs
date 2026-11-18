@@ -203,7 +203,7 @@ impl Menu {
         hints.extend(self.saved.as_deref());
         footer(ui, &hints);
         if back {
-            self.turn(Page::Main, SAVES_ROW);
+            self.turn(Page::Main, self.main_row(SAVES_ROW));
         }
     }
 

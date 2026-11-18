@@ -18,28 +18,51 @@
 //! - `gbaa-pingsim room PROFILE [--server ADDR] [OPTIONS]`: the same
 //!   through `gbaa-server`'s rooms: a local one (in this process), or the
 //!   one at ADDR (fly's, say), and a proxy for each peer between it and the
-//!   server, both following the profile; seat 0 makes a room, seat 1
-//!   joins it by its code. Passes as `run` does.
+//!   server, each following the profile; seat 0 makes a room of
+//!   `--players` seats, the others join it by its code. Passes as `run`
+//!   does, on every seat.
 //! - `gbaa-pingsim room-peer SEAT ADDR [CODE] [OPTIONS]`: one peer through
-//!   the server at ADDR; seat 0 makes a room of two and prints `code CODE`
-//!   first, seat 1 joins CODE.
+//!   the server at ADDR; seat 0 makes a room of `--players` and prints
+//!   `code CODE` first, any other joins CODE (taking the next free seat).
 //! - `gbaa-pingsim straight [OPTIONS]`: the same game without a network.
-//! - `gbaa-pingsim desktop PROFILE ROM [-- DESKTOP_ARGS]`: two
-//!   `gbaa-desktop` netplay peers (beside this program) on ROM through a
-//!   local server, the joiner's path through a proxy following the
-//!   profile (the host's direct, so the profile is the whole trip between
-//!   the players). DESKTOP_ARGS go to both (`--delay D`,
-//!   `--headless --paced --frames N`, ...); `--input1 S` and `--input2 S`
-//!   among them go to one each as `--input`, `--save1 F` and `--save2 F`
-//!   as `--save`, `--menu1 S` and `--menu2 S` as `--menu` (when the
-//!   seat's menu is open; `--menu S` goes to both); `--exe BIN` runs BIN
-//!   for both instead of `gbaa-desktop` (a recompiled game's binary,
-//!   `gbaa-<game>`). Prints each peer's end
-//!   lines; fails if their end hashes differ. Without `--headless`, two
-//!   windows: how it feels.
+//! - `gbaa-pingsim desktop PROFILE ROM [-- DESKTOP_ARGS]`: two (or
+//!   `--players N`, up to four) `gbaa-desktop` netplay peers (beside this
+//!   program) on ROM through a local server, each joiner's path through a
+//!   proxy following the profile (the host's direct, so the profile is the
+//!   whole trip between host and joiner). DESKTOP_ARGS go to all
+//!   (`--headless --paced --frames N`, ...); `--input1 S` to `--input4 S`
+//!   among them go to one each as `--input`, `--save1 F`.. as `--save`,
+//!   `--state1 F`.. as `--state` (the seat starts from that state, as a
+//!   window's game goes on into its session, not from reset),
+//!   `--menu1 S`.. as `--menu` (when the seat's menu is open; `--menu S`
+//!   goes to all), `--dump-dir1 D`.. as `--dump-dir`, `--desync-at1 N`..
+//!   as `--desync-at` (a forced desync); `--delay D` and `--players N` to
+//!   the host; `--exe BIN` runs BIN for all instead of `gbaa-desktop` (a
+//!   recompiled game's binary, `gbaa-<game>`). The joiners start a second
+//!   apart, so each takes the seat its options name. Prints each peer's
+//!   end lines; fails if their end hashes differ. Without `--headless`,
+//!   windows: how it
+//!   feels.
 //!
-//! OPTIONS: `--console toy|gba` (the two-seat toy console, or two GBAs on
-//! a cable running a tiny ROM that reads the keys; toy), `--frames N`
+//! - `gbaa-pingsim feel PROFILE [FEEL_OPTIONS]`: the feel sim
+//!   ([`netplay::feel`]): every peer in this process, in simulated time,
+//!   through the profile, each driven as the desktop's window drives it,
+//!   and what each window shows, one line a seat, for the desktop's loop
+//!   before this unit's fixes and after. FEEL_OPTIONS: `--players N` (2),
+//!   `--frames N` (3600), `--pacing audio|muted|paced` (audio),
+//!   `--version before|after|both` (both), `--present-ms L` (after's
+//!   presentation lag), `--input1 S`.. (each seat's presses; the lag
+//!   report's play by default, [`netplay::feel::PLAY`]), and the cost of a
+//!   turn: modelled on two recompiled Kirbys, or, with `--rom ROM`, ROM's
+//!   own frame by frame, measured first on interpreted GBAs running the
+//!   same presses straight (a [`netplay::feel::Trace`]; `--trace-out F`
+//!   keeps it, `--trace F` reuses one); either times `--scale K` (1).
+//!
+//! OPTIONS: `--console toy|gba|single-pak` (the toy console, GBAs on a
+//! cable running a tiny ROM that reads the keys, or single-pak link play:
+//! a homebrew sender in seat 0 sending its program by `MultiBoot` to seat
+//! 1, which has no cartridge, `demo::single_pak_sender`; toy), `--players N` (seats, 2
+//! to 4, `room` only; 2), `--frames N`
 //! (600), `--delay D` (input delay, 0), `--fps F` (each peer's frame rate,
 //! 60), `--linger-ms M` (the most a peer keeps answering after its last
 //! frame, waiting for the other's last inputs and acks; 3000).
@@ -63,12 +86,15 @@ const USAGE: &str = "usage: gbaa-pingsim run PROFILE [OPTIONS]
        gbaa-pingsim room-peer SEAT ADDR [CODE] [OPTIONS]
        gbaa-pingsim straight [OPTIONS]
        gbaa-pingsim desktop PROFILE ROM [-- DESKTOP_ARGS]
-OPTIONS: --console toy|gba, --frames N, --delay D, --fps F, --linger-ms M";
+       gbaa-pingsim feel PROFILE [FEEL_OPTIONS]
+OPTIONS: --console toy|gba|single-pak, --players N, --frames N, --delay D, --fps F, --linger-ms M";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Kind {
     Toy,
     Gba,
+    /// Single-pak: a sender in seat 0, seat 1 with no cartridge.
+    SinglePak,
 }
 
 #[derive(Clone, Debug)]
@@ -80,6 +106,8 @@ struct Options {
     linger_ms: u64,
     /// `room`'s server, when not a local one.
     server: Option<String>,
+    /// `room`'s seats, 2-4.
+    players: usize,
 }
 
 impl Options {
@@ -88,6 +116,7 @@ impl Options {
         let console = match self.console {
             Kind::Toy => "toy",
             Kind::Gba => "gba",
+            Kind::SinglePak => "single-pak",
         };
         [
             ("--console", console.to_string()),
@@ -95,6 +124,7 @@ impl Options {
             ("--delay", self.delay.to_string()),
             ("--fps", self.fps.to_string()),
             ("--linger-ms", self.linger_ms.to_string()),
+            ("--players", self.players.to_string()),
         ]
         .into_iter()
         .flat_map(|(k, v)| [k.to_string(), v])
@@ -111,6 +141,7 @@ fn options(args: &[String]) -> Result<(Options, Vec<String>), String> {
         fps: 60.0,
         linger_ms: 3000,
         server: None,
+        players: 2,
     };
     let mut rest = Vec::new();
     let mut it = args.iter();
@@ -126,7 +157,8 @@ fn options(args: &[String]) -> Result<(Options, Vec<String>), String> {
                 o.console = match v.as_str() {
                     "toy" => Kind::Toy,
                     "gba" => Kind::Gba,
-                    _ => return Err(format!("--console toy or gba, not {v}")),
+                    "single-pak" => Kind::SinglePak,
+                    _ => return Err(format!("--console toy, gba or single-pak, not {v}")),
                 }
             }
             "--frames" => o.frames = v.parse().map_err(bad)?,
@@ -134,11 +166,19 @@ fn options(args: &[String]) -> Result<(Options, Vec<String>), String> {
             "--fps" => o.fps = v.parse().map_err(|_| format!("{a} {v}?"))?,
             "--linger-ms" => o.linger_ms = v.parse().map_err(bad)?,
             "--server" => o.server = Some(v.clone()),
+            "--players" => o.players = v.parse().map_err(bad)?,
             _ => return Err(format!("unknown option {a}")),
         }
     }
     if !o.fps.is_finite() || o.fps <= 0.0 {
         return Err("--fps must be above 0".into());
+    }
+    if !(2..=runtime::link::MAX_PLAYERS).contains(&o.players) {
+        return Err(format!(
+            "--players 2 to {}, not {}",
+            runtime::link::MAX_PLAYERS,
+            o.players
+        ));
     }
     if o.frames < HASH_EVERY {
         return Err(format!("--frames at least {HASH_EVERY}, for a hash check"));
@@ -153,13 +193,13 @@ fn config(o: &Options) -> Config {
     }
 }
 
-/// Seat `seat`'s own console, or (`None`) the whole session's.
-fn console_toy(seat: Option<usize>) -> Toy {
-    seat.map_or_else(|| Toy::new(2), |s| Toy::peer(2, s))
+/// Seat `seat`'s own console of `seats`, or (`None`) the whole session's.
+fn console_toy(seats: usize, seat: Option<usize>) -> Toy {
+    seat.map_or_else(|| Toy::new(seats), |s| Toy::peer(seats, s))
 }
 
-fn console_gba(seat: Option<usize>) -> netplay::gba::Gba {
-    let mut g = demo::gba(demo::key_folder(), 2, seat);
+fn console_gba(seats: usize, seat: Option<usize>) -> netplay::gba::Gba {
+    let mut g = demo::gba(demo::key_folder(), seats, seat);
     if seat.is_none() {
         // A session sets the host's clock at its start; so does the
         // straight run.
@@ -168,16 +208,27 @@ fn console_gba(seat: Option<usize>) -> netplay::gba::Gba {
     g
 }
 
+/// The single-pak sender and a seat with no cartridge
+/// ([`demo::gba_single_pak`]); seat `seat`'s peer's, or the whole session's.
+fn console_single_pak(seat: Option<usize>) -> netplay::gba::Gba {
+    let mut g = demo::gba_single_pak();
+    if seat.is_none() {
+        g.set_clock(Config::default().clock);
+    }
+    g
+}
+
 fn straight(o: &Options) -> Vec<(u32, u64)> {
     match o.console {
-        Kind::Toy => demo::straight(console_toy(None), o.delay as u32, o.frames),
-        Kind::Gba => demo::straight(console_gba(None), o.delay as u32, o.frames),
+        Kind::Toy => demo::straight(console_toy(o.players, None), o.delay as u32, o.frames),
+        Kind::Gba => demo::straight(console_gba(o.players, None), o.delay as u32, o.frames),
+        Kind::SinglePak => demo::straight(console_single_pak(None), o.delay as u32, o.frames),
     }
 }
 
 fn peer(seat: usize, to: SocketAddr, o: &Options) -> Result<(), String> {
-    if seat > 1 {
-        return Err("two seats: 0 or 1".into());
+    if seat > 1 || o.players != 2 {
+        return Err("two seats: 0 or 1 (`room` plays more)".into());
     }
     let bind: SocketAddr = if to.is_ipv4() { "0.0.0.0:0" } else { "[::]:0" }
         .parse()
@@ -185,8 +236,9 @@ fn peer(seat: usize, to: SocketAddr, o: &Options) -> Result<(), String> {
     let sock = UdpSocket::bind(bind).map_err(|e| format!("bind: {e}"))?;
     let udp = Udp::new(sock, seat, &[to, to]).map_err(|e| e.to_string())?;
     match o.console {
-        Kind::Toy => play(console_toy(Some(seat)), udp, seat, o),
-        Kind::Gba => play(console_gba(Some(seat)), udp, seat, o),
+        Kind::Toy => play(console_toy(2, Some(seat)), udp, seat, o),
+        Kind::Gba => play(console_gba(2, Some(seat)), udp, seat, o),
+        Kind::SinglePak => play(console_single_pak(Some(seat)), udp, seat, o),
     }
 }
 
@@ -204,43 +256,54 @@ fn room_peer(
     code: Option<&str>,
     o: &Options,
 ) -> Result<(), String> {
+    let n = o.players;
     match o.console {
-        Kind::Toy => room_play(console_toy(Some(seat)), server, seat, code, o),
-        Kind::Gba => room_play(console_gba(Some(seat)), server, seat, code, o),
+        Kind::Toy => room_play(|s| console_toy(n, Some(s)), server, seat, code, o),
+        Kind::Gba => room_play(|s| console_gba(n, Some(s)), server, seat, code, o),
+        Kind::SinglePak if n == 2 => {
+            room_play(|s| console_single_pak(Some(s)), server, seat, code, o)
+        }
+        Kind::SinglePak => Err("single-pak plays two seats".into()),
     }
 }
 
+/// Seat 0 makes the room; a joiner is seated as it arrives (any seat from
+/// 1), so its console is made (`make`) once the room says which.
 fn room_play<C: Snapshot<Input = u16>>(
-    c: C,
+    make: impl Fn(usize) -> C,
     server: SocketAddr,
     seat: usize,
     code: Option<&str>,
     o: &Options,
 ) -> Result<(), String> {
-    let id = c.build_id();
+    let id = make(seat).build_id();
     let until = Instant::now() + Duration::from_secs(60);
     let go_on = || Instant::now() < until;
     let (net, _) = match (seat, code) {
         (0, None) => {
-            let say = |code: [u8; relay::CODE_LEN]| {
-                println!("code {}", String::from_utf8_lossy(&code));
-                let _ = std::io::stdout().flush();
+            let mut said = false;
+            let say = |code: [u8; relay::CODE_LEN], _, _| {
+                if !std::mem::replace(&mut said, true) {
+                    println!("code {}", String::from_utf8_lossy(&code));
+                    let _ = std::io::stdout().flush();
+                }
             };
-            Udp::host(server, 2, &id, say, go_on)?
+            Udp::host(server, o.players, &id, say, go_on)?
         }
-        (1, Some(code)) => {
+        (1.., Some(code)) => {
             let code = code
                 .as_bytes()
                 .try_into()
                 .map_err(|_| format!("code {code}?"))?;
             Udp::join(server, code, &id, go_on)?
         }
-        _ => return Err("seat 0 hosts (no code), seat 1 joins a code".into()),
+        _ => return Err("seat 0 hosts (no code), the others join a code".into()),
     };
-    if net.seat_of() != seat {
-        return Err(format!("the server sat us in seat {}", net.seat_of()));
+    let seat = net.seat_of();
+    if net.seats() != o.players {
+        return Err(format!("the room has {} seats", net.seats()));
     }
-    play(c, net, seat, o)
+    play(make(seat), net, seat, o)
 }
 
 /// Run the session at `o.fps`, printing what `run` reads.
@@ -362,7 +425,7 @@ fn run_room(profile_path: &Path, o: &Options) -> Result<(), String> {
         None => {
             let sock = UdpSocket::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
             let addr = sock.local_addr().map_err(|e| e.to_string())?;
-            std::thread::spawn(move || relay::rooms::serve(sock));
+            std::thread::spawn(move || relay::rooms::serve(sock, 0));
             addr
         }
     };
@@ -374,7 +437,7 @@ fn run_room(profile_path: &Path, o: &Options) -> Result<(), String> {
     .parse()
     .unwrap();
     let mut proxies = Vec::new();
-    for seat in 0..2u64 {
+    for seat in 0..o.players as u64 {
         // Each path its own randomness.
         let p = Profile {
             seed: profile.seed.wrapping_add(seat),
@@ -406,8 +469,11 @@ fn run_room(profile_path: &Path, o: &Options) -> Result<(), String> {
         return Err(format!("seat 0 gave no room code: {line:?}"));
     };
     println!("room {code} on {server}");
-    let guest = peer(1, Some(&code))?;
-    judge(vec![host, guest], proxies, o)
+    let mut peers = vec![host];
+    for seat in 1..o.players {
+        peers.push(peer(seat, Some(&code))?);
+    }
+    judge(peers, proxies, o)
 }
 
 /// A server's address: a host name or IP, and a port (default
@@ -511,21 +577,24 @@ fn judge(peers: Vec<Peer>, proxies: Vec<Proxy>, o: &Options) -> Result<(), Strin
         }
     }
     println!(
-        "pass: {} hashes and the end match the straight run on both seats",
-        want.len()
+        "pass: {} hashes and the end match the straight run on all {} seats",
+        want.len(),
+        o.players
     );
     Ok(())
 }
 
-/// Two `gbaa-desktop` peers through a local server, the joiner behind a
-/// proxy (`desktop` above).
+/// `gbaa-desktop` peers through a local server, each joiner behind a
+/// proxy of its own (`desktop` above).
 fn desktop(profile_path: &Path, rom: &str, extra: &[&str]) -> Result<(), String> {
+    const MAX: usize = runtime::link::MAX_PLAYERS;
     let profile = Profile::load(profile_path)?;
     let mut exe = std::env::current_exe()
         .map_err(|e| e.to_string())?
         .with_file_name("gbaa-desktop");
     let mut both = Vec::new();
-    let mut own: [Vec<String>; 2] = Default::default();
+    let mut own: [Vec<String>; MAX] = Default::default();
+    let mut players = 2;
     let mut it = extra.iter();
     while let Some(&a) = it.next() {
         let mut one = |seat: usize, flag: &str| -> Result<(), String> {
@@ -533,27 +602,55 @@ fn desktop(profile_path: &Path, rom: &str, extra: &[&str]) -> Result<(), String>
             own[seat].extend([flag.to_string(), v.to_string()]);
             Ok(())
         };
+        // `--input3`: seat 3's (from 1) `--input`, and so on.
+        let numbered = [
+            "--input",
+            "--save",
+            "--state",
+            "--menu",
+            "--dump-dir",
+            "--desync-at",
+        ]
+        .into_iter()
+        .find_map(|f| {
+            let n: usize = a.strip_prefix(f)?.parse().ok()?;
+            (1..=MAX).contains(&n).then_some((f, n - 1))
+        });
         match a {
-            "--input1" => one(0, "--input")?,
-            "--input2" => one(1, "--input")?,
-            "--save1" => one(0, "--save")?,
-            "--save2" => one(1, "--save")?,
-            "--menu1" => one(0, "--menu")?,
-            "--menu2" => one(1, "--menu")?,
+            _ if numbered.is_some() => {
+                let (flag, seat) = numbered.unwrap();
+                one(seat, flag)?
+            }
             // The host's to set.
             "--delay" => one(0, "--delay")?,
+            "--players" => {
+                let v = it.next().ok_or("--players needs a value")?;
+                players = v
+                    .parse()
+                    .ok()
+                    .filter(|n| (2..=MAX).contains(n))
+                    .ok_or(format!("--players 2 to {MAX}, not {v}"))?;
+                own[0].extend(["--players".to_string(), v.to_string()]);
+            }
             "--exe" => exe = it.next().ok_or("--exe needs a value")?.into(),
             a => both.push(a.to_string()),
         }
     }
     let local: SocketAddr = "127.0.0.1:0".parse().unwrap();
-    // The host goes to the server itself; the joiner to a proxy in front of
-    // it.
+    // The host goes to the server itself; each joiner to a proxy in front
+    // of it.
     let sock = UdpSocket::bind(local).map_err(|e| e.to_string())?;
     let server = sock.local_addr().map_err(|e| e.to_string())?;
-    std::thread::spawn(move || relay::rooms::serve(sock));
-    let proxy = Proxy::to(profile, local, server).map_err(|e| format!("proxy: {e}"))?;
-    let join_addr = proxy.addrs()[0];
+    std::thread::spawn(move || relay::rooms::serve(sock, 0));
+    let mut proxies = Vec::new();
+    for seat in 1..players as u64 {
+        // Each path its own randomness.
+        let p = Profile {
+            seed: profile.seed.wrapping_add(seat),
+            ..profile.clone()
+        };
+        proxies.push(Proxy::to(p, local, server).map_err(|e| format!("proxy: {e}"))?);
+    }
     let spawn = |seat: usize, addr: SocketAddr, role: &[String]| -> Result<Child, String> {
         let mut c = Command::new(&exe);
         c.arg(rom).arg("--server").arg(addr.to_string()).args(role);
@@ -569,13 +666,31 @@ fn desktop(profile_path: &Path, rom: &str, extra: &[&str]) -> Result<(), String>
         return Err(format!("the host gave no room code: {line:?}"));
     };
     println!("room {code}");
-    let guest = spawn(1, join_addr, &["--join".into(), code])?;
+    // A joiner takes the next free seat as its ask reaches the server: one
+    // at a time, so each gets its own options' seat (a proxy's spike could
+    // still swap two, which changes nothing the check compares).
+    let mut guests = Vec::new();
+    for (seat, proxy) in (1..players).zip(&proxies) {
+        if seat > 1 {
+            std::thread::sleep(Duration::from_secs(1));
+        }
+        guests.push(spawn(
+            seat,
+            proxy.addrs()[0],
+            &["--join".into(), code.clone()],
+        )?);
+    }
     let mut rest = String::new();
     std::io::Read::read_to_string(&mut out, &mut rest).map_err(|e| e.to_string())?;
     let _ = host.wait();
-    let g = guest.wait_with_output().map_err(|e| e.to_string())?;
-    let _ = proxy.stop();
-    let outs = [rest, String::from_utf8_lossy(&g.stdout).into_owned()];
+    let mut outs = vec![rest];
+    for g in guests {
+        let g = g.wait_with_output().map_err(|e| e.to_string())?;
+        outs.push(String::from_utf8_lossy(&g.stdout).into_owned());
+    }
+    for p in proxies {
+        let _ = p.stop();
+    }
     let mut ends = Vec::new();
     for (seat, o) in outs.iter().enumerate() {
         for l in o
@@ -591,16 +706,19 @@ fn desktop(profile_path: &Path, rom: &str, extra: &[&str]) -> Result<(), String>
         );
     }
     match ends.as_slice() {
-        [a, b] if a == b => Ok(()),
-        [a, b] => Err(format!("the peers ended apart: {a} and {b}")),
         // Windows closed early say nothing to compare.
-        _ => Ok(()),
+        e if e.len() < players => Ok(()),
+        [a, rest @ ..] if rest.iter().all(|e| e == a) => Ok(()),
+        e => Err(format!("the peers ended apart: {}", e.join(", "))),
     }
 }
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = (|| {
+        if args.first().is_some_and(|a| a == "feel") {
+            return feel(&args[1..]);
+        }
         // `desktop`'s arguments are the desktop's own, after `--`.
         let (args, desk) = match args.iter().position(|a| a == "--") {
             Some(i) if args.first().is_some_and(|a| a == "desktop") => {
@@ -657,4 +775,188 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// This thread's CPU time, µs: what a step costs, whatever else the
+/// machine is doing, short of sharing its core.
+fn cpu_us() -> f64 {
+    let mut ts = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: `ts` is a valid timespec for the call to fill.
+    unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut ts) };
+    ts.tv_sec as f64 * 1e6 + ts.tv_nsec as f64 / 1e3
+}
+
+/// A game's costs frame by frame ([`netplay::feel::Trace`]): its consoles
+/// run straight on the scripts, each frame timed three ways from the
+/// same snapshot (every picture drawn, seat 0's, none), so the three
+/// share whatever the machine was doing then.
+fn measure(
+    rom: &'static [u8],
+    scripts: &[netplay::script::Script],
+    frames: u32,
+) -> netplay::feel::Trace {
+    let seats = scripts.len();
+    let mut g = netplay::gba::Gba::new(rom, &vec![None; seats]);
+    g.set_clock(Config::default().clock);
+    let mut snap = netplay::gba::Snap::default();
+    let mut t = netplay::feel::Trace::default();
+    let (mut snaps, mut restores) = (0.0, 0.0);
+    let step = |g: &mut netplay::gba::Gba, inputs: &[u16]| {
+        let t0 = cpu_us();
+        g.step(inputs).expect("the game runs");
+        cpu_us() - t0
+    };
+    for f in 0..frames {
+        let inputs: Vec<u16> = scripts.iter().map(|s| s.keys(f as u64)).collect();
+        let t0 = cpu_us();
+        g.snapshot(&mut snap);
+        snaps += cpu_us() - t0;
+        g.show_only(None);
+        t.all.push(step(&mut g, &inputs));
+        let t0 = cpu_us();
+        g.restore(&snap).expect("a restore");
+        restores += cpu_us() - t0;
+        g.show_only(Some(0));
+        t.shown.push(step(&mut g, &inputs));
+        g.restore(&snap).expect("a restore");
+        g.quiet(true);
+        t.undrawn.push(step(&mut g, &inputs));
+        g.quiet(false);
+    }
+    t.snapshot_us = snaps / frames as f64;
+    t.restore_us = restores / frames as f64;
+    t
+}
+
+/// `gbaa-pingsim feel`: the feel sim's numbers.
+fn feel(args: &[String]) -> Result<(), String> {
+    use netplay::feel::{self, Cost, Costs, Pacing, Version, Window};
+    use netplay::script::Script;
+    let mut profile = None;
+    let mut players = 2usize;
+    let mut frames = 3600u32;
+    let mut pacing = Pacing::Audio;
+    let mut versions = vec![Version::Before, Version::After];
+    let mut present: Option<f64> = None;
+    let mut rom: Option<String> = None;
+    let mut trace_in: Option<String> = None;
+    let mut trace_out: Option<String> = None;
+    let mut scale = 1.0f64;
+    let mut inputs: Vec<Option<String>> = vec![None; 4];
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        if !a.starts_with("--") {
+            if profile.replace(a.clone()).is_some() {
+                return Err(format!("one profile, not {a} too"));
+            }
+            continue;
+        }
+        let v = it.next().ok_or(format!("{a} needs a value"))?;
+        let bad = || format!("{a} {v}?");
+        match a.as_str() {
+            "--players" => players = v.parse().map_err(|_| bad())?,
+            "--frames" => frames = v.parse().map_err(|_| bad())?,
+            "--pacing" => {
+                pacing = match v.as_str() {
+                    "audio" => Pacing::Audio,
+                    "muted" => Pacing::Muted,
+                    "paced" => Pacing::Paced,
+                    _ => return Err(bad()),
+                }
+            }
+            "--version" => {
+                versions = match v.as_str() {
+                    "before" => vec![Version::Before],
+                    "after" => vec![Version::After],
+                    "both" => vec![Version::Before, Version::After],
+                    _ => return Err(bad()),
+                }
+            }
+            "--present-ms" => present = Some(v.parse::<f64>().map_err(|_| bad())? * 1e3),
+            "--rom" => rom = Some(v.clone()),
+            "--trace" => trace_in = Some(v.clone()),
+            "--trace-out" => trace_out = Some(v.clone()),
+            "--scale" => scale = v.parse().map_err(|_| bad())?,
+            a if a.starts_with("--input") => {
+                let n: usize = a["--input".len()..].parse().map_err(|_| bad())?;
+                if !(1..=4).contains(&n) {
+                    return Err(bad());
+                }
+                inputs[n - 1] = Some(v.clone());
+            }
+            _ => return Err(format!("unknown option {a}")),
+        }
+    }
+    let profile = profile.ok_or("feel PROFILE [FEEL_OPTIONS]")?;
+    let profile = Profile::load(Path::new(&profile))?;
+    if !(2..=runtime::link::MAX_PLAYERS).contains(&players) {
+        return Err(format!("--players 2 to {}", runtime::link::MAX_PLAYERS));
+    }
+    let scripts: Vec<Script> = (0..players)
+        .map(|s| Script::parse(inputs[s].as_deref().unwrap_or(feel::PLAY[s])))
+        .collect::<Result<_, _>>()?;
+    let trace = match (rom, trace_in) {
+        (Some(path), None) => {
+            let rom: &'static [u8] = std::fs::read(&path)
+                .map_err(|e| format!("{path}: {e}"))?
+                .leak();
+            let started = Instant::now();
+            let t = measure(rom, &scripts, frames);
+            let p50 = |v: &[f64]| {
+                let mut v = v.to_vec();
+                v.sort_by(f64::total_cmp);
+                v[v.len() / 2] / 1e3
+            };
+            println!(
+                "trace of {path} ({:.1} s): a frame p50 {:.2} ms drawn, {:.2} every seat drawn, \
+                 {:.2} undrawn; a snapshot {:.2} ms, a restore {:.2}",
+                started.elapsed().as_secs_f64(),
+                p50(&t.shown),
+                p50(&t.all),
+                p50(&t.undrawn),
+                t.snapshot_us / 1e3,
+                t.restore_us / 1e3
+            );
+            if let Some(out) = &trace_out {
+                std::fs::write(out, t.write()).map_err(|e| format!("{out}: {e}"))?;
+            }
+            Some(t)
+        }
+        (None, Some(path)) => {
+            let text = std::fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))?;
+            Some(feel::Trace::read(&text).map_err(|e| format!("{path}: {e}"))?)
+        }
+        (None, None) => None,
+        (Some(_), Some(_)) => return Err("--rom or --trace, not both".into()),
+    };
+    for version in versions {
+        let window = |s: usize| {
+            let mut w = Window::new(pacing, version, s);
+            if version == Version::After && present.is_some() {
+                w.present_us = present;
+            }
+            w
+        };
+        let started = Instant::now();
+        let cost = match &trace {
+            Some(t) => Cost::Trace(t, scale),
+            None => Cost::Model(Costs::KIRBY_TWO.scaled(scale * players as f64 / 2.0)),
+        };
+        let feels =
+            feel::toy(&profile, &scripts, window, cost, frames).map_err(|e| e.to_string())?;
+        println!(
+            "{version:?}, {pacing:?} ({:.1} s):",
+            started.elapsed().as_secs_f64()
+        );
+        for f in &feels {
+            println!("  {}", f.line());
+        }
+        if feels.iter().any(|f| f.end != feels[0].end) {
+            return Err("the peers ended apart".into());
+        }
+    }
+    Ok(())
 }
