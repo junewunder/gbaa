@@ -696,7 +696,7 @@ one to four at a time between `0x0893` and `0x08E9`.
 
 **Who loads the 158** (assets/kirby-fuzz-last-misses, 2026-10-31, from
 `out/fuzz/kirby/scan/scan.toml` against katam's `katam.elf` symbols and
-the index tables read out of the ROM; no code changed yet):
+the index tables read out of the ROM):
 
 - **70 of the 76 off-table blobs are likely not data**: each starts
   inside a katam symbol (`gUnk_0845E108+0x54`, `gUnk_08D71FC8+0xc4cc`,
@@ -731,6 +731,43 @@ the index tables read out of the ROM; no code changed yet):
 - **Entry 776**: `gUnk_082DE698[0]` in `sub_0801DD20` (`code_0801DA58.c`).
 - Not traced: 183 and 204 to 224 (every fourth entry).
 
+**The sweep for them** (assets/kirby-fuzz-last-misses, 2026-11-18):
+18 more screen items (35 in all) and three more help slots (30), each
+in six languages. Two new tools in `kirby.rs`: RAM written after the
+fade, before the creator (`gUnk_02038580 = 1`, a guest
+`gLocalPlayerId`); and a screen's task found in `gTasks` by its `main`
+and its state pointer set to the function that draws the missed
+background (the menu's columns 3, 4, 6, 13, 14 and 15; the link
+screen's `sub_080330A4`; the sub-game menu's `sub_0801F8EC`; the 100%
+screen's `sub_0814ED78`, set as the task is made, since its first
+state recounts the file's completion and moves on). The help slots
+past the last ability are reached by writing 27 to 29 once the pause
+menu is up. Also the guest's sub-game menu (`sub_0801E6C4`), the
+send screen (`sub_0801E754`) and the mirror's map (`sub_0801DFE8`).
+Poking the help ability before the pause, or the link mode before the
+fade, or waiting two frames before setting the 100% state, all missed
+in 10-minute trial runs.
+
+The same `just kirby-fuzz` (12 workers, 45 minutes, 4.83 million
+frames, 6,966 random runs, 1,399 sweep items, 922 faults):
+
+| minutes | blobs reached | of 1,202 | before |
+|---:|---:|---:|---:|
+| 5 | 628 | 52.2% | 961 |
+| 10 | 1,102 | 91.7% | 1,035 |
+| 15 | 1,107 | 92.1% | 1,038 |
+| 30 | 1,110 | 92.3% | 1,041 |
+| 45 | 1,113 | **92.6%** | 1,044 (86.9%) |
+
+(Slower to start than before: the screen phase is longer and the
+machine ran another lane's jobs.) **Still missed, 89**: 15 table
+entries (183, 204 to 224 every fourth, 262 and 274, which are
+French and Japanese menu column 4 that the forced state reaches in
+the other languages, and 777 to 782), and 74 off-table blobs: the 70
+scan false positives and four with a pointer (`gUnk_082D8498`,
+`gUnk_082D8768`, `gUnk_0893EFC8`, `gUnk_08A1E720`). Of the 158, 69
+are reached; of the 88 that looked real, 19 are still missed.
+
 **Generic and Emerald-only.**
 
 | | generic (core.rs, the scan) | Emerald only | Kirby only |
@@ -738,7 +775,7 @@ the index tables read out of the ROM; no code changed yet):
 | coverage | instructions, ROM loads, provenance bitmaps of ROM bytes reaching palette, VRAM, OAM | | |
 | corpus | kept states, tournament pick, shared corpus and trades, random presses, logs | story seeds (pick weight) | |
 | states | route presses; `core::call` to start a game's own function | crafted and mutated saves (`emerald-save`), story saves, a TAS's mGBA states | doors to rooms, abilities |
-| sweeps | the worker's share of a list (`index`, `of`) | species, trainers, maps, Pokédex, bag, contests, Frontier: save blocks, `CB2_InitBattle`, scripts in RAM | rooms, abilities, screens through the game's fade, the pause help, languages by a patched ROM constant |
+| sweeps | the worker's share of a list (`index`, `of`) | species, trainers, maps, Pokédex, bag, contests, Frontier: save blocks, `CB2_InitBattle`, scripts in RAM | rooms, abilities, screens through the game's fade (with RAM pokes, or a task put in a state), the pause help, languages by a patched ROM constant |
 | screen / place | readers a game gives | `gMain.callback2` / map | `stateFn` / room |
 | score | the static scan and its curve | pret's file list (`assets-coverage`), `report.rs`'s pret functions | |
 

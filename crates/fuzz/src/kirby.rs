@@ -29,8 +29,15 @@
 //!   each of `sub_0801A744`'s four games (Speed Eaters, Crackity Hack,
 //!   Kirby Wave Ride; katam doesn't name the fourth), the ending, the
 //!   multiplayer ending, game over, the link screen, the first room with
-//!   the pause menu, and the collection room with every treasure set;
-//!   then the pause menu's help with each ability. The language
+//!   the pause menu, and the collection room with every treasure set.
+//!   Then (assets/kirby-fuzz-last-misses) screens only a link, a 100%
+//!   file or a guest player opens: RAM written after the fade, and a
+//!   screen's task found in `gTasks` by its `main` and put in the state
+//!   function that draws it (the menu's link columns, the link screen's
+//!   mode 1, the sub-games' multiplayer screens, the 100% screen), and
+//!   the mirror's map. Then the pause menu's help with each ability, and
+//!   the three slots past the last (the ability written once the pause
+//!   menu is up, so Kirby's own code never runs it). The language
 //!   is `gLanguage`, a constant in ROM (English, 1), so the worker plays a
 //!   copy of the ROM with it patched (keeping the original's CRC, so states
 //!   load either way), then puts the original back.
