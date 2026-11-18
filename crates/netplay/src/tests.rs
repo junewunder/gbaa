@@ -398,6 +398,7 @@ static NO_CODE: runtime::dispatch::Code<crate::gba::Pad> = runtime::dispatch::Co
     modded: &[],
     folded: &[],
     rom_hash: 0,
+    fns: &[],
     timing: runtime::Timing::Exact,
     seeds_file: None,
     spins: &[],

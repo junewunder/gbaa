@@ -2604,6 +2604,97 @@ fn folded_lists_the_rom_loads_const_prop_reads() {
     );
 }
 
+/// Each function's ROM bytes (`Code::fns`): its instructions and baked
+/// pool word, its callee and its keys; a byte flipped in the callee makes
+/// it stale, and its caller with it.
+#[test]
+fn fn_bytes_cover_code_and_baked_loads_and_stale_spreads_to_callers() {
+    let (rom, d) = program(
+        &[
+            0xE59F_0008, // 0x08000000 ldr r0, [pc, #8] (0x08000010)
+            0xEB00_0002, // 0x08000004 bl 0x08000014
+            0xEAFF_FFFE, // 0x08000008 b .
+            0xE1A0_0000, // 0x0800000C nop
+            0x1234_5678, // 0x08000010 the pool word
+            0xE280_0001, // 0x08000014 add r0, r0, #1
+            0xE12F_FF1E, // 0x08000018 bx lr
+            0xE12F_FF1E, // 0x0800001C bx lr, a function nothing calls
+        ],
+        &[0x0800_0000, 0x0800_0014, 0x0800_001C],
+    );
+    let ctx = Ctx::new(&rom, &d);
+    let r = build_all(&ctx);
+    let all: Vec<_> = r.funcs.iter().rev().map(|f| (&ctx, f)).collect();
+    let none = Default::default();
+    let recs = crate::emit::fn_bytes(&rom, &all, &none, &none);
+    let shape: Vec<_> = recs
+        .iter()
+        .map(|f| (f.entry, f.ranges.clone(), f.calls.clone(), f.keys.clone()))
+        .collect();
+    assert_eq!(
+        shape,
+        [
+            (
+                0x0800_0000,
+                vec![(0x0800_0000, 0x0800_000C), (0x0800_0010, 0x0800_0014)],
+                vec![1],
+                vec![0x0800_0000, 0x0800_0008]
+            ),
+            (
+                0x0800_0014,
+                vec![(0x0800_0014, 0x0800_001C)],
+                vec![],
+                vec![0x0800_0014]
+            ),
+            (
+                0x0800_001C,
+                vec![(0x0800_001C, 0x0800_0020)],
+                vec![],
+                vec![0x0800_001C]
+            ),
+        ]
+    );
+    let fns: Vec<runtime::dispatch::FnBytes> = recs
+        .iter()
+        .map(|f| runtime::dispatch::FnBytes {
+            entry: f.entry,
+            hash: f.hash,
+            ranges: f.ranges.clone().leak(),
+            calls: f.calls.clone().leak(),
+            keys: f.keys.clone().leak(),
+        })
+        .collect();
+    let code = runtime::dispatch::Code::<runtime::platform::Headless> {
+        blocks: &[],
+        ram_blocks: &[],
+        overlays: &[],
+        extents: &[],
+        ram_extents: &[],
+        inner: &[],
+        inner_extents: &[],
+        modded: &[],
+        folded: &[],
+        rom_hash: 0,
+        fns: fns.leak(),
+        timing: runtime::Timing::Exact,
+        seeds_file: None,
+        spins: &[],
+    };
+    let mut stale = [false; 3];
+    assert_eq!(code.mark_stale(&rom, &mut stale).total(), 0);
+    // The callee's `add r0, r0, #1` made `#2`.
+    let mut changed = rom.clone();
+    changed[0x14] = 2;
+    let n = code.mark_stale(&changed, &mut stale);
+    assert_eq!((n.changed, n.callers), (1, 1));
+    assert_eq!(stale, [true, true, false]);
+    // The pool word is the caller's alone.
+    let mut changed = rom.clone();
+    changed[0x10] ^= 1;
+    code.mark_stale(&changed, &mut stale);
+    assert_eq!(stale, [true, false, false]);
+}
+
 /// `ldr r0, =0x2000000; ldrh r1, [r0]; cmp r1, #2; movs r1, #1; strh r1,
 /// [r0]; bx lr`, in Thumb: a compare and a store of a field.
 fn thumb_field_values() -> (Vec<u8>, Discovery) {
