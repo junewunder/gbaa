@@ -374,9 +374,9 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   rewrites `mods/emerald/snapshots/emerald.rs`, the smallest structured
   Emerald function of each shape, so a printer change shows as its diff
   (about 30 s, not heavy); `just run-recompiled out/<name> [desktop args]` builds and
-  runs it (checks free RAM, caps it at 3 GB); `just recompile-check ROM`
-  compares the recompiled build with `--interp` (last frame hash and
-  registers; writes both runs' `.txt` and `.png` to `out/<name>/`);
+  runs it (checks free RAM, caps it at 3 GB); `just recompile-check ROM [FRAMES
+  TIMING PLAY ARGS…]` compares the recompiled build with `--interp` (frame hash, registers,
+  `out/<name>/`; PLAY: a changed ROM, e.g. `just randomize-emerald`'s, plays instead);
   `just sst-gen [PER_FILE] [SEQS]` runs SingleStepTests through generated
   Rust (PER_FILE cases from each file, against the expected state and the
   interpreter), then SEQS (4000) sequence cases: alternately a random block
