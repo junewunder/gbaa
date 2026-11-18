@@ -317,9 +317,9 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `report.txt` and `rom.gba`, a copy of the ROM that the binary carries
   inside it with `include_bytes!`, deck/embed-rom: run with no ROM, a
   build plays its own, as if it were `<name>.gba` beside the binary, so
-  its `.sav` and states go there; a ROM given runs instead, and must be
-  the one it was recompiled from. One file to send a friend, and netplay
-  can't pair a build with the wrong ROM. `out/` and the builds stay out
+  its `.sav` and states go there; a ROM given runs instead, a changed copy
+  with its changed functions interpreted (`docs/codegen-design.md`, "A
+  changed ROM"). One file to send a friend. `out/` and the builds stay out
   of git; a ROM is also run 1800 frames in the interpreter, for the
   IWRAM blocks it patches and the copies discovery missed, decision 7). It
   writes a file only when its bytes change and deletes only files no longer

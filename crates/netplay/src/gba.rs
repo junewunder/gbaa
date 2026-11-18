@@ -277,6 +277,18 @@ impl<P: Seat> Gba<P> {
         }
     }
 
+    /// Run the compiled functions at `keys` (sorted) interpreted on every
+    /// seat with a cartridge: those a ROM other than the build's made stale
+    /// ([`runtime::Bus::stale`]). Every peer computes the same keys from
+    /// the same ROM, whose CRC the build ID holds.
+    pub fn set_stale(&mut self, keys: &'static [u32]) {
+        for m in &mut self.machines {
+            if !m.bus.rom.is_empty() {
+                m.bus.stale = keys;
+            }
+        }
+    }
+
     /// Draw only seat `seat`'s picture (`None`: every seat's), the one
     /// this peer shows: the others' PPUs skip their lines, as in frames
     /// rollback runs again. The picture is outside snapshots and hashes,

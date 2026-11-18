@@ -478,8 +478,8 @@ out/<name>/
   the table. So one binary runs both sides of the interpreter-vs-recompiled
   check.
 - The ROM is not embedded: the binary takes its path, as `gbaa-desktop`
-  does, and refuses a ROM whose hash doesn't match `CODE.rom_hash` (FNV-1a
-  64, no dependency).
+  does; a ROM whose hash doesn't match `CODE.rom_hash` (FNV-1a 64, no
+  dependency) runs with its changed functions interpreted (below).
 - **A changed ROM** (a randomizer's copy, `docs/research/randomized-roms.md`
   option a; `runtime::dispatch::stale`): `CODE.fns` holds, per compiled
   function, the ROM ranges it was compiled from (its instructions, the `bx
@@ -493,8 +493,11 @@ out/<name>/
   sorted, go in `Bus::stale`, and the dispatcher, `rt::call` and `settle`
   treat them as keys without code: the interpreter runs them. IWRAM
   overlays need no entry: their guards already check their bytes. The
-  generated `call-<name>` takes a changed ROM this way; the desktop's
-  loader doesn't yet (it still refuses one).
+  generated `call-<name>` takes a changed ROM this way, and so does the
+  desktop (`crates/desktop/src/changed.rs`): solo, in a netplay room and
+  after a script's `cart0` writes, saying how many functions went stale. A
+  build without `fns` still refuses a ROM not its own. Save states, rewind,
+  netplay's build ID and `emu:checksum` compare the loaded ROM's own CRC.
 - `run-recompiled` builds with `--target-dir target/recompiled`, shared
   between games so `runtime`, `armv4t` and the desktop deps build once, in
   release. The generated `[workspace]` keeps cargo from treating it as a
