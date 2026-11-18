@@ -837,6 +837,36 @@ fn pointer_scan_takes_an_endless_task() {
 }
 
 #[test]
+fn pointer_scan_takes_a_pooled_task_that_switches_after_a_call() {
+    // A task (Kirby: Nightmare in Dream Land's 0x08034a89): push {r4, lr};
+    // bl setup; then a switch, `ldr r0, [r1]; mov pc, r0`, its only way
+    // on. The switch follows a call, so it is soft: taken when code loads
+    // the task from a pool, not for a stray word.
+    let task = |a: &mut Asm, at: u32| {
+        a.h(at, 0xb510)
+            .h(at + 2, 0x2000) // movs r0, #0
+            .h(at + 4, 0x2101) // movs r1, #1
+            .bl(at + 6, 0x380)
+            .h(at + 10, 0x6808) // ldr r0, [r1]
+            .h(at + 12, 0x4687); // mov pc, r0
+    };
+    let mut a = Asm::new();
+    a.entry(0x100)
+        // main: ldr r0, [pc, #4] (the pool word at 0x108); bx lr
+        .h(0x100, 0x4801)
+        .h(0x102, 0x4770)
+        .w(0x108, thumb(0x300))
+        .h(0x380, 0x4770); // setup: bx lr
+    task(&mut a, 0x300);
+    task(&mut a, 0x340);
+    // A word in data points at the second, beside nothing found.
+    a.w(0x400, 0).w(0x404, thumb(0x340)).w(0x408, 0);
+    let d = a.run();
+    assert_eq!(d.funcs.get(&thumb(0x300)), Some(&Evidence::Scanned));
+    assert!(!d.funcs.contains_key(&thumb(0x340)));
+}
+
+#[test]
 fn a_leaf_inside_the_callers_span_is_still_called() {
     let mut a = Asm::new();
     a.entry(0x100)
