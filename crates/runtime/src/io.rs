@@ -275,6 +275,7 @@ pub fn read_mask(o: u32) -> u16 {
 }
 
 /// The I/O registers.
+#[derive(Clone)]
 pub struct Io {
     /// Each halfword as last written, through its write mask.
     regs: [u16; (IO_SIZE / 2) as usize],

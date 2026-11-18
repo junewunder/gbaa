@@ -32,6 +32,11 @@
 //!
 //! Then a fault: one byte of the ROM changed under one function's
 //! reference ([`Spec::fault`]) must make it differ.
+//!
+//! This is Emerald's ten's check, with the interpreter as the reference.
+//! Any function of any game, a replacement against its lift with both
+//! run natively, is `just fn-check` (`gbaa-lift --fn-check`,
+//! `codegen::native::FN_CHECK_DRIVER`; unit native/fn-check-any).
 
 use armv4t::interp::T_BIT;
 use codegen::func::Ctx;
