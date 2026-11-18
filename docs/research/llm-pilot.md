@@ -172,7 +172,7 @@ open unit that already covers it.
 | Pattern | In | Provable? | Lifter unit |
 |---|---|---|---|
 | Flag and register writes nothing reads dropped | all 20 | yes | new: `native/lift-dead-writes` |
-| `pop {pc}` / `pop {r0}; bx r0` of the entry lr as a plain return | 15 | yes | new: `native/lift-pop-return` |
+| `pop {pc}` / `pop {r0}; bx r0` of the entry lr as a plain return | 15 | yes | `native/lift-pop-return` (done) |
 | Branch conditions as comparisons and bit tests | 12 | yes | new: `native/lift-branch-conditions` |
 | Compiler narrowing idioms as casts and masks | 6 | yes | new: `native/lift-narrowing-casts` |
 | Single-use temporaries inline, constants at their use | all 20 | yes | new: `native/lift-inline-temps` |
@@ -208,6 +208,13 @@ only from r14 at entry, and stage A's call passes `RET` there, so the
 the register the pop went through: r0 in DMA2IntrCode 0x08003381,
 SoundPlay 0x08002a19, CallbackSetVblank 0x08000ae5; r1 in FixedInverse
 0x08000a81, GetNoteDelay 0x080020d5 and IntroHandler 0x0808117d).
+The lifter now prints it so (`native/lift-pop-return`): the summaries'
+run proves the jump's target the entry lr (a pop of the word the
+prologue pushed, or lr itself), and `lr_entries` that every way into the
+function passes `RET` as its lr (a call does; a fall or tail jump passes
+the jumper's, proven its own entry lr). Metroid: 2,610 such returns plain,
+1 still through `call_fn` (`entry_lr_returns_call_fn`, barred); the agb
+programs' few are falls after a call to a panic whose summary may return.
 
 **Branch conditions.** `cmp r1, #128` then `bgt` is the lift's
 `add_with_carry(r1, -128, true)` and `!(z | (n ^ v))`; the rewrite says

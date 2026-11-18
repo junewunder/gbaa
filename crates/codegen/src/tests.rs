@@ -1198,6 +1198,40 @@ fn scratch_r4_r11_no_caller_reads_is_soft_and_a_register_parameter_hard() {
     );
 }
 
+/// `f: push {lr}; bl g` falling into `h: push {lr}; pop {r0}; bx r0`,
+/// `k: b h` and `g: bx lr` (native/lift-pop-return): h's and g's jumps by
+/// value are to their entry lr; k jumps into h with r14 its entry lr, f
+/// with r14 the call's return address.
+#[test]
+fn a_pop_of_the_entry_lr_is_a_return_and_falls_say_what_lr_they_pass() {
+    let (rom, d) = thumb_program(
+        &[
+            0xB500, // 0x00 f: push {lr}
+            0xF000, 0xF804, // 0x02 bl g
+            0xB500, // 0x06 h: push {lr}
+            0xBC01, // 0x08 pop {r0}
+            0x4700, // 0x0a bx r0
+            0xE7FB, // 0x0c k: b h
+            0x4770, // 0x0e g: bx lr
+        ],
+        &[2, 4, 2, 2, 2, 2, 2],
+        &[0x0800_0001, 0x0800_0007, 0x0800_000d, 0x0800_000f],
+    );
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    let s = |k: u32| &sums.by_entry[&k];
+    assert_eq!(
+        s(0x0800_0007).lr_returns,
+        std::collections::BTreeSet::from([0x0800_000a])
+    );
+    assert_eq!(
+        s(0x0800_000f).lr_returns,
+        std::collections::BTreeSet::from([0x0800_000e])
+    );
+    assert_eq!(s(0x0800_000d).lr_into.get(&0x0800_0007), Some(&true));
+    assert_eq!(s(0x0800_0001).lr_into.get(&0x0800_0007), Some(&false));
+}
+
 /// The summary holes of the function at 0x08000001 of a Thumb program of
 /// one-halfword instructions, with a pointer to it in the ROM (so its
 /// callers are unknown, and enter it with r4-r11 zeroed).
