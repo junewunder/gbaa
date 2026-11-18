@@ -2073,19 +2073,12 @@ impl For {
                 }
                 vs.push(nx);
             };
-            if range.is_none() || vs.len() < 2 {
+            if range.is_none() {
                 continue;
             }
-            let step = vs[1].wrapping_sub(vs[0]) as i32;
-            let even = vs
-                .windows(2)
-                .all(|w| w[1].wrapping_sub(w[0]) as i32 == step);
-            let (first, last) = (vs[0], *vs.last().unwrap());
-            let k = vs.len() as i64 - 1;
-            let span = last as i64 - first as i64;
-            if step == 0 || !even || span != k * step as i64 {
+            let Some((first, last, step)) = counted(&vs) else {
                 continue;
-            }
+            };
             let (lo, hi) = (
                 crate::print::word(first.min(last), true),
                 crate::print::word(first.max(last), false),
@@ -2108,6 +2101,24 @@ impl For {
         }
         None
     }
+}
+
+/// The values a `for` variable takes, `vs` in order, as a range: its
+/// first and last value and its step, if there are two or more and they
+/// step evenly without wrapping. Shared with the native lift's `for`
+/// loops (`crate::native::counted`).
+pub(crate) fn counted(vs: &[u32]) -> Option<(u32, u32, i32)> {
+    if vs.len() < 2 {
+        return None;
+    }
+    let step = vs[1].wrapping_sub(vs[0]) as i32;
+    let even = vs
+        .windows(2)
+        .all(|w| w[1].wrapping_sub(w[0]) as i32 == step);
+    let (first, last) = (vs[0], *vs.last().unwrap());
+    let k = vs.len() as i64 - 1;
+    let span = last as i64 - first as i64;
+    (step != 0 && even && span == k * step as i64).then_some((first, last, step))
 }
 
 /// [`Readable::of`] for `gb`, a ROM block.

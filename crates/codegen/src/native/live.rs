@@ -94,6 +94,14 @@ pub fn dead(
     blocks: &[&[Inst]],
     out: impl Fn(usize, usize) -> (Vec<usize>, Live),
 ) -> Vec<Vec<bool>> {
+    dead_and_live(blocks, out).0
+}
+
+/// [`dead`], and what is live at each block's start.
+pub fn dead_and_live(
+    blocks: &[&[Inst]],
+    out: impl Fn(usize, usize) -> (Vec<usize>, Live),
+) -> (Vec<Vec<bool>>, Vec<Live>) {
     let n = blocks.len();
     // The least fixpoint: nothing live, growing.
     let mut live_in: Vec<Live> = vec![0; n];
@@ -112,7 +120,7 @@ pub fn dead(
             }
         }
     }
-    blocks
+    let dead = blocks
         .iter()
         .enumerate()
         .map(|(b, insts)| {
@@ -120,7 +128,8 @@ pub fn dead(
             walk(insts, |i| after(&live_in, b, i), |i| dead[i] = true);
             dead
         })
-        .collect()
+        .collect();
+    (dead, live_in)
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
 //! [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT]
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT]
-//! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--copies N] [--holes-only [--flow]]
+//! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-for-loops] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
 //! [--plant-reference]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
@@ -69,6 +69,11 @@
 //! and a constant, inside its use (unit `native/lift-inline-temps`). The
 //! report and `value_lets` count the `let`s. A measure by hand too.
 //!
+//! `--no-for-loops` prints every structured loop as a `loop`, as stage A
+//! first did; the lift prints a counted loop of one block as a `for` over
+//! its range (unit `native/lift-for-loops`). The report counts both
+//! (`loops_for`, `loops_not_for`). A measure by hand too.
+//!
 //! `src/` is `main.rs` (the prelude, RAM, `ENTRY`), `fns.rs` (`FNS`) and
 //! the functions in modules of about 4,000 lines (`codegen::native::modules`,
 //! unit `native/lift-modules`), so rustc builds them in parallel; a `.rs`
@@ -115,7 +120,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference]"
         );
         ExitCode::FAILURE
     };
@@ -126,6 +131,7 @@ fn main() -> ExitCode {
     let (mut drop, mut plant, mut tail, mut irq_at_waits) = (None, None, false, false);
     let (mut ime_at_waits, mut takes_zeroed, mut keep_dead) = (false, false, false);
     let mut keep_temps = false;
+    let mut no_for_loops = false;
     let (mut holes_only, mut holes_flow) = (false, false);
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
     let (mut fn_check, mut replace, mut seed, mut runs) = (Vec::new(), None, None, None);
@@ -156,6 +162,10 @@ fn main() -> ExitCode {
         }
         if a == "--keep-temps" {
             keep_temps = true;
+            continue;
+        }
+        if a == "--no-for-loops" {
+            no_for_loops = true;
             continue;
         }
         if a == "--holes-only" {
@@ -281,6 +291,7 @@ fn main() -> ExitCode {
     holes.takes_zeroed = takes_zeroed;
     holes.keep_dead_writes = keep_dead;
     holes.keep_temps = keep_temps;
+    holes.no_for_loops = no_for_loops;
     holes.plant_slot = plant_slot;
     holes.shadow_locals = shadow;
     holes.copies = copies;
