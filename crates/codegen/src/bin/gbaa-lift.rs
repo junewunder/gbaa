@@ -2,7 +2,8 @@
 //! [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT]
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT]
 //! [--shadow-locals] [--copies N] [--holes-only [--flow]]
-//! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N]`:
+//! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
+//! [--plant-reference]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
 //! stage A). Writes the whole program as a Rust crate to OUT (`Cargo.toml`,
 //! `src/`, a copy of the ROM for its data, `report.txt`, and its metrics
@@ -73,6 +74,12 @@
 //! (`codegen::native::FN_CHECK_DRIVER`). Its seed and budget are the
 //! stand-in's `check = { seed, runs, digest }`, or 1 and 2000 runs;
 //! `--seed` and `--runs` override them (and drop the recorded digest).
+//! The interpreter is a second reference (unit `native/fn-check-interp`):
+//! every Nth compared run (`--interp-every N`, 8 unless given; 0 never;
+//! never at `--layout packed`, whose RAM isn't the guest's bytes) it runs
+//! the ROM's code from the same state, untimed, and its end must be the
+//! lift's. `--plant-reference` puts `--plant`'s store in the reference
+//! too, a planted wrong lift that only the interpreter can catch.
 //!
 //! `--holes-only` finds the hard holes and writes nothing (OUT is
 //! ignored): no function-address flow, heap pointers or modules
@@ -97,7 +104,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference]"
         );
         ExitCode::FAILURE
     };
@@ -110,6 +117,7 @@ fn main() -> ExitCode {
     let (mut holes_only, mut holes_flow) = (false, false);
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
     let (mut fn_check, mut replace, mut seed, mut runs) = (Vec::new(), None, None, None);
+    let (mut interp_every, mut plant_reference) = (8, false);
     let mut layout = codegen::native::globals::Layout::Guest;
     let hex = |s: &str| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok();
     let mut it = rest.iter();
@@ -136,6 +144,10 @@ fn main() -> ExitCode {
         }
         if a == "--flow" {
             holes_flow = true;
+            continue;
+        }
+        if a == "--plant-reference" {
+            plant_reference = true;
             continue;
         }
         if a == "--shadow-locals" {
@@ -167,6 +179,9 @@ fn main() -> ExitCode {
             ("--replace", Some(f)) => replace = Some(PathBuf::from(f)),
             ("--seed", Some(n)) if n.parse::<u64>().is_ok() => seed = n.parse().ok(),
             ("--runs", Some(n)) if n.parse::<u32>().is_ok_and(|n| n > 0) => runs = n.parse().ok(),
+            ("--interp-every", Some(n)) if n.parse::<u32>().is_ok() => {
+                interp_every = n.parse().unwrap()
+            }
             ("--copies", Some(n)) if n.parse::<usize>().is_ok_and(|n| n >= 1) => {
                 copies = n.parse().unwrap()
             }
@@ -234,6 +249,12 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
     holes.plant = plant;
+    holes.plant_reference = plant_reference;
+    // A packed layout's RAM isn't the guest's bytes: no interpreter.
+    holes.fn_check_interp = match layout {
+        codegen::native::globals::Layout::Guest => interp_every,
+        codegen::native::globals::Layout::Packed => 0,
+    };
     holes.fall_as_tail_call = tail;
     holes.irq_at_waits = irq_at_waits;
     holes.ime_at_waits = ime_at_waits;

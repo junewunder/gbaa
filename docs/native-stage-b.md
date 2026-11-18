@@ -325,8 +325,9 @@ a bar lowered". After that, three lines of work can go side by side:
   typed pointers wait on RAM globals and stack locals, since a pointer is
   typed by the object it points into; heap pointers wait on those.
 
-Not filed, for stage C or later: the 8 jumps by value per program as
-`match` (the structuring plan, unused so far), the functions whose
+Not filed, for stage C or later: the 8 jumps by value per program as a
+`match` on the target's code (the structuring plan takes them as jumps to
+labels; native/lift-structured), the functions whose
 callee-saves aren't proven (soft: each function keeps its own r4-r11),
 escaping stack slots as `&mut`, and replacing agb's allocator. Also not
 filed: discovery's own fix for the gaps the lifter decodes (a `bl`'s

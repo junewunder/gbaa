@@ -160,3 +160,119 @@ budget never saw.
   every such difference at once, with the byte or register named. Its
   budget is bounded by how often the no-input run calls the function, and
   a reference that can run forever needs a cap.
+
+## The rewrites' repeated transformations (`native/llm-pilot-patterns`)
+
+What Claude did to more than one of the 20, compared with the lift each
+was read from, and whether the lifter could do it with a proof (exact on
+every input, not just the check's). Functions are named with their keys
+(Thumb, so odd). "Lifter unit" is the unit filed for the pattern, or the
+open unit that already covers it.
+
+| Pattern | In | Provable? | Lifter unit |
+|---|---|---|---|
+| Flag and register writes nothing reads dropped | all 20 | yes | new: `native/lift-dead-writes` |
+| `pop {pc}` / `pop {r0}; bx r0` of the entry lr as a plain return | 15 | yes | new: `native/lift-pop-return` |
+| Branch conditions as comparisons and bit tests | 12 | yes | new: `native/lift-branch-conditions` |
+| Compiler narrowing idioms as casts and masks | 6 | yes | new: `native/lift-narrowing-casts` |
+| Single-use temporaries inline, constants at their use | all 20 | yes | new: `native/lift-inline-temps` |
+| One `bank_sp` per run of stores at the same sp | 10 | yes, with care | new: `native/lift-bank-sp-once` |
+| A counted loop as `for` over a range | 2 | yes | new: `native/lift-for-loops` |
+| A compare tree on one value as `match` | 3 | yes | new: `native/lift-switch-match` |
+| `if`/`while`/early return in place of the block match | 12 | yes | `native/lift-structured` (in progress) |
+| Table and array indexing (`base + i * size`) | 5 | yes | `native/rom-statics` (ROM), done `native/ref-in-object` (RAM) |
+| Names for locals, parameters and constants | all 20 | no | none (names files; the mod view's local naming) |
+| Scratch registers kept in the results | all 20 | no: forced | none (stage A; `native/fnref-live-registers` narrows) |
+| A misaligned word load's rotate dropped | 3 | no | none |
+| An unrolled sequence rolled into a loop | 1 | n/a | none (one function) |
+
+Not transformations: the DMA polls (`hw::idle`/`idle_exit`) and the key
+normalising of a pointer call were copied from the lift as they were.
+
+**Flag and register writes nothing reads.** Stage A writes N, Z, C and V
+at every flag-setting instruction and prints each `add_with_carry` up to
+three times for its three results; the rewrites keep no flag at all.
+UpdateInput (0x08000969) writes all four and reads none; ResetFreeOam
+(0x08000a19) and FixedInverse (0x08000a81) the same. A callee-saved
+register's restore before the return (`r4 = l8`) is dead too: the lift
+returns r0-r3 only. Liveness inside a function proves it: flags are read
+only by a later condition in the function or by a fall into another
+function's extended entry (`native/lift-fallthrough`), and the summaries
+say which registers a call or return passes on.
+
+**The entry lr's return.** Every function that pushes lr ends by
+`if t & !3 == RET { return } else { call_fn(t) }` on the popped word.
+`native/frame-locals` already holds that slot in a Rust local written
+only from r14 at entry, and stage A's call passes `RET` there, so the
+`call_fn` arm can't run and the rewrites return plainly (with `RET` in
+the register the pop went through: r0 in DMA2IntrCode 0x08003381,
+SoundPlay 0x08002a19, CallbackSetVblank 0x08000ae5; r1 in FixedInverse
+0x08000a81, GetNoteDelay 0x080020d5 and IntroHandler 0x0808117d).
+
+**Branch conditions.** `cmp r1, #128` then `bgt` is the lift's
+`add_with_carry(r1, -128, true)` and `!(z | (n ^ v))`; the rewrite says
+`first > 127` (ResetFreeOam 0x08000a19). Each ARM condition after a
+`cmp`/`cmn`/`subs` has an exact closed form over the operands (EQ `a ==
+b`, HI `a > b`, GT `a as i32 > b as i32`, and so on), and after
+`ands`/`tst` or a shift that sets flags it is a bit test (`ands r0, r4;
+cmp r0, #0; beq` is `x & 0x80 == 0`, DoSoundAction 0x080027f9; N after
+`lsls #k` is bit 31-k). Seen in unk_1bf0 0x08001bf1, CallbackSetVblank
+0x08000ae5, CallbackCallVblank 0x08000a99, DMA2IntrCode 0x08003381,
+DoSoundAction 0x080027f9, AudioCommand_Voice 0x080022cd, DmaTransfer
+0x080031e5, BitFill 0x080032b5, TitleScreenProcessOam 0x08076d91,
+GetNoteDelay 0x080020d5,
+IntroHandler 0x0808117d.
+
+**Narrowing idioms.** agbcc narrows with shift pairs and masks:
+`lsls #16; asrs #16` is `as i16 as i32` (FixedInverse 0x08000a81, both
+ways round its division), `lsls #24; asrs #24` the s8 loop counter of
+DoSoundAction 0x080027f9, `lsls #24; lsrs #24` or `ands` with a register
+holding 0xff a `u8` (unk_1bf0 0x08001bf1's countdown, DMA2IntrCode
+0x08003381's frame counter, GetNoteDelay 0x080020d5's parameters,
+IntroHandler 0x0808117d's test of a callee's `u8` result). The shift
+pairs are bit identities; the register mask needs the register's
+constant carried into the block (the mod view's `lower::known` does this
+for the play build).
+
+**Single-use temporaries.** Every lifted value is its own `let vN`, and
+constants are their own lines (`let v5 = 0xfffffff8u32; let v6 =
+v2.wrapping_add(v5);`). A pure value used once can print inside its use;
+the rewrites are 5 to 20 times shorter mostly from this and the flags.
+
+**`bank_sp` once.** The lift banks sp before every store that may reach
+I/O or go through a pointer, so ResetFreeOam's loop banks three times an
+iteration and DMA2IntrCode before each of its six I/O stores. The rewrites bank once per
+run of stores at one sp (AudioCommand_Volume 0x0800238d, PitchBend
+0x080023b5, PanPot 0x080023a1, KeyShift 0x080022b5, ResetFreeOam
+0x08000a19, unk_1bf0 0x08001bf1, DMA2IntrCode 0x08003381,
+TitleScreenVBlank 0x080776fd, DmaTransfer 0x080031e5, BitFill
+0x080032b5). A bank is redundant when the last bank on every path to it
+had the same value and nothing between can bank another (a call, an
+idle, an IME release whose handler runs); the check compares the banked
+sp, so this needs that proof, not just the check passing. Where the
+rewrites moved the bank earlier than the first store (the four
+AudioCommands bank at entry), the lifter shouldn't follow: that only
+passes because nothing before the store banks differently.
+
+**Counted loops.** ResetFreeOam 0x08000a19 (`for` from the free slot to
+127) and DoSoundAction 0x080027f9 (an s8 count from 11 down to 0). The
+mod view's `lower::For` (`mod/readable-for-loops`) recognises exactly
+this on the play build's structured form; the native lift should reuse
+it once `native/lift-structured` lands, not design it again.
+
+**Compare trees as `match`.** agbcc compiles a small switch as a
+binary search of `cmp`/`beq`/`bgt` on one register (IntroHandler
+0x0808117d's stage 0-3); AudioCommand_Voice 0x080022cd's PSG type 0-4
+and DoSoundAction 0x080027f9's mix setting are the same shape. Where
+every compare in the tree is of one unchanged value against constants,
+the tree is a `match` with the leaves as arms.
+
+**What isn't provable.** Names are guesses checked by nothing but
+reading. The kept scratch registers are the price of stage A's interface
+(every caller may read r0-r3), and go away with narrower results, not a
+rewrite. Dropping a word load's rotate (AudioCommand_Volume, unk_1bf0,
+AudioCommand_Voice) changed the result on odd pointers read from RAM: the
+check caught two of the three, and the lifter can drop the rotate only
+where a value set proves the address aligned, which a pointer read from
+RAM never is. Rolling TitleScreenVBlank's eight unrolled scroll copies
+into a loop is one function, so not filed.
