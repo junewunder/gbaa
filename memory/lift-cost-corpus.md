@@ -1,6 +1,6 @@
 ---
 title: What a whole lift of each corpus game costs, and the holes-only one
-hook: whole lifts 54 s-50 min at under 3 GB (not 16G: asking 16G blocks other jobs); holes-only 9 s-3.5 min under 0.6 GB (2026-11-14)
+hook: whole lifts 54 s-50 min under 3 GB (ask no 16G: it blocks other jobs); holes-only 9 s-3.5 min, 0.6 GB
 ---
 
 Measured on quack, 2026-11-14, commit 7f42cf22 (native/holes-match-lift),
