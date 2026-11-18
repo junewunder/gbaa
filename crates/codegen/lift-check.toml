@@ -32,7 +32,7 @@ route = "units/affine-600.toml"
 
 [program.affine.bars]
 lines = 71202
-lines_prelude = 1203
+lines_prelude = 1262
 functions = 109
 functions_iwram = 3
 functions_lifted = 106
@@ -89,7 +89,7 @@ route = "units/mosaic-modes-600.toml"
 
 [program.mosaic-modes.bars]
 lines = 49498
-lines_prelude = 1203
+lines_prelude = 1262
 functions = 102
 functions_iwram = 3
 functions_lifted = 99
@@ -152,7 +152,7 @@ planted_hole = { drop_standin = 0x08002728, names = "error: hard hole in f_08002
 
 [program.native-spike.bars]
 lines = 72079
-lines_prelude = 1203
+lines_prelude = 1262
 functions = 110
 functions_iwram = 3
 functions_lifted = 107
@@ -213,7 +213,7 @@ planted_flags = ["--fall-as-tail-call"]
 
 [program.native-fallthrough.bars]
 lines = 70092
-lines_prelude = 1203
+lines_prelude = 1262
 functions = 112
 functions_iwram = 3
 functions_lifted = 109
@@ -275,7 +275,7 @@ planted_flags = ["--irq-at-waits"]
 
 [program.native-irq-hold.bars]
 lines = 70751
-lines_prelude = 1203
+lines_prelude = 1262
 functions = 114
 functions_iwram = 3
 functions_lifted = 109
@@ -339,7 +339,7 @@ planted_flags = ["--plant-slot=0x08000182"]
 
 [program.native-frame-locals.bars]
 lines = 70174
-lines_prelude = 1203
+lines_prelude = 1262
 functions = 113
 functions_iwram = 3
 functions_lifted = 110
@@ -400,7 +400,7 @@ planted_flags = ["--ime-at-waits"]
 
 [program.native-ime-release.bars]
 lines = 70743
-lines_prelude = 1203
+lines_prelude = 1262
 functions = 113
 functions_iwram = 3
 functions_lifted = 110
@@ -465,7 +465,7 @@ route = "units/native-bios-calls-600.toml"
 
 [program.native-bios-calls.bars]
 lines = 71192
-lines_prelude = 1203
+lines_prelude = 1262
 functions = 109
 functions_iwram = 3
 functions_lifted = 106
@@ -530,7 +530,7 @@ route = "units/native-bios-more-600.toml"
 
 [program.native-bios-more.bars]
 lines = 70431
-lines_prelude = 1203
+lines_prelude = 1262
 functions = 104
 functions_iwram = 3
 functions_lifted = 101
@@ -598,7 +598,7 @@ planted_hole = { drop_standin = 0x080001a4, names = "error: hard hole in f_08000
 
 [program.native-tasks.bars]
 lines = 71525
-lines_prelude = 1203
+lines_prelude = 1262
 functions = 122
 functions_iwram = 3
 functions_lifted = 113
@@ -673,7 +673,7 @@ planted_store = 0x08000180
 
 [program.native-dma.bars]
 lines = 48698
-lines_prelude = 1203
+lines_prelude = 1262
 functions = 107
 functions_iwram = 3
 functions_lifted = 104
@@ -737,7 +737,7 @@ planted_store = 0x080002ac
 
 [program.native-save.bars]
 lines = 70850
-lines_prelude = 1203
+lines_prelude = 1262
 functions = 112
 functions_iwram = 3
 functions_lifted = 109
@@ -799,7 +799,7 @@ route = "units/native-bios-region-601.toml"
 
 [program.native-bios-region.bars]
 lines = 70547
-lines_prelude = 1203
+lines_prelude = 1262
 functions = 114
 functions_iwram = 3
 functions_lifted = 111
@@ -862,7 +862,7 @@ route = "units/native-bios-affine-600.toml"
 
 [program.native-bios-affine.bars]
 lines = 71579
-lines_prelude = 1203
+lines_prelude = 1262
 functions = 110
 functions_iwram = 3
 functions_lifted = 106
@@ -927,7 +927,7 @@ planted_store = 0x0800017c
 
 [program.native-serial.bars]
 lines = 73140
-lines_prelude = 1203
+lines_prelude = 1262
 functions = 117
 functions_iwram = 3
 functions_lifted = 114
@@ -994,7 +994,7 @@ planted_store = 0x080001f4
 
 [program.native-irq-wrapper.bars]
 lines = 71484
-lines_prelude = 1203
+lines_prelude = 1262
 functions = 118
 functions_iwram = 3
 functions_lifted = 116
@@ -1056,7 +1056,7 @@ planted_flags = ["--takes-zeroed"]
 
 [program.native-takes.bars]
 lines = 70108
-lines_prelude = 1203
+lines_prelude = 1262
 functions = 113
 functions_iwram = 3
 functions_lifted = 110
