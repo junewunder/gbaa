@@ -720,3 +720,69 @@ the mask kept.
 r0, r1, #1; cmp r0, #4; bhi` on the result of the call to 0x0808ac00, a
 switch on a call's result, which holds function addresses only through
 the empty callee sets' over-approximation. agb lift bars all held.
+
+## Stores indexed from a RAM literal, measured
+
+Unit `native/fnref-ram-array-bases`, 2026-11-18 on quack. Not kept:
+the code is commit e965fcb, reverted in the next.
+
+**Before it.** `native/fnref-pile-globals` (commit 8892dee, reverted)
+split the pile by the value sets' bounds on each store: they bound 246
+of Metroid's 3,898 unplaced stores and 76 spans on Nightmare, and
+nothing moved (Metroid 274 not proven; Nightmare's pile reads 2,529 to
+2,530). Nightmare's two largest pile roads are stores at a RAM literal
+plus an index the value sets give Top: `ldr r2, =0x030025f0; lsls r3,
+r1, #2; adds r2, r3, r2; str r0, [r2]`, a callback table, and records
+at 0x03002790 + 144i.
+
+**The rule tried.** As `native/fnref-table-ends` has it for ROM: a load
+or store whose address is a RAM literal its function loads, plus an
+offset, plus an index it scales, stays in the object from that literal
+to the next literal the code indexes from that isn't a field of one
+below (less than one entry past it). Found in the IR, through the
+function's registers from block to block where every path in agrees,
+not across a call (`ram_indexed`); not by the value sets. What C allows
+that it cuts short, settled so:
+
+- A struct's array field indexed from the struct's address (`s.a[i]` as
+  `&s + off + 4i`): the offset must be less than one step (a field of a
+  record), so `s.a[i]` with the array a step or more in stays in the
+  pile. One less than a step in is taken as a record's field, and its
+  object is `s`'s.
+- `&arr[k]` indexed from as well as `arr`: taken on trust, as in ROM; a
+  literal one entry or more past another start is an object of its own.
+- An index below the literal (`p = &arr[k]; p[-1]`): taken on trust.
+- Frames: no stack slot is in such an object, so a frame's load through
+  a pointer reads the pile, not the objects.
+
+Stores so placed went to their object; a load at a constant address
+read the objects that may hold its bytes, a load so placed its objects
+with every cell and the pile, a load the run can't place every object.
+
+**Measured** (main at c442dd0; Nightmare with `gbaa-recompile --summaries
+ROM --callee-sets` and `GBAA_FNREF_WATCH=roads`): Nightmare 2,715 words
+held before and after, 2,110 of them first by a pile read (main had
+moved since 8678f76's 2,728 and 2,529); Metroid `fn_words_not_proven`
+200 before and after. 2,974 of Nightmare's accesses are placed, in 128
+objects, the callback table's store among them. The run is 2 to 4 times
+as long: Metroid's flow 34 s to 127 s, Nightmare's rounds 70 s to 200 s.
+Object reads as explicit tokens made Metroid's 7 times as long; as
+`Ref`s, small ones inline, the loads at constant addresses inside an
+object (most globals lie inside one, as an object runs to the next
+start) still make values that share no expansion with the pile's.
+
+**Why nothing moved.** Watching 0x08026618 (a callback passed to
+0x08006148, which stores it in the table at 0x030025f0[i]): the store
+now goes only to that table's object, but its first hole is still at
+0x08006162, `lsls r1, r1, #8` on the index. The index is a byte that
+0x0800617d loads at `[[0x03002490] + 67]`: the scheduler's current task
+pointer, a global whose value the run can't place (it is stored a value
+made of unplaced reads), so the byte load reads every object, and the
+callback's bytes with them. The pile was the hub of that cycle; every
+object is now. Placing that load needs the pointer's value: a pointer
+the code makes as a RAM literal plus an index (`&tasks[i]`), stored to
+a global and loaded back, carried as "somewhere in this object" through
+memory and calls, as `Tok::RomFrom` is in ROM. That widens the trust a
+lot: a `memcpy` whose destination is such a pointer and whose length
+runs past the next start would leave the stores past it out of their
+objects, and loads there would miss what was copied.
