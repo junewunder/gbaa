@@ -2196,12 +2196,14 @@ pub fn run(
             );
         }
         // Decision 1's "would change our minds", in guest cycles: the share
-        // of the running (not halted) time the fallback took.
+        // of the running (not halted, not in a BIOS call's stall) time the
+        // fallback took.
         let running = (stats.compiled_cycles + stats.interpreted_cycles).max(1);
         let pct = |c: u64| c as f64 * 100.0 / running as f64;
         eprintln!(
             "cycles: {} compiled ({:.1}%, compiled in RAM {:.1}%), {} in the interpreter \
-             fallback ({:.1}%, {:.1} points of it in RAM code), {} halted",
+             fallback ({:.1}%, {:.1} points of it in RAM code), {} halted, {} in BIOS \
+             calls' stalls",
             stats.compiled_cycles,
             pct(stats.compiled_cycles),
             pct(stats.compiled_ram_cycles),
@@ -2209,6 +2211,7 @@ pub fn run(
             pct(stats.interpreted_cycles),
             pct(stats.interpreted_ram_cycles),
             stats.halted_cycles,
+            stats.stalled_cycles,
         );
         if stats.n_ram_seeds > 0 {
             // Where the fallback's RAM time went, by the key it was entered
@@ -2377,7 +2380,7 @@ fn script_moved(
 }
 
 /// `stats` with a guest's compiled cycles: the `ran` cycles (and its
-/// overlays') less the interpreter's and the halts'. Compiled code
+/// overlays') less the interpreter's, the halts' and the BIOS stalls'. Compiled code
 /// suspended at a frame end returns to the dispatcher, which counts its
 /// cycles, only when the guest is dropped, if ever.
 fn guest_counts(
@@ -2386,7 +2389,8 @@ fn guest_counts(
 ) -> runtime::dispatch::Stats {
     let mut s = stats.clone();
     if let Some((all, ram)) = ran {
-        s.compiled_cycles = all.saturating_sub(s.interpreted_cycles + s.halted_cycles);
+        s.compiled_cycles =
+            all.saturating_sub(s.interpreted_cycles + s.halted_cycles + s.stalled_cycles);
         s.compiled_ram_cycles = ram;
     }
     s
