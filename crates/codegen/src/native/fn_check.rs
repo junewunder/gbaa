@@ -19,8 +19,11 @@
 // state goes back and the reference runs the call for real, so the
 // program stays on the lift's path.
 //
-// A run whose reference panics or stops (`Exit`) isn't compared: it is
-// counted as skipped. What's kept is a seed, a count and a digest (of the
+// A run whose reference panics, stops (`Exit`) or presents more than
+// [`RUN_FRAMES_MAX`] frames (a variant that never returns: a random size
+// that makes a DMA repeat, which the function then waits on for ever)
+// isn't compared: it is counted as skipped. A replacement past the cap
+// where its reference returned is a difference. What's kept is a seed, a count and a digest (of the
 // reference's ends), not the states: the same seed and budget give the
 // same digest while the lift and the program's path don't change.
 // Generated: don't edit; rerun `just fn-check`.
@@ -31,6 +34,14 @@ use std::time::{Duration, Instant};
 
 /// Runs per call of the program's: the call as it came, then variants.
 pub const VARIANTS: u32 = 8;
+
+/// The frames one run may present: past them it is stopped, as a panic
+/// ([`CAPPED`]). A run that loops without letting time pass stops at
+/// the prelude's `ACCESSES_MAX` instead.
+pub const RUN_FRAMES_MAX: u32 = 600;
+
+/// The start of a capped run's panic message.
+const CAPPED: &str = "fn-check: past the cap";
 
 /// The stack below the entry sp that may be the function's frames: an
 /// IWRAM store this far below it or less moves the compare's floor.
@@ -69,6 +80,7 @@ struct Tally {
     differ: u32,
     ref_panics: u32,
     ref_exits: u32,
+    ref_capped: u32,
     shown: Vec<String>,
     digest: u64,
     time: Duration,
@@ -277,11 +289,16 @@ fn vary(g: &mut Game, rng: &mut Rng, args: &mut [u32; 4], params: u8, loads: &[u
     }
 }
 
-/// The host while a run runs: the keys held as they were.
-struct Quiet(u16);
+/// The host while a run runs: the keys held as they were, and the frames
+/// presented, which stop the run past [`RUN_FRAMES_MAX`].
+struct Quiet(u16, u32);
 
 impl runtime::hw::Host for Quiet {
     fn present(&mut self, _: &runtime::platform::Frame) -> Result<(), Exit> {
+        self.1 += 1;
+        if self.1 > RUN_FRAMES_MAX {
+            panic!("{CAPPED} of {RUN_FRAMES_MAX} frames in one run");
+        }
         Ok(())
     }
     fn keys(&mut self) -> u16 {
@@ -312,7 +329,7 @@ fn run(
     // A host that shows, plays and saves nothing: a run that lets time
     // pass (a wait, a spin) presents frames, which the program's host
     // would count, record and hash; the state goes back, the host can't.
-    let quiet = native_host::AnyHost(Box::new(Quiet(g.hw.keys.held())));
+    let quiet = native_host::AnyHost(Box::new(Quiet(g.hw.keys.held(), 0)));
     let host = std::mem::replace(&mut g.hw.host, quiet);
     let hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
@@ -406,6 +423,10 @@ pub fn call(
             loads.dedup();
         }
         let out = match r {
+            Err(p) if p.starts_with(CAPPED) => {
+                local.ref_capped += 1;
+                continue;
+            }
             Err(_) => {
                 local.ref_panics += 1;
                 continue;
@@ -473,6 +494,7 @@ pub fn call(
         t.differ += local.differ;
         t.ref_panics += local.ref_panics;
         t.ref_exits += local.ref_exits;
+        t.ref_capped += local.ref_capped;
         let room = 3usize.saturating_sub(t.shown.len());
         t.shown.extend(local.shown.into_iter().take(room));
         t.digest = fnv(t.digest ^ FNV, &local.digest.to_le_bytes());
@@ -544,10 +566,10 @@ fn report(frames: Option<u64>) -> i32 {
             s.name, s.key, t.runs, s.runs, t.entries, t.calls, t.time, s.seed, t.digest
         );
         println!("      replacement: {}; {}", s.replacement, s.sig);
-        if t.ref_panics + t.ref_exits > 0 {
+        if t.ref_panics + t.ref_exits + t.ref_capped > 0 {
             println!(
-                "      skipped: {} runs whose reference panicked, {} that stopped the program",
-                t.ref_panics, t.ref_exits
+                "      skipped: {} runs whose reference panicked, {} that stopped the program, {} capped (past {RUN_FRAMES_MAX} frames)",
+                t.ref_panics, t.ref_exits, t.ref_capped
             );
         }
         for w in &t.shown {

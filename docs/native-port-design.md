@@ -1191,8 +1191,8 @@ as a seed, a budget and a digest, never as states.
 - Compared: RAM but the stack below the entry sp, I/O, palette, VRAM,
   OAM, frames, sp, the CPSR and what callers read (the unreplaced shape;
   all four registers after a summary hole). The digest is of the
-  reference's ends: the same seed and budget give it again while the
-  lift and the program's path stay.
+  reference's ends, the same for the same seed, budget, lift and path. A
+  run whose reference panics, stops or passes 600 frames is skipped.
 - Not yet: the interpreter as a second reference (its own unit); a
   function first called past the lift's stop can't be checked.
 

@@ -1451,8 +1451,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   none, the lift, which `--plant AT` makes a planted wrong one) against
   its lift, both native, from the program's own calls and seeded variants
   of them, headless with no input, until each budget is spent. Prints per
-  function its runs, budget, time, seed and digest, and the first
-  differences, each naming the byte. Fails on a difference, or a budget
+  function its runs, budget, time, seed, digest, runs skipped (capped:
+  past 600 frames) and the first differences, each naming the byte. Fails on a difference, or a budget
   not spent before the program stops or `--frames` (18000) run out.
   Replacements: `holes/fn-check/` (our agb programs),
   `mods/<game>/fn-check.toml` (private). Heavy: builds a generated crate.
