@@ -231,8 +231,10 @@ fn irq_entry(g: &mut Game) {
     // IRQ mode, I set, as the exception enters it, the CPSR it stopped in
     // the SPSR; back as it was on the return (the BIOS's `subs pc, lr,
     // #4` restores the SPSR, which a wrapper that nests puts back). The
-    // IRQ stack as it was: the stub pops what it pushed.
+    // IRQ stack as it was: the stub pops what it pushed. The stopped
+    // mode's sp too, as the hardware's comes back (native/lift-bank-sp-once).
     let (cpsr, spsr, base) = (g.cpsr, g.spsr, g.banked[0]);
+    let mine = *banked_sp(g, cpsr & 0x1F);
     g.spsr = cpsr;
     g.cpsr = 0x92;
     // A handler doesn't wait, so it can't be told to stop.
@@ -242,6 +244,7 @@ fn irq_entry(g: &mut Game) {
         panic!("a SoftReset (to {to:#010x}) in an IRQ handler, which the native program can't restart from");
     }
     (g.cpsr, g.spsr, g.banked[0]) = (cpsr, spsr, base);
+    *banked_sp(g, cpsr & 0x1F) = mine;
     g.bios_latch = runtime::bus::BIOS_LATCH_AFTER_IRQ;
 }
 
