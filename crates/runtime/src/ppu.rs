@@ -101,6 +101,7 @@ pub fn bg_kind(mode: u16, n: usize) -> Option<BgKind> {
 
 /// The PPU: the frame being drawn, and the state it carries between
 /// lines, the affine backgrounds' reference points.
+#[derive(Clone)]
 pub struct Ppu {
     pub frame: Frame,
     refs: bg_affine::Refs,

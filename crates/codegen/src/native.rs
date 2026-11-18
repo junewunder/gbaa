@@ -179,6 +179,10 @@ use shape::{Shape, Shapes};
 /// The prelude every lifted crate starts with, at the guest layout.
 pub const PRELUDE: &str = include_str!("native/prelude.rs");
 
+/// The per-function check's driver (`gbaa-lift --fn-check`), written into
+/// a checked lift as `src/fn_check.rs`.
+pub const FN_CHECK_DRIVER: &str = include_str!("native/fn_check.rs");
+
 /// What the play layout (`--layout packed`) puts in place of the
 /// prelude's guest-layout `Ram` code ([`GUEST_RAM`] to [`GUEST_RAM_END`]).
 const PACKED_RAM: &str = include_str!("native/prelude_packed.rs");
@@ -315,15 +319,48 @@ pub struct Holes {
     /// it this is the lift's [`Lifted::holes`] but those, in seconds to a
     /// few minutes; [`Lifted::files`] is empty and the report one line.
     pub holes_only: bool,
+    /// The per-function check (`gbaa-lift --fn-check KEY`, unit
+    /// `native/fn-check-any`): the functions checked, by key. Each keeps
+    /// its replacement (its stand-in; with none, the lift itself, which a
+    /// `--plant` in it makes wrong) and gets the lift printed again as the
+    /// reference, `ref_f_<key>`; its `f_<key>` runs the check's driver
+    /// (`native/fn_check.rs`, the crate's `fn_check.rs`), whose `main`
+    /// runs the program headless under the checks.
+    pub fn_check: BTreeMap<u32, FnCheck>,
+    /// The budgets the holes file records for its stand-ins (`check = {…}`),
+    /// which `--fn-check` uses for a function it names.
+    pub checks: BTreeMap<u32, FnCheck>,
     /// With [`Holes::holes_only`], follow the function addresses too
     /// (`--flow`): the whole lift's holes exactly, at the flow's cost (up
     /// to about 20 minutes a game).
     pub holes_flow: bool,
 }
 
+/// A checked function's budget (`[[standin]] check = { seed = …, runs =
+/// …, digest = "…" }` in the holes file, or `gbaa-lift --fn-check`'s
+/// defaults): the seed of its variants, the runs to compare, and the
+/// digest of the reference's ends that seed and budget gave, if recorded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FnCheck {
+    pub seed: u64,
+    pub runs: u32,
+    pub digest: Option<u64>,
+}
+
+impl Default for FnCheck {
+    fn default() -> FnCheck {
+        FnCheck {
+            seed: 1,
+            runs: 2000,
+            digest: None,
+        }
+    }
+}
+
 impl Holes {
     /// Parse a holes file: `[[standin]] entry = 0x…, why = "…", code =
-    /// '''…'''` (and `lr = true` for [`Holes::lr`]), `[[jump]] at = 0x…, targets = [0x…], why = "…"`,
+    /// '''…'''` (and `lr = true` for [`Holes::lr`], `check = { seed, runs,
+    /// digest }` for [`Holes::checks`]), `[[jump]] at = 0x…, targets = [0x…], why = "…"`,
     /// `[[takes]]` ([`Holes::takes`]), `[[copy]]` ([`Holes::copies_seen`]),
     /// `[[stack]]` ([`Holes::stacks`]), and at the top, `skip_fn_flow =
     /// "why"`.
@@ -355,6 +392,34 @@ impl Holes {
                         let entry = int(e.get("entry").ok_or("standin: missing entry")?, "entry")?;
                         h.standins
                             .insert(entry, (str_of(e, "code")?, str_of(e, "why")?));
+                        if let Some(c) = e.get("check") {
+                            let c = c.as_table().ok_or("standin: check: not a table")?;
+                            let d = FnCheck::default();
+                            let num = |k: &str| -> Result<Option<i64>, String> {
+                                c.get(k)
+                                    .map(|v| {
+                                        v.as_integer()
+                                            .ok_or(format!("standin: check: {k}: not an integer"))
+                                    })
+                                    .transpose()
+                            };
+                            let digest = match c.get("digest") {
+                                None => None,
+                                Some(v) => Some(
+                                    v.as_str()
+                                        .and_then(|t| u64::from_str_radix(t, 16).ok())
+                                        .ok_or("standin: check: digest: not a hex string")?,
+                                ),
+                            };
+                            h.checks.insert(
+                                entry,
+                                FnCheck {
+                                    seed: num("seed")?.map_or(d.seed, |v| v as u64),
+                                    runs: num("runs")?.map_or(d.runs, |v| v as u32),
+                                    digest,
+                                },
+                            );
+                        }
                         match e.get("lr") {
                             None => {}
                             Some(v) => match v.as_bool() {
@@ -774,6 +839,22 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .map(|((ctx, _), funcs)| code(ctx, funcs, &named_sites, &first))
         .collect();
     let holes = &library_standins(holes, &codes);
+    // A function checked with no stand-in (`--fn-check`) is its own
+    // replacement: a stand-in in name, so its callers take it as one.
+    let synthetic: BTreeSet<u32> = holes
+        .fn_check
+        .keys()
+        .copied()
+        .filter(|k| !holes.standins.contains_key(k))
+        .collect();
+    let holes = &{
+        let mut h = holes.clone();
+        for &k in &synthetic {
+            h.standins
+                .insert(k, (String::new(), "the lift itself (--fn-check)".into()));
+        }
+        h
+    };
     // Every function, by key, over all contexts.
     let mut all: BTreeSet<u32> = BTreeSet::new();
     for c in &codes {
@@ -922,6 +1003,13 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         }
     }
     let shapes = shapes_of(&codes, &all, holes);
+    // A checked function's shape as if it weren't replaced: what its
+    // callers would read, which the check compares (`--fn-check`).
+    let check_shapes = (!holes.fn_check.is_empty()).then(|| {
+        let mut h = holes.clone();
+        h.standins.retain(|k, _| !holes.fn_check.contains_key(k));
+        shapes_of(&codes, &all, &h).shaped
+    });
     let args = call_fn_args(&sets, &codes, &shapes.shaped);
     // The functions that take r4-r11 from their callers, over all
     // contexts; a stand-in that calls one by its plain entry would run
@@ -942,7 +1030,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     for c in &codes {
         for f in &c.funcs {
             fns.push(f.entry);
-            if let Some((code, why)) = holes.standins.get(&f.entry) {
+            let check = holes.fn_check.get(&f.entry);
+            if let Some((code, why)) = holes.standins.get(&f.entry)
+                && check.is_none()
+            {
                 let mut t = format!("// f_{:08x}: a stand-in: {why}\n", f.entry);
                 t.push_str(code);
                 if !t.ends_with('\n') {
@@ -956,37 +1047,60 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             if shapes.callee_hole.contains_key(&f.entry) {
                 soft.callee_holes += 1;
             }
-            let mut p = FnPrinter {
-                ctx: &c.ctx,
-                f,
-                all: &all,
-                sums: &c.sums,
-                takers: &takers,
-                shapes: &shapes.shaped,
-                me: shapes.shaped.get(&f.entry).copied(),
-                holes,
-                found: Vec::new(),
-                soft: &mut soft,
-                labels: f.blocks.keys().enumerate().map(|(i, &k)| (k, i)).collect(),
-                frame: c.frames.get(&f.entry),
-                locals: c
-                    .frames
-                    .get(&f.entry)
-                    .map(Frame::locals)
-                    .unwrap_or_default(),
-                cur: f.entry,
-                globals: &globals,
-                args: &args,
-                heap: &heap,
-                psr: psr_fns.place(f.entry),
+            let print = |holes: &Holes, soft: &mut Soft| {
+                let mut p = FnPrinter {
+                    ctx: &c.ctx,
+                    f,
+                    all: &all,
+                    sums: &c.sums,
+                    takers: &takers,
+                    shapes: &shapes.shaped,
+                    me: shapes
+                        .shaped
+                        .get(&f.entry)
+                        .copied()
+                        .filter(|_| check.is_none()),
+                    holes,
+                    found: Vec::new(),
+                    soft,
+                    labels: f.blocks.keys().enumerate().map(|(i, &k)| (k, i)).collect(),
+                    frame: c.frames.get(&f.entry),
+                    locals: c
+                        .frames
+                        .get(&f.entry)
+                        .map(Frame::locals)
+                        .unwrap_or_default(),
+                    cur: f.entry,
+                    globals: &globals,
+                    args: &args,
+                    heap: &heap,
+                    psr: psr_fns.place(f.entry),
+                };
+                let text = p.print(c.sums.get(f.entry));
+                (text, p.found)
             };
-            let s = c.sums.get(f.entry);
-            let text = p.print(s);
-            if p.found.is_empty() {
+            let (text, found) = match check {
+                None => print(holes, &mut soft),
+                Some(chk) => {
+                    let (t, found) = fn_check_texts(
+                        f.entry,
+                        chk,
+                        holes,
+                        &synthetic,
+                        check_shapes.as_ref().and_then(|s| s.get(&f.entry)).copied(),
+                        c.sums.get(f.entry),
+                        &print,
+                        &mut soft,
+                    );
+                    soft.standins += 1;
+                    (t, found)
+                }
+            };
+            if found.is_empty() {
                 out.push((f.entry, text));
             } else {
                 let mut t = String::new();
-                for h in &p.found {
+                for h in &found {
                     writeln!(
                         t,
                         "compile_error!(\"{}\");",
@@ -995,7 +1109,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     .unwrap();
                 }
                 out.push((f.entry, t));
-                hard.extend(p.found);
+                hard.extend(found);
             }
         }
     }
@@ -1111,6 +1225,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             pre = pre.replace(&set, &format!("pub const {flag}: bool = false;"));
         }
     }
+    if !holes.fn_check.is_empty() {
+        pre = fn_check_main(&pre, holes.fn_check.keys());
+    }
     main.push_str(&pre);
     main.push('\n');
     let ram_struct = globals.ram_struct(holes.layout);
@@ -1138,7 +1255,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             )
         });
     let plains: Vec<String> = fns.iter().map(|&k| plain(&shapes.shaped, k)).collect();
-    let files = modules::split(main, table, &plains, &out, holes.copies);
+    let mut files = modules::split(main, table, &plains, &out, holes.copies);
+    if !holes.fn_check.is_empty() {
+        files
+            .files
+            .push(("fn_check.rs".into(), FN_CHECK_DRIVER.into()));
+    }
     let blocks: usize = codes
         .iter()
         .flat_map(|c| &c.funcs)
@@ -1743,6 +1865,180 @@ fn fn_ins<'a>(
         }
     }
     (ins, pools, call_fn)
+}
+
+/// The prelude of a checked lift (`--fn-check`): its RAM accesses noted
+/// (the prelude's `FN_CHECK`), the driver's module, the checks' list, and
+/// `main` the driver's, over the program's own (`play`).
+fn fn_check_main<'a>(pre: &str, keys: impl Iterator<Item = &'a u32>) -> String {
+    let on = "pub const FN_CHECK: bool = false;";
+    let main = "fn main() -> std::process::ExitCode {\n    native_host::main(";
+    assert!(
+        pre.contains(on) && pre.contains(main),
+        "the prelude's FN_CHECK and main"
+    );
+    let mut pre = pre.replace(on, "pub const FN_CHECK: bool = true;").replace(
+        main,
+        "fn play() -> std::process::ExitCode {\n    native_host::main(",
+    );
+    pre.push_str("\n// The per-function check (gbaa-lift --fn-check): the functions it runs.\nmod fn_check;\npub static FN_CHECKS: &[&fn_check::Spec] = &[");
+    for k in keys {
+        write!(pre, "&CHECK_{k:08x}, ").unwrap();
+    }
+    pre.push_str("];\n\nfn main() -> std::process::ExitCode {\n    fn_check::main(play)\n}\n");
+    pre
+}
+
+/// `x_<key>` as a whole word, and `pub fn f_<key>(`, prefixed with `p`: a
+/// second copy of a function's text beside the first.
+fn prefix_fn(text: &str, k: u32, p: &str) -> String {
+    let x = format!("x_{k:08x}");
+    let word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+    let b = text.as_bytes();
+    let mut out = String::with_capacity(text.len() + 64);
+    let mut last = 0;
+    for (i, _) in text.match_indices(&x) {
+        if (i == 0 || !word(b[i - 1])) && b.get(i + x.len()).is_none_or(|&c| !word(c)) {
+            out.push_str(&text[last..i]);
+            out.push_str(p);
+            last = i;
+        }
+    }
+    out.push_str(&text[last..]);
+    out.replace(
+        &format!("pub fn f_{k:08x}("),
+        &format!("pub fn {p}f_{k:08x}("),
+    )
+}
+
+/// A function's lift printed with the holes given: its text and holes.
+type PrintFn<'a> = dyn Fn(&Holes, &mut Soft) -> (String, Vec<Hole>) + 'a;
+
+/// A function under the per-function check (`--fn-check`, [`Holes::fn_check`]):
+/// the lift as the reference (`ref_f_<key>`, no planted store), the
+/// replacement (`new_f_<key>`: the stand-in, or for a key with none, the
+/// lift again with any `--plant`), its [`FnCheck`] as the driver's spec,
+/// and `f_<key>` the driver's wrapper. `print` prints the function's lift
+/// with the holes given.
+#[allow(clippy::too_many_arguments)]
+fn fn_check_texts(
+    k: u32,
+    chk: &FnCheck,
+    holes: &Holes,
+    synthetic: &BTreeSet<u32>,
+    shape: Option<Shape>,
+    sum: Option<&Summary>,
+    print: &PrintFn,
+    soft: &mut Soft,
+) -> (String, Vec<Hole>) {
+    let clean = Holes {
+        plant: None,
+        plant_slot: None,
+        ..holes.clone()
+    };
+    let (rt, mut found) = print(&clean, soft);
+    let mut t = format!(
+        "// f_{k:08x}: under the per-function check (gbaa-lift --fn-check).\n// The reference: the lift.\n"
+    );
+    t.push_str(&prefix_fn(&rt, k, "ref_"));
+    let replacement = if synthetic.contains(&k) {
+        let (nt, nf) = print(holes, soft);
+        found.extend(nf);
+        t.push_str("// The replacement: the lift again (with --plant's store, if one is in it).\n");
+        t.push_str(&prefix_fn(&nt, k, "new_"));
+        if holes.plant.is_some() || holes.plant_slot.is_some() {
+            "the lift with --plant's store (a planted wrong replacement)".to_string()
+        } else {
+            "the lift itself".to_string()
+        }
+    } else {
+        let (code, why) = &holes.standins[&k];
+        writeln!(t, "// The replacement: the stand-in: {why}").unwrap();
+        t.push_str(&code.replace(
+            &format!("pub fn f_{k:08x}("),
+            &format!("pub fn new_f_{k:08x}("),
+        ));
+        if !t.ends_with('\n') {
+            t.push('\n');
+        }
+        "the holes file's stand-in".to_string()
+    };
+    let regs = |m: u8| -> String {
+        let v: Vec<String> = (0..4)
+            .filter(|r| m & 1 << r != 0)
+            .map(|r| format!("r{r}"))
+            .collect();
+        if v.is_empty() {
+            "none".into()
+        } else {
+            v.join(",")
+        }
+    };
+    // What callers read: the shape's results, as if not replaced; a
+    // function with no shape (a summary hole) all four registers.
+    let (params, results, sig) = match (shape, sum) {
+        (Some(sh), _) => (
+            sh.params,
+            sh.results,
+            format!(
+                "parameters {}; compared on return: {} (its shape: what its callers read)",
+                regs(sh.params),
+                regs(sh.results)
+            ),
+        ),
+        (None, Some(s)) => (
+            s.params & 0xF,
+            0xF,
+            format!(
+                "parameters {} (its summary, which has a hole); compared on return: r0-r3",
+                regs(s.params & 0xF)
+            ),
+        ),
+        (None, None) => (
+            0xF,
+            0xF,
+            "no summary: r0-r3 in, r0-r3 compared on return".to_string(),
+        ),
+    };
+    // The typed globals the lift reads by field (not through `ld*`, so
+    // not in the run's notes): inputs the variants change too.
+    let mut fields: Vec<&str> = Vec::new();
+    for (i, _) in rt.match_indices("g.ram.") {
+        let rest = &rt[i + 6..];
+        let n = rest
+            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+            .unwrap_or(rest.len());
+        if n > 0 && !fields.contains(&&rest[..n]) {
+            fields.push(&rest[..n]);
+        }
+    }
+    let globals: Vec<String> = fields
+        .iter()
+        .map(|f| format!("(std::mem::offset_of!(Ram, {f}), |r: &Ram| size_of_val(&r.{f}))"))
+        .collect();
+    writeln!(
+        t,
+        "pub static CHECK_{k:08x}: fn_check::Spec = fn_check::Spec {{ key: {k:#010x}, name: \"f_{k:08x}\", params: {params:#x}, results: {results:#x}, sig: {sig:?}, replacement: {replacement:?}, globals: &[{}], seed: {}, runs: {}, digest: {} }};",
+        globals.join(", "),
+        chk.seed,
+        chk.runs,
+        chk.digest.map_or("None".into(), |d| format!("Some({d:#018x})"))
+    )
+    .unwrap();
+    writeln!(
+        t,
+        "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ fn_check::call(g, sp, a, &CHECK_{k:08x}, ref_f_{k:08x}, new_f_{k:08x}) }}"
+    )
+    .unwrap();
+    // The wrapper already has the adapter's shape; a stand-in elsewhere
+    // that calls `a_KEY` by name (Metroid's IWRAM copy of a ROM function)
+    // reaches the check through it.
+    writeln!(
+        t,
+        "pub fn a_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ f_{k:08x}(g, sp, a) }}\n"
+    )
+    .unwrap();
+    (t, found)
 }
 
 /// `holes` with a stand-in for each library routine the code has
@@ -3596,6 +3892,31 @@ mod tests {
         assert_eq!(p.place(0x0300_0c7c), Some(PsrPlace::Wrapper));
         // A critical section's elsewhere stays a hole.
         assert_eq!(p.place(0x0800_2728), None);
+    }
+
+    #[test]
+    fn holes_file_parses_a_standins_check() {
+        let t = "[[standin]]\nentry = 0x0800017d\nwhy = \"w\"\ncode = \"\"\ncheck = { seed = 7, digest = \"00ff\" }\n";
+        let h = Holes::parse(t).unwrap();
+        assert_eq!(
+            h.checks[&0x0800_017d],
+            FnCheck {
+                seed: 7,
+                runs: 2000,
+                digest: Some(0xFF)
+            }
+        );
+        assert!(Holes::parse(&t.replace("\"00ff\"", "\"zz\"")).is_err());
+        assert!(Holes::parse(&t.replace("seed = 7", "seed = \"7\"")).is_err());
+    }
+
+    #[test]
+    fn prefix_fn_renames_one_functions_entries() {
+        let t = "pub fn f_08000100(g: &mut Game) { x_08000100(g) }\npub fn x_08000100(g: &mut Game) { x_08000100(g); ax_08000100(g); x_081000100; f_08000100(g) }\n";
+        assert_eq!(
+            prefix_fn(t, 0x0800_0100, "ref_"),
+            "pub fn ref_f_08000100(g: &mut Game) { ref_x_08000100(g) }\npub fn ref_x_08000100(g: &mut Game) { ref_x_08000100(g); ax_08000100(g); x_081000100; f_08000100(g) }\n"
+        );
     }
 
     #[test]
