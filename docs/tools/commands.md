@@ -1445,15 +1445,19 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   (2026-11-01). About 30 s, most of it discovery and summaries; capped at
   3 GB. Not heavy (no generated crate).
 - `just fn-check ROM [--name NAME] --fn-check KEY... [--replace FILE]
-  [--seed N] [--runs N] [--plant AT] [--frames N]` (native/fn-check-any;
+  [--seed N] [--runs N] [--plant AT [--plant-reference]] [--interp-every N]
+  [--frames N]` (native/fn-check-any, native/fn-check-interp;
   `docs/native-port-design.md`, "The per-function check"): a function's
   replacement (its stand-in, from the holes file or `--replace FILE`; with
   none, the lift, which `--plant AT` makes a planted wrong one) against
   its lift, both native, from the program's own calls and seeded variants
   of them, headless with no input, until each budget is spent. Prints per
   function its runs, budget, time, seed and digest, and the first
-  differences, each naming the byte. Fails on a difference, or a budget
-  not spent before the program stops or `--frames` (18000) run out.
+  differences, each naming the byte; and how many runs the interpreter,
+  run untimed every Nth (8), also checked against the lift and whether
+  it agreed (`--plant-reference`: the planted store in the lift too, which
+  only it catches). Fails on a difference, or a budget not spent before
+  the program stops or `--frames` (18000) run out.
   Replacements: `holes/fn-check/` (our agb programs),
   `mods/<game>/fn-check.toml` (private). Heavy: builds a generated crate.
 - `just first-frame ROM [FRAMES] [TIMING]` (#32, milestone 2's check):

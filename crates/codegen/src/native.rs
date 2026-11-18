@@ -251,6 +251,14 @@ pub struct Holes {
     /// of the instruction at this address stores its value plus one, which
     /// the native check must catch.
     pub plant: Option<u32>,
+    /// `--plant`'s store in a checked function's reference too
+    /// (`gbaa-lift --plant-reference`): a planted wrong lift, which only
+    /// the interpreter, the check's second reference, can catch.
+    pub plant_reference: bool,
+    /// The per-function check runs the interpreter as a second reference
+    /// every this many compared runs (`gbaa-lift --interp-every N`; 0,
+    /// never; unit `native/fn-check-interp`).
+    pub fn_check_interp: u32,
     /// Stage A's old fall into another function (`gbaa-lift
     /// --fall-as-tail-call`): a tail call through its plain entry, which
     /// starts it with r4-r12 and the flags zeroed. The fallthrough check's
@@ -1226,7 +1234,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         }
     }
     if !holes.fn_check.is_empty() {
-        pre = fn_check_main(&pre, holes.fn_check.keys());
+        pre = fn_check_main(&pre, holes.fn_check.keys(), holes.fn_check_interp);
     }
     main.push_str(&pre);
     main.push('\n');
@@ -1870,7 +1878,7 @@ fn fn_ins<'a>(
 /// The prelude of a checked lift (`--fn-check`): its RAM accesses noted
 /// (the prelude's `FN_CHECK`), the driver's module, the checks' list, and
 /// `main` the driver's, over the program's own (`play`).
-fn fn_check_main<'a>(pre: &str, keys: impl Iterator<Item = &'a u32>) -> String {
+fn fn_check_main<'a>(pre: &str, keys: impl Iterator<Item = &'a u32>, interp: u32) -> String {
     let on = "pub const FN_CHECK: bool = false;";
     let main = "fn main() -> std::process::ExitCode {\n    native_host::main(";
     assert!(
@@ -1885,7 +1893,11 @@ fn fn_check_main<'a>(pre: &str, keys: impl Iterator<Item = &'a u32>) -> String {
     for k in keys {
         write!(pre, "&CHECK_{k:08x}, ").unwrap();
     }
-    pre.push_str("];\n\nfn main() -> std::process::ExitCode {\n    fn_check::main(play)\n}\n");
+    write!(
+        pre,
+        "];\n/// The interpreter checks every this many compared runs (0: never).\npub const FN_CHECK_INTERP: u32 = {interp};\n\nfn main() -> std::process::ExitCode {{\n    fn_check::main(play)\n}}\n"
+    )
+    .unwrap();
     pre
 }
 
@@ -1915,7 +1927,8 @@ fn prefix_fn(text: &str, k: u32, p: &str) -> String {
 type PrintFn<'a> = dyn Fn(&Holes, &mut Soft) -> (String, Vec<Hole>) + 'a;
 
 /// A function under the per-function check (`--fn-check`, [`Holes::fn_check`]):
-/// the lift as the reference (`ref_f_<key>`, no planted store), the
+/// the lift as the reference (`ref_f_<key>`, no planted store but with
+/// `--plant-reference`), the
 /// replacement (`new_f_<key>`: the stand-in, or for a key with none, the
 /// lift again with any `--plant`), its [`FnCheck`] as the driver's spec,
 /// and `f_<key>` the driver's wrapper. `print` prints the function's lift
@@ -1931,10 +1944,15 @@ fn fn_check_texts(
     print: &PrintFn,
     soft: &mut Soft,
 ) -> (String, Vec<Hole>) {
-    let clean = Holes {
-        plant: None,
-        plant_slot: None,
-        ..holes.clone()
+    // The reference has no planted store, unless --plant-reference.
+    let clean = if holes.plant_reference {
+        holes.clone()
+    } else {
+        Holes {
+            plant: None,
+            plant_slot: None,
+            ..holes.clone()
+        }
     };
     let (rt, mut found) = print(&clean, soft);
     let mut t = format!(
@@ -1946,7 +1964,9 @@ fn fn_check_texts(
         found.extend(nf);
         t.push_str("// The replacement: the lift again (with --plant's store, if one is in it).\n");
         t.push_str(&prefix_fn(&nt, k, "new_"));
-        if holes.plant.is_some() || holes.plant_slot.is_some() {
+        if holes.plant_reference && (holes.plant.is_some() || holes.plant_slot.is_some()) {
+            "the lift with --plant's store, as the reference is (--plant-reference)".to_string()
+        } else if holes.plant.is_some() || holes.plant_slot.is_some() {
             "the lift with --plant's store (a planted wrong replacement)".to_string()
         } else {
             "the lift itself".to_string()
