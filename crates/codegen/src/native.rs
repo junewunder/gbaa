@@ -3179,9 +3179,6 @@ impl FnPrinter<'_, '_> {
     }
 }
 
-/// How an access printed typed is counted: a constant address's field
-/// (`Global`), a computed one's (`Object`), or a heap object's through
-/// its `Ref<T>` (`Ref`).
 /// The deepest a structured function's printed Rust may nest
 /// ([`plan::Depth::indent`]); a deeper one stays a `loop { match b }`.
 /// Deeper than the mod view's ([`crate::lower::MAX_INDENT`], whose tokens
@@ -3220,6 +3217,9 @@ fn mark_regions(seq: &[plan::Node], in_region: &mut [bool]) {
     }
 }
 
+/// How an access printed typed is counted: a constant address's field
+/// (`Global`), a computed one's (`Object`), or a heap object's through
+/// its `Ref<T>` (`Ref`).
 fn typed_as(field: &Option<Place>, obj: &Option<Obj>, r: bool) -> Option<Where> {
     match (field, obj, r) {
         (Some(_), _, _) => Some(Where::Global),
