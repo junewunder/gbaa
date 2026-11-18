@@ -56,6 +56,11 @@ at = 330
 name = "arm1"
 frame = 50
 hash = "e9da3520d46ef155"
+# Frame 37 (2026-11-18): the recompiled PNG differs from the interpreter's
+# in one pixel, (126, 5), which the recompiled build (and mGBA 0.10.5, and
+# the block-timed interpreter, --interp-blocks) already draws white.
+block_timed = [37]
+block_timed_why = "the ARM page's text goes into VRAM as line 5 is drawn, and the store of pixel (126, 5) lands in a block whose cycles tick after it"
 
 [[checkpoint]]
 name = "arm2"
@@ -91,3 +96,8 @@ hash = "00ef7b773f87ce88"
 name = "thumb3"
 frame = 350
 hash = "bef412d72bfe8c11"
+# 2026-11-18: at frame 350 the interpreter ends in the wait for V-blank's
+# second poll (0x08003f86, DISPSTAT read on line 159), the recompiled build
+# and the block-timed interpreter (--interp-blocks) one poll later, back in
+# its caller (0x08003ab6). Every frame's hash but block-timed 37 is the same.
+regs_block_timed_why = "the last frame ends inside a DISPSTAT poll loop, which compiled code leaves one block later, at the call's return"

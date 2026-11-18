@@ -423,11 +423,51 @@ fn check(name: &str, r: &Route) -> Result<String, Stop> {
         read(&out.join("interp.txt"))?,
         read(&out.join("recompiled.txt"))?,
     );
-    if ours != theirs {
-        return Err(Fail(format!(
-            "at frame {last}, the recompiled build's registers differ from the interpreter's:\n\
-             interpreter:\n{ours}recompiled:\n{theirs}"
-        )));
+    // The last checkpoint may excuse the registers for block timing: the
+    // block-timed interpreter must then end where the recompiled build does.
+    let regs_why = r
+        .checkpoints
+        .last()
+        .and_then(|c| c.regs_block_timed_why.as_ref().map(|_| c));
+    match regs_why {
+        Some(c) if ours == theirs => {
+            return Err(Fail(format!(
+                "{}: the recompiled build's registers are the interpreter's now: drop \
+                 regs_block_timed_why",
+                at_checkpoint(c)
+            )));
+        }
+        Some(c) => {
+            runner(
+                &out,
+                "blocks",
+                &bin,
+                &args,
+                &[
+                    "--headless",
+                    "--regs",
+                    "--timing",
+                    timing(),
+                    "--interp-blocks",
+                ],
+            )?;
+            let blocks = read(&out.join("blocks.txt"))?;
+            if blocks != theirs {
+                return Err(Fail(format!(
+                    "{}: regs_block_timed_why is set, but the block-timed interpreter's \
+                     registers differ from the recompiled build's:\n\
+                     block-timed:\n{blocks}recompiled:\n{theirs}",
+                    at_checkpoint(c)
+                )));
+            }
+        }
+        None if ours != theirs => {
+            return Err(Fail(format!(
+                "at frame {last}, the recompiled build's registers differ from the interpreter's:\n\
+                 interpreter:\n{ours}recompiled:\n{theirs}"
+            )));
+        }
+        None => {}
     }
     let log = read(&out.join("recompiled.log"))?;
     let mut shares = Vec::new();
@@ -468,6 +508,9 @@ fn check(name: &str, r: &Route) -> Result<String, Stop> {
     if !excused.is_empty() {
         let frames: Vec<String> = excused.iter().map(u64::to_string).collect();
         write!(said, " but block-timed frame {}", frames.join(", ")).unwrap();
+    }
+    if regs_why.is_some() {
+        said.push_str(", block-timed registers");
     }
     if !shares.is_empty() {
         write!(said, "; compiled share {}", shares.join(", ")).unwrap();

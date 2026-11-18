@@ -91,3 +91,8 @@ hash = "00ef7b773f87ce88"
 name = "thumb3"
 frame = 350
 hash = "bef412d72bfe8c11"
+# 2026-11-18: at frame 350 the interpreter ends in the wait for V-blank's
+# second poll (0x080007ae, DISPSTAT read on line 159), the recompiled build
+# and the block-timed interpreter (--interp-blocks) one poll later, back in
+# its caller (0x080002de). Every frame's hash is the same.
+regs_block_timed_why = "the last frame ends inside a DISPSTAT poll loop, which compiled code leaves one block later, at the call's return"
