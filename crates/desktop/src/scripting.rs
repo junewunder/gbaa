@@ -41,6 +41,11 @@ pub fn host(
             let mut fresh = Machine::new(m.bus.rom, platform);
             fresh.set_timing(m.timing);
             fresh.spin_list = m.spin_list;
+            // The ROM as loaded and patched, so its CRC and stale
+            // functions too.
+            fresh.bus.keep_rom_crc(m.bus.rom_crc());
+            fresh.bus.stale = m.bus.stale;
+            fresh.bus.asset_overrides = m.bus.asset_overrides;
             std::mem::swap(&mut fresh.bus.save, &mut m.bus.save);
             *m = fresh;
         }),
@@ -55,6 +60,24 @@ pub fn host(
             slots::load(m, &slots::path(&load_from, slot(n)?))?;
             // The cartridge save is as the state had it: write it out.
             m.bus.save.dirty = true;
+            Ok(())
+        }),
+        // A patched function runs interpreted, as one a changed ROM's
+        // bytes made stale ([`crate::changed`]). States keep the loaded
+        // ROM's CRC, so they load with the script's patches or without.
+        patch_rom: Box::new(move |m: &mut DesktopMachine, writes: &[(u32, u8)]| {
+            let rom = script::patched(m.bus.rom, writes);
+            let stale = match code {
+                Some(c) => crate::changed::stale(rom, c)?,
+                None => None,
+            };
+            let crc = m.bus.rom_crc();
+            m.bus.rom = rom;
+            m.bus.keep_rom_crc(crc);
+            m.bus.stale = stale.map_or(&[], |s| s.keys);
+            if let Some(s) = stale {
+                eprintln!("gbaa-desktop: a script patched the ROM: {}", s.report());
+            }
             Ok(())
         }),
     };
