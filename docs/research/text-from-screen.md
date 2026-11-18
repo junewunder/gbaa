@@ -39,7 +39,8 @@ a code counts as right where the guess also has a code there.
 
 ## Method
 
-Each step is a subcommand; Metroid's arguments in brackets.
+Each step is a subcommand of `gbaa-text-guess` (`cargo build --release
+-p text-guess`; its usage line lists them).
 
 1. **Screens with text.** `gbaa-desktop --headless --dump-at … --dump-dir`
    over the attract loop, then with a short input script (`start@2000`,
