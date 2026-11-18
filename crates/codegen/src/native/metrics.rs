@@ -210,6 +210,10 @@ pub const UNBARRED: &[&str] = &[
     "store_ram_object",
     "ref_accesses",
     "ref_types",
+    "functions_structured",
+    "functions_structured_pct",
+    "blocks_structured",
+    "blocks_structured_pct",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each
