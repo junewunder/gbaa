@@ -62,7 +62,9 @@
 //! - Registers and NZCV are Rust locals; each block's IR values are `let`s.
 //!   A write of one nothing reads after it is left out ([`live`], unit
 //!   `native/lift-dead-writes`: a return reads its results, a call its
-//!   parameters, a fall into another function everything).
+//!   parameters, a fall into another function everything). A pure value
+//!   used once, or a constant, prints inside its use where nothing
+//!   between writes what it reads (unit `native/lift-inline-temps`).
 //!   r4-r11 outlive a call because callees keep them, or change only
 //!   what no caller reads (the summaries' `keeps` and `changes`; a
 //!   function that breaks that, `analysis::holes::SUMMARY_HARD`, is a
@@ -281,6 +283,10 @@ pub struct Holes {
     /// write of a register or flag printed, read or not, those nothing
     /// reads counted in `dead_flag_writes` (`native/lift-dead-writes`).
     pub keep_dead_writes: bool,
+    /// Stage A's old temporaries (`gbaa-lift --keep-temps`): every IR
+    /// value its own `let`, constants included, none printed inside its
+    /// use (`native/lift-inline-temps`).
+    pub keep_temps: bool,
     /// Stage A's old IRQs (`gbaa-lift --irq-at-waits`): `Game::cpsr` as
     /// bookkeeping only, so an IRQ due at a wait inside a critical section
     /// runs there, where the hardware holds it until the I bit clears. The
@@ -1091,6 +1097,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     labels: f.blocks.keys().enumerate().map(|(i, &k)| (k, i)).collect(),
                     in_region: Vec::new(),
                     rest_from: 0,
+                    unguard: Vec::new(),
                     region: None,
                     outs: None,
                     edges: None,
@@ -1107,6 +1114,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     psr: psr_fns.place(f.entry),
                     lr_ret: lr_ret.contains(&f.entry),
                     dead: BTreeMap::new(),
+                    inl: Vec::new(),
                 };
                 let text = p.print(c.sums.get(f.entry));
                 (text, p.found)
@@ -1334,6 +1342,18 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         }
     )
     .unwrap();
+    writeln!(
+        report,
+        "value lets printed: {}, values printed inside their use: {}{}",
+        soft.value_lets,
+        soft.inlined,
+        if holes.keep_temps {
+            " (--keep-temps: every value its own let)"
+        } else {
+            ""
+        }
+    )
+    .unwrap();
     if holes.irq_at_waits {
         writeln!(
             report,
@@ -1547,6 +1567,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // Flag writes printed that nothing reads (native/lift-dead-writes):
     // none, but with --keep-dead-writes.
     m.push("dead_flag_writes", soft.dead_flag_writes);
+    // The `let`s of IR values printed (native/lift-inline-temps): a pure
+    // value used once, or a constant, prints inside its use instead.
+    m.push("value_lets", soft.value_lets);
     m.push_accesses(&soft.access);
     m.push("ram_globals", n(globals.0.len()));
     m.push("pointer_unexplained", soft.unexplained);
@@ -2307,6 +2330,10 @@ struct Soft {
     compare_trees: usize,
     compare_tree_blocks: usize,
     compare_trees_left: usize,
+    /// The `let`s of IR values printed (`value_lets`), and the values
+    /// printed inside their use instead ([`FnPrinter::inline`]).
+    value_lets: u64,
+    inlined: u64,
 }
 
 struct FnPrinter<'a, 'b> {
@@ -2333,6 +2360,10 @@ struct FnPrinter<'a, 'b> {
     /// The next block printed starts at this inst: the rest of a block
     /// whose compare run a `match` arm printed ([`FnPrinter::switch_bodies`]).
     rest_from: usize,
+    /// The insts whose guards print nothing while a block's uses are
+    /// counted: a compare tree's tests ([`FnPrinter::operands`]).
+    /// Empty but then.
+    unguard: Vec<bool>,
     region: Option<usize>,
     outs: Option<Vec<plan::Out>>,
     edges: Option<Vec<plan::Edge>>,
@@ -2358,6 +2389,9 @@ struct FnPrinter<'a, 'b> {
     /// The writes of registers and flags nothing printed reads, by block
     /// ([`FnPrinter::dead_writes`]): left out.
     dead: BTreeMap<u32, Vec<bool>>,
+    /// The current block's values printed inside their use, by value:
+    /// their expressions ([`FnPrinter::inline`]; `None`, a `let`).
+    inl: Vec<Option<String>>,
 }
 
 /// Where an `msr` or `mrs` the lifter prints is: the hole report's
@@ -3024,13 +3058,26 @@ impl FnPrinter<'_, '_> {
                 None
             }
         };
-        let unguard: Vec<bool> = (0..insts.len())
+        // The tests' guards print nothing; the value compared prints as a
+        // `let` the `match` reads.
+        self.unguard = (0..insts.len())
             .map(|i| {
                 tree.as_ref()
-                    .is_some_and(|(t, _)| t.run.exit(i) && i != t.run.at())
+                    .is_some_and(|(t, _)| t.run.tests.iter().any(|&(j, _)| j == i))
             })
             .collect();
-        let used = self.used(insts, &typed, &refs, &skip, &unguard);
+        let scrutinee = tree.as_ref().map(|(t, _)| t.run.value);
+        let uses = self.uses(insts, &typed, &refs, &skip, &dead, scrutinee);
+        let used: Vec<bool> = uses.iter().map(|&n| n > 0).collect();
+        // The values printed inside their use, not as `let`s (unit
+        // `native/lift-inline-temps`); the block's own, a nested block's
+        // (an inlined edge's) set aside while that prints.
+        let mut inline = self.inline(insts, &typed, &refs, &skip, &dead, &uses);
+        if let Some(x) = scrutinee {
+            inline[x.index()] = false;
+        }
+        self.unguard = Vec::new();
+        let outer = std::mem::replace(&mut self.inl, vec![None; insts.len()]);
         for (i, inst) in insts.iter().enumerate() {
             let id = ValueId(i as u32);
             if i < from {
@@ -3040,6 +3087,12 @@ impl FnPrinter<'_, '_> {
                 continue;
             }
             if dead[i] || skip[i] || (pure(&inst.op) && !used[i]) {
+                continue;
+            }
+            if inline[i] {
+                let e = expr(&inst.op, &|x| self.val(x), &|x| self.whole(x));
+                self.inl[i] = Some(e);
+                self.soft.inlined += 1;
                 continue;
             }
             if let Some((t, arms)) = &tree {
@@ -3076,7 +3129,7 @@ impl FnPrinter<'_, '_> {
                 self.soft.flag_writes += 1;
                 self.soft.dead_flag_writes += u64::from(unread[i]);
             }
-            let guard = inst.guard.map(v);
+            let guard = inst.guard.map(|g| self.whole(g));
             let stmt = |s: &mut String, body: String| match &guard {
                 Some(g) => writeln!(s, "{ind}if {g} {{ {body} }}").unwrap(),
                 None => writeln!(s, "{ind}{body}").unwrap(),
@@ -3084,10 +3137,16 @@ impl FnPrinter<'_, '_> {
             match inst.op {
                 Op::Insn(a) => at = a,
                 Op::Timing(_) | Op::YieldFlag(..) => {}
-                Op::SetReg(r, x) => stmt(&mut s, format!("r{} = {};", r.index(), v(x))),
-                Op::SetFlag(fl, x) => stmt(&mut s, format!("{} = {};", flag(fl), v(x))),
-                Op::GetReg(r) => writeln!(s, "{ind}let {}: u32 = r{};", v(id), r.index()).unwrap(),
-                Op::GetFlag(fl) => writeln!(s, "{ind}let {}: bool = {};", v(id), flag(fl)).unwrap(),
+                Op::SetReg(r, x) => stmt(&mut s, format!("r{} = {};", r.index(), self.whole(x))),
+                Op::SetFlag(fl, x) => stmt(&mut s, format!("{} = {};", flag(fl), self.whole(x))),
+                Op::GetReg(r) => {
+                    self.soft.value_lets += 1;
+                    writeln!(s, "{ind}let {}: u32 = r{};", v(id), r.index()).unwrap()
+                }
+                Op::GetFlag(fl) => {
+                    self.soft.value_lets += 1;
+                    writeln!(s, "{ind}let {}: bool = {};", v(id), flag(fl)).unwrap()
+                }
                 Op::GetUserReg(_) | Op::SetUserReg(..) => self.hole(
                     at,
                     HoleKind::Cpu,
@@ -3105,7 +3164,7 @@ impl FnPrinter<'_, '_> {
                 }
                 Op::GetSpsr => writeln!(s, "{ind}let {}: u32 = g.spsr;", v(id)).unwrap(),
                 Op::SetCpsr { v: x, mask } => {
-                    let x = v(x);
+                    let x = self.val(x);
                     let mut body = String::new();
                     if mask.contains(PsrMask::FLAGS) {
                         for (fl, bit) in Flag::ALL.into_iter().zip([31, 30, 29, 28]) {
@@ -3123,7 +3182,7 @@ impl FnPrinter<'_, '_> {
                     let m = mask.bits();
                     stmt(
                         &mut s,
-                        format!("g.spsr = g.spsr & !{m:#x} | {} & {m:#x};", v(x)),
+                        format!("g.spsr = g.spsr & !{m:#x} | {} & {m:#x};", self.val(x)),
                     );
                 }
                 Op::Load { width, addr } => {
@@ -3134,12 +3193,14 @@ impl FnPrinter<'_, '_> {
                     };
                     let mem = match (&typed[i], &objs[i], refs[i]) {
                         (Some(p), _, _) => globals::load(p, bytes(width)),
-                        (None, Some(o), _) => o.load(&format!("{}{m}", v(addr)), bytes(width)),
+                        (None, Some(o), _) => {
+                            o.load(&format!("{}{m}", self.val(addr)), bytes(width))
+                        }
                         (None, None, Some(r)) => match r.base {
-                            Some((b, c)) => self.heap.load(r.f, &v(b), r.f.off - c),
-                            None => self.heap.load(r.f, &v(addr), r.f.off),
+                            Some((b, c)) => self.heap.load(r.f, &self.val(b), r.f.off - c),
+                            None => self.heap.load(r.f, &self.val(addr), r.f.off),
                         },
-                        (None, None, None) => format!("{f}(g, {}{m})", v(addr)),
+                        (None, None, None) => format!("{f}(g, {}{m})", self.val(addr)),
                     };
                     let e = match self.local(i) {
                         Some((l, d, n)) => {
@@ -3165,6 +3226,7 @@ impl FnPrinter<'_, '_> {
                             mem
                         }
                     };
+                    self.soft.value_lets += 1;
                     match &guard {
                         Some(gv) => writeln!(
                             s,
@@ -3190,17 +3252,20 @@ impl FnPrinter<'_, '_> {
                     } else {
                         ""
                     };
-                    let val = format!("{}{plant}", v(value));
+                    // One term: a field's store casts it (`{val} as u16`).
+                    let val = format!("{}{plant}", self.val(value));
                     let mem = match (&typed[i], &objs[i], refs[i]) {
                         (Some(p), _, _) => globals::store(p, bytes(width), &val),
                         (None, Some(o), _) => {
-                            o.store(&format!("{}{m}", v(addr)), bytes(width), &val)
+                            o.store(&format!("{}{m}", self.val(addr)), bytes(width), &val)
                         }
                         (None, None, Some(r)) => match r.base {
-                            Some((b, c)) => self.heap.store(r.f, &v(b), r.f.off - c, &val),
-                            None => self.heap.store(r.f, &v(addr), r.f.off, &val),
+                            Some((b, c)) => self.heap.store(r.f, &self.val(b), r.f.off - c, &val),
+                            None => self.heap.store(r.f, &self.val(addr), r.f.off, &val),
                         },
-                        (None, None, None) => format!("{f}(g, {}{m}, {val});", v(addr)),
+                        (None, None, None) => {
+                            format!("{f}(g, {}{m}, {val});", self.val(addr))
+                        }
                     };
                     let body = match local {
                         Some((l, d, n)) => {
@@ -3266,7 +3331,8 @@ impl FnPrinter<'_, '_> {
                 }
                 ref op => {
                     let ty = if is_bit(op) { "bool" } else { "u32" };
-                    let e = expr(op);
+                    let e = expr(op, &|x| self.val(x), &|x| self.whole(x));
+                    self.soft.value_lets += 1;
                     writeln!(s, "{ind}let {}: {ty} = {e};", v(id)).unwrap();
                 }
             }
@@ -3277,6 +3343,7 @@ impl FnPrinter<'_, '_> {
         {
             writeln!(s, "{ind}    }}\n{ind}}}").unwrap();
         }
+        self.inl = outer;
         s
     }
 
@@ -3334,46 +3401,157 @@ impl FnPrinter<'_, '_> {
         }
     }
 
-    /// Which of a block's values something printed uses. An access
-    /// printed as a stack local's (unless `--shadow-locals` reads the
-    /// frame's bytes too) or a typed global's (`typed`) doesn't use its
-    /// address, so the arithmetic only the address needed isn't printed
-    /// ([`pure`]), and neither does a write `skip` leaves out (a dead
-    /// one's, [`FnPrinter::dead_writes`]).
-    fn used(
+    /// How many times something printed uses each of a block's values.
+    /// An access printed as a stack local's (unless `--shadow-locals`
+    /// reads the frame's bytes too) or a typed global's (`typed`) doesn't
+    /// use its address, so the arithmetic only the address needed isn't
+    /// printed ([`pure`]), and neither does a write `skip` leaves out (a
+    /// dead one's, [`FnPrinter::dead_writes`]) or an address `dead`
+    /// leaves out ([`dead_addresses`]).
+    fn uses(
         &self,
         insts: &[Inst],
         typed: &[Option<Place>],
         refs: &[Option<HeapRef>],
         skip: &[bool],
-        unguard: &[bool],
-    ) -> Vec<bool> {
-        let mut used = vec![false; insts.len()];
+        dead: &[bool],
+        scrutinee: Option<ValueId>,
+    ) -> Vec<u32> {
+        let mut uses = vec![0u32; insts.len()];
+        if let Some(x) = scrutinee {
+            uses[x.index()] = 1;
+        }
         for (i, inst) in insts.iter().enumerate().rev() {
-            if skip[i] || (pure(&inst.op) && !used[i]) {
+            if skip[i] || dead[i] || (pure(&inst.op) && uses[i] == 0) {
                 continue;
             }
-            let local = !self.holes.shadow_locals
-                && self
-                    .frame
-                    .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
-            let field = typed[i].is_some();
-            let base = refs[i].and_then(|r| r.base).map(|(b, _)| b);
-            let ops = match inst.op {
-                Op::Load { .. } if local || field => Vec::new(),
-                Op::Store { value, .. } if local || field => vec![value],
-                Op::Load { .. } if base.is_some() => base.into_iter().collect(),
-                Op::Store { value, .. } if base.is_some() => {
-                    base.into_iter().chain([value]).collect()
-                }
-                ref op => op.operands(),
-            };
-            let guard = inst.guard.filter(|_| !unguard[i]);
-            for x in ops.into_iter().chain(guard) {
-                used[x.index()] = true;
+            for x in self.operands(i, inst, typed, refs) {
+                uses[x.index()] += 1;
             }
         }
-        used
+        uses
+    }
+
+    /// The values inst `i`'s printed code uses, its guard last ([`uses`]):
+    /// a timing mark or a yielded flag uses none, printed as nothing (nor
+    /// its guard), and a compare tree's test none for its guard, which
+    /// the `match` replaces ([`FnPrinter::unguard`]).
+    ///
+    /// [`uses`]: FnPrinter::uses
+    fn operands(
+        &self,
+        i: usize,
+        inst: &Inst,
+        typed: &[Option<Place>],
+        refs: &[Option<HeapRef>],
+    ) -> Vec<ValueId> {
+        let local = !self.holes.shadow_locals
+            && self
+                .frame
+                .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
+        let field = typed[i].is_some();
+        let base = refs[i].and_then(|r| r.base).map(|(b, _)| b);
+        let ops = match inst.op {
+            // Printed as nothing.
+            Op::Timing(_) | Op::YieldFlag(..) => return Vec::new(),
+            Op::Load { .. } if local || field => Vec::new(),
+            Op::Store { value, .. } if local || field => vec![value],
+            Op::Load { .. } if base.is_some() => base.into_iter().collect(),
+            Op::Store { value, .. } if base.is_some() => base.into_iter().chain([value]).collect(),
+            ref op => op.operands(),
+        };
+        let guard = inst
+            .guard
+            .filter(|_| !self.unguard.get(i).copied().unwrap_or(false));
+        ops.into_iter().chain(guard).collect()
+    }
+
+    /// Which of a block's values print inside their one use rather than
+    /// as a `let` (unit `native/lift-inline-temps`): a pure value used
+    /// once, and a constant at every use, where nothing between the value
+    /// and its use writes a register or flag it reads (through the values
+    /// inlined into it too). Loads stay `let`s, and so do the operands of
+    /// an exit and of a PSR write, which print theirs more than once
+    /// (constants but). Inlined into a value that is itself inlined, a
+    /// value is read where that one's use is.
+    fn inline(
+        &self,
+        insts: &[Inst],
+        typed: &[Option<Place>],
+        refs: &[Option<HeapRef>],
+        skip: &[bool],
+        dead: &[bool],
+        uses: &[u32],
+    ) -> Vec<bool> {
+        let n = insts.len();
+        let mut inline = vec![false; n];
+        if self.holes.keep_temps {
+            return inline;
+        }
+        let konst = |op: &Op| matches!(op, Op::Const(_) | Op::Pool(_) | Op::Bit(_));
+        // What each pending value reads: r0-r15 as bits 0-15, the flags
+        // 16-19; `None` once it is printed as a `let` or used.
+        let mut reads: Vec<Option<u32>> = vec![None; n];
+        let flag_bit = |f: Flag| 1u32 << (16 + f as u32);
+        for (i, inst) in insts.iter().enumerate() {
+            let op = &inst.op;
+            if dead[i] || skip[i] || (pure(op) && uses[i] == 0) {
+                continue;
+            }
+            let mut r = match *op {
+                Op::GetReg(g) => 1 << g.index(),
+                Op::GetFlag(f) => flag_bit(f),
+                _ => 0,
+            };
+            let whole = !matches!(op, Op::Exit(_) | Op::SetCpsr { .. } | Op::SetSpsr { .. });
+            for x in self.operands(i, inst, typed, refs) {
+                let x = x.index();
+                if konst(&insts[x].op) {
+                    inline[x] = true;
+                } else if whole && let Some(rx) = reads[x].take() {
+                    inline[x] = true;
+                    r |= rx;
+                }
+            }
+            // A write ends every pending value that reads what it writes.
+            let w = match *op {
+                Op::SetReg(g, _) => 1 << g.index(),
+                Op::SetFlag(f, _) => flag_bit(f),
+                Op::SetCpsr { .. } | Op::SetUserReg(..) => u32::MAX,
+                _ => 0,
+            };
+            if w != 0 {
+                for p in reads.iter_mut() {
+                    if p.is_some_and(|p| p & w != 0) {
+                        *p = None;
+                    }
+                }
+            }
+            if pure(op) && uses[i] == 1 && !konst(op) {
+                reads[i] = Some(r);
+            }
+        }
+        inline
+    }
+
+    /// Value `x` where an operand goes: its name, or its inlined
+    /// expression ([`FnPrinter::inline`]), in parentheses unless it is
+    /// one term.
+    fn val(&self, x: ValueId) -> String {
+        match self.inl.get(x.index()) {
+            Some(Some(e)) if !one_term(e) => format!("({e})"),
+            Some(Some(e)) => e.clone(),
+            _ => v(x),
+        }
+    }
+
+    /// Value `x` where a whole expression goes (an assignment's right
+    /// side, a condition): its name or its inlined expression as it is.
+    fn whole(&self, x: ValueId) -> String {
+        match self.inl.get(x.index()) {
+            Some(Some(e)) => e.clone(),
+            _ => v(x),
+        }
     }
 
     /// The writes of block `k`'s insts nothing reads ([`FnPrinter::dead_writes`]),
@@ -3522,12 +3700,12 @@ impl FnPrinter<'_, '_> {
                     continue;
                 }
                 let body = match insts[d].op {
-                    Op::SetReg(r, x) => format!("r{} = {};", r.index(), v(x)),
-                    Op::SetFlag(fl, x) => format!("{} = {};", flag(fl), v(x)),
+                    Op::SetReg(r, x) => format!("r{} = {};", r.index(), self.whole(x)),
+                    Op::SetFlag(fl, x) => format!("{} = {};", flag(fl), self.whole(x)),
                     _ => unreachable!("a run defers register and flag writes"),
                 };
                 match insts[d].guard {
-                    Some(g) => writeln!(pre, "{ind}if {} {{ {body} }}", v(g)).unwrap(),
+                    Some(g) => writeln!(pre, "{ind}if {} {{ {body} }}", self.whole(g)).unwrap(),
                     None => writeln!(pre, "{ind}{body}").unwrap(),
                 }
             }
@@ -3583,11 +3761,15 @@ impl FnPrinter<'_, '_> {
                     }
                     self.soft.compare_tree_blocks += 1;
                     let lets = tree_lets(n, &nt.run, &nskip);
+                    self.soft.value_lets += lets.lines().count() as u64;
+                    // Its values print as their `let`s.
+                    let outer = std::mem::replace(&mut self.inl, vec![None; n.len()]);
                     let pc = format!("{ind}runtime::guest_pc::set({k:#010x});\n");
                     for b in self.switch_bodies(nt, n, &nxs, nthumb, &nskip, k, Some(exits), false)
                     {
                         out.push(format!("{pre}{pc}{lets}{b}"));
                     }
+                    self.inl = outer;
                 }
             }
         }
@@ -3885,7 +4067,7 @@ impl FnPrinter<'_, '_> {
             }
             Plan::Dynamic { ret, target, .. } => {
                 let t = match e {
-                    Exit::Jump(t) | Exit::JumpExchange(t) => v(t),
+                    Exit::Jump(t) | Exit::JumpExchange(t) => self.val(t),
                     Exit::ExceptionReturn(_) => {
                         self.hole(
                             at,
@@ -4453,6 +4635,24 @@ fn reg_list(m: u16) -> String {
         .join(", ")
 }
 
+/// Whether expression `e` is one term, needing no parentheses as an
+/// operand: no space outside brackets, and no prefix operator.
+fn one_term(e: &str) -> bool {
+    if e.starts_with(['!', '-', '&', '*']) {
+        return false;
+    }
+    let mut depth = 0i32;
+    for c in e.chars() {
+        match c {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            ' ' if depth == 0 => return false,
+            _ => {}
+        }
+    }
+    true
+}
+
 /// Whether `op` is printed as a `let` of a value and does nothing else, so
 /// it needn't be printed where nothing uses it.
 fn pure(op: &Op) -> bool {
@@ -4603,19 +4803,24 @@ fn tree_lets(insts: &[Inst], run: &switch::Run, skip: &[bool]) -> String {
             Op::GetFlag(fl) => writeln!(s, "{ind}let {id}: bool = {};", flag(fl)).unwrap(),
             ref op => {
                 let ty = if is_bit(op) { "bool" } else { "u32" };
-                writeln!(s, "{ind}let {id}: {ty} = {};", expr(op)).unwrap();
+                writeln!(s, "{ind}let {id}: {ty} = {};", expr(op, &v, &v)).unwrap();
             }
         }
     }
     s
 }
 
-/// A pure op as a Rust expression over earlier values.
-fn expr(op: &Op) -> String {
+/// A pure op as a Rust expression over earlier values, each printed by
+/// `v` as an operand and `w` as a call's argument or a branch (a `vN`, or
+/// its expression where it is inlined: [`FnPrinter::val`],
+/// [`FnPrinter::whole`]).
+fn expr(op: &Op, v: &dyn Fn(ValueId) -> String, w: &dyn Fn(ValueId) -> String) -> String {
     use Op::*;
     match *op {
         Const(c) | Pool(c) => format!("{c:#x}u32"),
         Bit(b) => format!("{b}"),
+        GetReg(r) => format!("r{}", r.index()),
+        GetFlag(f) => flag(f).to_string(),
         Bin(o, a, b) => {
             let (a, b) = (v(a), v(b));
             match o {
@@ -4628,12 +4833,12 @@ fn expr(op: &Op) -> String {
             }
         }
         Not(a) | BNot(a) => format!("!{}", v(a)),
-        MulLongLo { signed, a, b } => format!("prim::mul_long({signed}, {}, {}).0", v(a), v(b)),
-        MulLongHi { signed, a, b } => format!("prim::mul_long({signed}, {}, {}).1", v(a), v(b)),
-        Adc { a, b, c } => format!("prim::add_with_carry({}, {}, {}).0", v(a), v(b), v(c)),
-        AdcCarry { a, b, c } => format!("prim::add_with_carry({}, {}, {}).1", v(a), v(b), v(c)),
+        MulLongLo { signed, a, b } => format!("prim::mul_long({signed}, {}, {}).0", w(a), w(b)),
+        MulLongHi { signed, a, b } => format!("prim::mul_long({signed}, {}, {}).1", w(a), w(b)),
+        Adc { a, b, c } => format!("prim::add_with_carry({}, {}, {}).0", w(a), w(b), w(c)),
+        AdcCarry { a, b, c } => format!("prim::add_with_carry({}, {}, {}).1", w(a), w(b), w(c)),
         AdcOverflow { a, b, c } => {
-            format!("prim::add_with_carry({}, {}, {}).2", v(a), v(b), v(c))
+            format!("prim::add_with_carry({}, {}, {}).2", w(a), w(b), w(c))
         }
         MulCarry {
             kind,
@@ -4643,16 +4848,16 @@ fn expr(op: &Op) -> String {
             acc_hi,
         } => format!(
             "prim::mul_carry(MulKind::{kind:?}, {}, {}, ({} as u64) << 32 | {} as u64)",
-            v(a),
-            v(b),
+            w(a),
+            w(b),
             v(acc_hi),
             v(acc_lo)
         ),
         Shift { kind, v: x, amount } => format!(
             "prim::shift(ShiftType::{}, {}, {}, false).0",
             shift(kind),
-            v(x),
-            v(amount)
+            w(x),
+            w(amount)
         ),
         ShiftCarry {
             kind,
@@ -4662,14 +4867,14 @@ fn expr(op: &Op) -> String {
         } => format!(
             "prim::shift(ShiftType::{}, {}, {}, {}).1",
             shift(kind),
-            v(x),
-            v(amount),
-            v(carry_in)
+            w(x),
+            w(amount),
+            w(carry_in)
         ),
-        Rrx { v: x, carry_in } => format!("prim::rrx({}, {}).0", v(x), v(carry_in)),
-        Sext { v: x, bits } => format!("prim::sext({}, {bits})", v(x)),
+        Rrx { v: x, carry_in } => format!("prim::rrx({}, {}).0", w(x), w(carry_in)),
+        Sext { v: x, bits } => format!("prim::sext({}, {bits})", w(x)),
         Select { c, a, b } | BSelect { c, a, b } => {
-            format!("if {} {{ {} }} else {{ {} }}", v(c), v(a), v(b))
+            format!("if {} {{ {} }} else {{ {} }}", w(c), w(a), w(b))
         }
         BitToWord(b) => format!("{} as u32", v(b)),
         TestBit { v: x, n } => format!("({} >> {n}) & 1 != 0", v(x)),
@@ -4741,6 +4946,42 @@ mod tests {
         assert!(!reset.contains("match b"), "{reset}");
         assert_eq!(l.metrics.get("functions_in_match"), Some(0));
         assert_eq!(l.metrics.get("blocks_structured_pct"), Some(100));
+    }
+
+    /// A value read from r0 and used once prints inside its use, but not
+    /// past a write of r0 between them: there it stays a `let`.
+    #[test]
+    fn a_single_use_value_prints_inside_its_use_unless_a_write_comes_between() {
+        let mut words = [0xE1A0_0000u32; 0x10];
+        words[0] = 0xE280_1001; // add r1, r0, #1
+        words[1] = 0xE3A0_0000; // mov r0, #0
+        words[2] = 0xE3A0_2403; // mov r2, #0x03000000
+        words[3] = 0xE582_1000; // str r1, [r2]
+        words[4] = 0xE3A0_1000; // mov r1, #0
+        words[5] = 0xEB00_0001; // bl 0x08000020 (reads r0)
+        words[6] = 0xEAFF_FFFE; // b .
+        words[8] = 0xE12F_FF1E; // bx lr
+        let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let print = |holes: &Holes| {
+            let l = lift(&rom, "t", holes);
+            let text: String = l.files.iter().map(|(_, t)| t.as_str()).collect();
+            let reset = &text[text.find("pub fn x_08000000").expect("the reset")..];
+            (reset[..reset.find("\n}\n").unwrap()].to_string(), l.metrics)
+        };
+        let (reset, m) = print(&Holes::parse("").unwrap());
+        let sum = reset
+            .find(": u32 = prim::add_with_carry(r0, 0x1u32, false).0;")
+            .unwrap_or_else(|| panic!("r0 + 1 a let: {reset}"));
+        let write = reset.find("r0 = 0x0u32;").expect("r0's write");
+        assert!(sum < write, "{reset}");
+        // Constants print at their use.
+        assert!(!reset.contains(": u32 = 0x"), "{reset}");
+        let (old, old_m) = print(&Holes {
+            keep_temps: true,
+            ..Holes::parse("").unwrap()
+        });
+        assert!(old.contains(": u32 = 0x"), "{old}");
+        assert!(m.get("value_lets") < old_m.get("value_lets"));
     }
 
     /// `bl 0x08000020`, the start of a function [`jump_into_a_copy`] gives
@@ -4947,6 +5188,7 @@ why = "a table"
     #[test]
     fn pure_ops_print_as_rust() {
         let v = ValueId;
+        let expr = |op: &Op| super::expr(op, &super::v, &super::v);
         assert_eq!(expr(&Op::Const(0x1234)), "0x1234u32");
         assert_eq!(
             expr(&Op::Bin(BinOp::Sub, v(1), v(2))),
