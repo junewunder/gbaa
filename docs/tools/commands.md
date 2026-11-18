@@ -224,19 +224,10 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `SCENE.md` lists (it matches mGBA and first-frame at frame 10). VRAM,
   palette and OAM take halfword stores only, in ROMs and in the runtime's
   PPU tests alike (`test_util::ppu`'s `fill16`, `tile4`, `store_bytes`).
-- C test programs (native/c-test-programs; `c/README.md`): `just c-tests`
-  builds each folder of `c/` but `common/` twice, with agbcc (GCC 2.95,
-  `$GBAA_DATA/src/agbcc-jzw`, pret's way: `arm-none-eabi-cpp -undef
-  -DAGBCC`, `agbcc -O2` to Thumb assembly, `as`) and with modern
-  arm-none-eabi-gcc (`$GBAA_DATA/toolchains/arm-gnu-toolchain-15.2.rel1-…`,
-  `-O2 -mthumb`), both from `scripts/fetch-decomps.sh`, each linked with
-  `c/common`'s own crt0, linker script, `draw.c` and `lib.c` and its
-  compiler's `libgcc.a`. Writes `$GBAA_DATA/c/c-<name>-{agbcc,gcc}.{elf,gba}`
-  (objects in `$GBAA_DATA/c/build/`). Source only in git. `c/template/` is
-  the starter; `fnptr`, `switch` and `chain` (function pointers in a struct
-  table and a callback list, switches as jump tables, structs by pointer
-  down a call chain) are in `just lift-check`. Each program's two builds
-  draw the same frames, and mGBA's at frame 600. Seconds.
+- C test programs (native/c-test-programs): `just c-tests` builds each of
+  `c/`'s with agbcc (GCC 2.95) and with modern arm-none-eabi-gcc into
+  `$GBAA_DATA/c/c-<name>-{agbcc,gcc}.{elf,gba}`, in seconds; how, and what
+  a new one needs: `c/README.md`.
 - `cargo run -p desktop -- ROM` (`gbaa-desktop`) plays a ROM through the
   interpreter in a window (arrows, X/Z = A/B, A/S = L/R, Enter/Backspace =
   Start/Select, Ctrl+Q quits; Escape never does, as Steam's desktop
