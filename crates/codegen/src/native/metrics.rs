@@ -223,6 +223,7 @@ pub const UNBARRED: &[&str] = &[
     "entry_lr_returns",
     "compare_trees_matched",
     "compare_tree_blocks",
+    "narrowing_casts",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each

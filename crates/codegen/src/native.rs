@@ -183,6 +183,7 @@ pub mod live;
 pub mod metrics;
 pub mod modules;
 pub mod named;
+pub mod narrow;
 pub mod shape;
 pub mod switch;
 
@@ -1098,6 +1099,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     in_region: Vec::new(),
                     rest_from: 0,
                     unguard: Vec::new(),
+                    scrutinee: None,
                     region: None,
                     outs: None,
                     edges: None,
@@ -1112,6 +1114,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     args: &args,
                     heap: &heap,
                     psr: psr_fns.place(f.entry),
+                    starts: narrow::Starts::new(),
                     lr_ret: lr_ret.contains(&f.entry),
                     dead: BTreeMap::new(),
                     inl: Vec::new(),
@@ -1481,6 +1484,21 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         )
         .unwrap();
     }
+    let left: Vec<String> = soft
+        .pairs_left
+        .iter()
+        .map(|a| format!("{a:#010x}"))
+        .collect();
+    writeln!(
+        report,
+        "narrowing idioms (native/lift-narrowing-casts): {} printed as casts; {} of the guest's {} shift pairs still printed as two shifts, by their second shift{}{}",
+        soft.narrowings.len(),
+        left.len(),
+        soft.shift_pairs.len(),
+        if left.is_empty() { "" } else { ": " },
+        left.join(" "),
+    )
+    .unwrap();
     let objs = |st| soft.access.get(&(st, Where::Object)).copied().unwrap_or(0);
     writeln!(
         report,
@@ -1564,6 +1582,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("compare_trees_matched", n(soft.compare_trees));
     m.push("compare_tree_blocks", n(soft.compare_tree_blocks));
     m.push("compare_trees_left", n(soft.compare_trees_left));
+    // Narrowing idioms (native/lift-narrowing-casts): the guest's shift
+    // pairs still printed as two shifts (barred), and the narrowings
+    // printed (no bar: they should rise).
+    m.push("shift_pairs_left", n(soft.pairs_left.len()));
+    m.push("narrowing_casts", n(soft.narrowings.len()));
     // Flag writes printed that nothing reads (native/lift-dead-writes):
     // none, but with --keep-dead-writes.
     m.push("dead_flag_writes", soft.dead_flag_writes);
@@ -2320,6 +2343,14 @@ struct Soft {
     fns_match: usize,
     blocks_structured: usize,
     blocks_match: usize,
+    /// The guest's shift pairs in printed blocks, by their second
+    /// shift's address ([`narrow::guest_pairs`]), and of them those whose
+    /// second shift still printed as one (not as a narrowing, nor folded
+    /// to a constant or left unused); every narrowing printed, by
+    /// (function, block, inst).
+    shift_pairs: BTreeSet<u32>,
+    pairs_left: BTreeSet<u32>,
+    narrowings: BTreeSet<(u32, u32, usize)>,
     /// Flag writes printed, and of them those nothing reads
     /// ([`FnPrinter::dead_writes`]: none but with `--keep-dead-writes`).
     flag_writes: u64,
@@ -2364,6 +2395,8 @@ struct FnPrinter<'a, 'b> {
     /// counted: a compare tree's tests ([`FnPrinter::operands`]).
     /// Empty but then.
     unguard: Vec<bool>,
+    /// And the value its `match` reads, used once more ([`FnPrinter::uses`]).
+    scrutinee: Option<ValueId>,
     region: Option<usize>,
     outs: Option<Vec<plan::Out>>,
     edges: Option<Vec<plan::Edge>>,
@@ -2383,6 +2416,9 @@ struct FnPrinter<'a, 'b> {
     /// Whether it is the reset or an IRQ wrapper, whose `msr` and `mrs`
     /// are printed ([`PsrFns`]); elsewhere they are hard holes.
     psr: Option<PsrPlace>,
+    /// The registers each block starts with a known constant in
+    /// ([`narrow::starts`]).
+    starts: narrow::Starts,
     /// Its entry lr is [`RET`] on every way in ([`lr_entries`]): a jump by
     /// value to the entry lr is a plain return.
     lr_ret: bool,
@@ -2471,6 +2507,38 @@ fn is_bit(op: &Op) -> bool {
 }
 
 impl FnPrinter<'_, '_> {
+    /// The registers each block starts with a constant in, over the
+    /// edges between its blocks its exits print ([`FnPrinter::jumps`]).
+    fn starts(&self) -> narrow::Starts {
+        use narrow::{After, Edge};
+        let mut edges = Vec::new();
+        for (&k, gb) in &self.f.blocks {
+            for x in exits(self.ctx, gb) {
+                let after = match x.plan {
+                    Plan::Static(_) | Plan::Rekey(_) | Plan::Dynamic { ret: None, .. } => {
+                        After::Jump
+                    }
+                    Plan::Call { .. }
+                    | Plan::CallVia { .. }
+                    | Plan::Dynamic { ret: Some(_), .. } => After::KeptCall,
+                    Plan::Swi { .. } | Plan::Undefined { .. } => After::Unknown,
+                };
+                for to in self.jumps(&gb.block.insts[x.index].op, &x) {
+                    if self.f.blocks.contains_key(&to) {
+                        edges.push(Edge {
+                            from: k,
+                            exit: x.index,
+                            to,
+                            after,
+                        });
+                    }
+                }
+            }
+        }
+        let f = self.f;
+        narrow::starts(f.entry, &edges, |k| &f.blocks[&k].block.insts)
+    }
+
     fn hole(&mut self, at: u32, kind: HoleKind, what: impl Into<String>) {
         self.found.push(Hole {
             func: self.f.entry,
@@ -2482,6 +2550,7 @@ impl FnPrinter<'_, '_> {
 
     fn print(&mut self, sum: Option<&Summary>) -> String {
         let f = self.f;
+        self.starts = self.starts();
         let mut s = String::new();
         match sum {
             Some(sum) if sum.holes.is_empty() => {
@@ -3067,16 +3136,27 @@ impl FnPrinter<'_, '_> {
             })
             .collect();
         let scrutinee = tree.as_ref().map(|(t, _)| t.run.value);
-        let uses = self.uses(insts, &typed, &refs, &skip, &dead, scrutinee);
+        self.scrutinee = scrutinee;
+        // The narrowing idioms and shifts by a constant, printed over the
+        // value they narrow or shift ([`narrow`]).
+        let none = BTreeMap::new();
+        let known = narrow::values(insts, self.starts.get(&self.cur).unwrap_or(&none));
+        let forms: Vec<_> = (0..insts.len())
+            .map(|i| narrow::form(insts, &known, i))
+            .collect();
+        let pairs = narrow::guest_pairs(&self.f.blocks[&self.cur].insns);
+        self.soft.shift_pairs.extend(&pairs);
+        let uses = self.uses(insts, &typed, &refs, &skip, &dead, &forms);
         let used: Vec<bool> = uses.iter().map(|&n| n > 0).collect();
         // The values printed inside their use, not as `let`s (unit
         // `native/lift-inline-temps`); the block's own, a nested block's
         // (an inlined edge's) set aside while that prints.
-        let mut inline = self.inline(insts, &typed, &refs, &skip, &dead, &uses);
+        let mut inline = self.inline(insts, &typed, &refs, &skip, &dead, &uses, &forms);
         if let Some(x) = scrutinee {
             inline[x.index()] = false;
         }
         self.unguard = Vec::new();
+        self.scrutinee = None;
         let outer = std::mem::replace(&mut self.inl, vec![None; insts.len()]);
         for (i, inst) in insts.iter().enumerate() {
             let id = ValueId(i as u32);
@@ -3089,8 +3169,15 @@ impl FnPrinter<'_, '_> {
             if dead[i] || skip[i] || (pure(&inst.op) && !used[i]) {
                 continue;
             }
+            // A narrowing idiom counts printed inline or as a `let`; so
+            // does a guest shift pair left a shift.
+            if forms[i].is_some_and(|(_, f)| f.narrows()) {
+                self.soft.narrowings.insert((self.f.entry, self.cur, i));
+            } else if matches!(inst.op, Op::Shift { .. }) && pairs.contains(&at) {
+                self.soft.pairs_left.insert(at);
+            }
             if inline[i] {
-                let e = expr(&inst.op, &|x| self.val(x), &|x| self.whole(x));
+                let e = self.value(&inst.op, forms[i]);
                 self.inl[i] = Some(e);
                 self.soft.inlined += 1;
                 continue;
@@ -3331,7 +3418,7 @@ impl FnPrinter<'_, '_> {
                 }
                 ref op => {
                     let ty = if is_bit(op) { "bool" } else { "u32" };
-                    let e = expr(op, &|x| self.val(x), &|x| self.whole(x));
+                    let e = self.value(op, forms[i]);
                     self.soft.value_lets += 1;
                     writeln!(s, "{ind}let {}: {ty} = {e};", v(id)).unwrap();
                 }
@@ -3407,7 +3494,8 @@ impl FnPrinter<'_, '_> {
     /// use its address, so the arithmetic only the address needed isn't
     /// printed ([`pure`]), and neither does a write `skip` leaves out (a
     /// dead one's, [`FnPrinter::dead_writes`]) or an address `dead`
-    /// leaves out ([`dead_addresses`]).
+    /// leaves out ([`dead_addresses`]); a value printed over another
+    /// ([`narrow::form`]) uses only that one.
     fn uses(
         &self,
         insts: &[Inst],
@@ -3415,17 +3503,17 @@ impl FnPrinter<'_, '_> {
         refs: &[Option<HeapRef>],
         skip: &[bool],
         dead: &[bool],
-        scrutinee: Option<ValueId>,
+        forms: &[Option<(ValueId, narrow::Form)>],
     ) -> Vec<u32> {
         let mut uses = vec![0u32; insts.len()];
-        if let Some(x) = scrutinee {
+        if let Some(x) = self.scrutinee {
             uses[x.index()] = 1;
         }
         for (i, inst) in insts.iter().enumerate().rev() {
             if skip[i] || dead[i] || (pure(&inst.op) && uses[i] == 0) {
                 continue;
             }
-            for x in self.operands(i, inst, typed, refs) {
+            for x in self.operands(i, inst, typed, refs, forms) {
                 uses[x.index()] += 1;
             }
         }
@@ -3434,7 +3522,8 @@ impl FnPrinter<'_, '_> {
 
     /// The values inst `i`'s printed code uses, its guard last ([`uses`]):
     /// a timing mark or a yielded flag uses none, printed as nothing (nor
-    /// its guard), and a compare tree's test none for its guard, which
+    /// its guard); a value printed over another ([`narrow::form`]) uses
+    /// only that one; and a compare tree's test none for its guard, which
     /// the `match` replaces ([`FnPrinter::unguard`]).
     ///
     /// [`uses`]: FnPrinter::uses
@@ -3444,6 +3533,7 @@ impl FnPrinter<'_, '_> {
         inst: &Inst,
         typed: &[Option<Place>],
         refs: &[Option<HeapRef>],
+        forms: &[Option<(ValueId, narrow::Form)>],
     ) -> Vec<ValueId> {
         let local = !self.holes.shadow_locals
             && self
@@ -3458,6 +3548,7 @@ impl FnPrinter<'_, '_> {
             Op::Store { value, .. } if local || field => vec![value],
             Op::Load { .. } if base.is_some() => base.into_iter().collect(),
             Op::Store { value, .. } if base.is_some() => base.into_iter().chain([value]).collect(),
+            _ if forms[i].is_some() => forms[i].map(|(x, _)| x).into_iter().collect(),
             ref op => op.operands(),
         };
         let guard = inst
@@ -3474,6 +3565,7 @@ impl FnPrinter<'_, '_> {
     /// an exit and of a PSR write, which print theirs more than once
     /// (constants but). Inlined into a value that is itself inlined, a
     /// value is read where that one's use is.
+    #[allow(clippy::too_many_arguments)]
     fn inline(
         &self,
         insts: &[Inst],
@@ -3482,6 +3574,7 @@ impl FnPrinter<'_, '_> {
         skip: &[bool],
         dead: &[bool],
         uses: &[u32],
+        forms: &[Option<(ValueId, narrow::Form)>],
     ) -> Vec<bool> {
         let n = insts.len();
         let mut inline = vec![false; n];
@@ -3504,7 +3597,7 @@ impl FnPrinter<'_, '_> {
                 _ => 0,
             };
             let whole = !matches!(op, Op::Exit(_) | Op::SetCpsr { .. } | Op::SetSpsr { .. });
-            for x in self.operands(i, inst, typed, refs) {
+            for x in self.operands(i, inst, typed, refs, forms) {
                 let x = x.index();
                 if konst(&insts[x].op) {
                     inline[x] = true;
@@ -3532,6 +3625,15 @@ impl FnPrinter<'_, '_> {
             }
         }
         inline
+    }
+
+    /// The expression of a value `op`: over the value it narrows or
+    /// shifts if it has a `form` ([`narrow::form`]), else of its operands.
+    fn value(&self, op: &Op, form: Option<(ValueId, narrow::Form)>) -> String {
+        match form {
+            Some((x, form)) => form.print(&self.val(x)),
+            None => expr(op, &|x| self.val(x), &|x| self.whole(x)),
+        }
     }
 
     /// Value `x` where an operand goes: its name, or its inlined
@@ -4926,6 +5028,37 @@ mod tests {
         .unwrap();
         holes.holes_only = true;
         lift(&rom, "t", &holes).holes
+    }
+
+    /// A shift pair prints as a cast, and an `and` with a register a block
+    /// before set to 0xff as `as u8` (native/lift-narrowing-casts).
+    #[test]
+    fn narrowing_idioms_print_as_casts() {
+        let mut words = [0xE1A0_0000u32; 0x10];
+        words[0] = 0xE1A0_0C01; // mov r0, r1, lsl #24
+        words[1] = 0xE1A0_0C40; // mov r0, r0, asr #24
+        words[2] = 0xE581_0000; // str r0, [r1]
+        words[3] = 0xE3A0_20FF; // mov r2, #0xff
+        words[4] = 0xEAFF_FFFF; // b 0x08000014
+        words[5] = 0xE001_3002; // and r3, r1, r2
+        words[6] = 0xE581_3000; // str r3, [r1]
+        words[7] = 0xEAFF_FFFE; // b .
+        let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let l = lift(&rom, "t", &Holes::parse("").unwrap());
+        let text: String = l.files.iter().map(|(_, t)| t.as_str()).collect();
+        let reset = &text[text.find("pub fn x_08000000").expect("the reset")..];
+        let reset = &reset[..reset.find("\n}\n").unwrap()];
+        assert!(reset.contains(" as i8 as u32"), "{reset}");
+        assert!(reset.contains(" as u8 as u32"), "{reset}");
+        assert!(!reset.contains("prim::shift"), "{reset}");
+        assert_eq!(l.metrics.get("shift_pairs_left"), Some(0));
+        assert_eq!(l.metrics.get("narrowing_casts"), Some(2));
+        assert!(
+            l.report
+                .contains("0 of the guest's 1 shift pairs still printed"),
+            "{}",
+            l.report
+        );
     }
 
     /// A reset that counts r0 down from 10 in a loop and then spins
