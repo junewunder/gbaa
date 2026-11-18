@@ -1140,3 +1140,375 @@ call_fn_four_complete = 58
 jumps_by_value = 8
 fn_words_not_proven = 55
 gap_targets = 5
+
+[program.c-fnptr-agbcc]
+rom = "c/c-fnptr-agbcc.gba"
+route = "units/c-fnptr-agbcc-600.toml"
+# A C program (native/c-test-programs; c/README.md, c/fnptr/SCENE.md), built
+# by agbcc (GCC 2.95) with `just c-tests`: function pointers in a const
+# struct table (sObjOps), a callback list in RAM (gCallbacks) and a main
+# callback pointer. The planted store is main_cb_run's gState++.
+planted_store = 0x080005d4
+
+[program.c-fnptr-agbcc.bars]
+lines = 2696
+lines_prelude = 1203
+functions = 18
+functions_iwram = 0
+functions_lifted = 18
+functions_unrecognised = 18
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 4
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 2
+hard_holes = 0
+blocks = 68
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 4
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 34
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 10
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 22
+pointer_unexplained = 0
+ref_unexplained = 43
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 12
+sp_accesses_callers_frame = 2
+call_fn_calls = 5
+call_fn_four_complete = 2
+jumps_by_value = 0
+fn_words_not_proven = 6
+gap_targets = 0
+
+[program.c-fnptr-gcc]
+rom = "c/c-fnptr-gcc.gba"
+route = "units/c-fnptr-gcc-600.toml"
+# A C program (native/c-test-programs; c/README.md, c/fnptr/SCENE.md), built
+# by modern arm-none-eabi-gcc with `just c-tests`: function pointers in a const
+# struct table (sObjOps), a callback list in RAM (gCallbacks) and a main
+# callback pointer. The planted store is main_cb_run's gState++.
+planted_store = 0x08000390
+
+[program.c-fnptr-gcc.bars]
+lines = 2754
+lines_prelude = 1203
+functions = 18
+functions_iwram = 0
+functions_lifted = 18
+functions_unrecognised = 18
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 4
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 2
+hard_holes = 0
+blocks = 78
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 4
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 30
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 10
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 22
+pointer_unexplained = 0
+ref_unexplained = 9
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 12
+sp_accesses_callers_frame = 2
+call_fn_calls = 5
+call_fn_four_complete = 2
+jumps_by_value = 0
+fn_words_not_proven = 10
+gap_targets = 0
+
+[program.c-switch-agbcc]
+rom = "c/c-switch-agbcc.gba"
+route = "units/c-switch-agbcc-600.toml"
+# A C program (native/c-test-programs; c/README.md, c/switch/SCENE.md), built
+# by agbcc (GCC 2.95) with `just c-tests`: two switches compiled to jump
+# tables, a byte-command script interpreter (script_run) and a pen's state
+# machine (pen_update). The planted store is AgbMain's gCommands += script_run(...).
+planted_store = 0x08000548
+
+[program.c-switch-agbcc.bars]
+lines = 2375
+lines_prelude = 1203
+functions = 9
+functions_iwram = 0
+functions_lifted = 9
+functions_unrecognised = 9
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 1
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 0
+hard_holes = 0
+blocks = 77
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 1
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 5
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 55
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 4
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 33
+pointer_unexplained = 0
+ref_unexplained = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 4
+sp_accesses_callers_frame = 1
+call_fn_calls = 0
+call_fn_four_complete = 0
+jumps_by_value = 2
+fn_words_not_proven = 1
+gap_targets = 0
+
+[program.c-switch-gcc]
+rom = "c/c-switch-gcc.gba"
+route = "units/c-switch-gcc-600.toml"
+# A C program (native/c-test-programs; c/README.md, c/switch/SCENE.md), built
+# by modern arm-none-eabi-gcc with `just c-tests`: two switches compiled to jump
+# tables, a byte-command script interpreter (script_run) and a pen's state
+# machine (pen_update). The planted store is AgbMain's gCommands += script_run(...).
+planted_store = 0x08000568
+
+[program.c-switch-gcc.bars]
+lines = 2560
+lines_prelude = 1203
+functions = 9
+functions_iwram = 0
+functions_lifted = 9
+functions_unrecognised = 9
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 1
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 0
+hard_holes = 0
+blocks = 80
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 1
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 5
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 54
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 4
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 36
+pointer_unexplained = 0
+ref_unexplained = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 4
+sp_accesses_callers_frame = 1
+call_fn_calls = 0
+call_fn_four_complete = 0
+jumps_by_value = 2
+fn_words_not_proven = 1
+gap_targets = 0
+
+[program.c-chain-agbcc]
+rom = "c/c-chain-agbcc.gba"
+route = "units/c-chain-agbcc-600.toml"
+# A C program (native/c-test-programs; c/README.md, c/chain/SCENE.md), built
+# by agbcc (GCC 2.95) with `just c-tests`: structs passed by pointer down a
+# call chain (frame's stack Ctx through step_world, move_body and bounce)
+# and one returned by value (rect_union). The planted store is frame's gTotalHits += ctx.hits.
+planted_store = 0x0800058e
+
+[program.c-chain-agbcc.bars]
+lines = 3115
+lines_prelude = 1203
+functions = 13
+functions_iwram = 0
+functions_lifted = 13
+functions_unrecognised = 13
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 2
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 0
+hard_holes = 0
+blocks = 63
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 13
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 59
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 26
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 27
+pointer_unexplained = 0
+ref_unexplained = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 35
+sp_accesses_callers_frame = 4
+call_fn_calls = 0
+call_fn_four_complete = 0
+jumps_by_value = 0
+fn_words_not_proven = 1
+gap_targets = 0
+
+[program.c-chain-gcc]
+rom = "c/c-chain-gcc.gba"
+route = "units/c-chain-gcc-600.toml"
+# A C program (native/c-test-programs; c/README.md, c/chain/SCENE.md), built
+# by modern arm-none-eabi-gcc with `just c-tests`: structs passed by pointer down a
+# call chain (frame's stack Ctx through step_world, move_body and bounce)
+# and one returned by value (rect_union). The planted store is frame's gTotalHits += ctx.hits.
+planted_store = 0x08000550
+
+[program.c-chain-gcc.bars]
+lines = 2883
+lines_prelude = 1203
+functions = 13
+functions_iwram = 0
+functions_lifted = 13
+functions_unrecognised = 13
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 1
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 0
+hard_holes = 0
+blocks = 64
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 4
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 47
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 9
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 22
+pointer_unexplained = 0
+ref_unexplained = 1
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 12
+sp_accesses_callers_frame = 1
+call_fn_calls = 0
+call_fn_four_complete = 0
+jumps_by_value = 0
+fn_words_not_proven = 1
+gap_targets = 0

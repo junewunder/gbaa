@@ -25,7 +25,9 @@
 //!
 //! **Ranking.** A `push {…, lr}` prologue only ranks candidates: it scores
 //! 4, being loaded from a literal pool by code found, sitting next to a
-//! known function start in a table or being a constant getter (pool
+//! known function start in a table (or beside another Thumb pointer, two
+//! words from one: a table of structs of two function pointers and a word
+//! of data) or being a constant getter (pool
 //! loads, then `bx lr`: [`getter`]) scores 2, and more than one word
 //! pointing there scores 1. A candidate needs [`MIN_SCORE`]. A batch takes
 //! candidates best first and drops any whose body overlaps one taken
@@ -103,7 +105,18 @@ pub fn batch(
         c.refs += 1;
         c.pooled |= view.pools.contains(&at);
         let start_at = |b: u32| prog.read(b, 4).is_some_and(|v| view.funcs.contains(&v));
-        c.table |= start_at(at.wrapping_sub(4)) || start_at(at + 4);
+        // Next to a start, or a pair of Thumb pointers two words from one:
+        // a table of structs that each hold two function pointers and a
+        // word of data (c/fnptr's sObjOps), where a leaf with no push has
+        // no other evidence.
+        let thumb_ptr = |b: u32| {
+            prog.read(b, 4)
+                .is_some_and(|v| v & 1 != 0 && prog.in_rom(v & !1))
+        };
+        c.table |= start_at(at.wrapping_sub(4))
+            || start_at(at + 4)
+            || ((thumb_ptr(at.wrapping_sub(4)) || thumb_ptr(at + 4))
+                && (start_at(at.wrapping_sub(8)) || start_at(at + 8)));
     }
     stats.candidates += cands.len();
 
