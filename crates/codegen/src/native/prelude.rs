@@ -281,7 +281,13 @@ pub struct Accesses {
     pub loads: Vec<u32>,
     pub lowest_store: u32,
     pub window: (u32, u32),
+    /// RAM loads and stores so far: past [`ACCESSES_MAX`] the run panics.
+    pub count: u32,
 }
+
+/// The RAM accesses one checked run may make: a variant whose changed
+/// inputs send a loop on forever stops here, as a panic, not out of memory.
+pub const ACCESSES_MAX: u32 = 1 << 22;
 
 thread_local! {
     /// The run's notes, while the check takes them.
@@ -299,6 +305,8 @@ fn note(o: usize, n: usize, store: bool) {
 fn note_access(o: usize, n: usize, store: bool) {
     ACCESSES.with_borrow_mut(|a| {
         if let Some(a) = a {
+            a.count += 1;
+            assert!(a.count <= ACCESSES_MAX, "past {ACCESSES_MAX} RAM accesses in one run");
             if store {
                 if (a.window.0..a.window.1).contains(&(o as u32)) {
                     a.lowest_store = a.lowest_store.min(o as u32);

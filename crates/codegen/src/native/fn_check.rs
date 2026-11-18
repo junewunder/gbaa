@@ -305,6 +305,7 @@ fn run(
             loads: Vec::new(),
             lowest_store: window.1,
             window,
+            count: 0,
         })
     });
     SIDE.set(side);
