@@ -384,6 +384,13 @@ pub struct Stats {
     /// The part of `interpreted_cycles` spent running code in EWRAM or
     /// IWRAM (copied there, decision 7).
     pub interpreted_ram_cycles: u64,
+    /// Where [`interpreted_ram_cycles`](Stats::interpreted_ram_cycles)
+    /// went: the RAM keys the fallback was entered at, the first
+    /// [`MAX_RAM_SEEDS`] of them, each with the RAM cycles its runs took
+    /// (to the next key with recompiled code, wherever they went in RAM).
+    /// What codegen's overlays miss, by where it is entered.
+    pub ram_seeds: [(u32, u64); MAX_RAM_SEEDS],
+    pub n_ram_seeds: usize,
     /// Guest cycles the CPU spent halted (`Halt`, `VBlankIntrWait`).
     pub halted_cycles: u64,
     /// Distinct ROM keys the fallback was entered at, the first
@@ -412,6 +419,7 @@ pub struct Stats {
 }
 
 pub const MAX_SEEDS: usize = 256;
+pub const MAX_RAM_SEEDS: usize = 64;
 
 impl Default for Stats {
     fn default() -> Stats {
@@ -426,6 +434,8 @@ impl Default for Stats {
             compiled_ram_cycles: 0,
             interpreted_cycles: 0,
             interpreted_ram_cycles: 0,
+            ram_seeds: [(0, 0); MAX_RAM_SEEDS],
+            n_ram_seeds: 0,
             halted_cycles: 0,
             seeds: [0; MAX_SEEDS],
             n_seeds: 0,
@@ -445,6 +455,19 @@ impl Stats {
         if is_rom(key) && self.n_seeds < MAX_SEEDS && !self.seeds[..self.n_seeds].contains(&key) {
             self.seeds[self.n_seeds] = key;
             self.n_seeds += 1;
+        }
+    }
+}
+
+impl Stats {
+    /// `cycles` more of the fallback's RAM time, entered at `key`.
+    fn ram_seed(&mut self, key: u32, cycles: u64) {
+        let n = self.n_ram_seeds;
+        if let Some(e) = self.ram_seeds[..n].iter_mut().find(|e| e.0 == key) {
+            e.1 += cycles;
+        } else if n < MAX_RAM_SEEDS {
+            self.ram_seeds[n] = (key, cycles);
+            self.n_ram_seeds += 1;
         }
     }
 }
@@ -804,12 +827,13 @@ fn run_inner<P: Platform>(
             m.nest.stats().seed(k);
         }
         let t = m.now();
+        let mut ram = 0;
         loop {
             let (pc, before) = (m.cpu.pc, m.now());
             let yield_ = m.step();
             m.nest.stats().interpreted += 1;
             if (0x0200_0000..0x0400_0000).contains(&pc) {
-                m.nest.stats().interpreted_ram_cycles += m.now() - before;
+                ram += m.now() - before;
             }
             let k = key(&m.cpu);
             let inside = |k| is_rom(k) && code.is_some_and(|c| c.find_inner(k).is_some());
@@ -836,6 +860,11 @@ fn run_inner<P: Platform>(
             }
         }
         m.nest.stats().interpreted_cycles += m.now() - t;
+        if ram > 0 {
+            let s = m.nest.stats();
+            s.interpreted_ram_cycles += ram;
+            s.ram_seed(k, ram);
+        }
     }
 }
 
