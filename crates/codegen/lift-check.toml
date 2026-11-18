@@ -31,7 +31,7 @@ rom = "agb/affine.gba"
 route = "units/affine-600.toml"
 
 [program.affine.bars]
-lines = 62372
+lines = 62162
 lines_prelude = 1262
 functions = 109
 functions_iwram = 3
@@ -82,6 +82,7 @@ sp_accesses_escaping_slot = 705
 call_fn_calls = 61
 call_fn_four_complete = 56
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 55
 sp_accesses_callers_frame = 7
@@ -91,7 +92,7 @@ rom = "agb/mosaic-modes.gba"
 route = "units/mosaic-modes-600.toml"
 
 [program.mosaic-modes.bars]
-lines = 43172
+lines = 42980
 lines_prelude = 1262
 functions = 102
 functions_iwram = 3
@@ -142,6 +143,9 @@ sp_accesses_escaping_slot = 1124
 call_fn_calls = 61
 call_fn_four_complete = 56
 jumps_by_value = 8
+# A fall into the next function after a call to a panic whose summary may
+# return: its entry lr isn't proven RET (native/lift-pop-return).
+entry_lr_returns_call_fn = 1
 gap_targets = 24
 fn_words_not_proven = 54
 sp_accesses_callers_frame = 4
@@ -157,7 +161,7 @@ planted_store = 0x08000186
 planted_hole = { drop_standin = 0x08002728, names = "error: hard hole in f_08002728 at 0x08002730: CPU state: mrs" }
 
 [program.native-spike.bars]
-lines = 63322
+lines = 63114
 lines_prelude = 1262
 functions = 110
 functions_iwram = 3
@@ -208,6 +212,7 @@ sp_accesses_escaping_slot = 1289
 call_fn_calls = 63
 call_fn_four_complete = 58
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 gap_targets = 22
 fn_words_not_proven = 58
 sp_accesses_callers_frame = 8
@@ -221,7 +226,7 @@ route = "units/native-fallthrough-600.toml"
 planted_flags = ["--fall-as-tail-call"]
 
 [program.native-fallthrough.bars]
-lines = 61255
+lines = 61043
 lines_prelude = 1262
 functions = 112
 functions_iwram = 3
@@ -272,6 +277,7 @@ sp_accesses_escaping_slot = 709
 call_fn_calls = 62
 call_fn_four_complete = 57
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 56
 sp_accesses_callers_frame = 9
@@ -286,7 +292,7 @@ route = "units/native-irq-hold-601.toml"
 planted_flags = ["--irq-at-waits"]
 
 [program.native-irq-hold.bars]
-lines = 61806
+lines = 61590
 lines_prelude = 1262
 functions = 114
 functions_iwram = 3
@@ -337,6 +343,7 @@ sp_accesses_escaping_slot = 709
 call_fn_calls = 65
 call_fn_four_complete = 60
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 gap_targets = 11
 fn_words_not_proven = 58
 sp_accesses_callers_frame = 7
@@ -353,7 +360,7 @@ route = "units/native-frame-locals-600.toml"
 planted_flags = ["--plant-slot=0x08000182"]
 
 [program.native-frame-locals.bars]
-lines = 61314
+lines = 61096
 lines_prelude = 1262
 functions = 113
 functions_iwram = 3
@@ -405,6 +412,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 61
 call_fn_four_complete = 56
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 55
 
@@ -417,7 +425,7 @@ route = "units/native-ime-release-601.toml"
 planted_flags = ["--ime-at-waits"]
 
 [program.native-ime-release.bars]
-lines = 61781
+lines = 61563
 lines_prelude = 1262
 functions = 113
 functions_iwram = 3
@@ -469,6 +477,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 63
 call_fn_four_complete = 58
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 gap_targets = 15
 fn_words_not_proven = 58
 
@@ -485,7 +494,7 @@ route = "units/native-bios-calls-600.toml"
 # (native/ref-heap-static-arrays).
 
 [program.native-bios-calls.bars]
-lines = 62267
+lines = 62057
 lines_prelude = 1262
 functions = 109
 functions_iwram = 3
@@ -537,6 +546,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 61
 call_fn_four_complete = 56
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 gap_targets = 7
 fn_words_not_proven = 55
 
@@ -553,7 +563,7 @@ route = "units/native-bios-more-600.toml"
 # restarts the program.
 
 [program.native-bios-more.bars]
-lines = 62362
+lines = 62172
 lines_prelude = 1262
 functions = 104
 functions_iwram = 3
@@ -605,6 +615,9 @@ sp_accesses_callers_frame = 3
 call_fn_calls = 61
 call_fn_four_complete = 56
 jumps_by_value = 7
+# A fall into the next function after a call to a panic whose summary may
+# return: its entry lr isn't proven RET (native/lift-pop-return).
+entry_lr_returns_call_fn = 2
 gap_targets = 165
 fn_words_not_proven = 55
 
@@ -624,7 +637,7 @@ planted_store = 0x08000288
 planted_hole = { drop_standin = 0x080001a4, names = "error: hard hole in f_080001a4 at 0x080001c0: CPU state: a stack switch" }
 
 [program.native-tasks.bars]
-lines = 62446
+lines = 62228
 lines_prelude = 1262
 functions = 122
 functions_iwram = 3
@@ -676,6 +689,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 61
 call_fn_four_complete = 0
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 gap_targets = 5
 # Raised 57 to 59 (native/fnref-emerald-speed; june's call, 2026-11-12,
 # d/raise-native-tasks-unproven-function). The 57 was evaluation order, not a
@@ -702,7 +716,7 @@ route = "units/native-dma-600.toml"
 planted_store = 0x08000180
 
 [program.native-dma.bars]
-lines = 42230
+lines = 42028
 lines_prelude = 1262
 functions = 107
 functions_iwram = 3
@@ -754,6 +768,9 @@ sp_accesses_callers_frame = 2
 call_fn_calls = 65
 call_fn_four_complete = 60
 jumps_by_value = 8
+# A fall into the next function after a call to a panic whose summary may
+# return: its entry lr isn't proven RET (native/lift-pop-return).
+entry_lr_returns_call_fn = 1
 gap_targets = 80
 fn_words_not_proven = 61
 
@@ -769,7 +786,7 @@ route = "units/native-save-600.toml"
 planted_store = 0x080002ac
 
 [program.native-save.bars]
-lines = 61968
+lines = 61752
 lines_prelude = 1262
 functions = 112
 functions_iwram = 3
@@ -821,6 +838,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 61
 call_fn_four_complete = 56
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 55
 gap_targets = 5
 
@@ -834,7 +852,7 @@ route = "units/native-bios-region-601.toml"
 # (nowhere); agb/native-bios-region/src/main.rs.
 
 [program.native-bios-region.bars]
-lines = 61627
+lines = 61407
 lines_prelude = 1262
 functions = 114
 functions_iwram = 3
@@ -886,6 +904,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 63
 call_fn_four_complete = 58
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 59
 gap_targets = 11
 
@@ -900,7 +919,7 @@ route = "units/native-bios-affine-600.toml"
 # agb/native-bios-affine/src/main.rs.
 
 [program.native-bios-affine.bars]
-lines = 62696
+lines = 62486
 lines_prelude = 1262
 functions = 110
 functions_iwram = 3
@@ -952,6 +971,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 61
 call_fn_four_complete = 56
 jumps_by_value = 9
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 56
 gap_targets = 5
 
@@ -968,7 +988,7 @@ route = "units/native-serial-600.toml"
 planted_store = 0x0800017c
 
 [program.native-serial.bars]
-lines = 64006
+lines = 63780
 lines_prelude = 1262
 functions = 117
 functions_iwram = 3
@@ -1020,6 +1040,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 63
 call_fn_four_complete = 58
 jumps_by_value = 9
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 58
 gap_targets = 5
 
@@ -1038,7 +1059,7 @@ route = "units/native-irq-wrapper-600.toml"
 planted_store = 0x080001f4
 
 [program.native-irq-wrapper.bars]
-lines = 62454
+lines = 62228
 lines_prelude = 1262
 functions = 118
 functions_iwram = 3
@@ -1090,6 +1111,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 65
 call_fn_four_complete = 60
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 60
 gap_targets = 5
 
@@ -1103,7 +1125,7 @@ route = "units/native-takes-600.toml"
 planted_flags = ["--takes-zeroed"]
 
 [program.native-takes.bars]
-lines = 61266
+lines = 61048
 lines_prelude = 1262
 functions = 113
 functions_iwram = 3
@@ -1155,6 +1177,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 63
 call_fn_four_complete = 58
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 55
 gap_targets = 5
 
@@ -1168,7 +1191,7 @@ route = "units/c-fnptr-agbcc-600.toml"
 planted_store = 0x080005d4
 
 [program.c-fnptr-agbcc.bars]
-lines = 2162
+lines = 2130
 lines_prelude = 1262
 functions = 18
 functions_iwram = 0
@@ -1220,6 +1243,7 @@ sp_accesses_callers_frame = 2
 call_fn_calls = 5
 call_fn_four_complete = 2
 jumps_by_value = 0
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 6
 gap_targets = 0
 
@@ -1233,7 +1257,7 @@ route = "units/c-fnptr-gcc-600.toml"
 planted_store = 0x08000390
 
 [program.c-fnptr-gcc.bars]
-lines = 2220
+lines = 2188
 lines_prelude = 1262
 functions = 18
 functions_iwram = 0
@@ -1285,6 +1309,7 @@ sp_accesses_callers_frame = 2
 call_fn_calls = 5
 call_fn_four_complete = 2
 jumps_by_value = 0
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 10
 gap_targets = 0
 
@@ -1298,7 +1323,7 @@ route = "units/c-switch-agbcc-600.toml"
 planted_store = 0x08000548
 
 [program.c-switch-agbcc.bars]
-lines = 1949
+lines = 1935
 lines_prelude = 1262
 functions = 9
 functions_iwram = 0
@@ -1350,6 +1375,7 @@ sp_accesses_callers_frame = 1
 call_fn_calls = 0
 call_fn_four_complete = 0
 jumps_by_value = 2
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 1
 gap_targets = 0
 
@@ -1363,7 +1389,7 @@ route = "units/c-switch-gcc-600.toml"
 planted_store = 0x08000568
 
 [program.c-switch-gcc.bars]
-lines = 2198
+lines = 2184
 lines_prelude = 1262
 functions = 9
 functions_iwram = 0
@@ -1415,6 +1441,7 @@ sp_accesses_callers_frame = 1
 call_fn_calls = 0
 call_fn_four_complete = 0
 jumps_by_value = 2
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 1
 gap_targets = 0
 
@@ -1428,7 +1455,7 @@ route = "units/c-chain-agbcc-600.toml"
 planted_store = 0x0800058e
 
 [program.c-chain-agbcc.bars]
-lines = 2620
+lines = 2598
 lines_prelude = 1262
 functions = 13
 functions_iwram = 0
@@ -1480,6 +1507,7 @@ sp_accesses_callers_frame = 4
 call_fn_calls = 0
 call_fn_four_complete = 0
 jumps_by_value = 0
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 1
 gap_targets = 0
 
@@ -1493,7 +1521,7 @@ route = "units/c-chain-gcc-600.toml"
 planted_store = 0x08000550
 
 [program.c-chain-gcc.bars]
-lines = 2414
+lines = 2392
 lines_prelude = 1262
 functions = 13
 functions_iwram = 0
@@ -1545,5 +1573,6 @@ sp_accesses_callers_frame = 1
 call_fn_calls = 0
 call_fn_four_complete = 0
 jumps_by_value = 0
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 1
 gap_targets = 0

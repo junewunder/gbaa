@@ -160,7 +160,7 @@
 //! and the stack locals' is bytes, every pointer a guest address, every
 //! ROM read at run time.
 
-use crate::func::{Ctx, ExitInfo, Func, Idle, Plan, build_func, exits, key};
+use crate::func::{Ctx, ExitInfo, Func, Idle, Plan, build_func, exits, key, successors};
 use crate::plan;
 use crate::saves::{Assume, Passing, Sets, Summaries, Summary, summarize_passing};
 use analysis::discovery::{self, Discovery};
@@ -1043,6 +1043,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .filter(|(k, s)| s.passed() != 0 && !holes.standins.contains_key(k))
         .map(|(&k, _)| k)
         .collect();
+    let lr_ret = lr_entries(&codes, &all, holes);
     // Each function's text by key, in print order: the modules' contents.
     let mut out: Vec<(u32, String)> = Vec::new();
     let mut report = String::new();
@@ -1102,6 +1103,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     args: &args,
                     heap: &heap,
                     psr: psr_fns.place(f.entry),
+                    lr_ret: lr_ret.contains(&f.entry),
                     dead: BTreeMap::new(),
                 };
                 let text = p.print(c.sums.get(f.entry));
@@ -1554,6 +1556,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("call_fn_complete", n(soft.indirect_complete));
     m.push("call_fn_four_complete", n(soft.indirect_four_complete));
     m.push("jumps_by_value", n(soft.dyn_jumps));
+    m.push("entry_lr_returns", n(soft.lr_returns));
+    m.push("entry_lr_returns_call_fn", n(soft.lr_returns_call_fn));
     if let Some(f) = &fnrefs {
         let fn_proven = f.1.keys().filter(|w| f.0.proven(**w)).count();
         m.push("fn_words_proven", n(fn_proven));
@@ -2147,6 +2151,67 @@ fn library_standins(holes: &Holes, codes: &[Code]) -> Holes {
     h
 }
 
+/// The functions whose entry lr (`r14` of their extended entry, `x_`) is
+/// [`RET`] however they're entered (`native/lift-pop-return`). A call
+/// (`f_`, `a_`, `call_fn`, an IRQ) passes `RET`; a fall or jump into
+/// another function's entry (and the code after a call, where it is one)
+/// passes the jumper's r14, which is `RET` where the summary's run saw r14
+/// still the jumper's entry lr there ([`Summary::lr_into`]) and the
+/// jumper is one of these, or where the run never reached the jump and
+/// no path of it was cut short at a hole (the jump can't run: the code
+/// after a call that never returns). The greatest such set: a cycle of
+/// falls is entered from outside it. A jumper with no settled summary,
+/// or a stand-in (its code is the holes file's), proves nothing of what
+/// it jumps into.
+///
+/// A return the summary's run proved a jump to the entry lr
+/// ([`Summary::lr_returns`]) is then a plain return: the word it pops is
+/// the one its prologue pushed, under the run's assumptions, which the
+/// lift's callers already rest on ([`crate::saves`]: a store through an
+/// address it can't place doesn't hit a saved register's slot; a local
+/// slot is a Rust local, which none can).
+fn lr_entries(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> BTreeSet<u32> {
+    // (jumper, the function it jumps into, r14 proven its entry lr there)
+    let mut pairs: Vec<(u32, u32, bool)> = Vec::new();
+    for c in codes {
+        for f in &c.funcs {
+            let sum = c
+                .sums
+                .get(f.entry)
+                .filter(|_| !holes.standins.contains_key(&f.entry));
+            for gb in f.blocks.values() {
+                for x in exits(&c.ctx, gb) {
+                    for k in successors(&c.ctx, &x) {
+                        if f.blocks.contains_key(&k) || !all.contains(&k) {
+                            continue;
+                        }
+                        // A jump the run never reached, with no path of
+                        // it cut short, can't run (the code after a call
+                        // that never returns).
+                        let ok =
+                            sum.is_some_and(|s| s.lr_into.get(&k).copied().unwrap_or(!s.stopped));
+                        pairs.push((f.entry, k, ok));
+                    }
+                }
+            }
+        }
+    }
+    let mut set = all.clone();
+    loop {
+        let out: Vec<u32> = pairs
+            .iter()
+            .filter(|&&(j, k, ok)| set.contains(&k) && (!ok || !set.contains(&j)))
+            .map(|&(_, k, _)| k)
+            .collect();
+        if out.is_empty() {
+            return set;
+        }
+        for k in out {
+            set.remove(&k);
+        }
+    }
+}
+
 /// One context's functions, summaries and frames. `named`: the indirect
 /// calls a holes file's `[[takes]]` names, where a stack address in a
 /// register the callees take escapes.
@@ -2202,6 +2267,11 @@ struct Soft {
     /// The functions that take one of r4-r11 from their callers.
     takers: Vec<(u32, u8)>,
     dyn_jumps: usize,
+    /// Jumps by value to the entry lr printed as a plain return, and those
+    /// still through `call_fn`, the entry lr not proven `RET`
+    /// ([`lr_entries`]).
+    lr_returns: usize,
+    lr_returns_call_fn: usize,
     /// Falls and jumps into another function's entry, printed through its
     /// extended entry.
     falls: usize,
@@ -2265,6 +2335,9 @@ struct FnPrinter<'a, 'b> {
     /// Whether it is the reset or an IRQ wrapper, whose `msr` and `mrs`
     /// are printed ([`PsrFns`]); elsewhere they are hard holes.
     psr: Option<PsrPlace>,
+    /// Its entry lr is [`RET`] on every way in ([`lr_entries`]): a jump by
+    /// value to the entry lr is a plain return.
+    lr_ret: bool,
     /// The writes of registers and flags nothing printed reads, by block
     /// ([`FnPrinter::dead_writes`]): left out.
     dead: BTreeMap<u32, Vec<bool>>,
@@ -3564,6 +3637,21 @@ impl FnPrinter<'_, '_> {
                         target.into_iter().collect()
                     }
                 };
+                // A jump to the entry lr, which is `RET`: a plain return,
+                // the popped word left in its register
+                // (`native/lift-pop-return`).
+                let to_lr = self
+                    .sums
+                    .get(self.f.entry)
+                    .is_some_and(|s| s.lr_returns.contains(&at));
+                if to_lr && self.lr_ret {
+                    self.soft.lr_returns += 1;
+                    writeln!(s, "{ind}{}", self.ret()).unwrap();
+                    return s;
+                }
+                if to_lr {
+                    self.soft.lr_returns_call_fn += 1;
+                }
                 writeln!(s, "{ind}let t: u32 = {t};").unwrap();
                 writeln!(s, "{ind}if t & !3 == RET {{ {} }}", self.ret()).unwrap();
                 // Anything else is a function's entry, taken as a tail call
