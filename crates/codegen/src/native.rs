@@ -60,6 +60,9 @@
 //!   `f_<key>(g, sp, a: [u32; 4]) -> Result<[u32; 4], Exit>`, with the
 //!   summary printed above it.
 //! - Registers and NZCV are Rust locals; each block's IR values are `let`s.
+//!   A write of one nothing reads after it is left out ([`live`], unit
+//!   `native/lift-dead-writes`: a return reads its results, a call its
+//!   parameters, a fall into another function everything).
 //!   r4-r11 outlive a call because callees keep them, or change only
 //!   what no caller reads (the summaries' `keeps` and `changes`; a
 //!   function that breaks that, `analysis::holes::SUMMARY_HARD`, is a
@@ -157,7 +160,7 @@
 //! and the stack locals' is bytes, every pointer a guest address, every
 //! ROM read at run time.
 
-use crate::func::{Ctx, ExitInfo, Func, Idle, Plan, build_func, exits, key};
+use crate::func::{Ctx, ExitInfo, Func, Idle, Plan, build_func, exits, key, successors};
 use crate::plan;
 use crate::saves::{Assume, Passing, Sets, Summaries, Summary, summarize_passing};
 use analysis::discovery::{self, Discovery};
@@ -174,6 +177,7 @@ pub mod frame;
 pub mod globals;
 pub mod heap;
 pub mod lift_check;
+pub mod live;
 pub mod metrics;
 pub mod modules;
 pub mod named;
@@ -273,6 +277,10 @@ pub struct Holes {
     /// planted control (`native/lift-fallthrough`): the native check must
     /// catch it on `agb/native-fallthrough`.
     pub fall_as_tail_call: bool,
+    /// Stage A's old dead writes (`gbaa-lift --keep-dead-writes`): every
+    /// write of a register or flag printed, read or not, those nothing
+    /// reads counted in `dead_flag_writes` (`native/lift-dead-writes`).
+    pub keep_dead_writes: bool,
     /// Stage A's old IRQs (`gbaa-lift --irq-at-waits`): `Game::cpsr` as
     /// bookkeeping only, so an IRQ due at a wait inside a critical section
     /// runs there, where the hardware holds it until the I bit clears. The
@@ -1036,6 +1044,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .filter(|(k, s)| s.passed() != 0 && !holes.standins.contains_key(k))
         .map(|(&k, _)| k)
         .collect();
+    let lr_ret = lr_entries(&codes, &all, holes);
     // Each function's text by key, in print order: the modules' contents.
     let mut out: Vec<(u32, String)> = Vec::new();
     let mut report = String::new();
@@ -1096,6 +1105,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     heap: &heap,
                     psr: psr_fns.place(f.entry),
                     starts: narrow::Starts::new(),
+                    lr_ret: lr_ret.contains(&f.entry),
+                    dead: BTreeMap::new(),
                 };
                 let text = p.print(c.sums.get(f.entry));
                 (text, p.found)
@@ -1306,6 +1317,18 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         soft.falls,
         if holes.fall_as_tail_call {
             " (--fall-as-tail-call: every one a tail call, r4-r12 and the flags zeroed)"
+        } else {
+            ""
+        }
+    )
+    .unwrap();
+    writeln!(
+        report,
+        "flag writes printed: {}, of which nothing reads {}{}",
+        soft.flag_writes,
+        soft.dead_flag_writes,
+        if holes.keep_dead_writes {
+            " (--keep-dead-writes: every write of a register or flag printed)"
         } else {
             ""
         }
@@ -1535,6 +1558,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // printed (no bar: they should rise).
     m.push("shift_pairs_left", n(soft.pairs_left.len()));
     m.push("narrowing_casts", n(soft.narrowings.len()));
+    // Flag writes printed that nothing reads (native/lift-dead-writes):
+    // none, but with --keep-dead-writes.
+    m.push("dead_flag_writes", soft.dead_flag_writes);
     m.push_accesses(&soft.access);
     m.push("ram_globals", n(globals.0.len()));
     m.push("pointer_unexplained", soft.unexplained);
@@ -1552,6 +1578,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("call_fn_complete", n(soft.indirect_complete));
     m.push("call_fn_four_complete", n(soft.indirect_four_complete));
     m.push("jumps_by_value", n(soft.dyn_jumps));
+    m.push("entry_lr_returns", n(soft.lr_returns));
+    m.push("entry_lr_returns_call_fn", n(soft.lr_returns_call_fn));
     if let Some(f) = &fnrefs {
         let fn_proven = f.1.keys().filter(|w| f.0.proven(**w)).count();
         m.push("fn_words_proven", n(fn_proven));
@@ -2145,6 +2173,67 @@ fn library_standins(holes: &Holes, codes: &[Code]) -> Holes {
     h
 }
 
+/// The functions whose entry lr (`r14` of their extended entry, `x_`) is
+/// [`RET`] however they're entered (`native/lift-pop-return`). A call
+/// (`f_`, `a_`, `call_fn`, an IRQ) passes `RET`; a fall or jump into
+/// another function's entry (and the code after a call, where it is one)
+/// passes the jumper's r14, which is `RET` where the summary's run saw r14
+/// still the jumper's entry lr there ([`Summary::lr_into`]) and the
+/// jumper is one of these, or where the run never reached the jump and
+/// no path of it was cut short at a hole (the jump can't run: the code
+/// after a call that never returns). The greatest such set: a cycle of
+/// falls is entered from outside it. A jumper with no settled summary,
+/// or a stand-in (its code is the holes file's), proves nothing of what
+/// it jumps into.
+///
+/// A return the summary's run proved a jump to the entry lr
+/// ([`Summary::lr_returns`]) is then a plain return: the word it pops is
+/// the one its prologue pushed, under the run's assumptions, which the
+/// lift's callers already rest on ([`crate::saves`]: a store through an
+/// address it can't place doesn't hit a saved register's slot; a local
+/// slot is a Rust local, which none can).
+fn lr_entries(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> BTreeSet<u32> {
+    // (jumper, the function it jumps into, r14 proven its entry lr there)
+    let mut pairs: Vec<(u32, u32, bool)> = Vec::new();
+    for c in codes {
+        for f in &c.funcs {
+            let sum = c
+                .sums
+                .get(f.entry)
+                .filter(|_| !holes.standins.contains_key(&f.entry));
+            for gb in f.blocks.values() {
+                for x in exits(&c.ctx, gb) {
+                    for k in successors(&c.ctx, &x) {
+                        if f.blocks.contains_key(&k) || !all.contains(&k) {
+                            continue;
+                        }
+                        // A jump the run never reached, with no path of
+                        // it cut short, can't run (the code after a call
+                        // that never returns).
+                        let ok =
+                            sum.is_some_and(|s| s.lr_into.get(&k).copied().unwrap_or(!s.stopped));
+                        pairs.push((f.entry, k, ok));
+                    }
+                }
+            }
+        }
+    }
+    let mut set = all.clone();
+    loop {
+        let out: Vec<u32> = pairs
+            .iter()
+            .filter(|&&(j, k, ok)| set.contains(&k) && (!ok || !set.contains(&j)))
+            .map(|&(_, k, _)| k)
+            .collect();
+        if out.is_empty() {
+            return set;
+        }
+        for k in out {
+            set.remove(&k);
+        }
+    }
+}
+
 /// One context's functions, summaries and frames. `named`: the indirect
 /// calls a holes file's `[[takes]]` names, where a stack address in a
 /// register the callees take escapes.
@@ -2200,6 +2289,11 @@ struct Soft {
     /// The functions that take one of r4-r11 from their callers.
     takers: Vec<(u32, u8)>,
     dyn_jumps: usize,
+    /// Jumps by value to the entry lr printed as a plain return, and those
+    /// still through `call_fn`, the entry lr not proven `RET`
+    /// ([`lr_entries`]).
+    lr_returns: usize,
+    lr_returns_call_fn: usize,
     /// Falls and jumps into another function's entry, printed through its
     /// extended entry.
     falls: usize,
@@ -2225,6 +2319,10 @@ struct Soft {
     shift_pairs: BTreeSet<u32>,
     pairs_left: BTreeSet<u32>,
     narrowings: BTreeSet<(u32, u32, usize)>,
+    /// Flag writes printed, and of them those nothing reads
+    /// ([`FnPrinter::dead_writes`]: none but with `--keep-dead-writes`).
+    flag_writes: u64,
+    dead_flag_writes: u64,
 }
 
 struct FnPrinter<'a, 'b> {
@@ -2270,6 +2368,12 @@ struct FnPrinter<'a, 'b> {
     /// The registers each block starts with a known constant in
     /// ([`narrow::starts`]).
     starts: narrow::Starts,
+    /// Its entry lr is [`RET`] on every way in ([`lr_entries`]): a jump by
+    /// value to the entry lr is a plain return.
+    lr_ret: bool,
+    /// The writes of registers and flags nothing printed reads, by block
+    /// ([`FnPrinter::dead_writes`]): left out.
+    dead: BTreeMap<u32, Vec<bool>>,
 }
 
 /// Where an `msr` or `mrs` the lifter prints is: the hole report's
@@ -2547,6 +2651,7 @@ impl FnPrinter<'_, '_> {
         let mut order: Vec<u32> = vec![f.entry];
         order.extend(f.blocks.keys().copied().filter(|&k| k != f.entry));
         self.labels = order.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+        self.dead = self.dead_writes();
         if let Some(p) = self.plan(&order) {
             self.soft.fns_structured += 1;
             self.soft.blocks_match += p.region_blocks;
@@ -2603,6 +2708,82 @@ impl FnPrinter<'_, '_> {
         let xs = exits(self.ctx, gb);
         self.cur = k;
         self.block(&gb.block.insts, &xs, gb.block.thumb)
+    }
+
+    /// The writes of r0-r12 and the flags nothing printed reads after
+    /// them, by block ([`live::dead`]; unit `native/lift-dead-writes`), as
+    /// [`FnPrinter::exit`] prints each exit: a jump to a block reads what
+    /// it does; a return its results; a direct call its parameters (all
+    /// of r0-r3, which is more than a shaped callee's) and the r4-r11 its
+    /// callee takes, then what its return site reads; a call through
+    /// `call_fn` r0-r11 (a `[[takes]]` site passes some of r4-r11); a
+    /// `swi` r0-r3; anything into another function's extended entry, or
+    /// that this function can't follow, everything. `--keep-dead-writes`
+    /// prints them all the same, counted (`dead_flag_writes`).
+    fn dead_writes(&self) -> BTreeMap<u32, Vec<bool>> {
+        let keys: Vec<u32> = self.f.blocks.keys().copied().collect();
+        let index: BTreeMap<u32, usize> = keys.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+        let xs: Vec<Vec<ExitInfo>> = self
+            .f
+            .blocks
+            .values()
+            .map(|gb| exits(self.ctx, gb))
+            .collect();
+        let insts: Vec<&[Inst]> = self
+            .f
+            .blocks
+            .values()
+            .map(|gb| &gb.block.insts[..])
+            .collect();
+        let results = live::low(self.me.map_or(0xf, |m| m.results));
+        let dead = live::dead(&insts, |b, i| {
+            let Some(x) = xs[b].iter().find(|x| x.index == i) else {
+                return (Vec::new(), live::ALL);
+            };
+            // Going on at `k`: its block, or (into another function, a
+            // hole) everything.
+            let to = |k: u32| match index.get(&k) {
+                Some(&s) => (vec![s], 0),
+                None => (Vec::new(), live::ALL),
+            };
+            let then = |k: u32, reads: live::Live| {
+                let (s, l) = to(k);
+                (s, l | reads)
+            };
+            match x.plan {
+                Plan::Static(k) | Plan::Rekey(k) => to(k),
+                Plan::Call { target, ret } => {
+                    then(ret, live::low(0xf) | live::high(self.passed(target)))
+                }
+                Plan::CallVia { reg, ret, .. } => then(
+                    ret,
+                    live::low(0xf) | live::high(0xff) | live::reg(reg.index()),
+                ),
+                Plan::Dynamic { ret: Some(ret), .. } => {
+                    then(ret, live::low(0xf) | live::high(0xff))
+                }
+                Plan::Dynamic {
+                    ret: None, target, ..
+                } => {
+                    let thumb = self.f.blocks[&keys[b]].block.thumb;
+                    let Ok(ts) = dyn_targets(self.ctx, self.holes, x.at, thumb, target) else {
+                        return (Vec::new(), live::ALL);
+                    };
+                    // The return, or a tail call through `call_fn`.
+                    let mut out = (Vec::new(), results | live::low(0xf));
+                    for t in ts {
+                        let (s, l) = to(t);
+                        out.0.extend(s);
+                        out.1 |= l;
+                    }
+                    out
+                }
+                Plan::Swi { next } => then(next, live::low(0xf)),
+                Plan::Undefined { trap: true } => (Vec::new(), 0),
+                Plan::Undefined { trap: false } => (Vec::new(), live::ALL),
+            }
+        });
+        keys.into_iter().zip(dead).collect()
     }
 
     /// The function's structuring plan ([`plan::plan`], as the mod view's
@@ -2853,6 +3034,14 @@ impl FnPrinter<'_, '_> {
             .ref_tys
             .extend(refs.iter().flatten().map(|r| r.f.ty));
         let dead = dead_addresses(insts, &typed);
+        // The writes of registers and flags nothing reads after them
+        // (`dead_writes`), left out but with `--keep-dead-writes`.
+        let unread: Vec<bool> = match self.dead.get(&self.cur) {
+            Some(d) if d.len() == insts.len() => d.clone(),
+            _ => vec![false; insts.len()],
+        };
+        let keep = self.holes.keep_dead_writes;
+        let skip: Vec<bool> = unread.iter().map(|&u| u && !keep).collect();
         // The narrowing idioms and shifts by a constant, printed over the
         // value they narrow or shift ([`narrow`]).
         let none = BTreeMap::new();
@@ -2860,13 +3049,29 @@ impl FnPrinter<'_, '_> {
         let forms: Vec<_> = (0..insts.len())
             .map(|i| narrow::form(insts, &known, i))
             .collect();
-        let used = self.used(insts, &typed, &refs, &forms);
+        let used = self.used(insts, &typed, &refs, &skip, &forms);
         let pairs = narrow::guest_pairs(&self.f.blocks[&self.cur].insns);
         self.soft.shift_pairs.extend(&pairs);
         for (i, inst) in insts.iter().enumerate() {
             let id = ValueId(i as u32);
-            if dead[i] || (pure(&inst.op) && !used[i]) {
+            if dead[i] || skip[i] || (pure(&inst.op) && !used[i]) {
                 continue;
+            }
+            // A load of a stack local nothing uses (a callee-saved
+            // register's restore before a return) reads a Rust local:
+            // nothing to print.
+            if matches!(inst.op, Op::Load { .. })
+                && !used[i]
+                && !self.holes.shadow_locals
+                && self
+                    .frame
+                    .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some())
+            {
+                continue;
+            }
+            if let Op::SetFlag(..) = inst.op {
+                self.soft.flag_writes += 1;
+                self.soft.dead_flag_writes += u64::from(unread[i]);
             }
             let guard = inst.guard.map(v);
             let stmt = |s: &mut String, body: String| match &guard {
@@ -3133,17 +3338,19 @@ impl FnPrinter<'_, '_> {
     /// printed as a stack local's (unless `--shadow-locals` reads the
     /// frame's bytes too) or a typed global's (`typed`) doesn't use its
     /// address, so the arithmetic only the address needed isn't printed
-    /// ([`pure`]).
+    /// ([`pure`]), and neither does a write `skip` leaves out (a dead
+    /// one's, [`FnPrinter::dead_writes`]); a value printed over another ([`narrow::form`]) uses only that one.
     fn used(
         &self,
         insts: &[Inst],
         typed: &[Option<Place>],
         refs: &[Option<HeapRef>],
+        skip: &[bool],
         forms: &[Option<(ValueId, narrow::Form)>],
     ) -> Vec<bool> {
         let mut used = vec![false; insts.len()];
         for (i, inst) in insts.iter().enumerate().rev() {
-            if pure(&inst.op) && !used[i] {
+            if skip[i] || (pure(&inst.op) && !used[i]) {
                 continue;
             }
             let local = !self.holes.shadow_locals
@@ -3516,6 +3723,21 @@ impl FnPrinter<'_, '_> {
                         target.into_iter().collect()
                     }
                 };
+                // A jump to the entry lr, which is `RET`: a plain return,
+                // the popped word left in its register
+                // (`native/lift-pop-return`).
+                let to_lr = self
+                    .sums
+                    .get(self.f.entry)
+                    .is_some_and(|s| s.lr_returns.contains(&at));
+                if to_lr && self.lr_ret {
+                    self.soft.lr_returns += 1;
+                    writeln!(s, "{ind}{}", self.ret()).unwrap();
+                    return s;
+                }
+                if to_lr {
+                    self.soft.lr_returns_call_fn += 1;
+                }
                 writeln!(s, "{ind}let t: u32 = {t};").unwrap();
                 writeln!(s, "{ind}if t & !3 == RET {{ {} }}", self.ret()).unwrap();
                 // Anything else is a function's entry, taken as a tail call
@@ -4221,10 +4443,12 @@ mod tests {
         let mut words = [0xE1A0_0000u32; 0x10];
         words[0] = 0xE1A0_0C01; // mov r0, r1, lsl #24
         words[1] = 0xE1A0_0C40; // mov r0, r0, asr #24
-        words[2] = 0xE3A0_20FF; // mov r2, #0xff
-        words[3] = 0xEAFF_FFFF; // b 0x08000010
-        words[4] = 0xE001_3002; // and r3, r1, r2
-        words[5] = 0xEAFF_FFFE; // b .
+        words[2] = 0xE581_0000; // str r0, [r1]
+        words[3] = 0xE3A0_20FF; // mov r2, #0xff
+        words[4] = 0xEAFF_FFFF; // b 0x08000014
+        words[5] = 0xE001_3002; // and r3, r1, r2
+        words[6] = 0xE581_3000; // str r3, [r1]
+        words[7] = 0xEAFF_FFFE; // b .
         let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
         let l = lift(&rom, "t", &Holes::parse("").unwrap());
         let text: String = l.files.iter().map(|(_, t)| t.as_str()).collect();
