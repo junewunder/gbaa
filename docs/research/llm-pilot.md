@@ -178,7 +178,7 @@ open unit that already covers it.
 | Branch conditions as comparisons and bit tests | 12 | yes | new: `native/lift-branch-conditions` |
 | Compiler narrowing idioms as casts and masks | 6 | yes | new: `native/lift-narrowing-casts` |
 | Single-use temporaries inline, constants at their use | all 20 | yes | done: `native/lift-inline-temps` |
-| One `bank_sp` per run of stores at the same sp | 10 | yes, with care | new: `native/lift-bank-sp-once` |
+| One `bank_sp` per run of stores at the same sp | 10 | yes, with care | done: `native/lift-bank-sp-once` |
 | A counted loop as `for` over a range | 2 | yes | new: `native/lift-for-loops` |
 | A compare tree on one value as `match` | 3 | yes | new: `native/lift-switch-match` |
 | `if`/`while`/early return in place of the block match | 12 | yes | `native/lift-structured` (in progress) |
@@ -271,6 +271,11 @@ sp, so this needs that proof, not just the check passing. Where the
 rewrites moved the bank earlier than the first store (the four
 AudioCommands bank at entry), the lifter shouldn't follow: that only
 passes because nothing before the store banks differently.
+Done (native/lift-bank-sp-once): the lift leaves a store's bank out where
+the bank holds its `r13` on every way in (a must-analysis over the
+function's blocks: a write of `r13`, a `msr`, a call, a `swi` or a wait
+ends the run), and `irq_entry` puts the stopped mode's sp back after a
+handler, so a store that runs one doesn't. Metroid 6588 calls to 2484.
 
 **Counted loops.** ResetFreeOam 0x08000a19 (`for` from the free slot to
 127) and DoSoundAction 0x080027f9 (an s8 count from 11 down to 0). The
