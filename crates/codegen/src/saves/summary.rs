@@ -195,6 +195,16 @@ pub struct Summary {
     /// it (`read_after`, `forwarded_after`; agbcc's epilogue `pop {r3};
     /// mov r8, r3` leaves the entry r8 in r3, unread).
     pub entry_returns: BTreeMap<u8, BTreeSet<String>>,
+    /// The registers of r0–r3 it returns holding one of r4–r11 exactly
+    /// as it came, on every return where it holds bits of any: (r0–r3,
+    /// r4–r11). m4a's `MPlayMain` ends `pop {r0-r7}; mov r8, r0; …`,
+    /// leaving the entry r8 in r0 (its early `bx lr`, the argument). The
+    /// lift passes the register at every call with a known callee (a
+    /// `bl`, a tail call, a `call_fn` call's complete callee set), so it
+    /// returns the caller's, as the machine does: a caller's own read of
+    /// the result, or its return, is its read of the register it passed
+    /// ([`Sum::echo_at`]), and this one's `entry_returns` hole is none.
+    pub echoes: BTreeMap<u8, u8>,
 }
 
 impl Summary {
@@ -364,6 +374,16 @@ pub(super) struct Sum<'a> {
     entry_reads: BTreeSet<(u32, u8, Via)>,
     /// [`Summary::passes`].
     passes: BTreeSet<(u32, u32)>,
+    /// [`Summary::echoes`] over the returns so far, by r0–r3 (`None`
+    /// before the first).
+    echo: Option<[Echo; 4]>,
+    /// The calls whose callee returns one of r4–r11 as it came in r0–r3
+    /// ([`Summary::echoes`]), by site: for each of r0–r3, the registers
+    /// of r4–r11 (bit `n - 4` for rN) whose entry values this function's
+    /// register it passes held bits of. A read of the result with its own
+    /// instruction, or its return, is a read of those ([`Sum::read`],
+    /// [`Sum::ret`]).
+    echo_at: BTreeMap<u32, [u8; 4]>,
     /// Reads of r4–r11 as they came whose every bit an op masks away:
     /// (the op's instruction, the register).
     masked: BTreeSet<(u32, u8)>,
@@ -371,6 +391,28 @@ pub(super) struct Sum<'a> {
     /// stack word it saved them in: a frame record, whose entry value is
     /// the caller's frame pointer ([`Sum::frame_record`]).
     frames: u16,
+}
+
+/// What a function returns in one of r0–r3, over its returns, as to
+/// r4–r11's entry values ([`Summary::echoes`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Echo {
+    /// No bits of them.
+    Clean,
+    /// Where it holds any, exactly rN as it came.
+    Of(u8),
+    /// Bits of them otherwise.
+    Mixed,
+}
+
+impl Echo {
+    fn join(self, o: Echo) -> Echo {
+        match (self, o) {
+            (a, b) if a == b => a,
+            (Echo::Clean, x) | (x, Echo::Clean) => x,
+            _ => Echo::Mixed,
+        }
+    }
 }
 
 /// How bits of an entry value of r4–r11 reach a use.
@@ -432,6 +474,8 @@ impl<'a> Sum<'a> {
             changes: 0,
             entry_reads: BTreeSet::new(),
             passes: BTreeSet::new(),
+            echo: None,
+            echo_at: BTreeMap::new(),
             masked: BTreeSet::new(),
             frames: 0,
         }
@@ -530,6 +574,17 @@ impl<'a> Sum<'a> {
             self.params.entry(r as u8).or_insert(cause);
         }
         for site in &o.sites {
+            // A result its callee returns one of r4–r11 in as it came:
+            // read by this function's own instruction, a read of the
+            // register it passed ([`Summary::echoes`]). Passed on to a
+            // callee isn't, as for any other entry value returned.
+            if let Cause::Reads(at) = cause
+                && let Some(m) = self.echo_at.get(site)
+            {
+                for e in entry_regs(m[r]) {
+                    self.entry_reads.insert((at, e, Via::Own));
+                }
+            }
             let callee = self.sites[site];
             for c in self.targets(*site, callee) {
                 self.used.entry((c, r as u8)).or_insert(cause);
@@ -624,6 +679,7 @@ impl<'a> Sum<'a> {
                 }
             }
         }
+        self.echo_call(s, at, &targets);
         self.sites.insert(at, callee);
         let changes = callee
             .and_then(|c| self.sums.get(&c))
@@ -638,6 +694,36 @@ impl<'a> Sum<'a> {
                 n.sites.insert(at);
             }
             *o = n;
+        }
+    }
+
+    /// The call at `at` to `targets` in `s`, the state before it: where a
+    /// callee returns one of r4–r11 as it came ([`Summary::echoes`]),
+    /// which of this function's entry values the register the lift
+    /// passes it holds bits of ([`Sum::echo_at`]).
+    fn echo_call(&mut self, s: &State, at: u32, targets: &[u32]) {
+        let mut m = [0u8; 4];
+        for c in targets {
+            let Some(x) = self.sums.get(c) else { continue };
+            if self.passing.replaced.contains(c) {
+                continue;
+            }
+            for (&r, &n) in &x.echoes {
+                if let Some((regs, _)) = s.regs[n as usize].taint() {
+                    m[r as usize] |= regs;
+                }
+                // The lift passes its local, as it was before an earlier
+                // callee changed the register: not what the machine has.
+                let by = s.chg[n as usize - 4];
+                if by != 0 {
+                    self.holes.insert(format!(
+                        "0x{at:08x}: reads r4-r11 a callee changed: r{n}, by 0x{by:08x}"
+                    ));
+                }
+            }
+        }
+        if m != [0; 4] {
+            self.echo_at.insert(at, m);
         }
     }
 
@@ -768,6 +854,27 @@ impl<'a> Sum<'a> {
         for (r, v) in s.regs[..12].iter().enumerate().skip(4) {
             if *v != V::Entry(r as u8) {
                 self.changes |= 1 << r;
+            }
+        }
+        let now: [Echo; 4] = std::array::from_fn(|r| match s.regs[r] {
+            V::Entry(n @ 4..=11) => Echo::Of(n),
+            v if v.taint().is_some() => Echo::Mixed,
+            _ => Echo::Clean,
+        });
+        self.echo = Some(match self.echo {
+            Some(e) => std::array::from_fn(|r| e[r].join(now[r])),
+            None => now,
+        });
+        // A result of a call whose callee returns one of r4–r11 as it
+        // came, returned: this function's caller's read of the register
+        // this one passed it.
+        for (r, o) in s.org[..4].iter().enumerate() {
+            for site in &o.sites {
+                if let Some(m) = self.echo_at.get(site) {
+                    for e in entry_regs(m[r]) {
+                        self.entry_reads.insert((at, e, Via::Ret(r as u8)));
+                    }
+                }
             }
         }
         self.exit = Some(match self.exit.take() {
@@ -1076,6 +1183,17 @@ pub fn summarize_passing(
             foreign: sum.foreign.clone(),
             undefined_reads: sum.undefined.clone(),
             entry_returns: returned,
+            // (A run cut short may have returns it didn't see.)
+            echoes: sum
+                .echo
+                .iter()
+                .filter(|_| !sum.stopped)
+                .flat_map(|e| e.iter().enumerate())
+                .filter_map(|(r, e)| match e {
+                    Echo::Of(n) => Some((r as u8, *n)),
+                    _ => None,
+                })
+                .collect(),
         };
         for &c in &sum.refs {
             callers.entry(c).or_default().insert(k);
@@ -1101,6 +1219,7 @@ pub fn summarize_passing(
             || old.exit != new.exit
             || old.changes != new.changes
             || old.takes != new.takes
+            || old.echoes != new.echoes
             || old.returns != new.returns
             || Sum::lost(old) != Sum::lost(&new);
         sums.insert(k, new);
@@ -1161,7 +1280,9 @@ pub fn summarize_passing(
         // the r3 a callee's `pop {r3}; mov r8, r3` left).
         let own = s.read_after | s.forwarded_after;
         for (&r, hs) in &s.entry_returns {
-            if own & 1 << r != 0 {
+            // One returned exactly as it came is the caller's own read
+            // ([`Summary::echoes`]).
+            if own & 1 << r != 0 && !s.echoes.contains_key(&r) {
                 s.holes.extend(hs.iter().cloned());
             }
         }
@@ -1208,7 +1329,9 @@ pub fn summarize_passing(
     // themselves only jumped into (agb's panic paths, discovery's entries
     // inside another function): soft. An entry value returned in r0–r3
     // isn't passed: hard wherever the function is called, or jumped into
-    // from one that is.
+    // from one that is, but where it is returned exactly as it came on
+    // every return (`Summary::echoes`): every call with a known callee
+    // passes it, and the caller's read is its own.
     //
     // A function a pointer call enters that only passes the register on
     // (`…, which 0x… takes`) uses nothing itself: the zero is wrong where

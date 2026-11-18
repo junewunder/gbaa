@@ -1318,6 +1318,70 @@ fn an_entry_value_returned_is_hard_where_a_caller_reads_it() {
 }
 
 #[test]
+fn an_entry_value_returned_as_it_came_is_the_callers() {
+    // `c: push {lr}; bl f; ldr r2, [r0]; pop {r0}; bx r0` and `f: cmp r0,
+    // #0; bne 1f; bx lr; 1: mov r0, r8; bx lr`: the entry r8 left in r0,
+    // or the argument (m4a's `MPlayMain`). The lift passes f the caller's r8, so c's load is a
+    // read of its own r8 (one nothing calls: only jumped into), not a
+    // hole of f's.
+    let (rom, d) = thumb_program(
+        &[
+            0xB500, // 0x00 push {lr}
+            0xF000, 0xF803, // 0x02 bl 0x0c
+            0x6802, // 0x06 ldr r2, [r0, #0]
+            0xBC01, // 0x08 pop {r0}
+            0x4700, // 0x0a bx r0
+            0x2800, // 0x0c cmp r0, #0
+            0xD100, // 0x0e bne 0x12
+            0x4770, // 0x10 bx lr
+            0x4640, // 0x12 mov r0, r8
+            0x4770, // 0x14 bx lr
+        ],
+        &[2, 4, 2, 2, 2, 2, 2, 2, 2, 2],
+        &[0x0800_0001, 0x0800_000d],
+    );
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    let f = &sums.by_entry[&0x0800_000d];
+    assert_eq!(f.echoes, [(0, 8)].into_iter().collect());
+    assert_eq!(hard_holes(&sums, 0x0800_000d), Vec::<String>::new());
+    let c = &sums.by_entry[&0x0800_0001];
+    assert!(
+        c.holes
+            .iter()
+            .any(|h| h.starts_with("0x08000006: reads r4-r11 at entry") && h.ends_with(": r8")),
+        "{:?}",
+        c.holes
+    );
+}
+
+#[test]
+fn a_call_passes_the_register_its_callee_returns_as_it_came() {
+    // Reset: `mov r8, #5; bl f; ldr r1, [r0]; b .`, `f: mov r0, r8; bx
+    // lr`: the call passes r8, so f returns 5 as the machine's does.
+    let rom: Vec<u8> = [
+        0xE3A0_8005u32, // 0x00 mov r8, #5
+        0xEB00_0001,    // 0x04 bl 0x10
+        0xE590_1000,    // 0x08 ldr r1, [r0]
+        0xEAFF_FFFE,    // 0x0c b .
+        0xE1A0_0008,    // 0x10 mov r0, r8
+        0xE12F_FF1E,    // 0x14 bx lr
+    ]
+    .iter()
+    .flat_map(|w| w.to_le_bytes())
+    .collect();
+    let lifted = crate::native::lift(&rom, "t", &crate::native::Holes::default());
+    assert!(lifted.holes.is_empty(), "{:?}", lifted.holes);
+    let text: String = lifted.files.iter().map(|(_, t)| t.as_str()).collect();
+    assert!(
+        text.contains(
+            "x_08000010(g, Regs { r: [r0, r1, r2, r3, 0, 0, 0, 0, r8, 0, 0, 0, 0, r13, RET]"
+        ),
+        "{text}"
+    );
+}
+
+#[test]
 fn an_entry_hi_register_passed_to_a_callee_is_hard() {
     // `w: push {lr}; mov r0, r8; bl s; pop {r0}; bx r0`, `s: adds r0, #1;
     // bx lr`: s reads the r8 that w took as it came (TMC's `player.s`
