@@ -1369,6 +1369,28 @@ gbaa-server: a host must be reachable (port forwarding), as with the
 assistant. Carrying it through gbaa-server's rooms would remove that and
 is a later step; it would lose mGBA interop for that path only.
 
+**Two real games meet** (multiplayer/rogue-coop-menus, 2026-11-18). Two
+headless `gbaa-desktop --rogue` runs on one machine, each on its own copy
+of the same save, walk to the clerk, pick Host and Join, and connect
+("All set!" on both); each then draws the other player and its follower
+where the other stands. To run it: copy the owner's `Emerald Rogue.sav`
+once per player, and run each `gbaa-desktop "Emerald Rogue.gba"
+--headless --timing exact --frames 7000 --rogue 127.0.0.1:PORT --save
+COPY --input W,…` at once, where `W` is
+`start@400,a@460-1240/60,down@1400+50,right@1460+170,up@1660+60,up@1820+40,left@1870+80,right@2040+12,up@2070+60,right@2140+16,up@2180+4,a@2220,a@2280-3000/40,a@3420`
+(from that save: the town square, into PokeConnect, through its back
+door to the clerk, through the assistant's notice and the save to the
+Host/Join menu). The host adds `down@3480,a@3620,a@4100,b@4200`, the
+one joining `a@3620,a@4100,b@4200,left@4300+20,down@4400+20` (stepping
+away, so the two don't stand on one tile). Both print `rogue:
+connected`, and from about frame 4500 each screen shows the other
+player. More presses of A at the clerk offer to stop, and close it. The
+first try found the
+header read one word off (the assistant state from the blob pointer's
+slot, the blob pointer from the home box's): the game never saw an
+assistant. `rom_header_reads` now lays out the whole header, the
+neighbouring words included.
+
 **Wire compatibility with mGBA + Rogue Assistant: yes, by construction.**
 The assistant links ENet 1.3.17 (`External/ENet`). `rusty_enet` 0.4 is
 ENet 1.3.18 transpiled to Rust (commit 2662c0d). Between v1.3.17 and that
@@ -1379,8 +1401,13 @@ negotiation, where 1.3.18 takes the smaller of the two MTUs (default
 1392 against 1400), which a 1.3.17 peer accepts. The payloads are the
 raw blob spans, no framing of the assistant's own, and the channel
 numbers, sizes and packet flags above match. Not yet tried against a real
-mGBA with the assistant (Windows only): a run against C ENet 1.3.17
-built here would be the cheap check.
+mGBA with the assistant (Windows only). Against C ENet 1.3.17 built here
+(2026-11-18), a relay hosting for one gbaa game and connecting to the
+other: both connects went through, rusty_enet to C and C to rusty_enet,
+and the C side took 265 game states and 1589 player states from the
+gbaa host; the handshake was lost to the relay's own race (it came
+before the relay reached the host), and the fixed relay's build was
+refused in that session, so no game has yet connected through C ENet.
 
 ## The cable over the internet: modes, timing, games (multiplayer/link-cable-survey)
 
