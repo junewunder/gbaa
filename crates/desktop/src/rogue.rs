@@ -145,8 +145,11 @@ impl Layout {
             player_count: f(14)?,
             request: f(15)?,
             current: f(16)?,
-            assistant_state: f(30)?,
-            multiplayer_ptr: f(31)?,
+            // Then nine home-box words (17-25) and the pointers: save
+            // blocks 1 and 2 and Rogue's block (26-28), the assistant
+            // state (29), the blob's pointer (30), the home box's (31).
+            assistant_state: f(29)?,
+            multiplayer_ptr: f(30)?,
         };
         l.check()?;
         Ok(l)
@@ -665,8 +668,30 @@ mod tests {
         for (i, v) in words.iter().enumerate() {
             w(&mut rom, 0x404 + 4 * i, *v);
         }
-        w(&mut rom, 0x404 + 4 * 30, l.assistant_state);
-        w(&mut rom, 0x404 + 4 * 31, l.multiplayer_ptr);
+        // `RogueAssistantHeader`'s tail as Emerald Rogue 2.x has it: the
+        // home-box words, the save blocks' and Rogue block's pointers,
+        // then the assistant state, the blob's pointer and the home box's
+        // pointer (a neighbour, so reading one slot off is caught).
+        let tail = [
+            0xa,
+            0x3c,
+            0x314,
+            0,
+            0xc,
+            0x2d0,
+            0x960,
+            0x2d4,
+            0x310, // home box
+            0x0300_3614,
+            0x0300_3618,
+            0x0300_3620, // save blocks, Rogue's
+            l.assistant_state,
+            l.multiplayer_ptr,
+            0x0203_826c, // the home box's pointer
+        ];
+        for (i, v) in tail.iter().enumerate() {
+            w(&mut rom, 0x404 + 4 * (17 + i), *v);
+        }
         assert_eq!(Layout::from_rom(&rom), Ok(l));
         w(&mut rom, 0x404, 2);
         assert!(
