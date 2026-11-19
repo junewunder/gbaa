@@ -1,7 +1,8 @@
 /* c-switch (c/switch/SCENE.md): switches dense enough to compile to jump
  * tables. A small script interpreter reads byte commands from ROM, one
  * switch case per command (as games' event scripts do), and a pen's
- * state machine picks its move by a second switch each frame. */
+ * state machine picks its move by a second switch each frame. A third,
+ * sparse switch compiles to compares (tally). */
 #include "gba.h"
 #include "draw.h"
 
@@ -81,6 +82,7 @@ struct Script gScript;
 struct Pen gPen;
 u32 gFrame;
 u32 gCommands;
+u32 gTally;
 
 NOINLINE void pen_set(u8 state)
 {
@@ -204,6 +206,29 @@ NOINLINE void pen_update(struct Pen *p)
     p->step++;
 }
 
+/* A switch too sparse for a jump table: both compilers compare its value
+ * in a binary search (as games' small switches on a stage do). */
+NOINLINE void tally(u32 n)
+{
+    switch (n) {
+    case 1:
+        gTally += 3;
+        break;
+    case 5:
+        gTally ^= gFrame;
+        break;
+    case 40:
+        gTally = (gTally << 1) | (gTally >> 31);
+        break;
+    case 100:
+        gTally -= gCommands;
+        break;
+    default:
+        gTally++;
+        break;
+    }
+}
+
 void AgbMain(void)
 {
     VIDEO_MODE3_VBLANK_IRQ();
@@ -217,6 +242,7 @@ void AgbMain(void)
         VBlankIntrWait();
         gCommands += script_run(&gScript);
         pen_update(&gPen);
+        tally(gFrame & 127);
         fill_rect(gPen.x, gPen.y, 2, 2, gPen.color);
         fill_rect(0, 150, (gCommands & 127) + 1, 4, sColors[gFrame & 7]);
         gFrame++;

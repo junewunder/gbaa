@@ -13,6 +13,7 @@
 mod assets_log;
 pub mod audio;
 mod capture;
+pub mod changed;
 pub mod console;
 mod coro;
 mod dump;
@@ -64,7 +65,8 @@ pub const USAGE: &str = "\
 usage: gbaa-desktop ROM [options]
 
   A game's binary, gbaa-NAME, carries the ROM it was recompiled from and
-  runs that when no ROM is given. A ROM given runs instead. The window
+  runs that when no ROM is given. A ROM given runs instead; a changed copy
+  of the build's runs the functions it changed interpreted. The window
   keeps a game's save, states and resume file in its own folder,
   saves/NAME/ in gbaa's data dir (~/.local/share/gbaa on Linux and the
   Deck, ~/Library/Application Support/gbaa on macOS, %APPDATA%\\gbaa on
@@ -1653,13 +1655,14 @@ pub fn run(
     {
         return Err("--interp-blocks needs an exact build and --timing exact".into());
     }
-    if let Some(c) = code
-        && runtime::dispatch::rom_hash(rom) != c.rom_hash
-    {
-        return Err(format!(
-            "{}: not the ROM this build was recompiled from",
-            opts.rom.display()
-        ));
+    // A ROM other than the build's runs its changed functions interpreted
+    // ([`changed`]).
+    let stale = match code {
+        Some(c) => changed::stale(rom, c).map_err(|e| format!("{}: {e}", opts.rom.display()))?,
+        None => None,
+    };
+    if let Some(s) = &stale {
+        eprintln!("gbaa-desktop: {}: {}", opts.rom.display(), s.report());
     }
     let (rom, overrides, crc) = match (&opts.assets_mod, &opts.assets_manifest) {
         (Some(dir), Some(manifest)) => asset_overrides(rom, dir, manifest, code)?,
@@ -1669,6 +1672,7 @@ pub fn run(
     m.set_timing(timing);
     m.spin_list = spin_list;
     m.bus.asset_overrides = overrides;
+    m.bus.stale = stale.map_or(&[], |s| s.keys);
     if let Some(crc) = crc {
         m.bus.keep_rom_crc(crc);
     }

@@ -47,6 +47,10 @@ pub type LoadState<P> = Box<dyn FnMut(&mut Machine<P>, Vec<u8>) -> Result<(), St
 pub type Screenshot<P> = Box<dyn FnMut(&Machine<P>, &Path) -> Result<(), String>>;
 /// `emu:saveStateSlot`'s and `loadStateSlot`'s: the front end's slot `n`.
 pub type Slot<P> = Box<dyn FnMut(&mut Machine<P>, i64) -> Result<(), String>>;
+/// What makes scripts' writes to the cartridge's memory domains real:
+/// (ROM offset, byte) pairs, sorted by offset, for the machine's ROM
+/// ([`patched`] makes the copy).
+pub type PatchRom<P> = Box<dyn FnMut(&mut Machine<P>, &[(u32, u8)]) -> Result<(), String>>;
 
 /// How the front end runs, resets, loads and shows the machine, for the
 /// parts of `emu` that need more than the machine.
@@ -63,6 +67,23 @@ pub struct Hooks<P: Platform> {
     pub save_slot: Slot<P>,
     /// `emu:loadStateSlot`: the slot's state, save data and all.
     pub load_slot: Slot<P>,
+    /// `emu.memory.cart0:write8` and the like, as mGBA patches its copy of
+    /// the ROM: the writes a script made since the last, applied when it
+    /// returns or before it runs the machine (`runFrame`, `step`,
+    /// `reset`). Until then the cartridge domains read them back.
+    pub patch_rom: PatchRom<P>,
+}
+
+/// A copy of `rom` with `writes` (ROM offset, byte) made, leaked; offsets
+/// past its end are left out, as mGBA leaves them.
+pub fn patched(rom: &[u8], writes: &[(u32, u8)]) -> &'static [u8] {
+    let mut r = rom.to_vec();
+    for &(a, v) in writes {
+        if let Some(b) = r.get_mut(a as usize) {
+            *b = v;
+        }
+    }
+    r.leak()
 }
 
 /// The Lua instructions a callback may run, in hook ticks of [`TICK`]:
@@ -93,6 +114,31 @@ struct Shared<P: Platform> {
     /// Console lines already handed out by [`Host::take_console`].
     taken: Cell<usize>,
     points: RefCell<points::Points>,
+    /// Scripts' writes to the cartridge domains not yet made
+    /// ([`Hooks::patch_rom`]), by ROM offset.
+    rom_writes: RefCell<std::collections::BTreeMap<u32, u8>>,
+}
+
+/// Make the scripts' pending ROM writes ([`Hooks::patch_rom`]); a refusal
+/// goes to the console.
+fn flush_rom<P: Platform>(s: &Shared<P>, m: &mut Machine<P>) {
+    let w: Vec<(u32, u8)> = std::mem::take(&mut *s.rom_writes.borrow_mut())
+        .into_iter()
+        .collect();
+    if w.is_empty() {
+        return;
+    }
+    if let Err(e) = (s.hooks.borrow_mut().patch_rom)(m, &w) {
+        s.console
+            .borrow_mut()
+            .push(format!("error: ROM write: {e}"));
+    }
+}
+
+/// Whether a memory domain at `base` is the cartridge's ROM (`cart0` to
+/// `cart2`, its three mirrors).
+fn is_cart(base: u32) -> bool {
+    (0x0800_0000..0x0E00_0000).contains(&base)
 }
 
 /// The lent machine.
@@ -211,6 +257,7 @@ impl<P: Platform + 'static> Host<P> {
             roots: RefCell::default(),
             taken: Cell::new(0),
             points: RefCell::default(),
+            rom_writes: RefCell::default(),
         });
         // As mGBA: every standard library, `debug` included (luaL_openlibs);
         // a sandboxed script's `_ENV` holds limited copies.
@@ -276,6 +323,7 @@ impl<P: Platform + 'static> Host<P> {
         let was = self.s.m.replace(m);
         let t = f();
         self.s.m.set(was);
+        flush_rom(&self.s, m);
         t
     }
 
@@ -536,13 +584,31 @@ fn memory_methods<P: Platform + 'static>(
     t: &Table,
     base: u32,
 ) -> mlua::Result<()> {
+    // The cartridge domains patch the ROM, as mGBA's raw writes do
+    // ([`Hooks::patch_rom`]); `emu:write8` and the other domains go
+    // through the bus, as mGBA's bus writes do (a ROM store reaches only
+    // the GPIO port).
+    let cart = is_cart(base);
     macro_rules! read {
-        ($name:literal, $f:ident) => {{
+        ($name:literal, $f:ident, $n:literal) => {{
             let s = s.clone();
             t.set(
                 $name,
                 lua.create_function(move |_, (_s, a): (Value, u32)| {
-                    Ok(machine(&s)?.bus.$f(base.wrapping_add(a)))
+                    let a = base.wrapping_add(a);
+                    let m = machine(&s)?;
+                    let pending = s.rom_writes.borrow();
+                    if !cart || pending.is_empty() {
+                        return Ok(m.bus.$f(a) as u32);
+                    }
+                    let a = a & !($n - 1);
+                    Ok((0..$n).fold(0u32, |v, i| {
+                        let b = pending
+                            .get(&((a + i) & 0x01FF_FFFF))
+                            .copied()
+                            .unwrap_or_else(|| m.bus.read8(a + i));
+                        v | (b as u32) << (8 * i)
+                    }))
                 })?,
             )?;
         }};
@@ -553,15 +619,26 @@ fn memory_methods<P: Platform + 'static>(
             t.set(
                 $name,
                 lua.create_function(move |_, (_s, a, v): (Value, u32, i64)| {
-                    machine(&s)?.bus.$f(base.wrapping_add(a), v as $ty);
+                    let a = base.wrapping_add(a);
+                    let m = machine(&s)?;
+                    if cart {
+                        let n = size_of::<$ty>() as u32;
+                        let a = a & !(n - 1);
+                        let mut w = s.rom_writes.borrow_mut();
+                        for i in 0..n {
+                            w.insert((a + i) & 0x01FF_FFFF, (v >> (8 * i)) as u8);
+                        }
+                    } else {
+                        m.bus.$f(a, v as $ty);
+                    }
                     Ok(())
                 })?,
             )?;
         }};
     }
-    read!("read8", read8);
-    read!("read16", read16);
-    read!("read32", read32);
+    read!("read8", read8, 1);
+    read!("read16", read16, 2);
+    read!("read32", read32, 4);
     write!("write8", write8, u8);
     write!("write16", write16, u16);
     write!("write32", write32, u32);
@@ -570,8 +647,16 @@ fn memory_methods<P: Platform + 'static>(
         "readRange",
         lua.create_function(move |lua, (_s, a, n): (Value, u32, u32)| {
             let m = machine(&s)?;
+            let pending = s.rom_writes.borrow();
             let bytes: Vec<u8> = (0..n)
-                .map(|i| m.bus.read8(base.wrapping_add(a).wrapping_add(i)))
+                .map(|i| {
+                    let a = base.wrapping_add(a).wrapping_add(i);
+                    match cart {
+                        true => pending.get(&(a & 0x01FF_FFFF)).copied(),
+                        false => None,
+                    }
+                    .unwrap_or_else(|| m.bus.read8(a))
+                })
                 .collect();
             lua.create_string(&bytes)
         })?,
@@ -783,6 +868,7 @@ fn install<P: Platform + 'static>(
         "runFrame",
         lua.create_function(move |_, _: Value| {
             let m = machine(&ss)?;
+            flush_rom(&ss, m);
             (ss.hooks.borrow_mut().run_frame)(m);
             Ok(())
         })?,
@@ -791,7 +877,9 @@ fn install<P: Platform + 'static>(
     emu.set(
         "step",
         lua.create_function(move |_, _: Value| {
-            machine(&ss)?.step();
+            let m = machine(&ss)?;
+            flush_rom(&ss, m);
+            m.step();
             Ok(())
         })?,
     )?;
@@ -799,7 +887,9 @@ fn install<P: Platform + 'static>(
     emu.set(
         "reset",
         lua.create_function(move |lua, _: Value| {
-            (ss.hooks.borrow_mut().reset)(machine(&ss)?);
+            let m = machine(&ss)?;
+            flush_rom(&ss, m);
+            (ss.hooks.borrow_mut().reset)(m);
             fire(lua, &ss, "reset", None);
             Ok(())
         })?,

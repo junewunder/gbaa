@@ -228,6 +228,9 @@ pub const UNBARRED: &[&str] = &[
     "blocks_structured",
     "blocks_structured_pct",
     "entry_lr_returns",
+    "compare_trees_matched",
+    "compare_tree_blocks",
+    "loops_for",
     "narrowing_casts",
 ];
 

@@ -23,6 +23,10 @@ fn host_for(rom: &'static [u8]) -> (Host<Headless>, Box<Machine<Headless>>) {
         screenshot: Box::new(|_, _| Ok(())),
         save_slot: Box::new(|_, _| Err("no slots".into())),
         load_slot: Box::new(|_, _| Err("no slots".into())),
+        patch_rom: Box::new(|m, w| {
+            m.bus.rom = patched(m.bus.rom, w);
+            Ok(())
+        }),
     };
     (
         Host::new(rom, hooks).unwrap(),
@@ -95,6 +99,27 @@ fn reads_memory_header_and_callbacks_in_order() {
         ]
     );
     assert_eq!(h.buffers(), [("Out".to_string(), "there".to_string())]);
+}
+
+#[test]
+fn cart_writes_patch_the_rom_and_read_back_at_once() {
+    let (h, mut m) = host();
+    let s = script(
+        r#"
+        emu.memory.cart0:write16(0x100, 0xBEEF)
+        emu.memory.cart1:write8(0x102, 0x12)
+        local r = emu.memory.cart0:readRange(0x101, 2)
+        console:log(string.format("%04x %08x %02x%02x", emu.memory.cart0:read16(0x100),
+            emu.memory.cart2:read32(0x100), r:byte(1), r:byte(2)))
+        emu:write8(0x08000104, 0x55)
+        "#,
+    );
+    h.load(&mut m, &s.path, Access::Sandboxed);
+    assert_eq!(h.console(), ["log: beef 0012beef be12"]);
+    assert_eq!(&m.bus.rom[0x100..0x105], [0xEF, 0xBE, 0x12, 0, 0]);
+    // Before the script's frame runs, so the frame sees the new byte.
+    h.eval(&mut m, "emu.memory.cart0:write8(0x103, 7) emu:runFrame()");
+    assert_eq!(m.bus.rom[0x103], 7);
 }
 
 #[test]
@@ -988,6 +1013,7 @@ fn load_state_slot_keeps_the_cartridge_save_unless_asked() {
             let b = load.borrow().get(&n).cloned().ok_or("empty")?;
             m.load_state(&b).map_err(|e| e.to_string())
         }),
+        patch_rom: Box::new(|_, _| Err("no patches".into())),
     };
     let h = Host::new(rom, hooks).unwrap();
     let mut m = Box::new(Machine::new(rom, Headless));

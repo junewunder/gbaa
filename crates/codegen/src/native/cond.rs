@@ -239,14 +239,27 @@ impl Form {
         )
     }
 
-    /// The Rust expression.
+    /// The Rust expression, each value by its `let`'s name.
     pub fn text(&self) -> String {
+        self.text_with(&|x| v(x))
+    }
+
+    /// Whether the form prints its values through [`Form::text_with`]'s
+    /// `val`, so they may be inlined; a joined form's text names their
+    /// `let`s.
+    pub fn takes_inlined(&self) -> bool {
+        !matches!(self.f, F::Text(_))
+    }
+
+    /// The Rust expression, value `x` printed as `val(x)` (its name, or
+    /// its inlined expression in parentheses) where the form allows.
+    pub fn text_with(&self, val: &dyn Fn(ValueId) -> String) -> String {
         match &self.f {
             F::Cmp { l, rel, r, signed } => format!(
                 "{} {} {}",
-                side(l, *signed, true),
+                side(l, *signed, true, val),
                 rel.text(),
-                side(r, *signed, false)
+                side(r, *signed, false, val)
             ),
             F::Bool(b) => format!("{b}"),
             F::Text(t) => t.clone(),
@@ -256,12 +269,12 @@ impl Form {
 
 /// A side as Rust. A constant on the left is typed (nothing else gives
 /// its type); on the right it takes the other side's.
-fn side(s: &Side, signed: bool, left: bool) -> String {
+fn side(s: &Side, signed: bool, left: bool, val: &dyn Fn(ValueId) -> String) -> String {
     match (s, signed) {
-        (Side::Val(x), false) => v(*x),
-        (Side::Val(x), true) => format!("({} as i32)", v(*x)),
-        (Side::And(a, b), false) => format!("({} & {})", and(a), and(b)),
-        (Side::And(..), true) => format!("({} as i32)", side(s, false, false)),
+        (Side::Val(x), false) => val(*x),
+        (Side::Val(x), true) => format!("({} as i32)", val(*x)),
+        (Side::And(a, b), false) => format!("({} & {})", and(a, val), and(b, val)),
+        (Side::And(..), true) => format!("({} as i32)", side(s, false, false, val)),
         (&Side::Const(k), false) if left => format!("{k:#x}u32"),
         (&Side::Const(k), false) => lit(k),
         (&Side::Const(k), true) if !left && (-0x10000..=0x10000).contains(&(k as i32)) => {
@@ -272,10 +285,10 @@ fn side(s: &Side, signed: bool, left: bool) -> String {
 }
 
 /// An `&`'s operand: a constant in hex.
-fn and(s: &Side) -> String {
+fn and(s: &Side, val: &dyn Fn(ValueId) -> String) -> String {
     match *s {
         Side::Const(k) => format!("{k:#x}"),
-        ref s => side(s, false, false),
+        ref s => side(s, false, false, val),
     }
 }
 
@@ -283,8 +296,16 @@ fn and(s: &Side) -> String {
 fn arg(s: &Side) -> String {
     match s {
         Side::Val(x) => format!("{} as i32", v(*x)),
-        s => side(s, true, false),
+        s => side(s, true, false, &|x| v(x)),
     }
+}
+
+/// The values two sides read.
+fn sides_uses(l: &Side, r: &Side) -> Vec<ValueId> {
+    let mut uses = Vec::new();
+    l.uses(&mut uses);
+    r.uses(&mut uses);
+    uses
 }
 
 /// An unsigned constant: small ones in decimal.
@@ -415,10 +436,17 @@ fn form(insts: &[Inst], done: &[Option<Form>], op: Op) -> Option<Form> {
         Op::Bit(b) => Form::new(F::Bool(b), Vec::new()),
         Op::AdcCarry { a, b, c } => match arith(insts, a, b, c)? {
             Arith::Sub(l, r) => Form::cmp(l, Rel::Ge, r, false),
-            Arith::Add(x, y) => Form::new(
-                F::Text(format!("{}.overflowing_add({}).1", v(x), v(y))),
-                vec![x, y],
-            ),
+            Arith::Add(x, y) => {
+                let (l, r) = (opnd(insts, x), opnd(insts, y));
+                Form::new(
+                    F::Text(format!(
+                        "{}.overflowing_add({}).1",
+                        side(&l, false, true, &|x| v(x)),
+                        side(&r, false, false, &|x| v(x))
+                    )),
+                    sides_uses(&l, &r),
+                )
+            }
         },
         Op::AdcOverflow { a, b, c } => match arith(insts, a, b, c)? {
             // a - 0 never overflows.
@@ -430,20 +458,23 @@ fn form(insts: &[Inst], done: &[Option<Form>], op: Op) -> Option<Form> {
                 Form::new(
                     F::Text(format!(
                         "{}.overflowing_sub({}).1",
-                        side(&l, true, true),
+                        side(&l, true, true, &|x| v(x)),
                         arg(&r)
                     )),
                     uses,
                 )
             }
-            Arith::Add(x, y) => Form::new(
-                F::Text(format!(
-                    "({} as i32).overflowing_add({} as i32).1",
-                    v(x),
-                    v(y)
-                )),
-                vec![x, y],
-            ),
+            Arith::Add(x, y) => {
+                let (l, r) = (opnd(insts, x), opnd(insts, y));
+                Form::new(
+                    F::Text(format!(
+                        "{}.overflowing_add({}).1",
+                        side(&l, true, true, &|x| v(x)),
+                        arg(&r)
+                    )),
+                    sides_uses(&l, &r),
+                )
+            }
         },
         Op::IsZero(r) => match insts[r.index()].op {
             Op::Adc { a, b, c } => match arith(insts, a, b, c) {

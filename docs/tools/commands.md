@@ -317,9 +317,9 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `report.txt` and `rom.gba`, a copy of the ROM that the binary carries
   inside it with `include_bytes!`, deck/embed-rom: run with no ROM, a
   build plays its own, as if it were `<name>.gba` beside the binary, so
-  its `.sav` and states go there; a ROM given runs instead, and must be
-  the one it was recompiled from. One file to send a friend, and netplay
-  can't pair a build with the wrong ROM. `out/` and the builds stay out
+  its `.sav` and states go there; a ROM given runs instead, a changed copy
+  with its changed functions interpreted (`docs/codegen-design.md`, "A
+  changed ROM"). One file to send a friend. `out/` and the builds stay out
   of git; a ROM is also run 1800 frames in the interpreter, for the
   IWRAM blocks it patches and the copies discovery missed, decision 7). It
   writes a file only when its bytes change and deletes only files no longer
@@ -374,9 +374,9 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   rewrites `mods/emerald/snapshots/emerald.rs`, the smallest structured
   Emerald function of each shape, so a printer change shows as its diff
   (about 30 s, not heavy); `just run-recompiled out/<name> [desktop args]` builds and
-  runs it (checks free RAM, caps it at 3 GB); `just recompile-check ROM`
-  compares the recompiled build with `--interp` (last frame hash and
-  registers; writes both runs' `.txt` and `.png` to `out/<name>/`);
+  runs it (checks free RAM, caps it at 3 GB); `just recompile-check ROM [FRAMES
+  TIMING PLAY ARGS…]` compares the recompiled build with `--interp` (frame hash, registers,
+  `out/<name>/`; PLAY: a changed ROM, e.g. `just randomize-emerald`'s, plays instead);
   `just sst-gen [PER_FILE] [SEQS]` runs SingleStepTests through generated
   Rust (PER_FILE cases from each file, against the expected state and the
   interpreter), then SEQS (4000) sequence cases: alternately a random block
@@ -1302,7 +1302,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `target/recompiled` (`gbaa-native-<name>`, the native programs' headless
   flags or, with none, gbaa-desktop's window to play in: `--scale N`, `--mute`; it keeps the game's `.sav` in `saves/<name>/` as the play build does, and its menus leave out save states, rewind, scripts and netplay; `crates/native-host`). It reads `holes/<name>.toml` when there is
   one, else `mods/<name>/holes.toml` (a commercial game's, private: its
-  stand-ins are ports of the game's code); `<name>` is `--name`'s when
+  stand-ins are ports of the game's code), and holds it to `mods/<name>/bars.toml` (private bars) if there is one; `<name>` is `--name`'s when
   given (a file name with spaces: `just lift "…/Metroid - Zero Mission
   (USA).gba" out/lift-metroid --name metroid`), else the ROM's file name
   lowercased. The file has `[[standin]]` (a function's hand-written Rust,
@@ -1332,7 +1332,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   heap's run types is a heap object's field through `Ref<T>`, counted in
   `ref_accesses` and `ref_types`, unbarred, and `ref_unexplained` those
   through an object's pointer no type explains, native/ref-heap); `call_fn` calls; jumps by value;
-  gap targets. `--bars FILE` fails the lift (after writing it) on any
+  gap targets; compare trees on one value printed as a `match` (`compare_trees_matched`, `compare_tree_blocks` the blocks taken in, unbarred; `compare_trees_left` barred; native/lift-switch-match). `--bars FILE` fails the lift (after writing it) on any
   metric over `[program.NAME.bars]`'s maximum, each named with both
   numbers (`gbaa-lift: affine: load_computed_unknown is 755, over its
   bar of 754`), and lists the metrics under their bars. Discovery's
