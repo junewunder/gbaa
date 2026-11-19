@@ -405,13 +405,13 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   standard libraries. Scripts load as into mGBA's scripting window
   with the game running: `emu` set, `start` not fired; each in its own
   `_ENV`, whose `require` finds modules beside the script. A script is
-  sandboxed (the owner's choice): files (`io`, `os.remove`/`rename`,
-  `loadfile`/`dofile`/`require`, state files, screenshots, `loadFile`) only
-  under its own folder, links and `..` resolved; source only, no C modules; no
-  `os.execute`, `io.popen`, `os.exit`, `os.getenv`, `os.tmpname`; of
-  `debug` only `traceback` and `getinfo`; sockets on loopback only (a
-  `nil` bind address binds 127.0.0.1; others get `access denied`). A blocked call raises an error
-  saying so. `--script-full FILE` gives it everything, as mGBA, and
+  sandboxed (the owner's choice): files (`io`, `os.remove`/`rename`, `loadfile`/`dofile`/`require`,
+  state files, screenshots, `loadFile`) only under its own folder, links and `..` resolved; source
+  only, no C modules; no `os.execute`, `io.popen`, `os.exit`, `os.getenv`, `os.tmpname`; of `debug`
+  only `traceback` and `getinfo`; sockets on loopback only (a `nil` bind address binds 127.0.0.1;
+  others get `access denied`). A blocked call raises an error saying so, but `io.open`, `os.remove`,
+  `os.rename`, `loadfile`, `io.popen` give nil and why, `os.execute` nil, `"exit"`, 126, as Lua's fail
+  (Ironmon probes paths, runs curl); a blocked command warns once. `--script-full FILE` gives it everything, as mGBA, and
   remembers that in `script-access.conf` beside `gamepad.conf` (a
   `full = PATH` line; delete it to take it back). The check is
   `cargo test -p script` (`crates/script/fixtures/sandbox/`). `keysRead` fires before each frame's pad

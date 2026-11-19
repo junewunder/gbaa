@@ -1237,13 +1237,34 @@ end
 
 return function(dir, path, full, allowed, id)
   local env
+  -- Why the script may not use path `p`, or nil if it may.
+  local function refused(name, p)
+    if full or type(p) ~= "string" or allowed(p) then return nil end
+    return name .. ": " .. p .. " is outside the script's folder (the script is sandboxed;"
+      .. " give it full access to use it)"
+  end
   -- A path the script may use, or an error at its call.
   local function checked(name, p)
     -- Lua's io and os functions turn a number into a filename, so check it as one.
     if type(p) == "number" then p = tostring(p) end
-    if full or type(p) ~= "string" or allowed(p) then return p end
-    error(name .. ": " .. p .. " is outside the script's folder (the script is sandboxed;"
-      .. " give it full access to use it)", 3)
+    local why = refused(name, p)
+    if why then error(why, 3) end
+    return p
+  end
+  -- Lua's io.open, os.remove, os.rename and loadfile report a file they
+  -- can't use by returning nil and why, and scripts test for that: Ironmon
+  -- tries a path relative to the working directory first, then its own.
+  -- So a blocked path fails them the same way, saying why.
+  local function soft(name, f, paths)
+    return function(...)
+      local a = table.pack(...)
+      for i = 1, paths do
+        if type(a[i]) == "number" then a[i] = tostring(a[i]) end
+        local why = refused(name, a[i])
+        if why then return nil, why end
+      end
+      return f(table.unpack(a, 1, a.n))
+    end
   end
   if full then
     env = setmetatable({}, {__index = G})
@@ -1253,17 +1274,35 @@ return function(dir, path, full, allowed, id)
     for k, v in pairs(G) do
       if type(k) ~= "string" or k:sub(1, 2) ~= "__" then env[k] = v end
     end
-    env.io = lib(rio, "io", {"close", "read", "write", "type", "tmpfile", "stdin", "stdout", "stderr"}, {"popen"})
-    env.io.open = function(p, ...) return rio.open(checked("io.open", p), ...) end
+    env.io = lib(rio, "io", {"close", "read", "write", "type", "tmpfile", "stdin", "stdout", "stderr"}, {})
+    env.io.open = soft("io.open", rio.open, 1)
     env.io.lines = function(p, ...) return rio.lines(checked("io.lines", p), ...) end
     env.io.input = function(p) return rio.input(checked("io.input", p)) end
     env.io.output = function(p) return rio.output(checked("io.output", p)) end
     env.os = lib(ros, "os", {"clock", "date", "difftime", "time"},
-      {"execute", "exit", "getenv", "setlocale", "tmpname"})
-    env.os.remove = function(p) return ros.remove(checked("os.remove", p)) end
-    env.os.rename = function(a, b)
-      return ros.rename(checked("os.rename", a), checked("os.rename", b))
+      {"exit", "getenv", "setlocale", "tmpname"})
+    -- A command fails as if it couldn't run (Lua's nil, "exit", code; no
+    -- command: no shell), warned of once: Ironmon checks for updates with
+    -- curl as it starts, and tracks on without it.
+    local said = {}
+    local function warnOnce(name)
+      if not said[name] then
+        said[name] = true
+        __console("warn", name .. " is not allowed: the script is sandboxed"
+          .. " (give it full access to use it)")
+      end
     end
+    env.os.execute = function(cmd)
+      if cmd == nil then return false end
+      warnOnce("os.execute")
+      return nil, "exit", 126
+    end
+    env.io.popen = function()
+      warnOnce("io.popen")
+      return nil, "io.popen is not allowed: the script is sandboxed (give it full access to use it)"
+    end
+    env.os.remove = soft("os.remove", ros.remove, 1)
+    env.os.rename = soft("os.rename", ros.rename, 2)
     env.debug = lib(rdebug, "debug", {"traceback"}, {"debug", "gethook", "getlocal",
       "getmetatable", "getregistry", "getupvalue", "getuservalue", "sethook", "setlocal",
       "setmetatable", "setupvalue", "setuservalue", "upvalueid", "upvaluejoin", "setcstacklimit"})
@@ -1306,7 +1345,10 @@ return function(dir, path, full, allowed, id)
     local p, mode, e = ...
     if select("#", ...) < 3 then e = env end
     if p == nil and not full then error("loadfile: the script is sandboxed: give a path", 2) end
-    return rawloadfile(checked("loadfile", p), full and mode or "t", e)
+    if type(p) == "number" then p = tostring(p) end
+    local why = refused("loadfile", p)
+    if why then return nil, why end
+    return rawloadfile(p, full and mode or "t", e)
   end
   env.dofile = function(p)
     local f, err = env.loadfile(p)

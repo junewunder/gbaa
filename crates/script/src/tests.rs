@@ -342,17 +342,21 @@ fn a_sandboxed_script_gets_an_error_for_each_blocked_call() {
             sandboxed.replace(" (", "; ").trim_end_matches(')')
         )
     };
-    let mut want = vec![];
-    let mut blocked = |what: &str, why: String| want.push(format!("log: blocked: {what}: {why}"));
-    for f in [
-        "os.execute",
-        "os.exit",
-        "os.getenv",
-        "os.tmpname",
-        "io.popen",
-    ] {
+    let want = std::cell::RefCell::new(vec![]);
+    let blocked = |what: &str, why: String| {
+        want.borrow_mut()
+            .push(format!("log: blocked: {what}: {why}"))
+    };
+    let warned = |why: String| want.borrow_mut().push(format!("warn: {why}"));
+    // A command fails as Lua's does when it can't run, warned of once.
+    warned(not_allowed("os.execute"));
+    blocked("os.execute", "os.execute failed".into());
+    blocked("os.execute's shell", "no shell".into());
+    for f in ["os.exit", "os.getenv", "os.tmpname"] {
         blocked(f, not_allowed(f));
     }
+    warned(not_allowed("io.popen"));
+    blocked("io.popen", not_allowed("io.popen"));
     blocked("io.open outside", outside("io.open", "../outside.txt"));
     blocked("io.open by ..", outside("io.open", "sub/../../outside.txt"));
     blocked("io.open by a link", outside("io.open", "link/outside.txt"));
@@ -410,9 +414,10 @@ fn a_sandboxed_script_gets_an_error_for_each_blocked_call() {
         "states and screenshots inside",
         "os.time, os.clock, os.date, debug.traceback",
     ] {
-        want.push(format!("log: allowed: {a}"));
+        want.borrow_mut().push(format!("log: allowed: {a}"));
     }
     let got = h.console();
+    let want = want.into_inner();
     for (g, w) in got.iter().zip(&want) {
         assert_eq!(g, w);
     }
