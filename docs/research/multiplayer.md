@@ -1440,6 +1440,11 @@ and the C side took 265 game states and 1589 player states from the
 gbaa host; the handshake was lost to the relay's own race (it came
 before the relay reached the host), and the fixed relay's build was
 refused in that session, so no game has yet connected through C ENet.
+The fixed relay is `spikes/enet-relay/relay.c` (it queues what comes
+before both sides are up, and retries the host); the owner allowed the
+build (2026-11-19), and it builds against 1.3.17's sources in
+`$GBAA_DATA/tools/enet-1.3.17` (the build line is in its header), but
+running it was refused by the session's permission classifier.
 
 ## The cable over the internet: modes, timing, games (multiplayer/link-cable-survey)
 
