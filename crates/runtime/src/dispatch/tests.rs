@@ -457,6 +457,7 @@ fn overlay_machine() -> Box<M> {
     ];
     let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
     let mut m = Box::new(Machine::new(Box::leak(rom.into_boxed_slice()), Headless));
+    m.start_at_line_0();
     for i in 0..4 {
         let v = m.bus.read32(0x0800_0010 + 4 * i);
         m.bus.write32(0x0300_0000 + 4 * i, v);
