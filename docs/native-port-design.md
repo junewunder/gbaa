@@ -1049,8 +1049,8 @@ with the native check and no replaced-library list.
   Result<[u32; 4], Exit>`. (Since `native/lift-params`, only those whose
   summary has a hole: the rest take their parameters and give their
   results, `docs/native-stage-b.md`, piece 3.) r0-r3 go in and come back; r4-r12, `lr` and
-  NZCV are Rust locals; each block's IR values are `let`s. Because every
-  function keeps r4-r11 in its own locals, a callee can't change its
+  NZCV are Rust locals (a write nothing reads left out: `native::live`); each block's IR values
+  are `let`s, but a pure one used once, or a constant, prints inside its use (native/lift-inline-temps). A counted loop of one block prints as a `for` over its range, proven by running it from a constant start (native/lift-for-loops, `native::counted`). Because every function keeps r4-r11 in its own locals, a callee can't change its
   caller's, so the lift is exact for any callee that follows AAPCS,
   whatever the summary proof says. The summary is printed above each
   function (`/// Reads {r0, r1}; returns {r0}`), and a function whose
@@ -1061,11 +1061,11 @@ with the native check and no replaced-library list.
   The 47-50 functions per program whose proof fails for other reasons
   (an indirect call, a callee that never returns) are listed in the
   report as soft.
-- Blocks are a `loop { match b }` over local labels, 0 the entry; ROM
-  addresses survive only as the labels' comments, jump-table `match`
-  arms and `FNS` keys. The structuring plan isn't used yet (stage C's
-  prettiness); `Plan::Static` is a label or, to another function's entry,
-  a tail call.
+- Blocks are printed from the structuring plan (`codegen::plan`): loops,
+  breaks, inlined code; an irreducible region, or a function with a block
+  no printed jump reaches, a `loop { match b }` (`blocks_in_match`). ROM
+  addresses survive as `guest_pc` marks, jump-table arms and `FNS` keys;
+  `Plan::Static` to another function's entry is a tail call.
 - A return is a jump to `RET`, the value `lr` holds on entry. Compiled
   code moves `lr` through the stack, so returns are told by value, not
   by shape: `pop {pc}`, `bx lr` and `ldr pc` all work, and anything else
@@ -1073,8 +1073,8 @@ with the native check and no replaced-library list.
   through `call_fn`.
 - The stack stays where the game has it: `sp` is a parameter and the
   frames are IWRAM bytes. A frame recovered as Rust locals is stage B's
-  (section 1). `bank_sp` puts sp in its mode's bank at a wait or I/O store;
-  `Game::sp`, system mode's, is where a handler's frames go.
+  (section 1). `bank_sp` puts sp in its mode's bank at a wait or I/O store
+  (once a run: `native::banks`); `Game::sp`, system mode's, is a handler's.
 - Memory is `ld8/16/32` and `st8/16/32` over `Game::ram` (EWRAM then
   IWRAM: the check layout is the only layout a byte program has), the
   library's I/O (`Hw::read16`/`write16`; the I/O block's unused
@@ -1169,6 +1169,39 @@ indirect calls through `call_fn`, 8 jumps by value.
   native/lift-fallthrough) are code the
   play build hands to its interpreter wherever it reaches them. Fixing discovery's `bl`-pair
   and scanned-fragment cases would make the lifter's decoding a no-op.
+
+## The per-function check (`native/fn-check-any`)
+
+`just fn-check` (2026-11-14) tests a replacement for one function (a
+hand or LLM rewrite, as a `[[standin]]`) against the function as the
+lifter prints it: tests, not proof (june, 2026-11-13), bounded and kept
+as a seed, a budget and a digest, never as states.
+
+- `gbaa-lift --fn-check KEY` prints the lift twice: the reference
+  `ref_f_KEY` (never planted) and the replacement `new_f_KEY`; `f_KEY` is
+  the driver's wrapper (`native/fn_check.rs`). Callers treat it as a
+  stand-in.
+- The program runs headless; at each call, while the budget lasts, the
+  driver copies the state (RAM, `Hw::checkpoint`, the CPSR and banked
+  sps) and runs 8 variants (the call as it came, then its parameters and
+  RAM it read changed by the seeded generator), the reference then the
+  replacement from the same state, under a host that shows nothing. Then
+  the state goes back and the reference runs the call, so the program's
+  path doesn't move (`GBAA_FN_CHECK_OFF`/`_RUN_ON` compare it).
+- Compared: RAM but the stack below the entry sp, I/O, palette, VRAM,
+  OAM, frames, sp, the CPSR and what callers read (the unreplaced shape;
+  all four registers after a summary hole). The digest is of the
+  reference's ends, the same for the same seed, budget, lift and path. A
+  run whose reference panics, stops or passes 600 frames is skipped.
+- The interpreter is a second reference (`native/fn-check-interp`): every
+  8th compared run (`--interp-every N`) the run's input becomes a
+  `Machine` (RAM, I/O as stored, display memories, save chip, CPSR, sp and
+  banked sps, r0-r3, lr a sentinel) and the interpreter runs the ROM's
+  code to the return (the sentinel's word, in ARM state too: `mov pc, lr`
+  doesn't interwork), untimed; its end must be the lift's. So a wrong lift
+  is caught too (`--plant-reference`). A run it can't follow (a wait: no
+  time passes) is counted, not compared ("none compared" if all).
+- Not yet: a function first called past the lift's stop can't be checked.
 
 ## The units that follow
 

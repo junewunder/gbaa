@@ -701,8 +701,9 @@ fn hard_reset<P: Platform>(m: &mut Machine<P>) {
     bus.write16(io_addr(reg::SOUNDCNT_H), 0x8800);
     bus.write16(io_addr(reg::SOUNDCNT_H), 0);
     // What `RegisterRamReset` leaves unlike power-on.
-    bus.io.write16(reg::DISPCNT, 0);
     bus.io.write16(reg::KEYCNT, 0);
+    // Power-on's `DISPCNT`: unwritten (`Io::new`).
+    bus.io.set_raw16(reg::DISPCNT, 8);
     // The serial port's answers to those stores (`Io::sio_unplugged`: SI
     // in normal mode; `JOY_TRANS`'s sent flag), which power-on hasn't.
     bus.io.set_raw16(reg::SIOCNT, 0);

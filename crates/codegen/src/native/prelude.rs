@@ -231,8 +231,10 @@ fn irq_entry(g: &mut Game) {
     // IRQ mode, I set, as the exception enters it, the CPSR it stopped in
     // the SPSR; back as it was on the return (the BIOS's `subs pc, lr,
     // #4` restores the SPSR, which a wrapper that nests puts back). The
-    // IRQ stack as it was: the stub pops what it pushed.
+    // IRQ stack as it was: the stub pops what it pushed. The stopped
+    // mode's sp too, as the hardware's comes back (native/lift-bank-sp-once).
     let (cpsr, spsr, base) = (g.cpsr, g.spsr, g.banked[0]);
+    let mine = *banked_sp(g, cpsr & 0x1F);
     g.spsr = cpsr;
     g.cpsr = 0x92;
     // A handler doesn't wait, so it can't be told to stop.
@@ -242,6 +244,7 @@ fn irq_entry(g: &mut Game) {
         panic!("a SoftReset (to {to:#010x}) in an IRQ handler, which the native program can't restart from");
     }
     (g.cpsr, g.spsr, g.banked[0]) = (cpsr, spsr, base);
+    *banked_sp(g, cpsr & 0x1F) = mine;
     g.bios_latch = runtime::bus::BIOS_LATCH_AFTER_IRQ;
 }
 
@@ -265,6 +268,58 @@ fn bios_read(g: &Game, a: u32, n: u32) -> u32 {
 /// The BIOS's size: past it, the region reads open bus, which the
 /// program doesn't keep.
 const BIOS_SIZE: u32 = 0x4000;
+
+/// The per-function check's build (`gbaa-lift --fn-check`, its driver
+/// `fn_check.rs`): RAM loads and stores are noted while it runs a
+/// function ([`Accesses`]). False in every other build, where the notes
+/// compile to nothing.
+pub const FN_CHECK: bool = false;
+
+/// What the per-function check notes of a run: the RAM offsets (into
+/// `Game::ram`) loaded through [`ld8`]/[`ld16`]/[`ld32`] and
+/// [`Game::at`] (a typed global's field isn't), and the lowest stored to
+/// through the stores inside `window` (the stack below the entry sp).
+#[derive(Default)]
+pub struct Accesses {
+    pub loads: Vec<u32>,
+    pub lowest_store: u32,
+    pub window: (u32, u32),
+    /// RAM loads and stores so far: past [`ACCESSES_MAX`] the run panics.
+    pub count: u32,
+}
+
+/// The RAM accesses one checked run may make: a variant whose changed
+/// inputs send a loop on forever stops here, as a panic, not out of memory.
+pub const ACCESSES_MAX: u32 = 1 << 22;
+
+thread_local! {
+    /// The run's notes, while the check takes them.
+    pub static ACCESSES: std::cell::RefCell<Option<Accesses>> = const { std::cell::RefCell::new(None) };
+}
+
+#[inline(always)]
+fn note(o: usize, n: usize, store: bool) {
+    if FN_CHECK {
+        note_access(o, n, store);
+    }
+}
+
+#[inline(never)]
+fn note_access(o: usize, n: usize, store: bool) {
+    ACCESSES.with_borrow_mut(|a| {
+        if let Some(a) = a {
+            a.count += 1;
+            assert!(a.count <= ACCESSES_MAX, "past {ACCESSES_MAX} RAM accesses in one run");
+            if store {
+                if (a.window.0..a.window.1).contains(&(o as u32)) {
+                    a.lowest_store = a.lowest_store.min(o as u32);
+                }
+            } else {
+                a.loads.extend((o..o + n).map(|o| o as u32));
+            }
+        }
+    });
+}
 
 /// The RAM offset of a guest EWRAM or IWRAM address (mirrors included).
 #[inline(always)]
@@ -336,6 +391,7 @@ impl Game {
     #[track_caller]
     pub fn at<T: Plain>(&self, r: Ref<T>) -> &T {
         let o = obj_at::<T>(r.0);
+        note(o, size_of::<T>(), false);
         // SAFETY: `obj_at` checked `T`'s bytes are in `Ram`, and any bytes
         // are a `T` (`Plain`: packed, integers).
         unsafe { &*(&*self.ram as *const Ram).cast::<u8>().add(o).cast::<T>() }
@@ -450,6 +506,7 @@ fn unmapped(what: &str, a: u32) -> ! {
 
 pub fn ld8(g: &mut Game, a: u32) -> u32 {
     if let Some(o) = ram_at(a) {
+        note(o, 1, false);
         return g.ram[o] as u32;
     }
     match a >> 24 {
@@ -469,6 +526,7 @@ pub fn ld8(g: &mut Game, a: u32) -> u32 {
 
 pub fn ld16(g: &mut Game, a: u32) -> u32 {
     if let Some(o) = ram_at(a) {
+        note(o, 2, false);
         return g.ram[o] as u32 | (g.ram[o + 1] as u32) << 8;
     }
     let le = |m: &[u8], o: usize| u16::from_le_bytes([m[o], m[o + 1]]) as u32;
@@ -488,6 +546,7 @@ pub fn ld16(g: &mut Game, a: u32) -> u32 {
 
 pub fn ld32(g: &mut Game, a: u32) -> u32 {
     if let Some(o) = ram_at(a) {
+        note(o, 4, false);
         return (0..4).fold(0, |v, i| v | (g.ram[o + i] as u32) << (8 * i));
     }
     match a >> 24 {
@@ -507,6 +566,7 @@ pub fn ld32(g: &mut Game, a: u32) -> u32 {
 pub fn st8(g: &mut Game, a: u32, v: u32) {
     let v = v as u8;
     if let Some(o) = ram_at(a) {
+        note(o, 1, true);
         g.ram[o] = v;
         return;
     }
@@ -550,6 +610,7 @@ pub fn st8(g: &mut Game, a: u32, v: u32) {
 pub fn st16(g: &mut Game, a: u32, v: u32) {
     let b = (v as u16).to_le_bytes();
     if let Some(o) = ram_at(a) {
+        note(o, 2, true);
         (g.ram[o], g.ram[o + 1]) = (b[0], b[1]);
         return;
     }
@@ -579,6 +640,7 @@ pub fn st16(g: &mut Game, a: u32, v: u32) {
 
 pub fn st32(g: &mut Game, a: u32, v: u32) {
     if let Some(o) = ram_at(a) {
+        note(o, 4, true);
         for (i, b) in v.to_le_bytes().into_iter().enumerate() {
             g.ram[o + i] = b;
         }

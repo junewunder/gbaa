@@ -1621,21 +1621,29 @@ struct Carry {
 /// function that keeps r4-r11 and sp (which carries only those). Nothing
 /// is known at the entry or after any other edge. A resume lands at a
 /// block's start with the state an edge in left.
-fn known(entry: u32, steps: &[Step]) -> BTreeMap<u32, BTreeMap<usize, u32>> {
+///
+/// Each edge is (from, to, sets): what the edge's block writes each
+/// register on its way out and whether it is the call, `None` for an edge
+/// after which nothing is known. The native lifter's narrowing casts use
+/// it too ([`crate::native::narrow::starts`]).
+pub(crate) fn known(
+    entry: u32,
+    steps: &[(u32, u32, Option<&Sets>)],
+) -> BTreeMap<u32, BTreeMap<usize, u32>> {
     type Regs = BTreeMap<usize, u32>;
     // `None`: no edge in seen yet.
     let mut at: BTreeMap<u32, Option<Regs>> = BTreeMap::new();
     loop {
         let mut next: BTreeMap<u32, Option<Regs>> = BTreeMap::new();
         next.insert(entry, Some(Regs::new()));
-        for s in steps {
-            let into = match (&s.sets, at.get(&s.from)) {
+        for &(from, to, sets) in steps {
+            let into = match (sets, at.get(&from)) {
                 (None, _) => Regs::new(),
                 // Its block not reached yet.
                 (Some(_), None | Some(None)) => continue,
                 (Some((sets, call)), Some(Some(k))) => {
                     let mut out = k.clone();
-                    for &(r, v) in sets {
+                    for &(r, v) in sets.iter() {
                         let v = match v {
                             Val::Const(c) => Some(c),
                             Val::Reg(q) => k.get(&q).copied(),
@@ -1652,7 +1660,7 @@ fn known(entry: u32, steps: &[Step]) -> BTreeMap<u32, BTreeMap<usize, u32>> {
                     out
                 }
             };
-            let slot = next.entry(s.to).or_insert(None);
+            let slot = next.entry(to).or_insert(None);
             *slot = Some(match slot.take() {
                 None => into,
                 Some(a) => a
@@ -1703,13 +1711,17 @@ struct Step {
     /// For a tick, or a call to a function that keeps r4-r11 and sp
     /// ([`crate::saves`]) back to the block after it: what the sync block
     /// writes each register, and whether it is the call.
-    sets: Option<(Vec<(usize, Val)>, bool)>,
+    sets: Option<Sets>,
 }
+
+/// What an edge's sync block writes each register, and whether it is a
+/// call (see [`known`]).
+pub(crate) type Sets = (Vec<(usize, Val)>, bool);
 
 /// What a sync block writes a register: a constant, another register's
 /// value at the block's start, or something else.
 #[derive(Clone, Copy)]
-enum Val {
+pub(crate) enum Val {
     Const(u32),
     Reg(usize),
     Other,
@@ -1870,7 +1882,11 @@ impl Carry {
                 }
             }
         }
-        c.known = known(f.entry, &steps);
+        let edges: Vec<_> = steps
+            .iter()
+            .map(|s| (s.from, s.to, s.sets.as_ref()))
+            .collect();
+        c.known = known(f.entry, &edges);
         at.retain(|_, v| *v != 0);
         // The locals some tick sets: a `for`'s variable is its binding.
         c.all = c.exits.keys().fold(0, |a, &(k, x)| a | c.set(k, x));
@@ -2073,19 +2089,12 @@ impl For {
                 }
                 vs.push(nx);
             };
-            if range.is_none() || vs.len() < 2 {
+            if range.is_none() {
                 continue;
             }
-            let step = vs[1].wrapping_sub(vs[0]) as i32;
-            let even = vs
-                .windows(2)
-                .all(|w| w[1].wrapping_sub(w[0]) as i32 == step);
-            let (first, last) = (vs[0], *vs.last().unwrap());
-            let k = vs.len() as i64 - 1;
-            let span = last as i64 - first as i64;
-            if step == 0 || !even || span != k * step as i64 {
+            let Some((first, last, step)) = counted(&vs) else {
                 continue;
-            }
+            };
             let (lo, hi) = (
                 crate::print::word(first.min(last), true),
                 crate::print::word(first.max(last), false),
@@ -2108,6 +2117,24 @@ impl For {
         }
         None
     }
+}
+
+/// The values a `for` variable takes, `vs` in order, as a range: its
+/// first and last value and its step, if there are two or more and they
+/// step evenly without wrapping. Shared with the native lift's `for`
+/// loops (`crate::native::counted`).
+pub(crate) fn counted(vs: &[u32]) -> Option<(u32, u32, i32)> {
+    if vs.len() < 2 {
+        return None;
+    }
+    let step = vs[1].wrapping_sub(vs[0]) as i32;
+    let even = vs
+        .windows(2)
+        .all(|w| w[1].wrapping_sub(w[0]) as i32 == step);
+    let (first, last) = (vs[0], *vs.last().unwrap());
+    let k = vs.len() as i64 - 1;
+    let span = last as i64 - first as i64;
+    (step != 0 && even && span == k * step as i64).then_some((first, last, step))
 }
 
 /// [`Readable::of`] for `gb`, a ROM block.

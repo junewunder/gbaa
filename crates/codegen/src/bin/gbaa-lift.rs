@@ -1,7 +1,9 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
 //! [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT]
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT]
-//! [--shadow-locals] [--copies N] [--holes-only [--flow]]`:
+//! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-for-loops] [--copies N] [--holes-only [--flow]]
+//! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
+//! [--plant-reference]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
 //! stage A). Writes the whole program as a Rust crate to OUT (`Cargo.toml`,
 //! `src/`, a copy of the ROM for its data, `report.txt`, and its metrics
@@ -56,12 +58,44 @@
 //! local differs from them: something the escape analysis didn't see
 //! wrote the frame. A check by hand, not part of the lift check.
 //!
+//! `--keep-dead-writes` prints every write of a register or flag, as
+//! stage A first did, also those nothing reads after them (unit
+//! `native/lift-dead-writes`), which the lift leaves out: the report and
+//! `dead_flag_writes` count the flag writes among them. A measure by
+//! hand: they change nothing the native check sees.
+//!
+//! `--keep-temps` prints every IR value as its own `let`, as stage A
+//! first did, constants included; the lift prints a pure value used once,
+//! and a constant, inside its use (unit `native/lift-inline-temps`). The
+//! report and `value_lets` count the `let`s. A measure by hand too.
+//!
+//! `--no-for-loops` prints every structured loop as a `loop`, as stage A
+//! first did; the lift prints a counted loop of one block as a `for` over
+//! its range (unit `native/lift-for-loops`). The report counts both
+//! (`loops_for`, `loops_not_for`). A measure by hand too.
+//!
 //! `src/` is `main.rs` (the prelude, RAM, `ENTRY`), `fns.rs` (`FNS`) and
 //! the functions in modules of about 4,000 lines (`codegen::native::modules`,
 //! unit `native/lift-modules`), so rustc builds them in parallel; a `.rs`
 //! file there from an earlier lift that this one didn't write is removed.
 //! `--copies N` writes the modules N times over under different names: a
 //! synthetic large lift, for measuring the build of a game-sized crate.
+//!
+//! `--fn-check KEY` (repeatable; unit `native/fn-check-any`, `just
+//! fn-check`) writes the per-function check's build: function KEY's
+//! replacement (its stand-in, from the holes file or `--replace FILE`'s
+//! `[[standin]]`s, which go over the holes file's; with none, the lift
+//! itself, which `--plant` makes a planted wrong one) against its lift,
+//! both in the crate, the program run headless under the check's driver
+//! (`codegen::native::FN_CHECK_DRIVER`). Its seed and budget are the
+//! stand-in's `check = { seed, runs, digest }`, or 1 and 2000 runs;
+//! `--seed` and `--runs` override them (and drop the recorded digest).
+//! The interpreter is a second reference (unit `native/fn-check-interp`):
+//! every Nth compared run (`--interp-every N`, 8 unless given; 0 never;
+//! never at `--layout packed`, whose RAM isn't the guest's bytes) it runs
+//! the ROM's code from the same state, untimed, and its end must be the
+//! lift's. `--plant-reference` puts `--plant`'s store in the reference
+//! too, a planted wrong lift that only the interpreter can catch.
 //!
 //! `--holes-only` finds the hard holes and writes nothing (OUT is
 //! ignored): no function-address flow, heap pointers or modules
@@ -86,7 +120,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--copies N] [--holes-only [--flow]]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference]"
         );
         ExitCode::FAILURE
     };
@@ -95,9 +129,13 @@ fn main() -> ExitCode {
     };
     let (mut name, mut holes, mut bars, mut names) = (None, None, None, None);
     let (mut drop, mut plant, mut tail, mut irq_at_waits) = (None, None, false, false);
-    let (mut ime_at_waits, mut takes_zeroed) = (false, false);
+    let (mut ime_at_waits, mut takes_zeroed, mut keep_dead) = (false, false, false);
+    let mut keep_temps = false;
+    let mut no_for_loops = false;
     let (mut holes_only, mut holes_flow) = (false, false);
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
+    let (mut fn_check, mut replace, mut seed, mut runs) = (Vec::new(), None, None, None);
+    let (mut interp_every, mut plant_reference) = (8, false);
     let mut layout = codegen::native::globals::Layout::Guest;
     let hex = |s: &str| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok();
     let mut it = rest.iter();
@@ -118,12 +156,28 @@ fn main() -> ExitCode {
             takes_zeroed = true;
             continue;
         }
+        if a == "--keep-dead-writes" {
+            keep_dead = true;
+            continue;
+        }
+        if a == "--keep-temps" {
+            keep_temps = true;
+            continue;
+        }
+        if a == "--no-for-loops" {
+            no_for_loops = true;
+            continue;
+        }
         if a == "--holes-only" {
             holes_only = true;
             continue;
         }
         if a == "--flow" {
             holes_flow = true;
+            continue;
+        }
+        if a == "--plant-reference" {
+            plant_reference = true;
             continue;
         }
         if a == "--shadow-locals" {
@@ -151,6 +205,13 @@ fn main() -> ExitCode {
             }
             ("--drop-standin", Some(k)) if hex(k).is_some() => drop = hex(k),
             ("--plant", Some(a)) if hex(a).is_some() => plant = hex(a),
+            ("--fn-check", Some(k)) if hex(k).is_some() => fn_check.push(hex(k).unwrap()),
+            ("--replace", Some(f)) => replace = Some(PathBuf::from(f)),
+            ("--seed", Some(n)) if n.parse::<u64>().is_ok() => seed = n.parse().ok(),
+            ("--runs", Some(n)) if n.parse::<u32>().is_ok_and(|n| n > 0) => runs = n.parse().ok(),
+            ("--interp-every", Some(n)) if n.parse::<u32>().is_ok() => {
+                interp_every = n.parse().unwrap()
+            }
             ("--copies", Some(n)) if n.parse::<usize>().is_ok_and(|n| n >= 1) => {
                 copies = n.parse().unwrap()
             }
@@ -183,6 +244,34 @@ fn main() -> ExitCode {
         },
         None => codegen::native::Holes::default(),
     };
+    // The per-function check's replacements (`--replace FILE`): its
+    // stand-ins, over the holes file's.
+    if let Some(p) = &replace {
+        match std::fs::read_to_string(p)
+            .map_err(|e| e.to_string())
+            .and_then(|t| codegen::native::Holes::parse(&t))
+        {
+            Ok(r) => {
+                holes.standins.extend(r.standins);
+                holes.checks.extend(r.checks);
+                holes.lr.extend(r.lr);
+            }
+            Err(e) => {
+                eprintln!("gbaa-lift: {}: {e}", p.display());
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    for k in fn_check {
+        let mut c = holes.checks.get(&k).copied().unwrap_or_default();
+        if seed.is_some() || runs.is_some() {
+            // Another seed or budget: the recorded digest isn't theirs.
+            c.digest = None;
+        }
+        c.seed = seed.unwrap_or(c.seed);
+        c.runs = runs.unwrap_or(c.runs);
+        holes.fn_check.insert(k, c);
+    }
     if let Some(k) = drop
         && holes.standins.remove(&k).is_none()
     {
@@ -190,10 +279,19 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
     holes.plant = plant;
+    holes.plant_reference = plant_reference;
+    // A packed layout's RAM isn't the guest's bytes: no interpreter.
+    holes.fn_check_interp = match layout {
+        codegen::native::globals::Layout::Guest => interp_every,
+        codegen::native::globals::Layout::Packed => 0,
+    };
     holes.fall_as_tail_call = tail;
     holes.irq_at_waits = irq_at_waits;
     holes.ime_at_waits = ime_at_waits;
     holes.takes_zeroed = takes_zeroed;
+    holes.keep_dead_writes = keep_dead;
+    holes.keep_temps = keep_temps;
+    holes.no_for_loops = no_for_loops;
     holes.plant_slot = plant_slot;
     holes.shadow_locals = shadow;
     holes.copies = copies;

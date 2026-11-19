@@ -277,6 +277,18 @@ impl<P: Seat> Gba<P> {
         }
     }
 
+    /// Run the compiled functions at `keys` (sorted) interpreted on every
+    /// seat with a cartridge: those a ROM other than the build's made stale
+    /// ([`runtime::Bus::stale`]). Every peer computes the same keys from
+    /// the same ROM, whose CRC the build ID holds.
+    pub fn set_stale(&mut self, keys: &'static [u32]) {
+        for m in &mut self.machines {
+            if !m.bus.rom.is_empty() {
+                m.bus.stale = keys;
+            }
+        }
+    }
+
     /// Draw only seat `seat`'s picture (`None`: every seat's), the one
     /// this peer shows: the others' PPUs skip their lines, as in frames
     /// rollback runs again. The picture is outside snapshots and hashes,
@@ -332,13 +344,13 @@ impl<P: Seat> Gba<P> {
     /// again too) together. With [`Turns`], compiled code suspended
     /// mid-run, or ended by a restore, never returned to the dispatcher to
     /// count its cycles, so the compiled ones are every cycle run but the
-    /// interpreter's and the halts'.
+    /// interpreter's, the halts' and the BIOS stalls'.
     pub fn stats(&self) -> Stats {
         let mut s = (*self.stats).clone();
         if self.turns.is_some() {
             s.compiled_cycles = self
                 .ran
-                .saturating_sub(s.interpreted_cycles + s.halted_cycles);
+                .saturating_sub(s.interpreted_cycles + s.halted_cycles + s.stalled_cycles);
         }
         s
     }

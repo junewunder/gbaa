@@ -368,7 +368,7 @@ at 11,063 sites. Filed as `native/nightmare-task-switch`. No other corpus game s
 coroutines (`native/task-coroutines`). Stand-ins: its holes file; resume's `bx pc` after a `pop
 {pc}` is a jump now (`classify`). Run (2026-11-14): the native check passes
 `units/kirby-nightmare-native.toml`'s 900 frames, tasks on their coroutines from frame 87 (a planted
-store in one caught) into Vegetable Valley; the lift stops at frame 902 (`native/nightmare-stop-34a88`).
+store in one caught); 3,000 since 2026-11-18, into stage 1-1, past frame 902's stage task (`native/nightmare-stop-34a88`).
 
 ## Functions that change r4-r11 or sp
 

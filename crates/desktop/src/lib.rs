@@ -13,6 +13,7 @@
 mod assets_log;
 pub mod audio;
 mod capture;
+pub mod changed;
 pub mod console;
 mod coro;
 mod dump;
@@ -64,7 +65,8 @@ pub const USAGE: &str = "\
 usage: gbaa-desktop ROM [options]
 
   A game's binary, gbaa-NAME, carries the ROM it was recompiled from and
-  runs that when no ROM is given. A ROM given runs instead. The window
+  runs that when no ROM is given. A ROM given runs instead; a changed copy
+  of the build's runs the functions it changed interpreted. The window
   keeps a game's save, states and resume file in its own folder,
   saves/NAME/ in gbaa's data dir (~/.local/share/gbaa on Linux and the
   Deck, ~/Library/Application Support/gbaa on macOS, %APPDATA%\\gbaa on
@@ -1653,13 +1655,14 @@ pub fn run(
     {
         return Err("--interp-blocks needs an exact build and --timing exact".into());
     }
-    if let Some(c) = code
-        && runtime::dispatch::rom_hash(rom) != c.rom_hash
-    {
-        return Err(format!(
-            "{}: not the ROM this build was recompiled from",
-            opts.rom.display()
-        ));
+    // A ROM other than the build's runs its changed functions interpreted
+    // ([`changed`]).
+    let stale = match code {
+        Some(c) => changed::stale(rom, c).map_err(|e| format!("{}: {e}", opts.rom.display()))?,
+        None => None,
+    };
+    if let Some(s) = &stale {
+        eprintln!("gbaa-desktop: {}: {}", opts.rom.display(), s.report());
     }
     let (rom, overrides, crc) = match (&opts.assets_mod, &opts.assets_manifest) {
         (Some(dir), Some(manifest)) => asset_overrides(rom, dir, manifest, code)?,
@@ -1669,6 +1672,7 @@ pub fn run(
     m.set_timing(timing);
     m.spin_list = spin_list;
     m.bus.asset_overrides = overrides;
+    m.bus.stale = stale.map_or(&[], |s| s.keys);
     if let Some(crc) = crc {
         m.bus.keep_rom_crc(crc);
     }
@@ -2196,12 +2200,14 @@ pub fn run(
             );
         }
         // Decision 1's "would change our minds", in guest cycles: the share
-        // of the running (not halted) time the fallback took.
+        // of the running (not halted, not in a BIOS call's stall) time the
+        // fallback took.
         let running = (stats.compiled_cycles + stats.interpreted_cycles).max(1);
         let pct = |c: u64| c as f64 * 100.0 / running as f64;
         eprintln!(
             "cycles: {} compiled ({:.1}%, compiled in RAM {:.1}%), {} in the interpreter \
-             fallback ({:.1}%, {:.1} points of it in RAM code), {} halted",
+             fallback ({:.1}%, {:.1} points of it in RAM code), {} halted, {} in BIOS \
+             calls' stalls",
             stats.compiled_cycles,
             pct(stats.compiled_cycles),
             pct(stats.compiled_ram_cycles),
@@ -2209,6 +2215,7 @@ pub fn run(
             pct(stats.interpreted_cycles),
             pct(stats.interpreted_ram_cycles),
             stats.halted_cycles,
+            stats.stalled_cycles,
         );
         if stats.n_ram_seeds > 0 {
             // Where the fallback's RAM time went, by the key it was entered
@@ -2377,7 +2384,7 @@ fn script_moved(
 }
 
 /// `stats` with a guest's compiled cycles: the `ran` cycles (and its
-/// overlays') less the interpreter's and the halts'. Compiled code
+/// overlays') less the interpreter's, the halts' and the BIOS stalls'. Compiled code
 /// suspended at a frame end returns to the dispatcher, which counts its
 /// cycles, only when the guest is dropped, if ever.
 fn guest_counts(
@@ -2386,7 +2393,8 @@ fn guest_counts(
 ) -> runtime::dispatch::Stats {
     let mut s = stats.clone();
     if let Some((all, ram)) = ran {
-        s.compiled_cycles = all.saturating_sub(s.interpreted_cycles + s.halted_cycles);
+        s.compiled_cycles =
+            all.saturating_sub(s.interpreted_cycles + s.halted_cycles + s.stalled_cycles);
         s.compiled_ram_cycles = ram;
     }
     s

@@ -255,6 +255,17 @@ impl<G> Default for Irq<G> {
     }
 }
 
+// By hand, not derived: `G` itself needn't be `Clone` (fn pointers are).
+impl<G> Clone for Irq<G> {
+    fn clone(&self) -> Irq<G> {
+        Irq {
+            master: self.master,
+            each: self.each,
+            ..*self
+        }
+    }
+}
+
 impl<G> Irq<G> {
     /// The game's master handler (stored at `0x0300_7FFC`): called with
     /// [`Irq::flags`] set, it acknowledges what it handles
@@ -292,6 +303,16 @@ pub struct HblankDma<G> {
     pub next: usize,
 }
 
+impl<G> Clone for HblankDma<G> {
+    fn clone(&self) -> HblankDma<G> {
+        HblankDma {
+            dst: self.dst,
+            src: self.src,
+            next: self.next,
+        }
+    }
+}
+
 /// The DMA channels' repeating kinds (section 8), as typed calls.
 /// Immediate copies are plain copies into [`Video`]
 /// ([`Video::copy_vram16`] and friends). A program that sets channels up
@@ -313,6 +334,16 @@ impl<G> Default for Dma<G> {
             hblank: [None, None, None, None],
             vblank: [None; 4],
             regs: dma_regs::Channels::default(),
+        }
+    }
+}
+
+impl<G> Clone for Dma<G> {
+    fn clone(&self) -> Dma<G> {
+        Dma {
+            hblank: self.hblank.clone(),
+            vblank: self.vblank,
+            regs: self.regs,
         }
     }
 }
@@ -381,6 +412,16 @@ pub struct Sound<G> {
     pub mixer: crate::sound::Sound,
     /// DMA channels 1 and 2, when they feed a FIFO.
     dma: [Option<FifoDma<G>>; 2],
+}
+
+impl<G> Clone for Sound<G> {
+    fn clone(&self) -> Sound<G> {
+        Sound {
+            io: self.io.clone(),
+            mixer: self.mixer.clone(),
+            dma: self.dma,
+        }
+    }
 }
 
 impl<G> Sound<G> {
@@ -492,6 +533,31 @@ pub fn dma_cycles(waitcnt: u16, bytes: u32, src: u32, dst: u32, count: u32) -> u
     w.dma(bytes, src, dst, count) + 2
 }
 
+/// The hardware's whole state but its host ([`Hw::checkpoint`]): what a
+/// check that runs code twice from one state (`gbaa-lift --fn-check`, the
+/// per-function check) puts back between the runs.
+pub struct Checkpoint<G: Native> {
+    ppu: Video,
+    stat: DispStat,
+    keys: Keys,
+    irq: Irq<G>,
+    dma: Dma<G>,
+    sound: Sound<G>,
+    save: crate::save::Save,
+    frame_end: Option<fn(&mut G)>,
+    line: u16,
+    frames: u64,
+    in_hblank: bool,
+    next_line_event: u64,
+    next_event: u64,
+    waitcnt: u16,
+    renderer: Ppu,
+    spins: [(usize, u32); crate::sched::SPIN_SLOTS],
+    spinning: bool,
+    stalling: bool,
+    exited: bool,
+}
+
 /// The hardware a native program drives.
 pub struct Hw<G: Native> {
     /// The display's registers and memories, as fields.
@@ -539,6 +605,13 @@ pub struct Hw<G: Native> {
     exited: bool,
 }
 
+impl<G: Native> Checkpoint<G> {
+    /// The display as it was.
+    pub fn ppu(&self) -> &Video {
+        &self.ppu
+    }
+}
+
 impl<G: Native> Hw<G> {
     /// Power-on: memories zero, registers as the BIOS leaves them, the
     /// beam at line 0.
@@ -553,11 +626,12 @@ impl<G: Native> Hw<G> {
             save: crate::save::Save::new(crate::save::Kind::Flash512),
             host,
             frame_end: None,
-            line: 0,
+            // The play build's start ([`crate::sched::START_LINE`]).
+            line: crate::sched::START_LINE,
             frames: 0,
             in_hblank: false,
-            next_line_event: HBLANK_DOT as u64,
-            next_event: HBLANK_DOT as u64,
+            next_line_event: crate::sched::START_HBLANK_IN,
+            next_event: crate::sched::START_HBLANK_IN,
             waitcnt: 0,
             renderer: Ppu::new(),
             spins: [(0, 0); crate::sched::SPIN_SLOTS],
@@ -565,6 +639,54 @@ impl<G: Native> Hw<G> {
             stalling: false,
             exited: false,
         }
+    }
+
+    /// A copy of everything but the host, to [`Hw::rewind`] to.
+    pub fn checkpoint(&self) -> Checkpoint<G> {
+        Checkpoint {
+            ppu: self.ppu.clone(),
+            stat: self.stat,
+            keys: self.keys,
+            irq: self.irq.clone(),
+            dma: self.dma.clone(),
+            sound: self.sound.clone(),
+            save: self.save.clone(),
+            frame_end: self.frame_end,
+            line: self.line,
+            frames: self.frames,
+            in_hblank: self.in_hblank,
+            next_line_event: self.next_line_event,
+            next_event: self.next_event,
+            waitcnt: self.waitcnt,
+            renderer: self.renderer.clone(),
+            spins: self.spins,
+            spinning: self.spinning,
+            stalling: self.stalling,
+            exited: self.exited,
+        }
+    }
+
+    /// Back to the state of `c` ([`Hw::checkpoint`]); the host stays.
+    pub fn rewind(&mut self, c: &Checkpoint<G>) {
+        self.ppu.clone_from(&c.ppu);
+        self.stat = c.stat;
+        self.keys = c.keys;
+        self.irq = c.irq.clone();
+        self.dma = c.dma.clone();
+        self.sound = c.sound.clone();
+        self.save.clone_from(&c.save);
+        self.frame_end = c.frame_end;
+        self.line = c.line;
+        self.frames = c.frames;
+        self.in_hblank = c.in_hblank;
+        self.next_line_event = c.next_line_event;
+        self.next_event = c.next_event;
+        self.waitcnt = c.waitcnt;
+        self.renderer.clone_from(&c.renderer);
+        self.spins = c.spins;
+        self.spinning = c.spinning;
+        self.stalling = c.stalling;
+        self.exited = c.exited;
     }
 
     /// The beam's line, without moving it (the library's own view; a game

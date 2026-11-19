@@ -888,15 +888,18 @@ windows-check name through="":
 windows-image:
     podman build -q -t gbaa-windows -f scripts/windows.Containerfile scripts > /dev/null
 
-# Recompiles ROM, builds it, and runs it headless for FRAMES frames both recompiled and with --interp, at TIMING (exact, mGBA's, or native, docs/native-port-design.md section 7); fails unless the last frame and the registers match. Writes out/<name>/{recompiled,interp}.{txt,png}, and the recompiled run's stderr (the dispatcher's stats) to recompiled.log.
-recompile-check rom frames="60" timing="exact":
+# Recompiles ROM, builds it, and runs it headless for FRAMES frames both recompiled and with --interp, at TIMING (exact, mGBA's, or native, docs/native-port-design.md section 7); fails unless the last frame and the registers match. With PLAY, both runs play that ROM instead, a changed copy of ROM (a randomized one): the build interprets the functions it changed (docs/codegen-design.md, "A changed ROM") and recompiled.log says how many. Further ARGS go to both runs (`--input …`). Writes out/<name>/{recompiled,interp}.{txt,png}, and the recompiled run's stderr (the dispatcher's stats) to recompiled.log.
+[positional-arguments]
+recompile-check rom frames="60" timing="exact" play="" *args:
     #!/usr/bin/env bash
     set -eu
+    shift $(( $# < 4 ? $# : 4 ))
     rom={{quote(join(invocation_directory(), rom))}}
     name=$(basename "$rom" .gba | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')
     out=out/"$name"
     just recompile "$rom" "$out" --timing {{timing}} | grep -v '^  uncovered'
-    args=("$rom" --headless --timing {{timing}} --frames {{frames}} --hash --regs)
+    play={{ if play == "" { "\"$rom\"" } else { quote(join(invocation_directory(), play)) } }}
+    args=("$play" --headless --timing {{timing}} --frames {{frames}} --hash --regs "$@")
     just build-recompiled "$out"
     bin=(systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 target/recompiled/release/gbaa-"$name")
     t0=$(date +%s%N)
@@ -961,7 +964,7 @@ native-check:
     {{cap}} MemoryMax=8G target/release/route-check --native target/release/native-direct-sound target/recompiled/release/gbaa-direct-sound \
         units/direct-sound.toml --replaced crates/native-spike/check/direct-sound.replaced.toml
 
-# The stage-A lifter (native/lift-stage-a; docs/native-port-design.md, "The stage-A lifter as built"; docs/tools/commands.md): gbaa-lift writes ROM whole as plain Rust over byte RAM and runtime::hw to OUT (default out/lift-<name>), with the stand-ins of holes/<name>.toml if there is one, else of mods/<name>/holes.toml (a commercial game's, game-derived and private) (<name> is --name NAME's if given, else the ROM's file name lowercased), then builds it into target/recompiled and runs it headless for 600 frames in a 3 GB scope (`just first-stop`: how far it got, or that it didn't build, goes in OUT's report.txt and metrics.toml; a stop doesn't fail the recipe). FLAGS go to gbaa-lift (--name, --holes, --bars, --drop-standin, --plant). Fails, naming each, on a hard hole no stand-in covers. Heavy: builds a generated crate.
+# The stage-A lifter (native/lift-stage-a; docs/native-port-design.md, "The stage-A lifter as built"; docs/tools/commands.md): gbaa-lift writes ROM whole as plain Rust over byte RAM and runtime::hw to OUT (default out/lift-<name>), with the stand-ins of holes/<name>.toml if there is one, else of mods/<name>/holes.toml (a commercial game's, game-derived and private) (<name> is --name NAME's if given, else the ROM's file name lowercased), held to mods/<name>/bars.toml's [program.<name>.bars] if there is one (a game's private bars, as lift-check.toml's; --bars FILE instead), then builds it into target/recompiled and runs it headless for 600 frames in a 3 GB scope (`just first-stop`: how far it got, or that it didn't build, goes in OUT's report.txt and metrics.toml; a stop doesn't fail the recipe). FLAGS go to gbaa-lift (--name, --holes, --bars, --drop-standin, --plant). Fails, naming each, on a hard hole no stand-in covers. Heavy: builds a generated crate.
 [positional-arguments]
 lift rom out="" *flags:
     #!/usr/bin/env bash
@@ -978,10 +981,13 @@ lift rom out="" *flags:
     # A game's holes file is game-derived, so it lives in the private mods/<name>/.
     if [ -f "holes/$name.toml" ]; then holes=(--holes "holes/$name.toml")
     elif [ -f "mods/$name/holes.toml" ]; then holes=(--holes "mods/$name/holes.toml"); fi
+    # A commercial game's bars (its lift-check table's, private too): mods/<name>/bars.toml.
+    bars=()
+    if [ -f "mods/$name/bars.toml" ] && [[ " $* " != *" --bars "* ]]; then bars=(--bars "mods/$name/bars.toml"); fi
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift --bin gbaa-first-stop
     # A hard hole fails the lift, and the build too (a compile_error! names each).
     lifted=0
-    {{cap}} MemoryMax=16G target/release/gbaa-lift "$rom" "$out" "${holes[@]}" "$@" || lifted=$?
+    {{cap}} MemoryMax=16G target/release/gbaa-lift "$rom" "$out" "${holes[@]}" "${bars[@]}" "$@" || lifted=$?
     built=0
     just build-recompiled "$out" || built=$?
     # Where the built program stops, or that it didn't build: into OUT's report.txt and metrics.toml.
@@ -990,6 +996,33 @@ lift rom out="" *flags:
     [ "$built" = 0 ] || exit "$built"
     [ "$lifted" = 0 ] || exit "$lifted"
     exit "$first"
+
+# The per-function check (native/fn-check-any, native/fn-check-interp; codegen::native's fn_check_texts and native/fn_check.rs; docs/tools/commands.md): lifts ROM with `gbaa-lift --fn-check KEY` for each KEY given (with the holes file as `just lift` finds it, and FLAGS: --replace FILE for replacements outside it, --seed N, --runs N, --plant AT for a planted wrong replacement of a function with no stand-in, --plant-reference to plant it in the lift too, --interp-every N), into out/fn-check-<name>, builds it and runs it headless: each function's replacement against its lift from the program's own calls and their variants, until every budget is spent. Prints per function its runs, budget, time, seed and digest, and the first differences with the byte named; and the runs the interpreter also checked against the lift, untimed, every Nth (8; native/fn-check-interp), and whether it agreed. --frames N (default 18000) is where it gives up waiting for calls. Fails on a difference or a budget not spent. Heavy: builds a generated crate.
+[positional-arguments]
+fn-check rom *flags:
+    #!/usr/bin/env bash
+    set -eu
+    rom={{quote(join(invocation_directory(), rom))}}
+    name=$(basename "$rom" .gba | tr '[:upper:]' '[:lower:]')
+    shift
+    frames=18000
+    args=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --frames) frames=$2; shift 2 ;;
+            --name) name=$2; shift 2 ;;
+            *) args+=("$1"); shift ;;
+        esac
+    done
+    out=out/fn-check-$name
+    holes=()
+    if [ -f "holes/$name.toml" ]; then holes=(--holes "holes/$name.toml")
+    elif [ -f "mods/$name/holes.toml" ]; then holes=(--holes "mods/$name/holes.toml"); fi
+    {{lock}} cargo build -q --release -p codegen --bin gbaa-lift
+    mkdir -p "$out"
+    {{cap}} MemoryMax=4G target/release/gbaa-lift "$rom" "$out" --name "fn-check-$name" "${holes[@]}" "${args[@]}" > "$out.lift.txt" || { tail -5 "$out.lift.txt"; exit 1; }
+    just build-recompiled "$out"
+    {{cap}} MemoryMax=3G target/recompiled/release/gbaa-native-fn-check-"$name" --headless --frames "$frames"
 
 # Where a built lift stops (native/native-first-stop; codegen::native::first_stop; docs/tools/commands.md): runs OUT's program (a lift `just lift` built into target/recompiled) headless for 600 frames in its own 3 GB scope and writes how far it got to OUT/metrics.toml ([run]: frames_run, stop, what, detail, functions) and the end of OUT/report.txt: every frame, or the stop's kind (an unmodelled I/O register by address and name, memory the program hasn't got, a call to no function, another panic, the time limit, killed) with the lifted functions on the stack. `just lift` ends with it. ARGS: --frames N, --time-limit SECONDS, --bin FILE, --not-built (the build failed). A lift with hard holes can't build, so its stop is not-built and nothing is run; a build that failed with none records no run (it may only have been refused or killed); a binary older than OUT's sources is refused. A stop isn't a failure: exits 0 once recorded.
 first-stop out *args:
@@ -1356,6 +1389,28 @@ script-check rom=(roms / "Pokemon - Emerald Version.gba") bin="":
 emerald-saves rom=(roms / "Pokemon - Emerald Version.gba"):
     {{lock}} cargo build -q --release -p emerald-save
     target/release/emerald-save {{quote(rom)}} {{quote(gbaa_data / "saves/emerald")}}
+
+# A Kaizo Ironmon Emerald (scripting/randomized-rom, docs/research/randomized-roms.md): downloads the Universal Pokemon Randomizer ZX 4.6.1 release into $GBAA_DATA/tools/upr-zx-4.6.1 if it isn't there, and runs its CLI twice on ROM, as the Emerald Kaizo rules (pastebin z3Q8hVa9) say: their 60% level boost, then their Kaizo settings string. Writes $GBAA_DATA/randomized/emerald-kaizo.gba and the randomizer's log beside it; each run is a new random seed (the log names it). Needs java; seconds. Then `just recompile-check ROM 3600 exact $GBAA_DATA/randomized/emerald-kaizo.gba --input …` plays it recompiled against --interp.
+randomize-emerald rom=(roms / "Pokemon - Emerald Version.gba"):
+    #!/usr/bin/env bash
+    set -eu
+    upr={{quote(gbaa_data / "tools/upr-zx-4.6.1")}}
+    out={{quote(gbaa_data / "randomized")}}
+    mkdir -p "$upr" "$out"
+    if [ ! -f "$upr/unz/PokeRandoZX.jar" ]; then
+        curl -sSL -o "$upr/PokeRandoZX-v4_6_1.zip" https://github.com/Ajarmar/universal-pokemon-randomizer-zx/releases/download/v4.6.1/PokeRandoZX-v4_6_1.zip
+        echo "26051fe8a6665ea0582dfcd4d1c3e4889da42a2f731f5fc530fff0cb691a43fd  $upr/PokeRandoZX-v4_6_1.zip" | sha256sum -c --quiet
+        unzip -o -q "$upr/PokeRandoZX-v4_6_1.zip" -d "$upr/unz"
+    fi
+    # A .rnqs file: the settings version (321, 4.6.0) and the string's length, big-endian, then the string without its "321".
+    rnqs() { local n=${#1}; printf "$(printf '\\x%02x' 0 0 1 65 $((n>>24&255)) $((n>>16&255)) $((n>>8&255)) $((n&255)))%s" "$1"; }
+    rnqs 'AAgEAQT8AP8AAgEEAAEeRAABFAAAFABABAABAAAAAAAAAAAAuAS4AQAICTIGBAAyAAIAC0VtZXJhbGQgKFUpunJmsePDOIo=' > "$upr/boost60.rnqs"
+    rnqs 'WRIEEjL8AP8AAgGRAAKeBhsECQEAFAACCQAuEgAAAAAABBC45ATkAYYICTIGBAIyAAUYC0VtZXJhbGQgKFUpY5koIePDOIo=' > "$upr/kaizo.rnqs"
+    upr_run() { {{cap}} MemoryMax=5G java -Xmx4608M -jar "$upr/unz/PokeRandoZX.jar" cli -s "$1" -i "$2" -o "$3" -l 2>&1 | grep -v 'older randomizer version\|attempt to open it anyway\|re-save your settings'; }
+    upr_run "$upr/boost60.rnqs" {{quote(rom)}} "$out/emerald-boost60.gba"
+    upr_run "$upr/kaizo.rnqs" "$out/emerald-boost60.gba" "$out/emerald-kaizo.gba"
+    grep -m1 'Random Seed' "$out/emerald-kaizo.gba.log"
+    sha1sum "$out/emerald-kaizo.gba"
 
 # Story-point saves for the fuzzer (assets/fuzz-story-seeds): alice.sav (`just emerald-saves`) moved along the main story by crates/emerald-save/story.toml's points (flags, vars, key items and HMs as pret's scripts leave them, the party's level, where the player stands), each point with every one before it applied; names resolved against pret's headers (`just fetch-pret`). Writes $GBAA_DATA/saves/emerald/story/NN-name.sav (crates/emerald-save/src/bin/emerald-story.rs). Seconds.
 emerald-story rom=(roms / "Pokemon - Emerald Version.gba"):

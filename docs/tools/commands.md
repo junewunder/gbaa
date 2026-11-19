@@ -317,9 +317,9 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `report.txt` and `rom.gba`, a copy of the ROM that the binary carries
   inside it with `include_bytes!`, deck/embed-rom: run with no ROM, a
   build plays its own, as if it were `<name>.gba` beside the binary, so
-  its `.sav` and states go there; a ROM given runs instead, and must be
-  the one it was recompiled from. One file to send a friend, and netplay
-  can't pair a build with the wrong ROM. `out/` and the builds stay out
+  its `.sav` and states go there; a ROM given runs instead, a changed copy
+  with its changed functions interpreted (`docs/codegen-design.md`, "A
+  changed ROM"). One file to send a friend. `out/` and the builds stay out
   of git; a ROM is also run 1800 frames in the interpreter, for the
   IWRAM blocks it patches and the copies discovery missed, decision 7). It
   writes a file only when its bytes change and deletes only files no longer
@@ -374,9 +374,9 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   rewrites `mods/emerald/snapshots/emerald.rs`, the smallest structured
   Emerald function of each shape, so a printer change shows as its diff
   (about 30 s, not heavy); `just run-recompiled out/<name> [desktop args]` builds and
-  runs it (checks free RAM, caps it at 3 GB); `just recompile-check ROM`
-  compares the recompiled build with `--interp` (last frame hash and
-  registers; writes both runs' `.txt` and `.png` to `out/<name>/`);
+  runs it (checks free RAM, caps it at 3 GB); `just recompile-check ROM [FRAMES
+  TIMING PLAY ARGS…]` compares the recompiled build with `--interp` (frame hash, registers,
+  `out/<name>/`; PLAY: a changed ROM, e.g. `just randomize-emerald`'s, plays instead);
   `just sst-gen [PER_FILE] [SEQS]` runs SingleStepTests through generated
   Rust (PER_FILE cases from each file, against the expected state and the
   interpreter), then SEQS (4000) sequence cases: alternately a random block
@@ -1302,7 +1302,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `target/recompiled` (`gbaa-native-<name>`, the native programs' headless
   flags or, with none, gbaa-desktop's window to play in: `--scale N`, `--mute`; it keeps the game's `.sav` in `saves/<name>/` as the play build does, and its menus leave out save states, rewind, scripts and netplay; `crates/native-host`). It reads `holes/<name>.toml` when there is
   one, else `mods/<name>/holes.toml` (a commercial game's, private: its
-  stand-ins are ports of the game's code); `<name>` is `--name`'s when
+  stand-ins are ports of the game's code), and holds it to `mods/<name>/bars.toml` (private bars) if there is one; `<name>` is `--name`'s when
   given (a file name with spaces: `just lift "…/Metroid - Zero Mission
   (USA).gba" out/lift-metroid --name metroid`), else the ROM's file name
   lowercased. The file has `[[standin]]` (a function's hand-written Rust,
@@ -1332,7 +1332,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   heap's run types is a heap object's field through `Ref<T>`, counted in
   `ref_accesses` and `ref_types`, unbarred, and `ref_unexplained` those
   through an object's pointer no type explains, native/ref-heap); `call_fn` calls; jumps by value;
-  gap targets. `--bars FILE` fails the lift (after writing it) on any
+  gap targets; compare trees on one value printed as a `match` (`compare_trees_matched`, `compare_tree_blocks` the blocks taken in, unbarred; `compare_trees_left` barred; native/lift-switch-match). `--bars FILE` fails the lift (after writing it) on any
   metric over `[program.NAME.bars]`'s maximum, each named with both
   numbers (`gbaa-lift: affine: load_computed_unknown is 755, over its
   bar of 754`), and lists the metrics under their bars. Discovery's
@@ -1444,13 +1444,29 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `$GBAA_DATA/src/pokeemerald/`. Passes with `native 0 of 10 differ`
   (2026-11-01). About 30 s, most of it discovery and summaries; capped at
   3 GB. Not heavy (no generated crate).
+- `just fn-check ROM [--name NAME] --fn-check KEY... [--replace FILE]
+  [--seed N] [--runs N] [--plant AT [--plant-reference]] [--interp-every N]
+  [--frames N]` (native/fn-check-any, native/fn-check-interp;
+  `docs/native-port-design.md`, "The per-function check"): a function's
+  replacement (its stand-in, from the holes file or `--replace FILE`; with
+  none, the lift, which `--plant AT` makes a planted wrong one) against
+  its lift, both native, from the program's own calls and seeded variants
+  of them, headless with no input, until each budget is spent. Prints per
+  function its runs, budget, time, seed, digest, runs skipped (past 600
+  frames), the first differences, each naming the byte, and how many
+  runs the interpreter (untimed, every Nth: 8) checked against the lift
+  and whether it agreed (`--plant-reference`: the planted store in the
+  lift too, which only it catches). Fails on a difference, or a budget
+  unspent when the program stops or `--frames` (18000) runs out. Stand-ins:
+  `holes/fn-check/` (agb), `mods/<game>/fn-check.toml`. ARM returns
+  without `bx`: `agb/native-arm-return`. Heavy: builds a generated crate.
 - `just first-frame ROM [FRAMES] [TIMING]` (#32, milestone 2's check):
   `recompile-check` (at TIMING, exact by default; `native` for the
   native port's timing, decision 11), then the two PNGs must be identical. The recompiled
   run's `cycles:` line (in `out/<name>/recompiled.log`) splits guest time
   between compiled code and the fallback, how much of each ran in RAM
   (decisions 1 and 7; IWRAM copies compile as overlays, #54), then the
-  fallback's RAM time by entry key (`Stats::ram_seeds`), and the log ends with `overlay invalidations: N`. It passes on june's ROM
+  fallback's RAM time by entry key (`Stats::ram_seeds`), BIOS calls' stalls (`bios::STALL_LOOP`) apart, in neither share, and the log ends with `overlay invalidations: N`. It passes on june's ROM
   (`$GBAA_DATA/agb/gba-cart1.gba`), jsmolka's `arm`/`thumb`, and the agb
   sprite example (`$GBAA_DATA/tools/obj-sprites/obj-sprites.gba 120`,
   hash `afc0b93200e5577f`).
@@ -1969,7 +1985,7 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   the recompiled picture may differ from the interpreter's because compiled
   code ticks once per block (an I/O store mid-block lands before the
   scanlines catch up), with `block_timed_why`; it fails once one of them
-  matches again). The format, with an
+  matches again; the last checkpoint's `regs_block_timed_why` lets the last registers differ if `--interp-blocks` ends with the recompiled build's). The format, with an
   example, is in `crates/route-check/src/route.rs`; comments say how each
   hash was verified. A ROM may have several routes where paths diverge
   (the intro untouched, a new game). It clears `out/units/NAME/`, runs

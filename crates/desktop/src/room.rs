@@ -253,16 +253,21 @@ pub fn run(
         return Err("netplay needs --server and --host or --join".into());
     };
     let rom = opts.load_rom()?;
-    if let Some(c) = code
-        && runtime::dispatch::rom_hash(rom) != c.rom_hash
-    {
-        return Err(format!(
-            "{}: not the ROM this build was recompiled from",
-            opts.rom.display()
-        ));
+    // Every seat's machine runs the changed functions of a ROM other than
+    // the build's interpreted ([`crate::changed`]); the build ID holds the
+    // ROM's own CRC, so only peers with the same ROM meet.
+    let stale = match code {
+        Some(c) => {
+            crate::changed::stale(rom, c).map_err(|e| format!("{}: {e}", opts.rom.display()))?
+        }
+        None => None,
+    };
+    if let Some(s) = &stale {
+        eprintln!("gbaa-desktop: {}: {}", opts.rom.display(), s.report());
     }
     let make = |seats: usize| {
         let mut gba = Gba::with_code(rom, &vec![None; seats], code, timing);
+        gba.set_stale(stale.map_or(&[], |s| s.keys));
         if code.is_some() {
             gba.set_turns(Box::<crate::coro::Guests>::default());
         }

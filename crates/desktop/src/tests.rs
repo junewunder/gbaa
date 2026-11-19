@@ -33,6 +33,7 @@ fn timing_defaults_to_instant_or_the_builds() {
         modded: &[],
         folded: &[],
         rom_hash: 0,
+        fns: &[],
         timing: Exact,
         seeds_file: None,
         spins: &[],
@@ -2136,6 +2137,7 @@ fn asset_overrides_patch_a_copy_and_refuse_folded_bytes() {
         modded: &[],
         folded: &[(0x0800_0102, 0x0800_0104)],
         rom_hash: 0,
+        fns: &[],
         timing: runtime::Timing::Exact,
         seeds_file: None,
         spins: &[],
@@ -2178,6 +2180,7 @@ fn netplay_guests_compute_what_unwinding_does_and_roll_back() {
         modded: &[],
         folded: &[],
         rom_hash: 0,
+        fns: &[],
         timing: runtime::Timing::Exact,
         seeds_file: None,
         spins: &[],
@@ -2247,4 +2250,144 @@ fn the_netplay_pacer_catches_up_and_holds() {
         assert_eq!(p.step(late, period), Duration::ZERO);
     }
     assert_eq!(p.step(late, period), ms(10));
+}
+
+/// What codegen would emit for one ARM block at the ROM's start (`mov
+/// r0, r0` in [`changed_rom_test`]'s ROM) that adds 1 to r0 instead, so
+/// a run shows whether it ran compiled.
+fn counts_r0(m: &mut DesktopMachine, pc: u32) -> runtime::dispatch::Flow {
+    if pc == 0x0800_0000 {
+        m.cpu.r[0] = m.cpu.r[0].wrapping_add(1);
+        runtime::dispatch::tick(m, 1);
+        return runtime::dispatch::Flow::Jump(0x0800_0004);
+    }
+    runtime::dispatch::Flow::Jump(pc)
+}
+
+/// `mov r0, r0; mov r1, #5; b start`, and a build of its first word
+/// ([`counts_r0`]) with that word's ROM bytes.
+fn changed_rom_test() -> (&'static [u8], &'static Code) {
+    use runtime::dispatch::{FnBytes, fn_hash};
+    let words: [u32; 3] = [0xE1A0_0000, 0xE3A0_1005, 0xEAFF_FFFC];
+    let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let rom: &'static [u8] = rom.leak();
+    let ranges: &'static [(u32, u32)] = &[(0x0800_0000, 0x0800_0004)];
+    let fns: &'static [FnBytes] = vec![FnBytes {
+        entry: 0x0800_0000,
+        hash: fn_hash(rom, ranges).unwrap(),
+        ranges,
+        calls: &[],
+        keys: &[0x0800_0000],
+    }]
+    .leak();
+    let code = Box::leak(Box::new(Code {
+        blocks: &[(0x0800_0000, counts_r0)],
+        ram_blocks: &[],
+        overlays: &[],
+        extents: &[],
+        ram_extents: &[],
+        inner: &[],
+        inner_extents: &[],
+        modded: &[],
+        folded: &[],
+        rom_hash: runtime::dispatch::rom_hash(rom),
+        fns,
+        timing: runtime::Timing::Exact,
+        seeds_file: None,
+        spins: &[],
+    }));
+    (rom, code)
+}
+
+/// The build's own ROM is nothing stale; a copy with its one function's
+/// `mov r0, r0` made `mov r0, #0` has it stale; a build without
+/// per-function hashes refuses the copy.
+#[test]
+fn a_changed_function_goes_stale() {
+    let (rom, code) = changed_rom_test();
+    assert!(changed::stale(rom, code).unwrap().is_none());
+    let mut other = rom.to_vec();
+    other[3] = 0xE3;
+    let c = changed::stale(&other, code).unwrap().unwrap();
+    assert_eq!(c.keys, [0x0800_0000]);
+    assert_eq!((c.n.changed, c.n.callers, c.fns), (1, 0, 1));
+    assert_eq!(
+        c.report(),
+        "1 of 1 compiled functions stale (1 changed, 0 calling them), run interpreted"
+    );
+    // A change outside every function leaves the build whole.
+    other[3] = 0xE1;
+    other[4] = 6;
+    let c = changed::stale(&other, code).unwrap().unwrap();
+    assert!(c.keys.is_empty());
+    let old = Box::leak(Box::new(Code { fns: &[], ..*code }));
+    let e = changed::stale(&other, old).unwrap_err();
+    assert!(e.contains("no per-function hashes"), "{e}");
+}
+
+/// The desktop runs a patched copy of the build's ROM, or the ROM a
+/// script patches, with the changed function interpreted: its state after
+/// three frames is what the interpreter alone leaves, where the build's own ROM
+/// runs the compiled block.
+#[test]
+fn a_patched_rom_runs_its_changed_function_interpreted() {
+    let (rom, code) = changed_rom_test();
+    let dir = std::env::temp_dir().join(format!("gbaa-changed-rom-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let own = dir.join("own.gba");
+    std::fs::write(&own, rom).unwrap();
+    let mut patched = rom.to_vec();
+    patched[3] = 0xE3;
+    let copy = dir.join("copy.gba");
+    std::fs::write(&copy, &patched).unwrap();
+    let patch = dir.join("patch.lua");
+    std::fs::write(&patch, "emu.memory.cart0:write8(3, 0xE3)\n").unwrap();
+    let hashes = |name: &str, rom: &Path, more: &str, code: Option<&'static Code>| {
+        let out = dir.join(name);
+        let args = format!(
+            "{} --headless --timing exact --frames 3 --state-out {} {more}",
+            rom.display(),
+            out.display()
+        );
+        run(&parse(&args).unwrap(), code, None, &mut None).unwrap();
+        std::fs::read(out).unwrap()
+    };
+    let compiled = hashes("own", &own, "", Some(code));
+    let interp_own = hashes("own-interp", &own, "", None);
+    assert_ne!(compiled, interp_own, "the build's own ROM runs compiled");
+    let copy_built = hashes("copy", &copy, "", Some(code));
+    let copy_interp = hashes("copy-interp", &copy, "", None);
+    assert_eq!(copy_built, copy_interp);
+    let script = format!("--script {}", patch.display());
+    let script_built = hashes("script", &own, &script, Some(code));
+    let script_interp = hashes("script-interp", &own, &script, None);
+    assert_eq!(script_built, script_interp);
+    assert_ne!(script_built, compiled);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A room's consoles on a patched copy of the build's ROM run its changed
+/// function interpreted, as an interpreted room does; the build ID holds
+/// the copy's CRC, so only peers with the same copy meet.
+#[test]
+fn a_room_on_a_patched_rom_computes_what_the_interpreter_does() {
+    use netplay::Console;
+    use netplay::gba::Gba;
+    let (rom, code) = changed_rom_test();
+    let mut copy = rom.to_vec();
+    copy[3] = 0xE3;
+    let copy: &'static [u8] = copy.leak();
+    let stale = changed::stale(copy, code).unwrap().unwrap();
+    let t = runtime::Timing::Exact;
+    let mut built = Gba::<Desktop>::with_code(copy, &[None, None], Some(code), t);
+    built.set_stale(stale.keys);
+    let mut interp = Gba::<Desktop>::with_code(copy, &[None, None], None, t);
+    let own = Gba::<Desktop>::with_code(rom, &[None, None], Some(code), t);
+    assert_ne!(built.build_id(), own.build_id());
+    for _ in 0..3 {
+        built.step(&[0, 0]).unwrap();
+        interp.step(&[0, 0]).unwrap();
+    }
+    assert_eq!(built.hash(), interp.hash());
 }
