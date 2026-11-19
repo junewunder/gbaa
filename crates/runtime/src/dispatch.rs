@@ -623,6 +623,7 @@ fn run_raw<P: Platform>(
         m.bus.overlays.install(c.overlays);
     }
     m.sched.frame_ended = false;
+    m.catch_up();
     // A nested run ([`settle`]) reaches the counts through the machine.
     let outer = core::mem::replace(&mut m.nest.stats, stats);
     let (top, low) = (m.nest.stack_top, m.nest.stack_low);

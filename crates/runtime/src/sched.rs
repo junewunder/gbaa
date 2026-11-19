@@ -13,7 +13,11 @@
 //! A scanline is 1232 cycles: H-draw, then H-blank from cycle 1006 (when
 //! GBATEK's H-blank flag and IRQ come). 228 lines a frame; 160–227 are
 //! V-blank, though the V-blank flag drops on line 227. The frame ends, for
-//! [`Machine::run_frame`], at the start of V-blank.
+//! [`Machine::run_frame`], at the start of V-blank. The beam starts where
+//! mGBA's does with no BIOS image, on line [`START_LINE`] (so the first
+//! frame is short), and every V-blank ends a frame, even two crossed by one
+//! long tick (an immediate DMA's): [`Machine::sync`] stops its walk at the
+//! first and [`Machine::catch_up`] goes on at the next frame's start.
 //!
 //! IRQ entry follows the real BIOS's handler at `0x18`, run as Rust (we ship
 //! no BIOS image, decision 12): it enters IRQ mode, pushes r0–r3, r12 and lr,
@@ -47,6 +51,14 @@ pub const SPIN_BUDGET: u32 = 2048;
 /// How many spin loops [`Sched::spins`] counts at once: direct-mapped by
 /// address, a clash restarting the count.
 pub const SPIN_SLOTS: usize = 32;
+
+/// Where the beam is when the cartridge's code starts: mGBA 0.10.5's,
+/// whose `GBAVideoReset` (no BIOS image) starts on line 126 with H-blank
+/// due in 117 cycles, of which its HLE BIOS's reset code takes about 26
+/// (memory/mgba-boot-beam.md, measured at the cartridge's entry).
+pub const START_LINE: u16 = 126;
+/// Cycles from the start to the first H-blank ([`START_LINE`]'s).
+pub const START_HBLANK_IN: u64 = 91;
 
 /// Cycles in a frame.
 pub const FRAME_CYCLES: u64 = LINE_CYCLES * LINES as u64;
@@ -112,9 +124,9 @@ pub struct Sched {
 impl Default for Sched {
     fn default() -> Sched {
         Sched {
-            next_line_event: HBLANK_START,
+            next_line_event: START_HBLANK_IN,
             hblank: false,
-            next_event: HBLANK_START,
+            next_event: START_HBLANK_IN,
             halted: false,
             frame_ended: false,
             irq_line: false,
@@ -253,6 +265,15 @@ impl<P: Platform> Machine<P> {
         self.tick(cycles)
     }
 
+    /// At a frame's start: the events a V-blank left due ([`Machine::sync`]
+    /// ends its walk there). Reaching another V-blank ends this frame too,
+    /// with no instruction run, as a DMA crossing it does in mGBA.
+    pub fn catch_up(&mut self) {
+        if self.bus.io.now >= self.sched.next_line_event {
+            self.sync(0);
+        }
+    }
+
     /// Cycles since power-on.
     #[inline(always)]
     pub fn now(&self) -> u64 {
@@ -273,13 +294,18 @@ impl<P: Platform> Machine<P> {
             self.handle_events(events);
         }
         self.bus.io.now += cycles as u64;
+        let ended = self.sched.frame_ended;
         loop {
             let events = self.bus.io.take_events();
             if events != 0 {
                 self.handle_events(events);
                 continue;
             }
-            if self.bus.io.now >= self.sched.next_line_event {
+            // A V-blank this walk started ends the frame there: the line
+            // events after it (a long DMA's, crossing two V-blanks) wait
+            // for the next frame's [`Machine::catch_up`], so each V-blank
+            // is a frame of its own, as in mGBA.
+            if self.bus.io.now >= self.sched.next_line_event && (ended || !self.sched.frame_ended) {
                 sound::run_timers(&mut self.bus);
                 self.line_event();
                 continue;
@@ -485,3 +511,17 @@ mod tests;
 
 #[cfg(test)]
 mod native_tests;
+
+#[cfg(test)]
+impl<P: Platform> Machine<P> {
+    /// For tests written for a beam that starts at line 0's start (as it
+    /// did before [`START_LINE`]), drawn as `DISPCNT` says from the first
+    /// line (`DISPCNT` as if written).
+    pub fn start_at_line_0(&mut self) {
+        self.bus.io.set_raw16(reg::VCOUNT, 0);
+        self.sched.next_line_event = HBLANK_START;
+        self.sched.next_event = HBLANK_START;
+        let cnt = self.bus.io.raw16(reg::DISPCNT);
+        self.bus.io.set_raw16(reg::DISPCNT, cnt & !8);
+    }
+}

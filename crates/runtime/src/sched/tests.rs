@@ -82,6 +82,7 @@ impl Platform for HoldA {
 fn run_frame_ends_at_vblank_and_polls_keys() {
     let rom: &'static [u8] = &[0xFE, 0xFF, 0xFF, 0xEA];
     let mut m = std::boxed::Box::new(Machine::new(rom, HoldA));
+    m.start_at_line_0();
     // A `b .` from ROM at power-on's wait states: 1S + 1N + 1S, 3 + 5 + 7 + 5.
     const B: u64 = 20;
     m.run_frame();
@@ -358,4 +359,23 @@ fn instant_timing_charges_a_failed_condition_in_full() {
     );
     assert!(run(Timing::Exact) >= SKIPPED.base as u64);
     assert_ne!(run(Timing::Instant), SKIPPED.base as u64);
+}
+
+#[test]
+fn a_tick_over_two_vblanks_ends_two_frames() {
+    // A long DMA's time, ticked at once: each V-blank it crosses is a
+    // frame, the second ended by the next run_frame before any instruction.
+    let mut m = machine();
+    m.tick((2 * FRAME_CYCLES) as u32);
+    assert!(m.sched.frame_ended);
+    assert_eq!(m.bus.io.vcount(), VISIBLE_LINES);
+    let (at, pc) = (m.now(), m.cpu.pc);
+    m.run_frame();
+    assert_eq!(
+        (m.bus.io.vcount(), m.now(), m.cpu.pc),
+        (VISIBLE_LINES, at, pc)
+    );
+    m.run_frame();
+    assert!(m.now() > at);
+    assert_eq!(m.bus.io.vcount(), VISIBLE_LINES);
 }

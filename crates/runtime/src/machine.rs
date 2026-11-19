@@ -235,6 +235,7 @@ impl<P: Platform> Machine<P> {
     /// until [`Machine::fault`] is set.
     pub fn run_frame(&mut self) {
         self.sched.frame_ended = false;
+        self.catch_up();
         while !self.sched.frame_ended && self.fault.is_none() {
             if self.sched.halted {
                 self.idle();
