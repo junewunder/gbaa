@@ -723,8 +723,8 @@ the empty callee sets' over-approximation. agb lift bars all held.
 
 ## RAM pointers in a closed world, in progress
 
-Unit `native/fnref-ram-pointers`, 2026-11-19 on quack; the code is on its
-branch, not on main. The rule (`fnref.rs`, "The closed world"): memory keeps
+Unit `native/fnref-ram-pointers`, 2026-11-19 on quack; the code is commit
+7a29e22e, reverted in the next until it lands. The rule (`fnref.rs`, "The closed world"): memory keeps
 every RAM pointer stored as a word, an exact one (`Num`) or one somewhere in
 an object (`Tok::Ram`: a RAM literal plus an index, `&tasks[i]`), so a
 number read from memory is no RAM address, and a load through a value with
@@ -752,7 +752,7 @@ closed world reads as no RAM address, so its loads read nothing and its
 calls are incomplete. Nightmare isn't measured: its first round ran over 9
 minutes with the roads on (they turn the kept ops off).
 
-**What it took to get there**, each a rule now on the branch:
+**What it took to get there**, each a rule in that commit:
 
 - An op on a RAM pointer other than plus, less or a mask makes a number,
   as on a ROM pointer. Made a dropped pointer instead, every byte read from
