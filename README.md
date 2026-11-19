@@ -15,7 +15,7 @@ can read and edit, with no emulated CPU underneath, so that a game can be
 modded. Today it handles the opening of Metroid: Zero Mission, and its output
 is not yet readable.
 
-gbaa has only been tested on Linux, and you bring your own ROM.
+gbaa has run on Linux, Windows and macOS, and you bring your own ROM.
 
 ## What runs
 
@@ -86,7 +86,7 @@ at the points where a person had to look or listen.
 
 ## Try it
 
-It has only been tested on Linux. You need the Rust toolchain, the command
+It has run on Linux, Windows and macOS. You need the Rust toolchain, the command
 runner [`just`](https://github.com/casey/just), cmake and a C compiler, and
 your own ROM.
 
