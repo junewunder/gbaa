@@ -39,6 +39,13 @@
 //! `sp_accesses_escaping_slot` (one the frame's run didn't place counts as
 //! escaping).
 //!
+//! Branch conditions (`super::cond`, native/lift-branch-conditions):
+//! `branches_on_raw_flags` counts each block's distinct conditions (an
+//! `if` over a guard) that rest on a flag with no closed form (one from
+//! another block, a selected one, a multiply's carry, an add with carry
+//! in, a shift by a register): barred. The rest print as comparisons and
+//! bit tests over the operands.
+//!
 //! Function words (`super::fnref`): the words of ROM outside code that hold
 //! a function's key, `fn_words_not_proven` those the flow didn't prove
 //! (barred), `fn_words_proven` the rest (no bar: it should rise).
