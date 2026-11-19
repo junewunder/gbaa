@@ -1104,6 +1104,15 @@ impl Options {
     }
 }
 
+/// The ROM at `path`, checked for size, kept for the run (`emu:loadFile`'s).
+pub fn read_rom(path: &Path) -> Result<&'static [u8], String> {
+    let rom = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    if rom.len() > runtime::bus::ROM_MAX {
+        return Err(format!("{}: larger than 32 MB", path.display()));
+    }
+    Ok(rom.leak())
+}
+
 /// Where a build's embedded ROM, named `name`, is taken to be when run
 /// with none given (double-clicked, say): `name.gba` beside the binary
 /// `exe`. The file needn't exist; it names the game in errors, and a
@@ -1716,6 +1725,7 @@ pub fn run(
     };
     // Made at the first script, from the command line or the window's
     // console ([`console`]).
+    let loaded = scripting::Loaded::default();
     let mut host = match opts.scripts.is_empty() {
         true => None,
         false => Some(scripting::host(
@@ -1723,6 +1733,7 @@ pub fn run(
             &opts.states,
             code,
             opts.interp_blocks,
+            loaded.clone(),
         )?),
     };
     // As mGBA's scripting window loads a script into a running game: `emu`
@@ -1874,6 +1885,7 @@ pub fn run(
                             &opts.states,
                             code,
                             opts.interp_blocks,
+                            loaded.clone(),
                         )?);
                     }
                     let h = host.as_ref().expect("made above");
@@ -2078,6 +2090,27 @@ pub fn run(
                 eprintln!("gbaa-desktop: {said}");
                 m.platform.set_title(&format!("gbaa: {said}"));
                 m.platform.set_undoable(undo_load.is_some());
+            }
+            // A ROM a script loaded (`emu:loadFile`, Ironmon's new run):
+            // the old ROM's save is written out, and the new one starts
+            // blank, or from the `.sav` beside it in a window, as mGBA
+            // opens a ROM. Rewinding and auto states stop at the swap.
+            if let Some(path) = loaded.borrow_mut().take() {
+                if let Some(f) = &mut sav {
+                    f.flush(&mut m.bus.save)?;
+                }
+                m.bus.save.data.fill(0xFF);
+                m.bus.save.dirty = false;
+                if sav.is_some() {
+                    sav = Some(sav_file::SavFile::open(
+                        &sav_file::beside(&path),
+                        &mut m.bus.save,
+                    )?);
+                }
+                if let Some(r) = &mut rewind {
+                    *r = rewind::Rewind::new(opts.rewind_mb << 20);
+                }
+                auto = None;
             }
             let saved = match &mut sav {
                 Some(f) => f.frame(&mut m.bus.save)?,

@@ -3,20 +3,29 @@
 use crate::{Code, Desktop, DesktopMachine, slots, write_png};
 use runtime::Machine;
 use script::Access;
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 pub type Host = script::Host<Desktop>;
+
+/// The ROM file `emu:loadFile` last loaded, until the run loop takes it
+/// ([`host`]) to move the cartridge save to it.
+pub type Loaded = Rc<RefCell<Option<PathBuf>>>;
 
 /// A script host for the game in `rom`, whose `emu:runFrame` runs frames
 /// as the run loop does (`code`, compiled, unless absent), and whose
 /// `emu:saveStateSlot` and `loadStateSlot` use the slot files at `states`
 /// ([`slots::path`]): the window's, in the game's folder, or headless,
-/// beside the ROM.
+/// beside the ROM. Its `emu:loadFile` swaps in another ROM the build
+/// accepts, as a changed copy of its own ([`crate::changed`]), and puts the
+/// file's path in `loaded`.
 pub fn host(
     rom: &'static [u8],
     states: &Path,
     code: Option<&'static Code>,
     interp_blocks: bool,
+    loaded: Loaded,
 ) -> Result<Host, String> {
     let mut stats = Box::new(runtime::dispatch::Stats::default());
     let save_to = states.to_path_buf();
@@ -78,6 +87,22 @@ pub fn host(
             if let Some(s) = stale {
                 eprintln!("gbaa-desktop: a script patched the ROM: {}", s.report());
             }
+            Ok(())
+        }),
+        load_file: Box::new(move |m: &mut DesktopMachine, path: &Path| {
+            let rom = crate::read_rom(path)?;
+            let stale = match code {
+                Some(c) => crate::changed::stale(rom, c)?,
+                None => None,
+            };
+            m.bus.rom = rom;
+            m.bus.stale = stale.map_or(&[], |s| s.keys);
+            eprintln!(
+                "gbaa-desktop: a script loaded {}{}",
+                path.display(),
+                stale.map_or(String::new(), |s| format!(": {}", s.report()))
+            );
+            *loaded.borrow_mut() = Some(path.to_path_buf());
             Ok(())
         }),
     };

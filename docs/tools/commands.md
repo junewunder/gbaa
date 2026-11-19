@@ -399,15 +399,15 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   design in `docs/research/lua-scripting.md`): `emu` (memory and its
   `emu.memory` domains, ROM info, CRC32 as four big-endian bytes,
   `getGameCode` as `AGB-XXXX`, keys, registers, state buffers and files
-  ours or mGBA's, `screenshot`, `step`, `runFrame`, `reset`), `callbacks`,
-  `console` and text buffers, `socket` (mGBA's Lua over a non-blocking
-  `std::net` `_socket`, polled each frame), `C`, `util`, `system`, and the standard
-  libraries. Scripts load as into mGBA's scripting window
+  ours or mGBA's, `screenshot`, `step`, `runFrame`, `reset`, `loadFile`: a
+  changed ROM, its save the `.sav` beside it), `callbacks`, `console` and text buffers, `socket` (mGBA's Lua over a non-blocking
+  `std::net` `_socket`, polled each frame), `C`, `util`, `system`, and the
+  standard libraries. Scripts load as into mGBA's scripting window
   with the game running: `emu` set, `start` not fired; each in its own
   `_ENV`, whose `require` finds modules beside the script. A script is
   sandboxed (the owner's choice): files (`io`, `os.remove`/`rename`,
-  `loadfile`/`dofile`/`require`, state files, screenshots) only under its
-  own folder, links and `..` resolved; source only, no C modules; no
+  `loadfile`/`dofile`/`require`, state files, screenshots, `loadFile`) only
+  under its own folder, links and `..` resolved; source only, no C modules; no
   `os.execute`, `io.popen`, `os.exit`, `os.getenv`, `os.tmpname`; of
   `debug` only `traceback` and `getinfo`; sockets on loopback only (a
   `nil` bind address binds 127.0.0.1; others get `access denied`). A blocked call raises an error
