@@ -2,7 +2,7 @@
 //!
 //! A [`Host`] owns a Lua 5.4 state with mGBA 0.10.5's globals: `emu`
 //! (memory, `emu.memory` domains, ROM info, keys, registers, states,
-//! `screenshot`, `step`, `runFrame`, `reset`), `callbacks`, `console` and
+//! `screenshot`, `step`, `runFrame`, `reset`, `loadFile`), `callbacks`, `console` and
 //! its text buffers, `socket` (mGBA's Lua over our `_socket`), `C`, `util`
 //! and `system`; and 0.11-dev's `storage` ([`storage`], kept where
 //! [`Host::set_storage`] says), `canvas` and `image` ([`canvas`]: overlays
@@ -51,6 +51,8 @@ pub type Slot<P> = Box<dyn FnMut(&mut Machine<P>, i64) -> Result<(), String>>;
 /// (ROM offset, byte) pairs, sorted by offset, for the machine's ROM
 /// ([`patched`] makes the copy).
 pub type PatchRom<P> = Box<dyn FnMut(&mut Machine<P>, &[(u32, u8)]) -> Result<(), String>>;
+/// `emu:loadFile`'s: the ROM at the path in place of the machine's.
+pub type LoadFile<P> = Box<dyn FnMut(&mut Machine<P>, &Path) -> Result<(), String>>;
 
 /// How the front end runs, resets, loads and shows the machine, for the
 /// parts of `emu` that need more than the machine.
@@ -72,6 +74,11 @@ pub struct Hooks<P: Platform> {
     /// returns or before it runs the machine (`runFrame`, `step`,
     /// `reset`). Until then the cartridge domains read them back.
     pub patch_rom: PatchRom<P>,
+    /// `emu:loadFile`: put the ROM at the path in `m.bus.rom`, as mGBA's
+    /// `mCoreLoadFile` swaps the cartridge without resetting (Ironmon
+    /// calls `emu:reset` next). The scripts' ROM info (`getGameTitle`,
+    /// `checksum`, `romSize`) follows it.
+    pub load_file: LoadFile<P>,
 }
 
 /// A copy of `rom` with `writes` (ROM offset, byte) made, leaked; offsets
@@ -117,6 +124,9 @@ struct Shared<P: Platform> {
     /// Scripts' writes to the cartridge domains not yet made
     /// ([`Hooks::patch_rom`]), by ROM offset.
     rom_writes: RefCell<std::collections::BTreeMap<u32, u8>>,
+    /// The ROM as loaded, for its header and checksum: the one the host
+    /// was made for until `emu:loadFile` loads another.
+    rom: Cell<&'static [u8]>,
 }
 
 /// Make the scripts' pending ROM writes ([`Hooks::patch_rom`]); a refusal
@@ -184,7 +194,7 @@ fn register(name: &str) -> Option<usize> {
 pub enum Access {
     /// Files (`io.open`, `io.lines`, `io.input`/`output`, `os.remove`,
     /// `os.rename`, `loadfile`, `dofile`, `require`, `emu:saveStateFile`,
-    /// `loadStateFile`, `screenshot`) only under the script's own folder,
+    /// `loadStateFile`, `screenshot`, `loadFile`) only under the script's own folder,
     /// links resolved; Lua source only, no bytecode or C modules; no
     /// `os.execute`, `io.popen`, `os.exit`, `os.getenv`, `os.setlocale`,
     /// `os.tmpname` or `package.loadlib`; of `debug`, only `traceback` and
@@ -258,6 +268,7 @@ impl<P: Platform + 'static> Host<P> {
             taken: Cell::new(0),
             points: RefCell::default(),
             rom_writes: RefCell::default(),
+            rom: Cell::new(rom),
         });
         // As mGBA: every standard library, `debug` included (luaL_openlibs);
         // a sandboxed script's `_ENV` holds limited copies.
@@ -277,7 +288,7 @@ impl<P: Platform + 'static> Host<P> {
         canvas::install(&lua, canvas.clone(), ctx).map_err(|e| e.to_string())?;
         let input = Rc::new(input::Input::default());
         input::install(&lua, input.clone()).map_err(|e| e.to_string())?;
-        let env = install(&lua, &s, rom).map_err(|e| e.to_string())?;
+        let env = install(&lua, &s).map_err(|e| e.to_string())?;
         let b = s.clone();
         lua.set_global_hook(
             HookTriggers::new().every_nth_instruction(TICK),
@@ -670,11 +681,7 @@ fn save_state<P: Platform>(m: &mut Machine<P>) -> Vec<u8> {
     v
 }
 
-fn install<P: Platform + 'static>(
-    lua: &Lua,
-    s: &Rc<Shared<P>>,
-    rom: &'static [u8],
-) -> mlua::Result<Function> {
+fn install<P: Platform + 'static>(lua: &Lua, s: &Rc<Shared<P>>) -> mlua::Result<Function> {
     let g = lua.globals();
     let c = s.clone();
     g.set(
@@ -702,14 +709,16 @@ fn install<P: Platform + 'static>(
     }
     emu.set("memory", memory)?;
 
+    let r = s.clone();
     let header = move |a: usize, b: usize| {
-        let h = rom.get(a..b).unwrap_or_default();
+        let h = r.rom.get().get(a..b).unwrap_or_default();
         let end = h.iter().position(|&c| c == 0).unwrap_or(h.len());
         String::from_utf8_lossy(&h[..end]).into_owned()
     };
+    let title = header.clone();
     emu.set(
         "getGameTitle",
-        lua.create_function(move |_, _: Value| Ok(header(0xA0, 0xAC)))?,
+        lua.create_function(move |_, _: Value| Ok(title(0xA0, 0xAC)))?,
     )?;
     // mGBA 0.10's format (`src/gba/gba.c:778` at 0.10.5): "AGB-BPEE".
     emu.set(
@@ -718,7 +727,10 @@ fn install<P: Platform + 'static>(
     )?;
     emu.set(
         "romSize",
-        lua.create_function(move |_, _: Value| Ok(rom.len()))?,
+        lua.create_function({
+            let r = s.clone();
+            move |_, _: Value| Ok(r.rom.get().len())
+        })?,
     )?;
     emu.set("platform", lua.create_function(|_, _: Value| Ok(0))?)?;
     emu.set(
@@ -734,6 +746,7 @@ fn install<P: Platform + 'static>(
         "currentFrame",
         lua.create_function(move |_, _: Value| Ok(f.frame.get()))?,
     )?;
+    let r = s.clone();
     emu.set(
         "checksum",
         lua.create_function(move |lua, (_s, t): (Value, Option<i64>)| {
@@ -741,7 +754,7 @@ fn install<P: Platform + 'static>(
             if t.unwrap_or(0) != 0 {
                 return Ok(Value::Nil);
             }
-            let crc = runtime::state::crc32(rom);
+            let crc = runtime::state::crc32(r.rom.get());
             Ok(Value::String(lua.create_string(crc.to_be_bytes())?))
         })?,
     )?;
@@ -892,6 +905,28 @@ fn install<P: Platform + 'static>(
             (ss.hooks.borrow_mut().reset)(m);
             fire(lua, &ss, "reset", None);
             Ok(())
+        })?,
+    )?;
+    // A ROM write a script made to the old ROM is gone with it; a refusal
+    // goes to the console, and the call gives false, as mGBA's does.
+    let ss = s.clone();
+    emu.set(
+        "loadFile",
+        lua.create_function(move |_, (_s, p): (Value, String)| {
+            let m = machine(&ss)?;
+            ss.rom_writes.borrow_mut().clear();
+            let r = (ss.hooks.borrow_mut().load_file)(m, Path::new(&p));
+            match r {
+                Ok(()) => {
+                    ss.rom.set(m.bus.rom);
+                    Ok(true)
+                }
+                Err(e) => {
+                    let msg = format!("error: emu:loadFile {p}: {e}");
+                    ss.console.borrow_mut().push(msg);
+                    Ok(false)
+                }
+            }
         })?,
     )?;
     g.set("emu", emu)?;
@@ -1202,13 +1237,34 @@ end
 
 return function(dir, path, full, allowed, id)
   local env
+  -- Why the script may not use path `p`, or nil if it may.
+  local function refused(name, p)
+    if full or type(p) ~= "string" or allowed(p) then return nil end
+    return name .. ": " .. p .. " is outside the script's folder (the script is sandboxed;"
+      .. " give it full access to use it)"
+  end
   -- A path the script may use, or an error at its call.
   local function checked(name, p)
     -- Lua's io and os functions turn a number into a filename, so check it as one.
     if type(p) == "number" then p = tostring(p) end
-    if full or type(p) ~= "string" or allowed(p) then return p end
-    error(name .. ": " .. p .. " is outside the script's folder (the script is sandboxed;"
-      .. " give it full access to use it)", 3)
+    local why = refused(name, p)
+    if why then error(why, 3) end
+    return p
+  end
+  -- Lua's io.open, os.remove, os.rename and loadfile report a file they
+  -- can't use by returning nil and why, and scripts test for that: Ironmon
+  -- tries a path relative to the working directory first, then its own.
+  -- So a blocked path fails them the same way, saying why.
+  local function soft(name, f, paths)
+    return function(...)
+      local a = table.pack(...)
+      for i = 1, paths do
+        if type(a[i]) == "number" then a[i] = tostring(a[i]) end
+        local why = refused(name, a[i])
+        if why then return nil, why end
+      end
+      return f(table.unpack(a, 1, a.n))
+    end
   end
   if full then
     env = setmetatable({}, {__index = G})
@@ -1218,17 +1274,35 @@ return function(dir, path, full, allowed, id)
     for k, v in pairs(G) do
       if type(k) ~= "string" or k:sub(1, 2) ~= "__" then env[k] = v end
     end
-    env.io = lib(rio, "io", {"close", "read", "write", "type", "tmpfile", "stdin", "stdout", "stderr"}, {"popen"})
-    env.io.open = function(p, ...) return rio.open(checked("io.open", p), ...) end
+    env.io = lib(rio, "io", {"close", "read", "write", "type", "tmpfile", "stdin", "stdout", "stderr"}, {})
+    env.io.open = soft("io.open", rio.open, 1)
     env.io.lines = function(p, ...) return rio.lines(checked("io.lines", p), ...) end
     env.io.input = function(p) return rio.input(checked("io.input", p)) end
     env.io.output = function(p) return rio.output(checked("io.output", p)) end
     env.os = lib(ros, "os", {"clock", "date", "difftime", "time"},
-      {"execute", "exit", "getenv", "setlocale", "tmpname"})
-    env.os.remove = function(p) return ros.remove(checked("os.remove", p)) end
-    env.os.rename = function(a, b)
-      return ros.rename(checked("os.rename", a), checked("os.rename", b))
+      {"exit", "getenv", "setlocale", "tmpname"})
+    -- A command fails as if it couldn't run (Lua's nil, "exit", code; no
+    -- command: no shell), warned of once: Ironmon checks for updates with
+    -- curl as it starts, and tracks on without it.
+    local said = {}
+    local function warnOnce(name)
+      if not said[name] then
+        said[name] = true
+        __console("warn", name .. " is not allowed: the script is sandboxed"
+          .. " (give it full access to use it)")
+      end
     end
+    env.os.execute = function(cmd)
+      if cmd == nil then return false end
+      warnOnce("os.execute")
+      return nil, "exit", 126
+    end
+    env.io.popen = function()
+      warnOnce("io.popen")
+      return nil, "io.popen is not allowed: the script is sandboxed (give it full access to use it)"
+    end
+    env.os.remove = soft("os.remove", ros.remove, 1)
+    env.os.rename = soft("os.rename", ros.rename, 2)
     env.debug = lib(rdebug, "debug", {"traceback"}, {"debug", "gethook", "getlocal",
       "getmetatable", "getregistry", "getupvalue", "getuservalue", "sethook", "setlocal",
       "setmetatable", "setupvalue", "setuservalue", "upvalueid", "upvaluejoin", "setcstacklimit"})
@@ -1243,7 +1317,7 @@ return function(dir, path, full, allowed, id)
     -- Its files only, and their paths, through a proxy whose metatable
     -- hides the real `emu`.
     local e = setmetatable({}, {__index = G.emu, __metatable = false})
-    for _, k in ipairs({"saveStateFile", "loadStateFile", "screenshot"}) do
+    for _, k in ipairs({"saveStateFile", "loadStateFile", "screenshot", "loadFile"}) do
       e[k] = function(self, p, ...) return G.emu[k](self, checked("emu:" .. k, p), ...) end
     end
     env.emu = e
@@ -1271,7 +1345,10 @@ return function(dir, path, full, allowed, id)
     local p, mode, e = ...
     if select("#", ...) < 3 then e = env end
     if p == nil and not full then error("loadfile: the script is sandboxed: give a path", 2) end
-    return rawloadfile(checked("loadfile", p), full and mode or "t", e)
+    if type(p) == "number" then p = tostring(p) end
+    local why = refused("loadfile", p)
+    if why then return nil, why end
+    return rawloadfile(p, full and mode or "t", e)
   end
   env.dofile = function(p)
     local f, err = env.loadfile(p)

@@ -27,6 +27,11 @@ fn host_for(rom: &'static [u8]) -> (Host<Headless>, Box<Machine<Headless>>) {
             m.bus.rom = patched(m.bus.rom, w);
             Ok(())
         }),
+        load_file: Box::new(|m, p| {
+            let b = std::fs::read(p).map_err(|e| e.to_string())?;
+            m.bus.rom = b.leak();
+            Ok(())
+        }),
     };
     (
         Host::new(rom, hooks).unwrap(),
@@ -264,6 +269,46 @@ fn a_state_buffer_round_trips_and_reset_fires() {
     assert_eq!(h.console(), ["log: true 7", "log: reset", "log: 0", &crc]);
 }
 
+/// `emu:loadFile` swaps the ROM and the scripts' ROM info follows it; a
+/// missing file gives false and says why; a sandboxed script may load only
+/// from its folder.
+#[test]
+fn load_file_swaps_the_rom() {
+    let (h, mut m) = host();
+    let s = script(
+        r#"console:log(emu:getGameTitle() .. " " .. emu:romSize())
+        console:log(tostring(emu:loadFile(script.dir .. "/next.gba")))
+        console:log(emu:getGameTitle() .. " " .. emu:getGameCode() .. " " .. emu:romSize())
+        console:log(string.format("%08x", string.unpack(">I4", emu:checksum(C.CHECKSUM.CRC32))))
+        console:log(tostring(emu:loadFile(script.dir .. "/none.gba")))
+        console:log(select(2, pcall(emu.loadFile, emu, "/outside.gba")))"#,
+    );
+    let mut next = vec![0u8; 0x400];
+    next[0xA0..0xAC].copy_from_slice(b"NEXTGAME\0\0\0\0");
+    next[0xAC..0xB0].copy_from_slice(b"BNXT");
+    std::fs::write(s.dir.join("next.gba"), &next).unwrap();
+    h.load(&mut m, &s.path, Access::Sandboxed);
+    assert_eq!(m.bus.rom, &next[..]);
+    let c = h.console();
+    assert_eq!(
+        c[..4],
+        [
+            "log: TESTGAME 512".to_string(),
+            "log: true".into(),
+            "log: NEXTGAME AGB-BNXT 1024".into(),
+            format!("log: {:08x}", runtime::state::crc32(&next)),
+        ][..]
+    );
+    assert!(
+        c[4].starts_with("error: emu:loadFile ") && c[5] == "log: false",
+        "{c:?}"
+    );
+    assert!(
+        c[6].contains("emu:loadFile: /outside.gba is outside the script's folder"),
+        "{c:?}"
+    );
+}
+
 /// `fixtures/sandbox/` copied into a fresh folder, with the files outside
 /// it that its calls try to reach.
 #[cfg(unix)]
@@ -297,17 +342,21 @@ fn a_sandboxed_script_gets_an_error_for_each_blocked_call() {
             sandboxed.replace(" (", "; ").trim_end_matches(')')
         )
     };
-    let mut want = vec![];
-    let mut blocked = |what: &str, why: String| want.push(format!("log: blocked: {what}: {why}"));
-    for f in [
-        "os.execute",
-        "os.exit",
-        "os.getenv",
-        "os.tmpname",
-        "io.popen",
-    ] {
+    let want = std::cell::RefCell::new(vec![]);
+    let blocked = |what: &str, why: String| {
+        want.borrow_mut()
+            .push(format!("log: blocked: {what}: {why}"))
+    };
+    let warned = |why: String| want.borrow_mut().push(format!("warn: {why}"));
+    // A command fails as Lua's does when it can't run, warned of once.
+    warned(not_allowed("os.execute"));
+    blocked("os.execute", "os.execute failed".into());
+    blocked("os.execute's shell", "no shell".into());
+    for f in ["os.exit", "os.getenv", "os.tmpname"] {
         blocked(f, not_allowed(f));
     }
+    warned(not_allowed("io.popen"));
+    blocked("io.popen", not_allowed("io.popen"));
     blocked("io.open outside", outside("io.open", "../outside.txt"));
     blocked("io.open by ..", outside("io.open", "sub/../../outside.txt"));
     blocked("io.open by a link", outside("io.open", "link/outside.txt"));
@@ -365,9 +414,10 @@ fn a_sandboxed_script_gets_an_error_for_each_blocked_call() {
         "states and screenshots inside",
         "os.time, os.clock, os.date, debug.traceback",
     ] {
-        want.push(format!("log: allowed: {a}"));
+        want.borrow_mut().push(format!("log: allowed: {a}"));
     }
     let got = h.console();
+    let want = want.into_inner();
     for (g, w) in got.iter().zip(&want) {
         assert_eq!(g, w);
     }
@@ -1014,6 +1064,7 @@ fn load_state_slot_keeps_the_cartridge_save_unless_asked() {
             m.load_state(&b).map_err(|e| e.to_string())
         }),
         patch_rom: Box::new(|_, _| Err("no patches".into())),
+        load_file: Box::new(|_, _| Err("no ROMs".into())),
     };
     let h = Host::new(rom, hooks).unwrap();
     let mut m = Box::new(Machine::new(rom, Headless));
