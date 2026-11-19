@@ -1460,18 +1460,31 @@ negotiation, where 1.3.18 takes the smaller of the two MTUs (default
 1392 against 1400), which a 1.3.17 peer accepts. The payloads are the
 raw blob spans, no framing of the assistant's own, and the channel
 numbers, sizes and packet flags above match. Not yet tried against a real
-mGBA with the assistant (Windows only). Against C ENet 1.3.17 built here
-(2026-11-18), a relay hosting for one gbaa game and connecting to the
-other: both connects went through, rusty_enet to C and C to rusty_enet,
-and the C side took 265 game states and 1589 player states from the
-gbaa host; the handshake was lost to the relay's own race (it came
-before the relay reached the host), and the fixed relay's build was
-refused in that session, so no game has yet connected through C ENet.
-The fixed relay is `spikes/enet-relay/relay.c` (it queues what comes
-before both sides are up, and retries the host); the owner allowed the
-build (2026-11-19), and it builds against 1.3.17's sources in
-`$GBAA_DATA/tools/enet-1.3.17` (the build line is in its header), but
-running it was refused by the session's permission classifier.
+mGBA with the assistant (Windows only), but **two gbaa games meet through
+C ENet 1.3.17** (2026-11-19). `spikes/enet-relay/relay.c`, built against
+1.3.17's sources in `$GBAA_DATA/tools/enet-1.3.17` (the build line is in
+its header), connects to the hosting game and only then listens for the
+joining one, passing every packet across on its channel with its flags:
+rusty_enet to C on one side, C to rusty_enet on the other, each game's
+whole session crossing C. Run as `relay 47100 47101 40`, with the
+"Two real games meet" runs above, the host on `--rogue 127.0.0.1:47100`
+and the joiner on `--rogue 127.0.0.1:47101` started 3 s later: three
+runs out of three, both games print `rogue: connected`, the host `player 1
+joined`, and at frame 6900 each screen draws the other player and its
+follower. The relay passed, per run, 1 handshake each way, about 270
+game states, 1 profile set and 1600 player states to the joiner, and
+900 to 1650 player states to the host. Two things the first tries
+found: a relay that takes the joiner before it has the host holds the
+joiner's handshake until the game gives up on it, and a headless game
+runs about four times faster than the wall clock ENet times its
+connects by, so ENet's default connect backoff (up to 30 s) reached the
+host too late. The relay sets a one-second connect timeout to the host
+and opens the joiner's port only once the host is reached. Started
+together, without the 3 s, two runs of three connected and one joiner's
+game gave up on its retry first; at the GBA's own frame rate (the
+window) that race is four times wider. Earlier (2026-11-18) a relay
+without these fixes had connected both ways and taken 265 game states
+and 1589 player states from the gbaa host, but lost the handshake.
 
 ## The cable over the internet: modes, timing, games (multiplayer/link-cable-survey)
 

@@ -3,10 +3,13 @@
  *
  * It listens for the joining game on JOIN_PORT and connects to the hosting
  * game on HOST_PORT (127.0.0.1), and passes every packet across on the same
- * channel with the same flags. Nothing is passed on until both sides are
- * connected: what arrives before that waits in a queue, so the joiner's
- * handshake isn't lost while the relay is still reaching the host. A connect
- * to the host that times out is tried again.
+ * channel with the same flags. It opens JOIN_PORT only once it has reached
+ * the host, so a joiner never sends its handshake into a relay with nowhere
+ * to pass it (the game gives up on an unanswered handshake, and headless
+ * games run several times faster than the wall clock ENet times by). A
+ * connect to the host that times out is tried again within about a second.
+ * Nothing is passed on while either side is down: what arrives then waits
+ * in a queue.
  *
  * Build (ENet 1.3.17's sources, not in git):
  *   gcc -O1 -I$ENET/include -DHAS_SOCKLEN_T -o relay relay.c \
@@ -81,6 +84,10 @@ static void connect_host(ENetHost *client, ENetAddress *addr) {
         fprintf(stderr, "relay: enet_host_connect failed\n");
         exit(1);
     }
+    /* Give up on an unanswered connect in about a second (ENet's default
+     * backs off for up to 30 s), so the host is reached soon after it
+     * starts listening. */
+    enet_peer_timeout(host_peer, 0, 500, 1000);
 }
 
 int main(int argc, char **argv) {
@@ -95,9 +102,10 @@ int main(int argc, char **argv) {
             ENET_VERSION_PATCH);
 
     ENetAddress listen = {.host = ENET_HOST_ANY, .port = (enet_uint16)join_port};
-    ENetHost *server = enet_host_create(&listen, 1, CHANNELS, 0, 0);
+    /* The joiner's side, opened once the host is reached. */
+    ENetHost *server = NULL;
     ENetHost *client = enet_host_create(NULL, 1, CHANNELS, 0, 0);
-    if (!server || !client) {
+    if (!client) {
         fprintf(stderr, "relay: enet_host_create failed\n");
         return 1;
     }
@@ -112,6 +120,14 @@ int main(int argc, char **argv) {
             case ENET_EVENT_TYPE_CONNECT:
                 host_up = 1;
                 fprintf(stderr, "relay: reached the host\n");
+                if (!server) {
+                    server = enet_host_create(&listen, 1, CHANNELS, 0, 0);
+                    if (!server) {
+                        fprintf(stderr, "relay: enet_host_create failed\n");
+                        return 1;
+                    }
+                    fprintf(stderr, "relay: listening for the joiner\n");
+                }
                 drain();
                 break;
             case ENET_EVENT_TYPE_DISCONNECT:
@@ -131,7 +147,7 @@ int main(int argc, char **argv) {
                 break;
             }
         }
-        while (enet_host_service(server, &ev, 1) > 0) {
+        while (server && enet_host_service(server, &ev, 1) > 0) {
             switch (ev.type) {
             case ENET_EVENT_TYPE_CONNECT:
                 join_peer = ev.peer;
@@ -157,13 +173,13 @@ int main(int argc, char **argv) {
             }
         }
         enet_host_flush(client);
-        enet_host_flush(server);
+        if (server) enet_host_flush(server);
     }
     printf("to the host (handshake, game state, player state, profiles): %ld %ld %ld %ld\n",
            passed_to_host[0], passed_to_host[1], passed_to_host[2], passed_to_host[3]);
     printf("to the joiner (handshake, game state, player state, profiles): %ld %ld %ld %ld\n",
            passed_to_join[0], passed_to_join[1], passed_to_join[2], passed_to_join[3]);
-    enet_host_destroy(server);
+    if (server) enet_host_destroy(server);
     enet_host_destroy(client);
     enet_deinitialize();
     return 0;
