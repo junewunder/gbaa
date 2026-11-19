@@ -1902,8 +1902,8 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   in the hub; the host listens on ADDR's port (30025 if left out), the
   client connects to ADDR. ENet over UDP, as the assistant speaks it, so
   the other player may be on mGBA with Rogue Assistant. Prints `rogue:`
-  lines to stderr as it connects. `cargo test -p desktop rogue` checks it
-  over localhost against a stand-in for the game's side.
+  lines to stderr as it connects. `cargo test -p desktop rogue`: a stand-in
+  game, localhost; two real games: research/multiplayer.md, "Two real games meet".
 - The netplay session core's check (multiplayer/session-core, `crates/netplay`):
   `just emerald-netplay [ROM] [ARGS]` plays emerald-link's walk into the
   Trade Center (4200 frames) straight, both Emeralds on one cable with
