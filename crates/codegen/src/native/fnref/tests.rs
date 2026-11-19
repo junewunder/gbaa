@@ -612,6 +612,103 @@ fn bounds_from_a_table_s_start_end_with_its_object() {
     assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
 }
 
+/// `ldr rN, =base` (a RAM literal) plus `rI << sh`, plus `k`: a pointer
+/// into `base`'s object ([`ram_indexed`] finds `base` a start).
+fn indexed(b: &mut B, w: u32, base: u32, i: u8, sh: u32, k: u32) -> ValueId {
+    let lit = b.pool(w, base);
+    let r = b.get(i);
+    let x = b.shift(ShiftType::Lsl, r, sh);
+    let a = b.bin(BinOp::Add, x, lit);
+    let k = b.k(k);
+    b.bin(BinOp::Add, a, k)
+}
+
+/// Two arrays of records in RAM, each indexed from its start: A1 of 24
+/// bytes, A2 of 8 (`native/fnref-ram-pointers`).
+const A1: u32 = 0x0300_0200;
+const A2: u32 = 0x0300_0400;
+
+/// One function makes `&A1[r1]` and stores it to CELL (a scheduler's
+/// current task), and stores H in A2[r2]; another loads CELL back and
+/// stores F through it, 4 on.
+fn make_and_set() -> [Built; 2] {
+    let e = 0x0800_1001;
+    let mut a = B::default();
+    let lit = a.pool(0x0800_0410, A1);
+    let i = a.get(1);
+    let n = a.k(24);
+    let x = a.bin(BinOp::Mul, i, n);
+    let t = a.bin(BinOp::Add, lit, x);
+    let c = a.k(CELL);
+    a.st(Width::Word, c, t);
+    let y = indexed(&mut a, 0x0800_0414, A2, 2, 3, 0);
+    let h = a.pool(0x0800_0404, H);
+    a.st(Width::Word, y, h);
+    let e2 = 0x0800_3001;
+    let mut b = B::default();
+    let c = b.k(CELL);
+    let t = b.ld(Width::Word, c);
+    let four = b.k(4);
+    let x = b.bin(BinOp::Add, t, four);
+    let p = b.pool(POOL, F);
+    b.st(Width::Word, x, p);
+    [
+        (e, vec![(e, a.end(None, Edge::Return))]),
+        (e2, vec![(e2, b.end(None, Edge::Return))]),
+    ]
+}
+
+#[test]
+fn a_pointer_into_a_ram_array_stays_in_it() {
+    // A call through CELL's pointer, 4 on: F alone, H kept in A2.
+    let mut b = B::default();
+    let c = b.k(CELL);
+    let t = b.ld(Width::Word, c);
+    let four = b.k(4);
+    let x = b.bin(BinOp::Add, t, four);
+    let g = b.ld(Width::Word, x);
+    let [make, set] = make_and_set();
+    let f = run(&[make, set, calling(0x0800_2001, b, g)]);
+    assert!(f.proven(POOL), "{f:?}");
+    assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
+    assert!(site(&f).complete, "{f:?}");
+    assert!(!f.piled.contains(&Origin::Word(POOL)), "{f:?}");
+    // And through A1[r3] + 4, from its literal: F alone too.
+    let mut b = B::default();
+    let x = indexed(&mut b, 0x0800_0418, A1, 3, 3, 4);
+    let g = b.ld(Width::Word, x);
+    let [make, set] = make_and_set();
+    let f = run(&[make, set, calling(0x0800_2001, b, g)]);
+    assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
+    // And through A2[r3]: H alone.
+    let mut b = B::default();
+    let x = indexed(&mut b, 0x0800_0418, A2, 3, 3, 0);
+    let g = b.ld(Width::Word, x);
+    let [make, set] = make_and_set();
+    let f = run(&[make, set, calling(0x0800_2001, b, g)]);
+    assert_eq!(site(&f).callees, BTreeSet::from([H]), "{f:?}");
+}
+
+#[test]
+fn a_ram_pointer_dropped_is_read_everywhere() {
+    // H stored in A2[r2]; F through a pointer the run dropped (which
+    // may be anywhere): a load through A2[r3] reads both.
+    let e = 0x0800_1001;
+    let mut a = B::default();
+    let y = indexed(&mut a, 0x0800_0414, A2, 2, 3, 0);
+    let h = a.pool(0x0800_0404, H);
+    a.st(Width::Word, y, h);
+    let (x, _) = dropped(&mut a);
+    let p = a.pool(POOL, F);
+    a.st(Width::Word, x, p);
+    let store = (e, vec![(e, a.end(None, Edge::Return))]);
+    let mut b = B::default();
+    let x = indexed(&mut b, 0x0800_0418, A2, 3, 3, 0);
+    let g = b.ld(Width::Word, x);
+    let f = run(&[store, calling(0x0800_2001, b, g)]);
+    assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
+}
+
 #[test]
 fn a_bios_copy_reads_its_length() {
     let n = |m: u32| Val::of(Tok::Num(m));
@@ -1319,7 +1416,7 @@ fn the_bound_counts_the_kept_expansions() {
     g.cell_reads[4] = Some(val(800));
     g.loose_args = vec![val(900)];
     g.loose_rets = Some(vec![val(1000)]);
-    g.mem_log.push((false, r, 4));
+    g.mem_log.entry(PILE).or_default().push((r, 4));
     // Eleven sets of ten, the expansion's raw tokens and the log's one.
     assert_eq!(g.held().iter().map(|h| h.2).sum::<usize>(), 110 + 10 + 1);
 }
@@ -1377,6 +1474,14 @@ fn table_use(n: u32, w: Width, body: &dyn Fn(&mut B, ValueId) -> ValueId) -> Sha
 
 /// A read of a hundred functions' addresses is one [`Tok::Ref`], where
 /// one of three is its tokens: every use comes to the same.
+/// Two RAM pointers the run drops: another mode's registers
+/// (`native/fnref-ram-pointers`), each plus an unknown.
+fn dropped(b: &mut B) -> (ValueId, ValueId) {
+    let (p, q) = (b.op(Op::GetUserReg(Reg(13))), b.op(Op::GetUserReg(Reg(14))));
+    let (n, m) = (b.get(2), b.get(3));
+    (b.bin(BinOp::Add, p, n), b.bin(BinOp::Add, q, m))
+}
+
 #[test]
 fn a_large_read_is_used_as_a_small_one_is() {
     type Body = (
@@ -1400,10 +1505,10 @@ fn a_large_read_is_used_as_a_small_one_is() {
             proven.clone(),
         ),
         (
-            "stored and loaded through unknown addresses",
+            "stored and loaded through RAM pointers the run dropped",
             Width::Word,
             Box::new(|b, x| {
-                let (p, q) = (b.get(2), b.get(3));
+                let (p, q) = dropped(b);
                 b.st(Width::Word, p, x);
                 b.ld(Width::Word, q)
             }),
@@ -1456,7 +1561,7 @@ fn a_large_read_is_used_as_a_small_one_is() {
             "copied by bytes and loaded as a word",
             Width::Byte,
             Box::new(|b, x| {
-                let (p, q) = (b.get(2), b.get(3));
+                let (p, q) = dropped(b);
                 b.st(Width::Byte, p, x);
                 b.ld(Width::Word, q)
             }),
