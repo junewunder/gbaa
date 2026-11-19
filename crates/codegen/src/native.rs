@@ -175,6 +175,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 pub mod banks;
+pub mod cond;
 pub mod counted;
 pub mod first_stop;
 pub mod fnref;
@@ -1646,6 +1647,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("call_fn_complete", n(soft.indirect_complete));
     m.push("call_fn_four_complete", n(soft.indirect_four_complete));
     m.push("jumps_by_value", n(soft.dyn_jumps));
+    m.push("branches_on_raw_flags", soft.raw_flag_branches);
     m.push("entry_lr_returns", n(soft.lr_returns));
     m.push("entry_lr_returns_call_fn", n(soft.lr_returns_call_fn));
     if let Some(f) = &fnrefs {
@@ -2338,6 +2340,8 @@ struct Soft {
     local_fns: usize,
     /// The `--plant-slot` store printed.
     planted_slot: bool,
+    /// Conditions resting on a raw flag ([`cond::raw`]).
+    raw_flag_branches: u64,
     /// Lifted functions whose summary has a hole, or that have none.
     summary_holes: usize,
     /// Lifted functions taking and returning all of r0-r3 whose summary
@@ -3473,6 +3477,9 @@ impl FnPrinter<'_, '_> {
             .ref_tys
             .extend(refs.iter().flatten().map(|r| r.f.ty));
         let dead = dead_addresses(insts, &typed);
+        // Conditions as comparisons and bit tests (native/lift-branch-conditions).
+        let conds = cond::forms(insts);
+        self.soft.raw_flag_branches += cond::raw(insts, &conds);
         // The writes of registers and flags nothing reads after them
         // (`dead_writes`), left out but with `--keep-dead-writes`.
         let unread: Vec<bool> = match self.dead.get(&self.cur) {
@@ -3538,12 +3545,12 @@ impl FnPrinter<'_, '_> {
             .collect();
         let pairs = narrow::guest_pairs(&self.f.blocks[&self.cur].insns);
         self.soft.shift_pairs.extend(&pairs);
-        let uses = self.uses(insts, &typed, &refs, &skip, &dead, &forms);
+        let uses = self.uses(insts, &typed, &refs, &skip, &dead, &conds, &forms);
         let used: Vec<bool> = uses.iter().map(|&n| n > 0).collect();
         // The values printed inside their use, not as `let`s (unit
         // `native/lift-inline-temps`); the block's own, a nested block's
         // (an inlined edge's) set aside while that prints.
-        let mut inline = self.inline(insts, &typed, &refs, &skip, &dead, &uses, &forms);
+        let mut inline = self.inline(insts, &typed, &refs, &skip, &dead, &uses, &conds, &forms);
         if let Some(x) = scrutinee {
             inline[x.index()] = false;
         }
@@ -3569,7 +3576,7 @@ impl FnPrinter<'_, '_> {
                 self.soft.pairs_left.insert(at);
             }
             if inline[i] {
-                let e = self.value(&inst.op, forms[i]);
+                let e = self.value(&inst.op, &conds[i], forms[i]);
                 self.inl[i] = Some(e);
                 self.soft.inlined += 1;
                 continue;
@@ -3809,7 +3816,7 @@ impl FnPrinter<'_, '_> {
                 }
                 ref op => {
                     let ty = if is_bit(op) { "bool" } else { "u32" };
-                    let e = self.value(op, forms[i]);
+                    let e = self.value(op, &conds[i], forms[i]);
                     self.soft.value_lets += 1;
                     writeln!(s, "{ind}let {}: {ty} = {e};", v(id)).unwrap();
                 }
@@ -3886,7 +3893,9 @@ impl FnPrinter<'_, '_> {
     /// printed ([`pure`]), and neither does a write `skip` leaves out (a
     /// dead one's, [`FnPrinter::dead_writes`]) or an address `dead`
     /// leaves out ([`dead_addresses`]); a value printed over another
-    /// ([`narrow::form`]) uses only that one.
+    /// ([`narrow::form`]) uses only that one, and a condition with a
+    /// closed form ([`cond::Form`]) what the form reads.
+    #[allow(clippy::too_many_arguments)]
     fn uses(
         &self,
         insts: &[Inst],
@@ -3894,6 +3903,7 @@ impl FnPrinter<'_, '_> {
         refs: &[Option<HeapRef>],
         skip: &[bool],
         dead: &[bool],
+        conds: &[Option<cond::Form>],
         forms: &[Option<(ValueId, narrow::Form)>],
     ) -> Vec<u32> {
         let mut uses = vec![0u32; insts.len()];
@@ -3904,7 +3914,7 @@ impl FnPrinter<'_, '_> {
             if skip[i] || dead[i] || (pure(&inst.op) && uses[i] == 0) {
                 continue;
             }
-            for x in self.operands(i, inst, typed, refs, forms) {
+            for x in self.operands(i, inst, typed, refs, conds, forms) {
                 uses[x.index()] += 1;
             }
         }
@@ -3924,6 +3934,7 @@ impl FnPrinter<'_, '_> {
         inst: &Inst,
         typed: &[Option<Place>],
         refs: &[Option<HeapRef>],
+        conds: &[Option<cond::Form>],
         forms: &[Option<(ValueId, narrow::Form)>],
     ) -> Vec<ValueId> {
         let local = !self.holes.shadow_locals
@@ -3939,6 +3950,7 @@ impl FnPrinter<'_, '_> {
             Op::Store { value, .. } if local || field => vec![value],
             Op::Load { .. } if base.is_some() => base.into_iter().collect(),
             Op::Store { value, .. } if base.is_some() => base.into_iter().chain([value]).collect(),
+            _ if let Some(f) = &conds[i] => f.uses.clone(),
             _ if forms[i].is_some() => forms[i].map(|(x, _)| x).into_iter().collect(),
             ref op => op.operands(),
         };
@@ -3955,7 +3967,10 @@ impl FnPrinter<'_, '_> {
     /// inlined into it too). Loads stay `let`s, and so do the operands of
     /// an exit and of a PSR write, which print theirs more than once
     /// (constants but). Inlined into a value that is itself inlined, a
-    /// value is read where that one's use is.
+    /// value is read where that one's use is. A condition's closed form
+    /// ([`cond::Form`]) that is a comparison takes its operands inlined;
+    /// any other (a join of two, an overflow test) names their `let`s, so
+    /// those stay `let`s, whoever else uses them (a constant too).
     #[allow(clippy::too_many_arguments)]
     fn inline(
         &self,
@@ -3965,6 +3980,7 @@ impl FnPrinter<'_, '_> {
         skip: &[bool],
         dead: &[bool],
         uses: &[u32],
+        conds: &[Option<cond::Form>],
         forms: &[Option<(ValueId, narrow::Form)>],
     ) -> Vec<bool> {
         let n = insts.len();
@@ -3976,6 +3992,18 @@ impl FnPrinter<'_, '_> {
         // What each pending value reads: r0-r15 as bits 0-15, the flags
         // 16-19; `None` once it is printed as a `let` or used.
         let mut reads: Vec<Option<u32>> = vec![None; n];
+        // The values a printed form names.
+        let mut named = vec![false; n];
+        for (i, f) in conds.iter().enumerate() {
+            if let Some(f) = f
+                && !f.takes_inlined()
+                && !(dead[i] || skip[i] || uses[i] == 0)
+            {
+                for x in &f.uses {
+                    named[x.index()] = true;
+                }
+            }
+        }
         let flag_bit = |f: Flag| 1u32 << (16 + f as u32);
         for (i, inst) in insts.iter().enumerate() {
             let op = &inst.op;
@@ -3988,9 +4016,15 @@ impl FnPrinter<'_, '_> {
                 _ => 0,
             };
             let whole = !matches!(op, Op::Exit(_) | Op::SetCpsr { .. } | Op::SetSpsr { .. });
-            for x in self.operands(i, inst, typed, refs, forms) {
+            let ops = match &conds[i] {
+                Some(f) if !f.takes_inlined() => Vec::new(),
+                _ => self.operands(i, inst, typed, refs, conds, forms),
+            };
+            for x in ops {
                 let x = x.index();
-                if konst(&insts[x].op) {
+                if named[x] {
+                    reads[x] = None;
+                } else if konst(&insts[x].op) {
                     inline[x] = true;
                 } else if whole && let Some(rx) = reads[x].take() {
                     inline[x] = true;
@@ -4018,9 +4052,18 @@ impl FnPrinter<'_, '_> {
         inline
     }
 
-    /// The expression of a value `op`: over the value it narrows or
-    /// shifts if it has a `form` ([`narrow::form`]), else of its operands.
-    fn value(&self, op: &Op, form: Option<(ValueId, narrow::Form)>) -> String {
+    /// The expression of a value `op`: a condition's closed form if it
+    /// has one (`cond`, [`cond::Form`]); over the value it narrows or
+    /// shifts if it has a `form` ([`narrow::form`]); else of its operands.
+    fn value(
+        &self,
+        op: &Op,
+        cond: &Option<cond::Form>,
+        form: Option<(ValueId, narrow::Form)>,
+    ) -> String {
+        if let Some(c) = cond {
+            return c.text_with(&|x| self.val(x));
+        }
         match form {
             Some((x, form)) => form.print(&self.val(x)),
             None => expr(op, &|x| self.val(x), &|x| self.whole(x)),
@@ -4396,6 +4439,18 @@ impl FnPrinter<'_, '_> {
         self.sums.get(k).map_or(0, Summary::passed)
     }
 
+    /// The registers of r4-r11 (bit `n - 4` for rN) `k` returns in r0-r3
+    /// as they came ([`Summary::echoes`]): a call passes them, so it
+    /// returns the caller's, as the machine does. 0 for a stand-in.
+    fn echoes(&self, k: u32) -> u8 {
+        if self.holes.standins.contains_key(&k) {
+            return 0;
+        }
+        self.sums
+            .get(k)
+            .map_or(0, |s| s.echoes.values().fold(0, |m, &n| m | 1 << (n - 4)))
+    }
+
     /// What a call passes of `m` (bits of r4-r11 its callee takes): all
     /// of them, or none with `--takes-zeroed` ([`Holes::takes_zeroed`]).
     fn taken(&self, m: u8) -> u8 {
@@ -4429,9 +4484,9 @@ impl FnPrinter<'_, '_> {
     /// A plain call of `k` with this function's registers: what it
     /// assigns its results to, and the call (without `?`).
     fn call(&self, k: u32) -> (String, String) {
-        let m = self.passed(k);
-        if m != 0 {
-            return ("[r0, r1, r2, r3] = ".into(), taking(k, self.taken(m)));
+        let (m, e) = (self.passed(k), self.echoes(k));
+        if m | e != 0 {
+            return ("[r0, r1, r2, r3] = ".into(), taking(k, self.taken(m) | e));
         }
         match self.shape(k) {
             None if self.holes.lr.contains(&k) => (
@@ -4498,7 +4553,7 @@ impl FnPrinter<'_, '_> {
         }
         // The functions the holes file says this call reaches that take
         // one of r4-r11 (`[[takes]]`): to those, with this function's.
-        let named: Vec<(u32, u8)> = self
+        let mut named: Vec<(u32, u8, bool)> = self
             .holes
             .takes
             .iter()
@@ -4508,15 +4563,27 @@ impl FnPrinter<'_, '_> {
                 let seen = |s: &Summary| s.passes.contains(&(at, e));
                 m != 0 && self.sums.get(self.f.entry).is_some_and(seen)
             })
+            .map(|(e, m)| (e, self.taken(m), true))
             .collect();
+        // And those of its callee set that return one of r4-r11 as it
+        // came: with that register ([`FnPrinter::echoes`]).
+        for &e in self.args.echoes.get(&at).into_iter().flatten() {
+            if let Some(n) = named.iter_mut().find(|n| n.0 == e) {
+                n.1 |= self.echoes(e);
+            } else if self.echoes(e) != 0 {
+                named.push((e, self.echoes(e), false));
+            }
+        }
         if !named.is_empty() {
             let mut t = format!("match {k} {{ ");
-            for (e, m) in named {
-                self.soft.passes.insert((at, e));
+            for (e, m, takes) in named {
+                if takes {
+                    self.soft.passes.insert((at, e));
+                }
                 write!(
                     t,
                     "{e:#010x} => {{ [r0, r1, r2, r3] = {}?; }} ",
-                    taking(e, self.taken(m))
+                    taking(e, m)
                 )
                 .unwrap();
             }
@@ -4987,6 +5054,9 @@ fn site_args(cs: &BTreeSet<u32>, shape: impl Fn(u32) -> Option<Shape>) -> (u8, u
 
 struct Args {
     by_site: BTreeMap<u32, (u8, u8)>,
+    /// The callees of each call's set that return one of r4-r11 as it
+    /// came ([`Summary::echoes`]): it calls them with that register.
+    echoes: BTreeMap<u32, Vec<u32>>,
     /// The sites whose callees' summaries (holes or not) read all four
     /// between them, and those with a four-register callee.
     union_four: usize,
@@ -5008,10 +5078,19 @@ fn call_fn_args(sets: &Sets, codes: &[Code], shaped: &BTreeMap<u32, Shape>) -> A
         .collect();
     let mut a = Args {
         by_site: BTreeMap::new(),
+        echoes: BTreeMap::new(),
         union_four: 0,
         four_reg_callee: 0,
     };
     for (&at, cs) in sets {
+        let echo: Vec<u32> = cs
+            .iter()
+            .copied()
+            .filter(|c| sums.get(c).is_some_and(|s| !s.echoes.is_empty()))
+            .collect();
+        if !echo.is_empty() {
+            a.echoes.insert(at, echo);
+        }
         let raw = cs
             .iter()
             .fold(0, |m, c| m | sums.get(c).map_or(0xf, |s| s.params));

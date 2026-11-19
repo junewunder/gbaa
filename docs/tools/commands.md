@@ -399,19 +399,19 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   design in `docs/research/lua-scripting.md`): `emu` (memory and its
   `emu.memory` domains, ROM info, CRC32 as four big-endian bytes,
   `getGameCode` as `AGB-XXXX`, keys, registers, state buffers and files
-  ours or mGBA's, `screenshot`, `step`, `runFrame`, `reset`), `callbacks`,
-  `console` and text buffers, `socket` (mGBA's Lua over a non-blocking
-  `std::net` `_socket`, polled each frame), `C`, `util`, `system`, and the standard
-  libraries. Scripts load as into mGBA's scripting window
+  ours or mGBA's, `screenshot`, `step`, `runFrame`, `reset`, `loadFile`: a
+  changed ROM, its save the `.sav` beside it), `callbacks`, `console` and text buffers, `socket` (mGBA's Lua over a non-blocking
+  `std::net` `_socket`, polled each frame), `C`, `util`, `system`, and the
+  standard libraries. Scripts load as into mGBA's scripting window
   with the game running: `emu` set, `start` not fired; each in its own
   `_ENV`, whose `require` finds modules beside the script. A script is
-  sandboxed (the owner's choice): files (`io`, `os.remove`/`rename`,
-  `loadfile`/`dofile`/`require`, state files, screenshots) only under its
-  own folder, links and `..` resolved; source only, no C modules; no
-  `os.execute`, `io.popen`, `os.exit`, `os.getenv`, `os.tmpname`; of
-  `debug` only `traceback` and `getinfo`; sockets on loopback only (a
-  `nil` bind address binds 127.0.0.1; others get `access denied`). A blocked call raises an error
-  saying so. `--script-full FILE` gives it everything, as mGBA, and
+  sandboxed (the owner's choice): files (`io`, `os.remove`/`rename`, `loadfile`/`dofile`/`require`,
+  state files, screenshots, `loadFile`) only under its own folder, links and `..` resolved; source
+  only, no C modules; no `os.execute`, `io.popen`, `os.exit`, `os.getenv`, `os.tmpname`; of `debug`
+  only `traceback` and `getinfo`; sockets on loopback only (a `nil` bind address binds 127.0.0.1;
+  others get `access denied`). A blocked call raises an error saying so, but `io.open`, `os.remove`,
+  `os.rename`, `loadfile`, `io.popen` give nil and why, `os.execute` nil, `"exit"`, 126, as Lua's fail
+  (Ironmon probes paths, runs curl); a blocked command warns once. `--script-full FILE` gives it everything, as mGBA, and
   remembers that in `script-access.conf` beside `gamepad.conf` (a
   `full = PATH` line; delete it to take it back). The check is
   `cargo test -p script` (`crates/script/fixtures/sandbox/`). `keysRead` fires before each frame's pad
@@ -1902,8 +1902,8 @@ keyed to the ROM's CRC-32. `gbaa-desktop --state-out
   in the hub; the host listens on ADDR's port (30025 if left out), the
   client connects to ADDR. ENet over UDP, as the assistant speaks it, so
   the other player may be on mGBA with Rogue Assistant. Prints `rogue:`
-  lines to stderr as it connects. `cargo test -p desktop rogue` checks it
-  over localhost against a stand-in for the game's side.
+  lines to stderr as it connects. `cargo test -p desktop rogue`: a stand-in
+  game, localhost; two real games: research/multiplayer.md, "Two real games meet".
 - The netplay session core's check (multiplayer/session-core, `crates/netplay`):
   `just emerald-netplay [ROM] [ARGS]` plays emerald-link's walk into the
   Trade Center (4200 frames) straight, both Emeralds on one cable with

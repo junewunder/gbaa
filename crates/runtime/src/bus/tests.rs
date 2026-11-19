@@ -262,7 +262,7 @@ fn io_masks() {
     assert_eq!(b.read16(IO + reg::DISPSTAT) & 7, 1);
     // VCOUNT is read-only; setting it updates the match flag.
     b.write16(IO + reg::VCOUNT, 5);
-    assert_eq!(b.read16(IO + reg::VCOUNT), 0);
+    assert_eq!(b.read16(IO + reg::VCOUNT), crate::sched::START_LINE);
     assert!(b.io.set_vcount(0xFF));
     assert_eq!(b.read16(IO + reg::DISPSTAT) & 4, 4);
     assert!(!b.io.set_vcount(3));

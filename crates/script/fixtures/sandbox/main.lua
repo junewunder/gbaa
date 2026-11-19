@@ -2,7 +2,9 @@
 -- may not make, then the ones it may. The test copies this folder to a
 -- fresh one with `outside.txt` and `outside.lua` beside it and (on Unix)
 -- `link`, a link from inside it to its parent. Each line says whether the
--- call went through, and the error if not.
+-- call went through, and the error if not. io.open, os.remove, os.rename,
+-- loadfile, io.popen and os.execute fail as Lua's do (nil and why, or for
+-- os.execute nil, "exit", 126, warned of once), so those are asserted.
 local here = debug.getinfo(1, "S").source:match("^@(.*[/\\])") or "./"
 local out = here .. "../outside.txt"
 
@@ -16,23 +18,24 @@ local function try(what, f)
   end
 end
 
-try("os.execute", function() os.execute("true") end)
+try("os.execute", function() assert(os.execute("true"), "os.execute failed") end)
+try("os.execute's shell", function() assert(os.execute(), "no shell") end)
 try("os.exit", function() os.exit(3) end)
 try("os.getenv", function() os.getenv("HOME") end)
 try("os.tmpname", function() os.tmpname() end)
-try("io.popen", function() io.popen("true") end)
-try("io.open outside", function() io.open(out) end)
-try("io.open by ..", function() io.open(here .. "sub/../../outside.txt") end)
-try("io.open by a link", function() io.open(here .. "link/outside.txt") end)
-try("io.open by a number", function() io.open(123, "w") end)
-try("os.remove by a number", function() os.remove(1) end)
+try("io.popen", function() assert(io.popen("true")) end)
+try("io.open outside", function() assert(io.open(out)) end)
+try("io.open by ..", function() assert(io.open(here .. "sub/../../outside.txt")) end)
+try("io.open by a link", function() assert(io.open(here .. "link/outside.txt")) end)
+try("io.open by a number", function() assert(io.open(123, "w")) end)
+try("os.remove by a number", function() assert(os.remove(1)) end)
 try("emu:saveStateFile by a number", function() emu:saveStateFile(7) end)
 try("io.lines outside", function() io.lines(out) end)
 try("io.output outside", function() io.output(out) end)
-try("os.remove outside", function() os.remove(out) end)
-try("os.rename out", function() os.rename(here .. "main.lua", here .. "../moved.lua") end)
+try("os.remove outside", function() assert(os.remove(out)) end)
+try("os.rename out", function() assert(os.rename(here .. "main.lua", here .. "../moved.lua")) end)
 try("dofile outside", function() dofile(out) end)
-try("loadfile outside", function() loadfile(here .. "../outside.lua") end)
+try("loadfile outside", function() assert(loadfile(here .. "../outside.lua")) end)
 try("require outside", function()
   package.path = here .. "../?.lua"
   require("outside")

@@ -118,6 +118,7 @@ impl<P: Platform> Machine<P> {
     /// [`Machine::run_frame`], with `d` told of each instruction.
     pub fn run_frame_debug(&mut self, d: &mut impl Debugger<P>) {
         self.sched.frame_ended = false;
+        self.catch_up();
         while !self.sched.frame_ended && self.fault.is_none() {
             if self.sched.halted {
                 self.idle();
