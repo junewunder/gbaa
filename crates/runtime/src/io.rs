@@ -401,8 +401,6 @@ impl Io {
                 self.sio_unplugged();
                 return;
             }
-            // A `JOY_TRANS` store sets `JOYSTAT`'s sent flag (GBATEK, and
-            // mGBA's `GBAIOWrite`); with no partner nothing clears it.
             // Bit 3 (CGB mode), set only by [`Io::new`], says no write has
             // come since power-on: the PPU draws forced blank until one does,
             // as mGBA's renderer, whose copy starts at 0x80.
@@ -410,6 +408,8 @@ impl Io {
                 self.regs[i] = (old & !m & !8) | (v & m);
                 return;
             }
+            // A `JOY_TRANS` store sets `JOYSTAT`'s sent flag (GBATEK, and
+            // mGBA's `GBAIOWrite`); with no partner nothing clears it.
             o if o & !2 == reg::JOY_TRANS => self.regs[reg::JOYSTAT as usize / 2] |= 8,
             // Writing 1 acknowledges an interrupt.
             reg::IF => {
