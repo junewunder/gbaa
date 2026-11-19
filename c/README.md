@@ -29,9 +29,10 @@ Source only in git.
   -ffreestanding -nostdlib -fno-tree-loop-distribute-patterns`, with GCC's
   Thumb `libgcc.a`. agbcc is C89: declarations at a block's top, no `//`.
 - No division or modulo: libgcc's would be the lift's to read too.
-- No long loop before the first `VBlankIntrWait` (a full-screen fill): it
-  lands a frame later in mGBA than in our interpreter, so the programs
-  start on a black screen (unit oracle/long-fill-frame-offset).
+- A long loop before the first `VBlankIntrWait` (a full-screen fill) is
+  fine: the interpreter starts the beam where mGBA hands over (line 126),
+  so such a fill lands on the same frame in both
+  (unit oracle/boot-beam-and-bios-costs, `memory/mgba-boot-beam.md`).
 
 | Folder      | Shape                                                    |
 |-------------|----------------------------------------------------------|
