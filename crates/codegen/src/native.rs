@@ -188,6 +188,7 @@ pub mod modules;
 pub mod named;
 pub mod narrow;
 pub mod shape;
+pub mod switch;
 
 use globals::{Globals, Layout, Obj, Place};
 use metrics::{Metrics, Where};
@@ -1102,6 +1103,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     soft,
                     labels: f.blocks.keys().enumerate().map(|(i, &k)| (k, i)).collect(),
                     in_region: Vec::new(),
+                    rest_from: 0,
+                    unguard: Vec::new(),
+                    scrutinee: None,
                     region: None,
                     outs: None,
                     edges: None,
@@ -1601,6 +1605,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("blocks_structured", n(bs));
     m.push("blocks_structured_pct", pct(bs, bs + bm));
     m.push("blocks_in_match", n(bm));
+    // Compare trees on one value printed as a `match` (native/lift-switch-
+    // match; no bar), the blocks they took in besides their first, and the
+    // blocks with two or more such compares left as `if`s (barred).
+    m.push("compare_trees_matched", n(soft.compare_trees));
+    m.push("compare_tree_blocks", n(soft.compare_tree_blocks));
+    m.push("compare_trees_left", n(soft.compare_trees_left));
     // Narrowing idioms (native/lift-narrowing-casts): the guest's shift
     // pairs still printed as two shifts (barred), and the narrowings
     // printed (no bar: they should rise).
@@ -2381,6 +2391,12 @@ struct Soft {
     /// ([`FnPrinter::dead_writes`]: none but with `--keep-dead-writes`).
     flag_writes: u64,
     dead_flag_writes: u64,
+    /// Compare trees printed as a `match` ([`switch`]), the blocks they
+    /// took in besides their first, and the blocks with two or more
+    /// compares of one value against a constant left as `if`s.
+    compare_trees: usize,
+    compare_tree_blocks: usize,
+    compare_trees_left: usize,
     /// `bank_sp` calls printed (before a store, a wait, a halt), and the
     /// stores' left out as the bank already held sp
     /// ([`FnPrinter::redundant_banks`]).
@@ -2417,6 +2433,15 @@ struct FnPrinter<'a, 'b> {
     /// edges of the exit being printed, which its jumps to its own blocks
     /// take ([`FnPrinter::goto`]). `None` in v1 form.
     in_region: Vec<bool>,
+    /// The next block printed starts at this inst: the rest of a block
+    /// whose compare run a `match` arm printed ([`FnPrinter::switch_bodies`]).
+    rest_from: usize,
+    /// The insts whose guards print nothing while a block's uses are
+    /// counted: a compare tree's tests ([`FnPrinter::operands`]).
+    /// Empty but then.
+    unguard: Vec<bool>,
+    /// And the value its `match` reads, used once more ([`FnPrinter::uses`]).
+    scrutinee: Option<ValueId>,
     region: Option<usize>,
     outs: Option<Vec<plan::Out>>,
     edges: Option<Vec<plan::Edge>>,
@@ -3437,6 +3462,7 @@ impl FnPrinter<'_, '_> {
         let mut s = String::new();
         let mut at = 0u32;
         let ind = "                ";
+        let from = std::mem::take(&mut self.rest_from);
         let (typed, objs, refs) = self.accesses(insts);
         let banks = self.store_banks(insts, &typed, &objs, &refs);
         let banked = match self.banked.get(&self.cur) {
@@ -3461,6 +3487,48 @@ impl FnPrinter<'_, '_> {
             .enumerate()
             .map(|(i, &u)| (u && !keep) || step == Some(i))
             .collect();
+        // A compare tree at the block's end prints as a `match`: its
+        // tests' guards aren't printed, its register and flag writes are
+        // its arms'.
+        let cur = self.cur;
+        let outs = self.outs.clone();
+        // A run of two tests or more; else one test whose block goes on
+        // comparing, two or more in all.
+        let tree = self
+            .switch_tree(cur, insts, xs, outs.as_deref(), 0, 2)
+            .or_else(
+                |n| match self.switch_tree(cur, insts, xs, outs.as_deref(), 0, 1) {
+                    Ok(t) if t.tests() >= 2 => Ok(t),
+                    _ => Err(n),
+                },
+            );
+        let tree = match tree {
+            // The rest of a block whose run another's arm printed.
+            _ if from > 0 => None,
+            // A `for`'s block: its range stands for the jump back's test.
+            _ if step.is_some() => None,
+            Ok(t) => match switch::arms(&t) {
+                Some(a) => Some((t, a)),
+                None => {
+                    self.soft.compare_trees_left += 1;
+                    None
+                }
+            },
+            Err(n) => {
+                self.soft.compare_trees_left += usize::from(n >= 2);
+                None
+            }
+        };
+        // The tests' guards print nothing; the value compared prints as a
+        // `let` the `match` reads.
+        self.unguard = (0..insts.len())
+            .map(|i| {
+                tree.as_ref()
+                    .is_some_and(|(t, _)| t.run.tests.iter().any(|&(j, _)| j == i))
+            })
+            .collect();
+        let scrutinee = tree.as_ref().map(|(t, _)| t.run.value);
+        self.scrutinee = scrutinee;
         // The narrowing idioms and shifts by a constant, printed over the
         // value they narrow or shift ([`narrow`]).
         let none = BTreeMap::new();
@@ -3475,10 +3543,21 @@ impl FnPrinter<'_, '_> {
         // The values printed inside their use, not as `let`s (unit
         // `native/lift-inline-temps`); the block's own, a nested block's
         // (an inlined edge's) set aside while that prints.
-        let inline = self.inline(insts, &typed, &refs, &skip, &dead, &uses, &forms);
+        let mut inline = self.inline(insts, &typed, &refs, &skip, &dead, &uses, &forms);
+        if let Some(x) = scrutinee {
+            inline[x.index()] = false;
+        }
+        self.unguard = Vec::new();
+        self.scrutinee = None;
         let outer = std::mem::replace(&mut self.inl, vec![None; insts.len()]);
         for (i, inst) in insts.iter().enumerate() {
             let id = ValueId(i as u32);
+            if i < from {
+                if let Op::Insn(a) = inst.op {
+                    at = a;
+                }
+                continue;
+            }
             if dead[i] || skip[i] || (pure(&inst.op) && !used[i]) {
                 continue;
             }
@@ -3494,6 +3573,24 @@ impl FnPrinter<'_, '_> {
                 self.inl[i] = Some(e);
                 self.soft.inlined += 1;
                 continue;
+            }
+            if let Some((t, arms)) = &tree {
+                // The writes before the first test are every arm's.
+                if t.run.deferred(insts, i) && i > t.run.tests[0].0 {
+                    if let Op::SetFlag(..) = inst.op {
+                        self.soft.flag_writes += 1;
+                        self.soft.dead_flag_writes += u64::from(unread[i]);
+                    }
+                    continue;
+                }
+                if i == t.run.at() {
+                    let m = self.print_switch(t, arms, insts, xs, thumb, &skip);
+                    s.push_str(&m);
+                    continue;
+                }
+                if t.run.exit(i) {
+                    continue;
+                }
             }
             // A load of a stack local nothing uses (a callee-saved
             // register's restore before a return) reads a Rust local:
@@ -3718,6 +3815,12 @@ impl FnPrinter<'_, '_> {
                 }
             }
         }
+        // The rest of the block was the `match`'s last arm.
+        if let Some((t, _)) = &tree
+            && let switch::End::Rest(_) = t.run.end
+        {
+            writeln!(s, "{ind}    }}\n{ind}}}").unwrap();
+        }
         self.inl = outer;
         s
     }
@@ -3794,6 +3897,9 @@ impl FnPrinter<'_, '_> {
         forms: &[Option<(ValueId, narrow::Form)>],
     ) -> Vec<u32> {
         let mut uses = vec![0u32; insts.len()];
+        if let Some(x) = self.scrutinee {
+            uses[x.index()] = 1;
+        }
         for (i, inst) in insts.iter().enumerate().rev() {
             if skip[i] || dead[i] || (pure(&inst.op) && uses[i] == 0) {
                 continue;
@@ -3806,8 +3912,10 @@ impl FnPrinter<'_, '_> {
     }
 
     /// The values inst `i`'s printed code uses, its guard last ([`uses`]):
-    /// a timing mark or a yielded flag uses none, printed as nothing; a
-    /// value printed over another ([`narrow::form`]) uses only that one.
+    /// a timing mark or a yielded flag uses none, printed as nothing (nor
+    /// its guard); a value printed over another ([`narrow::form`]) uses
+    /// only that one; and a compare tree's test none for its guard, which
+    /// the `match` replaces ([`FnPrinter::unguard`]).
     ///
     /// [`uses`]: FnPrinter::uses
     fn operands(
@@ -3826,7 +3934,7 @@ impl FnPrinter<'_, '_> {
         let base = refs[i].and_then(|r| r.base).map(|(b, _)| b);
         let ops = match inst.op {
             // Printed as nothing.
-            Op::Timing(_) | Op::YieldFlag(..) => Vec::new(),
+            Op::Timing(_) | Op::YieldFlag(..) => return Vec::new(),
             Op::Load { .. } if local || field => Vec::new(),
             Op::Store { value, .. } if local || field => vec![value],
             Op::Load { .. } if base.is_some() => base.into_iter().collect(),
@@ -3834,7 +3942,10 @@ impl FnPrinter<'_, '_> {
             _ if forms[i].is_some() => forms[i].map(|(x, _)| x).into_iter().collect(),
             ref op => op.operands(),
         };
-        ops.into_iter().chain(inst.guard).collect()
+        let guard = inst
+            .guard
+            .filter(|_| !self.unguard.get(i).copied().unwrap_or(false));
+        ops.into_iter().chain(guard).collect()
     }
 
     /// Which of a block's values print inside their one use rather than
@@ -3934,6 +4045,228 @@ impl FnPrinter<'_, '_> {
             Some(Some(e)) => e.clone(),
             _ => v(x),
         }
+    }
+
+    /// The writes of block `k`'s insts nothing reads ([`FnPrinter::dead_writes`]),
+    /// and those left out.
+    fn unread(&self, k: u32, n: usize) -> (Vec<bool>, Vec<bool>) {
+        let unread: Vec<bool> = match self.dead.get(&k) {
+            Some(d) if d.len() == n => d.clone(),
+            _ => vec![false; n],
+        };
+        let keep = self.holes.keep_dead_writes;
+        let skip = unread.iter().map(|&u| u && !keep).collect();
+        (unread, skip)
+    }
+
+    /// The compare tree at the end of block `cur` ([`switch::run`], its
+    /// first run of at least `min` tests), with
+    /// the trees of the blocks its plain jumps go on to: a block of the
+    /// plan's reached by that edge alone ([`plan::How::Inline`]), that
+    /// does nothing before its run, and compares the register holding
+    /// the same value. Else how many of its exits compare one value.
+    fn switch_tree(
+        &self,
+        cur: u32,
+        insts: &[Inst],
+        xs: &[ExitInfo],
+        outs: Option<&[plan::Out]>,
+        depth: usize,
+        min: usize,
+    ) -> Result<switch::Tree, usize> {
+        let run = switch::run(insts, min)?;
+        let mut next: Vec<_> = run
+            .exits()
+            .map(|i| self.switch_next(cur, insts, xs, outs, &run, i, depth))
+            .collect();
+        next.resize(run.tests.len() + 1, None);
+        Ok(switch::Tree { run, next })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn switch_next(
+        &self,
+        cur: u32,
+        insts: &[Inst],
+        xs: &[ExitInfo],
+        outs: Option<&[plan::Out]>,
+        run: &switch::Run,
+        i: usize,
+        depth: usize,
+    ) -> Option<switch::Tree> {
+        let (outs, j) = (outs?, xs.iter().position(|y| y.index == i)?);
+        let x = &xs[j];
+        if depth >= 8
+            || !switch::plain(&insts[i].op)
+            || !matches!(x.plan, Plan::Static(_))
+            || x.idle != Idle::No
+            || self.frame.is_some_and(|f| f.flush.contains(&(cur, i)))
+        {
+            return None;
+        }
+        let (node, exits) = inline_block(outs.get(j)?)?;
+        if self.in_region[node] {
+            return None;
+        }
+        let reg = switch::holder(insts, run.value, i)?;
+        let k = self.key_of(node);
+        let gb = &self.f.blocks[&k];
+        let nxs = exits_of_block(self.ctx, gb);
+        let n = &gb.block.insts;
+        let t = self
+            .switch_tree(k, n, &nxs, Some(exits), depth + 1, 1)
+            .ok()?;
+        (switch::quiet_before(n, t.run.start) && n[t.run.value.index()].op == Op::GetReg(reg))
+            .then_some(t)
+    }
+
+    /// A compare tree as a `match` on its value, each leaf an arm
+    /// ([`switch::arms`]), the last `_`: when the run ends at its last
+    /// test, that arm is left open for the rest of the block, which
+    /// [`FnPrinter::block`] closes.
+    fn print_switch(
+        &mut self,
+        t: &switch::Tree,
+        arms: &[Vec<(u32, u32)>],
+        insts: &[Inst],
+        xs: &[ExitInfo],
+        thumb: bool,
+        skip: &[bool],
+    ) -> String {
+        let ind = "                ";
+        let (cur, outs) = (self.cur, self.outs.clone());
+        let bodies = self.switch_bodies(t, insts, xs, thumb, skip, cur, outs.as_deref(), true);
+        self.cur = cur;
+        self.soft.compare_trees += 1;
+        let open = matches!(t.run.end, switch::End::Rest(_));
+        let mut s = format!("{ind}match {} {{\n", v(t.run.value));
+        for (n, (b, a)) in bodies.iter().zip(arms).enumerate() {
+            let pat = if n + 1 == bodies.len() {
+                "_".to_string()
+            } else {
+                switch::pattern(a)
+            };
+            let closed = n + 1 < bodies.len() || !open;
+            // A one-line arm on one line.
+            if closed && b.lines().count() == 1 {
+                writeln!(s, "{ind}    {pat} => {{ {} }}", b.trim()).unwrap();
+                continue;
+            }
+            write!(s, "{ind}    {pat} => {{\n{b}").unwrap();
+            if closed {
+                writeln!(s, "{ind}    }}").unwrap();
+            }
+        }
+        if !open {
+            writeln!(s, "{ind}}}").unwrap();
+        }
+        s
+    }
+
+    /// Each leaf's code: the run's writes before its exit, then the
+    /// exit, or the next block's run's leaves; a run ending at its last
+    /// test, the writes before the rest. At the `top` the writes before
+    /// the first test are printed before the `match`.
+    #[allow(clippy::too_many_arguments)]
+    fn switch_bodies(
+        &mut self,
+        t: &switch::Tree,
+        insts: &[Inst],
+        xs: &[ExitInfo],
+        thumb: bool,
+        skip: &[bool],
+        cur: u32,
+        outs: Option<&[plan::Out]>,
+        top: bool,
+    ) -> Vec<String> {
+        let ind = "                ";
+        let from = if top { t.run.tests[0].0 } else { t.run.start };
+        let rest = match t.run.end {
+            switch::End::Rest(r) => Some(r),
+            switch::End::Exit(_) => None,
+        };
+        let mut out = Vec::new();
+        for (n, i) in t.run.exits().chain(rest).enumerate() {
+            let mut pre = String::new();
+            for d in from..i {
+                if !t.run.deferred(insts, d) || skip[d] {
+                    continue;
+                }
+                let body = match insts[d].op {
+                    Op::SetReg(r, x) => format!("r{} = {};", r.index(), self.whole(x)),
+                    Op::SetFlag(fl, x) => format!("{} = {};", flag(fl), self.whole(x)),
+                    _ => unreachable!("a run defers register and flag writes"),
+                };
+                match insts[d].guard {
+                    Some(g) => writeln!(pre, "{ind}if {} {{ {body} }}", self.whole(g)).unwrap(),
+                    None => writeln!(pre, "{ind}{body}").unwrap(),
+                }
+            }
+            // The rest of the block: at the top the open arm's, which the
+            // block goes on printing; else printed here from its inst.
+            if Some(i) == rest {
+                if !top {
+                    self.rest_from = i;
+                    self.cur = cur;
+                    let saved = self.outs.replace(outs.expect("a structured tree").to_vec());
+                    let body = self.block(insts, xs, thumb);
+                    self.outs = saved;
+                    pre.push_str(&body);
+                }
+                out.push(pre);
+                continue;
+            }
+            let j = xs
+                .iter()
+                .position(|y| y.index == i)
+                .expect("an exit of the block's");
+            match &t.next[n] {
+                None => {
+                    self.cur = cur;
+                    self.edges = outs.map(|o| o[j].edges.clone());
+                    let Op::Exit(e) = insts[i].op else {
+                        unreachable!("a run's exits are exits")
+                    };
+                    let body = format!("{}{}", self.flush(i), self.exit(e, &xs[j], thumb));
+                    self.edges = None;
+                    out.push(format!("{pre}{body}"));
+                }
+                Some(nt) => {
+                    let (node, exits) = inline_block(&outs.expect("a structured tree")[j])
+                        .expect("a tree's next block is inline");
+                    let k = self.key_of(node);
+                    let gb = &self.f.blocks[&k];
+                    let (n, nthumb) = (&gb.block.insts, gb.block.thumb);
+                    let nxs = exits_of_block(self.ctx, gb);
+                    let (unread, nskip) = self.unread(k, n.len());
+                    // The rest of the block, if any, counts its own.
+                    let stop = match nt.run.end {
+                        switch::End::Rest(r) => r,
+                        switch::End::Exit(_) => n.len(),
+                    };
+                    for (d, inst) in n[..stop].iter().enumerate() {
+                        if let Op::SetFlag(..) = inst.op
+                            && !nskip[d]
+                        {
+                            self.soft.flag_writes += 1;
+                            self.soft.dead_flag_writes += u64::from(unread[d]);
+                        }
+                    }
+                    self.soft.compare_tree_blocks += 1;
+                    let lets = tree_lets(n, &nt.run, &nskip);
+                    self.soft.value_lets += lets.lines().count() as u64;
+                    // Its values print as their `let`s.
+                    let outer = std::mem::replace(&mut self.inl, vec![None; n.len()]);
+                    let pc = format!("{ind}runtime::guest_pc::set({k:#010x});\n");
+                    for b in self.switch_bodies(nt, n, &nxs, nthumb, &nskip, k, Some(exits), false)
+                    {
+                        out.push(format!("{pre}{pc}{lets}{b}"));
+                    }
+                    self.inl = outer;
+                }
+            }
+        }
+        out
     }
 
     /// The stack local the access at inst `i` of the current block lands
@@ -4905,6 +5238,77 @@ fn konst(insts: &[Inst], x: ValueId) -> Option<u32> {
         Op::Not(a) => konst(insts, a).map(|a| !a),
         _ => None,
     }
+}
+
+/// The single block an exit's one planned edge brings inline: its node
+/// and its exits' plan.
+fn inline_block(o: &plan::Out) -> Option<(usize, &[plan::Out])> {
+    let [e] = o.edges.as_slice() else { return None };
+    let plan::How::Inline(seq) = &e.how else {
+        return None;
+    };
+    match seq.as_slice() {
+        [plan::Node::Block { node, exits }] if *node == e.to => Some((*node, exits.as_slice())),
+        _ => None,
+    }
+}
+
+/// A block's exits ([`exits`]), named apart from the planned `exits`.
+fn exits_of_block(ctx: &Ctx, gb: &crate::func::GBlock) -> Vec<ExitInfo> {
+    exits(ctx, gb)
+}
+
+/// The reads and pure values a compare run printed inside another's arm
+/// needs ([`FnPrinter::switch_bodies`]): those its printed writes and
+/// guards, its exits and the rest of its block take, in order.
+fn tree_lets(insts: &[Inst], run: &switch::Run, skip: &[bool]) -> String {
+    let ind = "                ";
+    let mut need = vec![false; insts.len()];
+    // The block's printer prints the rest itself.
+    let stop = match run.end {
+        switch::End::Rest(r) => r,
+        switch::End::Exit(_) => insts.len(),
+    };
+    for inst in &insts[stop..] {
+        for x in inst.op.operands().into_iter().chain(inst.guard) {
+            if x.index() < stop {
+                need[x.index()] = true;
+            }
+        }
+    }
+    for (i, inst) in insts.iter().enumerate().take(stop).rev() {
+        let root = (run.deferred(insts, i) && !skip[i])
+            || (i >= run.start && matches!(inst.op, Op::Exit(_)));
+        if !(root || need[i]) {
+            continue;
+        }
+        if root {
+            let guard = inst.guard.filter(|_| !run.exit(i));
+            for x in inst.op.operands().into_iter().chain(guard) {
+                need[x.index()] = true;
+            }
+        } else {
+            for x in inst.op.operands() {
+                need[x.index()] = true;
+            }
+        }
+    }
+    let mut s = String::new();
+    for (i, inst) in insts.iter().enumerate().take(stop) {
+        if !need[i] || matches!(inst.op, Op::Exit(_)) {
+            continue;
+        }
+        let id = v(ValueId(i as u32));
+        match inst.op {
+            Op::GetReg(r) => writeln!(s, "{ind}let {id}: u32 = r{};", r.index()).unwrap(),
+            Op::GetFlag(fl) => writeln!(s, "{ind}let {id}: bool = {};", flag(fl)).unwrap(),
+            ref op => {
+                let ty = if is_bit(op) { "bool" } else { "u32" };
+                writeln!(s, "{ind}let {id}: {ty} = {};", expr(op, &v, &v)).unwrap();
+            }
+        }
+    }
+    s
 }
 
 /// A pure op as a Rust expression over earlier values, each printed by

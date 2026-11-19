@@ -180,7 +180,7 @@ open unit that already covers it.
 | Single-use temporaries inline, constants at their use | all 20 | yes | done: `native/lift-inline-temps` |
 | One `bank_sp` per run of stores at the same sp | 10 | yes, with care | done: `native/lift-bank-sp-once` |
 | A counted loop as `for` over a range | 2 | yes | done: `native/lift-for-loops` (a constant start only: DoSoundAction's, not ResetFreeOam's) |
-| A compare tree on one value as `match` | 3 | yes | new: `native/lift-switch-match` |
+| A compare tree on one value as `match` | 3 | yes | done: `native/lift-switch-match` |
 | `if`/`while`/early return in place of the block match | 12 | yes | `native/lift-structured` (in progress) |
 | Table and array indexing (`base + i * size`) | 5 | yes | `native/rom-statics` (ROM), done `native/ref-in-object` (RAM) |
 | Names for locals, parameters and constants | all 20 | no | none (names files; the mod view's local naming) |
@@ -293,6 +293,21 @@ binary search of `cmp`/`beq`/`bgt` on one register (IntroHandler
 and DoSoundAction 0x080027f9's mix setting are the same shape. Where
 every compare in the tree is of one unchanged value against constants,
 the tree is a `match` with the leaves as arms.
+The lifter now prints it so (`native/lift-switch-match`,
+`codegen::native::switch`): a block's run of guarded exits, each on the
+flags of one compare of the same value against a constant (its truth
+table over N, Z, C and V), with nothing between them but register and
+flag writes, is one `match` on the value; the blocks its edges bring
+inline that go on comparing the register holding it join the tree, and a
+run that ends at its last test leaves the rest of its block as the last
+arm. Each leaf's values come from evaluating the tree on every stretch of
+values between the compares' break points. IntroHandler is
+`match { 1, 2, 3, 4..=0x7fffffff, 0, _ }`; AudioCommand_Voice's PSG type
+switch is a `match` from its second test on (its first block's edge
+brings in more than the one block); DoSoundAction's mix setting is one.
+Metroid: 761 trees printed as a `match` (671 blocks taken in), 39 blocks
+with two or more such compares left as `if`s (`compare_trees_left`,
+barred).
 
 **What isn't provable.** Names are guesses checked by nothing but
 reading. The kept scratch registers are the price of stage A's interface
