@@ -17,6 +17,13 @@ is not yet readable.
 
 gbaa has run on Linux, Windows and macOS, and you bring your own ROM.
 
+![Two windows of Kirby & the Amazing Mirror, one per player, moving in step](docs/img/kirby-netplay.gif)
+
+Two copies of a recompiled Kirby & the Amazing Mirror playing each other
+over rollback netplay, one window per player. The connection between them
+is simulated at about 160 ms round trip with 2% of packets lost, and the
+button presses are scripted.
+
 ## What runs
 
 Pokémon Emerald passes its checks. Emerald Rogue and Emerald Imperium, two
@@ -24,6 +31,10 @@ fan-made versions of it, have been played recompiled on a desktop and on a
 Steam Deck. A recompiled game opens a window and plays with a controller or
 keyboard. It keeps the game's own saves, and adds save states, rewind and
 fast-forward.
+
+Kirby & the Amazing Mirror runs recompiled too, and players can link up
+over the internet (the recording above). It hasn't been checked against
+mGBA the way Emerald has.
 
 Timing is an estimate, not cycle-accurate, so a game that depends on exact
 timing would break. Games other than the ones named may run, or may stop at
