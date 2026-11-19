@@ -4439,6 +4439,18 @@ impl FnPrinter<'_, '_> {
         self.sums.get(k).map_or(0, Summary::passed)
     }
 
+    /// The registers of r4-r11 (bit `n - 4` for rN) `k` returns in r0-r3
+    /// as they came ([`Summary::echoes`]): a call passes them, so it
+    /// returns the caller's, as the machine does. 0 for a stand-in.
+    fn echoes(&self, k: u32) -> u8 {
+        if self.holes.standins.contains_key(&k) {
+            return 0;
+        }
+        self.sums
+            .get(k)
+            .map_or(0, |s| s.echoes.values().fold(0, |m, &n| m | 1 << (n - 4)))
+    }
+
     /// What a call passes of `m` (bits of r4-r11 its callee takes): all
     /// of them, or none with `--takes-zeroed` ([`Holes::takes_zeroed`]).
     fn taken(&self, m: u8) -> u8 {
@@ -4472,9 +4484,9 @@ impl FnPrinter<'_, '_> {
     /// A plain call of `k` with this function's registers: what it
     /// assigns its results to, and the call (without `?`).
     fn call(&self, k: u32) -> (String, String) {
-        let m = self.passed(k);
-        if m != 0 {
-            return ("[r0, r1, r2, r3] = ".into(), taking(k, self.taken(m)));
+        let (m, e) = (self.passed(k), self.echoes(k));
+        if m | e != 0 {
+            return ("[r0, r1, r2, r3] = ".into(), taking(k, self.taken(m) | e));
         }
         match self.shape(k) {
             None if self.holes.lr.contains(&k) => (
@@ -4541,7 +4553,7 @@ impl FnPrinter<'_, '_> {
         }
         // The functions the holes file says this call reaches that take
         // one of r4-r11 (`[[takes]]`): to those, with this function's.
-        let named: Vec<(u32, u8)> = self
+        let mut named: Vec<(u32, u8, bool)> = self
             .holes
             .takes
             .iter()
@@ -4551,15 +4563,27 @@ impl FnPrinter<'_, '_> {
                 let seen = |s: &Summary| s.passes.contains(&(at, e));
                 m != 0 && self.sums.get(self.f.entry).is_some_and(seen)
             })
+            .map(|(e, m)| (e, self.taken(m), true))
             .collect();
+        // And those of its callee set that return one of r4-r11 as it
+        // came: with that register ([`FnPrinter::echoes`]).
+        for &e in self.args.echoes.get(&at).into_iter().flatten() {
+            if let Some(n) = named.iter_mut().find(|n| n.0 == e) {
+                n.1 |= self.echoes(e);
+            } else if self.echoes(e) != 0 {
+                named.push((e, self.echoes(e), false));
+            }
+        }
         if !named.is_empty() {
             let mut t = format!("match {k} {{ ");
-            for (e, m) in named {
-                self.soft.passes.insert((at, e));
+            for (e, m, takes) in named {
+                if takes {
+                    self.soft.passes.insert((at, e));
+                }
                 write!(
                     t,
                     "{e:#010x} => {{ [r0, r1, r2, r3] = {}?; }} ",
-                    taking(e, self.taken(m))
+                    taking(e, m)
                 )
                 .unwrap();
             }
@@ -5030,6 +5054,9 @@ fn site_args(cs: &BTreeSet<u32>, shape: impl Fn(u32) -> Option<Shape>) -> (u8, u
 
 struct Args {
     by_site: BTreeMap<u32, (u8, u8)>,
+    /// The callees of each call's set that return one of r4-r11 as it
+    /// came ([`Summary::echoes`]): it calls them with that register.
+    echoes: BTreeMap<u32, Vec<u32>>,
     /// The sites whose callees' summaries (holes or not) read all four
     /// between them, and those with a four-register callee.
     union_four: usize,
@@ -5051,10 +5078,19 @@ fn call_fn_args(sets: &Sets, codes: &[Code], shaped: &BTreeMap<u32, Shape>) -> A
         .collect();
     let mut a = Args {
         by_site: BTreeMap::new(),
+        echoes: BTreeMap::new(),
         union_four: 0,
         four_reg_callee: 0,
     };
     for (&at, cs) in sets {
+        let echo: Vec<u32> = cs
+            .iter()
+            .copied()
+            .filter(|c| sums.get(c).is_some_and(|s| !s.echoes.is_empty()))
+            .collect();
+        if !echo.is_empty() {
+            a.echoes.insert(at, echo);
+        }
         let raw = cs
             .iter()
             .fold(0, |m, c| m | sums.get(c).map_or(0xf, |s| s.params));
