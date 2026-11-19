@@ -18,8 +18,7 @@ The scripts read this table (`factory/machines.sh`); keep its columns.
 
 | Machine | ssh | Lanes | Takes | Checkout | Can | Cache | Heavy | Reserve | GPU |
 |---|---|---|---|---|---|---|---|---|---|
-| quack | quack | 2 | any | ~/Documents/homelab/gbaa | — | 100G | 6 | 3G | 0 |
-| pyon | pyon | 1 | any | ~/Documents/homelab/gbaa | — | 100G | 2 | 3G | 0 |
+| quack | quack | 4 | any | ~/Documents/homelab/gbaa | — | 100G | 6 | 3G | 0 |
 
 - **Machine:** its short hostname (`hostname -s`). A unit pinned with
   `--host <machine>` runs only there.
@@ -69,21 +68,12 @@ from it. ROMs never go in git.
 
 - **Accounts:** none recorded
 - **Can do:** anything any machine can
-- **Cache:** none used (no store); `$GBAA_DATA` is shared by both lanes
+- **Cache:** none used (no store); `$GBAA_DATA` is shared by all its lanes
 - **Notes:** 24 cores, 30 GB RAM of which ~10 GB is usually available; 7 GB
-  swap, often full. Two lanes, june's choice (2026-10-20); raise to 3 if
-  build-lock waits stay under ~10% of unit time. Heavy 6 (2026-11-13: six sweep workers left load at 6 of 24 threads with 4), was 2, june's choice
+  swap, often full. Four lanes, june's choice (2026-11-18; was two from
+  2026-10-20, when pyon also ran one; pyon left the factory the same day). Heavy 6 (2026-11-13: six sweep workers left load at 6 of 24 threads with 4), was 2, june's choice
   (2026-11-05): 24 threads, and the memory budget gates each job. Each lane clone has its own
   `target/`.
-
-## pyon
-
-- **Accounts:** none recorded
-- **Can do:** anything any machine can
-- **Cache:** none used
-- **Notes:** 8 cores, 31 GB RAM (~28 GB available when idle). One lane,
-  june's ask (2026-11-18); Heavy 2 for the 8 cores. Set up 2026-11-18: checkout
-  and `mods/` cloned, `$GBAA_DATA` and `~/ROMs/gba` copied from quack.
 
 ## deck
 

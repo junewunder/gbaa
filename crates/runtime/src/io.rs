@@ -275,6 +275,7 @@ pub fn read_mask(o: u32) -> u16 {
 }
 
 /// The I/O registers.
+#[derive(Clone)]
 pub struct Io {
     /// Each halfword as last written, through its write mask.
     regs: [u16; (IO_SIZE / 2) as usize],
@@ -331,6 +332,9 @@ impl Io {
         ] {
             io.regs[o as usize / 2] = v;
         }
+        io.regs[reg::VCOUNT as usize / 2] = crate::sched::START_LINE;
+        // Unwritten since power-on (see `write_masked`).
+        io.regs[reg::DISPCNT as usize / 2] = 8;
         io
     }
 
@@ -395,6 +399,13 @@ impl Io {
                 }
                 self.regs[i] = (old & !m) | (v & m);
                 self.sio_unplugged();
+                return;
+            }
+            // Bit 3 (CGB mode), set only by [`Io::new`], says no write has
+            // come since power-on: the PPU draws forced blank until one does,
+            // as mGBA's renderer, whose copy starts at 0x80.
+            reg::DISPCNT => {
+                self.regs[i] = (old & !m & !8) | (v & m);
                 return;
             }
             // A `JOY_TRANS` store sets `JOYSTAT`'s sent flag (GBATEK, and

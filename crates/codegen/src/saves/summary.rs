@@ -195,6 +195,15 @@ pub struct Summary {
     /// it (`read_after`, `forwarded_after`; agbcc's epilogue `pop {r3};
     /// mov r8, r3` leaves the entry r8 in r3, unread).
     pub entry_returns: BTreeMap<u8, BTreeSet<String>>,
+    /// Its jumps by value (`pop {pc}`, `bx rN`) whose target the run
+    /// proved its entry lr on every path (a pop of the word its prologue
+    /// pushed lr to, or lr itself), by address: returns
+    /// (`native/lift-pop-return`). Empty if the run didn't settle.
+    pub lr_returns: BTreeSet<u32>,
+    /// The functions it jumps into (a tail call, a fall into another's
+    /// entry, the code after a call), and whether r14 held its entry lr
+    /// at every such jump. Empty if the run didn't settle.
+    pub lr_into: BTreeMap<u32, bool>,
 }
 
 impl Summary {
@@ -355,6 +364,17 @@ pub(super) struct Sum<'a> {
     pub(super) falls: BTreeSet<u32>,
     /// [`Summary::foreign`].
     pub(super) foreign: BTreeMap<u32, u8>,
+    /// The jumps by value whose target was the entry lr on some pass of
+    /// the run, and those where it wasn't ([`Summary::lr_returns`]).
+    pub(super) rets: BTreeSet<u32>,
+    pub(super) not_rets: BTreeSet<u32>,
+    /// The functions it tail-calls, and the code in another context it
+    /// jumps to, each with whether r14 was its entry lr at every such jump
+    /// ([`Summary::lr_into`]).
+    pub(super) lr_into: BTreeMap<u32, bool>,
+    /// The other functions' code it went on through, by the entry it
+    /// jumped to.
+    pub(super) inlined: BTreeSet<u32>,
     /// The functions whose summaries this run used.
     refs: BTreeSet<u32>,
     /// r4–r11 not as they came, over every return ([`Summary::changes`]).
@@ -428,6 +448,10 @@ impl<'a> Sum<'a> {
             sites: BTreeMap::new(),
             falls: BTreeSet::new(),
             foreign: BTreeMap::new(),
+            rets: BTreeSet::new(),
+            not_rets: BTreeSet::new(),
+            lr_into: BTreeMap::new(),
+            inlined: BTreeSet::new(),
             refs: BTreeSet::new(),
             changes: 0,
             entry_reads: BTreeSet::new(),
@@ -1007,6 +1031,8 @@ pub fn summarize_passing(
                 if let Some(s) = sums.get_mut(&k) {
                     s.holes.insert("summaries didn't settle".into());
                     s.stopped = true;
+                    s.lr_returns.clear();
+                    s.lr_into.clear();
                 }
             }
             break;
@@ -1018,7 +1044,25 @@ pub fn summarize_passing(
             Some(Sum::new(&sums, assume, sets, passing, &saves, &proof.kept)),
         )
         .expect("a summary's run records what the proof fails on");
+        let ins = w.ins;
         let mut sum = w.sum.expect("a summary's run");
+        // The entry lr's returns and jumps into other functions, known
+        // only from a settled run: each pass's state only loses facts, so
+        // an exit's last pass, the weakest, decides.
+        let settled = !sum.holes.contains("didn't settle");
+        let lr_returns: BTreeSet<u32> = if settled {
+            sum.rets.difference(&sum.not_rets).copied().collect()
+        } else {
+            BTreeSet::new()
+        };
+        let mut lr_into = BTreeMap::new();
+        if settled {
+            lr_into = std::mem::take(&mut sum.lr_into);
+            for &to in &sum.inlined {
+                let e = ins.get(&to).is_some_and(|s| s.regs[14] == V::Entry(14));
+                *lr_into.entry(to).or_insert(true) &= e;
+            }
+        }
         let mut returned: BTreeMap<u8, BTreeSet<String>> = BTreeMap::new();
         for &(at, r, via) in &sum.entry_reads {
             let hole = if sum.frames & 1 << r != 0 {
@@ -1076,6 +1120,8 @@ pub fn summarize_passing(
             foreign: sum.foreign.clone(),
             undefined_reads: sum.undefined.clone(),
             entry_returns: returned,
+            lr_returns,
+            lr_into,
         };
         for &c in &sum.refs {
             callers.entry(c).or_default().insert(k);

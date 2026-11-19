@@ -53,6 +53,8 @@ pub const PRESENT_US: f64 = 8_000.0;
 pub const RETRY_US: f64 = 1_000.0;
 /// A reliable message lost is resent this much later, µs.
 pub const RESEND_US: u64 = 100_000;
+/// [`Feel::apart_us`]'s line, frames apart.
+pub const APART: f32 = 10.0;
 
 /// (when it arrives, order sent, from, to, payload)
 type InFlight = Reverse<(u64, u64, usize, usize, Vec<u8>)>;
@@ -209,6 +211,10 @@ pub struct Window {
     /// done if later (`None`: when done). Frames then reach the display
     /// on the pacer's even beat instead of their costs' uneven one.
     pub present_us: Option<f64>,
+    /// The peer's process stopped at this frame for so long, µs (a
+    /// SIGSTOP, a machine swapping): the others play on, and it comes
+    /// back behind them.
+    pub stall: Option<(u32, f64)>,
 }
 
 impl Window {
@@ -220,6 +226,7 @@ impl Window {
             // Each display on a phase of its own.
             phase_us: 3_100.0 + 5_300.0 * seat as f64,
             present_us: (version == Version::After).then_some(PRESENT_US),
+            stall: None,
         }
     }
 }
@@ -404,6 +411,11 @@ pub struct Feel {
     pub depth_p99: u32,
     pub holds: u64,
     pub stalls: u64,
+    /// Frames run unpaced, catching up ([`Rollback::catching_up`]).
+    pub caught_up: u64,
+    /// The longest stretch this peer ran 10 or more frames ahead of
+    /// another or behind, µs.
+    pub apart_us: f64,
     /// Times the sound queue ran dry ([`Pacing::Audio`]).
     pub underruns: u64,
     /// Shown frames on which the other player jumped, and the biggest
@@ -431,7 +443,7 @@ impl Feel {
         format!(
             "seat {}: {} frames, {} late, {} doubled ({} the display's beat), {} skipped, \
              {} rollbacks, {} run again, depth p99 {} most {}, {} held back, {} stalls, \
-             {} underruns, {} jumps ({} of 4+ frames, most {}), shown {:.1} ms after due \
+             {} run catching up, apart 10+ frames for {:.1} s at most, {} underruns, {} jumps ({} of 4+ frames, most {}), shown {:.1} ms after due \
              (p99 {:.1}), turn p50 {:.1} p99 {:.1} \
              most {:.1} ms, end {:016x}",
             self.seat + 1,
@@ -446,6 +458,8 @@ impl Feel {
             self.deepest,
             self.holds,
             self.stalls,
+            self.caught_up,
+            self.apart_us / 1e6,
             self.underruns,
             self.jumps,
             self.big_jumps,
@@ -486,6 +500,12 @@ struct Front {
     depths: Vec<u32>,
     turns: Vec<f64>,
     rng: u64,
+    /// Whether [`Window::stall`] has come.
+    stalled: bool,
+    /// Since when this peer has run 10+ frames apart, and the longest
+    /// such stretch over, µs.
+    apart_since: Option<f64>,
+    apart_us: f64,
 }
 
 impl Front {
@@ -557,6 +577,9 @@ pub fn run<C: Snapshot>(
             depths: Vec::new(),
             turns: Vec::new(),
             rng: 0x5EED_0000 + s as u64 * 7919,
+            stalled: false,
+            apart_since: None,
+            apart_us: 0.0,
         })
         .collect();
     loop {
@@ -585,6 +608,14 @@ pub fn run<C: Snapshot>(
         }
         let p = &mut peers[s];
         let f = &mut fronts[s];
+        if let Some((at, us)) = f.w.stall
+            && !f.stalled
+            && p.frame() >= at
+        {
+            f.stalled = true;
+            f.next = t + us;
+            continue;
+        }
         let before = p.stats;
         let frame = p.frame();
         let status = p.advance(input(s, p.frame()))?;
@@ -601,6 +632,12 @@ pub fn run<C: Snapshot>(
         let end = t + c;
         let audio = f.w.pacing == Pacing::Audio;
         let after_fix = f.w.version == Version::After;
+        if p.lead().abs() >= APART {
+            f.apart_since.get_or_insert(t);
+        } else if let Some(since) = f.apart_since.take() {
+            f.apart_us = f.apart_us.max(t - since);
+        }
+        let catching = p.catching_up() && after_fix;
         f.next = match status {
             Status::Stepped => {
                 f.turns.push(c);
@@ -621,17 +658,26 @@ pub fn run<C: Snapshot>(
                 if f.origin.is_some() && end - due > GBA_FRAME_US {
                     f.late += 1;
                 }
-                match (f.w.pacing, f.w.version) {
-                    (Pacing::Audio, _) | (_, Version::After) => f.catch_up(end, audio),
-                    (Pacing::Muted, Version::Before) => {
-                        f.origin.get_or_insert(end);
-                        // A frame's sleep, then the clock (never later).
-                        let at = end + GBA_FRAME_US;
-                        f.clock(at)
-                    }
-                    (Pacing::Paced, Version::Before) => {
-                        f.origin.get_or_insert(end);
-                        f.clock(end)
+                if catching {
+                    // Far behind: the next frame at once, the pacer
+                    // starting over once caught up (as the desktop's does).
+                    f.origin = None;
+                    f.tick = None;
+                    f.k = 0.0;
+                    end
+                } else {
+                    match (f.w.pacing, f.w.version) {
+                        (Pacing::Audio, _) | (_, Version::After) => f.catch_up(end, audio),
+                        (Pacing::Muted, Version::Before) => {
+                            f.origin.get_or_insert(end);
+                            // A frame's sleep, then the clock (never later).
+                            let at = end + GBA_FRAME_US;
+                            f.clock(at)
+                        }
+                        (Pacing::Paced, Version::Before) => {
+                            f.origin.get_or_insert(end);
+                            f.clock(end)
+                        }
                     }
                 }
             }
@@ -659,7 +705,11 @@ pub fn run<C: Snapshot>(
         }
     }
     let mut out = Vec::new();
+    let now = net.borrow().now as f64;
     for (s, (p, f)) in peers.iter_mut().zip(&mut fronts).enumerate() {
+        if let Some(since) = f.apart_since.take() {
+            f.apart_us = f.apart_us.max(now - since);
+        }
         out.push(feel(s, p, f));
     }
     Ok(out)
@@ -686,6 +736,8 @@ fn feel<C: Snapshot>(seat: usize, p: &mut Rollback<C, Endpoint>, f: &mut Front) 
         depth_p99: percentile(&mut f.depths, 0.99).unwrap_or(0),
         holds: st.skips,
         stalls: st.stalls,
+        caught_up: st.caught_up,
+        apart_us: f.apart_us,
         underruns: f.underruns,
         turn_p50_us: percentile(&mut f.turns, 0.5).unwrap_or(0.0),
         turn_p99_us: percentile(&mut f.turns, 0.99).unwrap_or(0.0),
@@ -965,6 +1017,32 @@ mod tests {
             assert_eq!(p.holds, 0, "{}", p.line());
         }
         assert_eq!(f[0].end, f[1].end);
+    }
+
+    /// A peer stopped 4 s (multiplayer/stall-catch-up-paced) catches up in
+    /// seconds, not the minute time sync alone takes: back within 10
+    /// frames of the other inside 10 s of coming back, the other's
+    /// stretch apart the stall and that.
+    #[test]
+    fn a_peer_back_from_a_stall_catches_up_in_seconds() {
+        for pacing in [Pacing::Paced, Pacing::Audio, Pacing::Muted] {
+            let f = toy(
+                &profile("wander"),
+                &scripts(2),
+                |s| Window {
+                    stall: (s == 1).then_some((600, 4e6)),
+                    ..Window::new(pacing, Version::After, s)
+                },
+                Cost::Model(Costs::KIRBY_TWO),
+                2400,
+            )
+            .unwrap();
+            assert_eq!(f[0].end, f[1].end, "{pacing:?}");
+            assert!(f[1].caught_up > 100, "{pacing:?}: {}", f[1].line());
+            assert!(f[1].apart_us < 10e6, "{pacing:?}: {}", f[1].line());
+            assert!(f[0].apart_us < 14e6, "{pacing:?}: {}", f[0].line());
+            eprintln!("{pacing:?}\n  {}\n  {}", f[0].line(), f[1].line());
+        }
     }
 
     #[test]

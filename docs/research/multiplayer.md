@@ -663,7 +663,10 @@ player is seen to jump; the game doesn't stop.
 - **Time sync**: each peer sees how far ahead it runs from the input
   counts both sides report (`Msg::Input::have`; no new message), and a
   peer ahead by a frame or more holds one back (`Status::Skipped`, at
-  most one in 12).
+  most one in 12). A peer 20 or more frames behind (back from a stall)
+  catches up instead: `Rollback::catching_up`, and its front end runs
+  frames unpaced and unheard until within 2 (see "A peer back from a
+  stall" below).
 - **Hashes**: every 60th frame's consoles are hashed once every input
   before it is in, from its snapshot, and compared; a mismatch is a
   `desync N` line. No resync yet: none seen.
@@ -1246,9 +1249,33 @@ split (each took the other to have left). After, 2026-11-12 on quack:
 five in a row, player 2 or 1 stopped 4 s at 20 s, every one passing on
 `35d6b1be…`, 104-135 s each; the longest frames 2.3-6.2 s (the stop, or a
 300-frame rollback) and the longest freeze 4.7 s, with nobody taken to
-have left. A paced peer back from a stall still trails by the stall
+have left. A paced peer back from a stall still trailed by the stall
 (time sync holds the one ahead back a frame in 13):
-multiplayer/stall-catch-up-paced.
+multiplayer/stall-catch-up-paced, below.
+
+### A peer back from a stall (multiplayer/stall-catch-up-paced)
+
+A peer 20 or more frames behind another (unsmoothed) is catching up
+(`Rollback::catching_up`; `rollback::CATCH_UP_FROM`, `CATCH_UP_TO`): its
+front end runs each frame at once, its sound dropped (`Player::silence`)
+and its pacer started over, until it is within 2 frames; time sync does
+the rest. While it races, the two sides' input counts (time sync's
+measure) lag by its own faster pace, so its lead is taken as the other
+seat's inputs it lacks less their usual one-way trip, measured while it
+ran paced (`trip`); without that it overshot by tens of frames and the
+other peer then caught up in turn. A late message only ever makes a peer
+look ahead, so jitter never starts it.
+
+Checked 2026-11-18 on quack (load ~18), `just rollback-feel wander` on
+Kirby, `--headless --paced --frames 2400 --stop 2@20+4`, seat 2's presses
+ending at frame 1000 (no rollback on seat 1 to slow it): before, 22.9 s
+(seat 2) and 26.2 s (seat 1, the stop included) 10 or more frames apart;
+after, 4.3 s and 7.9 s, 423 frames run catching up, hashes equal. With
+presses changing every second the gap closed in about 4 s even before:
+each changed input is a ~200-frame rollback on the peer ahead, which
+costs it seconds and so slows it. In the feel sim
+(`a_peer_back_from_a_stall_catches_up_in_seconds`) the stopped seat is
+level 1.5 s after it returns; the budgets are unchanged.
 
 ### The other players' sound (multiplayer/other-seat-sound)
 

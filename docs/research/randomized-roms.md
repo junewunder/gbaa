@@ -94,15 +94,39 @@ Steven team, which no compiled function bakes in (`--baked`). Run on
   as stale too, transitively, makes it 155, among them `CB2_Overworld`,
   `BattleMainCB2` and `MainCB`: the main loop's callbacks.
 
-Not measured: a real randomized ROM. Running the randomizer's jar here
-was refused (running downloaded code needs the owner's OK). The probe
-takes one directly once it can be made: `--base base.gba --other
-randomized.gba` counts the bytes that differ and the functions they hit.
+## Measured on real randomized ROMs (2026-11-18)
+
+`just randomize-emerald` runs UPR ZX 4.6.1's CLI as the Emerald Kaizo
+rules say (their 60% level boost, then the Kaizo string; june's OK,
+2026-10-28). Two seeds, against a build of `out/pokemon-emerald-version`
+(15,192 functions; the desktop counts 15,207 entries with the IWRAM
+copies):
+
+- Seed 271555463637736: 48,553 bytes differ, 40 of them in compiled
+  instructions. **8 functions changed** (`RunTextPrinters`,
+  `SetUpBattleVarsAndBirchZigzagoon`, `IsBattlerModernFatefulEncounter`,
+  `PlayerNotOnBikeMoving`, `CB2_GiveStarter`, `IsRunningDisallowed`,
+  `CreateInitialRoamerMon`, `NewGameInitPCItems`), **101 stale** with
+  their callers, transitively; the probe (`--base/--other`) and the
+  desktop agree. The intro Pokemon's two sites didn't change.
+- Seed 78032738133183: 106 stale (10 changed, 96 callers).
+
+So the source-read upper bound (20 changed, 155 stale) held. Played for
+a minute (3600 frames, `--timing exact`, start, then A every 20 frames
+through Birch's speech to the truck), `just recompile-check ROM 3600
+exact KAIZO --input 'start@300,a@900,a@1100-3600/20'` matches `--interp`
+on the last frame and the registers for both seeds, with **99.1% of
+guest cycles compiled** (0.9% in the fallback, 0.8 points of it RAM
+code that runs interpreted on the exact ROM too); 3600 frames in 2.1 s
+recompiled, 13.4 s interpreted, on quack.
 
 ## What each option costs
 
 **a) Per-function check at load, interpreter fallback** (keeps compiled
-code where the randomizer left it alone).
+code where the randomizer left it alone). Chosen and built: the table,
+the stale set (every direct caller stale) and the desktop's loader, which
+also takes scripts' ROM writes (`docs/codegen-design.md`, "A changed
+ROM").
 
 - Codegen emits, per function, a hash of its instruction bytes and its
   baked loads' bytes (15,158 entries, ~120 KB with the ranges). At load

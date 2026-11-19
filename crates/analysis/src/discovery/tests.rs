@@ -99,6 +99,37 @@ fn pointer_scan_takes_validated_candidates() {
 }
 
 #[test]
+fn pointer_scan_takes_a_struct_table_of_pointer_pairs() {
+    // c/fnptr's sObjOps as modern GCC builds it: structs of two function
+    // pointers and a word of data, the leaves with no push.
+    let leaf = |a: &mut Asm, at: u32| {
+        a.h(at, 0x2001).h(at + 2, 0x4770); // movs r0, #1; bx lr
+    };
+    let table = |pair: bool| {
+        let mut a = Asm::new();
+        a.entry(0x100).h(0x100, 0x4770);
+        leaf(&mut a, 0x300);
+        leaf(&mut a, 0x320);
+        leaf(&mut a, 0x340);
+        a.w(0x400, if pair { thumb(0x300) } else { 0 })
+            .w(0x404, thumb(0x320))
+            .w(0x408, 8)
+            .w(0x40c, thumb(0x100))
+            .w(0x410, thumb(0x340))
+            .w(0x414, 8);
+        a.run()
+    };
+    let d = table(true);
+    for f in [0x300, 0x320, 0x340] {
+        assert_eq!(d.funcs.get(&thumb(f)), Some(&Evidence::Scanned), "0x{f:x}");
+    }
+    // Two words from a start, but with nothing beside it: no table.
+    let d = table(false);
+    assert!(!d.funcs.contains_key(&thumb(0x320)));
+    assert_eq!(d.funcs.get(&thumb(0x340)), Some(&Evidence::Scanned));
+}
+
+#[test]
 fn pointer_scan_takes_a_lone_pool_getter() {
     let mut a = Asm::new();
     a.entry(0x100)
@@ -312,6 +343,38 @@ fn a_run_of_cold_blocks_after_a_function_is_all_its_own() {
         assert!(!d.funcs.contains_key(&thumb(0x138 + 6 * k)), "block {k}");
     }
     assert!(d.funcs.contains_key(&thumb(0x200)));
+}
+
+/// main: `push {r4, lr}; cmp r0, #0; bne 1f; bl next; 1: pop {r4, pc}`,
+/// with the function `next` right after it, never returning.
+fn main_then(next: &[u16]) -> Discovery {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        .h(0x100, 0xb510)
+        .h(0x102, 0x2800)
+        .bcond(0x104, 1, 0x10a)
+        .bl(0x106, 0x10c)
+        .h(0x10a, 0xbd10);
+    for (k, &h) in next.iter().enumerate() {
+        a.h(0x10c + 2 * k as u32, h);
+    }
+    a.run()
+}
+
+#[test]
+fn a_variadic_function_after_its_caller_is_its_own() {
+    // push {r0-r3}; push {r4, lr}; b .
+    let d = main_then(&[0xb40f, 0xb510, 0xe7fe]);
+    assert!(!d.rec.far_jumps.contains(&(B + 0x106)));
+    assert!(d.funcs.contains_key(&thumb(0x10c)), "{:x?}", d.funcs);
+}
+
+#[test]
+fn a_lone_idle_loop_after_its_caller_is_its_own() {
+    // b .
+    let d = main_then(&[0xe7fe]);
+    assert!(!d.rec.far_jumps.contains(&(B + 0x106)));
+    assert!(d.funcs.contains_key(&thumb(0x10c)), "{:x?}", d.funcs);
 }
 
 #[test]
@@ -770,6 +833,36 @@ fn pointer_scan_takes_an_endless_task() {
     let d = a.run();
     assert_eq!(d.funcs.get(&thumb(0x300)), Some(&Evidence::Scanned));
     assert!(d.code.contains_key(&(B + 0x30a)));
+    assert!(!d.funcs.contains_key(&thumb(0x340)));
+}
+
+#[test]
+fn pointer_scan_takes_a_pooled_task_that_switches_after_a_call() {
+    // A task (Kirby: Nightmare in Dream Land's 0x08034a89): push {r4, lr};
+    // bl setup; then a switch, `ldr r0, [r1]; mov pc, r0`, its only way
+    // on. The switch follows a call, so it is soft: taken when code loads
+    // the task from a pool, not for a stray word.
+    let task = |a: &mut Asm, at: u32| {
+        a.h(at, 0xb510)
+            .h(at + 2, 0x2000) // movs r0, #0
+            .h(at + 4, 0x2101) // movs r1, #1
+            .bl(at + 6, 0x380)
+            .h(at + 10, 0x6808) // ldr r0, [r1]
+            .h(at + 12, 0x4687); // mov pc, r0
+    };
+    let mut a = Asm::new();
+    a.entry(0x100)
+        // main: ldr r0, [pc, #4] (the pool word at 0x108); bx lr
+        .h(0x100, 0x4801)
+        .h(0x102, 0x4770)
+        .w(0x108, thumb(0x300))
+        .h(0x380, 0x4770); // setup: bx lr
+    task(&mut a, 0x300);
+    task(&mut a, 0x340);
+    // A word in data points at the second, beside nothing found.
+    a.w(0x400, 0).w(0x404, thumb(0x340)).w(0x408, 0);
+    let d = a.run();
+    assert_eq!(d.funcs.get(&thumb(0x300)), Some(&Evidence::Scanned));
     assert!(!d.funcs.contains_key(&thumb(0x340)));
 }
 

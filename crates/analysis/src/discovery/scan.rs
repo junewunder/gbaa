@@ -14,7 +14,9 @@
 //! code found already other than at one of its instruction starts in the
 //! same instruction set. A body that only runs into a function start
 //! found already validates if code loads the candidate or a table holds it
-//! next to a known start (m4a's `ply_patt`, a branch into `ply_goto`). Undefined instructions, lone halves of a Thumb
+//! next to a known start (m4a's `ply_patt`, a branch into `ply_goto`), and so does one
+//! opening with `push {…, lr}` whose only way on is an indirect jump after a
+//! `bl` (a task that calls its setup, then switches on its state). Undefined instructions, lone halves of a Thumb
 //! `bl`, BIOS calls that don't exist, long runs of one word, instructions
 //! no game runs (user-bank `ldm`), Thumb shifts by 32 (a ROM pointer's
 //! upper half), a Thumb `bx` to a register last set by a shift left
@@ -25,7 +27,9 @@
 //!
 //! **Ranking.** A `push {…, lr}` prologue only ranks candidates: it scores
 //! 4, being loaded from a literal pool by code found, sitting next to a
-//! known function start in a table or being a constant getter (pool
+//! known function start in a table (or beside another Thumb pointer, two
+//! words from one: a table of structs of two function pointers and a word
+//! of data) or being a constant getter (pool
 //! loads, then `bx lr`: [`getter`]) scores 2, and more than one word
 //! pointing there scores 1. A candidate needs [`MIN_SCORE`]. A batch takes
 //! candidates best first and drops any whose body overlaps one taken
@@ -103,7 +107,18 @@ pub fn batch(
         c.refs += 1;
         c.pooled |= view.pools.contains(&at);
         let start_at = |b: u32| prog.read(b, 4).is_some_and(|v| view.funcs.contains(&v));
-        c.table |= start_at(at.wrapping_sub(4)) || start_at(at + 4);
+        // Next to a start, or a pair of Thumb pointers two words from one:
+        // a table of structs that each hold two function pointers and a
+        // word of data (c/fnptr's sObjOps), where a leaf with no push has
+        // no other evidence.
+        let thumb_ptr = |b: u32| {
+            prog.read(b, 4)
+                .is_some_and(|v| v & 1 != 0 && prog.in_rom(v & !1))
+        };
+        c.table |= start_at(at.wrapping_sub(4))
+            || start_at(at + 4)
+            || ((thumb_ptr(at.wrapping_sub(4)) || thumb_ptr(at + 4))
+                && (start_at(at.wrapping_sub(8)) || start_at(at + 8)));
     }
     stats.candidates += cands.len();
 
@@ -387,6 +402,8 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
     let mut work = vec![(start, false)];
     let mut ends = false;
     let mut jumps = false;
+    // An indirect jump on a soft path (after a `bl`).
+    let mut soft_jump = false;
     // A hard path ran into a function start found already.
     let mut into = false;
     let mut halves: HashSet<u32> = HashSet::new();
@@ -479,7 +496,8 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
                             ends = true
                         }
                         Ctl::Jump if !soft => jumps = true,
-                        Ctl::Return | Ctl::Jump => {}
+                        Ctl::Jump => soft_jump = true,
+                        Ctl::Return => {}
                         Ctl::Call => work.push((next, true)),
                     }
                     if cond {
@@ -527,7 +545,15 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
         && hard.len() >= JUMP_BODY_MIN
         && prog.decode(start, thumb).is_some_and(|i| is_push_lr(&i));
     let own = ends || (jumps && hard.len() >= JUMP_BODY_MIN) || endless;
-    (own || into).then_some((hard, own))
+    // A body opening with `push {…, lr}` whose only way on is a switch
+    // after a call: Nightmare's game-state tasks call a setup, then switch
+    // on a state byte into cases that loop and yield (0x08034a89). The
+    // switch is soft, so the body isn't its own: it validates for a
+    // candidate code loads from a pool or a table holds, as `into` does.
+    let late = soft_jump
+        && hard.len() >= JUMP_BODY_MIN
+        && prog.decode(start, thumb).is_some_and(|i| is_push_lr(&i));
+    (own || into || late).then_some((hard, own))
 }
 
 /// Whether `i` is a Thumb `bx rM` whose rM was last set, in the straight

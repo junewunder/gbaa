@@ -117,6 +117,11 @@ pub struct Bus {
     /// sorted by address. The HLE LZ77 and RL calls write these instead of
     /// what they decode. Empty, the play view, unless the front end sets it.
     pub asset_overrides: &'static [(u32, &'static [u8])],
+    /// The keys of the compiled functions this ROM's bytes made stale
+    /// ([`crate::dispatch::stale`]), sorted: the dispatcher runs them
+    /// interpreted. Empty, the ROM the build was made from, unless the
+    /// front end sets it.
+    pub stale: &'static [u32],
 }
 
 impl crate::snap::Snap for Bus {
@@ -146,6 +151,7 @@ impl crate::snap::Snap for Bus {
             block_first: _,
             rom_crc: _,
             asset_overrides: _,
+            stale: _,
         } = self;
         // The payload as before the split: the registers are in `io`.
         let Video {
@@ -194,6 +200,7 @@ impl Bus {
             block_first: false,
             rom_crc: None,
             asset_overrides: &[],
+            stale: &[],
         }
     }
 

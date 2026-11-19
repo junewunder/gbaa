@@ -1198,6 +1198,40 @@ fn scratch_r4_r11_no_caller_reads_is_soft_and_a_register_parameter_hard() {
     );
 }
 
+/// `f: push {lr}; bl g` falling into `h: push {lr}; pop {r0}; bx r0`,
+/// `k: b h` and `g: bx lr` (native/lift-pop-return): h's and g's jumps by
+/// value are to their entry lr; k jumps into h with r14 its entry lr, f
+/// with r14 the call's return address.
+#[test]
+fn a_pop_of_the_entry_lr_is_a_return_and_falls_say_what_lr_they_pass() {
+    let (rom, d) = thumb_program(
+        &[
+            0xB500, // 0x00 f: push {lr}
+            0xF000, 0xF804, // 0x02 bl g
+            0xB500, // 0x06 h: push {lr}
+            0xBC01, // 0x08 pop {r0}
+            0x4700, // 0x0a bx r0
+            0xE7FB, // 0x0c k: b h
+            0x4770, // 0x0e g: bx lr
+        ],
+        &[2, 4, 2, 2, 2, 2, 2],
+        &[0x0800_0001, 0x0800_0007, 0x0800_000d, 0x0800_000f],
+    );
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    let s = |k: u32| &sums.by_entry[&k];
+    assert_eq!(
+        s(0x0800_0007).lr_returns,
+        std::collections::BTreeSet::from([0x0800_000a])
+    );
+    assert_eq!(
+        s(0x0800_000f).lr_returns,
+        std::collections::BTreeSet::from([0x0800_000e])
+    );
+    assert_eq!(s(0x0800_000d).lr_into.get(&0x0800_0007), Some(&true));
+    assert_eq!(s(0x0800_0001).lr_into.get(&0x0800_0007), Some(&false));
+}
+
 /// The summary holes of the function at 0x08000001 of a Thumb program of
 /// one-halfword instructions, with a pointer to it in the ROM (so its
 /// callers are unknown, and enter it with r4-r11 zeroed).
@@ -2602,6 +2636,97 @@ fn folded_lists_the_rom_loads_const_prop_reads() {
         crate::emit::folded(&ctx, &r.funcs),
         [(0x0800_000C, 0x0800_0010), (0x0800_0011, 0x0800_0012)]
     );
+}
+
+/// Each function's ROM bytes (`Code::fns`): its instructions and baked
+/// pool word, its callee and its keys; a byte flipped in the callee makes
+/// it stale, and its caller with it.
+#[test]
+fn fn_bytes_cover_code_and_baked_loads_and_stale_spreads_to_callers() {
+    let (rom, d) = program(
+        &[
+            0xE59F_0008, // 0x08000000 ldr r0, [pc, #8] (0x08000010)
+            0xEB00_0002, // 0x08000004 bl 0x08000014
+            0xEAFF_FFFE, // 0x08000008 b .
+            0xE1A0_0000, // 0x0800000C nop
+            0x1234_5678, // 0x08000010 the pool word
+            0xE280_0001, // 0x08000014 add r0, r0, #1
+            0xE12F_FF1E, // 0x08000018 bx lr
+            0xE12F_FF1E, // 0x0800001C bx lr, a function nothing calls
+        ],
+        &[0x0800_0000, 0x0800_0014, 0x0800_001C],
+    );
+    let ctx = Ctx::new(&rom, &d);
+    let r = build_all(&ctx);
+    let all: Vec<_> = r.funcs.iter().rev().map(|f| (&ctx, f)).collect();
+    let none = Default::default();
+    let recs = crate::emit::fn_bytes(&rom, &all, &none, &none);
+    let shape: Vec<_> = recs
+        .iter()
+        .map(|f| (f.entry, f.ranges.clone(), f.calls.clone(), f.keys.clone()))
+        .collect();
+    assert_eq!(
+        shape,
+        [
+            (
+                0x0800_0000,
+                vec![(0x0800_0000, 0x0800_000C), (0x0800_0010, 0x0800_0014)],
+                vec![1],
+                vec![0x0800_0000, 0x0800_0008]
+            ),
+            (
+                0x0800_0014,
+                vec![(0x0800_0014, 0x0800_001C)],
+                vec![],
+                vec![0x0800_0014]
+            ),
+            (
+                0x0800_001C,
+                vec![(0x0800_001C, 0x0800_0020)],
+                vec![],
+                vec![0x0800_001C]
+            ),
+        ]
+    );
+    let fns: Vec<runtime::dispatch::FnBytes> = recs
+        .iter()
+        .map(|f| runtime::dispatch::FnBytes {
+            entry: f.entry,
+            hash: f.hash,
+            ranges: f.ranges.clone().leak(),
+            calls: f.calls.clone().leak(),
+            keys: f.keys.clone().leak(),
+        })
+        .collect();
+    let code = runtime::dispatch::Code::<runtime::platform::Headless> {
+        blocks: &[],
+        ram_blocks: &[],
+        overlays: &[],
+        extents: &[],
+        ram_extents: &[],
+        inner: &[],
+        inner_extents: &[],
+        modded: &[],
+        folded: &[],
+        rom_hash: 0,
+        fns: fns.leak(),
+        timing: runtime::Timing::Exact,
+        seeds_file: None,
+        spins: &[],
+    };
+    let mut stale = [false; 3];
+    assert_eq!(code.mark_stale(&rom, &mut stale).total(), 0);
+    // The callee's `add r0, r0, #1` made `#2`.
+    let mut changed = rom.clone();
+    changed[0x14] = 2;
+    let n = code.mark_stale(&changed, &mut stale);
+    assert_eq!((n.changed, n.callers), (1, 1));
+    assert_eq!(stale, [true, true, false]);
+    // The pool word is the caller's alone.
+    let mut changed = rom.clone();
+    changed[0x10] ^= 1;
+    code.mark_stale(&changed, &mut stale);
+    assert_eq!(stale, [true, false, false]);
 }
 
 /// `ldr r0, =0x2000000; ldrh r1, [r0]; cmp r1, #2; movs r1, #1; strh r1,

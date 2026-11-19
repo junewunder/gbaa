@@ -20,6 +20,9 @@ use crate::platform::Platform;
 use armv4t::interp::{Cpu, Exit};
 
 pub mod modcall;
+pub mod stale;
+
+pub use stale::{FnBytes, Staleness, fn_hash};
 
 /// How a generated function was left.
 #[must_use]
@@ -72,6 +75,10 @@ pub struct Code<P: Platform + 'static> {
     pub folded: &'static [(u32, u32)],
     /// [`rom_hash`] of the ROM it was recompiled from.
     pub rom_hash: u64,
+    /// Every compiled function's ROM bytes, sorted by entry, for running
+    /// a changed copy of the ROM ([`stale`]; empty in a build without
+    /// them, which runs only its own ROM).
+    pub fns: &'static [FnBytes],
     /// The timing it was generated with (`gbaa-recompile --timing`): what
     /// a front end runs its interpreter fallback with unless told otherwise
     /// ([`crate::Machine::timing`]).
@@ -114,6 +121,9 @@ impl<P: Platform> Code<P> {
     /// [`blocks`](Code::blocks).
     #[inline]
     fn find(&self, bus: &mut Bus, key: u32) -> Option<(GuestFn<P>, (bool, usize))> {
+        if is_stale(bus, key) {
+            return None;
+        }
         if is_ram(key) {
             let i = self.ram_blocks.binary_search_by_key(&key, |e| e.0).ok()?;
             let (_, f, o, n) = self.ram_blocks[i];
@@ -128,10 +138,12 @@ impl<P: Platform> Code<P> {
             .map(|i| (self.blocks[i].1, (false, i)))
     }
 
-    /// The index of `key` in [`inner`](Code::inner).
+    /// The index of `key` in [`inner`](Code::inner), unless its function
+    /// is stale.
     #[inline]
-    fn find_inner(&self, key: u32) -> Option<usize> {
-        self.inner.binary_search(&key).ok()
+    fn find_inner(&self, bus: &Bus, key: u32) -> Option<usize> {
+        let i = self.inner.binary_search(&key).ok()?;
+        (!is_stale(bus, key)).then_some(i)
     }
 
     /// Whether `key` is a block of a modded function past its entry.
@@ -150,6 +162,13 @@ impl<P: Platform> Code<P> {
         };
         i == 0 || self.blocks[i - 1].1 as usize != self.blocks[i].1 as usize
     }
+}
+
+/// Whether `key` runs code of a function the ROM's bytes made stale
+/// ([`Bus::stale`]).
+#[inline(always)]
+fn is_stale(bus: &Bus, key: u32) -> bool {
+    !bus.stale.is_empty() && bus.stale.binary_search(&key).is_ok()
 }
 
 fn is_ram(addr: u32) -> bool {
@@ -393,6 +412,11 @@ pub struct Stats {
     pub n_ram_seeds: usize,
     /// Guest cycles the CPU spent halted (`Halt`, `VBlankIntrWait`).
     pub halted_cycles: u64,
+    /// Guest cycles a BIOS call's stall took ([`crate::bios::STALL_LOOP`]:
+    /// the time of `CpuSet`, `CpuFastSet` and LZ77, burned where mGBA's HLE
+    /// BIOS burns it). The call's time, not the fallback's: like a halt,
+    /// it is in neither `compiled_cycles` nor `interpreted_cycles`.
+    pub stalled_cycles: u64,
     /// Distinct ROM keys the fallback was entered at, the first
     /// [`MAX_SEEDS`] of them.
     pub seeds: [u32; MAX_SEEDS],
@@ -437,6 +461,7 @@ impl Default for Stats {
             ram_seeds: [(0, 0); MAX_RAM_SEEDS],
             n_ram_seeds: 0,
             halted_cycles: 0,
+            stalled_cycles: 0,
             seeds: [0; MAX_SEEDS],
             n_seeds: 0,
             settles: 0,
@@ -598,6 +623,7 @@ fn run_raw<P: Platform>(
         m.bus.overlays.install(c.overlays);
     }
     m.sched.frame_ended = false;
+    m.catch_up();
     // A nested run ([`settle`]) reaches the counts through the machine.
     let outer = core::mem::replace(&mut m.nest.stats, stats);
     let (top, low) = (m.nest.stack_top, m.nest.stack_low);
@@ -762,7 +788,7 @@ fn run_inner<P: Platform>(
             }
             continue;
         }
-        let inner = code.and_then(|c| c.find_inner(k));
+        let inner = code.and_then(|c| c.find_inner(&m.bus, k));
         // The block-timed interpreter runs a structured function's inner
         // blocks as blocks too.
         if blocks && let (Some(i), Some(c)) = (inner, code) {
@@ -788,7 +814,8 @@ fn run_inner<P: Platform>(
         if let Some((f, (ram, i))) = code.and_then(|c| c.find(&mut m.bus, k)) {
             // What runs nested in the call ([`settle`]) counts itself.
             let counted = |s: &Stats| {
-                let all = s.compiled_cycles + s.interpreted_cycles + s.halted_cycles;
+                let all =
+                    s.compiled_cycles + s.interpreted_cycles + s.halted_cycles + s.stalled_cycles;
                 (all, s.compiled_ram_cycles)
             };
             let (t, r, n) = (m.now(), m.bus.overlays.cycles, counted(m.nest.stats()));
@@ -827,17 +854,24 @@ fn run_inner<P: Platform>(
             m.nest.stats().seed(k);
         }
         let t = m.now();
-        let mut ram = 0;
+        let (mut ram, mut stalled) = (0, 0);
         loop {
             let (pc, before) = (m.cpu.pc, m.now());
             let yield_ = m.step();
-            m.nest.stats().interpreted += 1;
+            if pc == crate::bios::STALL_LOOP {
+                // A BIOS call's time, not an instruction the fallback ran.
+                stalled += m.now() - before;
+            } else {
+                m.nest.stats().interpreted += 1;
+            }
             if (0x0200_0000..0x0400_0000).contains(&pc) {
                 ram += m.now() - before;
             }
             let k = key(&m.cpu);
-            let inside = |k| is_rom(k) && code.is_some_and(|c| c.find_inner(k).is_some());
-            if !resumed && inside(k) {
+            let inside = |m: &Machine<P>, k| {
+                is_rom(k) && code.is_some_and(|c| c.find_inner(&m.bus, k).is_some())
+            };
+            if !resumed && inside(m, k) {
                 // A timed resume runs it as a block.
                 if m.nest.timed_resumes {
                     break;
@@ -859,7 +893,10 @@ fn run_inner<P: Platform>(
                 m.nest.stats().mod_resumes += 1;
             }
         }
-        m.nest.stats().interpreted_cycles += m.now() - t;
+        let ran = m.now() - t;
+        let s = m.nest.stats();
+        s.interpreted_cycles += ran - stalled;
+        s.stalled_cycles += stalled;
         if ram > 0 {
             let s = m.nest.stats();
             s.interpreted_ram_cycles += ram;

@@ -167,7 +167,8 @@ fn single_line() {
     }
     assert_eq!(px(&p, 0, 5), 0x001F);
     assert_eq!(px(&p, 0, 4), 0);
-    assert_eq!(px(&p, 0, 6), 0);
+    // Not drawn: power-on's white.
+    assert_eq!(px(&p, 0, 6), WHITE);
 }
 
 #[test]

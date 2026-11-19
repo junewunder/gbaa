@@ -101,6 +101,7 @@ pub fn bg_kind(mode: u16, n: usize) -> Option<BgKind> {
 
 /// The PPU: the frame being drawn, and the state it carries between
 /// lines, the affine backgrounds' reference points.
+#[derive(Clone)]
 pub struct Ppu {
     pub frame: Frame,
     refs: bg_affine::Refs,
@@ -119,7 +120,9 @@ impl Default for Ppu {
 impl Ppu {
     pub fn new() -> Ppu {
         Ppu {
-            frame: [0; WIDTH * HEIGHT],
+            // White, as mGBA's first frame shows the lines above
+            // [`crate::sched::START_LINE`], which the beam never drew.
+            frame: [0x7FFF; WIDTH * HEIGHT],
             refs: bg_affine::Refs::default(),
             draw: true,
         }
@@ -151,7 +154,10 @@ impl Ppu {
             .try_into()
             .unwrap();
         let cnt = v.dispcnt.0;
-        if cnt & dispcnt::FORCED_BLANK != 0 {
+        // Bit 3: no write since power-on (`Io::new`), which mGBA's renderer
+        // draws as forced blank; the line the beam starts on
+        // ([`crate::sched::START_LINE`]) is drawn before most games write it.
+        if cnt & (dispcnt::FORCED_BLANK | 8) != 0 {
             row.fill(WHITE);
             return;
         }

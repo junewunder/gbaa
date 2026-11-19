@@ -31,8 +31,8 @@ rom = "agb/affine.gba"
 route = "units/affine-600.toml"
 
 [program.affine.bars]
-lines = 71202
-lines_prelude = 1203
+lines = 25980
+lines_prelude = 1265
 functions = 109
 functions_iwram = 3
 functions_lifted = 106
@@ -44,6 +44,14 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
 blocks = 1714
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 8631
+bank_sp_calls = 257
+loops_not_for = 142
 load_const_ram = 0
 load_const_io = 11
 load_const_rom = 0
@@ -79,6 +87,7 @@ sp_accesses_escaping_slot = 705
 call_fn_calls = 61
 call_fn_four_complete = 56
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 55
 sp_accesses_callers_frame = 7
@@ -88,8 +97,8 @@ rom = "agb/mosaic-modes.gba"
 route = "units/mosaic-modes-600.toml"
 
 [program.mosaic-modes.bars]
-lines = 49498
-lines_prelude = 1203
+lines = 18821
+lines_prelude = 1265
 functions = 102
 functions_iwram = 3
 functions_lifted = 99
@@ -101,6 +110,14 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 47
 hard_holes = 0
 blocks = 1238
+functions_in_match = 1
+blocks_in_match = 46
+compare_trees_left = 11
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 6009
+bank_sp_calls = 214
+loops_not_for = 123
 load_const_ram = 0
 load_const_io = 11
 load_const_rom = 0
@@ -136,6 +153,9 @@ sp_accesses_escaping_slot = 1124
 call_fn_calls = 61
 call_fn_four_complete = 56
 jumps_by_value = 8
+# A fall into the next function after a call to a panic whose summary may
+# return: its entry lr isn't proven RET (native/lift-pop-return).
+entry_lr_returns_call_fn = 1
 gap_targets = 24
 fn_words_not_proven = 54
 sp_accesses_callers_frame = 4
@@ -151,8 +171,8 @@ planted_store = 0x08000186
 planted_hole = { drop_standin = 0x08002728, names = "error: hard hole in f_08002728 at 0x08002730: CPU state: mrs" }
 
 [program.native-spike.bars]
-lines = 72079
-lines_prelude = 1203
+lines = 27055
+lines_prelude = 1265
 functions = 110
 functions_iwram = 3
 functions_lifted = 107
@@ -164,6 +184,14 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 48
 hard_holes = 0
 blocks = 1745
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 9360
+bank_sp_calls = 263
+loops_not_for = 144
 load_const_ram = 0
 load_const_io = 18
 load_const_rom = 0
@@ -199,6 +227,7 @@ sp_accesses_escaping_slot = 1289
 call_fn_calls = 63
 call_fn_four_complete = 58
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 gap_targets = 22
 fn_words_not_proven = 58
 sp_accesses_callers_frame = 8
@@ -212,8 +241,8 @@ route = "units/native-fallthrough-600.toml"
 planted_flags = ["--fall-as-tail-call"]
 
 [program.native-fallthrough.bars]
-lines = 70092
-lines_prelude = 1203
+lines = 25535
+lines_prelude = 1265
 functions = 112
 functions_iwram = 3
 functions_lifted = 109
@@ -225,6 +254,14 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 51
 hard_holes = 0
 blocks = 1712
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 8597
+bank_sp_calls = 260
+loops_not_for = 138
 load_const_ram = 0
 load_const_io = 12
 load_const_rom = 0
@@ -260,6 +297,7 @@ sp_accesses_escaping_slot = 709
 call_fn_calls = 62
 call_fn_four_complete = 57
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 56
 sp_accesses_callers_frame = 9
@@ -274,8 +312,8 @@ route = "units/native-irq-hold-601.toml"
 planted_flags = ["--irq-at-waits"]
 
 [program.native-irq-hold.bars]
-lines = 70751
-lines_prelude = 1203
+lines = 25791
+lines_prelude = 1265
 functions = 114
 functions_iwram = 3
 functions_lifted = 109
@@ -287,6 +325,14 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 51
 hard_holes = 0
 blocks = 1734
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 8667
+bank_sp_calls = 267
+loops_not_for = 142
 load_const_ram = 0
 load_const_io = 17
 load_const_rom = 0
@@ -322,6 +368,7 @@ sp_accesses_escaping_slot = 709
 call_fn_calls = 65
 call_fn_four_complete = 60
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 gap_targets = 11
 fn_words_not_proven = 58
 sp_accesses_callers_frame = 7
@@ -338,8 +385,8 @@ route = "units/native-frame-locals-600.toml"
 planted_flags = ["--plant-slot=0x08000182"]
 
 [program.native-frame-locals.bars]
-lines = 70174
-lines_prelude = 1203
+lines = 25559
+lines_prelude = 1265
 functions = 113
 functions_iwram = 3
 functions_lifted = 110
@@ -351,6 +398,14 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
 blocks = 1714
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 8598
+bank_sp_calls = 261
+loops_not_for = 138
 load_const_ram = 0
 load_const_io = 12
 load_const_rom = 0
@@ -387,6 +442,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 61
 call_fn_four_complete = 56
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 55
 
@@ -399,8 +455,8 @@ route = "units/native-ime-release-601.toml"
 planted_flags = ["--ime-at-waits"]
 
 [program.native-ime-release.bars]
-lines = 70743
-lines_prelude = 1203
+lines = 25770
+lines_prelude = 1265
 functions = 113
 functions_iwram = 3
 functions_lifted = 110
@@ -412,6 +468,14 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
 blocks = 1731
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 8652
+bank_sp_calls = 271
+loops_not_for = 142
 load_const_ram = 0
 load_const_io = 17
 load_const_rom = 0
@@ -448,6 +512,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 63
 call_fn_four_complete = 58
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 gap_targets = 15
 fn_words_not_proven = 58
 
@@ -464,8 +529,8 @@ route = "units/native-bios-calls-600.toml"
 # (native/ref-heap-static-arrays).
 
 [program.native-bios-calls.bars]
-lines = 71192
-lines_prelude = 1203
+lines = 25910
+lines_prelude = 1265
 functions = 109
 functions_iwram = 3
 functions_lifted = 106
@@ -477,6 +542,14 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
 blocks = 1724
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 8693
+bank_sp_calls = 259
+loops_not_for = 139
 load_const_ram = 0
 load_const_io = 13
 load_const_rom = 0
@@ -513,6 +586,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 61
 call_fn_four_complete = 56
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 gap_targets = 7
 fn_words_not_proven = 55
 
@@ -529,8 +603,8 @@ route = "units/native-bios-more-600.toml"
 # restarts the program.
 
 [program.native-bios-more.bars]
-lines = 70431
-lines_prelude = 1203
+lines = 27057
+lines_prelude = 1265
 functions = 104
 functions_iwram = 3
 functions_lifted = 101
@@ -542,6 +616,14 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 48
 hard_holes = 0
 blocks = 1673
+functions_in_match = 2
+blocks_in_match = 512
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 9730
+bank_sp_calls = 265
+loops_not_for = 113
 load_const_ram = 0
 load_const_io = 19
 load_const_rom = 0
@@ -578,6 +660,9 @@ sp_accesses_callers_frame = 3
 call_fn_calls = 61
 call_fn_four_complete = 56
 jumps_by_value = 7
+# A fall into the next function after a call to a panic whose summary may
+# return: its entry lr isn't proven RET (native/lift-pop-return).
+entry_lr_returns_call_fn = 2
 gap_targets = 165
 fn_words_not_proven = 55
 
@@ -597,8 +682,8 @@ planted_store = 0x08000288
 planted_hole = { drop_standin = 0x080001a4, names = "error: hard hole in f_080001a4 at 0x080001c0: CPU state: a stack switch" }
 
 [program.native-tasks.bars]
-lines = 71525
-lines_prelude = 1203
+lines = 26045
+lines_prelude = 1265
 functions = 122
 functions_iwram = 3
 functions_lifted = 113
@@ -610,6 +695,14 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 51
 hard_holes = 0
 blocks = 1752
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 8712
+bank_sp_calls = 270
+loops_not_for = 141
 load_const_ram = 0
 load_const_io = 13
 load_const_rom = 0
@@ -646,6 +739,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 61
 call_fn_four_complete = 0
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 gap_targets = 5
 # Raised 57 to 59 (native/fnref-emerald-speed; june's call, 2026-11-12,
 # d/raise-native-tasks-unproven-function). The 57 was evaluation order, not a
@@ -672,8 +766,8 @@ route = "units/native-dma-600.toml"
 planted_store = 0x08000180
 
 [program.native-dma.bars]
-lines = 48698
-lines_prelude = 1203
+lines = 18694
+lines_prelude = 1265
 functions = 107
 functions_iwram = 3
 functions_lifted = 104
@@ -685,6 +779,14 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 47
 hard_holes = 0
 blocks = 1259
+functions_in_match = 1
+blocks_in_match = 46
+compare_trees_left = 10
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 5997
+bank_sp_calls = 220
+loops_not_for = 120
 load_const_ram = 0
 load_const_io = 21
 load_const_rom = 0
@@ -721,6 +823,9 @@ sp_accesses_callers_frame = 2
 call_fn_calls = 65
 call_fn_four_complete = 60
 jumps_by_value = 8
+# A fall into the next function after a call to a panic whose summary may
+# return: its entry lr isn't proven RET (native/lift-pop-return).
+entry_lr_returns_call_fn = 1
 gap_targets = 80
 fn_words_not_proven = 61
 
@@ -736,8 +841,8 @@ route = "units/native-save-600.toml"
 planted_store = 0x080002ac
 
 [program.native-save.bars]
-lines = 70850
-lines_prelude = 1203
+lines = 25814
+lines_prelude = 1265
 functions = 112
 functions_iwram = 3
 functions_lifted = 109
@@ -749,6 +854,14 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
 blocks = 1723
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 8703
+bank_sp_calls = 263
+loops_not_for = 139
 load_const_ram = 0
 load_const_io = 12
 load_const_rom = 0
@@ -785,6 +898,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 61
 call_fn_four_complete = 56
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 55
 gap_targets = 5
 
@@ -798,8 +912,8 @@ route = "units/native-bios-region-601.toml"
 # (nowhere); agb/native-bios-region/src/main.rs.
 
 [program.native-bios-region.bars]
-lines = 70547
-lines_prelude = 1203
+lines = 25698
+lines_prelude = 1265
 functions = 114
 functions_iwram = 3
 functions_lifted = 111
@@ -811,6 +925,14 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
 blocks = 1724
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 8626
+bank_sp_calls = 268
+loops_not_for = 140
 load_const_ram = 0
 load_const_io = 15
 load_const_rom = 0
@@ -847,6 +969,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 63
 call_fn_four_complete = 58
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 59
 gap_targets = 11
 
@@ -861,8 +984,8 @@ route = "units/native-bios-affine-600.toml"
 # agb/native-bios-affine/src/main.rs.
 
 [program.native-bios-affine.bars]
-lines = 71579
-lines_prelude = 1203
+lines = 26020
+lines_prelude = 1265
 functions = 110
 functions_iwram = 3
 functions_lifted = 106
@@ -874,6 +997,14 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
 blocks = 1726
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 8796
+bank_sp_calls = 258
+loops_not_for = 139
 load_const_ram = 0
 load_const_io = 12
 load_const_rom = 0
@@ -910,6 +1041,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 61
 call_fn_four_complete = 56
 jumps_by_value = 9
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 56
 gap_targets = 5
 
@@ -926,8 +1058,8 @@ route = "units/native-serial-600.toml"
 planted_store = 0x0800017c
 
 [program.native-serial.bars]
-lines = 73140
-lines_prelude = 1203
+lines = 26634
+lines_prelude = 1265
 functions = 117
 functions_iwram = 3
 functions_lifted = 114
@@ -939,6 +1071,14 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 51
 hard_holes = 0
 blocks = 1758
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 9006
+bank_sp_calls = 270
+loops_not_for = 142
 load_const_ram = 0
 load_const_io = 16
 load_const_rom = 0
@@ -975,6 +1115,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 63
 call_fn_four_complete = 58
 jumps_by_value = 9
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 58
 gap_targets = 5
 
@@ -993,8 +1134,8 @@ route = "units/native-irq-wrapper-600.toml"
 planted_store = 0x080001f4
 
 [program.native-irq-wrapper.bars]
-lines = 71484
-lines_prelude = 1203
+lines = 26110
+lines_prelude = 1265
 functions = 118
 functions_iwram = 3
 functions_lifted = 116
@@ -1006,6 +1147,14 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
 blocks = 1744
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 8770
+bank_sp_calls = 273
+loops_not_for = 142
 load_const_ram = 0
 load_const_io = 17
 load_const_rom = 0
@@ -1042,6 +1191,7 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 65
 call_fn_four_complete = 60
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 60
 gap_targets = 5
 
@@ -1055,8 +1205,8 @@ route = "units/native-takes-600.toml"
 planted_flags = ["--takes-zeroed"]
 
 [program.native-takes.bars]
-lines = 70108
-lines_prelude = 1203
+lines = 25553
+lines_prelude = 1265
 functions = 113
 functions_iwram = 3
 functions_lifted = 110
@@ -1068,6 +1218,14 @@ four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 52
 hard_holes = 0
 blocks = 1714
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 8604
+bank_sp_calls = 262
+loops_not_for = 138
 load_const_ram = 0
 load_const_io = 12
 load_const_rom = 0
@@ -1104,5 +1262,436 @@ sp_accesses_callers_frame = 7
 call_fn_calls = 63
 call_fn_four_complete = 58
 jumps_by_value = 8
+entry_lr_returns_call_fn = 0
 fn_words_not_proven = 55
 gap_targets = 5
+
+[program.c-fnptr-agbcc]
+rom = "c/c-fnptr-agbcc.gba"
+route = "units/c-fnptr-agbcc-600.toml"
+# A C program (native/c-test-programs; c/README.md, c/fnptr/SCENE.md), built
+# by agbcc (GCC 2.95) with `just c-tests`: function pointers in a const
+# struct table (sObjOps), a callback list in RAM (gCallbacks) and a main
+# callback pointer. The planted store is main_cb_run's gState++.
+planted_store = 0x080005d4
+
+[program.c-fnptr-agbcc.bars]
+lines = 972
+lines_prelude = 1265
+functions = 18
+functions_iwram = 0
+functions_lifted = 18
+functions_unrecognised = 18
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 4
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 2
+hard_holes = 0
+blocks = 68
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 0
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 214
+bank_sp_calls = 13
+loops_not_for = 8
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 4
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 34
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 10
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 22
+pointer_unexplained = 0
+ref_unexplained = 43
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 12
+sp_accesses_callers_frame = 2
+call_fn_calls = 5
+call_fn_four_complete = 2
+jumps_by_value = 0
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 6
+gap_targets = 0
+
+[program.c-fnptr-gcc]
+rom = "c/c-fnptr-gcc.gba"
+route = "units/c-fnptr-gcc-600.toml"
+# A C program (native/c-test-programs; c/README.md, c/fnptr/SCENE.md), built
+# by modern arm-none-eabi-gcc with `just c-tests`: function pointers in a const
+# struct table (sObjOps), a callback list in RAM (gCallbacks) and a main
+# callback pointer. The planted store is main_cb_run's gState++.
+planted_store = 0x08000390
+
+[program.c-fnptr-gcc.bars]
+lines = 1036
+lines_prelude = 1265
+functions = 18
+functions_iwram = 0
+functions_lifted = 18
+functions_unrecognised = 18
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 4
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 2
+hard_holes = 0
+blocks = 78
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 0
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 240
+bank_sp_calls = 18
+loops_not_for = 9
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 4
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 30
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 10
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 22
+pointer_unexplained = 0
+ref_unexplained = 9
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 12
+sp_accesses_callers_frame = 2
+call_fn_calls = 5
+call_fn_four_complete = 2
+jumps_by_value = 0
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 10
+gap_targets = 0
+
+[program.c-switch-agbcc]
+rom = "c/c-switch-agbcc.gba"
+route = "units/c-switch-agbcc-600.toml"
+# A C program (native/c-test-programs; c/README.md, c/switch/SCENE.md), built
+# by agbcc (GCC 2.95) with `just c-tests`: two switches compiled to jump
+# tables, a byte-command script interpreter (script_run) and a pen's state
+# machine (pen_update), and a sparse one (tally) compiled to compares,
+# printed as a match (native/lift-switch-match). The planted store is
+# AgbMain's gCommands += script_run(...).
+planted_store = 0x080005ca
+
+[program.c-switch-agbcc.bars]
+lines = 963
+lines_prelude = 1265
+functions = 10
+functions_iwram = 0
+functions_lifted = 10
+functions_unrecognised = 10
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 1
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 0
+hard_holes = 0
+blocks = 87
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 0
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 249
+bank_sp_calls = 31
+loops_not_for = 5
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 1
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 5
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 55
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 4
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 33
+pointer_unexplained = 0
+ref_unexplained = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 4
+sp_accesses_callers_frame = 1
+call_fn_calls = 0
+call_fn_four_complete = 0
+jumps_by_value = 2
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 1
+gap_targets = 0
+
+[program.c-switch-gcc]
+rom = "c/c-switch-gcc.gba"
+route = "units/c-switch-gcc-600.toml"
+# A C program (native/c-test-programs; c/README.md, c/switch/SCENE.md), built
+# by modern arm-none-eabi-gcc with `just c-tests`: two switches compiled to jump
+# tables, a byte-command script interpreter (script_run) and a pen's state
+# machine (pen_update), and a sparse one (tally) compiled to compares,
+# printed as a match (native/lift-switch-match). The planted store is
+# AgbMain's gCommands += script_run(...).
+planted_store = 0x080005a0
+
+[program.c-switch-gcc.bars]
+lines = 1038
+lines_prelude = 1265
+functions = 10
+functions_iwram = 0
+functions_lifted = 10
+functions_unrecognised = 10
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 1
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 0
+hard_holes = 0
+blocks = 86
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 0
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 278
+bank_sp_calls = 39
+loops_not_for = 6
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 1
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 5
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 54
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 4
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 36
+pointer_unexplained = 0
+ref_unexplained = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 4
+sp_accesses_callers_frame = 1
+call_fn_calls = 0
+call_fn_four_complete = 0
+jumps_by_value = 2
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 1
+gap_targets = 0
+
+[program.c-chain-agbcc]
+rom = "c/c-chain-agbcc.gba"
+route = "units/c-chain-agbcc-600.toml"
+# A C program (native/c-test-programs; c/README.md, c/chain/SCENE.md), built
+# by agbcc (GCC 2.95) with `just c-tests`: structs passed by pointer down a
+# call chain (frame's stack Ctx through step_world, move_body and bounce)
+# and one returned by value (rect_union). The planted store is frame's gTotalHits += ctx.hits.
+planted_store = 0x0800058e
+
+[program.c-chain-agbcc.bars]
+lines = 1043
+lines_prelude = 1265
+functions = 13
+functions_iwram = 0
+functions_lifted = 13
+functions_unrecognised = 13
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 2
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 0
+hard_holes = 0
+blocks = 63
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 0
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 304
+bank_sp_calls = 17
+loops_not_for = 8
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 13
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 59
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 26
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 27
+pointer_unexplained = 0
+ref_unexplained = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 35
+sp_accesses_callers_frame = 4
+call_fn_calls = 0
+call_fn_four_complete = 0
+jumps_by_value = 0
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 1
+gap_targets = 0
+
+[program.c-chain-gcc]
+rom = "c/c-chain-gcc.gba"
+route = "units/c-chain-gcc-600.toml"
+# A C program (native/c-test-programs; c/README.md, c/chain/SCENE.md), built
+# by modern arm-none-eabi-gcc with `just c-tests`: structs passed by pointer down a
+# call chain (frame's stack Ctx through step_world, move_body and bounce)
+# and one returned by value (rect_union). The planted store is frame's gTotalHits += ctx.hits.
+planted_store = 0x08000550
+
+[program.c-chain-gcc.bars]
+lines = 1060
+lines_prelude = 1265
+functions = 13
+functions_iwram = 0
+functions_lifted = 13
+functions_unrecognised = 13
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 1
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 0
+hard_holes = 0
+blocks = 64
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 0
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 296
+bank_sp_calls = 19
+loops_not_for = 10
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 4
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 47
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 9
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 22
+pointer_unexplained = 0
+ref_unexplained = 1
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 12
+sp_accesses_callers_frame = 1
+call_fn_calls = 0
+call_fn_four_complete = 0
+jumps_by_value = 0
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 1
+gap_targets = 0

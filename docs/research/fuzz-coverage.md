@@ -692,8 +692,81 @@ screens, 29 to 31 for Japanese: help slots no ability reaches; scattered
 entries from 183 to 324; runs of four from 560 to 687, and 732 to 782:
 screens the sweep doesn't open), and 76 blobs outside the table: 44
 in `0x0845_0000` to `0x084A_FFFF`, 6 in `0x082C` to `0x082E`, the rest
-one to four at a time between `0x0893` and `0x08E9`. Not looked into
-further.
+one to four at a time between `0x0893` and `0x08E9`.
+
+**Who loads the 158** (assets/kirby-fuzz-last-misses, 2026-10-31, from
+`out/fuzz/kirby/scan/scan.toml` against katam's `katam.elf` symbols and
+the index tables read out of the ROM):
+
+- **70 of the 76 off-table blobs are likely not data**: each starts
+  inside a katam symbol (`gUnk_0845E108+0x54`, `gUnk_08D71FC8+0xc4cc`,
+  …) and no aligned ROM pointer leads to it. The 0x08D6-0x08E9 ones
+  repeat at the same offsets in six big symbols (`+0x2b0`, `+0xc4cc`,
+  `+0xc4dc`): one structure per language, read by the scan as LZ77
+  headers. The other six have a pointer: `gUnk_082D8498` and
+  `gUnk_082D8768` (from the ROM header area, 0x08000424 and 0x08000428),
+  `gUnk_0893EFC8`, `gUnk_08A1E720`, `sUnusedBgTileset` (named unused)
+  and `sCreditsEmptyTileset`. So about 88 of the 158 are real.
+- **Help slots 29 to 31** in each language (18 entries):
+  `sHelpMenuUnkTiledBGsIndices[language][2 + ability]` with abilities
+  27 to 29, which don't exist (`KIRBY_ABILITY_COUNT` is 27). Reachable
+  only by writing 27 to 29 into `ability` before START.
+- **The main menu, `gUnk_08385C14[gLanguage][16]`** (`code_08138D64.c`):
+  columns 14 and 15 (`sub_081404AC`, `sub_0813FF6C`; entries 313 to 324
+  and 670 to 685) are missed in every language. Columns 3, 4 and 6
+  (`sub_0813D550`, `sub_0813D784`, `sub_0813D364`) are missed in some
+  languages and reached in others (column 13 in Italian too), so the
+  masher reaches them by luck.
+  The menu is a task whose state is a function pointer (`a1->unk9CC`);
+  a sweep could set it to each state function.
+- **The sub-game menu**, `gUnk_082DE8DC`, `…90C`, `…93C` and `…96C`
+  `[game][gLanguage]` (`subgame_menu.c`): games 0 to 2 in Japanese
+  and English (entries 560 to 628). The other languages and game 3 are
+  reached.
+- **The link screen with `gUnk_02038580 == 1`**: `gUnk_082EC784`
+  (`multi_08032E98.c`; entries 672 to 687, three apart). The sweep reaches
+  the `== 0` version (`gUnk_082EC778`).
+- **`gUnk_08387FF0[gLanguage][0..3]`** (`code_0814EBE4.c`, entries 732
+  to 745): a screen with no katam name; its creator isn't traced yet.
+- **Entry 776**: `gUnk_082DE698[0]` in `sub_0801DD20` (`code_0801DA58.c`).
+- Not traced: 183 and 204 to 224 (every fourth entry).
+
+**The sweep for them** (assets/kirby-fuzz-last-misses, 2026-11-18):
+18 more screen items (35 in all) and three more help slots (30), each
+in six languages. Two new tools in `kirby.rs`: RAM written after the
+fade, before the creator (`gUnk_02038580 = 1`, a guest
+`gLocalPlayerId`); and a screen's task found in `gTasks` by its `main`
+and its state pointer set to the function that draws the missed
+background (the menu's columns 3, 4, 6, 13, 14 and 15; the link
+screen's `sub_080330A4`; the sub-game menu's `sub_0801F8EC`; the 100%
+screen's `sub_0814ED78`, set as the task is made, since its first
+state recounts the file's completion and moves on). The help slots
+past the last ability are reached by writing 27 to 29 once the pause
+menu is up. Also the guest's sub-game menu (`sub_0801E6C4`), the
+send screen (`sub_0801E754`) and the mirror's map (`sub_0801DFE8`).
+Poking the help ability before the pause, or the link mode before the
+fade, or waiting two frames before setting the 100% state, all missed
+in 10-minute trial runs.
+
+The same `just kirby-fuzz` (12 workers, 45 minutes, 4.83 million
+frames, 6,966 random runs, 1,399 sweep items, 922 faults):
+
+| minutes | blobs reached | of 1,202 | before |
+|---:|---:|---:|---:|
+| 5 | 628 | 52.2% | 961 |
+| 10 | 1,102 | 91.7% | 1,035 |
+| 15 | 1,107 | 92.1% | 1,038 |
+| 30 | 1,110 | 92.3% | 1,041 |
+| 45 | 1,113 | **92.6%** | 1,044 (86.9%) |
+
+(Slower to start than before: the screen phase is longer and the
+machine ran another lane's jobs.) **Still missed, 89**: 15 table
+entries (183, 204 to 224 every fourth, 262 and 274, which are
+French and Japanese menu column 4 that the forced state reaches in
+the other languages, and 777 to 782), and 74 off-table blobs: the 70
+scan false positives and four with a pointer (`gUnk_082D8498`,
+`gUnk_082D8768`, `gUnk_0893EFC8`, `gUnk_08A1E720`). Of the 158, 69
+are reached; of the 88 that looked real, 19 are still missed.
 
 **Generic and Emerald-only.**
 
@@ -702,7 +775,7 @@ further.
 | coverage | instructions, ROM loads, provenance bitmaps of ROM bytes reaching palette, VRAM, OAM | | |
 | corpus | kept states, tournament pick, shared corpus and trades, random presses, logs | story seeds (pick weight) | |
 | states | route presses; `core::call` to start a game's own function | crafted and mutated saves (`emerald-save`), story saves, a TAS's mGBA states | doors to rooms, abilities |
-| sweeps | the worker's share of a list (`index`, `of`) | species, trainers, maps, Pokédex, bag, contests, Frontier: save blocks, `CB2_InitBattle`, scripts in RAM | rooms, abilities, screens through the game's fade, the pause help, languages by a patched ROM constant |
+| sweeps | the worker's share of a list (`index`, `of`) | species, trainers, maps, Pokédex, bag, contests, Frontier: save blocks, `CB2_InitBattle`, scripts in RAM | rooms, abilities, screens through the game's fade (with RAM pokes, or a task put in a state), the pause help, languages by a patched ROM constant |
 | screen / place | readers a game gives | `gMain.callback2` / map | `stateFn` / room |
 | score | the static scan and its curve | pret's file list (`assets-coverage`), `report.rs`'s pret functions | |
 

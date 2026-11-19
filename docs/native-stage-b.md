@@ -102,7 +102,8 @@ any real game.
   recompiler at `--timing native` ends a block after a store that folds
   to `IME`; the lift's `hw::write_ime` runs what's pending, and the lift
   sets `bank_sp(g, r13);` (the current mode's bank) before every store that may reach I/O so the
-  handler runs on the right stack. Control `--ime-at-waits`; program
+  handler runs on the right stack (once per run of such stores at one sp,
+  native/lift-bank-sp-once). Control `--ime-at-waits`; program
   `agb/native-ime-release` (frame 601 matches mGBA).
 - **Task switchers on host coroutines** (`native/task-coroutines`). Done:
   a stack switch is a hard hole; the prelude's `task_resume` and kin run
@@ -325,8 +326,9 @@ a bar lowered". After that, three lines of work can go side by side:
   typed pointers wait on RAM globals and stack locals, since a pointer is
   typed by the object it points into; heap pointers wait on those.
 
-Not filed, for stage C or later: the 8 jumps by value per program as
-`match` (the structuring plan, unused so far), the functions whose
+Not filed, for stage C or later: the 8 jumps by value per program as a
+`match` on the target's code (the structuring plan takes them as jumps to
+labels; native/lift-structured), the functions whose
 callee-saves aren't proven (soft: each function keeps its own r4-r11),
 escaping stack slots as `&mut`, and replacing agb's allocator. Also not
 filed: discovery's own fix for the gaps the lifter decodes (a `bl`'s

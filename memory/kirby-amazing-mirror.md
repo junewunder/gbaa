@@ -26,3 +26,8 @@ hook: katam matches our ROM; gKirbys at 0x02020EE0; Lua keysRead drives Kirby on
   (1 = English; 0 Japanese, 2 German, 3 French, 4 Spanish, 5 Italian), not RAM: patch a ROM copy.
   `sub_08020428(callback)` fades out, destroys every task, resets the heaps, then calls callback:
   call it between frames to reach any screen (`crates/fuzz/src/kirby.rs`'s SCREENS lists them).
+- A screen's state by hand (assets/kirby-fuzz-last-misses): tasks are `gTasks` (0x030019F0, 0x80 of
+  0x14 bytes: `structOffset` +6, `main` +8, `flags` +0x12, 0x10 = EWRAM); the struct is at
+  0x03000000 + offset (EWRAM: 0x02000000 + offset*4). Most screens keep a state function pointer
+  in it (main menu +0x9CC, sub-game menu +0x154, link +0x40): set it to reach a drawing state.
+  The link code rewrites `gUnk_02038580` on its own; write it again just before the state.

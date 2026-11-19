@@ -30,6 +30,11 @@
 //! #                         may differ from the interpreter's, since compiled
 //! #                         code ticks once per block (docs/codegen-design.md,
 //! #                         Timing), and why (both or neither)
+//! # regs_block_timed_why = "…"  why, when this is the route's last
+//! #                         checkpoint, the recompiled build may end with
+//! #                         other registers than the interpreter: the
+//! #                         block-timed interpreter (`--interp-blocks`)
+//! #                         must end with the recompiled build's
 //! ```
 //!
 //! `$HOME` and `$GBAA_DATA` in paths are expanded. Frames count from 1,
@@ -80,6 +85,7 @@ pub struct Checkpoint {
     #[serde(default)]
     pub block_timed: Vec<u64>,
     pub block_timed_why: Option<String>,
+    pub regs_block_timed_why: Option<String>,
 }
 
 impl Checkpoint {
@@ -273,6 +279,7 @@ mgba_why = "known"
 min_compiled = 0.5
 block_timed = [6, 69]
 block_timed_why = "a store mid-block"
+regs_block_timed_why = "a poll mid-block"
 "#;
 
     #[test]
@@ -283,6 +290,10 @@ block_timed_why = "a store mid-block"
         assert_eq!(r.frames(), 70);
         assert_eq!(r.checkpoints[1].mgba_want(), "0123456789abcded");
         assert_eq!(r.checkpoints[0].mgba_want(), "0123456789abcdef");
+        assert_eq!(
+            r.checkpoints[1].regs_block_timed_why.as_deref(),
+            Some("a poll mid-block")
+        );
         let cut = Route::parse(ROUTE, &vars())
             .unwrap()
             .through("one")
