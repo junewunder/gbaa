@@ -173,11 +173,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   tables and short line programs mended first): `src` and `proto` on
   functions, `type` on data, `[locals]` (a row per range of a location list),
   `[lines]` and `[types]`, and a `dwarf:` report line; and from the tree's `include/constants/` and
-  `src/`, `[values]`: the `#define` families fields take
-  (`docs/mod-view-design.md`, "Value names"), and the enums (the headers'
-  `enum`s and `MAKE_ENUM`s, and the DWARF's) a field or global takes by its
-  C type, a global's from the DWARF or the headers' `extern`s
-  (`globals = [...]`; native/lift-value-names), with a `values:` line; and
+  `src/`, `[values]`: the `#define` families fields take, and the enums a field or global takes by its C type (`docs/mod-view-design.md`, "Value names"), with a `values:` line; and
   the tree's `charmap.txt` as `[text]`, for the readable print's string
   comments ("Text"), with a `text:` line (none for a game
   `crates/codegen/text-tables.toml` lists: its own table loads at print
