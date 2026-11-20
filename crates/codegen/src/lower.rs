@@ -443,7 +443,6 @@ fn text_notes(
     if ctx.base != ROM_BASE {
         return out;
     }
-    let cm = names.text.as_ref();
     let mut said = Vec::new();
     let mut insn = None;
     for (i, inst) in insts.iter().enumerate() {
@@ -455,71 +454,87 @@ fn text_notes(
             Op::Pool(x) => x,
             _ => continue,
         };
-        let Some(bytes) = x
-            .checked_sub(ROM_BASE)
-            .and_then(|o| ctx.rom.get(o as usize..))
-            .filter(|b| !b.is_empty())
-        else {
-            continue;
-        };
-        // A callback's word is a function's key, not text, nor is code
-        // data. Code only the pointer scan found may be a table of
-        // pointers it took for code (Metroid's text tables): a table note
-        // may still say what it leads to.
-        let code = ctx.disc.code.get(&(x & !1)).map(|c| c.evidence);
-        if said.contains(&x)
-            || names.functions.contains_key(&x)
-            || code == Some(analysis::discovery::Evidence::Confirmed)
-        {
+        if said.contains(&x) {
             continue;
         }
-        let scanned = code.is_some();
-        // The datum it lands in: its DWARF type, and the bytes left in it.
-        let name = names.data_at(x);
-        let item = name.and_then(|_| names.data.range(..=x).next_back());
-        let note = match cm {
-            Some(cm) => {
-                let ty = item.and_then(|(_, d)| d.proto.as_deref());
-                let size = item.and_then(|(&k, d)| Some(d.size? as u32 - (x - k)));
-                let direct = if scanned {
-                    None
-                } else {
-                    cm.note(x, bytes, name, ty, size)
-                };
-                direct.or_else(|| {
-                    // Text reached through a table of pointers.
-                    let at = match name {
-                        Some((n, 0)) => n.to_string(),
-                        Some((n, off)) => format!("{n}+{off}"),
-                        None => format!("0x{x:08x}"),
-                    };
-                    let size = |a: u32| names.data.get(&a).and_then(|d| d.size).map(|n| n as u32);
-                    let label = |a: u32| match names.data_at(a) {
-                        Some((n, 0)) => Some(n.to_string()),
-                        _ => None,
-                    };
-                    cm.table_note(x, ctx.rom, &at, &size, &label)
-                })
-            }
-            None if scanned => None,
-            None => {
-                let after = x.saturating_add(1);
-                let next = [
-                    ctx.pointed().range(after..).next().copied(),
-                    names.data.range(after..).next().map(|(&k, _)| k),
-                ]
-                .into_iter()
-                .flatten()
-                .min();
-                crate::text::Preview::get().note(x, bytes, next, name)
-            }
-        };
-        if let Some(n) = note {
+        if let Some(n) = word_note(ctx, names, x, true) {
             said.push(x);
             out.entry(insn.unwrap_or(i)).or_default().push(n);
         }
     }
     out
+}
+
+/// The text note for a pool word `x` of code run from ROM ([`text_notes`],
+/// one word's): `gText_MainMenuNewGame: "NEW GAME"`, a table of pointers'
+/// strings, or with `preview` and a map with no `[text]`, the word's
+/// bytes. `None` where `x` isn't text (a function's key, confirmed code,
+/// bytes that don't decode). The native lift's comments take it without
+/// `preview` (unit `native/lift-text`).
+pub(crate) fn word_note(
+    ctx: &Ctx,
+    names: &crate::names::SourceMap,
+    x: u32,
+    preview: bool,
+) -> Option<String> {
+    use analysis::program::ROM_BASE;
+    if ctx.base != ROM_BASE {
+        return None;
+    }
+    let cm = names.text.as_ref();
+    let bytes = x
+        .checked_sub(ROM_BASE)
+        .and_then(|o| ctx.rom.get(o as usize..))
+        .filter(|b| !b.is_empty())?;
+    // A callback's word is a function's key, not text, nor is code
+    // data. Code only the pointer scan found may be a table of
+    // pointers it took for code (Metroid's text tables): a table note
+    // may still say what it leads to.
+    let code = ctx.disc.code.get(&(x & !1)).map(|c| c.evidence);
+    if names.functions.contains_key(&x) || code == Some(analysis::discovery::Evidence::Confirmed) {
+        return None;
+    }
+    let scanned = code.is_some();
+    // The datum it lands in: its DWARF type, and the bytes left in it.
+    let name = names.data_at(x);
+    let item = name.and_then(|_| names.data.range(..=x).next_back());
+    match cm {
+        Some(cm) => {
+            let ty = item.and_then(|(_, d)| d.proto.as_deref());
+            let size = item.and_then(|(&k, d)| Some(d.size? as u32 - (x - k)));
+            let direct = if scanned {
+                None
+            } else {
+                cm.note(x, bytes, name, ty, size)
+            };
+            direct.or_else(|| {
+                // Text reached through a table of pointers.
+                let at = match name {
+                    Some((n, 0)) => n.to_string(),
+                    Some((n, off)) => format!("{n}+{off}"),
+                    None => format!("0x{x:08x}"),
+                };
+                let size = |a: u32| names.data.get(&a).and_then(|d| d.size).map(|n| n as u32);
+                let label = |a: u32| match names.data_at(a) {
+                    Some((n, 0)) => Some(n.to_string()),
+                    _ => None,
+                };
+                cm.table_note(x, ctx.rom, &at, &size, &label)
+            })
+        }
+        None if scanned || !preview => None,
+        None => {
+            let after = x.saturating_add(1);
+            let next = [
+                ctx.pointed().range(after..).next().copied(),
+                names.data.range(after..).next().map(|(&k, _)| k),
+            ]
+            .into_iter()
+            .flatten()
+            .min();
+            crate::text::Preview::get().note(x, bytes, next, name)
+        }
+    }
 }
 
 /// The readable form's comment at a call to `target` in `gb` that passes

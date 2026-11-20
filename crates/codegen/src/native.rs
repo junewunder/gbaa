@@ -209,6 +209,11 @@ use globals::{Globals, Layout, Obj, Place};
 use metrics::{Metrics, Where};
 use shape::{Shape, Shapes};
 
+/// What starts a comment giving the text a constant points at
+/// ([`Holes::text`]): `// text: sFileScreenTextPointers[2] …: ["Start
+/// Game", …]`. Not lifted code: `lines` leaves these lines out.
+pub const TEXT_NOTE: &str = "// text: ";
+
 /// The prelude every lifted crate starts with, at the guest layout.
 pub const PRELUDE: &str = include_str!("native/prelude.rs");
 
@@ -363,6 +368,13 @@ pub struct Holes {
     /// unit `native/lift-typed-access`). `None`: the files give no types,
     /// or `--no-field-types`.
     pub fields: Option<std::sync::Arc<fields::Maps>>,
+    /// The same files' map, where it has a text table (its `[text]`, or
+    /// the game's own, `crate::text::Table`): a constant pointing at text,
+    /// or at a table of pointers to it, gets a `// text: …` comment above
+    /// the statement that uses it, as the mod view's notes
+    /// ([`crate::lower::word_note`]; unit `native/lift-text`). Comments
+    /// only: `lines` leaves them out, `text_notes` counts them.
+    pub text: Option<std::sync::Arc<crate::names::SourceMap>>,
     /// Where `Ram`'s globals are (`gbaa-lift --layout`): the guest's
     /// offsets, or the play layout's order ([`globals::Layout`]).
     pub layout: Layout,
@@ -1636,10 +1648,21 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let prelude = pre.lines().count();
     let all_lines: usize = files.files.iter().map(|(_, t)| t.lines().count()).sum();
     let const_lines = named.map_or(0, |n| n.const_lines);
+    // The text comments ([`Holes::text`]) aren't lifted code either.
+    let text_notes: usize = files
+        .files
+        .iter()
+        .map(|(_, t)| {
+            t.lines()
+                .filter(|l| l.trim_start().starts_with(TEXT_NOTE))
+                .count()
+        })
+        .sum();
     m.push(
         "lines",
-        n(all_lines - files.wiring - prelude - const_lines - type_lines),
+        n(all_lines - files.wiring - prelude - const_lines - type_lines - text_notes),
     );
+    m.push("text_notes", n(text_notes));
     m.push("lines_prelude", n(prelude));
     m.push("lines_types", n(type_lines));
     m.push("functions", n(n_funcs));
@@ -4095,6 +4118,30 @@ impl FnPrinter<'_, '_> {
         (typed, objs, refs)
     }
 
+    /// The text the block's constants point at (unit `native/lift-text`),
+    /// by the constant's inst: each address once, where the map has a
+    /// text table ([`Holes::text`]). One line each: a line break in the
+    /// text prints as `\n`.
+    fn text_notes(&self, insts: &[Inst]) -> BTreeMap<usize, String> {
+        let mut out = BTreeMap::new();
+        let Some(map) = self.holes.text.as_deref() else {
+            return out;
+        };
+        let mut said = BTreeSet::new();
+        for (i, inst) in insts.iter().enumerate() {
+            let (Op::Const(x) | Op::Pool(x)) = inst.op else {
+                continue;
+            };
+            if !(0x0800_0000..0x0a00_0000).contains(&x) || !said.insert(x) {
+                continue;
+            }
+            if let Some(n) = crate::lower::word_note(self.ctx, map, x, false) {
+                out.insert(i, n.replace('\r', "\\r").replace('\n', "\\n"));
+            }
+        }
+        out
+    }
+
     fn block(&mut self, insts: &[Inst], xs: &[ExitInfo], thumb: bool) -> String {
         let mut s = String::new();
         let mut at = 0u32;
@@ -4224,6 +4271,13 @@ impl FnPrinter<'_, '_> {
         // label, how many arms before the rest fall off, and where the
         // rest starts.
         let mut open_mark: Option<(usize, usize, usize)> = None;
+        let mut notes = self.text_notes(insts);
+        let mut pending: Vec<String> = Vec::new();
+        let flush = |s: &mut String, p: &mut Vec<String>| {
+            for n in p.drain(..) {
+                writeln!(s, "{ind}{TEXT_NOTE}{n}").unwrap();
+            }
+        };
         for (i, inst) in insts.iter().enumerate() {
             let id = ValueId(i as u32);
             if i < from {
@@ -4231,6 +4285,15 @@ impl FnPrinter<'_, '_> {
                     at = a;
                 }
                 continue;
+            }
+            // The text a constant points at, above the next statement
+            // printed: its `let`, or one it prints inside. A form may
+            // print it whole, the constant's own value unused.
+            if let Some(n) = notes.remove(&i)
+                && !dead[i]
+                && !skip[i]
+            {
+                pending.push(n);
             }
             if dead[i] || skip[i] || ((pure(&inst.op) || quiet[i]) && !used[i]) {
                 continue;
@@ -4265,6 +4328,7 @@ impl FnPrinter<'_, '_> {
                     continue;
                 }
                 if i == t.run.at() {
+                    flush(&mut s, &mut pending);
                     self.mark = direct.filter(|_| closers.is_empty());
                     let m = self.print_switch(t, arms, insts, xs, thumb, &skip);
                     self.mark = None;
@@ -4295,6 +4359,9 @@ impl FnPrinter<'_, '_> {
             if let Op::SetFlag(..) = inst.op {
                 self.soft.flag_writes += 1;
                 self.soft.dead_flag_writes += u64::from(unread[i]);
+            }
+            if !matches!(inst.op, Op::Insn(_) | Op::Timing(_) | Op::YieldFlag(..)) {
+                flush(&mut s, &mut pending);
             }
             let guard = inst.guard.map(|g| self.whole(g));
             let stmt = |s: &mut String, body: String| match &guard {
@@ -6969,6 +7036,54 @@ mod tests {
         let (reset, m) = countdown(&[SPIN], &old);
         assert!(reset.contains("'l1: loop {"), "{reset}");
         assert_eq!(m.get("loops_for"), Some(0));
+    }
+
+    /// A pool word pointing at text the map's `[text]` decodes gets the
+    /// mod view's note above the statement that uses it (unit
+    /// `native/lift-text`); `lines` leaves the comment out, and without
+    /// the map the text is the same but for it.
+    #[test]
+    fn a_constant_pointing_at_text_gets_its_text_as_a_comment() {
+        let mut words = [0xE1A0_0000u32; 0x10];
+        words[0] = 0xE59F_0010; // ldr r0, =0x08000020
+        words[1] = 0xE3A0_1403; // mov r1, #0x03000000
+        words[2] = 0xE581_0000; // str r0, [r1]
+        words[3] = 0xEAFF_FFFE; // b .
+        words[6] = 0x0800_0020;
+        let mut rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        rom.truncate(0x20);
+        rom.extend(b"HI THERE\xff\0\0\0");
+        let sha = crate::names::sha1_hex(&rom);
+        let chars: Vec<String> = "HI TER"
+            .chars()
+            .map(|c| format!("{{ bytes = \"{:02X}\", char = \"{c}\" }}", c as u32))
+            .collect();
+        let map = format!(
+            "[map]\nrom_sha1 = \"{sha}\"\n[data]\n0x08000020 = {{ name = \"sHello\", size = 9 }}\n\
+             [text]\nchars = [{}]\n",
+            chars.join(", ")
+        );
+        let names = crate::names::SourceMap::from_texts(&sha, &[&map]).unwrap();
+        assert!(names.text.is_some());
+        let with = Holes {
+            text: Some(std::sync::Arc::new(names)),
+            ..Holes::parse("").unwrap()
+        };
+        let text = |h: &Holes| {
+            let l = lift(&rom, "t", h);
+            let t: String = l.files.iter().map(|(_, t)| t.as_str()).collect();
+            (t, l.metrics)
+        };
+        let (t, m) = text(&with);
+        let (plain, pm) = text(&Holes::parse("").unwrap());
+        let note = format!("{TEXT_NOTE}sHello: \"HI THERE\"");
+        let at = t.find(&note).unwrap_or_else(|| panic!("{note} in {t}"));
+        let next = t[at..].lines().nth(1).unwrap();
+        assert!(next.contains("0x8000020"), "{next}");
+        assert_eq!(t.replace(&format!("                {note}\n"), ""), plain);
+        assert_eq!(m.get("text_notes"), Some(1));
+        assert_eq!(pm.get("text_notes"), Some(0));
+        assert_eq!(m.get("lines"), pm.get("lines"));
     }
 
     /// A countdown whose register a block after the loop reads stays a
