@@ -147,6 +147,7 @@ build for the host.
   Result<u32, Exit>` (`()`, `u32` or a tuple), with a four-register
   adapter `a_<key>` for `FNS` and `ENTRY`; four-register functions
   without a summary hole are 0 (bar 0).
+- **No `Result` where nothing exits**: `native::no_result`; `functions_result_unneeded` 0.
 - **Function addresses followed to every use** (`native/fnref-flow`).
   Done (`crates/codegen/src/native/fnref.rs`, whose module doc is the
   rule and the closed world it rests on): a whole-program abstract run
