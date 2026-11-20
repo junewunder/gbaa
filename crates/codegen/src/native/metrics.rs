@@ -42,7 +42,9 @@
 //!   native/lift-typed-access) prints as a named field over the same
 //!   byte access, so it keeps its count here too: `named_field_accesses`
 //!   (no bar: it should rise) and, where it lands inside a field,
-//!   `named_inside_accesses`. A lift with types also has
+//!   `named_inside_accesses`; of either, `named_index_accesses` (no
+//!   bar) print as an element by a variable index (`.idx(i)`, `.add(i)`;
+//!   native/lift-index-names). A lift with types also has
 //!   `computed_unknown_unnamed`, barred: the `computed_unknown` accesses
 //!   no type names. Of those through a typed pointer that hold bitfields
 //!   (`super::bitfields`, native/lift-bitfields): `bitfield_sets` print
@@ -327,6 +329,7 @@ pub const UNBARRED: &[&str] = &[
     "lines_types",
     "named_field_accesses",
     "named_inside_accesses",
+    "named_index_accesses",
     "bitfield_sets",
     "data_constants_named",
     "ref_types",
