@@ -423,6 +423,10 @@ pub struct Holes {
     /// of a typed global ([`typed_fields`]; unit
     /// `native/mirror-katam-names`).
     pub types: Option<std::sync::Arc<crate::types::Types>>,
+    /// The same files' types where a field or global takes a family of
+    /// their named values (`[values]`): a constant stored to or compared
+    /// with one prints as its name (unit `native/lift-value-names`).
+    pub values: Option<std::sync::Arc<crate::types::Types>>,
     /// The same files' types, prototypes and DWARF variables: accesses
     /// through a pointer they type print as its named fields ([`fields`];
     /// unit `native/lift-typed-access`). `None`: the files give no types,
@@ -1072,6 +1076,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     if let Some(t) = &holes.types {
         globals.type_structs(t, &ram, &ranges);
     }
+    // A field or global that takes named values prints them
+    // (native/lift-value-names).
+    if let Some(t) = &holes.values {
+        globals.name_values(t.clone());
+    }
     // ROM's objects: what the computed loads the value sets bound to ROM
     // reach (native/rom-data-statics).
     let rom_data = RomData::carve(&rom_ranges, rom.len() as u32);
@@ -1301,6 +1310,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     banked: BTreeMap::new(),
                     field_at: BTreeMap::new(),
                     inl: Vec::new(),
+                    load_values: BTreeMap::new(),
                     printed: BTreeSet::new(),
                     fall: None,
                     tail_edge: false,
@@ -1544,6 +1554,18 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     }
     let io_lines = io_consts.lines().count();
     main.push_str(&io_consts);
+    // The named values the code stores and compares (native/lift-value-
+    // names): like the I/O registers' names, not lifted code.
+    let mut value_consts = String::new();
+    let value_names = soft.value_names.take();
+    if !value_names.is_empty() {
+        value_consts.push_str("\n/// The named values (the names files' `[values]`: the decomp's constants and enums) a field or global the code stores or compares takes.\n");
+        for (n, x) in &value_names {
+            writeln!(value_consts, "pub const {n}: u32 = {x};").unwrap();
+        }
+    }
+    let io_lines = io_lines + value_consts.lines().count();
+    main.push_str(&value_consts);
     writeln!(main, "\npub const NAME: &str = {name:?};").unwrap();
     writeln!(main, "pub const ENTRY: Fn = {};\n", plain(entry)).unwrap();
     let named =
@@ -1896,6 +1918,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             - text_lines),
     );
     m.push("io_named", soft.io_named);
+    m.push("values_named", soft.values_named.get());
     m.push("io_unnamed", soft.io_unnamed);
     m.push("text_notes", n(text_notes));
     m.push("line_notes", n(line_notes));
@@ -3160,6 +3183,11 @@ struct Soft {
     io_regs: BTreeSet<&'static str>,
     io_named: u64,
     io_unnamed: u64,
+    /// The named values (`[values]`; native/lift-value-names) a store or
+    /// compare prints, declared in `main.rs` with their values; and how
+    /// many constants printed as one (`value_names`).
+    value_names: std::cell::RefCell<BTreeMap<String, u32>>,
+    values_named: std::cell::Cell<u64>,
     /// The `let`s of IR values printed (`value_lets`), and the values
     /// printed inside their use instead ([`FnPrinter::inline`]).
     value_lets: u64,
@@ -3308,6 +3336,16 @@ struct FnPrinter<'a, 'b> {
     /// The current block's values printed inside their use, by value:
     /// their expressions ([`FnPrinter::inline`]; `None`, a `let`).
     inl: Vec<Option<String>>,
+    /// The current block's loads of a field or global that takes a family
+    /// of named values (`[values]`; native/lift-value-names), by inst: the
+    /// names by value, which a compare of the load with one prints.
+    load_values: BTreeMap<usize, BTreeMap<u32, String>>,
+}
+
+/// The value of a constant as the printer writes it (`0x2u32`).
+fn const_text(e: &str) -> Option<u32> {
+    let h = e.strip_prefix("0x")?.strip_suffix("u32")?;
+    u32::from_str_radix(&h.replace('_', ""), 16).ok()
 }
 
 /// Whether an untyped store at `w` ([`FnPrinter::vsa_where`]) may reach
@@ -4780,6 +4818,10 @@ impl FnPrinter<'_, '_> {
         let ind = "                ";
         let from = std::mem::take(&mut self.rest_from);
         let (typed, objs, refs) = self.accesses(insts);
+        self.load_values = (0..insts.len())
+            .filter(|&i| matches!(insts[i].op, Op::Load { .. }))
+            .filter_map(|i| Some((i, self.access_values(insts, i, &typed, &refs)?)))
+            .collect();
         let banks = self.store_banks(insts, &typed, &objs, &refs);
         let banked = match self.banked.get(&self.cur) {
             Some(r) if r.len() == insts.len() => r.clone(),
@@ -5168,7 +5210,13 @@ impl FnPrinter<'_, '_> {
                         ""
                     };
                     // One term: a field's store casts it (`{val} as u16`).
-                    let val = format!("{}{plant}", self.val(value));
+                    // A constant one of the field's named values is that
+                    // name (native/lift-value-names).
+                    let named = konst(insts, value).and_then(|c| {
+                        let vs = self.access_values(insts, i, &typed, &refs)?;
+                        self.value_name(&vs, c)
+                    });
+                    let val = format!("{}{plant}", named.unwrap_or_else(|| self.val(value)));
                     let mem = match (&typed[i], &objs[i], refs[i]) {
                         (Some(p), _, _) => globals::store(p, bytes(width), &val),
                         (None, Some(o), _) => {
@@ -5260,9 +5308,9 @@ impl FnPrinter<'_, '_> {
                         (Some(_), Some(t)) if t.trim().is_empty() => {
                             let g = inst.guard.expect("a guarded exit");
                             let not = match (&self.inl[g.index()], &conds[g.index()]) {
-                                (Some(_), Some(c)) if c.takes_inlined() => {
-                                    c.not().text_with(&|x| self.val(x))
-                                }
+                                (Some(_), Some(c)) if c.takes_inlined() => c
+                                    .not()
+                                    .text_named(&|x| self.val(x), &|x, k| self.load_value(x, k)),
                                 _ => format!("!{}", self.val(g)),
                             };
                             writeln!(s, "{ind}if {not} {{").unwrap();
@@ -5303,6 +5351,48 @@ impl FnPrinter<'_, '_> {
         self.inl = outer;
         self.bound = outer_bound;
         s
+    }
+
+    /// The names of the values the field or global the access at inst `i`
+    /// reads or writes whole takes (`[values]`; native/lift-value-names),
+    /// by value: a typed global's ([`Place::values`]) or a field through a
+    /// pointer the names files type ([`fields::values`]).
+    fn access_values(
+        &self,
+        insts: &[Inst],
+        i: usize,
+        typed: &[Option<Place>],
+        refs: &[Option<HeapRef>],
+    ) -> Option<BTreeMap<u32, String>> {
+        if let Some(p) = &typed[i] {
+            return p.values.clone();
+        }
+        let r = refs[i]?;
+        if !r.named {
+            return None;
+        }
+        let (Op::Load { width, .. } | Op::Store { width, .. }) = insts[i].op else {
+            return None;
+        };
+        let maps = self.holes.fields.as_deref()?;
+        let at = self.field_at.get(&(self.cur, i))?;
+        fields::values(&maps.types, at, bytes(width)).cloned()
+    }
+
+    /// `k` by its name in `vs` (a field's named values), recorded for
+    /// `main.rs`'s declarations.
+    fn value_name(&self, vs: &BTreeMap<u32, String>, k: u32) -> Option<String> {
+        let n = vs.get(&k)?;
+        self.soft.value_names.borrow_mut().insert(n.clone(), k);
+        self.soft.values_named.set(self.soft.values_named.get() + 1);
+        Some(n.clone())
+    }
+
+    /// `k` by its name where `x` is the current block's load of a field
+    /// that takes it ([`FnPrinter::load_values`]): a compare's constant.
+    fn load_value(&self, x: ValueId, k: u32) -> Option<String> {
+        let vs = self.load_values.get(&x.index())?;
+        self.value_name(vs, k)
     }
 
     /// The printed pointer of the access at inst `i` through a pointer
@@ -5590,7 +5680,7 @@ impl FnPrinter<'_, '_> {
         form: Option<(ValueId, narrow::Form)>,
     ) -> String {
         if let Some(c) = cond {
-            return c.text_with(&|x| self.val(x));
+            return c.text_named(&|x| self.val(x), &|x, k| self.load_value(x, k));
         }
         match form {
             Some((x, form)) => form.print_with(&self.val(x), &|y| self.whole(y)),
@@ -6144,11 +6234,23 @@ impl FnPrinter<'_, '_> {
                 format!(
                     "f_{k:08x}(g, r13{})",
                     shape::regs(c.params)
-                        .map(|r| format!(", {}", self.reg(r)))
+                        .map(|r| format!(", {}", self.arg_reg(k, r)))
                         .collect::<String>()
                 ),
             ),
         }
+    }
+
+    /// Argument register `r` of a call of `k` as [`FnPrinter::reg`]
+    /// reads it, a constant one of the named values its parameter's type
+    /// takes as that name (native/lift-value-names).
+    fn arg_reg(&self, k: u32, r: usize) -> String {
+        let e = self.reg(r);
+        let named = const_text(&e).and_then(|c| {
+            let vs = self.holes.values.as_deref()?.values_of_arg(k, r)?;
+            self.value_name(vs, c)
+        });
+        named.unwrap_or(e)
     }
 
     /// What a call of `k`'s `x_` entry ([`taking`]) assigns its results

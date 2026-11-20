@@ -397,6 +397,94 @@ fn a_field_takes_the_define_family_pret_sets_it_with() {
 }
 
 #[test]
+fn a_field_or_global_takes_the_enum_its_type_is() {
+    use dwarf::{Field, Layout};
+    use values::*;
+    // mzm's MAKE_ENUM, a plain enum, comments, an explicit value, a
+    // reference to an earlier enumerator, and one left out whole.
+    let h = "MAKE_ENUM(s16, GameMode) {\n  GM_SOFT_RESET, // 0\n  GM_INTRO,\n  GM_TITLE\n};\n\
+             MAKE_ENUM(u8, SubMode) { SUB_A = 1, SUB_B, SUB_C = 5, SUB_D = SUB_A, SUB_COUNT };\n\
+             enum Odd { ODD_A = 1 << 2, ODD_B };\n\
+             typedef enum { ANON_A, ANON_B } Anon;\n";
+    let es = enums_in(h, "include/constants/game_state.h");
+    let got: Vec<(&str, Vec<u32>)> = es
+        .iter()
+        .map(|e| (e.name.as_str(), e.values.iter().map(|v| v.1).collect()))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("GameMode", vec![0, 1, 2]),
+            ("SubMode", vec![1, 2, 5, 1, 2])
+        ]
+    );
+    let ex =
+        externs_in("extern GameMode gMainGameMode;\nextern u8 gArr[4];\n/* extern Foo gNo; */\n");
+    assert_eq!(ex, [("gMainGameMode".to_string(), "GameMode".to_string())]);
+    // The DWARF's enum (c/switch's `enum PenState_`), its typedef a
+    // field's type.
+    let types = BTreeMap::from([
+        (
+            "enum PenState_".to_string(),
+            Layout::Enum {
+                size: 4,
+                values: vec![("PEN_IDLE".into(), 0), ("PEN_RIGHT".into(), 1)],
+            },
+        ),
+        (
+            "struct Pen".to_string(),
+            Layout::Struct {
+                size: 2,
+                fields: vec![
+                    Field {
+                        name: "state".into(),
+                        off: 0,
+                        size: 1,
+                        ty: "PenState".into(),
+                        bits: None,
+                    },
+                    Field {
+                        name: "step".into(),
+                        off: 1,
+                        size: 1,
+                        ty: "u8".into(),
+                        bits: None,
+                    },
+                ],
+            },
+        ),
+    ]);
+    let mut all = es.clone();
+    all.extend(dwarf_enums(&types));
+    let globals = BTreeMap::from([
+        ("gMainGameMode".to_string(), ("GameMode".to_string(), 2)),
+        ("gSub".to_string(), ("SubMode".to_string(), 1)),
+        // Wider than a register: not a scalar.
+        ("gWide".to_string(), ("GameMode".to_string(), 8)),
+    ]);
+    let fams = enum_families(&all, &types, &globals, &BTreeMap::new());
+    assert_eq!(fams["GameMode"].globals, ["gMainGameMode"]);
+    assert_eq!(fams["GameMode"].file, "include/constants/game_state.h");
+    assert_eq!(fams["PenState"].fields, ["struct Pen.state"]);
+    // SUB_COUNT is a bound; SUB_A and SUB_D share 1, so neither names it.
+    assert_eq!(
+        fams["SubMode"].names,
+        [("SUB_B".to_string(), 2), ("SUB_C".to_string(), 5)]
+    );
+    assert_eq!(fams["SubMode"].globals, ["gSub"]);
+    // What it writes loads as codegen reads it, and types the global.
+    let text = format!(
+        "[map]\nrom_sha1 = \"00\"\n[data]\n0x03000c70 = {{ name = \"gMainGameMode\", size = 2 }}\n{}",
+        toml(&fams)
+    );
+    let m = codegen::names::SourceMap::from_texts("00", &[&text]).unwrap();
+    assert_eq!(m.values["GameMode"].globals, ["gMainGameMode"]);
+    let vs = m.typed.values_of_global(0x0300_0c70).unwrap();
+    assert_eq!(vs[&1], "GM_INTRO");
+    assert!(m.typed.has_values());
+}
+
+#[test]
 fn a_declaration_types_a_label_by_its_name() {
     // agbcc writes `extern struct Kirby gKirbys[];`'s bound as `[1]`.
     assert_eq!(

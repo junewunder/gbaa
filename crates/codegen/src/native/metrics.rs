@@ -107,6 +107,12 @@
 //! (barred, at 0 on the C programs and Metroid). The registers' constants
 //! in `main.rs` are data, not in `lines`.
 //!
+//! Value names (`native/lift-value-names`): `values_named`, the constants
+//! a store to or compare with a field or global that takes a family of
+//! the names files' `[values]` prints by its name (`g.ram.gPen.state =
+//! PEN_RIGHT as u8`; no bar: it should rise). Their constants in
+//! `main.rs` are data, not in `lines`.
+//!
 //! Entries (`native/lift-one-entry`): `entries_beyond_one` counts the
 //! entries the lifted functions print beyond the one each needs (an
 //! extended entry `x_` something falls, jumps or calls into, or a named
@@ -313,6 +319,7 @@ pub const UNBARRED: &[&str] = &[
     "line_notes",
     "text_statics",
     "io_named",
+    "values_named",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each

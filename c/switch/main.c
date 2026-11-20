@@ -22,7 +22,11 @@ enum {
     CMD_DOT,
 };
 
-enum {
+/* A pen's state: a byte, its values an enum's (as mzm's MAKE_ENUM: the
+ * typedef is the field's type, the enum its values), which the names file
+ * links by that type (native/lift-value-names). */
+typedef u8 PenState;
+enum PenState_ {
     PEN_IDLE,
     PEN_RIGHT,
     PEN_DOWN,
@@ -44,7 +48,7 @@ struct Script {
 
 struct Pen {
     s16 x, y;
-    u8 state;
+    PenState state;
     u8 step;
     u16 color;
 };
@@ -84,7 +88,7 @@ u32 gFrame;
 u32 gCommands;
 u32 gTally;
 
-NOINLINE void pen_set(u8 state)
+NOINLINE void pen_set(PenState state)
 {
     gPen.state = state;
     gPen.step = 0;

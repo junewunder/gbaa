@@ -93,7 +93,13 @@ impl Global {
 /// The globals, by their start offset, and the names files' types that
 /// the struct globals are of.
 #[derive(Clone, Debug, Default)]
-pub struct Globals(pub BTreeMap<u32, Global>, Option<Arc<Types>>);
+pub struct Globals(
+    pub BTreeMap<u32, Global>,
+    Option<Arc<Types>>,
+    /// The names files' value names (`[values]`), where a field or
+    /// global takes a family of them (native/lift-value-names).
+    Option<Arc<Types>>,
+);
 
 /// How one access reaches its global: the place (`g.ram.d_…`,
 /// `g.ram.d_…[i]` or a struct's field path), its element's width, and the
@@ -105,6 +111,10 @@ pub struct Place {
     pub elem: u32,
     pub shift: u32,
     pub parts: Vec<(String, u32)>,
+    /// The names of the values the field or global takes, by value
+    /// (`[values]`; native/lift-value-names): only for an access of the
+    /// whole of it.
+    pub values: Option<BTreeMap<u32, String>>,
 }
 
 /// `ty` as the Rust type of a `Ram` field or a `ram_t` struct's field: a
@@ -186,6 +196,9 @@ fn struct_place(t: &Types, ty: &Ty, base: &str, off: u32, w: u32) -> Option<Plac
             elem: s,
             shift: o * 8,
             parts: Vec::new(),
+            values: (o == 0 && w == s)
+                .then(|| t.values_of(ty, &p).cloned())
+                .flatten(),
         });
     }
     // Over whole scalars, side by side.
@@ -207,6 +220,7 @@ fn struct_place(t: &Types, ty: &Ty, base: &str, off: u32, w: u32) -> Option<Plac
         elem: w,
         shift: 0,
         parts,
+        values: None,
     })
 }
 
@@ -305,7 +319,7 @@ impl Globals {
             );
             i = j;
         }
-        Globals(out, None)
+        Globals(out, None, None)
     }
 
     /// Type the globals the names files' `types` give a plain struct
@@ -448,12 +462,25 @@ pub mod ram_t {
         } else {
             format!("g.ram.{}[{i}]", g.name)
         };
+        let values = match self.2.as_deref() {
+            Some(t) if g.len == g.elem && off == g.lo && width == g.elem => {
+                t.values_of_global(guest(g.lo)).cloned()
+            }
+            _ => None,
+        };
         Some(Place {
             place,
             elem: g.elem,
             shift: (off - g.lo - i * g.elem) * 8,
             parts: Vec::new(),
+            values,
         })
+    }
+
+    /// Name the values a field or global takes (`[values]`;
+    /// native/lift-value-names) from `types`.
+    pub fn name_values(&mut self, types: Arc<Types>) {
+        self.2 = Some(types);
     }
 
     /// The typed access through a computed address that the value sets
@@ -844,6 +871,7 @@ format = 1
 [data]
 0x03000000 = {{ name = "gPen", size = 8, proto = "struct Pen" }}
 0x03000010 = {{ name = "gFlags", size = 4, proto = "union Flags" }}
+0x03000020 = {{ name = "gMode", size = 2 }}
 
 [types."struct Vec"]
 kind = "struct"
@@ -869,10 +897,43 @@ fields = [
   {{ name = "all", off = 0, size = 4, type = "u32" }},
   {{ name = "lo", off = 0, size = 2, type = "u16" }},
 ]
+
+[values."PenState"]
+fields = ["struct Pen.state"]
+globals = ["gMode"]
+names = [
+  {{ name = "PEN_IDLE", value = 0 }},
+  {{ name = "PEN_RIGHT", value = 1 }},
+]
 "#
         );
         let m = crate::names::SourceMap::from_texts(sha, &[&text]).unwrap();
         Arc::new(m.typed.clone())
+    }
+
+    #[test]
+    fn a_field_or_global_that_takes_named_values_has_them() {
+        let t = pen_types();
+        let names = BTreeMap::from([
+            (0x0300_0000, ("gPen".to_string(), 8)),
+            (0x0300_0020, ("gMode".to_string(), 2)),
+        ]);
+        let acc = [
+            (EWRAM + 4, 1),
+            (EWRAM + 6, 2),
+            (EWRAM + 0x20, 2),
+            (EWRAM + 0x20, 1),
+        ];
+        let mut g = Globals::carve(&acc, &[], &names);
+        g.type_structs(&t, &acc, &[]);
+        g.name_values(t.clone());
+        let vs = g.place(EWRAM + 4, 1).unwrap().values.unwrap();
+        assert_eq!(vs[&1], "PEN_RIGHT");
+        assert_eq!(g.place(EWRAM + 6, 2).unwrap().values, None);
+        let vs = g.place(EWRAM + 0x20, 2).unwrap().values.unwrap();
+        assert_eq!(vs[&0], "PEN_IDLE");
+        // A byte of it isn't the global's value.
+        assert_eq!(g.place(EWRAM + 0x20, 1).unwrap().values, None);
     }
 
     #[test]
