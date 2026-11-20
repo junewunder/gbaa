@@ -97,9 +97,10 @@
 //! (`native/whole-lift-memory`); with the changes below, Nightmare (5,177
 //! functions) settles: 31 to 35 minutes at 2.0 GB with the roads
 //! (`native/fnref-c-game-words`), 8 minutes at 0.45 GB in its lift
-//! (`native/nightmare-fn-flow-again`). Its lift still skips the flow, for
-//! precision, not cost: its callee sets are pile-wide (about 2,000
-//! functions each), which makes one spurious hard hole.
+//! (`native/nightmare-fn-flow-again`). Its callee sets are pile-wide
+//! (about 2,000 functions each), which once made spurious hard holes;
+//! since such a set is a large value whose calls count as incomplete
+//! (below), its lift runs the flow with none (`native/nightmare-flow-on`).
 //!
 //! **Large reads by reference** (`native/fnref-flow-emerald`). On a large
 //! game a read of the pile, of every cell, or of a ROM table by an unknown

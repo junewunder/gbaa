@@ -302,6 +302,8 @@ first tests stage A and the shortcuts on a real agbcc game that builds.
   `mods/kirby-nightmare/holes.toml`, `skip_fn_flow`; a `[[jump]]`'s
   targets are now followed and decoded): 1,552,382 lines in 428 modules,
   lift 48 s at 0.38 GB, the crate alone builds in 80 s, rustc 6.78 GB.
+  Since 2026-11-20 (`native/nightmare-flow-on`) without `skip_fn_flow`:
+  the flow-on lift has 0 hard holes and runs 600 of 600 frames.
 - **Kirby Amazing Mirror lifts with no hard holes and builds**
   (`native/mirror-lifts`). Done (2026-11-14, quack;
   `mods/kirby-mirror/holes.toml`, `skip_fn_flow`: 37 min without):
