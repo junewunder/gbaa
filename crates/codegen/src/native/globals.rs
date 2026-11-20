@@ -25,9 +25,21 @@
 //! byte in the field that holds it (`prelude_packed.rs`). A field's name
 //! is the names file's for the datum at its start, else `d_<guest
 //! address>`.
+//!
+//! A global the names files type as a struct (unit
+//! `native/lift-struct-globals`) is that struct, `#[repr(C)]` in the
+//! `ram_t` module beside `Ram`, so an access prints its field's path
+//! (`g.ram.gPen.color`) over the same bytes, not an element (`gPen[3]`):
+//! where the datum is exactly the global, the struct is plain (no union,
+//! no bitfield, every field at its type's alignment) and every access to
+//! it lands in one scalar field or covers whole ones, which it then
+//! reads or writes each in turn. Else it keeps its element type.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
+use std::sync::Arc;
+
+use crate::types::{Step, Ty, Types};
 
 /// EWRAM's size: IWRAM follows it in `Game::ram`.
 const EWRAM: u32 = 0x4_0000;
@@ -57,12 +69,18 @@ pub fn guest(off: u32) -> u32 {
 pub struct Global {
     pub lo: u32,
     pub len: u32,
+    /// The element's width, or for a struct its alignment.
     pub elem: u32,
     pub name: String,
+    /// The struct it is, if the names files type it as one it can be.
+    pub typed: Option<Ty>,
 }
 
 impl Global {
-    fn ty(&self) -> String {
+    fn ty(&self, types: Option<&Types>) -> String {
+        if let (Some(t), Some(ty)) = (types, &self.typed) {
+            return rust_ty(t, ty);
+        }
         let t = format!("u{}", self.elem * 8);
         if self.len == self.elem {
             t
@@ -72,17 +90,124 @@ impl Global {
     }
 }
 
-/// The globals, by their start offset.
+/// The globals, by their start offset, and the names files' types that
+/// the struct globals are of.
 #[derive(Clone, Debug, Default)]
-pub struct Globals(pub BTreeMap<u32, Global>);
+pub struct Globals(pub BTreeMap<u32, Global>, Option<Arc<Types>>);
 
-/// How one access reaches its global: the place (`g.ram.d_…` or
-/// `g.ram.d_…[i]`), its element's width, and the access's bit shift in it.
+/// How one access reaches its global: the place (`g.ram.d_…`,
+/// `g.ram.d_…[i]` or a struct's field path), its element's width, and the
+/// access's bit shift in it. Or, for an access over several whole fields
+/// of a struct, `parts`: each field's place and width, from the lowest.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Place {
     pub place: String,
     pub elem: u32,
     pub shift: u32,
+    pub parts: Vec<(String, u32)>,
+}
+
+/// `ty` as the Rust type of a `Ram` field or a `ram_t` struct's field: a
+/// pointer is a `u32`, a struct its `ram_t` struct.
+fn rust_ty(t: &Types, ty: &Ty) -> String {
+    match ty {
+        Ty::U8 => "u8".into(),
+        Ty::U16 => "u16".into(),
+        Ty::U32 | Ty::Ptr(_) => "u32".into(),
+        Ty::Array(e, n) => format!("[{}; {n}]", rust_ty(t, e)),
+        Ty::Named(n) => format!("ram_t::{}", t.marker(n).unwrap_or("u8")),
+        Ty::Bytes(n) => format!("[u8; {n}]"),
+    }
+}
+
+/// `ty`'s alignment as a `ram_t` struct lays it out, if it is plain
+/// ([`Types::plain`]) all the way down and each field is at its
+/// alignment.
+fn align(t: &Types, ty: &Ty) -> Option<u32> {
+    match ty {
+        Ty::U8 | Ty::Bytes(_) => Some(1),
+        Ty::U16 => Some(2),
+        Ty::U32 | Ty::Ptr(_) => Some(4),
+        Ty::Array(e, _) => align(t, e),
+        Ty::Named(n) => {
+            let (_, size, fs) = t.plain(n)?;
+            let mut a = 1;
+            for (_, off, fty) in fs {
+                let fa = align(t, fty)?;
+                if off % fa != 0 {
+                    return None;
+                }
+                a = a.max(fa);
+            }
+            (size % a == 0).then_some(a)
+        }
+    }
+}
+
+/// A scalar's width: what an access can name whole.
+fn scalar(ty: &Ty) -> Option<u32> {
+    match ty {
+        Ty::U8 => Some(1),
+        Ty::U16 => Some(2),
+        Ty::U32 | Ty::Ptr(_) => Some(4),
+        _ => None,
+    }
+}
+
+/// The steps as Rust: `.field` and `[i]`.
+fn steps(p: &[Step]) -> String {
+    let mut s = String::new();
+    for st in p {
+        match st {
+            Step::Field(f) => write!(s, ".{f}").unwrap(),
+            Step::Idx(i) => write!(s, "[{i}]").unwrap(),
+        }
+    }
+    s
+}
+
+/// Where an access of `w` bytes at `off` into the struct global `base`
+/// of type `ty` is: in one scalar field, or over whole ones.
+fn struct_place(t: &Types, ty: &Ty, base: &str, off: u32, w: u32) -> Option<Place> {
+    let (p, rest) = t.path(ty, off, w, None);
+    // The field the path ends at.
+    let mut leaf = ty;
+    for st in &p {
+        leaf = match (st, leaf) {
+            (Step::Idx(_), Ty::Array(e, _)) => e,
+            (Step::Field(f), Ty::Named(n)) => t.plain(n)?.2.into_iter().find(|x| x.0 == f)?.2,
+            _ => return None,
+        };
+    }
+    if let Some(s) = scalar(leaf) {
+        let o = rest.unwrap_or(0);
+        return (o + w <= s).then(|| Place {
+            place: format!("{base}{}", steps(&p)),
+            elem: s,
+            shift: o * 8,
+            parts: Vec::new(),
+        });
+    }
+    // Over whole scalars, side by side.
+    let mut parts = Vec::new();
+    let mut at = off;
+    while at < off + w {
+        let (p, s) = [4, 2, 1].into_iter().find_map(|s| {
+            let (p, leaf) = t.walk(ty, at, s, None)?;
+            (scalar(&leaf) == Some(s)).then_some((p, s))
+        })?;
+        if at + s > off + w {
+            return None;
+        }
+        parts.push((format!("{base}{}", steps(&p)), s));
+        at += s;
+    }
+    Some(Place {
+        place: String::new(),
+        elem: w,
+        shift: 0,
+        parts,
+    })
 }
 
 impl Globals {
@@ -175,11 +300,132 @@ impl Globals {
                     len: hi - lo,
                     elem,
                     name,
+                    typed: None,
                 },
             );
             i = j;
         }
-        Globals(out)
+        Globals(out, None)
+    }
+
+    /// Type the globals the names files' `types` give a plain struct
+    /// that is all of them (module doc), where every access of
+    /// `accesses` (offset, width) to one lands in its fields and no
+    /// computed range of `ranges` (offset, end, width) reaches it.
+    pub fn type_structs(
+        &mut self,
+        types: &Arc<Types>,
+        accesses: &[(u32, u32)],
+        ranges: &[(u32, u32, u32)],
+    ) {
+        for g in self.0.values_mut() {
+            let a = guest(g.lo);
+            let Some((k, ty)) = types.global_at(a) else {
+                continue;
+            };
+            if k != a || !matches!(ty, Ty::Named(_)) || types.size(ty) != g.len {
+                continue;
+            }
+            let Some(al) = align(types, ty) else {
+                continue;
+            };
+            let end = g.lo + g.len;
+            let ok = g.lo % al == 0
+                && !ranges.iter().any(|&(lo, hi, _)| lo < end && g.lo < hi)
+                && accesses
+                    .iter()
+                    .filter(|&&(o, w)| o < end && g.lo < o + w)
+                    .all(|&(o, w)| {
+                        o >= g.lo
+                            && o + w <= end
+                            && struct_place(types, ty, "", o - g.lo, w).is_some()
+                    });
+            if ok {
+                g.typed = Some(ty.clone());
+                g.elem = al;
+            }
+        }
+        self.1 = Some(types.clone());
+    }
+
+    /// The `ram_t` module: each struct a struct global is, and those its
+    /// fields are, `#[repr(C)]` with byte padding where the C struct has
+    /// it. Empty when no global is a struct.
+    pub fn structs(&self) -> String {
+        let Some(t) = self.1.as_deref() else {
+            return String::new();
+        };
+        let mut todo: Vec<String> = self
+            .0
+            .values()
+            .filter_map(|g| match &g.typed {
+                Some(Ty::Named(n)) => Some(n.clone()),
+                _ => None,
+            })
+            .collect();
+        let mut done = BTreeMap::new();
+        while let Some(n) = todo.pop() {
+            if done.contains_key(&n) {
+                continue;
+            }
+            let Some((id, size, fs)) = t.plain(&n) else {
+                continue;
+            };
+            let mut s = format!(
+                "    /// `{n}`, {size} bytes.
+    #[repr(C)]
+    pub struct {id} {{
+"
+            );
+            let mut at = 0;
+            for (f, off, ty) in fs {
+                if off > at {
+                    writeln!(s, "        _p{at}_: [u8; {}],", off - at).unwrap();
+                }
+                writeln!(
+                    s,
+                    "        pub {f}: {},",
+                    rust_ty(t, ty).replace("ram_t::", "")
+                )
+                .unwrap();
+                at = off + t.size(ty);
+                let mut inner = ty;
+                while let Ty::Array(e, _) = inner {
+                    inner = e;
+                }
+                if let Ty::Named(m) = inner {
+                    todo.push(m.clone());
+                }
+            }
+            if size > at {
+                writeln!(s, "        _p{at}_: [u8; {}],", size - at).unwrap();
+            }
+            writeln!(
+                s,
+                "    }}
+    const _: () = assert!(size_of::<{id}>() == {size});"
+            )
+            .unwrap();
+            done.insert(n, s);
+        }
+        if done.is_empty() {
+            return String::new();
+        }
+        let mut s = String::from(
+            "
+/// The names files' structs that `Ram`'s struct globals are (native/lift-struct-globals).
+#[allow(non_camel_case_types, non_snake_case, dead_code)]
+pub mod ram_t {
+",
+        );
+        for d in done.values() {
+            s.push_str(d);
+        }
+        s.push_str(
+            "}
+",
+        );
+        s
     }
 
     /// Where the access of `width` bytes at offset `off` is, if it is in
@@ -187,7 +433,13 @@ impl Globals {
     /// its global's element).
     pub fn place(&self, off: u32, width: u32) -> Option<Place> {
         let (_, g) = self.0.range(..=off).next_back()?;
-        if off + width > g.lo + g.len || width > g.elem {
+        if off + width > g.lo + g.len {
+            return None;
+        }
+        if let (Some(t), Some(ty)) = (self.1.as_deref(), &g.typed) {
+            return struct_place(t, ty, &format!("g.ram.{}", g.name), off - g.lo, width);
+        }
+        if width > g.elem {
             return None;
         }
         let i = (off - g.lo) / g.elem;
@@ -200,6 +452,7 @@ impl Globals {
             place,
             elem: g.elem,
             shift: (off - g.lo - i * g.elem) * 8,
+            parts: Vec::new(),
         })
     }
 
@@ -220,20 +473,22 @@ impl Globals {
             return self.place(o_lo, width).map(|p| Obj::Pin(p, o_lo));
         }
         let (_, g) = self.0.range(..=o_lo).next_back()?;
-        (o_hi + width <= g.lo + g.len && width == g.elem && g.len > g.elem).then(|| Obj::Index {
-            global: format!("g.ram.{}", g.name),
-            off: g.lo,
-            elem: g.elem,
-            n: g.len / g.elem,
-        })
+        (o_hi + width <= g.lo + g.len && width == g.elem && g.len > g.elem && g.typed.is_none())
+            .then(|| Obj::Index {
+                global: format!("g.ram.{}", g.name),
+                off: g.lo,
+                elem: g.elem,
+                n: g.len / g.elem,
+            })
     }
 
     /// The `Ram` struct at `layout`.
     pub fn ram_struct(&self, layout: Layout) -> String {
-        match layout {
+        let s = match layout {
             Layout::Guest => self.ram_guest(),
             Layout::Packed => self.ram_packed(),
-        }
+        };
+        s + &self.structs()
     }
 
     /// Each global at its offset, bytes between.
@@ -249,7 +504,7 @@ impl Globals {
         };
         for g in self.0.values() {
             pad(&mut s, at, g.lo);
-            writeln!(s, "    pub {}: {},", g.name, g.ty()).unwrap();
+            writeln!(s, "    pub {}: {},", g.name, g.ty(self.1.as_deref())).unwrap();
             at = g.lo + g.len;
         }
         pad(&mut s, at, SIZE);
@@ -271,7 +526,7 @@ impl Globals {
         s.push_str("/// EWRAM then IWRAM at the play layout (`--layout packed`): each global the\n/// constant-address accesses find a typed field (native/ram-globals) in the lifter's\n/// order, the rest of RAM `bytes`.\n");
         s.push_str("#[repr(C, align(4))]\npub struct Ram {\n");
         for g in &gs {
-            writeln!(s, "    pub {}: {},", g.name, g.ty()).unwrap();
+            writeln!(s, "    pub {}: {},", g.name, g.ty(self.1.as_deref())).unwrap();
         }
         writeln!(s, "    bytes: [u8; {SIZE:#x}],\n}}\n").unwrap();
         s.push_str(
@@ -363,6 +618,19 @@ impl Obj {
 
 /// A load of `width` bytes from `p`, as a `u32` expression.
 pub fn load(p: &Place, width: u32) -> String {
+    if !p.parts.is_empty() {
+        let mut at = 0;
+        let mut xs = Vec::new();
+        for (f, w) in &p.parts {
+            xs.push(match (at, w) {
+                (0, 4) => f.clone(),
+                (0, _) => format!("({f} as u32)"),
+                (s, _) => format!("({f} as u32) << {}", s * 8),
+            });
+            at += w;
+        }
+        return format!("({})", xs.join(" | "));
+    }
     match (p.shift, width == p.elem, p.elem) {
         (_, true, 4) => p.place.clone(),
         (_, true, _) => format!("{} as u32", p.place),
@@ -375,6 +643,21 @@ pub fn load(p: &Place, width: u32) -> String {
 /// A store of `width` bytes of the `u32` expression `v` to `p`, as a
 /// statement.
 pub fn store(p: &Place, width: u32, v: &str) -> String {
+    if !p.parts.is_empty() {
+        let mut s = format!("{{ let pv: u32 = {v};");
+        let mut at = 0;
+        for (f, w) in &p.parts {
+            match (at, w) {
+                (0, 4) => write!(s, " {f} = pv;"),
+                (0, _) => write!(s, " {f} = pv as u{};", w * 8),
+                (a, _) => write!(s, " {f} = (pv >> {}) as u{};", a * 8, w * 8),
+            }
+            .unwrap();
+            at += w;
+        }
+        s.push_str(" }");
+        return s;
+    }
     let t = format!("u{}", p.elem * 8);
     if width == p.elem {
         return if p.elem == 4 {
@@ -422,10 +705,10 @@ mod tests {
         );
         let v: Vec<_> = g.0.values().map(|g| (g.lo, g.len, g.elem)).collect();
         assert_eq!(v, vec![(0x100, 6, 2), (0x200, 4, 4)]);
-        assert_eq!(g.0[&0x100].ty(), "[u16; 3]");
+        assert_eq!(g.0[&0x100].ty(None), "[u16; 3]");
         assert_eq!(g.0[&0x100].name, "gTiles");
         assert_eq!(g.0[&0x200].name, "d_02000200");
-        assert_eq!(g.0[&0x200].ty(), "u32");
+        assert_eq!(g.0[&0x200].ty(None), "u32");
         let p = g.place(0x104, 2).unwrap();
         assert_eq!(p.place, "g.ram.gTiles[2]");
         assert_eq!(load(&p, 2), "g.ram.gTiles[2] as u32");
@@ -467,7 +750,7 @@ mod tests {
     fn an_odd_sized_datum_keeps_its_wide_accesses_as_bytes() {
         // gOdd is 6 bytes: a word at its start doesn't fit its halfwords.
         let g = Globals::carve(&[(0x300, 4), (0x304, 2)], &[], &names());
-        assert_eq!(g.0[&0x300].ty(), "[u16; 3]");
+        assert_eq!(g.0[&0x300].ty(None), "[u16; 3]");
         assert!(g.place(0x300, 4).is_none());
         assert!(g.place(0x304, 2).is_some());
         // A datum no access reaches is no global.
@@ -548,5 +831,109 @@ mod tests {
         assert!(s.contains("[(usize, usize, usize); 4] = [\n    (0x8, 4, std::mem::offset_of!(Ram, d_02000008)),\n    (0xc, 4,"));
         let s = Globals::default().ram_struct(Layout::Packed);
         assert!(s.contains("[(usize, usize, usize); 0] = [\n];"));
+    }
+    fn pen_types() -> Arc<Types> {
+        let sha = "0000000000000000000000000000000000000000";
+        let text = format!(
+            r#"
+[map]
+rom_sha1 = "{sha}"
+source = "test"
+format = 1
+
+[data]
+0x03000000 = {{ name = "gPen", size = 8, proto = "struct Pen" }}
+0x03000010 = {{ name = "gFlags", size = 4, proto = "union Flags" }}
+
+[types."struct Vec"]
+kind = "struct"
+size = 4
+fields = [
+  {{ name = "x", off = 0, size = 2, type = "s16" }},
+  {{ name = "y", off = 2, size = 2, type = "s16" }},
+]
+
+[types."struct Pen"]
+kind = "struct"
+size = 8
+fields = [
+  {{ name = "pos", off = 0, size = 4, type = "struct Vec" }},
+  {{ name = "state", off = 4, size = 1, type = "u8" }},
+  {{ name = "color", off = 6, size = 2, type = "u16" }},
+]
+
+[types."union Flags"]
+kind = "union"
+size = 4
+fields = [
+  {{ name = "all", off = 0, size = 4, type = "u32" }},
+  {{ name = "lo", off = 0, size = 2, type = "u16" }},
+]
+"#
+        );
+        let m = crate::names::SourceMap::from_texts(sha, &[&text]).unwrap();
+        Arc::new(m.typed.clone())
+    }
+
+    #[test]
+    fn a_struct_global_is_its_struct() {
+        let t = pen_types();
+        let names = BTreeMap::from([
+            (0x0300_0000, ("gPen".to_string(), 8)),
+            (0x0300_0010, ("gFlags".to_string(), 4)),
+        ]);
+        let acc = [
+            (EWRAM, 4),
+            (EWRAM + 4, 1),
+            (EWRAM + 6, 2),
+            (EWRAM + 0x10, 4),
+            (EWRAM + 0x10, 2),
+        ];
+        let mut g = Globals::carve(&acc, &[], &names);
+        g.type_structs(&t, &acc, &[]);
+        // The union keeps its element type.
+        assert_eq!(g.0[&(EWRAM + 0x10)].typed, None);
+        let pen = &g.0[&EWRAM];
+        assert_eq!(pen.ty(Some(&t)), "ram_t::Pen");
+        // A field, a nested field, a byte inside a halfword.
+        let p = g.place(EWRAM + 6, 2).unwrap();
+        assert_eq!(load(&p, 2), "g.ram.gPen.color as u32");
+        assert_eq!(
+            load(&g.place(EWRAM + 2, 2).unwrap(), 2),
+            "g.ram.gPen.pos.y as u32"
+        );
+        let p = g.place(EWRAM + 7, 1).unwrap();
+        assert_eq!(load(&p, 1), "((g.ram.gPen.color as u32) >> 8 & 0xff)");
+        // A word over two whole fields reads and writes both.
+        let p = g.place(EWRAM, 4).unwrap();
+        assert_eq!(
+            load(&p, 4),
+            "((g.ram.gPen.pos.x as u32) | (g.ram.gPen.pos.y as u32) << 16)"
+        );
+        assert_eq!(
+            store(&p, 4, "v1"),
+            "{ let pv: u32 = v1; g.ram.gPen.pos.x = pv as u16; g.ram.gPen.pos.y = (pv >> 16) as u16; }"
+        );
+        // Padding is in no field: a word over it isn't the struct's.
+        assert_eq!(g.place(EWRAM + 4, 4), None);
+        let s = g.structs();
+        assert!(s.contains("    pub struct Pen {\n        pub pos: Vec,\n        pub state: u8,\n        _p5_: [u8; 1],\n        pub color: u16,\n    }\n"));
+        assert!(
+            s.contains("    pub struct Vec {\n        pub x: u16,\n        pub y: u16,\n    }\n")
+        );
+        assert!(
+            g.ram_struct(Layout::Guest)
+                .contains("    pub gPen: ram_t::Pen,\n")
+        );
+        // An access the struct's fields can't hold keeps the old type.
+        let acc2 = [(EWRAM + 4, 4)];
+        let mut g = Globals::carve(&acc2, &[], &names);
+        g.type_structs(&t, &acc2, &[]);
+        assert_eq!(g.0[&EWRAM].typed, None);
+        assert_eq!(g.0[&EWRAM].ty(Some(&t)), "[u32; 2]");
+        // So does one a computed range reaches.
+        let mut g = Globals::carve(&acc, &[], &names);
+        g.type_structs(&t, &acc, &[(EWRAM, EWRAM + 8, 2)]);
+        assert_eq!(g.0[&EWRAM].typed, None);
     }
 }

@@ -159,12 +159,16 @@ fn printers(w: &str) -> bool {
 }
 
 /// The words of a function's printed text that a name must not be: all
-/// but those of a one-line entry that only calls another (`x_` calling
+/// but a comment's and those of a one-line entry that only calls another (`x_` calling
 /// the body in `f_` with `s: Regs`), which is a function of its own and
 /// has no register local or argument to rename.
 pub fn words_of(text: &str) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     for l in text.lines() {
+        // A comment's words name nothing.
+        if l.trim_start().starts_with("//") {
+            continue;
+        }
         let ws = super::rust_words(l);
         let own = |w: &String| {
             let b = w.as_bytes();

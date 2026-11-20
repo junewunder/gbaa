@@ -95,6 +95,11 @@
 //! crate's `src/text.rs` (no bar; that module isn't in `lines`), and
 //! `texts_left`, those the code leads to that stay in the ROM.
 //!
+//! Source lines (`native/lift-line-comments`): `line_notes`, the
+//! `// file:line` comments above the statement each source line's first
+//! instruction starts, where the names files have a line table (no bar:
+//! it should rise; `lines` leaves them out).
+//!
 //! Names (`native/lift-local-names`): `locals_named`, the DWARF register
 //! variables and prototype parameters whose local or argument took the
 //! name (no bar: it should rise), and `locals_noted`, the variables left a
@@ -306,6 +311,7 @@ pub const UNBARRED: &[&str] = &[
     "plain_entry_bodies",
     "closed_tables",
     "text_notes",
+    "line_notes",
     "text_statics",
     "io_named",
     "locals_named",

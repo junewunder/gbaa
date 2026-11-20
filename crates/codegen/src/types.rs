@@ -54,6 +54,8 @@ struct Def {
     ident: String,
     /// The C name and kind, for its doc comment.
     c: String,
+    /// A union (`[types]`' kind), whose fields share bytes.
+    union: bool,
     fields: Vec<F>,
 }
 
@@ -89,6 +91,10 @@ pub struct Types {
     /// Each enum's size, by its C name.
     enums: BTreeMap<String, u32>,
 }
+
+/// A plain struct ([`Types::plain`]): its marker's identifier, its size
+/// and its fields' identifiers, offsets and types.
+pub type Plain<'a> = (&'a str, u32, Vec<(&'a str, u32, &'a Ty)>);
 
 /// A function's prototype as the readable form prints it (the spike's gap
 /// 7): what arrives in r0–r3 and whether r0 is the value it returns.
@@ -144,6 +150,7 @@ impl Types {
                     size: d.size,
                     ident: id,
                     c: name.clone(),
+                    union: d.kind == "union",
                     fields: Vec::new(),
                 },
             );
@@ -452,6 +459,31 @@ impl Types {
             .filter(|f| f.bits.is_none())
             .find(|f| (f.off..f.off + self.size(&f.ty)).contains(&off))
             .map(|f| (&f.ty, off - f.off))
+    }
+
+    /// The struct `name` as plain fields (native/lift-struct-globals):
+    /// its marker's identifier, its size and each field's identifier,
+    /// offset and type, by offset. `None` for a union, a struct with a
+    /// bitfield, or one whose fields overlap.
+    pub fn plain(&self, name: &str) -> Option<Plain<'_>> {
+        let d = self.defs.get(name)?;
+        if d.union || d.fields.iter().any(|f| f.bits.is_some()) {
+            return None;
+        }
+        let mut fs: Vec<(&str, u32, &Ty)> = d
+            .fields
+            .iter()
+            .map(|f| (f.ident.as_str(), f.off, &f.ty))
+            .collect();
+        fs.sort_by_key(|f| f.1);
+        let mut end = 0;
+        for &(_, off, ty) in &fs {
+            if off < end {
+                return None;
+            }
+            end = off + self.size(ty);
+        }
+        (end <= d.size).then_some((d.ident.as_str(), d.size, fs))
     }
 
     /// The typed datum `x` lands on or in, as its address and type.

@@ -404,6 +404,9 @@ fn main() -> ExitCode {
                     locals: map.locals.clone(),
                 }));
             }
+            // A line table: each source line's first instruction gets its
+            // `// file:line` comment.
+            holes.lines = codegen::native::line_starts(&map);
             // DWARF variables or prototypes: register locals and
             // parameters take their names where liveness agrees.
             let dwarf = !no_local_names && (!map.locals.is_empty() || map.typed.has_protos());

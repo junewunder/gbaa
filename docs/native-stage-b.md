@@ -217,7 +217,8 @@ typed pointers, below; until then they are soft holes, counted.
   (`crates/codegen/src/native/globals.rs`): constant-address RAM accesses
   carved into globals, the fields of `Ram` at the guest's offsets under
   `--layout guest`, names from `--names DIR` where a names file has them;
-  `load_const_ram` and `store_const_ram` (byte accesses) are 0.
+  `load_const_ram` and `store_const_ram` (byte accesses) are 0. A plain
+  struct global is its `ram_t` struct (`native/lift-struct-globals`).
 - **Pointers into one object as typed access** (`native/ref-in-object`).
   Done (`Globals::object`): a computed RAM access whose value set stays in
   one global is that global's field (`pin`) or element (`ix`), checked at
