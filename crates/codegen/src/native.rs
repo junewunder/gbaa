@@ -7449,13 +7449,37 @@ mod tests {
             text: Some(std::sync::Arc::new(names)),
             ..Holes::parse("").unwrap()
         };
+        // The code's files, and src/text.rs (native/lift-text-editable).
         let text = |h: &Holes| {
             let l = lift(&rom, "t", h);
-            let t: String = l.files.iter().map(|(_, t)| t.as_str()).collect();
-            (t, l.metrics)
+            let t: String = l
+                .files
+                .iter()
+                .filter(|(p, _)| p != "text.rs")
+                .map(|(_, t)| t.as_str())
+                .collect();
+            let statics = l
+                .files
+                .iter()
+                .find(|(p, _)| p == "text.rs")
+                .unwrap()
+                .1
+                .clone();
+            (t, l.metrics, statics)
         };
-        let (t, m) = text(&with);
-        let (plain, pm) = text(&Holes::parse("").unwrap());
+        let (t, m, statics) = text(&with);
+        let (plain, pm, none) = text(&Holes::parse("").unwrap());
+        // The string is a static an edit changes; the constant reads it
+        // where it is, so it may not grow.
+        assert!(
+            statics.contains("pub static TEXT_08000020: Text = Text { at: 0x08000020, slot: 9, grow: false, refs: &[0x18], s: \"HI THERE\" };"),
+            "{statics}"
+        );
+        assert!(none.contains("pub static TEXTS: &[&Text] = &[];"), "{none}");
+        assert_eq!(
+            (m.get("text_statics"), pm.get("text_statics")),
+            (Some(1), Some(0))
+        );
         let note = format!("{TEXT_NOTE}sHello: \"HI THERE\"");
         let at = t.find(&note).unwrap_or_else(|| panic!("{note} in {t}"));
         let next = t[at..].lines().nth(1).unwrap();
