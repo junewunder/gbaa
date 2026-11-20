@@ -398,6 +398,11 @@ fn main() -> ExitCode {
             if !map.typed.is_empty() {
                 holes.types = Some(std::sync::Arc::new(map.typed.clone()));
             }
+            // Named values a field or global takes: stores and compares
+            // of one print its name (native/lift-value-names).
+            if map.typed.has_values() {
+                holes.values = Some(std::sync::Arc::new(map.typed.clone()));
+            }
             if !map.types.is_empty() && !no_field_types {
                 holes.fields = Some(std::sync::Arc::new(codegen::native::fields::Maps {
                     types: map.typed.clone(),
