@@ -10,7 +10,11 @@ programs here give the lifter's code-shape work C's shapes to be judged on
 arm-none-eabi-gcc (`$GBAA_DATA/toolchains/arm-gnu-toolchain-15.2.rel1-…`),
 both fetched by `scripts/fetch-decomps.sh`, into
 `$GBAA_DATA/c/c-<name>-agbcc.{elf,gba}` and `c-<name>-gcc.{elf,gba}`.
-Source only in git.
+Source only in git. GCC writes DWARF 2 (`-gdwarf-2 -gstrict-dwarf`), as
+agbcc does: `pret-names` reads no later version. `names/c-<name>-<cc>.toml`
+are the programs' names files (`target/release/pret-names ELF ROM OUT`),
+which give their lifts types (native/lift-typed-access); a changed ROM
+needs its file made again, or its lift has no names.
 
 - `common/`: our own start-up and hardware, no game's or library's code
   (no libtonc, no libgba). `crt0.s` (ARM: points the BIOS's IRQ vector at

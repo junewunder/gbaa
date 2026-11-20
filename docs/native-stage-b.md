@@ -245,6 +245,12 @@ typed pointers, below; until then they are soft holes, counted.
   (several offsets, a byte loop, `Any`, a static array). The allocator
   stays lifted: its free list holds pointers the run can't follow, so
   replacing it waits on frame escapes narrowing.
+- **Accesses print as named fields, from the map's types**
+  (`native/lift-typed-access`). Done (`codegen::native::fields`): a
+  pointer's type comes from the names files (prototypes, typed data,
+  pointer fields, DWARF variables), not from a proof; the access is the
+  same `ld*`/`st*`, so a wrong type changes no byte. `gbaa-lift
+  --no-field-types` leaves them out.
 - **Lifted programs at the packed layout draw the same**
   (`native/lift-packed-layout`). Done: `gbaa-lift --layout packed`
   (`Globals::ram_struct`, `native/prelude_packed.rs`) orders `Ram`'s
@@ -296,6 +302,7 @@ first tests stage A and the shortcuts on a real agbcc game that builds.
   `mods/kirby-mirror/holes.toml`, `skip_fn_flow`: 37 min without):
   2,626,434 lines in 751 files, lift 45 s at 0.62 GB, the crate built in
   107 s at 11.7 GB; first stop frame 2, the m4a mixer as Nightmare's.
+- **katam's names and types in the Amazing Mirror's lift** (`native/mirror-katam-names`).
 
 Emerald comes after typed RAM and pointers, typed from pret's DWARF (the
 gaps Emerald's ten listed: fills, bitfields, retyping from access widths,

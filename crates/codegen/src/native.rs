@@ -46,7 +46,8 @@
 //! [`shape`]; frames, escaping slots and which become locals, [`frame`];
 //! function addresses and callee sets, [`fnref`]; RAM's globals, `pin`
 //! and `ix`, both layouts, [`globals`]; heap pointers as `Ref<T>`, the
-//! prelude's `Game::at`, [`heap`]; metric names and bars,
+//! prelude's `Game::at`, [`heap`]; accesses as the names files' named
+//! fields, [`fields`]; metric names and bars,
 //! [`metrics`]; the crate's files, [`modules`]; functions and data by the
 //! names file's names, [`named`]; `lift-check.toml`'s
 //! programs, [`lift_check`]. A function's blocks and IR come from
@@ -180,6 +181,7 @@ use std::fmt::Write as _;
 pub mod banks;
 pub mod cond;
 pub mod counted;
+pub mod fields;
 pub mod first_stop;
 pub mod fnref;
 pub mod frame;
@@ -343,6 +345,16 @@ pub struct Holes {
     /// its name ([`named`]; unit `native/lift-fn-names`). Not with
     /// `--copies`, whose copies would repeat them.
     pub fn_names: BTreeMap<u32, String>,
+    /// The same files' types (`codegen::types`), when they give any: the
+    /// report counts the constant RAM accesses that land on a named field
+    /// of a typed global ([`typed_fields`]; unit
+    /// `native/mirror-katam-names`).
+    pub types: Option<std::sync::Arc<crate::types::Types>>,
+    /// The same files' types, prototypes and DWARF variables: accesses
+    /// through a pointer they type print as its named fields ([`fields`];
+    /// unit `native/lift-typed-access`). `None`: the files give no types,
+    /// or `--no-field-types`.
+    pub fields: Option<std::sync::Arc<fields::Maps>>,
     /// Where `Ram`'s globals are (`gbaa-lift --layout`): the guest's
     /// offsets, or the play layout's order ([`globals::Layout`]).
     pub layout: Layout,
@@ -911,6 +923,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // (native/ref-in-object): one address is an access like a constant
     // one; a range, an object's extent.
     let mut ram = Vec::new();
+    let mut konst = Vec::new();
     let mut ranges = Vec::new();
     for c in &codes {
         for f in c
@@ -927,6 +940,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     }
                     if let Some((a, w)) = const_access(insts, &inst.op) {
                         ram.push((a, w));
+                        konst.push((a, w));
                     } else if let Some((lo, hi, w)) = computed_ram(&c.ctx, insts, &inst.op, at) {
                         if lo == hi {
                             ram.push((lo, w));
@@ -939,6 +953,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         }
     }
     let globals = Globals::carve(&ram, &ranges, &holes.names);
+    let typed_line = holes.types.as_deref().map(|t| typed_fields(t, &konst));
     let flow_ins: Vec<FlowIn> = codes
         .iter()
         .enumerate()
@@ -1137,6 +1152,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     steps: BTreeMap::new(),
                     tail_for: false,
                     banked: BTreeMap::new(),
+                    field_at: BTreeMap::new(),
                     inl: Vec::new(),
                 };
                 let text = p.print(c.sums.get(f.entry));
@@ -1317,6 +1333,14 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 &holes.names,
             )
         });
+    // The names files' types, declared: like the names' constants, not
+    // lifted code, so not in `lines`.
+    let mut type_lines = 0;
+    if let Some(maps) = &holes.fields {
+        let text = fields::module(&maps.types);
+        type_lines = text.lines().count();
+        main.push_str(&text);
+    }
     let plains: Vec<String> = fns.iter().map(|&k| plain(&shapes.shaped, k)).collect();
     let mut files = modules::split(main, table, &plains, &out, holes.copies);
     if !holes.fn_check.is_empty() {
@@ -1568,6 +1592,14 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         if heap.unsettled { " and didn't settle: nothing typed" } else { "" },
     )
     .unwrap();
+    if holes.fields.is_some() {
+        writeln!(
+            report,
+            "named fields (native/lift-typed-access): {} accesses through a pointer the names files type print as a named field, {} as bytes inside one",
+            soft.named_fields, soft.named_inside,
+        )
+        .unwrap();
+    }
     if let Some(at) = holes.plant_slot
         && !soft.planted_slot
     {
@@ -1588,8 +1620,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let prelude = pre.lines().count();
     let all_lines: usize = files.files.iter().map(|(_, t)| t.lines().count()).sum();
     let const_lines = named.map_or(0, |n| n.const_lines);
-    m.push("lines", n(all_lines - files.wiring - prelude - const_lines));
+    m.push(
+        "lines",
+        n(all_lines - files.wiring - prelude - const_lines - type_lines),
+    );
     m.push("lines_prelude", n(prelude));
+    m.push("lines_types", n(type_lines));
     m.push("functions", n(n_funcs));
     m.push(
         "functions_iwram",
@@ -1669,6 +1705,16 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     );
     m.push("ref_types", n(soft.ref_tys.len()));
     m.push("ref_unexplained", soft.ref_unexplained);
+    m.push("named_field_accesses", soft.named_fields);
+    m.push("named_inside_accesses", soft.named_inside);
+    // Only a lift with types has it, and its bar: what the types leave.
+    if holes.fields.is_some() {
+        let unknown = |st| soft.access.get(&(st, Where::Unknown)).copied().unwrap_or(0);
+        m.push(
+            "computed_unknown_unnamed",
+            unknown(false) + unknown(true) - soft.named_unknown,
+        );
+    }
     m.push("sp_accesses_local_slot", soft.sp_slots[0]);
     m.push("sp_accesses_escaping_slot", soft.sp_slots[1]);
     m.push("sp_accesses_callers_frame", soft.sp_slots[2]);
@@ -1707,6 +1753,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     .unwrap();
     if let Some(n) = named {
         writeln!(report, "{}", n.line()).unwrap();
+    }
+    if let Some(l) = typed_line {
+        writeln!(report, "{l}").unwrap();
     }
     writeln!(
         report,
@@ -2364,6 +2413,13 @@ struct Soft {
     ref_unexplained: u64,
     /// The heap's types the printed accesses use.
     ref_tys: BTreeSet<usize>,
+    /// Accesses printed through a pointer the names files type
+    /// (native/lift-typed-access): as a named field, and as bytes inside
+    /// one (`.field::<uN>(off)`).
+    named_fields: u64,
+    named_inside: u64,
+    /// Those of them the value sets don't bound (`computed_unknown`).
+    named_unknown: u64,
     /// Stack locals, and the functions with any.
     local_slots: usize,
     local_fns: usize,
@@ -2547,6 +2603,9 @@ struct FnPrinter<'a, 'b> {
     /// The stores whose `bank_sp` the bank already holds, by block
     /// ([`FnPrinter::redundant_banks`]): printed without it.
     banked: BTreeMap<u32, Vec<bool>>,
+    /// The accesses whose address the names files type, by block and
+    /// inst, and where in its object it is ([`FnPrinter::field_types`]).
+    field_at: BTreeMap<(u32, usize), fields::At>,
     /// The current block's values printed inside their use, by value:
     /// their expressions ([`FnPrinter::inline`]; `None`, a `let`).
     inl: Vec<Option<String>>,
@@ -2782,6 +2841,7 @@ impl FnPrinter<'_, '_> {
         order.extend(f.blocks.keys().copied().filter(|&k| k != f.entry));
         self.labels = order.iter().enumerate().map(|(i, &k)| (k, i)).collect();
         (self.dead, self.live_in, self.local) = self.dead_writes();
+        self.field_at = self.field_types();
         self.banked = self.redundant_banks();
         if let Some(p) = self.plan(&order) {
             if !self.holes.no_for_loops {
@@ -2922,7 +2982,7 @@ impl FnPrinter<'_, '_> {
                     (0..4).map(arg).collect::<Vec<_>>().join(", ")
                 ),
                 Some(sh) => std::iter::once(13)
-                    .chain(shape::regs(sh.params).map(usize::from))
+                    .chain(shape::regs(sh.params))
                     .map(|r| format!("{}: u32", arg(r)))
                     .collect::<Vec<_>>()
                     .join(", "),
@@ -2930,7 +2990,7 @@ impl FnPrinter<'_, '_> {
             let call = match self.me {
                 None => "s.r[13], [s.r[0], s.r[1], s.r[2], s.r[3]]".to_string(),
                 Some(sh) => std::iter::once(13)
-                    .chain(shape::regs(sh.params).map(usize::from))
+                    .chain(shape::regs(sh.params))
                     .map(|r| format!("s.r[{r}]"))
                     .collect::<Vec<_>>()
                     .join(", "),
@@ -3074,6 +3134,65 @@ impl FnPrinter<'_, '_> {
         let xs = exits(self.ctx, gb);
         self.cur = k;
         self.block(&gb.block.insts, &xs, gb.block.thumb)
+    }
+
+    /// The accesses of this function whose address the names files type
+    /// ([`fields::flow`]; unit `native/lift-typed-access`), by block and
+    /// inst. An exit goes on where [`FnPrinter::dead_writes`] has it: a
+    /// call at its return site, with the callee's r0.
+    fn field_types(&self) -> BTreeMap<(u32, usize), fields::At> {
+        let Some(maps) = self.holes.fields.as_deref() else {
+            return BTreeMap::new();
+        };
+        let mut keys: Vec<u32> = vec![self.f.entry];
+        keys.extend(self.f.blocks.keys().copied().filter(|&k| k != self.f.entry));
+        let index: BTreeMap<u32, usize> = keys.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+        let xs: Vec<Vec<ExitInfo>> = keys
+            .iter()
+            .map(|k| exits(self.ctx, &self.f.blocks[k]))
+            .collect();
+        let insts: Vec<&[Inst]> = keys
+            .iter()
+            .map(|k| &self.f.blocks[k].block.insts[..])
+            .collect();
+        let at = fields::flow(
+            maps,
+            self.f.entry,
+            &insts,
+            |b, i| {
+                let Some(x) = xs[b].iter().find(|x| x.index == i) else {
+                    return Vec::new();
+                };
+                let to = |k: u32, after| index.get(&k).map(|&s| (s, after)).into_iter().collect();
+                match x.plan {
+                    Plan::Static(k) | Plan::Rekey(k) => to(k, fields::After::Jump),
+                    Plan::Call { target, ret } => to(ret, fields::After::Call(Some(target))),
+                    Plan::CallVia { ret, .. }
+                    | Plan::Dynamic { ret: Some(ret), .. }
+                    | Plan::Swi { next: ret } => to(ret, fields::After::Call(None)),
+                    Plan::Dynamic {
+                        ret: None, target, ..
+                    } => {
+                        let thumb = self.f.blocks[&keys[b]].block.thumb;
+                        dyn_targets(self.ctx, self.holes, x.at, thumb, target)
+                            .map(|ts| {
+                                ts.into_iter()
+                                    .filter_map(|t| Some((*index.get(&t)?, fields::After::Jump)))
+                                    .collect()
+                            })
+                            .unwrap_or_default()
+                    }
+                    Plan::Undefined { .. } => Vec::new(),
+                }
+            },
+            |b, i| {
+                let (l, d, n) = self.frame?.local_at(&self.locals, keys[b], i)?;
+                (l.word && d == 0 && n == 4).then_some(l.lo)
+            },
+        );
+        at.into_iter()
+            .map(|((b, i), a)| ((keys[b], i), a))
+            .collect()
     }
 
     /// The writes of r0-r12 and the flags nothing printed reads after
@@ -3258,7 +3377,7 @@ impl FnPrinter<'_, '_> {
                 !local
                     && typed[i].is_none()
                     && objs[i].is_none()
-                    && refs[i].is_none()
+                    && refs[i].is_none_or(|r| r.named)
                     && store_may_reach_io(self.vsa_where(insts, addr, pc))
             })
             .collect()
@@ -3744,13 +3863,38 @@ impl FnPrinter<'_, '_> {
                 let (Op::Load { addr, .. } | Op::Store { addr, .. }) = inst.op else {
                     return None;
                 };
-                if typed[i].is_some()
-                    || objs[i].is_some()
-                    || self.vsa_where(insts, addr, pc) != Where::Unknown
-                {
+                if typed[i].is_some() || objs[i].is_some() {
                     return None;
                 }
-                let f = *self.heap.access.get(&(self.f.entry, self.cur, i))?;
+                let heap = (self.vsa_where(insts, addr, pc) == Where::Unknown)
+                    .then(|| self.heap.access.get(&(self.f.entry, self.cur, i)).copied())
+                    .flatten();
+                // Else through a pointer the names files type
+                // (native/lift-typed-access), where it lands on a field:
+                // not a frame's local, which prints as one.
+                let (f, named) = match heap {
+                    Some(f) => (f, false),
+                    None => {
+                        let at = self.field_at.get(&(self.cur, i))?;
+                        let maps = self.holes.fields.as_deref()?;
+                        let width = match inst.op {
+                            Op::Load { width, .. } | Op::Store { width, .. } => bytes(width),
+                            _ => unreachable!(),
+                        };
+                        let local = self
+                            .frame
+                            .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
+                        if local || fields::pointer(&maps.types, at, width, "", 0).is_none() {
+                            return None;
+                        }
+                        let f = heap::Field {
+                            ty: 0,
+                            off: at.off,
+                            width: width as u8,
+                        };
+                        (f, true)
+                    }
+                };
                 // Through the pointer the address adds a constant to, if
                 // that's in the object: the addition isn't printed.
                 let base = match insts[addr.index()].op {
@@ -3761,9 +3905,20 @@ impl FnPrinter<'_, '_> {
                             _ => None,
                         }
                     }
+                    // Thumb's `adds rd, rn, #k` (agbcc's address of a
+                    // field past a load's reach), for a named field.
+                    Op::Adc { a, b, c }
+                        if named && matches!(insts[c.index()].op, Op::Bit(false)) =>
+                    {
+                        match (konst(insts, a), konst(insts, b)) {
+                            (None, Some(c)) if c <= f.off => Some((a, c)),
+                            (Some(c), None) if c <= f.off => Some((b, c)),
+                            _ => None,
+                        }
+                    }
                     _ => None,
                 };
-                Some(HeapRef { f, base })
+                Some(HeapRef { f, base, named })
             })
             .collect();
         (typed, objs, refs)
@@ -3782,7 +3937,7 @@ impl FnPrinter<'_, '_> {
         };
         self.soft
             .ref_tys
-            .extend(refs.iter().flatten().map(|r| r.f.ty));
+            .extend(refs.iter().flatten().filter(|r| !r.named).map(|r| r.f.ty));
         let dead = dead_addresses(insts, &typed);
         // Conditions as comparisons and bit tests (native/lift-branch-conditions).
         let conds = cond::forms(insts);
@@ -4036,6 +4191,9 @@ impl FnPrinter<'_, '_> {
                         (None, Some(o), _) => {
                             o.load(&format!("{}{m}", self.val(addr)), bytes(width))
                         }
+                        (None, None, Some(r)) if r.named => {
+                            format!("g.get({})", self.field_ptr(i, r, addr))
+                        }
                         (None, None, Some(r)) => match r.base {
                             Some((b, c)) => self.heap.load(r.f, &self.val(b), r.f.off - c),
                             None => self.heap.load(r.f, &self.val(addr), r.f.off),
@@ -4055,14 +4213,16 @@ impl FnPrinter<'_, '_> {
                             }
                         }
                         None => {
-                            self.count(
+                            let w = self.count(
                                 insts,
                                 addr,
                                 at,
                                 i,
                                 false,
-                                typed_as(&typed[i], &objs[i], refs[i].is_some()),
+                                typed_as(&typed[i], &objs[i], refs[i].is_some_and(|r| !r.named)),
                             );
+                            self.soft.named_unknown +=
+                                u64::from(w == Where::Unknown && refs[i].is_some_and(|r| r.named));
                             mem
                         }
                     };
@@ -4104,6 +4264,9 @@ impl FnPrinter<'_, '_> {
                         (None, Some(o), _) => {
                             o.store(&format!("{}{m}", self.val(addr)), bytes(width), &val)
                         }
+                        (None, None, Some(r)) if r.named => {
+                            format!("g.set({}, {val});", self.field_ptr(i, r, addr))
+                        }
                         (None, None, Some(r)) => match r.base {
                             Some((b, c)) => self.heap.store(r.f, &self.val(b), r.f.off - c, &val),
                             None => self.heap.store(r.f, &self.val(addr), r.f.off, &val),
@@ -4128,13 +4291,15 @@ impl FnPrinter<'_, '_> {
                                 at,
                                 i,
                                 true,
-                                typed_as(&typed[i], &objs[i], refs[i].is_some()),
+                                typed_as(&typed[i], &objs[i], refs[i].is_some_and(|r| !r.named)),
                             );
+                            self.soft.named_unknown +=
+                                u64::from(w == Where::Unknown && refs[i].is_some_and(|r| r.named));
                             assert_eq!(
                                 banks[i],
                                 typed[i].is_none()
                                     && objs[i].is_none()
-                                    && refs[i].is_none()
+                                    && refs[i].is_none_or(|r| r.named)
                                     && store_may_reach_io(w),
                                 "{at:#010x}: the bank plan's store isn't the printed one"
                             );
@@ -4190,6 +4355,29 @@ impl FnPrinter<'_, '_> {
         self.inl = outer;
         self.bound = outer_bound;
         s
+    }
+
+    /// The printed pointer of the access at inst `i` through a pointer
+    /// the names files type ([`fields::pointer`]), counted.
+    fn field_ptr(&mut self, i: usize, r: HeapRef, addr: ValueId) -> String {
+        let maps = self
+            .holes
+            .fields
+            .as_deref()
+            .expect("a named access has types");
+        let at = &self.field_at[&(self.cur, i)];
+        let (p, k) = match r.base {
+            Some((b, c)) => (self.val(b), at.off - c),
+            None => (self.val(addr), at.off),
+        };
+        let (e, whole) = fields::pointer(&maps.types, at, r.f.width as u32, &p, k)
+            .expect("checked when the access was found");
+        if whole {
+            self.soft.named_fields += 1;
+        } else {
+            self.soft.named_inside += 1;
+        }
+        e
     }
 
     /// Count an access by the instruction at `at`: one printed `typed` as
@@ -5376,6 +5564,36 @@ fn mark_regions(seq: &[plan::Node], in_region: &mut [bool]) {
     }
 }
 
+/// The report's line on the names files' types (unit
+/// `native/mirror-katam-names`): of the constant accesses into EWRAM or
+/// IWRAM (`ram`: their offsets in `Game::ram` and widths), those in a
+/// typed global, those exactly one of its scalars (an element or field,
+/// [`crate::types::Types::walk`]), and those of these inside a struct or
+/// union field (`gKirbys[1].base.x`). Counted only: the printer still
+/// prints them as `Ram`'s fields ([`globals`]).
+fn typed_fields(t: &crate::types::Types, ram: &[(u32, u32)]) -> String {
+    let (mut all, mut typed, mut whole, mut field) = (0, 0, 0, 0);
+    for &(o, w) in ram {
+        let a = globals::guest(o);
+        all += 1;
+        let Some((k, ty)) = t.global_at(a) else {
+            continue;
+        };
+        typed += 1;
+        let Some((p, _)) = t.walk(ty, a - k, w, None) else {
+            continue;
+        };
+        whole += 1;
+        if p.iter().any(|s| matches!(s, crate::types::Step::Field(_))) {
+            field += 1;
+        }
+    }
+    format!(
+        "types (gbaa-lift --names): of {all} constant RAM accesses, {typed} in a typed global, \
+         {whole} exactly one of its scalars, {field} a named struct field"
+    )
+}
+
 /// How an access printed typed is counted: a constant address's field
 /// (`Global`), a computed one's (`Object`), or a heap object's through
 /// its `Ref<T>` (`Ref`).
@@ -5393,6 +5611,9 @@ fn typed_as(field: &Option<Place>, obj: &Option<Obj>, r: bool) -> Option<Where> 
 /// the address adds a constant to.
 #[derive(Clone, Copy)]
 struct HeapRef {
+    /// Not the heap's: a field of a type the names files give
+    /// ([`fields`]), printed over the same `ld*`/`st*` (`f.ty` unused).
+    named: bool,
     f: heap::Field,
     base: Option<(ValueId, u32)>,
 }

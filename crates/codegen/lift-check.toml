@@ -1378,7 +1378,8 @@ route = "units/c-fnptr-agbcc-600.toml"
 planted_store = 0x080005d4
 
 [program.c-fnptr-agbcc.bars]
-lines = 878
+computed_unknown_unnamed = 5
+lines = 864
 lines_prelude = 1265
 functions = 18
 functions_iwram = 0
@@ -1396,7 +1397,7 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 189
+value_lets = 178
 reg_local_writes = 75
 unpacked_unread = 0
 regs_call_entries = 1
@@ -1455,7 +1456,8 @@ route = "units/c-fnptr-gcc-600.toml"
 planted_store = 0x08000390
 
 [program.c-fnptr-gcc.bars]
-lines = 913
+computed_unknown_unnamed = 19
+lines = 903
 lines_prelude = 1265
 functions = 18
 functions_iwram = 0
@@ -1473,7 +1475,7 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 197
+value_lets = 187
 reg_local_writes = 85
 unpacked_unread = 0
 regs_call_entries = 0
@@ -1534,7 +1536,8 @@ route = "units/c-switch-agbcc-600.toml"
 planted_store = 0x080005ca
 
 [program.c-switch-agbcc.bars]
-lines = 854
+computed_unknown_unnamed = 14
+lines = 834
 lines_prelude = 1265
 functions = 10
 functions_iwram = 0
@@ -1552,7 +1555,7 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 205
+value_lets = 191
 reg_local_writes = 71
 unpacked_unread = 0
 regs_call_entries = 2
@@ -1613,7 +1616,8 @@ route = "units/c-switch-gcc-600.toml"
 planted_store = 0x080005a0
 
 [program.c-switch-gcc.bars]
-lines = 893
+computed_unknown_unnamed = 15
+lines = 876
 lines_prelude = 1265
 functions = 10
 functions_iwram = 0
@@ -1631,7 +1635,7 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 218
+value_lets = 205
 reg_local_writes = 96
 unpacked_unread = 0
 regs_call_entries = 2
@@ -1690,7 +1694,8 @@ route = "units/c-chain-agbcc-600.toml"
 planted_store = 0x0800058e
 
 [program.c-chain-agbcc.bars]
-lines = 955
+computed_unknown_unnamed = 5
+lines = 914
 lines_prelude = 1265
 functions = 13
 functions_iwram = 0
@@ -1708,7 +1713,7 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 258
+value_lets = 219
 reg_local_writes = 104
 unpacked_unread = 0
 regs_call_entries = 1
@@ -1767,7 +1772,8 @@ route = "units/c-chain-gcc-600.toml"
 planted_store = 0x08000550
 
 [program.c-chain-gcc.bars]
-lines = 937
+computed_unknown_unnamed = 18
+lines = 893
 lines_prelude = 1265
 functions = 13
 functions_iwram = 0
@@ -1785,7 +1791,7 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 235
+value_lets = 206
 reg_local_writes = 89
 unpacked_unread = 0
 regs_call_entries = 0
