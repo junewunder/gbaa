@@ -44,7 +44,7 @@ that adds it. The owner agreed the "Not wanted" list (2026-11-19).
 | A pointer access as a typed path (`Ptr<T>`, field accessors from `[types]`) | `g.get(Ref::<t::Pen>::new(v18).state())`: 77 on c-switch-agbcc, 33 on c-fnptr-gcc (`native::fields`) | Has it |
 | A global by its type (`gPen.x`) | A global the names files type as a plain struct (no union or bitfield) is that struct in `Ram` (`gPen: ram_t::Pen`, `#[repr(C)]`), so `g.ram.gPen.color = 0x2a9f`; a word over two whole fields writes each (`gPen.x`, `gPen.y`, c-switch-gcc). A union, a bitfield or an access across a field's edge keeps the access-width type (`[u32; 2]`). Metroid has no `[types]`, so nothing changes there | Has it (`native/lift-struct-globals`) |
 | A bitfield write as a field set (`set_bits`), constant or computed | Only whole fields are named. No C program has a bitfield | Unit: `native/lift-bitfields` |
-| Strength-reduced indexing as `idx(i)` | `.idx(n)` with a constant `n` only (`types::Step::Idx`) | Unit: `native/lift-index-names` |
+| Strength-reduced indexing as `idx(i)` | A typed pointer plus an index scaled by an element's size prints the element: `Ref::<[t::Obj; 6]>::new(gObjs).idx(v77).x()` for an array, `Ref::<u8>::new(r4).add(v1)` for a pointer's `p[i]` (`fields::pointer_indexed`), the same address; `named_index_accesses` 2026-11-20: 0 to 12 on the C programs (12 on c-fnptr-agbcc); none on Metroid, which has no types | Has it (`native/lift-index-names`) |
 | Types on Metroid | `mzm.toml` has no `[types]`, `[locals]` or `[lines]` (the ELF has no DWARF), so Metroid's lift has 0 named fields | Unit: `native/metroid-dwarf-map` |
 
 ### Functions and locals

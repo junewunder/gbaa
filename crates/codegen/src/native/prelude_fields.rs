@@ -54,6 +54,15 @@ impl<T: Guest, const N: usize> Ref<[T; N]> {
     }
 }
 
+impl<T: Guest> Ref<T> {
+    /// `&p[i]`: the `i`th `T` on from this one.
+    #[inline(always)]
+    #[allow(clippy::should_implement_trait)]
+    pub fn add(self, i: u32) -> Ref<T> {
+        Ref(self.0.wrapping_add(i.wrapping_mul(T::SIZE)), std::marker::PhantomData)
+    }
+}
+
 /// A value loaded or stored whole: its bytes.
 pub trait Word {
     const BYTES: u32;

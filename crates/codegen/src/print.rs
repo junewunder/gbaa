@@ -337,7 +337,7 @@ pub fn index_of(
 /// `x` as `c + leaf * s`: `(c, Some((leaf, s)))`, or `(c, None)` for a
 /// constant. Through adds with no carry in, shifts left and multiplies
 /// by constants, `depth` deep; a sum of two other values is a leaf.
-fn linear(
+pub(crate) fn linear(
     insts: &[Inst],
     known: &dyn Fn(usize) -> Option<u32>,
     x: ValueId,

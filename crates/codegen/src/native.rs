@@ -1300,6 +1300,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     tail_for: false,
                     banked: BTreeMap::new(),
                     field_at: BTreeMap::new(),
+                    field_idx: BTreeMap::new(),
                     inl: Vec::new(),
                     printed: BTreeSet::new(),
                     fall: None,
@@ -1841,8 +1842,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     if holes.fields.is_some() {
         writeln!(
             report,
-            "named fields (native/lift-typed-access): {} accesses through a pointer the names files type print as a named field, {} as bytes inside one",
-            soft.named_fields, soft.named_inside,
+            "named fields (native/lift-typed-access): {} accesses through a pointer the names files type print as a named field, {} as bytes inside one; {} of them as an element by a variable index (native/lift-index-names)",
+            soft.named_fields, soft.named_inside, soft.named_index,
         )
         .unwrap();
     }
@@ -2005,6 +2006,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("ref_unexplained", soft.ref_unexplained);
     m.push("named_field_accesses", soft.named_fields);
     m.push("named_inside_accesses", soft.named_inside);
+    m.push("named_index_accesses", soft.named_index);
     // Only a lift with types has it, and its bar: what the types leave.
     if holes.fields.is_some() {
         let unknown = |st| soft.access.get(&(st, Where::Unknown)).copied().unwrap_or(0);
@@ -3085,6 +3087,9 @@ struct Soft {
     /// one (`.field::<uN>(off)`).
     named_fields: u64,
     named_inside: u64,
+    /// Of those, the ones printed as an element by a variable index
+    /// (native/lift-index-names).
+    named_index: u64,
     /// Those of them the value sets don't bound (`computed_unknown`).
     named_unknown: u64,
     /// Stack locals, and the functions with any.
@@ -3312,6 +3317,9 @@ struct FnPrinter<'a, 'b> {
     /// The accesses whose address the names files type, by block and
     /// inst, and where in its object it is ([`FnPrinter::field_types`]).
     field_at: BTreeMap<(u32, usize), fields::At>,
+    /// Those of them whose address is a typed pointer plus a scaled index
+    /// (native/lift-index-names), by block and inst.
+    field_idx: BTreeMap<(u32, usize), fields::Indexed>,
     /// The current block's values printed inside their use, by value:
     /// their expressions ([`FnPrinter::inline`]; `None`, a `let`).
     inl: Vec<Option<String>>,
@@ -3547,7 +3555,7 @@ impl FnPrinter<'_, '_> {
         order.extend(f.blocks.keys().copied().filter(|&k| k != f.entry));
         self.labels = order.iter().enumerate().map(|(i, &k)| (k, i)).collect();
         (self.dead, self.live_in, self.local) = self.dead_writes();
-        self.field_at = self.field_types();
+        (self.field_at, self.field_idx) = self.field_types();
         self.banked = self.redundant_banks();
         if let Some(p) = self.plan(&order) {
             if !self.holes.no_for_loops {
@@ -3869,10 +3877,17 @@ impl FnPrinter<'_, '_> {
     /// The accesses of this function whose address the names files type
     /// ([`fields::flow`]; unit `native/lift-typed-access`), by block and
     /// inst. An exit goes on where [`FnPrinter::dead_writes`] has it: a
-    /// call at its return site, with the callee's r0.
-    fn field_types(&self) -> BTreeMap<(u32, usize), fields::At> {
+    /// call at its return site, with the callee's r0. Then those of them
+    /// that index an element ([`fields::Indexed`]).
+    #[allow(clippy::type_complexity)]
+    fn field_types(
+        &self,
+    ) -> (
+        BTreeMap<(u32, usize), fields::At>,
+        BTreeMap<(u32, usize), fields::Indexed>,
+    ) {
         let Some(maps) = self.holes.fields.as_deref() else {
-            return BTreeMap::new();
+            return Default::default();
         };
         let mut keys: Vec<u32> = vec![self.f.entry];
         keys.extend(self.f.blocks.keys().copied().filter(|&k| k != self.f.entry));
@@ -3920,9 +3935,11 @@ impl FnPrinter<'_, '_> {
                 (l.word && d == 0 && n == 4).then_some(l.lo)
             },
         );
-        at.into_iter()
-            .map(|((b, i), a)| ((keys[b], i), a))
-            .collect()
+        let key = |(b, i): (usize, usize)| (keys[b], i);
+        (
+            at.access.into_iter().map(|(k, a)| (key(k), a)).collect(),
+            at.index.into_iter().map(|(k, x)| (key(k), x)).collect(),
+        )
     }
 
     /// The writes of r0-r12 and the flags nothing printed reads after
@@ -4704,7 +4721,10 @@ impl FnPrinter<'_, '_> {
                     .flatten();
                 // Else through a pointer the names files type
                 // (native/lift-typed-access), where it lands on a field:
-                // not a frame's local, which prints as one.
+                // not a frame's local, which prints as one. One that is a
+                // typed pointer plus a scaled index prints as an element
+                // (native/lift-index-names), where it names one.
+                let mut idx = None;
                 let (f, named) = match heap {
                     Some(f) => (f, false),
                     None => {
@@ -4717,7 +4737,14 @@ impl FnPrinter<'_, '_> {
                         let local = self
                             .frame
                             .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
-                        if local || fields::pointer(&maps.types, at, width, "", 0).is_none() {
+                        if local {
+                            return None;
+                        }
+                        idx = self.field_idx.get(&(self.cur, i)).filter(|x| {
+                            fields::pointer_indexed(&maps.types, x, width, "", "").is_some()
+                        });
+                        if idx.is_none() && fields::pointer(&maps.types, at, width, "", 0).is_none()
+                        {
                             return None;
                         }
                         let f = heap::Field {
@@ -4751,7 +4778,20 @@ impl FnPrinter<'_, '_> {
                     }
                     _ => None,
                 };
-                Some(HeapRef { f, base, named })
+                Some(match idx {
+                    Some(x) => HeapRef {
+                        f,
+                        base: Some((x.base, 0)),
+                        idx: Some(x.i),
+                        named,
+                    },
+                    None => HeapRef {
+                        f,
+                        base,
+                        idx: None,
+                        named,
+                    },
+                })
             })
             .collect();
         (typed, objs, refs)
@@ -5320,6 +5360,19 @@ impl FnPrinter<'_, '_> {
             .fields
             .as_deref()
             .expect("a named access has types");
+        if let Some(ix) = r.idx {
+            let x = &self.field_idx[&(self.cur, i)];
+            let (p, ix) = (self.val(x.base), self.val(ix));
+            let (e, whole) = fields::pointer_indexed(&maps.types, x, r.f.width as u32, &p, &ix)
+                .expect("checked when the access was found");
+            self.soft.named_index += 1;
+            if whole {
+                self.soft.named_fields += 1;
+            } else {
+                self.soft.named_inside += 1;
+            }
+            return e;
+        }
         let at = &self.field_at[&(self.cur, i)];
         let (p, k) = match r.base {
             Some((b, c)) => (self.val(b), at.off - c),
@@ -5477,13 +5530,16 @@ impl FnPrinter<'_, '_> {
                 .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
         let field = typed[i].is_some();
         let base = refs[i].and_then(|r| r.base).map(|(b, _)| b);
+        let idx = refs[i].and_then(|r| r.idx);
         let ops = match inst.op {
             // Printed as nothing.
             Op::Timing(_) | Op::YieldFlag(..) => return Vec::new(),
             Op::Load { .. } if local || field => Vec::new(),
             Op::Store { value, .. } if local || field => vec![value],
-            Op::Load { .. } if base.is_some() => base.into_iter().collect(),
-            Op::Store { value, .. } if base.is_some() => base.into_iter().chain([value]).collect(),
+            Op::Load { .. } if base.is_some() => base.into_iter().chain(idx).collect(),
+            Op::Store { value, .. } if base.is_some() => {
+                base.into_iter().chain(idx).chain([value]).collect()
+            }
             _ if let Some(f) = &conds[i] => f.uses.clone(),
             _ if let Some((x, f)) = forms[i] => [x].into_iter().chain(f.others()).collect(),
             Op::Exit(_) if self.blind.get(i).copied().unwrap_or(false) => Vec::new(),
@@ -6696,6 +6752,9 @@ struct HeapRef {
     named: bool,
     f: heap::Field,
     base: Option<(ValueId, u32)>,
+    /// A named access's index, the base then the typed pointer it is
+    /// added to scaled ([`fields::Indexed`]; native/lift-index-names).
+    idx: Option<ValueId>,
 }
 
 fn bytes(w: Width) -> u32 {
