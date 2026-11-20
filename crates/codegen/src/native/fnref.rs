@@ -54,7 +54,8 @@
 //! it, frame slots that escape); and one pile for every other store (a
 //! pointer the run dropped, [`RAM_ANY`]). A load at a constant address
 //! reads its cell, its object's and the pile; through a pointer somewhere
-//! in an object, every cell, that object's and the pile; through a
+//! in an object, the cells at the constant addresses in that object
+//! ([`in_cell`]), that object's and the pile; through a
 //! dropped one, the pile, every cell and every object's; through a value
 //! that holds no RAM pointer (an unknown, a number read from memory: the
 //! closed world, below), nothing in RAM, but where the value-set analysis
@@ -172,9 +173,14 @@
 //! doesn't know is somewhere in its object (`&tasks[i]`), as a ROM
 //! pointer "from here on" is; any other op on one (a shift, a difference,
 //! its bytes) makes a number, as on a ROM pointer. What that takes on
-//! trust, as the ROM rule does: an index stays in its object, and an
+//! trust, as the ROM rule does: an index stays in its object (so a RAM
+//! address moved out of its object by an amount that varies is still
+//! somewhere in it, [`left_object`]; one constant offset is exact, a
+//! field's address), and an
 //! object runs to the next literal the code indexes from that isn't a
-//! field of the one below (a `memcpy` through `&s` past such a literal
+//! field of the one below, or, where the value sets bound every access
+//! the code makes from its start, to the last byte those reach
+//! ([`ram_parts`]) (a `memcpy` through `&s` past such a literal
 //! inside `s` leaves those stores in `s`'s object, and a load there at a
 //! constant address misses them); a pointer isn't made of its bytes in
 //! registers (a byte copy through memory is a number); a function called
@@ -182,8 +188,14 @@
 //! incomplete callee sets pass, a pointer into a stack, at a constant
 //! address or one the run dropped, never one somewhere in an object
 //! ([`LOOSE`] in r0-r3, `native/fnref-ram-loose-params`: a closure's
-//! environment called through a vtable the run never read); and no load
-//! at a constant address reads a stack.
+//! environment called through a vtable the run never read); with the
+//! registers' rules on too ([`live_env`]), the callers the run can't see
+//! are the BIOS's and nothing's (the reset, a function no code names,
+//! the IRQ vector's function at 0x03007ffc) once the run has otherwise
+//! settled, and every address-taken function's only from when some
+//! call's callee set is incomplete, where before each such function had
+//! them from the first round; and no load at a constant address reads a
+//! stack.
 //!
 //! **The heap by allocation site** (`native/fnref-heap-sites`;
 //! `GBAA_FNREF_HEAP` set, [`heap_env`], off by default, and on only over
