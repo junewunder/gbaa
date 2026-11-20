@@ -34,7 +34,7 @@ that adds it. The owner agreed the "Not wanted" list (2026-11-19).
 | BIOS calls by name | `LZ77UncompVram(g, …)`, `hw::halt(g)` (the prelude's BIOS calls) | Has it |
 | GBA I/O registers by name (`REG_TM1CNT_L`, `codegen::io_regs`) | `st16(g, 0x4000208u32 & !1, 0x1u32)` | Unit: `native/lift-io-names` |
 | Value names (`[values]`, pret's constants where a field takes them) | Numbers (`gMainGameMode = 0x1u32 as u16`) | Unit: `native/lift-value-names` |
-| Text where the code loads a string (decomp charmaps, community tables, a table from screenshots) | The bare address | Unit: `native/lift-text` |
+| Text where the code loads a string (decomp charmaps, community tables, a table from screenshots) | `// text: sFileScreenTextPointers[2] sEnglishTextPointers_FileScreen: ["Start Game\nStart Game (Link)", …]` above the statement that uses a constant pointing at text or a table of it, where the names files give a text table (`native/lift-text`, 2026-11-19: 8 on Metroid); no byte preview where none is known | Has it |
 | The bytes behind ROM data pointers | Bare addresses, read at run time | Unit: `native/rom-statics` (filed; ROM objects become typed statics) |
 
 ### Types and paths
