@@ -1,0 +1,104 @@
+{
+  "id": "volume",
+  "title": "Volume: a sane starting level, and controls",
+  "priority": 6,
+  "order": 19,
+  "units": [
+    {
+      "id": "volume/measure-level",
+      "title": "Measure our loudness against mGBA and real apps",
+      "detail": "Answers what 'correct' volume is. Today runtime::sound::mix maps the 10-bit DAC's full swing to full i16 (x64), and desktop audio.rs plays it at /32768 with no gain, so a game that swings the DAC fully plays at 0 dBFS. Measure peak and loudness (RMS or LUFS; Rust, not a python script) of our --wav against mgba-dump --audio-log for the same frames on 3+ ROMs (agb sound ROM, Emerald title/overworld/battle, Kirby AM): the dB gap to mGBA at its default 100%, and how loud each is next to typical desktop audio (~-14 to -23 LUFS). Write the numbers and a recommended default gain into docs/sound-design.md 'Playback'. Leave mix() alone: the oracle and audio hashes depend on it.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "6100117b",
+        "at": "2026-10-28T08:03:10Z",
+        "evidence": "just audio-loudness on 8 scenes, 7 ROMs (agb sound ROM, 10512 Hz ROM, Emerald intro/title/Littleroot, Kirby AM, Minish Cap, Metroid ZM): ours is +2.50 dB RMS over mGBA at 100% in every one (x64 vs mGBA's x48), -6.5 to -19.3 LUFS. Table and recommended -6 dB default gain in docs/sound-design.md 'Level'; loudness tool unit-tested against BS.1770 (0 LUFS 997 Hz sine); just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "volume/default-gain",
+      "title": "Start at a reasonable volume by default",
+      "detail": "Apply a master gain in the desktop (f32, before the resampler in audio.rs; never in runtime mix(), which the audio hashes and mGBA oracle judge), defaulting to the level {unit:volume/measure-level} recommends. Headless --wav/--audio-hash stay ungained. Netplay's seat sound gets the same gain. Evidence: before/after peak and loudness on the same ROMs.",
+      "check": "recorded",
+      "needs": ["volume/measure-level"],
+      "record": {
+        "state": "done",
+        "by": "900400dc",
+        "at": "2026-10-29T01:23:30Z",
+        "evidence": "Player applies DEFAULT_GAIN x0.5 (f32, before the resampler) for window, link and netplay seats; mix()/--wav/--audio-hash ungained. Ungained --wav vs new --audio-pace 0 --played-wav, same frames: agb -14.4->-20.5 LUFS, Emerald -15.4->-21.9, Kirby -19.3->-25.9, Minish -12.5->-19.0, Metroid -6.5->-12.8; peaks -6.02..-6.05 dB. Test the_gain_scales_what_plays; just check passes. Table in docs/sound-design.md Level.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-28T08:03:12Z",
+          "by": "6100117b",
+          "text": "Measured in {unit:volume/measure-level}: ours is 2.50 dB over mGBA at 100%; -6.5 to -19 LUFS. Recommended -6 dB (x0.5) in playback after the resampler; -2.5 dB would match mGBA. Table: docs/sound-design.md 'Level'; rerun with just audio-loudness."
+        }
+      ]
+    },
+    {
+      "id": "volume/windows-loud",
+      "title": "Find why sound starts very loud on Windows",
+      "detail": "A friend reported the Windows build started very loud (louder than Linux, which is also loud). Suspects: WASAPI shared mode has no per-app default below 100% where PipeWire may restore a lower stream volume; the device's sample format (cpal I16/U16/I32 paths in audio/device.rs) or channel count (5.1/7.1 interleave) scaling wrong; Windows loudness enhancements. Check what can be checked by reading cpal and our conversion, and in wine if it helps. Real-Windows confirmation goes on {unit:stretch/windows-play-gate} as a note, not here. Agents may not touch june's screen for Windows (decision).",
+      "check": "recorded",
+      "needs": ["volume/default-gain"],
+      "record": {
+        "state": "done",
+        "by": "e6b01c8d",
+        "at": "2026-10-29T01:30:29Z",
+        "evidence": "Read cpal 0.18.2 WASAPI (shared mode, GetMixFormat F32, AUTOCONVERTPCM, session volume never set: 100% of master), dasp f32->int conv (correct, saturating) and our interleave (L/R then silence, right for 5.1/7.1). No format/channel bug; the report predates the -6 dB default; host differences (PipeWire restored stream volume, Windows Loudness Equalization). Written in docs/sound-design.md Level; just check passes.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "volume/setting",
+      "title": "A volume setting: --volume and settings.conf",
+      "check": "recorded",
+      "needs": ["volume/default-gain"],
+      "record": {
+        "state": "done",
+        "by": "4b4046bf",
+        "at": "2026-10-29T01:51:42Z",
+        "evidence": "Flag --volume PCT (0-200, 100=DEFAULT_GAIN -6 dB, 200 ungained) or 'volume = PCT' in settings.conf sets the gain for window, link and netplay seats and --audio-pace's --played-wav. New settings.rs parses/loads both keys; set/save rewrite one in place (for the menu row). Tests the_settings_file, the_volume_flag. agb sound ROM 600 frames played-wav peaks: -19.32 dBFS at 100, -25.34 at 50, -13.30 at 200 (6.02 dB steps). just check passes.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "volume/menu-row",
+      "title": "Volume and mute rows in the window menu",
+      "detail": "In menu.rs's main page: a Volume row (left/right in 10% steps, like Fast-forward's) and a Mute toggle that pauses output without stopping the device's pacing (see how fast-forward empties the queue). Changes save to settings.conf. Works by pad and keyboard. Test the row logic in Rust; a screenshot in a cu session for evidence.",
+      "check": "recorded",
+      "needs": ["volume/setting"],
+      "record": {
+        "state": "done",
+        "by": "8682be91",
+        "at": "2026-10-29T02:08:19Z",
+        "evidence": "Volume (10% steps, 0-200, saved to settings.conf, comments kept) and Mute (gain 0 + queue emptied, device keeps pacing) rows; tests volumes_step_and_stop_at_the_ends, the_volume_and_mute_rows_set_and_save_it, muting_keeps_the_device_pacing; just check 722 pass after merging main. cu session (keyboard; cu has no headless pad): screenshot work/volume-menu-row/menu-volume-mute.png shows Volume 120%, Mute on; settings.conf rewritten to 'volume = 120 # starting level'; muted run 0 underruns, presents mean 16.6 ms.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-29T01:51:35Z",
+          "by": "4b4046bf",
+          "text": "Use settings::save(path, \"volume\", pct) to persist (rewrites the line, comments kept); Player::set_gain(audio::volume_gain(pct)) to apply live. Volume is 0-200 percent, 100 = default -6 dB level."
+        }
+      ]
+    },
+    {
+      "id": "volume/hotkeys",
+      "title": "Volume keys with a brief on-screen level",
+      "detail": "Keyboard keys to step volume and mute without opening the menu (pick ones that don't clash with remap defaults, e.g. - = and M or F-keys), saved like the menu's. Show the level for ~1 s on screen (egui toast or runtime overlay.rs). No pad combo unless one is free of game buttons.",
+      "check": "recorded",
+      "needs": ["volume/menu-row"],
+      "record": {
+        "state": "done",
+        "by": "22560dae",
+        "at": "2026-10-29T02:23:25Z",
+        "evidence": "With the menu shut, - and = (keypad - +) step the volume 10% (saved to settings.conf like the menu's row, unmuting) and M mutes for the run; an egui toast shows 'Volume N%' or 'Muted' for 1 s. Keys are free in the default and player-2 maps (test the_volume_keys_are_free); a key a mapping binds stays the button's. Menu test the_volume_keys_step_mute_save_and_toast; just check passes after merging main. No pad combo: none free.",
+        "host": "quack"
+      }
+    }
+  ]
+}

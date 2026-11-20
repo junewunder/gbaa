@@ -1,0 +1,88 @@
+{
+  "id": "oracle",
+  "title": "Making mGBA a sharper oracle",
+  "priority": 4,
+  "order": 6,
+  "units": [
+    {
+      "id": "oracle/mgba-mismatches",
+      "title": "Shrink mGBA's known mismatches; match its reset",
+      "detail": "From GitHub #60/#61. mGBA 0.10.5 fails jsmolka arm 235 (cmp pc doesn't flush) and thumb 230 (base in rlist) and bios 001 (HLE open-bus word). Check whether mGBA master passes the CPU two; if so pin it in scripts/fetch-mgba.sh and drop their known-mismatches.tsv lines. Note mGBA's HLE reset leaves r14=0x08000000, r1=0 where ours zeroes all: decide (and record) whether ours copies it, for register comparisons.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "0f9995ba",
+        "at": "2026-10-21T15:22:16Z",
+        "evidence": "Built mGBA master fd9dc5c: jsmolka arm fails 522 (new), thumb still 230, bios passes; so 0.10.5 stays pinned and known-mismatches.tsv keeps its lines. Shim now compiled with libmgba's defines (master segfaulted without them). Machine::new copies mGBA HLE reset: r14=0x08000000, carry set. just check, gba-tests (5 pass), mgba-oracle (10 ok) pass after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "oracle/five-routes-red-on-main",
+      "title": "Five unit routes fail on main: armwrestler, 3 shares",
+      "detail": "Found 2026-11-01 by {unit:native/hw-library}, reproduced on the pre-change commit with byte-identical hashes, so main already fails them: just unit affine, mosaic-modes and windows-blend stop on the compiled share (0.8909, 0.9660, 0.9407 against a bar of 0.97; mGBA and the interpreter draw every checkpoint); armwrestler-fixed's recompiled frame 37 differs from the interpreter's; armwrestler-original's recompiled registers differ from the interpreter's at frame 350. Find which commit turned each red (git bisect over just unit <name>) and fix it, or ask the owner if a bar should move (never lower it to pass). Done when all five pass just unit.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit affine && just unit mosaic-modes && just unit windows-blend && just unit armwrestler-fixed && just unit armwrestler-original"
+      },
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "check",
+        "worker": "3d0b5b4b",
+        "at": "2026-11-18T12:33:11Z",
+        "evidence": "help: consider removing the field `workspace.package.license`",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-11-18T12:32:13Z",
+          "by": "3d0b5b4b",
+          "text": "All five pass on the branch after merging main (2026-11-18). Shares: BIOS stalls were counted as fallback (Stats::stalled_cycles now). armwrestler: block_timed frame 37 and new regs_block_timed_why, both confirmed with --interp-blocks."
+        }
+      ]
+    },
+    {
+      "id": "oracle/long-fill-frame-offset",
+      "title": "A long VRAM fill before the first wait: a frame off mGBA",
+      "detail": "Found by {unit:native/c-test-programs}: c/template with a full-screen mode-3 fill_rect (38400 strh, Thumb from ROM, WAITCNT 0x4317 or default) before its first VBlankIntrWait draws frame N in our interpreter as mGBA 0.10.5 draws frame N+1 (just mgba-diff, 600 frames, 62 pixels). Without the fill they match. Find whose cycle count is off (ROM prefetch, VRAM stores, IntrWait's entry) and fix ours or record it as a known mismatch. Repro: put fill_rect(0, 0, SCREEN_W, SCREEN_H, RGB(4, 4, 8)) back before the loop in c/template/main.c, just c-tests, just mgba-diff $GBAA_DATA/c/c-template-agbcc.gba 600.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "2ff8c02c",
+        "at": "2026-11-18T12:38:18Z",
+        "evidence": "Cause found, recorded as a known mismatch: the fill costs 618027 cycles in both (timer-measured, agbcc and gcc). mGBA's HLE reset hands over on line 126, H-blank ~91 cycles off (fingerprinted, 16 ROMs); ours on line 0, so the first wait lands a frame apart. Ours moved to 126/91: just mgba-diff hash 8c89c928550c71a5 both at 600, but Metroid exact parts from mGBA at frame 28 (BIOS costs likely), so reverted; fix filed as {unit:oracle/boot-beam-and-bios-costs}; memory/mgba-boot-beam.md. just check passed after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "oracle/boot-beam-and-bios-costs",
+      "title": "Start the beam where mGBA does, with its BIOS call costs",
+      "detail": "mGBA hands over on line 126 with H-blank ~91 cycles off; ours starts on line 0 (memory/mgba-boot-beam.md). Moving ours alone fixes {unit:oracle/long-fill-frame-offset}'s ROM but puts Metroid's exact interpreter a frame off mGBA from frame 28, likely because our BIOS calls cost more cycles than mGBA's HLE ones. Find what Metroid's boot spends before its first wait in both, match the costs and the start together, re-pin any route checkpoint that changes (with mGBA's agreement), and update the runtime tests that assume line 0. Done when the long-fill template ROM (repro on that unit) and every units/*.toml checkpoint that matched mGBA still match it.",
+      "check": "recorded",
+      "uses": ["heavy"],
+      "priority": 3,
+      "record": {
+        "state": "done",
+        "by": "98d3dc04",
+        "at": "2026-11-19T22:11:12Z",
+        "evidence": "Review's last fix made: c/README.md bullet now says long fills before the first wait match mGBA. Earlier evidence stands (long-fill template agbcc+gcc match mGBA at frame 600 in mgba-diff; units/*.toml checkpoints that matched still match). Merged latest main; just check passes (exit 0).",
+        "host": "quack",
+        "landed": "2026-11-19T22:15:43Z"
+      },
+      "notes": [
+        {
+          "at": "2026-11-19T21:54:47Z",
+          "by": "094c9ec7",
+          "text": "Only the review's README finding is left: drop or rewrite the c/README.md bullet about long fills starting a frame late, since this unit fixed it. Then land; the code findings were already settled."
+        },
+        {
+          "at": "2026-11-18T13:41:44Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/runtime/src/io.rs:404-413: the new `reg::DISPCNT =>` arm in `Io::write_masked` was inserted between the existing `JOY_TRANS` comment (\"A `JOY_TRANS` store sets `JOYSTAT`'s sent flag (GBATEK, and mGBA's …"
+        }
+      ]
+    }
+  ]
+}

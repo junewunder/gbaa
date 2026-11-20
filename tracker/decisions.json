@@ -1,0 +1,1449 @@
+{
+  "decisions": [
+    {
+      "id": "d/known-mgba-mismatches-live-in-each-unit-s-env",
+      "title": "Known mGBA mismatches live in each unit's env file",
+      "why": "A unit's input script means ROM plus frames isn't a key, so just unit reads MGBA_HASH and MGBA_WHY from units/NAME.env instead of known-mismatches.tsv (which mgba-diff keeps using).",
+      "by": "8fa58b46",
+      "at": "2026-10-21T02:43:05Z",
+      "scope": ["*"]
+    },
+    {
+      "id": "d/a-unit-is-stopped-and-split-at-3-hours-not-90",
+      "title": "A unit is stopped and split at ~3 hours, not 90 min",
+      "why": "june: units running an hour are fine and not a bad sign; at about 3 hours a unit should have been broken up.",
+      "by": "owner",
+      "at": "2026-10-21T02:49:49Z",
+      "scope": ["*"]
+    },
+    {
+      "id": "d/stay-on-mgba-0.10.5-our-reset-copies-its-hle",
+      "title": "Stay on mGBA 0.10.5; our reset copies its HLE BIOS's",
+      "why": "mGBA master (fd9dc5c) passes jsmolka bios 001 but still fails thumb 230 and now arm 522, so no pin change. Machine::new leaves r14=0x08000000 and carry set, as mGBA's HLE resetBase does, so register dumps from reset compare equal; frame hashes unchanged.",
+      "by": "0f9995ba",
+      "at": "2026-10-21T15:19:03Z",
+      "scope": ["oracle/*"]
+    },
+    {
+      "id": "d/sound-is-judged-against-mgba-from-a-state",
+      "title": "Sound is judged against mGBA from a state; GBATEK refill stays",
+      "why": "just mgba-audio-diff from frame-100 mGBA states is byte-exact on the 18157 Hz ROM (600 frames) and the 10512 Hz ROM (1000), so the FIFO refill rule (<=16 bytes) never shows. From reset agb's boot runs fast here (no wait states) and music starts 3 buffers early, so compare from a state.",
+      "by": "e72824f5",
+      "at": "2026-10-21T19:09:32Z",
+      "scope": ["sound/*"]
+    },
+    {
+      "id": "d/self-patching-iwram-code-versions-seen-at",
+      "title": "Self-patching IWRAM code: versions seen at recompile time",
+      "why": "Rogue's mixer patches its loop per channel (3 templates). gbaa-recompile runs the ROM 1800 frames in the interpreter and compiles each block version seen, guarded by its own bytes; guards are per block. Deterministic, from git; unseen bytes fall back. Fallback 37.8% to 2.2%.",
+      "by": "5f36f243",
+      "at": "2026-10-21T20:26:49Z",
+      "scope": ["discovery/*"]
+    },
+    {
+      "id": "d/mgba-s-8-bit-blend-rounding-is-a-known-mismatch",
+      "title": "mGBA's 8-bit blend rounding is a known mismatch",
+      "why": "Our mGBA build mixes widened 8-bit channels, rounding some blended pixels up a 5-bit step; hardware (GBATEK) and mGBA's 16-bit build don't. We keep the 5-bit mix; units hit by it set MGBA_HASH after proving the swap reproduces mGBA's hash.",
+      "by": "42a9da12",
+      "at": "2026-10-21T20:59:08Z",
+      "scope": ["emerald/*"]
+    },
+    {
+      "id": "d/short-input-scripts-are-fine-long-routes-use-an",
+      "title": "Short input scripts are fine; long routes use an existing TAS",
+      "why": "june: a checkpoint's input script is a test, so a few presses to reach a screen are fine. Never build a long gameplay route (a TAS) ourselves; if one is needed, use a published TAS (e.g. a TASVideos movie) converted to our input format, and ask june first.",
+      "by": "owner",
+      "at": "2026-10-22T14:18:43Z",
+      "scope": ["*"]
+    },
+    {
+      "id": "d/gamepads-read-through-gilrs-positional-default",
+      "title": "Gamepads read through gilrs; positional default layout",
+      "why": "gilrs is pure Rust (no SDL2 dev or cmake), reads evdev so it sees Steam Input's virtual pad in Game Mode, honours SDL_GAMECONTROLLERCONFIG, and runs on Windows/macOS. Default: east=A, south=B as on a GBA; ~/.config/gbaa/gamepad.conf rebinds per button",
+      "by": "32d1e9e5",
+      "at": "2026-10-22T14:42:56Z",
+      "scope": ["deck/*"]
+    },
+    {
+      "id": "d/pad-west-saves-a-state-north-loads-it",
+      "title": "Pad west saves a state, north loads it",
+      "why": "The GBA has two face buttons, so west and north are free in the positional layout. They act on the slot last used (1 at first); keyboard Shift+F1-F4 saves, F1-F4 loads. gamepad.conf rebinds save-state and load-state.",
+      "by": "39c71a40",
+      "at": "2026-10-22T15:09:31Z",
+      "scope": ["deck/*"]
+    },
+    {
+      "id": "d/register-dumps-step-to-the-loop-head-before",
+      "title": "Register dumps step to the loop head before printing",
+      "why": "Compiled code ends a frame only at a block start; the interpreter after any instruction, so in a busy wait loop (Emerald's WaitForVBlank) the registers matched by luck. gbaa-desktop --regs now steps the interpreter, no IRQs, until a backward branch, in both runs; the frame hash is still taken at frame end.",
+      "by": "2b1a1ddc",
+      "at": "2026-10-22T15:19:33Z",
+      "scope": ["emerald/*"]
+    },
+    {
+      "id": "d/rewind-is-held-on-r-or-the-right-stick-pushed",
+      "title": "Rewind is held on R, or the right stick pushed left",
+      "why": "Every pad button already has a GBA or front-end job (triggers double L/R; west/north are save states); the right stick's directions were free and the Deck has one. Keyboard R is unbound. Rebind with 'rewind =' in gamepad.conf.",
+      "by": "b3ba2b4f",
+      "at": "2026-10-22T15:33:26Z",
+      "scope": ["deck/*"]
+    },
+    {
+      "id": "d/fix-the-groudon-regression-before-the-title",
+      "title": "Fix the Groudon regression before the title screen",
+      "why": "The title checkpoint (frame 3800) runs through frame 2400, so a drift there would likely make the title unit chase the same bug.",
+      "by": "cf5d1ad1",
+      "at": "2026-10-22T16:01:25Z",
+      "scope": ["emerald/legends-again"]
+    },
+    {
+      "id": "d/checkpoints-are-one-check-per-route-not-a-unit",
+      "title": "Checkpoints are one check per route, not a unit each",
+      "why": "Owner 2026-10-23: a ROM's checkpoints share one input route, so one build checks them all; units are the fixes the first failing checkpoint needs. A ROM can have several routes when paths diverge.",
+      "by": "owner",
+      "at": "2026-10-23T20:03:12Z",
+      "scope": ["group:rogue", "group:imperium", "group:emerald", "shared/route-checks"]
+    },
+    {
+      "id": "d/new-check-and-data-logic-in-rust-or-toml-not",
+      "title": "New check and data logic in Rust or TOML, not bash",
+      "why": "Owner 2026-10-23, frustrated that agents keep reaching for bash: checkers, input scripts and checkpoint data go in Rust code or declarative files; just recipes stay thin calls.",
+      "by": "owner",
+      "at": "2026-10-23T20:03:14Z",
+      "scope": ["*"]
+    },
+    {
+      "id": "d/route-inputs-are-toml-press-tables-not-a-string",
+      "title": "Route inputs are TOML press tables, not a string",
+      "why": "Owner 2026-10-23: each press or run of presses is a [[press]] table (button, at, or from/to/every, optional hold). --input on the CLI keeps its string syntax.",
+      "by": "owner",
+      "at": "2026-10-23T20:06:00Z",
+      "scope": ["shared/route-checks", "group:rogue", "group:imperium", "group:emerald"]
+    },
+    {
+      "id": "d/known-mgba-mismatches-live-on-the-route-s",
+      "title": "Known mGBA mismatches live on the route's checkpoint",
+      "why": "units/*.env became TOML routes ({unit:shared/route-checks}): a checkpoint's mgba_hash and mgba_why sit beside its hash in units/<route>.toml; known-mismatches.tsv stays mgba-diff's.",
+      "by": "485e5fdd",
+      "at": "2026-10-23T21:13:30Z",
+      "scope": ["*"],
+      "replaces": "d/known-mgba-mismatches-live-in-each-unit-s-env"
+    },
+    {
+      "id": "d/netplay-every-peer-runs-every-console-lockstep",
+      "title": "Netplay: every peer runs every console; lockstep, no rollback",
+      "why": "Only inputs cross the network, so the link cable stays exact inside each process (Dolphin's integrated-GBA way). Our targets are turn-based, where 3-6 frames of input delay don't show; rollback waits for a real-time game. docs/research/multiplayer.md.",
+      "by": "d1083785",
+      "at": "2026-10-24T03:38:46Z",
+      "scope": ["multiplayer/*"]
+    },
+    {
+      "id": "d/lua-scripts-follow-mgba-0.10.5-s-api-where-0.11",
+      "title": "Lua scripts follow mGBA 0.10.5's API where 0.11-dev differs",
+      "why": "0.10.5 is the latest mGBA release, so scripts in the wild target it. getGameCode differs (AGB-BPEE vs BPEE) and each pokemon.lua recognises Emerald only in its own format (probe in docs/research/lua-scripting.md). Take 0.11-dev's additions only where they don't clash.",
+      "by": "ea00af67",
+      "at": "2026-10-24T03:49:21Z",
+      "scope": ["scripting"]
+    },
+    {
+      "id": "d/lua-runs-on-mlua-with-vendored-puc-lua-5.4",
+      "title": "Lua runs on mlua with vendored PUC Lua 5.4, outside runtime",
+      "why": "mGBA builds against Lua 5.4 and its scripts use 5.3+ syntax (bit operators) that LuaJIT and Luau can't parse; piccolo lacks most of the standard library. Vendored builds need only a C compiler on Linux, macOS, Windows. runtime stays no_std, so Lua lives in a desktop-side crate.",
+      "by": "ea00af67",
+      "at": "2026-10-24T03:49:23Z",
+      "scope": ["scripting"]
+    },
+    {
+      "id": "d/multiplayer-kind-linking-built-first",
+      "title": "Multiplayer: which kind of linking should be built first: Cable first: trades and battles with friends",
+      "why": "builds the plan as filed: link hub, local two-player window, netplay core, relay server, then june plays a friend. Wireless and shared overworld stay later research",
+      "by": "owner",
+      "at": "2026-10-24T04:00:37Z",
+      "question": "q/multiplayer-kind-linking-built-first",
+      "via": "65e71fe8"
+    },
+    {
+      "id": "d/multiplayer-where-server-run",
+      "title": "Multiplayer: where should the server run: A machine of june's that is always on",
+      "why": "Start the relay as a separate program (later optionally built into the game). june wants it to know nothing about the game: the same server works for any game, any console. Build a quick prototype first to find out if that holds. Which always-on machine: not named yet, ask june when the relay unit needs it.",
+      "by": "owner",
+      "at": "2026-10-24T04:00:39Z",
+      "question": "q/multiplayer-where-server-run",
+      "via": "65e71fe8"
+    },
+    {
+      "id": "d/game-menus-built",
+      "title": "What should the in-game menus be built on: winit + egui (OpenGL)",
+      "why": "Changed by june (2026-10-24): egui yes, but SDL3 (the sdl3 crate, vhspace/sdl3-rs) instead of winit for the window and graphics layer, and for gamepads (button labels, the Deck's controller, Steam Input), replacing gilrs; egui drawn through SDL's renderer (Vulkan/Metal/D3D as SDL picks), not OpenGL. The glue from egui to the SDL renderer may be ours to write. Audio (cpal or SDL's) is the implementer's call, say why. egui's look is ours to style; june has no opinion on egui details. Accessibility through AccessKit (AT-SPI on Linux) is wanted later, not now.",
+      "by": "owner",
+      "at": "2026-10-24T04:10:31Z",
+      "question": "q/game-menus-built",
+      "via": "65e71fe8"
+    },
+    {
+      "id": "d/menus-in-egui-drawn-through-sdl3-sdl3-for",
+      "title": "Menus in egui, drawn through SDL3; SDL3 for window, graphics and pads",
+      "why": "june, 2026-10-24: SDL3 (sdl3 crate, vhspace/sdl3-rs) for the window and graphics layer instead of winit, and for gamepads (button labels, the Deck's controller, Steam Input) in place of gilrs; egui for the menus and later the Lua console, drawn through SDL's renderer (Vulkan/Metal/D3D as SDL picks), not OpenGL. The egui-to-SDL-renderer glue may be ours to write. Audio stays cpal unless the implementer shows SDL's is better. egui's styling is ours to settle. Accessibility via AccessKit later, not now. Research: docs/research/ui-library.md.",
+      "by": "owner",
+      "at": "2026-10-24T04:10:49Z",
+      "scope": ["stretch/*", "scripting/console-ui", "deck/*"],
+      "replaces": "d/game-menus-built"
+    },
+    {
+      "id": "d/much-may-lua-script-your",
+      "title": "How much may a Lua script do on your machine: Limited, with a per-script full-access switch",
+      "why": "scripts can only touch files in their own folder and talk to this machine; Ironmon's tracking works at once, and its updater and new-run automation work once you flip its switch (remembered)",
+      "by": "owner",
+      "at": "2026-10-24T04:48:09Z",
+      "question": "q/much-may-lua-script-your",
+      "via": "f8f08620"
+    },
+    {
+      "id": "d/scripts-breakpoints-watchpoints",
+      "title": "Should scripts get breakpoints and watchpoints: Leave them out for now",
+      "why": "nothing to build; a script that asks gets a warning",
+      "by": "owner",
+      "at": "2026-10-24T04:48:10Z",
+      "question": "q/scripts-breakpoints-watchpoints",
+      "via": "f8f08620"
+    },
+    {
+      "id": "d/ctrl-q-quits-the-window-escape-never-does",
+      "title": "Ctrl+Q quits the window; Escape never does",
+      "why": "Steam's desktop controller layout sends Escape for the Deck's B, and holding B (running in Pokémon) is common, so even Escape held would quit by accident. Escape only closes the menu; quit by Ctrl+Q, the menu's Quit, the window's close button or Steam's Exit game.",
+      "by": "ba130907",
+      "at": "2026-10-24T16:44:10Z",
+      "scope": ["deck/*"]
+    },
+    {
+      "id": "d/pad-a-and-b-follow-the-buttons-labels",
+      "title": "Pad A and B follow the buttons' labels",
+      "why": "june, play test 2026-10-23: the GBA-positional default (A east, B south) felt wrong; the button labelled A should press GBA A. Default a = label-a, b = label-b: south/east on Xbox pads and the Deck, east/south on Nintendo pads. gilrs was since replaced by SDL3.",
+      "by": "d7634b05",
+      "at": "2026-10-24T20:22:44Z",
+      "scope": ["deck/*"],
+      "replaces": "d/gamepads-read-through-gilrs-positional-default"
+    },
+    {
+      "id": "d/undoing-state-load-look-feel",
+      "title": "How should undoing a state load look and feel: Menu row plus a key",
+      "why": "june: as a temporary solution for now; may revisit the UI later",
+      "by": "owner",
+      "at": "2026-10-24T20:32:58Z",
+      "question": "q/undoing-state-load-look-feel",
+      "via": "30499a0c"
+    },
+    {
+      "id": "d/windows-only-in-a-private-cu-session-never-june",
+      "title": "Windows only in a private cu session, never june's screen",
+      "why": "june, 2026-10-24: a lane opened windows on june's real desktop. Any run that opens a window (gbaa-desktop without --headless, SDL, fullscreen or resize checks) goes in a private headless KWin via the cu CLI (cu session; linux-computer-use skill). Prefer --headless where it suffices.",
+      "by": "owner",
+      "at": "2026-10-24T22:04:12Z",
+      "scope": ["*"]
+    },
+    {
+      "id": "d/structured-code-interpret-resumes-second",
+      "title": "Structured code: interpret resumes, or keep a second body: One structured body; resumes interpreted, then won back",
+      "why": "One body, but the runtime changes come first and change: calls settled in place (wider), IRQs in the tick, and the guest on its own stack so the frame end doesn't unwind. Spike: 1 resume a frame, 99.2% compiled, hashes exact. Design doc steps 5-8.",
+      "by": "owner",
+      "at": "2026-10-24T22:14:55Z",
+      "question": "q/structured-code-interpret-resumes-second",
+      "via": "862c0a49"
+    },
+    {
+      "id": "d/stop-unwinding-guest-stack-then-one-structured",
+      "title": "Stop unwinding: guest stack, then one structured body",
+      "why": "june, 2026-10-24: resumes are made rare rather than interpreted. Before the emitter: calls settled in place (any key other than the return site), IRQs and halts in the tick, and the guest on its own stack so the frame end pauses it. Two bodies, async codegen and nightly coroutines rejected: docs/structured-codegen-design.md steps 5-8.",
+      "by": "owner",
+      "at": "2026-10-24T22:14:57Z",
+      "scope": ["group:structured"]
+    },
+    {
+      "id": "d/emerald-saves-pokemon-center",
+      "title": "How should we get two Emerald saves at a Pokemon Center: Craft them",
+      "why": "june: a or b both fine; a chosen as the cheaper. If crafting hits a wall, a published TAS (b) is pre-approved as the fallback.",
+      "by": "owner",
+      "at": "2026-10-24T23:59:39Z",
+      "question": "q/emerald-saves-pokemon-center",
+      "via": "30499a0c"
+    },
+    {
+      "id": "d/scripts-load-into-a-running-game-start-not-fired",
+      "title": "Scripts load into a running game: start not fired",
+      "why": "mGBA 0.10.5 has no --script flag; its scripting window loads a script either before a game (emu nil, then start and reset fire) or into a running one (emu set, nothing fires). We load with emu set, the way the probe ran pokemon.lua and Ironmon; firing start too made idiomatic scripts set up twice.",
+      "by": "fa5a48d4",
+      "at": "2026-10-25T15:26:07Z",
+      "scope": ["scripting/*"]
+    },
+    {
+      "id": "d/may-lane-run-1-minute",
+      "title": "May a lane run a 1-minute Emerald benchmark on your Deck: Yes, whenever it's awake",
+      "why": "june: sure; network behaviour itself is tested locally with injected latency/jitter/loss",
+      "by": "owner",
+      "at": "2026-10-25T18:27:05Z",
+      "question": "q/may-lane-run-1-minute",
+      "via": "4b7a9cc9"
+    },
+    {
+      "id": "d/netplay-is-tested-locally-through-a-variable",
+      "title": "Netplay is tested locally through a variable-ping simulator",
+      "why": "june, 2026-10-25: write a variable-ping sim and run two instances locally that talk to each other; the Deck only occasionally, for CPU numbers",
+      "by": "owner",
+      "at": "2026-10-25T18:28:00Z",
+      "scope": ["group:multiplayer"]
+    },
+    {
+      "id": "d/registers-rust-locals-cost-58",
+      "title": "Registers in Rust locals cost 58% more build for no speed: keep, drop or turn on: Keep it, off",
+      "why": "june 2026-10-26: keep it, off by default behind --locals. It's the play view's answer; a future mod view may turn it on per function.",
+      "by": "owner",
+      "at": "2026-10-26T04:17:53Z",
+      "question": "q/registers-rust-locals-cost-58",
+      "via": "944ccabe"
+    },
+    {
+      "id": "d/emerald-build-run-randomized-emerald-2",
+      "title": "Should our Emerald build run randomized Emerald ROMs (Ironmon): Keep it compiled where unchanged",
+      "why": "june 2026-10-26: default",
+      "by": "owner",
+      "at": "2026-10-26T22:27:41Z",
+      "question": "q/emerald-build-run-randomized-emerald-2",
+      "via": "59f27e93"
+    },
+    {
+      "id": "d/multiplayer-vanilla-link-by-default-a-per-game",
+      "title": "Multiplayer: vanilla link by default, a per-game mod when vanilla can't deliver",
+      "why": "june 2026-10-26. Vanilla (emulate the cable, sync inputs, every peer runs every console) is the default: no per-game work, exact, works for any game, enough for turn-based or menu-driven link play (Emerald trades and battles). Mod a game's netcode when the feature doesn't exist in the game (shared overworld, drop-in, >4 players) or its real-time link protocol can't survive internet latency even with rollback. Where the game already ships a networking mod (Emerald Rogue's Rogue Assistant blobs), implement its other end. Applied: Emerald trades/battles vanilla; Rogue co-op mod side; Kirby co-op vanilla with rollback first, mod only if it feels bad; shared overworld mod only. june's long-term aim is the modded route for good multiplayer.",
+      "by": "owner",
+      "at": "2026-10-26T23:46:27Z",
+      "scope": ["multiplayer/*"]
+    },
+    {
+      "id": "d/online-play-friend-where-server",
+      "title": "Online play with a friend: where does the server run: A small rented VPS",
+      "why": "june: a fly.io app, not a VPS: deploy gbaa-server there with flyctl (no SSH needed). The rollback side is its own spike, {unit:multiplayer/rollback-design}.",
+      "by": "owner",
+      "at": "2026-10-26T23:51:12Z",
+      "question": "q/online-play-friend-where-server",
+      "via": "e0202f56"
+    },
+    {
+      "id": "d/mod-copies-live-in-mods-game-in-this-private",
+      "title": "Mod copies live in mods/<game>/ in this private repo",
+      "why": "Decision 2 says a mod is ordinary Rust in git once cut; a mod is a few dozen translated functions, like the committed Emerald snapshots, and the repo is private. Never in a public repo. docs/mod-view-design.md 'A mod copy'.",
+      "by": "c7879ead",
+      "at": "2026-10-27T00:40:06Z",
+      "scope": ["mod/*"]
+    },
+    {
+      "id": "d/mod-view-prints-pret-s-file-line-never-pret-s-c",
+      "title": "Mod view prints pret's file:line, never pret's C text",
+      "why": "The source map holds only addresses, names, sizes, paths and C types as text (decision 2's legality line). file:line lets a reader with pokeemerald open the line; copying C source into generated output is avoided. docs/mod-view-design.md 'The readable form'.",
+      "by": "c7879ead",
+      "at": "2026-10-27T00:40:08Z",
+      "scope": ["mod/*"]
+    },
+    {
+      "id": "d/source-map-file-is-the-elf-s-object-name-dup",
+      "title": "Source map file is the ELF's object name; dup names need two files",
+      "why": "STT_FILE names objects (main.o) and 69 of 893 stems match no single source file, so file is the object name; a source path waits for DWARF. One map file may give one name to two addresses only when their files differ (pret's statics); else the loader refuses.",
+      "by": "8005b1a5",
+      "at": "2026-10-27T01:01:09Z",
+      "scope": ["mod/*"]
+    },
+    {
+      "id": "d/mod-view-prints-maintainable-rust-close-to-pret",
+      "title": "Mod view prints maintainable Rust close to pret's C",
+      "why": "june 2026-10-26: the readable form aims at decompiled, maintainable Rust, not translated asm with names. Target, for ClearBattleMonForms: fn clear_battle_mon_forms(g: &mut Game) { for i in (0..4).rev() { g.battle_mon_forms[i] = 0; } }. Timing and flags hidden in macros, exact still. Not perfect pret C; maintainable is the bar. pret's C (and its DWARF types) is the oracle.",
+      "by": "owner",
+      "at": "2026-10-27T02:23:36Z",
+      "scope": ["group:mod"]
+    },
+    {
+      "id": "d/may-readable-rust-leave-dead",
+      "title": "May readable Rust leave dead scratch registers at a return: Allow registers dead at every return site to differ",
+      "why": "The printer drops those syncs, so bodies get about a third shorter. Needs an interprocedural liveness proof, and fn-diff compares only live state at returns. The Emerald route same-states check still runs.",
+      "by": "owner",
+      "at": "2026-10-27T16:53:50Z",
+      "question": "q/may-readable-rust-leave-dead",
+      "via": "05901267"
+    },
+    {
+      "id": "d/headless-lane-ssh-onto-your",
+      "title": "How should a headless lane get SSH onto your Deck: You approve the check now and then",
+      "why": "june 2026-10-27: lanes can already ssh onto the Deck via Tailscale, but must ask june before each time they do; june approves, then the unit runs.",
+      "by": "owner",
+      "at": "2026-10-27T16:54:56Z",
+      "question": "q/headless-lane-ssh-onto-your",
+      "via": "05901267"
+    },
+    {
+      "id": "d/approve-tailscale-ssh-onto-your",
+      "title": "Approve Tailscale SSH onto your Deck for the Emerald benchmark: Skip the Deck",
+      "why": "june 2026-10-27: skip the Deck",
+      "by": "owner",
+      "at": "2026-10-27T17:25:25Z",
+      "question": "q/approve-tailscale-ssh-onto-your",
+      "via": "05901267"
+    },
+    {
+      "id": "d/asset-overrides-key-on-rom-address-served-at",
+      "title": "Asset overrides key on ROM address, served at the load",
+      "why": "gbaa owns the BIOS decompressors and DMA, so it sees each load's ROM source: exact, one lookup a load, and names match the manifest and source map. Content-hash keys (Dolphin, PPSSPP) suit emulators that only see VRAM. docs/asset-extraction-design.md, Overrides.",
+      "by": "3196d7f9",
+      "at": "2026-10-27T17:40:38Z",
+      "scope": ["assets/*"]
+    },
+    {
+      "id": "d/naming-agents-sonnet-5.5-via-claude-p-with-no",
+      "title": "Naming agents: Sonnet 5.5 via claude -p, with no tools",
+      "why": "The naming loop's agent is claude -p --tools '' --safe-mode from an empty /tmp folder, so it can't read pret's source on disk and only the prompt reaches it; Sonnet 5.5 for cost (about $14 list per 300-function round). naming ask --model changes it.",
+      "by": "f0cba470",
+      "at": "2026-10-27T18:04:06Z",
+      "scope": ["mod/naming-*"]
+    },
+    {
+      "id": "d/readable-sync-blocks-are-the-exit-macro-s",
+      "title": "Readable sync blocks are the exit macro's trailing argument",
+      "why": "A macro_rules! per exit at the top of the function can't name the block's let-bound values: macro hygiene resolves locals where the macro is defined. So each exit's sync (regs!) is a trailing { } argument of tick!/call!/ret!, after the body's C lines. docs/mod-view-design.md, under {unit:mod/readable-lowering}.",
+      "by": "68e6bb5b",
+      "at": "2026-10-27T18:51:02Z",
+      "scope": ["mod/readable-*"]
+    },
+    {
+      "id": "d/netplay-is-rollback-over-plain-udp-lockstep-and",
+      "title": "Netplay is rollback over plain UDP; lockstep and QUIC parked",
+      "why": "june (2026-10-27), after playing both: lockstep freezes at every late input, and its QUIC relay doesn't work through fly.io. Rollback (--rollback, gbaa-server's plain-UDP rooms on 7374) is what netplay work builds on; lockstep stays in the code, unchanged, but gets no more work unless june says.",
+      "by": "owner",
+      "at": "2026-10-28T03:32:47Z",
+      "scope": ["group:multiplayer"]
+    },
+    {
+      "id": "d/netplay-is-rollback-over-plain-udp-lockstep-and-2",
+      "title": "Netplay is rollback over plain UDP; lockstep and QUIC parked",
+      "why": "june (2026-10-27), after playing both over fly.io: lockstep freezes at every late input, and its QUIC relay doesn't work through fly. Every peer still runs every console and only inputs cross the wire, but by rollback (--rollback, gbaa-server's plain-UDP rooms on 7374, netplay::rollback). Lockstep stays in the code, unchanged, and gets no more work unless june says.",
+      "by": "owner",
+      "at": "2026-10-28T03:33:06Z",
+      "scope": ["multiplayer/*"],
+      "replaces": "d/netplay-is-rollback-over-plain-udp-lockstep-and"
+    },
+    {
+      "id": "d/netplay-every-peer-runs-every-console-by",
+      "title": "Netplay: every peer runs every console, by rollback",
+      "why": "june (2026-10-27) parked lockstep and QUIC ({d:netplay-is-rollback-over-plain-udp-lockstep-and-2}): only inputs cross the network and every peer runs every console, as before, but by rollback over plain UDP, not lockstep. Kirby's real-time co-op showed lockstep's freezes; rollback is for turn-based games too.",
+      "by": "owner",
+      "at": "2026-10-28T03:33:38Z",
+      "scope": ["multiplayer/*"],
+      "replaces": "d/netplay-every-peer-runs-every-console-lockstep"
+    },
+    {
+      "id": "d/netplay-zero-input-delay-others-may-teleport",
+      "title": "Netplay: zero input delay; others may teleport",
+      "why": "june (2026-10-27): a press reaches your own console on the next frame, every game, turn-based too; other players may teleport. Input delay is never the fix for a bad connection or slow machine: speed is (recompiled netplay, no drawing on re-runs). Rollback is the desktop default at delay 0, lockstep behind --lockstep. The window is 300 frames (5 s), not Slippi's 7: don't freeze over a late input. Build, play, find what's bad, then fix it.",
+      "by": "owner",
+      "at": "2026-10-28T03:50:50Z",
+      "scope": ["multiplayer/*"]
+    },
+    {
+      "id": "d/netplay-lockstep-and-quic-are-removed-not-parked",
+      "title": "Netplay: lockstep and QUIC are removed, not parked",
+      "why": "june (2026-10-27): rip lockstep and QUIC out. Rollback over plain UDP at delay 0 is the only netplay ({d:netplay-zero-input-delay-others-may-teleport}). Every peer still runs every console and only inputs cross the wire.",
+      "by": "owner",
+      "at": "2026-10-28T03:51:20Z",
+      "scope": ["multiplayer/*"],
+      "replaces": "d/netplay-is-rollback-over-plain-udp-lockstep-and-2"
+    },
+    {
+      "id": "d/randomized-emerald-test",
+      "title": "How do we get a randomized Emerald to test with: Allow a session to run the UPR ZX jar on quack",
+      "why": "june (2026-10-28): approved after checking the repo; factory/auto-mode.json now allows the UPR ZX 4.6.1 jar run",
+      "by": "owner",
+      "at": "2026-10-28T04:28:51Z",
+      "question": "q/randomized-emerald-test",
+      "via": "e70ceba9"
+    },
+    {
+      "id": "d/a-soundfont-per-song-voicegroup-not-one-game",
+      "title": "A soundfont per song voicegroup, not one game-wide SF2",
+      "why": "A bank per voicegroup needs 176 banks for Emerald, past MIDI's 0-127 (128 is drums to most players), and the exported MIDI selects no bank. soundfonts/<voicegroup>.sf2 (bank 0, program = voice) plays a song's MIDI in any player; the manifest maps song to voicegroup to file.",
+      "by": "99532d88",
+      "at": "2026-10-28T06:27:51Z",
+      "scope": ["assets/*"]
+    },
+    {
+      "id": "d/may-loop-build-pret-s",
+      "title": "May the loop build pret's pokefirered for the FireRed control: allow it",
+      "why": "june (2026-10-28): approved; factory/auto-mode.json now allows just fetch-pret",
+      "by": "owner",
+      "at": "2026-10-28T13:35:12Z",
+      "question": "q/may-loop-build-pret-s",
+      "via": "e70ceba9"
+    },
+    {
+      "id": "d/readable-form-prints-call-values-as-comments",
+      "title": "Readable form prints call values as comments",
+      "why": "The readable lowering keeps registers in Machine and has no r0 local, so the design's 'r0 = call!(..)' would be a dead local. Instead a comment above call!: '// r0 = Callee(arg: r0): type' (void: no 'r0 ='). docs/mod-view-design.md, 'Naming locals', Printed.",
+      "by": "8a697918",
+      "at": "2026-10-28T20:53:33Z",
+      "scope": ["mod/*"]
+    },
+    {
+      "id": "d/the-kirby-probe-may-fail-then-a-retry-waits",
+      "title": "The Kirby probe may fail; then a retry waits behind a gate",
+      "why": "june 2026-10-28: a failed Kirby controller/asset probe is an acceptable result. june must be told, and a retry unit goes behind a gate (a unit or capability that would unblock it) so it is tried again later, instead of being dropped.",
+      "by": "owner",
+      "at": "2026-10-29T01:12:40Z",
+      "scope": ["research/kirby-controller-probe"]
+    },
+    {
+      "id": "d/the-menu-s-mute-lasts-one-run-only-volume-is",
+      "title": "The menu's Mute lasts one run; only Volume is saved",
+      "why": "settings.conf keeps the volume the menu sets; a saved mute would start the next run silent with no hint why, and --mute (no device, frame-clock pacing) already exists for a lasting mute.",
+      "by": "8682be91",
+      "at": "2026-10-29T02:08:18Z",
+      "scope": ["group:volume"]
+    },
+    {
+      "id": "d/build-controls-page-mockup",
+      "title": "Build the Controls page as in the mockup: Build it as mocked",
+      "why": "june: yes, as mocked. Built tomorrow by an agent under june's supervision from a GitHub issue, not by a lane.",
+      "by": "owner",
+      "at": "2026-10-29T03:39:09Z",
+      "question": "q/build-controls-page-mockup",
+      "via": "600a9d3e"
+    },
+    {
+      "id": "d/sessions-may-run-pokemonbizhawklua-in-gbaa",
+      "title": "Sessions may run PokemonBizhawkLua in gbaa",
+      "why": "june 2026-10-29: approved running mkdasher/PokemonBizhawkLua on Emerald in gbaa's Lua host, as many times as needed; rule in factory/auto-mode.json",
+      "by": "owner",
+      "at": "2026-10-29T14:48:47Z",
+      "scope": ["scripting/bizhawk-gui"]
+    },
+    {
+      "id": "d/asset-extraction-reach-graphics-route",
+      "title": "How should asset extraction reach graphics a route doesn't show: Fuzzing, extended. No general solution covers every GBA game, so do our best and give Claude and players good extraction tools. Emerald: a coverage report vs pret (unused excluded), aim ~90%; fuzz v2 with sweeps and story saves; static scan for the rest; an extract-while-playing flag. Then try it on Kirby.",
+      "why": "Fuzzing, extended. No general solution covers every GBA game, so do our best and give Claude and players good extraction tools. Emerald: a coverage report vs pret (unused excluded), aim ~90%; fuzz v2 with sweeps and story saves; static scan for the rest; an extract-while-playing flag. Then try it on Kirby.",
+      "by": "owner",
+      "at": "2026-10-29T18:19:23Z",
+      "question": "q/asset-extraction-reach-graphics-route",
+      "via": "d0eeeaaa"
+    },
+    {
+      "id": "d/no-game-library-of-our-own-fit-into-es-de-style",
+      "title": "No game library of our own; fit into ES-DE-style frontends",
+      "why": "june, 2026-10-29, after the emulator UX research: integrate nicely with ES-DE and frontends like it rather than be our own game library.",
+      "by": "owner",
+      "at": "2026-10-29T21:48:49Z",
+      "scope": ["group:deck"]
+    },
+    {
+      "id": "d/every-menu-action-works-on-a-pad-alone",
+      "title": "Every menu action works on a pad alone",
+      "why": "june, 2026-10-29: everything must be doable with a controller only, as on the Steam Deck.",
+      "by": "owner",
+      "at": "2026-10-29T21:48:51Z",
+      "scope": ["group:deck"]
+    },
+    {
+      "id": "d/keep-the-picture-as-it-is-no-colour-correction",
+      "title": "Keep the picture as it is: no colour correction by default",
+      "why": "june, 2026-10-29: friends say it looks so crisp; today's raw, integer-scaled picture is what she wants.",
+      "by": "owner",
+      "at": "2026-10-29T21:48:53Z",
+      "scope": ["group:deck"]
+    },
+    {
+      "id": "d/pad-x-presses-b-and-y-presses-a",
+      "title": "Pad X presses B and Y presses A",
+      "why": "june, 2026-10-29: the buttons across from each other should press the same GBA button; her project, her default for now.",
+      "by": "owner",
+      "at": "2026-10-30T03:48:50Z",
+      "scope": ["deck/face-buttons-mirror"]
+    },
+    {
+      "id": "d/every-recompiled-build-embeds-its-rom",
+      "title": "Every recompiled build embeds its ROM",
+      "why": "june, 2026-10-29: one file to send a friend or put on a Deck; nothing in the project stops it, builds never reach git or the mirror.",
+      "by": "owner",
+      "at": "2026-10-30T03:48:52Z",
+      "scope": ["deck/embed-rom"]
+    },
+    {
+      "id": "d/may-agent-sessions-run-just",
+      "title": "May agent sessions run just fly-deploy: agents may deploy",
+      "why": "june adds a permission rule allowing just fly-deploy; a lane then does {unit:multiplayer/fly-redeploy-rooms}; the volume stays june's to destroy",
+      "by": "owner",
+      "at": "2026-10-30T14:55:15Z",
+      "question": "q/may-agent-sessions-run-just",
+      "via": "0c5e1fa1"
+    },
+    {
+      "id": "d/source-emerald-story-point-fuzz",
+      "title": "Which source for Emerald story-point fuzz seed states: june: a and b. Try the published TAS first (replay in mGBA via mgba-dump, snapshot ~10 story points); if it won't sync on mGBA, or for story points it doesn't reach, use crafted story saves (a Rust tool setting pokeemerald's flags, vars and badges from pret's scripts).",
+      "why": "june: a and b. Try the published TAS first (replay in mGBA via mgba-dump, snapshot ~10 story points); if it won't sync on mGBA, or for story points it doesn't reach, use crafted story saves (a Rust tool setting pokeemerald's flags, vars and badges from pret's scripts).",
+      "by": "owner",
+      "at": "2026-10-30T14:55:52Z",
+      "question": "q/source-emerald-story-point-fuzz",
+      "via": "0c5e1fa1"
+    },
+    {
+      "id": "d/sticks-count-past-40-by-default-triggers-20",
+      "title": "Sticks count past 40% by default; triggers 20%",
+      "why": "june (2026-10-29): the GBA's pad is all or nothing, so a stick that counts small moves presses directions you didn't mean. In the Kirby playtest Athena kept inflating Kirby by a stray up at 20% and was fine at 40%. A settings file's deadzone keeps its value.",
+      "by": "2df1830c",
+      "at": "2026-10-30T17:50:15Z",
+      "scope": ["deck"]
+    },
+    {
+      "id": "d/supply-gba-bios-dump-emerald",
+      "title": "Can you supply a GBA BIOS dump so the Emerald TASes can sync: Yes, I'll put my own dump at $GBAA_DATA/bios/gba_bios.bin",
+      "why": "june supplied it 2026-10-30; at $GBAA_DATA/bios/gba_bios.bin on quack, read-only, SHA1 300c20df… (the official BIOS). Never commit it.",
+      "by": "owner",
+      "at": "2026-10-30T18:50:13Z",
+      "question": "q/supply-gba-bios-dump-emerald",
+      "via": "0c5e1fa1"
+    },
+    {
+      "id": "d/may-build-bizhawk-s-mgba",
+      "title": "May we build BizHawk's mGBA fork to sync the Emerald TAS: Yes, build the fork",
+      "why": "A session clones TASEmulators/mgba at 645282a into $GBAA_DATA/tools/, builds a second libmgba with fetch-mgba.sh's flags, links a TAS-only mgba-dump build to it, and replays the living-dex run again; if it syncs, the fuzzer gets TAS story states too",
+      "by": "owner",
+      "at": "2026-10-30T20:06:37Z",
+      "question": "q/may-build-bizhawk-s-mgba",
+      "via": "0c5e1fa1"
+    },
+    {
+      "id": "d/where-game-s-saves-states",
+      "title": "Where should a game's saves, states and resume file live: Per-game folder under a readable name (build's name, set at recompile; interpreter slugs the file name), not a hash. Order: --save-dir/--state-dir (exact folder) > per-game menu setting > global setting > <OS data dir>/gbaa/saves/<name>/. Files named after the game. States/resume record the ROM hash, load anyway with a .bak on mismatch, research whether that's risky. Old saves beside the ROM copied in once, originals kept. Full design: docs/save-locations-design.md",
+      "why": "Per-game folder under a readable name (build's name, set at recompile; interpreter slugs the file name), not a hash. Order: --save-dir/--state-dir (exact folder) > per-game menu setting > global setting > <OS data dir>/gbaa/saves/<name>/. Files named after the game. States/resume record the ROM hash, load anyway with a .bak on mismatch, research whether that's risky. Old saves beside the ROM copied in once, originals kept. Full design: docs/save-locations-design.md",
+      "by": "owner",
+      "at": "2026-10-30T20:31:41Z",
+      "question": "q/where-game-s-saves-states",
+      "via": "0e32b9de"
+    },
+    {
+      "id": "d/may-sessions-run-bizhawk-mgba",
+      "title": "May sessions run the BizHawk mGBA fork's build: Add a permission rule",
+      "why": "june 2026-10-30: same yes as building the fork; sessions may build and run it. Don't ask again for this route: if refused, ask the overseer to reword factory/auto-mode.json.",
+      "by": "owner",
+      "at": "2026-10-31T00:43:03Z",
+      "question": "q/may-sessions-run-bizhawk-mgba",
+      "via": "0c5e1fa1"
+    },
+    {
+      "id": "d/play-builds-use-timing-instant-checks-pass",
+      "title": "Play builds use --timing instant; checks pass --timing exact",
+      "why": "june played instant Kirby and can't tell it apart, finds it more responsive. mGBA stays the oracle through exact. A new check that recompiles must pass --timing exact (docs/research/mod-view-without-timing.md).",
+      "by": "owner",
+      "at": "2026-10-31T02:51:19Z",
+      "scope": ["*"]
+    },
+    {
+      "id": "d/resume-on-launch-is-off-by-default-a-menu",
+      "title": "Resume on launch is off by default; a menu setting turns it on",
+      "why": "june, 2026-10-30, reversing the on-by-default of 2026-10-29 ({unit:deck/resume-on-launch})",
+      "by": "owner",
+      "at": "2026-10-31T03:33:38Z",
+      "scope": ["group:deck"]
+    },
+    {
+      "id": "d/the-interpreter-plays-instant-too-checks-pin-it",
+      "title": "The interpreter plays instant too; checks pin it exact",
+      "why": "june, 2026-10-31: gbaa-desktop on a ROM defaults to --timing instant like play builds; a recompiled build's fallback and --interp follow the build's own timing; every check that runs gbaa-desktop or a build passes --timing exact (route-check --args prints it); gbaa-interp stays exact. A new check must pass it too (docs/decisions.md 11).",
+      "by": "owner",
+      "at": "2026-10-31T04:11:07Z",
+      "scope": ["*"]
+    },
+    {
+      "id": "d/a-lost-mod-call-reruns-its-block-from-a-guest",
+      "title": "A lost mod call reruns its block from a guest-RAM record",
+      "why": "A call a mod adds has no ROM code to resume at and its Rust frame can't be rebuilt (that'd be a state machine). Its record (r0-r14, CPSR, the block's key) sits below the callee's stack, so after a load, rewind or unwind the guest goes on where the block began: stock code, or the mod from its top. docs/mod-view-design.md, 'A call a mod adds'.",
+      "by": "8d9cb62f",
+      "at": "2026-10-31T18:54:56Z",
+      "scope": ["mod/*"]
+    },
+    {
+      "id": "d/modded-builds-are-plain-rust-programs-no-save",
+      "title": "Modded builds are plain Rust programs: no save states, rewind or rollback",
+      "why": "june 2026-10-31: save states/rewind and readable mods are incompatible (a mod can make a network request, which nothing rewinds). Unmodded builds keep save states, rewind, rollback, mGBA states and exact checks, with real ROM addresses in their state. Modded builds are fully native Rust using ordinary memory, no GBA memory block, and get none of those. No middle ground for now. The lost-mod-call rerun from a guest-RAM record is unsound under rollback and not needed. docs/decisions.md, decision 2.",
+      "by": "owner",
+      "at": "2026-11-01T00:04:05Z",
+      "scope": ["mod/*", "deck/*"],
+      "replaces": "d/a-lost-mod-call-reruns-its-block-from-a-guest"
+    },
+    {
+      "id": "d/may-lane-ssh-onto-your",
+      "title": "May a lane SSH onto your Deck to time four Kirbys' netplay: Leave the Deck for later",
+      "why": "the four-player rooms unit is recorded done on quack's numbers; the Deck timing stays its own follow-up {unit:multiplayer/four-kirbys-deck}, run whenever you next say yes",
+      "by": "owner",
+      "at": "2026-11-01T00:23:05Z",
+      "question": "q/may-lane-ssh-onto-your",
+      "via": "24176b67"
+    },
+    {
+      "id": "d/link-only-graphics-count-toward-2",
+      "title": "Should link-only graphics count toward Emerald's coverage: Keep them in",
+      "why": "the denominator stays 6,755 and play's share 64%; the report change is dropped; reaching them waits on the multiplayer link work",
+      "by": "owner",
+      "at": "2026-11-01T00:25:03Z",
+      "question": "q/link-only-graphics-count-toward-2",
+      "via": "24176b67"
+    },
+    {
+      "id": "d/minish-cap-s-decoded-text",
+      "title": "How should Minish Cap's decoded text be checked against mGBA: Accept the check without a scene",
+      "why": "june asked why an earlier text box can't be used; the 29 decoded calls are the only ones with a constant message number and all sit after the festival, so a",
+      "by": "owner",
+      "at": "2026-11-01T00:27:34Z",
+      "question": "q/minish-cap-s-decoded-text",
+      "via": "24176b67"
+    },
+    {
+      "id": "d/may-native-port-s-check",
+      "title": "May the native port's check use a new timing, not exact: Add --timing native for the native check",
+      "why": "the play build and interpreter get a fourth timing that moves the clock where the native program does; the native check compares frames and RAM byte for byte against that build, every frame. mGBA stays the oracle for the play build through its exact checks, as now. One more timing to keep correct ({unit:native/timing-native})",
+      "by": "owner",
+      "at": "2026-11-01T01:51:48Z",
+      "question": "q/may-native-port-s-check",
+      "via": "964dca9b"
+    },
+    {
+      "id": "d/native-sprint-2026-10-31-one-unit-at-a-time-in",
+      "title": "Native sprint 2026-10-31: one unit at a time, in a set order",
+      "why": "june asked for the native units as a sprint, one at a time. Order: agb spike, hw library, summaries, timing-native, native check, hole report, Emerald ten, Stage-A lifter (the lifter's check needs the native check, so it goes last). Calls taken in june's place: the spike writes a new agb/native-spike that reads input; summaries measure with no bar; Emerald's lifted code stays in mods/ out of the public mirror.",
+      "by": "7b10ef7b",
+      "at": "2026-11-01T02:34:52Z",
+      "scope": ["group:native"],
+      "retired": {
+        "kind": "superseded",
+        "at": "2026-11-13T04:48:46Z",
+        "by": "9828215c",
+        "other": "d/native-units-run-side-by-side-needs-set-the"
+      }
+    },
+    {
+      "id": "d/a-vcount-dispstat-or-timer-read-outside-a-poll",
+      "title": "A VCOUNT, DISPSTAT or timer read outside a poll loop moves no time",
+      "why": "From {unit:native/emerald-ten}: SetGpuReg reads VCOUNT on every call, dozens a frame; if every read stepped the beam a line (design section 3's table), game code would run several frames of beam a frame. Only reads in a store-free poll loop advance (as idle's back edge); others read hw.line(), hw.dispstat() or the timer's counter as they are. The ten's check (untimed reference) agrees.",
+      "by": "48795438",
+      "at": "2026-11-01T09:00:07Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/native-fn-diff-s-reference-is-the-interpreter",
+      "title": "Native fn-diff's reference is the interpreter run untimed",
+      "why": "From {unit:native/emerald-ten}: the play build's native timing isn't built (it waits on q/busy-loop-calls-functions-let); step_untimed from the recorded entry state gives code-takes-no-time exactly: no IRQs, beam and timers still. Generated code is checked against the interpreter by fn-diff and first-frame.",
+      "by": "48795438",
+      "at": "2026-11-01T09:00:09Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/busy-loop-calls-functions-let",
+      "title": "How should a busy loop that calls functions let time pass under native timing: Back-edge budget",
+      "why": "june 2026-11-01: default to (a), refined per docs/research/busy-wait-loops.md: count only loops that contain a call, each loop on its own; past ~2,000 passes with no time passing, each pass moves the clock half a scanline (hw::spin in native code), under --timing native only. Also build the tooling for (c): a per-game list of wait loops (TOML) as a fallback for loops the rule misses, with the hole report flagging candidates.",
+      "by": "owner",
+      "at": "2026-11-01T14:29:08Z",
+      "question": "q/busy-loop-calls-functions-let",
+      "via": "7b10ef7b"
+    },
+    {
+      "id": "d/the-native-check-skips-a-replaced-library-s",
+      "title": "The native check skips a replaced library's state by name",
+      "why": "From {unit:native/oracle}: the hand-lifted agb programs replace agb's allocator, interrupt list and tile allocator with runtime::hw (research rule 1), so agb's EWRAM globals, heap and VRAM free list exist only in the play build. route-check --native skips ranges a --replaced TOML names, each with its why, printed every run; the program's own globals are compared. A literal lift needs no list; the recogniser should emit it.",
+      "by": "2a2e7dbf",
+      "at": "2026-11-01T16:31:38Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/the-native-check-takes-the-lowest-sp-from-the",
+      "title": "The native check takes the lowest sp from the play build's interpreter",
+      "why": "From {unit:native/oracle}: compiled code never writes a block's lowest sp to r13 (balanced push/pop are folded), so noting r13 writes saw 0x03007e9c where the stack reached 0x03007e94. route-check --native runs the play build again with --interp (Machine::low_sp, after every instruction), whose records must equal the compiled run's.",
+      "by": "2a2e7dbf",
+      "at": "2026-11-01T16:31:40Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/test",
+      "title": "test",
+      "why": "x",
+      "by": "9d780600",
+      "at": "2026-11-01T17:38:22Z",
+      "scope": ["native/lift-stage-a"],
+      "until": "2026-11-01T17:00:00Z"
+    },
+    {
+      "id": "d/stage-a-passes-r0-r3-in-and-out-of-every",
+      "title": "Stage A passes r0-r3 in and out of every function; the summaries mark holes",
+      "why": "From Stage-A lifter ({unit:native/lift-stage-a}): each lifted function keeps r4-r11, lr and NZCV in its own Rust locals, so a callee can't change its caller's and fn(g, sp, [r0..r3]) -> [r0..r3] is exact for any AAPCS callee. The summaries' proof fails on 47-50 of each agb program's ~110 functions for analysis reasons (indirect calls, callees that never return); a summary that returns r4-r11 or sp changed is a hard hole, the rest are listed soft. Fewer parameters from the summaries is stage B's.",
+      "by": "9d780600",
+      "at": "2026-11-01T17:38:44Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/stage-a-keeps-the-guest-stack-as-iwram-bytes-sp",
+      "title": "Stage A keeps the guest stack as IWRAM bytes, sp a parameter",
+      "why": "From Stage-A lifter ({unit:native/lift-stage-a}): agb code passes addresses of stack values everywhere, so frames as Rust locals need section 1's escape analysis (stage B). The frames stay at the guest's addresses (the native check skips the stack from the lowest sp); Game::sp is the sp at the last wait, where an IRQ handler that switches to system mode puts its frames.",
+      "by": "9d780600",
+      "at": "2026-11-01T17:38:46Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/stage-a-function-pointers-are-rom-keys-no-dense",
+      "title": "Stage-A function pointers are ROM keys; no dense IDs until stage B",
+      "why": "From Stage-A lifter ({unit:native/lift-stage-a}): a literal lift loads function pointers from ROM bytes and RAM (agb's vtables and closures), so it can't renumber them; FnRef IDs are the function's key (address, Thumb bit) in every stage-A build, as --fn-ids rom says. Dense IDs need the points-to facts of stage B.",
+      "by": "9d780600",
+      "at": "2026-11-01T17:38:48Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/the-lifter-decodes-discovery-s-gaps-itself-and",
+      "title": "The lifter decodes discovery's gaps itself and lists them",
+      "why": "From Stage-A lifter ({unit:native/lift-stage-a}): a jump into ROM where discovery has no code (a bl's second half taken for a literal pool, a scanned fragment stopped short) falls to the interpreter in the play build but would be a hard hole natively. gbaa-lift decodes from each such target until known code, joins split bl halves, repeats until none are left, and lists the targets in its report (22, 5 and 143 on the three agb programs). Fixing discovery would make it a no-op.",
+      "by": "9d780600",
+      "at": "2026-11-01T17:38:50Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/recognised-agb-is-replaced-by-hand-written-rust",
+      "title": "Recognised agb is replaced by hand-written Rust over Hw",
+      "why": "x",
+      "by": "2de7f8d5",
+      "at": "2026-11-01T18:46:03Z",
+      "scope": ["native/lib-signatures"]
+    },
+    {
+      "id": "d/recognised-agb-is-replaced-by-hand-written-rust-2",
+      "title": "Recognised agb is replaced by hand-written Rust over Hw",
+      "why": "From stage-B planning (docs/native-stage-b.md, piece 2): the real agb crate targets the GBA (memory-mapped I/O, asm!) and doesn't build for the host, so a recognised agb or core function becomes hand-written Rust kept once per agb version, keyed by symbol, over runtime::hw and the prelude. Leaves (panic path, mem*, division, critical sections) keep RAM byte for byte so the native check needs no skips; agb's stateful runtime (interrupt list, vblank, entry) gets a skip list the lifter generates.",
+      "by": "2de7f8d5",
+      "at": "2026-11-01T18:46:16Z",
+      "scope": [
+        "native/lib-signatures",
+        "native/lib-standins",
+        "native/lib-leaves",
+        "native/lib-agb-runtime"
+      ],
+      "replaces": "d/recognised-agb-is-replaced-by-hand-written-rust"
+    },
+    {
+      "id": "d/stage-b-checks-are-bars-in-one-committed-file",
+      "title": "Stage-B checks are bars in one committed file, only lowered",
+      "why": "From stage-B planning: every stage-B unit is checked by lift-check staying green plus a metric moving. gbaa-lift prints the metrics and --bars fails over a maximum in one committed TOML; each unit lowers the bars it names. Raising a bar to pass is changing the oracle: ask june. Checks in Rust/TOML, not bash (june's preference).",
+      "by": "2de7f8d5",
+      "at": "2026-11-01T18:46:29Z",
+      "scope": [
+        "native/lift-*",
+        "native/lib-*",
+        "native/fnref-dense",
+        "native/indirect-call-args",
+        "native/frame-*",
+        "native/rom-statics",
+        "native/ram-globals",
+        "native/ref-in-object"
+      ]
+    },
+    {
+      "id": "d/agb-s-allocator-stays-lifted-until-pointers-are",
+      "title": "agb's allocator stays lifted until pointers are typed",
+      "why": "From stage-B planning: agb's heap holds the program's own objects (closures, Vecs) whose pointers are guest addresses in stage A. Replacing the allocator before Ref<T> would move them and break every pointer, so lib-agb-runtime leaves it lifted and ref-pointers takes it up.",
+      "by": "2de7f8d5",
+      "at": "2026-11-01T18:46:31Z",
+      "scope": ["native/lib-agb-runtime", "native/ref-in-object"]
+    },
+    {
+      "id": "d/shortcut-fixes-ship-with-an-agb-test-program",
+      "title": "Shortcut fixes ship with an agb test program and a control",
+      "why": "From stage-B planning: the fallthrough and IRQ-hold shortcuts pass on the three agb programs, so a fix there would be checked by nothing. Each fix writes a small agb program of ours that hits the case (global_asm! where needed), adds it to lift-check, and keeps the old behaviour behind a flag that must fail the check. Same for stack locals, since the native check skips the stack.",
+      "by": "2de7f8d5",
+      "at": "2026-11-01T18:46:33Z",
+      "scope": ["native/lift-fallthrough", "native/lift-irq-hold", "native/frame-locals"]
+    },
+    {
+      "id": "d/indirect-calls-pass-r0-r3-until-their-callee",
+      "title": "Indirect calls pass r0-r3 until their callee sets are known",
+      "why": "From stage-B planning, settling what {unit:native/summaries} left open: all four registers is sound and is what stage A does; computing callee sets needs the points-to the dense FnRef IDs build anyway. So parameters-from-summaries keeps all four at indirect calls, and indirect-call-args then passes the union of a complete callee set's summaries (an incomplete set keeps all four).",
+      "by": "2de7f8d5",
+      "at": "2026-11-01T18:46:39Z",
+      "scope": ["native/lift-params", "native/fnref-dense", "native/indirect-call-args"]
+    },
+    {
+      "id": "d/first-native-game",
+      "title": "Which game should be the first real game lifted natively: Metroid first, at stage A; Emerald after typed stage B",
+      "why": "june picked (a) in thread 40c9bac3",
+      "by": "owner",
+      "at": "2026-11-01T19:26:11Z",
+      "question": "q/first-native-game",
+      "via": "40c9bac3-237d-4d11-bbbe-da08935342c5"
+    },
+    {
+      "id": "d/agb-recognition-is-off-the-path-agb-programs",
+      "title": "agb recognition is off the path: agb programs are tests, not the target",
+      "why": "june, 2026-11-01: gbaa converts games to native Rust; agb programs are only our test inputs. The four agb-recognition units are parked; RAM globals no longer wait on them. A unit that turns out to need library recognition for a real game (e.g. Metroid's sound engine) files it for that game.",
+      "by": "owner",
+      "at": "2026-11-01T19:30:45Z",
+      "scope": [
+        "native/lib-signatures",
+        "native/lib-standins",
+        "native/lib-leaves",
+        "native/lib-agb-runtime",
+        "native/ram-globals"
+      ]
+    },
+    {
+      "id": "d/stage-b-sprint-2026-11-01-one-unit-at-a-time",
+      "title": "Stage-B sprint 2026-11-01: one unit at a time, Metroid track third",
+      "why": "june, 2026-11-01: order is lift-bars; lift-fallthrough, lift-irq-hold; Metroid track (lift-modules, flash-stack-standin, disc-run-call-targets, disc-ram-copies, hole-coverage, metroid-lifts, hw-sound, metroid-native-check); then lift-params, fnref-flow, fnref-dense, indirect-call-args; frame-escape, frame-locals; rom-statics, ram-globals, ref-in-object, ref-heap, lift-packed-layout. No stop time; wait for RAM while rivals-forge runs.",
+      "by": "owner",
+      "at": "2026-11-01T19:31:16Z",
+      "scope": ["native"]
+    },
+    {
+      "id": "d/a-bar-may-rise-only-when-accesses-move-out-of",
+      "title": "A bar may rise only when accesses move out of computed_unknown",
+      "why": "Bars only go down, but better analysis moves accesses from load/store_computed_unknown into a region's computed_<region> count, which would push that region's bar up. A unit may raise a computed_<region> bar by no more than the same direction's computed_unknown bar drops, with the moved count stated in its evidence; the total of computed loads (and of stores) never rises. Any other raise still goes to june.",
+      "by": "94d6f329",
+      "at": "2026-11-01T20:02:56Z",
+      "scope": ["native"]
+    },
+    {
+      "id": "d/a-fall-into-another-function-goes-through-its",
+      "title": "A fall into another function goes through its extended entry, not a copy of its blocks",
+      "why": "From {unit:native/lift-fallthrough}: every lifted function is x_<key>(g, Regs) with r0-r14 and NZCV, f_<key> a one-line call into it; a fall, jump or call-return into another function's entry passes every register and flag. Copying blocks duplicates code (agb programs have ~13 falls each into library code) and chains; the extended entry cost no lines (the old five-line header became three). Stand-ins and call_fn tail jumps still use the plain entry.",
+      "by": "500ebc16",
+      "at": "2026-11-01T20:36:15Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/gap-decoding-stops-after-a-bl-whose-return-site",
+      "title": "Gap decoding stops after a bl whose return site is a known literal pool",
+      "why": "From {unit:native/lift-fallthrough}: force_code decoded past agb qrcodegen's panic bl into its pool, an undefined instruction (hard hole) in the new program's layout. Such a bl can't return (it would run data). Dropped pool-as-code from every lift (mosaic-modes gap targets 143 -> 24, lines 74,432 -> 51,309); native check still green on all four programs; bars lowered.",
+      "by": "500ebc16",
+      "at": "2026-11-01T20:36:17Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/the-native-timing-play-build-takes-an-irq-the-i",
+      "title": "The native-timing play build takes an IRQ the I bit held as soon as an msr clears I",
+      "why": "From {unit:native/lift-irq-hold}: at --timing native the play build opened its IRQ window only where time passed, so an IRQ held by I in a critical section waited past the msr to the next wait; mGBA takes it at the msr (agb/native-irq-hold drew c2-c0 = 0 at native, 1 in mGBA). tick_native now opens the window when I is clear and an IRQ the last sync found is still pending; a control msr ends a compiled block, so compiled code and the interpreter take it at the same instruction. Native timing at frame 601 now hashes as mGBA (abc7ac7a22ed22b3). IME has the same shape and is left as is (both builds agree; only a test against mGBA would see it).",
+      "by": "0def0baa",
+      "at": "2026-11-01T21:08:09Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/agb-native-irq-hold-s-route-stops-at-frame-601",
+      "title": "agb/native-irq-hold's route stops at frame 601, not 600",
+      "why": "From {unit:native/lift-irq-hold}: a pixel lands about every frame and a half, and at frame 600 our exact interpreter has drawn one more than mGBA (frame 599's picture is mGBA's 600); at 598, 601 and 610 they agree. The checkpoint must be mGBA's hash, so the route is units/native-irq-hold-601.toml.",
+      "by": "0def0baa",
+      "at": "2026-11-01T21:08:11Z",
+      "scope": ["native/lift-irq-hold"]
+    },
+    {
+      "id": "d/the-lift-s-line-count-leaves-out-the-hand",
+      "title": "The lift's line count leaves out the hand-written prelude, which has its own bar",
+      "why": "From {unit:native/lift-irq-hold} (owner's call, via the parent session): the prelude (crates/codegen/src/native/prelude.rs) is hand-written runtime code in every lifted crate, not lifted output, so it shouldn't share a bar with what the lifter makes. lines now counts everything the lift writes but the prelude (bars: the old values less the old 414-line prelude; still only lowered); lines_prelude counts the prelude (bar 439 after this unit's +25). lines_prelude may rise when a unit adds hand-written prelude code, if the unit's evidence says how many lines and why; lines still only goes down.",
+      "by": "0def0baa",
+      "at": "2026-11-01T21:19:25Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/may-lane-scale-fly-s",
+      "title": "May a lane scale fly's gbaa-server down to one machine: lanes may",
+      "why": "june: lanes may do almost anything with the fly deploy; nobody uses it now and no friend has an up-to-date install, so no users, no harm.",
+      "by": "owner",
+      "at": "2026-11-06T04:23:41Z",
+      "question": "q/may-lane-scale-fly-s",
+      "via": "1f762505"
+    },
+    {
+      "id": "d/a-native-direct-sound-program-stands-for-the",
+      "title": "A native direct-sound program stands for the card's bios-sound",
+      "why": "From {unit:native/hw-sound}: the card asked for a native bios-sound playing direct sound by timer and DMA, but agb/bios-sound only calls the BIOS sound driver's no-op stubs and plays nothing. agb/direct-sound (new) plays both FIFOs from IWRAM double buffers swapped by a cascaded timer's IRQ (agb's mixer's shape), matches mGBA's sound for 299 frames, and its native port passes route-check --native with samples equal every frame; psg-square covers FIFO A by DMA1 on timer 0 with the PSG.",
+      "by": "338023f7",
+      "at": "2026-11-06T06:52:47Z",
+      "scope": ["native/hw-sound"]
+    },
+    {
+      "id": "d/native-timing-releases-an-irq-only-when-ime",
+      "title": "Native timing releases an IRQ only when IME goes 0 to 1",
+      "why": "On the hardware a pending IRQ is taken the moment IME is set again. The native-timing play build acts on that write alone (event IME_ON), not on any IE/IF change, so an IRQ requested between time points with IME on (a DMA end) still waits for the next time point, as the native library does. The recompiler at native timing ends a block after a store that folds to IME, so compiled code and interpreter take it at the same instruction; an unfolded IME store still ticks at its block end.",
+      "by": "75500cb2",
+      "at": "2026-11-06T11:04:28Z",
+      "scope": ["native/*"]
+    },
+    {
+      "id": "d/a-commercial-game-s-holes-file-lives-in-mods",
+      "title": "A commercial game's holes file lives in mods/<game>/holes.toml",
+      "why": "From Metroid lifts with no hard holes and builds ({unit:native/metroid-lifts}): a stand-in is a hand port of the game's own function (Metroid's reset and IRQ dispatcher), game-derived code AGENTS.md keeps out of the public repo. holes/ keeps the agb test programs' files; just lift takes holes/<name>.toml, else mods/<name>/holes.toml, <name> from --name if given.",
+      "by": "f93b1ecd",
+      "at": "2026-11-06T11:56:43Z",
+      "scope": ["native/*"]
+    },
+    {
+      "id": "d/heap-pointer-unit-s-bar",
+      "title": "What should the heap-pointer unit's bar measure: Bar on what moves",
+      "why": "june delegated the call to the agent: a measurement target, not a correctness question",
+      "by": "owner",
+      "at": "2026-11-07T04:20:44Z",
+      "question": "q/heap-pointer-unit-s-bar",
+      "via": "8f498bd1"
+    },
+    {
+      "id": "d/accept-indirect-call-bar-today",
+      "title": "Accept the indirect-call bar at today's values, not 0: Accept the measured bars",
+      "why": "call_fn_four_complete stays barred at 56-60; the unit is checked and lands now; the heap-site unit is noted to lower the bar when its sets narrow",
+      "by": "owner",
+      "at": "2026-11-07T04:27:11Z",
+      "question": "q/accept-indirect-call-bar-today",
+      "via": "8f498bd1",
+      "until": "2026-11-07T05:00:00Z"
+    },
+    {
+      "id": "d/covered-controls-page-your-deck",
+      "title": "What covered the Controls page on your Deck in the Kirby room: Land the Main-page fix and close this",
+      "why": "june: a custom keyboard on an un-updated Steam Deck, not gbaa. Closed for good; don't refile.",
+      "by": "owner",
+      "at": "2026-11-07T04:29:43Z",
+      "question": "q/covered-controls-page-your-deck",
+      "via": "8f498bd1"
+    },
+    {
+      "id": "d/may-lane-ssh-onto-your-2",
+      "title": "May a lane SSH onto your Deck to time four Kirbys' netplay now: Not yet",
+      "why": "june: stop asking; she'll ask a Claude herself when she wants the Deck used",
+      "by": "owner",
+      "at": "2026-11-07T04:31:03Z",
+      "question": "q/may-lane-ssh-onto-your-2",
+      "via": "8f498bd1"
+    },
+    {
+      "id": "d/never-ask-to-ssh-onto-the-deck-june-asks-when",
+      "title": "Never ask to SSH onto the Deck; june asks when she wants it",
+      "why": "june 2026-11-06: stop asking to ssh into the Steam Deck. She will ask a Claude herself when she wants it. No lane or agent files a question about Deck SSH; Deck-only work is parked.",
+      "by": "owner",
+      "at": "2026-11-07T04:31:07Z",
+      "scope": ["*"],
+      "replaces": "d/headless-lane-ssh-onto-your"
+    },
+    {
+      "id": "d/land-indirect-call-callee-sets",
+      "title": "Land indirect-call callee sets before Emerald is measured: Land it now",
+      "why": "The lift and summaries work merges today; the Emerald numbers go in the design doc later, from the measurement unit once the flow fits on Emerald",
+      "by": "owner",
+      "at": "2026-11-07T15:08:18Z",
+      "question": "q/land-indirect-call-callee-sets",
+      "via": "ed09cc1f"
+    },
+    {
+      "id": "d/land-bios-calls-unit-emerald",
+      "title": "Land the BIOS-calls unit with Emerald's runaway compared later: Keep all eight",
+      "why": "The runaway fix is on main now (b565bece): merge main, re-compare Emerald, land.",
+      "by": "owner",
+      "at": "2026-11-07T15:08:20Z",
+      "question": "q/land-bios-calls-unit-emerald",
+      "via": "ed09cc1f"
+    },
+    {
+      "id": "d/may-load-sp-sp-accesses",
+      "title": "May load_sp and sp_accesses_escaping_slot rise by 1 for a better frame rule: Accept the +1",
+      "why": "load_sp and sp_accesses_escaping_slot bars go up by 1 in those four programs, as one access moved out of computed_unknown; the unit lands with them",
+      "by": "owner",
+      "at": "2026-11-07T15:08:22Z",
+      "question": "q/may-load-sp-sp-accesses",
+      "via": "ed09cc1f"
+    },
+    {
+      "id": "d/may-ref-unexplained-rise-for-true-data",
+      "title": "May two lift bars rise because a false function start is gone: Accept the measured values",
+      "why": "the two bars are set to what the lift measures now on the seven agb programs; this unit is checked and lands; a new unit bounds that ROM read by the table, not the next code, and lowers them again",
+      "by": "owner",
+      "at": "2026-11-07T15:08:24Z",
+      "question": "q/may-ref-unexplained-rise-for-true-data",
+      "via": "ed09cc1f"
+    },
+    {
+      "id": "d/netplay-frames-go-to-the-window-8-ms-into-their",
+      "title": "Netplay frames go to the window 8 ms into their turn",
+      "why": "Feel sim, 2026-11-08 ({unit:multiplayer/rollback-feel-sim}): a frame handed to the window when done meets the 60 Hz display unevenly, about 200 doubled+skipped frames a minute on calm with none late. Handing it over 8 ms after its turn began cuts that to about 70 (16 a minute is the 60 vs 59.73 Hz beat) for about 4 ms more display lag (13.7 to 17.5 ms after due). Not input delay: a press still reaches the console the next frame. gbaa-desktop --present-ms N changes it (0: the old way); the owner may prefer another trade.",
+      "by": "29ee78be",
+      "at": "2026-11-08T20:49:34Z",
+      "scope": ["multiplayer/*"]
+    },
+    {
+      "id": "d/raise-lift-bars-rom-widening",
+      "title": "Raise lift bars for the ROM-widening fix's honest rise: Raise the bars to the new values",
+      "why": "the fix lands; the ref_unexplained and native-spike fn_words_not_proven bars go up to what the sound run measures, and later heap units lower them from there",
+      "by": "owner",
+      "at": "2026-11-08T23:18:08Z",
+      "question": "q/raise-lift-bars-rom-widening",
+      "via": "d06a24f2"
+    },
+    {
+      "id": "d/netplay-waits-8-s-for-a-silent-peer-before-it",
+      "title": "Netplay waits 8 s for a silent peer before it has left",
+      "why": "From Emerald's netplay trade split once on wander, under load ({unit:multiplayer/wander-split-under-load}): room::QUIET was 3 s, and a loaded machine (a 3.4 s rollback) or a 4 s SIGSTOP ended the session. 8 s lets a stall of a few seconds catch up; past the 5 s window the others freeze, so a truly gone peer costs 3 s frozen before they play on alone (the mark says 'not hearing' after 0.75 s). The owner may prefer shorter.",
+      "by": "18d209b3",
+      "at": "2026-11-12T06:34:01Z",
+      "scope": ["group:multiplayer"]
+    },
+    {
+      "id": "d/a-constant-jump-to-a-ram-copy-s-function-is",
+      "title": "A constant jump to a RAM copy's function is resolved",
+      "why": "From Discover code past m4a's and Nightmare's copy sources ({unit:native/copy-tail-discovery}): a jump to one constant RAM address (m4a's SoundMain into its IWRAM copy, Minish Cap's ROM-to-IWRAM veneers) is Recovery's JumpRes::Ram. It is no more a hole than a constant call: the hole report doesn't count it where an overlay discovered a function at the target, and the lifter jumps to that function (a hole if none is there). Hard total over the corpus 106 to 103. Code discovery then finds that hides a real hole counts it: Nightmare's resume bx r1 (0x08000254) takes it 9 to 10, covered by its task switcher's stand-in.",
+      "by": "b67b3cd7",
+      "at": "2026-11-12T06:37:44Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/a-networked-adapter-lists-only-the-hosts-the",
+      "title": "A networked adapter lists only the hosts the server says are open",
+      "why": "From {unit:multiplayer/wireless-radio-netplay}: the local radio's 3 s host memory (a guess beyond afska's docs) sent the first Connect to a host's ID from before it reopened; without it the sim trade connects first try at 22 and 200 ms each way, and calm passes. --heard-ms N brings it back.",
+      "by": "8f376444",
+      "at": "2026-11-12T07:42:04Z",
+      "scope": ["multiplayer/wireless-*"]
+    },
+    {
+      "id": "d/a-networked-adapter-keeps-the-3-s-host-memory",
+      "title": "A networked adapter keeps the 3 s host memory",
+      "why": "Rerun of the latency sweep (multiplayer.md, 'The radio on the server'): without HEARD_FOR, 100 and 120 ms each way lost BOB's offer from ALICE's board; with it 0-200 ms all trade. Cost: a first Connect to a stale host ID is refused and retried (~100 frames). --heard-ms 0 turns it off.",
+      "by": "4d69fe66",
+      "at": "2026-11-12T08:18:42Z",
+      "scope": ["multiplayer/wireless-*"],
+      "replaces": "d/a-networked-adapter-lists-only-the-hosts-the"
+    },
+    {
+      "id": "d/lift-bars-agents-may-raise-a-count-with-the",
+      "title": "Lift bars: agents may raise a count, with the cause named",
+      "why": "june, 2026-11-12. The bars in crates/codegen/lift-check.toml measure how plain the lifted code is; they are not the correctness check. Correctness stays june's: the native check (the lifted build draws its route's frames as the interpreter does), hard_holes and the planted controls never loosen without her. Any other bar may be raised by the unit's own session, with no question, when the native check stays green and the unit's evidence gives each raised bar, its old and new value, and the cause (the old value was unsound or an accident, or counts moved between categories). The loop's review judges that explanation. Each raise is also recorded with 'just tracker decide --for-run', so the morning report shows it. Still ask june when the bar that would rise is the metric the unit's own done-when says must fall, or when a rise is large and its cause isn't found. Replaces 'only lowered': six raise questions in a week, the first five all answered yes, each holding finished work for hours.",
+      "by": "owner",
+      "at": "2026-11-12T18:55:48Z",
+      "scope": ["group:native"],
+      "replaces": "d/stage-b-checks-are-bars-in-one-committed-file"
+    },
+    {
+      "id": "d/raise-native-tasks-unproven-function",
+      "title": "Raise native-tasks' unproven-function-words bar 57 to 59: Raise it to 59",
+      "why": "june, 2026-11-12: raise to 59. The 57 recorded an ordering accident, not a proof. Decided under the new standing rule on lift bars (d/lift-bars-agents-may-raise-a-count-with-the).",
+      "by": "owner",
+      "at": "2026-11-12T18:55:57Z",
+      "question": "q/raise-native-tasks-unproven-function",
+      "via": "625afd3a"
+    },
+    {
+      "id": "d/lift-bars-agents-may-raise-a-count-with-the-2",
+      "title": "Lift bars: agents may raise a count, with the cause named",
+      "why": "x",
+      "by": "owner",
+      "at": "2026-11-12T18:55:59Z",
+      "scope": ["group:native"],
+      "replaces": "d/a-bar-may-rise-only-when-accesses-move-out-of",
+      "retired": {
+        "kind": "merged",
+        "at": "2026-11-12T18:56:10Z",
+        "by": "625afd3a",
+        "other": "d/lift-bars-agents-may-raise-a-count-with-the"
+      }
+    },
+    {
+      "id": "d/unknown-address-step-land-without",
+      "title": "Should the unknown-address step land without the fall it was to show: Land the step",
+      "why": "june, 2026-11-12: land it, judged by the loads-that-read-everything count. Before it lands, native-irq-hold must get its 16 typed heap accesses (ref_accesses) back: that is a real loss, not a counting accident. The 1-3 unproven words on the three IRQ programs fall under the new lift-bars rule (d/lift-bars-agents-may-raise-a-count-with-the): raise only with the cause named.",
+      "by": "owner",
+      "at": "2026-11-12T18:59:55Z",
+      "question": "q/unknown-address-step-land-without",
+      "via": "625afd3a"
+    },
+    {
+      "id": "d/lift-counts-are-the-agents-call-correctness",
+      "title": "Lift counts are the agents' call; correctness stays june's",
+      "why": "june, 2026-11-12. The bars in crates/codegen/lift-check.toml and the counts a unit's done-when names measure precision: how much the analysis proves, how plain the lift is. They are not the correctness check. Correctness stays june's: the native check (the lifted build draws its route's frames as the interpreter does), hard_holes and the planted controls never loosen without her. Two things are the unit's own call, with no question. (1) Raising a bar: allowed when the native check stays green and the evidence gives each raised bar, its old and new value, and the cause (the old value was unsound or an accident, or counts moved between categories). (2) A target count that doesn't move: the unit may land on a direct measure of what it did, when the native check stays green, the direct measure becomes a new bar in every program's table, the original target is handed to a named follow-up unit (filed, or an existing one's done-when), and the independent checker agrees the swap is fair and says so in its verdict. Either is recorded with 'just tracker decide --for-run' so the morning report shows it, and the loop's review judges the explanation. Still ask june when a unit can show no direct measure of what it did, or a large rise has no cause found. Why: seven such questions in a week, all answered with the default, each holding finished work for hours.",
+      "by": "owner",
+      "at": "2026-11-12T19:01:57Z",
+      "scope": ["group:native"],
+      "replaces": "d/lift-bars-agents-may-raise-a-count-with-the"
+    },
+    {
+      "id": "d/native-units-run-side-by-side-needs-set-the",
+      "title": "Native units run side by side; needs set the order",
+      "why": "june, 2026-11-12, asked the sweep's foreman to judge whether native units may go out of the sprint order. Both sprint orders named units that are all done now. What is ready today has no needs between its units; the real orderings are in the tracker as needs. Kept by hand: the hole report matching the lifter waits for the reset/IRQ msr work and the data-as-code fix, and the two function-flow units warn each other about fnref.rs.",
+      "by": "9828215c",
+      "at": "2026-11-13T04:48:41Z",
+      "scope": ["group:native"],
+      "replaces": "d/stage-b-sprint-2026-11-01-one-unit-at-a-time"
+    },
+    {
+      "id": "d/a-native-stop-names-functions-from-the",
+      "title": "A native stop names functions from the backtrace; no guest pc yet",
+      "why": "Each built native game runs headless; report where it stops ({unit:native/native-first-stop}): the card asks for the guest function and pc when known. Lifted code keeps no pc, so the stop line gives the lifted functions the panic's backtrace names (innermost first; one inlined into its caller doesn't show). A pc is filed as {unit:native/first-stop-guest-pc}. A stop doesn't fail just lift; a build that failed with no hard hole records no run (it may only have been refused or killed).",
+      "by": "3d525e2f",
+      "at": "2026-11-13T06:57:03Z",
+      "scope": ["native/native-first-stop"]
+    },
+    {
+      "id": "d/a-direct-call-passes-the-r4-r11-its-callee",
+      "title": "A direct call passes the r4-r11 its callee reads at entry; a pointer call only where the holes file names it",
+      "why": "From {unit:native/metroid-entry-reads}: Metroid's save writer 0x08073ce5 stores the top of its caller's r9; r9 is the sprite updater's, three calls up through its AI table, 0x082b0cac or 0x8000001c by the loop, so no constant stand-in is exact. The summaries now give each function what it takes (Summary::takes); a bl or tail call is the callee's x_ entry with the caller's own registers, and a caller that still has one as it came takes it in turn. Such a reader is soft (takes r4-r11 from its callers); one a pointer may call stays hard unless the holes file's [[takes]] names the indirect calls that reach it, which then pass theirs. A taker's plain entry (call_fn's, a stand-in's) panics, so nothing runs it on zeroes: exact or a named stop. An entry value only returned in r0-r3 is not passed and stays as it was.",
+      "by": "8814ddd6",
+      "at": "2026-11-13T07:50:24Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/prelude-bar-1131-to-1137-registerramreset-s",
+      "title": "Prelude bar 1131 to 1137: RegisterRamReset's serial flag",
+      "why": "From {unit:native/hw-serial-registers}: the prelude's register_ram_reset now resets the serial registers on flag 0x20 as the play build's does (7 lines added, 1 doc line less: 6 net), so lines_prelude rose from 1131 to 1137 in every program's table of crates/codegen/lift-check.toml. Hand-written runtime code, not lifted output. The native check stays green: just lift-check passed whole, 15 programs with 0 differences, every planted fault caught.",
+      "by": "34d57864",
+      "at": "2026-11-13T08:10:34Z",
+      "scope": ["native/hw-serial-registers"],
+      "until": "2026-11-14T05:00:00Z"
+    },
+    {
+      "id": "d/prelude-bar-plus-6-registerramreset-s-serial",
+      "title": "Prelude bar plus 6: RegisterRamReset's serial flag",
+      "why": "From {unit:native/hw-serial-registers}: the prelude's register_ram_reset now resets the serial registers on flag 0x20 as the play build's does (7 lines added, 1 doc line less: 6 net). lines_prelude is 1201 in every table of crates/codegen/lift-check.toml: main's 1195 (after the reset and IRQ-wrapper msr work) plus these 6; before that merge it was 1131 to 1137. Hand-written runtime code, not lifted output. just lift-metrics measures 0 over, 0 under; the native check stays green (just lift-check passed whole, 15 programs, 0 differences, every planted fault caught).",
+      "by": "34d57864",
+      "at": "2026-11-13T08:54:00Z",
+      "scope": ["native/hw-serial-registers"],
+      "replaces": "d/prelude-bar-1131-to-1137-registerramreset-s",
+      "until": "2026-11-14T05:00:00Z"
+    },
+    {
+      "id": "d/a-compiler-s-trap-lifts-as-a-named-stop-not-a",
+      "title": "A compiler's trap lifts as a named stop, not a hard hole",
+      "why": "From {unit:native/lift-undefined-insns}: 46 of the 47 undefined-instruction holes in moonbeam, Rogue and Imperium are GCC's udf #255 ending a path it proved can only crash. gbaa-lift knows a trap by its encoding alone (Thumb 0xdeff/0xdefe, ARM 0xe7ffdefe/0xe7f000f0, as discovery's deliberate does) and prints a panic! naming the address, listed in the report; the play build faults there too. Data read as code that held one of these words would be a named stop, not a hole: exact or a named stop, as a taker's plain entry. The hard_holes bars are untouched (0); what counts as a hard hole is narrower by this one kind, and the traps are a report line, not a metric.",
+      "by": "7e93e2be",
+      "at": "2026-11-13T11:45:22Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/a-context-save-takes-nothing-a-broken-taker",
+      "title": "A context save takes nothing; a broken taker chain's hole is its reader's",
+      "why": "From {unit:native/moonbeam-taker-chain} (PR 16), adding to the decision that a direct call passes the r4-r11 its callee reads. (1) An unconditional ARM stm of r4-r11 with sp and lr through another register, each of r4-r11 whole and as it came, in a program with the matching ldm (same list, same way: setjmp and longjmp), is a save, not a use; with sp and lr it is a point to resume at. Any other store through a pointer is still a use (Metroid's half of r9). Not proven: that nothing reads the block as data; natively its words are zeroes, like a stack frame's saved registers. (2) A function a pointer call enters that only passes a register on is soft (passes on r4-r11 a pointer call zeroes); the read at the end of its chain is the hard hole, once (zeroed through 0x...). One hole a reader, as before calls passed registers; the lift prints the same code. Corpus hard holes 615 to 85, moonbeam 503 to 4.",
+      "by": "c5c06b25",
+      "at": "2026-11-13T12:44:54Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/llm-passes-may-alternate-with-the-algorithmic",
+      "title": "LLM passes may alternate with the algorithmic lift",
+      "why": "june, 2026-11-13, after playing Metroid's native build: she is fine with the lift alternating between the algorithmic lifter and an LLM (Claude). Either the lifter goes as far as it can, Claude reads the result and finds what unblocks the lifter, and the two iterate; or the lifter goes as far as it can and Claude brings the code the rest of the way. Either is OK with her. She set no rule for how LLM-written code is checked.",
+      "by": "owner",
+      "at": "2026-11-13T18:32:21Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/a-compiler-s-trap-lifts-as-a-named-stop-not-a-2",
+      "title": "A compiler's trap lifts as a named stop, not a hard hole",
+      "why": "june confirmed the sweep's call (2026-11-13): GCC's udf trap (Thumb 0xdeff/0xdefe, ARM 0xe7ffdefe/0xe7f000f0) lifts as a panic! naming its address, listed in the lift report, not counted as a hard hole; the play build faults there too.",
+      "by": "owner",
+      "at": "2026-11-13T20:37:48Z",
+      "scope": ["group:native"],
+      "replaces": "d/a-compiler-s-trap-lifts-as-a-named-stop-not-a"
+    },
+    {
+      "id": "d/test-programs-may-share-short-arm-idioms-with",
+      "title": "Test programs may share short ARM idioms with games",
+      "why": "june (2026-11-13): agb/native-irq-wrapper's few-instruction mode switch and handler call matches the games' IRQ wrappers; a standard idiom of a few instructions is not game-derived and may be public. Whole functions or game-specific sequences still go in mods/.",
+      "by": "owner",
+      "at": "2026-11-13T20:37:51Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/code-shape-lifter-work-is-judged-on-c-programs",
+      "title": "Code-shape lifter work is judged on C programs and games",
+      "why": "june (2026-11-13): agb programs are Rust from LLVM; the games are C from agbcc or modern GCC. agb programs stay as tests of the hardware library and the native check, but lifter code-shape work must not be steered by agb-only shapes (allocator, heap, vtables). Until the C test programs exist, agb bars still hold. The lifter's output stays Rust.",
+      "by": "owner",
+      "at": "2026-11-13T20:46:13Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/the-unplugged-serial-port-is-mgba-s-but-for",
+      "title": "The unplugged serial port is mGBA's but for three kept items",
+      "why": "From {unit:native/serial-no-partner-as-mgba}, 2026-11-14. Play build and hw take mGBA 0.10.5's no-partner answers (sio.c dummy drivers): SI 1 in normal mode, an internal-clock transfer ended in the store (hardware takes 8/32 bit times; GBATEK doesn't say what an unplugged port receives) with its IRQ, multiplayer bits 2-6 forced, RCNT low four bits never stored (no unplugged pin level in GBATEK), 0x15A not a register. Kept, hardware first: JOYCNT/JOYSTAT keep GBATEK's bits in every mode (mGBA stores all 16 outside JOY bus); unused I/O reads 0 block-wide; a byte store to SIOCNT merges with the register, not mGBA's unanswered copy. A masked build showed these three are the whole remaining mGBA difference.",
+      "by": "de276265",
+      "at": "2026-11-14T14:05:16Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/full-nightly-corpus-run-done",
+      "title": "How should the full nightly corpus run be done and checked: Check on the two-game runs; run the nine overnight outside the loop",
+      "why": "{unit:native/nightly-corpus} is checked on the Metroid and Nightmare runs and lands; june or the overseer starts the full run with just long start nightly at night, and its first diff is the next night's",
+      "by": "owner",
+      "at": "2026-11-14T15:25:05Z",
+      "question": "q/full-nightly-corpus-run-done",
+      "via": "10665e2b"
+    },
+    {
+      "id": "d/native-tasks-fn-words-not-proven-bar-raised-59",
+      "title": "native-tasks fn_words_not_proven bar raised 59 to 60",
+      "why": "{unit:native/fnref-table-fields}: strided reads of its 28-byte glyph table give fewer values, a cap stops widening one, and an exact ROM pointer reaches the IRQ handler's own code via incomplete call sets, holding pool word 0x080073d8. Without the stride it stays 59; the native check is green.",
+      "by": "0c04797d",
+      "at": "2026-11-14T18:09:31Z",
+      "scope": ["native/fnref-table-fields"],
+      "until": "2026-11-15T01:23:01Z"
+    },
+    {
+      "id": "d/four-lift-check-lines-bars-raised-for-the-tail",
+      "title": "Four lift-check lines bars raised for the tail-call frame flush",
+      "why": "From {unit:native/ram-copy-jump-only}: {unit:native/nightmare-mixer-pointer} (d6770ed) stores a live frame's locals before a tail call and landed after the bars were set; lift-check failed on main since. With it reverted each count equals its bar. native-spike 71806 to 72079, mosaic-modes 49227 to 49498, native-bios-more 70166 to 70431, native-dma 48433 to 48698. Old values unsound (frames unstored); lift-check passes whole, native check green.",
+      "by": "d206f186",
+      "at": "2026-11-14T21:07:33Z",
+      "scope": ["native/ram-copy-jump-only"],
+      "until": "2026-11-15T01:22:53Z"
+    },
+    {
+      "id": "d/count-nightmare-s-flow-card",
+      "title": "Count Nightmare's flow card done with skip_fn_flow kept: Done as is",
+      "why": "june 2026-11-17: fine as is; the clean flow-on lift is owed by the MPlayMain hole unit",
+      "by": "owner",
+      "at": "2026-11-17T22:32:40Z",
+      "question": "q/count-nightmare-s-flow-card",
+      "via": "f137e839"
+    },
+    {
+      "id": "d/install-cmake-alsa-lib-devel",
+      "title": "Install cmake and alsa-lib-devel on pyon: june runs 'sudo dnf install cmake alsa-lib-devel' on pyon",
+      "why": "Overseer installed cmake, ninja, sox, alsa-lib-devel and the other -devel packages quack has on pyon (passwordless sudo), finishing the pyon setup june asked for; desktop crate builds there now.",
+      "by": "owner",
+      "at": "2026-11-18T05:30:44Z",
+      "question": "q/install-cmake-alsa-lib-devel",
+      "via": "9ec1785c"
+    },
+    {
+      "id": "d/a-stale-function-s-direct-callers-go-stale-too",
+      "title": "A stale function's direct callers go stale too",
+      "why": "A direct call between compiled functions is a Rust call the dispatcher never sees (decision 8), so a caller of a stale function would still run its stale body. Marking every transitive caller stale costs nothing on the exact ROM (the dispatcher checks an empty list) and interprets about 155 functions on Kaizo Emerald (an upper bound, main-loop callbacks among them, whose callees mostly stay compiled); a stale bit checked at the top of every compiled function would cost every build on every call. Revisit if a randomized ROM's measured frame rate is too low on the Deck.",
+      "by": "00c5224e",
+      "at": "2026-11-18T07:13:18Z",
+      "scope": ["group:scripting"]
+    },
+    {
+      "id": "d/discovery-s-table-evidence-covers-a-struct-s",
+      "title": "Discovery's table evidence covers a struct's pointer pair",
+      "why": "A Thumb pointer beside another, two words from a known function pointer, is a table of structs of two function pointers and data (c/fnptr's sObjOps built by modern GCC); without it the native lift calls a leaf it lacks. Emerald scores unchanged; docs/decisions.md 5d.",
+      "by": "e8174acf",
+      "at": "2026-11-18T07:27:01Z",
+      "scope": ["native/*"]
+    },
+    {
+      "id": "d/lines-prelude-bar-1262-to-1265-for-irq-entry-s",
+      "title": "lines_prelude bar 1262 to 1265 for irq_entry's sp restore",
+      "why": "{unit:native/lift-bank-sp-once}: irq_entry now puts the stopped mode's banked sp back after a handler (3 lines), which proves a store that runs a handler leaves the bank holding r13, so later banks in the run are redundant. Native check green on all 23 programs and Metroid 600/600.",
+      "by": "140b1c38",
+      "at": "2026-11-18T11:25:53Z",
+      "scope": ["native/*"],
+      "until": "2026-11-18T13:59:58Z"
+    },
+    {
+      "id": "d/c-switch-s-lines-bars-rise-for-its-new-sparse",
+      "title": "c-switch's lines bars rise for its new sparse switch",
+      "why": "{unit:native/lift-switch-match} added tally (a sparse switch both compilers compile to compares) to c/switch so the C rows have a compare tree to judge; the program grew a function, so its lines bars rise: agbcc 913 -> 964, gcc 1026 -> 1039 (functions 9 -> 10, blocks 77 -> 87 and 80 -> 86 likewise). Every other program's lines and value_lets bars fell. Native check green on all 23 programs.",
+      "by": "f17b91fa",
+      "at": "2026-11-18T12:28:10Z",
+      "scope": ["native/lift-switch-match"],
+      "until": "2026-11-18T13:59:58Z"
+    },
+    {
+      "id": "d/block-timed-end-registers-pass-only-if-interp",
+      "title": "Block-timed end registers pass only if --interp-blocks agrees",
+      "why": "armwrestler's frame-350 registers differ from the interpreter's only because compiled code leaves a DISPSTAT poll one block later. A route's last checkpoint may say regs_block_timed_why; route-check then requires the block-timed interpreter to end with the recompiled build's registers, so it is checked, not waived.",
+      "by": "3d0b5b4b",
+      "at": "2026-11-18T12:32:11Z",
+      "scope": ["oracle/*"]
+    },
+    {
+      "id": "d/may-sessions-run-ironmon-tracker",
+      "title": "May sessions run the Ironmon tracker in our Lua host: Yes, sandboxed and with full access",
+      "why": "a rule in factory/auto-mode.json lets sessions run that commit in gbaa's host, headless or in a private cu session; the whole check runs, new runs included",
+      "by": "owner",
+      "at": "2026-11-19T22:25:36Z",
+      "question": "q/may-sessions-run-ironmon-tracker",
+      "via": "094c9ec7"
+    },
+    {
+      "id": "d/may-lane-build-c-enet",
+      "title": "May a lane build C ENet 1.3.17 to test Rogue co-op against it: Allow the C ENet build",
+      "why": "june: yes, but build it outside /tmp (tmpfs, it sits in RAM): use a folder under $GBAA_DATA, e.g. $GBAA_DATA/tools/enet-1.3.17, outside the repo.",
+      "by": "owner",
+      "at": "2026-11-19T22:28:34Z",
+      "question": "q/may-lane-build-c-enet",
+      "via": "094c9ec7"
+    },
+    {
+      "id": "d/nightmare-s-flow-lift-land",
+      "title": "Nightmare's flow lift: land the rule though 3 holes remain: Land the rule, keep skip_fn_flow",
+      "why": "The rule merges; Nightmare keeps skipping the flow, its reason updated to the 3 readers; this unit counts as done and the clean flow-on lift waits on the parked flow-precision units",
+      "by": "owner",
+      "at": "2026-11-19T22:28:37Z",
+      "question": "q/nightmare-s-flow-lift-land",
+      "via": "094c9ec7"
+    },
+    {
+      "id": "d/may-lane-run-c-enet",
+      "title": "May a lane run the C ENet relay it built for Rogue co-op: Allow running it",
+      "why": "june's 2026-11-19 yes to building C ENet (option a) already said: build it and rerun two gbaa games through the fixed relay. Running it is now in factory/auto-mode.json (b7f4187c). If a session is still refused, note the exact command and stop; don't ask again.",
+      "by": "owner",
+      "at": "2026-11-19T22:43:57Z",
+      "question": "q/may-lane-run-c-enet",
+      "via": "094c9ec7"
+    },
+    {
+      "id": "d/may-these-mod-view-features",
+      "title": "May these mod-view features stay out of the native lift: Leave all seven out",
+      "why": "The table stands; the mod view's retirement drops them with it",
+      "by": "owner",
+      "at": "2026-11-20T02:58:26Z",
+      "question": "q/may-these-mod-view-features",
+      "via": "094c9ec7"
+    },
+    {
+      "id": "d/the-function-flow-gives-up-on-three-kinds-of",
+      "title": "The function flow gives up on three kinds of value past a bound",
+      "why": "From {unit:native/fnref-flow-emerald}, 2026-11-19. Emerald's flow never settled because three kinds of value grew a few tokens a round: 67,000 different pointers into code (return addresses, each its own run of data), junk pointers from wide ROM reads (1,300 runs in one value), and sets of thousands of task and callback addresses copied into 40,000 registers. Past 16 pointers from-here-on into bytes that hold nothing followed they are one token (RomDull); past 64 runs the value is a dropped pointer (RomAny, lost_rom); past 1,024 functions the value refers to one shared set and gives up its ROM pointers (lost_rom). Sound: each stands for more than the value held. Cost: a call through a large value that also held a ROM pointer counts as incomplete (Nightmare: 1 of 54 sets complete, 51 before, each about 976 callees; its lift with the flow on then has 0 hard holes, 3 before). Trust taken: a pointer into dull bytes under a mask coarser than its word is a number, as other pointer arithmetic the run doesn't follow. The agb and C programs and Metroid never reach a bound: lift-metrics 0 over 0 under, Metroid's output the same. Hard holes with the flow, main against this: WarioWare 6/6, moonbeam 7/7, Minish Cap 27/27, Emerald 13, Rogue 20, Imperium 17 as without it.",
+      "by": "3fa5f3c3",
+      "at": "2026-11-20T03:32:25Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/a-native-lift-s-bounded-jump-table-has-no-call",
+      "title": "A native lift's bounded jump table has no call_fn arm",
+      "why": "The recompiler's fallback arm (decisions.md: every resolved table keeps one) goes to a dispatcher; stage A has none, and its call_fn arm panicked on any value but a function's entry, so it caught no missed case anyway. A table Recovery resolved (its index bounded) prints its targets and unreachable!() naming the jump; then r1-r3 it would pass aren't live at entry, and switch functions take parameters by name (c-switch rows' regs_call_entries 2 to 0). A holes file's targets keep the arm.",
+      "by": "ce6c84d4",
+      "at": "2026-11-20T03:47:38Z",
+      "scope": ["native/*"]
+    },
+    {
+      "id": "d/a-job-killed-at-its-own-memory-cap-reruns-with",
+      "title": "A job killed at its own memory cap reruns with a higher cap",
+      "why": "june (2026-11-20): whoever gets OOM'd can rerun with a higher memory limit. Raise --mem to about 1.5x the peak if the machine's budget has room (just heavy). Not for a whole-machine OOM: then cut the load.",
+      "by": "owner",
+      "at": "2026-11-20T05:30:40Z",
+      "scope": ["*"]
+    },
+    {
+      "id": "d/a-lift-s-open-bus-load-reads-the-native-play",
+      "title": "A lift's open-bus load reads the native play build's 0",
+      "why": "From Amazing Mirror's lift matches the play build into play ({unit:native/mirror-native-route}), 2026-11-20. The game reads byte 0x46 of a room table entry that isn't a pointer (roomId 0xffff, frame 1324): 0x100f0d55, open bus. Hardware gives the last prefetched opcode; the play build's interpreter keeps that only off --timing native, and its compiled code never sets it, so at native timing it reads 0 (the native check's reference: VRAM differed for 5 frames with the opcode). A holes file's [[open_bus]] at = names each such load, which reads 0 at or above 0x10000000; a load named that isn't printed is a hard hole. Not a lifter rule: only loads the game is seen to make.",
+      "by": "43cd8488",
+      "at": "2026-11-20T13:02:37Z",
+      "scope": ["group:native"]
+    },
+    {
+      "id": "d/may-mod-view-deleted-happens",
+      "title": "May the mod view be deleted, and what happens to its three mods: Delete now; port half-speed, drop Emerald's two",
+      "why": "The listed code goes; a unit ports Kirby's half-speed to a lift cut; text-speed and main-menu are deleted (redo them on the lift once Emerald's lift builds)",
+      "by": "owner",
+      "at": "2026-11-20T17:13:26Z",
+      "question": "q/may-mod-view-deleted-happens",
+      "via": "094c9ec7"
+    },
+    {
+      "id": "d/lines-prelude-bar-1322-to-1327-game-gave-for",
+      "title": "lines_prelude bar 1322 to 1327: Game::gave for registers given back",
+      "why": "From {unit:native/lift-gives}, 2026-11-20: the prelude gains Game::gave (a field, three doc lines, its initialiser: 5 lines), hand-written runtime code every lifted crate carries, so every program's lines_prelude bar in crates/codegen/lift-check.toml rose 1322 to 1327. The native check stays green (just check; agb/native-gives and its planted control added). Agent's call under the rule that lift counts are the agents' (d/lift-counts-are-the-agents-call-correctness).",
+      "by": "190f663c",
+      "at": "2026-11-20T21:14:34Z",
+      "scope": ["native/lift-gives"],
+      "until": "2026-11-22T05:00:00Z"
+    }
+  ]
+}

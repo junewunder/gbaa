@@ -1,0 +1,101 @@
+{
+  "id": "sound",
+  "title": "The PSG sound channels, judged by mGBA",
+  "priority": 1,
+  "order": 4,
+  "units": [
+    {
+      "id": "sound/mgba-audio-oracle",
+      "title": "Compare audio with mGBA, not just frames",
+      "detail": "From GitHub #63. mgba-dump captures FIFO A/B samples per timer overflow in gbaa-desktop --fifo-dump's format; just mgba-audio-diff ROM FRAMES compares byte-exact, printing on a mismatch the offset from the nearest buffer swap. Run on the 18157 Hz ROM and the 10512 Hz ROM. mGBA pops whole words and asks for DMA before the pop (<4 words queued); ours refills at <=16 bytes (GBATEK). If streams differ, decide which rule to keep and record it. PSG units are judged by this.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "e72824f5",
+        "at": "2026-10-21T19:09:41Z",
+        "evidence": "mgba-dump --fifo-dump/--audio-log (libmgba linked --wrap=GBAAudioSampleFIFO) + just mgba-audio-diff ROM FRAMES [STATE]. From mGBA frame-100 states: 18157 Hz ROM 600 frames (182400 records) and the 10512 Hz ROM 1000 (176000) byte-identical. From reset: mGBA = ours shifted 912/528 records (3 buffers, boot speed, no wait states), then identical to the end. GBATEK refill kept. just check and mgba-oracle pass after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "sound/psg-square",
+      "title": "PSG square channels 1 and 2",
+      "detail": "Channels 1 (sweep) and 2 in runtime/src/sound.rs, mixed with DMA sound per SOUNDCNT_L/H. A test program; audio matches mGBA.",
+      "check": "recorded",
+      "needs": ["sound/mgba-audio-oracle"],
+      "record": {
+        "state": "done",
+        "by": "2ffcf570",
+        "at": "2026-10-21T21:38:08Z",
+        "evidence": "Channels 1-2 in runtime/src/sound/psg.rs (mGBA 0.10.5 model), mixed into FIFO records. just psg-square (agb/psg-square, 119 frames from mGBA's frame-1 state): FIFO 32644 records and PSG 65286 samples byte-identical with mGBA. mgba-audio-diff on 18157 Hz ROM 600 / 10512 Hz ROM 1000 still match, PSG included. just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "sound/psg-wave-noise",
+      "title": "PSG wave and noise channels 3 and 4",
+      "detail": "Channel 3 (wave RAM) and 4 (LFSR noise). A test program; audio matches mGBA.",
+      "check": "recorded",
+      "needs": ["sound/psg-square"],
+      "record": {
+        "state": "done",
+        "by": "a3905b4a",
+        "at": "2026-10-21T23:32:05Z",
+        "evidence": "just psg-wave-noise (agb/psg-wave-noise, 119 frames from mGBA's frame-1 state): FIFO records 32644 and PSG samples 65286 byte-identical with mGBA 0.10.5, covering ch3 volumes/banks/64-sample/DAC off/length and ch4 15/7-bit, envelopes, length, clock change. psg-square still matches; just check passes after merging main.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-21T23:32:06Z",
+          "by": "a3905b4a",
+          "text": "Wave RAM reads return the last store, not the unplayed bank as mGBA does (psg.rs write_wave_ram). Any SOUND3CNT_X store re-times ch3 at DMA-word timing: test ROMs must not write it in rows 8k+3 (agb/psg-wave-noise/SOUND.md)."
+        },
+        {
+          "at": "2026-10-21T21:37:17Z",
+          "by": "2ffcf570",
+          "text": "psg-square left the model in runtime/src/sound/psg.rs (mGBA port; ch3/ch4 hook into Psg::run, raw, frame_step, load). Oracle: --psg-dump, just mgba-audio-diff; copy agb/psg-square's V-blank DMA score and its just psg-square recipe. mGBA state loses frequencies."
+        }
+      ]
+    },
+    {
+      "id": "sound/psg-without-fifo",
+      "title": "Play PSG sound when no FIFO timer runs",
+      "detail": "Records (and so playback, --wav) come only from FIFO timer overflows, so a game playing PSG alone is silent in the desktop. Emit records on the PSG grid when no timer clocks a FIFO, keeping --fifo-dump to FIFO records. See docs/sound-design.md, The PSG.",
+      "check": "recorded",
+      "needs": ["sound/psg-square"],
+      "record": {
+        "state": "done",
+        "by": "74794cb4",
+        "at": "2026-10-22T14:14:38Z",
+        "evidence": "With master on and no FIFO timer, PSG grid samples now feed AudioChunk::samples (--wav, playback) at 0x200>>res cycles; --fifo-dump/hash stay FIFO-only; AudioChunk::spans lets playback resample mixed-rate chunks. New tests without_a_fifo_timer_the_grid_makes_the_stream and a_fifo_timer_takes_the_stream_over_from_the_grid pass; just check passes; psg-square and psg-wave-noise still byte-exact with mGBA (32644 records, 65286 PSG samples each).",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "sound/audio-test-flake",
+      "title": "Fix flaky test: stalled audio device falls back to clock",
+      "detail": "audio::tests::a_stalled_device_falls_back_to_the_frame_clock (crates/desktop) failed once in just check on quack lane 2 (2026-10-24, machine under load) and passed on rerun. Likely a wall-clock threshold; make it independent of machine load.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "f8793a90",
+        "at": "2026-10-24T17:00:12Z",
+        "evidence": "Root cause: the device-comes-back step pulled on a thread 15 ms ahead of the wait; under load it hadn't pulled, so stalled stayed Some (old tests.rs:280). Test now pulls on its own thread, fill loop waits for Duration::MAX, bounds widened. 12 loaded parallel runs + 48 busy loops: old failed 2/12, new 0/12; just check passes after merging main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "sound/desktop-timing-tests",
+      "title": "Harden wall-clock desktop tests against machine load",
+      "detail": "Under heavy synthetic load (12 parallel copies of the desktop test binary plus 48 busy loops on quack), audio::tests::the_pacer_waits_for_the_device (queue max_len < 80 ms, tests.rs:233) and tests::fast_forward_runs_fast_and_frames_match / fast_forward_mutes_and_sound_comes_back (elapsed limits) failed every run or most. Not seen in a normal just check yet. Make their thresholds independent of load where possible (as in {unit:sound/audio-test-flake}), else widen them.",
+      "check": "recorded",
+      "record": {
+        "state": "done",
+        "by": "fa50e719",
+        "at": "2026-10-24T17:16:23Z",
+        "evidence": "Fast-forward tests now bound runs from above by the pacers' own sleep/wait totals (new Clock::slept, Player::waited, Desktop::paced), wall clock only from below. Pacer test reruns a run where the device thread went unscheduled past WAIT_LIMIT (seen: 290 ms gap -> 131 ms queue). 12 loaded parallel binaries + 48 busy loops: before, fast-forward 12/12 fail, pacer 1-2/12; after 36/36 pass. just check passes after merging main.",
+        "host": "quack"
+      }
+    }
+  ]
+}

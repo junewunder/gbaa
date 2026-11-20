@@ -1,0 +1,234 @@
+{
+  "id": "imperium",
+  "title": "Emerald Imperium, checkpoint by checkpoint",
+  "order": 10,
+  "units": [
+    {
+      "id": "imperium/copyright",
+      "title": "Emerald Imperium's copyright screen",
+      "detail": "Frame 100, no input: the same frame as Emerald's copyright. Our interpreter drew mGBA's hash (2026-10-22). The first Imperium unit: Imperium (32 MB ROM) has never been recompiled, so this is its first build; misses it turns up are new units. Checkpoint: units/imperium-copyright.env (frame, input, mGBA's hash). Pass: just unit imperium-copyright (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit imperium-copyright"
+      },
+      "uses": ["heavy"],
+      "tags": ["slow-check"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:imperium/newgame-route} (units/imperium-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:13:02Z"
+      },
+      "notes": [
+        {
+          "at": "2026-10-23T17:54:15Z",
+          "by": "34597d75",
+          "text": "branch has no code changes and is level with main; just check passes. The unit's check already passed (see the earlier note); left for the loop's recheck."
+        },
+        {
+          "at": "2026-10-23T17:35:37Z",
+          "by": "e4a70a43",
+          "text": "first Imperium build; just unit imperium-copyright passed on quack as a long job (~12 min, 99.9% compiled, hash 8e9a9d00 matches mGBA). No code changes needed. Tagged slow-check; rerun as a long job with 8+ GB free."
+        }
+      ]
+    },
+    {
+      "id": "imperium/pret",
+      "title": "Emerald Imperium's POWERED BY PRET x RHH screen",
+      "detail": "Frame 400, no input, with its walking sprites. Our interpreter drew mGBA's hash (2026-10-22). Checkpoint: units/imperium-pret.env (frame, input, mGBA's hash). Pass: just unit imperium-pret (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit imperium-pret"
+      },
+      "needs": ["imperium/copyright"],
+      "uses": ["heavy"],
+      "tags": ["slow-check"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:imperium/newgame-route} (units/imperium-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:13:04Z"
+      },
+      "notes": [
+        {
+          "at": "2026-10-23T18:42:44Z",
+          "by": "21b4e703",
+          "text": "Still no code changes; branch up to date with main, just check passes. Left for the loop's recheck (just unit imperium-pret, ~20 min long job)."
+        },
+        {
+          "at": "2026-10-23T18:26:13Z",
+          "by": "047d794c",
+          "text": "No code changes needed: just unit imperium-pret passed on quack as a long job (~20 min, hash 2ceee58c matches mGBA, 60% compiled; no MIN_COMPILED set). Main merged, just check passes. Tagged slow-check; rerun as a long job."
+        }
+      ]
+    },
+    {
+      "id": "imperium/intro-gamefreak",
+      "title": "Emerald Imperium's intro: the GAME FREAK logo",
+      "detail": "Frame 700, no input: the GAME FREAK logo in the forest. Our interpreter drew mGBA's hash (2026-10-22). Checkpoint: units/imperium-gamefreak.env (frame, input, mGBA's hash). Pass: just unit imperium-gamefreak (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit imperium-gamefreak"
+      },
+      "needs": ["imperium/pret"],
+      "uses": ["heavy"],
+      "tags": ["slow-check"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:imperium/newgame-route} (units/imperium-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:13:05Z"
+      },
+      "notes": [
+        {
+          "at": "2026-10-23T20:29:37Z",
+          "by": "6ebc74ba",
+          "text": "Check passes (2026-10-23 16:29) but takes 15m04s (recompiled crate build ~13 min, 39 CPU-min), over the tracker's 900s probe timeout, so recheck reports exit 101. Needs probe timeout ~1800s (tracker edit has no flag; owner) or a faster build. Tagged slow-check."
+        },
+        {
+          "at": "2026-10-23T19:14:03Z",
+          "by": "cab0a6bd",
+          "text": "No code changes needed: just unit imperium-gamefreak passes on main as is (2026-10-23, ~3 min; 77.4% compiled, mGBA matches). Branch equals main; just check passes. Left for the loop's recheck."
+        }
+      ]
+    },
+    {
+      "id": "imperium/intro-bike",
+      "title": "Emerald Imperium's intro: the bike scene",
+      "detail": "Frame 2000, no input. Ours differs in 3900 pixels: the scene's sprites and scrolling shifted, a timing gap (Emerald's took wait states, LZ77 stall and cycle-cost fixes; see memory/emerald-debugging.md). Checkpoint: units/imperium-bike.env (frame, input, mGBA's hash). Pass: just unit imperium-bike (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit imperium-bike"
+      },
+      "needs": ["imperium/intro-gamefreak", "shared/route-checks"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:imperium/newgame-route} (units/imperium-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:13:07Z"
+      }
+    },
+    {
+      "id": "imperium/intro-legends",
+      "title": "Emerald Imperium's intro: the legendary over water",
+      "detail": "Frame 2800, no input: the red silhouette over water. Ours differs in 1893 pixels at the silhouette's edges: timing, or a per-line effect. Checkpoint: units/imperium-legends.env (frame, input, mGBA's hash). Pass: just unit imperium-legends (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit imperium-legends"
+      },
+      "needs": ["imperium/intro-bike"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:imperium/newgame-route} (units/imperium-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:13:09Z"
+      }
+    },
+    {
+      "id": "imperium/title",
+      "title": "Emerald Imperium's title screen",
+      "detail": "Frame 4000, no input: the snowy title with two Empoleon. Ours differs in 133 pixels (sparkles): likely timing. Checkpoint: units/imperium-title.env (frame, input, mGBA's hash). Pass: just unit imperium-title (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit imperium-title"
+      },
+      "needs": ["imperium/intro-legends"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:imperium/newgame-route} (units/imperium-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:13:10Z"
+      }
+    },
+    {
+      "id": "imperium/main-menu",
+      "title": "Emerald Imperium's main menu with no save",
+      "detail": "Frame 4250 on Imperium's script (Start at 4100): New Game, Option. Ours differs in 6644 pixels, the unselected Option box: likely mGBA's 8-bit darken rounding, as on Emerald's main menu. Checkpoint: units/imperium-main-menu.env (frame, input, mGBA's hash). Pass: just unit imperium-main-menu (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit imperium-main-menu"
+      },
+      "needs": ["imperium/title"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:imperium/newgame-route} (units/imperium-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:13:12Z"
+      }
+    },
+    {
+      "id": "imperium/birch",
+      "title": "Emerald Imperium's new game: the professor's speech",
+      "detail": "Frame 5300 on Imperium's script: the professor and Piplup. Our interpreter drew mGBA's hash (2026-10-22). Checkpoint: units/imperium-birch.env (frame, input, mGBA's hash). Pass: just unit imperium-birch (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit imperium-birch"
+      },
+      "needs": ["imperium/main-menu"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:imperium/newgame-route} (units/imperium-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:13:14Z"
+      }
+    },
+    {
+      "id": "imperium/naming",
+      "title": "Emerald Imperium's naming screen",
+      "detail": "Frame 5600 on Imperium's script: the naming keyboard, nothing typed. Ours differs in 80 pixels, the cursor: likely mGBA's 8-bit alpha blend rounding, as on Emerald's naming screen. Checkpoint: units/imperium-naming.env (frame, input, mGBA's hash). Pass: just unit imperium-naming (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit imperium-naming"
+      },
+      "needs": ["imperium/birch"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:imperium/newgame-route} (units/imperium-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:13:16Z"
+      }
+    },
+    {
+      "id": "imperium/truck",
+      "title": "Emerald Imperium's first overworld frame, in the truck",
+      "detail": "Frame 6800 on Imperium's script: the moving truck, the same frame as Emerald's truck. Our interpreter drew mGBA's hash (2026-10-22). Checkpoint: units/imperium-truck.env (frame, input, mGBA's hash). Pass: just unit imperium-truck (mGBA, interpreter and recompiled build agree). No symbols: a pokeemerald-expansion build, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit imperium-truck"
+      },
+      "needs": ["imperium/naming"],
+      "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "Folded into the one route check {unit:imperium/newgame-route} (units/imperium-newgame.toml), per the owner's one-check-per-route decision",
+        "by": "485e5fdd",
+        "at": "2026-10-23T21:13:18Z"
+      }
+    },
+    {
+      "id": "imperium/newgame-route",
+      "title": "Emerald Imperium's intro and new game: one route",
+      "detail": "Route units/imperium-newgame.toml: copyright 100, pret 400, gamefreak 700, bike 2000, legends 2800, title 4000, main-menu 4250, birch 5300, naming 5600, truck 6800. Pass: just unit imperium-newgame (mGBA, interpreter and recompiled build agree at every checkpoint). Work it by the first failing checkpoint; a fix too big for one session is its own unit this needs. Through gamefreak passed 2026-10-23; bike fails, ours first differs from mGBA at frame 232. Known when it was a unit each: bike 3900 px, sprites and scrolling shifted (timing; Emerald took wait-state, LZ77 stall and cycle-cost fixes, memory/emerald-debugging.md); legends 1893 px at the silhouette's edges; title 133 px sparkles; main-menu 6644 px unselected Option box and naming 80 px cursor, likely mGBA's 8-bit darken and blend rounding (as Emerald's); birch and truck drew mGBA's hash on 2026-10-22. No symbols: pokeemerald-expansion, modern GCC.",
+      "check": "computed",
+      "probe": {
+        "cmd": "just unit imperium-newgame"
+      },
+      "needs": ["shared/route-checks"],
+      "uses": ["heavy"],
+      "tags": ["slow-check"],
+      "record": {
+        "state": "done",
+        "by": "check",
+        "worker": "f40bb273",
+        "at": "2026-10-23T22:14:34Z",
+        "evidence": "unit imperium-newgame: pass (copyright, pret, gamefreak, bike, legends, title, main-menu, birch, naming, truck to frame 6800; mGBA known wrong at main-menu: its 32-bit colour build darkens 8-bit chann"
+      }
+    }
+  ]
+}

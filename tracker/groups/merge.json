@@ -1,0 +1,689 @@
+{
+  "id": "merge",
+  "title": "Merges the loop couldn't do by itself",
+  "priority": 1000,
+  "order": 15,
+  "units": [
+    {
+      "id": "merge/quack-lane1-structured-yield-flags",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/structured/yield-flags` holds {unit:structured/yield-flags}, finished but not on main: merging main conflicts in crates/codegen/src/bin/gbaa-recompile.rs docs/tools/commands.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/structured/yield-flags",
+      "record": {
+        "state": "done",
+        "by": "f671e37b",
+        "at": "2026-10-24T19:42:03Z",
+        "evidence": "Merged origin/main into unit/structured/yield-flags (9a3a68f): gbaa-recompile.rs imports/usage unioned (--no-flag-liveness and --sst PER_FILE SEQS), commands.md sst-gen entry takes main's sequence text with yield-flags wording; just check exit 0.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane1-multiplayer-measure-frame-cost",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/multiplayer/measure-frame-cost` holds {unit:multiplayer/measure-frame-cost}, finished but not on main: merging main conflicts in crates/desktop/src/lib.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/multiplayer/measure-frame-cost",
+      "record": {
+        "state": "done",
+        "by": "78f777ca",
+        "at": "2026-10-25T16:58:44Z",
+        "evidence": "Merged origin/main (37d5906) into the branch as f2b696e; the lib.rs conflict is settled by keeping main's coroutine stats_ptr and frame dispatch, with the --frame-times clock started before the guest/frame match. just check passes (exit 0).",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane2-bios-diff-unfilter",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/bios/diff-unfilter` holds {unit:bios/diff-unfilter}, finished but not on main: `just check` fails on the branch with main merged in (error: recipe `check` failed on line 15 with exit code 101). Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/bios/diff-unfilter",
+      "record": {
+        "state": "done",
+        "by": "881e660f",
+        "at": "2026-10-27T01:56:54Z",
+        "evidence": "Merged origin/main into unit/bios/diff-unfilter clean (11dbff9, tracker-only changes); just check passes on the merged branch (exit 0: fmt, clippy, tests, check-nostd, rebuildable).",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T01:54:16Z",
+          "by": "2c4c66dc",
+          "text": "started 21:53, merged main clean (c7a20fe, tracker-only). Fifth stop-time cutoff 1 min into just check. This unit keeps being offered in the last minutes; it needs ~10 min early in a run: just check, then just done."
+        },
+        {
+          "at": "2026-10-27T01:51:10Z",
+          "by": "eb16064e",
+          "text": "started 21:49, merged main clean (8c80f94, tracker-only). Fourth session cut off by the 22:00 stop 1 min into just check. Needs a lane run that starts it early: just check, then just done. Nothing to split."
+        },
+        {
+          "at": "2026-10-27T01:49:34Z",
+          "by": "8f28502c",
+          "text": "Merged latest main again (clean, f446370 on branch). Third session to hit the 22:00 stop ~1 min into just check; nothing to split. Needs a session started well before the stop: just check (~several min), then just done."
+        }
+      ]
+    },
+    {
+      "id": "merge/quack-lane2-bios-sound-driver-stubs",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/bios/sound-driver-stubs` holds {unit:bios/sound-driver-stubs}, finished but not on main: merging main conflicts in crates/runtime/src/bios.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/bios/sound-driver-stubs",
+      "record": {
+        "state": "done",
+        "by": "0a751334",
+        "at": "2026-10-27T16:06:41Z",
+        "evidence": "Merged origin/main into unit/bios/sound-driver-stubs (bb9b22c): bios.rs conflict settled by keeping main's SOUND_BIAS 0x19 and the branch's sound driver constants 0x1A-0x24 in number order; just check passes.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-10-27T16:03:41Z",
+          "by": "manual",
+          "text": "Merging failed again: merging main conflicts in crates/runtime/src/bios.rs"
+        }
+      ]
+    },
+    {
+      "id": "merge/quack-lane1-bios-midi-key2freq",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/bios/midi-key2freq` holds {unit:bios/midi-key2freq}, finished but not on main: merging main conflicts in crates/runtime/src/bios.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/bios/midi-key2freq",
+      "record": {
+        "state": "done",
+        "by": "49257938",
+        "at": "2026-10-27T16:11:57Z",
+        "evidence": "Merged origin/main into unit/bios/midi-key2freq; bios.rs conflict settled keeping MIDI_KEY2FREQ (0x1F) and main's sound-driver calls in number order; just check passes.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane1-mod-callee-saves",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/mod/callee-saves` holds {unit:mod/callee-saves}, finished but not on main: merging main conflicts in crates/codegen/src/bin/gbaa-recompile.rs crates/codegen/src/func.rs crates/codegen/src/locals.rs crates/codegen/src/names/check.rs crates/codegen/src/tests.rs docs/tools/commands.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/mod/callee-saves",
+      "record": {
+        "state": "done",
+        "by": "a82d88c2",
+        "at": "2026-10-27T17:30:12Z",
+        "evidence": "Merged origin/main (84166fb) into unit/mod/callee-saves; settled 6 conflicts keeping both callee-saves (kept, --saves, reload_kept) and readable form (readable, --readable, addr!); just check passes",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane2-mod-dwarf-print",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/mod/dwarf-print` holds {unit:mod/dwarf-print}, finished but not on main: merging main conflicts in crates/codegen/snapshots/emerald-readable.list crates/codegen/src/print.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/mod/dwarf-print",
+      "record": {
+        "state": "done",
+        "by": "2b5c4316",
+        "at": "2026-10-28T22:30:31Z",
+        "evidence": "Merged origin/main into unit/mod/dwarf-print (fb8c0ac): print.rs keeps both Printer fields (value_names, index); readable list keeps all nine functions; snapshot regenerated via just snapshots-readable; just check passes.",
+        "host": "quack"
+      },
+      "round": "2026-10-28T22:26:32Z"
+    },
+    {
+      "id": "merge/quack-lane1-multiplayer-recompiled-netplay",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/multiplayer/recompiled-netplay` holds {unit:multiplayer/recompiled-netplay}, finished but not on main: merging main conflicts in crates/netplay/src/gba.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/multiplayer/recompiled-netplay",
+      "record": {
+        "state": "done",
+        "by": "b5d6d4fc",
+        "at": "2026-10-29T03:00:24Z",
+        "evidence": "Merged origin/main into unit/multiplayer/recompiled-netplay (49a6b56); gba.rs quiet() conflict kept branch's platform.pad_mut().quiet and main's ppu.draw = !on; just check passes.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane2-assets-play-extract",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/assets/play-extract` holds {unit:assets/play-extract}, finished but not on main: merging main conflicts in crates/assets/src/lib.rs crates/assets/src/main.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/assets/play-extract",
+      "record": {
+        "state": "done",
+        "by": "b3cbc851",
+        "at": "2026-10-29T20:28:26Z",
+        "evidence": "Merged origin/main (d69b4b48) into unit/assets/play-extract; conflicts in crates/assets/src/lib.rs (kept both pub mod export and pub mod coverage) and main.rs USAGE (kept check-extract and coverage lines). just check passes (exit 0).",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane1-native-ime-release",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/native/ime-release` holds {unit:native/ime-release}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/native/ime-release",
+      "record": {
+        "state": "done",
+        "by": "aba07131",
+        "at": "2026-11-06T11:24:20Z",
+        "evidence": "Merged origin/main into unit/native/ime-release (4f61b72f): lift-check.toml conflict settled keeping main's fn_words_not_proven bar and the branch's native-ime-release table, its new bar 55 from its first lift. just lift-check passed (all programs, planted faults caught); just check exit 0.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane3-native-lift-bios-calls",
+      "title": "Merge main on quack lane 3",
+      "detail": "Branch `unit/native/lift-bios-calls` holds {unit:native/lift-bios-calls}, finished but not on main: merging main conflicts in docs/native-stage-b.numbers.md docs/research/native-holes.numbers.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/3",
+      "branch": "unit/native/lift-bios-calls",
+      "record": {
+        "state": "done",
+        "by": "62ef447a",
+        "at": "2026-11-08T18:37:11Z",
+        "evidence": "Merged origin/main (6b6ddcc). Conflicts were in both generated numbers docs: regenerated them (lift-metrics --write-doc: 0 over/under bars after moving native-bios-calls bars the way main moved the others'; holes-all --write-doc over nine games). just check exit 0.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane1-native-hw-dma-registers",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/native/hw-dma-registers` holds {unit:native/hw-dma-registers}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/native/hw-dma-registers",
+      "record": {
+        "state": "done",
+        "by": "fd902c34",
+        "at": "2026-11-12T10:05:05Z",
+        "evidence": "Merged origin/main (4b80ea23): lift-check.toml kept main's fn_words_not_proven=57 plus the branch's native-dma table, its ref_unexplained bar lowered 105->43. just check exit 0; just lift-check --only native-dma passed (600 frames, planted fault caught).",
+        "host": "quack"
+      },
+      "round": "2026-11-12T09:57:13Z"
+    },
+    {
+      "id": "merge/quack-lane4-native-lift-save-memory",
+      "title": "Merge main on quack lane 4",
+      "detail": "Branch `unit/native/lift-save-memory` holds {unit:native/lift-save-memory}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml docs/tools/commands.md justfile. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/4",
+      "branch": "unit/native/lift-save-memory",
+      "record": {
+        "state": "done",
+        "by": "5d09211d",
+        "at": "2026-11-12T11:09:20Z",
+        "evidence": "Merged origin/main (24432fa) into the branch as 751b8be: lift-check.toml keeps both native-dma and native-save, lines_prelude 885 (measured by lift-metrics); justfile and commands.md list both. just check passes; just lift-check --only native-save --only native-dma passes (both routes 600 frames, planted faults caught). native-spike's hard hole also fails on clean main 24432fa, already filed as {unit:native/spike-entry-read-hole}.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane3-native-lift-bios-region",
+      "title": "Merge main on quack lane 3",
+      "detail": "Branch `unit/native/lift-bios-region` holds {unit:native/lift-bios-region}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml crates/codegen/src/native/prelude.rs docs/tools/commands.md justfile. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/3",
+      "branch": "unit/native/lift-bios-region",
+      "record": {
+        "state": "done",
+        "by": "391251bf",
+        "at": "2026-11-12T11:24:18Z",
+        "evidence": "Merged origin/main (61773aa) into unit/native/lift-bios-region as 186b4cd: prelude keeps BIOS latch and save-chip accesses, lift-check.toml has both programs with lines_prelude 917; just check passes; just lift-metrics all bars hold except native-spike's hard hole, which is {unit:native/spike-entry-read-hole} on main.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane2-native-lift-bios-affine",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/native/lift-bios-affine` holds {unit:native/lift-bios-affine}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/native/lift-bios-affine",
+      "minMinutes": 40,
+      "record": {
+        "state": "done",
+        "by": "625afd3a",
+        "at": "2026-11-12T16:48:38Z",
+        "evidence": "Merged origin/main (8013955) into unit/native/lift-bios-affine at 377762c: clean, only tracker/ and docs/machines.md since the settled merge 957d9f4. Full just check passed on 377762c (check-nostd, rebuildable, fmt, clippy -D warnings, workspace tests: exit 0), run by hand in lane 2's clone outside a lane run so the stop time couldn't cut it off."
+      },
+      "notes": [
+        {
+          "at": "2026-11-12T14:01:26Z",
+          "by": "eae1c8a3",
+          "text": "main conflicted again in lift-check.toml (native-bios-more, native-dma bars); settled: lines from main, lines_prelude 1131 from branch; lift-metrics 0 over/0 under; merge commit 957d9f4. Handed out at 08:59 again; just check cut off a 6th time. Next: just check, then done."
+        },
+        {
+          "at": "2026-11-12T13:58:59Z",
+          "by": "manual",
+          "text": "Merging failed again: merging main conflicts in crates/codegen/lift-check.toml"
+        },
+        {
+          "at": "2026-11-12T13:52:40Z",
+          "by": "aa3b6b9a",
+          "text": "merged main again (tracker/ only, clean, a900d93). Handed out at 08:51 despite min-minutes 40: loop ignores min-minutes for this unit (factory bug, for owner). just check cut off a 5th time. Next: run just check at run start, then done."
+        }
+      ],
+      "round": "2026-11-12T13:43:18Z"
+    },
+    {
+      "id": "merge/quack-lane3-native-fnref-table-fields",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/native/fnref-table-fields` holds {unit:native/fnref-table-fields}, finished but not on main: merging main conflicts in crates/codegen/src/native/fnref.rs crates/codegen/src/native/fnref/tests.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/native/fnref-table-fields",
+      "record": {
+        "state": "done",
+        "by": "db1bafe0",
+        "at": "2026-11-14T18:29:20Z",
+        "evidence": "Merged origin/main into unit/native/fnref-table-fields (8aad0e4): fnref.rs Adc keeps main's moves() rule plus the branch's RomStep and strides; tests keep both sides. codegen fnref tests 52 pass; just check exit 0.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-11-14T18:23:22Z",
+          "by": "db1bafe0",
+          "text": "Taken over by quack lane 2: lane 3, which filed it, isn't in docs/machines.md any more (quack has 2 lanes)."
+        }
+      ]
+    },
+    {
+      "id": "merge/quack-lane4-stretch-dbusmenu-test-hang",
+      "title": "Merge main on quack lane 4",
+      "detail": "Branch `unit/stretch/dbusmenu-test-hang` holds {unit:stretch/dbusmenu-test-hang}, finished but not on main: `just check` fails on the branch with main merged in (error: recipe `check` failed on line 19 with exit code 1). Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/4",
+      "branch": "unit/stretch/dbusmenu-test-hang",
+      "record": {
+        "state": "done",
+        "by": "2f332eb8",
+        "at": "2026-11-18T06:13:47Z",
+        "evidence": "Merged origin/main (d482528, tracker-only changes, no conflicts) into the branch as b7208c8; just check passed (exit 0) on the merged tree, including tests and native-check.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane3-native-lift-structured",
+      "title": "Merge main on quack lane 3",
+      "detail": "Branch `unit/native/lift-structured` holds {unit:native/lift-structured}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml crates/codegen/src/native.rs docs/native-stage-b.numbers.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/3",
+      "branch": "unit/native/lift-structured",
+      "record": {
+        "state": "done",
+        "by": "667f1dac",
+        "at": "2026-11-18T09:23:40Z",
+        "evidence": "Merged origin/main into unit/native/lift-structured (bb6a7e3): native.rs keeps main's fn-check print closure plus the structuring FnPrinter fields; lift-check bars re-measured via lift-metrics --lower-bars (C programs' lines_prelude 1203->1262, main's prelude growth); numbers doc regenerated; just check passed (exit 0).",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane1-native-fn-check-run-cap",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/native/fn-check-run-cap` holds {unit:native/fn-check-run-cap}, finished but not on main: merging main conflicts in crates/codegen/src/native/fn_check.rs docs/native-port-design.md docs/tools/commands.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/native/fn-check-run-cap",
+      "record": {
+        "state": "done",
+        "by": "2a64def5",
+        "at": "2026-11-18T09:50:25Z",
+        "evidence": "Merged origin/main into unit/native/fn-check-run-cap (b155eb39): conflicts in fn_check.rs header, native-port-design.md, commands.md settled keeping both the interpreter second reference and the 600-frame run cap; docs trimmed to line budgets; just check passes (exit 0).",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane2-native-lift-pop-return",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/native/lift-pop-return` holds {unit:native/lift-pop-return}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml crates/codegen/src/native.rs docs/research/llm-pilot.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/native/lift-pop-return",
+      "record": {
+        "state": "done",
+        "by": "aace621e",
+        "at": "2026-11-18T10:41:35Z",
+        "evidence": "Merged origin/main into unit/native/lift-pop-return (55d6d16): FnPrinter keeps both lr_ret and dead fields, llm-pilot table marks both units done, lift-check.toml lines bars re-measured on the merged lifter via just lift-metrics --lower-bars (23 lowered, 0 over) and numbers doc regenerated; just check exit 0.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane1-native-lift-branch-conditions",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/native/lift-branch-conditions` holds {unit:native/lift-branch-conditions}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml crates/codegen/src/native.rs docs/native-stage-b.numbers.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/native/lift-branch-conditions",
+      "record": {
+        "state": "done",
+        "by": "586cd61f",
+        "at": "2026-11-18T12:42:20Z",
+        "evidence": "Merged origin/main three times (inline temps, narrowing casts, bank sp once) into the branch; condition forms woven into uses/operands/inline/value, values a form names stay lets (lift-check caught the inlined-constant bug). Bars re-lowered; just lift-check passed and just check passed after the last merge (929013ac..HEAD).",
+        "host": "quack"
+      },
+      "round": "2026-11-18T11:28:40Z"
+    },
+    {
+      "id": "merge/quack-lane2-native-lift-bank-sp-once",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/native/lift-bank-sp-once` holds {unit:native/lift-bank-sp-once}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml crates/codegen/src/native.rs docs/native-stage-b.numbers.md docs/research/llm-pilot.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/native/lift-bank-sp-once",
+      "record": {
+        "state": "done",
+        "by": "55e57baa",
+        "at": "2026-11-18T12:12:52Z",
+        "evidence": "Merged origin/main (inline-temps, then narrowing-casts) into the branch: native.rs keeps banked map and inl, both metrics; lift-check bars take main's with lines_prelude 1265 and bank_sp_calls re-measured by lift-metrics. just check passed, just lift-check passed (all programs and planted controls). Commits 8d4d013..HEAD.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane4-native-lift-narrowing-casts",
+      "title": "Merge main on quack lane 4",
+      "detail": "Branch `unit/native/lift-narrowing-casts` holds {unit:native/lift-narrowing-casts}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml crates/codegen/src/native.rs docs/native-stage-b.numbers.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/4",
+      "branch": "unit/native/lift-narrowing-casts",
+      "record": {
+        "state": "done",
+        "by": "b43cb64c",
+        "at": "2026-11-18T11:46:35Z",
+        "evidence": "Merged origin/main into the narrowing-casts branch (c15c16d): native.rs combines main's inline temps/use counts with the narrowing forms (forms feed uses, operands, inline; casts print inline). lift-metrics: 0 over bars, 34 bars lowered, numbers doc regenerated; just check exit 0.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/quack-lane3-native-lift-for-loops",
+      "title": "Merge main on quack lane 3",
+      "detail": "Branch `unit/native/lift-for-loops` holds {unit:native/lift-for-loops}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml crates/codegen/src/native.rs docs/native-stage-b.numbers.md docs/research/llm-pilot.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/3",
+      "branch": "unit/native/lift-for-loops",
+      "record": {
+        "state": "done",
+        "by": "43b9df47",
+        "at": "2026-11-18T12:35:46Z",
+        "evidence": "Merged origin/main at f5ec22cb: native.rs keeps bank_sp-once and for-loop printing side by side; lift-check.toml carries both bank_sp_calls and loops_not_for bars, 46 bars lowered via lift-metrics --lower-bars (0 over); numbers doc regenerated; just check exit 0.",
+        "host": "quack"
+      }
+    },
+    {
+      "id": "merge/pyon-lane1-native-lift-switch-match",
+      "title": "Merge main into the lift-switch-match branch",
+      "detail": "Branch `unit/native/lift-switch-match` holds {unit:native/lift-switch-match}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml crates/codegen/src/native.rs crates/codegen/src/native/metrics.rs docs/native-stage-b.numbers.md docs/research/llm-pilot.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "branch": "unit/native/lift-switch-match",
+      "record": {
+        "state": "done",
+        "by": "ecb301a4",
+        "at": "2026-11-18T15:38:01Z",
+        "evidence": "Merge 0819cea1 on unit/native/lift-switch-match (main d7316c0d, with {unit:native/lift-for-loops}): conflicts settled keeping both (skip takes the for's step and the match; a for's block tries no compare tree). just check passed (1208 tests); just lift-check passed, 23 programs 0 differences, every planted fault and both planted holes caught; 46 bars lowered by --lower-bars, none raised; c-switch compare_trees_matched 2/2 as on the branch. Metroid lift built and ran 600 of 600 frames (compare_trees_left 39; lines 324819, value_lets 75711). C ROMs rebuilt from the branch's c/ in a private data dir."
+      },
+      "round": "2026-11-18T14:58:37Z"
+    },
+    {
+      "id": "merge/quack-lane2-native-lift-one-entry",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/native/lift-one-entry` holds {unit:native/lift-one-entry}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml crates/codegen/src/native.rs docs/native-stage-b.numbers.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/native/lift-one-entry",
+      "record": {
+        "state": "done",
+        "by": "d0a0af90",
+        "at": "2026-11-20T04:00:55Z",
+        "evidence": "Merged origin/main into unit/native/lift-one-entry (bda8feb7, then a clean re-merge). native.rs: main's new switch_next guest_pc::set now prints the prelude pc(). Line bars lowered by lift-metrics --lower-bars, numbers doc rewritten. just check passed twice; just lift-check passed.",
+        "host": "quack"
+      },
+      "notes": [
+        {
+          "at": "2026-11-20T02:55:46Z",
+          "by": "manual",
+          "text": "Merging failed again: merging main conflicts in crates/codegen/lift-check.toml crates/codegen/src/native.rs docs/native-stage-b.numbers.md"
+        }
+      ],
+      "round": "2026-11-20T02:55:54Z"
+    },
+    {
+      "id": "merge/quack-lane4-native-mirror-katam-names",
+      "title": "Merge main on quack lane 4",
+      "detail": "Branch `unit/native/mirror-katam-names` holds {unit:native/mirror-katam-names}, finished but not on main: merging main conflicts in crates/codegen/src/bin/gbaa-lift.rs crates/codegen/src/native.rs crates/codegen/src/types.rs docs/tools/commands.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/4",
+      "branch": "unit/native/mirror-katam-names",
+      "record": {
+        "state": "done",
+        "by": "85f702bf",
+        "at": "2026-11-20T02:32:12Z",
+        "evidence": "Merged origin/main into unit/native/mirror-katam-names (ca7b227c): kept --names layering + typed-fields report beside main's --no-field-types/holes.fields, is_empty with marker/field_at, both commands.md texts; just check exit 0.",
+        "host": "quack",
+        "landed": "2026-11-20T02:37:50Z"
+      }
+    },
+    {
+      "id": "merge/quack-lane3-native-lift-register-locals",
+      "title": "Merge main on quack lane 3",
+      "detail": "Branch `unit/native/lift-register-locals` holds {unit:native/lift-register-locals}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml crates/codegen/src/native.rs docs/native-stage-b.numbers.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/3",
+      "branch": "unit/native/lift-register-locals",
+      "record": {
+        "state": "done",
+        "by": "74f02e69",
+        "at": "2026-11-20T03:17:31Z",
+        "evidence": "Merged origin/main into the branch (cf4ac6ce): native.rs keeps register lets and entries-after-body with main's join-shape code and fall-mark assert; bars lowered to merged values by lift-metrics --lower-bars (0 over); just check passed, exit 0.",
+        "host": "quack"
+      },
+      "round": "2026-11-20T03:09:36Z"
+    },
+    {
+      "id": "merge/quack-lane4-native-lift-register-locals",
+      "title": "Merge main on quack lane 4",
+      "detail": "Branch `unit/native/lift-register-locals` holds {unit:native/lift-register-locals}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/4",
+      "branch": "unit/native/lift-register-locals",
+      "record": {
+        "state": "done",
+        "by": "92a04bd4",
+        "at": "2026-11-20T04:18:22Z",
+        "evidence": "Merged origin/main (commit f39fa03f). lift-check.toml bar conflict for c-fnptr-gcc/c-chain-gcc: kept branch's new metrics, then lift-metrics --lower-bars on merged code (0 over, 6 lowered). just check passed; lift-check --only c-fnptr-gcc --only c-chain-gcc passed.",
+        "host": "quack",
+        "landed": "2026-11-20T04:24:13Z"
+      }
+    },
+    {
+      "id": "merge/quack-lane1-native-rom-data-statics",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/native/rom-data-statics` holds {unit:native/rom-data-statics}, finished but not on main: merging main conflicts in docs/native-stage-b.numbers.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/native/rom-data-statics",
+      "record": {
+        "state": "done",
+        "by": "7878a7ed",
+        "at": "2026-11-20T05:31:30Z",
+        "evidence": "Merged origin/main into unit/native/rom-data-statics (faf674a5): numbers doc regenerated via just lift-metrics --write-doc (0 over bars); c-heap lines_prelude bars 1265->1304 to match this branch's prelude like every other program; just check exit 0.",
+        "host": "quack",
+        "landed": "2026-11-20T05:36:38Z"
+      }
+    },
+    {
+      "id": "merge/quack-lane4-native-lift-frame-gone",
+      "title": "Merge main on quack lane 4",
+      "detail": "Branch `unit/native/lift-frame-gone` holds {unit:native/lift-frame-gone}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/4",
+      "branch": "unit/native/lift-frame-gone",
+      "record": {
+        "state": "done",
+        "by": "481e1fb2",
+        "at": "2026-11-20T10:53:58Z",
+        "evidence": "Merged origin/main into unit/native/lift-frame-gone: native.rs conflicts settled keeping both sides; c-fnptr-agbcc locals_noted bar 8->10 (commented: frame-gone drops saves, so two registers get a note not a rename, checked against main's output); stage-B doc folded to its budget; numbers regenerated; just lift-metrics 0 over, just check passes.",
+        "host": "quack",
+        "landed": "2026-11-20T11:16:30Z"
+      },
+      "notes": [
+        {
+          "at": "2026-11-20T09:17:09Z",
+          "by": "094c9ec7",
+          "text": "Overseer: the merge is fine; just check fails only on the docs budget: docs/native-stage-b.md is 422 lines, budget 421 (crates/leak-check/tests/budgets.rs). Move a result line to its numbers file, run just check, commit."
+        },
+        {
+          "at": "2026-11-20T07:26:17Z",
+          "by": "094c9ec7",
+          "text": "Overseer: main moved again during landing. In the conflicted bars and numbers doc, take main's copy and regenerate (lift-metrics --lower-bars, then --write-doc on a clean tree), not a hand merge. Commit fast so it lands before main moves."
+        },
+        {
+          "at": "2026-11-20T07:05:31Z",
+          "by": "manual",
+          "text": "Merging failed again: merging main conflicts in crates/codegen/lift-check.toml"
+        }
+      ]
+    },
+    {
+      "id": "merge/quack-lane1-native-lift-text-editable",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/native/lift-text-editable` holds {unit:native/lift-text-editable}, finished but not on main: merging main conflicts in crates/codegen/src/native.rs crates/codegen/src/native/metrics.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/native/lift-text-editable",
+      "record": {
+        "state": "done",
+        "by": "1d036631",
+        "at": "2026-11-20T07:12:09Z",
+        "evidence": "Merged origin/main into unit/native/lift-text-editable (b141ade0): native.rs lines metric now subtracts both io_lines and text_lines; metrics.rs UNBARRED keeps text_statics and io_named. just check passed (exit 0).",
+        "host": "quack",
+        "landed": "2026-11-20T07:22:18Z"
+      }
+    },
+    {
+      "id": "merge/quack-lane2-native-lift-no-exit-result",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/native/lift-no-exit-result` holds {unit:native/lift-no-exit-result}, finished but not on main: `just check` fails on the branch with main merged in (error: recipe `check` failed on line 18 with exit code 101). Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/native/lift-no-exit-result",
+      "record": {
+        "state": "done",
+        "by": "bb535b1a",
+        "at": "2026-11-20T08:43:38Z",
+        "evidence": "Merged origin/main (36f481c5; only tracker changes new). just check failed only on docs_are_within_their_line_budgets (docs/native-stage-b.md 422 vs 421); folded the branch's entry to one line; just check then passed (exit 0).",
+        "host": "quack",
+        "landed": "2026-11-20T08:56:00Z"
+      }
+    },
+    {
+      "id": "merge/quack-lane3-native-lift-index-names",
+      "title": "Merge main on quack lane 3",
+      "detail": "Branch `unit/native/lift-index-names` holds {unit:native/lift-index-names}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml crates/codegen/src/native.rs docs/native-stage-b.numbers.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/3",
+      "branch": "unit/native/lift-index-names",
+      "record": {
+        "state": "done",
+        "by": "d7bafa6f",
+        "at": "2026-11-20T13:25:06Z",
+        "evidence": "Merged origin/main into the branch (23285a5d): conflicts in native.rs, fields.rs, metrics.rs, lift-check.toml, mod-view-parity.md and the numbers doc settled keeping index names and bitfields both; lift-metrics 0 over bars (2 lines bars lowered), numbers doc regenerated; just check passed (exit 0).",
+        "host": "quack",
+        "landed": "2026-11-20T13:35:36Z"
+      },
+      "notes": [
+        {
+          "at": "2026-11-20T11:49:51Z",
+          "by": "094c9ec7",
+          "text": "Overseer: real code conflicts now (native.rs, fields.rs, metrics.rs). Merge main, settle the code keeping both sides, take main's bars and numbers doc and regenerate them, run just check, commit at once so it lands before main moves."
+        },
+        {
+          "at": "2026-11-20T11:16:54Z",
+          "by": "manual",
+          "text": "Merging failed again: merging main conflicts in crates/codegen/lift-check.toml crates/codegen/src/native.rs docs/native-stage-b.numbers.md"
+        },
+        {
+          "at": "2026-11-20T10:37:51Z",
+          "by": "manual",
+          "text": "Merging failed again: merging main conflicts in docs/mod-view-parity.md"
+        }
+      ]
+    },
+    {
+      "id": "merge/quack-lane4-native-lift-bitfields",
+      "title": "Merge main on quack lane 4",
+      "detail": "Branch `unit/native/lift-bitfields` holds {unit:native/lift-bitfields}, finished but not on main: merging main conflicts in docs/mod-view-parity.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/4",
+      "branch": "unit/native/lift-bitfields",
+      "record": {
+        "state": "done",
+        "by": "8aaa707a",
+        "at": "2026-11-20T11:28:35Z",
+        "evidence": "Merged origin/main into unit/native/lift-bitfields; settled conflicts in native.rs, lift-check.toml, mod-view-parity.md, commands.md, numbers doc (regenerated); lift-metrics 0 over/under bars; just check exit 0.",
+        "host": "quack",
+        "landed": "2026-11-20T11:45:36Z"
+      }
+    },
+    {
+      "id": "merge/quack-lane2-native-lift-mod-cut",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/native/lift-mod-cut` holds {unit:native/lift-mod-cut}, finished but not on main: merging main conflicts in crates/codegen/src/bin/gbaa-lift.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/native/lift-mod-cut",
+      "record": {
+        "state": "done",
+        "by": "7f50ce0f",
+        "at": "2026-11-20T11:23:17Z",
+        "evidence": "Merged origin/main (6d71cf9c) into unit/native/lift-mod-cut; one conflict in gbaa-lift.rs usage string, kept both --no-data-names and --cut; just check passed (exit 0).",
+        "host": "quack",
+        "landed": "2026-11-20T11:38:56Z"
+      }
+    },
+    {
+      "id": "merge/quack-lane4-native-mirror-native-route",
+      "title": "Merge main on quack lane 4",
+      "detail": "Branch `unit/native/mirror-native-route` holds {unit:native/mirror-native-route}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml docs/native-stage-b.numbers.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/4",
+      "branch": "unit/native/mirror-native-route",
+      "minMinutes": 30,
+      "record": {
+        "state": "claimed",
+        "by": "00941e5d",
+        "session": "00941e5d-e9a2-4202-8da6-072eb475efb9",
+        "host": "quack",
+        "pid": 3424758,
+        "start": "57919012",
+        "at": "2026-11-20T13:47:24Z",
+        "branch": "unit/native/mirror-native-route",
+        "resumed": "a9a46ec9",
+        "prevSession": "a9a46ec9-967f-4ea1-85a2-dba1c6ebd1bd",
+        "pushed": true,
+        "beats": true,
+        "handedBack": "2026-11-20T13:48:50Z",
+        "ended": "2026-11-20T13:48:58Z"
+      },
+      "notes": [
+        {
+          "at": "2026-11-20T13:48:43Z",
+          "by": "00941e5d",
+          "text": "merged latest main again (only tracker/ changed, no conflicts; commit 8f848d7d). just check started but stopped at lane stop time again. Next: run just check early in a run, then record done."
+        },
+        {
+          "at": "2026-11-20T13:47:03Z",
+          "by": "a9a46ec9",
+          "text": "Merge committed on the branch: lift-check.toml keeps main's lines bars + branch's lines_prelude 1323; numbers doc regenerated; lift-metrics 0 over. just check was stopped at lane stop time: rerun it, then record done."
+        }
+      ],
+      "round": "2026-11-20T13:43:40Z"
+    }
+  ]
+}
