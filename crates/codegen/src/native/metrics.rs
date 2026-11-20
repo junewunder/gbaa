@@ -44,7 +44,11 @@
 //!   (no bar: it should rise) and, where it lands inside a field,
 //!   `named_inside_accesses`. A lift with types also has
 //!   `computed_unknown_unnamed`, barred: the `computed_unknown` accesses
-//!   no type names.
+//!   no type names. Of those through a typed pointer that hold bitfields
+//!   (`super::bitfields`, native/lift-bitfields): `bitfield_sets` print
+//!   as `set_bits` (no bar), `bitfield_joined` through the accessor of
+//!   the several fields they hold, `bitfield_arith` name none (left as
+//!   bytes and masks); both barred.
 //!
 //! The sp-relative ones are split again by whether the stack slot they
 //! reach escapes (`super::frame`): `sp_accesses_local_slot` and
@@ -87,6 +91,14 @@
 //! by value through a table Recovery bounded, printed with neither a
 //! return nor a `call_fn` arm (no bar: it should rise), so that the
 //! r0-r3 such an arm would pass aren't live at entry.
+//!
+//! Frames gone (`native/lift-frame-gone`): `sp_arith_unescaped`, the
+//! functions printing sp arithmetic though no slot of their frame
+//! escapes, nor do they pass sp on to code needing it exactly (barred, at
+//! 0: a frame nothing of which is in memory prints none,
+//! [`super::frame::Frame::in_locals`]), and `lr_returned`, the
+//! functions returning a register that holds only their entry lr (barred,
+//! at 0: [`crate::saves::Summary::lr_left`]).
 //!
 //! Text (`native/lift-text`): `text_notes`, the `// text: …` comments
 //! giving the text a constant points at, where the names files have a text
@@ -315,6 +327,7 @@ pub const UNBARRED: &[&str] = &[
     "lines_types",
     "named_field_accesses",
     "named_inside_accesses",
+    "bitfield_sets",
     "data_constants_named",
     "ref_types",
     "functions_structured",

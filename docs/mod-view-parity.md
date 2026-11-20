@@ -43,7 +43,7 @@ that adds it. The owner agreed the "Not wanted" list (2026-11-19).
 |---|---|---|
 | A pointer access as a typed path (`Ptr<T>`, field accessors from `[types]`) | `g.get(Ref::<t::Pen>::new(v18).state())`: 77 on c-switch-agbcc, 33 on c-fnptr-gcc (`native::fields`) | Has it |
 | A global by its type (`gPen.x`) | A global the names files type as a plain struct (no union or bitfield) is that struct in `Ram` (`gPen: ram_t::Pen`, `#[repr(C)]`), so `g.ram.gPen.color = 0x2a9f`; a word over two whole fields writes each (`gPen.x`, `gPen.y`, c-switch-gcc). A union, a bitfield or an access across a field's edge keeps the access-width type (`[u32; 2]`). Metroid: 3 globals (`gMusicTrackInfo: ram_t::MusicTrackInfo`; most of its structs hold a union or bitfield) | Has it (`native/lift-struct-globals`) |
-| A bitfield write as a field set (`set_bits`), constant or computed | Only whole fields are named. No C program has a bitfield | Unit: `native/lift-bitfields` |
+| A bitfield write as a field set (`set_bits`), constant or computed | Through a typed pointer (`native::bitfields`, c/bits): a write of one field whose load the block has to itself prints `g.set_bits(Ref::<t::Ball>::new(r0).hue(), v)` (6 on c-bits-agbcc, 4 on c-bits-gcc; any access width, where the mod view matches a byte); any other access of one field names it (`g.get(p.speed())`, `g.set(p.up(), …)`); one the compiler joined over several fields goes through an accessor named for them all (`p.left_up_speed_hue()`). `bitfield_arith`, the accesses left as bytes, is 0 on the C rows. A typed global's bitfields keep the access-width type, as above | Has it (`native/lift-bitfields`) |
 | Strength-reduced indexing as `idx(i)` | `.idx(n)` with a constant `n` only (`types::Step::Idx`) | Unit: `native/lift-index-names` |
 | Types on Metroid | `just fetch-decomps` builds mzm with agbcc `-g` (`scripts/agbcc-dwarf`; the ROM's sha1 unchanged), so `mzm.toml` has 488 `[types]`, 4,754 located `[locals]` and 62,685 `[lines]`; Metroid's lift names 7,267 field accesses (`Ref::<t::SamusData>::new(r3).pose()`), 2026-11-20 | Has it (`native/metroid-dwarf-map`) |
 
@@ -65,10 +65,10 @@ that adds it. The owner agreed the "Not wanted" list (2026-11-19).
 
 | The mod view | The lift today | Status |
 |---|---|---|
-| Cut chosen functions into `mods/<game>/<mod>/` with a pristine `orig/`, re-cut by three-way merge (`--cut`, `--mod`) | Stand-ins (`[[standin]]` in a holes file, `--replace FILE`), checked by `just fn-check`. No cut: an editor copies a function out of `out/` by hand | Unit: `native/lift-mod-cut` |
+| Cut chosen functions into `mods/<game>/<mod>/` with a pristine `orig/`, re-cut by three-way merge (`--cut`, `--mod`) | `gbaa-lift --cut DIR KEY...` (names allowed) writes `src/<name>.rs`, `orig/` and `replace.toml`; `--replace DIR/replace.toml` builds with it; a re-cut merges (`git merge-file`). On c-switch-agbcc an unedited cut of `tally` and `pen_update` passes the native check, a one-constant edit fails it at frame 31, and a re-cut from an older print merges with no conflict | Has it (`native/lift-mod-cut`, 2026-11-20) |
 | A call a mod adds needs no ROM address | A replacement calls any lifted function by its Rust name | Has it |
 | One command builds a mod and shows its frames beside stock | None | Unit: `native/lift-mod-run` |
-| A cut file says what its macros mean to an editor | The lift has no `at`, `ret!` or `regs!` to explain. The cut's header covers what is left | In `native/lift-mod-cut` |
+| A cut file says what its macros mean to an editor | The lift has no `at`, `ret!` or `regs!` to explain. A cut's header says what must stay as cut (each `pub fn` line's signature, `Result` or not) and what `g`, `r13`, `lN`, `vN`, `RET`, `pc(..)` and `bank_sp` are | Has it (`native/lift-mod-cut`) |
 | An agent makes a small real mod and says what hurt | Not tried on a lift | Unit: `native/lift-agent-mod` |
 | Proof the named build is the unnamed one (fn-diff, same states after names) | The native check (`route-check --native`), the per-function check (`just fn-check`), `lift-check`'s planted faults | Has it |
 

@@ -182,39 +182,54 @@ fn is_word(c: u8) -> bool {
 /// in scope until its block's `}` or a `let` of the same name in the same
 /// block; a name read is the innermost `let` of it in scope.
 fn unread_in(f: &str) -> u64 {
-    // Each open block's `let`s: name and whether read.
-    let mut scopes: Vec<Vec<(&str, bool)>> = vec![Vec::new()];
-    let unread = |scope: &[(&str, bool)]| scope.iter().filter(|(_, r)| !r).count() as u64;
-    let mut n = 0u64;
+    unread_at(f).len() as u64
+}
+
+/// Where in `f` (one function's text, or part of one) the names of its
+/// unread `let`s are, by byte offset, as [`unread_lets`] counts them.
+pub fn unread_at(f: &str) -> Vec<usize> {
+    // Each open block's `let`s: name, where, and whether read.
+    let mut scopes: Vec<Vec<(&str, usize, bool)>> = vec![Vec::new()];
+    let at = |w: &str| w.as_ptr() as usize - f.as_ptr() as usize;
+    let mut out = Vec::new();
+    let unread = |scope: Vec<(&str, usize, bool)>, out: &mut Vec<usize>| {
+        out.extend(scope.into_iter().filter(|l| !l.2).map(|l| l.1));
+    };
     for tok in tokens(f) {
         match tok {
             Tok::Open => scopes.push(Vec::new()),
             Tok::Close => {
                 if scopes.len() > 1 {
-                    n += unread(&scopes.pop().expect("a scope"));
+                    unread(scopes.pop().expect("a scope"), &mut out);
                 }
             }
             Tok::Word(w, true) => {
                 let top = scopes.last_mut().expect("a scope");
-                if let Some(k) = top.iter().position(|(x, _)| *x == w) {
-                    let (_, read) = top.remove(k);
-                    n += u64::from(!read);
+                if let Some(k) = top.iter().position(|(x, _, _)| *x == w) {
+                    let l = top.remove(k);
+                    if !l.2 {
+                        out.push(l.1);
+                    }
                 }
                 // `_`-led names are meant unread.
-                top.push((w, w.starts_with('_')));
+                top.push((w, at(w), w.starts_with('_')));
             }
             Tok::Word(w, false) => {
                 if let Some(l) = scopes
                     .iter_mut()
                     .rev()
-                    .find_map(|sc| sc.iter_mut().rev().find(|(x, _)| *x == w))
+                    .find_map(|sc| sc.iter_mut().rev().find(|(x, _, _)| *x == w))
                 {
-                    l.1 = true;
+                    l.2 = true;
                 }
             }
         }
     }
-    n + scopes.iter().map(|s| unread(s)).sum::<u64>()
+    for sc in scopes {
+        unread(sc, &mut out);
+    }
+    out.sort_unstable();
+    out
 }
 
 #[cfg(test)]
