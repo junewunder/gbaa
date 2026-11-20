@@ -119,8 +119,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `--cover` gives each its coverage file (hours, not minutes). Fails if
   any game's run did. One 3 GB cap, no swap, for the whole run (the games
   run one at a time). About 30 minutes for the nine on quack (Imperium the
-  longest, 9 minutes; 2026-11-20): run it
-  with `just long start holes -- just holes-all`. Use it, not a loop over `just
+  longest, 9 minutes; 2026-11-20): run it with `just long start holes -- just holes-all`. Use it, not a loop over `just
   holes`, to compare before and after a change: run it on main, then on
   the branch with `--against` the first DIR. `--write-doc
   docs/research/native-holes.numbers.md` also writes the table as that
