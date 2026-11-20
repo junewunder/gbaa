@@ -1279,8 +1279,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             let mut r = taken.clone();
             r.insert(entry);
             r.extend(
-                rom.chunks_exact(4)
-                    .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+                rom.as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|&w| u32::from_le_bytes(w))
                     .filter(|w| all.contains(w)),
             );
             r.extend(all.iter().filter(|&&k| k >> 24 != 0x08));
