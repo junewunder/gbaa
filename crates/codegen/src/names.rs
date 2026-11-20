@@ -93,14 +93,18 @@ pub struct Field {
     pub bits: Option<(u32, u32)>,
 }
 
-/// A family of named values (`[values]`, `OPTIONS_TEXT_SPEED_*`): each
-/// value's one name, and the fields that take it, as (type's C name, field).
+/// A family of named values (`[values]`, `OPTIONS_TEXT_SPEED_*`, or an
+/// enum, `GameMode`): each value's one name, the fields that take it, as
+/// (type's C name, field), and the globals that do, by name
+/// (`gMainGameMode`; native/lift-value-names).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Values {
-    /// Where its names are defined (`include/constants/global.h`).
+    /// Where its names are defined (`include/constants/global.h`; empty
+    /// for an enum of the DWARF's).
     pub file: String,
     pub names: Vec<(String, u32)>,
     pub fields: Vec<(String, String)>,
+    pub globals: Vec<String>,
 }
 
 /// Every map file, layered, and the identifier of each named key.
@@ -432,6 +436,13 @@ fn values(v: &toml::Value, at: &str) -> Result<Values, String> {
             .ok_or_else(|| format!("{at}: a field is \"type.field\""))?;
         fields.push((ty.to_string(), name.to_string()));
     }
+    let mut globals = Vec::new();
+    for g in arr("globals") {
+        let g = g
+            .as_str()
+            .ok_or_else(|| format!("{at}: a global is its name"))?;
+        globals.push(g.to_string());
+    }
     let mut names = Vec::new();
     for n in arr("names") {
         let n = n
@@ -453,6 +464,7 @@ fn values(v: &toml::Value, at: &str) -> Result<Values, String> {
             .to_string(),
         names,
         fields,
+        globals,
     })
 }
 
