@@ -51,7 +51,8 @@
 //! prelude's `Game::at`, [`heap`]; accesses as the names files' named
 //! fields, [`fields`]; metric names and bars,
 //! [`metrics`]; the crate's files, [`modules`]; functions and data by the
-//! names file's names, [`named`]; `lift-check.toml`'s
+//! names file's names, [`named`]; register locals and parameters by
+//! their DWARF variables' names, [`local_names`]; `lift-check.toml`'s
 //! programs, [`lift_check`]. A function's blocks and IR come from
 //! [`crate::func`], its summary from [`crate::saves`].
 //!
@@ -213,6 +214,7 @@ pub mod globals;
 pub mod heap;
 pub mod lift_check;
 pub mod live;
+pub mod local_names;
 pub mod metrics;
 pub mod modules;
 pub mod named;
@@ -423,6 +425,10 @@ pub struct Holes {
     /// of a typed global ([`typed_fields`]; unit
     /// `native/mirror-katam-names`).
     pub types: Option<std::sync::Arc<crate::types::Types>>,
+    /// The same files' types where a field or global takes a family of
+    /// their named values (`[values]`): a constant stored to or compared
+    /// with one prints as its name (unit `native/lift-value-names`).
+    pub values: Option<std::sync::Arc<crate::types::Types>>,
     /// The same files' types, prototypes and DWARF variables: accesses
     /// through a pointer they type print as its named fields ([`fields`];
     /// unit `native/lift-typed-access`). `None`: the files give no types,
@@ -435,6 +441,12 @@ pub struct Holes {
     /// ([`crate::lower::word_note`]; unit `native/lift-text`). Comments
     /// only: `lines` leaves them out, `text_notes` counts them.
     pub text: Option<std::sync::Arc<crate::names::SourceMap>>,
+    /// The same files' map, where it has `[locals]` or prototypes: a
+    /// function's register locals and parameters take its variables'
+    /// names where liveness agrees, else a comment
+    /// ([`local_names`]; unit `native/lift-local-names`). `None` with
+    /// `--no-local-names`.
+    pub dwarf: Option<std::sync::Arc<crate::names::SourceMap>>,
     /// The same files' line table, where they have one: each row that
     /// starts a source line, as `file:line` by its instruction's address
     /// ([`line_starts`]). Its `// c/switch/main.c:42` comment prints above
@@ -1072,6 +1084,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     if let Some(t) = &holes.types {
         globals.type_structs(t, &ram, &ranges);
     }
+    // A field or global that takes named values prints them
+    // (native/lift-value-names).
+    if let Some(t) = &holes.values {
+        globals.name_values(t.clone());
+    }
     // ROM's objects: what the computed loads the value sets bound to ROM
     // reach (native/rom-data-statics).
     let rom_data = RomData::carve(&rom_ranges, rom.len() as u32);
@@ -1304,6 +1321,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     inl: Vec::new(),
                     frameless: false,
                     sp_exact: sp_exact.contains(&f.entry),
+                    load_values: BTreeMap::new(),
                     printed: BTreeSet::new(),
                     fall: None,
                     tail_edge: false,
@@ -1547,6 +1565,18 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     }
     let io_lines = io_consts.lines().count();
     main.push_str(&io_consts);
+    // The named values the code stores and compares (native/lift-value-
+    // names): like the I/O registers' names, not lifted code.
+    let mut value_consts = String::new();
+    let value_names = soft.value_names.take();
+    if !value_names.is_empty() {
+        value_consts.push_str("\n/// The named values (the names files' `[values]`: the decomp's constants and enums) a field or global the code stores or compares takes.\n");
+        for (n, x) in &value_names {
+            writeln!(value_consts, "pub const {n}: u32 = {x};").unwrap();
+        }
+    }
+    let io_lines = io_lines + value_consts.lines().count();
+    main.push_str(&value_consts);
     writeln!(main, "\npub const NAME: &str = {name:?};").unwrap();
     writeln!(main, "pub const ENTRY: Fn = {};\n", plain(entry)).unwrap();
     let named =
@@ -1894,6 +1924,16 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 .count()
         })
         .sum();
+    // Nor the register variables' comments ([`local_names`]).
+    let local_notes: usize = files
+        .files
+        .iter()
+        .map(|(_, t)| {
+            t.lines()
+                .filter(|l| l.trim_start().starts_with(local_names::LOCAL_NOTE))
+                .count()
+        })
+        .sum();
     // Nor are the source lines' ([`Holes::lines`]).
     let line_notes: usize = files
         .files
@@ -1910,10 +1950,17 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             - rom_lines
             - io_lines
             - text_notes
+            - local_notes
             - line_notes
             - text_lines),
     );
+    // Only where the names files give DWARF variables or prototypes.
+    if holes.dwarf.is_some() {
+        m.push("locals_named", n(soft.locals_named));
+        m.push("locals_noted", n(soft.locals_noted));
+    }
     m.push("io_named", soft.io_named);
+    m.push("values_named", soft.values_named.get());
     m.push("io_unnamed", soft.io_unnamed);
     m.push("text_notes", n(text_notes));
     m.push("line_notes", n(line_notes));
@@ -2051,6 +2098,13 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         let fn_proven = f.1.keys().filter(|w| f.0.proven(**w)).count();
         m.push("fn_words_proven", n(fn_proven));
         m.push("fn_words_not_proven", n(f.1.len() - fn_proven));
+    }
+    // Only a lift with names has them (native/lift-data-names-inline):
+    // the data constants named, and those inside a named datum left as
+    // numbers (barred).
+    if let Some(d) = named {
+        m.push("data_constants_named", n(d.constants));
+        m.push("data_constants_unnamed", n(d.unnamed));
     }
     m.push("gap_targets", n(gaps.len()));
     writeln!(
@@ -3352,6 +3406,11 @@ struct Soft {
     io_regs: BTreeSet<&'static str>,
     io_named: u64,
     io_unnamed: u64,
+    /// The named values (`[values]`; native/lift-value-names) a store or
+    /// compare prints, declared in `main.rs` with their values; and how
+    /// many constants printed as one (`value_names`).
+    value_names: std::cell::RefCell<BTreeMap<String, u32>>,
+    values_named: std::cell::Cell<u64>,
     /// The `let`s of IR values printed (`value_lets`), and the values
     /// printed inside their use instead ([`FnPrinter::inline`]).
     value_lets: u64,
@@ -3369,6 +3428,11 @@ struct Soft {
     /// Functions whose body is in their plain entry, its parameters
     /// arguments by name ([`FnPrinter::entries`]).
     body_in_plain: usize,
+    /// DWARF variables and parameters whose register local or argument
+    /// took the variable's name, and the variables left a comment
+    /// ([`local_names`]).
+    locals_named: usize,
+    locals_noted: usize,
     /// And those whose plain entry still packs its arguments into
     /// [`Regs::call`] for `x_` (barred): what they take as they came is
     /// more than those (a flag, r4-r12, an lr not proven `RET`).
@@ -3506,6 +3570,16 @@ struct FnPrinter<'a, 'b> {
     /// It passes sp on to code needing the guest's exactly ([`exact_sp`]):
     /// its sp arithmetic stays.
     sp_exact: bool,
+    /// The current block's loads of a field or global that takes a family
+    /// of named values (`[values]`; native/lift-value-names), by inst: the
+    /// names by value, which a compare of the load with one prints.
+    load_values: BTreeMap<usize, BTreeMap<u32, String>>,
+}
+
+/// The value of a constant as the printer writes it (`0x2u32`).
+fn const_text(e: &str) -> Option<u32> {
+    let h = e.strip_prefix("0x")?.strip_suffix("u32")?;
+    u32::from_str_radix(&h.replace('_', ""), 16).ok()
 }
 
 /// Whether an untyped store at `w` ([`FnPrinter::vsa_where`]) may reach
@@ -3768,6 +3842,7 @@ impl FnPrinter<'_, '_> {
             self.frame_gone(&mut s, head, sum);
             let e = self.entries(&s[head..], &ty);
             s.insert_str(head, &e);
+            self.name_locals(&mut s, head, e.len());
             return s;
         }
         self.soft.fns_match += 1;
@@ -3785,6 +3860,7 @@ impl FnPrinter<'_, '_> {
         self.frame_gone(&mut s, head, sum);
         let e = self.entries(&s[head..], &ty);
         s.insert_str(head, &e);
+        self.name_locals(&mut s, head, e.len());
         s
     }
 
@@ -3908,6 +3984,47 @@ impl FnPrinter<'_, '_> {
         if lr & self.returned() != 0 {
             self.soft.lr_returned.push(self.f.entry);
         }
+    }
+
+    /// The function's register locals and parameters by their DWARF
+    /// names, where liveness agrees, else a comment where each variable's
+    /// range starts ([`local_names`]): over `s` from `head`, whose
+    /// entries (`e_len` bytes, the adapter's first, which keeps its
+    /// registers) the printer keeps too ([`Entries`]).
+    fn name_locals(&mut self, s: &mut String, head: usize, e_len: usize) {
+        let Some(names) = self.holes.dwarf.clone() else {
+            return;
+        };
+        let k = self.f.entry;
+        let Some(e) = self.soft.entries.get(&k) else {
+            return;
+        };
+        let start = head + e.adapter.len();
+        if !s[head..].starts_with(&e.adapter) {
+            return;
+        }
+        let mut words = local_names::words_of(&s[start..]);
+        words.extend(local_names::words_of(&e.no_x));
+        let written = written_words(&s[head + e_len..]);
+        let facts = local_names::Facts {
+            f: self.f,
+            dead: &self.dead,
+            local: &self.local,
+            live_in: &self.live_in,
+        };
+        let n = local_names::plan(&names, &facts, &words, &written);
+        if n.renames.is_empty() && n.notes.is_empty() {
+            return;
+        }
+        let renamed = local_names::rename(&s[start..], &n.renames);
+        let (text, noted) = local_names::insert_notes(&renamed, &n.notes);
+        s.replace_range(start.., &text);
+        if let Some(e) = self.soft.entries.get_mut(&k) {
+            e.keep_x = local_names::rename(&e.keep_x, &n.renames);
+            e.no_x = local_names::rename(&e.no_x, &n.renames);
+        }
+        self.soft.locals_named += n.named;
+        self.soft.locals_noted += noted;
     }
 
     /// The function's entries and the start of its body
@@ -5121,6 +5238,10 @@ impl FnPrinter<'_, '_> {
         let ind = "                ";
         let from = std::mem::take(&mut self.rest_from);
         let (typed, objs, refs) = self.accesses(insts);
+        self.load_values = (0..insts.len())
+            .filter(|&i| matches!(insts[i].op, Op::Load { .. }))
+            .filter_map(|i| Some((i, self.access_values(insts, i, &typed, &refs)?)))
+            .collect();
         let banks = self.store_banks(insts, &typed, &objs, &refs);
         let banked = match self.banked.get(&self.cur) {
             Some(r) if r.len() == insts.len() => r.clone(),
@@ -5519,7 +5640,13 @@ impl FnPrinter<'_, '_> {
                         ""
                     };
                     // One term: a field's store casts it (`{val} as u16`).
-                    let val = format!("{}{plant}", self.val(value));
+                    // A constant one of the field's named values is that
+                    // name (native/lift-value-names).
+                    let named = konst(insts, value).and_then(|c| {
+                        let vs = self.access_values(insts, i, &typed, &refs)?;
+                        self.value_name(&vs, c)
+                    });
+                    let val = format!("{}{plant}", named.unwrap_or_else(|| self.val(value)));
                     let mem = match (&typed[i], &objs[i], refs[i]) {
                         _ if let Some(o) = self.callers_off(i) => {
                             format!("{f}(g, {}{m}, {val});", callers_addr(o))
@@ -5614,9 +5741,9 @@ impl FnPrinter<'_, '_> {
                         (Some(_), Some(t)) if t.trim().is_empty() => {
                             let g = inst.guard.expect("a guarded exit");
                             let not = match (&self.inl[g.index()], &conds[g.index()]) {
-                                (Some(_), Some(c)) if c.takes_inlined() => {
-                                    c.not().text_with(&|x| self.val(x))
-                                }
+                                (Some(_), Some(c)) if c.takes_inlined() => c
+                                    .not()
+                                    .text_named(&|x| self.val(x), &|x, k| self.load_value(x, k)),
                                 _ => format!("!{}", self.val(g)),
                             };
                             writeln!(s, "{ind}if {not} {{").unwrap();
@@ -5657,6 +5784,48 @@ impl FnPrinter<'_, '_> {
         self.inl = outer;
         self.bound = outer_bound;
         s
+    }
+
+    /// The names of the values the field or global the access at inst `i`
+    /// reads or writes whole takes (`[values]`; native/lift-value-names),
+    /// by value: a typed global's ([`Place::values`]) or a field through a
+    /// pointer the names files type ([`fields::values`]).
+    fn access_values(
+        &self,
+        insts: &[Inst],
+        i: usize,
+        typed: &[Option<Place>],
+        refs: &[Option<HeapRef>],
+    ) -> Option<BTreeMap<u32, String>> {
+        if let Some(p) = &typed[i] {
+            return p.values.clone();
+        }
+        let r = refs[i]?;
+        if !r.named {
+            return None;
+        }
+        let (Op::Load { width, .. } | Op::Store { width, .. }) = insts[i].op else {
+            return None;
+        };
+        let maps = self.holes.fields.as_deref()?;
+        let at = self.field_at.get(&(self.cur, i))?;
+        fields::values(&maps.types, at, bytes(width)).cloned()
+    }
+
+    /// `k` by its name in `vs` (a field's named values), recorded for
+    /// `main.rs`'s declarations.
+    fn value_name(&self, vs: &BTreeMap<u32, String>, k: u32) -> Option<String> {
+        let n = vs.get(&k)?;
+        self.soft.value_names.borrow_mut().insert(n.clone(), k);
+        self.soft.values_named.set(self.soft.values_named.get() + 1);
+        Some(n.clone())
+    }
+
+    /// `k` by its name where `x` is the current block's load of a field
+    /// that takes it ([`FnPrinter::load_values`]): a compare's constant.
+    fn load_value(&self, x: ValueId, k: u32) -> Option<String> {
+        let vs = self.load_values.get(&x.index())?;
+        self.value_name(vs, k)
     }
 
     /// The printed pointer of the access at inst `i` through a pointer
@@ -5945,7 +6114,7 @@ impl FnPrinter<'_, '_> {
         form: Option<(ValueId, narrow::Form)>,
     ) -> String {
         if let Some(c) = cond {
-            return c.text_with(&|x| self.val(x));
+            return c.text_named(&|x| self.val(x), &|x, k| self.load_value(x, k));
         }
         match form {
             Some((x, form)) => form.print_with(&self.val(x), &|y| self.whole(y)),
@@ -6509,11 +6678,23 @@ impl FnPrinter<'_, '_> {
                 format!(
                     "f_{k:08x}(g, r13{})",
                     shape::regs(c.params)
-                        .map(|r| format!(", {}", self.reg(r)))
+                        .map(|r| format!(", {}", self.arg_reg(k, r)))
                         .collect::<String>()
                 ),
             ),
         }
+    }
+
+    /// Argument register `r` of a call of `k` as [`FnPrinter::reg`]
+    /// reads it, a constant one of the named values its parameter's type
+    /// takes as that name (native/lift-value-names).
+    fn arg_reg(&self, k: u32, r: usize) -> String {
+        let e = self.reg(r);
+        let named = const_text(&e).and_then(|c| {
+            let vs = self.holes.values.as_deref()?.values_of_arg(k, r)?;
+            self.value_name(vs, c)
+        });
+        named.unwrap_or(e)
     }
 
     /// What a call of `k`'s `x_` entry ([`taking`]) assigns its results
@@ -8227,6 +8408,67 @@ mod tests {
         assert_eq!(m.get("text_notes"), Some(1));
         assert_eq!(pm.get("text_notes"), Some(0));
         assert_eq!(m.get("lines"), pm.get("lines"));
+    }
+
+    /// A register local takes its DWARF variable's name where every
+    /// access of the register is in the variable's range, and the
+    /// parameter its prototype's name where its local is never written
+    /// (unit `native/lift-local-names`); a range that misses an access
+    /// leaves a comment where it starts, which `lines` leaves out.
+    #[test]
+    fn register_locals_take_their_dwarf_names_where_liveness_agrees() {
+        let mut words = [0xE1A0_0000u32; 0x10];
+        words[0] = 0xE3A0_0003; // mov r0, #3
+        words[1] = 0xEB00_0001; // bl 0x08000010
+        words[2] = 0xEAFF_FFFE; // b .
+        words[4] = 0xE1A0_2000; // count: mov r2, r0
+        words[5] = 0xE252_2001; // subs r2, r2, #1
+        words[6] = 0x1AFF_FFFD; // bne 0x08000014
+        words[7] = 0xE3A0_1403; // mov r1, #0x03000000
+        words[8] = 0xE581_2000; // str r2, [r1]
+        words[9] = 0xE12F_FF1E; // bx lr
+        let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let sha = crate::names::sha1_hex(&rom);
+        let lifted = |from: u32| {
+            let map = format!(
+                "[map]\nrom_sha1 = \"{sha}\"\n[functions]\n\
+                 0x08000010 = {{ name = \"count\", size = 24, proto = \"void count(u32 k)\" }}\n\
+                 [locals]\n0x08000010 = [\n  {{ name = \"left\", reg = 2, from = {from:#010x}, to = 0x08000028, type = \"u32\" }},\n]\n"
+            );
+            let names = crate::names::SourceMap::from_texts(&sha, &[&map]).unwrap();
+            let h = Holes {
+                dwarf: Some(std::sync::Arc::new(names)),
+                ..Holes::parse("").unwrap()
+            };
+            let l = lift(&rom, "t", &h);
+            let text: String = l.files.iter().map(|(_, t)| t.as_str()).collect();
+            let f = &text[text.find("pub fn f_08000010(").expect("count")..];
+            (f[..f.find("\n}\n").unwrap()].to_string(), l.metrics)
+        };
+        let (f, m) = lifted(0x0800_0010);
+        assert!(f.contains("left") && !f.contains("r2"), "{f}");
+        assert!(f.contains("k: u32") && !f.contains("r0"), "{f}");
+        assert_eq!(
+            (m.get("locals_named"), m.get("locals_noted")),
+            (Some(2), Some(0))
+        );
+        // The range starts after the first write: a comment, not a name.
+        let (f, m) = lifted(0x0800_0014);
+        assert!(f.contains("r2") && !f.contains("let left"), "{f}");
+        assert!(
+            f.contains(&format!("{}r2: left", local_names::LOCAL_NOTE)),
+            "{f}"
+        );
+        assert_eq!(
+            (m.get("locals_named"), m.get("locals_noted")),
+            (Some(1), Some(1))
+        );
+        let (_, plain) = {
+            let l = lift(&rom, "t", &Holes::parse("").unwrap());
+            (l.files, l.metrics)
+        };
+        assert_eq!(m.get("lines"), plain.get("lines"));
+        assert_eq!(plain.get("locals_named"), None);
     }
 
     /// Each source line's first instruction gets the line table's `//

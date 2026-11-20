@@ -235,6 +235,17 @@ names = [
   with no name stays a number. A DWARF local can't take a value's name.
   `--names-check` checks readable functions untyped, so it sees none;
   states (`readable-states`, `fn-diff`) prove them, as for typed paths.
+- **Enums by type** (native/lift-value-names): an enum of the headers
+  (`enum Name { … }`, mzm's `MAKE_ENUM(s16, GameMode) { … }`: a typedef
+  `GameMode` and `enum GameMode_`) or of the DWARF is a family keyed by
+  its type name, its values counted as C counts them (an enum with an
+  expression it can't count is left out), less bounds and shared values.
+  A field, or a global (`globals = ["gMainGameMode"]`, typed by the DWARF
+  or the headers' `extern`s), whose C type is that type takes it: the
+  type is the evidence, no use in the source is needed. The native lift
+  prints a constant stored to or compared with one, or passed to a
+  parameter of that type, by its name (`g.ram.gMainGameMode = GM_INTRO
+  as u16`), each a `pub const` of `main.rs`.
 
 ### Text
 

@@ -199,9 +199,8 @@ local), so locals need an escape analysis first.
   the entry sp are the caller's (`sp_accesses_callers_frame`).
   `sp_accesses_local_slot` is 0 (bar 0). Control `--plant-slot=ADDR`;
   program `agb/native-frame-locals`. `gbaa-lift --shadow-locals` keeps
-  every local in the frame's bytes too and prints `shadow local:` where a
-  load differs (how to run it: `docs/tools/commands.md`).
-- **No sp or lr left behind** (`native/lift-frame-gone`). Done: `exact_sp`.
+  every local in the frame's bytes too, `shadow local:` where a load
+  differs (`docs/tools/commands.md`). Frameless: `native/lift-frame-gone`.
 
 Escaping slots passed as `&mut` (the design's section 1 form 1) come with
 typed pointers, below; until then they are soft holes, counted.
@@ -256,7 +255,7 @@ typed pointers, below; until then they are soft holes, counted.
   pointer's type comes from the names files (prototypes, typed data,
   pointer fields, DWARF variables), not from a proof; the access is the
   same `ld*`/`st*`, so a wrong type changes no byte. `gbaa-lift
-  --no-field-types` leaves them out.
+  --no-field-types` leaves them out. DWARF names locals too (`native/lift-local-names`).
 - **Lifted programs at the packed layout draw the same**
   (`native/lift-packed-layout`). Done: `gbaa-lift --layout packed`
   (`Globals::ram_struct`, `native/prelude_packed.rs`) orders `Ram`'s

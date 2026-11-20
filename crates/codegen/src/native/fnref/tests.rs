@@ -3064,3 +3064,176 @@ fn a_call_by_value_takes_back_what_each_callee_may_change() {
     assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
     assert!(site(&f).complete, "{f:?}");
 }
+
+/// A function that stores H in A1[r2] (so A1 and A2 are objects: A2[r2]
+/// gets a number) and F at a constant address outside both, [`CELL`].
+fn h_in_a1_f_in_a_global() -> Built {
+    let e = 0x0800_1001;
+    let mut a = B::default();
+    let x = indexed(&mut a, 0x0800_0414, A1, 2, 3, 0);
+    let h = a.pool(0x0800_0404, H);
+    a.st(Width::Word, x, h);
+    let y = indexed(&mut a, 0x0800_0418, A2, 2, 3, 0);
+    let five = a.k(5);
+    a.st(Width::Word, y, five);
+    let f = a.pool(POOL, F);
+    let c = a.k(CELL);
+    a.st(Width::Word, c, f);
+    (e, vec![(e, a.end(None, Edge::Return))])
+}
+
+#[test]
+fn a_load_through_a_pointer_into_an_array_reads_that_array_alone() {
+    // Through A1[r3]: H, stored there, and not F, which is in a global
+    // of its own.
+    let mut b = B::default();
+    let x = indexed(&mut b, 0x0800_041c, A1, 3, 3, 0);
+    let t = b.ld(Width::Word, x);
+    let f = run_ram(&[h_in_a1_f_in_a_global(), calling(0x0800_2001, b, t)]);
+    assert_eq!(site(&f).callees, BTreeSet::from([H]), "{f:?}");
+    // And F stored at a constant address inside A1 is read through it.
+    let e = 0x0800_3001;
+    let mut a = B::default();
+    let f = a.pool(POOL, F);
+    let c = a.k(A1 + 0x30);
+    a.st(Width::Word, c, f);
+    let inside = (e, vec![(e, a.end(None, Edge::Return))]);
+    let mut b = B::default();
+    let x = indexed(&mut b, 0x0800_041c, A1, 3, 3, 0);
+    let t = b.ld(Width::Word, x);
+    let f = run_ram(&[h_in_a1_f_in_a_global(), inside, calling(0x0800_2001, b, t)]);
+    assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
+}
+
+#[test]
+fn an_amount_that_varies_keeps_a_ram_address_in_its_object() {
+    // `A1 + (0 or 0x200)`: the second lands on A2's start, but an index
+    // stays in its array: F stored through it is A1's, and a load through
+    // A2[r3] doesn't read it.
+    let store = || {
+        let e = 0x0800_3001;
+        let mut a = B::default();
+        let lit = a.pool(0x0800_0420, A1);
+        let zero = a.k(0);
+        let far = a.k(A2 - A1);
+        let c = a.op(Op::GetFlag(Flag::Z));
+        let k = a.op(Op::Select { c, a: zero, b: far });
+        let p = a.bin(BinOp::Add, lit, k);
+        let f = a.pool(POOL, F);
+        a.st(Width::Word, p, f);
+        (e, vec![(e, a.end(None, Edge::Return))])
+    };
+    let through = |base: u32| {
+        let mut b = B::default();
+        let x = indexed(&mut b, 0x0800_041c, base, 3, 3, 0);
+        let t = b.ld(Width::Word, x);
+        calling(0x0800_2001, b, t)
+    };
+    let f = run_ram(&[h_in_a1_f_in_a_global(), store(), through(A2)]);
+    assert!(site(&f).callees.is_empty(), "{f:?}");
+    let f = run_ram(&[h_in_a1_f_in_a_global(), store(), through(A1)]);
+    assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
+    // One constant offset is exact: a field's address, wherever it is.
+    let mut a = B::default();
+    let lit = a.pool(0x0800_0420, A1);
+    let far = a.k(A2 - A1);
+    let p = a.bin(BinOp::Add, lit, far);
+    let fp = a.pool(POOL, F);
+    a.st(Width::Word, p, fp);
+    let exact = (0x0800_3001, vec![(0x0800_3001, a.end(None, Edge::Return))]);
+    let f = run_ram(&[h_in_a1_f_in_a_global(), exact, through(A2)]);
+    assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
+}
+
+#[test]
+fn a_callback_s_pointer_is_its_callers_once_every_call_is_seen() {
+    // CB's address is taken (a pool word) and called through that word
+    // with `&A1[r3]` in r0; CB calls through the word r0 points at.
+    const CB: u32 = 0x0800_3201;
+    let fns = || {
+        let mut b = B::default();
+        let p = b.get(0);
+        let t = b.ld(Width::Word, p);
+        let cb = calling(CB, b, t);
+        let e = 0x0800_5001;
+        let mut b = B::default();
+        let x = indexed(&mut b, 0x0800_041c, A1, 3, 3, 0);
+        b.set(0, x);
+        let w = b.pool(0x0800_0440, CB);
+        let mut call = b.end(
+            Some(w),
+            Edge::Call {
+                target: None,
+                ret: e + 0x10,
+            },
+        );
+        call.1.at = 0x0800_0110;
+        let caller = (
+            e,
+            vec![(e, call), (e + 0x10, B::default().end(None, Edge::Return))],
+        );
+        [h_in_a1_f_in_a_global(), cb, caller]
+    };
+    let img = || {
+        let mut img = Img::new();
+        img.fns.insert(CB);
+        img.words.insert(0x0800_0440, CB);
+        img
+    };
+    // With the RAM pointers alone, CB's r0 may be anything a caller the
+    // run can't see passes: its load reads every cell, F's too.
+    FORCE_RAM.with(|c| c.set(true));
+    let f = run_img(&fns(), &BTreeMap::new(), &img());
+    assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
+    // With calls that wait, every call of CB is seen: r0 is `&A1[i]`,
+    // and the load reads A1 alone.
+    LEAVES.with(|c| c.borrow_mut().insert(1, (0, 0b1111)));
+    let f = run_img(&fns(), &BTreeMap::new(), &img());
+    LEAVES.with(|c| c.borrow_mut().clear());
+    FORCE_RAM.with(|c| c.set(false));
+    assert_eq!(site(&f).callees, BTreeSet::from([H]), "{f:?}");
+    assert!(site(&f).complete, "{f:?}");
+}
+
+#[test]
+fn the_last_array_ends_below_the_bios_s_ram() {
+    // H is stored in A2[r2], the last array the code indexes. F stored at
+    // the IRQ vector isn't in it: a load through A2[r3] reads H alone.
+    let e = 0x0800_1001;
+    let mut a = B::default();
+    let y = indexed(&mut a, 0x0800_0414, A2, 2, 3, 0);
+    let h = a.pool(0x0800_0404, H);
+    a.st(Width::Word, y, h);
+    let f = a.pool(POOL, F);
+    let c = a.k(IRQ_VECTOR);
+    a.st(Width::Word, c, f);
+    let store = (e, vec![(e, a.end(None, Edge::Return))]);
+    let mut b = B::default();
+    let x = indexed(&mut b, 0x0800_041c, A2, 3, 3, 0);
+    let t = b.ld(Width::Word, x);
+    let f = run_ram(&[store, calling(0x0800_2001, b, t)]);
+    assert_eq!(site(&f).callees, BTreeSet::from([H]), "{f:?}");
+}
+
+#[test]
+fn one_pointer_of_several_plus_a_constant_is_exact() {
+    // `p = A1 or 0x03000a00; p + (A2 - A1)`: a field's address through a
+    // pointer with two targets, not a walk. F stored through it at A2 is
+    // read through A2[r3] (and through the other target's field too).
+    let e = 0x0800_3001;
+    let mut a = B::default();
+    let l1 = a.pool(0x0800_0420, A1);
+    let l2 = a.k(0x0300_0a00);
+    let c = a.op(Op::GetFlag(Flag::Z));
+    let p = a.op(Op::Select { c, a: l1, b: l2 });
+    let far = a.k(A2 - A1);
+    let q = a.bin(BinOp::Add, p, far);
+    let fp = a.pool(POOL, F);
+    a.st(Width::Word, q, fp);
+    let store = (e, vec![(e, a.end(None, Edge::Return))]);
+    let mut b = B::default();
+    let x = indexed(&mut b, 0x0800_041c, A2, 3, 3, 0);
+    let t = b.ld(Width::Word, x);
+    let f = run_ram(&[h_in_a1_f_in_a_global(), store, calling(0x0800_2001, b, t)]);
+    assert!(site(&f).callees.contains(&F), "{f:?}");
+}
