@@ -153,17 +153,65 @@ pub fn values(insts: &[Inst], start: &BTreeMap<usize, u32>) -> Vec<Option<u32>> 
     out
 }
 
-/// How a value prints when it narrows or shifts another by a constant.
+/// How a value prints when it narrows or shifts another by a constant,
+/// or adds to it or takes from it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Form {
     /// Its low `bits` bits, sign-extended if `signed`.
-    Narrow { bits: u32, signed: bool },
+    Narrow {
+        bits: u32,
+        signed: bool,
+    },
     /// A shift by a constant 1 to 31.
     Shift(ShiftType, u32),
+    /// `x + k`, `x - k` and `k - x`, a constant `k`.
+    AddConst(u32),
+    SubConst(u32),
+    ConstSub(u32),
+    /// `x + y`, `x - y`.
+    Add(ValueId),
+    Sub(ValueId),
+    /// `x + y + c`, a carry bit `c`.
+    AddCarry(ValueId, ValueId),
+    /// `x + c`.
+    CarryOnly(ValueId),
 }
 
 impl Form {
-    /// The expression over `x`, the value it narrows or shifts.
+    /// The values it reads besides `x`.
+    pub fn others(self) -> Vec<ValueId> {
+        match self {
+            Form::Add(y) | Form::Sub(y) => vec![y],
+            Form::AddCarry(y, c) => vec![y, c],
+            Form::CarryOnly(c) => vec![c],
+            _ => Vec::new(),
+        }
+    }
+
+    /// The expression over `x`, the value it narrows or shifts (an
+    /// operand, parenthesised unless it is one term), and the others
+    /// ([`Form::others`]) each as `w` prints a whole expression.
+    pub fn print_with(self, x: &str, w: &dyn Fn(ValueId) -> String) -> String {
+        match self {
+            Form::AddConst(k) => format!("{x}.wrapping_add({k:#x})"),
+            Form::SubConst(k) => format!("{x}.wrapping_sub({k:#x})"),
+            Form::ConstSub(0) => format!("{x}.wrapping_neg()"),
+            Form::ConstSub(k) => format!("{k:#x}u32.wrapping_sub({x})"),
+            Form::Add(y) => format!("{x}.wrapping_add({})", w(y)),
+            Form::Sub(y) => format!("{x}.wrapping_sub({})", w(y)),
+            Form::AddCarry(y, c) => {
+                format!(
+                    "{x}.wrapping_add({}).wrapping_add(u32::from({}))",
+                    w(y),
+                    w(c)
+                )
+            }
+            Form::CarryOnly(c) => format!("{x}.wrapping_add(u32::from({}))", w(c)),
+            f => f.print(x),
+        }
+    }
+
+    /// [`Form::print_with`] of a form that reads no other value.
     pub fn print(self, x: &str) -> String {
         match self {
             Form::Narrow { bits: 8, signed } => {
@@ -181,6 +229,7 @@ impl Form {
             Form::Shift(ShiftType::Lsr, c) => format!("{x} >> {c}"),
             Form::Shift(ShiftType::Asr, c) => format!("(({x} as i32) >> {c}) as u32"),
             Form::Shift(ShiftType::Ror, c) => format!("{x}.rotate_right({c})"),
+            f => panic!("{f:?} reads another value"),
         }
     }
 
@@ -237,7 +286,56 @@ pub fn form(insts: &[Inst], known: &[Option<u32>], i: usize) -> Option<(ValueId,
                 },
             ))
         }
+        Op::Adc { a, b, c } => sum(insts, known, a, b, c),
         _ => None,
+    }
+}
+
+/// An `add_with_carry`'s result (unit `native/lift-plain-arith`), which
+/// its flags don't change: `a + b + c` as plain arithmetic over the value
+/// it adds to. A subtraction, `a + !y + 1`, is `a - y`; a constant
+/// operand (as the block knows it, carried registers included) is added
+/// or taken, whichever is smaller, so `a + !k + 1` is `a - k`.
+fn sum(
+    insts: &[Inst],
+    known: &[Option<u32>],
+    a: ValueId,
+    b: ValueId,
+    c: ValueId,
+) -> Option<(ValueId, Form)> {
+    let Op::Bit(carry) = insts[c.index()].op else {
+        // `adc`, `sbc`: plus a carry flag; `adc rN, #0` its carry alone.
+        return Some(match (known[a.index()], known[b.index()]) {
+            (_, Some(0)) => (a, Form::CarryOnly(c)),
+            (Some(0), _) => (b, Form::CarryOnly(c)),
+            _ => (a, Form::AddCarry(b, c)),
+        });
+    };
+    let carry = u32::from(carry);
+    let not = |x: ValueId| match insts[x.index()].op {
+        Op::Not(y) => Some(y),
+        _ => None,
+    };
+    let add = |x: ValueId, k: u32| {
+        Some(if (k as i32) < 0 {
+            (x, Form::SubConst(k.wrapping_neg()))
+        } else {
+            (x, Form::AddConst(k))
+        })
+    };
+    match (known[a.index()], known[b.index()]) {
+        (_, Some(k)) => add(a, k.wrapping_add(carry)),
+        // `k + !y + 1`: `k - y`.
+        (Some(k), None) => match not(b) {
+            Some(y) if carry == 1 => Some((y, Form::ConstSub(k))),
+            _ => add(b, k.wrapping_add(carry)),
+        },
+        (None, None) if carry == 1 => match (not(b), not(a)) {
+            (Some(y), _) => Some((a, Form::Sub(y))),
+            (None, Some(y)) => Some((b, Form::Sub(y))),
+            (None, None) => Some((a, Form::AddCarry(b, c))),
+        },
+        (None, None) => Some((a, Form::Add(b))),
     }
 }
 
