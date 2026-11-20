@@ -91,6 +91,13 @@
 //! Text (`native/lift-text`): `text_notes`, the `// text: …` comments
 //! giving the text a constant points at, where the names files have a text
 //! table (no bar: it should rise; `lines` leaves them out).
+//!
+//! I/O registers (`native/lift-io-names`): `io_named`, the constant-address
+//! I/O loads and stores printed by a register's name (`st16(g, REG_IME,
+//! …)`, [`crate::io_regs::base`]; no bar: it should rise), and
+//! `io_unnamed`, those at an address no register holds, left as numbers
+//! (barred, at 0 on the C programs and Metroid). The registers' constants
+//! in `main.rs` are data, not in `lines`.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -282,6 +289,7 @@ pub const UNBARRED: &[&str] = &[
     "plain_entry_bodies",
     "closed_tables",
     "text_notes",
+    "io_named",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each

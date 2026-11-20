@@ -1376,6 +1376,26 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     }
     let rom_lines = rom_statics.lines().count();
     main.push_str(&rom_statics);
+    // The I/O registers the code names (native/lift-io-names): like the
+    // names' constants, not lifted code, so not in `lines`.
+    let mut io_consts = String::new();
+    if !soft.io_regs.is_empty() {
+        io_consts.push_str("\n/// The GBA's I/O registers the code reads and writes, by address (pret's `REG_*`).\n");
+        for &r in crate::io_regs::REGS
+            .iter()
+            .filter(|r| soft.io_regs.contains(r.0))
+        {
+            writeln!(
+                io_consts,
+                "pub const {}: u32 = {:#010x};",
+                crate::io_regs::ident(r.0),
+                r.1
+            )
+            .unwrap();
+        }
+    }
+    let io_lines = io_consts.lines().count();
+    main.push_str(&io_consts);
     writeln!(main, "\npub const NAME: &str = {name:?};").unwrap();
     writeln!(
         main,
@@ -1694,8 +1714,17 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .sum();
     m.push(
         "lines",
-        n(all_lines - files.wiring - prelude - const_lines - type_lines - rom_lines - text_notes),
+        n(all_lines
+            - files.wiring
+            - prelude
+            - const_lines
+            - type_lines
+            - rom_lines
+            - io_lines
+            - text_notes),
     );
+    m.push("io_named", soft.io_named);
+    m.push("io_unnamed", soft.io_unnamed);
     m.push("text_notes", n(text_notes));
     m.push("lines_prelude", n(prelude));
     m.push("lines_types", n(type_lines));
@@ -2582,6 +2611,12 @@ struct Soft {
     /// ([`FnPrinter::redundant_banks`]).
     bank_sp_calls: u64,
     banks_left_out: u64,
+    /// I/O registers the printed accesses name (`native/lift-io-names`),
+    /// declared in `main.rs`; constant-address I/O accesses printed by a
+    /// register's name, and those no register holds (left as numbers).
+    io_regs: BTreeSet<&'static str>,
+    io_named: u64,
+    io_unnamed: u64,
     /// The `let`s of IR values printed (`value_lets`), and the values
     /// printed inside their use instead ([`FnPrinter::inline`]).
     value_lets: u64,
@@ -4504,7 +4539,7 @@ impl FnPrinter<'_, '_> {
                                 rom = true;
                                 o.load(&format!("{}{m}", self.val(addr)))
                             }
-                            None => format!("{f}(g, {}{m})", self.val(addr)),
+                            None => format!("{f}(g, {})", self.io_addr(insts, addr, width, m)),
                         },
                     };
                     let e = match self.local(i) {
@@ -4580,7 +4615,7 @@ impl FnPrinter<'_, '_> {
                             None => self.heap.store(r.f, &self.val(addr), r.f.off, &val),
                         },
                         (None, None, None) => {
-                            format!("{f}(g, {}{m}, {val});", self.val(addr))
+                            format!("{f}(g, {}, {val});", self.io_addr(insts, addr, width, m))
                         }
                     };
                     let body = match local {
@@ -4761,6 +4796,30 @@ impl FnPrinter<'_, '_> {
             self.soft.sp_slots[k] += 1;
         }
         w
+    }
+
+    /// The address of a byte access by `width` at `addr`, aligned by
+    /// `mask` (` & !1`): a constant one in I/O space by the register's name
+    /// (`REG_IME`, `(REG_VCOUNT + 0x1)`; [`crate::io_regs::base`],
+    /// `native/lift-io-names`), the same value; else the value.
+    fn io_addr(&mut self, insts: &[Inst], addr: ValueId, width: Width, mask: &str) -> String {
+        let w = bytes(width);
+        let Some(x) = konst(insts, addr).filter(|&x| metrics::region(x) == 1) else {
+            return format!("{}{mask}", self.val(addr));
+        };
+        let Some((reg, off)) = crate::io_regs::base(x, w) else {
+            self.soft.io_unnamed += 1;
+            return format!("{}{mask}", self.val(addr));
+        };
+        self.soft.io_named += 1;
+        self.soft.io_regs.insert(reg);
+        let name = crate::io_regs::ident(reg);
+        let a = match off {
+            0 => name,
+            o => format!("({name} + {o:#x})"),
+        };
+        // An aligned constant's mask changes nothing.
+        if x % w == 0 { a } else { format!("{a}{mask}") }
     }
 
     /// The ROM static a load reads ([`rom_data`]), if the value sets bound
