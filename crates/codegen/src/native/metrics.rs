@@ -59,9 +59,13 @@
 //! Register locals (`native/lift-register-locals`): `reg_local_writes`,
 //! the writes of r0-r12's `mut` locals printed (barred; a value only its
 //! own block reads is a `let` instead, so what is left goes on into
-//! another block), and `unpacked_unread`, the functions whose extended
-//! entry takes a register or flag from its `Regs` that its code never
-//! reads as it came (barred, at 0).
+//! another block), and `unpacked_unread`, the functions whose entry takes
+//! a register or flag that its printed code reads nowhere, judged on the
+//! text apart from the liveness that chose them (barred, at 0).
+//! `plain_entry_bodies`, the functions whose body is in their plain entry
+//! with their parameters as named arguments (no bar: it should rise), and
+//! `regs_call_entries`, those whose plain entry still packs them into
+//! `Regs::call` for the extended one (barred).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -239,6 +243,7 @@ pub const UNBARRED: &[&str] = &[
     "compare_tree_blocks",
     "loops_for",
     "narrowing_casts",
+    "plain_entry_bodies",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each

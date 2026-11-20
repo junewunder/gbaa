@@ -1374,8 +1374,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     writeln!(
         report,
         "register locals: {} writes printed, {} register values as lets of their own; \
-         {} registers and flags unpacked at entries, {} functions unpacking one never read as it came",
-        soft.reg_writes, soft.reg_lets, soft.unpacked, soft.unpacked_unread
+         {} registers and flags taken at entries, {} functions taking one never read as it came; \
+         {} functions' bodies in their plain entry, parameters by name, {} packing them into Regs::call",
+        soft.reg_writes, soft.reg_lets, soft.unpacked, soft.unpacked_unread, soft.body_in_plain, soft.regs_call
     )
     .unwrap();
     writeln!(
@@ -1647,6 +1648,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // came (bar 0).
     m.push("reg_local_writes", soft.reg_writes);
     m.push("unpacked_unread", n(soft.unpacked_unread));
+    m.push("plain_entry_bodies", n(soft.body_in_plain));
+    m.push("regs_call_entries", n(soft.regs_call));
     // The `let`s nothing reads, and the sums still printed as
     // `add_with_carry(..).0` (native/lift-plain-arith): none.
     let text = || files.files.iter().map(|(_, t)| t.as_str());
@@ -2446,6 +2449,13 @@ struct Soft {
     /// flags unpacked in all.
     unpacked_unread: usize,
     unpacked: u64,
+    /// Functions whose body is in their plain entry, its parameters
+    /// arguments by name ([`FnPrinter::entries`]).
+    body_in_plain: usize,
+    /// And those whose plain entry still packs its arguments into
+    /// [`Regs::call`] for `x_` (barred): what they take as they came is
+    /// more than those (a flag, r4-r12, an lr not proven `RET`).
+    regs_call: usize,
     /// The structured loops printed as `for` ([`FnPrinter::find_fors`])
     /// and as `loop`.
     loops_for: u64,
@@ -2761,16 +2771,211 @@ impl FnPrinter<'_, '_> {
         }
         // The plain entry, for calls, and the extended one, for a fall or
         // jump from another function, which passes its registers and flags.
-        // A shaped function's plain entry takes its parameters and gives
-        // its results; its adapter, `a_<key>`, is the four-register form
-        // `call_fn` takes it by (`FNS`), and gives back the registers that
-        // aren't results as they came.
-        let k = f.entry;
+        // They print once the body has: whether the body can go in `f_`,
+        // and what `x_` unpacks, depend on what it reads as it came
+        // ([`FnPrinter::entries`]).
         let ty = ret_ty(self.me);
+        let head = s.len();
+        s.push_str(&self.declare_locals());
+        // The entry first: label 0.
+        let mut order: Vec<u32> = vec![f.entry];
+        order.extend(f.blocks.keys().copied().filter(|&k| k != f.entry));
+        self.labels = order.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+        (self.dead, self.live_in, self.local) = self.dead_writes();
+        self.banked = self.redundant_banks();
+        if let Some(p) = self.plan(&order) {
+            if !self.holes.no_for_loops {
+                self.find_fors(&p.tree);
+            }
+            self.soft.fns_structured += 1;
+            self.soft.blocks_match += p.region_blocks;
+            self.soft.blocks_structured += order.len() - p.region_blocks;
+            if p.regions > 0 {
+                s.push_str("    let mut b = 0usize;\n");
+            }
+            // A jump that falls through prints nothing on its line.
+            let mut body = self.seq(&p.tree);
+            if self.tail_for {
+                body.push_str("    unreachable!()\n");
+            }
+            for l in body.lines().filter(|l| !l.trim().is_empty()) {
+                writeln!(s, "{l}").unwrap();
+            }
+            s.push_str("}\n\n");
+            let e = self.entries(&s[head..], &ty);
+            s.insert_str(head, &e);
+            return s;
+        }
+        self.soft.fns_match += 1;
+        self.soft.blocks_match += order.len();
+        if f.blocks.len() == 1 {
+            s.push_str("    let b = 0usize;\n    loop {\n        match b {\n");
+        } else {
+            s.push_str("    let mut b = 0usize;\n    loop {\n        match b {\n");
+        }
+        for k in &order {
+            let label = self.labels[k];
+            s.push_str(&self.arm(label));
+        }
+        s.push_str("            _ => unreachable!(),\n        }\n    }\n}\n\n");
+        let e = self.entries(&s[head..], &ty);
+        s.insert_str(head, &e);
+        s
+    }
+
+    /// The function's entries and the start of its body
+    /// (native/lift-register-locals), given the `body` printed. Of the
+    /// registers and flags `body` names, each it reads as it came (live at
+    /// the entry block's start, [`FnPrinter::dead_writes`]) is taken, the
+    /// rest declared (zero or false: nothing reads that before writing
+    /// it). sp is always taken: the printed code passes it by name (calls,
+    /// `bank_sp`), which liveness doesn't see. A `mut` only for a register
+    /// the body writes.
+    ///
+    /// Where all it takes is sp, its parameters (r0-r3 of a four-register
+    /// function's array), an entry lr proven [`RET`] ([`lr_entries`]) and
+    /// r4-r11 its summary shows reach no use (saved and restored for a
+    /// caller that keeps its own), the body goes in the plain entry, `f_`, those its arguments by name,
+    /// and the extended entry, `x_`, calls it with its `Regs`' values.
+    /// Otherwise `f_` calls `x_` with [`Regs::call`]'s, and `x_` holds the
+    /// body. A function that takes r4-r11 ([`taking`]) has a plain entry
+    /// that panics: the plain one would zero them.
+    ///
+    /// A shaped function's plain entry takes its parameters and gives
+    /// its results; its adapter, `a_<key>`, is the four-register form
+    /// `call_fn` takes it by (`FNS`), and gives back the registers that
+    /// aren't results as they came.
+    fn entries(&mut self, body: &str, ty: &str) -> String {
+        let k = self.f.entry;
+        let words = rust_words(body);
+        let live = self
+            .live_in
+            .get(&self.f.entry)
+            .copied()
+            .unwrap_or(live::ALL);
+        let written = written_words(body);
+        // (register number or 15 + flag index, `mut `, name)
+        let (mut taken, mut zeros) = (Vec::new(), Vec::new());
+        let regs = (0..15).map(|r| (r, format!("r{r}"), live::reg(r), "0u32"));
+        let flags = Flag::ALL.into_iter().map(|fl| {
+            (
+                15 + fl.index(),
+                flag(fl).to_string(),
+                live::flag(fl),
+                "false",
+            )
+        });
+        for (i, name, bit, zero) in regs.chain(flags) {
+            if !words.contains(&name) {
+                continue;
+            }
+            let m = if written.contains(&name) { "mut " } else { "" };
+            if live & bit != 0 || name == "r13" {
+                self.soft.unpacked += 1;
+                taken.push((i, m, name));
+            } else {
+                zeros.push((format!("{m}{name}"), zero.to_string()));
+            }
+        }
+        // The check of that, on the text alone: a register taken that the
+        // printed code never reads.
+        self.soft.unpacked_unread += taken_unread(body, taken.iter().map(|t| t.2.as_str()));
+        let let_line = |names: Vec<String>, from: Vec<String>| match &names[..] {
+            [] => String::new(),
+            [n] => format!("    let {n} = {};\n", from[0]),
+            ns => format!("    let ({}) = ({});\n", ns.join(", "), from.join(", ")),
+        };
+        let taker = self.me.is_none() && self.passed(k) != 0;
+        let params: u8 = self.me.map_or(0xf, |sh| sh.params);
+        // r4-r11 as they came reach no use (a save, its restore unread:
+        // callers keep their own) and come back in no result it gives
+        // (agbcc's `pop {r3}; mov r8, r3` leaves the entry r8 in r3, which
+        // a shaped function doesn't return unless r3 is a result): `x_`'s
+        // and `Regs::call`'s zeroes alike.
+        let returned = self.me.map_or(0xf, |sh| sh.results);
+        let unused_high = self.sums.get(k).is_some_and(|s| {
+            s.takes == 0
+                && s.echoes.keys().all(|&r| returned & 1 << r == 0)
+                && s.entry_returns.keys().all(|&r| returned & 1 << r == 0)
+        });
+        let in_f = !taker
+            && taken.iter().all(|&(i, _, _)| {
+                i == 13
+                    || (i < 4 && params & 1 << i != 0)
+                    || (i == 14 && self.lr_ret)
+                    || ((4..12).contains(&i) && unused_high)
+            });
+        let mut s = String::new();
+        if in_f {
+            self.soft.body_in_plain += 1;
+            // Its arguments by name; `_` for one the body doesn't take.
+            let arg = |r: usize| {
+                taken
+                    .iter()
+                    .find(|&&(i, _, _)| i == r)
+                    .map_or("_".to_string(), |(_, m, name)| format!("{m}{name}"))
+            };
+            let sig = match self.me {
+                None => format!(
+                    "{}: u32, [{}]: [u32; 4]",
+                    arg(13),
+                    (0..4).map(arg).collect::<Vec<_>>().join(", ")
+                ),
+                Some(sh) => std::iter::once(13)
+                    .chain(shape::regs(sh.params).map(usize::from))
+                    .map(|r| format!("{}: u32", arg(r)))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            };
+            let call = match self.me {
+                None => "s.r[13], [s.r[0], s.r[1], s.r[2], s.r[3]]".to_string(),
+                Some(sh) => std::iter::once(13)
+                    .chain(shape::regs(sh.params).map(usize::from))
+                    .map(|r| format!("s.r[{r}]"))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            };
+            if let Some(sh) = self.me {
+                writeln!(
+                    s,
+                    "pub fn a_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ let [mut r0, mut r1, mut r2, mut r3] = a; {}f_{k:08x}(g, sp{})?; Ok([r0, r1, r2, r3]) }}",
+                    lhs(sh.results),
+                    args(sh.params)
+                )
+                .unwrap();
+            }
+            writeln!(
+                s,
+                "pub fn x_{k:08x}(g: &mut Game, s: Regs) -> Result<{ty}, Exit> {{ f_{k:08x}(g, {call}) }}"
+            )
+            .unwrap();
+            writeln!(
+                s,
+                "pub fn f_{k:08x}(g: &mut Game, {sig}) -> Result<{ty}, Exit> {{"
+            )
+            .unwrap();
+            // The entry lr, proven `RET`, r4-r11 (unused, as `Regs::call`
+            // gives them), then what it declares.
+            let (mut names, mut from): (Vec<String>, Vec<String>) = taken
+                .iter()
+                .filter(|&&(i, _, _)| (4..15).contains(&i) && i != 13)
+                .map(|&(i, m, ref name)| {
+                    let v = if i == 14 { "RET" } else { "0u32" };
+                    (format!("{m}{name}"), v.to_string())
+                })
+                .unzip();
+            for (n, z) in zeros {
+                names.push(n);
+                from.push(z);
+            }
+            s.push_str(&let_line(names, from));
+            return s;
+        }
+        if !taker {
+            self.soft.regs_call += 1;
+        }
         match self.me {
-            // What it takes of r4-r11 comes through the extended entry
-            // ([`taking`]); the plain one would zero it.
-            None if self.passed(k) != 0 => {
+            None if taker => {
                 let m = self.passed(k);
                 self.soft.takers.push((k, m));
                 let regs: Vec<String> = (4..12)
@@ -2823,112 +3028,24 @@ impl FnPrinter<'_, '_> {
             "pub fn x_{k:08x}(g: &mut Game, s: Regs) -> Result<{ty}, Exit> {{"
         )
         .unwrap();
-        // The registers it reads as they came go in after the body prints
-        // ([`FnPrinter::unpack`]).
-        let head = s.len();
-        s.push_str(&self.declare_locals());
-        // The entry first: label 0.
-        let mut order: Vec<u32> = vec![f.entry];
-        order.extend(f.blocks.keys().copied().filter(|&k| k != f.entry));
-        self.labels = order.iter().enumerate().map(|(i, &k)| (k, i)).collect();
-        (self.dead, self.live_in, self.local) = self.dead_writes();
-        self.banked = self.redundant_banks();
-        if let Some(p) = self.plan(&order) {
-            if !self.holes.no_for_loops {
-                self.find_fors(&p.tree);
-            }
-            self.soft.fns_structured += 1;
-            self.soft.blocks_match += p.region_blocks;
-            self.soft.blocks_structured += order.len() - p.region_blocks;
-            if p.regions > 0 {
-                s.push_str("    let mut b = 0usize;\n");
-            }
-            // A jump that falls through prints nothing on its line.
-            let mut body = self.seq(&p.tree);
-            if self.tail_for {
-                body.push_str("    unreachable!()\n");
-            }
-            for l in body.lines().filter(|l| !l.trim().is_empty()) {
-                writeln!(s, "{l}").unwrap();
-            }
-            s.push_str("}\n\n");
-            let u = self.unpack(&s[head..]);
-            s.insert_str(head, &u);
-            return s;
-        }
-        self.soft.fns_match += 1;
-        self.soft.blocks_match += order.len();
-        if f.blocks.len() == 1 {
-            s.push_str("    let b = 0usize;\n    loop {\n        match b {\n");
-        } else {
-            s.push_str("    let mut b = 0usize;\n    loop {\n        match b {\n");
-        }
-        for k in &order {
-            let label = self.labels[k];
-            s.push_str(&self.arm(label));
-        }
-        s.push_str("            _ => unreachable!(),\n        }\n    }\n}\n\n");
-        let u = self.unpack(&s[head..]);
-        s.insert_str(head, &u);
-        s
-    }
-
-    /// The extended entry's registers and flags (native/lift-register-locals):
-    /// of those `body` names, each it reads as it came (live at the entry
-    /// block's start, [`FnPrinter::dead_writes`]) taken from `s`, the rest
-    /// declared (zero or false: nothing reads that before writing it). sp
-    /// is always taken: the printed code passes it by name (calls,
-    /// `bank_sp`), which liveness doesn't see. A `mut` only for a register
-    /// the body writes.
-    fn unpack(&mut self, body: &str) -> String {
-        let words = rust_words(body);
-        let live = self
-            .live_in
-            .get(&self.f.entry)
-            .copied()
-            .unwrap_or(live::ALL);
-        let written = written_words(body);
-        let (mut taken_names, mut taken_from) = (Vec::new(), Vec::new());
-        let (mut zero_names, mut zeros) = (Vec::new(), Vec::new());
-        let mut unread = false;
-        let regs = (0..15).map(|r| (format!("r{r}"), live::reg(r), format!("s.r[{r}]"), "0u32"));
-        let flags = Flag::ALL.into_iter().map(|fl| {
-            (
-                flag(fl).to_string(),
-                live::flag(fl),
-                format!("s.f[{}]", fl.index()),
-                "false",
-            )
-        });
-        for (name, bit, from, zero) in regs.chain(flags) {
-            if !words.contains(&name) {
-                continue;
-            }
-            let m = if written.contains(&name) { "mut " } else { "" };
-            let taken = live & bit != 0 || name == "r13";
-            if taken {
-                self.soft.unpacked += 1;
-                taken_names.push(format!("{m}{name}"));
-                taken_from.push(from);
-            } else {
-                zero_names.push(format!("{m}{name}"));
-                zeros.push(zero.to_string());
-            }
-            unread |= taken && live & bit == 0 && name != "r13";
-        }
-        self.soft.unpacked_unread += usize::from(unread);
         // One line: `let (mut r0, r13, mut r1) = (s.r[0], s.r[13], 0u32);`.
-        taken_names.extend(zero_names);
-        taken_from.extend(zeros);
-        match &taken_names[..] {
-            [] => String::new(),
-            [n] => format!("    let {n} = {};\n", taken_from[0]),
-            names => format!(
-                "    let ({}) = ({});\n",
-                names.join(", "),
-                taken_from.join(", ")
-            ),
+        let (mut names, mut from): (Vec<String>, Vec<String>) = taken
+            .iter()
+            .map(|&(i, m, ref name)| {
+                let src = if i < 15 {
+                    format!("s.r[{i}]")
+                } else {
+                    format!("s.f[{}]", i - 15)
+                };
+                (format!("{m}{name}"), src)
+            })
+            .unzip();
+        for (n, z) in zeros {
+            names.push(n);
+            from.push(z);
         }
+        s.push_str(&let_line(names, from));
+        s
     }
 
     /// Block `label`'s code as an arm of a `match b`. The block's guest
@@ -3011,6 +3128,21 @@ impl FnPrinter<'_, '_> {
             };
             match x.plan {
                 Plan::Static(k) | Plan::Rekey(k) => to(k),
+                // A call whose return site is no function's code (it never
+                // returns): the `unreachable!` after it reads nothing
+                // ([`FnPrinter::call_then`]).
+                Plan::Call { target, ret }
+                    if !index.contains_key(&ret)
+                        && (!self.all.contains(&ret) || self.holes.fall_as_tail_call) =>
+                {
+                    let reads = match self.shape(target) {
+                        Some(c) if self.passed(target) | self.echoes(target) == 0 => {
+                            live::low(c.params)
+                        }
+                        _ => live::low(0xf) | live::high(self.passed(target) | self.echoes(target)),
+                    };
+                    (Vec::new(), reads)
+                }
                 // A shaped callee's call prints its parameters only.
                 Plan::Call { target, ret } => match self.shape(target) {
                     Some(c) if self.passed(target) | self.echoes(target) == 0 => {
@@ -3046,12 +3178,19 @@ impl FnPrinter<'_, '_> {
                     }
                     out
                 }
-                Plan::Swi { next } => then(next, live::low(0xf)),
+                Plan::Swi { next } => {
+                    let reads = match self.f.blocks[&keys[b]].block.insts[x.index].op {
+                        Op::Exit(Exit::Swi { comment, .. }) => {
+                            swi_reads(runtime::bios::number(comment, x.thumb))
+                        }
+                        _ => 0xf,
+                    };
+                    then(next, live::low(reads))
+                }
                 Plan::Undefined { trap: true } => (Vec::new(), 0),
                 Plan::Undefined { trap: false } => (Vec::new(), live::ALL),
             }
         };
-        let (dead, live_in) = live::dead_and_live(&insts, out);
         // The exits that print their reads through the block's names
         // ([`FnPrinter::reg`]): a direct call but a taker's (its
         // arguments; it sets its results) returning to a block of this
@@ -3069,6 +3208,20 @@ impl FnPrinter<'_, '_> {
                 _ => None,
             }
         };
+        // What an exit sets as printed: such a call's results, and a BIOS
+        // call's ([`swi_writes`]).
+        let kills = |b: usize, i: usize| {
+            let Some(x) = xs[b].iter().find(|x| x.index == i) else {
+                return 0;
+            };
+            match (x.plan, &insts[b][i].op) {
+                (Plan::Swi { .. }, Op::Exit(Exit::Swi { comment, .. })) => {
+                    live::low(swi_writes(runtime::bios::number(*comment, x.thumb)))
+                }
+                _ => by_name(b, i).unwrap_or(0),
+            }
+        };
+        let (dead, live_in) = live::dead_and_live_killing(&insts, out, kills);
         let local = live::block_local(&insts, &live_in, out, by_name);
         (
             keys.iter().copied().zip(dead).collect(),
@@ -5791,6 +5944,79 @@ fn rust_words(text: &str) -> BTreeSet<String> {
     out
 }
 
+/// The registers of r0-r3 (bit `n` for rN) BIOS call `n`'s printed code
+/// ([`FnPrinter::exit`]'s `Plan::Swi`) reads: `VBlankIntrWait` none, as
+/// it sets its own. All four for one the library doesn't have (a hole).
+fn swi_reads(n: u8) -> u8 {
+    match n {
+        0x00 | 0x02 | 0x03 | 0x05 | 0x25 | 0x28 => 0,
+        0x01 | 0x08 | 0x19 => 0b1,
+        0x04 | 0x0A => 0b11,
+        0x1F => 0b111,
+        _ => 0xf,
+    }
+}
+
+/// The registers of r0-r3 BIOS call `n`'s printed code ([`swi_reads`])
+/// sets whatever it reads: its results.
+fn swi_writes(n: u8) -> u8 {
+    match n {
+        0x04 | 0x08 | 0x1F | 0x25 => 0b1,
+        0x05 => 0b11,
+        0x0A => 0b1011,
+        0x06 | 0x0B | 0x0C | 0x0E | 0x0F | 0x11..=0x15 => 0xf,
+        _ => 0,
+    }
+}
+
+/// 1 if printed code `body` reads one of the registers and flags `taken`
+/// nowhere ([`reads_name`]), else 0: `unpacked_unread`'s count of one
+/// function.
+fn taken_unread<'a>(body: &str, mut taken: impl Iterator<Item = &'a str>) -> usize {
+    usize::from(taken.any(|name| !reads_name(body, name)))
+}
+
+/// Whether printed code `body` reads `name` anywhere: the check behind
+/// `unpacked_unread`, made on the text alone, apart from the liveness that
+/// decided what an entry takes. Each statement (split at `;`, `{`, `}` and
+/// line ends; a match arm's pattern apart from its code) reads the names
+/// in it but the one a `let`, a plain `x = ` or a tuple's or array's
+/// assignment (`[r0, r1] = `) writes; `r13 = r13.wrapping_add(4)` and
+/// `r1 += 1` read theirs. Text order is not control order (a loop's
+/// write comes before the read at its exit the loop may skip), so a read
+/// after a write still counts.
+fn reads_name(body: &str, name: &str) -> bool {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = RE.get_or_init(|| {
+        regex::Regex::new(
+            r"^\s*(?:let\s+)?(?:mut\s+)?(?:([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*[^=]+)?|[\[(]([^\[\]()=]*)[\])])\s*=(?:[^=]|$)",
+        )
+        .expect("a valid pattern")
+    });
+    let names = |t: &str| rust_words(t).contains(name);
+    for line in body.split(['\n', ';', '{', '}']) {
+        // A match arm's pattern, then its code.
+        let (pat, st) = line.split_once("=>").unwrap_or(("", line));
+        if names(pat) {
+            return true;
+        }
+        let written = re.captures(st).and_then(|c| {
+            let whole = c.get(0)?;
+            let hit = match (c.get(1), c.get(2)) {
+                (Some(w), _) => w.as_str() == name,
+                (_, Some(ws)) => rust_words(ws.as_str()).contains(name),
+                _ => false,
+            };
+            hit.then(|| whole.end() - 1)
+        });
+        let rest = written.map_or(st, |eq| &st[eq..]);
+        if names(rest) {
+            return true;
+        }
+    }
+    false
+}
+
 /// The locals `text` assigns: `x = `, `x += `, and each name of a tuple's
 /// or array's assignment (`[r0, r1] = `), or of a `for mut x`.
 fn written_words(text: &str) -> BTreeSet<String> {
@@ -5918,6 +6144,29 @@ fn expr(op: &Op, v: &dyn Fn(ValueId) -> String, w: &dyn Fn(ValueId) -> String) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_taken_register_the_printed_code_never_reads_is_counted() {
+        // r1 is only written; r0 is read after its write, as a loop's
+        // exit may read the value it came with; r13's write reads it.
+        let body = "    r1 = 5;\n    r0 = ld32(g, r1);\n    r13 = r13.wrapping_add(4);\n    return Ok(r0);\n";
+        assert!(reads_name(body, "r0"));
+        assert!(reads_name(body, "r13"));
+        assert_eq!(taken_unread(body, ["r0", "r13"].into_iter()), 0);
+        let only_written =
+            "    r1 = 5;\n    [r2, r3] = f(g);\n    let r4 = 0;\n    return Ok(r0);\n";
+        for r in ["r1", "r2", "r3", "r4"] {
+            assert!(!reads_name(only_written, r), "{r}");
+        }
+        assert_eq!(taken_unread(only_written, ["r0", "r1"].into_iter()), 1);
+        assert_eq!(taken_unread(only_written, ["r0"].into_iter()), 0);
+        // A compound write, a match arm's pattern and a condition read.
+        assert!(reads_name("    r1 += 1;\n", "r1"));
+        assert!(reads_name("    match r2 { 0 => { r2 = 1; } }\n", "r2"));
+        assert!(reads_name("    5 => r3 = r3 | 1,\n", "r3"));
+        assert!(reads_name("    if cf { r0 = 1; }\n", "cf"));
+        assert!(!reads_name("    cf = v7 >= 100;\n", "cf"));
+    }
 
     /// A ROM whose reset jumps by `ldr r3, =0x03000000; bx r3` into code
     /// a `[[copy]]` puts in IWRAM, `ldr r0, [r4]; bx lr`: it reads r4 as

@@ -96,6 +96,9 @@ fn walk(insts: &[Inst], out: impl Fn(usize) -> Live, mut dead: impl FnMut(usize)
             // have no SPSR, `GetSpsr` reads the CPSR.
             Op::GetCpsr | Op::GetSpsr => live |= FLAGS,
             Op::SetCpsr { mask, .. } if !guarded && mask.contains(PsrMask::FLAGS) => live &= !FLAGS,
+            // The flags an IRQ would see: the lift prints none (no IRQ
+            // yield), so what it takes isn't read.
+            Op::YieldFlag(..) => kept = false,
             ref op if pure(op) => kept = needed[i],
             _ => {}
         }
@@ -150,12 +153,25 @@ pub fn dead_and_live(
     blocks: &[&[Inst]],
     out: impl Fn(usize, usize) -> (Vec<usize>, Live),
 ) -> (Vec<Vec<bool>>, Vec<Live>) {
+    dead_and_live_killing(blocks, out, |_, _| 0)
+}
+
+/// [`dead_and_live`], with what the exit at inst `i` of block `b` itself
+/// sets as printed, `kills(b, i)` (a call's results, a BIOS call's): not
+/// live before it for the blocks it goes on at, though `out`'s own reads
+/// still are.
+pub fn dead_and_live_killing(
+    blocks: &[&[Inst]],
+    out: impl Fn(usize, usize) -> (Vec<usize>, Live),
+    kills: impl Fn(usize, usize) -> Live,
+) -> (Vec<Vec<bool>>, Vec<Live>) {
     let n = blocks.len();
     // The least fixpoint: nothing live, growing.
     let mut live_in: Vec<Live> = vec![0; n];
     let after = |live_in: &[Live], b: usize, i: usize| {
         let (succ, extra) = out(b, i);
-        succ.iter().fold(extra, |l, &s| l | live_in[s])
+        let on = succ.iter().fold(0, |l, &s| l | live_in[s]);
+        on & !(kills(b, i) & !KEPT) | extra
     };
     let mut changed = true;
     while changed {

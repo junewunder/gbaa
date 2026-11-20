@@ -207,10 +207,11 @@ This is `pen_set` from one of the repo's own C test programs
 `gPen.state` and `gPen.step` are the bytes at addresses 0x0300000c and
 0x0300000d. The lifter has turned each into a field of the struct that holds
 the game's RAM, named after its address (`d_0300000c`) because this program
-has no file of names. The rest is the literal part: the function still takes
-its argument and its return address from the CPU's registers (`r0` and `r14`
-of `s`), though it takes only the registers it reads, and still reads the
-return address though nothing uses it.
+has no file of names. Its argument is a named parameter, `r0`, used
+directly. The rest is the literal part: the argument keeps its register's
+name, the stack pointer is passed though nothing here uses it (`_`), and
+the extended entry `x_08000271`, which another function's code may jump
+into with every register, still sits beside it.
 
 ```c
 void pen_set(u8 state)
@@ -221,12 +222,11 @@ void pen_set(u8 state)
 ```
 
 ```rust
-pub fn x_08000271(g: &mut Game, s: Regs) -> Result<(), Exit> {
-    let (r0, r14) = (s.r[0], s.r[14]);
+pub fn x_08000271(g: &mut Game, s: Regs) -> Result<(), Exit> { f_08000271(g, s.r[13], s.r[0]) }
+pub fn f_08000271(g: &mut Game, _: u32, r0: u32) -> Result<(), Exit> {
     runtime::guest_pc::set(0x08000271);
     g.ram.d_0300000c = r0 as u8;
     g.ram.d_0300000d = 0x0u32 as u8;
-    let v22: u32 = r14;
     return Ok(());
 }
 ```
