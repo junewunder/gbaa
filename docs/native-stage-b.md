@@ -176,11 +176,10 @@ build for the host.
   (56-60 per program, the owner's call), not 0:
   every complete set is the pile's ~21 address-taken functions, whose
   summaries read all four between them; it falls when
-  `native/fnref-heap-sites` narrows the sets. Emerald (656
-  disagreements from indirect calls without sets) is re-measured in
-  `native/indirect-call-args-emerald`, once the flow settles on
-  Emerald (`native/fnref-flow-emerald`; `native/fnref-flow-scale`
-  landed and wasn't enough), the owner's call to land this first.
+  `native/fnref-heap-sites` narrows the sets. On Emerald 103 of 554
+  sets are complete: disagreements from indirect calls go 656 to 601;
+  what keeps the rest incomplete is in `docs/native-port-design.md`
+  section 5 (`native/indirect-call-args-emerald`).
 
 ### 4. The stack
 
@@ -230,14 +229,13 @@ typed pointers, below; until then they are soft holes, counted.
 
 ### 5. Typed data
 
-- **ROM data as typed statics** (`native/rom-statics`). ROM objects read at
-  constant addresses or through pool pointers become `static`s typed by the
-  widths the code reads them at (`[u16; N]`), loads from them indexing. A
-  pointer loaded from ROM data stays a `RomRef` (a soft hole, counted).
-  Needs the dense IDs, so a function-pointer word in a table is an
-  `FnRef`. Bar: the computed ROM loads at most a quarter of their bar
-  (constant ROM loads are already 0: each was a literal pool's word, which
-  the IR has as a constant, so `native/ram-globals` dropped them).
+- **ROM data as typed statics** (`native/rom-data-statics`). Done
+  (`native/rom_data.rs`): a computed load the value sets bound to ROM
+  indexes a static view of `ROM` typed by its width, one object per width
+  from overlapping extents, the pointer checked (`ROM_0808CAD0[rix(a,
+  0x808cad0, 2, 12)]`); extents over 256 KB stay bytes. A word loaded
+  from one is still a guest address. Function words as `FnRef`s and
+  pointers as `RomRef`s are `native/rom-statics`', after the dense IDs.
 - **RAM globals as typed fields** (`native/ram-globals`). Done
   (`crates/codegen/src/native/globals.rs`): constant-address RAM accesses
   carved into globals, the fields of `Ram` at the guest's offsets under
@@ -354,8 +352,8 @@ a bar lowered". After that, three lines of work can go side by side:
   rewrite how calls and continuations print); following function
   addresses waits on parameters (the `FNS` adapters); dense IDs wait on
   that and on the heap by allocation site, and indirect-call arguments
-  on dense IDs; ROM statics wait on the dense IDs (a function word in a
-  table must already be an `FnRef`). The escape analysis needs only the
+  on dense IDs; ROM statics' function words wait on the dense IDs (a
+  function word in a table must already be an `FnRef`). The escape analysis needs only the
   bars; stack locals wait on it and on parameters (a function's signature
   decides what's in its frame). The packed layout waits on RAM globals;
   typed pointers wait on RAM globals and stack locals, since a pointer is
@@ -395,13 +393,13 @@ What the done pieces left open, for the units that come next.
   units narrow those as the summaries' holes close.
 - **The pile** (piece 3, function addresses). Most words aren't proven
   and nearly every `call_fn` set is every address-taken function. No one
-  kind of read holds them (`research/fnref-held-words.md`, measured
-  before main's `Ref` tokens). Objects by allocation site, call-site
-  context and RAM pointers followed are unlanded on
-  `native/fnref-unknown-addrs`'s branch, which merges main first
-  (`native/fnref-branch-merge`); then frames (`native/fnref-frame-pointers`),
-  registers a callee doesn't read (`native/fnref-live-registers`), and
-  it lands (`native/fnref-ram-pointers-land`).
+  kind of read holds them (`research/fnref-held-words.md`). The pieces
+  come to main one by one, each behind a switch that is off until it pays
+  on the C programs and Metroid at Emerald's cost: RAM pointers
+  (`GBAA_FNREF_RAM`), the heap by allocation site (`GBAA_FNREF_HEAP`,
+  `native/fnref-heap-sites`), then registers a callee doesn't read
+  (`native/fnref-live-registers`), call-site context and frames
+  (`native/fnref-context`, `native/fnref-frame-pointers`).
 - **Function-address flow, smaller gaps** (for `native/fnref-dense`).
   Proofs are per origin; a pool load folded from a non-pc-relative
   address gets a code-constant origin (dense needs per-site constant

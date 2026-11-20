@@ -64,7 +64,7 @@
 //! answer.
 //!
 //! `gbaa-recompile --summaries ROM [--names FILE]... [--names-dir DIR]
-//! [--show N] [--callee-sets] [KEY...]`: each function's parameters,
+//! [--show N] [--callee-sets] [--allocators KEY,...] [KEY...]`: each function's parameters,
 //! results and callee-saves ([`codegen::saves::summarize`]), checked
 //! against the map's DWARF prototypes ([`codegen::saves::compare`]):
 //! agree, disagree and no-prototype counts, the disagreements by category
@@ -72,7 +72,10 @@
 //! KEY's summary. With `--callee-sets`, an indirect call with a complete
 //! callee set reads and leaves what its callees do
 //! ([`codegen::native::callee_sets`], [`codegen::saves::summarize_sets`];
-//! the function-address flow, which doesn't settle on a whole game yet).
+//! the function-address flow; `--allocators`: the program's allocators,
+//! as a holes file's `allocators` names them, for the flow with
+//! `GBAA_FNREF_HEAP` set), and the incomplete sets are counted by what
+//! left them so ([`codegen::native::fnref::Lost`]), N of each.
 //!
 //! `gbaa-recompile --snapshots ROM FILE`: write to FILE the smallest
 //! structured function of each shape ([`codegen::snapshot`], `just
@@ -331,7 +334,7 @@ fn usage() -> ! {
          gbaa-recompile --fn-diff ROM OUT [--hand FILE KEYS] [--names-dir DIR] [FUNCS] | \
          gbaa-recompile --print ROM KEY... | \
          gbaa-recompile --saves ROM [KEY...] | \
-         gbaa-recompile --summaries ROM [--names FILE]... [--names-dir DIR] [--show N] [--callee-sets] [KEY...] | \
+         gbaa-recompile --summaries ROM [--names FILE]... [--names-dir DIR] [--show N] [--callee-sets] [--allocators KEY,...] [KEY...] | \
          gbaa-recompile --snapshots ROM FILE [--names FILE... | --names-dir DIR] [--readable LIST] | \
          gbaa-recompile --sst OUT [PER_FILE [SEQS]] [--readable]"
     );
@@ -460,10 +463,19 @@ fn saves(rom: &[u8], disc: &Discovery, keys: &[String]) {
 fn summaries(rom: &[u8], rest: &[String]) {
     let (mut paths, mut dir, mut show, mut keys) = (Vec::new(), None, 10, Vec::new());
     let mut with_sets = false;
+    let mut allocs = std::collections::BTreeSet::new();
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--callee-sets" => with_sets = true,
+            "--allocators" => {
+                for k in it.next().unwrap_or_else(|| usage()).split(',') {
+                    allocs.insert(
+                        u32::from_str_radix(k.strip_prefix("0x").unwrap_or(k), 16)
+                            .unwrap_or_else(|_| usage()),
+                    );
+                }
+            }
             "--names" => paths.push(PathBuf::from(it.next().unwrap_or_else(|| usage()))),
             "--names-dir" => dir = Some(PathBuf::from(it.next().unwrap_or_else(|| usage()))),
             "--show" => {
@@ -488,7 +500,7 @@ fn summaries(rom: &[u8], rest: &[String]) {
     let plain = codegen::saves::summarize(&ctx, &funcs);
     let t = std::time::Instant::now();
     let (flow, sets) = if with_sets {
-        codegen::native::callee_sets(rom, &disc, &ctx, &funcs, &plain)
+        codegen::native::callee_sets(rom, &disc, &ctx, &funcs, &plain, &allocs)
     } else {
         Default::default()
     };
@@ -521,6 +533,34 @@ fn summaries(rom: &[u8], rest: &[String]) {
             indirect.len(),
             callees as f64 / complete.max(1) as f64,
         );
+        // What keeps the rest incomplete, with a sample of each (the
+        // calling function, its name where the map has one).
+        let caller: std::collections::BTreeMap<u32, u32> = plain
+            .by_entry
+            .iter()
+            .flat_map(|(&f, s)| s.indirect_sites.iter().map(move |&a| (a, f)))
+            .collect();
+        for why in codegen::native::fnref::Lost::ALL {
+            let hit: Vec<(u32, usize)> = indirect
+                .iter()
+                .filter_map(|a| {
+                    let s = flow.sites.get(a)?;
+                    (s.lost == Some(why)).then_some((*a, s.callees.len()))
+                })
+                .collect();
+            println!("  {:6}  incomplete: {}", hit.len(), why.text());
+            let step = (hit.len() / show.max(1)).max(1);
+            for (a, n) in hit.iter().step_by(step).take(show) {
+                let f = caller.get(a).copied().unwrap_or(0);
+                let name = names
+                    .as_ref()
+                    .and_then(|m| m.functions.get(&f))
+                    .map_or("", |i| i.name.as_str());
+                println!("          0x{a:08x} in 0x{f:08x} {name}: {n} callees");
+            }
+        }
+        let none = indirect.len() - with_set;
+        println!("  {none:6}  no callee set: the run never reached the call");
     } else {
         println!(
             "callee sets: not followed (--callee-sets); {} indirect calls, each taken to read r0-r3",

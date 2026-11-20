@@ -29,7 +29,8 @@
 //! 4, being loaded from a literal pool by code found, sitting next to a
 //! known function start in a table (or beside another Thumb pointer, two
 //! words from one: a table of structs of two function pointers and a word
-//! of data) or being a constant getter (pool
+//! of data; or in a column of starts, one record of three to eight words
+//! from one and two from another: [`column`]) or being a constant getter (pool
 //! loads, then `bx lr`: [`getter`]) scores 2, and more than one word
 //! pointing there scores 1. A candidate needs [`MIN_SCORE`]. A batch takes
 //! candidates best first and drops any whose body overlaps one taken
@@ -118,7 +119,8 @@ pub fn batch(
         c.table |= start_at(at.wrapping_sub(4))
             || start_at(at + 4)
             || ((thumb_ptr(at.wrapping_sub(4)) || thumb_ptr(at + 4))
-                && (start_at(at.wrapping_sub(8)) || start_at(at + 8)));
+                && (start_at(at.wrapping_sub(8)) || start_at(at + 8)))
+            || column(at, &start_at);
     }
     stats.candidates += cands.len();
 
@@ -192,6 +194,25 @@ pub fn batch(
     }
     stats.accepted += out.len();
     out
+}
+
+/// The record sizes [`column`] tries, in bytes: a table of structs whose
+/// records are wider than two words (narrower ones are the neighbour
+/// rules' already).
+const COLUMN_STRIDES: std::ops::RangeInclusive<u32> = 3..=8;
+
+/// Whether the word at `at` sits in a column of known function starts: one
+/// record of some size ([`COLUMN_STRIDES`], in words) away from one and
+/// two records away from another, on the same side or one on each side.
+/// A table of structs each holding a handler and data
+/// (`native/mirror-past-frame-99`: Amazing Mirror's intro sequences,
+/// records of four words whose leaf handlers have no push).
+fn column(at: u32, start_at: &dyn Fn(u32) -> bool) -> bool {
+    COLUMN_STRIDES.map(|n| n * 4).any(|s| {
+        let (b1, b2) = (at.wrapping_sub(s), at.wrapping_sub(2 * s));
+        let (a1, a2) = (at + s, at + 2 * s);
+        (start_at(a1) && (start_at(a2) || start_at(b1))) || (start_at(b1) && start_at(b2))
+    })
 }
 
 /// The highest BIOS call number.

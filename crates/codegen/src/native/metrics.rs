@@ -33,6 +33,11 @@
 //!   the types; `ref_unexplained` counts those through an object's
 //!   pointer the types don't explain (left as bytes, in
 //!   `computed_unknown` too).
+//!   A load the value sets bound to ROM that reads one of ROM's typed
+//!   statics (`super::rom_data`, native/rom-data-statics) indexes it:
+//!   `load_rom_static` (no bar: it should rise), with `rom_statics` the
+//!   statics, whose one-line declarations `lines` leaves out, as it does
+//!   `lines_types` (data, not code). The rest stay `load_computed_rom`.
 //!   One through a pointer the names files type (`super::fields`,
 //!   native/lift-typed-access) prints as a named field over the same
 //!   byte access, so it keeps its count here too: `named_field_accesses`
@@ -137,6 +142,9 @@ pub enum Where {
     /// Computed, a field of a heap object's type through its `Ref<T>`
     /// (`super::heap`): not a byte access.
     Ref,
+    /// Computed, into one of ROM's typed statics
+    /// (`super::rom_data`): not a byte access.
+    RomStatic,
     /// sp-relative.
     Sp,
     /// Computed, bounded to this region.
@@ -169,6 +177,9 @@ impl Metrics {
             }
             self.push(format!("{dir}_ram_global"), n(Where::Global));
             self.push(format!("{dir}_ram_object"), n(Where::Object));
+            if !store {
+                self.push("load_rom_static", n(Where::RomStatic));
+            }
             self.push(format!("{dir}_sp"), n(Where::Sp));
             for (r, name) in REGIONS.iter().enumerate() {
                 self.push(format!("{dir}_computed_{name}"), n(Where::Computed(r)));
@@ -259,6 +270,8 @@ pub const UNBARRED: &[&str] = &[
     "fn_words_proven",
     "call_fn_complete",
     "load_ram_object",
+    "load_rom_static",
+    "rom_statics",
     "store_ram_object",
     "ref_accesses",
     "lines_types",
