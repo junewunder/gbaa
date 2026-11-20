@@ -61,6 +61,14 @@ pub struct Found {
     pub folds: BTreeMap<usize, Fold>,
 }
 
+/// A named store's load, its field, and the values from the load to the
+/// store.
+struct Chain {
+    load: usize,
+    field: (u32, u32),
+    between: BTreeSet<usize>,
+}
+
 /// The bitfield accesses of a block's `insts`: `fields(i)` gives the
 /// bitfields access `i` holds (empty for one that holds none), `unread(i)`
 /// whether inst `i` is a write nothing reads (left out of the print).
@@ -94,8 +102,8 @@ pub fn find(
     let keys = addr_keys(insts);
     let mut out = Found::default();
     let all: Vec<Vec<(u32, u32)>> = (0..n).map(&fields).collect();
-    // Each named store's load and the values between them.
-    let mut chains: BTreeMap<usize, (usize, (u32, u32), BTreeSet<usize>)> = BTreeMap::new();
+    // Each named store's chain.
+    let mut chains: BTreeMap<usize, Chain> = BTreeMap::new();
     for s in 0..n {
         let Op::Store { width, addr, value } = insts[s].op else {
             continue;
@@ -128,15 +136,22 @@ pub fn find(
         if let Some(fold) = fold(insts, &users, s, l, f, w, &between) {
             out.folds.insert(s, fold);
         }
-        chains.insert(s, (l, f, between));
+        chains.insert(
+            s,
+            Chain {
+                load: l,
+                field: f,
+                between,
+            },
+        );
     }
     for l in 0..n {
         let Op::Load { width, .. } = insts[l].op else {
             continue;
         };
         if all[l].is_empty() || out.folds.values().any(|f| f.load == l) {
-            if let Some((_, (_, f, _))) = chains.iter().find(|(_, (cl, _, _))| *cl == l) {
-                out.bits.insert(l, *f);
+            if let Some(c) = chains.values().find(|c| c.load == l) {
+                out.bits.insert(l, c.field);
             }
             continue;
         }
@@ -146,13 +161,13 @@ pub fn find(
         // The field a store this load keeps the rest of names.
         let mut via: Option<(u32, u32)> = None;
         for &u in &users[l] {
-            if let Some((_, (_, f, _))) = chains
-                .iter()
-                .find(|(_, (cl, _, between))| *cl == l && between.contains(&u))
+            if let Some(c) = chains
+                .values()
+                .find(|c| c.load == l && c.between.contains(&u))
             {
                 match via {
-                    Some(g) if g != *f => ok = false,
-                    _ => via = Some(*f),
+                    Some(g) if g != c.field => ok = false,
+                    _ => via = Some(c.field),
                 }
                 continue;
             }

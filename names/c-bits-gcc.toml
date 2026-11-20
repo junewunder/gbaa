@@ -1,9 +1,9 @@
-# Names for /home/meadow/.local/share/gbaa/c/c-bits-gcc.gba, from pret's symbols in /home/meadow/.local/share/gbaa/c/c-bits-gcc.elf.
+# Names for c-bits-gcc.gba, from pret's symbols in c-bits-gcc.elf.
 # Written by `just pret-names` (crates/pret-names). Don't edit.
 
 [map]
 rom_sha1 = "3cca0d10879ef7a7e21b4f03d133df2c3ae1aaaf"
-source = "/home/meadow/.local/share/gbaa/c/c-bits-gcc.elf"
+source = "c-bits-gcc.elf"
 format = 1
 #
 # Keys are codegen's function keys (bit 0 set = Thumb; an IWRAM copy's
