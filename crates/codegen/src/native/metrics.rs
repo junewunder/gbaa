@@ -95,6 +95,11 @@
 //! crate's `src/text.rs` (no bar; that module isn't in `lines`), and
 //! `texts_left`, those the code leads to that stay in the ROM.
 //!
+//! Source lines (`native/lift-line-comments`): `line_notes`, the
+//! `// file:line` comments above the statement each source line's first
+//! instruction starts, where the names files have a line table (no bar:
+//! it should rise; `lines` leaves them out).
+//!
 //! I/O registers (`native/lift-io-names`): `io_named`, the constant-address
 //! I/O loads and stores printed by a register's name (`st16(g, REG_IME,
 //! …)`, [`crate::io_regs::base`]; no bar: it should rise), and
@@ -307,6 +312,7 @@ pub const UNBARRED: &[&str] = &[
     "plain_entry_bodies",
     "closed_tables",
     "text_notes",
+    "line_notes",
     "text_statics",
     "io_named",
 ];

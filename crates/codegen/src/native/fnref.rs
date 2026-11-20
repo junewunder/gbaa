@@ -215,6 +215,25 @@
 //! `gEffects[i]` still reads every global's cell
 //! (`docs/research/fnref-held-words.md`, "The heap by allocation site").
 //!
+//! **Registers at a call** (`native/fnref-live-registers`;
+//! `GBAA_FNREF_LIVE` set, [`live_env`], off by default). As above, a call
+//! passes r0-r3 and takes all four back as the callee's returns hold
+//! them, so a register a callee never writes comes back as every
+//! caller's value of it joined, and a leftover in a scratch register
+//! travels the program. On, three rules, each from the callee's summary
+//! ([`crate::saves::Summary`]) where its run and its callees' didn't stop
+//! at a hole: a register the callee leaves as it came on every return
+//! ([`FnIn::leaves`]) is the caller's own value after the call
+//! ([`G::kept`]), which is what the machine does and what the lifted
+//! program has; a callee is given only the registers it reads
+//! ([`FnIn::reads`]: its parameters, and those it may return as they
+//! came on some path or that a BIOS or indirect call in it may leave);
+//! and a call through a value no function's address has reached yet
+//! waits until the run has otherwise settled before it counts as an
+//! incomplete callee set ([`Run::call_by_value`]), where at once its
+//! arguments went to every loose function for good and what that held
+//! depended on the order the functions ran in.
+//!
 //! **What isn't allowed** ([`Why`]): a function's address used as an
 //! address, in arithmetic but the split and join, in an ordered compare or
 //! a bit test, its halves or bytes used as anything but stored or joined,
@@ -241,7 +260,8 @@
 //! `GBAA_FNREF_OFF` ([`off_env`]), which measures what the words would be
 //! without one kind of hole. `GBAA_FNREF_RAM=1` turns the closed world's
 //! RAM pointers on ([`ram_on`]), `GBAA_FNREF_HEAP=1` those and the
-//! allocation sites ([`heap_env`]).
+//! allocation sites ([`heap_env`]), `GBAA_FNREF_LIVE=1` the registers'
+//! rules at a call ([`live_env`]).
 //!
 //! Precision: the one pile is the limit (`docs/native-stage-b.md`, "Known
 //! gaps", the pile). agb keeps closures and trait objects on its heap, so a
@@ -1291,6 +1311,21 @@ thread_local! {
     static RAM_ON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
+/// `GBAA_FNREF_LIVE` as set: whether a call takes back only the registers
+/// its callee may change (`native/fnref-live-registers`), off by default.
+/// The flow took all of r0-r3 back as the callee's returns hold them, so
+/// a register a callee never writes came back as every caller's value of
+/// it joined: a handler called through r0 that returns nothing "returned"
+/// its own address, and a call with an empty callee set took those back
+/// from every address-taken function. On, a register the callee leaves as
+/// it came on every return ([`FnIn::leaves`]) keeps the caller's own
+/// value after the call, which is what the machine does and what the
+/// lifted program has (a shaped callee doesn't return it). Off, the flow
+/// is main's.
+pub fn live_env() -> bool {
+    std::env::var_os("GBAA_FNREF_LIVE").is_some_and(|v| !v.is_empty() && v != "0")
+}
+
 /// `GBAA_FNREF_HEAP` as set: whether the run splits the heap by
 /// allocation site (`native/fnref-heap-sites`), off by default. On, the
 /// RAM pointers' rules are on too ([`ram_on`]: without the closed world a
@@ -1981,6 +2016,18 @@ pub struct FnIn<'a> {
     pub blocks: BTreeMap<u32, FBlock<'a>>,
     /// Its frame ([`super::frame`]): where its sp-relative accesses go.
     pub frame: Option<&'a Frame>,
+    /// Of r0-r3 (bit `n` for rN), those it leaves as they came on every
+    /// return, where its summary says so ([`crate::saves::Summary::exit`];
+    /// 0: none, or not known). After a call of it such a register holds
+    /// the caller's own value still (`native/fnref-live-registers`,
+    /// [`live_env`]).
+    pub leaves: u8,
+    /// Of r0-r3, those a call gives it: its parameters
+    /// ([`crate::saves::Summary::params`]) and each register it may
+    /// return as it came on one path and changed on another; all four
+    /// (0xf) where its summary doesn't say. A caller's leftover in a
+    /// register it doesn't read isn't passed on through it.
+    pub reads: u8,
 }
 
 /// An indirect call's or a tail jump's callees.
@@ -2207,6 +2254,24 @@ struct G {
     heap_sites: Vec<(u32, BTreeSet<Tok>)>,
     /// One of those sets grew this round.
     heap_changed: bool,
+    /// By function, the registers of r0-r3 it leaves as they came
+    /// ([`FnIn::leaves`]; empty unless [`live_env`]): after a call they
+    /// are the caller's own, not what the callee's returns hold.
+    leaves: std::collections::HashMap<u32, u8, Fx>,
+    /// Those of the functions incomplete callee sets reach, between
+    /// them: kept with [`G::loose_rets`].
+    loose_leaves: u8,
+    /// By function, the registers of r0-r3 a call gives it
+    /// ([`FnIn::reads`]; empty unless [`live_env`], and a function not
+    /// in it is given all four).
+    reads: std::collections::HashMap<u32, u8, Fx>,
+    /// A call through a value nothing has reached yet waits
+    /// ([`live_env`]): the functions whose last run had one, and whether
+    /// the run has otherwise settled, when they are taken as the
+    /// incomplete sets they are ([`Run::call_by_value`]).
+    defer: bool,
+    deferred: BTreeSet<u32>,
+    deferred_due: bool,
 }
 
 /// A kept op's key ([`G::op_kept`]): the op, a shift's amount, each
@@ -3301,7 +3366,12 @@ impl G {
             .unwrap_or_else(|| vec![Val::default(); 16]);
         let mut c = false;
         let mut gained = Vec::new();
+        let reads = self.reads.get(&f).copied().unwrap_or(0xf);
         for (i, (a, b)) in e.iter_mut().zip(regs).enumerate() {
+            // (A register of r0-r3 it doesn't read: not its to take.)
+            if i < 4 && reads & 1 << i == 0 {
+                continue;
+            }
             let old = a.clone();
             if a.join_capped(b) {
                 self.take_large(a);
@@ -3355,7 +3425,11 @@ impl G {
                 .remove(&f)
                 .unwrap_or_else(|| vec![Val::default(); 16]);
             let mut c = false;
+            let reads = self.reads.get(&f).copied().unwrap_or(0xf);
             for (i, (a, b)) in e.iter_mut().zip(regs).enumerate() {
+                if i < 4 && reads & 1 << i == 0 {
+                    continue;
+                }
                 if a.toks.is_empty() {
                     if a.join_capped(b) {
                         self.take_large(a);
@@ -3688,6 +3762,35 @@ impl G {
             show(&gone),
             new.toks.len()
         );
+    }
+
+    /// After a call of `k` with the caller's registers `own`: each of
+    /// `rets` that `k` leaves as it came ([`G::leaves`]) is the caller's
+    /// own value, not what `k`'s returns hold (every caller's, joined).
+    fn kept(&self, k: u32, rets: &mut [Val], own: &[Val]) {
+        let Some(&m) = self.leaves.get(&k) else {
+            return;
+        };
+        for (i, (r, o)) in rets.iter_mut().zip(own).enumerate().take(4) {
+            if m & 1 << i != 0 {
+                *r = o.clone();
+            }
+        }
+    }
+
+    /// The registers of r0-r3 any of `ks` leaves as it came.
+    fn left_by<'a>(&self, ks: impl IntoIterator<Item = &'a u32>) -> u8 {
+        if self.leaves.is_empty() {
+            return 0;
+        }
+        ks.into_iter()
+            .fold(0, |m, k| m | self.leaves.get(k).copied().unwrap_or(0))
+    }
+
+    /// Whether `k` may change r`i` (of r0-r3): its return's value of it
+    /// is a result.
+    fn sets(&self, k: u32, i: usize) -> bool {
+        self.leaves.get(&k).is_none_or(|m| m & 1 << i == 0)
     }
 
     fn taken_add(&mut self, v: &Val) {
@@ -5661,6 +5764,7 @@ impl Run<'_, '_> {
                         if self.g.allocs.contains(k) {
                             r[0] = self.g.heap_alloc(out.at, &r[0]);
                         }
+                        self.g.kept(*k, &mut r, &s.regs);
                         r
                     }
                     None => {
@@ -5692,6 +5796,7 @@ impl Run<'_, '_> {
                 if self.g.allocs.contains(k) {
                     r[0] = self.g.heap_alloc(out.at, &r[0]);
                 }
+                self.g.kept(*k, &mut r, &s.regs);
                 self.g.give_ret(me, &r);
             }
             Edge::Tail(None) | Edge::TailOr(_) => {
@@ -5836,6 +5941,20 @@ impl Run<'_, '_> {
     /// what comes back.
     fn call_by_value(&mut self, t: &Val, at: u32, args: &[Val], tail: bool) -> Vec<Val> {
         let (callees, complete) = self.callees(t, at, tail);
+        // A target no function's address has reached yet (the function
+        // that stores or passes it hasn't run, or not with its own
+        // values; an unknown is none, in the closed world) is no call
+        // yet. Taken as an incomplete set at once, its arguments went to
+        // every loose function for good, though a round later it called
+        // one function: which words that un-proved was the order the
+        // functions ran in. It waits until the run has otherwise settled;
+        // one still without a callee then is the incomplete set it
+        // always was. (One that may hold an address the run dropped
+        // doesn't wait: it is incomplete whatever comes.)
+        if self.g.defer && !self.g.deferred_due && callees.is_empty() && !t.lost_rom {
+            self.g.deferred.insert(self.f.entry);
+            return vec![Val::unk(); 4];
+        }
         // Large arguments as the entries keep them ([`Large::take`]), so
         // that what a callee set was given before is told from what's new.
         let args: Vec<Val> = args
@@ -5890,7 +6009,8 @@ impl Run<'_, '_> {
                     self.rets_read.insert(k);
                     if self.g.ret_stamp.get(&k).is_some_and(|&s| s > m.stamp) {
                         for (i, (a, b)) in m.rets.iter_mut().zip(&self.g.ret[&k]).enumerate() {
-                            grew |= once.first(i, b) && a.union_new(b);
+                            // (What it may change: [`G::kept`].)
+                            grew |= self.g.sets(k, i) && once.first(i, b) && a.union_new(b);
                         }
                     }
                 }
@@ -5912,7 +6032,7 @@ impl Run<'_, '_> {
                 let mut once = Once::default();
                 for &k in &callees {
                     for (i, (a, b)) in rets.iter_mut().zip(self.ret_of(k)).enumerate() {
-                        if once.first(i, &b) {
+                        if self.g.sets(k, i) && once.first(i, &b) {
                             a.union_new(&b);
                         }
                     }
@@ -5940,6 +6060,15 @@ impl Run<'_, '_> {
             }
         };
         let mut rets = rets;
+        // A register some callee leaves as it came is, after that one,
+        // the caller's own ([`G::kept`]).
+        let left = self.g.left_by(&callees);
+        for (i, r) in rets.iter_mut().enumerate() {
+            if left & 1 << i != 0 {
+                r.join(&args[i]);
+                self.g.take_large(r);
+            }
+        }
         if !complete {
             self.g.rd.incomplete = true;
             self.g
@@ -5969,12 +6098,13 @@ impl Run<'_, '_> {
                     for k in self.loose {
                         if let Some(r) = self.g.ret.get(k) {
                             for (i, (a, b)) in v.iter_mut().zip(r).enumerate() {
-                                if once.first(i, b) {
+                                if self.g.sets(*k, i) && once.first(i, b) {
                                     a.join_capped(b);
                                 }
                             }
                         }
                     }
+                    self.g.loose_leaves = self.g.left_by(self.loose);
                     for a in &mut v {
                         self.g.take_large(a);
                         self.g.sets.share(&mut a.toks);
@@ -5984,8 +6114,13 @@ impl Run<'_, '_> {
                 }
             };
             self.rets_read.extend(self.loose.iter().copied());
-            for (a, b) in rets.iter_mut().zip(&lr) {
+            for (i, (a, b)) in rets.iter_mut().zip(&lr).enumerate() {
                 a.join_capped(b);
+                // (And as some loose function leaves it: the caller's.)
+                if self.g.loose_leaves & 1 << i != 0 {
+                    a.join(&args[i]);
+                    self.g.take_large(a);
+                }
             }
             for r in &mut rets {
                 r.unk = true;
@@ -6834,27 +6969,38 @@ pub fn follow(
     copies: &[(u32, u32, u32)],
     allocs: &BTreeSet<u32>,
 ) -> Flow {
-    if heap_env() {
-        follow_heap(fns, img, copies, true, allocs)
-    } else {
-        follow_ram(fns, img, copies, ram_env())
-    }
+    let none = BTreeSet::new();
+    let heap = heap_env();
+    follow_live(
+        fns,
+        img,
+        copies,
+        ram_env() || heap,
+        if heap { allocs } else { &none },
+        live_env(),
+    )
 }
 
-/// [`follow`], RAM pointers kept or not ([`ram_on`]).
-fn follow_ram(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)], ram: bool) -> Flow {
-    follow_heap(fns, img, copies, ram, &BTreeSet::new())
+/// Whether `f` has a jump by value the run takes for a tail call.
+fn jumps_by_value(f: &FnIn) -> bool {
+    f.blocks
+        .values()
+        .flat_map(|b| b.exits.values())
+        .any(|o| matches!(o.edge, Edge::Tail(None) | Edge::TailOr(_)))
 }
 
-/// [`follow_ram`], with the allocators whose calls return an allocation
-/// of their own (`native/fnref-heap-sites`; none: no [`Tok::Heap`] is
-/// made, and the run is [`follow_ram`]'s).
-fn follow_heap(
+/// [`follow`] as told: RAM pointers kept or not ([`ram_on`]); the
+/// allocators whose calls return an allocation of their own
+/// (`native/fnref-heap-sites`; none: no [`Tok::Heap`] is made); and
+/// whether a call takes back only what its callee may change
+/// ([`live_env`]).
+fn follow_live(
     fns: &[FnIn],
     img: &dyn Image,
     copies: &[(u32, u32, u32)],
     ram: bool,
     allocs: &BTreeSet<u32>,
+    live: bool,
 ) -> Flow {
     debug_assert!(
         ram || allocs.is_empty(),
@@ -6871,6 +7017,20 @@ fn follow_heap(
         roads: std::env::var_os("GBAA_FNREF_WATCH").is_some(),
         gains: std::env::var_os("GBAA_FNREF_GAINS").map(|_| BTreeMap::new()),
         allocs: allocs.clone(),
+        // (Neither for a function that jumps by value: its registers go
+        // on to wherever its target's value says, which may be more
+        // functions than its summary followed.)
+        leaves: fns
+            .iter()
+            .filter(|f| live && f.leaves != 0 && !jumps_by_value(f))
+            .map(|f| (f.entry, f.leaves))
+            .collect(),
+        reads: fns
+            .iter()
+            .filter(|f| live && f.reads & 0xf != 0xf && !jumps_by_value(f))
+            .map(|f| (f.entry, f.reads))
+            .collect(),
+        defer: live,
         ..G::default()
     };
     if g.off != 0 {
@@ -6961,6 +7121,12 @@ fn follow_heap(
                 dirty.extend(rds.iter().filter(|(_, r)| r.incomplete).map(|(f, _)| *f));
             }
         }
+        // Settled but for the calls that waited on a target nothing
+        // reached: they are incomplete sets now, and the run goes on.
+        if dirty.is_empty() && !g.deferred.is_empty() && !g.deferred_due {
+            g.deferred_due = true;
+            dirty = std::mem::take(&mut g.deferred);
+        }
         if dirty.is_empty() {
             return finish(g);
         }
@@ -7020,6 +7186,7 @@ fn follow_heap(
                 run.work.insert(f.entry);
             }
             run.g.rd = Rd::default();
+            run.g.deferred.remove(&f.entry);
             let mut steps = 0;
             while let Some(k) = run.work.pop_first() {
                 steps += 1;
