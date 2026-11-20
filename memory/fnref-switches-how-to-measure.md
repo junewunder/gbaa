@@ -1,6 +1,6 @@
 ---
-title: The function flow's switches: how each is measured and profiled
-hook: GBAA_FNREF_LIVE/RAM/HEAP; run pairs side by side; eu-stack -i on a line-table build; an empty VAR= is still set
+title: Measuring and profiling the function flow's switches
+hook: run off and on side by side; eu-stack -i on a line-table build; an empty VAR= is set
 ---
 
 Where the pieces stand is the tracker's (`just find function flow`) and
