@@ -172,9 +172,12 @@
 //! inside `s` leaves those stores in `s`'s object, and a load there at a
 //! constant address misses them); a pointer isn't made of its bytes in
 //! registers (a byte copy through memory is a number); a function called
-//! from where the run can't see (`loose`) is passed no RAM pointer but
-//! what the incomplete callee sets pass; and no load at a constant
-//! address reads a stack.
+//! from where the run can't see (`loose`) is passed, besides what the
+//! incomplete callee sets pass, a pointer into a stack, at a constant
+//! address or one the run dropped, never one somewhere in an object
+//! ([`LOOSE`] in r0-r3, `native/fnref-ram-loose-params`: a closure's
+//! environment called through a vtable the run never read); and no load
+//! at a constant address reads a stack.
 //!
 //! **The heap by allocation site** (`native/fnref-heap-sites`;
 //! `GBAA_FNREF_HEAP` set, [`heap_env`], off by default, and on only over
@@ -768,6 +771,15 @@ const RAM_ANY: Tok = Tok::Ram(0);
 /// stack).
 const STACK: Tok = Tok::Ram(1);
 const STACK_CELL: u32 = 0x0fff_fff0;
+
+/// A loose function's parameter ([`Tok::Ram`],
+/// `native/fnref-ram-loose-params`): a pointer from a caller the run
+/// can't see (an `&mut dyn` closure's environment, called through a
+/// vtable the run never read), so somewhere in RAM it doesn't place. A
+/// load through it reads every cell, the stacks' cell and the pile, as an
+/// unknown address did with the switch off ([`ram_on`]), but no RAM
+/// object's (what [`RAM_ANY`] adds); a store through it goes to the pile.
+const LOOSE: Tok = Tok::Ram(2);
 
 /// A [`Tok::Heap`]'s offset: somewhere in the allocation, at or past the
 /// pointer its call returned (an index stays in its object, as C has it).
@@ -2368,6 +2380,19 @@ impl G {
     fn read_stack(&mut self, w: u8, into: &mut Val) {
         self.read_obj(STACK_CELL, w, into);
         self.read_pile(w, into);
+    }
+
+    /// What a load at width `w` through a loose function's parameter
+    /// reads ([`LOOSE`]): every cell, the stacks' cell, and the pile.
+    /// And, where the run has allocations ([`Tok::Heap`]), theirs: the
+    /// caller it can't see may pass one's pointer. (With every object's
+    /// cell, which is the read that holds them.)
+    fn read_loose(&mut self, w: u8, into: &mut Val) {
+        self.read_cells(w, into);
+        self.read_stack(w, into);
+        if !self.heap_sites.is_empty() {
+            self.read_objs(w, into);
+        }
     }
 
     /// What a load at width `w` through a pointer somewhere in RAM object
@@ -5034,6 +5059,10 @@ impl Run<'_, '_> {
                     capped = false;
                     self.g.read_stack(w, &mut out);
                 }
+                Tok::Ram(2) => {
+                    capped = false;
+                    self.g.read_loose(w, &mut out);
+                }
                 // Somewhere in an object: what was stored in it, its
                 // cells, and the pile.
                 Tok::Ram(o) => {
@@ -5356,7 +5385,7 @@ impl Run<'_, '_> {
                 }
                 // Somewhere in an object: stays in it, as an index stays in
                 // its array (`native/fnref-ram-pointers`).
-                Tok::Ram(0) => anywhere = true,
+                Tok::Ram(0) | Tok::Ram(2) => anywhere = true,
                 Tok::Ram(1) => self.g.store(Store::Cell(STACK_CELL), toks),
                 Tok::Ram(o) => self.g.store(Store::Cell(obj_cell(o)), toks),
                 // In an allocation: its word's cell, or, somewhere in it
@@ -5562,6 +5591,11 @@ impl Run<'_, '_> {
                 }
                 Tok::Ram(1) => {
                     pile = true;
+                    self.g.read_obj(STACK_CELL, 4, into);
+                }
+                Tok::Ram(2) => {
+                    pile = true;
+                    self.g.read_cells(4, into);
                     self.g.read_obj(STACK_CELL, 4, into);
                 }
                 Tok::Ram(o) if o != 0 => self.g.read_in_obj(o, 4, into),
@@ -6724,6 +6758,13 @@ fn follow_heap(
             if loose.contains(&f.entry) {
                 for (a, b) in entry.iter_mut().zip(&g.loose_args) {
                     a.join(b);
+                }
+                // r0-r3 from a caller the run can't see: somewhere in RAM
+                // it doesn't place ([`LOOSE`]).
+                if ram {
+                    for r in &mut entry[..4] {
+                        r.toks.insert(LOOSE);
+                    }
                 }
                 for r in &mut entry {
                     r.unk = true;

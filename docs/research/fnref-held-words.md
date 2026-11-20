@@ -780,6 +780,15 @@ minutes with the roads on (they turn the kept ops off).
 there, without every closure's r0 becoming "anywhere"), the run's cost, and
 Nightmare's count.
 
+**Loose functions' parameters** (`native/fnref-ram-loose-params`). A loose
+function's r0-r3 now hold a RAM token of their own (`LOOSE`): a load
+through it reads every cell, the stacks' cell and the pile (what an unknown
+address read with the switch off), but no RAM object's cell (what a dropped
+pointer adds); a store through it goes to the pile. On native-takes the
+closure's two calls are complete again and the hard hole is gone. With the
+switch on, `just lift-metrics` has no bar over (native-takes 55 words not
+proven, native-irq-hold 58, `ref_unexplained` 48, as off); Metroid stays
+604 proven, 200 not.
 ## The heap by allocation site, landed off
 
 Unit `native/fnref-heap-sites`, 2026-11-19 on quack, on main behind

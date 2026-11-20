@@ -729,6 +729,32 @@ fn a_pointer_into_a_ram_array_stays_in_it() {
 }
 
 #[test]
+fn a_loose_function_s_parameter_reads_the_cells() {
+    // F stored to CELL, H in A2[r2]; a function nothing calls directly
+    // (an `&mut dyn` closure's method, through a vtable the run never
+    // read) calls through what its r0 points at
+    // (`native/fnref-ram-loose-params`): every cell, the stacks' and the
+    // pile, but no RAM object's, so F alone, complete. Before, its r0 was
+    // an unknown, no RAM address: the load read nothing, the call
+    // incomplete.
+    let e = 0x0800_1001;
+    let mut a = B::default();
+    let p = a.pool(POOL, F);
+    let c = a.k(CELL);
+    a.st(Width::Word, c, p);
+    let y = indexed(&mut a, 0x0800_0414, A2, 2, 3, 0);
+    let h = a.pool(0x0800_0404, H);
+    a.st(Width::Word, y, h);
+    let make = (e, vec![(e, a.end(None, Edge::Return))]);
+    let mut b = B::default();
+    let r0 = b.get(0);
+    let t = b.ld(Width::Word, r0);
+    let f = run_ram(&[make, calling(0x0800_2001, b, t)]);
+    assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
+    assert!(site(&f).complete, "{f:?}");
+}
+
+#[test]
 fn a_ram_pointer_dropped_is_read_everywhere() {
     // H stored in A2[r2]; F through a pointer the run dropped (which
     // may be anywhere): a load through A2[r3] reads both.
