@@ -1067,7 +1067,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // whose `msr` and `mrs` are printed ([`PsrFns`]).
     let psr_fns = PsrFns::of(&disc, &overlays);
     // RAM's globals: what the constant-address accesses of the functions
-    // printed (a stand-in's code is its own) reach.
+    // printed (a stand-in's code is its own) reach. A checked cut's are
+    // the lift's, as its stock build has them: the cut reads them so.
     // And what their computed ones reach, where the value sets bound it
     // (native/ref-in-object): one address is an access like a constant
     // one; a range, an object's extent.
@@ -1082,7 +1083,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         for f in c
             .funcs
             .iter()
-            .filter(|f| !holes.standins.contains_key(&f.entry))
+            .filter(|f| !holes.standins.contains_key(&f.entry) || holes.cuts.contains_key(&f.entry))
         {
             for gb in f.blocks.values() {
                 let insts = &gb.block.insts;
@@ -1425,8 +1426,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     for &k in holes.cuts.keys().chain(&holes.cut_want) {
         let what = if !all.contains(&k) {
             "the mod's cut matches no function"
-        } else if holes.standins.contains_key(&k) || holes.fn_check.contains_key(&k) {
-            "the mod's cut is of a function the holes file replaces or the check checks: cut the lift only"
+        } else if holes.standins.contains_key(&k) && !synthetic.contains(&k) {
+            // A checked cut is the check's replacement (`fn_check_texts`).
+            "the mod's cut is of a function the holes file replaces: cut the lift only"
         } else {
             continue;
         };
@@ -1658,10 +1660,22 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let cut_texts: BTreeMap<u32, String> = out
         .iter()
         .filter(|(k, _)| holes.cut_want.contains(k) || holes.cuts.contains_key(k))
+        .filter(|(k, _)| !holes.fn_check.contains_key(k))
         .cloned()
         .collect();
     let mut cut_in = 0;
     for (k, t) in out.iter_mut() {
+        // A checked cut goes where the check's replacement left it room,
+        // after the names pass as any cut (which would rename what the
+        // cut calls by name: `pen_set_`).
+        if let Some(c) = holes.cuts.get(k)
+            && holes.fn_check.contains_key(k)
+        {
+            if let Ok(r) = cut::Replacement::of(c, *k) {
+                *t = t.replacen(&cut_marker(*k), &r.text, 1);
+            }
+            continue;
+        }
         if let Some(c) = holes.cuts.get(k) {
             *t = c.clone();
             if !t.ends_with('\n') {
@@ -2686,6 +2700,14 @@ fn prefix_fn(text: &str, k: u32, p: &str) -> String {
     )
 }
 
+/// The line a checked cut's function takes the place of, after the names
+/// pass ([`fn_check_texts`]).
+fn cut_marker(k: u32) -> String {
+    format!(
+        "// gbaa-lift: the cut of key {k:08x} goes here (not f_: the names pass names those).\n"
+    )
+}
+
 /// A function's lift printed with the holes given: its text and holes.
 type PrintFn<'a> = dyn Fn(&Holes, &mut Soft) -> (String, Vec<Hole>) + 'a;
 
@@ -2722,7 +2744,50 @@ fn fn_check_texts(
         "// f_{k:08x}: under the per-function check (gbaa-lift --fn-check).\n// The reference: the lift.\n"
     );
     t.push_str(&prefix_fn(&rt, k, "ref_"));
-    let replacement = if synthetic.contains(&k) {
+    let replacement = if let Some(cut) = holes.cuts.get(&k) {
+        // A mod's cut (unit `native/lift-mod-run`): its function, renamed,
+        // behind an adapter from the check's call to its lifted signature.
+        let want = |sh: Option<Shape>| 1 + sh.map_or(1, |sh| shape::regs(sh.params).count());
+        let adapter = cut::Replacement::of(cut, k).and_then(|r| {
+            if r.params != want(shape) {
+                return Err(format!(
+                    "the cut of {} takes {} parameters after g, but its function's shape {}",
+                    r.name,
+                    r.params,
+                    want(shape)
+                ));
+            }
+            let q = if r.result { "?" } else { "" };
+            let call = match shape {
+                Some(sh) => format!(
+                    "let [mut r0, mut r1, mut r2, mut r3] = a; {}{}(g, sp{}){q}; Ok([r0, r1, r2, r3])",
+                    lhs(sh.results),
+                    r.name,
+                    args(sh.params)
+                ),
+                None => format!("Ok({}(g, sp, a){q})", r.name),
+            };
+            Ok(format!(
+                "{}pub fn new_f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ {call} }}\n",
+                cut_marker(k)
+            ))
+        });
+        match adapter {
+            Ok(a) => {
+                t.push_str(
+                    "// The replacement: the mod's cut (gbaa-lift --replace DIR/replace.toml).\n",
+                );
+                t.push_str(&a);
+            }
+            Err(what) => found.push(Hole {
+                func: k,
+                at: k,
+                kind: HoleKind::HolesFile,
+                what,
+            }),
+        }
+        "the mod's cut".to_string()
+    } else if synthetic.contains(&k) {
         let (nt, nf) = print(holes, soft);
         found.extend(nf);
         t.push_str("// The replacement: the lift again (with --plant's store, if one is in it).\n");
@@ -2797,7 +2862,11 @@ fn fn_check_texts(
     }
     let globals: Vec<String> = fields
         .iter()
-        .map(|f| format!("(std::mem::offset_of!(Ram, {f}), |r: &Ram| size_of_val(&r.{f}))"))
+        .map(|f| {
+            format!(
+                "|r: &Ram| (std::ptr::addr_of!(r.{f}) as usize - std::ptr::from_ref(r) as usize, size_of_val(&r.{f}))"
+            )
+        })
         .collect();
     writeln!(
         t,

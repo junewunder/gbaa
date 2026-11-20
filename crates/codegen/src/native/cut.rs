@@ -127,6 +127,84 @@ pub fn name_of(text: &str, key: u32) -> String {
         .map_or_else(|| format!("f_{key:08x}"), str::to_string)
 }
 
+/// A cut as the per-function check's replacement (`gbaa-lift --replace
+/// DIR/replace.toml --fn-check KEY`, unit `native/lift-mod-run`): the cut's
+/// own function (the `pub fn` [`name_of`] names, to its closing `}`; its
+/// `x_`/`a_` entries left out, the reference has its own) renamed
+/// `cut_<name>`, with what its signature says: that name, how many
+/// parameters it takes after `g` (`sp`, then the shape's registers), and
+/// whether it returns a `Result`.
+#[derive(Debug, PartialEq)]
+pub struct Replacement {
+    pub name: String,
+    pub text: String,
+    pub params: usize,
+    pub result: bool,
+}
+
+impl Replacement {
+    pub fn of(text: &str, key: u32) -> Result<Replacement, String> {
+        let name = name_of(text, key);
+        let head = format!("pub fn {name}(");
+        let mut lines = text.lines().skip_while(|l| !l.starts_with(&head));
+        let sig = lines
+            .next()
+            .ok_or_else(|| format!("the cut of {name} has no `{head}` line"))?;
+        let mut body = vec![sig.replacen(&head, &format!("pub fn cut_{name}("), 1)];
+        let mut closed = false;
+        for l in lines {
+            body.push(l.to_string());
+            if l == "}" {
+                closed = true;
+                break;
+            }
+        }
+        if !closed {
+            return Err(format!("the cut of {name}: no `}}` line ends {head}…"));
+        }
+        // The parameter list, to its matching `)`.
+        let open = head.len();
+        let mut depth = 1;
+        let close = sig[open..]
+            .char_indices()
+            .find(|&(_, c)| {
+                depth += match c {
+                    '(' | '[' | '<' => 1,
+                    ')' | ']' | '>' => -1,
+                    _ => 0,
+                };
+                depth == 0
+            })
+            .map(|(i, _)| open + i)
+            .ok_or_else(|| format!("the cut of {name}: `{sig}` has no `)`"))?;
+        let mut params = 0usize;
+        let mut depth = 0;
+        let mut any = false;
+        for c in sig[open..close].chars() {
+            match c {
+                '(' | '[' | '<' => depth += 1,
+                ')' | ']' | '>' => depth -= 1,
+                ',' if depth == 0 => params += 1,
+                c if !c.is_whitespace() => any = true,
+                _ => {}
+            }
+        }
+        // `g` is the first; the commas count the rest.
+        let params = if any { params } else { 0 };
+        let result = sig[close..]
+            .trim_start_matches(')')
+            .trim_start()
+            .strip_prefix("->")
+            .is_some_and(|r| r.trim_start().starts_with("Result<"));
+        Ok(Replacement {
+            name: format!("cut_{name}"),
+            text: body.join("\n") + "\n",
+            params,
+            result,
+        })
+    }
+}
+
 /// What a cut did.
 #[derive(Debug, Default)]
 pub struct Cut {
@@ -271,6 +349,26 @@ mod tests {
             ),
             "AgbMain"
         );
+    }
+
+    #[test]
+    fn a_cut_as_a_replacement_is_its_own_function_renamed() {
+        let text = "pub fn x_080004fd(g: &mut Game, s: Regs) -> () { tally(g, s.r[13], s.r[0]) }\n\
+                    pub fn tally(g: &mut Game, _: u32, mut n: u32) -> () {\n    n += 1;\n}\n";
+        let r = super::Replacement::of(text, 0x0800_04fd).unwrap();
+        assert_eq!(r.name, "cut_tally");
+        assert_eq!(
+            r.text,
+            "pub fn cut_tally(g: &mut Game, _: u32, mut n: u32) -> () {\n    n += 1;\n}\n"
+        );
+        assert_eq!((r.params, r.result), (2, false));
+        let text = "pub fn f_08000100(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {\n}\n";
+        let r = super::Replacement::of(text, 0x0800_0100).unwrap();
+        assert_eq!(
+            (r.name.as_str(), r.params, r.result),
+            ("cut_f_08000100", 2, true)
+        );
+        assert!(super::Replacement::of("pub fn tally(g: &mut Game) -> () {\n", 1).is_err());
     }
 
     #[test]
