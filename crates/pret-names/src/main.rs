@@ -214,14 +214,37 @@ fn dwarf_report(names: &pret_names::Names, d: &pret_names::dwarf::Debug) -> Stri
         .keys()
         .filter(|a| d.globals.contains_key(a))
         .count();
+    // Typed only by `extern` declarations (a global the linker script
+    // places), and of those, how many units disagree on the type.
+    let declared: Vec<&pret_names::Datum> = names
+        .data
+        .iter()
+        .filter(|(a, x)| {
+            !d.globals.contains_key(a)
+                && std::iter::once(&x.name)
+                    .chain(&x.aliases)
+                    .any(|n| d.decl_type(n).is_some())
+        })
+        .map(|(_, x)| x)
+        .collect();
+    let split = declared
+        .iter()
+        .filter(|x| {
+            std::iter::once(&x.name)
+                .chain(&x.aliases)
+                .any(|n| d.decls.get(n).is_some_and(|t| t.len() > 1))
+        })
+        .count();
     format!(
         "dwarf: {} of {} named functions have a prototype; locals: {reg} in a register, \
-         {slot} in a stack slot, {homeless} with no location; lines {}; data typed {typed} of {}; \
+         {slot} in a stack slot, {homeless} with no location; lines {}; data typed {typed} of {}, {} more by extern declarations \
+         ({split} declared two ways, the most units' type kept); \
          types {} ({} names with two layouts, the first kept); units unread {}, line programs cut short {}\n",
         fs.len(),
         roms.len(),
         d.lines.len(),
         names.data.len(),
+        declared.len(),
         d.types.len(),
         d.clashes.len(),
         d.bad_units.len(),
