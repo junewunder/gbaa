@@ -890,6 +890,90 @@ its callees' didn't stop at a hole:
 program's count moves. What holds the C programs' words is the RAM
 globals (the next section but one).
 
+## A pointer into a RAM array stays in it, as landed
+
+Unit `native/fnref-ram-pointers`, 2026-11-20 on quack, behind
+`GBAA_FNREF_RAM` (off by default; off, the flow is main's). What held the
+C programs' words with the RAM switch on was found on c-fnptr by
+`GBAA_FNREF_WATCH`, one thing behind the other, and each is a rule now
+(`fnref.rs`, "The closed world"):
+
+- **A load through a pointer into an object read every global.**
+  `obj->color` through `&gObjs[i]` was also the main callback in the
+  global beside the array, which then went as a colour into `fill_rect`
+  and out to the screen's memory. It reads that object now: the cells at
+  the constant addresses in it, kept together in one cell of their own so
+  that it is one read (`in_cell`; reading each cell apart was three times
+  slower on Metroid, "The RAM switch's cost").
+- **Every address-taken function had callers the run can't see**, from
+  the first round: its parameters were unknowns and pointers anywhere,
+  so a callback handed `&gObjs[i]` read every cell all the same. With
+  the registers' rules on too (calls that wait), the unseen callers are
+  the BIOS's and nothing's (the reset, a function no code names, the IRQ
+  vector's function) once the run has otherwise settled, and every
+  address-taken function's only from when some call's callee set is
+  incomplete.
+- **A walked index left its array before it was widened.** `gObjs + i *
+  12` with `i` one of eight numbers the run still held exactly reached
+  into `gCallbacks`. A RAM address moved out of its object by an amount
+  that varies (several values of the index, or a pointer walked through
+  one object) stays somewhere in it; one constant offset is exact, a
+  field's address, through one pointer or one of several.
+- **The last array ran to the end of RAM**, the IRQ flags and vector
+  with it, so the IRQ handler's `flags | r2` was arithmetic on the
+  callbacks. The top 256 bytes of IWRAM are the BIOS's (its stacks, the
+  flags at 0x03007ff8, the vector at 0x03007ffc; the user stack starts
+  below and grows down), so an object ends there. (Tried first and
+  dropped at review: ending an object where the value sets' bounds on
+  its accesses end. A bound past the real array cut into the next
+  object, and not every use of an array is an access the bounds cover.)
+- **A flip-flop in the widening** showed once values were sharper
+  (native-tasks never settled): exact pointers into code bytes were
+  folded into "somewhere in code" when a value passed its bound, and put
+  back by the next join. With the RAM rules on they stay folded.
+
+The cells at the constant addresses in an object are kept a second time
+in one cell of the object's (`in_cell`), which is what the first rule
+reads. They are no part of "what was stored somewhere in an object":
+counted there, every store to a global reran each function that had
+read every object's cell (13,000 of Emerald's 15,000 a round).
+
+**Counts.** `fn_words_not_proven` with `GBAA_FNREF_RAM` and
+`GBAA_FNREF_LIVE` on against off (the second rule needs both):
+
+| program | off | on | callees a set, off to on |
+|---|---|---|---|
+| c-fnptr-agbcc | 6 | 0 | 3.8 to 2.4 |
+| c-fnptr-gcc | 10 | 9 | |
+| c-chain-agbcc, c-chain-gcc | 1 | 0 | |
+| c-switch-agbcc, c-switch-gcc | 1 | 0 | |
+| c-heap-agbcc, c-heap-gcc | 7 | 6 | |
+| Metroid | 202 | 125, as with the registers' rules alone | 50.3 to 31.3, the same |
+
+c-fnptr built by agbcc is exact now: 14 of 14 words proven, each call's
+set the functions it calls. The word every C program gains is its IRQ
+handler's, in the vector. `just lift-metrics` with the RAM switch alone:
+0 over, 8 under. With both: one over, native-dma's `lines` by 1 (15,888;
+two of its callee sets that were every address-taken function, by what
+early rounds spread, are empty and incomplete now, and a constant equal
+to a function's address joins its function table); its bar is to be
+raised with that cause when the switches turn on. Metroid's flow: 34 s
+off, 23 s with the registers' rules, 50 s with both (51 s with the RAM
+rules alone). Emerald's with both: settles in 22 rounds, 1,329 s, 0.95 GB
+(557 s off, 477 to 587 with the registers' rules, 1,032 with the RAM
+rules before this unit): 2.4 times main's, which is what keeps the RAM
+switch off; most of each round is reruns for memory that changed, not
+entries (13,000 functions rerun where 700 entries changed). Nightmare, which the unit named, isn't moved: 11 of its
+5,073 words are proven either way (2,309 never read, and 53 of its 55
+call sets are incomplete), in 3.5 minutes off and 7 with both.
+
+**GCC's builds move least**, for one reason: modern GCC addresses every
+global from one anchor (`ldr r7, =anchor; ldr r0, [r7, #40]`), so no
+literal starts an array and all of `.bss` is one object. Finding the
+objects there (from the names files where a program has one, or from the
+constant offsets the code uses with the anchor) is the next unit
+(`native/fnref-ram-anchors`).
+
 ## The heap by allocation site, landed off
 
 Unit `native/fnref-heap-sites`, 2026-11-19 on quack, on main behind
