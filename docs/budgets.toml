@@ -59,10 +59,13 @@ max_lines = 2011
 # 1280 after native/fn-check-any's section on the per-function check (26
 # lines: how both sides run and what is compared; its numbers in the
 # tracker's evidence); 1287 after native/fn-check-interp's paragraph on the
-# interpreter as the check's second reference (6 lines; 1 more from main's merge).
+# interpreter as the check's second reference (6 lines; 1 more from main's merge);
+# 1308 after native/indirect-call-args-emerald (21 lines: its card asks
+# for Emerald's counts with callee sets and what keeps sets incomplete in
+# section 5's paragraph, two short tables).
 [[doc]]
 path = "docs/native-port-design.md"
-max_lines = 1287
+max_lines = 1308
 
 [[doc]]
 path = "AGENTS.md"
