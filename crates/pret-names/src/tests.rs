@@ -234,6 +234,22 @@ fn abbrev_tables_are_cut_and_terminated() {
     assert_eq!(&info2[13 + 6..13 + 10], &13u32.to_le_bytes());
 }
 
+/// A DWARF 5 unit (modern GCC's default) keeps its abbrev offset after the
+/// unit type and address size: that is the field moved, not the bytes
+/// where DWARF 2 keeps it.
+#[test]
+fn a_dwarf5_header_moves_its_abbrev_offset() {
+    let abbrev = [7u8, 1, 0x11, 0, 0x03, 0x08, 0, 0];
+    // unit_length, version 5, DW_UT_compile, address size 4, offset 1.
+    let mut info = vec![10, 0, 0, 0, 5, 0, 1, 4];
+    info.extend(1u32.to_le_bytes());
+    info.extend([0, 0]);
+    let (info2, ab2) = dwarf::fix_abbrevs(&info, &abbrev);
+    assert_eq!(ab2, [1, 0x11, 0, 0x03, 0x08, 0, 0, 0]);
+    assert_eq!(&info2[4..8], &[5, 0, 1, 4]);
+    assert_eq!(&info2[8..12], &0u32.to_le_bytes());
+}
+
 /// A line program a byte or few short of the next one is grown to it; a
 /// wider gap (a program no unit names) is left alone.
 #[test]
