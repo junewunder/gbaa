@@ -148,7 +148,10 @@ fn pointer_scan_takes_a_column_of_struct_records() {
         }
         a.run()
     };
-    assert_eq!(table(true).funcs.get(&thumb(0x300)), Some(&Evidence::Scanned));
+    assert_eq!(
+        table(true).funcs.get(&thumb(0x300)),
+        Some(&Evidence::Scanned)
+    );
     // One start a record away is no column.
     assert!(!table(false).funcs.contains_key(&thumb(0x300)));
 }
