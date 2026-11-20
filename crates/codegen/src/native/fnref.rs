@@ -66,7 +66,13 @@
 //! escaping slot or a stack argument is the pile's, and a load through a
 //! value the run can't place, or a ROM pointer "from here on" stored
 //! through, reads or writes the pile and every cell, or the cells the
-//! value sets bound it to.) Interprocedural: a call passes r0-r3 to its callee's entry
+//! value sets bound it to.) Three bounds keep the objects from costing
+//! more than they tell (`native/fnref-ram-cost`): a value with pointers
+//! into more than [`OBJS_MAX`] objects holds "somewhere in some object"
+//! ([`ANYOBJ`]), a load through pointers into more than [`OBJS_READ`]
+//! reads every object's cell as one read, and more than [`OBJ_REFS`]
+//! reads of single objects' cells in a value are reads of every
+//! object's. Interprocedural: a call passes r0-r3 to its callee's entry
 //! and takes back what its returns hold; a tail call or a fall passes
 //! every register, and so does a call to a function that may take r4-r11
 //! from its callers or through a pointer the holes file's `[[takes]]`
@@ -827,6 +833,33 @@ fn heap_off(s: u32, k: u32, d: i64) -> Tok {
     }
 }
 
+/// Somewhere in some RAM object ([`Tok::Ram`]): a value that held
+/// pointers into more objects than [`OBJS_MAX`]. A load through it reads
+/// every cell, every object's cell and the pile; a store goes to one cell
+/// of its own, [`ANYOBJ_CELL`], which a load at a constant address or
+/// through a pointer into an object reads with that object's
+/// (`native/fnref-ram-cost`).
+const ANYOBJ: Tok = Tok::Ram(3);
+/// (Above [`STACK_CELL`]: a read of every object's cell is kept by the
+/// cells from there up, [`G::read_objs`].)
+const ANYOBJ_CELL: u32 = 0x0fff_fff8;
+/// More RAM objects than this pointed into by one value: somewhere in
+/// some object ([`ANYOBJ`]). A parameter every caller passes its own
+/// global to held dozens, each stored through and read through in turn.
+const OBJS_MAX: usize = 8;
+/// A load through a pointer into more RAM objects than this reads every
+/// object's cell as one read ([`Src::Objs`]), not each object's as its
+/// own.
+const OBJS_READ: usize = 4;
+/// More reads of single objects' cells ([`Src::Obj`]) than this in a
+/// value: each is the read of every object's cell at its width and forms
+/// ([`Src::Objs`]), which holds what it held and more. With the RAM
+/// pointers on, Metroid's registers held hundreds of such reads between
+/// them (one an object, width and form), and every shift, compare and
+/// call looked through each: its run took five times main's
+/// (`native/fnref-ram-cost`).
+const OBJ_REFS: usize = 4;
+
 /// The lowest [`Tok::Ref`].
 const REF0: Tok = Tok::Ref {
     src: Src::Pile(0),
@@ -1458,15 +1491,26 @@ impl Val {
         self.toks.contains(&t)
             || match t {
                 Tok::Num(c) if is_ram(c) && ram_on() => {
-                    self.toks.contains(&RAM_ANY) || self.toks.contains(&Tok::Ram(ram_obj(c).0))
+                    self.toks.contains(&RAM_ANY)
+                        || self.toks.contains(&ANYOBJ)
+                        || self.toks.contains(&Tok::Ram(ram_obj(c).0))
                 }
-                Tok::Ram(o) => o != 0 && self.toks.contains(&RAM_ANY),
+                Tok::Ram(o) => {
+                    o != 0 && self.toks.contains(&RAM_ANY) || o > 3 && self.toks.contains(&ANYOBJ)
+                }
                 Tok::Heap(s, k) => {
                     self.toks.contains(&HEAP_ALL)
                         || self.toks.contains(&Tok::Heap(0, k))
                         || k != HEAP_ANY && self.toks.contains(&Tok::Heap(s, HEAP_ANY))
                 }
                 Tok::Num(_) => self.unk,
+                Tok::Ref {
+                    src: Src::Obj(_, w),
+                    xf,
+                } => self.toks.contains(&Tok::Ref {
+                    src: Src::Objs(w),
+                    xf,
+                }),
                 Tok::Rom(_) | Tok::RomFrom(_) | Tok::RomStep(..) | Tok::RomDull
                     if self.toks.contains(&Tok::RomAny) =>
                 {
@@ -1579,8 +1623,63 @@ impl Val {
                 self.toks.insert(t);
             }
         }
+        // Pointers into more objects than [`OBJS_MAX`], or any beside
+        // [`ANYOBJ`]: somewhere in some object, which takes in every
+        // exact RAM address too.
+        // (Also those the block above just made of exact addresses.)
+        if ram && (objs || rams > RAMS) {
+            let n = self.toks.range(Tok::Ram(4)..=Tok::Ram(u32::MAX)).count();
+            let any = self.toks.contains(&ANYOBJ);
+            if n > OBJS_MAX || any && n > 0 {
+                self.drop_range(Tok::Ram(4)..=Tok::Ram(u32::MAX));
+                self.toks.insert(ANYOBJ);
+            }
+            if self.toks.contains(&ANYOBJ) && !self.toks.contains(&RAM_ANY) {
+                self.drop_range(Tok::Num(0x0200_0000)..Tok::Num(0x0400_0000));
+            }
+        }
         if heaps {
             self.cap_heap();
+        }
+        // More reads of single objects' cells than [`OBJ_REFS`], or any
+        // beside the read of every object's at its width and forms: that
+        // read of every object's.
+        if ram && self.toks.range(REF0..).next().is_some() {
+            let objs: Vec<Tok> = self
+                .toks
+                .range(REF0..)
+                .filter(|t| {
+                    matches!(
+                        t,
+                        Tok::Ref {
+                            src: Src::Obj(..),
+                            ..
+                        }
+                    )
+                })
+                .copied()
+                .collect();
+            if !objs.is_empty() {
+                let all = |t: Tok| match t {
+                    Tok::Ref {
+                        src: Src::Obj(_, w),
+                        xf,
+                    } => Tok::Ref {
+                        src: Src::Objs(w),
+                        xf,
+                    },
+                    t => t,
+                };
+                let many = objs.len() > OBJ_REFS;
+                for t in objs {
+                    if many || self.toks.contains(&all(t)) {
+                        self.toks.remove(&t);
+                        if many {
+                            self.toks.insert(all(t));
+                        }
+                    }
+                }
+            }
         }
         // Somewhere in ROM takes in every pointer there.
         if has_any {
@@ -2303,11 +2402,44 @@ struct Rd {
     /// It looked at the large set's tokens ([`Large::take`]).
     large: bool,
     ranges: Vec<(u32, u32)>,
+    /// Those of [`Rd::ranges`], while the function runs: each is kept
+    /// once ([`Rd::range`]).
+    seen: std::collections::HashSet<(u32, u32), Fx>,
     /// It made a call whose callee set is incomplete (it reads every
     /// loose function's results).
     incomplete: bool,
     /// It looked at where an allocation is ([`G::heap_lower`]).
     heap: bool,
+}
+
+impl Rd {
+    /// The run read the cells in `lo..=hi`. Once each: a load says so at
+    /// every pass over its block, and a kept read each time it is looked
+    /// at, which on Metroid was 175 million entries for 213 thousand
+    /// ranges with the RAM pointers on (`native/fnref-ram-cost`), a
+    /// gigabyte the run held and walked each round.
+    fn range(&mut self, lo: u32, hi: u32) {
+        if self.seen.insert((lo, hi)) {
+            self.ranges.push((lo, hi));
+        }
+    }
+
+    /// The ranges read, sorted, those inside another left out; what the
+    /// run is kept by between rounds.
+    fn settle(&mut self) {
+        self.seen = Default::default();
+        self.ranges
+            .sort_unstable_by_key(|&(lo, hi)| (lo, std::cmp::Reverse(hi)));
+        let mut top: Option<u32> = None;
+        self.ranges.retain(|&(_, hi)| match top {
+            Some(t) if hi <= t => false,
+            _ => {
+                top = Some(hi);
+                true
+            }
+        });
+        self.ranges.shrink_to_fit();
+    }
 }
 
 impl G {
@@ -2423,6 +2555,9 @@ impl G {
     fn read_loose(&mut self, w: u8, into: &mut Val) {
         self.read_cells(w, into);
         self.read_stack(w, into);
+        // (What was stored through a pointer into some object may be in
+        // a cell: an exact address beside [`ANYOBJ`] is that.)
+        self.read_obj(ANYOBJ_CELL, w, into);
         if !self.heap_sites.is_empty() {
             self.read_objs(w, into);
         }
@@ -2436,7 +2571,14 @@ impl G {
     /// run ten times as long.)
     fn read_in_obj(&mut self, o: u32, w: u8, into: &mut Val) {
         self.read_cells(w, into);
-        self.read_obj(obj_cell(ram_obj(o).0), w, into);
+        // (Somewhere in some object, [`ANYOBJ`]: every object's; else
+        // this one's, and what was stored through such a pointer.)
+        if o == 3 {
+            self.read_objs(w, into);
+        } else {
+            self.read_obj(obj_cell(ram_obj(o).0), w, into);
+            self.read_obj(ANYOBJ_CELL, w, into);
+        }
         self.read_pile(w, into);
     }
 
@@ -2445,7 +2587,7 @@ impl G {
     /// [`STACK_CELL`]): as a [`Tok::Ref`] when large, as a ROM read is
     /// ([`rom_ref`]).
     fn read_obj(&mut self, k: u32, w: u8, into: &mut Val) {
-        self.rd.ranges.push((k, k));
+        self.rd.range(k, k);
         let r = self.obj_read(k, w);
         if r.toks.len() < 64 {
             let r = r.clone();
@@ -2506,7 +2648,7 @@ impl G {
     /// stack's cell, as it reads every cell: the [`Tok::Ref`] and the
     /// read's flags.
     fn read_objs(&mut self, w: u8, into: &mut Val) {
-        self.rd.ranges.push((STACK_CELL, u32::MAX));
+        self.rd.range(STACK_CELL, u32::MAX);
         let i = w as usize;
         if self.objs_reads[i].is_none() {
             let mut v = self.objs_raw[i].clone();
@@ -2644,7 +2786,7 @@ impl G {
         }
         if k == HEAP_ANY || (k & 3) + w as u32 > 4 {
             let (lo, hi) = (heap_cell(s, 0), heap_cell(s, HEAP_ANY));
-            self.rd.ranges.push((lo, hi));
+            self.rd.range(lo, hi);
             let cs: Vec<u32> = self.cells.range(lo..=hi).map(|(&c, _)| c).collect();
             for c in cs {
                 self.read_obj(c, w, into);
@@ -2847,10 +2989,10 @@ impl G {
             self.rd.pile |= e.pile;
             self.rd.all_cells |= e.cells;
             for &k in &e.objs {
-                self.rd.ranges.push((
+                self.rd.range(
                     if k == OBJS { STACK_CELL } else { k },
                     if k == OBJS { u32::MAX } else { k },
-                ));
+                );
             }
             self.rd.large |= e.large;
             return e.v.clone();
@@ -2886,10 +3028,10 @@ impl G {
         self.rd.pile |= e.pile;
         self.rd.all_cells |= e.cells;
         for &k in &e.objs {
-            self.rd.ranges.push((
+            self.rd.range(
                 if k == OBJS { STACK_CELL } else { k },
                 if k == OBJS { u32::MAX } else { k },
-            ));
+            );
         }
         self.rd.large |= e.large;
         let v = e.v.clone();
@@ -4290,6 +4432,10 @@ impl Run<'_, '_> {
         conc.drop_range(REF0..);
         let xf = Xf::of(&m);
         let mut refs = Vec::new();
+        // What each large Ref leaves, gathered and added once: a set built
+        // again at each of a value's Refs was a third of Emerald's rounds
+        // with the RAM pointers on (`native/fnref-ram-cost`).
+        let mut rests: Vec<Toks> = Vec::new();
         for r in x.refs().collect::<Vec<_>>() {
             let e = self.g.ref_val(r);
             if e.toks.len() < 64 {
@@ -4315,15 +4461,20 @@ impl Run<'_, '_> {
                     rest
                 }
             };
-            if conc.toks.is_empty() {
-                conc.toks = rest;
-            } else if !rest.is_empty() {
-                conc.toks.add_all(rest.iter().copied().collect());
+            if !rest.is_empty() && !rests.iter().any(|t| std::rc::Rc::ptr_eq(&t.0, &rest.0)) {
+                rests.push(rest);
             }
             let Tok::Ref { src, xf: rx } = r else {
                 continue;
             };
             refs.extend(ref_tok(src, rx.then(xf)));
+        }
+        match rests.len() {
+            0 => {}
+            1 if conc.toks.is_empty() => conc.toks = rests.pop().expect("one"),
+            _ => conc
+                .toks
+                .add_all(rests.iter().flat_map(|t| t.iter().copied()).collect()),
         }
         conc.cap();
         (conc, refs)
@@ -5093,12 +5244,28 @@ impl Run<'_, '_> {
         // `out` as the cap leaves it (each ROM read caps it; a read
         // through thousands of function addresses reads their code).
         let mut capped = false;
+        // Into more objects than [`OBJS_READ`], or somewhere in some
+        // object ([`ANYOBJ`]): every cell, every object's cell and the
+        // pile, once (each object's own was a `Ref` of its own in the
+        // value).
+        let many = ram
+            && a.toks
+                .range(Tok::Ram(3)..=Tok::Ram(u32::MAX))
+                .nth(OBJS_READ)
+                .is_some()
+            || a.toks.contains(&ANYOBJ);
+        if many {
+            self.g.read_cells(w, &mut out);
+            self.g.read_objs(w, &mut out);
+            self.g.read_pile(w, &mut out);
+        }
         for &t in &a.toks {
             match t {
                 Tok::Rom(r) => {
                     self.rom_read_or_capped(r, w, &mut out, capped);
                     capped = true;
                 }
+                Tok::Ram(o) if o > 2 && many => {}
                 Tok::Ram(0) => lost = true,
                 Tok::Ram(1) => {
                     capped = false;
@@ -5141,15 +5308,13 @@ impl Run<'_, '_> {
                     if is_ram(c) {
                         capped = false;
                         let c = ram_canon(c);
-                        self.g
-                            .rd
-                            .ranges
-                            .push((c.saturating_sub(3), c + w as u32 - 1));
+                        self.g.rd.range(c.saturating_sub(3), c + w as u32 - 1);
                         // The cells the access overlaps, what was stored
                         // somewhere in its object.
                         self.g.read_cell(c, w, &mut out);
                         if ram {
                             self.g.read_obj(obj_cell(ram_obj(c).0), w, &mut out);
+                            self.g.read_obj(ANYOBJ_CELL, w, &mut out);
                         }
                         self.g.read_pile(w, &mut out);
                     } else if self.img.word(c).is_some() {
@@ -5277,7 +5442,7 @@ impl Run<'_, '_> {
                         self.g.read_pile(w, &mut out);
                         match hull {
                             Some((lo, hi)) => {
-                                self.g.rd.ranges.push((lo.saturating_sub(3), hi));
+                                self.g.rd.range(lo.saturating_sub(3), hi);
                                 for (_, c) in self.g.cells.range(lo.saturating_sub(3)..=hi) {
                                     from_mem(c, w, &mut out);
                                 }
@@ -5289,7 +5454,7 @@ impl Run<'_, '_> {
                     {
                         let (lo, hi) = (ram_canon(lo), ram_canon(hi).max(ram_canon(lo)));
                         self.g.read_pile(w, &mut out);
-                        self.g.rd.ranges.push((lo.saturating_sub(3), hi));
+                        self.g.rd.range(lo.saturating_sub(3), hi);
                         for (_, c) in self.g.cells.range(lo.saturating_sub(3)..=hi) {
                             from_mem(c, w, &mut out);
                         }
@@ -5299,6 +5464,7 @@ impl Run<'_, '_> {
                         for o in std::iter::once(o).chain(os) {
                             self.g.read_obj(obj_cell(o), w, &mut out);
                         }
+                        self.g.read_obj(ANYOBJ_CELL, w, &mut out);
                     }
                     // An I/O read, too.
                     out.unk = true;
@@ -5432,6 +5598,7 @@ impl Run<'_, '_> {
                 // its array (`native/fnref-ram-pointers`).
                 Tok::Ram(0) | Tok::Ram(2) => anywhere = true,
                 Tok::Ram(1) => self.g.store(Store::Cell(STACK_CELL), toks),
+                Tok::Ram(3) => self.g.store(Store::Cell(ANYOBJ_CELL), toks),
                 Tok::Ram(o) => self.g.store(Store::Cell(obj_cell(o)), toks),
                 // In an allocation: its word's cell, or, somewhere in it
                 // (or in any allocation), the site's any-cell.
@@ -5615,7 +5782,7 @@ impl Run<'_, '_> {
                     };
                     match n.map(|n| lo.saturating_add(n.max(1))) {
                         Some(hi) if hi <= end => {
-                            self.g.rd.ranges.push((lo.saturating_sub(3), hi - 1));
+                            self.g.rd.range(lo.saturating_sub(3), hi - 1);
                             for (_, m) in self.g.cells.range(lo.saturating_sub(3)..hi) {
                                 from_mem(m, 4, into);
                             }
@@ -5626,6 +5793,9 @@ impl Run<'_, '_> {
                                 .with(|c| c.borrow().range(o..hi).map(|(&o, _)| o).collect());
                             for o in std::iter::once(o).chain(os).filter(|_| ram_on()) {
                                 self.g.read_obj(obj_cell(o), 4, into);
+                            }
+                            if ram_on() {
+                                self.g.read_obj(ANYOBJ_CELL, 4, into);
                             }
                         }
                         _ => anywhere = true,
@@ -6473,6 +6643,9 @@ fn via(r: Option<Tok>) -> String {
                     format!("a bounded ROM read w{w} of {lo:#010x}..={hi:#010x}")
                 }
                 Src::Obj(STACK_CELL, w) => format!("a read w{w} of the stacks' cell"),
+                Src::Obj(ANYOBJ_CELL, w) => {
+                    format!("a read w{w} of what was stored somewhere in some RAM object")
+                }
                 Src::Obj(k, w) => format!(
                     "a read w{w} of what was stored somewhere in the RAM object at {:#010x}",
                     obj_of_cell(k).unwrap_or(k)
@@ -6865,7 +7038,9 @@ fn follow_heap(
             }
             let r = std::mem::take(&mut run.rets_read);
             reads.insert(f.entry, r);
-            rds.insert(f.entry, std::mem::take(&mut g.rd));
+            let mut rd = std::mem::take(&mut g.rd);
+            rd.settle();
+            rds.insert(f.entry, rd);
             // The memory bound, every 64 functions run.
             ran += 1;
             if ran.is_multiple_of(64) {

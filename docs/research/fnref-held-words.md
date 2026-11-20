@@ -789,6 +789,60 @@ closure's two calls are complete again and the hard hole is gone. With the
 switch on, `just lift-metrics` has no bar over (native-takes 55 words not
 proven, native-irq-hold 58, `ref_unexplained` 48, as off); Metroid stays
 604 proven, 200 not.
+## The RAM switch's cost, as landed
+
+Unit `native/fnref-ram-cost`, 2026-11-20 on quack. With `GBAA_FNREF_RAM`
+on, Metroid's flow took 157 s in 41 rounds at a peak of 1.04 GB against
+main's 33 s in 33 rounds at 0.16 GB, and Emerald's was killed at its 4 GB
+cap in its first round (main: 14 to 18 minutes, 1.05 GB). Where that
+went, in the order found (per-op timers; `perf` gives no call graphs on
+quack, so `eu-stack -i` on a build with line tables, which names inlined
+callers):
+
+- **The ranges a function read, kept with every repeat.** Each load
+  pushed the cells it read to its function's list at every pass over its
+  block, and a kept read each time it was looked at: 175 million entries
+  for 213 thousand ranges on Metroid with the switch on (795 thousand
+  off), held between rounds and walked each round. That was the gigabyte,
+  and Emerald's four. Each is kept once now (`Rd::range`, `Rd::settle`).
+  A cost fix for main's flow too; its results are the same.
+- **Hundreds of reads of single objects' cells in one value.** A read of
+  what was stored somewhere in a RAM object is a `Ref` of its own (object,
+  width, forms), registers held up to a thousand between them, and every
+  shift, compare and call looked through each (shifts: 43 s against 6 off).
+  Three bounds: more than 8 objects pointed into by one value are
+  "somewhere in some object" (`ANYOBJ`, with one cell for stores through
+  it, which a load in any object reads); a load through pointers into more
+  than 4 objects reads every object's cell as one read; more than 4 reads
+  of single objects' cells in a value are reads of every object's. Each
+  makes a value stand for more, never less.
+- **A set built again at each `Ref`** (`Run::split_refs`): a third of
+  Emerald's rounds with the switch on. Gathered and built once; the same
+  sets, off and on.
+
+Tried and not kept: reading only the cells inside a pointer's object
+(exact, but an object as cut today runs over hundreds of globals: a round
+of 100 s on Metroid, the holes tripled).
+
+**Counts**, flow alone, each pair run side by side on one build:
+
+| | off | RAM on |
+|---|---|---|
+| Metroid | 31 s, 33 rounds, 157 MB | 41 s, 35 rounds, 177 MB |
+| Emerald | 557 s (9.3 min), 25 rounds, 1.06 GB | 1,032 s (17.2 min), 28 rounds, 0.91 GB |
+
+(Emerald's two were not one pair: off ran beside an earlier on-run of
+1,076 s. Main before this unit, off: 838 to 977 s.) Metroid's words are 613 proven and 202 not either way, 70 of its 72 sets
+complete, and with the switch off its trace is main's line for line.
+Emerald's 554 indirect calls have 103 complete sets of 4.3 callees on
+average either way. `just lift-metrics`: 0 over, 0 under off; 0 over on
+(`fn_words_not_proven` and `call_fn_four_complete` under their bars on
+four programs).
+
+The switch stays off: it is near main's cost now and still proves nothing
+more on the C programs or Metroid. What it is for is the next unit
+(`native/fnref-ram-pointers`).
+
 ## The heap by allocation site, landed off
 
 Unit `native/fnref-heap-sites`, 2026-11-19 on quack, on main behind

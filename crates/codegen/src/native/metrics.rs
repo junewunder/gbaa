@@ -98,7 +98,15 @@
 //!
 //! Text (`native/lift-text`): `text_notes`, the `// text: …` comments
 //! giving the text a constant points at, where the names files have a text
-//! table (no bar: it should rise; `lines` leaves them out).
+//! table (no bar: it should rise; `lines` leaves them out). Editable text
+//! (`native/lift-text-editable`): `text_statics`, the strings in the
+//! crate's `src/text.rs` (no bar; that module isn't in `lines`), and
+//! `texts_left`, those the code leads to that stay in the ROM.
+//!
+//! Source lines (`native/lift-line-comments`): `line_notes`, the
+//! `// file:line` comments above the statement each source line's first
+//! instruction starts, where the names files have a line table (no bar:
+//! it should rise; `lines` leaves them out).
 //!
 //! I/O registers (`native/lift-io-names`): `io_named`, the constant-address
 //! I/O loads and stores printed by a register's name (`st16(g, REG_IME,
@@ -305,6 +313,8 @@ pub const UNBARRED: &[&str] = &[
     "plain_entry_bodies",
     "closed_tables",
     "text_notes",
+    "line_notes",
+    "text_statics",
     "io_named",
 ];
 

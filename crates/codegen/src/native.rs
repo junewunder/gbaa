@@ -216,6 +216,7 @@ pub mod narrow;
 pub mod rom_data;
 pub mod shape;
 pub mod switch;
+pub mod text_statics;
 pub mod unread;
 
 use globals::{Globals, Layout, Obj, Place};
@@ -227,6 +228,47 @@ use shape::{Shape, Shapes};
 /// ([`Holes::text`]): `// text: sFileScreenTextPointers[2] …: ["Start
 /// Game", …]`. Not lifted code: `lines` leaves these lines out.
 pub const TEXT_NOTE: &str = "// text: ";
+
+/// Whether a printed line is a source line's comment ([`Holes::lines`]):
+/// `// c/switch/main.c:42`, one word ending in `:<line>`. Not lifted code:
+/// `lines` leaves these out, `line_notes` counts them.
+pub fn is_line_note(l: &str) -> bool {
+    l.trim_start()
+        .strip_prefix("// ")
+        .filter(|r| !r.contains(char::is_whitespace))
+        .and_then(|r| r.rsplit_once(':'))
+        .is_some_and(|(f, n)| {
+            !f.is_empty() && !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())
+        })
+}
+
+/// The `[lines]` rows of `map` that start a source line, as `file:line`
+/// by address ([`Holes::lines`]): a row whose text is its predecessor's
+/// (the same line again, as GCC's row per instruction) is left out. A row
+/// with no file takes the source file of the function holding it; one
+/// with neither is left out.
+pub fn line_starts(map: &crate::names::SourceMap) -> BTreeMap<u32, String> {
+    let mut out = BTreeMap::new();
+    let mut last: Option<String> = None;
+    for (&a, l) in &map.lines {
+        let file = l.file.as_deref().or_else(|| {
+            let (&k, f) = map.functions.range(..=a | 1).next_back()?;
+            let start = k & !1;
+            let inside = f.size.is_none_or(|n| u64::from(a - start) < n.max(1));
+            f.src.as_deref().filter(|_| inside)
+        });
+        let Some(file) = file else {
+            last = None;
+            continue;
+        };
+        let t = format!("{file}:{}", l.line);
+        if last.as_ref() != Some(&t) {
+            out.insert(a, t.clone());
+        }
+        last = Some(t);
+    }
+    out
+}
 
 /// The prelude every lifted crate starts with, at the guest layout.
 pub const PRELUDE: &str = include_str!("native/prelude.rs");
@@ -389,6 +431,17 @@ pub struct Holes {
     /// ([`crate::lower::word_note`]; unit `native/lift-text`). Comments
     /// only: `lines` leaves them out, `text_notes` counts them.
     pub text: Option<std::sync::Arc<crate::names::SourceMap>>,
+    /// The same files' line table, where they have one: each row that
+    /// starts a source line, as `file:line` by its instruction's address
+    /// ([`line_starts`]). Its `// c/switch/main.c:42` comment prints above
+    /// the statement that instruction starts, as the mod view's `[lines]`
+    /// notes (unit `native/lift-line-comments`). Comments only: `lines`
+    /// leaves them out, `line_notes` counts them.
+    pub lines: BTreeMap<u32, String>,
+    /// Literals the text module prints in place of the decoded ones, by
+    /// static name (`gbaa-lift --text-edit FILE`; [`text_statics`]): an
+    /// editor's edit, made by the lifter, for a mod's check.
+    pub text_edits: BTreeMap<String, String>,
     /// Where `Ram`'s globals are (`gbaa-lift --layout`): the guest's
     /// offsets, or the play layout's order ([`globals::Layout`]).
     pub layout: Layout,
@@ -974,6 +1027,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let mut konst = Vec::new();
     let mut ranges = Vec::new();
     let mut rom_ranges = Vec::new();
+    // The code's constants and pool words, for its text
+    // (native/lift-text-editable).
+    let mut code_consts = BTreeSet::new();
     for c in &codes {
         for f in c
             .funcs
@@ -986,6 +1042,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 for inst in insts {
                     if let Op::Insn(a) = inst.op {
                         at = a;
+                    }
+                    if let Op::Const(x) | Op::Pool(x) = inst.op {
+                        code_consts.insert(x);
                     }
                     if let Some((a, w)) = const_access(insts, &inst.op) {
                         ram.push((a, w));
@@ -1003,10 +1062,37 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             }
         }
     }
-    let globals = Globals::carve(&ram, &ranges, &holes.names);
+    let mut globals = Globals::carve(&ram, &ranges, &holes.names);
+    // A global the names files type as a struct is that struct, its
+    // accesses its fields (native/lift-struct-globals).
+    if let Some(t) = &holes.types {
+        globals.type_structs(t, &ram, &ranges);
+    }
     // ROM's objects: what the computed loads the value sets bound to ROM
     // reach (native/rom-data-statics).
     let rom_data = RomData::carve(&rom_ranges, rom.len() as u32);
+    // The game's text as statics an editor can change
+    // (native/lift-text-editable).
+    let texts = match &holes.text {
+        Some(map) => text_statics::collect(
+            &codes[0].ctx,
+            map,
+            &code_consts,
+            &rom_data,
+            &holes.text_edits,
+        ),
+        None => text_statics::collect(
+            &codes[0].ctx,
+            &Default::default(),
+            &code_consts,
+            &rom_data,
+            &holes.text_edits,
+        ),
+    };
+    let texts = match texts {
+        Ok(t) => t,
+        Err(e) => panic!("{e}"),
+    };
     let typed_line = holes.types.as_deref().map(|t| typed_fields(t, &konst));
     let flow_ins: Vec<FlowIn> = codes
         .iter()
@@ -1393,7 +1479,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let n_funcs = fns.len();
     let mut main = String::new();
     main.push_str("// Generated by gbaa-lift (crates/codegen/src/native.rs). Don't edit; rerun `just lift`.\n");
-    main.push_str("#![allow(unused_mut, unused_parens, unused_variables, unused_imports, unused_assignments, unreachable_code, unused_labels, non_snake_case, non_upper_case_globals, dead_code, clippy::all)]\n\n");
+    main.push_str("#![allow(unused_mut, unused_parens, unused_variables, unused_imports, unused_assignments, unreachable_code, unused_labels, non_snake_case, non_upper_case_globals, dead_code, long_running_const_eval, clippy::all)]\n\n");
     let mut pre = prelude(holes.layout);
     for (on, flag) in [
         (holes.irq_at_waits, "IRQ_HOLD"),
@@ -1464,10 +1550,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         });
     // The names files' types, declared: like the names' constants, not
     // lifted code, so not in `lines`.
-    let mut type_lines = 0;
+    // The struct globals' structs (`ram_t`, printed with `Ram`) too.
+    let mut type_lines = globals.structs().lines().count();
     if let Some(maps) = &holes.fields {
         let text = fields::module(&maps.types);
-        type_lines = text.lines().count();
+        type_lines += text.lines().count();
         main.push_str(&text);
     }
     let plains: Vec<String> = fns_reached
@@ -1475,6 +1562,13 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .map(|&k| plain(&shapes.shaped, k))
         .collect();
     let mut files = modules::split(main, table, &plains, &out, holes.copies);
+    // The game's text, a module of its own (native/lift-text-editable):
+    // data, so not in `lines`; the prelude patches the ROM with it.
+    let text_module = texts.module();
+    let text_lines = text_module.lines().count();
+    files.files[0].1.push_str("mod text;\n");
+    files.wiring += 1;
+    files.files.push(("text.rs".into(), text_module));
     if !holes.fn_check.is_empty() {
         files
             .files
@@ -1498,6 +1592,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     for h in &hard {
         writeln!(report, "  {h}").unwrap();
     }
+    writeln!(report, "{}", texts.report()).unwrap();
     writeln!(
         report,
         "falls and jumps into another function's entry, run on with the caller's registers and flags: {}{}",
@@ -1783,6 +1878,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 .count()
         })
         .sum();
+    // Nor are the source lines' ([`Holes::lines`]).
+    let line_notes: usize = files
+        .files
+        .iter()
+        .map(|(_, t)| t.lines().filter(|l| is_line_note(l)).count())
+        .sum();
     m.push(
         "lines",
         n(all_lines
@@ -1792,11 +1893,16 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             - type_lines
             - rom_lines
             - io_lines
-            - text_notes),
+            - text_notes
+            - line_notes
+            - text_lines),
     );
     m.push("io_named", soft.io_named);
     m.push("io_unnamed", soft.io_unnamed);
     m.push("text_notes", n(text_notes));
+    m.push("line_notes", n(line_notes));
+    m.push("text_statics", n(texts.texts.len()));
+    m.push("texts_left", n(texts.left.len()));
     m.push("lines_prelude", n(prelude));
     m.push("lines_types", n(type_lines));
     m.push("rom_statics", n(rom_data.len()));
@@ -4944,7 +5050,15 @@ impl FnPrinter<'_, '_> {
         let mut open_mark: Option<(usize, usize, usize)> = None;
         let mut notes = self.text_notes(insts);
         let mut pending: Vec<String> = Vec::new();
-        let flush = |s: &mut String, p: &mut Vec<String>| {
+        // The source line an instruction starts ([`Holes::lines`]), above
+        // the next statement printed; of several before one statement,
+        // the last (the one whose instruction the statement ends with).
+        let holes = self.holes;
+        let mut line: Option<&str> = None;
+        let flush = |s: &mut String, p: &mut Vec<String>, line: &mut Option<&str>| {
+            if let Some(l) = line.take() {
+                writeln!(s, "{ind}// {l}").unwrap();
+            }
             for n in p.drain(..) {
                 writeln!(s, "{ind}{TEXT_NOTE}{n}").unwrap();
             }
@@ -4956,6 +5070,11 @@ impl FnPrinter<'_, '_> {
                     at = a;
                 }
                 continue;
+            }
+            if let Op::Insn(a) = inst.op
+                && let Some(l) = holes.lines.get(&a)
+            {
+                line = Some(l);
             }
             // The text a constant points at, above the next statement
             // printed: its `let`, or one it prints inside. A form may
@@ -4999,7 +5118,7 @@ impl FnPrinter<'_, '_> {
                     continue;
                 }
                 if i == t.run.at() {
-                    flush(&mut s, &mut pending);
+                    flush(&mut s, &mut pending, &mut line);
                     self.mark = direct.filter(|_| closers.is_empty());
                     let m = self.print_switch(t, arms, insts, xs, thumb, &skip);
                     self.mark = None;
@@ -5032,7 +5151,7 @@ impl FnPrinter<'_, '_> {
                 self.soft.dead_flag_writes += u64::from(unread[i]);
             }
             if !matches!(inst.op, Op::Insn(_) | Op::Timing(_) | Op::YieldFlag(..)) {
-                flush(&mut s, &mut pending);
+                flush(&mut s, &mut pending, &mut line);
             }
             let guard = inst.guard.map(|g| self.whole(g));
             let stmt = |s: &mut String, body: String| match &guard {
@@ -7862,13 +7981,37 @@ mod tests {
             text: Some(std::sync::Arc::new(names)),
             ..Holes::parse("").unwrap()
         };
+        // The code's files, and src/text.rs (native/lift-text-editable).
         let text = |h: &Holes| {
             let l = lift(&rom, "t", h);
-            let t: String = l.files.iter().map(|(_, t)| t.as_str()).collect();
-            (t, l.metrics)
+            let t: String = l
+                .files
+                .iter()
+                .filter(|(p, _)| p != "text.rs")
+                .map(|(_, t)| t.as_str())
+                .collect();
+            let statics = l
+                .files
+                .iter()
+                .find(|(p, _)| p == "text.rs")
+                .unwrap()
+                .1
+                .clone();
+            (t, l.metrics, statics)
         };
-        let (t, m) = text(&with);
-        let (plain, pm) = text(&Holes::parse("").unwrap());
+        let (t, m, statics) = text(&with);
+        let (plain, pm, none) = text(&Holes::parse("").unwrap());
+        // The string is a static an edit changes; the constant reads it
+        // where it is, so it may not grow.
+        assert!(
+            statics.contains("pub static TEXT_08000020: Text = Text { at: 0x08000020, slot: 9, grow: false, refs: &[0x18], s: \"HI THERE\" };"),
+            "{statics}"
+        );
+        assert!(none.contains("pub static TEXTS: &[&Text] = &[];"), "{none}");
+        assert_eq!(
+            (m.get("text_statics"), pm.get("text_statics")),
+            (Some(1), Some(0))
+        );
         let note = format!("{TEXT_NOTE}sHello: \"HI THERE\"");
         let at = t.find(&note).unwrap_or_else(|| panic!("{note} in {t}"));
         let next = t[at..].lines().nth(1).unwrap();
@@ -7877,6 +8020,70 @@ mod tests {
         assert_eq!(m.get("text_notes"), Some(1));
         assert_eq!(pm.get("text_notes"), Some(0));
         assert_eq!(m.get("lines"), pm.get("lines"));
+    }
+
+    /// Each source line's first instruction gets the line table's `//
+    /// file:line` above its statement (unit `native/lift-line-comments`):
+    /// a row repeating the line before it prints nothing, a row with no
+    /// file takes its function's; `lines` leaves the comments out, and
+    /// without the table the text is the same but for them.
+    #[test]
+    fn a_source_line_prints_as_a_comment_above_its_statement() {
+        let words = [
+            0xE3A0_0005u32, // mov r0, #5
+            0xE3A0_1403,    // mov r1, #0x03000000
+            0xE581_0000,    // str r0, [r1]
+            0xE3A0_0006,    // mov r0, #6
+            0xE581_0004,    // str r0, [r1, #4]
+            0xEAFF_FFFE,    // b .
+        ];
+        let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let sha = crate::names::sha1_hex(&rom);
+        let map = format!(
+            "[map]\nrom_sha1 = \"{sha}\"\n[functions]\n\
+             0x08000000 = {{ name = \"start\", size = 24, src = \"c/t.c\" }}\n\
+             [lines]\n0x08000000 = 3\n0x08000004 = 3\n0x0800000c = \"c/u.h:4\"\n"
+        );
+        let names = crate::names::SourceMap::from_texts(&sha, &[&map]).unwrap();
+        let starts = line_starts(&names);
+        assert_eq!(
+            starts.into_iter().collect::<Vec<_>>(),
+            [
+                (0x0800_0000, "c/t.c:3".to_string()),
+                (0x0800_000c, "c/u.h:4".to_string())
+            ]
+        );
+        let with = Holes {
+            lines: line_starts(&names),
+            ..Holes::parse("").unwrap()
+        };
+        let text = |h: &Holes| {
+            let l = lift(&rom, "t", h);
+            let t: String = l
+                .files
+                .iter()
+                .filter(|(p, _)| p != "text.rs")
+                .map(|(_, t)| t.as_str())
+                .collect();
+            (t, l.metrics)
+        };
+        let (t, m) = text(&with);
+        let (plain, pm) = text(&Holes::parse("").unwrap());
+        for (note, stored) in [("// c/t.c:3", "0x5"), ("// c/u.h:4", "0x6")] {
+            let at = t.find(note).unwrap_or_else(|| panic!("{note} in {t}"));
+            let next = t[at..].lines().nth(1).unwrap();
+            assert!(next.contains(stored), "{note} then {next}");
+        }
+        let stripped: String = t
+            .lines()
+            .filter(|l| !is_line_note(l))
+            .map(|l| format!("{l}\n"))
+            .collect();
+        assert_eq!(stripped, plain);
+        assert_eq!(m.get("line_notes"), Some(2));
+        assert_eq!(pm.get("line_notes"), Some(0));
+        assert_eq!(m.get("lines"), pm.get("lines"));
+        assert!(!is_line_note("// sp+8: x") && !is_line_note("// r4: keyInput"));
     }
 
     /// A countdown whose register a block after the loop reads stays a
