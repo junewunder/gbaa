@@ -59,6 +59,10 @@ pub(super) struct Org {
     clob: bool,
     /// The direct calls (by call site) whose return left it.
     sites: BTreeSet<u32>,
+    /// On every path, the machine holds a return address in it: a
+    /// callee's entry lr the callee left there ([`Summary::lr_left`]),
+    /// where the lift keeps the caller's value ([`Sum::lr_kept`]).
+    ra: bool,
 }
 
 impl Org {
@@ -75,6 +79,7 @@ impl Org {
             own: self.own || o.own,
             clob: self.clob || o.clob,
             sites: self.sites.union(&o.sites).copied().collect(),
+            ra: self.ra && o.ra,
         }
     }
 }
@@ -214,6 +219,15 @@ pub struct Summary {
     /// entry, the code after a call), and whether r14 held its entry lr
     /// at every such jump. Empty if the run didn't settle.
     pub lr_into: BTreeMap<u32, bool>,
+    /// The registers of r0–r3 (bit `n` for rN) holding its entry lr, and
+    /// nothing else, on every return (`native/lift-frame-gone`): agbcc's
+    /// `pop {r0}; bx r0`; or a callee's it left there, on every return. A
+    /// caller can't read the return address as a
+    /// value (the lift's lr is a stand-in, `RET`), so it isn't a result:
+    /// the lift gives the register back as the caller passed it, and the
+    /// callers' runs take it so ([`Sum::lr_kept`]). 0 if the run stopped
+    /// or didn't settle.
+    pub lr_left: u8,
 }
 
 impl Summary {
@@ -397,6 +411,9 @@ pub(super) struct Sum<'a> {
     /// [`Summary::echoes`] over the returns so far, by r0–r3 (`None`
     /// before the first).
     echo: Option<[Echo; 4]>,
+    /// [`Summary::lr_left`] over the returns so far (`None` before the
+    /// first).
+    lr_left: Option<u8>,
     /// The calls whose callee returns one of r4–r11 as it came in r0–r3
     /// ([`Summary::echoes`]), by site: for each of r0–r3, the registers
     /// of r4–r11 (bit `n - 4` for rN) whose entry values this function's
@@ -499,6 +516,7 @@ impl<'a> Sum<'a> {
             entry_reads: BTreeSet::new(),
             passes: BTreeSet::new(),
             echo: None,
+            lr_left: None,
             echo_at: BTreeMap::new(),
             masked: BTreeSet::new(),
             frames: 0,
@@ -538,6 +556,25 @@ impl<'a> Sum<'a> {
             }
         }
         (p, x)
+    }
+
+    /// The registers of r0-r3 (bit `n` for rN) the call at `site` to
+    /// `callee` leaves as they were: those every callee it may reach (its
+    /// own, or an indirect call's complete set) holds only its entry lr
+    /// in on return ([`Summary::lr_left`]), which the lift gives back as
+    /// passed. None for a stand-in's callee, nor an unknown one.
+    pub(super) fn lr_kept(&self, site: u32, callee: Option<u32>) -> u8 {
+        let ts = self.targets(site, callee);
+        if ts.is_empty() {
+            return 0;
+        }
+        ts.iter().fold(0xf, |m, c| {
+            let lr = match self.sums.get(c) {
+                Some(s) if !self.passing.replaced.contains(c) && s.returns => s.lr_left,
+                _ => 0,
+            };
+            m & lr
+        })
     }
 
     /// The functions the call at `site` to `callee` may reach whose
@@ -628,6 +665,7 @@ impl<'a> Sum<'a> {
         let Some(i) = slot(r) else { return };
         if guarded {
             s.org[i].own = true;
+            s.org[i].ra = false;
         } else {
             s.org[i] = Org {
                 own: true,
@@ -712,10 +750,18 @@ impl<'a> Sum<'a> {
             s.regs[r] = V::Other;
             s.chg[r - 4] = callee.expect("a direct call");
         }
-        for (o, x) in s.org.iter_mut().zip(exit) {
+        // A register the callee holds only its entry lr in is the
+        // caller's still ([`Sum::lr_kept`]).
+        let kept = self.lr_kept(at, callee);
+        for (i, (o, x)) in s.org.iter_mut().zip(exit).enumerate() {
+            if i < 4 && kept & 1 << i != 0 {
+                o.ra = true;
+                continue;
+            }
             let mut n = if x.entry { o.clone() } else { Org::default() };
             if x.def || x.clob {
                 n.sites.insert(at);
+                n.ra = false;
             }
             *o = n;
         }
@@ -885,6 +931,11 @@ impl<'a> Sum<'a> {
             v if v.taint().is_some() => Echo::Mixed,
             _ => Echo::Clean,
         });
+        // Its entry lr, or a callee's it left there.
+        let lr = (0..4).fold(0u8, |m, r| {
+            m | u8::from(s.regs[r] == V::Entry(14) || s.org.get(r).is_some_and(|o| o.ra)) << r
+        });
+        self.lr_left = Some(self.lr_left.map_or(lr, |m| m & lr));
         self.echo = Some(match self.echo {
             Some(e) => std::array::from_fn(|r| e[r].join(now[r])),
             None => now,
@@ -1240,6 +1291,7 @@ pub fn summarize_passing(
                 .collect(),
             lr_returns,
             lr_into,
+            lr_left: sum.lr_left.filter(|_| settled && !sum.stopped).unwrap_or(0),
         };
         for &c in &sum.refs {
             callers.entry(c).or_default().insert(k);
@@ -1266,6 +1318,7 @@ pub fn summarize_passing(
             || old.changes != new.changes
             || old.takes != new.takes
             || old.echoes != new.echoes
+            || old.lr_left != new.lr_left
             || old.returns != new.returns
             || Sum::lost(old) != Sum::lost(&new);
         sums.insert(k, new);

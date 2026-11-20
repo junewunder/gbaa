@@ -1098,6 +1098,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .map(|(&k, _)| k)
         .collect();
     let lr_ret = lr_entries(&codes, &all, holes);
+    let sp_exact = exact_sp(&codes, &all, holes, &sets, &psr_fns);
     // Each function's text by key, in print order: the modules' contents.
     let mut out: Vec<(u32, String)> = Vec::new();
     let mut report = String::new();
@@ -1174,6 +1175,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     banked: BTreeMap::new(),
                     field_at: BTreeMap::new(),
                     inl: Vec::new(),
+                    frameless: false,
+                    sp_exact: sp_exact.contains(&f.entry),
                     printed: BTreeSet::new(),
                     fall: None,
                     tail_edge: false,
@@ -1571,6 +1574,21 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         frames.iter().map(|f| f.flush.len()).sum::<usize>(),
     )
     .unwrap();
+    writeln!(
+        report,
+        "frames gone (native/lift-frame-gone): {} functions keep nothing of their frame in memory and print no sp arithmetic, {} of them still passing sp on (a callee's or a BIOS call's frame, bank_sp); {} more with no slot escaping keep their sp arithmetic to pass sp on as the guest has it, to code whose frame escapes (stored stack addresses the native check holds to the guest's), {} print sp arithmetic for no such reason; {} stack locals left out, written and never read; {} functions return their entry lr{}",
+        soft.frameless,
+        soft.frameless_pass_sp,
+        soft.sp_arith_exact,
+        soft.sp_arith_unescaped,
+        soft.locals_unread,
+        soft.lr_returned.len(),
+        soft.lr_returned
+            .iter()
+            .map(|k| format!(" {k:#010x}"))
+            .collect::<String>(),
+    )
+    .unwrap();
     if !soft.traps.is_empty() {
         let at: BTreeSet<u32> = soft.traps.iter().copied().collect();
         let at: Vec<String> = at.iter().map(|a| format!("{a:#010x}")).collect();
@@ -1714,6 +1732,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // `bank_sp` calls printed: one per run of stores at one sp
     // (native/lift-bank-sp-once).
     m.push("bank_sp_calls", soft.bank_sp_calls);
+    // Frames gone (native/lift-frame-gone): functions printing sp
+    // arithmetic though no slot of their frame escapes, and functions
+    // returning a register that holds only their entry lr (both barred).
+    m.push("sp_arith_unescaped", n(soft.sp_arith_unescaped));
+    m.push("lr_returned", n(soft.lr_returned.len()));
     // The `let`s of IR values printed (native/lift-inline-temps): a pure
     // value used once, or a constant, prints inside its use instead.
     m.push("value_lets", soft.value_lets);
@@ -2434,6 +2457,159 @@ fn lr_entries(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> BTreeSet<u3
     }
 }
 
+/// The functions that pass sp on to code needing the guest's sp exactly
+/// (`native/lift-frame-gone`), whose sp arithmetic stays printed though
+/// nothing of their frame is in memory: a frameless function's callees
+/// run on its entry sp, and one whose frame escapes stores addresses in
+/// it (a pointer to a local, in a global), which the native check holds
+/// to the guest's. Code needs sp exactly where its own frame escapes (or
+/// sp loses its offset, or it switches stacks, or writes its locals to
+/// the frame for a callee), it is a stand-in or has no frame, or it
+/// passes sp on to such code: a call, a tail call or fall, a call by value
+/// to one of a complete callee set (to any function if the set isn't
+/// complete); or, where the IRQ handlers need it (an IRQ wrapper's own
+/// code does), a BIOS call, an idle loop's edge or a store that may reach
+/// I/O, where `bank_sp` gives the handlers the stack they run on.
+fn exact_sp(
+    codes: &[Code],
+    all: &BTreeSet<u32>,
+    holes: &Holes,
+    sets: &Sets,
+    psr: &PsrFns,
+) -> BTreeSet<u32> {
+    // What each function passes sp on to.
+    #[derive(Default)]
+    struct Passes {
+        to: BTreeSet<u32>,
+        unknown: bool,
+        irq: bool,
+        own: bool,
+    }
+    let mut fns: BTreeMap<u32, Passes> = BTreeMap::new();
+    for c in codes {
+        for f in &c.funcs {
+            let mut p = Passes::default();
+            let frame = c.frames.get(&f.entry);
+            p.own = holes.standins.contains_key(&f.entry)
+                || frame.is_none_or(|fr| {
+                    fr.lost
+                        || fr.escaping() > 0
+                        || !fr.flush.is_empty()
+                        || !fr.switches.is_empty()
+                        || !fr.fresh.is_empty()
+                });
+            let sum = c.sums.get(f.entry);
+            for (&k, gb) in &f.blocks {
+                for x in exits(&c.ctx, gb) {
+                    let mut callee = |t: u32| {
+                        if !f.blocks.contains_key(&t) {
+                            if all.contains(&t) {
+                                p.to.insert(t);
+                            } else {
+                                p.unknown = true;
+                            }
+                        }
+                    };
+                    match x.plan {
+                        Plan::Call { target, .. } => callee(target),
+                        Plan::Static(t) | Plan::Rekey(t) => {
+                            if !f.blocks.contains_key(&t) && all.contains(&t) {
+                                p.to.insert(t);
+                            }
+                        }
+                        Plan::Dynamic {
+                            ret: Some(_),
+                            target: Some(t),
+                            ..
+                        } if all.contains(&t) => callee(t),
+                        Plan::CallVia { .. } | Plan::Dynamic { ret: Some(_), .. } => {
+                            match sets.get(&x.at) {
+                                Some(cs) => cs.iter().for_each(|&t| callee(t)),
+                                None => p.unknown = true,
+                            }
+                        }
+                        Plan::Dynamic {
+                            ret: None, target, ..
+                        } => {
+                            if sum.is_some_and(|s| s.lr_returns.contains(&x.at)) {
+                                continue;
+                            }
+                            let thumb = gb.block.thumb;
+                            match dyn_targets(&c.ctx, holes, x.at, thumb, target) {
+                                Ok(ts) => ts.into_iter().for_each(&mut callee),
+                                Err(_) => p.unknown = true,
+                            }
+                            if !closed_jump(&c.ctx, x.at, thumb) {
+                                p.unknown = true;
+                            }
+                        }
+                        Plan::Swi { .. } => p.irq = true,
+                        Plan::Undefined { .. } => {}
+                    }
+                    if x.idle != Idle::No {
+                        p.irq = true;
+                    }
+                }
+                let insts = &gb.block.insts;
+                for (i, inst) in insts.iter().enumerate() {
+                    let Op::Store { addr, .. } = inst.op else {
+                        continue;
+                    };
+                    let stack = frame
+                        .and_then(|fr| fr.places.get(&(k, i)))
+                        .is_some_and(|pl| matches!(pl, frame::Place::Exact(..)));
+                    let not_io = konst(insts, addr)
+                        .is_some_and(|a| metrics::REGIONS[metrics::region(a)] != "io");
+                    if !stack && !not_io {
+                        p.irq = true;
+                    }
+                }
+            }
+            fns.insert(f.entry, p);
+        }
+    }
+    let exact = |irq: bool| -> BTreeSet<u32> {
+        let mut set: BTreeSet<u32> = fns
+            .iter()
+            .filter(|(_, p)| p.own || p.unknown || (irq && p.irq))
+            .map(|(&k, _)| k)
+            .collect();
+        // A callee nothing is known of (not lifted) needs it too.
+        loop {
+            let more: Vec<u32> = fns
+                .iter()
+                .filter(|(k, p)| {
+                    !set.contains(k) && p.to.iter().any(|t| set.contains(t) || !fns.contains_key(t))
+                })
+                .map(|(&k, _)| k)
+                .collect();
+            if more.is_empty() {
+                return set;
+            }
+            set.extend(more);
+        }
+    };
+    let mut irq = false;
+    loop {
+        let set = exact(irq);
+        let now = psr.wrappers.iter().any(|w| set.contains(w));
+        if now == irq {
+            // Those that pass it on: all but the ones needing it for their
+            // own frame alone.
+            return fns
+                .iter()
+                .filter(|(_, p)| {
+                    p.unknown
+                        || (irq && p.irq)
+                        || p.to.iter().any(|t| set.contains(t) || !fns.contains_key(t))
+                })
+                .map(|(&k, _)| k)
+                .collect();
+        }
+        irq = now;
+    }
+}
+
 /// One context's functions, summaries and frames. `named`: the indirect
 /// calls a holes file's `[[takes]]` names, where a stack address in a
 /// register the callees take escapes.
@@ -2475,6 +2651,22 @@ struct Soft {
     /// Stack locals, and the functions with any.
     local_slots: usize,
     local_fns: usize,
+    /// Functions with nothing of their frame in memory
+    /// ([`Frame::in_locals`]; native/lift-frame-gone), which print no sp
+    /// arithmetic; those of them whose printed code still passes sp on
+    /// (to a callee, a BIOS call, `bank_sp`); the functions that print sp
+    /// arithmetic though no slot of theirs escapes (barred); and those
+    /// that return a register holding only their entry lr (barred).
+    frameless: usize,
+    frameless_pass_sp: usize,
+    sp_arith_unescaped: usize,
+    /// Functions no slot of whose frame escapes that print sp arithmetic
+    /// to pass sp on exactly ([`exact_sp`]).
+    sp_arith_exact: usize,
+    lr_returned: Vec<u32>,
+    /// Stack locals left out: written, never read (a callee-saved
+    /// register's or lr's save whose restore nothing reads).
+    locals_unread: usize,
     /// The `--plant-slot` store printed.
     planted_slot: bool,
     /// Conditions resting on a raw flag ([`cond::raw`]).
@@ -2692,6 +2884,12 @@ struct FnPrinter<'a, 'b> {
     /// The current block's values printed inside their use, by value:
     /// their expressions ([`FnPrinter::inline`]; `None`, a `let`).
     inl: Vec<Option<String>>,
+    /// Nothing of its frame is in memory ([`FnPrinter::is_frameless`]):
+    /// set as the function starts printing.
+    frameless: bool,
+    /// It passes sp on to code needing the guest's exactly ([`exact_sp`]):
+    /// its sp arithmetic stays.
+    sp_exact: bool,
 }
 
 /// Whether an untyped store at `w` ([`FnPrinter::vsa_where`]) may reach
@@ -2827,6 +3025,7 @@ impl FnPrinter<'_, '_> {
     fn print(&mut self, sum: Option<&Summary>) -> String {
         let f = self.f;
         self.starts = self.starts();
+        self.frameless = self.is_frameless();
         let mut s = String::new();
         match sum {
             Some(sum) if sum.holes.is_empty() => {
@@ -2950,6 +3149,7 @@ impl FnPrinter<'_, '_> {
                 writeln!(s, "{l}").unwrap();
             }
             s.push_str("}\n\n");
+            self.frame_gone(&mut s, head, sum);
             let e = self.entries(&s[head..], &ty);
             s.insert_str(head, &e);
             return s;
@@ -2966,9 +3166,132 @@ impl FnPrinter<'_, '_> {
             s.push_str(&self.arm(label));
         }
         s.push_str("            _ => unreachable!(),\n        }\n    }\n}\n\n");
+        self.frame_gone(&mut s, head, sum);
         let e = self.entries(&s[head..], &ty);
         s.insert_str(head, &e);
         s
+    }
+
+    /// Whether nothing of the function's frame is in memory
+    /// ([`Frame::in_locals`]; native/lift-frame-gone): its sp arithmetic
+    /// isn't printed, so its callees run on its entry sp. Not where it
+    /// passes sp on to code needing the guest's exactly ([`exact_sp`]),
+    /// in the reset or an IRQ wrapper (their `msr` banks sp), nor with
+    /// `--shadow-locals` (the shadow keeps the frame's bytes).
+    fn is_frameless(&self) -> bool {
+        !self.sp_exact
+            && self.psr.is_none()
+            && !self.holes.shadow_locals
+            && self.frame.is_some_and(|f| f.in_locals(&self.locals))
+    }
+
+    /// After the body printed (`s` from `head`, the locals' declarations
+    /// first; native/lift-frame-gone): leaves out each word local that is
+    /// written and never read (lr's or a callee-saved register's save,
+    /// whose restore nothing reads), its declaration too, unless the
+    /// frame's bytes may be read for it (`--shadow-locals`, a call that
+    /// writes the locals to the frame); and the writes of lr (a call's
+    /// return address) where nothing reads it; and counts what the metrics bar:
+    /// sp arithmetic printed though no slot escapes, an entry lr returned.
+    fn frame_gone(&mut self, s: &mut String, head: usize, sum: Option<&Summary>) {
+        let shadowed = self.holes.shadow_locals || self.frame.is_some_and(|f| !f.flush.is_empty());
+        // `name = value;`, alone or under a guard, or (a local's) its
+        // declaration: the lines of `body` that go with `names`.
+        let without = |body: &str, names: &[String]| -> String {
+            let gone = |line: &str| {
+                let t = line.trim();
+                let t = t
+                    .strip_prefix("if ")
+                    .and_then(|t| t.split_once(" { "))
+                    .and_then(|(_, t)| t.strip_suffix(" }"))
+                    .unwrap_or(t);
+                names.iter().any(|n| {
+                    t.strip_prefix(n.as_str())
+                        .and_then(|t| t.strip_prefix(" = "))
+                        .is_some_and(|v| v.ends_with(';') && !v[..v.len() - 1].contains(';'))
+                        || t.strip_prefix("let mut ")
+                            .and_then(|t| t.strip_prefix(n.as_str()))
+                            .is_some_and(|t| t == ": u32 = 0;")
+                })
+            };
+            body.split_inclusive('\n').filter(|l| !gone(l)).collect()
+        };
+        // The word locals nothing reads, then lr (its writes before calls)
+        // if nothing reads it once its save is gone.
+        let mut body = s[head..].to_string();
+        let before = body.len();
+        let mut locals_gone = 0;
+        if !shadowed {
+            let unread: Vec<String> = self
+                .locals
+                .iter()
+                .filter(|l| l.word)
+                .map(Local::name)
+                .filter(|n| !reads_name(&body, n))
+                .collect();
+            locals_gone = unread.len();
+            body = without(&body, &unread);
+        }
+        if !reads_name(&body, "r14") {
+            body = without(&body, &["r14".to_string()]);
+        }
+        // A value let for a write gone, nothing reads now: a register's (a
+        // save, `mov r3, r8; push {r3}`; lr's, `mov lr, r9`) goes; a
+        // load's (an `ldm` into locals nothing reads) stays a bus access,
+        // as the printer leaves any load nothing reads.
+        if body.len() != before {
+            let dead: Vec<usize> = unread::unread_at(&body);
+            let mut at = 0;
+            let mut kept = String::with_capacity(body.len());
+            for l in body.split_inclusive('\n') {
+                let name = at + l.find("let ").map_or(0, |p| p + 4);
+                at += l.len();
+                let parts = l
+                    .trim()
+                    .strip_prefix("let ")
+                    .and_then(|t| t.split_once(": u32 = "))
+                    .and_then(|(v, e)| Some((v, e.strip_suffix(';')?)))
+                    .filter(|(v, _)| plain_value(v) && dead.binary_search(&name).is_ok());
+                let Some((_, e)) = parts else {
+                    kept.push_str(l);
+                    continue;
+                };
+                let reg = e
+                    .strip_prefix('r')
+                    .is_some_and(|d| !d.is_empty() && d.bytes().all(|b| b.is_ascii_digit()));
+                let load = ["ld8(", "ld16(", "ld32("].iter().any(|f| e.starts_with(f));
+                if load {
+                    let ind = &l[..l.len() - l.trim_start().len()];
+                    writeln!(kept, "{ind}{e};").unwrap();
+                } else if !reg {
+                    kept.push_str(l);
+                }
+            }
+            body = kept;
+        }
+        s.truncate(head);
+        s.push_str(&body);
+        self.soft.locals_unread += locals_gone;
+        self.soft.local_slots -= locals_gone;
+        if locals_gone > 0 && locals_gone == self.locals.len() {
+            self.soft.local_fns -= 1;
+        }
+        let body = &s[head..];
+        let arith = body.lines().any(|l| l.contains("r13 = r13."));
+        if self.frameless {
+            self.soft.frameless += 1;
+            self.soft.frameless_pass_sp += usize::from(reads_name(body, "r13"));
+        } else if self.frame.is_some_and(|f| !f.lost && f.escaping() == 0) && arith {
+            if self.sp_exact {
+                self.soft.sp_arith_exact += 1;
+            } else {
+                self.soft.sp_arith_unescaped += 1;
+            }
+        }
+        let lr = sum.filter(|s| s.returns).map_or(0, |s| s.lr_left);
+        if lr & self.returned() != 0 {
+            self.soft.lr_returned.push(self.f.entry);
+        }
     }
 
     /// The function's entries and the start of its body
@@ -3013,12 +3336,24 @@ impl FnPrinter<'_, '_> {
                 "false",
             )
         });
+        // A four-register function gives back as passed each of r0-r3
+        // holding only its entry lr on every return ([`FnPrinter::ret`]):
+        // taken, and kept as it came in `e<n>`.
+        let kept = if self.me.is_none() { self.lr_left() } else { 0 };
+        let keep_lines: String = (0..4)
+            .filter(|r| kept & 1 << r != 0)
+            .map(|r| format!("    let e{r}: u32 = r{r};\n"))
+            .collect();
         for (i, name, bit, zero) in regs.chain(flags) {
-            if !words.contains(&name) {
+            let keep = i < 4 && kept & 1 << i != 0;
+            if !words.contains(&name) && !keep {
                 continue;
             }
             let m = if written.contains(&name) { "mut " } else { "" };
-            if live & bit != 0 || name == "r13" {
+            // Live as liveness has it, and read in the text: a stack local
+            // written and never read is left out after liveness ran
+            // ([`FnPrinter::frame_gone`]), and with it a save's read.
+            if (live & bit != 0 && reads_name(body, &name)) || name == "r13" || keep {
                 self.soft.unpacked += 1;
                 taken.push((i, m, name));
             } else {
@@ -3026,8 +3361,14 @@ impl FnPrinter<'_, '_> {
             }
         }
         // The check of that, on the text alone: a register taken that the
-        // printed code never reads.
-        self.soft.unpacked_unread += taken_unread(body, taken.iter().map(|t| t.2.as_str()));
+        // printed code never reads (one kept as `e<n>` is read there).
+        self.soft.unpacked_unread += taken_unread(
+            body,
+            taken
+                .iter()
+                .filter(|t| !(t.0 < 4 && kept & 1 << t.0 != 0))
+                .map(|t| t.2.as_str()),
+        );
         let let_line = |names: Vec<String>, from: Vec<String>| match &names[..] {
             [] => String::new(),
             [n] => format!("    let {n} = {};\n", from[0]),
@@ -3117,6 +3458,7 @@ impl FnPrinter<'_, '_> {
                 from.push(z);
             }
             s.push_str(&let_line(names, from));
+            s.push_str(&keep_lines);
             return s;
         }
         if !taker {
@@ -3193,6 +3535,7 @@ impl FnPrinter<'_, '_> {
             from.push(z);
         }
         s.push_str(&let_line(names, from));
+        s.push_str(&keep_lines);
         s
     }
 
@@ -3326,7 +3669,7 @@ impl FnPrinter<'_, '_> {
             .values()
             .map(|gb| &gb.block.insts[..])
             .collect();
-        let results = live::low(self.me.map_or(0xf, |m| m.results));
+        let results = live::low(self.returned());
         let out = |b: usize, i: usize| {
             let Some(x) = xs[b].iter().find(|x| x.index == i) else {
                 return (Vec::new(), live::ALL);
@@ -4169,10 +4512,17 @@ impl FnPrinter<'_, '_> {
         let keep = self.holes.keep_dead_writes;
         // A `for`'s step, which its range takes the place of.
         let step = self.steps.get(&self.cur).copied();
+        // A frame nothing is in memory of prints no sp arithmetic
+        // (native/lift-frame-gone).
+        let frameless = self.frameless;
         let skip: Vec<bool> = unread
             .iter()
             .enumerate()
-            .map(|(i, &u)| (u && !keep) || step == Some(i))
+            .map(|(i, &u)| {
+                (u && !keep)
+                    || step == Some(i)
+                    || (frameless && matches!(insts[i].op, Op::SetReg(r, _) if r.index() == 13))
+            })
             .collect();
         // A compare tree at the block's end prints as a `match`: its
         // tests' guards aren't printed, its register and flag writes are
@@ -4444,6 +4794,9 @@ impl FnPrinter<'_, '_> {
                         Width::Word => ("ld32", " & !3"),
                     };
                     let mem = match (&typed[i], &objs[i], refs[i]) {
+                        _ if let Some(o) = self.callers_off(i) => {
+                            format!("{f}(g, {}{m})", callers_addr(o))
+                        }
                         (Some(p), _, _) => globals::load(p, bytes(width)),
                         (None, Some(o), _) => {
                             o.load(&format!("{}{m}", self.val(addr)), bytes(width))
@@ -4517,6 +4870,9 @@ impl FnPrinter<'_, '_> {
                     // One term: a field's store casts it (`{val} as u16`).
                     let val = format!("{}{plant}", self.val(value));
                     let mem = match (&typed[i], &objs[i], refs[i]) {
+                        _ if let Some(o) = self.callers_off(i) => {
+                            format!("{f}(g, {}{m}, {val});", callers_addr(o))
+                        }
                         (Some(p), _, _) => globals::store(p, bytes(width), &val),
                         (None, Some(o), _) => {
                             o.store(&format!("{}{m}", self.val(addr)), bytes(width), &val)
@@ -4785,12 +5141,13 @@ impl FnPrinter<'_, '_> {
                 .frame
                 .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
         let field = typed[i].is_some();
+        let callers = self.callers_off(i).is_some();
         let base = refs[i].and_then(|r| r.base).map(|(b, _)| b);
         let ops = match inst.op {
             // Printed as nothing.
             Op::Timing(_) | Op::YieldFlag(..) => return Vec::new(),
-            Op::Load { .. } if local || field => Vec::new(),
-            Op::Store { value, .. } if local || field => vec![value],
+            Op::Load { .. } if local || field || callers => Vec::new(),
+            Op::Store { value, .. } if local || field || callers => vec![value],
             Op::Load { .. } if base.is_some() => base.into_iter().collect(),
             Op::Store { value, .. } if base.is_some() => base.into_iter().chain([value]).collect(),
             _ if let Some(f) = &conds[i] => f.uses.clone(),
@@ -5269,6 +5626,16 @@ impl FnPrinter<'_, '_> {
         out
     }
 
+    /// In a frameless function, the offset from its entry sp of the
+    /// access at inst `i` of the current block, if it is into the
+    /// caller's frame ([`Frame::callers_only`]): printed from `r13`, the
+    /// entry sp, as no sp arithmetic is.
+    fn callers_off(&self, i: usize) -> Option<i32> {
+        self.frame
+            .filter(|_| self.frameless)
+            .and_then(|f| f.callers_only(self.cur, i))
+    }
+
     /// The stack local the access at inst `i` of the current block lands
     /// in, if any ([`Frame::local_at`]), counted.
     fn local(&mut self, i: usize) -> Option<(Local, u32, u8)> {
@@ -5502,12 +5869,38 @@ impl FnPrinter<'_, '_> {
         }
     }
 
+    /// The registers of r0-r3 (bit `n` for rN) its summary shows hold
+    /// its entry lr only on every return ([`Summary::lr_left`]): no value.
+    fn lr_left(&self) -> u8 {
+        self.sums
+            .get(self.f.entry)
+            .filter(|s| s.returns)
+            .map_or(0, |s| s.lr_left)
+    }
+
+    /// The registers of r0-r3 its returns give back: a shaped function's
+    /// results; a four-register one's four, but one holding its entry lr
+    /// only ([`FnPrinter::lr_left`]), which it gives back as passed, as a
+    /// shaped one does each register that isn't a result (the summaries'
+    /// callers take it so: `Sum::lr_kept`).
+    fn returned(&self) -> u8 {
+        self.me.map_or(0xf & !self.lr_left(), |sh| sh.results)
+    }
+
     /// The return statement.
     fn ret(&self) -> String {
+        let returned = self.returned();
         let e = match self.me {
             None => format!(
                 "[{}]",
-                (0..4).map(|r| self.reg(r)).collect::<Vec<_>>().join(", ")
+                (0..4)
+                    .map(|r| if returned & 1 << r != 0 {
+                        self.reg(r)
+                    } else {
+                        format!("e{r}")
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
             Some(s) => self.regs_value(s.results),
         };
@@ -6171,6 +6564,9 @@ fn call_fn_text(k: &str, pass: u8, back: u8) -> String {
     if back == 0xf {
         return format!("[r0, r1, r2, r3] = {call};");
     }
+    if back == 0 {
+        return format!("{{ {call}; }}");
+    }
     let set: Vec<String> = shape::regs(back)
         .map(|r| format!(" r{r} = o[{r}];"))
         .collect();
@@ -6407,6 +6803,16 @@ fn pure(op: &Op) -> bool {
 /// it the byte is.
 fn local_addr(l: &Local, d: u32) -> String {
     format!("sp0.wrapping_sub({:#x})", (-l.lo) as u32 - d)
+}
+
+/// The address of the caller's frame `o` bytes above the entry sp, in a
+/// frameless function (`r13` is its entry sp: [`FnPrinter::callers_off`]).
+fn callers_addr(o: i32) -> String {
+    if o == 0 {
+        "r13".into()
+    } else {
+        format!("r13.wrapping_add({o:#x})")
+    }
 }
 
 /// A load of `n` bytes at byte `d` of stack local `l`, as a `u32`.
@@ -7226,6 +7632,11 @@ mod tests {
         assert_eq!(
             call_fn_text("k", 0xf, 0xf),
             "[r0, r1, r2, r3] = call_fn(g, k, r13, [r0, r1, r2, r3])?;"
+        );
+        // Nothing back (each callee leaves only its lr in r0).
+        assert_eq!(
+            call_fn_text("k", 0b0001, 0),
+            "{ call_fn(g, k, r13, [r0, 0, 0, 0])?; }"
         );
     }
 

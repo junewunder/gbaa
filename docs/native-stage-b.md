@@ -202,6 +202,29 @@ local), so locals need an escape analysis first.
   every local in the frame's bytes too and prints `shadow local:` where a
   load differs (how to run it: `docs/tools/commands.md`).
 
+- **A frame nothing points into leaves no sp or lr behind**
+  (`native/lift-frame-gone`). Done: a function none of whose frame is in
+  memory (no slot escapes, every sp-relative access a Rust local or a
+  stack argument at or above its entry sp: `Frame::in_locals`) prints no
+  sp arithmetic, reads its stack arguments at `r13` plus their offset,
+  and its callees run on its entry sp; unless it passes sp on to code
+  that needs the guest's sp exactly (`exact_sp`: code whose frame
+  escapes stores stack addresses, which the native check holds to the
+  guest's; through a call, a callee set, or `bank_sp` where the IRQ
+  handlers need it), which keeps its arithmetic until frames escaping
+  as `&mut` (typed pointers) take those addresses out of memory. A word local written and never
+  read (a save of lr or of r4-r11 whose restore nothing reads) is left
+  out, and so are lr's writes before calls where nothing reads lr. A
+  register of r0-r3 holding only the entry lr on every return
+  (`Summary::lr_left`: agbcc's `pop {r0}; bx r0`), or what a callee left
+  of its own, isn't a result: shaped functions don't return it, a
+  four-register one gives it back as passed, and callers' summaries keep
+  their value across the call (`Sum::lr_kept`). Metrics
+  `sp_arith_unescaped` (but for that reason) and `lr_returned`, both 0
+  (barred); the report's `frames gone` line counts the frameless
+  functions, those of them still passing sp on, and those that keep their
+  arithmetic to pass it exactly.
+
 Escaping slots passed as `&mut` (the design's section 1 form 1) come with
 typed pointers, below; until then they are soft holes, counted.
 

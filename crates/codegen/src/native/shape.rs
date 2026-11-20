@@ -35,7 +35,9 @@
 //!
 //! A result it may leave as it came on some paths (its entry value) is a
 //! parameter too, so that path returns what the caller passed. A register
-//! it never changes isn't a result: the caller's value stands.
+//! it never changes isn't a result: the caller's value stands; nor is one
+//! that holds only its entry lr on every return ([`Summary::lr_left`]:
+//! agbcc's `pop {r0}; bx r0`), the return address, no value.
 
 use crate::func::{Ctx, Func, Plan, exits};
 use crate::saves::{Summaries, Summary};
@@ -279,7 +281,9 @@ fn shape(s: &Summary, demand: u8) -> Shape {
             changed |= 1 << r;
         }
     }
-    let results = demand & changed | s.results as u8 & 0xf;
+    // The entry lr left in a register (agbcc's `pop {r0}; bx r0`) is
+    // no value a caller reads (`native/lift-frame-gone`).
+    let results = (demand & changed | s.results as u8 & 0xf) & !s.lr_left;
     Shape {
         params: s.params | results & entry,
         results,
