@@ -147,6 +147,13 @@ build for the host.
   Result<u32, Exit>` (`()`, `u32` or a tuple), with a four-register
   adapter `a_<key>` for `FNS` and `ENTRY`; four-register functions
   without a summary hole are 0 (bar 0).
+- **No `Result` where nothing exits** (`native/lift-no-exit-result`).
+  Done (`codegen::native::no_result`): a function with no wait, `call_fn`,
+  BIOS call or stand-in on any path, itself or through a callee, returns
+  its value as it is and its calls have no `?`; its adapter (a closure in
+  `FNS` for a four-register one) takes it in `Ok`. Stand-ins and checked
+  functions keep their `Result`. Metric `functions_result_unneeded`, those
+  still returning one that can't exit (bar 0).
 - **Function addresses followed to every use** (`native/fnref-flow`).
   Done (`crates/codegen/src/native/fnref.rs`, whose module doc is the
   rule and the closed world it rests on): a whole-program abstract run

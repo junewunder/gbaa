@@ -66,7 +66,11 @@
 //!   or a stand-in calls it by name). A function whose summary has a hole (or rests on a
 //!   callee's that stopped) keeps stage A's four-register form,
 //!   `f_<key>(g, sp, a: [u32; 4]) -> Result<[u32; 4], Exit>`, with the
-//!   summary printed above it.
+//!   summary printed above it. One that can't exit, itself or through a
+//!   callee (no wait, `call_fn` or BIOS call on any path), returns its
+//!   value with no `Result`, and its calls have no `?` ([`no_result`],
+//!   unit `native/lift-no-exit-result`); its adapter, or for a
+//!   four-register one a closure in `FNS`, takes it in `Ok`.
 //! - Registers and NZCV are Rust locals; each block's IR values are `let`s.
 //!   A write of one nothing reads after it is left out ([`live`], unit
 //!   `native/lift-dead-writes`: a return reads its results, a call its
@@ -1375,6 +1379,19 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         _ => all.clone(),
     };
     let entries_extra = one_entry(&mut out, &soft.entries, &reach, &holes.fn_names);
+    // Functions that can't exit return no `Result` (unit
+    // `native/lift-no-exit-result`); a stand-in's and a checked
+    // function's text is the holes file's or the check's, so they keep it.
+    let forced: BTreeSet<u32> = holes
+        .standins
+        .keys()
+        .chain(holes.fn_check.keys())
+        .copied()
+        .collect();
+    let printed = out.len();
+    let never = cannot_exit(&out, &forced);
+    no_result(&mut out, &never);
+    let plain = |k: u32| plain(&shapes.shaped, &never, k);
     let fns_reached: Vec<u32> = fns.iter().copied().filter(|k| reach.contains(k)).collect();
     let mut table = String::new();
     writeln!(
@@ -1384,7 +1401,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     )
     .unwrap();
     for k in &fns_reached {
-        writeln!(table, "    ({k:#010x}, {}),", plain(&shapes.shaped, *k)).unwrap();
+        writeln!(table, "    ({k:#010x}, {}),", plain(*k)).unwrap();
     }
     table.push_str("];\n");
     let n_funcs = fns.len();
@@ -1421,12 +1438,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let rom_lines = rom_statics.lines().count();
     main.push_str(&rom_statics);
     writeln!(main, "\npub const NAME: &str = {name:?};").unwrap();
-    writeln!(
-        main,
-        "pub const ENTRY: Fn = {};\n",
-        plain(&shapes.shaped, entry)
-    )
-    .unwrap();
+    writeln!(main, "pub const ENTRY: Fn = {};\n", plain(entry)).unwrap();
     let named =
         (holes.copies <= 1 && !(holes.fn_names.is_empty() && holes.names.is_empty())).then(|| {
             named::apply(
@@ -1447,10 +1459,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         type_lines = text.lines().count();
         main.push_str(&text);
     }
-    let plains: Vec<String> = fns_reached
-        .iter()
-        .map(|&k| plain(&shapes.shaped, k))
-        .collect();
+    let plains: Vec<String> = fns_reached.iter().map(|&k| plain(k)).collect();
     let mut files = modules::split(main, table, &plains, &out, holes.copies);
     if !holes.fn_check.is_empty() {
         files
@@ -1486,10 +1495,16 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         }
     )
     .unwrap();
-    let (never, of) = cannot_exit(&out);
+    // What is left: those still returning one that the text says can't
+    // exit (0 unless the rewrite missed one).
+    let result_left = cannot_exit(&out, &forced)
+        .into_iter()
+        .filter(|k| out.iter().any(|(o, t)| o == k && returns_result(t, *k)))
+        .count();
     writeln!(
         report,
-        "functions that return Result<_, Exit> but can't exit, themselves or through a callee (measured, native/lift-one-entry): {never} of {of}"
+        "functions that can't exit, themselves or through a callee, printed without Result<_, Exit> (native/lift-no-exit-result): {} of {printed}; still returning one: {result_left}",
+        never.len()
     )
     .unwrap();
     writeln!(
@@ -1777,6 +1792,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // adapter), and the guest pc set outside the prelude's `pc`, which
     // only the crate's `guest-pc` feature turns on.
     m.push("entries_beyond_one", n(entries_extra));
+    // Functions that can't exit yet still return `Result<_, Exit>`
+    // (native/lift-no-exit-result; barred at 0).
+    m.push("functions_result_unneeded", n(result_left));
     m.push(
         "guest_pc_plain",
         n(out
@@ -2576,62 +2594,98 @@ impl Entries {
     }
 }
 
-/// How many of the printed functions can't exit, of how many (unit
-/// `native/lift-one-entry`'s measure; nothing is changed by it): a
-/// function's text can pass up an `Exit` where it has a `?` after
-/// anything but a lifted function's call (`f_`, `x_` or `a_` and a key:
-/// a wait, `call_fn`, a BIOS call, a named function) or an `Err(`, or
-/// through a `?` on a lifted function that can; the rest return
-/// `Result<_, Exit>` for nothing. Text it can't read counts as exiting.
-fn cannot_exit(out: &[(u32, String)]) -> (usize, usize) {
-    // By key: whether it exits itself, and the lifted functions it `?`s.
-    let mut own: BTreeMap<u32, (bool, BTreeSet<u32>)> = BTreeMap::new();
-    for (k, t) in out {
-        let mut exits = t.contains("Err(");
-        let mut callees = BTreeSet::new();
-        let b = t.as_bytes();
-        for (i, _) in t.match_indices(")?") {
-            // The call's name: back over its balanced arguments.
-            let mut depth = 0usize;
-            let mut j = i + 1;
-            let open = loop {
-                if j == 0 {
-                    break None;
-                }
-                j -= 1;
-                match b[j] {
-                    b')' => depth += 1,
-                    b'(' => {
-                        depth -= 1;
-                        if depth == 0 {
-                            break Some(j);
-                        }
+/// A call of a lifted function by its numbered name in `t`: where the
+/// name starts, its letter (`f`, `x` or `a`), its key, and where the
+/// call's `)` is. A definition (`fn f_<key>(`) is no call.
+fn lifted_calls(t: &str) -> Vec<(usize, u8, u32, usize)> {
+    let b = t.as_bytes();
+    let word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+    let mut calls = Vec::new();
+    let mut j = 0;
+    while j + 11 <= b.len() {
+        let hit = matches!(b[j], b'f' | b'x' | b'a')
+            && b[j + 1] == b'_'
+            && (j == 0 || !word(b[j - 1]))
+            && b[j + 2..j + 10].iter().all(u8::is_ascii_hexdigit)
+            && b[j + 10] == b'('
+            && !t[..j].ends_with("fn ");
+        if !hit {
+            j += 1;
+            continue;
+        }
+        let k = u32::from_str_radix(&t[j + 2..j + 10], 16).expect("hex digits");
+        let mut depth = 0usize;
+        let mut close = None;
+        for (i, &c) in b.iter().enumerate().skip(j + 10) {
+            match c {
+                b'(' => depth += 1,
+                b')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        close = Some(i);
+                        break;
                     }
-                    _ => {}
                 }
-            };
-            let name = open.map(|o| {
-                let s = t[..o]
-                    .rfind(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == ':'))
-                    .map_or(0, |s| s + 1);
-                &t[s..o]
-            });
-            let key = name.and_then(|n| {
-                let nb = n.as_bytes();
-                (nb.len() == 10 && matches!(nb[0], b'f' | b'x' | b'a') && nb[1] == b'_')
-                    .then(|| u32::from_str_radix(&n[2..], 16).ok())
-                    .flatten()
-            });
-            match key {
-                Some(c) => {
-                    callees.insert(c);
-                }
-                None => exits = true,
+                _ => {}
             }
         }
+        match close {
+            Some(c) => calls.push((j, b[j], k, c)),
+            None => break,
+        }
+        j += 10;
+    }
+    calls
+}
+
+/// Where the `?` that passes up call `(_, letter, _, close)`'s `Exit` is:
+/// right after it, or after the block it ends (`{ g.lr = r14; f_<key>(…)
+/// }?`, a call that sets lr). `None` for a call with none.
+fn call_question(t: &str, close: usize) -> Option<usize> {
+    let rest = &t[close + 1..];
+    if rest.starts_with('?') {
+        Some(close + 1)
+    } else if rest.starts_with(" }?") {
+        Some(close + 3)
+    } else {
+        None
+    }
+}
+
+/// The printed functions that can't exit, by key (unit
+/// `native/lift-no-exit-result`; measured first by
+/// `native/lift-one-entry`): a function's text can pass up an `Exit`
+/// where it has an `Err(`, or a `?` anywhere but after a call of a lifted
+/// function's `f_` or `x_` entry (a wait, `call_fn`, a BIOS call, an
+/// adapter `a_`: any other), or where it calls by name a lifted function
+/// that can (a `?`, or a tail call that returns its `Result`), or one not
+/// printed. Those of `forced` (stand-ins, checked functions: their text
+/// is the holes file's or the check's) count as exiting.
+fn cannot_exit(out: &[(u32, String)], forced: &BTreeSet<u32>) -> BTreeSet<u32> {
+    // By key: whether it exits itself, and the lifted functions it calls.
+    let mut own: BTreeMap<u32, (bool, BTreeSet<u32>)> = BTreeMap::new();
+    for (k, t) in out {
+        let calls = lifted_calls(t);
+        let passed: BTreeSet<usize> = calls
+            .iter()
+            .filter(|c| c.1 != b'a')
+            .filter_map(|c| call_question(t, c.3))
+            .collect();
+        // A `return` of anything but `Ok(…)` or a lifted function's call
+        // returns a `Result` it was given (`return call_fn(…);`).
+        let lifted_at: BTreeSet<usize> =
+            calls.iter().filter(|c| c.1 != b'a').map(|c| c.0).collect();
+        let returns_other = t.match_indices("return ").any(|(i, _)| {
+            let at = i + "return ".len();
+            !t[at..].starts_with("Ok(") && !lifted_at.contains(&at)
+        });
+        let exits = forced.contains(k)
+            || t.contains("Err(")
+            || returns_other
+            || t.match_indices('?').any(|(i, _)| !passed.contains(&i));
         let e = own.entry(*k).or_default();
         e.0 |= exits;
-        e.1.extend(callees);
+        e.1.extend(calls.iter().filter(|c| c.1 != b'a').map(|c| c.2));
     }
     // Exiting spreads to callers until nothing changes.
     let mut exits: BTreeSet<u32> = own.iter().filter(|(_, e)| e.0).map(|(&k, _)| k).collect();
@@ -2651,7 +2705,84 @@ fn cannot_exit(out: &[(u32, String)]) -> (usize, usize) {
         }
         exits.extend(more);
     }
-    (own.len() - exits.len(), own.len())
+    own.into_keys().filter(|k| !exits.contains(k)).collect()
+}
+
+/// Whether `t`, function `k`'s text, still declares `f_<key>` or
+/// `x_<key>` returning a `Result`.
+fn returns_result(t: &str, k: u32) -> bool {
+    t.lines().any(|l| {
+        (l.starts_with(&format!("pub fn f_{k:08x}("))
+            || l.starts_with(&format!("pub fn x_{k:08x}(")))
+            && l.contains("-> Result<")
+    })
+}
+
+/// The functions of `never` (they can't exit: [`cannot_exit`]) printed
+/// with their plain return type (unit `native/lift-no-exit-result`):
+/// their `f_` and `x_` entries return it, their returns give the value
+/// itself, and every call of one by name loses its `?` (a stand-in's
+/// too), or where a function that can exit returns its value (a tail
+/// call, a stand-in's last expression), takes it in `Ok(…)`. An adapter
+/// `a_` keeps its `Result`, an `Ok(…)` around the call.
+fn no_result(out: &mut [(u32, String)], never: &BTreeSet<u32>) {
+    for (k, t) in out.iter_mut() {
+        let me = never.contains(k);
+        // (where, bytes taken out, text put in), applied from the end.
+        let mut edits: Vec<(usize, usize, &str)> = Vec::new();
+        for (j, letter, c, close) in lifted_calls(t) {
+            if letter == b'a' || !never.contains(&c) {
+                continue;
+            }
+            match call_question(t, close) {
+                Some(q) => edits.push((q, 1, "")),
+                None if !me => {
+                    edits.push((j, 0, "Ok("));
+                    edits.push((close + 1, 0, ")"));
+                }
+                None => {}
+            }
+        }
+        if me {
+            let b = t.as_bytes();
+            for (i, _) in t.match_indices("return Ok(") {
+                let open = i + "return Ok".len();
+                let mut depth = 0usize;
+                let close = (open..b.len()).find(|&x| {
+                    match b[x] {
+                        b'(' => depth += 1,
+                        b')' => depth -= 1,
+                        _ => {}
+                    }
+                    depth == 0
+                });
+                if let Some(close) = close {
+                    edits.push((i + "return ".len(), 3, ""));
+                    edits.push((close, 1, ""));
+                }
+            }
+            let mut at = 0;
+            for l in t.split_inclusive('\n') {
+                let entry = l.starts_with(&format!("pub fn f_{k:08x}("))
+                    || l.starts_with(&format!("pub fn x_{k:08x}("));
+                if entry
+                    && let Some(r) = l.find("-> Result<")
+                    && let Some(e) = l[r..].find(", Exit> {")
+                {
+                    edits.push((at + r + 3, "Result<".len(), ""));
+                    edits.push((at + r + e, ", Exit>".len(), ""));
+                }
+                at += l.len();
+            }
+        }
+        if edits.is_empty() {
+            continue;
+        }
+        edits.sort_by_key(|e| std::cmp::Reverse((e.0, e.1)));
+        for (at, n, put) in edits {
+            t.replace_range(at..at + n, put);
+        }
+    }
 }
 
 /// Each printed function's entries trimmed to those something calls
@@ -6642,10 +6773,14 @@ fn closed_jump(ctx: &Ctx, at: u32, thumb: bool) -> bool {
 }
 
 /// The plain four-register entry of `k`, as `FNS` holds it: a shaped
-/// function's adapter.
-fn plain(shapes: &BTreeMap<u32, Shape>, k: u32) -> String {
+/// function's adapter, or for one of `never` (it can't exit, so returns
+/// its registers as they are: [`no_result`]) a closure taking them in
+/// `Ok`.
+fn plain(shapes: &BTreeMap<u32, Shape>, never: &BTreeSet<u32>, k: u32) -> String {
     if shapes.contains_key(&k) {
         format!("a_{k:08x}")
+    } else if never.contains(&k) {
+        format!("|g, sp, a| Ok(f_{k:08x}(g, sp, a))")
     } else {
         format!("f_{k:08x}")
     }
@@ -7575,9 +7710,66 @@ mod tests {
             (2, "bank_sp(g, r13); hw::idle(g)?;".to_string()),
             (3, "r0 = f_00000004(g, r13)?;".to_string()),
             (4, "Ok(r0)".to_string()),
+            // A tail call of one that can exit, and one that sets lr.
+            (5, "return f_00000002(g, r13);".to_string()),
+            (6, "r0 = { g.lr = r14; f_00000004(g, r13) }?;".to_string()),
+            // A stand-in, and a call through an adapter.
+            (7, "f_00000004(g, sp, a)".to_string()),
+            (8, "a_00000004(g, sp, a)?;".to_string()),
+            // A tail call through a pointer, and of one that can't exit.
+            (
+                9,
+                "return call_fn(g, r0, r13, [r0, r1, r2, r3]);".to_string(),
+            ),
+            (10, "return f_00000004(g, r13);".to_string()),
         ];
-        // 2 waits, 1 calls it; 3 and 4 can't exit.
-        assert_eq!(cannot_exit(&out), (2, 4));
+        // 2 waits, 1 and 5 call it; 7 is forced, 8 calls an adapter, 9
+        // returns `call_fn`'s `Result`.
+        assert_eq!(
+            cannot_exit(&out, &BTreeSet::from([7])),
+            BTreeSet::from([3, 4, 6, 10])
+        );
+    }
+
+    #[test]
+    fn a_function_that_cannot_exit_returns_its_value() {
+        let mut out = vec![
+            (
+                1,
+                "pub fn f_00000001(g: &mut Game, r13: u32) -> Result<(u32, u32), Exit> {\n    \
+                 r0 = f_00000002(g, r13)?;\n    return Ok((r0, f(r1)));\n}\n"
+                    .to_string(),
+            ),
+            (
+                3,
+                "pub fn a_00000003(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> { let [mut r0, mut r1, mut r2, mut r3] = a; r0 = f_00000003(g, sp)?; Ok([r0, r1, r2, r3]) }\n\
+                 pub fn f_00000003(g: &mut Game, sp: u32) -> Result<u32, Exit> { x_00000003(g, Regs::call(sp, [0, 0, 0, 0])) }\n\
+                 pub fn x_00000003(g: &mut Game, s: Regs) -> Result<u32, Exit> {\n    \
+                 hw::idle(g)?; r0 = { g.lr = r14; f_00000001(g, r13) }?;\n    return f_00000002(g, r13);\n}\n"
+                    .to_string(),
+            ),
+            (7, "    f_00000001(g, sp, a)?;\n    f_00000002(g, sp, a)\n".to_string()),
+        ];
+        no_result(&mut out, &BTreeSet::from([1, 2]));
+        assert_eq!(
+            out[0].1,
+            "pub fn f_00000001(g: &mut Game, r13: u32) -> (u32, u32) {\n    \
+             r0 = f_00000002(g, r13);\n    return (r0, f(r1));\n}\n"
+        );
+        assert!(out[1].1.contains("r0 = f_00000003(g, sp)?; Ok("));
+        assert!(out[1].1.contains("-> Result<u32, Exit> { x_00000003"));
+        assert!(
+            out[1]
+                .1
+                .contains("r0 = { g.lr = r14; f_00000001(g, r13) };")
+        );
+        assert!(out[1].1.contains("return Ok(f_00000002(g, r13));"));
+        assert_eq!(
+            out[2].1,
+            "    f_00000001(g, sp, a);\n    Ok(f_00000002(g, sp, a))\n"
+        );
+        assert!(!returns_result(&out[0].1, 1));
+        assert!(returns_result(&out[1].1, 3));
     }
 
     #[test]
