@@ -20,10 +20,15 @@
 //! `bl`, BIOS calls that don't exist, long runs of one word, instructions
 //! no game runs (user-bank `ldm`), Thumb shifts by 32 (a ROM pointer's
 //! upper half), a Thumb `bx` to a register last set by a shift left
-//! ([`shifted_bx`]), and a first instruction that is
+//! ([`shifted_bx`]) or through the value it had on entry ([`entry_bx`]),
+//! and a first instruction that is
 //! conditional or pops fail it. An ARM body must be mostly unconditional.
 //! Then the value-set analysis from the candidate must return with sp
 //! where it started: data decoded as code usually pops its caller's frame.
+//!
+//! An ARM candidate heading an embedded GBA program (the Nintendo logo
+//! after its first word, [`embedded_image`]) isn't one: that code runs
+//! from where it is loaded, often another GBA.
 //!
 //! **Ranking.** A `push {…, lr}` prologue only ranks candidates: it scores
 //! 4, being loaded from a literal pool by code found, sitting next to a
@@ -128,6 +133,9 @@ pub fn batch(
     let mut ranked: Vec<(u32, u32, Body)> = Vec::new();
     for (&w, c) in &cands {
         let (a, thumb) = (w & !1, w & 1 != 0);
+        if !thumb && embedded_image(prog, a) {
+            continue;
+        }
         let push = prog.decode(a, thumb).is_some_and(|i| is_push_lr(&i));
         let score = 4 * push as u32
             + 2 * (c.pooled || c.table || getter(prog, a, thumb)) as u32
@@ -492,7 +500,7 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
                         work.push((next, soft));
                     }
                 } else if writes_pc(&i.instr) {
-                    if thumb && shifted_bx(prog, start, &i) {
+                    if thumb && (shifted_bx(prog, start, &i) || entry_bx(prog, start, &i)) {
                         if !soft {
                             return None;
                         }
@@ -618,6 +626,63 @@ fn shifted_bx(prog: &Program, start: u32, i: &Insn) -> bool {
         }
     }
     false
+}
+
+/// Whether `i` is a Thumb `bx rM` (rM not lr) that a straight run of
+/// instructions from `start`, one at least, reaches without writing rM: a
+/// jump through the value rM had on entry. A compiler's Thumb code jumps
+/// through a register it loaded or computed (a switch, `_call_via_rN`
+/// called with `bl`); data does this: Emerald's battle-script pointer
+/// 0x082db591, loaded for its script pusher, decodes as four instructions
+/// and `bx r2`; its movement-action bytes at 0x0850dbaf, listed beside
+/// Thumb pointers, as sixteen and `bx r8`. A `bx rM` at `start` itself (a
+/// lone `_call_via_rN`) isn't a run. Anything in the run that may write rM,
+/// or may branch, ends the search with no.
+fn entry_bx(prog: &Program, start: u32, i: &Insn) -> bool {
+    let Instr::Bx { rm, .. } = i.instr else {
+        return false;
+    };
+    if rm == Reg::Lr || i.addr <= start {
+        return false;
+    }
+    let mut a = start;
+    while a < i.addr {
+        let Some(p) = prog.decode(a, true) else {
+            return false;
+        };
+        if p.size != 2 || p.bl.is_some() || writes_pc(&p.instr) {
+            return false;
+        }
+        let writes = match p.instr {
+            Instr::Alu { op, rd, .. } => !op.is_compare() && rd == rm,
+            Instr::Mul { rd, .. } => rd == rm,
+            Instr::Load { rd, addr, .. } => rd == rm || addr.rn == rm,
+            Instr::Store { addr, .. } => addr.rn == rm,
+            Instr::Block { load, rn, regs, .. } => rn == rm || (load && regs & 1 << rm as u32 != 0),
+            _ => true,
+        };
+        if writes {
+            return false;
+        }
+        a = p.next();
+    }
+    a == i.addr
+}
+
+/// Whether the ARM candidate at `a` heads an embedded GBA program: the
+/// 156 bytes after its first word are the Nintendo logo, as at 0x08000004
+/// in the ROM's own header. Such a program runs from where it is loaded,
+/// not from here: a multiboot image the game sends down the link cable
+/// (Emerald's Berry fix program at 0x089a6550) at 0x02000000 on another
+/// GBA, its code jumping to EWRAM where this ROM has no code; Metroid: Zero
+/// Mission's classic NES game (0x08754bd0) from the copy its launcher
+/// makes, which the stage-A lift leaves out.
+fn embedded_image(prog: &Program, a: u32) -> bool {
+    const LOGO: u32 = 156;
+    let rom = prog.rom();
+    let (h, o) = (4usize, (a - ROM_BASE + 4) as usize);
+    let n = LOGO as usize;
+    o > h && o + n <= rom.len() && rom[h..h + n] == rom[o..o + n]
 }
 
 /// The fewest instructions a body ending in an indirect jump needs.

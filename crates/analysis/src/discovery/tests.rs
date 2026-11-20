@@ -244,6 +244,58 @@ fn pointer_scan_rejects_a_bx_to_a_shifted_register() {
 }
 
 #[test]
+fn pointer_scan_rejects_a_bx_through_an_entry_register() {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        .h(0x100, 0x4770)
+        // Emerald's battle script at 0x082db591 decoded as Thumb: lsls r0,
+        // r1, #12; subs r1, #2; movs r0, r4; bx r2, r2 as it came.
+        .h(0x300, 0x0308)
+        .h(0x302, 0x3902)
+        .h(0x304, 0x0020)
+        .h(0x306, 0x4710)
+        // The same with the jump's target loaded: ldr r2, [r2, #0].
+        .h(0x340, 0x0308)
+        .h(0x342, 0x3902)
+        .h(0x344, 0x6812)
+        .h(0x346, 0x4710)
+        // Both beside a function found already.
+        .w(0x400, thumb(0x300))
+        .w(0x404, thumb(0x100))
+        .w(0x408, thumb(0x340));
+    let d = a.run();
+    assert!(!d.funcs.contains_key(&thumb(0x300)));
+    assert_eq!(d.funcs.get(&thumb(0x340)), Some(&Evidence::Scanned));
+}
+
+#[test]
+fn pointer_scan_rejects_an_embedded_gba_image() {
+    // An ARM candidate, `b` over a header to `bx lr`, beside a function
+    // found already.
+    let image = |logo: bool| {
+        let mut a = Asm::new();
+        a.entry(0x100)
+            .h(0x100, 0x4770)
+            .w(0x500, 0xea00_002e)
+            .w(0x5c0, 0xe12f_ff1e)
+            .w(0x600, B + 0x500)
+            .w(0x604, thumb(0x100));
+        if logo {
+            // The 156 bytes after its first word are the ROM's own header
+            // logo's (here whatever 0x04 holds).
+            let h = a.0[4..4 + 156].to_vec();
+            a.0[0x504..0x504 + 156].copy_from_slice(&h);
+        }
+        a.run()
+    };
+    assert_eq!(
+        image(false).funcs.get(&(B + 0x500)),
+        Some(&Evidence::Scanned)
+    );
+    assert!(!image(true).funcs.contains_key(&(B + 0x500)));
+}
+
+#[test]
 fn scanned_code_reaching_an_undefined_insn_is_data() {
     let mut a = Asm::new();
     a.entry(0x100)
