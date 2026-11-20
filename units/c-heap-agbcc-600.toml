@@ -1,0 +1,12 @@
+# c/heap built by agbcc (`just c-tests`) for 600 frames with no input: a C
+# program of the stage-A lifter's check (native/fnref-heap-sites; `just
+# lift-check`), its lift (gbaa-lift) against the play build at --timing
+# native by route-check --native. What it draws: c/heap/SCENE.md.
+rom = "$GBAA_DATA/c/c-heap-agbcc.gba"
+
+[[checkpoint]]
+name = "c-heap-agbcc-600"
+frame = 600
+hash = "95692f5f4d510086"
+# Verified: mGBA 0.10.5 (`just mgba-diff`) draws the same at frame 600,
+# as does the program's other compiler's build (2026-11-19).

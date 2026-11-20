@@ -371,6 +371,13 @@ pub struct Holes {
     /// stage B's metrics, and on a game it doesn't settle in a session
     /// (Metroid: 68 s a round, rounds growing). `None`: followed.
     pub skip_fn_flow: Option<String>,
+    /// The program's allocators, by key (`allocators = [0x…]` in the
+    /// holes file; unit `native/fnref-heap-sites`): functions that return
+    /// a pointer to memory nothing else points to yet (`malloc`, a
+    /// wrapper that zeroes it). With `GBAA_FNREF_HEAP` set the function
+    /// flow gives each direct call of one an object of its own
+    /// ([`fnref::heap_env`]); else the list isn't looked at.
+    pub allocators: BTreeSet<u32>,
     /// Find the hard holes only (`gbaa-lift --holes-only`; the hole
     /// report's lift, native/holes-match-lift): no heap pointers, no
     /// modules, and unless [`Holes::holes_flow`], no function-address
@@ -425,7 +432,7 @@ impl Holes {
     /// digest }` for [`Holes::checks`]), `[[jump]] at = 0x…, targets = [0x…], why = "…"`,
     /// `[[takes]]` ([`Holes::takes`]), `[[copy]]` ([`Holes::copies_seen`]),
     /// `[[stack]]` ([`Holes::stacks`]), and at the top, `skip_fn_flow =
-    /// "why"`.
+    /// "why"` and `allocators = [0x…]` ([`Holes::allocators`]).
     pub fn parse(text: &str) -> Result<Holes, String> {
         let t: toml::Table = text.parse().map_err(|e| format!("{e}"))?;
         let mut h = Holes::default();
@@ -444,6 +451,13 @@ impl Holes {
             if k == "skip_fn_flow" {
                 let why = v.as_str().ok_or("skip_fn_flow: not a string (why)")?;
                 h.skip_fn_flow = Some(why.to_string());
+                continue;
+            }
+            if k == "allocators" {
+                let list = v.as_array().ok_or("allocators: not a list of keys")?;
+                for e in list {
+                    h.allocators.insert(int(e, "allocators")?);
+                }
                 continue;
             }
             let list = v.as_array().ok_or(format!("{k}: not a list of tables"))?;
@@ -985,7 +999,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     };
     let fnrefs = match &holes.skip_fn_flow {
         None if !no_flow => {
-            let (flow, words) = fn_flow(rom, &disc, &overlays, &ins, &pools, &all);
+            let (flow, words) =
+                fn_flow(rom, &disc, &overlays, &ins, &pools, &all, &holes.allocators);
             Some((flow, words, call_fn))
         }
         _ => None,
@@ -1971,6 +1986,7 @@ fn fn_flow(
     ins: &[fnref::FnIn],
     pools: &BTreeSet<u32>,
     all: &BTreeSet<u32>,
+    allocs: &BTreeSet<u32>,
 ) -> (fnref::Flow, BTreeMap<u32, (u32, bool)>) {
     // Every function word in ROM that isn't an instruction (of the ROM's
     // code, or an IWRAM copy's).
@@ -2001,7 +2017,7 @@ fn fn_flow(
         .filter(|(src, _, _)| !overlays.iter().any(|o| o.src == *src))
         .collect();
     let img = FnImage { rom, all, disc };
-    (fnref::follow(ins, &img, &copies), words)
+    (fnref::follow(ins, &img, &copies, allocs), words)
 }
 
 /// Every context's functions as the flows take them ([`fnref::FnIn`]),
@@ -6029,13 +6045,16 @@ fn dead_addresses(insts: &[Inst], typed: &[Option<Place>]) -> Vec<bool> {
 /// ([`complete_sets`]), for [`crate::saves::summarize_sets`]. `sums` are
 /// the summaries the frames need ([`frame::of_code`]); `gbaa-recompile
 /// --summaries` runs it on Emerald. The lift runs it over every context
-/// with the stand-ins' code, so its sets can differ.
+/// with the stand-ins' code, so its sets can differ. `allocs`: the
+/// program's allocators ([`Holes::allocators`], which this run has no
+/// holes file to read from).
 pub fn callee_sets(
     rom: &[u8],
     disc: &Discovery,
     ctx: &Ctx,
     funcs: &[Func],
     sums: &Summaries,
+    allocs: &BTreeSet<u32>,
 ) -> (fnref::Flow, Sets) {
     let none = BTreeSet::new();
     let frames = frame::of_code(ctx, funcs, sums, &none);
@@ -6049,7 +6068,7 @@ pub fn callee_sets(
         sums,
     }];
     let (ins, pools, _) = fn_ins(&ins, &all, &none);
-    let (flow, _) = fn_flow(rom, disc, &overlays, &ins, &pools, &all);
+    let (flow, _) = fn_flow(rom, disc, &overlays, &ins, &pools, &all, allocs);
     let sets = complete_sets(&flow);
     (flow, sets)
 }
@@ -7226,6 +7245,10 @@ why = "a table"
         let h = Holes::parse("skip_fn_flow = \"too slow\"\n").unwrap();
         assert_eq!(h.skip_fn_flow.as_deref(), Some("too slow"));
         assert!(Holes::parse("skip_fn_flow = true\n").is_err());
+        // The allocators (native/fnref-heap-sites): a list of keys.
+        let h = Holes::parse("allocators = [0x08000291, 0x080002ed]\n").unwrap();
+        assert_eq!(h.allocators, BTreeSet::from([0x0800_0291, 0x0800_02ed]));
+        assert!(Holes::parse("allocators = 3\n").is_err());
     }
 
     #[test]
