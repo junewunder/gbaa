@@ -1112,6 +1112,12 @@ fn ram_indexed(f: &FnIn) -> BTreeMap<(u32, usize), (u32, u32)> {
 /// [`ram_indexed_block`]'s key of a value it finds stored or passed, not
 /// an address (or'd with the inst's index).
 const VALUE: usize = 1 << 30;
+/// And of where such an address or value is from: its literal and the
+/// constant it adds, whatever the step (`anchor + i * 4 + 8`: GCC's
+/// globals, addressed from one anchor, `native/fnref-ram-anchors`). The
+/// run takes the object from that ([`G::rebased`]), where its own sum,
+/// literal plus index first, is in the object at the literal.
+const BASED: usize = 1 << 29;
 
 /// One block of [`ram_indexed`], from the registers `regs` in: what it
 /// finds, and the registers at each block of the function it goes on to.
@@ -1170,18 +1176,22 @@ fn ram_indexed_block(
             Op::Load { addr, .. } | Op::Store { addr, .. } => {
                 if let B(l, k, s) = v[addr.index()]
                     && s > 0
-                    && k < s
                 {
-                    found.insert(i, (l, s));
+                    if k < s {
+                        found.insert(i, (l, s));
+                    }
+                    found.insert(i | BASED, (l, k));
                 }
                 // A pointer made so and stored (`cur = &tasks[i]`): its
                 // literal starts an object as well (`native/fnref-ram-pointers`).
                 if let Op::Store { value, .. } = inst.op
                     && let B(l, k, s) = v[value.index()]
                     && s > 0
-                    && k < s
                 {
-                    found.insert(i | VALUE, (l, s));
+                    if k < s {
+                        found.insert(i | VALUE, (l, s));
+                    }
+                    found.insert(i | VALUE | BASED, (l, k));
                 }
                 Other
             }
@@ -1194,9 +1204,11 @@ fn ram_indexed_block(
                     for (r, x) in regs[..4].iter().enumerate() {
                         if let B(l, k, s) = *x
                             && s > 0
-                            && k < s
                         {
-                            found.insert(i | VALUE | (r + 1) << 24, (l, s));
+                            if k < s {
+                                found.insert(i | VALUE | (r + 1) << 24, (l, s));
+                            }
+                            found.insert(i | VALUE | BASED | (r + 1) << 24, (l, k));
                         }
                     }
                 }
@@ -1240,7 +1252,7 @@ fn ram_objects(
         *e = (*e).max(s);
     };
     for (f, ix) in fns.iter().zip(indexed) {
-        for &(l, s) in ix.values() {
+        for (_, &(l, s)) in ix.iter().filter(|(k, _)| k.1 & BASED == 0) {
             add(l, s);
         }
         for b in f.blocks.values() {
@@ -1280,10 +1292,11 @@ fn ram_objects(
 
 /// RAM cut into objects for [`Tok::Ram`] (`native/fnref-ram-pointers`):
 /// by start, where each ends. The starts [`ram_objects`] finds that
-/// aren't a field of one below, each RAM's first byte, and the BIOS's
-/// part of IWRAM ([`BIOS_RAM`]); each object runs to the next start, so
-/// every RAM address is in one.
-fn ram_parts(fns: &[FnIn]) -> BTreeMap<u32, u32> {
+/// aren't a field of one below, each RAM's first byte, the BIOS's
+/// part of IWRAM ([`BIOS_RAM`]), and each global the names files name
+/// (`named`: start and size), whole; each object runs to the next start,
+/// so every RAM address is in one.
+fn ram_parts(fns: &[FnIn], named: &BTreeMap<u32, u32>) -> BTreeMap<u32, u32> {
     let indexed: Vec<_> = fns.iter().map(ram_indexed).collect();
     let objs = ram_objects(fns, &indexed);
     let mut starts: BTreeSet<u32> = [0x0200_0000, 0x0300_0000].into_iter().collect();
@@ -1302,6 +1315,32 @@ fn ram_parts(fns: &[FnIn]) -> BTreeMap<u32, u32> {
     // grows down. No array of the program's lies there, so the last one
     // it indexes doesn't run through them.
     starts.insert(BIOS_RAM);
+    // The globals the names files name, each an object, whole: a start
+    // the code's literals put inside one is no start (a struct's array
+    // member indexed from its own literal: a pointer through `&s` covers
+    // it), and what follows one is another object. With these, GCC's
+    // globals, which it addresses from one anchor and so have no literal
+    // of their own, are objects too (`native/fnref-ram-anchors`).
+    let named: Vec<(u32, u32)> = named
+        .iter()
+        .filter(|&(&a, &n)| is_ram(a) && n > 0)
+        .map(|(&a, &n)| (ram_canon(a), n))
+        .filter(|&(a, n)| a.checked_add(n).is_some_and(|e| e <= ram_top(a)))
+        .map(|(a, n)| (a, a + n))
+        .collect();
+    starts.retain(|s| !named.iter().any(|&(lo, hi)| lo < *s && *s < hi));
+    for &(lo, hi) in &named {
+        // (One inside another, a member with a symbol of its own: the
+        // outer one's.)
+        if named
+            .iter()
+            .any(|&(l, h)| (l, h) != (lo, hi) && l <= lo && hi <= h)
+        {
+            continue;
+        }
+        starts.insert(lo);
+        starts.insert(hi);
+    }
     let v: Vec<u32> = starts.into_iter().collect();
     v.iter()
         .enumerate()
@@ -1386,10 +1425,10 @@ fn ram_env() -> bool {
 struct ObjsGuard;
 
 impl ObjsGuard {
-    fn set(ram: bool, fns: &[FnIn]) -> ObjsGuard {
+    fn set(ram: bool, fns: &[FnIn], named: &BTreeMap<u32, u32>) -> ObjsGuard {
         RAM_ON.with(|c| c.set(ram));
         if ram {
-            let objs = ram_parts(fns);
+            let objs = ram_parts(fns, named);
             RAM_OBJS.with(|c| *c.borrow_mut() = std::rc::Rc::new(objs));
         }
         ObjsGuard
@@ -2365,6 +2404,11 @@ struct G {
     /// Some call has had an incomplete callee set: an address-taken
     /// function may be called from it with anything.
     unseen_calls: bool,
+    /// By function, block and [`ram_indexed`]'s key: the literal and the
+    /// constant offset of an address, or of a value stored or passed,
+    /// that is a RAM literal plus a constant plus a scaled index
+    /// ([`BASED`]; with the RAM pointers on).
+    based: std::collections::HashMap<(u32, u32, usize), (u32, u32), Fx>,
 }
 
 /// A kept op's key ([`G::op_kept`]): the op, a shift's amount, each
@@ -3877,6 +3921,29 @@ impl G {
         );
     }
 
+    /// `v`, the address or value at [`ram_indexed`]'s `key` of block
+    /// `block` of function `f`, with its pointer somewhere in its
+    /// literal's object made one somewhere in the object at the literal
+    /// plus its constant ([`BASED`]): `anchor + i * 4 + 8` is in the
+    /// global at `anchor + 8`, though the sum's first step, anchor plus
+    /// index, was in the one at the anchor. (An array's own literal with
+    /// `arr[i + 1]` is in the same object either way.)
+    fn rebased(&self, f: u32, block: u32, key: usize, mut v: Val) -> Val {
+        let Some(&(l, k)) = self.based.get(&(f, block, key | BASED)) else {
+            return v;
+        };
+        let at = l.wrapping_add(k);
+        if k >= 0x8000_0000 || !is_ram(at) || at >> 24 != l >> 24 {
+            return v;
+        }
+        let (from, to) = (Tok::Ram(ram_obj(l).0), Tok::Ram(ram_obj(at).0));
+        if from != to && v.toks.contains(&from) {
+            v.toks.remove(&from);
+            v.toks.insert(to);
+        }
+        v
+    }
+
     /// After a call of `k` with the caller's registers `own`: each of
     /// `rets` that `k` leaves as it came ([`G::leaves`]) is the caller's
     /// own value, not what `k`'s returns hold (every caller's, joined).
@@ -5315,6 +5382,7 @@ impl Run<'_, '_> {
                 Op::Load { width, addr } => {
                     let w = bytes(width);
                     let a = xv(self.g, addr);
+                    let a = self.g.rebased(self.f.entry, key, i, a);
                     self.g.hole(&a, at, Why::Address, |_| true);
                     let mut out = self.load(&s, key, i, &a, w, b.hulls.get(&i).copied());
                     if !self.g.watch.is_empty() {
@@ -5330,7 +5398,9 @@ impl Run<'_, '_> {
                 }
                 Op::Store { width, addr, value } => {
                     let w = bytes(width);
-                    let (a, mut x) = (xv(self.g, addr), val(value));
+                    let (a, x) = (xv(self.g, addr), val(value));
+                    let a = self.g.rebased(self.f.entry, key, i, a);
+                    let mut x = self.g.rebased(self.f.entry, key, i | VALUE, x);
                     self.g.take_large(&mut x);
                     self.g.hole(&a, at, Why::Address, |_| true);
                     let (xm, bad_refs) = self.g.for_mem(&x, w);
@@ -5361,6 +5431,14 @@ impl Run<'_, '_> {
                 }
                 Op::Exit(e) => {
                     let out = &b.exits[&i];
+                    // (A pointer passed: [`BASED`].)
+                    for r in 0..4 {
+                        let k = i | VALUE | (r + 1) << 24;
+                        if self.g.based.contains_key(&(self.f.entry, key, k | BASED)) {
+                            let v = std::mem::take(&mut s.regs[r]);
+                            s.regs[r] = self.g.rebased(self.f.entry, key, k, v);
+                        }
+                    }
                     let t = match e {
                         Exit::Jump(t) | Exit::JumpExchange(t) | Exit::ExceptionReturn(t) => {
                             Some(xv(self.g, t))
@@ -7141,11 +7219,15 @@ impl G {
 /// program start's copies of ROM data to RAM (source, destination, bytes).
 /// `allocs`: the functions the holes file names as allocators, looked at
 /// only with `GBAA_FNREF_HEAP` set ([`heap_env`]).
+/// `named`: the program's named data, start and size in bytes, as its
+/// names files give them: with the RAM pointers on ([`ram_on`]) each such
+/// global in RAM is an object ([`ram_parts`]).
 pub fn follow(
     fns: &[FnIn],
     img: &dyn Image,
     copies: &[(u32, u32, u32)],
     allocs: &BTreeSet<u32>,
+    named: &BTreeMap<u32, u32>,
 ) -> Flow {
     let none = BTreeSet::new();
     let heap = heap_env();
@@ -7156,6 +7238,7 @@ pub fn follow(
         ram_env() || heap,
         if heap { allocs } else { &none },
         live_env(),
+        named,
     )
 }
 
@@ -7179,13 +7262,14 @@ fn follow_live(
     ram: bool,
     allocs: &BTreeSet<u32>,
     live: bool,
+    named: &BTreeMap<u32, u32>,
 ) -> Flow {
     debug_assert!(
         ram || allocs.is_empty(),
         "allocation sites rest on the RAM rules"
     );
     let _code = CodeGuard::set(img);
-    let _objs = ObjsGuard::set(ram, fns);
+    let _objs = ObjsGuard::set(ram, fns, named);
     let mut g = G {
         loose_args: vec![Val::default(); 4],
         objects: objects(img),
@@ -7209,6 +7293,16 @@ fn follow_live(
             .map(|f| (f.entry, f.reads))
             .collect(),
         defer: live,
+        based: fns
+            .iter()
+            .filter(|_| ram)
+            .flat_map(|f| {
+                ram_indexed(f)
+                    .into_iter()
+                    .filter(|(k, _)| k.1 & BASED != 0)
+                    .map(|((b, k), x)| ((f.entry, b, k), x))
+            })
+            .collect(),
         ..G::default()
     };
     if g.off != 0 {

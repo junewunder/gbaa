@@ -1140,7 +1140,23 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let fnrefs = match &holes.skip_fn_flow {
         None if !no_flow => {
             let (flow, words) =
-                fn_flow(rom, &disc, &overlays, &ins, &pools, &all, &holes.allocators);
+                // (The named data's extents, [`Holes::names`] where the
+                // size is known, are the flow's RAM objects.)
+                fn_flow(
+                    rom,
+                    &disc,
+                    &overlays,
+                    &ins,
+                    &pools,
+                    &all,
+                    &holes.allocators,
+                    &holes
+                        .names
+                        .iter()
+                        .filter(|(_, n)| n.1 > 0)
+                        .map(|(a, n)| (*a, n.1))
+                        .collect(),
+                );
             Some((flow, words, call_fn))
         }
         _ => None,
@@ -2303,6 +2319,7 @@ fn fn_flow(
     pools: &BTreeSet<u32>,
     all: &BTreeSet<u32>,
     allocs: &BTreeSet<u32>,
+    named: &BTreeMap<u32, u32>,
 ) -> (fnref::Flow, BTreeMap<u32, (u32, bool)>) {
     // Every function word in ROM that isn't an instruction (of the ROM's
     // code, or an IWRAM copy's).
@@ -2333,7 +2350,7 @@ fn fn_flow(
         .filter(|(src, _, _)| !overlays.iter().any(|o| o.src == *src))
         .collect();
     let img = FnImage { rom, all, disc };
-    (fnref::follow(ins, &img, &copies, allocs), words)
+    (fnref::follow(ins, &img, &copies, allocs, named), words)
 }
 
 /// Every context's functions as the flows take them ([`fnref::FnIn`]),
@@ -7008,7 +7025,16 @@ pub fn callee_sets(
         sums,
     }];
     let (ins, pools, _) = fn_ins(&ins, &all, &none, &none);
-    let (flow, _) = fn_flow(rom, disc, &overlays, &ins, &pools, &all, allocs);
+    let (flow, _) = fn_flow(
+        rom,
+        disc,
+        &overlays,
+        &ins,
+        &pools,
+        &all,
+        allocs,
+        &BTreeMap::new(),
+    );
     let sets = complete_sets(&flow);
     (flow, sets)
 }
