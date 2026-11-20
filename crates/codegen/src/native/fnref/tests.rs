@@ -29,6 +29,8 @@ struct Img {
     code: BTreeSet<u32>,
     /// More functions' keys.
     fns: BTreeSet<u32>,
+    /// Instructions' bytes, `lo..hi` (none: no address is inside one).
+    insts: Vec<(u32, u32)>,
 }
 
 impl Img {
@@ -38,6 +40,7 @@ impl Img {
             top: 0x0800_1000,
             code: BTreeSet::new(),
             fns: BTreeSet::new(),
+            insts: Vec::new(),
         }
     }
 }
@@ -53,6 +56,9 @@ impl Image for Img {
     }
     fn bound(&self, a: u32) -> u32 {
         self.code.range(a + 1..).next().copied().unwrap_or(self.top)
+    }
+    fn code_at(&self, a: u32) -> bool {
+        self.insts.iter().any(|&(lo, hi)| lo <= a && a < hi)
     }
 }
 
@@ -1992,4 +1998,243 @@ fn a_flag_read_after_a_call_is_live_across_it() {
         ],
     )]);
     assert_eq!(f.holes[&Origin::Word(POOL)].1, Why::BitTest);
+}
+
+/// An image with Thumb code at 0x08000800..0x08000900 and at
+/// 0x08000a00..0x08000a10, numbers between them but for a function's
+/// address at 0x08000980.
+fn img_with_code() -> Img {
+    let mut img = Img::new();
+    img.insts = vec![(0x0800_0800, 0x0800_0900), (0x0800_0a00, 0x0800_0a10)];
+    for &(lo, hi) in &img.insts {
+        img.code.extend((lo..hi).step_by(2));
+    }
+    img.words.insert(0x0800_0980, F);
+    img
+}
+
+#[test]
+fn bytes_that_hold_nothing_the_run_follows_are_dull() {
+    let img = img_with_code();
+    let _code = CodeGuard::set(&img);
+    // Instructions, and the numbers before them back to the last
+    // function's address (VT + 12's F).
+    assert!(dull(0x0800_0810));
+    assert!(dull(0x0800_0811));
+    assert!(dull(0x0800_0700));
+    assert!(dull(VT + 16));
+    assert!(!dull(VT + 12));
+    assert!(!dull(VT));
+    // A run's last instruction reads on through the data after it,
+    // which holds a function's address: not dull. The numbers after
+    // that address, up to the next code, are.
+    assert!(dull(0x0800_08fc));
+    assert!(!dull(0x0800_08fe));
+    assert!(!dull(0x0800_0900));
+    assert!(!dull(0x0800_0980));
+    assert!(dull(0x0800_0984));
+    assert!(dull(0x0800_0a00));
+    // The last code of all reads to the end of ROM.
+    assert!(!dull(0x0800_0a0e));
+    drop(_code);
+    // No image, nothing is.
+    assert!(!dull(0x0800_0810));
+}
+
+#[test]
+fn pointers_into_dull_bytes_are_one_token_past_sixteen() {
+    let img = img_with_code();
+    let _code = CodeGuard::set(&img);
+    // Sixteen, each from its own instruction on, are kept as they are.
+    let mut v = Val::of(Tok::RomFrom(VT));
+    for k in 0..16 {
+        v.join(&Val::of(Tok::RomFrom(0x0800_0810 + 2 * k)));
+    }
+    assert_eq!(v.toks.len(), 17);
+    // One more: all of them are the one token, beside the pointer into
+    // the table.
+    assert!(v.join_capped(&Val::of(Tok::RomFrom(0x0800_0880))));
+    let want: Toks = [Tok::RomFrom(VT), Tok::RomDull].into_iter().collect();
+    assert_eq!(v.toks, want);
+    assert!(!v.lost_rom);
+    // It takes in every pointer "from here on" there, and says nothing
+    // changed, leaving the set it was.
+    let p = std::rc::Rc::as_ptr(&v.toks.0);
+    assert!(!v.join_capped(&Val::of(Tok::RomFrom(0x0800_0700))));
+    assert!(!v.join_capped(&Val::of(Tok::RomStep(0x0800_0820, 4))));
+    assert_eq!(v.toks, want);
+    assert_eq!(p, std::rc::Rc::as_ptr(&v.toks.0));
+    // An exact pointer there stays its own (one more may be a function's
+    // key), as does one into followed data.
+    assert!(v.join_capped(&Val::of(Tok::Rom(0x0800_0820))));
+    assert!(v.join_capped(&Val::of(Tok::Rom(0x0800_0980))));
+    assert_eq!(v.toks.len(), 4);
+}
+
+#[test]
+fn ops_on_the_dull_token() {
+    let img = img_with_code();
+    let _code = CodeGuard::set(&img);
+    let on = |op, x, y| match bin_tok(&img, op, x, y, [1, 1]) {
+        R::T(t) => Some(t),
+        _ => None,
+    };
+    let d = Some(Tok::RomDull);
+    // An index added, or aligned down to its word: still there.
+    assert_eq!(on(BinOp::Add, d, None), d);
+    assert_eq!(on(BinOp::Add, d, Some(Tok::Num(8))), d);
+    assert_eq!(on(BinOp::And, d, Some(Tok::Num(!3))), d);
+    // Less a number, or masked to a page: no pointer the run knows.
+    assert_eq!(on(BinOp::Sub, d, Some(Tok::Num(8))), None);
+    assert_eq!(on(BinOp::And, d, Some(Tok::Num(0xffff_0000))), None);
+    // Somewhere in ROM stays that, wherever it is moved.
+    let any = Some(Tok::RomAny);
+    assert_eq!(on(BinOp::Add, any, None), any);
+    assert_eq!(on(BinOp::Sub, any, Some(Tok::Num(8))), any);
+    assert_eq!(on(BinOp::And, any, Some(Tok::Num(0xffff_0000))), any);
+}
+
+#[test]
+fn more_pointers_from_here_on_than_the_bound_are_dropped() {
+    let mut img = Img::new();
+    img.top = 0x0801_0000;
+    img.code = (1..0x100).map(|k| 0x0800_0000 + 0x100 * k).collect();
+    let _code = CodeGuard::set(&img);
+    let mut v = Val::default();
+    for k in 0..FROMS as u32 {
+        v.join(&Val::of(Tok::RomFrom(0x0800_0010 + 0x100 * k)));
+    }
+    assert_eq!(v.toks.len(), FROMS);
+    assert!(!v.lost_rom);
+    v.join(&Val::of(Tok::RomFrom(0x0800_0010 + 0x100 * FROMS as u32)));
+    let any: Toks = [Tok::RomAny].into_iter().collect();
+    assert_eq!(v.toks, any, "{v:?}");
+    assert!(v.lost_rom);
+    // For good: it takes in every pointer after, and doesn't fill again.
+    assert!(!v.join_capped(&Val::of(Tok::RomFrom(0x0800_0010))));
+    assert!(!v.join_capped(&Val::of(Tok::Rom(0x0800_0020))));
+    assert_eq!(v.toks, any);
+    // A value made of memory's words is dropped the same way.
+    let mut e = Exp::default();
+    let mut d = Val::default();
+    d.toks
+        .extend((0..=FROMS as u32).map(|k| Tok::RomFrom(0x0800_0010 + 0x100 * k)));
+    exp_merge(&mut e, d);
+    assert!(e.v.lost_rom, "{:?}", e.v);
+}
+
+/// `n` functions' addresses, whole, each from its own word.
+fn many_fns(n: usize) -> Val {
+    Val {
+        toks: (0..n as u32)
+            .map(|k| Tok::Fn {
+                key: 0x0800_2001 + 4 * k,
+                origin: Origin::Word(0x0810_0000 + 4 * k),
+                form: Form::Full,
+            })
+            .collect(),
+        ..Val::default()
+    }
+}
+
+#[test]
+fn a_large_value_s_functions_are_the_large_set_s() {
+    let mut g = G::default();
+    // At the bound, a value is kept as it is.
+    let mut small = many_fns(LARGE);
+    g.take_large(&mut small);
+    assert_eq!(small, many_fns(LARGE));
+    assert!(!g.large.changed);
+    // Past it, one reference to the set, which expands to what it held.
+    let big = many_fns(LARGE + 1);
+    let mut v = big.clone();
+    g.take_large(&mut v);
+    assert_eq!(v.toks.len(), 1, "{v:?}");
+    assert!(v.marked());
+    assert!(g.large.changed);
+    assert_eq!(g.expand(&v), big);
+    assert!(g.rd.large, "whoever looks at it reads the set");
+    // A second value with the reference and a half of another function:
+    // the half goes to the set, and the value's reference holds both
+    // forms. The first value's, whole addresses only, doesn't gain it.
+    let lo = Tok::Fn {
+        key: F,
+        origin: Origin::Word(POOL),
+        form: Form::Lo,
+    };
+    let mut w = v.clone();
+    w.join(&Val::of(lo));
+    g.take_large(&mut w);
+    assert_eq!(w.toks.len(), 1, "{w:?}");
+    assert_ne!(w, v);
+    let mut both = big.clone();
+    both.join(&Val::of(lo));
+    assert_eq!(g.expand(&w), both);
+    assert_eq!(g.expand(&v), big);
+    // Joined again with what it holds, it is as it was.
+    let mut again = w.clone();
+    again.join(&Val::of(lo));
+    g.take_large(&mut again);
+    assert_eq!(again, w);
+    // A large value that may be a ROM pointer too: the run gives the
+    // pointer up.
+    let mut p = v.clone();
+    p.join(&Val::of(Tok::RomFrom(VT)));
+    g.take_large(&mut p);
+    assert_eq!(p.toks, v.toks);
+    assert!(p.lost_rom && p.unk);
+}
+
+#[test]
+fn a_large_value_s_memory_reads_go_to_the_set() {
+    let mut g = G::default();
+    // The pile holds F, whole.
+    let f = Tok::Fn {
+        key: F,
+        origin: Origin::Word(POOL),
+        form: Form::Full,
+    };
+    g.store(Store::Pile, &[(f, 4)]);
+    let mut v = many_fns(LARGE + 1);
+    g.take_large(&mut v);
+    // A large value that may also be a word of the pile: the read's
+    // functions are the set's, and the value keeps the read's flags and
+    // pointers by a reference with every form dropped.
+    let mut w = v.clone();
+    w.join(&Val::of(mem_ref(false, 4)));
+    g.take_large(&mut w);
+    assert_eq!(w.toks.len(), 2, "{w:?}");
+    let e = g.expand(&w);
+    assert!(e.toks.contains(&f));
+    assert_eq!(e.toks.len(), LARGE + 2);
+    // What the pile gains later, the value's expansion has.
+    let h = Tok::Fn {
+        key: H,
+        origin: Origin::Word(0x0800_0404),
+        form: Form::Full,
+    };
+    g.store(Store::Pile, &[(h, 4)]);
+    assert!(g.expand(&w).toks.contains(&h));
+}
+
+#[test]
+fn a_reference_that_stands_for_nothing_is_no_token() {
+    let none = Xf::of(|_| None);
+    assert_eq!(ref_tok(Src::Pile(4), none), None);
+    // Forms the read never holds don't count: a byte read's are bytes.
+    let full = Xf::of(|f| (f == Form::Full).then_some(Form::Full));
+    assert_eq!(ref_tok(Src::Pile(1), full), None);
+    assert!(ref_tok(Src::Pile(4), full).is_some());
+    // Its flags or its ROM pointers alone are something.
+    assert!(
+        ref_tok(
+            Src::Pile(4),
+            Xf {
+                flags: true,
+                ..none
+            }
+        )
+        .is_some()
+    );
+    assert!(ref_tok(Src::Pile(4), Xf { roms: true, ..none }).is_some());
 }

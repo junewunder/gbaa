@@ -1893,6 +1893,13 @@ impl fnref::Image for FnImage<'_> {
             .next()
             .map_or(0x0800_0000 + self.rom.len() as u32, |(k, _)| *k)
     }
+    fn code_at(&self, a: u32) -> bool {
+        self.disc
+            .code
+            .range(..=a)
+            .next_back()
+            .is_some_and(|(k, c)| a - k < c.size)
+    }
 }
 
 /// The ROM address of the literal an `ldr rN, [pc, #k]` at `at` reads, if
