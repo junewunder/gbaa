@@ -1485,6 +1485,7 @@ route = "units/c-fnptr-agbcc-600.toml"
 planted_store = 0x080005d4
 
 [program.c-fnptr-agbcc.bars]
+data_constants_unnamed = 0
 io_unnamed = 0
 computed_unknown_unnamed = 5
 lines = 794
@@ -1569,6 +1570,7 @@ route = "units/c-fnptr-gcc-600.toml"
 planted_store = 0x08000390
 
 [program.c-fnptr-gcc.bars]
+data_constants_unnamed = 0
 io_unnamed = 0
 computed_unknown_unnamed = 17
 lines = 850
@@ -1655,6 +1657,7 @@ route = "units/c-switch-agbcc-600.toml"
 planted_store = 0x080005ca
 
 [program.c-switch-agbcc.bars]
+data_constants_unnamed = 0
 io_unnamed = 0
 computed_unknown_unnamed = 14
 lines = 740
@@ -1741,6 +1744,7 @@ route = "units/c-switch-gcc-600.toml"
 planted_store = 0x080005a0
 
 [program.c-switch-gcc.bars]
+data_constants_unnamed = 0
 io_unnamed = 0
 computed_unknown_unnamed = 15
 lines = 815
@@ -1825,6 +1829,7 @@ route = "units/c-chain-agbcc-600.toml"
 planted_store = 0x0800058e
 
 [program.c-chain-agbcc.bars]
+data_constants_unnamed = 0
 io_unnamed = 0
 computed_unknown_unnamed = 5
 lines = 833
@@ -1909,6 +1914,7 @@ route = "units/c-chain-gcc-600.toml"
 planted_store = 0x08000550
 
 [program.c-chain-gcc.bars]
+data_constants_unnamed = 0
 io_unnamed = 0
 computed_unknown_unnamed = 10
 lines = 823
@@ -1994,6 +2000,7 @@ route = "units/c-heap-agbcc-600.toml"
 planted_store = 0x08000692
 
 [program.c-heap-agbcc.bars]
+data_constants_unnamed = 0
 io_unnamed = 0
 computed_unknown_unnamed = 11
 lines = 927
@@ -2079,6 +2086,7 @@ route = "units/c-heap-gcc-600.toml"
 planted_store = 0x0800060e
 
 [program.c-heap-gcc.bars]
+data_constants_unnamed = 0
 io_unnamed = 0
 computed_unknown_unnamed = 37
 lines = 934

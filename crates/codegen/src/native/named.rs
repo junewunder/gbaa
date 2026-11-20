@@ -10,11 +10,14 @@
 //!   (`native_record::stop::functions_in`), and the body is defined right
 //!   below the named entry (so a named function keeps its `x_` where an
 //!   unnamed one's body would be its `f_`: `super::one_entry`).
-//! - A constant address in a named datum (`let v3: u32 = 0x3001234u32;`,
-//!   the only form the printer gives a constant): the datum's name, as a
-//!   `pub const` in `main.rs`, with the address in a comment
-//!   (`let v3: u32 = gSamusData /* 0x03001234 */;`, or `(gSamusData +
-//!   0x4) /* 0x03001238 */` inside it). ROM, EWRAM and IWRAM only.
+//! - A constant address in a named datum, wherever the code prints it
+//!   (`let v3: u32 = 0x3001234u32;`, or inlined into its one use since
+//!   native/lift-inline-temps: `r0 = 0x8000638u32;`, a call's argument;
+//!   unit native/lift-data-names-inline): the datum's name, as a `pub
+//!   const` in `main.rs`, with the address in a comment (`gSamusData /*
+//!   0x03001234 */`, or `(gSamusData + 0x4) /* 0x03001238 */` inside it).
+//!   ROM, EWRAM and IWRAM only. A sum can't be a match pattern, so one
+//!   there stays a number, counted in [`Named::unnamed`].
 //!
 //! The map's identifiers ([`crate::names::SourceMap`]) are already valid
 //! and unique among the map's names; a name that meets one of the crate's
@@ -33,6 +36,9 @@ pub struct Named {
     /// Data given a constant, and the constants printed as one.
     pub data: usize,
     pub constants: usize,
+    /// Constants inside a named datum left as numbers (a sum in a match
+    /// pattern): barred, at 0 on the C programs.
+    pub unnamed: usize,
     /// The lines of the data constants in `main.rs` (not lifted code).
     pub const_lines: usize,
 }
@@ -108,19 +114,74 @@ fn rename(text: &str, names: &BTreeMap<u32, String>) -> String {
     out
 }
 
-/// A constant's line, `let v<n>: u32 = 0x<hex>u32;`: the span of its
-/// literal (up to the `;`) and its value.
-fn constant(line: &str) -> Option<(usize, usize, u32)> {
-    let t = line.trim_end();
-    let (n, _) = t.trim_start().strip_prefix("let v")?.split_once(':')?;
-    if n.is_empty() || !n.bytes().all(|c| c.is_ascii_digit()) {
-        return None;
+/// The `0x<hex>u32` literals of lifted code `text`, as (start, end,
+/// value), outside comments and string literals and not inside a longer
+/// word: every form the printer gives a constant (`let v3: u32 =
+/// 0x3001234u32;`, `r0 = 0x8000638u32;`, a call's argument, an operand).
+fn literals(text: &str) -> Vec<(usize, usize, u32)> {
+    let b = text.as_bytes();
+    let word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'"' => {
+                i += 1;
+                while i < b.len() && b[i] != b'"' {
+                    i += if b[i] == b'\\' { 2 } else { 1 };
+                }
+                i += 1;
+            }
+            // A char literal holds no `"`; a lifetime is a word.
+            b'\'' if b.get(i + 2) == Some(&b'\'') || b.get(i + 1) == Some(&b'\\') => {
+                i += 1;
+                while i < b.len() && b[i] != b'\'' {
+                    i += if b[i] == b'\\' { 2 } else { 1 };
+                }
+                i += 1;
+            }
+            b'/' if b.get(i + 1) == Some(&b'/') => {
+                while i < b.len() && b[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            b'/' if b.get(i + 1) == Some(&b'*') => {
+                i = text[i + 2..].find("*/").map_or(b.len(), |e| i + 2 + e + 2);
+            }
+            b'0' if b.get(i + 1) == Some(&b'x')
+                && (i == 0 || !word(b[i - 1]) && b[i - 1] != b'.') =>
+            {
+                let s = i;
+                let mut e = i + 2;
+                while e < b.len() && b[e].is_ascii_hexdigit() {
+                    e += 1;
+                }
+                let lit = text[e..].starts_with("u32") && b.get(e + 3).is_none_or(|&c| !word(c));
+                let x = u32::from_str_radix(&text[s + 2..e], 16).ok();
+                match x.filter(|_| lit && e > s + 2) {
+                    Some(x) => {
+                        out.push((s, e + 3, x));
+                        i = e + 3;
+                    }
+                    None => i = e,
+                }
+            }
+            c if word(c) => {
+                while i < b.len() && word(b[i]) {
+                    i += 1;
+                }
+            }
+            _ => i += 1,
+        }
     }
-    let s = t.find(": u32 = 0x")? + ": u32 = ".len();
-    let e = t.len() - 1;
-    let hex = t.get(s + 2..)?.strip_suffix("u32;")?;
-    let x = u32::from_str_radix(hex, 16).ok()?;
-    Some((s, e, x))
+    out
+}
+
+/// Whether the literal ending at `e` is a match pattern (`=>` or `|`
+/// after it), where only a constant's own name, not a sum, may stand.
+fn in_pattern(text: &str, e: usize) -> bool {
+    let rest = text[e..].trim_start();
+    rest.starts_with("=>") || (rest.starts_with('|') && !rest.starts_with("||"))
 }
 
 /// ROM and work RAM, where a constant may be a datum's address.
@@ -179,33 +240,40 @@ pub fn apply(
     // The data each function's constants are in.
     let mut used = BTreeSet::new();
     for (_, t) in funcs.iter() {
-        for line in t.lines() {
-            if let Some((_, _, x)) = constant(line).filter(|c| addressable(c.2)) {
+        for (_, _, x) in literals(t) {
+            if addressable(x) {
                 used.extend(datum(data, x));
             }
         }
     }
     let consts: BTreeMap<u32, String> = used.iter().map(|&k| (k, free(&data[&k].0))).collect();
-    let mut constants = 0;
+    let (mut constants, mut unnamed) = (0, 0);
     for (_, t) in funcs.iter_mut() {
         let mut out = String::with_capacity(t.len() + 64);
-        for line in t.split_inclusive('\n') {
-            let c = constant(line).filter(|c| addressable(c.2));
-            match c.and_then(|(s, e, x)| Some((s, e, x, datum(data, x)?))) {
-                Some((s, e, x, k)) => {
-                    let n = &consts[&k];
-                    out.push_str(&line[..s]);
-                    if x == k {
-                        write!(out, "{n} /* {x:#010x} */").unwrap();
-                    } else {
-                        write!(out, "({n} + {:#x}) /* {x:#010x} */", x - k).unwrap();
-                    }
-                    out.push_str(&line[e..]);
-                    constants += 1;
-                }
-                None => out.push_str(line),
+        let mut last = 0;
+        for (s, e, x) in literals(t) {
+            let Some(k) = Some(x)
+                .filter(|&x| addressable(x))
+                .and_then(|x| datum(data, x))
+            else {
+                continue;
+            };
+            let n = &consts[&k];
+            out.push_str(&t[last..s]);
+            last = e;
+            if x == k {
+                write!(out, "{n} /* {x:#010x} */").unwrap();
+            } else if in_pattern(t, e) {
+                // `(gHeap + 0x8)` is no pattern: the number stays.
+                out.push_str(&t[s..e]);
+                unnamed += 1;
+                continue;
+            } else {
+                write!(out, "({n} + {:#x}) /* {x:#010x} */", x - k).unwrap();
             }
+            constants += 1;
         }
+        out.push_str(&t[last..]);
         *t = rename(&out, &names);
     }
     *table = rename(table, &names);
@@ -226,6 +294,7 @@ pub fn apply(
         of_functions: lifted.len(),
         data: consts.len(),
         constants,
+        unnamed,
         const_lines,
     }
 }
