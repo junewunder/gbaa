@@ -346,7 +346,7 @@ c-tests:
     {{lock}} cargo build -q --release -p disc-check
     disc="$PWD/target/release/disc-check"
     as=("$tc/arm-none-eabi-as" -mcpu=arm7tdmi -mthumb-interwork)
-    gcc=("$tc/arm-none-eabi-gcc" -mcpu=arm7tdmi -mthumb -mthumb-interwork -O2 -g -ffreestanding -nostdlib -fno-tree-loop-distribute-patterns -Wall -Werror -Ic/common)
+    gcc=("$tc/arm-none-eabi-gcc" -mcpu=arm7tdmi -mthumb -mthumb-interwork -O2 -g -gdwarf-2 -gstrict-dwarf -ffreestanding -nostdlib -fno-tree-loop-distribute-patterns -Wall -Werror -Ic/common)
     gcclib=$("${gcc[@]}" -print-libgcc-file-name)
     for dir in c/*/; do
         name=$(basename "$dir")

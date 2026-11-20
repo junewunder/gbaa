@@ -1,7 +1,7 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
 //! [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT]
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT]
-//! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-for-loops] [--copies N] [--holes-only [--flow]]
+//! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-for-loops] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
 //! [--plant-reference]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
@@ -17,7 +17,12 @@
 //! ROM (default the repo's `names/`; none is fine); so do the lifted
 //! functions and the data whose address the code takes as a constant
 //! (`codegen::native::named`, unit `native/lift-fn-names`; not with
-//! `--copies`), which the report counts. `--layout guest` (the
+//! `--copies`), which the report counts. Where the files give types
+//! (`[types]`, prototypes, `[locals]`: a decomp's DWARF through
+//! `pret-names`), an access through a pointer they type prints as its
+//! named field (`g.get(Ref::<t::Kirby>::new(r4).hp())`;
+//! `codegen::native::fields`, unit `native/lift-typed-access`), over the
+//! same byte access; `--no-field-types` leaves that out. `--layout guest` (the
 //! default) puts them at the guest's offsets, the native check's layout;
 //! `--layout packed` makes them fields in the lifter's order, the rest of
 //! RAM bytes, the play layout, which must draw the same frames (unit
@@ -120,7 +125,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference]"
         );
         ExitCode::FAILURE
     };
@@ -131,6 +136,7 @@ fn main() -> ExitCode {
     let (mut drop, mut plant, mut tail, mut irq_at_waits) = (None, None, false, false);
     let (mut ime_at_waits, mut takes_zeroed, mut keep_dead) = (false, false, false);
     let mut keep_temps = false;
+    let mut no_field_types = false;
     let mut no_for_loops = false;
     let (mut holes_only, mut holes_flow) = (false, false);
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
@@ -162,6 +168,10 @@ fn main() -> ExitCode {
         }
         if a == "--keep-temps" {
             keep_temps = true;
+            continue;
+        }
+        if a == "--no-field-types" {
+            no_field_types = true;
             continue;
         }
         if a == "--no-for-loops" {
@@ -324,6 +334,14 @@ fn main() -> ExitCode {
                     Some((k, id.to_string()))
                 })
                 .collect();
+            // The files' types, if they give any: accesses through a
+            // typed pointer print as named fields.
+            if !map.types.is_empty() && !no_field_types {
+                holes.fields = Some(std::sync::Arc::new(codegen::native::fields::Maps {
+                    types: map.typed.clone(),
+                    locals: map.locals.clone(),
+                }));
+            }
         }
         Err(e) => {
             eprintln!("gbaa-lift: {}: {e}", names.display());
