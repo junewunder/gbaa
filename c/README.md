@@ -11,7 +11,9 @@ arm-none-eabi-gcc (`$GBAA_DATA/toolchains/arm-gnu-toolchain-15.2.rel1-…`),
 both fetched by `scripts/fetch-decomps.sh`, into
 `$GBAA_DATA/c/c-<name>-agbcc.{elf,gba}` and `c-<name>-gcc.{elf,gba}`.
 Source only in git. GCC writes DWARF 2 (`-gdwarf-2 -gstrict-dwarf`), as
-agbcc does: `pret-names` reads no later version. `names/c-<name>-<cc>.toml`
+agbcc does (`pret-names` reads GCC 15's default DWARF 5 as well, and the
+location lists both give: native/names-location-lists; `gba.ld` keeps
+DWARF 5's sections). `names/c-<name>-<cc>.toml`
 are the programs' names files (`target/release/pret-names ELF ROM OUT`),
 which give their lifts types (native/lift-typed-access); a changed ROM
 needs its file made again, or its lift has no names.

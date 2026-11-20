@@ -195,8 +195,9 @@ fn dwarf_report(names: &pret_names::Names, d: &pret_names::dwarf::Debug) -> Stri
         .map(|e| e.rom.unwrap_or(e.key) & !1)
         .collect();
     let fs: Vec<_> = roms.iter().filter_map(|a| d.funcs.get(a)).collect();
-    let (mut reg, mut slot, mut homeless) = (0, 0, 0);
+    let (mut reg, mut slot, mut homeless, mut located) = (0, 0, 0, 0);
     for f in &fs {
+        located += f.located;
         reg += f
             .locals
             .iter()
@@ -236,12 +237,13 @@ fn dwarf_report(names: &pret_names::Names, d: &pret_names::dwarf::Debug) -> Stri
         })
         .count();
     format!(
-        "dwarf: {} of {} named functions have a prototype; locals: {reg} in a register, \
-         {slot} in a stack slot, {homeless} with no location; lines {}; data typed {typed} of {}, {} more by extern declarations \
+        "dwarf: {} of {} named functions have a prototype; locals: {located} of {} with a location \
+         (rows: {reg} in a register, {slot} in a stack slot), {homeless} with none; lines {}; data typed {typed} of {}, {} more by extern declarations \
          ({split} declared two ways, the most units' type kept); \
          types {} ({} names with two layouts, the first kept); units unread {}, line programs cut short {}\n",
         fs.len(),
         roms.len(),
+        located + homeless,
         d.lines.len(),
         names.data.len(),
         declared.len(),
