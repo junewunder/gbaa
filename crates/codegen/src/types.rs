@@ -235,8 +235,19 @@ impl Types {
             if m.ident(Kind::Data, k).is_none() {
                 continue;
             }
-            let size = item.size.map(|s| s as u32);
-            let ty = t.parse(c, size, &enums);
+            // Size 0 is a label's (a global the linker script places,
+            // typed by its declarations): its size isn't known.
+            let size = item.size.filter(|&s| s > 0).map(|s| s as u32);
+            let mut ty = t.parse(c, size, &enums);
+            // An array of no stated length and no size runs to the next
+            // datum (katam's `extern struct Kirby gKirbys[];`).
+            if let (Ty::Array(e, 0), None) = (&ty, size)
+                && let Some((&next, _)) = m.data.range(k + 1..).next()
+                && let es = t.size(e)
+                && es > 0
+            {
+                ty = Ty::Array(e.clone(), (next - k) / es);
+            }
             t.globals.insert(k, (ty, c.clone()));
         }
         t.enums = enums.iter().map(|(n, s)| (n.to_string(), *s)).collect();
@@ -413,6 +424,11 @@ impl Types {
             Ty::Named(n) => self.defs.get(n).map_or(0, |d| d.size),
             Ty::Bytes(n) => *n,
         }
+    }
+
+    /// Whether the map typed no datum.
+    pub fn is_empty(&self) -> bool {
+        self.globals.is_empty()
     }
 
     /// The marker type's identifier of the struct or union `name`.
@@ -880,6 +896,37 @@ fields = []
         let save = t.global_at(0x0300_5d90).unwrap().1;
         assert_eq!(save, &Ty::Ptr(Box::new(Ty::Named("struct Save".into()))));
         assert_eq!(t.rust(save).to_string(), "Ptr < Save >");
+    }
+
+    #[test]
+    fn a_label_takes_its_declarations_type() {
+        // A global the linker script places has size 0 (a label) and its
+        // declarations' type; one of no stated length runs to the next datum.
+        let text = format!(
+            r#"[map]
+rom_sha1 = "{SHA}"
+[data]
+0x02020ee0 = {{ name = "gKirbys", size = 0, type = "struct Kirby []" }}
+0x02020f00 = {{ name = "gLevel", size = 0, type = "struct Kirby" }}
+0x02020f08 = {{ name = "gNext", size = 0, type = "u32" }}
+[types."struct Kirby"]
+kind = "struct"
+size = 8
+fields = [
+  {{ name = "hp", off = 4, size = 2, type = "u16" }},
+]
+"#
+        );
+        let m = SourceMap::from_texts(SHA, &[&text]).unwrap();
+        let t = &m.typed;
+        let kirby = Ty::Named("struct Kirby".into());
+        let (k, ty) = t.global_at(0x0202_0ef4).unwrap();
+        assert_eq!(
+            (k, ty),
+            (0x0202_0ee0, &Ty::Array(Box::new(kirby.clone()), 4))
+        );
+        assert_eq!(t.global_at(0x0202_0f04).unwrap().1, &kirby);
+        assert_eq!(t.global_at(0x0202_0f08).unwrap().1, &Ty::U32);
     }
 
     #[test]
