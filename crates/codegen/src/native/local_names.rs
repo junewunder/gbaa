@@ -389,15 +389,18 @@ pub fn rename(text: &str, renames: &BTreeMap<String, String>) -> String {
     out
 }
 
-/// `text` with each block's comments after its first `pc(0x…);` line, at
-/// that line's indent. Comments whose block prints no `pc` are dropped;
-/// gives how many went in.
+/// `text` with each block's comments after its first line ending in
+/// `pc(0x…);`: at that line's indent when the `pc` stands alone, one level
+/// deeper when it ends a `match` arm's opening line (`N => { pc(0x…);`).
+/// Comments whose block prints no `pc` are dropped; gives how many went in.
 pub fn insert_notes(text: &str, notes: &BTreeMap<u32, Vec<String>>) -> (String, usize) {
     let mut by_line: BTreeMap<usize, &Vec<String>> = BTreeMap::new();
     let lines: Vec<&str> = text.split_inclusive('\n').collect();
     for (k, ns) in notes {
         let pc = format!("pc(0x{k:08x});");
-        if let Some(i) = lines.iter().position(|l| l.trim() == pc) {
+        let arm = format!("=> {{ {pc}");
+        let at = |l: &&str| l.trim() == pc || l.trim_end().ends_with(&arm);
+        if let Some(i) = lines.iter().position(at) {
             by_line.insert(i, ns);
         }
     }
@@ -406,12 +409,16 @@ pub fn insert_notes(text: &str, notes: &BTreeMap<u32, Vec<String>>) -> (String, 
     for (i, l) in lines.iter().enumerate() {
         out.push_str(l);
         if let Some(ns) = by_line.get(&i) {
-            let ind = &l[..l.len() - l.trim_start().len()];
+            let mut ind = l[..l.len() - l.trim_start().len()].to_string();
+            if !l.trim_start().starts_with("pc(") {
+                // An arm's opening line: the body sits one level in.
+                ind.push_str("    ");
+            }
             if !l.ends_with('\n') {
                 out.push('\n');
             }
             for c in *ns {
-                out.push_str(ind);
+                out.push_str(&ind);
                 out.push_str(c);
                 out.push('\n');
                 n += 1;
@@ -443,6 +450,18 @@ mod tests {
         let (s, n) = insert_notes(t, &notes);
         assert_eq!(n, 1);
         assert!(s.contains("        pc(0x08000105);\n        // dwarf r0: x\n}"));
+    }
+
+    #[test]
+    fn notes_in_match_arm() {
+        let t = "        match b {\n            3 => { pc(0x08000105);\n                r0 = 1;\n            }\n";
+        let notes: BTreeMap<u32, Vec<String>> =
+            [(0x0800_0105, vec![format!("{LOCAL_NOTE}r0: x")])].into();
+        let (s, n) = insert_notes(t, &notes);
+        assert_eq!(n, 1);
+        assert!(s.contains(
+            "            3 => { pc(0x08000105);\n                // dwarf r0: x\n                r0 = 1;"
+        ));
     }
 
     #[test]
