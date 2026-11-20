@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# agbcc with DWARF 2 (-g) for a decomp whose Makefile pipes preprocessed C
+# into `$(CC) -o OUT.s FLAGS…` (metroidret/mzm; scripts/fetch-decomps.sh sets
+# CC="scripts/agbcc-dwarf AGBCC SRC.c"). Two fixes keep its ROM byte-identical
+# and its names right:
+# - cpp read stdin, so its line markers name "<stdin>"; they are given the C
+#   file's name, which agbcc takes as the unit's name and the line table's.
+# - with -g agbcc ends the assembly with `.section .text`, `.Letext0:` and
+#   its debug sections, so the alignment the Makefile appends ("dont insert
+#   nops") would land in a debug section, and the section the C file ended
+#   in (.rodata, mostly) would lose it. That section's directive is appended
+#   again.
+set -euo pipefail
+agbcc=$1 src=$2
+shift 2
+out=
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do
+  if [[ ${args[i]} == -o ]]; then out=${args[i + 1]}; fi
+done
+[[ -n $out ]] || { echo "agbcc-dwarf: no -o in $*" >&2; exit 2; }
+sed "s|\"<stdin>\"|\"$src\"|" | "$agbcc" -g "$@"
+# The last section directive before agbcc's own `.section .text` above
+# `.Letext0:`; .text if there is none.
+last=$(awk '
+  /^\.Letext0:/ { print (prev == "" ? "\t.text" : prev); found = 1; exit }
+  /^[ \t]*(\.text|\.data|\.bss|\.section)([ \t,]|$)/ { prev = cur; cur = $0 }
+  END { if (!found) print "\t.text" }' "$out")
+printf '%s\n' "$last" >>"$out"

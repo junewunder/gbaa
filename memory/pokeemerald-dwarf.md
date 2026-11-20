@@ -14,3 +14,15 @@ hook: binutils 15.2 rejects agbcc's .debug_abbrev; Fedora gdb reads it (info sco
 - Each variable has one location for its whole scope (no location lists):
   `CreateBoxMon`'s stack-passed 6th parameter shows as `$r0`. Treat
   registers as hints. More in `docs/research/name-recovery.md`.
+
+## Adding -g to another agbcc decomp (mzm, 2026-11-20)
+
+- `-g` alone moved mzm's ROM (sha1 off): agbcc ends each `.s` with
+  `.section .text`, `.Letext0:` and the debug sections, so the Makefile's
+  appended `.align 2, 0 @ dont insert nops` pads a debug section, and the
+  section the C file really ended in (`.rodata` in 469 of 654 files) loses
+  it; `.text` then gets nop padding. Appending `.text` (pokeemerald's fix)
+  isn't enough for mzm: re-enter the section open before agbcc's
+  `.section .text` (`scripts/agbcc-dwarf`).
+- mzm pipes preproc into cpp, so units are named `<stdin>`: sed the line
+  markers to the C file's name before agbcc.
