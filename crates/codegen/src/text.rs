@@ -121,6 +121,9 @@ pub struct Code {
     pub named: Vec<(u8, String)>,
 }
 
+/// One character or code of a decoded string: its spelling and its bytes.
+pub type Token = (String, Vec<u8>);
+
 /// A character table, ready to decode.
 #[derive(Clone, Debug, Default)]
 pub struct Charmap {
@@ -232,6 +235,31 @@ impl Charmap {
         each.join(" ")
     }
 
+    /// The table's spellings and their bytes, for encoding (unit
+    /// `native/lift-text-editable`): each character, and each code that
+    /// takes no arguments as `{NAME}`; a spelling more than one sequence
+    /// has, by the least. The end's bytes are [`Charmap::end`].
+    pub fn spellings(&self) -> Vec<(String, Vec<u8>)> {
+        let mut by: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+        for (bytes, (name, text)) in &self.seqs {
+            let sp = match name {
+                false => text.clone(),
+                true if self.enc.pokemon && Charmap::args_after(bytes) > 0 => continue,
+                true => format!("{{{text}}}"),
+            };
+            let e = by.entry(sp).or_insert_with(|| bytes.clone());
+            if bytes < e {
+                *e = bytes.clone();
+            }
+        }
+        by.into_iter().collect()
+    }
+
+    /// The bytes that end a string.
+    pub fn end(&self) -> &[u8] {
+        &self.enc.end
+    }
+
     /// The string at the start of `bytes`, as pret's source writes it, if
     /// it decodes whole up to its end (`0xFF` in a Pokémon table) and
     /// looks like text (the module doc); and its length in bytes, the end
@@ -247,13 +275,38 @@ impl Charmap {
         self.decode_as(bytes, false)
     }
 
+    /// [`Charmap::decode`]'s string as its tokens: each character or code
+    /// as it spells it, with its bytes (the end's not among them). Joined,
+    /// the spellings are the string.
+    pub fn tokens(&self, bytes: &[u8]) -> Option<(Vec<Token>, usize)> {
+        let mut toks = Vec::new();
+        let (_, n) = self.decode_with(bytes, true, Some(&mut toks))?;
+        Some((toks, n))
+    }
+
     fn decode_as(&self, bytes: &[u8], check: bool) -> Option<(String, usize)> {
+        self.decode_with(bytes, check, None)
+    }
+
+    fn decode_with(
+        &self,
+        bytes: &[u8],
+        check: bool,
+        mut toks: Option<&mut Vec<Token>>,
+    ) -> Option<(String, usize)> {
         let u = self.enc.unit;
         let mut out = String::new();
         let (mut plain, mut alnum, mut chars, mut holders) = (0usize, 0usize, 0usize, 0usize);
         let mut spaces = 0;
         let mut i = 0;
+        let mut last = (0, 0);
         loop {
+            if let Some(t) = toks.as_deref_mut()
+                && i > last.1
+            {
+                t.push((out[last.0..].to_string(), bytes[last.1..i].to_vec()));
+            }
+            last = (out.len(), i);
             if i >= MAX_BYTES {
                 return None;
             }
@@ -417,22 +470,52 @@ impl Charmap {
         size: &dyn Fn(u32) -> Option<u32>,
         label: &dyn Fn(u32) -> Option<String>,
     ) -> Option<String> {
+        let (head, st) = self.table_texts(x, rom, at, size, label)?;
+        let st = st.into_iter().map(|(_, _, s)| s).collect();
+        Some(Self::show(head, st))
+    }
+
+    /// The strings [`Charmap::table_note`] finds, with its head (`at`, or
+    /// `at[k] name` for an inner table): each string's table word, its
+    /// address, and its text.
+    #[allow(clippy::type_complexity)]
+    pub fn table_texts(
+        &self,
+        x: u32,
+        rom: &[u8],
+        at: &str,
+        size: &dyn Fn(u32) -> Option<u32>,
+        label: &dyn Fn(u32) -> Option<String>,
+    ) -> Option<(String, Vec<(u32, u32, String)>)> {
         let leaf = |t: u32| {
             let sized = size(t).map(|n| n as usize / 4);
             let ptrs = pointers(rom, t, sized.unwrap_or(MAX_ENTRIES))?;
             let mut out = Vec::new();
-            for p in &ptrs {
+            for (k, p) in ptrs.iter().enumerate() {
                 match self.decode(rom.get((*p - 0x0800_0000) as usize..)?) {
-                    Some((s, _)) => out.push(s),
+                    Some((s, _)) => out.push((t + 4 * k as u32, *p, s)),
                     None if sized.is_some() => return None,
                     None => break,
                 }
             }
             (out.len() >= 2 || sized == Some(out.len()) && !out.is_empty()).then_some(out)
         };
+        if let Some(st) = leaf(x) {
+            return Some((at.to_string(), st));
+        }
+        let outer = pointers(rom, x, size(x).map_or(MAX_ENTRIES, |n| n as usize / 4))?;
+        outer.iter().enumerate().find_map(|(k, &t)| {
+            let st = leaf(t)?;
+            let name = label(t).unwrap_or_else(|| format!("0x{t:08x}"));
+            Some((format!("{at}[{k}] {name}"), st))
+        })
+    }
+
+    /// A table note's text: `head: ["…", …]`.
+    fn show(head: String, strings: Vec<String>) -> String {
         // The strings, as many as fit in MAX_CHARS, the first at least
         // (cut with `…` itself if it's longer); `…` says more follow.
-        let show = |head: String, strings: Vec<String>| {
+        {
             let mut o = String::new();
             for (k, st) in strings.iter().enumerate() {
                 let used = o.chars().count();
@@ -458,16 +541,7 @@ impl Charmap {
                 o.push('"');
             }
             format!("{head}: [{o}]")
-        };
-        if let Some(st) = leaf(x) {
-            return Some(show(at.to_string(), st));
         }
-        let outer = pointers(rom, x, size(x).map_or(MAX_ENTRIES, |n| n as usize / 4))?;
-        outer.iter().enumerate().find_map(|(k, &t)| {
-            let st = leaf(t)?;
-            let name = label(t).unwrap_or_else(|| format!("0x{t:08x}"));
-            Some(show(format!("{at}[{k}] {name}"), st))
-        })
     }
 }
 
