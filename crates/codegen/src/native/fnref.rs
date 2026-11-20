@@ -552,7 +552,6 @@ impl Drop for CodeGuard {
 /// (`native/whole-lift-memory`).
 const TOKENS: usize = 48_000_000;
 
-/// The lowest [`Tok::Ref`].
 /// [`G::mem_log`]'s tag of a store to the pile, and to a cell; one to an
 /// object's or a stack's cell is tagged by it.
 const PILE: u32 = 0;
@@ -573,6 +572,7 @@ const RAM_ANY: Tok = Tok::Ram(0);
 const STACK: Tok = Tok::Ram(1);
 const STACK_CELL: u32 = 0x0fff_fff0;
 
+/// The lowest [`Tok::Ref`].
 const REF0: Tok = Tok::Ref {
     src: Src::Pile(0),
     xf: Xf {

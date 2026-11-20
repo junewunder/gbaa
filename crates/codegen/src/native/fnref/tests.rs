@@ -1489,8 +1489,6 @@ fn table_use(n: u32, w: Width, body: &dyn Fn(&mut B, ValueId) -> ValueId) -> Sha
     )
 }
 
-/// A read of a hundred functions' addresses is one [`Tok::Ref`], where
-/// one of three is its tokens: every use comes to the same.
 /// Two RAM pointers the run drops: another mode's registers
 /// (`native/fnref-ram-pointers`), each plus an unknown.
 fn dropped(b: &mut B) -> (ValueId, ValueId) {
@@ -1499,6 +1497,8 @@ fn dropped(b: &mut B) -> (ValueId, ValueId) {
     (b.bin(BinOp::Add, p, n), b.bin(BinOp::Add, q, m))
 }
 
+/// A read of a hundred functions' addresses is one [`Tok::Ref`], where
+/// one of three is its tokens: every use comes to the same.
 #[test]
 fn a_large_read_is_used_as_a_small_one_is() {
     type Body = (
