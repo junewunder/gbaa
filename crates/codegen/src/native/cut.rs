@@ -18,7 +18,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// The first lines of every file a cut writes: what the text an editor
-/// meets is, and what must stay as cut.
+/// meets is, and what must stay as cut. [`head`] adds a line for each
+/// checked helper ([`HELPERS`]) the cut uses, then [`HEAD_END`].
 pub const HEAD: &str = "// Cut by `gbaa-lift --cut` (crates/codegen/src/native/cut.rs): edit freely;\n\
 // build with `gbaa-lift ROM OUT --replace DIR/replace.toml`. orig/ keeps\n\
 // the print as cut, for a re-cut's three-way merge.\n\
@@ -31,8 +32,66 @@ pub const HEAD: &str = "// Cut by `gbaa-lift --cut` (crates/codegen/src/native/c
 //   `Result<_, Exit>` (`?` after a call that can). Keep that as cut.\n\
 // - `lN` is the stack slot N bytes below the entry sp; `vN` a value;\n\
 //   `RET` the lr a call leaves (a return's marker). `pc(0x…)` names the\n\
-//   guest block for a stop's backtrace; `bank_sp(g, r13)` comes before what may run a handler.\n\
-// - Call another function by its Rust name, as the lift does.\n\n";
+//   guest block for a stop's backtrace; `bank_sp(g, r13)` comes before what may run a handler.\n";
+
+/// The header's last line, after the helpers'.
+const HEAD_END: &str = "// - Call another function by its Rust name, as the lift does.\n\n";
+
+/// The helpers an edit may meet that the header explains when the cut
+/// uses them (unit `native/lift-cut-header-helpers`): the name called,
+/// and its line.
+pub const HELPERS: [(&str, &str); 4] = [
+    (
+        "pin",
+        "// - `pin(p, 0x…)` checks that pointer `p` is the global at that RAM offset\n\
+//   (the field next to it is read or written by name, not through `p`); it\n\
+//   panics if not, and doesn't change with the value. Keep it with its access.\n",
+    ),
+    (
+        "ix",
+        "// - `G[ix(p, 0x…, e, n)]` is the element of RAM global `G` (at that offset,\n\
+//   `n` of `e` bytes) pointer `p` points to; it panics outside it.\n",
+    ),
+    (
+        "rix",
+        "// - `R[rix(p, 0x…, e, n)]` is the same for a ROM static from that guest\n\
+//   address: `p`'s element of `R`, checked.\n",
+    ),
+    (
+        "prim::sext",
+        "// - `prim::sext(x, n)` sign-extends the low `n` bits of `x` (a signed\n\
+//   byte or halfword).\n",
+    ),
+];
+
+/// Whether `body` calls `name` (as `name(`, not part of a longer name:
+/// `hw::spin(` isn't `pin(`, `rix(` isn't `ix(`).
+fn calls(body: &str, name: &str) -> bool {
+    let pat = format!("{name}(");
+    body.match_indices(&pat).any(|(i, _)| {
+        !body[..i]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_' || c == ':')
+    })
+}
+
+/// The header for a cut of `body`: [`HEAD`], a line for each of
+/// [`HELPERS`] it calls, then the last line.
+pub fn head(body: &str) -> String {
+    let mut h = String::from(HEAD);
+    for (name, line) in HELPERS {
+        if calls(body, name) {
+            h += line;
+        }
+    }
+    h + HEAD_END
+}
+
+/// `body` as a cut file: its [`head`], then it.
+pub fn with_head(body: &str) -> String {
+    head(body) + body
+}
 
 /// A cut's `replace.toml`.
 #[derive(Debug, Default, PartialEq)]
@@ -257,7 +316,7 @@ pub fn cut(
                 }
             }
         }
-        let text = format!("{HEAD}{body}");
+        let text = with_head(body);
         let (s, o) = (src.join(&file), orig.join(&file));
         let edited = match (std::fs::read(&s), std::fs::read(&o)) {
             (Ok(a), Ok(b)) => a != b,
@@ -320,7 +379,7 @@ pub fn stale(origs: &Origs, lifted: &BTreeMap<u32, String>) -> Vec<u32> {
             let Some(t) = lifted.get(k) else {
                 return false;
             };
-            std::fs::read_to_string(o).ok() != Some(format!("{HEAD}{t}"))
+            std::fs::read_to_string(o).ok() != Some(with_head(t))
         })
         .map(|(&k, _)| k)
         .collect()
@@ -334,6 +393,25 @@ mod tests {
                          pub fn tally(g: &mut Game, mut r13: u32, mut n: u32) -> u32 {\n    \
                          let v4: u32 = n;\n    g.ram.gTally = 0x82u32;\n    \
                          // c/switch/main.c:222\n    let v5: u32 = g.ram.gFrame;\n    return v5;\n}\n\n";
+
+    /// The header explains a checked helper only where the cut calls it
+    /// (and `hw::spin(` isn't `pin(`, nor `rix(` `ix(`).
+    #[test]
+    fn the_header_explains_the_helpers_the_cut_uses() {
+        let plain = head(TALLY);
+        assert!(plain.starts_with(HEAD) && plain.ends_with(HEAD_END));
+        assert_eq!(plain.len(), HEAD.len() + HEAD_END.len());
+        let body = "pin(v3, 0x1c0); g.ram.gX.a = v4;\nlet v5 = ROM_T[rix(v2, 0x80001000, 4, 8)];\n\
+                    let v6 = prim::sext(v5, 8); hw::spin(g)?;\n";
+        let h = head(body);
+        assert!(h.contains("// - `pin(p, 0x…)`"));
+        assert!(h.contains("// - `R[rix("));
+        assert!(h.contains("// - `prim::sext("));
+        assert!(!h.contains("// - `G[ix("));
+        let h = head("let v1 = g.ram.gT[ix(v0, 0x40, 2, 16)];\n");
+        assert!(h.contains("// - `G[ix(") && !h.contains("rix(") && !h.contains("`pin("));
+        assert_eq!(with_head("x"), format!("{plain}x"));
+    }
 
     #[test]
     fn a_functions_name_is_its_entrys() {
@@ -414,10 +492,10 @@ mod tests {
         let got = std::fs::read_to_string(&s).unwrap();
         assert_eq!(
             got,
-            format!("{HEAD}{}", printed.replace("0x82u32", "0x40u32"))
+            with_head(&printed.replace("0x82u32", "0x40u32"))
         );
         let orig = std::fs::read_to_string(dir.join("orig/tally.rs")).unwrap();
-        assert_eq!(orig, format!("{HEAD}{printed}"));
+        assert_eq!(orig, with_head(&printed));
         let m = CutMod::load(&dir).unwrap().unwrap();
         assert_eq!(m.gbaa, "c2");
         let (cuts, origs) = read_files(
