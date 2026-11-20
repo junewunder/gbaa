@@ -1,6 +1,6 @@
 ---
-title: Emerald's function-address flow settles: what stopped it, and how to look
-hook: three kinds of junk value dripped tokens; GBAA_FNREF_GAINS shows what entries gain; check Metroid is byte-same
+title: Emerald's function-address flow settles: what stopped it
+hook: three kinds of junk value dripped tokens; GBAA_FNREF_GAINS shows them; keep Metroid byte-same
 ---
 
 How it got here before 2026-11-19 (where the memory went, the Ref fix, the
