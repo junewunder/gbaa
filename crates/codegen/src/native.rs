@@ -51,7 +51,8 @@
 //! prelude's `Game::at`, [`heap`]; accesses as the names files' named
 //! fields, [`fields`]; metric names and bars,
 //! [`metrics`]; the crate's files, [`modules`]; functions and data by the
-//! names file's names, [`named`]; `lift-check.toml`'s
+//! names file's names, [`named`]; register locals and parameters by
+//! their DWARF variables' names, [`local_names`]; `lift-check.toml`'s
 //! programs, [`lift_check`]. A function's blocks and IR come from
 //! [`crate::func`], its summary from [`crate::saves`].
 //!
@@ -213,6 +214,7 @@ pub mod globals;
 pub mod heap;
 pub mod lift_check;
 pub mod live;
+pub mod local_names;
 pub mod metrics;
 pub mod modules;
 pub mod named;
@@ -435,6 +437,12 @@ pub struct Holes {
     /// ([`crate::lower::word_note`]; unit `native/lift-text`). Comments
     /// only: `lines` leaves them out, `text_notes` counts them.
     pub text: Option<std::sync::Arc<crate::names::SourceMap>>,
+    /// The same files' map, where it has `[locals]` or prototypes: a
+    /// function's register locals and parameters take its variables'
+    /// names where liveness agrees, else a comment
+    /// ([`local_names`]; unit `native/lift-local-names`). `None` with
+    /// `--no-local-names`.
+    pub dwarf: Option<std::sync::Arc<crate::names::SourceMap>>,
     /// The same files' line table, where they have one: each row that
     /// starts a source line, as `file:line` by its instruction's address
     /// ([`line_starts`]). Its `// c/switch/main.c:42` comment prints above
@@ -1876,6 +1884,16 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 .count()
         })
         .sum();
+    // Nor the register variables' comments ([`local_names`]).
+    let local_notes: usize = files
+        .files
+        .iter()
+        .map(|(_, t)| {
+            t.lines()
+                .filter(|l| l.trim_start().starts_with(local_names::LOCAL_NOTE))
+                .count()
+        })
+        .sum();
     // Nor are the source lines' ([`Holes::lines`]).
     let line_notes: usize = files
         .files
@@ -1892,9 +1910,15 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             - rom_lines
             - io_lines
             - text_notes
+            - local_notes
             - line_notes
             - text_lines),
     );
+    // Only where the names files give DWARF variables or prototypes.
+    if holes.dwarf.is_some() {
+        m.push("locals_named", n(soft.locals_named));
+        m.push("locals_noted", n(soft.locals_noted));
+    }
     m.push("io_named", soft.io_named);
     m.push("io_unnamed", soft.io_unnamed);
     m.push("text_notes", n(text_notes));
@@ -3184,6 +3208,11 @@ struct Soft {
     /// Functions whose body is in their plain entry, its parameters
     /// arguments by name ([`FnPrinter::entries`]).
     body_in_plain: usize,
+    /// DWARF variables and parameters whose register local or argument
+    /// took the variable's name, and the variables left a comment
+    /// ([`local_names`]).
+    locals_named: usize,
+    locals_noted: usize,
     /// And those whose plain entry still packs its arguments into
     /// [`Regs::call`] for `x_` (barred): what they take as they came is
     /// more than those (a flag, r4-r12, an lr not proven `RET`).
@@ -3575,6 +3604,7 @@ impl FnPrinter<'_, '_> {
             s.push_str("}\n\n");
             let e = self.entries(&s[head..], &ty);
             s.insert_str(head, &e);
+            self.name_locals(&mut s, head, e.len());
             return s;
         }
         self.soft.fns_match += 1;
@@ -3591,7 +3621,49 @@ impl FnPrinter<'_, '_> {
         s.push_str("            _ => unreachable!(),\n        }\n    }\n}\n\n");
         let e = self.entries(&s[head..], &ty);
         s.insert_str(head, &e);
+        self.name_locals(&mut s, head, e.len());
         s
+    }
+
+    /// The function's register locals and parameters by their DWARF
+    /// names, where liveness agrees, else a comment where each variable's
+    /// range starts ([`local_names`]): over `s` from `head`, whose
+    /// entries (`e_len` bytes, the adapter's first, which keeps its
+    /// registers) the printer keeps too ([`Entries`]).
+    fn name_locals(&mut self, s: &mut String, head: usize, e_len: usize) {
+        let Some(names) = self.holes.dwarf.clone() else {
+            return;
+        };
+        let k = self.f.entry;
+        let Some(e) = self.soft.entries.get(&k) else {
+            return;
+        };
+        let start = head + e.adapter.len();
+        if !s[head..].starts_with(&e.adapter) {
+            return;
+        }
+        let mut words = local_names::words_of(&s[start..]);
+        words.extend(local_names::words_of(&e.no_x));
+        let written = written_words(&s[head + e_len..]);
+        let facts = local_names::Facts {
+            f: self.f,
+            dead: &self.dead,
+            local: &self.local,
+            live_in: &self.live_in,
+        };
+        let n = local_names::plan(&names, &facts, &words, &written);
+        if n.renames.is_empty() && n.notes.is_empty() {
+            return;
+        }
+        let renamed = local_names::rename(&s[start..], &n.renames);
+        let (text, noted) = local_names::insert_notes(&renamed, &n.notes);
+        s.replace_range(start.., &text);
+        if let Some(e) = self.soft.entries.get_mut(&k) {
+            e.keep_x = local_names::rename(&e.keep_x, &n.renames);
+            e.no_x = local_names::rename(&e.no_x, &n.renames);
+        }
+        self.soft.locals_named += n.named;
+        self.soft.locals_noted += noted;
     }
 
     /// The function's entries and the start of its body
@@ -7830,6 +7902,67 @@ mod tests {
         assert_eq!(m.get("text_notes"), Some(1));
         assert_eq!(pm.get("text_notes"), Some(0));
         assert_eq!(m.get("lines"), pm.get("lines"));
+    }
+
+    /// A register local takes its DWARF variable's name where every
+    /// access of the register is in the variable's range, and the
+    /// parameter its prototype's name where its local is never written
+    /// (unit `native/lift-local-names`); a range that misses an access
+    /// leaves a comment where it starts, which `lines` leaves out.
+    #[test]
+    fn register_locals_take_their_dwarf_names_where_liveness_agrees() {
+        let mut words = [0xE1A0_0000u32; 0x10];
+        words[0] = 0xE3A0_0003; // mov r0, #3
+        words[1] = 0xEB00_0001; // bl 0x08000010
+        words[2] = 0xEAFF_FFFE; // b .
+        words[4] = 0xE1A0_2000; // count: mov r2, r0
+        words[5] = 0xE252_2001; // subs r2, r2, #1
+        words[6] = 0x1AFF_FFFD; // bne 0x08000014
+        words[7] = 0xE3A0_1403; // mov r1, #0x03000000
+        words[8] = 0xE581_2000; // str r2, [r1]
+        words[9] = 0xE12F_FF1E; // bx lr
+        let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let sha = crate::names::sha1_hex(&rom);
+        let lifted = |from: u32| {
+            let map = format!(
+                "[map]\nrom_sha1 = \"{sha}\"\n[functions]\n\
+                 0x08000010 = {{ name = \"count\", size = 24, proto = \"void count(u32 k)\" }}\n\
+                 [locals]\n0x08000010 = [\n  {{ name = \"left\", reg = 2, from = {from:#010x}, to = 0x08000028, type = \"u32\" }},\n]\n"
+            );
+            let names = crate::names::SourceMap::from_texts(&sha, &[&map]).unwrap();
+            let h = Holes {
+                dwarf: Some(std::sync::Arc::new(names)),
+                ..Holes::parse("").unwrap()
+            };
+            let l = lift(&rom, "t", &h);
+            let text: String = l.files.iter().map(|(_, t)| t.as_str()).collect();
+            let f = &text[text.find("pub fn f_08000010(").expect("count")..];
+            (f[..f.find("\n}\n").unwrap()].to_string(), l.metrics)
+        };
+        let (f, m) = lifted(0x0800_0010);
+        assert!(f.contains("left") && !f.contains("r2"), "{f}");
+        assert!(f.contains("k: u32") && !f.contains("r0"), "{f}");
+        assert_eq!(
+            (m.get("locals_named"), m.get("locals_noted")),
+            (Some(2), Some(0))
+        );
+        // The range starts after the first write: a comment, not a name.
+        let (f, m) = lifted(0x0800_0014);
+        assert!(f.contains("r2") && !f.contains("let left"), "{f}");
+        assert!(
+            f.contains(&format!("{}r2: left", local_names::LOCAL_NOTE)),
+            "{f}"
+        );
+        assert_eq!(
+            (m.get("locals_named"), m.get("locals_noted")),
+            (Some(1), Some(1))
+        );
+        let (_, plain) = {
+            let l = lift(&rom, "t", &Holes::parse("").unwrap());
+            (l.files, l.metrics)
+        };
+        assert_eq!(m.get("lines"), plain.get("lines"));
+        assert_eq!(plain.get("locals_named"), None);
     }
 
     /// Each source line's first instruction gets the line table's `//
