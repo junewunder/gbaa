@@ -789,11 +789,12 @@ snapshots-readable rom=(roms / "Pokemon - Emerald Version.gba") names=(gbaa_data
     {{lock}} cargo build -q --release -p codegen --bin gbaa-recompile
     {{cap}} MemoryMax=8G target/release/gbaa-recompile --snapshots {{quote(rom)}} {{quote(file)}} --names {{quote(names)}} --readable {{quote(list)}}
 
-# Builds a recompiled crate in release (heavy: refuses unless `free -g` shows NEED_GB + 3 available; GBAA_GEN_NEED_GB, default 4) into target/recompiled, capped at available - 3 GB with no swap.
-build-recompiled out:
+# Builds a recompiled crate in release (heavy: refuses unless `free -g` shows NEED_GB + 3 available; GBAA_GEN_NEED_GB, default 4) into target/recompiled, capped at available - 3 GB with no swap. FEATURES: the crate's cargo features (a lift's `guest-pc`, each block's guest pc for a stop to name: `just lift`, `fn-check` and `lift-check` build with it).
+build-recompiled out features="":
     #!/usr/bin/env bash
     set -eu
     out={{quote(out)}}
+    features=({{ if features == "" { "" } else { "--features " + quote(features) } }})
     need=$(( ${GBAA_GEN_NEED_GB:-4} + 3 ))
     avail=$(free -g | awk '/^Mem:/ {print $7}')
     if [ "$avail" -lt "$need" ]; then
@@ -801,7 +802,7 @@ build-recompiled out:
         exit 1
     fi
     # Capped at what was available less 3 GB, no swap: a build that outgrows it is OOM-killed instead of thrashing the machine.
-    {{lock}} systemd-run --user --scope -q -p MemoryMax=$(( avail - 3 ))G -p MemorySwapMax=0 cargo build -q --release --manifest-path "$out/Cargo.toml" --target-dir target/recompiled
+    {{lock}} systemd-run --user --scope -q -p MemoryMax=$(( avail - 3 ))G -p MemorySwapMax=0 cargo build -q --release --manifest-path "$out/Cargo.toml" --target-dir target/recompiled "${features[@]}"
 
 # Builds a recompiled crate (`build-recompiled`) and runs it with gbaa-desktop's arguments, capped at 3 GB of RAM and no swap so a runaway can't take the desktop down.
 [positional-arguments]
@@ -989,7 +990,7 @@ lift rom out="" *flags:
     lifted=0
     {{cap}} MemoryMax=16G target/release/gbaa-lift "$rom" "$out" "${holes[@]}" "${bars[@]}" "$@" || lifted=$?
     built=0
-    just build-recompiled "$out" || built=$?
+    just build-recompiled "$out" guest-pc || built=$?
     # Where the built program stops, or that it didn't build: into OUT's report.txt and metrics.toml.
     first=0
     if [ "$built" = 0 ]; then target/release/gbaa-first-stop "$out" || first=$?; else target/release/gbaa-first-stop "$out" --not-built || first=$?; fi
@@ -1021,7 +1022,7 @@ fn-check rom *flags:
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift
     mkdir -p "$out"
     {{cap}} MemoryMax=4G target/release/gbaa-lift "$rom" "$out" --name "fn-check-$name" "${holes[@]}" "${args[@]}" > "$out.lift.txt" || { tail -5 "$out.lift.txt"; exit 1; }
-    just build-recompiled "$out"
+    just build-recompiled "$out" guest-pc
     {{cap}} MemoryMax=3G target/recompiled/release/gbaa-native-fn-check-"$name" --headless --frames "$frames"
 
 # Where a built lift stops (native/native-first-stop; codegen::native::first_stop; docs/tools/commands.md): runs OUT's program (a lift `just lift` built into target/recompiled) headless for 600 frames in its own 3 GB scope and writes how far it got to OUT/metrics.toml ([run]: frames_run, stop, what, detail, functions) and the end of OUT/report.txt: every frame, or the stop's kind (an unmodelled I/O register by address and name, memory the program hasn't got, a call to no function, another panic, the time limit, killed) with the lifted functions on the stack. `just lift` ends with it. ARGS: --frames N, --time-limit SECONDS, --bin FILE, --not-built (the build failed). A lift with hard holes can't build, so its stop is not-built and nothing is run; a build that failed with none records no run (it may only have been refused or killed); a binary older than OUT's sources is refused. A stop isn't a failure: exits 0 once recorded.

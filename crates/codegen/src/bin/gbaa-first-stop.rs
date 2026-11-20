@@ -230,14 +230,14 @@ fn first_stop(a: &Args) -> Result<(), String> {
             .and_then(|m| m.modified())
             .map_err(|e| {
                 format!(
-                    "{}: {e} (`just build-recompiled {}`; a build that failed is `--not-built`)",
+                    "{}: {e} (`just build-recompiled {} guest-pc`; a build that failed is `--not-built`)",
                     bin.display(),
                     a.out.display()
                 )
             })?;
         if built < newest_source(&a.out)? {
             return Err(format!(
-                "{}: older than {}'s sources, so not this lift's build (`just build-recompiled {}`; a build that failed is `--not-built`)",
+                "{}: older than {}'s sources, so not this lift's build (`just build-recompiled {} guest-pc`; a build that failed is `--not-built`)",
                 bin.display(),
                 a.out.display(),
                 a.out.display()

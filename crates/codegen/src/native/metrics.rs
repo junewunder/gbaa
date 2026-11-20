@@ -98,6 +98,14 @@
 //! `io_unnamed`, those at an address no register holds, left as numbers
 //! (barred, at 0 on the C programs and Metroid). The registers' constants
 //! in `main.rs` are data, not in `lines`.
+//!
+//! Entries (`native/lift-one-entry`): `entries_beyond_one` counts the
+//! entries the lifted functions print beyond the one each needs (an
+//! extended entry `x_` something falls, jumps or calls into, or a named
+//! function's body (`native/named.rs`); an adapter
+//! `a_` for `FNS`); `guest_pc_plain` the blocks that set the guest pc in
+//! a plain build, outside the prelude's `pc` and its `guest-pc` feature
+//! (barred at 0).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
