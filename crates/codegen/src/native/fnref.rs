@@ -215,6 +215,25 @@
 //! `gEffects[i]` still reads every global's cell
 //! (`docs/research/fnref-held-words.md`, "The heap by allocation site").
 //!
+//! **Registers at a call** (`native/fnref-live-registers`;
+//! `GBAA_FNREF_LIVE` set, [`live_env`], off by default). As above, a call
+//! passes r0-r3 and takes all four back as the callee's returns hold
+//! them, so a register a callee never writes comes back as every
+//! caller's value of it joined, and a leftover in a scratch register
+//! travels the program. On, three rules, each from the callee's summary
+//! ([`crate::saves::Summary`]) where its run and its callees' didn't stop
+//! at a hole: a register the callee leaves as it came on every return
+//! ([`FnIn::leaves`]) is the caller's own value after the call
+//! ([`G::kept`]), which is what the machine does and what the lifted
+//! program has; a callee is given only the registers it reads
+//! ([`FnIn::reads`]: its parameters, and those it may return as they
+//! came on some path or that a BIOS or indirect call in it may leave);
+//! and a call through a value no function's address has reached yet
+//! waits until the run has otherwise settled before it counts as an
+//! incomplete callee set ([`Run::call_by_value`]), where at once its
+//! arguments went to every loose function for good and what that held
+//! depended on the order the functions ran in.
+//!
 //! **What isn't allowed** ([`Why`]): a function's address used as an
 //! address, in arithmetic but the split and join, in an ordered compare or
 //! a bit test, its halves or bytes used as anything but stored or joined,
@@ -241,7 +260,8 @@
 //! `GBAA_FNREF_OFF` ([`off_env`]), which measures what the words would be
 //! without one kind of hole. `GBAA_FNREF_RAM=1` turns the closed world's
 //! RAM pointers on ([`ram_on`]), `GBAA_FNREF_HEAP=1` those and the
-//! allocation sites ([`heap_env`]).
+//! allocation sites ([`heap_env`]), `GBAA_FNREF_LIVE=1` the registers'
+//! rules at a call ([`live_env`]).
 //!
 //! Precision: the one pile is the limit (`docs/native-stage-b.md`, "Known
 //! gaps", the pile). agb keeps closures and trait objects on its heap, so a
@@ -6961,6 +6981,14 @@ pub fn follow(
     )
 }
 
+/// Whether `f` has a jump by value the run takes for a tail call.
+fn jumps_by_value(f: &FnIn) -> bool {
+    f.blocks
+        .values()
+        .flat_map(|b| b.exits.values())
+        .any(|o| matches!(o.edge, Edge::Tail(None) | Edge::TailOr(_)))
+}
+
 /// [`follow`] as told: RAM pointers kept or not ([`ram_on`]); the
 /// allocators whose calls return an allocation of their own
 /// (`native/fnref-heap-sites`; none: no [`Tok::Heap`] is made); and
@@ -6989,23 +7017,17 @@ fn follow_live(
         roads: std::env::var_os("GBAA_FNREF_WATCH").is_some(),
         gains: std::env::var_os("GBAA_FNREF_GAINS").map(|_| BTreeMap::new()),
         allocs: allocs.clone(),
+        // (Neither for a function that jumps by value: its registers go
+        // on to wherever its target's value says, which may be more
+        // functions than its summary followed.)
         leaves: fns
             .iter()
-            .filter(|f| live && f.leaves != 0)
+            .filter(|f| live && f.leaves != 0 && !jumps_by_value(f))
             .map(|f| (f.entry, f.leaves))
             .collect(),
-        // (Not one that jumps by value: a `bx r3` veneer reads r3 and
-        // hands the rest to wherever it goes, which its summary counts
-        // as the target's reads, not its own.)
         reads: fns
             .iter()
-            .filter(|f| live && f.reads & 0xf != 0xf)
-            .filter(|f| {
-                !f.blocks
-                    .values()
-                    .flat_map(|b| b.exits.values())
-                    .any(|o| matches!(o.edge, Edge::Tail(None) | Edge::TailOr(_)))
-            })
+            .filter(|f| live && f.reads & 0xf != 0xf && !jumps_by_value(f))
             .map(|f| (f.entry, f.reads))
             .collect(),
         defer: live,

@@ -2949,7 +2949,9 @@ fn a_call_with_no_callee_yet_waits_for_one() {
     let f = run(&fns());
     assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
     assert!(!f.proven(0x0800_0404), "{f:?}");
-    // Waiting, it calls F alone, and H goes nowhere.
+    // Waiting, it calls F alone, and H goes nowhere. (The entry for no
+    // function only turns the switch on: every function leaves nothing
+    // and is given all four.)
     let f = run_live(&fns(), &[(1, 0, 0b1111)]);
     assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
     assert!(site(&f).complete, "{f:?}");
@@ -2976,4 +2978,89 @@ fn a_call_that_never_gets_a_callee_is_incomplete_in_the_end() {
     let f = run_live(&[caller, l_fn], &[(1, 0, 0b1111)]);
     assert!(!site(&f).complete, "{f:?}");
     assert!(!f.proven(POOL), "{f:?}");
+}
+
+#[test]
+fn a_call_by_value_takes_back_what_each_callee_may_change() {
+    // Two callees a pointer may call: one leaves r1 as it came, one sets
+    // it to H. The caller has F in r1, calls one of them, and then calls
+    // through r1: F (after the one that leaves it) or H.
+    const LEAVE: u32 = 0x0800_3201;
+    const SET: u32 = 0x0800_3301;
+    let fns = || {
+        let leave = (LEAVE, vec![(LEAVE, B::default().end(None, Edge::Return))]);
+        let mut b = B::default();
+        let h = b.pool(0x0800_0404, H);
+        b.set(1, h);
+        let set = (SET, vec![(SET, b.end(None, Edge::Return))]);
+        // Another caller of LEAVE, with a third function in r1.
+        let o = 0x0800_6001;
+        let mut b = B::default();
+        let a = b.pool(POOL_A, A);
+        b.set(1, a);
+        let other = (
+            o,
+            vec![
+                (o, call_at(b, LEAVE, 0x0800_0130, o + 0x10)),
+                (o + 0x10, B::default().end(None, Edge::Return)),
+            ],
+        );
+        let e = 0x0800_1001;
+        let mut b = B::default();
+        let f = b.pool(POOL, F);
+        b.set(1, f);
+        let c = b.op(Op::GetFlag(Flag::Z));
+        let l = b.pool(0x0800_0440, LEAVE);
+        let s = b.pool(0x0800_0444, SET);
+        let t = b.op(Op::Select { c, a: l, b: s });
+        let mut first = b.end(
+            Some(t),
+            Edge::Call {
+                target: None,
+                ret: e + 0x10,
+            },
+        );
+        first.1.at = 0x0800_0110;
+        let mut after = B::default();
+        let t = after.get(1);
+        let caller = (
+            e,
+            vec![
+                (e, first),
+                (
+                    e + 0x10,
+                    after.end(
+                        Some(t),
+                        Edge::Call {
+                            target: None,
+                            ret: e + 0x20,
+                        },
+                    ),
+                ),
+                (e + 0x20, B::default().end(None, Edge::Return)),
+            ],
+        );
+        [leave, set, other, caller]
+    };
+    let img = || {
+        let mut img = Img::new();
+        img.fns.extend([LEAVE, SET]);
+        img.words.extend([(0x0800_0440, LEAVE), (0x0800_0444, SET)]);
+        img
+    };
+    let run_on = |leaves: &[(u32, u8, u8)]| {
+        LEAVES.with(|c| *c.borrow_mut() = leaves.iter().map(|&(k, l, r)| (k, (l, r))).collect());
+        let f = run_img(&fns(), &BTreeMap::new(), &img());
+        LEAVES.with(|c| c.borrow_mut().clear());
+        f
+    };
+    // As the returns hold it: LEAVE's r1 is every caller's (F and A), and
+    // SET's is H.
+    let f = run_on(&[]);
+    assert_eq!(site(&f).callees, BTreeSet::from([F, H, A]), "{f:?}");
+    // LEAVE leaves r1: the caller's own F after it, H after SET, and not
+    // what LEAVE's other caller passed.
+    let f = run_on(&[(LEAVE, 0b1111, 0b1111)]);
+    assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
+    assert!(site(&f).complete, "{f:?}");
 }

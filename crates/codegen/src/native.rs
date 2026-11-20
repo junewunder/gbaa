@@ -2262,21 +2262,30 @@ fn fn_ins<'a>(
                 })
                 .fold(0, |m, r| m | 1 << r)
         };
-        // And what it is given: its parameters, and a register it may
+        // And what it is given: its parameters; a register it may
         // return as it came on some path and changed on another (the
-        // caller takes its return's value of that one). All four where
-        // the summary doesn't say.
+        // caller takes its return's value of that one); and one a BIOS
+        // or indirect call may leave undefined, at a return or where it
+        // reads it: the summaries count that a leftover, the flow keeps
+        // what the call doesn't set ([`fnref`]'s BIOS table), so there
+        // its entry value is still followed. All four where the summary
+        // doesn't say.
         let reads = |k: u32| -> u8 {
             let Some(s) = c.sums.get(k) else { return 0xf };
             if blind.contains(&k) || standins.contains(&k) {
                 return 0xf;
             }
+            let undefined = s
+                .undefined_reads
+                .keys()
+                .filter(|(_, r)| *r < 4)
+                .fold(0u8, |m, (_, r)| m | 1 << r);
             (0..4)
                 .filter(|&r| {
                     let b = s.exit[r];
-                    b.entry && (b.def || b.clob)
+                    b.clob || b.entry && b.def
                 })
-                .fold(s.params & 0xf, |m, r| m | 1 << r)
+                .fold(s.params & 0xf | undefined, |m, r| m | 1 << r)
         };
         for f in c.funcs {
             let mut blocks = BTreeMap::new();

@@ -843,6 +843,51 @@ The switch stays off: it is near main's cost now and still proves nothing
 more on the C programs or Metroid. What it is for is the next unit
 (`native/fnref-ram-pointers`).
 
+## Registers at a call, as landed
+
+Unit `native/fnref-live-registers`, 2026-11-20 on quack; on main behind
+`GBAA_FNREF_LIVE=1` (off, the flow is main's: Metroid's trace line for
+line, every lift bar). Follow-up 2 of "A C game" above, and the unit's
+other clauses as they turned out to be needed. Three rules (`fnref.rs`,
+"Registers at a call"), each from the callee's summary where its run and
+its callees' didn't stop at a hole:
+
+- **A register the callee leaves is the caller's own after the call.**
+  The flow took r0 to r3 back as the callee's returns hold them, which
+  for a register it never writes is every caller's value of it, joined: a
+  handler called through r0 that returns nothing "returned" its own
+  address, and a call with an empty callee set took those from every
+  address-taken function. The machine leaves the caller's value there,
+  and so does the lifted program (a shaped callee doesn't return it).
+- **A callee is given only what it reads**: its parameters, a register
+  it may return as it came on one path and changed on another, and one a
+  BIOS or indirect call in it may leave (the summaries count that a
+  leftover; the flow keeps what a BIOS call doesn't set). Without this
+  the first rule made one agb program worse: a leftover that now
+  survived a call went on into every callee.
+- **A call with no callee yet waits.** A call through a value no
+  function's address has reached counted as an incomplete set at once,
+  and its arguments went to every loose function for good, though a
+  round later it called one function. Which words that un-proved was the
+  order functions ran in (native-takes: the first rule moved a value a
+  round earlier and three proven words were lost). Such a call now waits
+  until the run has otherwise settled; one still without a callee then
+  is the incomplete set it always was.
+
+**Counts**, switch off against on, side by side on one build:
+
+| | off | on |
+|---|---|---|
+| Metroid, proven / not | 613 / 202 | 690 / 125 |
+| Metroid, callees a complete set (of 70), widest | 50.3, 133 | 31.3, 108 |
+| Metroid, flow | 32 s, 33 rounds, 157 MB | 21 s, 39 rounds, 151 MB |
+| Emerald, flow | 557 s, 25 rounds, 1.06 GB | EMERALD_LIVE |
+
+Emerald's 554 indirect calls keep 103 complete sets of 4.3 callees.
+`just lift-metrics`: 0 over and 0 under, off and on: no agb or C
+program's count moves. What holds the C programs' words is the RAM
+globals (the next section but one).
+
 ## The heap by allocation site, landed off
 
 Unit `native/fnref-heap-sites`, 2026-11-19 on quack, on main behind
