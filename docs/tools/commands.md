@@ -1353,7 +1353,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `agb/native-frame-locals`, `agb/native-ime-release`, `agb/native-bios-calls`,
   `agb/native-bios-more` (SoftReset too), `agb/native-tasks`, `agb/native-dma`, `agb/native-save` (SRAM),
   `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`, `agb/native-serial`, `agb/native-irq-wrapper` (both its IRQ wrappers lifted, their `msr` and `mrs` run), `agb/native-takes` (two functions that take r8 and r9 from their caller, one called through a pointer the holes file's `[[takes]]` names)
-  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers, native/lift-irq-wrapper-tail, native/taker-test-program), and the C programs `c-fnptr`, `c-switch` and `c-chain`, each built by agbcc and by modern GCC (`c-fnptr-agbcc`, `c-fnptr-gcc`, …: six ROMs from `just c-tests`, native/c-test-programs; each with a `planted_store`) on
+  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers, native/lift-irq-wrapper-tail, native/taker-test-program), and the C programs `c-fnptr`, `c-switch`, `c-chain` and `c-heap`, each built by agbcc and by modern GCC (`c-fnptr-agbcc`, `c-fnptr-gcc`, …: eight ROMs from `just c-tests`, native/c-test-programs, native/fnref-heap-sites; each with a `planted_store`) on
   `units/<name>-600.toml` (the spike's is `units/native-spike.toml`,
   native-irq-hold's, native-ime-release's and native-bios-region's
   `-601`). First every program is lifted with `--bars`

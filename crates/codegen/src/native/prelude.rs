@@ -24,8 +24,27 @@ pub const RET: u32 = 0xFFFF_FFF0;
 /// it, the BIOS stub's push.
 pub const IRQ_STACK: u32 = 0x0300_7FA0;
 
-/// The ROM, for its data (section 8: bytes where nothing is typed yet).
-pub static ROM: &[u8] = include_bytes!("../rom.gba");
+/// The ROM, for its data (section 8: bytes where nothing is typed yet),
+/// word-aligned so that its typed statics ([`rom_at`]) can view it.
+pub static ROM: &[u8] = &ROM_ALIGNED.0;
+
+#[repr(C, align(4))]
+struct RomBytes<B: ?Sized>(B);
+static ROM_ALIGNED: &RomBytes<[u8]> = &RomBytes(*include_bytes!("../rom.gba"));
+
+#[cfg(not(target_endian = "little"))]
+compile_error!("ROM's typed statics view its little-endian bytes as they lie");
+
+/// A typed view of the ROM from offset `o` (native/rom-data-statics): the
+/// lifter's statics of ROM's objects, which it carved inside the ROM and on
+/// their elements' alignment.
+pub const fn rom_at<T>(o: usize) -> &'static T {
+    assert!(o + std::mem::size_of::<T>() <= ROM_ALIGNED.0.len());
+    assert!(o % std::mem::align_of::<T>() == 0);
+    // SAFETY: in bounds and aligned (the ROM is word-aligned); the
+    // statics' types are arrays of integers, which any bytes are.
+    unsafe { &*ROM_ALIGNED.0.as_ptr().add(o).cast::<T>() }
+}
 
 /// The whole program's state.
 pub struct Game {
@@ -350,6 +369,26 @@ pub fn ix(a: u32, off: usize, e: usize, n: usize) -> usize {
         Some(o) if o >= off && (o - off) % e == 0 && (o - off) / e < n => (o - off) / e,
         _ => unexplained(a, off, e, n),
     }
+}
+
+/// The element `a` points to of a ROM static from guest address `base`,
+/// `n` of `e` bytes, which the value sets bound it to
+/// (native/rom-data-statics), checked.
+#[inline(always)]
+#[track_caller]
+pub fn rix(a: u32, base: u32, e: u32, n: usize) -> usize {
+    let o = a.wrapping_sub(base);
+    if o % e == 0 && ((o / e) as usize) < n {
+        (o / e) as usize
+    } else {
+        rom_unexplained(a, base, e, n)
+    }
+}
+
+#[cold]
+#[track_caller]
+fn rom_unexplained(a: u32, base: u32, e: u32, n: usize) -> ! {
+    panic!("pointer {a:#010x} outside its ROM static ({base:#010x}, {n} of {e} bytes): a value set the lift trusted was wrong")
 }
 
 #[cold]
