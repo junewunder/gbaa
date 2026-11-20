@@ -25,14 +25,19 @@
 # rest of what the lift writes (not the modules' wiring, native/modules.rs).
 # functions_recognised has no bar (it should rise); every other metric needs one.
 # Metric names: crates/codegen/src/native/metrics.rs.
+# entries_beyond_one on the C rows raised 2026-11-19 (native/lift-one-entry merged
+# with native/lift-typed-access): their new names files name every function,
+# and a named function keeps its x_ body below its named entry, for a stop's
+# backtrace (native/named.rs): c-chain 2/5 -> 15, c-fnptr 9/10 -> 27, c-switch
+# 2 -> 12; the native check stays green.
 
 [program.affine]
 rom = "agb/affine.gba"
 route = "units/affine-600.toml"
 
 [program.affine.bars]
-lines = 22259
-lines_prelude = 1312
+lines = 22097
+lines_prelude = 1322
 texts_left = 0
 functions = 109
 functions_iwram = 3
@@ -44,6 +49,8 @@ functions_summary_hole = 79
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
+entries_beyond_one = 21
+guest_pc_plain = 0
 blocks = 1714
 functions_in_match = 1
 blocks_in_match = 206
@@ -106,8 +113,8 @@ rom = "agb/mosaic-modes.gba"
 route = "units/mosaic-modes-600.toml"
 
 [program.mosaic-modes.bars]
-lines = 16226
-lines_prelude = 1312
+lines = 16084
+lines_prelude = 1322
 texts_left = 0
 functions = 102
 functions_iwram = 3
@@ -119,6 +126,8 @@ functions_summary_hole = 77
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 47
 hard_holes = 0
+entries_beyond_one = 22
+guest_pc_plain = 0
 blocks = 1238
 functions_in_match = 1
 blocks_in_match = 46
@@ -189,8 +198,8 @@ planted_store = 0x08000186
 planted_hole = { drop_standin = 0x08002728, names = "error: hard hole in f_08002728 at 0x08002730: CPU state: mrs" }
 
 [program.native-spike.bars]
-lines = 23177
-lines_prelude = 1312
+lines = 23016
+lines_prelude = 1322
 texts_left = 0
 functions = 110
 functions_iwram = 3
@@ -202,6 +211,8 @@ functions_summary_hole = 78
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 48
 hard_holes = 0
+entries_beyond_one = 25
+guest_pc_plain = 0
 blocks = 1745
 functions_in_match = 1
 blocks_in_match = 206
@@ -268,8 +279,8 @@ route = "units/native-fallthrough-600.toml"
 planted_flags = ["--fall-as-tail-call"]
 
 [program.native-fallthrough.bars]
-lines = 21838
-lines_prelude = 1312
+lines = 21672
+lines_prelude = 1322
 texts_left = 0
 functions = 112
 functions_iwram = 3
@@ -281,6 +292,8 @@ functions_summary_hole = 81
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 51
 hard_holes = 0
+entries_beyond_one = 22
+guest_pc_plain = 0
 blocks = 1712
 functions_in_match = 1
 blocks_in_match = 206
@@ -348,8 +361,8 @@ route = "units/native-irq-hold-601.toml"
 planted_flags = ["--irq-at-waits"]
 
 [program.native-irq-hold.bars]
-lines = 22048
-lines_prelude = 1312
+lines = 21882
+lines_prelude = 1322
 texts_left = 0
 functions = 114
 functions_iwram = 3
@@ -361,6 +374,8 @@ functions_summary_hole = 80
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 51
 hard_holes = 0
+entries_beyond_one = 23
+guest_pc_plain = 0
 blocks = 1734
 functions_in_match = 1
 blocks_in_match = 206
@@ -430,8 +445,8 @@ route = "units/native-frame-locals-600.toml"
 planted_flags = ["--plant-slot=0x08000182"]
 
 [program.native-frame-locals.bars]
-lines = 21822
-lines_prelude = 1312
+lines = 21648
+lines_prelude = 1322
 texts_left = 0
 functions = 113
 functions_iwram = 3
@@ -443,6 +458,8 @@ functions_summary_hole = 79
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
+entries_beyond_one = 21
+guest_pc_plain = 0
 blocks = 1714
 functions_in_match = 1
 blocks_in_match = 206
@@ -509,8 +526,8 @@ route = "units/native-ime-release-601.toml"
 planted_flags = ["--ime-at-waits"]
 
 [program.native-ime-release.bars]
-lines = 22023
-lines_prelude = 1312
+lines = 21855
+lines_prelude = 1322
 texts_left = 0
 functions = 113
 functions_iwram = 3
@@ -522,6 +539,8 @@ functions_summary_hole = 79
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
+entries_beyond_one = 24
+guest_pc_plain = 0
 blocks = 1731
 functions_in_match = 1
 blocks_in_match = 206
@@ -592,8 +611,8 @@ route = "units/native-bios-calls-600.toml"
 # (native/ref-heap-static-arrays).
 
 [program.native-bios-calls.bars]
-lines = 22179
-lines_prelude = 1312
+lines = 22017
+lines_prelude = 1322
 texts_left = 0
 functions = 109
 functions_iwram = 3
@@ -605,6 +624,8 @@ functions_summary_hole = 79
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
+entries_beyond_one = 21
+guest_pc_plain = 0
 blocks = 1724
 functions_in_match = 1
 blocks_in_match = 206
@@ -675,8 +696,8 @@ route = "units/native-bios-more-600.toml"
 # restarts the program.
 
 [program.native-bios-more.bars]
-lines = 23478
-lines_prelude = 1312
+lines = 23333
+lines_prelude = 1322
 texts_left = 0
 functions = 104
 functions_iwram = 3
@@ -688,6 +709,8 @@ functions_summary_hole = 79
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 48
 hard_holes = 0
+entries_beyond_one = 22
+guest_pc_plain = 0
 blocks = 1673
 functions_in_match = 2
 blocks_in_match = 512
@@ -763,8 +786,8 @@ planted_store = 0x08000288
 planted_hole = { drop_standin = 0x080001a4, names = "error: hard hole in f_080001a4 at 0x080001c0: CPU state: a stack switch" }
 
 [program.native-tasks.bars]
-lines = 22264
-lines_prelude = 1312
+lines = 22085
+lines_prelude = 1322
 texts_left = 0
 functions = 122
 functions_iwram = 3
@@ -776,6 +799,8 @@ functions_summary_hole = 83
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 51
 hard_holes = 0
+entries_beyond_one = 21
+guest_pc_plain = 0
 blocks = 1752
 functions_in_match = 1
 blocks_in_match = 206
@@ -856,8 +881,8 @@ route = "units/native-dma-600.toml"
 planted_store = 0x08000180
 
 [program.native-dma.bars]
-lines = 16036
-lines_prelude = 1312
+lines = 15887
+lines_prelude = 1322
 texts_left = 0
 functions = 107
 functions_iwram = 3
@@ -869,6 +894,8 @@ functions_summary_hole = 77
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 47
 hard_holes = 0
+entries_beyond_one = 26
+guest_pc_plain = 0
 blocks = 1259
 functions_in_match = 1
 blocks_in_match = 46
@@ -940,8 +967,8 @@ route = "units/native-save-600.toml"
 planted_store = 0x080002ac
 
 [program.native-save.bars]
-lines = 22078
-lines_prelude = 1312
+lines = 21907
+lines_prelude = 1322
 texts_left = 0
 functions = 112
 functions_iwram = 3
@@ -953,6 +980,8 @@ functions_summary_hole = 79
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
+entries_beyond_one = 21
+guest_pc_plain = 0
 blocks = 1723
 functions_in_match = 1
 blocks_in_match = 206
@@ -1020,8 +1049,8 @@ route = "units/native-bios-region-601.toml"
 # (nowhere); agb/native-bios-region/src/main.rs.
 
 [program.native-bios-region.bars]
-lines = 21989
-lines_prelude = 1312
+lines = 21816
+lines_prelude = 1322
 texts_left = 0
 functions = 114
 functions_iwram = 3
@@ -1033,6 +1062,8 @@ functions_summary_hole = 79
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
+entries_beyond_one = 23
+guest_pc_plain = 0
 blocks = 1724
 functions_in_match = 1
 blocks_in_match = 206
@@ -1101,8 +1132,8 @@ route = "units/native-bios-affine-600.toml"
 # agb/native-bios-affine/src/main.rs.
 
 [program.native-bios-affine.bars]
-lines = 22282
-lines_prelude = 1312
+lines = 22120
+lines_prelude = 1322
 texts_left = 0
 functions = 110
 functions_iwram = 3
@@ -1114,6 +1145,8 @@ functions_summary_hole = 79
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
+entries_beyond_one = 21
+guest_pc_plain = 0
 blocks = 1726
 functions_in_match = 1
 blocks_in_match = 206
@@ -1184,8 +1217,8 @@ route = "units/native-serial-600.toml"
 planted_store = 0x0800017c
 
 [program.native-serial.bars]
-lines = 22847
-lines_prelude = 1312
+lines = 22666
+lines_prelude = 1322
 texts_left = 0
 functions = 117
 functions_iwram = 3
@@ -1197,6 +1230,8 @@ functions_summary_hole = 80
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 51
 hard_holes = 0
+entries_beyond_one = 23
+guest_pc_plain = 0
 blocks = 1758
 functions_in_match = 1
 blocks_in_match = 206
@@ -1269,8 +1304,8 @@ route = "units/native-irq-wrapper-600.toml"
 planted_store = 0x080001f4
 
 [program.native-irq-wrapper.bars]
-lines = 22330
-lines_prelude = 1312
+lines = 22155
+lines_prelude = 1322
 texts_left = 0
 functions = 118
 functions_iwram = 3
@@ -1282,6 +1317,8 @@ functions_summary_hole = 81
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
+entries_beyond_one = 26
+guest_pc_plain = 0
 blocks = 1744
 functions_in_match = 1
 blocks_in_match = 206
@@ -1349,8 +1386,8 @@ route = "units/native-takes-600.toml"
 planted_flags = ["--takes-zeroed"]
 
 [program.native-takes.bars]
-lines = 21823
-lines_prelude = 1312
+lines = 21658
+lines_prelude = 1322
 texts_left = 0
 functions = 113
 functions_iwram = 3
@@ -1362,6 +1399,8 @@ functions_summary_hole = 83
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 52
 hard_holes = 0
+entries_beyond_one = 23
+guest_pc_plain = 0
 blocks = 1714
 functions_in_match = 1
 blocks_in_match = 206
@@ -1430,8 +1469,8 @@ planted_store = 0x080005d4
 
 [program.c-fnptr-agbcc.bars]
 computed_unknown_unnamed = 5
-lines = 804
-lines_prelude = 1312
+lines = 794
+lines_prelude = 1322
 texts_left = 0
 functions = 18
 functions_iwram = 0
@@ -1443,6 +1482,8 @@ functions_summary_hole = 4
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 2
 hard_holes = 0
+entries_beyond_one = 27
+guest_pc_plain = 0
 blocks = 68
 functions_in_match = 0
 blocks_in_match = 0
@@ -1511,8 +1552,8 @@ planted_store = 0x08000390
 
 [program.c-fnptr-gcc.bars]
 computed_unknown_unnamed = 17
-lines = 860
-lines_prelude = 1312
+lines = 850
+lines_prelude = 1322
 texts_left = 0
 functions = 18
 functions_iwram = 0
@@ -1524,6 +1565,8 @@ functions_summary_hole = 4
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 2
 hard_holes = 0
+entries_beyond_one = 27
+guest_pc_plain = 0
 blocks = 78
 functions_in_match = 0
 blocks_in_match = 0
@@ -1594,8 +1637,8 @@ planted_store = 0x080005ca
 
 [program.c-switch-agbcc.bars]
 computed_unknown_unnamed = 14
-lines = 754
-lines_prelude = 1312
+lines = 740
+lines_prelude = 1322
 texts_left = 0
 functions = 10
 functions_iwram = 0
@@ -1607,6 +1650,8 @@ functions_summary_hole = 1
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 0
 hard_holes = 0
+entries_beyond_one = 12
+guest_pc_plain = 0
 blocks = 87
 functions_in_match = 0
 blocks_in_match = 0
@@ -1677,8 +1722,8 @@ planted_store = 0x080005a0
 
 [program.c-switch-gcc.bars]
 computed_unknown_unnamed = 15
-lines = 829
-lines_prelude = 1312
+lines = 815
+lines_prelude = 1322
 texts_left = 0
 functions = 10
 functions_iwram = 0
@@ -1690,6 +1735,8 @@ functions_summary_hole = 1
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 0
 hard_holes = 0
+entries_beyond_one = 12
+guest_pc_plain = 0
 blocks = 86
 functions_in_match = 0
 blocks_in_match = 0
@@ -1758,8 +1805,8 @@ planted_store = 0x0800058e
 
 [program.c-chain-agbcc.bars]
 computed_unknown_unnamed = 5
-lines = 852
-lines_prelude = 1312
+lines = 833
+lines_prelude = 1322
 texts_left = 0
 functions = 13
 functions_iwram = 0
@@ -1771,6 +1818,8 @@ functions_summary_hole = 2
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 0
 hard_holes = 0
+entries_beyond_one = 15
+guest_pc_plain = 0
 blocks = 63
 functions_in_match = 0
 blocks_in_match = 0
@@ -1839,8 +1888,8 @@ planted_store = 0x08000550
 
 [program.c-chain-gcc.bars]
 computed_unknown_unnamed = 10
-lines = 843
-lines_prelude = 1312
+lines = 823
+lines_prelude = 1322
 texts_left = 0
 functions = 13
 functions_iwram = 0
@@ -1852,6 +1901,8 @@ functions_summary_hole = 1
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 0
 hard_holes = 0
+entries_beyond_one = 15
+guest_pc_plain = 0
 blocks = 64
 functions_in_match = 0
 blocks_in_match = 0
@@ -1921,8 +1972,8 @@ planted_store = 0x08000692
 
 [program.c-heap-agbcc.bars]
 computed_unknown_unnamed = 11
-lines = 950
-lines_prelude = 1312
+lines = 927
+lines_prelude = 1322
 texts_left = 0
 functions = 22
 functions_iwram = 0
@@ -1934,6 +1985,8 @@ functions_summary_hole = 5
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 3
 hard_holes = 0
+entries_beyond_one = 29
+guest_pc_plain = 0
 blocks = 81
 functions_in_match = 0
 blocks_in_match = 0
@@ -2003,8 +2056,8 @@ planted_store = 0x0800060e
 
 [program.c-heap-gcc.bars]
 computed_unknown_unnamed = 37
-lines = 954
-lines_prelude = 1312
+lines = 934
+lines_prelude = 1322
 texts_left = 0
 functions = 19
 functions_iwram = 0
@@ -2016,6 +2069,8 @@ functions_summary_hole = 2
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 0
 hard_holes = 0
+entries_beyond_one = 26
+guest_pc_plain = 0
 blocks = 84
 functions_in_match = 0
 blocks_in_match = 0

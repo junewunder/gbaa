@@ -2949,8 +2949,8 @@ fn an_idle_loops_exit_syncs_in_native_code() {
 #[test]
 fn a_function_taking_only_its_parameters_has_its_body_in_its_plain_entry() {
     // Reset: `mov r0, #7; ldr r1, =0x03000000; bl f; str r0, [r1]; b .`,
-    // `f: add r0, r0, #1; bx lr`: f takes r0 by name, and its extended
-    // entry calls the plain one (native/lift-register-locals).
+    // `f: add r0, r0, #1; bx lr`: f takes r0 by name
+    // (native/lift-register-locals).
     let rom: Vec<u8> = [
         0xE3A0_0007u32, // 0x00 mov r0, #7
         0xE3A0_1403,    // 0x04 mov r1, #0x03000000
@@ -2971,10 +2971,9 @@ fn a_function_taking_only_its_parameters_has_its_body_in_its_plain_entry() {
         text.contains("pub fn f_08000018(g: &mut Game, _: u32, r0: u32) -> Result<u32, Exit> {"),
         "{text}"
     );
-    assert!(
-        text.contains("pub fn x_08000018(g: &mut Game, s: Regs) -> Result<u32, Exit> { f_08000018(g, s.r[13], s.r[0]) }"),
-        "{text}"
-    );
+    // Nothing falls or jumps into it, so it has no extended entry
+    // (native/lift-one-entry).
+    assert!(!text.contains("pub fn x_08000018("), "{text}");
     assert!(!text.contains("(g, Regs::call("), "{text}");
     assert_eq!(lifted.metrics.get("regs_call_entries"), Some(0));
     assert_eq!(lifted.metrics.get("unpacked_unread"), Some(0));
