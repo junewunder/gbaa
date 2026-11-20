@@ -27,7 +27,7 @@ that adds it. The owner agreed the "Not wanted" list (2026-11-19).
 | The mod view | The lift today | Status |
 |---|---|---|
 | Function names from a source map (pret's symbols, `[functions]`) | `pub fn SoftResetCheck`, `pub fn pen_update`; 2,611 of 2,623 named on Metroid (`codegen::native::named`) | Has it |
-| Names by default from every map in `$GBAA_DATA/names` that names the ROM by its sha1 (library maps too) | `gbaa-lift` reads only the repo's `names/` unless `--names` is given; `just lift` on Metroid names nothing | Unit: `native/lift-names-default` |
+| Names by default from every map in `$GBAA_DATA/names` that names the ROM by its sha1 (library maps too) | `gbaa-lift` with no `--names` layers the repo's `names/` over `$GBAA_DATA/names` (`--no-data-names` leaves it out); `just lift` on Metroid names 2,611 of 2,623 functions | Has it (`native/lift-names-default`) |
 | Library names for games unlike the reference (BSim-style matching, Opus as judge, other decomps as references) | These units write names files. The lift reads names files as they are | Has it (through the names files) |
 | RAM global names (`[data]`) | `g.ram.gMainGameMode`, `g.ram.gTally` (`native::globals`) | Has it |
 | A data address the code takes, by name (`addr!(gHeap + 8)`) | `r0 = sColors /* 0x08000638 */;`, `(gHeap + 0x8) /* … */` inside one: every `0x…u32` literal inside a named datum, wherever it prints (`codegen::native::named`), each a `pub const` in `main.rs`; 2026-11-20: 1,934 data at 8,187 constants on Metroid, 9 at 13 on c-switch-agbcc; `data_constants_unnamed` (a sum in a match pattern) barred, 0 on the C programs and Metroid | Has it (`native/lift-data-names-inline`) |
