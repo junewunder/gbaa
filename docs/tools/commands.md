@@ -635,10 +635,10 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   complete callee set as calling exactly those
   (`codegen::saves::summarize_sets`; unit `native/indirect-call-args`),
   printing the counts without the sets too. About 5 s on an agb program;
-  on Emerald (`just long start NAME --mem 4G`; 2026-11-13) it no longer
-  stops at its token bound (24M held of 48M, 1.5 GB), but a round reruns
-  15,000 functions in 2 to 10 minutes and seven hadn't settled it: no set
-  counts as complete yet: `native/fnref-flow-emerald`'s work.
+  on Emerald (`just long start NAME --mem 4G`; 2026-11-19,
+  `native/fnref-flow-emerald`) it settles in 24 rounds: 14 to 18 minutes
+  on quack with the lanes running, 1.0 GB peak; 554 indirect calls, 103
+  with a complete callee set.
   fn-diff's summary line gives the same count and
   how many picks call a proven function. Emerald, `just fn-diff ROM 2000
   --exact` (2026-10-27): every entered function picked, 270, 591 states,
