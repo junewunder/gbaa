@@ -32,7 +32,7 @@ that adds it. The owner agreed the "Not wanted" list (2026-11-19).
 | RAM global names (`[data]`) | `g.ram.gMainGameMode`, `g.ram.gTally` (`native::globals`) | Has it |
 | A data address the code takes, by name (`addr!(gHeap + 8)`) | `r0 = 0x8000638u32` is `sColors`. The report says "0 data named, at 0 constants": `named.rs` only matches `let vN: u32 = 0x…;`, and inlined constants stopped printing that form | Unit: `native/lift-data-names-inline` (a regression) |
 | BIOS calls by name | `LZ77UncompVram(g, …)`, `hw::halt(g)` (the prelude's BIOS calls) | Has it |
-| GBA I/O registers by name (`REG_TM1CNT_L`, `codegen::io_regs`) | `st16(g, 0x4000208u32 & !1, 0x1u32)` | Unit: `native/lift-io-names` |
+| GBA I/O registers by name (`REG_TM1CNT_L`, `codegen::io_regs`) | `st16(g, REG_IME, 0x1u32)`: every constant-address I/O load and store names its register (`io_regs::base`; `(REG_VCOUNT + 0x1)` inside one), each a `pub const REG_*: u32` in `main.rs`; `io_unnamed` (an address no register holds, such as mGBA's debug port) barred, 0 on the C programs and Metroid | Has it (`native/lift-io-names`) |
 | Value names (`[values]`, pret's constants where a field takes them) | Numbers (`gMainGameMode = 0x1u32 as u16`) | Unit: `native/lift-value-names` |
 | Text where the code loads a string (decomp charmaps, community tables, a table from screenshots) | `// text: sFileScreenTextPointers[2] sEnglishTextPointers_FileScreen: ["Start Game\nStart Game (Link)", …]` above the statement that uses a constant pointing at text or a table of it, where the names files give a text table (`native/lift-text`, 2026-11-19: 8 on Metroid); no byte preview where none is known | Has it |
 | The bytes behind ROM data pointers | A load the value sets bound to ROM indexes a typed static (`ROM_0808CAD0[rix(…)]`, `native/rom-data-statics`); a pointer loaded from ROM is a bare address, read through at run time | Partly: function words as `FnRef`s are `native/rom-statics` |
@@ -55,7 +55,7 @@ that adds it. The owner agreed the "Not wanted" list (2026-11-19).
 | Parameter names, and DWARF local names where liveness agrees | `a0`, `r4`, `v18` (`pen_update`'s `r4` is `p`) | Unit: `native/lift-local-names` (needs `native/lift-register-locals`, in progress) |
 | Locals as variables, values not re-synced to registers | `let vN` values inlined into their use; registers are still `r0`-`r14` | Unit: `native/lift-register-locals` (in progress) |
 | `file:line` comments from DWARF's line table | None | Unit: `native/lift-line-comments` |
-| Literal-pool loads folded into the access | Constants inline: `st16(g, 0x4000004u32 & !1, 0x8u32)`, `g.ram.gTally` | Has it |
+| Literal-pool loads folded into the access | Constants inline: `st16(g, REG_DISPSTAT, 0x8u32)`, `g.ram.gTally` | Has it |
 | Loops with their variables, `for` loops | `'l2: loop`; 95 `for` and 601 `loop` on Metroid (`native/lift-for-loops`) | Has it |
 | Switch shapes | A compare tree as a `match` on case values (`tally`: `5 => …`, `0x28 => …`). A jump table as a `match` on the target address (`pen_update`). The mod view never wrote jump tables (its design's gap 9) | Has it (more than the mod view had) |
 | Callee-saved registers proven per callee, reloads dropped | The summaries' callee-saves proof; 584 of 2,623 unproven on Metroid (soft) | Has it |
