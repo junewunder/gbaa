@@ -3,7 +3,7 @@
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT]
 //! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
-//! [--plant-reference] [--text-edit FILE] [--cut DIR [KEY]...]`:
+//! [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
 //! stage A). Writes the whole program as a Rust crate to OUT (`Cargo.toml`,
 //! `src/`, a copy of the ROM for its data, `report.txt`, and its metrics
@@ -112,6 +112,9 @@
 //! the ROM's code from the same state, untimed, and its end must be the
 //! lift's. `--plant-reference` puts `--plant`'s store in the reference
 //! too, a planted wrong lift that only the interpreter can catch.
+//! A mod's cut (`--replace DIR/replace.toml`) checked is the replacement,
+//! its lifted signature behind an adapter (unit `native/lift-mod-run`);
+//! `--fn-check-cuts` checks every cut the replace file has.
 //!
 //! The game's text (unit `native/lift-text-editable`, where the names
 //! files have a text table): each string the code's constants lead to is
@@ -128,7 +131,7 @@
 //! as cut, and `DIR/replace.toml`, a holes file whose `[[cut]]`s
 //! `--replace DIR/replace.toml` builds the lift with (each cut in its
 //! function's place; a cut keeps the lifted signature, so a holes file's
-//! stand-in or a checked function can't be cut). With no KEY it re-cuts
+//! stand-in can't be cut; a checked one is the check's replacement). With no KEY it re-cuts
 //! the mod's functions. A re-cut of an edited file three-way merges the
 //! new print into it (`git merge-file`), and fails on a conflict. The
 //! crate is written as usual. A lift with `--replace` of a cut whose
@@ -157,7 +160,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--text-edit FILE] [--cut DIR [KEY]...]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...]"
         );
         ExitCode::FAILURE
     };
@@ -177,6 +180,7 @@ fn main() -> ExitCode {
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
     let (mut fn_check, mut replace, mut seed, mut runs) = (Vec::new(), None, None, None);
     let (mut interp_every, mut plant_reference) = (8, false);
+    let mut fn_check_cuts = false;
     let mut layout = codegen::native::globals::Layout::Guest;
     let mut text_edit = None;
     let (mut cut_dir, mut cut_keys): (Option<PathBuf>, Vec<String>) = (None, Vec::new());
@@ -233,6 +237,10 @@ fn main() -> ExitCode {
         }
         if a == "--plant-reference" {
             plant_reference = true;
+            continue;
+        }
+        if a == "--fn-check-cuts" {
+            fn_check_cuts = true;
             continue;
         }
         if a == "--shadow-locals" {
@@ -329,6 +337,9 @@ fn main() -> ExitCode {
                         p.display()
                     );
                     return ExitCode::FAILURE;
+                }
+                if fn_check_cuts {
+                    fn_check.extend(r.cut_files.keys().copied());
                 }
                 match codegen::native::cut::read_files(p, &r.cut_files) {
                     Ok((cuts, origs)) => {

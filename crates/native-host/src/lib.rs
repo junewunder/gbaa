@@ -5,7 +5,8 @@
 //!
 //! ```text
 //! PROGRAM --headless --frames N [--input PRESSES] [--frame-hashes F]
-//!         [--dump FILE.png] [--native-record FILE] [--time-limit SECONDS]
+//!         [--dump FILE.png] [--dump-at N,… --dump-dir DIR]
+//!         [--native-record FILE] [--time-limit SECONDS]
 //! PROGRAM [--scale N] [--mute] [--input PRESSES] [--native-record FILE]
 //! ```
 //!
@@ -21,6 +22,8 @@
 //!
 //! `--input` is gbaa-desktop's (`button@frame[+frames],...`), read by the
 //! same parser; `--frame-hashes` writes the same `frame N hash H` lines;
+//! `--dump-at N,… --dump-dir DIR` writes frame N (counted as the hashes
+//! are) to `DIR/frame-N.png`, as gbaa-desktop's do (`just lift-mod-run`);
 //! `--native-record` writes each frame's record as the play build's
 //! `--native-record` does (crates/native-record), from the program's RAM
 //! as the guest lays it out: a guest-layout build's own bytes, or the
@@ -36,6 +39,7 @@
 //! reaches a frame), exiting [`TIME_LIMIT_EXIT`]. `gbaa-first-stop` reads it.
 
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -67,6 +71,9 @@ pub struct Options {
     input: Script,
     frame_hashes: Option<PathBuf>,
     dump: Option<PathBuf>,
+    /// `--dump-at`'s frames and `--dump-dir`.
+    dump_at: BTreeSet<u64>,
+    dump_dir: Option<PathBuf>,
     native_record: Option<PathBuf>,
     /// No `--headless`: the window to open.
     window: Option<Window>,
@@ -85,6 +92,8 @@ fn parse(args: &[String]) -> Result<Options, String> {
         input: Script::default(),
         frame_hashes: None,
         dump: None,
+        dump_at: BTreeSet::new(),
+        dump_dir: None,
         native_record: None,
         window: None,
     };
@@ -124,6 +133,17 @@ fn parse(args: &[String]) -> Result<Options, String> {
                 o.dump = Some(value()?.into());
                 headless_only = Some(a);
             }
+            "--dump-at" => {
+                for n in value()?.split(',') {
+                    o.dump_at
+                        .insert(n.parse().map_err(|e| format!("--dump-at {n:?}: {e}"))?);
+                }
+                headless_only = Some(a);
+            }
+            "--dump-dir" => {
+                o.dump_dir = Some(value()?.into());
+                headless_only = Some(a);
+            }
             "--native-record" => o.native_record = Some(value()?.into()),
             _ => return Err(format!("unknown argument {a:?}")),
         }
@@ -134,6 +154,9 @@ fn parse(args: &[String]) -> Result<Options, String> {
         }
         if o.frames == 0 {
             return Err("a headless run needs its end: --headless --frames N".into());
+        }
+        if o.dump_at.is_empty() != o.dump_dir.is_none() {
+            return Err("--dump-at and --dump-dir go together".into());
         }
     } else {
         if let Some(a) = headless_only {
@@ -155,6 +178,9 @@ struct Headless {
     shown: u64,
     hashes: String,
     last: Box<Frame>,
+    /// `--dump-at`'s frames, and those of them shown so far.
+    dump_at: BTreeSet<u64>,
+    dumped: Vec<(u64, Box<Frame>)>,
 }
 
 impl Host for Headless {
@@ -165,6 +191,9 @@ impl Host for Headless {
         self.hashes
             .push_str(&format!("frame {} hash {h:016x}\n", self.shown));
         self.last.copy_from_slice(frame);
+        if self.dump_at.contains(&self.shown) {
+            self.dumped.push((self.shown, Box::new(*frame)));
+        }
         if self.shown < self.frames {
             Ok(())
         } else {
@@ -490,6 +519,8 @@ fn run<G: Native<Host = AnyHost> + 'static>(
         shown: 0,
         hashes: String::new(),
         last: Box::new([0; WIDTH * HEIGHT]),
+        dump_at: o.dump_at,
+        dumped: Vec::new(),
     }));
     let mut g = make(AnyHost(Box::new(Shared(host.clone()))));
     let Err(Exit) = main(&mut g);
@@ -500,6 +531,13 @@ fn run<G: Native<Host = AnyHost> + 'static>(
     }
     if let Some(p) = &o.dump {
         desktop::write_png(p, &h.last).map_err(|e| format!("{}: {e}", p.display()))?;
+    }
+    if let Some(d) = &o.dump_dir {
+        std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
+        for (n, f) in &h.dumped {
+            let p = d.join(format!("frame-{n}.png"));
+            desktop::write_png(&p, f).map_err(|e| format!("{}: {e}", p.display()))?;
+        }
     }
     Ok(())
 }
