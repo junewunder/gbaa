@@ -1060,7 +1060,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let (ins, pools, call_fn) = if no_flow {
         Default::default()
     } else {
-        fn_ins(&flow_ins, &all, &named_sites)
+        let standins: BTreeSet<u32> = holes.standins.keys().copied().collect();
+        fn_ins(&flow_ins, &all, &named_sites, &standins)
     };
     let fnrefs = match &holes.skip_fn_flow {
         None if !no_flow => {
@@ -2205,18 +2206,78 @@ fn fn_flow(
 /// the ROM words literal pools read that hold a function's key, and the
 /// addresses of the calls printed through `call_fn`. `named`: the
 /// indirect calls a holes file's `[[takes]]` names, which pass every
-/// register.
+/// register. `standins`: the functions a holes file replaces, whose
+/// hand-written code returns what it will ([`fnref::FnIn::leaves`]).
 #[allow(clippy::type_complexity)]
 fn fn_ins<'a>(
     codes: &[FlowIn<'a>],
     all: &BTreeSet<u32>,
     named: &BTreeSet<u32>,
+    standins: &BTreeSet<u32>,
 ) -> (Vec<fnref::FnIn<'a>>, BTreeSet<u32>, BTreeSet<u32>) {
     let mut ins = Vec::new();
     let mut pools = BTreeSet::new();
     let mut call_fn = BTreeSet::new();
     for c in codes {
         let src = c.src;
+        // The functions whose summary doesn't say what they leave: one
+        // whose run stopped at a hole (a write past it is unseen), and
+        // whatever calls or jumps into such a one, as the shapes have it
+        // ([`shape::shapes`]).
+        let mut blind: BTreeSet<u32> = c
+            .funcs
+            .iter()
+            .map(|f| f.entry)
+            .filter(|k| c.sums.get(*k).is_none_or(|s| s.stopped))
+            .collect();
+        loop {
+            let more: Vec<u32> = c
+                .funcs
+                .iter()
+                .map(|f| f.entry)
+                .filter(|k| !blind.contains(k))
+                .filter(|k| {
+                    c.sums.get(*k).is_some_and(|s| {
+                        s.callees
+                            .iter()
+                            .any(|x| blind.contains(x) || c.sums.get(*x).is_none())
+                    })
+                })
+                .collect();
+            if more.is_empty() {
+                break;
+            }
+            blind.extend(more);
+        }
+        // Of r0-r3, what a function leaves as it came on every return.
+        let leaves = |k: u32| -> u8 {
+            let Some(s) = c.sums.get(k) else { return 0 };
+            if blind.contains(&k) || standins.contains(&k) || !s.returns {
+                return 0;
+            }
+            (0..4)
+                .filter(|&r| {
+                    let b = s.exit[r];
+                    b.entry && !b.def && !b.clob
+                })
+                .fold(0, |m, r| m | 1 << r)
+        };
+        // And what it is given: its parameters, and a register it may
+        // return as it came on some path and changed on another (the
+        // caller takes its return's value of that one). All four where
+        // the summary doesn't say.
+        let reads = |k: u32| -> u8 {
+            let Some(s) = c.sums.get(k) else { return 0xf };
+            if blind.contains(&k) || standins.contains(&k) {
+                return 0xf;
+            }
+            (0..4)
+                .filter(|&r| {
+                    let b = s.exit[r];
+                    b.entry && (b.def || b.clob)
+                })
+                .fold(s.params & 0xf, |m, r| m | 1 << r)
+        };
         for f in c.funcs {
             let mut blocks = BTreeMap::new();
             let mut strides_of = BTreeMap::new();
@@ -2316,6 +2377,8 @@ fn fn_ins<'a>(
                 entry: f.entry,
                 blocks,
                 frame: c.frames.get(&f.entry),
+                leaves: leaves(f.entry),
+                reads: reads(f.entry),
             });
         }
     }
@@ -6548,7 +6611,7 @@ pub fn callee_sets(
         frames: &frames,
         sums,
     }];
-    let (ins, pools, _) = fn_ins(&ins, &all, &none);
+    let (ins, pools, _) = fn_ins(&ins, &all, &none, &none);
     let (flow, _) = fn_flow(rom, disc, &overlays, &ins, &pools, &all, allocs);
     let sets = complete_sets(&flow);
     (flow, sets)
