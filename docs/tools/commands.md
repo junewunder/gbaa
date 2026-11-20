@@ -778,7 +778,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   ROM MAP…` scores every ROM's names on every other one. `just
   fetch-decomps` builds zeldaret/tmc, metroidret/mzm and
   jiangzhengwenjz/katam byte-identical to june's ROMs (about 3 min the
-  first time) and `just decomp-names` makes their maps in
+  first time; mzm with DWARF 2, through `scripts/agbcc-dwarf`) and `just decomp-names` makes their maps in
   `$GBAA_DATA/names/`. `just library-names [ROMS]` (`xmatch
   library-names`, mod/default-library-names) names every ROM in ROMS
   (default `~/ROMs/gba`) that no full map names (one from symbols, not

@@ -74,16 +74,28 @@ if ! built "$jzw/agbcc" "$jzw"; then
   (cd "$jzw" && sh build.sh)
 fi
 
-# Metroid: Zero Mission (USA).
+# Metroid: Zero Mission (USA), with DWARF 2 (agbcc -g, as pokeemerald's
+# build and c/ have it): the source map's [types], [locals] and [lines].
+# scripts/agbcc-dwarf is the CC, set on make's command line (which keeps the
+# -O1 its dma.c and sram/ get); it keeps the ROM byte-identical. An ELF
+# without .debug_info, or a ROM off its SHA1, is rebuilt: make doesn't see
+# a changed CC, so the C files' assembly is deleted first (all but
+# nes_metroid.s, whose rule runs a sub-make that would take this CC; it is
+# data).
 mzm="$src/mzm"
-if ! built "$mzm/mzm_us.elf" "$mzm"; then
-  baserom "Metroid - Zero Mission (USA).gba" 5de8536afe1f0078ee6fe1089f890e8c7aa0a6e8 "$mzm/mzm_us_baserom.gba"
+mzm_sha=5de8536afe1f0078ee6fe1089f890e8c7aa0a6e8
+mzm_cc="$(cd "$(dirname "$0")" && pwd)/agbcc-dwarf $mzm/tools/agbcc/bin/agbcc \$<"
+if ! built "$mzm/mzm_us.elf" "$mzm" \
+  || ! arm-none-eabi-readelf -S "$mzm/mzm_us.elf" | grep -q '\.debug_info' \
+  || ! echo "$mzm_sha  $mzm/mzm_us.gba" | sha1sum -c --quiet --status; then
+  baserom "Metroid - Zero Mission (USA).gba" $mzm_sha "$mzm/mzm_us_baserom.gba"
   if [[ ! -x "$mzm/tools/agbcc/bin/agbcc" ]]; then
     (cd "$jzw" && sh install.sh ../mzm)
   fi
   make -C "$mzm" extract
-  make -C "$mzm" -j8
-  echo "5de8536afe1f0078ee6fe1089f890e8c7aa0a6e8  $mzm/mzm_us.gba" | sha1sum -c
+  (cd "$mzm" && find src -name '*.c' ! -name nes_metroid.c | sed 's/\.c$//' | while read -r f; do rm -f "$f.s" "$f.o"; done)
+  make -C "$mzm" -j8 CC="$mzm_cc"
+  echo "$mzm_sha  $mzm/mzm_us.gba" | sha1sum -c
 fi
 
 # Kirby & the Amazing Mirror (USA).
