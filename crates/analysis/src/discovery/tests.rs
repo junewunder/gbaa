@@ -130,6 +130,30 @@ fn pointer_scan_takes_a_struct_table_of_pointer_pairs() {
 }
 
 #[test]
+fn pointer_scan_takes_a_column_of_struct_records() {
+    // Amazing Mirror's intro records: a handler, then three words of data;
+    // a leaf handler with no push has a start one record on and another
+    // two records on.
+    let table = |second: bool| {
+        let mut a = Asm::new();
+        a.entry(0x100).h(0x100, 0x4770);
+        a.h(0x300, 0x2001).h(0x302, 0x4770); // movs r0, #1; bx lr
+        a.h(0x340, 0xb500).h(0x342, 0xbd00); // push {lr}; pop {pc}
+        for (r, f) in [(0, thumb(0x300)), (1, thumb(0x100)), (2, thumb(0x340))] {
+            let f = if r == 2 && !second { 0 } else { f };
+            a.w(0x400 + 16 * r, f)
+                .w(0x404 + 16 * r, 0)
+                .w(0x408 + 16 * r, 8)
+                .w(0x40c + 16 * r, 0);
+        }
+        a.run()
+    };
+    assert_eq!(table(true).funcs.get(&thumb(0x300)), Some(&Evidence::Scanned));
+    // One start a record away is no column.
+    assert!(!table(false).funcs.contains_key(&thumb(0x300)));
+}
+
+#[test]
 fn pointer_scan_takes_a_lone_pool_getter() {
     let mut a = Asm::new();
     a.entry(0x100)
