@@ -102,6 +102,12 @@
 //! instruction starts, where the names files have a line table (no bar:
 //! it should rise; `lines` leaves them out).
 //!
+//! Names (`native/lift-local-names`): `locals_named`, the DWARF register
+//! variables and prototype parameters whose local or argument took the
+//! name (no bar: it should rise), and `locals_noted`, the variables left a
+//! `// dwarf rN: name` comment instead (barred; `lines` leaves them out).
+//! Both only where the names files give `[locals]` or prototypes.
+//!
 //! I/O registers (`native/lift-io-names`): `io_named`, the constant-address
 //! I/O loads and stores printed by a register's name (`st16(g, REG_IME,
 //! …)`, [`crate::io_regs::base`]; no bar: it should rise), and
@@ -323,6 +329,7 @@ pub const UNBARRED: &[&str] = &[
     "line_notes",
     "text_statics",
     "io_named",
+    "locals_named",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each

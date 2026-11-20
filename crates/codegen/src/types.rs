@@ -270,6 +270,11 @@ impl Types {
         t
     }
 
+    /// Whether the map gives any function's prototype.
+    pub fn has_protos(&self) -> bool {
+        !self.protos.is_empty()
+    }
+
     /// The function `key`'s prototype, if the map gives one.
     pub fn proto_of(&self, key: u32) -> Option<&Proto> {
         self.protos.get(&key)
