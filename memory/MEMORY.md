@@ -17,7 +17,7 @@ Made from each file's frontmatter (`title`, `hook`, `open: true`) by `just memor
 - [pokeemerald's DWARF (locals, types, lines) through gdb](pokeemerald-dwarf.md) — binutils 15.2 rejects agbcc's .debug_abbrev; Fedora gdb reads it (info scope, ptype, info line) (2026-10-26)
 - [SDL3's static build, and testing a window under gamescope](sdl-build-and-gamescope.md) — spotting SDL's X11 driver; gamescope in a lane needs WAYLAND_DISPLAY unset; cu type can overtake cu key
 - [Timing a hand-patched generated build, and testing a value](variant-builds-and-mirror-runs.md) — patch call sites, not call!; a copied crate needs its own --target-dir; use a positive control
-- [What a whole lift of each corpus game costs, and the holes-only one](lift-cost-corpus.md) — whole lifts 1-30 min under 3 GB (Mirror 3 min since 2026-11-20) (ask no 16G: it blocks other jobs); holes-only 9 s-3.5 min, 0.6 GB
+- [What a whole lift of each corpus game costs, and the holes-only one](lift-cost-corpus.md) — whole lifts 1-30 min under 3 GB (Mirror 3 min since 2026-11-20; its typed release build 53 s, 4.1 GB) (ask no 16G: it blocks other jobs); holes-only 9 s-3.5 min, 0.6 GB
 - [Where a generated crate's build time goes](generated-build-cost.md) — LLVM, not rustc's front end: p07 checks in 4.7 s of a 60 s build; how to measure one part (2026-10-24)
 - [Where mGBA's beam is at the hand-over, and what matching it took](mgba-boot-beam.md) — mGBA hands over on line 126, H-blank 91 cycles off; ours does too, which needed each V-blank of a long DMA to end a frame (2026-11-18)
 
