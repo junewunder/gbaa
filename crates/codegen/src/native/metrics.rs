@@ -78,7 +78,10 @@
 //! `plain_entry_bodies`, the functions whose body is in their plain entry
 //! with their parameters as named arguments (no bar: it should rise), and
 //! `regs_call_entries`, those whose plain entry still packs them into
-//! `Regs::call` for the extended one (barred).
+//! `Regs::call` for the extended one (barred). `closed_tables`, the jumps
+//! by value through a table Recovery bounded, printed with neither a
+//! return nor a `call_fn` arm (no bar: it should rise), so that the
+//! r0-r3 such an arm would pass aren't live at entry.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -260,6 +263,7 @@ pub const UNBARRED: &[&str] = &[
     "loops_for",
     "narrowing_casts",
     "plain_entry_bodies",
+    "closed_tables",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each

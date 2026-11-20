@@ -1746,6 +1746,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("branches_on_raw_flags", soft.raw_flag_branches);
     m.push("entry_lr_returns", n(soft.lr_returns));
     m.push("entry_lr_returns_call_fn", n(soft.lr_returns_call_fn));
+    m.push("closed_tables", n(soft.closed_tables));
     if let Some(f) = &fnrefs {
         let fn_proven = f.1.keys().filter(|w| f.0.proven(**w)).count();
         m.push("fn_words_proven", n(fn_proven));
@@ -2472,6 +2473,9 @@ struct Soft {
     /// ([`lr_entries`]).
     lr_returns: usize,
     lr_returns_call_fn: usize,
+    /// Indirect jumps through a closed table ([`closed_jump`]), printed
+    /// with no return and no `call_fn` arm.
+    closed_tables: usize,
     /// Falls and jumps into another function's entry, printed through its
     /// extended entry.
     falls: usize,
@@ -3350,8 +3354,14 @@ impl FnPrinter<'_, '_> {
                     let Ok(ts) = dyn_targets(self.ctx, self.holes, x.at, thumb, target) else {
                         return (Vec::new(), live::ALL);
                     };
-                    // The return, or a tail call through `call_fn`.
-                    let mut out = (Vec::new(), results | live::low(0xf));
+                    // The return, or a tail call through `call_fn`; a
+                    // closed table's targets only.
+                    let fallback = if closed_jump(self.ctx, x.at, thumb) {
+                        0
+                    } else {
+                        results | live::low(0xf)
+                    };
+                    let mut out = (Vec::new(), fallback);
                     for t in ts {
                         let (s, l) = to(t);
                         out.0.extend(s);
@@ -5686,16 +5696,25 @@ impl FnPrinter<'_, '_> {
                 if to_lr {
                     self.soft.lr_returns_call_fn += 1;
                 }
-                writeln!(s, "{ind}let t: u32 = {t};").unwrap();
-                writeln!(s, "{ind}if t & !3 == RET {{ {} }}", self.ret()).unwrap();
-                // Anything else is a function's entry, taken as a tail call
-                // (`call_fn` panics on any other value): the match's last
-                // arm, as a target's jump may fall through (structured).
-                let t = self.tail(
-                    None,
-                    "[r0, r1, r2, r3] = ",
-                    &format!("call_fn(g, {k}, r13, {regs})"),
-                );
+                // A closed table ([`closed_jump`]): its targets are all
+                // there is, so no return and no `call_fn` arm.
+                let closed = !targets.is_empty() && closed_jump(self.ctx, at, thumb);
+                let t = if closed {
+                    self.soft.closed_tables += 1;
+                    format!("unreachable!(\"{at:#010x}: a jump outside its table\")")
+                } else {
+                    writeln!(s, "{ind}let t: u32 = {t};").unwrap();
+                    writeln!(s, "{ind}if t & !3 == RET {{ {} }}", self.ret()).unwrap();
+                    // Anything else is a function's entry, taken as a tail
+                    // call (`call_fn` panics on any other value): the
+                    // match's last arm, as a target's jump may fall through
+                    // (structured).
+                    self.tail(
+                        None,
+                        "[r0, r1, r2, r3] = ",
+                        &format!("call_fn(g, {k}, r13, {regs})"),
+                    )
+                };
                 if targets.is_empty() {
                     writeln!(s, "{ind}{t}").unwrap();
                 } else {
@@ -6198,6 +6217,24 @@ fn dyn_targets(
     targets.sort_unstable();
     targets.dedup();
     Ok(targets)
+}
+
+/// Whether the indirect jump at `at` goes only to the targets
+/// [`dyn_targets`] gives: a table Recovery resolved (its index bounded by
+/// the compare before it), so neither a return nor another function's
+/// entry is among them. Its printed `match` has no `call_fn` arm, and no
+/// register is live past it but its targets' (unit
+/// `native/lift-register-locals`). A holes file's targets aren't proven:
+/// those keep the fallback.
+fn closed_jump(ctx: &Ctx, at: u32, thumb: bool) -> bool {
+    let jumps = &ctx.disc.rec.jumps;
+    [at, at.wrapping_sub(2)]
+        .into_iter()
+        .find_map(|a| jumps.get(&a))
+        .is_some_and(|j| matches!(j, JumpRes::Resolved(j) if !j.targets.is_empty()))
+        && ctx
+            .table_targets(at, thumb)
+            .is_some_and(|ts| !ts.is_empty())
 }
 
 /// The plain four-register entry of `k`, as `FNS` holds it: a shaped
