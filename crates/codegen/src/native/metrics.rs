@@ -87,6 +87,10 @@
 //! by value through a table Recovery bounded, printed with neither a
 //! return nor a `call_fn` arm (no bar: it should rise), so that the
 //! r0-r3 such an arm would pass aren't live at entry.
+//!
+//! Text (`native/lift-text`): `text_notes`, the `// text: …` comments
+//! giving the text a constant points at, where the names files have a text
+//! table (no bar: it should rise; `lines` leaves them out).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -277,6 +281,7 @@ pub const UNBARRED: &[&str] = &[
     "narrowing_casts",
     "plain_entry_bodies",
     "closed_tables",
+    "text_notes",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each
