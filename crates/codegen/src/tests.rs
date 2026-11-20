@@ -2968,9 +2968,14 @@ fn a_function_taking_only_its_parameters_has_its_body_in_its_plain_entry() {
     assert!(lifted.holes.is_empty(), "{:?}", lifted.holes);
     let text: String = lifted.files.iter().map(|(_, t)| t.as_str()).collect();
     assert!(
-        text.contains("pub fn f_08000018(g: &mut Game, _: u32, r0: u32) -> Result<u32, Exit> {"),
+        text.contains("pub fn f_08000018(g: &mut Game, _: u32, r0: u32) -> u32 {"),
         "{text}"
     );
+    // It can't exit, so it returns no `Result`, and its call has no `?`
+    // (native/lift-no-exit-result); the reset handler waits, so it does.
+    assert!(text.contains("r0 = f_08000018(g, r13, 0x7u32);"), "{text}");
+    assert!(text.contains("-> Result<(), Exit> {"), "{text}");
+    assert_eq!(lifted.metrics.get("functions_result_unneeded"), Some(0));
     // Nothing falls or jumps into it, so it has no extended entry
     // (native/lift-one-entry).
     assert!(!text.contains("pub fn x_08000018("), "{text}");

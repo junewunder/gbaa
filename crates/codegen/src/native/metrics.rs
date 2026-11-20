@@ -122,6 +122,11 @@
 //! `a_` for `FNS`); `guest_pc_plain` the blocks that set the guest pc in
 //! a plain build, outside the prelude's `pc` and its `guest-pc` feature
 //! (barred at 0).
+//!
+//! Results (`native/lift-no-exit-result`): `functions_result_unneeded`,
+//! the lifted functions still returning `Result<_, Exit>` that the printed
+//! text shows can't exit, themselves or through a callee (barred at 0;
+//! stand-ins and checked functions keep theirs and aren't counted).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
