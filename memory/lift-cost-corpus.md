@@ -23,6 +23,7 @@ holes files applied (`mods/<game>/holes.toml`), one job each:
 | Metroid (0711e3d2, 2026-11-20, lift+build+run) | 1 min | 0.28 GB | | |
 | Kirby: Nightmare (0711e3d2, 2026-11-20, lift+build+run) | 4 min | 0.43 GB | | |
 | Kirby & the Amazing Mirror, typed (24f4b797, 2026-11-20): lift / release build | 79 s / 53 s | 0.48 GB / 4.1 GB | | |
+| Emerald, named and typed (55cc3c8c, 2026-11-20, `just lift`: lift+build+run 600 frames) | ~22 min (lift ~13, build+run ~9) | under `just long --mem 12G`; the build under its own 10 GB cap | 80 s | |
 
 - The Mirror's release build with katam's types (74,751 named-field
   accesses, native/mirror-typed-build; `just build-recompiled OUT guest-pc`
