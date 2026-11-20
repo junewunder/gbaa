@@ -193,6 +193,7 @@ pub mod named;
 pub mod narrow;
 pub mod shape;
 pub mod switch;
+pub mod unread;
 
 use globals::{Globals, Layout, Obj, Place};
 use metrics::{Metrics, Where};
@@ -1109,6 +1110,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     in_region: Vec::new(),
                     rest_from: 0,
                     unguard: Vec::new(),
+                    blind: Vec::new(),
+                    quiet: Vec::new(),
                     scrutinee: None,
                     region: None,
                     outs: None,
@@ -1644,6 +1647,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // came (bar 0).
     m.push("reg_local_writes", soft.reg_writes);
     m.push("unpacked_unread", n(soft.unpacked_unread));
+    // The `let`s nothing reads, and the sums still printed as
+    // `add_with_carry(..).0` (native/lift-plain-arith): none.
+    let text = || files.files.iter().map(|(_, t)| t.as_str());
+    m.push("unread_lets", text().map(unread::unread_lets).sum());
+    m.push("adc_sums", text().map(unread::adc_sums).sum());
     // Structured loops (native/lift-for-loops): those printed as `for`
     // (no bar: it should rise) and the rest, as `loop` (barred).
     m.push("loops_for", soft.loops_for);
@@ -2472,6 +2480,14 @@ struct FnPrinter<'a, 'b> {
     /// counted: a compare tree's tests ([`FnPrinter::operands`]).
     /// Empty but then.
     unguard: Vec<bool>,
+    /// The exits whose printed code doesn't read their target value
+    /// ([`FnPrinter::reads_target`]), by inst, while a block's uses are
+    /// counted. Empty but then.
+    blind: Vec<bool>,
+    /// The loads a block may leave out where nothing uses their value
+    /// ([`FnPrinter::quiet_loads`]), by inst, while its uses are counted.
+    /// Empty but then.
+    quiet: Vec<bool>,
     /// And the value its `match` reads, used once more ([`FnPrinter::uses`]).
     scrutinee: Option<ValueId>,
     region: Option<usize>,
@@ -2506,7 +2522,7 @@ struct FnPrinter<'a, 'b> {
     live_in: BTreeMap<u32, live::Live>,
     /// The writes of r0-r12 only their own block reads, by block
     /// ([`FnPrinter::dead_writes`]): each prints as a `let`.
-    local: BTreeMap<u32, Vec<bool>>,
+    local: BTreeMap<u32, Vec<Option<live::Local>>>,
     /// What each of r0-r12 holds as the block printing now let it
     /// (`native/lift-register-locals`): a name or a constant its reads
     /// print instead of the register's local.
@@ -2962,7 +2978,7 @@ impl FnPrinter<'_, '_> {
     ) -> (
         BTreeMap<u32, Vec<bool>>,
         BTreeMap<u32, live::Live>,
-        BTreeMap<u32, Vec<bool>>,
+        BTreeMap<u32, Vec<Option<live::Local>>>,
     ) {
         let keys: Vec<u32> = self.f.blocks.keys().copied().collect();
         let index: BTreeMap<u32, usize> = keys.iter().enumerate().map(|(i, &k)| (k, i)).collect();
@@ -2979,7 +2995,6 @@ impl FnPrinter<'_, '_> {
             .map(|gb| &gb.block.insts[..])
             .collect();
         let results = live::low(self.me.map_or(0xf, |m| m.results));
-        let lr_returns = self.sums.get(self.f.entry).map(|s| &s.lr_returns);
         let out = |b: usize, i: usize| {
             let Some(x) = xs[b].iter().find(|x| x.index == i) else {
                 return (Vec::new(), live::ALL);
@@ -3013,13 +3028,8 @@ impl FnPrinter<'_, '_> {
                 Plan::Dynamic { ret: Some(ret), .. } => {
                     then(ret, live::low(0xf) | live::high(0xff))
                 }
-                Plan::Dynamic { ret: None, .. }
-                    if self.lr_ret && lr_returns.is_some_and(|r| r.contains(&x.at)) =>
-                {
-                    // A jump to the entry lr, printed as a plain return
-                    // ([`FnPrinter::exit`]): its results only.
-                    (Vec::new(), results)
-                }
+                // A plain return ([`FnPrinter::exit`]): its results.
+                Plan::Dynamic { ret: None, .. } if !self.reads_target(x) => (Vec::new(), results),
                 Plan::Dynamic {
                     ret: None, target, ..
                 } => {
@@ -3055,11 +3065,7 @@ impl FnPrinter<'_, '_> {
                 {
                     Some(live::low(self.shape(target).map_or(0xf, |c| c.results)))
                 }
-                Plan::Dynamic { ret: None, .. }
-                    if self.lr_ret && lr_returns.is_some_and(|r| r.contains(&x.at)) =>
-                {
-                    Some(0)
-                }
+                Plan::Dynamic { ret: None, .. } if !self.reads_target(x) => Some(0),
                 _ => None,
             }
         };
@@ -3693,6 +3699,9 @@ impl FnPrinter<'_, '_> {
             .collect();
         let pairs = narrow::guest_pairs(&self.f.blocks[&self.cur].insns);
         self.soft.shift_pairs.extend(&pairs);
+        self.blind = self.blind_exits(insts, xs);
+        let quiet = self.quiet_loads(insts, &typed, &objs, &refs);
+        self.quiet = quiet.clone();
         let uses = self.uses(insts, &typed, &refs, &skip, &dead, &conds, &forms);
         let used: Vec<bool> = uses.iter().map(|&n| n > 0).collect();
         // The values printed inside their use, not as `let`s (unit
@@ -3703,16 +3712,25 @@ impl FnPrinter<'_, '_> {
             inline[x.index()] = false;
         }
         self.unguard = Vec::new();
+        self.blind = Vec::new();
+        self.quiet = Vec::new();
         self.scrutinee = None;
         let outer = std::mem::replace(&mut self.inl, vec![None; insts.len()]);
         // A register value only this block reads prints as a `let`
         // ([`live::block_local`]), but in a block printed in pieces (a
         // compare tree's, a `for`'s): its reads go by `bound`.
         let outer_bound = std::mem::take(&mut self.bound);
+        // Only where something printed reads it: a call or return by
+        // name, or a read whose value is used; else it is the write it
+        // was (a value a call's result overwrites, say).
         let local: Vec<bool> = match self.local.get(&self.cur) {
-            Some(l) if l.len() == insts.len() && from == 0 && tree.is_none() && step.is_none() => {
-                l.clone()
-            }
+            Some(l) if l.len() == insts.len() && from == 0 && tree.is_none() && step.is_none() => l
+                .iter()
+                .map(|l| {
+                    l.as_ref()
+                        .is_some_and(|l| l.by_exit || l.reads.iter().any(|&j| used[j]))
+                })
+                .collect(),
             _ => vec![false; insts.len()],
         };
         for (i, inst) in insts.iter().enumerate() {
@@ -3723,7 +3741,7 @@ impl FnPrinter<'_, '_> {
                 }
                 continue;
             }
-            if dead[i] || skip[i] || (pure(&inst.op) && !used[i]) {
+            if dead[i] || skip[i] || ((pure(&inst.op) || quiet[i]) && !used[i]) {
                 continue;
             }
             // A read of a register this block let: the `let`'s name.
@@ -3895,6 +3913,11 @@ impl FnPrinter<'_, '_> {
                             mem
                         }
                     };
+                    // One nothing reads is still a bus access.
+                    if !used[i] {
+                        stmt(&mut s, format!("{e};"));
+                        continue;
+                    }
                     self.soft.value_lets += 1;
                     match &guard {
                         Some(gv) => writeln!(
@@ -4095,7 +4118,7 @@ impl FnPrinter<'_, '_> {
             uses[x.index()] = 1;
         }
         for (i, inst) in insts.iter().enumerate().rev() {
-            if skip[i] || dead[i] || (pure(&inst.op) && uses[i] == 0) {
+            if skip[i] || dead[i] || (self.gone_if_unused(i, &inst.op) && uses[i] == 0) {
                 continue;
             }
             for x in self.operands(i, inst, typed, refs, conds, forms) {
@@ -4135,7 +4158,8 @@ impl FnPrinter<'_, '_> {
             Op::Load { .. } if base.is_some() => base.into_iter().collect(),
             Op::Store { value, .. } if base.is_some() => base.into_iter().chain([value]).collect(),
             _ if let Some(f) = &conds[i] => f.uses.clone(),
-            _ if forms[i].is_some() => forms[i].map(|(x, _)| x).into_iter().collect(),
+            _ if let Some((x, f)) = forms[i] => [x].into_iter().chain(f.others()).collect(),
+            Op::Exit(_) if self.blind.get(i).copied().unwrap_or(false) => Vec::new(),
             ref op => op.operands(),
         };
         let guard = inst
@@ -4191,7 +4215,7 @@ impl FnPrinter<'_, '_> {
         let flag_bit = |f: Flag| 1u32 << (16 + f as u32);
         for (i, inst) in insts.iter().enumerate() {
             let op = &inst.op;
-            if dead[i] || skip[i] || (pure(op) && uses[i] == 0) {
+            if dead[i] || skip[i] || (self.gone_if_unused(i, op) && uses[i] == 0) {
                 continue;
             }
             let mut r = match *op {
@@ -4249,7 +4273,7 @@ impl FnPrinter<'_, '_> {
             return c.text_with(&|x| self.val(x));
         }
         match form {
-            Some((x, form)) => form.print(&self.val(x)),
+            Some((x, form)) => form.print_with(&self.val(x), &|y| self.whole(y)),
             None => expr(op, &|x| self.val(x), &|x| self.whole(x)),
         }
     }
@@ -4415,8 +4439,9 @@ impl FnPrinter<'_, '_> {
         let mut out = Vec::new();
         for (n, i) in t.run.exits().chain(rest).enumerate() {
             let mut pre = String::new();
+            let unread = self.arm_unread(insts, &t.run, from, i, xs);
             for d in from..i {
-                if !t.run.deferred(insts, d) || skip[d] {
+                if !t.run.deferred(insts, d) || skip[d] || unread[d - from] {
                     continue;
                 }
                 let body = match insts[d].op {
@@ -4483,17 +4508,71 @@ impl FnPrinter<'_, '_> {
                         }
                     }
                     self.soft.compare_tree_blocks += 1;
-                    let lets = tree_lets(n, &nt.run, &nskip);
-                    self.soft.value_lets += lets.lines().count() as u64;
-                    // Its values print as their `let`s.
+                    let lets = tree_lets(n, &nt.run, &nskip, &self.blind_exits(n, &nxs));
+                    // Its values print as their `let`s, each arm those it
+                    // reads.
                     let outer = std::mem::replace(&mut self.inl, vec![None; n.len()]);
                     let pc = format!("{ind}runtime::guest_pc::set({k:#010x});\n");
                     for b in self.switch_bodies(nt, n, &nxs, nthumb, &nskip, k, Some(exits), false)
                     {
+                        let lets = unread::read_lets(&lets, &b);
+                        self.soft.value_lets += lets.lines().count() as u64;
                         out.push(format!("{pre}{pc}{lets}{b}"));
                     }
                     self.inl = outer;
                 }
+            }
+        }
+        out
+    }
+
+    /// Which of a run's writes from inst `from` to its exit at `i` (or
+    /// the rest of its block, there) an arm leaves out, by inst from
+    /// `from`: those the arm's code doesn't read (unit
+    /// `native/lift-plain-arith`). The run's tests, which read its flags,
+    /// print as the `match`; so a write is read only if it is the last of
+    /// its register or flag before the exit (no unguarded one after it)
+    /// and live where the exit goes on (a block of this function's,
+    /// [`FnPrinter::dead_writes`]; anywhere else, and the rest of a block,
+    /// everything). A write also stays where a read of the same register
+    /// or flag follows it within the run. sp, lr and pc always stay.
+    fn arm_unread(
+        &self,
+        insts: &[Inst],
+        run: &switch::Run,
+        from: usize,
+        i: usize,
+        xs: &[ExitInfo],
+    ) -> Vec<bool> {
+        let mut out = vec![false; i.saturating_sub(from)];
+        if self.holes.keep_dead_writes {
+            return out;
+        }
+        let x = xs.iter().find(|x| x.index == i);
+        let mut need = match x.map(|x| x.plan) {
+            Some(Plan::Static(k) | Plan::Rekey(k)) => {
+                self.live_in.get(&k).copied().unwrap_or(live::ALL)
+            }
+            _ => live::ALL,
+        };
+        need |= live::reg(13) | live::reg(14) | live::reg(15);
+        for d in (from..i).rev() {
+            let bit = match insts[d].op {
+                Op::SetReg(r, _) if run.deferred(insts, d) => live::reg(r.index()),
+                Op::SetFlag(f, _) if run.deferred(insts, d) => live::flag(f),
+                Op::GetReg(r) => {
+                    need |= live::reg(r.index());
+                    continue;
+                }
+                Op::GetFlag(f) => {
+                    need |= live::flag(f);
+                    continue;
+                }
+                _ => continue,
+            };
+            out[d - from] = need & bit == 0;
+            if insts[d].guard.is_none() {
+                need &= !bit;
             }
         }
         out
@@ -4697,6 +4776,15 @@ impl FnPrinter<'_, '_> {
         }
     }
 
+    /// What a call of `k`'s `x_` entry ([`taking`]) assigns its results
+    /// to: its shape's, or all of r0-r3 for a four-register function.
+    fn results_lhs(&self, k: u32) -> String {
+        match self.shape(k) {
+            Some(c) => lhs(c.results),
+            None => "[r0, r1, r2, r3] = ".into(),
+        }
+    }
+
     /// The call statement: `lhs call?;`.
     fn call_stmt(&self, k: u32) -> String {
         let (lhs, call) = self.call(k);
@@ -4759,15 +4847,6 @@ impl FnPrinter<'_, '_> {
         format!("{call}\n                    {then}")
     }
 
-    /// What a call of `k`'s extended entry (`x_`, [`taking`]) assigns its
-    /// results to: a shaped callee's results, else all of r0-r3.
-    fn results_lhs(&self, k: u32) -> String {
-        match self.shape(k) {
-            Some(c) => lhs(c.results),
-            None => "[r0, r1, r2, r3] = ".into(),
-        }
-    }
-
     /// An indirect call at `at` to key `k` through `call_fn`: all of
     /// r0-r3 in and out, or, where its callee set is complete, what its
     /// callees read in and what they may change out.
@@ -4821,6 +4900,76 @@ impl FnPrinter<'_, '_> {
             return t;
         }
         call_fn_text(k, pass, back)
+    }
+
+    /// Whether exit `x`'s printed code ([`FnPrinter::exit`]) reads its
+    /// target value: only a dynamic jump's does, unless it is a plain
+    /// return to the entry lr or a call through a register whose one
+    /// callee is called directly.
+    fn reads_target(&self, x: &ExitInfo) -> bool {
+        let Plan::Dynamic { ret, target, .. } = x.plan else {
+            return false;
+        };
+        if ret.is_some() {
+            return !target.is_some_and(|tk| self.all.contains(&tk) && !self.takers.contains(&tk));
+        }
+        let to_lr = self
+            .sums
+            .get(self.f.entry)
+            .is_some_and(|s| s.lr_returns.contains(&x.at));
+        !(to_lr && self.lr_ret)
+    }
+
+    /// The loads of a block's `insts` whose read has no effect, so that
+    /// one nothing uses prints as nothing (unit `native/lift-plain-arith`):
+    /// a stack slot's, a typed global's or heap object's, or one the
+    /// value-set analysis bounds to RAM, ROM or the display memories. One
+    /// that may reach I/O, SRAM or anywhere still prints, as a statement.
+    fn quiet_loads(
+        &self,
+        insts: &[Inst],
+        typed: &[Option<Place>],
+        objs: &[Option<Obj>],
+        refs: &[Option<HeapRef>],
+    ) -> Vec<bool> {
+        let quiet_region = |r: usize| matches!(metrics::REGIONS[r], "ram" | "rom" | "display");
+        let mut at = 0;
+        let mut q = vec![false; insts.len()];
+        for (i, inst) in insts.iter().enumerate() {
+            match inst.op {
+                Op::Insn(a) => at = a,
+                Op::Load { addr, .. } => {
+                    let w = typed_as(&typed[i], &objs[i], refs[i].is_some())
+                        .unwrap_or_else(|| self.vsa_where(insts, addr, at));
+                    q[i] = match w {
+                        Where::Global | Where::Object | Where::Ref | Where::Sp => true,
+                        Where::Const(r) | Where::Computed(r) => quiet_region(r),
+                        Where::Unknown => false,
+                    };
+                }
+                _ => {}
+            }
+        }
+        q
+    }
+
+    /// Whether inst `i`, op `op`, of the block whose uses are counted
+    /// prints as nothing where nothing uses it: a pure op or a quiet load
+    /// ([`FnPrinter::quiet_loads`]).
+    fn gone_if_unused(&self, i: usize, op: &Op) -> bool {
+        pure(op) || self.quiet.get(i).copied().unwrap_or(false)
+    }
+
+    /// The exits of a block's `insts` whose printed code doesn't read
+    /// their target ([`FnPrinter::reads_target`]), by inst.
+    fn blind_exits(&self, insts: &[Inst], xs: &[ExitInfo]) -> Vec<bool> {
+        let mut b = vec![false; insts.len()];
+        for x in xs {
+            if x.index < insts.len() && matches!(insts[x.index].op, Op::Exit(_)) {
+                b[x.index] = !self.reads_target(x);
+            }
+        }
+        b
     }
 
     fn exit(&mut self, e: Exit, x: &ExitInfo, thumb: bool) -> String {
@@ -5561,8 +5710,10 @@ fn exits_of_block(ctx: &Ctx, gb: &crate::func::GBlock) -> Vec<ExitInfo> {
 
 /// The reads and pure values a compare run printed inside another's arm
 /// needs ([`FnPrinter::switch_bodies`]): those its printed writes and
-/// guards, its exits and the rest of its block take, in order.
-fn tree_lets(insts: &[Inst], run: &switch::Run, skip: &[bool]) -> String {
+/// guards, its exits (those `blind` doesn't mark,
+/// [`FnPrinter::blind_exits`]) and the rest of its block take, in order.
+/// Each arm prints those it reads ([`unread::read_lets`]).
+fn tree_lets(insts: &[Inst], run: &switch::Run, skip: &[bool], blind: &[bool]) -> String {
     let ind = "                ";
     let mut need = vec![false; insts.len()];
     // The block's printer prints the rest itself.
@@ -5585,7 +5736,12 @@ fn tree_lets(insts: &[Inst], run: &switch::Run, skip: &[bool]) -> String {
         }
         if root {
             let guard = inst.guard.filter(|_| !run.exit(i));
-            for x in inst.op.operands().into_iter().chain(guard) {
+            // An exit whose printed code doesn't read its target.
+            let ops = match inst.op {
+                Op::Exit(_) if blind.get(i).copied().unwrap_or(false) => Vec::new(),
+                op => op.operands(),
+            };
+            for x in ops.into_iter().chain(guard) {
                 need[x.index()] = true;
             }
         } else {
@@ -5697,7 +5853,13 @@ fn expr(op: &Op, v: &dyn Fn(ValueId) -> String, w: &dyn Fn(ValueId) -> String) -
         Not(a) | BNot(a) => format!("!{}", v(a)),
         MulLongLo { signed, a, b } => format!("prim::mul_long({signed}, {}, {}).0", w(a), w(b)),
         MulLongHi { signed, a, b } => format!("prim::mul_long({signed}, {}, {}).1", w(a), w(b)),
-        Adc { a, b, c } => format!("prim::add_with_carry({}, {}, {}).0", w(a), w(b), w(c)),
+        // Where no form names it ([`narrow::form`]), a sum as it is.
+        Adc { a, b, c } => format!(
+            "{}.wrapping_add({}).wrapping_add(u32::from({}))",
+            v(a),
+            w(b),
+            w(c)
+        ),
         AdcCarry { a, b, c } => format!("prim::add_with_carry({}, {}, {}).1", w(a), w(b), w(c)),
         AdcOverflow { a, b, c } => {
             format!("prim::add_with_carry({}, {}, {}).2", w(a), w(b), w(c))
@@ -5901,7 +6063,7 @@ mod tests {
         };
         let (reset, m) = print(&Holes::parse("").unwrap());
         let sum = reset
-            .find(": u32 = prim::add_with_carry(r0, 0x1u32, false).0;")
+            .find(": u32 = r0.wrapping_add(0x1);")
             .unwrap_or_else(|| panic!("r0 + 1 a let: {reset}"));
         // r0's new value, only the call reads, is its argument
         // (native/lift-register-locals).
