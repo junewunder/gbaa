@@ -1282,7 +1282,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
 - `just lift ROM [OUT] [FLAGS]` (native/lift-stage-a;
   `docs/native-port-design.md`, "The stage-A lifter as built"): the
   stage-A lifter. `gbaa-lift ROM OUT [--name NAME] [--holes FILE]
-  [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY]
+  [--bars FILE] [--names DIR]... [--layout guest|packed] [--drop-standin KEY]
   [--plant AT] [--copies N] [--holes-only]` (`codegen::native`) writes the whole
   program to OUT (default `out/lift-<name>`) as `src/`: `main.rs` (the
   prelude, RAM, `ENTRY`), `fns.rs` (`FNS`) and the functions in modules
@@ -1296,8 +1296,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   guest's offsets, `--layout guest`, the default, which derefs to
   the bytes; `--layout packed`, the play layout, puts them in the
   lifter's order with the rest of RAM as `bytes`, and `g.ram[offset]`
-  finds a byte in the field that holds it, native/lift-packed-layout; names from DIR's names files for this ROM, default `names/`;
-  native/ram-globals; and functions' entries, and constant addresses in named data, by name: native/lift-fn-names), its registers locals, blocks a `loop { match }` over
+  finds a byte in the field that holds it, native/lift-packed-layout; names from DIR's names files for this ROM, default `names/`, each `--names` layering its DIR's over those before;
+  native/ram-globals; a datum of size 0 in the map (a label: a global the linker script places, as katam's RAM, which pret-names types from its `extern` declarations) spans its type's size, and the report's `types` line counts the constant RAM accesses that land on a typed global's scalar and on a named struct field, native/mirror-katam-names: Kirby & the Amazing Mirror's lift takes katam's map with `--names $GBAA_DATA/names --names names`, the hand names over it; and functions' entries, and constant addresses in named data, by name: native/lift-fn-names), its registers locals, blocks a `loop { match }` over
   local labels, calls Rust calls; then the recipe builds it into
   `target/recompiled` (`gbaa-native-<name>`, the native programs' headless
   flags or, with none, gbaa-desktop's window to play in: `--scale N`, `--mute`; it keeps the game's `.sav` in `saves/<name>/` as the play build does, and its menus leave out save states, rewind, scripts and netplay; `crates/native-host`). It reads `holes/<name>.toml` when there is

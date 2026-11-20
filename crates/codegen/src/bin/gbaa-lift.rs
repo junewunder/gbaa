@@ -1,5 +1,5 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
-//! [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT]
+//! [--names DIR]... [--layout guest|packed] [--drop-standin KEY] [--plant AT]
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT]
 //! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-for-loops] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
@@ -14,7 +14,10 @@
 //!
 //! RAM's globals (`codegen::native::globals`, unit `native/ram-globals`)
 //! take their names from the names files in DIR whose `[map]` names this
-//! ROM (default the repo's `names/`; none is fine); so do the lifted
+//! ROM (default the repo's `names/`; none is fine; `--names` again layers
+//! another DIR's over the ones before, as Kirby & the Amazing Mirror's
+//! lift takes katam's map from `$GBAA_DATA/names` and the repo's hand
+//! names over it, unit `native/mirror-katam-names`); so do the lifted
 //! functions and the data whose address the code takes as a constant
 //! (`codegen::native::named`, unit `native/lift-fn-names`; not with
 //! `--copies`), which the report counts. `--layout guest` (the
@@ -120,14 +123,15 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference]"
         );
         ExitCode::FAILURE
     };
     let [rom, out, rest @ ..] = &args[..] else {
         return usage();
     };
-    let (mut name, mut holes, mut bars, mut names) = (None, None, None, None);
+    let (mut name, mut holes, mut bars) = (None, None, None);
+    let mut names: Vec<PathBuf> = Vec::new();
     let (mut drop, mut plant, mut tail, mut irq_at_waits) = (None, None, false, false);
     let (mut ime_at_waits, mut takes_zeroed, mut keep_dead) = (false, false, false);
     let mut keep_temps = false;
@@ -196,7 +200,7 @@ fn main() -> ExitCode {
             ("--name", Some(n)) => name = Some(n.clone()),
             ("--holes", Some(f)) => holes = Some(PathBuf::from(f)),
             ("--bars", Some(f)) => bars = Some(PathBuf::from(f)),
-            ("--names", Some(d)) => names = Some(PathBuf::from(d)),
+            ("--names", Some(d)) => names.push(PathBuf::from(d)),
             ("--layout", Some(l)) if l == "guest" => {
                 layout = codegen::native::globals::Layout::Guest
             }
@@ -301,19 +305,34 @@ fn main() -> ExitCode {
     }
     holes.holes_only = holes_only;
     holes.holes_flow = holes_flow;
-    let names = names.unwrap_or_else(|| crates_dir().parent().expect("the repo").join("names"));
+    if names.is_empty() {
+        names.push(crates_dir().parent().expect("the repo").join("names"));
+    }
     let sha = codegen::names::sha1_hex(&bytes);
-    match codegen::names::files_for(&names, &sha)
-        .map_err(|e| e.to_string())
-        .and_then(|fs| codegen::names::SourceMap::load(&sha, &fs))
-    {
+    let files = names.iter().try_fold(Vec::new(), |mut all, d| {
+        all.extend(
+            codegen::names::files_for(d, &sha).map_err(|e| format!("{}: {e}", d.display()))?,
+        );
+        Ok::<_, String>(all)
+    });
+    match files.and_then(|fs| codegen::names::SourceMap::load(&sha, &fs)) {
         Ok(map) => {
             holes.names = map
                 .data
                 .iter()
                 .filter_map(|(&a, item)| {
                     let id = map.ident(codegen::names::Kind::Data, a)?;
-                    Some((a, (id.to_string(), item.size.unwrap_or(0) as u32)))
+                    // A label (size 0: a global the linker script places,
+                    // as katam's RAM) is as big as its type, if typed.
+                    let size = match item.size.unwrap_or(0) as u32 {
+                        0 => map
+                            .typed
+                            .global_at(a)
+                            .filter(|&(k, _)| k == a)
+                            .map_or(0, |(_, ty)| map.typed.size(ty)),
+                        n => n,
+                    };
+                    Some((a, (id.to_string(), size)))
                 })
                 .collect();
             holes.fn_names = map
@@ -324,9 +343,12 @@ fn main() -> ExitCode {
                     Some((k, id.to_string()))
                 })
                 .collect();
+            if !map.typed.is_empty() {
+                holes.types = Some(std::sync::Arc::new(map.typed));
+            }
         }
         Err(e) => {
-            eprintln!("gbaa-lift: {}: {e}", names.display());
+            eprintln!("gbaa-lift: names: {e}");
             return ExitCode::FAILURE;
         }
     }

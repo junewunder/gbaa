@@ -296,6 +296,7 @@ first tests stage A and the shortcuts on a real agbcc game that builds.
   `mods/kirby-mirror/holes.toml`, `skip_fn_flow`: 37 min without):
   2,626,434 lines in 751 files, lift 45 s at 0.62 GB, the crate built in
   107 s at 11.7 GB; first stop frame 2, the m4a mixer as Nightmare's.
+- **katam's names and types in the Amazing Mirror's lift** (`native/mirror-katam-names`).
 
 Emerald comes after typed RAM and pointers, typed from pret's DWARF (the
 gaps Emerald's ten listed: fills, bitfields, retyping from access widths,

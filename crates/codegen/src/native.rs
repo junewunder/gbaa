@@ -340,6 +340,11 @@ pub struct Holes {
     /// its name ([`named`]; unit `native/lift-fn-names`). Not with
     /// `--copies`, whose copies would repeat them.
     pub fn_names: BTreeMap<u32, String>,
+    /// The same files' types (`codegen::types`), when they give any: the
+    /// report counts the constant RAM accesses that land on a named field
+    /// of a typed global ([`typed_fields`]; unit
+    /// `native/mirror-katam-names`).
+    pub types: Option<std::sync::Arc<crate::types::Types>>,
     /// Where `Ram`'s globals are (`gbaa-lift --layout`): the guest's
     /// offsets, or the play layout's order ([`globals::Layout`]).
     pub layout: Layout,
@@ -908,6 +913,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // (native/ref-in-object): one address is an access like a constant
     // one; a range, an object's extent.
     let mut ram = Vec::new();
+    let mut konst = Vec::new();
     let mut ranges = Vec::new();
     for c in &codes {
         for f in c
@@ -924,6 +930,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     }
                     if let Some((a, w)) = const_access(insts, &inst.op) {
                         ram.push((a, w));
+                        konst.push((a, w));
                     } else if let Some((lo, hi, w)) = computed_ram(&c.ctx, insts, &inst.op, at) {
                         if lo == hi {
                             ram.push((lo, w));
@@ -936,6 +943,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         }
     }
     let globals = Globals::carve(&ram, &ranges, &holes.names);
+    let typed_line = holes.types.as_deref().map(|t| typed_fields(t, &konst));
     let flow_ins: Vec<FlowIn> = codes
         .iter()
         .enumerate()
@@ -1686,6 +1694,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     .unwrap();
     if let Some(n) = named {
         writeln!(report, "{}", n.line()).unwrap();
+    }
+    if let Some(l) = typed_line {
+        writeln!(report, "{l}").unwrap();
     }
     writeln!(
         report,
@@ -5006,6 +5017,36 @@ fn mark_regions(seq: &[plan::Node], in_region: &mut [bool]) {
             }
         }
     }
+}
+
+/// The report's line on the names files' types (unit
+/// `native/mirror-katam-names`): of the constant accesses into EWRAM or
+/// IWRAM (`ram`: their offsets in `Game::ram` and widths), those in a
+/// typed global, those exactly one of its scalars (an element or field,
+/// [`crate::types::Types::walk`]), and those of these inside a struct or
+/// union field (`gKirbys[1].base.x`). Counted only: the printer still
+/// prints them as `Ram`'s fields ([`globals`]).
+fn typed_fields(t: &crate::types::Types, ram: &[(u32, u32)]) -> String {
+    let (mut all, mut typed, mut whole, mut field) = (0, 0, 0, 0);
+    for &(o, w) in ram {
+        let a = globals::guest(o);
+        all += 1;
+        let Some((k, ty)) = t.global_at(a) else {
+            continue;
+        };
+        typed += 1;
+        let Some((p, _)) = t.walk(ty, a - k, w, None) else {
+            continue;
+        };
+        whole += 1;
+        if p.iter().any(|s| matches!(s, crate::types::Step::Field(_))) {
+            field += 1;
+        }
+    }
+    format!(
+        "types (gbaa-lift --names): of {all} constant RAM accesses, {typed} in a typed global, \
+         {whole} exactly one of its scalars, {field} a named struct field"
+    )
 }
 
 /// How an access printed typed is counted: a constant address's field

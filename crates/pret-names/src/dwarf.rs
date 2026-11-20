@@ -96,6 +96,10 @@ pub struct Debug {
     pub lines: BTreeMap<u32, (String, u32)>,
     /// Each global with a fixed address: its name and type.
     pub globals: BTreeMap<u32, (String, String)>,
+    /// Each `extern` declaration's type by the variable's name, with the
+    /// number of units declaring it so: a global the linker script places
+    /// (katam's RAM) has no DWARF address, only these.
+    pub decls: BTreeMap<String, BTreeMap<String, usize>>,
     /// Each named struct, union or enum, by its type text
     /// (`struct Pokemon`, or a typedef's name for an anonymous one).
     pub types: BTreeMap<String, Layout>,
@@ -474,6 +478,18 @@ fn home(expr: &[u8]) -> Option<Home> {
     }
 }
 
+/// A declaration's type with its outer `[1]` read as `[]`: agbcc gives
+/// `extern T x[];` an upper bound of 0, as if `x[1]`, and a declaration of
+/// a real one-element array is rare enough to lose (katam has none).
+pub(crate) fn unsized_decl(ty: String) -> String {
+    match ty.find('[') {
+        Some(i) if ty[i..].starts_with("[1]") && !ty.contains('(') => {
+            format!("{}[]{}", &ty[..i], &ty[i + 3..])
+        }
+        _ => ty,
+    }
+}
+
 /// A variable's fixed address (`DW_OP_addr`).
 fn static_addr(e: &gimli::DebuggingInformationEntry<'_, '_, R<'_>>) -> Option<u32> {
     let b = match e.attr_value(dw::DW_AT_location).ok()?? {
@@ -582,6 +598,11 @@ fn read_unit<'a>(
                     let n = cx.name_of(&e).unwrap_or_default();
                     let ty = cx.decl(cx.type_ref(&e), "", 0);
                     d.globals.entry(a).or_insert((n, ty));
+                } else if e.attr_value(dw::DW_AT_declaration)?.is_some()
+                    && let Some(n) = cx.name_of(&e)
+                {
+                    let ty = unsized_decl(cx.decl(cx.type_ref(&e), "", 0));
+                    *d.decls.entry(n).or_default().entry(ty).or_default() += 1;
                 }
             }
             _ => {}
@@ -785,10 +806,29 @@ impl Debug {
         }
     }
 
-    /// `, type = "…"` for the global at `a`.
-    pub fn data_fields(&self, a: u32) -> String {
-        match self.globals.get(&a) {
-            Some((_, ty)) => format!(", type = {}", quoted(ty)),
+    /// The type of the global at `a` called `name`: its own DWARF entry's,
+    /// else what the units' `extern` declarations of `name` say (the most
+    /// units' type; on a tie one with a length, `u16 [4]` over `u16 []`).
+    pub fn global_type(&self, a: u32, name: &str) -> Option<&str> {
+        if let Some((_, ty)) = self.globals.get(&a) {
+            return Some(ty);
+        }
+        self.decl_type(name)
+    }
+
+    /// What the `extern` declarations of `name` say its type is.
+    pub fn decl_type(&self, name: &str) -> Option<&str> {
+        let tys = self.decls.get(name)?;
+        tys.iter()
+            .max_by_key(|(ty, n)| (**n, !ty.ends_with("[]"), std::cmp::Reverse(ty.as_str())))
+            .map(|(ty, _)| ty.as_str())
+    }
+
+    /// `, type = "…"` for the global at `a` called `name`
+    /// ([`Debug::global_type`]).
+    pub fn data_fields(&self, a: u32, name: &str) -> String {
+        match self.global_type(a, name) {
+            Some(ty) => format!(", type = {}", quoted(ty)),
             None => String::new(),
         }
     }
