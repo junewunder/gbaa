@@ -13,6 +13,7 @@ holes files applied (`mods/<game>/holes.toml`), one job each:
 | Kirby & the Amazing Mirror | ~50 min (heap pass 1,771 s) | 0.5 GB | 36 s | 1,054 s |
 | Kirby: Nightmare (skip_fn_flow) | 54 s | 0.4 GB | 20 s | |
 | Kirby: Nightmare, flow on (2026-11-14) | 491 s | 0.45 GB | | |
+| Kirby: Nightmare, flow on (2026-11-20, lift+build+run) | ~4 min | 0.44 GB | | |
 | moonbeam | 294 s | 0.15 GB | 35 s | |
 | Minish Cap | 1,218 s (flow most of it) | 0.5 GB | 18 s | 1,076 s |
 | Emerald Rogue | 1,838 s | 2.7 GB | 107 s | |
@@ -25,6 +26,8 @@ holes files applied (`mods/<game>/holes.toml`), one job each:
   looping over games keeps going after the game you wanted.
 - holes-only skips the flow, the heap pass and the modules; the flow's
   callee sets add one summary hole each in Minish Cap and the Amazing
-  Mirror (`--flow` finds them), and one in Nightmare (MPlayMain's entry
-  r8 left in r0, native/nightmare-fn-flow-again), which fails its build:
-  its holes file keeps skip_fn_flow for that.
+  Mirror (`--flow` finds them). Nightmare's (MPlayMain's entry r8 left
+  in r0, native/nightmare-fn-flow-again) went with native/fnref-flow-emerald
+  (a pile-wide set is a large value, its calls incomplete): its holes file
+  has no skip_fn_flow since native/nightmare-flow-on (2026-11-20; 0 hard
+  holes, builds, 600 of 600 frames as with the flow off).
