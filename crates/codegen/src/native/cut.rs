@@ -490,10 +490,7 @@ mod tests {
         let c = cut(&dir, &BTreeMap::from([(k, printed.clone())]), "aa", "c2").unwrap();
         assert_eq!(c.merged, [("tally".to_string(), 0)]);
         let got = std::fs::read_to_string(&s).unwrap();
-        assert_eq!(
-            got,
-            with_head(&printed.replace("0x82u32", "0x40u32"))
-        );
+        assert_eq!(got, with_head(&printed.replace("0x82u32", "0x40u32")));
         let orig = std::fs::read_to_string(dir.join("orig/tally.rs")).unwrap();
         assert_eq!(orig, with_head(&printed));
         let m = CutMod::load(&dir).unwrap().unwrap();
