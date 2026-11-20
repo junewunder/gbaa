@@ -189,11 +189,16 @@
 //! global's cell: two allocations, and two fields of one, are apart. A
 //! value with pointers into more than [`HEAP_SITES`] sites holds "that
 //! offset of any allocation" (`free`'s parameter). What that takes on
-//! trust: an index from an allocation's pointer stays at or past it; no
-//! global lies in an allocation, so no load at a constant address reads
-//! one; what the allocator's own code stores in an allocation through
-//! its own pointers is numbers (it zeroes it); and memory freed and
-//! allocated again at another site isn't read before it is written. A
+//! trust: an index from an allocation's pointer stays at or past it, and
+//! a pointer somewhere in it less a constant is still in it; no global
+//! lies in an allocation, so no load at a constant address reads one; a
+//! named allocator returns memory nothing else points to yet (a wrapper
+//! named as one keeps no copy of the pointer it returns); the allocator's
+//! own code, through its own pointers into the heap's RAM, stores only
+//! numbers in an allocation (it zeroes it) and reads nothing a user
+//! stored there (no `realloc` that copies: such a function isn't one to
+//! name); and memory freed and allocated again at another site isn't
+//! read before it is written. A
 //! pointer below the one returned (`free`'s `ptr - 12`) is the
 //! allocator's header: a pointer into the RAM the allocator returned
 //! ([`G::heap_lower`]), read and written as that RAM is. On `c/heap` it
@@ -770,7 +775,7 @@ const HEAP_ANY: u32 = 0xffff_fff0;
 /// A [`Tok::Heap`]'s offset below the pointer the call returned: the
 /// allocator's own header, which is the heap's RAM, not the allocation.
 /// Never kept: the op that makes it gives pointers into the RAM the
-/// allocator returned instead ([`Run::heap_under`]).
+/// allocator returned instead ([`G::heap_lower`]).
 const HEAP_UNDER: u32 = 0xffff_fff1;
 /// Exact offsets into an allocation are kept below this.
 const HEAP_WIN: u32 = 0xff00;
@@ -2498,7 +2503,11 @@ impl G {
         for t in ptrs {
             match t {
                 Tok::Num(c) => under.push(Tok::Ram(ram_obj(c).0)),
-                Tok::Heap(s, _) => under.extend(self.heap_under(s)),
+                // (Another site's, which may grow: read again then.)
+                Tok::Heap(s, _) => {
+                    self.rd.heap = true;
+                    under.extend(self.heap_under(s));
+                }
                 t => under.push(t),
             }
             out.toks.remove(&t);
@@ -2529,7 +2538,7 @@ impl G {
     }
 
     /// Takes the pointers below an allocation's start out of `v`
-    /// ([`HEAP_UNDER`]: `free`'s `ptr - 16`), each for the pointers into
+    /// ([`HEAP_UNDER`]: `free`'s `ptr - 12`), each for the pointers into
     /// RAM its allocator returned: a header is the allocator's own, read
     /// and written through the heap's RAM, not the allocation's cells.
     fn heap_lower(&mut self, v: &mut Val) {
@@ -3943,6 +3952,10 @@ struct Run<'a, 'g> {
     /// Per block, the insts whose value only a flag nothing reads takes
     /// ([`unused`]): they make no holes.
     unused: BTreeMap<u32, Vec<bool>>,
+    /// The instruction's op read where an allocation is
+    /// ([`G::heap_lower`]): its result isn't kept by its operands
+    /// ([`G::op_kept`]), which don't say where that was.
+    lowered: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -4392,6 +4405,7 @@ impl Run<'_, '_> {
         out.toks.add_all(toks);
         if under {
             self.g.heap_lower(&mut out);
+            self.lowered = true;
         }
         out.cap();
         out
@@ -4458,6 +4472,7 @@ impl Run<'_, '_> {
                 continue;
             }
             let site = Origin::Code(key, i as u32);
+            self.lowered = false;
             let holes_before = self.g.flow.holes.len();
             let logged = self.g.hole_log.len();
             let val = |x: ValueId| vals[x.index()].clone();
@@ -4627,9 +4642,35 @@ impl Run<'_, '_> {
                         } else {
                             kept = None;
                             let st = [strides[ra.index()], strides[rb.index()]];
-                            let ab = self.bin(BinOp::Add, &a, &b, st, site, at);
                             let c = xv(self.g, c);
-                            self.bin(BinOp::Add, &ab, &c, [1, 1], site, at)
+                            // A pointer into an allocation less a constant
+                            // (`subs r0, #8` is `r0 + !8 + 1`): the
+                            // constant first, so that `p + 8 - 8` is the
+                            // allocation's start, not one byte below it on
+                            // the way (its header, [`HEAP_UNDER`]).
+                            let heap = |v: &Val| {
+                                v.toks
+                                    .range(Tok::Heap(0, 0)..=Tok::Heap(u32::MAX, u32::MAX))
+                                    .next()
+                                    .is_some()
+                            };
+                            let nums = |v: &Val| {
+                                !v.unk
+                                    && !v.mem
+                                    && !v.lost_rom
+                                    && !v.toks.is_empty()
+                                    && v.toks.iter().all(|t| matches!(t, Tok::Num(_)))
+                            };
+                            if heap(&a) && nums(&b) && nums(&c) {
+                                let bc = self.bin(BinOp::Add, &b, &c, [1, 1], site, at);
+                                self.bin(BinOp::Add, &a, &bc, st, site, at)
+                            } else if heap(&b) && nums(&a) && nums(&c) {
+                                let ac = self.bin(BinOp::Add, &a, &c, [1, 1], site, at);
+                                self.bin(BinOp::Add, &ac, &b, st, site, at)
+                            } else {
+                                let ab = self.bin(BinOp::Add, &a, &b, st, site, at);
+                                self.bin(BinOp::Add, &ab, &c, [1, 1], site, at)
+                            }
                         }
                     }
                 }
@@ -4894,6 +4935,7 @@ impl Run<'_, '_> {
             }
             // Kept, but for a constant this instruction made (its own).
             if let Some(k) = kept
+                && !self.lowered
                 && !v
                     .toks
                     .iter()
@@ -5949,10 +5991,15 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>, steps: [u
         | (BinOp::And, Some(Num(m)), Some(Heap(s, k)))
             if m >= 0xffff_0000 =>
         {
+            // An allocation starts on a word, so aligned down to one the
+            // offset is; to more, it is at or past the start if the
+            // offset was past the mask's reach, and else on either side
+            // of it: a pointer the run drops.
             return R::T(match k {
                 HEAP_ANY | HEAP_UNDER => Heap(s, k),
                 k if m >= 0xffff_fffc => Heap(s, k & m),
-                _ => Heap(s, HEAP_UNDER),
+                k if k >= !m => Heap(s, HEAP_ANY),
+                _ => RAM_ANY,
             });
         }
         (_, Some(Ram(_) | Heap(..)), _) | (_, _, Some(Ram(_) | Heap(..))) => return R::Unk,
@@ -6701,6 +6748,7 @@ fn follow_heap(
                 rets_read: BTreeSet::new(),
                 at: 0,
                 unused: unused(f),
+                lowered: false,
             };
             if f.blocks.contains_key(&f.entry) {
                 run.ins.insert(

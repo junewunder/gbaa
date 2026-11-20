@@ -2271,10 +2271,15 @@ fn allocator() -> Built {
 
 /// `b` ended with a direct call of [`ALLOC`] at `at`, returning to `ret`.
 fn alloc_call(b: B, at: u32, ret: u32) -> (Vec<Inst>, Out, BTreeMap<usize, u32>) {
+    call_at(b, ALLOC, at, ret)
+}
+
+/// `b` ended with a direct call of `target` at `at`, returning to `ret`.
+fn call_at(b: B, target: u32, at: u32, ret: u32) -> (Vec<Inst>, Out, BTreeMap<usize, u32>) {
     let mut x = b.end(
         None,
         Edge::Call {
-            target: Some(ALLOC),
+            target: Some(target),
             ret,
         },
     );
@@ -2282,11 +2287,24 @@ fn alloc_call(b: B, at: u32, ret: u32) -> (Vec<Inst>, Out, BTreeMap<usize, u32>)
     x
 }
 
+/// `p - k` as a `sub` instruction is lifted: `p + !k + 1`.
+fn sub(b: &mut B, p: ValueId, k: u32) -> ValueId {
+    let k = b.k(k);
+    let n = b.op(Op::Not(k));
+    let one = b.op(Op::Bit(true));
+    b.op(Op::Adc { a: p, b: n, c: one })
+}
+
 /// A function that allocates twice, at two call sites: F stored at
 /// `off_f` of the first allocation, whose pointer goes to [`CELL`]; H at
 /// `off_h` of the second (`second`: else of the first again), whose
 /// pointer goes to [`CELL2`].
 fn two_allocations(off_f: u32, off_h: u32, second: bool) -> Built {
+    two_allocations_by(ALLOC, off_f, off_h, second)
+}
+
+/// [`two_allocations`], by calls of `alloc`.
+fn two_allocations_by(alloc: u32, off_f: u32, off_h: u32, second: bool) -> Built {
     let e = 0x0800_1001;
     let mut b1 = B::default();
     let p = b1.get(0);
@@ -2308,8 +2326,8 @@ fn two_allocations(off_f: u32, off_h: u32, second: bool) -> Built {
     (
         e,
         vec![
-            (e, alloc_call(B::default(), 0x0800_0110, e + 0x10)),
-            (e + 0x10, alloc_call(b1, 0x0800_0120, e + 0x20)),
+            (e, call_at(B::default(), alloc, 0x0800_0110, e + 0x10)),
+            (e + 0x10, call_at(b1, alloc, 0x0800_0120, e + 0x20)),
             (e + 0x20, b2.end(None, Edge::Return)),
         ],
     )
@@ -2461,4 +2479,158 @@ fn pointers_into_many_sites_are_any_allocations() {
         v.toks.iter().collect::<Vec<_>>(),
         [&Tok::Heap(3, HEAP_ANY), &Tok::Heap(4, 8)]
     );
+}
+
+#[test]
+fn a_sub_back_to_an_allocations_start_is_in_it() {
+    // `q = p + 8; subs q, #8` (an add of `!8`, then of 1) is the
+    // allocation's start again, not its header on the way.
+    let mut b = B::default();
+    let c = b.k(CELL);
+    let p = b.ld(Width::Word, c);
+    let eight = b.k(8);
+    let q = b.bin(BinOp::Add, p, eight);
+    let r = sub(&mut b, q, 8);
+    let t = b.ld(Width::Word, r);
+    let fns = [
+        allocator(),
+        two_allocations(0, 4, false),
+        calling(0x0800_2001, b, t),
+    ];
+    let f = run_heap(&fns, &[ALLOC]);
+    assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
+    // And `subs p, #8` from the start is the header: F stored there is
+    // the heap's RAM's, read at its address and not through the
+    // allocation.
+    let make = || {
+        let e = 0x0800_1001;
+        let mut b1 = B::default();
+        let p = b1.get(0);
+        let x = sub(&mut b1, p, 8);
+        let f = b1.pool(POOL, F);
+        b1.st(Width::Word, x, f);
+        let c = b1.k(CELL);
+        b1.st(Width::Word, c, p);
+        (
+            e,
+            vec![
+                (e, alloc_call(B::default(), 0x0800_0110, e + 0x10)),
+                (e + 0x10, b1.end(None, Edge::Return)),
+            ],
+        )
+    };
+    let f = run_heap(&[allocator(), make(), call_field(CELL, 0)], &[ALLOC]);
+    assert!(site(&f).callees.is_empty(), "{f:?}");
+    let mut b = B::default();
+    let a = b.k(HEAP - 8);
+    let t = b.ld(Width::Word, a);
+    let f = run_heap(&[allocator(), make(), calling(0x0800_2001, b, t)], &[ALLOC]);
+    assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
+}
+
+#[test]
+fn a_pointer_into_an_allocation_aligned_down() {
+    let heap = |k| Some(Tok::Heap(3, k));
+    let and = |k, m| match bin_tok(&Img::new(), BinOp::And, heap(k), Some(Tok::Num(m)), [1, 1]) {
+        R::T(t) => t,
+        _ => panic!("no token"),
+    };
+    RAM_ON.with(|c| c.set(true));
+    // To a word: that word of it (an allocation starts on one).
+    assert_eq!(and(7, !3), Tok::Heap(3, 4));
+    // To eight bytes, from 8 or more on: at or past its start, somewhere.
+    assert_eq!(and(12, !7), Tok::Heap(3, HEAP_ANY));
+    // From less: either side of its start, a pointer the run drops.
+    assert_eq!(and(4, !7), RAM_ANY);
+    RAM_ON.with(|c| c.set(false));
+}
+
+#[test]
+fn an_allocator_that_returns_anothers_result_has_its_own_sites() {
+    // ZALLOC calls ALLOC and returns its pointer; both are named. Its two
+    // callers' allocations are apart, and each one's header is where
+    // ALLOC said the memory is.
+    const ZALLOC: u32 = 0x0800_3101;
+    let zalloc = || {
+        (
+            ZALLOC,
+            vec![
+                (ZALLOC, alloc_call(B::default(), 0x0800_0130, ZALLOC + 0x10)),
+                (ZALLOC + 0x10, B::default().end(None, Edge::Return)),
+            ],
+        )
+    };
+    let fns = |cell| {
+        [
+            allocator(),
+            zalloc(),
+            two_allocations_by(ZALLOC, 0, 0, true),
+            call_field(cell, 0),
+        ]
+    };
+    let f = run_heap(&fns(CELL), &[ALLOC, ZALLOC]);
+    assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
+    let f = run_heap(&fns(CELL2), &[ALLOC, ZALLOC]);
+    assert_eq!(site(&f).callees, BTreeSet::from([H]), "{f:?}");
+    // With ALLOC alone named, ZALLOC's one call of it is one allocation.
+    let f = run_heap(&fns(CELL), &[ALLOC]);
+    assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
+    // The header, through ZALLOC's site: a load at the heap's address
+    // reads what was stored 8 below the pointer.
+    let e = 0x0800_1001;
+    let mut b1 = B::default();
+    let p = b1.get(0);
+    let x = sub(&mut b1, p, 8);
+    let fp = b1.pool(POOL, F);
+    b1.st(Width::Word, x, fp);
+    let make = (
+        e,
+        vec![
+            (e, call_at(B::default(), ZALLOC, 0x0800_0110, e + 0x10)),
+            (e + 0x10, b1.end(None, Edge::Return)),
+        ],
+    );
+    let mut b = B::default();
+    let a = b.k(HEAP - 8);
+    let t = b.ld(Width::Word, a);
+    let f = run_heap(
+        &[allocator(), zalloc(), make, calling(0x0800_2001, b, t)],
+        &[ALLOC, ZALLOC],
+    );
+    assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
+}
+
+#[test]
+fn any_allocations_pointer_reads_and_reaches_every_site() {
+    let tok = |key, w| Tok::Fn {
+        key,
+        origin: Origin::Word(w),
+        form: Form::Full,
+    };
+    let (f, h) = (tok(F, POOL), tok(H, 0x0800_0404));
+    let mut g = G::default();
+    // F stored through site 0 (any allocation), H at +4 of site 3.
+    g.store(Store::Cell(heap_cell(0, HEAP_ANY)), &[(f, 4)]);
+    g.store(Store::Cell(heap_cell(3, 4)), &[(h, 4)]);
+    let read = |g: &mut G, s, k| {
+        let mut v = Val::default();
+        g.read_heap(s, k, 4, &mut v);
+        g.expand(&v)
+    };
+    // A load of site 3's word 0 reads F (it may be there), not H.
+    let v = read(&mut g, 3, 0);
+    assert!(v.toks.contains(&f) && !v.toks.contains(&h), "{v:?}");
+    // Of its word 4, and of somewhere in it, both.
+    for k in [4, HEAP_ANY] {
+        let v = read(&mut g, 3, k);
+        assert!(v.toks.contains(&f) && v.toks.contains(&h), "{v:?}");
+    }
+    // Site 5 holds F alone; any allocation's pointer reads both.
+    let v = read(&mut g, 5, HEAP_ANY);
+    assert!(v.toks.contains(&f) && !v.toks.contains(&h), "{v:?}");
+    let v = read(&mut g, 0, 4);
+    assert!(v.toks.contains(&f) && v.toks.contains(&h), "{v:?}");
+    // A word load across two words reads the whole site.
+    let v = read(&mut g, 3, 2);
+    assert!(v.toks.contains(&h), "{v:?}");
 }

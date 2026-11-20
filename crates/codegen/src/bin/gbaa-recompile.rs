@@ -470,7 +470,7 @@ fn summaries(rom: &[u8], rest: &[String]) {
             "--allocators" => {
                 for k in it.next().unwrap_or_else(|| usage()).split(',') {
                     allocs.insert(
-                        u32::from_str_radix(k.trim_start_matches("0x"), 16)
+                        u32::from_str_radix(k.strip_prefix("0x").unwrap_or(k), 16)
                             .unwrap_or_else(|_| usage()),
                     );
                 }
