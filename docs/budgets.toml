@@ -9,10 +9,11 @@
 # The stage-B plan, cut from 810 lines to a plan on 2026-11-06; 410 after
 # native/mirror-lifts (its card asks for its lift's numbers here, as each
 # game's lift unit's); 416 after native/lift-typed-access (its piece's
-# line, six lines).
+# line, six lines); 421 after native/mod-view-parity (the link to its
+# table, mod-view-parity.md).
 [[doc]]
 path = "docs/native-stage-b.md"
-max_lines = 416
+max_lines = 421
 
 # The hole report's method and findings, cut from 667 lines on 2026-11-06;
 # 390 after native/nightmare-cpu-state added Nightmare's task switcher
