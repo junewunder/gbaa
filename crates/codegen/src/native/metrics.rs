@@ -33,6 +33,13 @@
 //!   the types; `ref_unexplained` counts those through an object's
 //!   pointer the types don't explain (left as bytes, in
 //!   `computed_unknown` too).
+//!   One through a pointer the names files type (`super::fields`,
+//!   native/lift-typed-access) prints as a named field over the same
+//!   byte access, so it keeps its count here too: `named_field_accesses`
+//!   (no bar: it should rise) and, where it lands inside a field,
+//!   `named_inside_accesses`. A lift with types also has
+//!   `computed_unknown_unnamed`, barred: the `computed_unknown` accesses
+//!   no type names.
 //!
 //! The sp-relative ones are split again by whether the stack slot they
 //! reach escapes (`super::frame`): `sp_accesses_local_slot` and
@@ -228,6 +235,9 @@ pub const UNBARRED: &[&str] = &[
     "load_ram_object",
     "store_ram_object",
     "ref_accesses",
+    "lines_types",
+    "named_field_accesses",
+    "named_inside_accesses",
     "ref_types",
     "functions_structured",
     "functions_structured_pct",
