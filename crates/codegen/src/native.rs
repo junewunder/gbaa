@@ -98,8 +98,16 @@
 //!   ([`crate::plan`], as the mod view's structured codegen has it; unit
 //!   `native/lift-structured`): labeled `loop`s and blocks, a jump to a
 //!   block a `continue`, a `break`, a fall-through or the block's code
-//!   inline, an irreducible region a `loop { match b }` of its own. A
-//!   function the plan doesn't take (a block no printed jump reaches, one
+//!   inline, an irreducible region a `loop { match b }` of its own.
+//!   Joins print as the code after an `if`, a `match` or a loop (unit
+//!   `native/lift-join-shape`): a labelled block nothing breaks out of
+//!   prints bare; a `break` to where falling off goes is left out (an
+//!   arm's last), takes a loop's label (out of the loop), or makes the
+//!   guarded exit an `if` whose `else` is the rest of its block; arms of
+//!   the same code are one; a labelled block whose body falls off at one
+//!   arm alone takes the code after it into that arm; a compare tree's
+//!   later blocks print nothing in the arms (else they print once, as a
+//!   `match` of their own). A function the plan doesn't take (a block no printed jump reaches, one
 //!   nested too deep) stays a whole `loop { match b }` over local labels
 //!   (0 the entry). Each block starts with `runtime::guest_pc::set` of its
 //!   guest address, which a stop names (unit `native/first-stop-guest-pc`:
@@ -1149,6 +1157,14 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     banked: BTreeMap::new(),
                     field_at: BTreeMap::new(),
                     inl: Vec::new(),
+                    printed: BTreeSet::new(),
+                    fall: None,
+                    tail_edge: false,
+                    loops: Vec::new(),
+                    direct: None,
+                    block_direct: None,
+                    mark: None,
+                    open_mark: None,
                 };
                 let text = p.print(c.sums.get(f.entry));
                 (text, p.found)
@@ -1674,6 +1690,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // (no bar: it should rise) and the rest, as `loop` (barred).
     m.push("loops_for", soft.loops_for);
     m.push("loops_not_for", soft.loops_plain);
+    // Joins (native/lift-join-shape): the labelled blocks printed, where
+    // the flow isn't an `if`, a `match` or a loop's, and the guest blocks
+    // whose code printed more than once (both barred).
+    m.push("labelled_blocks", soft.labelled_blocks);
+    m.push("blocks_printed_again", soft.blocks_printed_again);
     m.push_accesses(&soft.access);
     m.push("ram_globals", n(globals.0.len()));
     m.push("pointer_unexplained", soft.unexplained);
@@ -2478,6 +2499,11 @@ struct Soft {
     /// and as `loop`.
     loops_for: u64,
     loops_plain: u64,
+    /// Labelled blocks printed (a `break` leaves each), and the times a
+    /// guest block's code printed again where it had printed already
+    /// (unit `native/lift-join-shape`).
+    labelled_blocks: u64,
+    blocks_printed_again: u64,
 }
 
 struct FnPrinter<'a, 'b> {
@@ -2504,6 +2530,29 @@ struct FnPrinter<'a, 'b> {
     /// The next block printed starts at this inst: the rest of a block
     /// whose compare run a `match` arm printed ([`FnPrinter::switch_bodies`]).
     rest_from: usize,
+    /// The guest blocks whose code printed so far, to count one printed
+    /// again ([`Soft::blocks_printed_again`]).
+    printed: BTreeSet<u32>,
+    /// Joins (unit `native/lift-join-shape`): the labelled block whose
+    /// code follows where the node being printed ends, if falling off its
+    /// end goes there; whether the exit being printed ends its block's
+    /// code (its last, or a `match` arm), so an edge inlined there falls
+    /// there too; and the loops printing, innermost last, each with the
+    /// labelled block falling out of it goes to, which a `break` to that
+    /// block takes the loop's label for.
+    fall: Option<usize>,
+    tail_edge: bool,
+    loops: Vec<(usize, Option<usize>)>,
+    /// The labelled block whose body's last node is the one printing
+    /// (`direct`), and so whose every way of falling off its body is that
+    /// block's; and, while that block's last exit prints, the label its
+    /// `match`'s or jump table's one arm that falls off marks
+    /// ([`fall_mark`]), where the code after the labelled block goes.
+    direct: Option<usize>,
+    block_direct: Option<usize>,
+    mark: Option<usize>,
+    /// An open `match`'s mark and its arms before the rest that fall off.
+    open_mark: Option<(usize, usize)>,
     /// The insts whose guards print nothing while a block's uses are
     /// counted: a compare tree's tests ([`FnPrinter::operands`]).
     /// Empty but then.
@@ -2868,6 +2917,11 @@ impl FnPrinter<'_, '_> {
             }
             // A jump that falls through prints nothing on its line.
             let mut body = self.seq(&p.tree);
+            assert!(
+                !body.contains(['\u{1}', '\u{2}']),
+                "{:#010x}: a fall mark left in the printed code",
+                f.entry
+            );
             if self.tail_for {
                 body.push_str("    unreachable!()\n");
             }
@@ -2914,10 +2968,18 @@ impl FnPrinter<'_, '_> {
 
     /// Block `k`'s code.
     fn block_at(&mut self, k: u32) -> String {
+        self.printing(k);
         let gb = &self.f.blocks[&k];
         let xs = exits(self.ctx, gb);
         self.cur = k;
         self.block(&gb.block.insts, &xs, gb.block.thumb)
+    }
+
+    /// Block `k`'s code printing: counted if it printed already.
+    fn printing(&mut self, k: u32) {
+        if !self.printed.insert(k) {
+            self.soft.blocks_printed_again += 1;
+        }
     }
 
     /// The accesses of this function whose address the names files type
@@ -3408,8 +3470,68 @@ impl FnPrinter<'_, '_> {
         }
     }
 
+    /// A sequence of nodes: falling off one but the last goes to the
+    /// next (the code after a labelled block, which its node says);
+    /// falling off the last where falling off the sequence goes.
+    ///
+    /// A labelled block nothing breaks out of, whose body falls off at
+    /// one `match` or jump table arm alone (its last block's, which
+    /// marks it: [`fall_mark`]), takes the code after it into that arm
+    /// (unit `native/lift-join-shape`).
     fn seq(&mut self, seq: &[plan::Node]) -> String {
-        seq.iter().map(|n| self.node(n)).collect()
+        let (outer, direct) = (self.fall, self.direct);
+        let mut s = String::new();
+        let mut i = 0;
+        while i < seq.len() {
+            let last = i + 1 == seq.len();
+            self.fall = if last { outer } else { None };
+            self.direct = if last { direct } else { None };
+            let n = self.node(&seq[i]);
+            i += 1;
+            let plan::Node::Labeled { label, .. } = &seq[i - 1] else {
+                s.push_str(&n);
+                continue;
+            };
+            let (mark, end) = (fall_mark(*label), arm_end(*label));
+            if n.matches(&mark).count() == 1
+                && !n.contains(&format!("break 'b{label};"))
+                && i < seq.len()
+            {
+                self.fall = outer;
+                self.direct = direct;
+                let rest = self.seq(&seq[i..]);
+                let n = n.replacen(&mark, &format!("\n{rest}"), 1);
+                // Its `match` now ends the sequence: an arm's `break` to
+                // where falling off it goes is its end.
+                let mut parts: Vec<String> = n.split(&end).map(str::to_string).collect();
+                let n = match outer {
+                    Some(o) => {
+                        let k = parts.len();
+                        let mut fell = false;
+                        for p in &mut parts[..k - 1] {
+                            let q = fall_off(p, o);
+                            fell |= q != *p;
+                            *p = q;
+                        }
+                        let n = parts.concat();
+                        // Those arms now fall off it too: the code after
+                        // it can't go into the one arm the code just
+                        // moved in marked.
+                        if fell {
+                            n.replace(&fall_mark(o), "").replace(&arm_end(o), "")
+                        } else {
+                            n
+                        }
+                    }
+                    None => parts.concat(),
+                };
+                s.push_str(&n);
+                break;
+            }
+            s.push_str(&n.replace(&mark, "").replace(&end, ""));
+        }
+        (self.fall, self.direct) = (outer, direct);
+        s
     }
 
     fn node(&mut self, n: &plan::Node) -> String {
@@ -3417,6 +3539,7 @@ impl FnPrinter<'_, '_> {
             plan::Node::Block { node, exits } => {
                 let k = self.key_of(*node);
                 let outer = self.edges.take();
+                self.block_direct = self.direct.take();
                 let outs = exits.clone();
                 let body = self.block_with(k, outs);
                 self.edges = outer;
@@ -3435,14 +3558,32 @@ impl FnPrinter<'_, '_> {
                         "loop".to_string()
                     }
                 };
-                let s = format!("    'l{label}: {head} {{\n{}    }}\n", self.seq(body));
+                // Falling out of the loop goes where falling off it does;
+                // falling off its body goes round again.
+                let after = self.fall.take();
+                let direct = self.direct.take();
+                self.loops.push((*label, after));
+                let b = self.seq(body);
+                self.loops.pop();
+                (self.fall, self.direct) = (after, direct);
+                let s = format!("    'l{label}: {head} {{\n{b}    }}\n");
                 self.tail_for = is_for;
                 s
             }
+            // Printed bare where nothing breaks out of it: its body
+            // falls to the code after it at every way out (an `if`'s,
+            // a `match`'s arms').
             plan::Node::Labeled { label, body } => {
-                let s = format!("    'b{label}: {{\n{}    }}\n", self.seq(body));
+                let outer = (self.fall.replace(*label), self.direct.replace(*label));
+                let b = self.seq(body);
+                (self.fall, self.direct) = outer;
                 self.tail_for = false;
-                s
+                if b.contains(&format!("break 'b{label};")) {
+                    self.soft.labelled_blocks += 1;
+                    format!("    'b{label}: {{\n{b}    }}\n")
+                } else {
+                    b
+                }
             }
             // v1's `loop { match b }` over the region's blocks, entered at
             // the label the edge into it set; leaving it, `match b` picks
@@ -3455,6 +3596,8 @@ impl FnPrinter<'_, '_> {
             } => {
                 let mut s = format!("    'r{label}: loop {{\n        match b {{\n");
                 let outer = (self.region.replace(*label), self.edges.take());
+                let fall = self.fall.take();
+                let direct = self.direct.take();
                 for b in blocks {
                     let plan::Node::Block { node, exits } = b else {
                         unreachable!("a region holds blocks")
@@ -3468,6 +3611,7 @@ impl FnPrinter<'_, '_> {
                     .unwrap();
                 }
                 (self.region, self.edges) = outer;
+                (self.fall, self.direct) = (fall, direct);
                 s.push_str("            _ => unreachable!(),\n        }\n    }\n");
                 let mut tail_for = false;
                 if !exits.is_empty() {
@@ -3506,13 +3650,23 @@ impl FnPrinter<'_, '_> {
             String::new()
         };
         let then = match &e.how {
-            plan::How::Break(l) => format!("break 'b{l};"),
+            // Where falling out of a loop goes, out of the loop.
+            plan::How::Break(l) => match self.loops.iter().rev().find(|(_, a)| *a == Some(*l)) {
+                Some((x, _)) => format!("break 'l{x};"),
+                None => format!("break 'b{l};"),
+            },
             plan::How::Continue(l) => format!("continue 'l{l};"),
             plan::How::Next => String::new(),
             plan::How::Inline(seq) => {
                 let seq = seq.clone();
                 let region = self.region.take();
+                let tail = std::mem::take(&mut self.tail_edge);
+                let fall = if tail { self.fall } else { None };
+                let outer = std::mem::replace(&mut self.fall, fall);
+                let direct = self.direct.take();
                 let s = format!("\n{}", self.seq(&seq));
+                (self.fall, self.direct) = (outer, direct);
+                self.tail_edge = tail;
                 self.region = region;
                 s
             }
@@ -3735,6 +3889,18 @@ impl FnPrinter<'_, '_> {
         self.quiet = Vec::new();
         self.scrutinee = None;
         let outer = std::mem::replace(&mut self.inl, vec![None; insts.len()]);
+        // Where falling off the block goes: the labelled block its last
+        // exit falls to the end of. A guarded exit that breaks to it
+        // prints as an `if` whose `else` is the rest of the block (unit
+        // `native/lift-join-shape`); what closes each, innermost last.
+        let fall = self.fall.filter(|_| self.outs.is_some());
+        // Whether its ways of falling off are its labelled block's.
+        let direct = self.block_direct.take().filter(|_| from == 0);
+        let mut closers: Vec<String> = Vec::new();
+        // An open `match`'s marks ([`FnPrinter::print_switch`]): its
+        // label, how many arms before the rest fall off, and where the
+        // rest starts.
+        let mut open_mark: Option<(usize, usize, usize)> = None;
         for (i, inst) in insts.iter().enumerate() {
             let id = ValueId(i as u32);
             if i < from {
@@ -3769,8 +3935,15 @@ impl FnPrinter<'_, '_> {
                     continue;
                 }
                 if i == t.run.at() {
+                    self.mark = direct.filter(|_| closers.is_empty());
                     let m = self.print_switch(t, arms, insts, xs, thumb, &skip);
+                    self.mark = None;
                     s.push_str(&m);
+                    open_mark = self.open_mark.take().map(|(l, n)| (l, n, s.len()));
+                    // The rest of the block is the `match`'s last arm.
+                    if let switch::End::Rest(_) = t.run.end {
+                        closers.push(format!("{ind}    }}\n{ind}}}\n"));
+                    }
                     continue;
                 }
                 if t.run.exit(i) {
@@ -4000,11 +4173,39 @@ impl FnPrinter<'_, '_> {
                             .expect("an exit of the block's");
                         self.edges = Some(outs[j].edges.clone());
                     }
+                    // The last exit ends the block's code; so does a
+                    // guarded one where the rest of the block can be its
+                    // `else` (below).
+                    self.tail_edge = guard.is_none() || fall.is_some();
+                    self.mark = direct.filter(|_| guard.is_none() && closers.is_empty());
                     let body = format!("{}{}", self.flush(i), self.exit(e, &x, thumb));
+                    self.mark = None;
+                    self.tail_edge = false;
                     self.edges = None;
-                    match &guard {
-                        Some(gv) => writeln!(s, "{ind}if {gv} {{\n{body}{ind}}}").unwrap(),
-                        None => s.push_str(&body),
+                    // One that may fall off (to where falling off the
+                    // block goes) has the rest of the block as its `else`.
+                    let then = fall
+                        .filter(|_| guard.is_some())
+                        .map(|l| fall_off(&body, l))
+                        .filter(|t| !diverges(t));
+                    match (&guard, then) {
+                        (Some(_), Some(t)) if t.trim().is_empty() => {
+                            let g = inst.guard.expect("a guarded exit");
+                            let not = match (&self.inl[g.index()], &conds[g.index()]) {
+                                (Some(_), Some(c)) if c.takes_inlined() => {
+                                    c.not().text_with(&|x| self.val(x))
+                                }
+                                _ => format!("!{}", self.val(g)),
+                            };
+                            writeln!(s, "{ind}if {not} {{").unwrap();
+                            closers.push(format!("{ind}}}\n"));
+                        }
+                        (Some(gv), Some(t)) => {
+                            writeln!(s, "{ind}if {gv} {{\n{t}{ind}}} else {{").unwrap();
+                            closers.push(format!("{ind}}}\n"));
+                        }
+                        (Some(gv), None) => writeln!(s, "{ind}if {gv} {{\n{body}{ind}}}").unwrap(),
+                        (None, _) => s.push_str(&body),
                     }
                 }
                 ref op => {
@@ -4015,11 +4216,21 @@ impl FnPrinter<'_, '_> {
                 }
             }
         }
-        // The rest of the block was the `match`'s last arm.
-        if let Some((t, _)) = &tree
-            && let switch::End::Rest(_) = t.run.end
-        {
-            writeln!(s, "{ind}    }}\n{ind}}}").unwrap();
+        // The rest is the open `match`'s last arm: its one way of falling
+        // off, or none and the arm before it.
+        if let Some((l, falls, at)) = open_mark {
+            let rest_falls = closers.len() > 1 || !diverges(&s[at..]);
+            match (falls, rest_falls) {
+                (1, false) => s.push_str(&arm_end(l)),
+                (0, true) if closers.len() == 1 => {
+                    s.push_str(&fall_mark(l));
+                    s.push_str(&arm_end(l));
+                }
+                _ => s = s.replace(&fall_mark(l), "").replace(&arm_end(l), ""),
+            }
+        }
+        for c in closers.iter().rev() {
+            s.push_str(c);
         }
         self.inl = outer;
         s
@@ -4376,8 +4587,17 @@ impl FnPrinter<'_, '_> {
         let t = self
             .switch_tree(k, n, &nxs, Some(exits), depth + 1, 1)
             .ok()?;
-        (switch::quiet_before(n, t.run.start) && n[t.run.value.index()].op == Op::GetReg(reg))
-            .then_some(t)
+        // Its block prints nothing in the arms but its leaves (unit
+        // `native/lift-join-shape`): no write the run defers that is
+        // read, and no value its exits take. Else it prints once, as a
+        // `match` of its own inside this one's arm.
+        let (_, nskip) = self.unread(k, n.len());
+        let silent = (0..n.len()).all(|d| !t.run.deferred(n, d) || nskip[d])
+            && tree_lets(n, &t.run, &nskip, &self.blind_exits(n, &nxs), false).is_empty();
+        (silent
+            && switch::quiet_before(n, t.run.start)
+            && n[t.run.value.index()].op == Op::GetReg(reg))
+        .then_some(t)
     }
 
     /// A compare tree as a `match` on its value, each leaf an arm
@@ -4395,19 +4615,57 @@ impl FnPrinter<'_, '_> {
     ) -> String {
         let ind = "                ";
         let (cur, outs) = (self.cur, self.outs.clone());
+        // (The arms' own blocks print with marks of their own.)
+        let mark = self.mark.take();
         let bodies = self.switch_bodies(t, insts, xs, thumb, skip, cur, outs.as_deref(), true);
         self.cur = cur;
         self.soft.compare_trees += 1;
         let open = matches!(t.run.end, switch::End::Rest(_));
+        // Where falling off the `match` goes, the end of its block's
+        // code: the labelled block falling off that goes to. An arm's
+        // `break` to it is the same as its end (unit
+        // `native/lift-join-shape`).
+        let fall = self.fall.filter(|_| outs.is_some());
+        let bodies: Vec<String> = bodies
+            .into_iter()
+            .map(|b| match fall {
+                Some(l) => fall_off(&b, l),
+                None => b,
+            })
+            .collect();
+        let mut bodies = merge_arms(bodies, arms, open);
+        // Its one arm that falls off takes the code after its labelled
+        // block, if its block's ways of falling off are that block's.
+        // An open one's last arm is the rest of the block, which
+        // [`FnPrinter::block`] marks, or takes these marks back from.
+        if let Some(l) = mark {
+            let k = bodies.len() - usize::from(open);
+            let falls: Vec<usize> = (0..k).filter(|&n| !diverges(&bodies[n].0)).collect();
+            if falls.len() == 1 || (open && falls.is_empty()) {
+                if let [n] = falls[..] {
+                    bodies[n].0.push_str(&fall_mark(l));
+                }
+                for b in &mut bodies[..k] {
+                    b.0.push_str(&arm_end(l));
+                }
+                if open {
+                    self.open_mark = Some((l, falls.len()));
+                }
+            }
+        }
         let mut s = format!("{ind}match {} {{\n", v(t.run.value));
-        for (n, (b, a)) in bodies.iter().zip(arms).enumerate() {
+        for (n, (b, a)) in bodies.iter().enumerate() {
             let pat = if n + 1 == bodies.len() {
                 "_".to_string()
             } else {
                 switch::pattern(a)
             };
             let closed = n + 1 < bodies.len() || !open;
-            // A one-line arm on one line.
+            // A one-line arm on one line, an empty one as `{}`.
+            if closed && b.trim().is_empty() {
+                writeln!(s, "{ind}    {pat} => {{}}").unwrap();
+                continue;
+            }
             if closed && b.lines().count() == 1 {
                 writeln!(s, "{ind}    {pat} => {{ {} }}", b.trim()).unwrap();
                 continue;
@@ -4467,11 +4725,18 @@ impl FnPrinter<'_, '_> {
             // block goes on printing; else printed here from its inst.
             if Some(i) == rest {
                 if !top {
+                    // Its block's only code, with what it reads.
+                    self.printing(cur);
+                    let lets = tree_lets(insts, &t.run, skip, &self.blind_exits(insts, xs), true);
                     self.rest_from = i;
                     self.cur = cur;
                     let saved = self.outs.replace(outs.expect("a structured tree").to_vec());
                     let body = self.block(insts, xs, thumb);
                     self.outs = saved;
+                    let lets = unread::read_lets(&lets, &body);
+                    self.soft.value_lets += lets.lines().count() as u64;
+                    writeln!(pre, "{ind}runtime::guest_pc::set({cur:#010x});").unwrap();
+                    pre.push_str(&lets);
                     pre.push_str(&body);
                 }
                 out.push(pre);
@@ -4488,7 +4753,10 @@ impl FnPrinter<'_, '_> {
                     let Op::Exit(e) = insts[i].op else {
                         unreachable!("a run's exits are exits")
                     };
+                    // Every arm ends the block's code.
+                    self.tail_edge = true;
                     let body = format!("{}{}", self.flush(i), self.exit(e, &xs[j], thumb));
+                    self.tail_edge = false;
                     self.edges = None;
                     out.push(format!("{pre}{body}"));
                 }
@@ -4514,16 +4782,14 @@ impl FnPrinter<'_, '_> {
                         }
                     }
                     self.soft.compare_tree_blocks += 1;
-                    let lets = tree_lets(n, &nt.run, &nskip, &self.blind_exits(n, &nxs));
-                    // Its values print as their `let`s, each arm those it
-                    // reads.
+                    // It prints nothing of its own in the arms
+                    // ([`FnPrinter::switch_next`]) but the rest of its
+                    // block, if any, in its arm; its values print as their
+                    // `let`s there.
                     let outer = std::mem::replace(&mut self.inl, vec![None; n.len()]);
-                    let pc = format!("{ind}runtime::guest_pc::set({k:#010x});\n");
                     for b in self.switch_bodies(nt, n, &nxs, nthumb, &nskip, k, Some(exits), false)
                     {
-                        let lets = unread::read_lets(&lets, &b);
-                        self.soft.value_lets += lets.lines().count() as u64;
-                        out.push(format!("{pre}{pc}{lets}{b}"));
+                        out.push(format!("{pre}{b}"));
                     }
                     self.inl = outer;
                 }
@@ -5068,10 +5334,36 @@ impl FnPrinter<'_, '_> {
                     self.soft.dyn_jumps += 1;
                     writeln!(s, "{ind}match {k} {{").unwrap();
                     let mut tail_for = false;
+                    // Ending the block's code, an arm's `break` to where
+                    // falling off it goes is its end; arms of the same
+                    // code are one (unit `native/lift-join-shape`).
+                    let fall = self.fall.filter(|_| self.tail_edge);
+                    let mark = self.mark.take();
+                    let mut arms: Vec<(Vec<u32>, String)> = Vec::new();
                     for tk in targets {
                         let j = self.goto(tk, at);
+                        let j = fall.map_or(j.clone(), |l| fall_off(&j, l));
                         tail_for |= std::mem::take(&mut self.tail_for);
-                        writeln!(s, "{ind}    {tk:#010x} => {{ {j} }}").unwrap();
+                        match arms.iter_mut().find(|(_, b)| b.trim() == j.trim()) {
+                            Some((ks, _)) => ks.push(tk),
+                            None => arms.push((vec![tk], j)),
+                        }
+                    }
+                    // Its one arm that falls off takes the code after its
+                    // labelled block ([`FnPrinter::seq`]).
+                    if let Some(l) = mark {
+                        let falls: Vec<usize> =
+                            (0..arms.len()).filter(|&n| !diverges(&arms[n].1)).collect();
+                        if let [n] = falls[..] {
+                            arms[n].1.push_str(&fall_mark(l));
+                            for a in &mut arms {
+                                a.1.push_str(&arm_end(l));
+                            }
+                        }
+                    }
+                    for (ks, j) in arms {
+                        let pat: Vec<String> = ks.iter().map(|k| format!("{k:#010x}")).collect();
+                        writeln!(s, "{ind}    {} => {{ {j} }}", pat.join(" | ")).unwrap();
                     }
                     self.tail_for = tail_for;
                     writeln!(s, "{ind}    _ => {{ {t} }}").unwrap();
@@ -5717,34 +6009,129 @@ fn inline_block(o: &plan::Out) -> Option<(usize, &[plan::Out])> {
     }
 }
 
+/// The mark in a `match` arm's code where the code after labelled block
+/// `l` goes ([`FnPrinter::seq`]), at its end: gone from every function
+/// printed.
+fn fall_mark(l: usize) -> String {
+    format!("\u{1}fall {l}\u{1}")
+}
+
+/// The mark at the end of each arm of the `match` that took a
+/// [`fall_mark`], so that a `break` ending one can go once the code after
+/// its labelled block is in its arm ([`FnPrinter::seq`]).
+fn arm_end(l: usize) -> String {
+    format!("\u{2}end {l}\u{2}")
+}
+
+/// Whether an arm's code `b` ends in a jump away (`break`, `continue`,
+/// `return`), as printed; one that may fall off the end of the arm
+/// doesn't (one ending in a block is taken to).
+fn diverges(b: &str) -> bool {
+    let Some(t) = b.trim_end().strip_suffix(';') else {
+        return false;
+    };
+    let start = t.rfind(['\n', ';', '{', '}']).map_or(0, |i| i + 1);
+    let last = t[start..].trim();
+    ["break", "continue", "return"]
+        .iter()
+        .any(|w| last == *w || last.starts_with(&format!("{w} ")))
+}
+
+/// An arm's code `b` with the `break` to labelled block `l` that ends it
+/// left out: the arm falls to the end of the `match` there.
+fn fall_off(b: &str, l: usize) -> String {
+    let brk = format!("break 'b{l};");
+    let t = b.trim_end();
+    match t.strip_suffix(&brk) {
+        Some(rest) => {
+            let rest = rest.trim_end();
+            if rest.is_empty() {
+                String::new()
+            } else {
+                format!("{rest}\n")
+            }
+        }
+        None => b.to_string(),
+    }
+}
+
+/// A `match`'s arms with those of the same code as one, its patterns
+/// theirs in order (unit `native/lift-join-shape`); the last stays last,
+/// with those of its code, as the `_` arm. An `open` match's last arm
+/// goes on in its block, so it takes in none.
+fn merge_arms(
+    bodies: Vec<String>,
+    arms: &[Vec<(u32, u32)>],
+    open: bool,
+) -> Vec<(String, Vec<(u32, u32)>)> {
+    let n = bodies.len();
+    let mut out: Vec<(String, Vec<(u32, u32)>)> = Vec::new();
+    let last = bodies.last().cloned();
+    for (i, (b, a)) in bodies.into_iter().zip(arms).enumerate() {
+        let to_last = i + 1 < n && !open && last.as_ref().is_some_and(|l| l.trim() == b.trim());
+        if to_last {
+            continue;
+        }
+        match out
+            .iter_mut()
+            .take(if i + 1 == n { 0 } else { usize::MAX })
+            .find(|(o, _)| o.trim() == b.trim())
+        {
+            Some((_, p)) => p.extend(a),
+            None => out.push((b, a.clone())),
+        }
+    }
+    // The ranges of each arm sorted and joined.
+    for (_, p) in &mut out {
+        p.sort_unstable();
+        let mut joined: Vec<(u32, u32)> = Vec::new();
+        for &(lo, hi) in p.iter() {
+            match joined.last_mut() {
+                Some((_, h)) if h.wrapping_add(1) == lo && *h != u32::MAX => *h = hi,
+                _ => joined.push((lo, hi)),
+            }
+        }
+        *p = joined;
+    }
+    out
+}
+
 /// A block's exits ([`exits`]), named apart from the planned `exits`.
 fn exits_of_block(ctx: &Ctx, gb: &crate::func::GBlock) -> Vec<ExitInfo> {
     exits(ctx, gb)
 }
 
 /// The reads and pure values a compare run printed inside another's arm
-/// needs ([`FnPrinter::switch_bodies`]): those its printed writes and
-/// guards, its exits (those `blind` doesn't mark,
-/// [`FnPrinter::blind_exits`]) and the rest of its block take, in order.
-/// Each arm prints those it reads ([`unread::read_lets`]).
-fn tree_lets(insts: &[Inst], run: &switch::Run, skip: &[bool], blind: &[bool]) -> String {
+/// needs ([`FnPrinter::switch_bodies`]), in order: with `rest`, those the
+/// rest of its block takes (the block's printer prints the rest itself);
+/// else those its printed writes and guards and its exits (those `blind`
+/// doesn't mark, [`FnPrinter::blind_exits`]) take.
+fn tree_lets(
+    insts: &[Inst],
+    run: &switch::Run,
+    skip: &[bool],
+    blind: &[bool],
+    rest: bool,
+) -> String {
     let ind = "                ";
     let mut need = vec![false; insts.len()];
-    // The block's printer prints the rest itself.
     let stop = match run.end {
         switch::End::Rest(r) => r,
         switch::End::Exit(_) => insts.len(),
     };
-    for inst in &insts[stop..] {
-        for x in inst.op.operands().into_iter().chain(inst.guard) {
-            if x.index() < stop {
-                need[x.index()] = true;
+    if rest {
+        for inst in &insts[stop..] {
+            for x in inst.op.operands().into_iter().chain(inst.guard) {
+                if x.index() < stop {
+                    need[x.index()] = true;
+                }
             }
         }
     }
     for (i, inst) in insts.iter().enumerate().take(stop).rev() {
-        let root = (run.deferred(insts, i) && !skip[i])
-            || (i >= run.start && matches!(inst.op, Op::Exit(_)));
+        let root = !rest
+            && ((run.deferred(insts, i) && !skip[i])
+                || (i >= run.start && matches!(inst.op, Op::Exit(_))));
         if !(root || need[i]) {
             continue;
         }
@@ -5872,6 +6259,51 @@ fn expr(op: &Op, v: &dyn Fn(ValueId) -> String, w: &dyn Fn(ValueId) -> String) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_break_ending_an_arm_where_it_falls_anyway_goes() {
+        assert_eq!(fall_off("    x = 1;\n    break 'b6;\n", 6), "    x = 1;\n");
+        assert_eq!(fall_off("break 'b6;", 6), "");
+        // Another label's, or one not at the end, stays.
+        assert_eq!(fall_off("break 'b16;\n", 6), "break 'b16;\n");
+        assert_eq!(fall_off("break 'b6; x = 1;\n", 6), "break 'b6; x = 1;\n");
+    }
+
+    #[test]
+    fn an_arm_diverges_only_when_its_last_statement_jumps_away() {
+        assert!(diverges("    x = 1;\n    break 'b3;\n"));
+        assert!(diverges("f(g)?; return Ok(r0);"));
+        assert!(diverges("continue 'l2;"));
+        assert!(!diverges(""));
+        assert!(!diverges("x = 1;"));
+        // A block may fall off its end: taken to.
+        assert!(!diverges("if v { return Ok(r0); }"));
+        assert!(!diverges("let returned: u32 = 1;"));
+    }
+
+    #[test]
+    fn arms_of_the_same_code_are_one_and_the_last_takes_its_own() {
+        let arms = vec![
+            vec![(1, 1)],
+            vec![(2, 4)],
+            vec![(5, 5)],
+            vec![(6, u32::MAX), (0, 0)],
+        ];
+        let bodies: Vec<String> = ["a", "b", "a", "b"].map(String::from).to_vec();
+        let m = merge_arms(bodies.clone(), &arms, false);
+        // 2..=4 is the last's code: `_` takes it.
+        assert_eq!(
+            m,
+            vec![
+                ("a".to_string(), vec![(1, 1), (5, 5)]),
+                ("b".to_string(), vec![(0, 0), (6, u32::MAX)]),
+            ]
+        );
+        // An open `match`'s last arm goes on in its block: none join it.
+        let m = merge_arms(bodies, &arms, true);
+        assert_eq!(m.len(), 3);
+        assert_eq!(m[1], ("b".to_string(), vec![(2, 4)]));
+    }
 
     /// A ROM whose reset jumps by `ldr r3, =0x03000000; bx r3` into code
     /// a `[[copy]]` puts in IWRAM, `ldr r0, [r4]; bx lr`: it reads r4 as
