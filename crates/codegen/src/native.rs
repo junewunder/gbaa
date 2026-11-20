@@ -56,7 +56,8 @@
 //!   ([`crate::saves::summarize`]; [`shape`], unit `native/lift-params`),
 //!   the stack pointer as a parameter, `Exit` passed up from the waits
 //!   with `?`; `a_<key>`, its adapter, takes and gives all of r0-r3, for
-//!   `call_fn`. A function whose summary has a hole (or rests on a
+//!   `call_fn`, printed only for a function a pointer can reach (`FNS`'s,
+//!   or a stand-in calls it by name). A function whose summary has a hole (or rests on a
 //!   callee's that stopped) keeps stage A's four-register form,
 //!   `f_<key>(g, sp, a: [u32; 4]) -> Result<[u32; 4], Exit>`, with the
 //!   summary printed above it.
@@ -70,11 +71,16 @@
 //!   what no caller reads (the summaries' `keeps` and `changes`; a
 //!   function that breaks that, `analysis::holes::SUMMARY_HARD`, is a
 //!   hard hole).
-//! - Two entries: `x_<key>(g, Regs)` takes every register and flag, and
-//!   `f_<key>` above is a call into it with r4-r12 and the flags zero and
-//!   `lr` [`RET`]. A fall or jump into another function's entry (or a
-//!   call's return into one) runs on in its `x_` with this one's registers
-//!   and flags, as the hardware does (unit `native/lift-fallthrough`).
+//! - The extended entry, `x_<key>(g, Regs)`, takes every register and
+//!   flag, and `f_<key>` above is then a call into it with r4-r12 and the
+//!   flags zero and `lr` [`RET`]. A fall or jump into another function's
+//!   entry (or a call's return into one) runs on in its `x_` with this
+//!   one's registers and flags, as the hardware does (unit
+//!   `native/lift-fallthrough`). One entry where one is enough (unit
+//!   `native/lift-one-entry`, [`one_entry`]): `x_` only for a function
+//!   something falls, jumps or calls into so, one that takes r4-r11 from
+//!   its callers, or a named one (a backtrace finds it by `x_`'s key);
+//!   else the body is `f_`'s own, its registers `Regs::call`'s.
 //! - A function that reads one of r4-r11 as it came (a parameter by
 //!   register: hand-written code's, or agbcc's word built in an unset
 //!   register and stored) takes it from its callers
@@ -100,9 +106,11 @@
 //!   inline, an irreducible region a `loop { match b }` of its own. A
 //!   function the plan doesn't take (a block no printed jump reaches, one
 //!   nested too deep) stays a whole `loop { match b }` over local labels
-//!   (0 the entry). Each block starts with `runtime::guest_pc::set` of its
-//!   guest address, which a stop names (unit `native/first-stop-guest-pc`:
-//!   compiled code keeps no other pc); calls are Rust calls; a return is a jump to the value
+//!   (0 the entry). Each block starts with `pc` (prelude) of its guest
+//!   address, which a stop names (unit `native/first-stop-guest-pc`:
+//!   compiled code keeps no other pc): `runtime::guest_pc::set` in a build
+//!   with the crate's `guest-pc` feature (`just lift`'s, the checks'),
+//!   nothing in a plain one (unit `native/lift-one-entry`); calls are Rust calls; a return is a jump to the value
 //!   `lr` held on entry, [`RET`] (prelude), told by value since compiled
 //!   code moves it through the stack.
 //! - Memory is `ld8/16/32` and `st8/16/32` over `Game::ram` (EWRAM then
@@ -1259,9 +1267,41 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         };
     }
     fns.sort_unstable();
+    // The functions a pointer can reach, `FNS`'s (unit
+    // `native/lift-one-entry`): with a settled flow, those whose key the
+    // code makes as a constant or reads from ROM (its closed world: no
+    // other value is a function's address), and every ROM word that holds
+    // one, the program's entry, the IWRAM copies' functions, the holes
+    // file's `[[takes]]` and any key a stand-in's text names. Without one
+    // (skipped, unsettled, or `--copies`), every function.
+    let reach: BTreeSet<u32> = match &taken {
+        Some(taken) if holes.copies <= 1 => {
+            let mut r = taken.clone();
+            r.insert(entry);
+            r.extend(
+                rom.chunks_exact(4)
+                    .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+                    .filter(|w| all.contains(w)),
+            );
+            r.extend(all.iter().filter(|&&k| k >> 24 != 0x08));
+            r.extend(holes.takes.keys());
+            for (code, _) in holes.standins.values() {
+                r.extend(all.iter().filter(|k| code.contains(&format!("{k:#010x}"))));
+            }
+            r
+        }
+        _ => all.clone(),
+    };
+    let entries_extra = one_entry(&mut out, &soft.entries, &reach, &holes.fn_names);
+    let fns_reached: Vec<u32> = fns.iter().copied().filter(|k| reach.contains(k)).collect();
     let mut table = String::new();
-    writeln!(table, "pub static FNS: [(u32, Fn); {}] = [", fns.len()).unwrap();
-    for k in &fns {
+    writeln!(
+        table,
+        "pub static FNS: [(u32, Fn); {}] = [",
+        fns_reached.len()
+    )
+    .unwrap();
+    for k in &fns_reached {
         writeln!(table, "    ({k:#010x}, {}),", plain(&shapes.shaped, *k)).unwrap();
     }
     table.push_str("];\n");
@@ -1309,7 +1349,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 &holes.names,
             )
         });
-    let plains: Vec<String> = fns.iter().map(|&k| plain(&shapes.shaped, k)).collect();
+    let plains: Vec<String> = fns_reached
+        .iter()
+        .map(|&k| plain(&shapes.shaped, k))
+        .collect();
     let mut files = modules::split(main, table, &plains, &out, holes.copies);
     if !holes.fn_check.is_empty() {
         files
@@ -1343,6 +1386,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         } else {
             ""
         }
+    )
+    .unwrap();
+    let (never, of) = cannot_exit(&out);
+    writeln!(
+        report,
+        "functions that return Result<_, Exit> but can't exit, themselves or through a callee (measured, native/lift-one-entry): {never} of {of}"
     )
     .unwrap();
     writeln!(
@@ -1593,6 +1642,18 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     );
     m.push("callee_saves_unproven", n(soft.unproven.len()));
     m.push("hard_holes", n(hard.len()));
+    // One entry per function (native/lift-one-entry): the entries the
+    // lifted functions print beyond their one (an extended entry, an
+    // adapter), and the guest pc set outside the prelude's `pc`, which
+    // only the crate's `guest-pc` feature turns on.
+    m.push("entries_beyond_one", n(entries_extra));
+    m.push(
+        "guest_pc_plain",
+        n(out
+            .iter()
+            .map(|(_, t)| t.matches("guest_pc::set(").count())
+            .sum()),
+    );
     m.push("blocks", n(blocks));
     // Structured code (native/lift-structured): the functions and blocks
     // printed from the structuring plan, and their share in percent (no
@@ -2318,8 +2379,177 @@ fn code<'a>(ctx: Ctx<'a>, funcs: Vec<Func>, named: &BTreeSet<u32>, passing: &Pas
     }
 }
 
+/// A printed function's entries, as [`FnPrinter::print`] wrote them
+/// one after another above its body, which [`one_entry`] trims to what
+/// the program calls (unit `native/lift-one-entry`).
+#[derive(Clone, Debug, Default)]
+struct Entries {
+    /// `f_<key>`, the plain entry: a call into the extended one (or, for
+    /// a function that takes r4-r11 from its callers, a stop).
+    plain: String,
+    /// `a_<key>`, a shaped function's four-register adapter, for `FNS`
+    /// (empty for a four-register function, whose plain entry is that).
+    adapter: String,
+    /// The extended entry's head: `x_<key>(g, Regs)` and its registers.
+    extended: String,
+    /// The plain entry's head with the body in it (registers from
+    /// `Regs::call`), where nothing needs the extended entry.
+    head: String,
+    /// It takes r4-r11 from its callers: the extended entry stays.
+    taker: bool,
+}
+
+impl Entries {
+    /// All three, as printed.
+    fn all(&self) -> String {
+        format!("{}{}{}", self.plain, self.adapter, self.extended)
+    }
+}
+
+/// How many of the printed functions can't exit, of how many (unit
+/// `native/lift-one-entry`'s measure; nothing is changed by it): a
+/// function's text can pass up an `Exit` where it has a `?` after
+/// anything but a lifted function's call (`f_`, `x_` or `a_` and a key:
+/// a wait, `call_fn`, a BIOS call, a named function) or an `Err(`, or
+/// through a `?` on a lifted function that can; the rest return
+/// `Result<_, Exit>` for nothing. Text it can't read counts as exiting.
+fn cannot_exit(out: &[(u32, String)]) -> (usize, usize) {
+    // By key: whether it exits itself, and the lifted functions it `?`s.
+    let mut own: BTreeMap<u32, (bool, BTreeSet<u32>)> = BTreeMap::new();
+    for (k, t) in out {
+        let mut exits = t.contains("Err(");
+        let mut callees = BTreeSet::new();
+        let b = t.as_bytes();
+        for (i, _) in t.match_indices(")?") {
+            // The call's name: back over its balanced arguments.
+            let mut depth = 0usize;
+            let mut j = i + 1;
+            let open = loop {
+                if j == 0 {
+                    break None;
+                }
+                j -= 1;
+                match b[j] {
+                    b')' => depth += 1,
+                    b'(' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            break Some(j);
+                        }
+                    }
+                    _ => {}
+                }
+            };
+            let name = open.map(|o| {
+                let s = t[..o]
+                    .rfind(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == ':'))
+                    .map_or(0, |s| s + 1);
+                &t[s..o]
+            });
+            let key = name.and_then(|n| {
+                let nb = n.as_bytes();
+                (nb.len() == 10 && matches!(nb[0], b'f' | b'x' | b'a') && nb[1] == b'_')
+                    .then(|| u32::from_str_radix(&n[2..], 16).ok())
+                    .flatten()
+            });
+            match key {
+                Some(c) => {
+                    callees.insert(c);
+                }
+                None => exits = true,
+            }
+        }
+        let e = own.entry(*k).or_default();
+        e.0 |= exits;
+        e.1.extend(callees);
+    }
+    // Exiting spreads to callers until nothing changes.
+    let mut exits: BTreeSet<u32> = own.iter().filter(|(_, e)| e.0).map(|(&k, _)| k).collect();
+    loop {
+        let more: Vec<u32> = own
+            .iter()
+            .filter(|(k, e)| {
+                !exits.contains(k)
+                    && e.1
+                        .iter()
+                        .any(|c| exits.contains(c) || !own.contains_key(c))
+            })
+            .map(|(&k, _)| k)
+            .collect();
+        if more.is_empty() {
+            break;
+        }
+        exits.extend(more);
+    }
+    (own.len() - exits.len(), own.len())
+}
+
+/// Each printed function's entries trimmed to those something calls
+/// (unit `native/lift-one-entry`): the extended entry `x_<key>` only
+/// where some text calls it (a fall or jump into the function, a call
+/// that passes r4-r11, a stand-in by name) or the function takes r4-r11
+/// from its callers or has a name (a stop's backtrace finds the function
+/// by its body's key: [`named`]); else the body is the plain entry's own.
+/// The adapter `a_<key>` only for a function in `reach` (`FNS`) or that
+/// some text calls by name. Returns how many entries the lifted
+/// functions print beyond their one.
+fn one_entry(
+    out: &mut [(u32, String)],
+    entries: &BTreeMap<u32, Entries>,
+    reach: &BTreeSet<u32>,
+    named: &BTreeMap<u32, String>,
+) -> usize {
+    // Each function's own entries, where its text has them as printed
+    // (not a checked function's two copies, nor a hard hole's errors).
+    let own: BTreeMap<u32, (usize, &Entries)> = out
+        .iter()
+        .enumerate()
+        .filter_map(|(i, (k, t))| {
+            let e = entries.get(k)?;
+            t.contains(&e.all()).then_some((*k, (i, e)))
+        })
+        .collect();
+    // The `x_` and `a_` names called anywhere but in their own entries.
+    let mut called: BTreeSet<(u8, u32)> = BTreeSet::new();
+    for (k, t) in out.iter() {
+        let t = match own.get(k) {
+            Some((_, e)) => t.replacen(&e.all(), "", 1),
+            None => t.clone(),
+        };
+        let b = t.as_bytes();
+        let word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+        for j in 0..b.len().saturating_sub(9) {
+            if matches!(b[j], b'x' | b'a')
+                && b[j + 1] == b'_'
+                && (j == 0 || !word(b[j - 1]))
+                && b.get(j + 10).is_none_or(|&c| !word(c))
+                && let Ok(k) = u32::from_str_radix(&t[j + 2..j + 10], 16)
+                && t[j + 2..j + 10].bytes().all(|c| c.is_ascii_hexdigit())
+            {
+                called.insert((b[j], k));
+            }
+        }
+    }
+    let mut extra = 0;
+    for (&k, &(i, e)) in &own {
+        let x = e.taker || named.contains_key(&k) || called.contains(&(b'x', k));
+        let a = !e.adapter.is_empty() && (reach.contains(&k) || called.contains(&(b'a', k)));
+        extra += usize::from(x) + usize::from(a);
+        let new = match (x, a) {
+            (true, true) => continue,
+            (true, false) => format!("{}{}", e.plain, e.extended),
+            (false, true) => format!("{}{}", e.adapter, e.head),
+            (false, false) => e.head.clone(),
+        };
+        out[i].1 = out[i].1.replacen(&e.all(), &new, 1);
+    }
+    extra
+}
+
 #[derive(Default)]
 struct Soft {
+    /// Each printed function's entries ([`one_entry`]).
+    entries: BTreeMap<u32, Entries>,
     /// Loads (false) and stores (true) by where their address is.
     access: BTreeMap<(bool, Where), u64>,
     /// The sp-relative ones left in memory: to slots that don't escape
@@ -2713,9 +2943,13 @@ impl FnPrinter<'_, '_> {
         // A shaped function's plain entry takes its parameters and gives
         // its results; its adapter, `a_<key>`, is the four-register form
         // `call_fn` takes it by (`FNS`), and gives back the registers that
-        // aren't results as they came.
+        // aren't results as they came. All are printed here; [`one_entry`]
+        // keeps those the program calls, once every function is printed.
         let k = f.entry;
         let ty = ret_ty(self.me);
+        // `Regs::call`'s r0-r3 for the merged entry ([`Entries::merged`]).
+        let mut call_regs = "a".to_string();
+        let mut e = Entries::default();
         match self.me {
             // What it takes of r4-r11 comes through the extended entry
             // ([`taking`]); the plain one would zero it.
@@ -2726,21 +2960,23 @@ impl FnPrinter<'_, '_> {
                     .filter(|r| m & 1 << (r - 4) != 0)
                     .map(|r| format!("r{r}"))
                     .collect();
-                writeln!(
-                    s,
-                    "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ let _ = (g, sp, a); panic!(\"0x{k:08x} takes {} from its caller, and this call (through a pointer the holes file's takes doesn't name, or a stand-in's) passes none\") }}",
+                e.plain = format!(
+                    "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ let _ = (g, sp, a); panic!(\"0x{k:08x} takes {} from its caller, and this call (through a pointer the holes file's takes doesn't name, or a stand-in's) passes none\") }}\n",
                     regs.join(", ")
-                )
-                .unwrap()
+                );
+                e.taker = true;
             }
-            None => writeln!(
-                s,
-                "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ x_{k:08x}(g, Regs::call(sp, a)) }}"
-            )
-            .unwrap(),
+            None => {
+                e.plain = format!(
+                    "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ x_{k:08x}(g, Regs::call(sp, a)) }}\n"
+                );
+                e.head = format!(
+                    "pub fn f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{\n"
+                );
+            }
             Some(sh) => {
-                let ps: Vec<String> = shape::regs(sh.params)
-                    .map(|r| format!("a{r}: u32"))
+                let ps: String = shape::regs(sh.params)
+                    .map(|r| format!(", a{r}: u32"))
                     .collect();
                 let a: Vec<String> = (0..4)
                     .map(|r| {
@@ -2751,28 +2987,28 @@ impl FnPrinter<'_, '_> {
                         }
                     })
                     .collect();
-                writeln!(
-                    s,
-                    "pub fn f_{k:08x}(g: &mut Game, sp: u32{}) -> Result<{ty}, Exit> {{ x_{k:08x}(g, Regs::call(sp, [{}])) }}",
-                    ps.iter().map(|p| format!(", {p}")).collect::<String>(),
-                    a.join(", ")
-                )
-                .unwrap();
-                writeln!(
-                    s,
-                    "pub fn a_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ let [mut r0, mut r1, mut r2, mut r3] = a; {}f_{k:08x}(g, sp{})?; Ok([r0, r1, r2, r3]) }}",
+                call_regs = format!("[{}]", a.join(", "));
+                e.plain = format!(
+                    "pub fn f_{k:08x}(g: &mut Game, sp: u32{ps}) -> Result<{ty}, Exit> {{ x_{k:08x}(g, Regs::call(sp, {call_regs})) }}\n"
+                );
+                e.head = format!(
+                    "pub fn f_{k:08x}(g: &mut Game, sp: u32{ps}) -> Result<{ty}, Exit> {{\n"
+                );
+                e.adapter = format!(
+                    "pub fn a_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ let [mut r0, mut r1, mut r2, mut r3] = a; {}f_{k:08x}(g, sp{})?; Ok([r0, r1, r2, r3]) }}\n",
                     lhs(sh.results),
                     args(sh.params)
-                )
-                .unwrap();
+                );
             }
         }
-        writeln!(
-            s,
-            "pub fn x_{k:08x}(g: &mut Game, s: Regs) -> Result<{ty}, Exit> {{"
-        )
-        .unwrap();
-        s.push_str("    let Regs { r: [mut r0, mut r1, mut r2, mut r3, mut r4, mut r5, mut r6, mut r7, mut r8, mut r9, mut r10, mut r11, mut r12, mut r13, mut r14], f: [mut nf, mut zf, mut cf, mut vf] } = s;\n");
+        const REGS: &str = "    let Regs { r: [mut r0, mut r1, mut r2, mut r3, mut r4, mut r5, mut r6, mut r7, mut r8, mut r9, mut r10, mut r11, mut r12, mut r13, mut r14], f: [mut nf, mut zf, mut cf, mut vf] } = ";
+        e.extended =
+            format!("pub fn x_{k:08x}(g: &mut Game, s: Regs) -> Result<{ty}, Exit> {{\n{REGS}s;\n");
+        if !e.taker {
+            e.head = format!("{}{REGS}Regs::call(sp, {call_regs});\n", e.head);
+        }
+        s.push_str(&e.all());
+        self.soft.entries.insert(k, e);
         s.push_str(&self.declare_locals());
         // The entry first: label 0.
         let mut order: Vec<u32> = vec![f.entry];
@@ -2817,12 +3053,12 @@ impl FnPrinter<'_, '_> {
     }
 
     /// Block `label`'s code as an arm of a `match b`. The block's guest
-    /// address is kept for a stop to name (`runtime::guest_pc`), on the
-    /// arm's own line.
+    /// address is kept for a stop to name (`pc`, `runtime::guest_pc`), on
+    /// the arm's own line.
     fn arm(&mut self, label: usize) -> String {
         let k = self.key_of(label);
         format!(
-            "            {label} => {{ runtime::guest_pc::set({k:#010x});\n{}            }}\n",
+            "            {label} => {{ pc({k:#010x});\n{}            }}\n",
             self.block_at(k)
         )
     }
@@ -3283,7 +3519,7 @@ impl FnPrinter<'_, '_> {
                 let outs = exits.clone();
                 let body = self.block_with(k, outs);
                 self.edges = outer;
-                format!("    runtime::guest_pc::set({k:#010x});\n{body}")
+                format!("    pc({k:#010x});\n{body}")
             }
             plan::Node::Loop { label, body } => {
                 let is_for = self.fors.contains_key(label);
@@ -3326,7 +3562,7 @@ impl FnPrinter<'_, '_> {
                     let body = self.block_with(k, exits.clone());
                     writeln!(
                         s,
-                        "            {node} => {{ runtime::guest_pc::set({k:#010x});\n{body}            }}"
+                        "            {node} => {{ pc({k:#010x});\n{body}            }}"
                     )
                     .unwrap();
                 }
@@ -4300,7 +4536,7 @@ impl FnPrinter<'_, '_> {
                     self.soft.value_lets += lets.lines().count() as u64;
                     // Its values print as their `let`s.
                     let outer = std::mem::replace(&mut self.inl, vec![None; n.len()]);
-                    let pc = format!("{ind}runtime::guest_pc::set({k:#010x});\n");
+                    let pc = format!("{ind}pc({k:#010x});\n");
                     for b in self.switch_bodies(nt, n, &nxs, nthumb, &nskip, k, Some(exits), false)
                     {
                         out.push(format!("{pre}{pc}{lets}{b}"));
@@ -4486,7 +4722,12 @@ impl FnPrinter<'_, '_> {
     fn call(&self, k: u32) -> (String, String) {
         let (m, e) = (self.passed(k), self.echoes(k));
         if m | e != 0 {
-            return ("[r0, r1, r2, r3] = ".into(), taking(k, self.taken(m) | e));
+            // Its extended entry gives what its plain one does: a shaped
+            // function's results (one that echoes r4-r11 may be shaped).
+            let to = self
+                .shape(k)
+                .map_or_else(|| "[r0, r1, r2, r3] = ".into(), |c| lhs(c.results));
+            return (to, taking(k, self.taken(m) | e));
         }
         match self.shape(k) {
             None if self.holes.lr.contains(&k) => (
@@ -4580,12 +4821,12 @@ impl FnPrinter<'_, '_> {
                 if takes {
                     self.soft.passes.insert((at, e));
                 }
-                write!(
-                    t,
-                    "{e:#010x} => {{ [r0, r1, r2, r3] = {}?; }} ",
-                    taking(e, m)
-                )
-                .unwrap();
+                // A shaped callee's extended entry gives its results; the
+                // rest of r0-r3 stay, as its adapter gives them back.
+                let to = self
+                    .shape(e)
+                    .map_or_else(|| "[r0, r1, r2, r3] = ".into(), |c| lhs(c.results));
+                write!(t, "{e:#010x} => {{ {to}{}?; }} ", taking(e, m)).unwrap();
             }
             write!(t, "k => {{ {} }} }}", call_fn_text("k", pass, back)).unwrap();
             return t;
@@ -5524,7 +5765,7 @@ mod tests {
         let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
         let l = lift(&rom, "t", &Holes::parse("").unwrap());
         let text: String = l.files.iter().map(|(_, t)| t.as_str()).collect();
-        let reset = &text[text.find("pub fn x_08000000").expect("the reset")..];
+        let reset = &text[text.find("pub fn f_08000000(").expect("the reset")..];
         let reset = &reset[..reset.find("\n}\n").unwrap()];
         assert!(reset.contains(" as i8 as u32"), "{reset}");
         assert!(reset.contains(" as u8 as u32"), "{reset}");
@@ -5550,7 +5791,7 @@ mod tests {
         let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
         let l = lift(&rom, "t", holes);
         let text: String = l.files.iter().map(|(_, t)| t.as_str()).collect();
-        let reset = &text[text.find("pub fn x_08000000").expect("the reset")..];
+        let reset = &text[text.find("pub fn f_08000000(").expect("the reset")..];
         (reset[..reset.find("\n}\n").unwrap()].to_string(), l.metrics)
     }
 
@@ -5613,7 +5854,7 @@ mod tests {
         let print = |holes: &Holes| {
             let l = lift(&rom, "t", holes);
             let text: String = l.files.iter().map(|(_, t)| t.as_str()).collect();
-            let reset = &text[text.find("pub fn x_08000000").expect("the reset")..];
+            let reset = &text[text.find("pub fn f_08000000(").expect("the reset")..];
             (reset[..reset.find("\n}\n").unwrap()].to_string(), l.metrics)
         };
         let (reset, m) = print(&Holes::parse("").unwrap());
@@ -5675,6 +5916,76 @@ mod tests {
                 .contains("a jump into 0x03000000, another code context's, with r4 as they came")),
             "{hs:?}"
         );
+    }
+
+    #[test]
+    fn each_function_keeps_only_the_entries_something_calls() {
+        let e = |k: u32, shaped: bool| Entries {
+            plain: format!("pub fn f_{k:08x}() {{ x_{k:08x}() }}\n"),
+            adapter: if shaped {
+                format!("pub fn a_{k:08x}() {{ f_{k:08x}() }}\n")
+            } else {
+                String::new()
+            },
+            extended: format!("pub fn x_{k:08x}() {{\n"),
+            head: format!("pub fn f_{k:08x}() {{\n"),
+            taker: false,
+        };
+        // 1 falls into 2; 3 is reached by a pointer; 4 is called by name
+        // by a stand-in (5); 6 has a name.
+        let entries: BTreeMap<u32, Entries> = [1, 2, 3, 4, 6]
+            .map(|k| (k, e(k, true)))
+            .into_iter()
+            .collect();
+        let mut out: Vec<(u32, String)> = [1, 2, 3, 4, 6]
+            .map(|k| {
+                let body = if k == 1 {
+                    "    x_00000002()\n}\n"
+                } else {
+                    "}\n"
+                };
+                (k, format!("{}{body}", entries[&k].all()))
+            })
+            .into_iter()
+            .collect();
+        out.push((5, "pub fn f_00000005() { a_00000004() }\n".into()));
+        let reach = BTreeSet::from([3]);
+        let named = BTreeMap::from([(6, "named".to_string())]);
+        let extra = one_entry(&mut out, &entries, &reach, &named);
+        let text = |k: u32| out.iter().find(|(o, _)| *o == k).unwrap().1.clone();
+        assert_eq!(text(1), "pub fn f_00000001() {\n    x_00000002()\n}\n");
+        assert_eq!(
+            text(2),
+            format!("{}{}}}\n", entries[&2].plain, entries[&2].extended)
+        );
+        assert_eq!(
+            text(3),
+            format!("{}{}}}\n", entries[&3].adapter, entries[&3].head)
+        );
+        assert_eq!(
+            text(4),
+            format!("{}{}}}\n", entries[&4].adapter, entries[&4].head)
+        );
+        assert_eq!(
+            text(6),
+            format!("{}{}}}\n", entries[&6].plain, entries[&6].extended)
+        );
+        assert_eq!(extra, 4);
+    }
+
+    #[test]
+    fn a_function_exits_through_a_wait_or_a_callee_that_can() {
+        let out = vec![
+            (
+                1,
+                "r0 = f_00000002(g, r13, x(1))?; f_00000003(g)?;".to_string(),
+            ),
+            (2, "bank_sp(g, r13); hw::idle(g)?;".to_string()),
+            (3, "r0 = f_00000004(g, r13)?;".to_string()),
+            (4, "Ok(r0)".to_string()),
+        ];
+        // 2 waits, 1 calls it; 3 and 4 can't exit.
+        assert_eq!(cannot_exit(&out), (2, 4));
     }
 
     #[test]

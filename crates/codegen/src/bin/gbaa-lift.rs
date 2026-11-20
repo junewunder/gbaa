@@ -369,6 +369,9 @@ fn main() -> ExitCode {
          native-host = {{ path = \"{c}/native-host\" }}\n\
          # The prelude's task coroutines (task_resume).\n\
          corosensei = \"0.3.4\"\n\n\
+         # Each block's guest pc kept for a stop to name (the prelude's `pc`):\n\
+         # `just lift` and the checks build with it, a plain build without.\n\
+         [features]\nguest-pc = []\n\n\
          [profile.release]\ndebug = false\nincremental = false\n",
         c = crates.display()
     );

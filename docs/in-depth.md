@@ -221,9 +221,9 @@ void pen_set(u8 state)
 ```
 
 ```rust
-pub fn x_08000271(g: &mut Game, s: Regs) -> Result<(), Exit> {
-    let Regs { r: [mut r0, mut r1, /* r2 to r14 */], f: [mut nf, mut zf, mut cf, mut vf] } = s;
-    runtime::guest_pc::set(0x08000271);
+pub fn f_08000271(g: &mut Game, sp: u32, a0: u32) -> Result<(), Exit> {
+    let Regs { r: [mut r0, mut r1, /* r2 to r14 */], f: [mut nf, mut zf, mut cf, mut vf] } = Regs::call(sp, [a0, 0, 0, 0]);
+    pc(0x08000271);
     r1 = 0x3000008u32;
     r2 = 0x0u32;
     g.ram.d_0300000c = r0 as u8;

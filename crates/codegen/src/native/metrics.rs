@@ -55,6 +55,13 @@
 //! r0`), printed as a plain return where the entry lr is proven `RET`,
 //! `entry_lr_returns` (no bar: it should rise), and those still through
 //! `call_fn`, `entry_lr_returns_call_fn` (barred, at 0).
+//!
+//! Entries (`native/lift-one-entry`): `entries_beyond_one` counts the
+//! entries the lifted functions print beyond the one each needs (an
+//! extended entry `x_` something falls, jumps or calls into; an adapter
+//! `a_` for `FNS`); `guest_pc_plain` the blocks that set the guest pc in
+//! a plain build, outside the prelude's `pc` and its `guest-pc` feature
+//! (barred at 0).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
