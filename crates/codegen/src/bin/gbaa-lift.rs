@@ -1,7 +1,7 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
 //! [--names DIR]... [--layout guest|packed] [--drop-standin KEY] [--plant AT]
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT]
-//! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-for-loops] [--copies N] [--holes-only [--flow]]
+//! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
 //! [--plant-reference] [--text-edit FILE]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
@@ -25,7 +25,12 @@
 //! `pret-names`), an access through a pointer they type prints as its
 //! named field (`g.get(Ref::<t::Kirby>::new(r4).hp())`;
 //! `codegen::native::fields`, unit `native/lift-typed-access`), over the
-//! same byte access; `--no-field-types` leaves that out. `--layout guest` (the
+//! same byte access; `--no-field-types` leaves that out. Where they give
+//! `[locals]` or prototypes, a function's register locals and parameters
+//! take their variables' names where liveness agrees, else a `// dwarf
+//! r4: name` comment where the variable's range starts
+//! (`codegen::native::local_names`, unit `native/lift-local-names`);
+//! `--no-local-names` leaves that out. `--layout guest` (the
 //! default) puts them at the guest's offsets, the native check's layout;
 //! `--layout packed` makes them fields in the lifter's order, the rest of
 //! RAM bytes, the play layout, which must draw the same frames (unit
@@ -136,7 +141,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--text-edit FILE]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--text-edit FILE]"
         );
         ExitCode::FAILURE
     };
@@ -149,6 +154,7 @@ fn main() -> ExitCode {
     let (mut ime_at_waits, mut takes_zeroed, mut keep_dead) = (false, false, false);
     let mut keep_temps = false;
     let mut no_field_types = false;
+    let mut no_local_names = false;
     let mut no_for_loops = false;
     let (mut holes_only, mut holes_flow) = (false, false);
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
@@ -185,6 +191,10 @@ fn main() -> ExitCode {
         }
         if a == "--no-field-types" {
             no_field_types = true;
+            continue;
+        }
+        if a == "--no-local-names" {
+            no_local_names = true;
             continue;
         }
         if a == "--no-for-loops" {
@@ -402,9 +412,17 @@ fn main() -> ExitCode {
             // A line table: each source line's first instruction gets its
             // `// file:line` comment.
             holes.lines = codegen::native::line_starts(&map);
+            // DWARF variables or prototypes: register locals and
+            // parameters take their names where liveness agrees.
+            let dwarf = !no_local_names && (!map.locals.is_empty() || map.typed.has_protos());
+            let text = map.text.is_some();
+            let map = std::sync::Arc::new(map);
+            if dwarf {
+                holes.dwarf = Some(map.clone());
+            }
             // A text table: constants pointing at text get its comment.
-            if map.text.is_some() {
-                holes.text = Some(std::sync::Arc::new(map));
+            if text {
+                holes.text = Some(map);
             }
         }
         Err(e) => {

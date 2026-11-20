@@ -732,6 +732,26 @@ impl SourceMap {
         (!taken(&id)).then_some(id)
     }
 
+    /// A DWARF local's name as a lifted function's local (unit
+    /// `native/lift-local-names`): `name_` where the name is a function's
+    /// or datum's identifier or a value's name (the lifted crate brings
+    /// data in as consts, which a `let` would match instead of binding),
+    /// or has no lower-case letter (the crate's own consts and statics).
+    /// The lifter checks it against the function's own words.
+    pub fn lift_local_ident(&self, name: &str) -> Option<String> {
+        let taken = |s: &str| {
+            self.key_of(s).is_some()
+                || self.typed.value_named(s).is_some()
+                || !s.bytes().any(|b| b.is_ascii_lowercase())
+        };
+        let id = as_ident(name)?;
+        if !taken(&id) {
+            return Some(id);
+        }
+        let id = format!("{id}_");
+        (!taken(&id)).then_some(id)
+    }
+
     /// The identifier for `key` in `kind`'s table, if it has one.
     pub fn ident(&self, kind: Kind, key: u32) -> Option<&str> {
         self.idents.get(&(kind, key)).map(String::as_str)
