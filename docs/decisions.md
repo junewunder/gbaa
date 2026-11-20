@@ -268,6 +268,16 @@ switch, but it counts toward the trickle.
   yield; the native lift stopped at frame 902 calling it. Emerald 0.9997 /
   0.9575 (16 more true starts, none false; 5 more jump tables), modern GCC
   0.9996 / 0.7873 (1 more), agb's unchanged; Nightmare 5 more starts.
+  **A column of struct records** (2026-11-19, native/mirror-past-frame-99):
+  "beside it" also covers a pointer one record (three to eight words) from
+  a known function pointer and two records from another, on one side or
+  one each side: a table of structs holding a handler and data. Amazing
+  Mirror's intro records (a handler and three words) hold leaf handlers
+  with no push; its native lift stopped at frame 99 calling one. Against
+  katam's ELF, Amazing Mirror 0.9998 / 0.9606 to 0.9998 / 0.9642 (21 more
+  true starts, none false); Emerald 0.9997 / 0.9575 to 0.9997 / 0.9583
+  (13 more), modern GCC 0.9996 / 0.7873 to 0.9996 / 0.7922 (78 more, one
+  more jump table), none false; agb's 1.0 precision kept.
 - **Checking discovery:** precision and recall of function starts against
   the pokeemerald ELF, specified in `research/discovery-prior-art.md`
   ("Proposed discovery-accuracy check"). Baseline to beat: 99.87% precision,
