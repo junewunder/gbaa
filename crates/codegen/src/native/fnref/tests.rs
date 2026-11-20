@@ -3196,39 +3196,44 @@ fn a_callback_s_pointer_is_its_callers_once_every_call_is_seen() {
 }
 
 #[test]
-fn an_array_ends_where_its_accesses_bounds_do() {
-    // A1 is only ever accessed in `A1..=A1 + 0x1f` (the value sets'
-    // bounds on its indexed store), so F stored at a constant address
-    // past that, with no other array's start between, isn't A1's.
-    let fns = || {
-        let e = 0x0800_1001;
-        let mut a = B::default();
-        let x = indexed(&mut a, 0x0800_0414, A1, 2, 3, 0);
-        let h = a.pool(0x0800_0404, H);
-        a.st(Width::Word, x, h);
-        let at = a.insts.len() - 1;
-        let f = a.pool(POOL, F);
-        let c = a.k(A1 + 0x100);
-        a.st(Width::Word, c, f);
-        let store = (e, vec![(e, a.end(None, Edge::Return))]);
-        let mut b = B::default();
-        let x = indexed(&mut b, 0x0800_041c, A1, 3, 3, 0);
-        let t = b.ld(Width::Word, x);
-        let load_at = b.insts.len() - 1;
-        (store, at, calling(0x0800_2001, b, t), load_at)
-    };
-    // Without bounds the array runs to its RAM's end: both.
-    let (store, _, load, _) = fns();
-    let f = run_ram(&[store, load]);
-    assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
-    // With them it ends at A1 + 0x20: H alone.
-    let (store, at, load, load_at) = fns();
-    let bounds = BTreeMap::from([
-        ((0x0800_1001, at), ((A1, A1 + 0x1f), Some(8))),
-        ((0x0800_2001, load_at), ((A1, A1 + 0x1f), Some(8))),
-    ]);
-    FORCE_RAM.with(|c| c.set(true));
-    let f = run_bounded(&[store, load], &BTreeMap::new(), &Img::new(), &bounds);
-    FORCE_RAM.with(|c| c.set(false));
+fn the_last_array_ends_below_the_bios_s_ram() {
+    // H is stored in A2[r2], the last array the code indexes. F stored at
+    // the IRQ vector isn't in it: a load through A2[r3] reads H alone.
+    let e = 0x0800_1001;
+    let mut a = B::default();
+    let y = indexed(&mut a, 0x0800_0414, A2, 2, 3, 0);
+    let h = a.pool(0x0800_0404, H);
+    a.st(Width::Word, y, h);
+    let f = a.pool(POOL, F);
+    let c = a.k(IRQ_VECTOR);
+    a.st(Width::Word, c, f);
+    let store = (e, vec![(e, a.end(None, Edge::Return))]);
+    let mut b = B::default();
+    let x = indexed(&mut b, 0x0800_041c, A2, 3, 3, 0);
+    let t = b.ld(Width::Word, x);
+    let f = run_ram(&[store, calling(0x0800_2001, b, t)]);
     assert_eq!(site(&f).callees, BTreeSet::from([H]), "{f:?}");
+}
+
+#[test]
+fn one_pointer_of_several_plus_a_constant_is_exact() {
+    // `p = A1 or 0x03000a00; p + (A2 - A1)`: a field's address through a
+    // pointer with two targets, not a walk. F stored through it at A2 is
+    // read through A2[r3] (and through the other target's field too).
+    let e = 0x0800_3001;
+    let mut a = B::default();
+    let l1 = a.pool(0x0800_0420, A1);
+    let l2 = a.k(0x0300_0a00);
+    let c = a.op(Op::GetFlag(Flag::Z));
+    let p = a.op(Op::Select { c, a: l1, b: l2 });
+    let far = a.k(A2 - A1);
+    let q = a.bin(BinOp::Add, p, far);
+    let fp = a.pool(POOL, F);
+    a.st(Width::Word, q, fp);
+    let store = (e, vec![(e, a.end(None, Edge::Return))]);
+    let mut b = B::default();
+    let x = indexed(&mut b, 0x0800_041c, A2, 3, 3, 0);
+    let t = b.ld(Width::Word, x);
+    let f = run_ram(&[h_in_a1_f_in_a_global(), store, calling(0x0800_2001, b, t)]);
+    assert!(site(&f).callees.contains(&F), "{f:?}");
 }

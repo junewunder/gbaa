@@ -178,9 +178,8 @@
 //! somewhere in it, [`left_object`]; one constant offset is exact, a
 //! field's address), and an
 //! object runs to the next literal the code indexes from that isn't a
-//! field of the one below, or, where the value sets bound every access
-//! the code makes from its start, to the last byte those reach
-//! ([`ram_parts`]) (a `memcpy` through `&s` past such a literal
+//! field of the one below, or to the BIOS's part of IWRAM
+//! ([`BIOS_RAM`], [`ram_parts`]) (a `memcpy` through `&s` past such a literal
 //! inside `s` leaves those stores in `s`'s object, and a load there at a
 //! constant address misses them); a pointer isn't made of its bytes in
 //! registers (a byte copy through memory is a number); a function called
@@ -1280,10 +1279,9 @@ fn ram_objects(
 
 /// RAM cut into objects for [`Tok::Ram`] (`native/fnref-ram-pointers`):
 /// by start, where each ends. The starts [`ram_objects`] finds that
-/// aren't a field of one below, each RAM's first byte, and the end of
-/// each object whose every access the value sets bound (a pointer into
-/// it stored or passed on has none: that object runs to the next start);
-/// each object runs to the next start, so every RAM address is in one.
+/// aren't a field of one below, each RAM's first byte, and the BIOS's
+/// part of IWRAM ([`BIOS_RAM`]); each object runs to the next start, so
+/// every RAM address is in one.
 fn ram_parts(fns: &[FnIn]) -> BTreeMap<u32, u32> {
     let indexed: Vec<_> = fns.iter().map(ram_indexed).collect();
     let objs = ram_objects(fns, &indexed);
@@ -1297,46 +1295,12 @@ fn ram_parts(fns: &[FnIn]) -> BTreeMap<u32, u32> {
             .is_none_or(|(_, &(_, e))| e <= o)
             || ends.contains(&o)
     }));
-    // Where an object the code only reads and writes within bounds the
-    // value sets give ends: past the last byte any of them reaches. What
-    // lies from there to the next start is an object of its own (other
-    // globals), not the array's: else the last array a program indexes
-    // ran to its RAM's end, the IRQ flags and vector with it.
-    {
-        let mut ext: BTreeMap<u32, Option<u32>> = BTreeMap::new();
-        let mut see = |l: u32, hi: Option<u32>| {
-            let l = ram_canon(l);
-            let e = ext.entry(l).or_insert(Some(l));
-            *e = match (*e, hi) {
-                (Some(a), Some(h)) if h >= l && h < ram_top(l) => Some(a.max(h)),
-                _ => None,
-            };
-        };
-        for (f, ix) in fns.iter().zip(&indexed) {
-            for (&(k, i), &(l, _)) in ix {
-                // A pointer stored or passed: where it goes isn't known.
-                let hull = (i & VALUE == 0)
-                    .then(|| f.blocks.get(&k).and_then(|b| b.hulls.get(&i)))
-                    .flatten();
-                see(l, hull.map(|h| ram_canon(h.1)));
-            }
-            for b in f.blocks.values() {
-                for i in b.bases.keys() {
-                    let (lo, hi) = b.hulls[i];
-                    if is_ram(lo) {
-                        see(lo, Some(ram_canon(hi)));
-                    }
-                }
-            }
-        }
-        for (l, e) in ext {
-            if let Some(hi) = e
-                && starts.contains(&l)
-            {
-                starts.insert((hi + 4) & !3);
-            }
-        }
-    }
+    // The top of IWRAM is the BIOS's: the IRQ and supervisor stacks and
+    // its own words (the IRQ flags at 0x03007ff8, the vector at
+    // 0x03007ffc), from 0x03007f00 up, where the user stack starts and
+    // grows down. No array of the program's lies there, so the last one
+    // it indexes doesn't run through them.
+    starts.insert(BIOS_RAM);
     let v: Vec<u32> = starts.into_iter().collect();
     v.iter()
         .enumerate()
@@ -1347,6 +1311,18 @@ fn ram_parts(fns: &[FnIn]) -> BTreeMap<u32, u32> {
         })
         .collect()
 }
+
+/// The word the BIOS's IRQ stub calls through (0x03fffffc, as the
+/// program writes it, is its mirror): a function stored there has a
+/// caller the run doesn't see. One put there through a pointer the run
+/// can't place, or by a BIOS copy, isn't found so; its registers at
+/// entry are the interrupted code's, which a handler doesn't read.
+const IRQ_VECTOR: u32 = 0x0300_7ffc;
+
+/// Where the BIOS's part of IWRAM starts: its stacks and its words, the
+/// IRQ flags and vector among them. The user stack starts here and grows
+/// down.
+const BIOS_RAM: u32 = 0x0300_7f00;
 
 /// The end of the RAM `a` is in.
 fn ram_top(a: u32) -> u32 {
@@ -1458,6 +1434,20 @@ fn obj_cell(o: u32) -> u32 {
 fn in_cell(o: u32) -> u32 {
     obj_cell(o) + 0x0800_0000
 }
+
+/// Whether cell `k` is an [`in_cell`]: a copy of constant addresses'
+/// cells, which a read of every cell holds already, and so no part of
+/// "what was stored somewhere in an object" ([`G::objs_all`]). (Counted
+/// there, every store to a global reran each function that read every
+/// object's cell: 13,000 of Emerald's 15,000 a round.)
+fn is_in_cell(k: u32) -> bool {
+    (0x1800_0000..HEAP_BASE).contains(&k)
+}
+
+/// The cells a read of every object's is kept by ([`Rd::range`]): the
+/// stacks', the objects' and the allocations', not the [`in_cell`]s
+/// between.
+const OBJ_CELLS: [(u32, u32); 2] = [(STACK_CELL, 0x17ff_ffff), (HEAP_BASE, u32::MAX)];
 
 /// The RAM object whose [`obj_cell`] `c` is.
 fn obj_of_cell(c: u32) -> Option<u32> {
@@ -1602,10 +1592,14 @@ impl Val {
                 }
                 Tok::Num(_) => self.unk,
                 Tok::Ref {
-                    src: Src::Obj(_, w),
+                    src: Src::Obj(k, w),
                     xf,
                 } => self.toks.contains(&Tok::Ref {
-                    src: Src::Objs(w),
+                    src: if is_in_cell(k) {
+                        Src::Cells(w)
+                    } else {
+                        Src::Objs(w)
+                    },
                     xf,
                 }),
                 Tok::Rom(_) | Tok::RomFrom(_) | Tok::RomStep(..) | Tok::RomDull
@@ -1759,6 +1753,14 @@ impl Val {
                 .collect();
             if !objs.is_empty() {
                 let all = |t: Tok| match t {
+                    // (A copy of constant addresses' cells: every cell's.)
+                    Tok::Ref {
+                        src: Src::Obj(k, w),
+                        xf,
+                    } if is_in_cell(k) => Tok::Ref {
+                        src: Src::Cells(w),
+                        xf,
+                    },
                     Tok::Ref {
                         src: Src::Obj(_, w),
                         xf,
@@ -1898,6 +1900,12 @@ impl Val {
         // value it came from put it back: on native-tasks three entries
         // changed so every round, and the run never settled
         // (`native/fnref-ram-pointers`). [`Val::takes_in`] agrees.
+        // (An exact one there, one more, is a function's key where
+        // hand-written code makes a Thumb address of a label. Past
+        // [`ROMS`] of them the widening above folds them all the same,
+        // with the switch off too; marking the value as holding a dropped
+        // address here left 8 of Metroid's 70 complete callee sets
+        // complete.)
         if dull_now && ram {
             let exact: Vec<Tok> = self
                 .toks
@@ -2801,7 +2809,9 @@ impl G {
     /// stack's cell, as it reads every cell: the [`Tok::Ref`] and the
     /// read's flags.
     fn read_objs(&mut self, w: u8, into: &mut Val) {
-        self.rd.range(STACK_CELL, u32::MAX);
+        for (lo, hi) in OBJ_CELLS {
+            self.rd.range(lo, hi);
+        }
         let i = w as usize;
         if self.objs_reads[i].is_none() {
             let mut v = self.objs_raw[i].clone();
@@ -3016,7 +3026,7 @@ impl G {
                         .or_default()
                         .extend(new.iter().copied());
                     for &(t, sw) in &new {
-                        if self.objs_all.insert((t, sw)) {
+                        if !is_in_cell(a) && self.objs_all.insert((t, sw)) {
                             self.log_total += 1;
                             self.mem_log.entry(OBJS).or_default().push((t, sw));
                             self.objs_reads = Default::default();
@@ -3150,10 +3160,13 @@ impl G {
             self.rd.pile |= e.pile;
             self.rd.all_cells |= e.cells;
             for &k in &e.objs {
-                self.rd.range(
-                    if k == OBJS { STACK_CELL } else { k },
-                    if k == OBJS { u32::MAX } else { k },
-                );
+                if k == OBJS {
+                    for (lo, hi) in OBJ_CELLS {
+                        self.rd.range(lo, hi);
+                    }
+                } else {
+                    self.rd.range(k, k);
+                }
             }
             self.rd.large |= e.large;
             return e.v.clone();
@@ -3189,10 +3202,13 @@ impl G {
         self.rd.pile |= e.pile;
         self.rd.all_cells |= e.cells;
         for &k in &e.objs {
-            self.rd.range(
-                if k == OBJS { STACK_CELL } else { k },
-                if k == OBJS { u32::MAX } else { k },
-            );
+            if k == OBJS {
+                for (lo, hi) in OBJ_CELLS {
+                    self.rd.range(lo, hi);
+                }
+            } else {
+                self.rd.range(k, k);
+            }
         }
         self.rd.large |= e.large;
         let v = e.v.clone();
@@ -4734,8 +4750,29 @@ impl Run<'_, '_> {
                     .flat_map(|&x| ys.iter().map(move |&y| (x, y)))
                     .collect()
             };
-        // (More than one value on a side: an amount that varies.)
-        let varying = xs.len() > 1 || ys.len() > 1;
+        // Whether a side's amount varies (more than one value: a loop's
+        // index), or its RAM addresses are a walk through one object
+        // (several, all in it). One pointer of several plus one constant
+        // is a field's address, and stays exact.
+        let walk = |ps: &[Option<Tok>]| {
+            let mut os = ps.iter().filter_map(|t| match t {
+                Some(Tok::Num(c)) if is_ram(*c) => Some(ram_obj(*c).0),
+                _ => None,
+            });
+            let first = os.next();
+            let mut n = 1;
+            first.is_some_and(|o| {
+                os.all(|x| {
+                    n += 1;
+                    x == o
+                }) && n > 1
+            })
+        };
+        let ram = ram_on();
+        let varies = [
+            ram && (ys.len() > 1 || walk(&xs)),
+            ram && (xs.len() > 1 || walk(&ys)),
+        ];
         // Gathered, and added at the end (a large set's one at a time was
         // most of a large game's run), as the holes of functions' tokens.
         let mut toks = Vec::new();
@@ -4747,13 +4784,13 @@ impl Run<'_, '_> {
                     // that varies (a loop's index or walked pointer, not
                     // one field's offset): somewhere in its object, as an
                     // index stays in its array.
-                    R::T(Tok::Num(_)) if varying && left_object(op, x, y).is_some() => {
-                        toks.push(left_object(op, x, y).expect("some"));
-                    }
-                    R::T(Tok::Num(c)) => {
-                        let t = self.classify(c, site);
-                        toks.push(t);
-                    }
+                    R::T(Tok::Num(c)) => match left_object(self.img, op, x, y) {
+                        Some((t, on_x)) if varies[usize::from(!on_x)] => toks.push(t),
+                        _ => {
+                            let t = self.classify(c, site);
+                            toks.push(t);
+                        }
+                    },
                     R::T(
                         t @ Tok::Fn {
                             form: Form::Cmp, ..
@@ -6176,10 +6213,12 @@ impl Run<'_, '_> {
         }
         if !complete {
             self.g.rd.incomplete = true;
-            if !self.g.unseen_calls {
+            // (With the RAM pointers and calls that wait: from now on
+            // every address-taken function has callers the run can't
+            // see, [`follow_live`].)
+            if !self.g.unseen_calls && self.g.defer && ram_on() {
                 self.g.unseen_calls = true;
                 self.g.dirty_loose = true;
-                self.g.mark(true);
             }
             self.g
                 .watch_regs(args, |r| format!("passed in r{r} to every loose function"));
@@ -6583,25 +6622,27 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>, steps: [u
 }
 
 /// `x op y` of a RAM address and a number that leaves the address's RAM
-/// object ([`ram_parts`]): a pointer somewhere in that object.
-fn left_object(op: BinOp, x: Option<Tok>, y: Option<Tok>) -> Option<Tok> {
+/// object ([`ram_parts`]) for another's: a pointer somewhere in the
+/// address's object, and whether the address was `x`. (A result outside
+/// RAM is two values' tokens paired, not a pointer moved: a number.)
+fn left_object(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>) -> Option<(Tok, bool)> {
     if !ram_on() {
         return None;
     }
-    let (p, r) = match (op, x, y) {
+    let (p, r, on_x) = match (op, x, y) {
         (BinOp::Add, Some(Tok::Num(p)), Some(Tok::Num(k))) if is_ram(p) && !is_ram(k) => {
-            (p, p.wrapping_add(k))
+            (p, p.wrapping_add(k), true)
         }
         (BinOp::Add, Some(Tok::Num(k)), Some(Tok::Num(p))) if is_ram(p) && !is_ram(k) => {
-            (p, p.wrapping_add(k))
+            (p, p.wrapping_add(k), false)
         }
         (BinOp::Sub, Some(Tok::Num(p)), Some(Tok::Num(k))) if is_ram(p) && !is_ram(k) => {
-            (p, p.wrapping_sub(k))
+            (p, p.wrapping_sub(k), true)
         }
         _ => return None,
     };
     let o = ram_obj(p).0;
-    (!is_ram(r) || r >> 24 != p >> 24 || ram_obj(r).0 != o).then_some(Tok::Ram(o))
+    (is_ram(r) && img.word(r).is_none() && ram_obj(r).0 != o).then_some((Tok::Ram(o), on_x))
 }
 
 fn gcd(a: u32, b: u32) -> u32 {
@@ -7295,7 +7336,7 @@ fn follow_live(
                 // parameters were unknowns and pointers anywhere, so a
                 // callback given `&gObjs[i]` read every global.
                 let vector = |g: &G| {
-                    g.cells.get(&0x0300_7ffc).is_some_and(|m| {
+                    g.cells.get(&IRQ_VECTOR).is_some_and(|m| {
                         m.iter()
                             .any(|(t, _)| matches!(t, Tok::Fn { key, .. } if *key == f.entry))
                     })
@@ -7458,6 +7499,16 @@ fn follow_live(
         let mut pile_w = 0u8;
         let mut cells_w = 0u8;
         let cells = std::mem::take(&mut g.cells_changed);
+        // The IRQ vector's function is called by the BIOS: one stored
+        // there now runs again, as that ([`IRQ_VECTOR`]).
+        if cells.contains(&IRQ_VECTOR)
+            && let Some(m) = g.cells.get(&IRQ_VECTOR)
+        {
+            dirty.extend(m.iter().filter_map(|(t, _)| match t {
+                Tok::Fn { key, .. } => Some(*key),
+                _ => None,
+            }));
+        }
         if std::mem::take(&mut g.pile_changed) || !cells.is_empty() {
             let now = snap(&mut g);
             for (i, w) in [1u8, 2, 4].into_iter().enumerate() {
