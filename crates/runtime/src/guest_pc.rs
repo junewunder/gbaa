@@ -1,7 +1,10 @@
 //! The guest pc a lifted program last reached (unit
 //! `native/first-stop-guest-pc`): compiled code keeps no pc, so each block
 //! a lift prints (`codegen::native`) starts with [`set`] of its guest
-//! address, the key of the block (bit 0 set for Thumb). A program that
+//! address, the key of the block (bit 0 set for Thumb), through the lifted
+//! crate's `pc`, which calls it only with the crate's `guest-pc` feature
+//! (`just lift`'s and the checks' builds; a plain build sets none, unit
+//! `native/lift-one-entry`). A program that
 //! stops (a panic, its time limit) says where with [`get`] in its stop
 //! line (`native_record::stop`). It names the block, not the instruction
 //! in it: one relaxed store per block is the whole cost. A hand-written

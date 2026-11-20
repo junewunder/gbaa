@@ -1138,6 +1138,16 @@ fn flash_call(g: &mut Game, k: u32, a: [u32; 4]) -> Option<[u32; 4]> {
     Some([r0, a[1], a[2], a[3]])
 }
 
+/// The block at guest address `k` is entered: `runtime::guest_pc::set`,
+/// for a stop to name, in a build with the crate's `guest-pc` feature
+/// (`just lift`'s and the checks'); nothing in a plain build.
+#[inline(always)]
+pub fn pc(k: u32) {
+    #[cfg(feature = "guest-pc")]
+    runtime::guest_pc::set(k);
+    let _ = k;
+}
+
 /// A lifted function's four-register form (`a_<key>` if shaped): sp, r0-r3 in; r0-r3 out.
 pub type Fn = fn(&mut Game, u32, [u32; 4]) -> Result<[u32; 4], Exit>;
 
