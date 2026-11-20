@@ -61,18 +61,18 @@
 //! bounds it to ROM, the words there (to the object's end, where the
 //! bounds start at a literal the function loads: a table read from its
 //! start), and where it bounds it to RAM, those cells and objects.
-//! Three bounds keep that from costing more than it tells
-//! (`native/fnref-ram-cost`): a value with pointers into more than
-//! [`OBJS_MAX`] objects holds "somewhere in some object" ([`ANYOBJ`]), a load
-//! through pointers into more than [`OBJS_READ`] reads every object's
-//! cell as one read, and more than [`OBJ_REFS`] reads of single objects'
-//! cells in a value are reads of every object's.
 //! (`native/fnref-ram-pointers`; with `GBAA_FNREF_RAM` set, [`ram_on`].
 //! Off, the default, there are no objects and no stacks' cell: an
 //! escaping slot or a stack argument is the pile's, and a load through a
 //! value the run can't place, or a ROM pointer "from here on" stored
 //! through, reads or writes the pile and every cell, or the cells the
-//! value sets bound it to.) Interprocedural: a call passes r0-r3 to its callee's entry
+//! value sets bound it to.) Three bounds keep the objects from costing
+//! more than they tell (`native/fnref-ram-cost`): a value with pointers
+//! into more than [`OBJS_MAX`] objects holds "somewhere in some object"
+//! ([`ANYOBJ`]), a load through pointers into more than [`OBJS_READ`]
+//! reads every object's cell as one read, and more than [`OBJ_REFS`]
+//! reads of single objects' cells in a value are reads of every
+//! object's. Interprocedural: a call passes r0-r3 to its callee's entry
 //! and takes back what its returns hold; a tail call or a fall passes
 //! every register, and so does a call to a function that may take r4-r11
 //! from its callers or through a pointer the holes file's `[[takes]]`
@@ -840,7 +840,9 @@ fn heap_off(s: u32, k: u32, d: i64) -> Tok {
 /// through a pointer into an object reads with that object's
 /// (`native/fnref-ram-cost`).
 const ANYOBJ: Tok = Tok::Ram(3);
-const ANYOBJ_CELL: u32 = 0x0fff_ffe0;
+/// (Above [`STACK_CELL`]: a read of every object's cell is kept by the
+/// cells from there up, [`G::read_objs`].)
+const ANYOBJ_CELL: u32 = 0x0fff_fff8;
 /// More RAM objects than this pointed into by one value: somewhere in
 /// some object ([`ANYOBJ`]). A parameter every caller passes its own
 /// global to held dozens, each stored through and read through in turn.
@@ -1624,7 +1626,8 @@ impl Val {
         // Pointers into more objects than [`OBJS_MAX`], or any beside
         // [`ANYOBJ`]: somewhere in some object, which takes in every
         // exact RAM address too.
-        if ram && objs {
+        // (Also those the block above just made of exact addresses.)
+        if ram && (objs || rams > RAMS) {
             let n = self.toks.range(Tok::Ram(4)..=Tok::Ram(u32::MAX)).count();
             let any = self.toks.contains(&ANYOBJ);
             if n > OBJS_MAX || any && n > 0 {
@@ -2519,6 +2522,9 @@ impl G {
     fn read_loose(&mut self, w: u8, into: &mut Val) {
         self.read_cells(w, into);
         self.read_stack(w, into);
+        // (What was stored through a pointer into some object may be in
+        // a cell: an exact address beside [`ANYOBJ`] is that.)
+        self.read_obj(ANYOBJ_CELL, w, into);
         if !self.heap_sites.is_empty() {
             self.read_objs(w, into);
         }
@@ -6592,6 +6598,9 @@ fn via(r: Option<Tok>) -> String {
                     format!("a bounded ROM read w{w} of {lo:#010x}..={hi:#010x}")
                 }
                 Src::Obj(STACK_CELL, w) => format!("a read w{w} of the stacks' cell"),
+                Src::Obj(ANYOBJ_CELL, w) => {
+                    format!("a read w{w} of what was stored somewhere in some RAM object")
+                }
                 Src::Obj(k, w) => format!(
                     "a read w{w} of what was stored somewhere in the RAM object at {:#010x}",
                     obj_of_cell(k).unwrap_or(k)

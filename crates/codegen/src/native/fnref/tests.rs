@@ -2679,6 +2679,22 @@ fn pointers_into_many_ram_objects_are_some_objects() {
     assert_eq!(v.toks.iter().collect::<Vec<_>>(), [&STACK, &ANYOBJ]);
     assert!(v.takes_in(Tok::Ram(0x0300_0100)) && v.takes_in(Tok::Num(0x0200_0000)));
     assert!(!v.takes_in(LOOSE));
+    // Capped again it is the same, and one more object beside it is it.
+    let was = v.clone();
+    v.cap();
+    assert_eq!(v, was);
+    v.toks.insert(Tok::Ram(0x0300_7000));
+    v.cap();
+    assert_eq!(v, was);
+    // Exact addresses in more objects than the bound, with no pointer
+    // into an object yet: the same in one widening.
+    let mut v = Val::default();
+    v.toks
+        .extend((0..=OBJS_MAX as u32).map(|i| Tok::Num(0x0200_0000 + i * 0x1_0000)));
+    v.cap();
+    let once = v.clone();
+    v.cap();
+    assert_eq!(v, once);
     RAM_ON.with(|c| c.set(false));
 }
 
@@ -2713,31 +2729,44 @@ fn many_reads_of_single_objects_are_one_of_every_object() {
 }
 
 #[test]
-fn a_store_through_some_objects_pointer_is_read_at_a_constant_address() {
-    // A pointer into more objects than the bound, stored through: a load
-    // at a constant address in any of them reads it.
-    let e = 0x0800_1001;
-    let mut a = B::default();
-    let i = a.get(1);
-    let mut p = None;
-    for k in 0..=OBJS_MAX as u32 {
-        let lit = a.k(0x0300_0200 + k * 0x400);
-        let x = a.bin(BinOp::Add, lit, i);
-        p = Some(match p {
-            None => x,
-            Some(q) => {
-                let c = a.op(Op::GetFlag(Flag::Z));
-                a.op(Op::Select { c, a: q, b: x })
-            }
-        });
-    }
-    let f = a.pool(POOL, F);
-    a.st(Width::Word, p.unwrap(), f);
-    let store = (e, vec![(e, a.end(None, Edge::Return))]);
-    let mut b = B::default();
-    let c = b.k(0x0300_0a00);
-    let t = b.ld(Width::Word, c);
-    let f = run_ram(&[store, calling(0x0800_2001, b, t)]);
+fn a_store_through_some_objects_pointer_is_read_in_any_object() {
+    // `n` arrays, each indexed from its start and so an object, and a
+    // pointer that may be into any of them, stored through; then a load
+    // at a constant address in one more array, which the pointer isn't
+    // into.
+    let arr = |k: u32| 0x0300_0200 + k * 0x400;
+    let flow = |n: u32| {
+        let e = 0x0800_1001;
+        let mut a = B::default();
+        let five = a.k(5);
+        let mut p = None;
+        for k in 0..n {
+            let x = indexed(&mut a, 0x0800_0420 + 4 * k, arr(k), 2, 3, 0);
+            a.st(Width::Word, x, five);
+            p = Some(match p {
+                None => x,
+                Some(q) => {
+                    let c = a.op(Op::GetFlag(Flag::Z));
+                    a.op(Op::Select { c, a: q, b: x })
+                }
+            });
+        }
+        let f = a.pool(POOL, F);
+        a.st(Width::Word, p.unwrap(), f);
+        let y = indexed(&mut a, 0x0800_0480, arr(12), 2, 3, 0);
+        a.st(Width::Word, y, five);
+        let store = (e, vec![(e, a.end(None, Edge::Return))]);
+        let mut b = B::default();
+        let c = b.k(arr(12) + 0x10);
+        let t = b.ld(Width::Word, c);
+        run_ram(&[store, calling(0x0800_2001, b, t)])
+    };
+    // Into as many objects as the bound keeps: each one's own cell, which
+    // a load in another object doesn't read.
+    let f = flow(OBJS_MAX as u32);
+    assert!(site(&f).callees.is_empty(), "{f:?}");
+    // Into one more: somewhere in some object, read in every object.
+    let f = flow(OBJS_MAX as u32 + 1);
     assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
 }
 
@@ -2754,4 +2783,11 @@ fn a_function_s_read_ranges_are_kept_once() {
     rd.settle();
     // Those inside another are left out.
     assert_eq!(rd.ranges, [(0, 100), (200, 200)]);
+    // Two from one start: the longer; and one to the top stays.
+    let mut rd = Rd::default();
+    for r in [(8, 9), (8, 20), (8, 12), (30, u32::MAX), (40, u32::MAX)] {
+        rd.range(r.0, r.1);
+    }
+    rd.settle();
+    assert_eq!(rd.ranges, [(8, 20), (30, u32::MAX)]);
 }
