@@ -17,7 +17,8 @@
 //!    (`missing`, `force_code`); the overlays and the holes file's copies;
 //!    one `Code` per context (`code`: functions, summaries, frames); RAM
 //!    globals carved (`const_access`, `computed_ram`, then
-//!    [`globals::Globals::carve`]); shapes (`shapes_of`); the
+//!    [`globals::Globals::carve`]); ROM's objects (`computed_rom`, then
+//!    [`rom_data::RomData::carve`]); shapes (`shapes_of`); the
 //!    function-address flow (`fn_ins`, `fn_flow`, `FnImage`, `literal`)
 //!    and the heap's ([`heap::follow`]); each
 //!    function printed (a stand-in's text, else `FnPrinter::print`);
@@ -45,7 +46,8 @@
 //! Elsewhere: what each function's parameters and results are,
 //! [`shape`]; frames, escaping slots and which become locals, [`frame`];
 //! function addresses and callee sets, [`fnref`]; RAM's globals, `pin`
-//! and `ix`, both layouts, [`globals`]; heap pointers as `Ref<T>`, the
+//! and `ix`, both layouts, [`globals`]; ROM's objects as typed statics,
+//! the prelude's `rom_at` and `rix`, [`rom_data`]; heap pointers as `Ref<T>`, the
 //! prelude's `Game::at`, [`heap`]; accesses as the names files' named
 //! fields, [`fields`]; metric names and bars,
 //! [`metrics`]; the crate's files, [`modules`]; functions and data by the
@@ -211,12 +213,14 @@ pub mod metrics;
 pub mod modules;
 pub mod named;
 pub mod narrow;
+pub mod rom_data;
 pub mod shape;
 pub mod switch;
 pub mod unread;
 
 use globals::{Globals, Layout, Obj, Place};
 use metrics::{Metrics, Where};
+use rom_data::RomData;
 use shape::{Shape, Shapes};
 
 /// What starts a comment giving the text a constant points at
@@ -393,6 +397,13 @@ pub struct Holes {
     /// stage B's metrics, and on a game it doesn't settle in a session
     /// (Metroid: 68 s a round, rounds growing). `None`: followed.
     pub skip_fn_flow: Option<String>,
+    /// The program's allocators, by key (`allocators = [0x…]` in the
+    /// holes file; unit `native/fnref-heap-sites`): functions that return
+    /// a pointer to memory nothing else points to yet (`malloc`, a
+    /// wrapper that zeroes it). With `GBAA_FNREF_HEAP` set the function
+    /// flow gives each direct call of one an object of its own
+    /// ([`fnref::heap_env`]); else the list isn't looked at.
+    pub allocators: BTreeSet<u32>,
     /// Find the hard holes only (`gbaa-lift --holes-only`; the hole
     /// report's lift, native/holes-match-lift): no heap pointers, no
     /// modules, and unless [`Holes::holes_flow`], no function-address
@@ -447,7 +458,7 @@ impl Holes {
     /// digest }` for [`Holes::checks`]), `[[jump]] at = 0x…, targets = [0x…], why = "…"`,
     /// `[[takes]]` ([`Holes::takes`]), `[[copy]]` ([`Holes::copies_seen`]),
     /// `[[stack]]` ([`Holes::stacks`]), and at the top, `skip_fn_flow =
-    /// "why"`.
+    /// "why"` and `allocators = [0x…]` ([`Holes::allocators`]).
     pub fn parse(text: &str) -> Result<Holes, String> {
         let t: toml::Table = text.parse().map_err(|e| format!("{e}"))?;
         let mut h = Holes::default();
@@ -466,6 +477,13 @@ impl Holes {
             if k == "skip_fn_flow" {
                 let why = v.as_str().ok_or("skip_fn_flow: not a string (why)")?;
                 h.skip_fn_flow = Some(why.to_string());
+                continue;
+            }
+            if k == "allocators" {
+                let list = v.as_array().ok_or("allocators: not a list of keys")?;
+                for e in list {
+                    h.allocators.insert(int(e, "allocators")?);
+                }
                 continue;
             }
             let list = v.as_array().ok_or(format!("{k}: not a list of tables"))?;
@@ -955,6 +973,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let mut ram = Vec::new();
     let mut konst = Vec::new();
     let mut ranges = Vec::new();
+    let mut rom_ranges = Vec::new();
     for c in &codes {
         for f in c
             .funcs
@@ -977,12 +996,17 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                         } else {
                             ranges.push((lo, hi + w, w));
                         }
+                    } else if let Some((lo, hi, w)) = computed_rom(&c.ctx, insts, &inst.op, at) {
+                        rom_ranges.push((lo, hi + w, w));
                     }
                 }
             }
         }
     }
     let globals = Globals::carve(&ram, &ranges, &holes.names);
+    // ROM's objects: what the computed loads the value sets bound to ROM
+    // reach (native/rom-data-statics).
+    let rom_data = RomData::carve(&rom_ranges, rom.len() as u32);
     let typed_line = holes.types.as_deref().map(|t| typed_fields(t, &konst));
     let flow_ins: Vec<FlowIn> = codes
         .iter()
@@ -1007,7 +1031,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     };
     let fnrefs = match &holes.skip_fn_flow {
         None if !no_flow => {
-            let (flow, words) = fn_flow(rom, &disc, &overlays, &ins, &pools, &all);
+            let (flow, words) =
+                fn_flow(rom, &disc, &overlays, &ins, &pools, &all, &holes.allocators);
             Some((flow, words, call_fn))
         }
         _ => None,
@@ -1169,6 +1194,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                         .unwrap_or_default(),
                     cur: f.entry,
                     globals: &globals,
+                    rom_data: &rom_data,
                     args: &args,
                     heap: &heap,
                     psr: psr_fns.place(f.entry),
@@ -1386,6 +1412,14 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     for &t in &soft.ref_tys {
         main.push_str(&heap.types[t].decl());
     }
+    // ROM's objects as typed statics (native/rom-data-statics): data,
+    // like the names files' types, so not in `lines`.
+    let mut rom_statics = rom_data.decls(&holes.names);
+    if !rom_statics.is_empty() {
+        rom_statics.insert_str(0, "\n/// ROM's objects the computed loads read, as views of `ROM` typed by their width.\n");
+    }
+    let rom_lines = rom_statics.lines().count();
+    main.push_str(&rom_statics);
     writeln!(main, "\npub const NAME: &str = {name:?};").unwrap();
     writeln!(
         main,
@@ -1713,11 +1747,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .sum();
     m.push(
         "lines",
-        n(all_lines - files.wiring - prelude - const_lines - type_lines - text_notes),
+        n(all_lines - files.wiring - prelude - const_lines - type_lines - rom_lines - text_notes),
     );
     m.push("text_notes", n(text_notes));
     m.push("lines_prelude", n(prelude));
     m.push("lines_types", n(type_lines));
+    m.push("rom_statics", n(rom_data.len()));
     m.push("functions", n(n_funcs));
     m.push(
         "functions_iwram",
@@ -2059,6 +2094,7 @@ fn fn_flow(
     ins: &[fnref::FnIn],
     pools: &BTreeSet<u32>,
     all: &BTreeSet<u32>,
+    allocs: &BTreeSet<u32>,
 ) -> (fnref::Flow, BTreeMap<u32, (u32, bool)>) {
     // Every function word in ROM that isn't an instruction (of the ROM's
     // code, or an IWRAM copy's).
@@ -2089,7 +2125,7 @@ fn fn_flow(
         .filter(|(src, _, _)| !overlays.iter().any(|o| o.src == *src))
         .collect();
     let img = FnImage { rom, all, disc };
-    (fnref::follow(ins, &img, &copies), words)
+    (fnref::follow(ins, &img, &copies, allocs), words)
 }
 
 /// Every context's functions as the flows take them ([`fnref::FnIn`]),
@@ -2884,6 +2920,8 @@ struct FnPrinter<'a, 'b> {
     cur: u32,
     /// RAM's typed globals.
     globals: &'a Globals,
+    /// ROM's objects read at computed addresses, as typed statics.
+    rom_data: &'a RomData,
     /// What each `call_fn` call with a complete callee set passes and
     /// takes back ([`call_fn_args`]), by its address.
     args: &'a Args,
@@ -4305,6 +4343,11 @@ impl FnPrinter<'_, '_> {
                 if typed[i].is_some() || objs[i].is_some() {
                     return None;
                 }
+                // A load from one of ROM's statics indexes it instead
+                // (native/rom-data-statics).
+                if self.rom_static(insts, &inst.op, pc).is_some() {
+                    return None;
+                }
                 let heap = (self.vsa_where(insts, addr, pc) == Where::Unknown)
                     .then(|| self.heap.access.get(&(self.f.entry, self.cur, i)).copied())
                     .flatten();
@@ -4683,6 +4726,7 @@ impl FnPrinter<'_, '_> {
                     );
                 }
                 Op::Load { width, addr } => {
+                    let mut rom = false;
                     let (f, m) = match width {
                         Width::Byte => ("ld8", ""),
                         Width::Half => ("ld16", " & !1"),
@@ -4700,7 +4744,13 @@ impl FnPrinter<'_, '_> {
                             Some((b, c)) => self.heap.load(r.f, &self.val(b), r.f.off - c),
                             None => self.heap.load(r.f, &self.val(addr), r.f.off),
                         },
-                        (None, None, None) => format!("{f}(g, {}{m})", self.val(addr)),
+                        (None, None, None) => match self.rom_static(insts, &inst.op, at) {
+                            Some(o) => {
+                                rom = true;
+                                o.load(&format!("{}{m}", self.val(addr)))
+                            }
+                            None => format!("{f}(g, {}{m})", self.val(addr)),
+                        },
                     };
                     let e = match self.local(i) {
                         Some((l, d, n)) => {
@@ -4721,7 +4771,8 @@ impl FnPrinter<'_, '_> {
                                 at,
                                 i,
                                 false,
-                                typed_as(&typed[i], &objs[i], refs[i].is_some_and(|r| !r.named)),
+                                typed_as(&typed[i], &objs[i], refs[i].is_some_and(|r| !r.named))
+                                    .or(rom.then_some(Where::RomStatic)),
                             );
                             self.soft.named_unknown +=
                                 u64::from(w == Where::Unknown && refs[i].is_some_and(|r| r.named));
@@ -4955,6 +5006,13 @@ impl FnPrinter<'_, '_> {
             self.soft.sp_slots[k] += 1;
         }
         w
+    }
+
+    /// The ROM static a load reads ([`rom_data`]), if the value sets bound
+    /// it to one.
+    fn rom_static(&self, insts: &[Inst], op: &Op, at: u32) -> Option<&rom_data::RomObj> {
+        let (lo, hi, w) = computed_rom(self.ctx, insts, op, at)?;
+        self.rom_data.object(lo, hi, w)
     }
 
     /// Where an access by the instruction at `at` is, untyped: a constant
@@ -5878,7 +5936,11 @@ impl FnPrinter<'_, '_> {
                     let w = typed_as(&typed[i], &objs[i], refs[i].is_some())
                         .unwrap_or_else(|| self.vsa_where(insts, addr, at));
                     q[i] = match w {
-                        Where::Global | Where::Object | Where::Ref | Where::Sp => true,
+                        Where::Global
+                        | Where::Object
+                        | Where::Ref
+                        | Where::RomStatic
+                        | Where::Sp => true,
                         Where::Const(r) | Where::Computed(r) => quiet_region(r),
                         Where::Unknown => false,
                     };
@@ -6290,6 +6352,26 @@ fn computed_ram(ctx: &Ctx, insts: &[Inst], op: &Op, at: u32) -> Option<(u32, u32
     (o_hi >= o_lo && o_hi - o_lo == hi - lo).then_some((o_lo, o_hi, w))
 }
 
+/// A load whose address isn't a constant in its block but which the value
+/// sets bound to ROM, by the instruction at `at`: its lowest and highest
+/// address (aligned as the load aligns them) and its width in bytes
+/// ([`rom_data`], native/rom-data-statics).
+fn computed_rom(ctx: &Ctx, insts: &[Inst], op: &Op, at: u32) -> Option<(u32, u32, u32)> {
+    let Op::Load { width, addr } = *op else {
+        return None;
+    };
+    if konst(insts, addr).is_some() {
+        return None;
+    }
+    let x = ctx.disc.rec.accesses.get(&at)?;
+    let (lo, hi) = x.hull.filter(|_| !x.sp && !x.top)?;
+    if metrics::region_of(lo, hi) != Some(2) {
+        return None;
+    }
+    let w = bytes(width);
+    Some((lo & !(w - 1), hi & !(w - 1), w))
+}
+
 /// The values of a block's address arithmetic (constants and the ops
 /// [`konst`] folds) that nothing uses but the accesses `typed` prints as
 /// fields, which don't print their address; and the loads from constant
@@ -6341,13 +6423,16 @@ fn dead_addresses(insts: &[Inst], typed: &[Option<Place>]) -> Vec<bool> {
 /// ([`complete_sets`]), for [`crate::saves::summarize_sets`]. `sums` are
 /// the summaries the frames need ([`frame::of_code`]); `gbaa-recompile
 /// --summaries` runs it on Emerald. The lift runs it over every context
-/// with the stand-ins' code, so its sets can differ.
+/// with the stand-ins' code, so its sets can differ. `allocs`: the
+/// program's allocators ([`Holes::allocators`], which this run has no
+/// holes file to read from).
 pub fn callee_sets(
     rom: &[u8],
     disc: &Discovery,
     ctx: &Ctx,
     funcs: &[Func],
     sums: &Summaries,
+    allocs: &BTreeSet<u32>,
 ) -> (fnref::Flow, Sets) {
     let none = BTreeSet::new();
     let frames = frame::of_code(ctx, funcs, sums, &none);
@@ -6361,7 +6446,7 @@ pub fn callee_sets(
         sums,
     }];
     let (ins, pools, _) = fn_ins(&ins, &all, &none);
-    let (flow, _) = fn_flow(rom, disc, &overlays, &ins, &pools, &all);
+    let (flow, _) = fn_flow(rom, disc, &overlays, &ins, &pools, &all, allocs);
     let sets = complete_sets(&flow);
     (flow, sets)
 }
@@ -7649,6 +7734,10 @@ why = "a table"
         let h = Holes::parse("skip_fn_flow = \"too slow\"\n").unwrap();
         assert_eq!(h.skip_fn_flow.as_deref(), Some("too slow"));
         assert!(Holes::parse("skip_fn_flow = true\n").is_err());
+        // The allocators (native/fnref-heap-sites): a list of keys.
+        let h = Holes::parse("allocators = [0x08000291, 0x080002ed]\n").unwrap();
+        assert_eq!(h.allocators, BTreeSet::from([0x0800_0291, 0x0800_02ed]));
+        assert!(Holes::parse("allocators = 3\n").is_err());
     }
 
     #[test]
