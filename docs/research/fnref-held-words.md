@@ -881,9 +881,11 @@ its callees' didn't stop at a hole:
 | Metroid, proven / not | 613 / 202 | 690 / 125 |
 | Metroid, callees a complete set (of 70), widest | 50.3, 133 | 31.3, 108 |
 | Metroid, flow | 32 s, 33 rounds, 157 MB | 21 s, 39 rounds, 151 MB |
-| Emerald, flow | 557 s, 25 rounds, 1.06 GB | EMERALD_LIVE |
+| Emerald, flow | 557 s, 25 rounds, 1.06 GB | 477 to 587 s, 20 rounds, 0.97 GB |
 
-Emerald's 554 indirect calls keep 103 complete sets of 4.3 callees.
+(Emerald's were not one pair: on, 477 s with one other job running and
+587 s with two.) Emerald's 554 indirect calls keep 103 complete sets of
+4.3 callees.
 `just lift-metrics`: 0 over and 0 under, off and on: no agb or C
 program's count moves. What holds the C programs' words is the RAM
 globals (the next section but one).
