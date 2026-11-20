@@ -53,6 +53,12 @@
 //! in, a shift by a register): barred. The rest print as comparisons and
 //! bit tests over the operands.
 //!
+//! Joins (`native/lift-join-shape`): `labelled_blocks` counts the
+//! labelled blocks printed (a `break` leaves each: a join that isn't an
+//! `if`, a `match` or a loop's), and `blocks_printed_again` the times a
+//! guest block's code printed where it had already: both barred, the
+//! second at 0 on the C programs.
+//!
 //! Function words (`super::fnref`): the words of ROM outside code that hold
 //! a function's key, `fn_words_not_proven` those the flow didn't prove
 //! (barred), `fn_words_proven` the rest (no bar: it should rise).
