@@ -349,6 +349,16 @@ pub struct Holes {
     /// fails unless every `sp` outside IWRAM the play build's interpreter
     /// saw lies in one (`start..=end`, an empty stack's `sp` its end).
     pub stacks: Vec<SeenStack>,
+    /// Loads the game makes of unmapped memory (`[[open_bus]] at = 0x…,
+    /// why = "…"`, by the load's instruction address): a lookup through a
+    /// table entry that isn't a pointer, which the hardware answers with
+    /// open bus, the last prefetched opcode. Each prints 0 where the
+    /// address is at or above 0x10000000, the plain load elsewhere: the
+    /// play build's open bus at `--timing native`, the native check's
+    /// reference, whose interpreter keeps it only at the other timings and
+    /// whose compiled code never sets it. One that names no load is a hard
+    /// hole.
+    pub open_bus: BTreeMap<u32, String>,
     /// A check's planted wrong store (`gbaa-lift --plant AT`): the store
     /// of the instruction at this address stores its value plus one, which
     /// the native check must catch.
@@ -543,7 +553,8 @@ impl Holes {
     /// '''…'''` (and `lr = true` for [`Holes::lr`], `check = { seed, runs,
     /// digest }` for [`Holes::checks`]), `[[jump]] at = 0x…, targets = [0x…], why = "…"`,
     /// `[[takes]]` ([`Holes::takes`]), `[[copy]]` ([`Holes::copies_seen`]),
-    /// `[[stack]]` ([`Holes::stacks`]), and at the top, `skip_fn_flow =
+    /// `[[stack]]` ([`Holes::stacks`]), `[[open_bus]] at = 0x…, why = "…"`
+    /// ([`Holes::open_bus`]), and at the top, `skip_fn_flow =
     /// "why"` and `allocators = [0x…]` ([`Holes::allocators`]).
     pub fn parse(text: &str) -> Result<Holes, String> {
         let t: toml::Table = text.parse().map_err(|e| format!("{e}"))?;
@@ -673,6 +684,12 @@ impl Holes {
                             roots,
                             why: str_of(e, "why")?,
                         });
+                    }
+                    "open_bus" => {
+                        let at = int(e.get("at").ok_or("open_bus: missing at")?, "at")?;
+                        if h.open_bus.insert(at, str_of(e, "why")?).is_some() {
+                            return Err(format!("open_bus: {at:#010x} twice"));
+                        }
                     }
                     "stack" => {
                         let field = |f: &str| -> Result<u32, String> {
@@ -1979,6 +1996,18 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             soft.bitfield_sets, soft.bitfield_joined, soft.bitfield_arith,
         )
         .unwrap();
+    }
+    for &at in holes.open_bus.keys() {
+        if !soft.open_bus_printed.contains(&at) {
+            let h = Hole {
+                func: at,
+                at,
+                kind: HoleKind::HolesFile,
+                what: "[[open_bus]]: no load printed there".into(),
+            };
+            writeln!(report, "  {h}").unwrap();
+            hard.push(h);
+        }
     }
     if let Some(at) = holes.plant_slot
         && !soft.planted_slot
@@ -3437,6 +3466,8 @@ struct Soft {
     locals_unread: usize,
     /// The `--plant-slot` store printed.
     planted_slot: bool,
+    /// The holes file's `[[open_bus]]` loads printed.
+    open_bus_printed: BTreeSet<u32>,
     /// Conditions resting on a raw flag ([`cond::raw`]).
     raw_flag_branches: u64,
     /// Lifted functions whose summary has a hole, or that have none.
@@ -5766,6 +5797,16 @@ impl FnPrinter<'_, '_> {
                             }
                             None => format!("{f}(g, {})", self.io_addr(insts, addr, width, m)),
                         },
+                    };
+                    let mem = match self.holes.open_bus.contains_key(&at) {
+                        true => {
+                            self.soft.open_bus_printed.insert(at);
+                            format!(
+                                "{{ let a: u32 = {}{m}; if a >> 28 != 0 {{ 0 }} else {{ {f}(g, a) }} }}",
+                                self.val(addr)
+                            )
+                        }
+                        false => mem,
                     };
                     let e = match self.local(i) {
                         Some((l, d, n)) => {
@@ -9146,6 +9187,11 @@ why = "a table"
         );
         assert!(Holes::parse("[[stack]]\nstart = 0x10\nend = 0x10\nwhy = \"x\"\n").is_err());
         assert!(Holes::parse("[[stack]]\nstart = 0x10\nwhy = \"x\"\n").is_err());
+        let h = Holes::parse("[[open_bus]]\nat = 0x0803500c\nwhy = \"no room\"\n").unwrap();
+        assert_eq!(h.open_bus[&0x0803_500c], "no room");
+        assert!(Holes::parse("[[open_bus]]\nwhy = \"x\"\n").is_err());
+        let twice = "[[open_bus]]\nat = 0x10\nwhy = \"x\"\n";
+        assert!(Holes::parse(&format!("{twice}{twice}")).is_err());
         let h = Holes::parse(
             "[[takes]]\nentry = 0x08000015\nsites = [0x08000006, 0x08000020]\nwhy = \"its caller's r5\"\n",
         )
