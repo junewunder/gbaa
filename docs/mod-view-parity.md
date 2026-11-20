@@ -65,10 +65,10 @@ that adds it. The owner agreed the "Not wanted" list (2026-11-19).
 
 | The mod view | The lift today | Status |
 |---|---|---|
-| Cut chosen functions into `mods/<game>/<mod>/` with a pristine `orig/`, re-cut by three-way merge (`--cut`, `--mod`) | Stand-ins (`[[standin]]` in a holes file, `--replace FILE`), checked by `just fn-check`. No cut: an editor copies a function out of `out/` by hand | Unit: `native/lift-mod-cut` |
+| Cut chosen functions into `mods/<game>/<mod>/` with a pristine `orig/`, re-cut by three-way merge (`--cut`, `--mod`) | `gbaa-lift --cut DIR KEY...` (names allowed) writes `src/<name>.rs`, `orig/` and `replace.toml`; `--replace DIR/replace.toml` builds with it; a re-cut merges (`git merge-file`). On c-switch-agbcc an unedited cut of `tally` and `pen_update` passes the native check, a one-constant edit fails it at frame 31, and a re-cut from an older print merges with no conflict | Has it (`native/lift-mod-cut`, 2026-11-20) |
 | A call a mod adds needs no ROM address | A replacement calls any lifted function by its Rust name | Has it |
 | One command builds a mod and shows its frames beside stock | None | Unit: `native/lift-mod-run` |
-| A cut file says what its macros mean to an editor | The lift has no `at`, `ret!` or `regs!` to explain. The cut's header covers what is left | In `native/lift-mod-cut` |
+| A cut file says what its macros mean to an editor | The lift has no `at`, `ret!` or `regs!` to explain. A cut's header says what must stay as cut (each `pub fn` line's signature, `Result` or not) and what `g`, `r13`, `lN`, `vN`, `RET`, `pc(..)` and `bank_sp` are | Has it (`native/lift-mod-cut`) |
 | An agent makes a small real mod and says what hurt | Not tried on a lift | Unit: `native/lift-agent-mod` |
 | Proof the named build is the unnamed one (fn-diff, same states after names) | The native check (`route-check --native`), the per-function check (`just fn-check`), `lift-check`'s planted faults | Has it |
 

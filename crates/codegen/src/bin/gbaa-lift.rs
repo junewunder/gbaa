@@ -3,7 +3,7 @@
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT]
 //! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
-//! [--plant-reference] [--text-edit FILE]`:
+//! [--plant-reference] [--text-edit FILE] [--cut DIR [KEY]...]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
 //! stage A). Writes the whole program as a Rust crate to OUT (`Cargo.toml`,
 //! `src/`, a copy of the ROM for its data, `report.txt`, and its metrics
@@ -121,6 +121,19 @@
 //! prints those literals in place of the decoded ones: an editor's edit,
 //! made by the lifter, for a mod's check.
 //!
+//! `--cut DIR [KEY]...` (unit `native/lift-mod-cut`;
+//! `codegen::native::cut`) cuts functions KEY (hex keys, or names as the
+//! names files give them) into a mod at DIR: each one's whole printed
+//! text, names and all, to `DIR/src/<name>.rs` to edit and `DIR/orig/`
+//! as cut, and `DIR/replace.toml`, a holes file whose `[[cut]]`s
+//! `--replace DIR/replace.toml` builds the lift with (each cut in its
+//! function's place; a cut keeps the lifted signature, so a holes file's
+//! stand-in or a checked function can't be cut). With no KEY it re-cuts
+//! the mod's functions. A re-cut of an edited file three-way merges the
+//! new print into it (`git merge-file`), and fails on a conflict. The
+//! crate is written as usual. A lift with `--replace` of a cut whose
+//! `orig/` isn't what it prints says so: re-cut to merge.
+//!
 //! `--holes-only` finds the hard holes and writes nothing (OUT is
 //! ignored): no function-address flow, heap pointers or modules
 //! (`codegen::native::Holes::holes_only`, the hole report's lift), so not
@@ -144,7 +157,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--text-edit FILE]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--text-edit FILE] [--cut DIR [KEY]...]"
         );
         ExitCode::FAILURE
     };
@@ -166,8 +179,9 @@ fn main() -> ExitCode {
     let (mut interp_every, mut plant_reference) = (8, false);
     let mut layout = codegen::native::globals::Layout::Guest;
     let mut text_edit = None;
+    let (mut cut_dir, mut cut_keys): (Option<PathBuf>, Vec<String>) = (None, Vec::new());
     let hex = |s: &str| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok();
-    let mut it = rest.iter();
+    let mut it = rest.iter().peekable();
     while let Some(a) = it.next() {
         if a == "--fall-as-tail-call" {
             tail = true;
@@ -223,6 +237,16 @@ fn main() -> ExitCode {
         }
         if a == "--shadow-locals" {
             shadow = true;
+            continue;
+        }
+        if a == "--cut" {
+            let Some(d) = it.next() else {
+                return usage();
+            };
+            cut_dir = Some(PathBuf::from(d));
+            while let Some(k) = it.next_if(|k| !k.starts_with("--")) {
+                cut_keys.push(k.clone());
+            }
             continue;
         }
         // One word, so the lift check's `planted_flags` can name it.
@@ -287,7 +311,8 @@ fn main() -> ExitCode {
         None => codegen::native::Holes::default(),
     };
     // The per-function check's replacements (`--replace FILE`): its
-    // stand-ins, over the holes file's.
+    // stand-ins, over the holes file's; and a mod's cuts.
+    let mut cut_origs = std::collections::BTreeMap::new();
     if let Some(p) = &replace {
         match std::fs::read_to_string(p)
             .map_err(|e| e.to_string())
@@ -297,6 +322,24 @@ fn main() -> ExitCode {
                 holes.standins.extend(r.standins);
                 holes.checks.extend(r.checks);
                 holes.lr.extend(r.lr);
+                let sha = codegen::names::sha1_hex(&bytes);
+                if let Some(c) = r.cut_rom.filter(|c| !c.eq_ignore_ascii_case(&sha)) {
+                    eprintln!(
+                        "gbaa-lift: {}: cut from ROM {c}, not this one ({sha})",
+                        p.display()
+                    );
+                    return ExitCode::FAILURE;
+                }
+                match codegen::native::cut::read_files(p, &r.cut_files) {
+                    Ok((cuts, origs)) => {
+                        holes.cuts.extend(cuts);
+                        cut_origs = origs;
+                    }
+                    Err(e) => {
+                        eprintln!("gbaa-lift: {e}");
+                        return ExitCode::FAILURE;
+                    }
+                }
             }
             Err(e) => {
                 eprintln!("gbaa-lift: {}: {e}", p.display());
@@ -443,6 +486,53 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     }
+    // The functions to cut: KEY by key or name, else the mod's own.
+    let cut_mod = match cut_dir.as_deref().map(codegen::native::cut::CutMod::load) {
+        Some(Err(e)) => {
+            eprintln!("gbaa-lift: --cut: {e}");
+            return ExitCode::FAILURE;
+        }
+        Some(Ok(m)) => m,
+        None => None,
+    };
+    if cut_dir.is_some() {
+        if cut_keys.is_empty() {
+            holes.cut_want = cut_mod
+                .iter()
+                .flat_map(|m| m.funcs.keys().copied())
+                .collect();
+            if holes.cut_want.is_empty() {
+                eprintln!("gbaa-lift: --cut: no KEY, and no cut there to re-cut");
+                return ExitCode::FAILURE;
+            }
+        }
+        for k in &cut_keys {
+            let by_name = holes
+                .fn_names
+                .iter()
+                .find(|(_, n)| *n == k)
+                .map(|(&key, _)| key);
+            let key = by_name
+                .or_else(|| {
+                    cut_mod
+                        .as_ref()?
+                        .funcs
+                        .iter()
+                        .find(|(_, n)| *n == k)
+                        .map(|(&key, _)| key)
+                })
+                .or_else(|| hex(k.strip_prefix("f_").unwrap_or(k)));
+            match key {
+                Some(key) => {
+                    holes.cut_want.insert(key);
+                }
+                None => {
+                    eprintln!("gbaa-lift: --cut: {k}: names no function (a hex key or a name)");
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
+    }
     // Read before the lift, so a bad file fails at once.
     let bars = match &bars {
         Some(p) => match std::fs::read_to_string(p)
@@ -537,6 +627,54 @@ fn main() -> ExitCode {
     }
     print!("{}", lifted.report);
     let mut ok = true;
+    for k in codegen::native::cut::stale(&cut_origs, &lifted.cut_texts) {
+        println!(
+            "gbaa-lift: the cut of {} isn't what this lift prints: --cut its directory again to merge",
+            codegen::native::cut::name_of(&lifted.cut_texts[&k], k)
+        );
+    }
+    if let Some(dir) = &cut_dir {
+        let texts: std::collections::BTreeMap<u32, String> = lifted
+            .cut_texts
+            .iter()
+            .filter(|(k, _)| holes.cut_want.contains(k))
+            .map(|(&k, t)| (k, t.clone()))
+            .collect();
+        let commit = std::process::Command::new("git")
+            .args([
+                "-C",
+                &crates.display().to_string(),
+                "rev-parse",
+                "--short=12",
+                "HEAD",
+            ])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+        match codegen::native::cut::cut(dir, &texts, &sha, &commit) {
+            Ok(c) => {
+                println!(
+                    "gbaa-lift: cut {} functions into {} ({} fresh, {} merged)",
+                    texts.len(),
+                    dir.display(),
+                    c.fresh.len(),
+                    c.merged.len()
+                );
+                for (n, conflicts) in &c.merged {
+                    println!("  merged {n}: {conflicts} conflicts");
+                    if *conflicts > 0 {
+                        ok = false;
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("gbaa-lift: --cut: {e}");
+                ok = false;
+            }
+        }
+    }
     if !lifted.holes.is_empty() {
         eprintln!(
             "gbaa-lift: {} hard holes; the crate won't build",
