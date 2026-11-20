@@ -6523,6 +6523,7 @@ mod tests {
                 callees: [0x0800_0201].into(),
                 complete: true,
                 tail: false,
+                lost: None,
             },
         );
         assert_eq!(complete_sets(&flow).len(), 1);

@@ -176,11 +176,10 @@ build for the host.
   (56-60 per program, the owner's call), not 0:
   every complete set is the pile's ~21 address-taken functions, whose
   summaries read all four between them; it falls when
-  `native/fnref-heap-sites` narrows the sets. Emerald (656
-  disagreements from indirect calls without sets) is re-measured in
-  `native/indirect-call-args-emerald`, once the flow settles on
-  Emerald (`native/fnref-flow-emerald`; `native/fnref-flow-scale`
-  landed and wasn't enough), the owner's call to land this first.
+  `native/fnref-heap-sites` narrows the sets. On Emerald 103 of 554
+  sets are complete: disagreements from indirect calls go 656 to 601;
+  what keeps the rest incomplete is in `docs/native-port-design.md`
+  section 5 (`native/indirect-call-args-emerald`).
 
 ### 4. The stack
 

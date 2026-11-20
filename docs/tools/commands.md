@@ -634,11 +634,11 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `fnref` flow, over the ROM's code) and takes each indirect call with a
   complete callee set as calling exactly those
   (`codegen::saves::summarize_sets`; unit `native/indirect-call-args`),
-  printing the counts without the sets too. About 5 s on an agb program;
-  on Emerald (`just long start NAME --mem 4G`; 2026-11-19,
-  `native/fnref-flow-emerald`) it settles in 24 rounds: 14 to 18 minutes
-  on quack with the lanes running, 1.0 GB peak; 554 indirect calls, 103
-  with a complete callee set.
+  printing the counts without the sets too, and the incomplete sets by
+  cause (`fnref::Lost`), N of each. About 5 s on an agb program; on
+  Emerald (`just long start NAME --mem 4G`) it settles in 24 rounds: 11
+  to 18 minutes on quack, 1.1 GB; its counts are in
+  `docs/native-port-design.md` section 5.
   fn-diff's summary line gives the same count and
   how many picks call a proven function. Emerald, `just fn-diff ROM 2000
   --exact` (2026-10-27): every entered function picked, 270, 591 states,

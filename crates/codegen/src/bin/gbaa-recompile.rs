@@ -72,7 +72,8 @@
 //! KEY's summary. With `--callee-sets`, an indirect call with a complete
 //! callee set reads and leaves what its callees do
 //! ([`codegen::native::callee_sets`], [`codegen::saves::summarize_sets`];
-//! the function-address flow, which doesn't settle on a whole game yet).
+//! the function-address flow), and the incomplete sets are counted by
+//! what left them so ([`codegen::native::fnref::Lost`]), N of each.
 //!
 //! `gbaa-recompile --snapshots ROM FILE`: write to FILE the smallest
 //! structured function of each shape ([`codegen::snapshot`], `just
@@ -521,6 +522,34 @@ fn summaries(rom: &[u8], rest: &[String]) {
             indirect.len(),
             callees as f64 / complete.max(1) as f64,
         );
+        // What keeps the rest incomplete, with a sample of each (the
+        // calling function, its name where the map has one).
+        let caller: std::collections::BTreeMap<u32, u32> = plain
+            .by_entry
+            .iter()
+            .flat_map(|(&f, s)| s.indirect_sites.iter().map(move |&a| (a, f)))
+            .collect();
+        for why in codegen::native::fnref::Lost::ALL {
+            let hit: Vec<(u32, usize)> = indirect
+                .iter()
+                .filter_map(|a| {
+                    let s = flow.sites.get(a)?;
+                    (s.lost == Some(why)).then_some((*a, s.callees.len()))
+                })
+                .collect();
+            println!("  {:6}  incomplete: {}", hit.len(), why.text());
+            let step = (hit.len() / show.max(1)).max(1);
+            for (a, n) in hit.iter().step_by(step).take(show) {
+                let f = caller.get(a).copied().unwrap_or(0);
+                let name = names
+                    .as_ref()
+                    .and_then(|m| m.functions.get(&f))
+                    .map_or("", |i| i.name.as_str());
+                println!("          0x{a:08x} in 0x{f:08x} {name}: {n} callees");
+            }
+        }
+        let none = indirect.len() - with_set;
+        println!("  {none:6}  no callee set: the run never reached the call");
     } else {
         println!(
             "callee sets: not followed (--callee-sets); {} indirect calls, each taken to read r0-r3",
