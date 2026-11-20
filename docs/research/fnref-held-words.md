@@ -959,7 +959,11 @@ early rounds spread, are empty and incomplete now, and a constant equal
 to a function's address joins its function table); its bar is to be
 raised with that cause when the switches turn on. Metroid's flow: 34 s
 off, 23 s with the registers' rules, 50 s with both (51 s with the RAM
-rules alone). Nightmare, which the unit named, isn't moved: 11 of its
+rules alone). Emerald's with both: settles in 22 rounds, 1,329 s, 0.95 GB
+(557 s off, 477 to 587 with the registers' rules, 1,032 with the RAM
+rules before this unit): 2.4 times main's, which is what keeps the RAM
+switch off; most of each round is reruns for memory that changed, not
+entries (13,000 functions rerun where 700 entries changed). Nightmare, which the unit named, isn't moved: 11 of its
 5,073 words are proven either way (2,309 never read, and 53 of its 55
 call sets are incomplete), in 3.5 minutes off and 7 with both.
 
