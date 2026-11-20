@@ -205,7 +205,16 @@ fn run_bounded(
     let ram = ram_env() || FORCE_RAM.with(|c| c.get());
     let allocs = ALLOCS.with(|c| c.borrow().clone());
     let live = LEAVES.with(|c| !c.borrow().is_empty());
-    follow_live(&ins, img, &[], ram || !allocs.is_empty(), &allocs, live)
+    let named = NAMED.with(|c| c.borrow().clone());
+    follow_live(
+        &ins,
+        img,
+        &[],
+        ram || !allocs.is_empty(),
+        &allocs,
+        live,
+        &named,
+    )
 }
 
 thread_local! {
@@ -221,6 +230,11 @@ fn run_live(fns: &[Built], leaves: &[(u32, u8, u8)]) -> Flow {
     let f = run(fns);
     LEAVES.with(|c| c.borrow_mut().clear());
     f
+}
+
+thread_local! {
+    /// The named globals (start, size) a test's run is given.
+    static NAMED: std::cell::RefCell<BTreeMap<u32, u32>> = const { std::cell::RefCell::new(BTreeMap::new()) };
 }
 
 thread_local! {
@@ -3236,4 +3250,167 @@ fn one_pointer_of_several_plus_a_constant_is_exact() {
     let t = b.ld(Width::Word, x);
     let f = run_ram(&[h_in_a1_f_in_a_global(), store, calling(0x0800_2001, b, t)]);
     assert!(site(&f).callees.contains(&F), "{f:?}");
+}
+
+#[test]
+fn a_named_global_is_an_object() {
+    // One literal for everything, as GCC's section anchors have it: an
+    // array at anchor + 0x40 holds H (stored by index) and, at a constant
+    // address in it, a third function; a global at anchor + 0x20 holds F.
+    // With no names all of it is the anchor's one object, and a load
+    // through the array reads F too.
+    const ANCHOR: u32 = 0x0300_0000;
+    let fns = || {
+        let e = 0x0800_1001;
+        let mut a = B::default();
+        let x = indexed(&mut a, 0x0800_0414, ANCHOR, 2, 2, 0x40);
+        let h = a.pool(0x0800_0404, H);
+        a.st(Width::Word, x, h);
+        let lit = a.pool(0x0800_0418, ANCHOR);
+        let off = a.k(0x20);
+        let g = a.bin(BinOp::Add, lit, off);
+        let f = a.pool(POOL, F);
+        a.st(Width::Word, g, f);
+        let inside = a.k(ANCHOR + 0x48);
+        let third = a.pool(POOL_A, A);
+        a.st(Width::Word, inside, third);
+        let store = (e, vec![(e, a.end(None, Edge::Return))]);
+        let mut b = B::default();
+        let x = indexed(&mut b, 0x0800_041c, ANCHOR, 3, 2, 0x40);
+        let t = b.ld(Width::Word, x);
+        [store, calling(0x0800_2001, b, t)]
+    };
+    let f = run_ram(&fns());
+    assert_eq!(site(&f).callees, BTreeSet::from([F, H, A]), "{f:?}");
+    // Named, the array (16 bytes at anchor + 0x40) is an object of its
+    // own: what is stored in it, by index or at a constant address, and
+    // not F.
+    NAMED.with(|c| *c.borrow_mut() = BTreeMap::from([(ANCHOR + 0x20, 4), (ANCHOR + 0x40, 16)]));
+    let f = run_ram(&fns());
+    NAMED.with(|c| c.borrow_mut().clear());
+    assert_eq!(site(&f).callees, BTreeSet::from([H, A]), "{f:?}");
+}
+
+#[test]
+fn a_literal_inside_a_named_global_starts_no_object() {
+    RAM_ON.with(|c| c.set(true));
+    // A struct of 0x100 bytes at A1 with an array member the code
+    // indexes from its own literal, A1 + 0x40: one object, the struct.
+    let mut a = B::default();
+    let x = indexed(&mut a, 0x0800_0414, A1 + 0x40, 2, 2, 0);
+    let five = a.k(5);
+    a.st(Width::Word, x, five);
+    let built = a.end(None, Edge::Return);
+    let ins = [FnIn {
+        entry: 0x0800_1001,
+        blocks: BTreeMap::from([(
+            0x0800_1001,
+            FBlock {
+                insts: &built.0,
+                exits: BTreeMap::from([(built.0.len() - 1, built.1.clone())]),
+                pools: built.2.clone(),
+                hulls: BTreeMap::new(),
+                bases: BTreeMap::new(),
+            },
+        )]),
+        frame: None,
+        leaves: 0,
+        reads: 0xf,
+    }];
+    let parts = ram_parts(&ins, &BTreeMap::new());
+    assert!(parts.contains_key(&(A1 + 0x40)), "{parts:x?}");
+    let parts = ram_parts(&ins, &BTreeMap::from([(A1, 0x100)]));
+    assert_eq!(parts.get(&A1), Some(&(A1 + 0x100)), "{parts:x?}");
+    assert!(!parts.contains_key(&(A1 + 0x40)), "{parts:x?}");
+    RAM_ON.with(|c| c.set(false));
+}
+
+/// GCC's `gEffects[slot] = e`: H stored at `(anchor + r2 * 4) + 8`, the
+/// index added before the constant; and F stored in the global at the
+/// anchor.
+fn index_first_store(anchor: u32) -> Built {
+    let e = 0x0800_1001;
+    let mut a = B::default();
+    let lit = a.pool(0x0800_0414, anchor);
+    let r = a.get(2);
+    let x = a.shift(ShiftType::Lsl, r, 2);
+    let p = a.bin(BinOp::Add, lit, x);
+    let eight = a.k(8);
+    let q = a.bin(BinOp::Add, p, eight);
+    let h = a.pool(0x0800_0404, H);
+    a.st(Width::Word, q, h);
+    let lit = a.pool(0x0800_0418, anchor);
+    let f = a.pool(POOL, F);
+    a.st(Width::Word, lit, f);
+    (e, vec![(e, a.end(None, Edge::Return))])
+}
+
+#[test]
+fn an_index_added_to_the_anchor_first_is_in_the_global_at_the_offset() {
+    // H stored index first is in the global at anchor + 8 (12 bytes),
+    // not in the one at the anchor, where F is: a load of
+    // `(anchor + 8) + r3 * 4`, the constant first, reads H alone.
+    const ANCHOR: u32 = 0x0300_0000;
+    let named = || BTreeMap::from([(ANCHOR, 4), (ANCHOR + 8, 12)]);
+    let load = || {
+        let mut b = B::default();
+        let lit = b.pool(0x0800_041c, ANCHOR);
+        let eight = b.k(8);
+        let base = b.bin(BinOp::Add, lit, eight);
+        let r = b.get(3);
+        let x = b.shift(ShiftType::Lsl, r, 2);
+        let p = b.bin(BinOp::Add, base, x);
+        let t = b.ld(Width::Word, p);
+        calling(0x0800_2001, b, t)
+    };
+    NAMED.with(|c| *c.borrow_mut() = named());
+    let f = run_ram(&[index_first_store(ANCHOR), load()]);
+    assert_eq!(site(&f).callees, BTreeSet::from([H]), "{f:?}");
+    // And so does a load through the pointer another function made index
+    // first and returned.
+    let get = 0x0800_3001;
+    let mut a = B::default();
+    let lit = a.pool(0x0800_0420, ANCHOR);
+    let r = a.get(0);
+    let x = a.shift(ShiftType::Lsl, r, 2);
+    let p = a.bin(BinOp::Add, lit, x);
+    let eight = a.k(8);
+    let q = a.bin(BinOp::Add, p, eight);
+    a.set(0, q);
+    let getter = (get, vec![(get, a.end(None, Edge::Return))]);
+    let e = 0x0800_2001;
+    let mut after = B::default();
+    let p = after.get(0);
+    let t = after.ld(Width::Word, p);
+    let user = (
+        e,
+        vec![
+            (e, call_at(B::default(), get, 0x0800_0110, e + 0x10)),
+            (
+                e + 0x10,
+                after.end(
+                    Some(t),
+                    Edge::Call {
+                        target: None,
+                        ret: e + 0x20,
+                    },
+                ),
+            ),
+            (e + 0x20, B::default().end(None, Edge::Return)),
+        ],
+    );
+    let f = run_ram(&[index_first_store(ANCHOR), getter, user]);
+    NAMED.with(|c| c.borrow_mut().clear());
+    assert_eq!(site(&f).callees, BTreeSet::from([H]), "{f:?}");
+}
+
+#[test]
+fn named_globals_that_overlap_are_one_object() {
+    RAM_ON.with(|c| c.set(true));
+    let parts = ram_parts(&[], &BTreeMap::from([(A1, 8), (A1 + 4, 8), (A2, 0x7c00)]));
+    assert_eq!(parts.get(&A1), Some(&(A1 + 12)), "{parts:x?}");
+    assert!(!parts.contains_key(&(A1 + 4)), "{parts:x?}");
+    // One that ends at its RAM's end adds no object past it.
+    assert!(!parts.contains_key(&0x0300_8000), "{parts:x?}");
+    RAM_ON.with(|c| c.set(false));
 }
