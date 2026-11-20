@@ -537,6 +537,59 @@ pub(crate) fn word_note(
     }
 }
 
+/// The strings a pool word `x` of code run from ROM leads to, as
+/// [`word_note`] finds them with a text table (unit
+/// `native/lift-text-editable`): the string at `x`, or each a table of
+/// pointers at `x` leads to, with the table word that points at it and
+/// where it was found (`sFileScreenTextPointers[2] sEnglish…[0]`).
+pub(crate) fn word_texts(
+    ctx: &Ctx,
+    names: &crate::names::SourceMap,
+    x: u32,
+) -> Vec<(Option<u32>, u32, String)> {
+    use analysis::program::ROM_BASE;
+    let (Some(cm), true) = (names.text.as_ref(), ctx.base == ROM_BASE) else {
+        return Vec::new();
+    };
+    let Some(bytes) = x
+        .checked_sub(ROM_BASE)
+        .and_then(|o| ctx.rom.get(o as usize..))
+        .filter(|b| !b.is_empty())
+    else {
+        return Vec::new();
+    };
+    let code = ctx.disc.code.get(&(x & !1)).map(|c| c.evidence);
+    if names.functions.contains_key(&x) || code == Some(analysis::discovery::Evidence::Confirmed) {
+        return Vec::new();
+    }
+    let name = names.data_at(x);
+    let at = match name {
+        Some((n, 0)) => n.to_string(),
+        Some((n, off)) => format!("{n}+{off}"),
+        None => format!("0x{x:08x}"),
+    };
+    let item = name.and_then(|_| names.data.range(..=x).next_back());
+    let ty = item.and_then(|(_, d)| d.proto.as_deref());
+    let size = item.and_then(|(&k, d)| Some(d.size? as u32 - (x - k)));
+    if code.is_none() && cm.note(x, bytes, name, ty, size).is_some() {
+        return vec![(None, x, at)];
+    }
+    let size = |a: u32| names.data.get(&a).and_then(|d| d.size).map(|n| n as u32);
+    let label = |a: u32| match names.data_at(a) {
+        Some((n, 0)) => Some(n.to_string()),
+        _ => None,
+    };
+    match cm.table_texts(x, ctx.rom, &at, &size, &label) {
+        Some((head, st)) => {
+            let base = st.first().map_or(0, |s| s.0);
+            st.into_iter()
+                .map(|(w, p, _)| (Some(w), p, format!("{head}[{}]", (w - base) / 4)))
+                .collect()
+        }
+        None => Vec::new(),
+    }
+}
+
 /// The readable form's comment at a call to `target` in `gb` that passes
 /// a message number of a game that reaches its text by one
 /// ([`crate::text::Messages`]; `crates/codegen/text-tables.toml`'s

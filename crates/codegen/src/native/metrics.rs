@@ -90,7 +90,10 @@
 //!
 //! Text (`native/lift-text`): `text_notes`, the `// text: …` comments
 //! giving the text a constant points at, where the names files have a text
-//! table (no bar: it should rise; `lines` leaves them out).
+//! table (no bar: it should rise; `lines` leaves them out). Editable text
+//! (`native/lift-text-editable`): `text_statics`, the strings in the
+//! crate's `src/text.rs` (no bar; that module isn't in `lines`), and
+//! `texts_left`, those the code leads to that stay in the ROM.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -282,6 +285,7 @@ pub const UNBARRED: &[&str] = &[
     "plain_entry_bodies",
     "closed_tables",
     "text_notes",
+    "text_statics",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each

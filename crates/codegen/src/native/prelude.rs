@@ -25,12 +25,15 @@ pub const RET: u32 = 0xFFFF_FFF0;
 pub const IRQ_STACK: u32 = 0x0300_7FA0;
 
 /// The ROM, for its data (section 8: bytes where nothing is typed yet),
-/// word-aligned so that its typed statics ([`rom_at`]) can view it.
+/// word-aligned so that its typed statics ([`rom_at`]) can view it, with
+/// the game's text (`src/text.rs`) written in at build time
+/// (native/lift-text-editable): the cartridge's bytes till a text is edited.
 pub static ROM: &[u8] = &ROM_ALIGNED.0;
 
 #[repr(C, align(4))]
 struct RomBytes<B: ?Sized>(B);
-static ROM_ALIGNED: &RomBytes<[u8]> = &RomBytes(*include_bytes!("../rom.gba"));
+static ROM_ALIGNED: &RomBytes<[u8]> =
+    &RomBytes(runtime::text::patch(*include_bytes!("../rom.gba"), &text::CHARSET, text::TEXTS));
 
 #[cfg(not(target_endian = "little"))]
 compile_error!("ROM's typed statics view its little-endian bytes as they lie");
@@ -523,7 +526,12 @@ fn io_write16(g: &mut Game, o: u32, v: u32) {
 }
 
 fn rom16(o: usize) -> u32 {
-    match ROM.get(o..o + 2) {
+    // Past the ROM's end, the texts an edit made longer (`text::EXTRA`).
+    let moved = || {
+        let x = o.checked_sub(runtime::text::extra_base(ROM.len()))?;
+        text::EXTRA.get(x..x + 2)
+    };
+    match ROM.get(o..o + 2).or_else(moved) {
         Some(b) => u16::from_le_bytes([b[0], b[1]]) as u32,
         None => (o as u32 >> 1) & 0xFFFF,
     }

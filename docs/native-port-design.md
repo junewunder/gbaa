@@ -872,9 +872,15 @@ for data). Two forms:
   a `static` initialised from the ROM's bytes at build time, with pointer
   fields as `&'static` references to the other statics they point at
   (Rust statics can refer to each other): `static gMonIconTable: [&[u8];
-  N] = [&ICON_BULBASAUR, …]`. Strings are `&'static [u8]` in the game's
-  encoding (the mod view's text tables print them). Being Rust statics,
-  they stay out of `Game`: ROM is immutable and needs no handle.
+  N] = [&ICON_BULBASAUR, …]`. Being Rust statics, they stay out of
+  `Game`: ROM is immutable and needs no handle.
+- **Text, as literals** (`native/lift-text-editable`). Each string the
+  code's constants lead to that the game's text table decodes is a static
+  in the crate's `src/text.rs` (`codegen::native::text_statics`), a string
+  literal the table encodes into the ROM at build time (`runtime::text`):
+  an edit shows on screen. A longer one moves past the ROM's end, the ROM
+  words that point at it pointed there, where those are every reader; one
+  a computed load reads stays in the ROM, counted (`texts_left`).
 - **Bytes, where they aren't.** The ROM's data stays one
   `include_bytes!` (as the play build's does, `crates/desktop/src/lib.rs`)
   and a pointer into it is a `RomRef<T>`, an offset with typed views. A

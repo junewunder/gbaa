@@ -3,7 +3,7 @@
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT]
 //! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-for-loops] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
-//! [--plant-reference]`:
+//! [--plant-reference] [--text-edit FILE]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
 //! stage A). Writes the whole program as a Rust crate to OUT (`Cargo.toml`,
 //! `src/`, a copy of the ROM for its data, `report.txt`, and its metrics
@@ -105,6 +105,14 @@
 //! lift's. `--plant-reference` puts `--plant`'s store in the reference
 //! too, a planted wrong lift that only the interpreter can catch.
 //!
+//! The game's text (unit `native/lift-text-editable`, where the names
+//! files have a text table): each string the code's constants lead to is
+//! a static in `src/text.rs` (`codegen::native::text_statics`), its text a
+//! literal the build encodes into the ROM, so an edit of it shows on
+//! screen. `--text-edit FILE` (TOML, `TEXT_0840ABCD = "…"` by static name)
+//! prints those literals in place of the decoded ones: an editor's edit,
+//! made by the lifter, for a mod's check.
+//!
 //! `--holes-only` finds the hard holes and writes nothing (OUT is
 //! ignored): no function-address flow, heap pointers or modules
 //! (`codegen::native::Holes::holes_only`, the hole report's lift), so not
@@ -128,7 +136,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--text-edit FILE]"
         );
         ExitCode::FAILURE
     };
@@ -147,6 +155,7 @@ fn main() -> ExitCode {
     let (mut fn_check, mut replace, mut seed, mut runs) = (Vec::new(), None, None, None);
     let (mut interp_every, mut plant_reference) = (8, false);
     let mut layout = codegen::native::globals::Layout::Guest;
+    let mut text_edit = None;
     let hex = |s: &str| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok();
     let mut it = rest.iter();
     while let Some(a) = it.next() {
@@ -221,6 +230,7 @@ fn main() -> ExitCode {
             ("--plant", Some(a)) if hex(a).is_some() => plant = hex(a),
             ("--fn-check", Some(k)) if hex(k).is_some() => fn_check.push(hex(k).unwrap()),
             ("--replace", Some(f)) => replace = Some(PathBuf::from(f)),
+            ("--text-edit", Some(f)) => text_edit = Some(PathBuf::from(f)),
             ("--seed", Some(n)) if n.parse::<u64>().is_ok() => seed = n.parse().ok(),
             ("--runs", Some(n)) if n.parse::<u32>().is_ok_and(|n| n > 0) => runs = n.parse().ok(),
             ("--interp-every", Some(n)) if n.parse::<u32>().is_ok() => {
@@ -310,6 +320,25 @@ fn main() -> ExitCode {
     holes.shadow_locals = shadow;
     holes.copies = copies;
     holes.layout = layout;
+    if let Some(p) = &text_edit {
+        let t = std::fs::read_to_string(p)
+            .map_err(|e| format!("{e}"))
+            .and_then(|t| t.parse::<toml::Table>().map_err(|e| format!("{e}")));
+        let t = match t {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("gbaa-lift: --text-edit {}: {e}", p.display());
+                return ExitCode::FAILURE;
+            }
+        };
+        for (k, v) in t {
+            let Some(v) = v.as_str() else {
+                eprintln!("gbaa-lift: --text-edit {}: {k}: not a string", p.display());
+                return ExitCode::FAILURE;
+            };
+            holes.text_edits.insert(k, v.to_string());
+        }
+    }
     if holes_flow && !holes_only {
         return usage();
     }
