@@ -379,3 +379,27 @@ fn a_field_takes_the_define_family_pret_sets_it_with() {
     );
     assert_eq!(v.names[1], ("OPTIONS_TEXT_SPEED_MID".to_string(), 1));
 }
+
+#[test]
+fn a_declaration_types_a_label_by_its_name() {
+    // agbcc writes `extern struct Kirby gKirbys[];`'s bound as `[1]`.
+    assert_eq!(
+        dwarf::unsized_decl("struct Kirby [1]".into()),
+        "struct Kirby []"
+    );
+    assert_eq!(dwarf::unsized_decl("u8 [1][2]".into()), "u8 [][2]");
+    assert_eq!(dwarf::unsized_decl("u8 [4]".into()), "u8 [4]");
+    assert_eq!(dwarf::unsized_decl("u8 (*)[1]".into()), "u8 (*)[1]");
+    let mut d = dwarf::Debug::default();
+    d.globals.insert(0x0200_0000, ("gA".into(), "u32".into()));
+    let mut two = std::collections::BTreeMap::new();
+    two.insert("u16 []".to_string(), 2);
+    two.insert("u16 [4]".to_string(), 2);
+    two.insert("u8".to_string(), 1);
+    d.decls.insert("gB".into(), two);
+    // An address DWARF gives wins; else the most units' type, a length
+    // over none on a tie.
+    assert_eq!(d.data_fields(0x0200_0000, "gB"), ", type = \"u32\"");
+    assert_eq!(d.data_fields(0x0200_0010, "gB"), ", type = \"u16 [4]\"");
+    assert_eq!(d.data_fields(0x0200_0010, "gC"), "");
+}

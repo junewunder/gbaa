@@ -737,7 +737,13 @@ impl Names {
                 write!(o, ", aliases = [{}]", al.join(", ")).unwrap();
             }
             if let Some(dbg) = dbg {
-                o.push_str(&dbg.data_fields(*a));
+                // A linker-placed global's type is its declarations' (by
+                // its name, else an alias's).
+                let name = std::iter::once(&d.name)
+                    .chain(&d.aliases)
+                    .find(|n| dbg.decl_type(n).is_some())
+                    .unwrap_or(&d.name);
+                o.push_str(&dbg.data_fields(*a, name));
             }
             o.push_str(" }\n");
         }
