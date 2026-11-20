@@ -222,7 +222,7 @@ fetch-pret:
 fetch-rogue:
     scripts/fetch-rogue.sh
 
-# Clones the decomps of june's other games (zeldaret/tmc, metroidret/mzm, jiangzhengwenjz/katam), pinned by commit, into $GBAA_DATA/src and builds each byte-identical to june's ROM (copied in as baserom, checked by SHA1): their symbols name those games and are library references for the rest. Needs `just fetch-pret`. Idempotent; about 3 min the first time.
+# Clones the decomps of june's other games (zeldaret/tmc, metroidret/mzm, jiangzhengwenjz/katam), pinned by commit, into $GBAA_DATA/src and builds each byte-identical to june's ROM (copied in as baserom, checked by SHA1; mzm with DWARF 2 through scripts/agbcc-dwarf): their symbols name those games and are library references for the rest. Needs `just fetch-pret`. Idempotent; about 3 min the first time.
 fetch-decomps:
     scripts/fetch-decomps.sh
 
