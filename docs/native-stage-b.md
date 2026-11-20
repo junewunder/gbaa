@@ -371,13 +371,13 @@ What the done pieces left open, for the units that come next.
   units narrow those as the summaries' holes close.
 - **The pile** (piece 3, function addresses). Most words aren't proven
   and nearly every `call_fn` set is every address-taken function. No one
-  kind of read holds them (`research/fnref-held-words.md`, measured
-  before main's `Ref` tokens). Objects by allocation site, call-site
-  context and RAM pointers followed are unlanded on
-  `native/fnref-unknown-addrs`'s branch, which merges main first
-  (`native/fnref-branch-merge`); then frames (`native/fnref-frame-pointers`),
-  registers a callee doesn't read (`native/fnref-live-registers`), and
-  it lands (`native/fnref-ram-pointers-land`).
+  kind of read holds them (`research/fnref-held-words.md`). The pieces
+  come to main one by one, each behind a switch that is off until it pays
+  on the C programs and Metroid at Emerald's cost: RAM pointers
+  (`GBAA_FNREF_RAM`), the heap by allocation site (`GBAA_FNREF_HEAP`,
+  `native/fnref-heap-sites`), then registers a callee doesn't read
+  (`native/fnref-live-registers`), call-site context and frames
+  (`native/fnref-context`, `native/fnref-frame-pointers`).
 - **Function-address flow, smaller gaps** (for `native/fnref-dense`).
   Proofs are per origin; a pool load folded from a non-pc-relative
   address gets a code-constant origin (dense needs per-site constant

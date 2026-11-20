@@ -179,6 +179,36 @@
 //! environment called through a vtable the run never read); and no load
 //! at a constant address reads a stack.
 //!
+//! **The heap by allocation site** (`native/fnref-heap-sites`;
+//! `GBAA_FNREF_HEAP` set, [`heap_env`], off by default, and on only over
+//! the RAM pointers' rules above). A direct call of a function the holes
+//! file names as an allocator (`allocators = [0x…]`) returns a pointer to
+//! an allocation of its own, by call site ([`Tok::Heap`],
+//! [`G::heap_alloc`]): plus or less a constant it is that offset of it,
+//! plus an index the run doesn't know somewhere in it, and any other op
+//! makes a number, as on a RAM pointer. A store through it goes to the
+//! site's cell for that word, or to the site's any-cell; a load reads
+//! that word's cell, the any-cell and the pile ([`G::read_heap`]), and no
+//! global's cell: two allocations, and two fields of one, are apart. A
+//! value with pointers into more than [`HEAP_SITES`] sites holds "that
+//! offset of any allocation" (`free`'s parameter). What that takes on
+//! trust: an index from an allocation's pointer stays at or past it, and
+//! a pointer somewhere in it less a constant is still in it; no global
+//! lies in an allocation, so no load at a constant address reads one; a
+//! named allocator returns memory nothing else points to yet (a wrapper
+//! named as one keeps no copy of the pointer it returns); the allocator's
+//! own code, through its own pointers into the heap's RAM, stores only
+//! numbers in an allocation (it zeroes it) and reads nothing a user
+//! stored there (no `realloc` that copies: such a function isn't one to
+//! name); and memory freed and allocated again at another site isn't
+//! read before it is written. A
+//! pointer below the one returned (`free`'s `ptr - 12`) is the
+//! allocator's header: a pointer into the RAM the allocator returned
+//! ([`G::heap_lower`]), read and written as that RAM is. On `c/heap` it
+//! narrows the callee sets and proves no more words yet: a load through
+//! `gEffects[i]` still reads every global's cell
+//! (`docs/research/fnref-held-words.md`, "The heap by allocation site").
+//!
 //! **What isn't allowed** ([`Why`]): a function's address used as an
 //! address, in arithmetic but the split and join, in an ordered compare or
 //! a bit test, its halves or bytes used as anything but stored or joined,
@@ -204,7 +234,8 @@
 //! `docs/research/fnref-held-words.md` is made with both, and with
 //! `GBAA_FNREF_OFF` ([`off_env`]), which measures what the words would be
 //! without one kind of hole. `GBAA_FNREF_RAM=1` turns the closed world's
-//! RAM pointers on ([`ram_on`]).
+//! RAM pointers on ([`ram_on`]), `GBAA_FNREF_HEAP=1` those and the
+//! allocation sites ([`heap_env`]).
 //!
 //! Precision: the one pile is the limit (`docs/native-stage-b.md`, "Known
 //! gaps", the pile). agb keeps closures and trait objects on its heap, so a
@@ -291,6 +322,17 @@ enum Tok {
     /// stays in it. [`RAM_ANY`] (start 0): a pointer into RAM the run
     /// dropped, anywhere.
     Ram(u32),
+    /// A pointer into what one call of an allocator returned
+    /// (`native/fnref-heap-sites`; `GBAA_FNREF_HEAP`, [`heap_on`]): the
+    /// call site ([`G::heap_site`]'s number, from 1) and the offset from
+    /// the pointer returned, exact below [`HEAP_WIN`] or [`HEAP_ANY`],
+    /// somewhere at or past it (an index the run doesn't know). A store
+    /// through it goes to that site's cell for that word ([`heap_cell`]),
+    /// a load reads it: two allocations' fields, and two fields of one,
+    /// are kept apart, where one pile held them all. Site 0: that offset
+    /// of any allocation, in a value that held pointers into more sites
+    /// than [`HEAP_SITES`] (`free`'s parameter).
+    Heap(u32, u32),
     /// What a load at width `w` reads of the pile, or of every cell, as
     /// it is when someone looks ([`G::ref_val`]), not its tokens: a large
     /// game's pile read is tens of thousands of tokens, a new set at each
@@ -739,6 +781,52 @@ const STACK_CELL: u32 = 0x0fff_fff0;
 /// object's (what [`RAM_ANY`] adds); a store through it goes to the pile.
 const LOOSE: Tok = Tok::Ram(2);
 
+/// A [`Tok::Heap`]'s offset: somewhere in the allocation, at or past the
+/// pointer its call returned (an index stays in its object, as C has it).
+const HEAP_ANY: u32 = 0xffff_fff0;
+/// A [`Tok::Heap`]'s offset below the pointer the call returned: the
+/// allocator's own header, which is the heap's RAM, not the allocation.
+/// Never kept: the op that makes it gives pointers into the RAM the
+/// allocator returned instead ([`G::heap_lower`]).
+const HEAP_UNDER: u32 = 0xffff_fff1;
+/// Exact offsets into an allocation are kept below this.
+const HEAP_WIN: u32 = 0xff00;
+/// More exact offsets into one allocation than this in a value: somewhere
+/// in it ([`HEAP_ANY`]).
+const HEAP_OFFS: usize = 8;
+/// Pointers into more allocation sites than this in a value: somewhere in
+/// any allocation ([`HEAP_ALL`]; `free` and a `memset` take every site's).
+const HEAP_SITES: usize = 16;
+/// Somewhere in any allocation ([`Tok::Heap`] of site 0, which is any
+/// site): a store through a pointer into site 0 goes to one cell every
+/// allocation's loads read, a load reads every site's cells.
+const HEAP_ALL: Tok = Tok::Heap(0, HEAP_ANY);
+/// Where the allocations' cells are kept, outside the address space and
+/// past the RAM objects' ([`obj_cell`]): 64 KB a site, a cell a word.
+const HEAP_BASE: u32 = 0x2000_0000;
+/// The most allocation sites: a call past it returns what the allocator
+/// did, a pointer into the heap's RAM.
+const HEAP_MAX: u32 = 0x3fff;
+
+/// The cell of the word at `off` of allocation site `s` ([`Tok::Heap`]);
+/// [`HEAP_ANY`]: of what was stored somewhere in it.
+fn heap_cell(s: u32, off: u32) -> u32 {
+    let at = if off >= HEAP_WIN { 0xfff8 } else { off & !3 };
+    HEAP_BASE + (s << 16) + at
+}
+
+/// A pointer `d` bytes on from offset `k` of site `s`'s allocation.
+fn heap_off(s: u32, k: u32, d: i64) -> Tok {
+    if k == HEAP_ANY || k == HEAP_UNDER {
+        return Tok::Heap(s, k);
+    }
+    match k as i64 + d {
+        n if n < 0 => Tok::Heap(s, HEAP_UNDER),
+        n if n >= HEAP_WIN as i64 => Tok::Heap(s, HEAP_ANY),
+        n => Tok::Heap(s, n as u32),
+    }
+}
+
 /// The lowest [`Tok::Ref`].
 const REF0: Tok = Tok::Ref {
     src: Src::Pile(0),
@@ -1170,6 +1258,17 @@ thread_local! {
     static RAM_ON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
+/// `GBAA_FNREF_HEAP` as set: whether the run splits the heap by
+/// allocation site (`native/fnref-heap-sites`), off by default. On, the
+/// RAM pointers' rules are on too ([`ram_on`]: without the closed world a
+/// load through an unknown address would read every allocation), and a
+/// direct call of an allocator the holes file names (`allocators =
+/// [0x…]`) returns a pointer to an object of its own ([`Tok::Heap`]).
+/// Off, the list is not looked at and no such token is made.
+pub fn heap_env() -> bool {
+    std::env::var_os("GBAA_FNREF_HEAP").is_some_and(|v| !v.is_empty() && v != "0")
+}
+
 /// Whether the run follows RAM pointers in a closed world
 /// (`native/fnref-ram-pointers`): `GBAA_FNREF_RAM` set, off by default
 /// (`native/fnref-ram-switch`), so its rules land one by one while the
@@ -1362,6 +1461,11 @@ impl Val {
                     self.toks.contains(&RAM_ANY) || self.toks.contains(&Tok::Ram(ram_obj(c).0))
                 }
                 Tok::Ram(o) => o != 0 && self.toks.contains(&RAM_ANY),
+                Tok::Heap(s, k) => {
+                    self.toks.contains(&HEAP_ALL)
+                        || self.toks.contains(&Tok::Heap(0, k))
+                        || k != HEAP_ANY && self.toks.contains(&Tok::Heap(s, HEAP_ANY))
+                }
                 Tok::Num(_) => self.unk,
                 Tok::Rom(_) | Tok::RomFrom(_) | Tok::RomStep(..) | Tok::RomDull
                     if self.toks.contains(&Tok::RomAny) =>
@@ -1393,6 +1497,7 @@ impl Val {
         // changed when something does.
         let (mut nums, mut roms, mut froms, mut steps) = (0, 0, false, 0);
         let (mut rams, mut objs) = (0, false);
+        let mut heaps = false;
         let ram = ram_on();
         // Whether it holds [`Tok::RomDull`], or [`Tok::RomAny`].
         let (mut has_dull, mut has_any) = (false, false);
@@ -1401,6 +1506,7 @@ impl Val {
             match *t {
                 Tok::Num(c) if ram && is_ram(c) => rams += 1,
                 Tok::Ram(_) => objs = true,
+                Tok::Heap(..) => heaps = true,
                 Tok::Num(_) => nums += 1,
                 Tok::Rom(_) => roms += 1,
                 Tok::RomFrom(_) => froms = true,
@@ -1472,6 +1578,9 @@ impl Val {
             for t in new {
                 self.toks.insert(t);
             }
+        }
+        if heaps {
+            self.cap_heap();
         }
         // Somewhere in ROM takes in every pointer there.
         if has_any {
@@ -1591,6 +1700,49 @@ impl Val {
             self.drop_range(Tok::Rom(0)..Tok::RomAny);
             self.toks.insert(Tok::RomAny);
             self.lost_rom = true;
+        }
+    }
+
+    /// [`Val::cap`]'s widening of pointers into allocations
+    /// ([`Tok::Heap`]): somewhere in a site's takes in its exact offsets,
+    /// more exact ones than [`HEAP_OFFS`] are somewhere in it, and more
+    /// sites than [`HEAP_SITES`], or any beside site 0's, are site 0's:
+    /// any allocation's, at the same offsets.
+    fn cap_heap(&mut self) {
+        let all = Tok::Heap(0, 0)..=Tok::Heap(u32::MAX, u32::MAX);
+        let hs: Vec<(u32, u32)> = self
+            .toks
+            .range(all.clone())
+            .filter_map(|t| match *t {
+                Tok::Heap(s, k) => Some((s, k)),
+                _ => None,
+            })
+            .collect();
+        let mut sites: Vec<(u32, usize, bool)> = Vec::new();
+        for &(s, k) in &hs {
+            match sites.last_mut() {
+                Some(l) if l.0 == s => {
+                    l.1 += 1;
+                    l.2 |= k == HEAP_ANY;
+                }
+                _ => sites.push((s, 1, k == HEAP_ANY)),
+            }
+        }
+        if sites.len() > HEAP_SITES || sites[0].0 == 0 && sites.len() > 1 {
+            self.drop_range(all);
+            let ks: BTreeSet<u32> = hs.iter().map(|h| h.1).collect();
+            if ks.len() > 1 && (ks.contains(&HEAP_ANY) || ks.len() > HEAP_OFFS) {
+                self.toks.insert(HEAP_ALL);
+            } else {
+                self.toks.extend(ks.into_iter().map(|k| Tok::Heap(0, k)));
+            }
+            return;
+        }
+        for (s, n, any) in sites {
+            if n > 1 && (any || n > HEAP_OFFS) {
+                self.drop_range(Tok::Heap(s, 0)..=Tok::Heap(s, u32::MAX));
+                self.toks.insert(Tok::Heap(s, HEAP_ANY));
+            }
         }
     }
 
@@ -1909,6 +2061,20 @@ struct G {
     /// `GBAA_FNREF_GAINS`: what entries and results gained this round, by
     /// kind ([`G::gain`]), and the samples said of each kind.
     gains: Option<BTreeMap<String, (usize, usize)>>,
+    /// The allocators (`native/fnref-heap-sites`: the holes file's
+    /// `allocators`, with `GBAA_FNREF_HEAP` set; else none): a direct
+    /// call of one returns a pointer to an allocation of its own
+    /// ([`G::heap_alloc`]).
+    allocs: BTreeSet<u32>,
+    /// The allocation sites, by the call's address: their numbers in
+    /// [`Tok::Heap`], from 1.
+    heap_ix: BTreeMap<u32, u32>,
+    /// By number less 1: the call's address, and the pointers into RAM
+    /// the allocator returned there, which is where the allocation is
+    /// (its header, just below it, is that RAM's: [`G::heap_lower`]).
+    heap_sites: Vec<(u32, BTreeSet<Tok>)>,
+    /// One of those sets grew this round.
+    heap_changed: bool,
 }
 
 /// A kept op's key ([`G::op_kept`]): the op, a shift's amount, each
@@ -2012,7 +2178,7 @@ impl Large {
             return;
         }
         let fns = v.toks.range(..Tok::Num(0)).count();
-        let roms = v.toks.range(Tok::Rom(0)..REF0).next().is_some();
+        let roms = v.toks.range(Tok::Rom(0)..Tok::Ram(0)).next().is_some();
         if old.is_empty() && fns <= LARGE || fns == 0 && old.len() == 1 && refs.is_empty() && !roms
         {
             return;
@@ -2075,8 +2241,10 @@ impl Large {
         // into ROM besides is no pointer the run can follow: it gives
         // them up ([`Val::lost_rom`]). Each such value otherwise held up
         // to [`FROMS`] of them, a few more each round.
-        if v.toks.range(Tok::Rom(0)..REF0).next().is_some() {
-            v.drop_range(Tok::Rom(0)..REF0);
+        // (Its pointers into RAM stay: an unknown is none, in the closed
+        // world, so dropped with these a load through it read nothing.)
+        if v.toks.range(Tok::Rom(0)..Tok::Ram(0)).next().is_some() {
+            v.drop_range(Tok::Rom(0)..Tok::Ram(0));
             v.lost_rom = true;
             // (And, shifted or masked, the pointer was a number.)
             v.unk = true;
@@ -2105,6 +2273,8 @@ struct Rd {
     /// It made a call whose callee set is incomplete (it reads every
     /// loose function's results).
     incomplete: bool,
+    /// It looked at where an allocation is ([`G::heap_lower`]).
+    heap: bool,
 }
 
 impl G {
@@ -2214,9 +2384,15 @@ impl G {
 
     /// What a load at width `w` through a loose function's parameter
     /// reads ([`LOOSE`]): every cell, the stacks' cell, and the pile.
+    /// And, where the run has allocations ([`Tok::Heap`]), theirs: the
+    /// caller it can't see may pass one's pointer. (With every object's
+    /// cell, which is the read that holds them.)
     fn read_loose(&mut self, w: u8, into: &mut Val) {
         self.read_cells(w, into);
         self.read_stack(w, into);
+        if !self.heap_sites.is_empty() {
+            self.read_objs(w, into);
+        }
     }
 
     /// What a load at width `w` through a pointer somewhere in RAM object
@@ -2317,6 +2493,134 @@ impl G {
             unk,
             lost_rom,
         });
+    }
+
+    /// What a direct call at `at` of an allocator returns, given what the
+    /// allocator did (`ret`): a pointer to that call site's own
+    /// allocation ([`Tok::Heap`], offset 0) in place of each pointer into
+    /// RAM, and whatever else it returned (0 for no memory). The pointers
+    /// taken out say where the allocation is: the site's, kept for its
+    /// header ([`G::heap_lower`]). An allocator that returns another's
+    /// result (a wrapper that zeroes) passes that one's on.
+    fn heap_alloc(&mut self, at: u32, ret: &Val) -> Val {
+        let n = match self.heap_ix.get(&at) {
+            Some(&n) => n,
+            None if self.heap_sites.len() as u32 >= HEAP_MAX => return ret.clone(),
+            None => {
+                self.heap_sites.push((at, BTreeSet::new()));
+                let n = self.heap_sites.len() as u32;
+                self.heap_ix.insert(at, n);
+                n
+            }
+        };
+        let mut out = self.expand(ret);
+        let mut under: Vec<Tok> = Vec::new();
+        let ptrs: Vec<Tok> = out
+            .toks
+            .range(Tok::Num(0x0200_0000)..REF0)
+            .filter(|t| match **t {
+                Tok::Num(c) => is_ram(c),
+                Tok::Ram(_) | Tok::Heap(..) => true,
+                _ => false,
+            })
+            .copied()
+            .collect();
+        for t in ptrs {
+            match t {
+                Tok::Num(c) => under.push(Tok::Ram(ram_obj(c).0)),
+                // (Another site's, which may grow: read again then.)
+                Tok::Heap(s, _) => {
+                    self.rd.heap = true;
+                    under.extend(self.heap_under(s));
+                }
+                t => under.push(t),
+            }
+            out.toks.remove(&t);
+        }
+        let site = &mut self.heap_sites[n as usize - 1].1;
+        let was = site.len();
+        site.extend(under);
+        if site.len() != was {
+            self.heap_changed = true;
+            self.mark(true);
+        }
+        out.toks.insert(Tok::Heap(n, 0));
+        out.cap();
+        out
+    }
+
+    /// Where site `s`'s allocation is: the pointers into RAM its
+    /// allocator returned (site 0: any site's).
+    fn heap_under(&self, s: u32) -> BTreeSet<Tok> {
+        match s {
+            0 => self
+                .heap_sites
+                .iter()
+                .flat_map(|h| h.1.iter().copied())
+                .collect(),
+            s => self.heap_sites[s as usize - 1].1.clone(),
+        }
+    }
+
+    /// Takes the pointers below an allocation's start out of `v`
+    /// ([`HEAP_UNDER`]: `free`'s `ptr - 12`), each for the pointers into
+    /// RAM its allocator returned: a header is the allocator's own, read
+    /// and written through the heap's RAM, not the allocation's cells.
+    fn heap_lower(&mut self, v: &mut Val) {
+        let low: Vec<Tok> = v
+            .toks
+            .range(Tok::Heap(0, 0)..=Tok::Heap(u32::MAX, u32::MAX))
+            .filter(|t| matches!(t, Tok::Heap(_, HEAP_UNDER)))
+            .copied()
+            .collect();
+        if low.is_empty() {
+            return;
+        }
+        self.rd.heap = true;
+        for t in low {
+            v.toks.remove(&t);
+            if let Tok::Heap(s, _) = t {
+                let under = self.heap_under(s);
+                v.toks.extend(under);
+            }
+        }
+        v.cap();
+    }
+
+    /// What a load at width `w` through a pointer at `k` into site `s`'s
+    /// allocation reads ([`Tok::Heap`]): the cell of that word and the
+    /// site's any-cell, or, somewhere in it, every cell of the site's;
+    /// what was stored somewhere in any allocation; and the pile (a
+    /// pointer the run dropped may be into it). No cell at a constant
+    /// address (no global is in an allocation) and none of the heap's
+    /// RAM: what the allocator's own code stored in an allocation through
+    /// its own pointers (zeroes) is a number, which the read's mark
+    /// stands for. Site 0, any allocation: every site's and object's.
+    fn read_heap(&mut self, s: u32, k: u32, w: u8, into: &mut Val) {
+        into.mem = true;
+        self.read_pile(w, into);
+        if k == HEAP_UNDER {
+            debug_assert!(false, "a header's pointer not lowered");
+            self.read_cells(w, into);
+            self.read_objs(w, into);
+            return;
+        }
+        if s == 0 {
+            self.read_objs(w, into);
+            return;
+        }
+        if k == HEAP_ANY || (k & 3) + w as u32 > 4 {
+            let (lo, hi) = (heap_cell(s, 0), heap_cell(s, HEAP_ANY));
+            self.rd.ranges.push((lo, hi));
+            let cs: Vec<u32> = self.cells.range(lo..=hi).map(|(&c, _)| c).collect();
+            for c in cs {
+                self.read_obj(c, w, into);
+            }
+        } else {
+            self.read_obj(heap_cell(s, k), w, into);
+            self.read_obj(heap_cell(s, HEAP_ANY), w, into);
+        }
+        self.read_obj(heap_cell(0, HEAP_ANY), w, into);
     }
 
     fn store(&mut self, to: Store, toks: &[(Tok, u8)]) {
@@ -3157,6 +3461,7 @@ impl G {
             Tok::RomDull => "dull",
             Tok::RomAny => "any",
             Tok::Ram(_) => "ram",
+            Tok::Heap(..) => "heap",
             Tok::Ref { src, .. } => match src {
                 Src::Pile(_) => "ref-pile",
                 Src::Cells(_) => "ref-cells",
@@ -3398,7 +3703,7 @@ fn to_mem(v: &Val, w: u8) -> (Vec<(Tok, u8)>, Vec<Form>) {
             // every one, so a number read from it is none); its pieces, as
             // a ROM pointer's, a number.
             Tok::Num(c) if is_ram(c) && w == 4 && ram_on() => out.push((Tok::Num(ram_canon(c)), 4)),
-            Tok::Ram(_) if w == 4 => out.push((t, 4)),
+            Tok::Ram(_) | Tok::Heap(..) if w == 4 => out.push((t, 4)),
             // As it is ([`G::for_mem`] expands any other).
             Tok::Ref { .. } => {
                 debug_assert!(
@@ -3517,7 +3822,7 @@ fn from_mem_one(t: Tok, sw: u8, w: u8, into: &mut Val) {
         // A pointer into RAM read as stored (`native/fnref-ram-pointers`);
         // its bytes, as a ROM pointer's, a number read from memory.
         Tok::Num(c) if is_ram(c) && w == 4 && sw == 4 && ram_on() => t,
-        Tok::Ram(_) if w == 4 && sw == 4 => t,
+        Tok::Ram(_) | Tok::Heap(..) if w == 4 && sw == 4 => t,
         // Read at the width it was stored at, it is what was stored; a
         // word from pieces, reassembled; narrower, its bytes.
         Tok::Ref { src, xf } => {
@@ -3672,6 +3977,10 @@ struct Run<'a, 'g> {
     /// Per block, the insts whose value only a flag nothing reads takes
     /// ([`unused`]): they make no holes.
     unused: BTreeMap<u32, Vec<bool>>,
+    /// The instruction's op read where an allocation is
+    /// ([`G::heap_lower`]): its result isn't kept by its operands
+    /// ([`G::op_kept`]), which don't say where that was.
+    lowered: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -4117,7 +4426,12 @@ impl Run<'_, '_> {
         for (o, why) in holes {
             self.g.hole_one(o, at, why);
         }
+        let under = toks.iter().any(|t| matches!(t, Tok::Heap(_, HEAP_UNDER)));
         out.toks.add_all(toks);
+        if under {
+            self.g.heap_lower(&mut out);
+            self.lowered = true;
+        }
         out.cap();
         out
     }
@@ -4183,6 +4497,7 @@ impl Run<'_, '_> {
                 continue;
             }
             let site = Origin::Code(key, i as u32);
+            self.lowered = false;
             let holes_before = self.g.flow.holes.len();
             let logged = self.g.hole_log.len();
             let val = |x: ValueId| vals[x.index()].clone();
@@ -4352,9 +4667,35 @@ impl Run<'_, '_> {
                         } else {
                             kept = None;
                             let st = [strides[ra.index()], strides[rb.index()]];
-                            let ab = self.bin(BinOp::Add, &a, &b, st, site, at);
                             let c = xv(self.g, c);
-                            self.bin(BinOp::Add, &ab, &c, [1, 1], site, at)
+                            // A pointer into an allocation less a constant
+                            // (`subs r0, #8` is `r0 + !8 + 1`): the
+                            // constant first, so that `p + 8 - 8` is the
+                            // allocation's start, not one byte below it on
+                            // the way (its header, [`HEAP_UNDER`]).
+                            let heap = |v: &Val| {
+                                v.toks
+                                    .range(Tok::Heap(0, 0)..=Tok::Heap(u32::MAX, u32::MAX))
+                                    .next()
+                                    .is_some()
+                            };
+                            let nums = |v: &Val| {
+                                !v.unk
+                                    && !v.mem
+                                    && !v.lost_rom
+                                    && !v.toks.is_empty()
+                                    && v.toks.iter().all(|t| matches!(t, Tok::Num(_)))
+                            };
+                            if heap(&a) && nums(&b) && nums(&c) {
+                                let bc = self.bin(BinOp::Add, &b, &c, [1, 1], site, at);
+                                self.bin(BinOp::Add, &a, &bc, st, site, at)
+                            } else if heap(&b) && nums(&a) && nums(&c) {
+                                let ac = self.bin(BinOp::Add, &a, &c, [1, 1], site, at);
+                                self.bin(BinOp::Add, &ac, &b, st, site, at)
+                            } else {
+                                let ab = self.bin(BinOp::Add, &a, &b, st, site, at);
+                                self.bin(BinOp::Add, &ab, &c, [1, 1], site, at)
+                            }
                         }
                     }
                 }
@@ -4388,7 +4729,8 @@ impl Run<'_, '_> {
                             | Tok::RomStep(..)
                             | Tok::RomDull
                             | Tok::RomAny
-                            | Tok::Ram(_) => out.unk = true,
+                            | Tok::Ram(_)
+                            | Tok::Heap(..) => out.unk = true,
                             Tok::Ref { .. } => {
                                 debug_assert!(false, "a Ref not expanded");
                                 out.unk = true;
@@ -4453,13 +4795,14 @@ impl Run<'_, '_> {
                                 Some(n) => toks.push(num_tok(self.img, shift(kind, c, n))),
                                 None => out.unk = true,
                             },
-                            Tok::Ram(_) if keep => toks.push(t),
+                            Tok::Ram(_) | Tok::Heap(..) if keep => toks.push(t),
                             // Shifted, it's no pointer (the closed world).
                             Tok::RomFrom(_)
                             | Tok::RomStep(..)
                             | Tok::RomDull
                             | Tok::RomAny
-                            | Tok::Ram(_) => out.unk = true,
+                            | Tok::Ram(_)
+                            | Tok::Heap(..) => out.unk = true,
                             Tok::Ref { .. } => unreachable!("expanded"),
                         }
                     }
@@ -4617,6 +4960,7 @@ impl Run<'_, '_> {
             }
             // Kept, but for a constant this instruction made (its own).
             if let Some(k) = kept
+                && !self.lowered
                 && !v
                     .toks
                     .iter()
@@ -4724,6 +5068,11 @@ impl Run<'_, '_> {
                 Tok::Ram(o) => {
                     capped = false;
                     self.g.read_in_obj(o, w, &mut out);
+                }
+                // In an allocation: its site's cells.
+                Tok::Heap(s, k) => {
+                    capped = false;
+                    self.g.read_heap(s, k, w, &mut out);
                 }
                 Tok::RomFrom(_) | Tok::RomStep(..) => {
                     let (r, k) = match t {
@@ -4997,8 +5346,17 @@ impl Run<'_, '_> {
         // RAM (the closed world, as for loads): what it stores reaches no
         // load there, but functions' and ROM addresses go to the pile all
         // the same (an I/O register's or VRAM's: not followed).
+        // (Not where the address is a pointer into an allocation that may
+        // also be a number, as one loaded from a global that was 0 is: the
+        // allocation is where the store goes, and its site's cells are
+        // all the pile would have been split into.)
         let ram = ram_on();
-        if ram && (a.unk || a.mem || a.toks.is_empty()) {
+        let heap = a
+            .toks
+            .range(Tok::Heap(0, 0)..=Tok::Heap(u32::MAX, u32::MAX))
+            .next()
+            .is_some();
+        if ram && !heap && (a.unk || a.mem || a.toks.is_empty()) {
             let kept: Vec<(Tok, u8)> = toks
                 .iter()
                 .copied()
@@ -5030,6 +5388,20 @@ impl Run<'_, '_> {
                 Tok::Ram(0) | Tok::Ram(2) => anywhere = true,
                 Tok::Ram(1) => self.g.store(Store::Cell(STACK_CELL), toks),
                 Tok::Ram(o) => self.g.store(Store::Cell(obj_cell(o)), toks),
+                // In an allocation: its word's cell, or, somewhere in it
+                // (or in any allocation), the site's any-cell.
+                Tok::Heap(_, HEAP_UNDER) => {
+                    debug_assert!(false, "a header's pointer not lowered");
+                    anywhere = true;
+                }
+                Tok::Heap(s, k) => {
+                    let k = if s == 0 || (k & 3) + w as u32 > 4 {
+                        HEAP_ANY
+                    } else {
+                        k
+                    };
+                    self.g.store(Store::Cell(heap_cell(s, k)), toks)
+                }
                 // I/O, the display memories, SRAM: not followed.
                 Tok::Num(c) | Tok::Fn { key: c, .. } if self.img.word(c).is_none() => {
                     self.g.hole(x, self.at, Why::Outside, |_| true)
@@ -5073,7 +5445,11 @@ impl Run<'_, '_> {
                 let rets = match target {
                     Some(k) => {
                         self.g.give(*k, args);
-                        self.ret_of(*k)
+                        let mut r = self.ret_of(*k);
+                        if self.g.allocs.contains(k) {
+                            r[0] = self.g.heap_alloc(out.at, &r[0]);
+                        }
+                        r
                     }
                     None => {
                         let t = match out.via {
@@ -5100,7 +5476,10 @@ impl Run<'_, '_> {
             }
             Edge::Tail(Some(k)) => {
                 self.g.give(*k, &s.regs);
-                let r = self.ret_of(*k);
+                let mut r = self.ret_of(*k);
+                if self.g.allocs.contains(k) {
+                    r[0] = self.g.heap_alloc(out.at, &r[0]);
+                }
                 self.g.give_ret(me, &r);
             }
             Edge::Tail(None) | Edge::TailOr(_) => {
@@ -5220,6 +5599,7 @@ impl Run<'_, '_> {
                     self.g.read_obj(STACK_CELL, 4, into);
                 }
                 Tok::Ram(o) if o != 0 => self.g.read_in_obj(o, 4, into),
+                Tok::Heap(s, k) if k != HEAP_UNDER => self.g.read_heap(s, HEAP_ANY, 4, into),
                 // I/O, VRAM, OAM: nothing the run stores a function's
                 // address to but through the pile.
                 _ => anywhere = true,
@@ -5569,7 +5949,7 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>, steps: [u
             (
                 BinOp::Sub,
                 Full,
-                None | Some(Num(0)) | Some(Fn { form: Full, .. }) | Some(Ram(_)),
+                None | Some(Num(0)) | Some(Fn { form: Full, .. }) | Some(Ram(_)) | Some(Heap(..)),
             ) => fnt(Cmp),
             (BinOp::Sub, Full, Some(Num(c))) if is_ram(c) && ram_on() => fnt(Cmp),
             (BinOp::Or, Full, Some(Num(1))) if kx & 1 == 1 => fnt(Full),
@@ -5626,7 +6006,37 @@ fn bin_tok(img: &dyn Image, op: BinOp, x: Option<Tok>, y: Option<Tok>, steps: [u
         {
             return R::T(Ram(o));
         }
-        (_, Some(Ram(_)), _) | (_, _, Some(Ram(_))) => return R::Unk,
+        // A pointer into an allocation (`native/fnref-heap-sites`): plus
+        // or less a constant, that offset; an index the run doesn't
+        // know, somewhere in it; aligned down, the word it is in. Below
+        // the pointer the call returned it is the allocator's header.
+        (BinOp::Add | BinOp::Sub, Some(Heap(s, k)), None)
+        | (BinOp::Add, None, Some(Heap(s, k))) => {
+            return R::T(Heap(s, if k == HEAP_UNDER { k } else { HEAP_ANY }));
+        }
+        (BinOp::Add, Some(Heap(s, k)), Some(Num(c)))
+        | (BinOp::Add, Some(Num(c)), Some(Heap(s, k))) => {
+            return R::T(heap_off(s, k, c as i32 as i64));
+        }
+        (BinOp::Sub, Some(Heap(s, k)), Some(Num(c))) => {
+            return R::T(heap_off(s, k, -(c as i32 as i64)));
+        }
+        (BinOp::And, Some(Heap(s, k)), Some(Num(m)))
+        | (BinOp::And, Some(Num(m)), Some(Heap(s, k)))
+            if m >= 0xffff_0000 =>
+        {
+            // An allocation starts on a word, so aligned down to one the
+            // offset is; to more, it is at or past the start if the
+            // offset was past the mask's reach, and else on either side
+            // of it: a pointer the run drops.
+            return R::T(match k {
+                HEAP_ANY | HEAP_UNDER => Heap(s, k),
+                k if m >= 0xffff_fffc => Heap(s, k & m),
+                k if k >= !m => Heap(s, HEAP_ANY),
+                _ => RAM_ANY,
+            });
+        }
+        (_, Some(Ram(_) | Heap(..)), _) | (_, _, Some(Ram(_) | Heap(..))) => return R::Unk,
         _ => {}
     }
     let (x, y) = match (x, y) {
@@ -6198,12 +6608,40 @@ impl G {
 /// Follow every function address in `fns` (all the program's functions,
 /// over every code context) from its sources to its uses. `copies`: the
 /// program start's copies of ROM data to RAM (source, destination, bytes).
-pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)]) -> Flow {
-    follow_ram(fns, img, copies, ram_env())
+/// `allocs`: the functions the holes file names as allocators, looked at
+/// only with `GBAA_FNREF_HEAP` set ([`heap_env`]).
+pub fn follow(
+    fns: &[FnIn],
+    img: &dyn Image,
+    copies: &[(u32, u32, u32)],
+    allocs: &BTreeSet<u32>,
+) -> Flow {
+    if heap_env() {
+        follow_heap(fns, img, copies, true, allocs)
+    } else {
+        follow_ram(fns, img, copies, ram_env())
+    }
 }
 
 /// [`follow`], RAM pointers kept or not ([`ram_on`]).
 fn follow_ram(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)], ram: bool) -> Flow {
+    follow_heap(fns, img, copies, ram, &BTreeSet::new())
+}
+
+/// [`follow_ram`], with the allocators whose calls return an allocation
+/// of their own (`native/fnref-heap-sites`; none: no [`Tok::Heap`] is
+/// made, and the run is [`follow_ram`]'s).
+fn follow_heap(
+    fns: &[FnIn],
+    img: &dyn Image,
+    copies: &[(u32, u32, u32)],
+    ram: bool,
+    allocs: &BTreeSet<u32>,
+) -> Flow {
+    debug_assert!(
+        ram || allocs.is_empty(),
+        "allocation sites rest on the RAM rules"
+    );
     let _code = CodeGuard::set(img);
     let _objs = ObjsGuard::set(ram, fns);
     let mut g = G {
@@ -6214,6 +6652,7 @@ fn follow_ram(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)], ram: bo
         off: off_env(),
         roads: std::env::var_os("GBAA_FNREF_WATCH").is_some(),
         gains: std::env::var_os("GBAA_FNREF_GAINS").map(|_| BTreeMap::new()),
+        allocs: allocs.clone(),
         ..G::default()
     };
     if g.off != 0 {
@@ -6350,6 +6789,7 @@ fn follow_ram(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)], ram: bo
                 rets_read: BTreeSet::new(),
                 at: 0,
                 unused: unused(f),
+                lowered: false,
             };
             if f.blocks.contains_key(&f.entry) {
                 run.ins.insert(
@@ -6481,12 +6921,14 @@ fn follow_ram(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)], ram: bo
             snapped = now;
         }
         let large = std::mem::take(&mut g.large.changed);
+        let heap = std::mem::take(&mut g.heap_changed);
         dirty.extend(
             rds.iter()
                 .filter(|(_, r)| {
                     r.pile & pile_w != 0
                         || r.all_cells & cells_w != 0
                         || r.large && large
+                        || r.heap && heap
                         || r.ranges
                             .iter()
                             .any(|&(lo, hi)| cells.range(lo..=hi).next().is_some())
@@ -6532,7 +6974,7 @@ fn follow_ram(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)], ram: bo
             let kind = |t: &Tok| match t {
                 Tok::Fn { .. } => 0,
                 // (A pointer into a RAM object with the numbers.)
-                Tok::Num(_) | Tok::Ram(_) => 1,
+                Tok::Num(_) | Tok::Ram(_) | Tok::Heap(..) => 1,
                 Tok::Rom(_) => 2,
                 Tok::RomFrom(_) => 3,
                 Tok::RomStep(..) | Tok::RomDull | Tok::RomAny => 4,
@@ -6651,7 +7093,7 @@ fn follow_ram(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)], ram: bo
                     k[match t {
                         Tok::Fn { .. } => 0,
                         Tok::Num(c) if is_ram(*c) => 1,
-                        Tok::Ram(_) => 2,
+                        Tok::Ram(_) | Tok::Heap(..) => 2,
                         Tok::Ref { .. } => 3,
                         _ => 4,
                     }] += 1;

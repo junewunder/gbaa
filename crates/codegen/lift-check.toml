@@ -1885,3 +1885,165 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 1
 gap_targets = 0
+
+[program.c-heap-agbcc]
+rom = "c/c-heap-agbcc.gba"
+route = "units/c-heap-agbcc-600.toml"
+# A C program (native/fnref-heap-sites; c/README.md, c/heap/SCENE.md), built
+# by agbcc (GCC 2.95) with `just c-tests`: a first-fit allocator
+# (heap_alloc, heap_alloc_zeroed, heap_free; named in holes/c-heap-agbcc.toml)
+# and three kinds of object allocated at three call sites, function pointers
+# beside numbers in each. The planted store is AgbMain's gFrame++.
+planted_store = 0x08000692
+
+[program.c-heap-agbcc.bars]
+computed_unknown_unnamed = 11
+lines = 950
+lines_prelude = 1304
+functions = 22
+functions_iwram = 0
+functions_lifted = 22
+functions_unrecognised = 22
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 5
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 3
+hard_holes = 0
+blocks = 81
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 0
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 182
+reg_local_writes = 101
+unpacked_unread = 0
+regs_call_entries = 1
+unread_lets = 0
+adc_sums = 0
+bank_sp_calls = 21
+loops_not_for = 8
+labelled_blocks = 6
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 2
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 42
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 8
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 40
+pointer_unexplained = 0
+ref_unexplained = 2
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 9
+sp_accesses_callers_frame = 1
+call_fn_calls = 4
+call_fn_four_complete = 0
+jumps_by_value = 0
+branches_on_raw_flags = 0
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 7
+gap_targets = 0
+
+[program.c-heap-gcc]
+rom = "c/c-heap-gcc.gba"
+route = "units/c-heap-gcc-600.toml"
+# A C program (native/fnref-heap-sites; c/README.md, c/heap/SCENE.md), built
+# by modern arm-none-eabi-gcc with `just c-tests`: a first-fit allocator
+# (heap_alloc, heap_alloc_zeroed, heap_free; named in holes/c-heap-gcc.toml)
+# and three kinds of object allocated at three call sites, function pointers
+# beside numbers in each. The planted store is AgbMain's gFrame++.
+planted_store = 0x0800060e
+
+[program.c-heap-gcc.bars]
+computed_unknown_unnamed = 37
+lines = 954
+lines_prelude = 1304
+functions = 19
+functions_iwram = 0
+functions_lifted = 19
+functions_unrecognised = 19
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 2
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 0
+hard_holes = 0
+blocks = 84
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 0
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 203
+reg_local_writes = 93
+unpacked_unread = 0
+regs_call_entries = 0
+unread_lets = 0
+adc_sums = 0
+bank_sp_calls = 25
+loops_not_for = 10
+labelled_blocks = 9
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 1
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 41
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 6
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 38
+pointer_unexplained = 0
+ref_unexplained = 2
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 6
+sp_accesses_callers_frame = 1
+call_fn_calls = 4
+call_fn_four_complete = 0
+jumps_by_value = 0
+branches_on_raw_flags = 0
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 7
+gap_targets = 0
