@@ -204,6 +204,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 pub mod banks;
+pub mod bitfields;
 pub mod cond;
 pub mod counted;
 pub mod cut;
@@ -1689,7 +1690,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // The struct globals' structs (`ram_t`, printed with `Ram`) too.
     let mut type_lines = globals.structs().lines().count();
     if let Some(maps) = &holes.fields {
-        let text = fields::module(&maps.types);
+        let text = fields::module(&maps.types, &soft.joined);
         type_lines += text.lines().count();
         main.push_str(&text);
     }
@@ -1986,6 +1987,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             soft.named_fields, soft.named_inside,
         )
         .unwrap();
+        writeln!(
+            report,
+            "bitfields (native/lift-bitfields): {} writes print as set_bits, {} accesses of several fields through their joined accessor, {} accesses holding bitfields name none (left as arithmetic)",
+            soft.bitfield_sets, soft.bitfield_joined, soft.bitfield_arith,
+        )
+        .unwrap();
     }
     if let Some(at) = holes.plant_slot
         && !soft.planted_slot
@@ -2175,6 +2182,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             "computed_unknown_unnamed",
             unknown(false) + unknown(true) - soft.named_unknown,
         );
+        m.push("bitfield_arith", soft.bitfield_arith);
+        m.push("bitfield_joined", soft.bitfield_joined);
+        m.push("bitfield_sets", soft.bitfield_sets);
     }
     m.push("sp_accesses_local_slot", soft.sp_slots[0]);
     m.push("sp_accesses_escaping_slot", soft.sp_slots[1]);
@@ -3464,6 +3474,15 @@ struct Soft {
     /// one (`.field::<uN>(off)`).
     named_fields: u64,
     named_inside: u64,
+    /// Bitfield writes printed as `set_bits` (native/lift-bitfields).
+    bitfield_sets: u64,
+    /// Accesses holding bitfields through a typed pointer that name none.
+    bitfield_arith: u64,
+    /// Accesses holding several fields, bitfields among them, printed
+    /// through an accessor named for them all ([`fields::joined_pointer`]).
+    bitfield_joined: u64,
+    /// Those accessors.
+    joined: fields::Joined,
     /// Those of them the value sets don't bound (`computed_unknown`).
     named_unknown: u64,
     /// Stack locals, and the functions with any.
@@ -5284,11 +5303,14 @@ impl FnPrinter<'_, '_> {
                     .object(globals::guest(lo), globals::guest(hi), w)
             })
             .collect();
+        // The bitfields the accesses through a typed pointer name
+        // (native/lift-bitfields).
+        let bitfields = self.bitfields(insts);
         // The accesses the value sets don't bound that the heap's run
         // types (native/ref-heap): a field through a `Ref<T>`, which
         // prints its address too.
         let mut pc = 0;
-        let refs: Vec<Option<HeapRef>> = insts
+        let mut refs: Vec<Option<HeapRef>> = insts
             .iter()
             .enumerate()
             .map(|(i, inst)| {
@@ -5312,6 +5334,7 @@ impl FnPrinter<'_, '_> {
                 // Else through a pointer the names files type
                 // (native/lift-typed-access), where it lands on a field:
                 // not a frame's local, which prints as one.
+                let bits = bitfields.bits.get(&i).copied();
                 let (f, named) = match heap {
                     Some(f) => (f, false),
                     None => {
@@ -5324,7 +5347,14 @@ impl FnPrinter<'_, '_> {
                         let local = self
                             .frame
                             .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
-                        if local || fields::pointer(&maps.types, at, width, "", 0).is_none() {
+                        // Bitfields it names none of: through the
+                        // accessor of all it holds.
+                        let joined = bits.is_none() && self.holds_bitfields(i, inst);
+                        let printed = match joined {
+                            true => maps.types.joined(&at.ty, at.off, width).is_some(),
+                            false => fields::pointer(&maps.types, at, width, "", 0, bits).is_some(),
+                        };
+                        if local || !printed {
                             return None;
                         }
                         let f = heap::Field {
@@ -5358,10 +5388,74 @@ impl FnPrinter<'_, '_> {
                     }
                     _ => None,
                 };
-                Some(HeapRef { f, base, named })
+                Some(HeapRef {
+                    f,
+                    base,
+                    named,
+                    bits: bits.filter(|_| named),
+                    fold: None,
+                    joined: named && bits.is_none() && self.holds_bitfields(i, inst),
+                })
             })
             .collect();
+        // A fold needs its load printed by name too: it takes its place.
+        for (&s, fold) in &bitfields.folds {
+            let named = |i: usize| refs[i].is_some_and(|r| r.named && r.bits.is_some());
+            if named(s) && named(fold.load) {
+                refs[s].as_mut().expect("named").fold = Some(*fold);
+            }
+        }
         (typed, objs, refs)
+    }
+
+    /// The bitfields access `i` of the block can name through a pointer
+    /// the names files type ([`fields`], [`crate::types::Types::bits_at`]):
+    /// empty for any other access or inst, or one that holds bitfields
+    /// with no accessor of its width.
+    fn bitfield_unit(&self, i: usize, inst: &Inst) -> Vec<(u32, u32)> {
+        match self.typed_access(i, inst) {
+            Some((at, w, maps)) => maps.types.bits_at(&at.ty, at.off, w),
+            None => Vec::new(),
+        }
+    }
+
+    /// Whether access `i` of the block holds a bitfield (with others or
+    /// not) through a pointer the names files type
+    /// ([`crate::types::Types::joined`]).
+    fn holds_bitfields(&self, i: usize, inst: &Inst) -> bool {
+        self.typed_access(i, inst)
+            .is_some_and(|(at, w, maps)| maps.types.joined(&at.ty, at.off, w).is_some())
+    }
+
+    /// Access `i` through a pointer the names files type, not a frame's
+    /// local: where it is in its object, its width and the types.
+    fn typed_access(&self, i: usize, inst: &Inst) -> Option<(&fields::At, u32, &fields::Maps)> {
+        let (Op::Load { width, .. } | Op::Store { width, .. }) = inst.op else {
+            return None;
+        };
+        let at = self.field_at.get(&(self.cur, i))?;
+        let maps = self.holes.fields.as_deref()?;
+        let local = self
+            .frame
+            .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
+        (!local).then_some((at, bytes(width), maps))
+    }
+
+    /// The block's bitfield accesses ([`bitfields`]): which field each
+    /// names, and the stores printed as `set_bits`.
+    fn bitfields(&self, insts: &[Inst]) -> bitfields::Found {
+        if self.holes.fields.is_none() {
+            return bitfields::Found::default();
+        }
+        let unread = self.dead.get(&self.cur).filter(|d| d.len() == insts.len());
+        bitfields::find(
+            insts,
+            |i| match self.holds_bitfields(i, &insts[i]) {
+                true => self.bitfield_unit(i, &insts[i]),
+                false => Vec::new(),
+            },
+            |i| unread.is_some_and(|d| d[i]),
+        )
     }
 
     /// The text the block's constants point at (unit `native/lift-text`),
@@ -5422,7 +5516,7 @@ impl FnPrinter<'_, '_> {
         // A frame nothing is in memory of prints no sp arithmetic
         // (native/lift-frame-gone).
         let frameless = self.frameless;
-        let skip: Vec<bool> = unread
+        let mut skip: Vec<bool> = unread
             .iter()
             .enumerate()
             .map(|(i, &u)| {
@@ -5431,6 +5525,10 @@ impl FnPrinter<'_, '_> {
                     || (frameless && matches!(insts[i].op, Op::SetReg(r, _) if r.index() == 13))
             })
             .collect();
+        // A bitfield's load a `set_bits` takes the place of.
+        for f in refs.iter().flatten().filter_map(|r| r.fold) {
+            skip[f.load] = true;
+        }
         // A compare tree at the block's end prints as a `match`: its
         // tests' guards aren't printed, its register and flag writes are
         // its arms'.
@@ -5708,6 +5806,7 @@ impl FnPrinter<'_, '_> {
                     );
                 }
                 Op::Load { width, addr } => {
+                    self.count_bitfield(i, inst, refs[i]);
                     let mut rom = false;
                     let (f, m) = match width {
                         Width::Byte => ("ld8", ""),
@@ -5781,6 +5880,7 @@ impl FnPrinter<'_, '_> {
                     }
                 }
                 Op::Store { width, addr, value } => {
+                    self.count_bitfield(i, inst, refs[i]);
                     let (f, m) = match width {
                         Width::Byte => ("st8", ""),
                         Width::Half => ("st16", " & !1"),
@@ -5811,9 +5911,25 @@ impl FnPrinter<'_, '_> {
                         (None, Some(o), _) => {
                             o.store(&format!("{}{m}", self.val(addr)), bytes(width), &val)
                         }
-                        (None, None, Some(r)) if r.named => {
-                            format!("g.set({}, {val});", self.field_ptr(i, r, addr))
-                        }
+                        (None, None, Some(r)) if r.named => match r.fold {
+                            Some(f) => {
+                                let v = match f.v {
+                                    bitfields::FoldValue::Const(c) => format!("{c:#x}u32{plant}"),
+                                    bitfields::FoldValue::Of(x, 0) if plant.is_empty() => {
+                                        self.whole(x)
+                                    }
+                                    bitfields::FoldValue::Of(x, 0) => {
+                                        format!("{}{plant}", self.val(x))
+                                    }
+                                    bitfields::FoldValue::Of(x, k) => {
+                                        format!("({} >> {k}){plant}", self.val(x))
+                                    }
+                                };
+                                self.soft.bitfield_sets += 1;
+                                format!("g.set_bits({}, {v});", self.field_ptr(i, r, addr))
+                            }
+                            None => format!("g.set({}, {val});", self.field_ptr(i, r, addr)),
+                        },
                         (None, None, Some(r)) => match r.base {
                             Some((b, c)) => self.heap.store(r.f, &self.val(b), r.f.off - c, &val),
                             None => self.heap.store(r.f, &self.val(addr), r.f.off, &val),
@@ -5942,6 +6058,20 @@ impl FnPrinter<'_, '_> {
         s
     }
 
+    /// Count access `i` where it holds bitfields through a typed pointer
+    /// ([`FnPrinter::bitfield_unit`]): by the field it names, or as one
+    /// left to the arithmetic (native/lift-bitfields).
+    fn count_bitfield(&mut self, i: usize, inst: &Inst, r: Option<HeapRef>) {
+        if !self.holds_bitfields(i, inst) {
+            return;
+        }
+        match r.filter(|r| r.named) {
+            Some(r) if r.bits.is_some() => {}
+            Some(r) if r.joined => self.soft.bitfield_joined += 1,
+            _ => self.soft.bitfield_arith += 1,
+        }
+    }
+
     /// The names of the values the field or global the access at inst `i`
     /// reads or writes whole takes (`[values]`; native/lift-value-names),
     /// by value: a typed global's ([`Place::values`]) or a field through a
@@ -5997,7 +6127,19 @@ impl FnPrinter<'_, '_> {
             Some((b, c)) => (self.val(b), at.off - c),
             None => (self.val(addr), at.off),
         };
-        let (e, whole) = fields::pointer(&maps.types, at, r.f.width as u32, &p, k)
+        if r.joined {
+            let at = at.clone();
+            return fields::joined_pointer(
+                &maps.types,
+                &mut self.soft.joined,
+                &at,
+                r.f.width as u32,
+                &p,
+                k,
+            )
+            .expect("checked when the access was found");
+        }
+        let (e, whole) = fields::pointer(&maps.types, at, r.f.width as u32, &p, k, r.bits)
             .expect("checked when the access was found");
         if whole {
             self.soft.named_fields += 1;
@@ -6150,9 +6292,18 @@ impl FnPrinter<'_, '_> {
         let field = typed[i].is_some();
         let callers = self.callers_off(i).is_some();
         let base = refs[i].and_then(|r| r.base).map(|(b, _)| b);
+        let fold = refs[i].and_then(|r| r.fold);
         let ops = match inst.op {
             // Printed as nothing.
             Op::Timing(_) | Op::YieldFlag(..) => return Vec::new(),
+            // `set_bits`: its pointer and the field's value.
+            Op::Store { addr, .. } if let Some(f) = fold => {
+                let v = match f.v {
+                    bitfields::FoldValue::Of(x, _) => Some(x),
+                    bitfields::FoldValue::Const(_) => None,
+                };
+                base.or(Some(addr)).into_iter().chain(v).collect()
+            }
             Op::Load { .. } if local || field || callers => Vec::new(),
             Op::Store { value, .. } if local || field || callers => vec![value],
             Op::Load { .. } if base.is_some() => base.into_iter().collect(),
@@ -7417,6 +7568,14 @@ struct HeapRef {
     named: bool,
     f: heap::Field,
     base: Option<(ValueId, u32)>,
+    /// A named access's bitfield, by its bits ([`bitfields`]).
+    bits: Option<(u32, u32)>,
+    /// A named store printed as `g.set_bits(..)` with its load.
+    fold: Option<bitfields::Fold>,
+    /// A named access holding bitfields that names none of them: through
+    /// the accessor of all the fields it holds
+    /// ([`fields::joined_pointer`]).
+    joined: bool,
 }
 
 fn bytes(w: Width) -> u32 {

@@ -98,4 +98,15 @@ impl Game {
             _ => st32(self, p.0 & !3, v),
         }
     }
+
+    /// `p`'s bitfield set to `v` (`x.f = v;`, native/lift-bitfields): a
+    /// load of the bytes that hold it, then a store of them with the
+    /// field's bits replaced by `v`'s low ones, as the code it stands for
+    /// does.
+    #[inline(always)]
+    pub fn set_bits<T: Word, const LO: u32, const N: u32>(&mut self, p: Ref<Bits<T, LO, N>>, v: u32) {
+        let old = self.get(p);
+        let mask = (u32::MAX >> (32 - N)) << LO;
+        self.set(p, (old & !mask) | ((v << LO) & mask));
+    }
 }
