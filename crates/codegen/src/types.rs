@@ -590,6 +590,98 @@ impl Types {
         }
     }
 
+    /// The bitfields an access of `w` bytes at `off` into `ty` loads or
+    /// stores whole with others (native/lift-bitfields): each one's bits,
+    /// counted from the access's offset, where the access is the
+    /// bitfields' accessor (as [`Types::walk`] finds them: through arrays
+    /// and whole fields). Empty where it holds no bitfield that doesn't
+    /// fill it.
+    pub fn bits_at(&self, ty: &Ty, off: u32, w: u32) -> Vec<(u32, u32)> {
+        match ty {
+            Ty::Array(e, n) => {
+                let es = self.size(e);
+                if es == 0 || off / es >= *n {
+                    return Vec::new();
+                }
+                self.bits_at(e, off % es, w)
+            }
+            Ty::Named(n) => {
+                let Some(d) = self.defs.get(n) else {
+                    return Vec::new();
+                };
+                if let Some(f) = d
+                    .fields
+                    .iter()
+                    .find(|f| f.bits.is_none() && (f.off..f.off + self.size(&f.ty)).contains(&off))
+                {
+                    return self.bits_at(&f.ty, off - f.off, w);
+                }
+                d.fields
+                    .iter()
+                    .filter(|f| f.off == off && self.size(&f.ty) == w)
+                    .filter_map(|f| f.bits.filter(|b| b.1 < 8 * w))
+                    .collect()
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// An access of `w` bytes at `off` into `ty` that loads or stores
+    /// bitfields with others, as one (native/lift-bitfields: a compiler
+    /// joins `b->left = 0; b->hue = 1;` into one store): the steps to the
+    /// struct holding them (through arrays and whole fields), that
+    /// struct's C name, the access's offset in it, and every field of it
+    /// with a byte in the access, by offset. `None` where the access holds
+    /// no bitfield.
+    pub fn joined(
+        &self,
+        ty: &Ty,
+        off: u32,
+        w: u32,
+    ) -> Option<(Vec<Step>, String, u32, Vec<String>)> {
+        match ty {
+            Ty::Array(e, n) => {
+                let es = self.size(e);
+                if es == 0 || off / es >= *n || off % es + w > es {
+                    return None;
+                }
+                let (mut p, s, o, fs) = self.joined(e, off % es, w)?;
+                p.insert(0, Step::Idx(off / es));
+                Some((p, s, o, fs))
+            }
+            Ty::Named(n) => {
+                let d = self.defs.get(n)?;
+                if let Some(f) = d.fields.iter().find(|f| {
+                    f.bits.is_none() && f.off <= off && off + w <= f.off + self.size(&f.ty)
+                }) {
+                    let (mut p, s, o, fs) = self.joined(&f.ty, off - f.off, w)?;
+                    p.insert(0, Step::Field(f.ident.clone()));
+                    return Some((p, s, o, fs));
+                }
+                // Each field's bytes: a bitfield's, those its bits are in.
+                let bytes = |f: &F| match f.bits {
+                    Some((lo, k)) => (f.off + lo / 8, f.off + (lo + k - 1) / 8 + 1),
+                    None => (f.off, f.off + self.size(&f.ty)),
+                };
+                let mut fs: Vec<&F> = d
+                    .fields
+                    .iter()
+                    .filter(|f| {
+                        let (a, b) = bytes(f);
+                        a < off + w && off < b
+                    })
+                    .collect();
+                if !fs.iter().any(|f| f.bits.is_some()) {
+                    return None;
+                }
+                fs.sort_by_key(|f| (bytes(f).0, f.bits.map_or(0, |b| b.0)));
+                let ids = fs.iter().map(|f| f.ident.clone()).collect();
+                Some((Vec::new(), n.clone(), off, ids))
+            }
+            _ => None,
+        }
+    }
+
     /// Whether [`Types::walk`] of `bits` lands on a bitfield of exactly
     /// those bits that doesn't fill the access.
     pub fn is_bitfield(&self, ty: &Ty, off: u32, w: u32, bits: (u32, u32)) -> bool {
