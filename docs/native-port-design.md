@@ -888,6 +888,13 @@ for data). Two forms:
   set is one ROM object. Under `--layout guest` a `RomRef` holds the guest
   address, so RAM still compares.
 
+As built (`native/rom-data-statics`, `codegen::native::rom_data`), the
+first typed form needs no DWARF: a ROM object a computed load reads (its
+extent from the value sets) is a static typed by the width the code reads
+it at, `static ROM_0808CAD0: &[u16; 12]`, a view of the included bytes,
+indexed with the pointer checked. Struct types and `&'static` pointer
+fields come later, from the names files.
+
 Graphics and music that the asset group extracts (`assets`,
 `docs/asset-extraction-design.md`) can replace their bytes with files
 later; the program sees the same `&'static [u8]`.

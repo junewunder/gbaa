@@ -17,7 +17,8 @@
 //!    (`missing`, `force_code`); the overlays and the holes file's copies;
 //!    one `Code` per context (`code`: functions, summaries, frames); RAM
 //!    globals carved (`const_access`, `computed_ram`, then
-//!    [`globals::Globals::carve`]); shapes (`shapes_of`); the
+//!    [`globals::Globals::carve`]); ROM's objects (`computed_rom`, then
+//!    [`rom_data::RomData::carve`]); shapes (`shapes_of`); the
 //!    function-address flow (`fn_ins`, `fn_flow`, `FnImage`, `literal`)
 //!    and the heap's ([`heap::follow`]); each
 //!    function printed (a stand-in's text, else `FnPrinter::print`);
@@ -45,7 +46,8 @@
 //! Elsewhere: what each function's parameters and results are,
 //! [`shape`]; frames, escaping slots and which become locals, [`frame`];
 //! function addresses and callee sets, [`fnref`]; RAM's globals, `pin`
-//! and `ix`, both layouts, [`globals`]; heap pointers as `Ref<T>`, the
+//! and `ix`, both layouts, [`globals`]; ROM's objects as typed statics,
+//! the prelude's `rom_at` and `rix`, [`rom_data`]; heap pointers as `Ref<T>`, the
 //! prelude's `Game::at`, [`heap`]; accesses as the names files' named
 //! fields, [`fields`]; metric names and bars,
 //! [`metrics`]; the crate's files, [`modules`]; functions and data by the
@@ -201,12 +203,14 @@ pub mod metrics;
 pub mod modules;
 pub mod named;
 pub mod narrow;
+pub mod rom_data;
 pub mod shape;
 pub mod switch;
 pub mod unread;
 
 use globals::{Globals, Layout, Obj, Place};
 use metrics::{Metrics, Where};
+use rom_data::RomData;
 use shape::{Shape, Shapes};
 
 /// The prelude every lifted crate starts with, at the guest layout.
@@ -933,6 +937,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let mut ram = Vec::new();
     let mut konst = Vec::new();
     let mut ranges = Vec::new();
+    let mut rom_ranges = Vec::new();
     for c in &codes {
         for f in c
             .funcs
@@ -955,12 +960,17 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                         } else {
                             ranges.push((lo, hi + w, w));
                         }
+                    } else if let Some((lo, hi, w)) = computed_rom(&c.ctx, insts, &inst.op, at) {
+                        rom_ranges.push((lo, hi + w, w));
                     }
                 }
             }
         }
     }
     let globals = Globals::carve(&ram, &ranges, &holes.names);
+    // ROM's objects: what the computed loads the value sets bound to ROM
+    // reach (native/rom-data-statics).
+    let rom_data = RomData::carve(&rom_ranges, rom.len() as u32);
     let typed_line = holes.types.as_deref().map(|t| typed_fields(t, &konst));
     let flow_ins: Vec<FlowIn> = codes
         .iter()
@@ -1147,6 +1157,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                         .unwrap_or_default(),
                     cur: f.entry,
                     globals: &globals,
+                    rom_data: &rom_data,
                     args: &args,
                     heap: &heap,
                     psr: psr_fns.place(f.entry),
@@ -1330,6 +1341,14 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     for &t in &soft.ref_tys {
         main.push_str(&heap.types[t].decl());
     }
+    // ROM's objects as typed statics (native/rom-data-statics): data,
+    // like the names files' types, so not in `lines`.
+    let mut rom_statics = rom_data.decls(&holes.names);
+    if !rom_statics.is_empty() {
+        rom_statics.insert_str(0, "\n/// ROM's objects the computed loads read, as views of `ROM` typed by their width.\n");
+    }
+    let rom_lines = rom_statics.lines().count();
+    main.push_str(&rom_statics);
     writeln!(main, "\npub const NAME: &str = {name:?};").unwrap();
     writeln!(
         main,
@@ -1638,10 +1657,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let const_lines = named.map_or(0, |n| n.const_lines);
     m.push(
         "lines",
-        n(all_lines - files.wiring - prelude - const_lines - type_lines),
+        n(all_lines - files.wiring - prelude - const_lines - type_lines - rom_lines),
     );
     m.push("lines_prelude", n(prelude));
     m.push("lines_types", n(type_lines));
+    m.push("rom_statics", n(rom_data.len()));
     m.push("functions", n(n_funcs));
     m.push(
         "functions_iwram",
@@ -2627,6 +2647,8 @@ struct FnPrinter<'a, 'b> {
     cur: u32,
     /// RAM's typed globals.
     globals: &'a Globals,
+    /// ROM's objects read at computed addresses, as typed statics.
+    rom_data: &'a RomData,
     /// What each `call_fn` call with a complete callee set passes and
     /// takes back ([`call_fn_args`]), by its address.
     args: &'a Args,
@@ -4037,6 +4059,11 @@ impl FnPrinter<'_, '_> {
                 if typed[i].is_some() || objs[i].is_some() {
                     return None;
                 }
+                // A load from one of ROM's statics indexes it instead
+                // (native/rom-data-statics).
+                if self.rom_static(insts, &inst.op, pc).is_some() {
+                    return None;
+                }
                 let heap = (self.vsa_where(insts, addr, pc) == Where::Unknown)
                     .then(|| self.heap.access.get(&(self.f.entry, self.cur, i)).copied())
                     .flatten();
@@ -4371,6 +4398,7 @@ impl FnPrinter<'_, '_> {
                     );
                 }
                 Op::Load { width, addr } => {
+                    let mut rom = false;
                     let (f, m) = match width {
                         Width::Byte => ("ld8", ""),
                         Width::Half => ("ld16", " & !1"),
@@ -4388,7 +4416,13 @@ impl FnPrinter<'_, '_> {
                             Some((b, c)) => self.heap.load(r.f, &self.val(b), r.f.off - c),
                             None => self.heap.load(r.f, &self.val(addr), r.f.off),
                         },
-                        (None, None, None) => format!("{f}(g, {}{m})", self.val(addr)),
+                        (None, None, None) => match self.rom_static(insts, &inst.op, at) {
+                            Some(o) => {
+                                rom = true;
+                                o.load(&format!("{}{m}", self.val(addr)))
+                            }
+                            None => format!("{f}(g, {}{m})", self.val(addr)),
+                        },
                     };
                     let e = match self.local(i) {
                         Some((l, d, n)) => {
@@ -4409,7 +4443,8 @@ impl FnPrinter<'_, '_> {
                                 at,
                                 i,
                                 false,
-                                typed_as(&typed[i], &objs[i], refs[i].is_some_and(|r| !r.named)),
+                                typed_as(&typed[i], &objs[i], refs[i].is_some_and(|r| !r.named))
+                                    .or(rom.then_some(Where::RomStatic)),
                             );
                             self.soft.named_unknown +=
                                 u64::from(w == Where::Unknown && refs[i].is_some_and(|r| r.named));
@@ -4643,6 +4678,13 @@ impl FnPrinter<'_, '_> {
             self.soft.sp_slots[k] += 1;
         }
         w
+    }
+
+    /// The ROM static a load reads ([`rom_data`]), if the value sets bound
+    /// it to one.
+    fn rom_static(&self, insts: &[Inst], op: &Op, at: u32) -> Option<&rom_data::RomObj> {
+        let (lo, hi, w) = computed_rom(self.ctx, insts, op, at)?;
+        self.rom_data.object(lo, hi, w)
     }
 
     /// Where an access by the instruction at `at` is, untyped: a constant
@@ -5566,7 +5608,11 @@ impl FnPrinter<'_, '_> {
                     let w = typed_as(&typed[i], &objs[i], refs[i].is_some())
                         .unwrap_or_else(|| self.vsa_where(insts, addr, at));
                     q[i] = match w {
-                        Where::Global | Where::Object | Where::Ref | Where::Sp => true,
+                        Where::Global
+                        | Where::Object
+                        | Where::Ref
+                        | Where::RomStatic
+                        | Where::Sp => true,
                         Where::Const(r) | Where::Computed(r) => quiet_region(r),
                         Where::Unknown => false,
                     };
@@ -5976,6 +6022,26 @@ fn computed_ram(ctx: &Ctx, insts: &[Inst], op: &Op, at: u32) -> Option<(u32, u32
     let (lo, hi) = (lo & !(w - 1), hi & !(w - 1));
     let (o_lo, o_hi) = (globals::ram_at(lo)?, globals::ram_at(hi)?);
     (o_hi >= o_lo && o_hi - o_lo == hi - lo).then_some((o_lo, o_hi, w))
+}
+
+/// A load whose address isn't a constant in its block but which the value
+/// sets bound to ROM, by the instruction at `at`: its lowest and highest
+/// address (aligned as the load aligns them) and its width in bytes
+/// ([`rom_data`], native/rom-data-statics).
+fn computed_rom(ctx: &Ctx, insts: &[Inst], op: &Op, at: u32) -> Option<(u32, u32, u32)> {
+    let Op::Load { width, addr } = *op else {
+        return None;
+    };
+    if konst(insts, addr).is_some() {
+        return None;
+    }
+    let x = ctx.disc.rec.accesses.get(&at)?;
+    let (lo, hi) = x.hull.filter(|_| !x.sp && !x.top)?;
+    if metrics::region_of(lo, hi) != Some(2) {
+        return None;
+    }
+    let w = bytes(width);
+    Some((lo & !(w - 1), hi & !(w - 1), w))
 }
 
 /// The values of a block's address arithmetic (constants and the ops

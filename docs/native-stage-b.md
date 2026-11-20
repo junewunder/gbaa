@@ -207,14 +207,27 @@ typed pointers, below; until then they are soft holes, counted.
 
 ### 5. Typed data
 
-- **ROM data as typed statics** (`native/rom-statics`). ROM objects read at
-  constant addresses or through pool pointers become `static`s typed by the
-  widths the code reads them at (`[u16; N]`), loads from them indexing. A
-  pointer loaded from ROM data stays a `RomRef` (a soft hole, counted).
-  Needs the dense IDs, so a function-pointer word in a table is an
-  `FnRef`. Bar: the computed ROM loads at most a quarter of their bar
-  (constant ROM loads are already 0: each was a literal pool's word, which
-  the IR has as a constant, so `native/ram-globals` dropped them).
+- **ROM data as typed statics** (`native/rom-data-statics`, the data
+  half). Done (`crates/codegen/src/native/rom_data.rs`): a computed load
+  the value sets bound to ROM reads an object, carved from the loads'
+  extents one per width (overlapping extents of one width join), printed
+  as `pub static ROM_0808CAD0: &[u16; 12] = rom_at(0xcad0);`, a view of
+  the prelude's word-aligned `ROM` (two widths over the same bytes cost
+  nothing); the load is `ROM_0808CAD0[rix(a, 0x808cad0, 2, 12)] as u32`,
+  the pointer checked, so a wrong value set stops the program naming it.
+  An extent past the ROM's end ends there; one wider than 256 KB (a lost
+  pointer's "from here on" set) stays bytes, as does the EEPROM's window.
+  `load_computed_rom` 54-78 to 0 on the agb programs, 5 to 0 on
+  c-switch, 3361 to 19 on Metroid (615 statics; `load_rom_static`, no
+  bar, and `rom_statics` count them; their declarations are data, out of
+  `lines`). A loaded word is still a guest address: a pointer from ROM
+  data stays a number (the design's `RomRef`, a soft hole), a function
+  word a ROM key. Constant ROM loads were already 0 (each was a literal
+  pool's word, which the IR has as a constant, so `native/ram-globals`
+  dropped them).
+- **Function words in ROM tables as `FnRef`s** (`native/rom-statics`,
+  what is left). Needs the dense IDs: a function-pointer word in a
+  static is an `FnRef`.
 - **RAM globals as typed fields** (`native/ram-globals`). Done
   (`crates/codegen/src/native/globals.rs`): constant-address RAM accesses
   carved into globals, the fields of `Ram` at the guest's offsets under
@@ -331,8 +344,9 @@ a bar lowered". After that, three lines of work can go side by side:
   rewrite how calls and continuations print); following function
   addresses waits on parameters (the `FNS` adapters); dense IDs wait on
   that and on the heap by allocation site, and indirect-call arguments
-  on dense IDs; ROM statics wait on the dense IDs (a function word in a
-  table must already be an `FnRef`). The escape analysis needs only the
+  on dense IDs; ROM statics' function words wait on the dense IDs (a
+  function word in a table must already be an `FnRef`; the data half
+  needed neither). The escape analysis needs only the
   bars; stack locals wait on it and on parameters (a function's signature
   decides what's in its frame). The packed layout waits on RAM globals;
   typed pointers wait on RAM globals and stack locals, since a pointer is
@@ -407,8 +421,8 @@ What the done pieces left open, for the units that come next.
   ranges aren't weighed against each other when carving. Most computed
   accesses (`load_computed_unknown`) have no value set at all:
   parameters from callers the analysis can't see and the heap's
-  pointers, `native/ref-heap`'s. Escaping stack slots and ROM statics
-  aren't pointed into yet. Pointers are guest addresses in both layouts
+  pointers, `native/ref-heap`'s. Escaping stack slots aren't pointed
+  into yet; ROM's objects are their own statics (`native/rom-data-statics`). Pointers are guest addresses in both layouts
   (a `Ref<T>` too: its value is the guest's address), and the packed
   prelude's `ld16`/`st32` go a byte at a time (a word may span two
   globals).
