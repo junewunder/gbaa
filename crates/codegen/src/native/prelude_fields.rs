@@ -1,0 +1,101 @@
+// Typed pointers from the names files (native/lift-typed-access;
+// `codegen::native::fields`): what the `t` module's accessors and the
+// accesses printed through them need. Written into a lifted crate only
+// when its lift has types. A `Ref` here is only a typed address: `get`
+// and `set` are `ld*` and `st*` at it, whatever it points at.
+
+/// The `t` module's name for a typed pointer.
+pub type Ptr<T> = Ref<T>;
+
+impl<T> Clone for Ref<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T> Copy for Ref<T> {}
+
+impl<T> Ref<T> {
+    pub const fn at(a: u32) -> Ref<T> {
+        Ref(a, std::marker::PhantomData)
+    }
+
+    /// A field `off` bytes in.
+    #[inline(always)]
+    pub const fn field<F>(self, off: u32) -> Ref<F> {
+        Ref(self.0.wrapping_add(off), std::marker::PhantomData)
+    }
+}
+
+/// A type the guest lays out: its size there.
+pub trait Guest {
+    const SIZE: u32;
+}
+impl Guest for u8 {
+    const SIZE: u32 = 1;
+}
+impl Guest for u16 {
+    const SIZE: u32 = 2;
+}
+impl Guest for u32 {
+    const SIZE: u32 = 4;
+}
+impl<T> Guest for Ref<T> {
+    const SIZE: u32 = 4;
+}
+impl<T: Guest, const N: usize> Guest for [T; N] {
+    const SIZE: u32 = T::SIZE * N as u32;
+}
+
+impl<T: Guest, const N: usize> Ref<[T; N]> {
+    /// `&a[i]`.
+    #[inline(always)]
+    pub fn idx(self, i: u32) -> Ref<T> {
+        Ref(self.0.wrapping_add(i.wrapping_mul(T::SIZE)), std::marker::PhantomData)
+    }
+}
+
+/// A value loaded or stored whole: its bytes.
+pub trait Word {
+    const BYTES: u32;
+}
+impl Word for u8 {
+    const BYTES: u32 = 1;
+}
+impl Word for u16 {
+    const BYTES: u32 = 2;
+}
+impl Word for u32 {
+    const BYTES: u32 = 4;
+}
+impl<T> Word for Ref<T> {
+    const BYTES: u32 = 4;
+}
+
+/// A bitfield (`T x : N` in C): `N` bits from bit `LO` of the `T` its
+/// accessor points at, which loads and stores as that `T`.
+pub struct Bits<T, const LO: u32, const N: u32>(pub T);
+impl<T: Word, const LO: u32, const N: u32> Word for Bits<T, LO, N> {
+    const BYTES: u32 = T::BYTES;
+}
+
+impl Game {
+    /// `*p`, as `ld8`, `ld16` or `ld32` loads it.
+    #[inline(always)]
+    pub fn get<T: Word>(&mut self, p: Ref<T>) -> u32 {
+        match T::BYTES {
+            1 => ld8(self, p.0),
+            2 => ld16(self, p.0 & !1),
+            _ => ld32(self, p.0 & !3),
+        }
+    }
+
+    /// `*p = v`, as `st8`, `st16` or `st32` stores it.
+    #[inline(always)]
+    pub fn set<T: Word>(&mut self, p: Ref<T>, v: u32) {
+        match T::BYTES {
+            1 => st8(self, p.0, v),
+            2 => st16(self, p.0 & !1, v),
+            _ => st32(self, p.0 & !3, v),
+        }
+    }
+}

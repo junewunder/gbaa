@@ -1,0 +1,271 @@
+# Names for c-chain-agbcc.gba (c/, built by `just c-tests`), from its ELF's symbols and DWARF.
+# Written by `just pret-names` (crates/pret-names). Don't edit.
+
+[map]
+rom_sha1 = "83e50f3977d746be62d8720a01fb48a561483793"
+source = "gbaa c/ (c-chain-agbcc.elf, just c-tests)"
+format = 1
+#
+# Keys are codegen's function keys (bit 0 set = Thumb; an IWRAM copy's
+# run address, with `rom` its source) or data addresses.
+
+# Our entries with a pret function symbol (`label`: an asm label) here.
+[functions]
+0x08000000 = { name = "_start", size = 0, file = "crt0.o" }
+0x08000160 = { name = "irq_handler", size = 0, file = "crt0.o" }
+0x0800018d = { name = "VBlankIntrWait", size = 0, file = "crt0.o" }
+0x08000191 = { name = "fill_rect", size = 102, file = "common-draw.o", src = "c/common/draw.c", proto = "void fill_rect(s32 x, s32 y, s32 w, s32 h, u16 color)" }
+0x08000271 = { name = "overlaps", size = 72, file = "chain-main.o", src = "c/chain/main.c", proto = "s32 overlaps(const struct Rect *a, const struct Rect *b)" }
+0x080002b9 = { name = "rect_union", size = 216, file = "chain-main.o", src = "c/chain/main.c", proto = "struct Rect rect_union(const struct Rect *a, const struct Rect *b)" }
+0x08000391 = { name = "bounce", size = 146, file = "chain-main.o", src = "c/chain/main.c", proto = "void bounce(struct Ctx *ctx, struct Body *b)" }
+0x08000425 = { name = "move_body", size = 64, file = "chain-main.o", src = "c/chain/main.c", proto = "void move_body(struct Ctx *ctx, struct Body *b)" }
+0x08000465 = { name = "draw_body", size = 46, file = "chain-main.o", src = "c/chain/main.c", proto = "void draw_body(struct Ctx *ctx, const struct Body *b)" }
+0x08000495 = { name = "step_world", size = 196, file = "chain-main.o", src = "c/chain/main.c", proto = "void step_world(struct Ctx *ctx, struct Body *bodies, u32 n)" }
+0x08000559 = { name = "frame", size = 156, file = "chain-main.o", src = "c/chain/main.c", proto = "void frame(u32 count)" }
+0x080005f5 = { name = "init_body", size = 48, file = "chain-main.o", src = "c/chain/main.c", proto = "void init_body(struct Body *b, s16 x, s16 y, s16 vx, s16 vy, u16 size, u16 color)" }
+0x08000625 = { name = "AgbMain", size = 184, file = "chain-main.o", src = "c/chain/main.c", proto = "void AgbMain(void)" }
+
+# Our entries pret has no symbol for, inside one of its functions.
+[inside]
+
+# Our entries with no function name: a pret function in the other mode,
+# pret data (discovery took it for code), or nothing.
+[unnamed]
+
+# pret functions that aren't our entries, and why.
+[missed]
+0x080001f9 = { name = "plot", size = 42, why = "unreached; no ROM word points at it" }
+0x08000225 = { name = "memcpy", size = 40, why = "unreached; no ROM word points at it" }
+0x0800024d = { name = "memset", size = 34, why = "unreached; no ROM word points at it" }
+
+# Code copied out of ROM to run in RAM (BIOS copies discovery found), by
+# destination: the pret functions in it, keyed by run address.
+[copies]
+
+# pret's data: variables, tables and buffers in RAM and ROM.
+[data]
+0x02000000 = { name = "__ewram_start", size = 0, aliases = ["__ewram_end"] }
+0x03000000 = { name = "gUnion", size = 8, aliases = ["__data_end", "__bss_start", "__data_start"], type = "struct Rect" }
+0x03000008 = { name = "gLastHitIndex", size = 4, type = "u16" }
+0x0300000c = { name = "gFrame", size = 4, type = "u32" }
+0x03000010 = { name = "gTotalHits", size = 4, type = "u32" }
+0x03000020 = { name = "gBodies", size = 64, type = "struct Body [4]" }
+0x03000060 = { name = "__bss_end", size = 0 }
+
+# Each function's parameters and variables from DWARF: a register (`reg`)
+# or a stack slot (`slot`, an offset from sp after the prologue), over
+# [from, to). Variables agbcc gave no location are left out.
+[locals]
+0x08000191 = [
+  { name = "x", reg = 6, from = 0x08000190, to = 0x080001f6, type = "s32", param = true },
+  { name = "y", reg = 5, from = 0x08000190, to = 0x080001f6, type = "s32", param = true },
+  { name = "w", reg = 4, from = 0x08000190, to = 0x080001f6, type = "s32", param = true },
+  { name = "h", reg = 3, from = 0x08000190, to = 0x080001f6, type = "s32", param = true },
+  { name = "color", reg = 7, from = 0x08000190, to = 0x080001f6, type = "u16", param = true },
+  { name = "i", reg = 1, from = 0x08000190, to = 0x080001f6, type = "s32" },
+  { name = "j", reg = 2, from = 0x08000190, to = 0x080001f6, type = "s32" },
+  { name = "row", reg = 0, from = 0x08000190, to = 0x080001f6, type = "volatile u16 *" },
+]
+0x08000271 = [
+  { name = "a", reg = 2, from = 0x08000270, to = 0x080002b8, type = "const struct Rect *", param = true },
+  { name = "b", reg = 1, from = 0x08000270, to = 0x080002b8, type = "const struct Rect *", param = true },
+]
+0x080002b9 = [
+  { name = "a", reg = 1, from = 0x080002b8, to = 0x08000390, type = "const struct Rect *", param = true },
+  { name = "b", reg = 6, from = 0x080002b8, to = 0x08000390, type = "const struct Rect *", param = true },
+  { name = "u", reg = 4, from = 0x080002b8, to = 0x08000390, type = "struct Rect" },
+  { name = "x2", reg = 12, from = 0x080002b8, to = 0x08000390, type = "s16" },
+  { name = "y2", reg = 8, from = 0x080002b8, to = 0x08000390, type = "s16" },
+]
+0x08000391 = [
+  { name = "ctx", reg = 4, from = 0x08000390, to = 0x08000422, type = "struct Ctx *", param = true },
+  { name = "b", reg = 3, from = 0x08000390, to = 0x08000422, type = "struct Body *", param = true },
+  { name = "bd", reg = 5, from = 0x08000390, to = 0x08000422, type = "const struct Rect *" },
+]
+0x08000425 = [
+  { name = "ctx", reg = 6, from = 0x08000424, to = 0x08000464, type = "struct Ctx *", param = true },
+  { name = "b", reg = 5, from = 0x08000424, to = 0x08000464, type = "struct Body *", param = true },
+]
+0x08000465 = [
+  { name = "ctx", reg = 5, from = 0x08000464, to = 0x08000492, type = "struct Ctx *", param = true },
+  { name = "b", reg = 1, from = 0x08000464, to = 0x08000492, type = "const struct Body *", param = true },
+]
+0x08000495 = [
+  { name = "ctx", slot = 8, from = 0x08000494, to = 0x08000558, type = "struct Ctx *", param = true },
+  { name = "bodies", reg = 9, from = 0x08000494, to = 0x08000558, type = "struct Body *", param = true },
+  { name = "n", reg = 8, from = 0x08000494, to = 0x08000558, type = "u32", param = true },
+  { name = "i", reg = 5, from = 0x08000494, to = 0x08000558, type = "u32" },
+  { name = "j", reg = 7, from = 0x08000494, to = 0x08000558, type = "u32" },
+]
+0x08000559 = [
+  { name = "count", reg = 0, from = 0x08000558, to = 0x080005f4, type = "u32", param = true },
+  { name = "ctx", slot = 4, from = 0x08000558, to = 0x080005f4, type = "struct Ctx" },
+]
+0x080005f5 = [
+  { name = "b", reg = 0, from = 0x080005f4, to = 0x08000624, type = "struct Body *", param = true },
+]
+
+# The line table: each row's address and its line, in the `src` of the
+# function holding it, else "file:line".
+[lines]
+0x08000190 = 7
+0x0800019e = 11
+0x080001a6 = 12
+0x080001ae = 13
+0x080001b8 = 14
+0x080001c2 = 15
+0x080001d0 = 16
+0x080001da = 17
+0x080001e2 = 18
+0x080001e4 = 17
+0x080001ec = 15
+0x080001f0 = 20
+0x080001f8 = 23
+0x08000200 = 24
+0x0800020c = 25
+0x0800021e = 26
+0x08000224 = 8
+0x08000228 = 9
+0x0800022a = 12
+0x08000236 = 13
+0x08000244 = 14
+0x08000246 = 15
+0x0800024c = 18
+0x08000250 = 19
+0x08000252 = 21
+0x0800025c = 22
+0x08000266 = 23
+0x08000268 = 24
+0x08000270 = 38
+0x08000274 = 39
+0x080002b2 = 41
+0x080002b8 = 44
+0x080002c6 = 46
+0x080002de = 48
+0x080002f4 = 49
+0x08000312 = 50
+0x08000326 = 51
+0x08000332 = 52
+0x08000346 = 53
+0x08000350 = 54
+0x08000362 = 55
+0x08000374 = 56
+0x0800037a = 57
+0x08000390 = 61
+0x08000396 = 62
+0x08000398 = 64
+0x080003bc = 65
+0x080003c2 = 66
+0x080003cc = 67
+0x080003d2 = 68
+0x080003d8 = 69
+0x080003da = 71
+0x080003fe = 72
+0x08000404 = 73
+0x0800040e = 74
+0x08000414 = 75
+0x0800041a = 76
+0x0800041c = 78
+0x08000424 = 81
+0x0800042c = 82
+0x08000444 = 83
+0x0800044c = 84
+0x08000454 = 85
+0x0800045c = 86
+0x08000464 = 89
+0x0800046a = 90
+0x08000484 = 91
+0x0800048a = 92
+0x08000494 = 96
+0x080004a6 = 99
+0x080004ae = 100
+0x080004b6 = 99
+0x080004be = 101
+0x080004c8 = 102
+0x080004e2 = 103
+0x080004f2 = 104
+0x08000506 = 105
+0x0800050e = 106
+0x08000516 = 102
+0x08000520 = 101
+0x08000526 = 108
+0x0800052e = 109
+0x08000536 = 108
+0x0800053e = 110
+0x08000558 = 113
+0x0800055c = 116
+0x08000564 = 117
+0x08000566 = 118
+0x0800056c = 119
+0x08000570 = 120
+0x08000572 = 121
+0x08000576 = 122
+0x08000578 = 123
+0x0800057a = 124
+0x08000584 = 125
+0x08000590 = 126
+0x08000596 = 127
+0x0800059e = 128
+0x080005b4 = 129
+0x080005ec = 130
+0x080005f4 = 133
+0x08000606 = 134
+0x0800060a = 135
+0x0800060c = 136
+0x0800060e = 137
+0x08000610 = 138
+0x08000612 = 139
+0x08000616 = 140
+0x08000618 = 141
+0x0800061a = 142
+0x08000624 = 145
+0x08000628 = 146
+0x08000642 = 147
+0x0800065c = 148
+0x0800067c = 149
+0x08000696 = 150
+0x080006b0 = 151
+0x080006b2 = 152
+0x080006b6 = 153
+0x080006bc = 154
+0x080006c2 = 151
+0x080006dc = "c/chain/main.c:156"
+
+# Structs, unions and enums by C name (a typedef's for an anonymous one):
+# fields with byte offset, size, type and bitfield bits [lowest, width].
+
+[types."struct Body"]
+kind = "struct"
+size = 16
+fields = [
+  { name = "r", off = 0, size = 8, type = "struct Rect" },
+  { name = "vx", off = 8, size = 2, type = "s16" },
+  { name = "vy", off = 10, size = 2, type = "s16" },
+  { name = "color", off = 12, size = 2, type = "u16" },
+  { name = "hits", off = 14, size = 2, type = "u16" },
+]
+
+[types."struct Ctx"]
+kind = "struct"
+size = 20
+fields = [
+  { name = "bounds", off = 0, size = 8, type = "struct Rect" },
+  { name = "frame", off = 8, size = 4, type = "u32" },
+  { name = "hits", off = 12, size = 2, type = "u16" },
+  { name = "drawn", off = 14, size = 2, type = "u16" },
+  { name = "last_hit", off = 16, size = 4, type = "struct Body *" },
+]
+
+[types."struct Rect"]
+kind = "struct"
+size = 8
+fields = [
+  { name = "x", off = 0, size = 2, type = "s16" },
+  { name = "y", off = 2, size = 2, type = "s16" },
+  { name = "w", off = 4, size = 2, type = "s16" },
+  { name = "h", off = 6, size = 2, type = "s16" },
+]
+
+# #define families of pret's include/constants/ that a field takes, by
+# the prefix its name spells (`optionsTextSpeed`: OPTIONS_TEXT_SPEED_*):
+# each value's one name, and the fields, as `type.field`.

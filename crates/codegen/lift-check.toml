@@ -1293,7 +1293,8 @@ route = "units/c-fnptr-agbcc-600.toml"
 planted_store = 0x080005d4
 
 [program.c-fnptr-agbcc.bars]
-lines = 962
+computed_unknown_unnamed = 5
+lines = 948
 lines_prelude = 1265
 functions = 18
 functions_iwram = 0
@@ -1311,7 +1312,7 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 204
+value_lets = 193
 bank_sp_calls = 13
 loops_not_for = 8
 load_const_ram = 0
@@ -1365,7 +1366,8 @@ route = "units/c-fnptr-gcc-600.toml"
 planted_store = 0x08000390
 
 [program.c-fnptr-gcc.bars]
-lines = 1019
+computed_unknown_unnamed = 19
+lines = 1009
 lines_prelude = 1265
 functions = 18
 functions_iwram = 0
@@ -1383,7 +1385,7 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 223
+value_lets = 213
 bank_sp_calls = 18
 loops_not_for = 9
 load_const_ram = 0
@@ -1439,7 +1441,8 @@ route = "units/c-switch-agbcc-600.toml"
 planted_store = 0x080005ca
 
 [program.c-switch-agbcc.bars]
-lines = 937
+computed_unknown_unnamed = 14
+lines = 917
 lines_prelude = 1265
 functions = 10
 functions_iwram = 0
@@ -1457,7 +1460,7 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 223
+value_lets = 209
 bank_sp_calls = 31
 loops_not_for = 5
 load_const_ram = 0
@@ -1513,7 +1516,8 @@ route = "units/c-switch-gcc-600.toml"
 planted_store = 0x080005a0
 
 [program.c-switch-gcc.bars]
-lines = 1012
+computed_unknown_unnamed = 15
+lines = 995
 lines_prelude = 1265
 functions = 10
 functions_iwram = 0
@@ -1531,7 +1535,7 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 252
+value_lets = 239
 bank_sp_calls = 39
 loops_not_for = 6
 load_const_ram = 0
@@ -1585,7 +1589,8 @@ route = "units/c-chain-agbcc-600.toml"
 planted_store = 0x0800058e
 
 [program.c-chain-agbcc.bars]
-lines = 1011
+computed_unknown_unnamed = 5
+lines = 970
 lines_prelude = 1265
 functions = 13
 functions_iwram = 0
@@ -1603,7 +1608,7 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 272
+value_lets = 233
 bank_sp_calls = 17
 loops_not_for = 8
 load_const_ram = 0
@@ -1657,7 +1662,8 @@ route = "units/c-chain-gcc-600.toml"
 planted_store = 0x08000550
 
 [program.c-chain-gcc.bars]
-lines = 1025
+computed_unknown_unnamed = 18
+lines = 981
 lines_prelude = 1265
 functions = 13
 functions_iwram = 0
@@ -1675,7 +1681,7 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 261
+value_lets = 232
 bank_sp_calls = 19
 loops_not_for = 10
 load_const_ram = 0

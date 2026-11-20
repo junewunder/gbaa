@@ -74,7 +74,7 @@ struct F {
 }
 
 /// The typed view of a source map: its markers and typed globals.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Types {
     defs: BTreeMap<String, Def>,
     /// Each typed datum's type, by address.
@@ -86,6 +86,8 @@ pub struct Types {
     values: BTreeMap<String, BTreeMap<u32, String>>,
     /// Each value's name: its value, its family and the family's header.
     named: BTreeMap<String, (u32, String, String)>,
+    /// Each enum's size, by its C name.
+    enums: BTreeMap<String, u32>,
 }
 
 /// A function's prototype as the readable form prints it (the spike's gap
@@ -100,6 +102,9 @@ pub struct Proto {
     /// It returns a value in r0: not `void`, a struct (returned through a
     /// hidden first argument, so it has no `args` either) or 64 bits.
     pub returns: bool,
+    /// What the value returned points at, if it is a pointer (but
+    /// `void *`).
+    pub ret: Option<Ty>,
 }
 
 /// Names an accessor can't take: `Ptr`'s own methods and Rust's keywords.
@@ -234,6 +239,7 @@ impl Types {
             let ty = t.parse(c, size, &enums);
             t.globals.insert(k, (ty, c.clone()));
         }
+        t.enums = enums.iter().map(|(n, s)| (n.to_string(), *s)).collect();
         for (&k, item) in &m.functions {
             if let Some(p) = item
                 .proto
@@ -261,6 +267,7 @@ impl Types {
     ) -> Option<Proto> {
         let (ret, params) = crate::dwarf::proto_params(c, name)?;
         let ret = normal(&ret);
+        let to = self.pointee(&ret);
         let returns = match ret.as_str() {
             "void" => false,
             r => match self.read(r, enums) {
@@ -287,7 +294,27 @@ impl Types {
             };
             args.push(n.as_deref().and_then(|n| m.local_ident(n)).map(|n| (n, ty)));
         }
-        Some(Proto { args, returns })
+        Some(Proto {
+            args,
+            returns,
+            ret: to.filter(|_| returns),
+        })
+    }
+
+    /// What `c`, a C type as the map writes it, points at, if it is a
+    /// pointer to something the map types: not `void *`, nor a pointer to
+    /// a function.
+    pub fn pointee(&self, c: &str) -> Option<Ty> {
+        let text = normal(c);
+        if text.contains('(') || text.contains('[') {
+            return None;
+        }
+        let to = text.strip_suffix('*')?.trim();
+        if to == "void" {
+            return None;
+        }
+        let enums: BTreeMap<&str, u32> = self.enums.iter().map(|(n, s)| (n.as_str(), *s)).collect();
+        self.read(to, &enums)
     }
 
     /// `c`, a C type as the map writes it, of `size` bytes if known: its
@@ -386,6 +413,24 @@ impl Types {
             Ty::Named(n) => self.defs.get(n).map_or(0, |d| d.size),
             Ty::Bytes(n) => *n,
         }
+    }
+
+    /// The marker type's identifier of the struct or union `name`.
+    pub fn marker(&self, name: &str) -> Option<&str> {
+        self.defs.get(name).map(|d| d.ident.as_str())
+    }
+
+    /// The field of the struct or union `ty` that holds byte `off` (not a
+    /// bitfield), and the offset in it.
+    pub fn field_at(&self, ty: &Ty, off: u32) -> Option<(&Ty, u32)> {
+        let Ty::Named(n) = ty else { return None };
+        self.defs
+            .get(n)?
+            .fields
+            .iter()
+            .filter(|f| f.bits.is_none())
+            .find(|f| (f.off..f.off + self.size(&f.ty)).contains(&off))
+            .map(|f| (&f.ty, off - f.off))
     }
 
     /// The typed datum `x` lands on or in, as its address and type.
@@ -608,6 +653,36 @@ impl Types {
             let doc = format!(" `{c}`");
             Some(quote!(#[doc = #doc] pub const #id: Ptr<#t> = Ptr::at(#a);))
         });
+        let markers = self.markers();
+        let values = self.named.iter().map(|(n, (x, fam, file))| {
+            let (id, x) = (
+                format_ident!("{n}"),
+                proc_macro2::Literal::u32_unsuffixed(*x),
+            );
+            let doc = format!(" One of `{fam}_*`, pret's `{file}`.");
+            quote!(#[doc = #doc] pub const #id: u32 = #x;)
+        });
+        let io = crate::io_regs::consts();
+        quote! {
+            /// The source map's typed data as `Ptr<T>`s and its structs and
+            /// unions as marker types, each field an accessor
+            /// (`docs/mod-view-design.md`, the spike's gap 6), and the
+            /// GBA's I/O registers ([`crate::io_regs`]).
+            #[allow(non_upper_case_globals, non_camel_case_types, non_snake_case)]
+            pub mod globals {
+                use super::prelude::*;
+                #(#consts)*
+                #(#values)*
+                #io
+                #markers
+            }
+        }
+    }
+
+    /// Every struct and union as a marker type with its size and its
+    /// fields' accessors, as [`Types::module`] declares them: over `Ptr`,
+    /// `Guest` and `Bits`, which the module they go in imports.
+    pub fn markers(&self) -> TokenStream {
         let markers = self.defs.values().map(|d| {
             let id = format_ident!("{}", d.ident);
             let size = proc_macro2::Literal::u32_unsuffixed(d.size);
@@ -654,29 +729,7 @@ impl Types {
                 }
             }
         });
-        let values = self.named.iter().map(|(n, (x, fam, file))| {
-            let (id, x) = (
-                format_ident!("{n}"),
-                proc_macro2::Literal::u32_unsuffixed(*x),
-            );
-            let doc = format!(" One of `{fam}_*`, pret's `{file}`.");
-            quote!(#[doc = #doc] pub const #id: u32 = #x;)
-        });
-        let io = crate::io_regs::consts();
-        quote! {
-            /// The source map's typed data as `Ptr<T>`s and its structs and
-            /// unions as marker types, each field an accessor
-            /// (`docs/mod-view-design.md`, the spike's gap 6), and the
-            /// GBA's I/O registers ([`crate::io_regs`]).
-            #[allow(non_upper_case_globals, non_camel_case_types, non_snake_case)]
-            pub mod globals {
-                use super::prelude::*;
-                #(#consts)*
-                #(#values)*
-                #io
-                #(#markers)*
-            }
-        }
+        quote!(#(#markers)*)
     }
 }
 
@@ -786,14 +839,16 @@ fields = []
             p(0x0800_0001),
             Some(Proto {
                 args: vec![a("quantity", Some(Ty::U16)), a("id", None)],
-                returns: true
+                returns: true,
+                ret: None,
             })
         );
         assert_eq!(
             p(0x0800_0011),
             Some(Proto {
                 args: vec![a("save", Some(save)), a("buf", Some(Ty::U8))],
-                returns: false
+                returns: false,
+                ret: None,
             })
         );
         // A struct returned by value takes a hidden first argument.
