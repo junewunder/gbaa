@@ -241,6 +241,38 @@ impl Frame {
         Some((*l, (o - l.lo) as u32, n))
     }
 
+    /// Whether nothing of the frame is in memory (`native/lift-frame-gone`):
+    /// sp keeps its offset, no slot escapes, no call writes the locals to
+    /// the frame's bytes, no stack switch or fresh stack, and every access
+    /// into the frame lands in one of `locals` (this frame's
+    /// [`Frame::locals`]) or in the caller's frame, whole at or above the
+    /// entry sp ([`Frame::callers_only`]). Then the lift needs no sp of
+    /// its own: it prints no sp arithmetic, reaches the caller's frame from
+    /// its entry sp, and its callees run on that sp, below which it keeps
+    /// nothing.
+    pub fn in_locals(&self, locals: &[Local]) -> bool {
+        !self.lost
+            && self.escaping() == 0
+            && self.flush.is_empty()
+            && self.switches.is_empty()
+            && self.fresh.is_empty()
+            && self.places.iter().all(|(&(b, i), p)| match p {
+                Place::Elsewhere => true,
+                Place::Exact(..) => {
+                    self.local_at(locals, b, i).is_some() || self.callers_only(b, i).is_some()
+                }
+                Place::Through(_) => false,
+            })
+    }
+
+    /// The offset from the entry sp of the access at inst `i` of block
+    /// `b`, if it lands in a slot of the caller's frame, whole at or above
+    /// the entry sp, that doesn't escape here (a stack argument).
+    pub fn callers_only(&self, b: u32, i: usize) -> Option<i32> {
+        let (s, o, _) = self.slot_at(b, i)?;
+        (s.lo >= 0 && !s.escapes()).then_some(o)
+    }
+
     /// Whether the access at inst `i` of block `b` is into a slot of the
     /// caller's frame that doesn't escape here: at or above the entry sp.
     pub fn in_callers(&self, b: u32, i: usize) -> bool {
