@@ -6,6 +6,10 @@ The design behind decision 2's mod view ("Two views of a ROM", june
 matching ([research/pret-names.md](research/pret-names.md)), and it is
 Emerald first. Written 2026-10-26 on quack, against main `97b7279`.
 
+The mod view is being retired for the native lift (the owner, 2026-11-19).
+What of it the lift has, what is filed and what is left out:
+[mod-view-parity.md](mod-view-parity.md).
+
 The play view (what `just recompile` prints today) is unchanged by
 everything here. The mod view is the same analysis, structuring and
 runtime, printed differently:
