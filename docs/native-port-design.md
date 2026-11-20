@@ -592,9 +592,9 @@ callee set the function-address flow proves complete
 (`codegen::native::fnref`) as calling exactly those
 (`codegen::saves::summarize_sets`). On Emerald, 2026-11-19
 (`native/indirect-call-args-emerald`; the flow settles since
-`native/fnref-flow-emerald`: 11 minutes, 1.1 GB), its 15,192 functions
-by today's map: the flow reaches all 554 indirect calls and proves 103
-complete (4.2 callees on average). With those:
+`native/fnref-flow-emerald`: 11 minutes, 1.1 GB), its 15,205 functions
+by today's discovery: the flow reaches all 554 indirect calls and proves 103
+complete (4.3 callees on average). With those:
 
 | | without sets | with sets |
 |---|---|---|
@@ -611,7 +611,7 @@ value shows it at the call (`fnref::Lost`, printed with a sample of each):
 
 | what | calls | e.g. |
 |---|---|---|
-| the target holds the large shared set (1,024 functions or more: here 6,120) | 180 | `CallCallbacks` (`gMain.callback1`), `SoundMain`, `GetCurrentMenuCB`, task functions called through `gTasks[id].func` (`Task_ShopMenu`) |
+| the target holds the large shared set (1,024 functions or more: here 6,129) | 180 | `CallCallbacks` (`gMain.callback1`), `SoundMain`, `GetCurrentMenuCB`, task functions called through `gTasks[id].func` (`Task_ShopMenu`) |
 | a ROM read cut short or too wide, or arithmetic on a ROM pointer the run gave up | 257 | sprite and object-event callbacks (`AnimateSprite`, the `MovementType_*_callback`s, 2 to 37 callees in the sample), `Task_WeatherMain`, `HandleEndTurn_FinishBattle` (249) |
 | no function's address reaches the target | 14 | pointers read out of script bytes (`ScrCmd_callnative`, `Cmd_createvisualtask`, `FieldEffectScript_CallNative`), `Task_RunLoopedTask`, and the flash driver's calls through RAM copies (`ReadFlashId`, `ReadFlash`) |
 | a ROM pointer given up past 64 runs of data | 0 | |
