@@ -14,7 +14,7 @@
 //!
 //! Within a block the walk is backwards: an unguarded write kills, a
 //! guarded one doesn't (the old value survives its false path), a read
-//! makes live, `mrs` reads every flag, an unguarded `msr` of the flags
+//! makes live if something kept takes its value (not only a dead write), `mrs` reads every flag, an unguarded `msr` of the flags
 //! writes all four. The same walk as [`analysis::ir::flags`]'s, with the
 //! registers too and no IRQ yield (natively a handler is a call of its
 //! own, which sees none of the interrupted function's locals).
@@ -55,22 +55,22 @@ pub fn high(m: u8) -> Live {
 
 /// Walk `insts` backwards with `out(i)` live after the exit at inst `i`:
 /// call `dead(i)` for each write of a register (but r13-r15) or flag
-/// nothing reads after it, and return what is live at entry. A read
-/// whose value only reaches dead writes (an `eors`'s C kept as it was, a
-/// shift's carry chosen by an amount known not to be 0), or nothing, is
-/// no read: the printer prints a pure value only where something it
-/// prints uses it (unit `native/lift-join-shape`).
+/// nothing reads after it, and return what is live at entry. A read of a
+/// register or flag makes it live only if something kept takes its value
+/// (through pure ops): an effect, an exit, a guard, or a write that isn't
+/// dead; so a read only a dead write took (a shift's carry in, kept for
+/// a C nobody reads) doesn't (unit `native/lift-plain-arith`).
 fn walk(insts: &[Inst], out: impl Fn(usize) -> Live, mut dead: impl FnMut(usize)) -> Live {
     let mut live: Live = 0;
-    // The values something kept uses.
-    let mut need = vec![false; insts.len()];
+    let mut needed = vec![false; insts.len()];
     for (i, inst) in insts.iter().enumerate().rev() {
         let guarded = inst.guard.is_some();
+        // Whether the inst is kept, so that what it takes is needed.
         let mut kept = true;
-        let mut write = |bit: Live, live: &mut Live, kept: &mut bool| {
+        let mut write = |bit: Live, live: &mut Live| {
             if *live & bit == 0 && bit & KEPT == 0 {
                 dead(i);
-                *kept = false;
+                kept = false;
             } else if !guarded {
                 *live &= !bit;
             }
@@ -78,24 +78,58 @@ fn walk(insts: &[Inst], out: impl Fn(usize) -> Live, mut dead: impl FnMut(usize)
         match inst.op {
             Op::Exit(_) if guarded => live |= out(i),
             Op::Exit(_) => live = out(i),
-            Op::SetReg(r, _) => write(reg(r.index()), &mut live, &mut kept),
-            Op::SetFlag(f, _) => write(flag(f), &mut live, &mut kept),
-            Op::GetReg(r) if need[i] => live |= reg(r.index()),
-            Op::GetFlag(f) if need[i] => live |= flag(f),
+            Op::SetReg(r, _) => write(reg(r.index()), &mut live),
+            Op::SetFlag(f, _) => write(flag(f), &mut live),
+            Op::GetReg(r) => {
+                kept = needed[i];
+                if kept {
+                    live |= reg(r.index());
+                }
+            }
+            Op::GetFlag(f) => {
+                kept = needed[i];
+                if kept {
+                    live |= flag(f);
+                }
+            }
             // `mrs_cpsr` takes the flags; in user and system mode, which
             // have no SPSR, `GetSpsr` reads the CPSR.
             Op::GetCpsr | Op::GetSpsr => live |= FLAGS,
             Op::SetCpsr { mask, .. } if !guarded && mask.contains(PsrMask::FLAGS) => live &= !FLAGS,
-            ref op if super::pure(op) => kept = need[i],
+            ref op if pure(op) => kept = needed[i],
             _ => {}
         }
         if kept {
             for x in inst.op.operands().into_iter().chain(inst.guard) {
-                need[x.index()] = true;
+                needed[x.index()] = true;
             }
         }
     }
     live
+}
+
+/// Whether `op` has no effect and reads no CPU state: kept only for what
+/// takes its value.
+fn pure(op: &Op) -> bool {
+    !matches!(
+        op,
+        Op::Insn(_)
+            | Op::Timing(_)
+            | Op::YieldFlag(..)
+            | Op::SetReg(..)
+            | Op::SetFlag(..)
+            | Op::GetReg(_)
+            | Op::GetFlag(_)
+            | Op::GetUserReg(_)
+            | Op::SetUserReg(..)
+            | Op::GetCpsr
+            | Op::GetSpsr
+            | Op::SetCpsr { .. }
+            | Op::SetSpsr { .. }
+            | Op::Load { .. }
+            | Op::Store { .. }
+            | Op::Exit(_)
+    )
 }
 
 /// The dead writes of a function's blocks (`blocks[b]`, a block's insts):
@@ -180,7 +214,7 @@ mod tests {
     #[test]
     fn a_flag_a_later_block_reads_is_live_and_a_guarded_write_does_not_kill() {
         let one = ValueId(0);
-        let z = ValueId(1);
+        let z = ValueId(0);
         // Block 0 sets C, then C again under a guard, and goes to 1, which
         // reads C; block 1 then returns.
         let b0 = [
@@ -192,53 +226,35 @@ mod tests {
             },
             inst(Op::Exit(Exit::Jump(one))),
         ];
-        // (Into r0, which its return reads.)
         let b1 = [
             inst(Op::GetFlag(Flag::C)),
             inst(Op::SetFlag(Flag::N, z)),
-            inst(Op::SetReg(Reg(0), z)),
-            inst(Op::Exit(Exit::Jump(one))),
+            inst(Op::Exit(Exit::Jump(ValueId(0)))),
         ];
         let dead = dead(&[&b0, &b1], |b, _| {
             if b == 0 {
                 (vec![1], 0)
             } else {
-                (Vec::new(), reg(0))
+                (Vec::new(), 0)
             }
         });
         assert_eq!(dead[0], [false, false, false, false]);
-        assert_eq!(dead[1], [false, true, false, false]);
-        // A fall into another function reads everything.
-        let dead = super::dead(&[&b1], |_, _| (Vec::new(), ALL));
-        assert_eq!(dead[0], [false, false, false, false]);
-    }
-
-    #[test]
-    fn a_read_only_dead_writes_use_is_no_read() {
-        // Block 0 sets C and goes to 1, which reads C only to write it
-        // back (an `eors`'s C kept), then sets r0 and returns it.
-        let one = ValueId(0);
-        let b0 = [
-            inst(Op::Bit(true)),
-            inst(Op::SetFlag(Flag::C, one)),
-            inst(Op::Exit(Exit::Jump(one))),
-        ];
-        let b1 = [
+        assert_eq!(dead[1], [false, true, false]);
+        // A read only a dead write takes makes nothing live: here C goes
+        // only to N, which nothing reads.
+        let b2 = [
             inst(Op::GetFlag(Flag::C)),
-            inst(Op::SetFlag(Flag::C, one)),
-            inst(Op::Const(1)),
-            inst(Op::SetReg(Reg(0), ValueId(2))),
+            inst(Op::SetFlag(Flag::N, ValueId(0))),
+            inst(Op::Const(0)),
             inst(Op::Exit(Exit::Jump(ValueId(2)))),
         ];
-        let out = |b: usize, _| {
-            if b == 0 {
-                (vec![1], 0)
-            } else {
-                (Vec::new(), reg(0))
-            }
-        };
-        let dead = dead(&[&b0, &b1], out);
-        assert_eq!(dead[0], [false, true, false], "C's write is dead");
-        assert_eq!(dead[1], [false, true, false, false, false]);
+        let (dead, live_in) = super::dead_and_live(&[&b2], |_, _| (Vec::new(), 0));
+        assert_eq!(
+            (&dead[0][..], &live_in[..]),
+            (&[false, true, false, false][..], &[0][..])
+        );
+        // A fall into another function reads everything.
+        let dead = super::dead(&[&b1], |_, _| (Vec::new(), ALL));
+        assert_eq!(dead[0], [false, false, false]);
     }
 }
