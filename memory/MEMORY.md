@@ -15,6 +15,7 @@ Made from each file's frontmatter (`title`, `hook`, `open: true`) by `just memor
 - [mGBA's blending quirks (windows and sprites)](mgba-blend-quirks.md) — with the OBJ window on, mGBA brightens non-target sprites; semi sprites ignore the window's effect bit
 - [pokeemerald's DWARF (locals, types, lines) through gdb](pokeemerald-dwarf.md) — binutils 15.2 rejects agbcc's .debug_abbrev; Fedora gdb reads it (info scope, ptype, info line) (2026-10-26)
 - [SDL3's static build, and testing a window under gamescope](sdl-build-and-gamescope.md) — spotting SDL's X11 driver; gamescope in a lane needs WAYLAND_DISPLAY unset; cu type can overtake cu key
+- [The function flow's switches: how each is measured and profiled](fnref-switches-how-to-measure.md) — GBAA_FNREF_LIVE/RAM/HEAP; run pairs side by side; eu-stack -i on a line-table build; an empty VAR= is still set
 - [Timing a hand-patched generated build, and testing a value](variant-builds-and-mirror-runs.md) — patch call sites, not call!; a copied crate needs its own --target-dir; use a positive control
 - [What a whole lift of each corpus game costs, and the holes-only one](lift-cost-corpus.md) — whole lifts 54 s-50 min under 3 GB (ask no 16G: it blocks other jobs); holes-only 9 s-3.5 min, 0.6 GB
 - [Where a generated crate's build time goes](generated-build-cost.md) — LLVM, not rustc's front end: p07 checks in 4.7 s of a 60 s build; how to measure one part (2026-10-24)
