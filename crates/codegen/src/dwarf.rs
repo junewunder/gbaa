@@ -142,33 +142,7 @@ impl<'a> FnDwarf<'a> {
     /// half of its zero or sign extension. `address`: an access uses it
     /// as its address.
     fn fits(&self, n: usize, insts: &[analysis::ir::Inst], i: usize, address: &bool) -> bool {
-        let Some(ty) = self.locals[n].ty.as_deref() else {
-            return true;
-        };
-        let pointer = ty.contains('*') || ty.contains('[');
-        let shift = |k: u32| match insts[i].op {
-            Op::Shift { kind, amount, .. } => {
-                kind == armv4t::sem::ShiftType::Lsl
-                    && matches!(insts[amount.index()].op, Op::Const(c) if c == k)
-            }
-            _ => false,
-        };
-        if pointer {
-            let narrow =
-                matches!(insts[i].op, Op::Load { width, .. } if width != armv4t::sem::Width::Word);
-            return !narrow && !matches!(insts[i].op, Op::Shift { .. });
-        }
-        if *address {
-            return false;
-        }
-        let bits = if ty.contains("char") || ["u8", "s8", "bool8"].contains(&ty) {
-            8
-        } else if ty.contains("short") || ["u16", "s16"].contains(&ty) {
-            16
-        } else {
-            32
-        };
-        bits == 32 || !shift(32 - bits)
+        fits(self.locals[n].ty.as_deref(), insts, i, *address)
     }
 
     /// Whether variable `n`'s scope holds `a`.
@@ -427,6 +401,47 @@ impl<'a> FnDwarf<'a> {
             .filter_map(|l| names.local_ident(&l.name))
             .collect()
     }
+}
+
+/// Whether inst `i`'s value can be a variable of C type `ty`, where
+/// agbcc's one register for the whole scope can't say (a register reused
+/// in it): a pointer isn't a narrow load or a shift, an integer isn't an
+/// address as it is, and a narrow one isn't the `x << 16` half of its zero
+/// or sign extension. `address`: an access uses it as its address. Shared
+/// with the lift's register names (`native::local_names`).
+pub(crate) fn fits(
+    ty: Option<&str>,
+    insts: &[analysis::ir::Inst],
+    i: usize,
+    address: bool,
+) -> bool {
+    let Some(ty) = ty else {
+        return true;
+    };
+    let pointer = ty.contains('*') || ty.contains('[');
+    let shift = |k: u32| match insts[i].op {
+        Op::Shift { kind, amount, .. } => {
+            kind == armv4t::sem::ShiftType::Lsl
+                && matches!(insts[amount.index()].op, Op::Const(c) if c == k)
+        }
+        _ => false,
+    };
+    if pointer {
+        let narrow =
+            matches!(insts[i].op, Op::Load { width, .. } if width != armv4t::sem::Width::Word);
+        return !narrow && !matches!(insts[i].op, Op::Shift { .. });
+    }
+    if address {
+        return false;
+    }
+    let bits = if ty.contains("char") || ["u8", "s8", "bool8"].contains(&ty) {
+        8
+    } else if ty.contains("short") || ["u16", "s16"].contains(&ty) {
+        16
+    } else {
+        32
+    };
+    bits == 32 || !shift(32 - bits)
 }
 
 /// Each value's offset from `sp` at the block's start, where it is one:

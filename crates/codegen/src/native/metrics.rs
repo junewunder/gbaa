@@ -104,12 +104,30 @@
 //! instruction starts, where the names files have a line table (no bar:
 //! it should rise; `lines` leaves them out).
 //!
+//! Names (`native/lift-local-names`): `locals_named`, the DWARF register
+//! variables and prototype parameters whose local or argument took the
+//! name (no bar: it should rise), and `locals_noted`, the variables left a
+//! `// dwarf rN: name` comment instead (barred; `lines` leaves them out).
+//! Both only where the names files give `[locals]` or prototypes.
+//!
 //! I/O registers (`native/lift-io-names`): `io_named`, the constant-address
 //! I/O loads and stores printed by a register's name (`st16(g, REG_IME,
 //! …)`, [`crate::io_regs::base`]; no bar: it should rise), and
 //! `io_unnamed`, those at an address no register holds, left as numbers
 //! (barred, at 0 on the C programs and Metroid). The registers' constants
 //! in `main.rs` are data, not in `lines`.
+//!
+//! Value names (`native/lift-value-names`): `values_named`, the constants
+//! a store to or compare with a field or global that takes a family of
+//! the names files' `[values]` prints by its name (`g.ram.gPen.state =
+//! PEN_RIGHT as u8`; no bar: it should rise). Their constants in
+//! `main.rs` are data, not in `lines`.
+//!
+//! Data names (`native/lift-data-names-inline`, [`super::named`]): in a
+//! lift with names, `data_constants_named`, the constant addresses inside
+//! a named datum printed by its name (no bar: it should rise), and
+//! `data_constants_unnamed`, those left as numbers (barred, at 0 on the C
+//! programs).
 //!
 //! Entries (`native/lift-one-entry`): `entries_beyond_one` counts the
 //! entries the lifted functions print beyond the one each needs (an
@@ -302,6 +320,7 @@ pub const UNBARRED: &[&str] = &[
     "named_field_accesses",
     "named_inside_accesses",
     "bitfield_sets",
+    "data_constants_named",
     "ref_types",
     "functions_structured",
     "functions_structured_pct",
@@ -318,6 +337,8 @@ pub const UNBARRED: &[&str] = &[
     "line_notes",
     "text_statics",
     "io_named",
+    "values_named",
+    "locals_named",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each

@@ -90,6 +90,13 @@ pub struct Types {
     named: BTreeMap<String, (u32, String, String)>,
     /// Each enum's size, by its C name.
     enums: BTreeMap<String, u32>,
+    /// The family each global that takes one takes (`[values]`'
+    /// `globals`), by the datum's address.
+    global_values: BTreeMap<u32, String>,
+    /// The family each of a function's argument registers takes, where
+    /// its parameter's C type is an enum family's (`PenState state`), by
+    /// key and register.
+    arg_values: BTreeMap<(u32, usize), String>,
 }
 
 /// A plain struct ([`Types::plain`]): its marker's identifier, its size
@@ -188,6 +195,13 @@ impl Types {
             for (ty, f) in &v.fields {
                 takes.insert((ty.as_str(), f.as_str()), fam.as_str());
             }
+            for g in &v.globals {
+                for (&k, item) in &m.data {
+                    if &item.name == g {
+                        t.global_values.insert(k, fam.clone());
+                    }
+                }
+            }
         }
         let mut fields = BTreeMap::new();
         for (name, d) in &m.types {
@@ -264,10 +278,37 @@ impl Types {
                 .as_deref()
                 .and_then(|c| t.proto(m, c, &item.name, &enums))
             {
+                // An argument whose type names a family of named values
+                // (an enum's: `[values."PenState"]`) takes it.
+                if let Some((_, params)) = item
+                    .proto
+                    .as_deref()
+                    .and_then(|c| crate::dwarf::proto_params(c, &item.name))
+                {
+                    for (r, (_, ty)) in params.iter().enumerate().take(p.args.len()) {
+                        let ty = normal(ty);
+                        let ty = ty.strip_prefix("enum ").unwrap_or(&ty);
+                        let fam = ty.strip_suffix('_').unwrap_or(ty);
+                        if t.values.contains_key(fam) {
+                            t.arg_values.insert((k, r), fam.to_string());
+                        }
+                    }
+                }
                 t.protos.insert(k, p);
             }
         }
         t
+    }
+
+    /// The names of the values function `key`'s argument in register `r`
+    /// takes, by value, where its parameter's type is an enum family's.
+    pub fn values_of_arg(&self, key: u32, r: usize) -> Option<&BTreeMap<u32, String>> {
+        self.values.get(self.arg_values.get(&(key, r))?)
+    }
+
+    /// Whether the map gives any function's prototype.
+    pub fn has_protos(&self) -> bool {
+        !self.protos.is_empty()
     }
 
     /// The function `key`'s prototype, if the map gives one.
@@ -417,6 +458,12 @@ impl Types {
         }
         if let Some(&n) = enums.get(t) {
             return Some(by_size(n));
+        }
+        // The typedef an enum family is keyed by (mzm's `MAKE_ENUM`:
+        // `typedef u8 PenState`, its values `enum PenState_`): an integer,
+        // register-wide (a field's size, when known, gives its width).
+        if self.values.contains_key(t) {
+            return Some(Ty::U32);
         }
         self.defs.contains_key(t).then(|| Ty::Named(t.to_string()))
     }
@@ -750,6 +797,30 @@ impl Types {
         self.values.get(fam?)
     }
 
+    /// The names of the values the global at `addr` takes (`[values]`'
+    /// `globals`), by value.
+    pub fn values_of_global(&self, addr: u32) -> Option<&BTreeMap<u32, String>> {
+        self.values.get(self.global_values.get(&addr)?)
+    }
+
+    /// Whether any field or global takes a family of named values.
+    pub fn has_values(&self) -> bool {
+        !self.global_values.is_empty()
+            || !self.arg_values.is_empty()
+            || self
+                .defs
+                .values()
+                .any(|d| d.fields.iter().any(|f| f.values.is_some()))
+    }
+
+    /// A value's name: its value, its family and the family's header
+    /// (empty for an enum of the DWARF's).
+    pub fn value_of(&self, id: &str) -> Option<(u32, &str, &str)> {
+        self.named
+            .get(id)
+            .map(|(x, fam, file)| (*x, fam.as_str(), file.as_str()))
+    }
+
     /// The value a value's name stands for, if `id` is one.
     pub fn value_named(&self, id: &str) -> Option<u32> {
         self.named.get(id).map(|&(x, _, _)| x)
@@ -799,7 +870,16 @@ impl Types {
                 format_ident!("{n}"),
                 proc_macro2::Literal::u32_unsuffixed(*x),
             );
-            let doc = format!(" One of `{fam}_*`, pret's `{file}`.");
+            // A `#define` family is keyed by its prefix, an enum by its
+            // type name (native/lift-value-names).
+            let doc = match (
+                fam.contains(|c: char| c.is_ascii_lowercase()),
+                file.as_str(),
+            ) {
+                (false, _) => format!(" One of `{fam}_*`, pret's `{file}`."),
+                (true, "") => format!(" One of enum `{fam}`'s values."),
+                (true, f) => format!(" One of enum `{fam}`'s values, `{f}`."),
+            };
             quote!(#[doc = #doc] pub const #id: u32 = #x;)
         });
         let io = crate::io_regs::consts();

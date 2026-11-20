@@ -6,6 +6,7 @@
 use analysis::discovery::{discover, overlays};
 use codegen::func::Ctx;
 use pret_names::{Copy, Ours, match_names};
+use std::collections::BTreeMap;
 use std::process::ExitCode;
 
 fn ours(rom: &[u8]) -> Ours {
@@ -148,8 +149,29 @@ fn run(args: &[String]) -> Result<(), String> {
         .parent()
         .unwrap_or(std::path::Path::new("."));
     let fams = {
-        use pret_names::values::{families, read_defines, read_uses};
-        families(&read_defines(src), &read_uses(src), &dbg.types)
+        use pret_names::values::*;
+        let mut fams = families(&read_defines(src), &read_uses(src), &dbg.types);
+        // Enums a field or global takes by its type: the headers' and the
+        // DWARF's enums; each global's type from the DWARF, else the
+        // headers' `extern`s.
+        let mut enums = read_enums(src);
+        enums.extend(dwarf_enums(&dbg.types));
+        let externs = read_externs(src);
+        let mut globals: BTreeMap<String, (String, u32)> = BTreeMap::new();
+        for (a, d) in &names.data {
+            let ty = dbg
+                .globals
+                .get(a)
+                .filter(|(n, _)| *n == d.name)
+                .map(|(_, t)| t)
+                .or_else(|| externs.get(&d.name));
+            if let Some(ty) = ty {
+                globals.insert(d.name.clone(), (ty.clone(), d.size.min(8) as u32));
+            }
+        }
+        let en = enum_families(&enums, &dbg.types, &globals, &fams);
+        fams.extend(en);
+        fams
     };
     text.push_str(&pret_names::values::toml(&fams));
     // The character table at the tree's root, for the readable form's
@@ -178,9 +200,10 @@ fn run(args: &[String]) -> Result<(), String> {
     print!("{}", dwarf_report(&names, &dbg));
     println!("text: {} charmap.txt entries", chars.len());
     println!(
-        "values: {} families of #define names, taken by {} fields",
+        "values: {} families of #define names and enums, taken by {} fields and {} globals",
         fams.len(),
-        fams.values().map(|f| f.fields.len()).sum::<usize>()
+        fams.values().map(|f| f.fields.len()).sum::<usize>(),
+        fams.values().map(|f| f.globals.len()).sum::<usize>()
     );
     loads(out, &sha)
 }

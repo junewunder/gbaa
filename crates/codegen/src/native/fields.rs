@@ -416,6 +416,17 @@ pub fn joined_pointer(
     Some(e)
 }
 
+/// The names of the values the field the `w` bytes at `at` are takes
+/// (`[values]`; native/lift-value-names), by value: only where the access
+/// is the whole field.
+pub fn values<'t>(t: &'t Types, at: &At, w: u32) -> Option<&'t BTreeMap<u32, String>> {
+    let (steps, rest) = t.path(&at.ty, at.off, w, None);
+    if rest.is_some() || steps.is_empty() {
+        return None;
+    }
+    t.values_of(&at.ty, &steps)
+}
+
 /// The lifted crate's `t` module: every struct and union of the names
 /// files as a marker type, its fields accessors on `Ref`; and the
 /// accessors the lift's joined accesses take ([`joined_pointer`]).
