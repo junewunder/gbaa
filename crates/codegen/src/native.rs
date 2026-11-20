@@ -209,6 +209,7 @@ pub mod cond;
 pub mod counted;
 pub mod cut;
 pub mod fields;
+pub mod find_field;
 pub mod first_stop;
 pub mod fnref;
 pub mod frame;
@@ -475,6 +476,9 @@ pub struct Holes {
     /// The functions whose printed text [`Lifted::cut_texts`] keeps
     /// (`gbaa-lift --cut`).
     pub cut_want: BTreeSet<u32>,
+    /// Record each RAM access the lift resolves ([`Lifted::touches`];
+    /// `gbaa-lift --find FIELD`, [`find_field`]).
+    pub find_touches: bool,
     /// Where `Ram`'s globals are (`gbaa-lift --layout`): the guest's
     /// offsets, or the play layout's order ([`globals::Layout`]).
     pub layout: Layout,
@@ -812,6 +816,9 @@ pub struct Lifted {
     /// the functions of [`Holes::cut_want`] and [`Holes::cuts`], as lifted:
     /// before a cut takes its place.
     pub cut_texts: BTreeMap<u32, String>,
+    /// With [`Holes::find_touches`], each load and store of a printed
+    /// function whose RAM place the lift knows ([`find_field`]).
+    pub touches: Vec<find_field::Touch>,
 }
 
 /// The literals of `funcs`' constant jumps (not calls) to a RAM
@@ -1522,6 +1529,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             holes: hard,
             metrics: Metrics::default(),
             cut_texts: BTreeMap::new(),
+            touches: std::mem::take(&mut soft.touches),
         };
     }
     fns.sort_unstable();
@@ -2257,6 +2265,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         report,
         metrics: m,
         cut_texts,
+        touches: soft.touches,
     }
 }
 
@@ -3454,6 +3463,8 @@ fn one_entry(
 
 #[derive(Default)]
 struct Soft {
+    /// Each resolved RAM access, with [`Holes::find_touches`].
+    touches: Vec<find_field::Touch>,
     /// Each printed function's entries ([`one_entry`]).
     entries: BTreeMap<u32, Entries>,
     /// Loads (false) and stores (true) by where their address is.
@@ -5449,6 +5460,56 @@ impl FnPrinter<'_, '_> {
         (typed, objs, refs)
     }
 
+    /// Each load and store of the block from `from` on whose RAM place
+    /// the lift knows, into [`Soft::touches`] ([`find_field`]): a
+    /// constant address, one the value sets bound (each element of an
+    /// array global it indexes, else each aligned slot of its range), or
+    /// a field through a pointer the names files type.
+    fn touches(&mut self, insts: &[Inst], from: usize, objs: &[Option<Obj>]) {
+        let mut pc = 0;
+        for (i, inst) in insts.iter().enumerate() {
+            if let Op::Insn(a) = inst.op {
+                pc = a;
+            }
+            let write = match inst.op {
+                Op::Store { .. } => true,
+                Op::Load { .. } => false,
+                _ => continue,
+            };
+            if i < from {
+                continue;
+            }
+            let place = if let Some((lo, w)) = const_access(insts, &inst.op) {
+                find_field::Place::Ram {
+                    lo,
+                    hi: lo,
+                    w,
+                    stride: w,
+                }
+            } else if let Some((lo, hi, w)) = computed_ram(self.ctx, insts, &inst.op, pc) {
+                let stride = match &objs[i] {
+                    Some(Obj::Index { elem, .. }) => (*elem).max(w),
+                    _ => w,
+                };
+                find_field::Place::Ram { lo, hi, w, stride }
+            } else if let Some((at, w, _)) = self.typed_access(i, inst) {
+                find_field::Place::Typed {
+                    ty: at.ty.clone(),
+                    off: at.off,
+                    w,
+                }
+            } else {
+                continue;
+            };
+            self.soft.touches.push(find_field::Touch {
+                func: self.f.entry,
+                at: pc,
+                write,
+                place,
+            });
+        }
+    }
+
     /// The bitfields access `i` of the block can name through a pointer
     /// the names files type ([`fields`], [`crate::types::Types::bits_at`]):
     /// empty for any other access or inst, or one that holds bitfields
@@ -5529,6 +5590,9 @@ impl FnPrinter<'_, '_> {
         let ind = "                ";
         let from = std::mem::take(&mut self.rest_from);
         let (typed, objs, refs) = self.accesses(insts);
+        if self.holes.find_touches {
+            self.touches(insts, from, &objs);
+        }
         self.load_values = (0..insts.len())
             .filter(|&i| matches!(insts[i].op, Op::Load { .. }))
             .filter_map(|i| Some((i, self.access_values(insts, i, &typed, &refs)?)))
