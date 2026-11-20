@@ -180,7 +180,13 @@
 //! field's address), and an
 //! object runs to the next literal the code indexes from that isn't a
 //! field of the one below, or to the BIOS's part of IWRAM
-//! ([`BIOS_RAM`], [`ram_parts`]) (a `memcpy` through `&s` past such a literal
+//! ([`BIOS_RAM`], [`ram_parts`]); a global the names files name is an
+//! object, whole, whatever literals lie in it (GCC's globals, addressed
+//! from one anchor, have none of their own: `native/fnref-ram-anchors`),
+//! and an access the function's own code makes at a literal plus a
+//! constant plus a scaled index is in the object at literal plus
+//! constant ([`BASED`], [`G::rebased`]: GCC adds the index to the anchor
+//! first) (a `memcpy` through `&s` past such a literal
 //! inside `s` leaves those stores in `s`'s object, and a load there at a
 //! constant address misses them); a pointer isn't made of its bytes in
 //! registers (a byte copy through memory is a number); a function called

@@ -974,6 +974,49 @@ objects there (from the names files where a program has one, or from the
 constant offsets the code uses with the anchor) is the next unit
 (`native/fnref-ram-anchors`).
 
+## RAM objects under GCC's anchors, and from the names, as landed
+
+Unit `native/fnref-ram-anchors`, 2026-11-20 on quack, behind
+`GBAA_FNREF_RAM`. Two rules (`fnref.rs`, `ram_parts` and `G::rebased`):
+
+- **A global the names files name is an object, whole.** Its start and
+  its end are object starts, and a start the code's literals put inside
+  it is none (a struct's array member indexed from its own literal).
+  The lift passes the names' data extents to the flow. On c/heap built
+  by agbcc that ends `gEffects` at its 12 bytes, where it ran on over
+  `gHeapHead` and `gMenu` to the next literal the code indexes from.
+- **An indexed access is in the object at its literal plus its
+  constant.** GCC compiles `gEffects[slot] = e` as `(anchor + slot * 4)
+  + 8`: the run's sum is "anchor plus an index" first, which is
+  somewhere in the first global, and the store went there, unread by the
+  load at `anchor + 8`. The per-function pass that finds indexed
+  accesses (`ram_indexed`) has the whole expression, literal, constant
+  and step, for each load, store, stored value and call argument, and
+  the run takes the object from that. An array's own literal with
+  `arr[i + 1]` is the same object either way; a constant that would go
+  below the literal is left alone.
+
+**Counts**, `fn_words_not_proven` (and proven), before this unit to
+after:
+
+| program | RAM and registers | with the heap switch too |
+|---|---|---|
+| c-heap-agbcc | 6 to 6 | 6 to 0 (8 of 8 proven) |
+| c-heap-gcc | 6 to 6 | 6 to 0 (8 of 8 proven) |
+| c-fnptr-gcc | 9 to 9 | |
+
+So the heap by allocation site pays here: on main the program proves 1
+of its 8 words, with the three switches all 8, on both compilers, each
+call's set the functions it calls. c-fnptr built by GCC keeps 9: its
+callee sets mix `update` and `draw` because GCC keeps `&sObjOps[kind]`
+in a register across blocks, and the stride a ROM table's field pointer
+carries is found a block at a time (`native/fnref-table-fields`); that
+is a ROM-table unit, filed (`native/fnref-table-fields-blocks`). No bar
+over with the RAM switch alone; with the registers' too, native-dma's
+one line as before. Metroid: 690 proven and 125 not with both switches,
+38 s against 30 off; its lift here takes no names file, so its objects
+are the literals' as before.
+
 ## The heap by allocation site, landed off
 
 Unit `native/fnref-heap-sites`, 2026-11-19 on quack, on main behind
@@ -1030,6 +1073,10 @@ words now, by `GBAA_FNREF_WATCH=roads`, is not the heap:
   pointer in r1 to r3, and the next call passes it on.
 
 The first two are the RAM-array unit's (`native/fnref-ram-pointers`), the
-third `native/fnref-live-registers`. The heap unit stays open on them:
-its count is to fall on `c/heap` once a pointer into a global array reads
-that array alone.
+third `native/fnref-live-registers`.
+
+**After those and the names' objects** (`native/fnref-ram-anchors`), on
+main at the same day's end: with `GBAA_FNREF_HEAP` and `GBAA_FNREF_LIVE`
+on, c/heap proves all 8 words on both compilers (6 not proven with the
+RAM and registers' switches alone, 7 off), 4 of 4 call sets complete and
+exact.
