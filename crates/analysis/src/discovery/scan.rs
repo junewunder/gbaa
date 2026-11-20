@@ -18,7 +18,7 @@
 //! opening with `push {…, lr}` whose only way on is an indirect jump after a
 //! `bl` (a task that calls its setup, then switches on its state). Undefined instructions, lone halves of a Thumb
 //! `bl`, BIOS calls that don't exist, long runs of one word, instructions
-//! no game runs (user-bank `ldm`), Thumb shifts by 32 (a ROM pointer's
+//! no game runs (user-bank `ldm`, an `ldm` or `stm` of no registers), Thumb shifts by 32 (a ROM pointer's
 //! upper half), a Thumb `bx` to a register last set by a shift left
 //! ([`shifted_bx`]) or through the value it had on entry ([`entry_bx`]),
 //! and a first instruction that is
@@ -238,15 +238,23 @@ fn repeated(prog: &Program, i: &Insn) -> bool {
 }
 
 /// Instructions games don't run outside the BIOS and exception handlers,
-/// or that make no sense: user-bank or SPSR-restoring `ldm`/`stm`, pc
+/// or that make no sense: user-bank or SPSR-restoring `ldm`/`stm`, one
+/// with an empty register list (an ARM7TDMI moves r15 alone and the base
+/// by 0x40; no compiler or assembler writes it, and the Thumb halfwords
+/// 0xc000 to 0xcf00 are text bytes: Emerald's string at 0x085ef6a1, loaded
+/// from a pool, ran through `ldmia r4!, {}` to a pop of pc), pc
 /// written by an ALU op other than `mov`, `add` or `sub`, and writeback
 /// to pc.
 fn implausible(i: &Instr) -> bool {
     use armv4t::decode::{AluOp, Index};
     match *i {
         Instr::Block {
-            psr, rn, writeback, ..
-        } => psr || (rn == Reg::Pc && writeback),
+            psr,
+            rn,
+            writeback,
+            regs,
+            ..
+        } => psr || regs == 0 || (rn == Reg::Pc && writeback),
         Instr::Alu {
             op, rd: Reg::Pc, ..
         } => !op.is_compare() && !matches!(op, AluOp::Mov | AluOp::Add | AluOp::Sub),
