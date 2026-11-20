@@ -107,7 +107,7 @@ pub fn run(
 /// Stock, the mod, and stock dimmed with the differing pixels in red, as
 /// one RGB image with a grey gap between panels: its width, height and
 /// bytes.
-fn side_by_side(w: u32, h: u32, stock: &[u8], modded: &[u8]) -> (u32, u32, Vec<u8>) {
+pub(crate) fn side_by_side(w: u32, h: u32, stock: &[u8], modded: &[u8]) -> (u32, u32, Vec<u8>) {
     let (w, h) = (w as usize, h as usize);
     let wide = 3 * w + 2 * GAP;
     let mut px = Vec::with_capacity(wide * h * 3);
@@ -132,7 +132,7 @@ fn side_by_side(w: u32, h: u32, stock: &[u8], modded: &[u8]) -> (u32, u32, Vec<u
 }
 
 /// An RGB PNG's width, height and bytes.
-fn read(path: &Path) -> Result<(u32, u32, Vec<u8>), Stop> {
+pub(crate) fn read(path: &Path) -> Result<(u32, u32, Vec<u8>), Stop> {
     let err = |e: &dyn std::fmt::Display| Unrun(format!("{}: {e}", path.display()));
     let mut dec = png::Decoder::new(BufReader::new(File::open(path).map_err(|e| err(&e))?));
     dec.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
@@ -146,7 +146,7 @@ fn read(path: &Path) -> Result<(u32, u32, Vec<u8>), Stop> {
     Ok((info.width, info.height, buf))
 }
 
-fn write(path: &Path, w: u32, h: u32, px: &[u8]) -> Result<(), Stop> {
+pub(crate) fn write(path: &Path, w: u32, h: u32, px: &[u8]) -> Result<(), Stop> {
     let err = |e: &dyn std::fmt::Display| Unrun(format!("{}: {e}", path.display()));
     let mut enc = png::Encoder::new(
         BufWriter::new(File::create(path).map_err(|e| err(&e))?),

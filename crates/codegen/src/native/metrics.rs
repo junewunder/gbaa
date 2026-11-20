@@ -46,7 +46,11 @@
 //!   bar) print as an element by a variable index (`.idx(i)`, `.add(i)`;
 //!   native/lift-index-names). A lift with types also has
 //!   `computed_unknown_unnamed`, barred: the `computed_unknown` accesses
-//!   no type names.
+//!   no type names. Of those through a typed pointer that hold bitfields
+//!   (`super::bitfields`, native/lift-bitfields): `bitfield_sets` print
+//!   as `set_bits` (no bar), `bitfield_joined` through the accessor of
+//!   the several fields they hold, `bitfield_arith` name none (left as
+//!   bytes and masks); both barred.
 //!
 //! The sp-relative ones are split again by whether the stack slot they
 //! reach escapes (`super::frame`): `sp_accesses_local_slot` and
@@ -326,6 +330,7 @@ pub const UNBARRED: &[&str] = &[
     "named_field_accesses",
     "named_inside_accesses",
     "named_index_accesses",
+    "bitfield_sets",
     "data_constants_named",
     "ref_types",
     "functions_structured",

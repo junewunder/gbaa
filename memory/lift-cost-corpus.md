@@ -1,6 +1,6 @@
 ---
 title: What a whole lift of each corpus game costs, and the holes-only one
-hook: whole lifts 54 s-50 min under 3 GB (ask no 16G: it blocks other jobs); holes-only 9 s-3.5 min, 0.6 GB
+hook: whole lifts 1-30 min under 3 GB (Mirror 3 min since 2026-11-20) (ask no 16G: it blocks other jobs); holes-only 9 s-3.5 min, 0.6 GB
 ---
 
 Measured on quack, 2026-11-14, commit 7f42cf22 (native/holes-match-lift),
@@ -19,6 +19,9 @@ holes files applied (`mods/<game>/holes.toml`), one job each:
 | Emerald Rogue | 1,838 s | 2.7 GB | 107 s | |
 | Imperium | 1,641 s | 2.8 GB | 214 s | |
 | Emerald (25fa1c4e, 2026-11-17; flow stops at its bound) | 1,358 s | 3.0 GB | 60 s | |
+| Kirby & the Amazing Mirror (0711e3d2, 2026-11-20, lift+build+run) | 3 min | 0.66 GB | | |
+| Metroid (0711e3d2, 2026-11-20, lift+build+run) | 1 min | 0.28 GB | | |
+| Kirby: Nightmare (0711e3d2, 2026-11-20, lift+build+run) | 4 min | 0.43 GB | | |
 
 - `just lift`'s 16G cap is far above any of these: `just long start …
   --mem 4G` is enough, and a 16G reservation queues every other job.
@@ -31,3 +34,7 @@ holes files applied (`mods/<game>/holes.toml`), one job each:
   (a pile-wide set is a large value, its calls incomplete): its holes file
   has no skip_fn_flow since native/nightmare-flow-on (2026-11-20; 0 hard
   holes, builds, 600 of 600 frames as with the flow off).
+- `just holes-all` over the nine took 29 min at 0711e3d2 (2026-11-20, two
+  runs; Imperium 9 min, Rogue 5). Its first-stop
+  column reads the lifts when it runs: `--from DIR` keeps DIR's saved stops,
+  so lift first, then run it.

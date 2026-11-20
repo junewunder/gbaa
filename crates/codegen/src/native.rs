@@ -204,6 +204,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 pub mod banks;
+pub mod bitfields;
 pub mod cond;
 pub mod counted;
 pub mod cut;
@@ -1067,7 +1068,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // whose `msr` and `mrs` are printed ([`PsrFns`]).
     let psr_fns = PsrFns::of(&disc, &overlays);
     // RAM's globals: what the constant-address accesses of the functions
-    // printed (a stand-in's code is its own) reach.
+    // printed (a stand-in's code is its own) reach. A checked cut's are
+    // the lift's, as its stock build has them: the cut reads them so.
     // And what their computed ones reach, where the value sets bound it
     // (native/ref-in-object): one address is an access like a constant
     // one; a range, an object's extent.
@@ -1082,7 +1084,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         for f in c
             .funcs
             .iter()
-            .filter(|f| !holes.standins.contains_key(&f.entry))
+            .filter(|f| !holes.standins.contains_key(&f.entry) || holes.cuts.contains_key(&f.entry))
         {
             for gb in f.blocks.values() {
                 let insts = &gb.block.insts;
@@ -1426,8 +1428,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     for &k in holes.cuts.keys().chain(&holes.cut_want) {
         let what = if !all.contains(&k) {
             "the mod's cut matches no function"
-        } else if holes.standins.contains_key(&k) || holes.fn_check.contains_key(&k) {
-            "the mod's cut is of a function the holes file replaces or the check checks: cut the lift only"
+        } else if holes.standins.contains_key(&k) && !synthetic.contains(&k) {
+            // A checked cut is the check's replacement (`fn_check_texts`).
+            "the mod's cut is of a function the holes file replaces: cut the lift only"
         } else {
             continue;
         };
@@ -1659,10 +1662,22 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let cut_texts: BTreeMap<u32, String> = out
         .iter()
         .filter(|(k, _)| holes.cut_want.contains(k) || holes.cuts.contains_key(k))
+        .filter(|(k, _)| !holes.fn_check.contains_key(k))
         .cloned()
         .collect();
     let mut cut_in = 0;
     for (k, t) in out.iter_mut() {
+        // A checked cut goes where the check's replacement left it room,
+        // after the names pass as any cut (which would rename what the
+        // cut calls by name: `pen_set_`).
+        if let Some(c) = holes.cuts.get(k)
+            && holes.fn_check.contains_key(k)
+        {
+            if let Ok(r) = cut::Replacement::of(c, *k) {
+                *t = t.replacen(&cut_marker(*k), &r.text, 1);
+            }
+            continue;
+        }
         if let Some(c) = holes.cuts.get(k) {
             *t = c.clone();
             if !t.ends_with('\n') {
@@ -1676,7 +1691,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // The struct globals' structs (`ram_t`, printed with `Ram`) too.
     let mut type_lines = globals.structs().lines().count();
     if let Some(maps) = &holes.fields {
-        let text = fields::module(&maps.types);
+        let text = fields::module(&maps.types, &soft.joined);
         type_lines += text.lines().count();
         main.push_str(&text);
     }
@@ -1973,6 +1988,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             soft.named_fields, soft.named_inside, soft.named_index,
         )
         .unwrap();
+        writeln!(
+            report,
+            "bitfields (native/lift-bitfields): {} writes print as set_bits, {} accesses of several fields through their joined accessor, {} accesses holding bitfields name none (left as arithmetic)",
+            soft.bitfield_sets, soft.bitfield_joined, soft.bitfield_arith,
+        )
+        .unwrap();
     }
     if let Some(at) = holes.plant_slot
         && !soft.planted_slot
@@ -2163,6 +2184,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             "computed_unknown_unnamed",
             unknown(false) + unknown(true) - soft.named_unknown,
         );
+        m.push("bitfield_arith", soft.bitfield_arith);
+        m.push("bitfield_joined", soft.bitfield_joined);
+        m.push("bitfield_sets", soft.bitfield_sets);
     }
     m.push("sp_accesses_local_slot", soft.sp_slots[0]);
     m.push("sp_accesses_escaping_slot", soft.sp_slots[1]);
@@ -2688,6 +2712,14 @@ fn prefix_fn(text: &str, k: u32, p: &str) -> String {
     )
 }
 
+/// The line a checked cut's function takes the place of, after the names
+/// pass ([`fn_check_texts`]).
+fn cut_marker(k: u32) -> String {
+    format!(
+        "// gbaa-lift: the cut of key {k:08x} goes here (not f_: the names pass names those).\n"
+    )
+}
+
 /// A function's lift printed with the holes given: its text and holes.
 type PrintFn<'a> = dyn Fn(&Holes, &mut Soft) -> (String, Vec<Hole>) + 'a;
 
@@ -2724,7 +2756,50 @@ fn fn_check_texts(
         "// f_{k:08x}: under the per-function check (gbaa-lift --fn-check).\n// The reference: the lift.\n"
     );
     t.push_str(&prefix_fn(&rt, k, "ref_"));
-    let replacement = if synthetic.contains(&k) {
+    let replacement = if let Some(cut) = holes.cuts.get(&k) {
+        // A mod's cut (unit `native/lift-mod-run`): its function, renamed,
+        // behind an adapter from the check's call to its lifted signature.
+        let want = |sh: Option<Shape>| 1 + sh.map_or(1, |sh| shape::regs(sh.params).count());
+        let adapter = cut::Replacement::of(cut, k).and_then(|r| {
+            if r.params != want(shape) {
+                return Err(format!(
+                    "the cut of {} takes {} parameters after g, but its function's shape {}",
+                    r.name,
+                    r.params,
+                    want(shape)
+                ));
+            }
+            let q = if r.result { "?" } else { "" };
+            let call = match shape {
+                Some(sh) => format!(
+                    "let [mut r0, mut r1, mut r2, mut r3] = a; {}{}(g, sp{}){q}; Ok([r0, r1, r2, r3])",
+                    lhs(sh.results),
+                    r.name,
+                    args(sh.params)
+                ),
+                None => format!("Ok({}(g, sp, a){q})", r.name),
+            };
+            Ok(format!(
+                "{}pub fn new_f_{k:08x}(g: &mut Game, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {{ {call} }}\n",
+                cut_marker(k)
+            ))
+        });
+        match adapter {
+            Ok(a) => {
+                t.push_str(
+                    "// The replacement: the mod's cut (gbaa-lift --replace DIR/replace.toml).\n",
+                );
+                t.push_str(&a);
+            }
+            Err(what) => found.push(Hole {
+                func: k,
+                at: k,
+                kind: HoleKind::HolesFile,
+                what,
+            }),
+        }
+        "the mod's cut".to_string()
+    } else if synthetic.contains(&k) {
         let (nt, nf) = print(holes, soft);
         found.extend(nf);
         t.push_str("// The replacement: the lift again (with --plant's store, if one is in it).\n");
@@ -2799,7 +2874,11 @@ fn fn_check_texts(
     }
     let globals: Vec<String> = fields
         .iter()
-        .map(|f| format!("(std::mem::offset_of!(Ram, {f}), |r: &Ram| size_of_val(&r.{f}))"))
+        .map(|f| {
+            format!(
+                "|r: &Ram| (std::ptr::addr_of!(r.{f}) as usize - std::ptr::from_ref(r) as usize, size_of_val(&r.{f}))"
+            )
+        })
         .collect();
     writeln!(
         t,
@@ -3400,6 +3479,15 @@ struct Soft {
     /// Of those, the ones printed as an element by a variable index
     /// (native/lift-index-names).
     named_index: u64,
+    /// Bitfield writes printed as `set_bits` (native/lift-bitfields).
+    bitfield_sets: u64,
+    /// Accesses holding bitfields through a typed pointer that name none.
+    bitfield_arith: u64,
+    /// Accesses holding several fields, bitfields among them, printed
+    /// through an accessor named for them all ([`fields::joined_pointer`]).
+    bitfield_joined: u64,
+    /// Those accessors.
+    joined: fields::Joined,
     /// Those of them the value sets don't bound (`computed_unknown`).
     named_unknown: u64,
     /// Stack locals, and the functions with any.
@@ -5232,11 +5320,14 @@ impl FnPrinter<'_, '_> {
                     .object(globals::guest(lo), globals::guest(hi), w)
             })
             .collect();
+        // The bitfields the accesses through a typed pointer name
+        // (native/lift-bitfields).
+        let bitfields = self.bitfields(insts);
         // The accesses the value sets don't bound that the heap's run
         // types (native/ref-heap): a field through a `Ref<T>`, which
         // prints its address too.
         let mut pc = 0;
-        let refs: Vec<Option<HeapRef>> = insts
+        let mut refs: Vec<Option<HeapRef>> = insts
             .iter()
             .enumerate()
             .map(|(i, inst)| {
@@ -5261,8 +5352,10 @@ impl FnPrinter<'_, '_> {
                 // (native/lift-typed-access), where it lands on a field:
                 // not a frame's local, which prints as one. One that is a
                 // typed pointer plus a scaled index prints as an element
-                // (native/lift-index-names), where it names one.
+                // (native/lift-index-names), where it names one: that
+                // takes the place of its bitfields (native/lift-bitfields).
                 let mut idx = None;
+                let mut bits = bitfields.bits.get(&i).copied();
                 let (f, named) = match heap {
                     Some(f) => (f, false),
                     None => {
@@ -5281,8 +5374,20 @@ impl FnPrinter<'_, '_> {
                         idx = self.field_idx.get(&(self.cur, i)).filter(|x| {
                             fields::pointer_indexed(&maps.types, x, width, "", "").is_some()
                         });
-                        if idx.is_none() && fields::pointer(&maps.types, at, width, "", 0).is_none()
-                        {
+                        if idx.is_some() {
+                            bits = None;
+                        }
+                        // Bitfields it names none of: through the
+                        // accessor of all it holds.
+                        let joined = bits.is_none() && self.holds_bitfields(i, inst);
+                        let printed = match (idx, joined) {
+                            (Some(_), _) => true,
+                            (None, true) => maps.types.joined(&at.ty, at.off, width).is_some(),
+                            (None, false) => {
+                                fields::pointer(&maps.types, at, width, "", 0, bits).is_some()
+                            }
+                        };
+                        if !printed {
                             return None;
                         }
                         let f = heap::Field {
@@ -5316,23 +5421,82 @@ impl FnPrinter<'_, '_> {
                     }
                     _ => None,
                 };
-                Some(match idx {
-                    Some(x) => HeapRef {
-                        f,
-                        base: Some((x.base, 0)),
-                        idx: Some(x.i),
-                        named,
-                    },
-                    None => HeapRef {
-                        f,
-                        base,
-                        idx: None,
-                        named,
-                    },
+                let (base, ix) = match idx {
+                    Some(x) => (Some((x.base, 0)), Some(x.i)),
+                    None => (base, None),
+                };
+                Some(HeapRef {
+                    f,
+                    base,
+                    idx: ix,
+                    named,
+                    bits: bits.filter(|_| named),
+                    fold: None,
+                    joined: named
+                        && ix.is_none()
+                        && bits.is_none()
+                        && self.holds_bitfields(i, inst),
                 })
             })
             .collect();
+        // A fold needs its load printed by name too: it takes its place.
+        for (&s, fold) in &bitfields.folds {
+            let named = |i: usize| refs[i].is_some_and(|r| r.named && r.bits.is_some());
+            if named(s) && named(fold.load) {
+                refs[s].as_mut().expect("named").fold = Some(*fold);
+            }
+        }
         (typed, objs, refs)
+    }
+
+    /// The bitfields access `i` of the block can name through a pointer
+    /// the names files type ([`fields`], [`crate::types::Types::bits_at`]):
+    /// empty for any other access or inst, or one that holds bitfields
+    /// with no accessor of its width.
+    fn bitfield_unit(&self, i: usize, inst: &Inst) -> Vec<(u32, u32)> {
+        match self.typed_access(i, inst) {
+            Some((at, w, maps)) => maps.types.bits_at(&at.ty, at.off, w),
+            None => Vec::new(),
+        }
+    }
+
+    /// Whether access `i` of the block holds a bitfield (with others or
+    /// not) through a pointer the names files type
+    /// ([`crate::types::Types::joined`]).
+    fn holds_bitfields(&self, i: usize, inst: &Inst) -> bool {
+        self.typed_access(i, inst)
+            .is_some_and(|(at, w, maps)| maps.types.joined(&at.ty, at.off, w).is_some())
+    }
+
+    /// Access `i` through a pointer the names files type, not a frame's
+    /// local: where it is in its object, its width and the types.
+    fn typed_access(&self, i: usize, inst: &Inst) -> Option<(&fields::At, u32, &fields::Maps)> {
+        let (Op::Load { width, .. } | Op::Store { width, .. }) = inst.op else {
+            return None;
+        };
+        let at = self.field_at.get(&(self.cur, i))?;
+        let maps = self.holes.fields.as_deref()?;
+        let local = self
+            .frame
+            .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
+        (!local).then_some((at, bytes(width), maps))
+    }
+
+    /// The block's bitfield accesses ([`bitfields`]): which field each
+    /// names, and the stores printed as `set_bits`.
+    fn bitfields(&self, insts: &[Inst]) -> bitfields::Found {
+        if self.holes.fields.is_none() {
+            return bitfields::Found::default();
+        }
+        let unread = self.dead.get(&self.cur).filter(|d| d.len() == insts.len());
+        bitfields::find(
+            insts,
+            |i| match self.holds_bitfields(i, &insts[i]) {
+                true => self.bitfield_unit(i, &insts[i]),
+                false => Vec::new(),
+            },
+            |i| unread.is_some_and(|d| d[i]),
+        )
     }
 
     /// The text the block's constants point at (unit `native/lift-text`),
@@ -5393,7 +5557,7 @@ impl FnPrinter<'_, '_> {
         // A frame nothing is in memory of prints no sp arithmetic
         // (native/lift-frame-gone).
         let frameless = self.frameless;
-        let skip: Vec<bool> = unread
+        let mut skip: Vec<bool> = unread
             .iter()
             .enumerate()
             .map(|(i, &u)| {
@@ -5402,6 +5566,10 @@ impl FnPrinter<'_, '_> {
                     || (frameless && matches!(insts[i].op, Op::SetReg(r, _) if r.index() == 13))
             })
             .collect();
+        // A bitfield's load a `set_bits` takes the place of.
+        for f in refs.iter().flatten().filter_map(|r| r.fold) {
+            skip[f.load] = true;
+        }
         // A compare tree at the block's end prints as a `match`: its
         // tests' guards aren't printed, its register and flag writes are
         // its arms'.
@@ -5679,6 +5847,7 @@ impl FnPrinter<'_, '_> {
                     );
                 }
                 Op::Load { width, addr } => {
+                    self.count_bitfield(i, inst, refs[i]);
                     let mut rom = false;
                     let (f, m) = match width {
                         Width::Byte => ("ld8", ""),
@@ -5752,6 +5921,7 @@ impl FnPrinter<'_, '_> {
                     }
                 }
                 Op::Store { width, addr, value } => {
+                    self.count_bitfield(i, inst, refs[i]);
                     let (f, m) = match width {
                         Width::Byte => ("st8", ""),
                         Width::Half => ("st16", " & !1"),
@@ -5782,9 +5952,25 @@ impl FnPrinter<'_, '_> {
                         (None, Some(o), _) => {
                             o.store(&format!("{}{m}", self.val(addr)), bytes(width), &val)
                         }
-                        (None, None, Some(r)) if r.named => {
-                            format!("g.set({}, {val});", self.field_ptr(i, r, addr))
-                        }
+                        (None, None, Some(r)) if r.named => match r.fold {
+                            Some(f) => {
+                                let v = match f.v {
+                                    bitfields::FoldValue::Const(c) => format!("{c:#x}u32{plant}"),
+                                    bitfields::FoldValue::Of(x, 0) if plant.is_empty() => {
+                                        self.whole(x)
+                                    }
+                                    bitfields::FoldValue::Of(x, 0) => {
+                                        format!("{}{plant}", self.val(x))
+                                    }
+                                    bitfields::FoldValue::Of(x, k) => {
+                                        format!("({} >> {k}){plant}", self.val(x))
+                                    }
+                                };
+                                self.soft.bitfield_sets += 1;
+                                format!("g.set_bits({}, {v});", self.field_ptr(i, r, addr))
+                            }
+                            None => format!("g.set({}, {val});", self.field_ptr(i, r, addr)),
+                        },
                         (None, None, Some(r)) => match r.base {
                             Some((b, c)) => self.heap.store(r.f, &self.val(b), r.f.off - c, &val),
                             None => self.heap.store(r.f, &self.val(addr), r.f.off, &val),
@@ -5913,6 +6099,20 @@ impl FnPrinter<'_, '_> {
         s
     }
 
+    /// Count access `i` where it holds bitfields through a typed pointer
+    /// ([`FnPrinter::bitfield_unit`]): by the field it names, or as one
+    /// left to the arithmetic (native/lift-bitfields).
+    fn count_bitfield(&mut self, i: usize, inst: &Inst, r: Option<HeapRef>) {
+        if !self.holds_bitfields(i, inst) {
+            return;
+        }
+        match r.filter(|r| r.named) {
+            Some(r) if r.bits.is_some() => {}
+            Some(r) if r.joined => self.soft.bitfield_joined += 1,
+            _ => self.soft.bitfield_arith += 1,
+        }
+    }
+
     /// The names of the values the field or global the access at inst `i`
     /// reads or writes whole takes (`[values]`; native/lift-value-names),
     /// by value: a typed global's ([`Place::values`]) or a field through a
@@ -5981,7 +6181,19 @@ impl FnPrinter<'_, '_> {
             Some((b, c)) => (self.val(b), at.off - c),
             None => (self.val(addr), at.off),
         };
-        let (e, whole) = fields::pointer(&maps.types, at, r.f.width as u32, &p, k)
+        if r.joined {
+            let at = at.clone();
+            return fields::joined_pointer(
+                &maps.types,
+                &mut self.soft.joined,
+                &at,
+                r.f.width as u32,
+                &p,
+                k,
+            )
+            .expect("checked when the access was found");
+        }
+        let (e, whole) = fields::pointer(&maps.types, at, r.f.width as u32, &p, k, r.bits)
             .expect("checked when the access was found");
         if whole {
             self.soft.named_fields += 1;
@@ -6135,9 +6347,18 @@ impl FnPrinter<'_, '_> {
         let callers = self.callers_off(i).is_some();
         let base = refs[i].and_then(|r| r.base).map(|(b, _)| b);
         let idx = refs[i].and_then(|r| r.idx);
+        let fold = refs[i].and_then(|r| r.fold);
         let ops = match inst.op {
             // Printed as nothing.
             Op::Timing(_) | Op::YieldFlag(..) => return Vec::new(),
+            // `set_bits`: its pointer and the field's value.
+            Op::Store { addr, .. } if let Some(f) = fold => {
+                let v = match f.v {
+                    bitfields::FoldValue::Of(x, _) => Some(x),
+                    bitfields::FoldValue::Const(_) => None,
+                };
+                base.or(Some(addr)).into_iter().chain(v).collect()
+            }
             Op::Load { .. } if local || field || callers => Vec::new(),
             Op::Store { value, .. } if local || field || callers => vec![value],
             Op::Load { .. } if base.is_some() => base.into_iter().chain(idx).collect(),
@@ -7407,6 +7628,14 @@ struct HeapRef {
     /// A named access's index, the base then the typed pointer it is
     /// added to scaled ([`fields::Indexed`]; native/lift-index-names).
     idx: Option<ValueId>,
+    /// A named access's bitfield, by its bits ([`bitfields`]).
+    bits: Option<(u32, u32)>,
+    /// A named store printed as `g.set_bits(..)` with its load.
+    fold: Option<bitfields::Fold>,
+    /// A named access holding bitfields that names none of them: through
+    /// the accessor of all the fields it holds
+    /// ([`fields::joined_pointer`]).
+    joined: bool,
 }
 
 fn bytes(w: Width) -> u32 {

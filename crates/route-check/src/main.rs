@@ -19,6 +19,11 @@
 //! mod's frames beside stock's, a side-by-side PNG of each pair that
 //! differs (`just mod-run`, [`mod_run`]).
 //!
+//! `route-check --lift-mod-run STOCK MOD [--sides N] units/NAME.toml`: a
+//! lift mod's frames beside the stock lift's, native programs both: the
+//! frames that differ listed, side-by-side PNGs of up to N of them (`just
+//! lift-mod-run`, [`lift_mod_run`]).
+//!
 //! `route-check --args units/NAME.toml`: the arguments every runner is
 //! given for the route (ROM, frames, presses, state, dump frames), then
 //! `--timing exact` (gbaa-desktop's and a recompiled build's, not
@@ -43,6 +48,7 @@
 //! the build lock themselves. Exits 1 on a failure, 2 on a bad route file,
 //! 75 when this machine couldn't run the check (a build refused or broke).
 
+mod lift_mod_run;
 mod mod_run;
 mod native;
 mod route;
@@ -58,6 +64,7 @@ const USAGE: &str = "usage: route-check units/NAME.toml [--through CHECKPOINT]\n
                      route-check --missing ROUTE.toml…\n       \
                      route-check --same-states A B [--every N] ROUTE.toml…\n       \
                      route-check --mod-run STOCK MOD [--dump-at N,…] ROUTE.toml\n       \
+                     route-check --lift-mod-run STOCK MOD [--sides N] ROUTE.toml\n       \
                      route-check --args ROUTE.toml\n       \
                      route-check --windows units/NAME.toml [--through CHECKPOINT]\n       \
                      route-check --native NATIVE PLAY ROUTE [--replaced FILE] [--holes FILE] \
@@ -165,6 +172,28 @@ fn main() -> ExitCode {
             }
         };
         return report("mod-run", mod_run::run(stock, modded, &at, route, &vars));
+    }
+    if let [flag, stock, modded, rest @ ..] = args.as_slice()
+        && flag == "--lift-mod-run"
+    {
+        let (sides, route) = match rest {
+            [s, n, route] if s == "--sides" => match n.parse() {
+                Ok(n) => (n, route),
+                Err(_) => {
+                    eprintln!("{USAGE}");
+                    return ExitCode::from(2);
+                }
+            },
+            [route] => (lift_mod_run::SIDES, route),
+            _ => {
+                eprintln!("{USAGE}");
+                return ExitCode::from(2);
+            }
+        };
+        return report(
+            "lift-mod-run",
+            lift_mod_run::run(stock, modded, sides, route, &vars),
+        );
     }
     if let [flag, native, play, route, rest @ ..] = args.as_slice()
         && flag == "--native"
