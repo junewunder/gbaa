@@ -242,6 +242,16 @@ impl State {
             _ => self.slots.clear(),
         }
     }
+
+    /// After a call: the registers of r0-r3 in `kept` (bit `n` for rN)
+    /// as they were before it, in `before` (`Sum::lr_kept`).
+    fn keep(&mut self, before: &State, kept: u8) {
+        for r in 0..4 {
+            if kept & 1 << r != 0 {
+                self.regs[r] = before.regs[r];
+            }
+        }
+    }
 }
 
 /// Which functions keep r4–r11 and sp, and why each other one doesn't.
@@ -409,6 +419,7 @@ impl Walk<'_> {
                     let mut after = s.clone();
                     sum.call(&mut after, Some(to), to);
                     after.called(false);
+                    after.keep(s, sum.lr_kept(to, Some(to)));
                     sum.ret(&after, to);
                 }
                 return Ok(());
@@ -681,7 +692,9 @@ impl Walk<'_> {
                 // The callee's own proof is checked in `prove`.
                 self.callees.insert(target);
                 let mut after = s.clone();
+                let mut kept = 0;
                 if let Some(sum) = &mut self.sum {
+                    kept = sum.lr_kept(at, Some(target));
                     sum.call(&mut after, Some(target), at);
                     // A callee whose summary never returns (and lost no
                     // return to a hole): the code after the call runs only
@@ -692,6 +705,7 @@ impl Walk<'_> {
                     }
                 }
                 after.called(self.sum.as_ref().is_some_and(|s| s.keeps(target)));
+                after.keep(s, kept);
                 self.flow(ret, &after)
             }
             Plan::Swi { next } => {
@@ -751,10 +765,13 @@ impl Walk<'_> {
             Plan::Dynamic { ret: Some(ret), .. } | Plan::CallVia { ret, .. } => {
                 self.fail(format!("0x{at:08x}: an indirect call"))?;
                 let mut after = s.clone();
+                let mut kept = 0;
                 if let Some(sum) = &mut self.sum {
+                    kept = sum.lr_kept(at, None);
                     sum.call(&mut after, None, at);
                 }
                 after.called(false);
+                after.keep(s, kept);
                 self.flow(ret, &after)
             }
             Plan::Dynamic { .. } => {
