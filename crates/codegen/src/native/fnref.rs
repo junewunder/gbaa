@@ -1089,6 +1089,9 @@ fn ram_indexed(f: &FnIn) -> BTreeMap<(u32, usize), (u32, u32)> {
     while let Some(k) = work.pop_first() {
         let Some(b) = f.blocks.get(&k) else { continue };
         let (found, exits) = ram_indexed_block(b, ins[&k]);
+        // (Run again with more paths in, a block's sums may no longer be
+        // what they were: those of its first run go.)
+        out.retain(|&(blk, key), _| blk != k || key & BASED == 0);
         for (i, x) in found {
             out.insert((k, i), x);
         }
@@ -1118,11 +1121,13 @@ fn ram_indexed(f: &FnIn) -> BTreeMap<(u32, usize), (u32, u32)> {
 /// [`ram_indexed_block`]'s key of a value it finds stored or passed, not
 /// an address (or'd with the inst's index).
 const VALUE: usize = 1 << 30;
-/// And of where such an address or value is from: its literal and the
-/// constant it adds, whatever the step (`anchor + i * 4 + 8`: GCC's
-/// globals, addressed from one anchor, `native/fnref-ram-anchors`). The
-/// run takes the object from that ([`G::rebased`]), where its own sum,
-/// literal plus index first, is in the object at the literal.
+/// And of a sum that is a RAM literal, a constant and a scaled index
+/// (`anchor + i * 4 + 8`: GCC's globals, addressed from one anchor,
+/// `native/fnref-ram-anchors`), at the instruction that makes it: the
+/// literal and the constant, whatever the step. The run takes the sum's
+/// object from that ([`G::rebased`]), where its own arithmetic, literal
+/// plus index first, is in the object at the literal; every use of the
+/// sum (an access, a call's argument, a result, a spill) then has it.
 const BASED: usize = 1 << 29;
 
 /// One block of [`ram_indexed`], from the registers `regs` in: what it
@@ -1182,22 +1187,18 @@ fn ram_indexed_block(
             Op::Load { addr, .. } | Op::Store { addr, .. } => {
                 if let B(l, k, s) = v[addr.index()]
                     && s > 0
+                    && k < s
                 {
-                    if k < s {
-                        found.insert(i, (l, s));
-                    }
-                    found.insert(i | BASED, (l, k));
+                    found.insert(i, (l, s));
                 }
                 // A pointer made so and stored (`cur = &tasks[i]`): its
                 // literal starts an object as well (`native/fnref-ram-pointers`).
                 if let Op::Store { value, .. } = inst.op
                     && let B(l, k, s) = v[value.index()]
                     && s > 0
+                    && k < s
                 {
-                    if k < s {
-                        found.insert(i | VALUE, (l, s));
-                    }
-                    found.insert(i | VALUE | BASED, (l, k));
+                    found.insert(i | VALUE, (l, s));
                 }
                 Other
             }
@@ -1210,11 +1211,9 @@ fn ram_indexed_block(
                     for (r, x) in regs[..4].iter().enumerate() {
                         if let B(l, k, s) = *x
                             && s > 0
+                            && k < s
                         {
-                            if k < s {
-                                found.insert(i | VALUE | (r + 1) << 24, (l, s));
-                            }
-                            found.insert(i | VALUE | BASED | (r + 1) << 24, (l, k));
+                            found.insert(i | VALUE | (r + 1) << 24, (l, s));
                         }
                     }
                 }
@@ -1229,6 +1228,13 @@ fn ram_indexed_block(
             }
             _ => Other,
         };
+        // A sum that is a literal, a constant and a scaled index: where
+        // the run takes its object from ([`BASED`]).
+        if let (B(l, k, s), Op::Bin(..) | Op::Adc { .. }) = (r, inst.op)
+            && s > 0
+        {
+            found.insert(i | BASED, (l, k));
+        }
         v.push(r);
     }
     (found, exits)
@@ -1327,25 +1333,29 @@ fn ram_parts(fns: &[FnIn], named: &BTreeMap<u32, u32>) -> BTreeMap<u32, u32> {
     // it), and what follows one is another object. With these, GCC's
     // globals, which it addresses from one anchor and so have no literal
     // of their own, are objects too (`native/fnref-ram-anchors`).
-    let named: Vec<(u32, u32)> = named
+    let mut spans: Vec<(u32, u32)> = named
         .iter()
         .filter(|&(&a, &n)| is_ram(a) && n > 0)
         .map(|(&a, &n)| (ram_canon(a), n))
         .filter(|&(a, n)| a.checked_add(n).is_some_and(|e| e <= ram_top(a)))
         .map(|(a, n)| (a, a + n))
         .collect();
+    // (One inside or across another, a member with a symbol of its own:
+    // one object between them.)
+    spans.sort_unstable();
+    let mut named: Vec<(u32, u32)> = Vec::new();
+    for (lo, hi) in spans {
+        match named.last_mut() {
+            Some(l) if lo < l.1 => l.1 = l.1.max(hi),
+            _ => named.push((lo, hi)),
+        }
+    }
     starts.retain(|s| !named.iter().any(|&(lo, hi)| lo < *s && *s < hi));
     for &(lo, hi) in &named {
-        // (One inside another, a member with a symbol of its own: the
-        // outer one's.)
-        if named
-            .iter()
-            .any(|&(l, h)| (l, h) != (lo, hi) && l <= lo && hi <= h)
-        {
-            continue;
-        }
         starts.insert(lo);
-        starts.insert(hi);
+        if hi < ram_top(lo) {
+            starts.insert(hi);
+        }
     }
     let v: Vec<u32> = starts.into_iter().collect();
     v.iter()
@@ -2410,10 +2420,9 @@ struct G {
     /// Some call has had an incomplete callee set: an address-taken
     /// function may be called from it with anything.
     unseen_calls: bool,
-    /// By function, block and [`ram_indexed`]'s key: the literal and the
-    /// constant offset of an address, or of a value stored or passed,
-    /// that is a RAM literal plus a constant plus a scaled index
-    /// ([`BASED`]; with the RAM pointers on).
+    /// By function, block and instruction ([`ram_indexed`]'s [`BASED`]
+    /// keys): the literal and the constant of a sum that is a RAM literal
+    /// plus a constant plus a scaled index (with the RAM pointers on).
     based: std::collections::HashMap<(u32, u32, usize), (u32, u32), Fx>,
 }
 
@@ -3927,22 +3936,25 @@ impl G {
         );
     }
 
-    /// `v`, the address or value at [`ram_indexed`]'s `key` of block
-    /// `block` of function `f`, with its pointer somewhere in its
-    /// literal's object made one somewhere in the object at the literal
-    /// plus its constant ([`BASED`]): `anchor + i * 4 + 8` is in the
-    /// global at `anchor + 8`, though the sum's first step, anchor plus
-    /// index, was in the one at the anchor. (An array's own literal with
-    /// `arr[i + 1]` is in the same object either way.)
-    fn rebased(&self, f: u32, block: u32, key: usize, mut v: Val) -> Val {
-        let Some(&(l, k)) = self.based.get(&(f, block, key | BASED)) else {
+    /// `v`, the sum instruction `i` of block `block` of function `f`
+    /// makes, with its pointer somewhere in its literal's object made one
+    /// somewhere in the object at the literal plus its constant
+    /// ([`BASED`]): `anchor + i * 4 + 8` is in the global at `anchor +
+    /// 8`, though the sum's first step, anchor plus index, was in the one
+    /// at the anchor. (An array's own literal with `arr[i + 1]` is in the
+    /// same object either way.) What this takes on trust: the index is
+    /// not negative from the literal plus the constant (`gNext[i - 3]`
+    /// from an anchor, with the `- 3` folded into the constant, would be
+    /// the global three entries below).
+    fn rebased(&self, f: u32, block: u32, i: usize, mut v: Val) -> Val {
+        let Some(&(l, k)) = self.based.get(&(f, block, i | BASED)) else {
             return v;
         };
-        let at = l.wrapping_add(k);
-        if k >= 0x8000_0000 || !is_ram(at) || at >> 24 != l >> 24 {
+        let l = ram_canon(l);
+        if k >= 0x8000_0000 || l.checked_add(k).is_none_or(|at| at >= ram_top(l)) {
             return v;
         }
-        let (from, to) = (Tok::Ram(ram_obj(l).0), Tok::Ram(ram_obj(at).0));
+        let (from, to) = (Tok::Ram(ram_obj(l).0), Tok::Ram(ram_obj(l + k).0));
         if from != to && v.toks.contains(&from) {
             v.toks.remove(&from);
             v.toks.insert(to);
@@ -5060,7 +5072,9 @@ impl Run<'_, '_> {
                 self.g.op_kept(op, n, [&vals[a.index()], b])
             }) {
                 Some(Ok(out)) => {
-                    vals[i] = out;
+                    // (Kept by its operands, as made: its object here is
+                    // this instruction's, [`BASED`].)
+                    vals[i] = self.g.rebased(self.f.entry, key, i, out);
                     continue;
                 }
                 Some(Err(k)) => Some(k),
@@ -5388,7 +5402,6 @@ impl Run<'_, '_> {
                 Op::Load { width, addr } => {
                     let w = bytes(width);
                     let a = xv(self.g, addr);
-                    let a = self.g.rebased(self.f.entry, key, i, a);
                     self.g.hole(&a, at, Why::Address, |_| true);
                     let mut out = self.load(&s, key, i, &a, w, b.hulls.get(&i).copied());
                     if !self.g.watch.is_empty() {
@@ -5404,9 +5417,7 @@ impl Run<'_, '_> {
                 }
                 Op::Store { width, addr, value } => {
                     let w = bytes(width);
-                    let (a, x) = (xv(self.g, addr), val(value));
-                    let a = self.g.rebased(self.f.entry, key, i, a);
-                    let mut x = self.g.rebased(self.f.entry, key, i | VALUE, x);
+                    let (a, mut x) = (xv(self.g, addr), val(value));
                     self.g.take_large(&mut x);
                     self.g.hole(&a, at, Why::Address, |_| true);
                     let (xm, bad_refs) = self.g.for_mem(&x, w);
@@ -5437,14 +5448,6 @@ impl Run<'_, '_> {
                 }
                 Op::Exit(e) => {
                     let out = &b.exits[&i];
-                    // (A pointer passed: [`BASED`].)
-                    for r in 0..4 {
-                        let k = i | VALUE | (r + 1) << 24;
-                        if self.g.based.contains_key(&(self.f.entry, key, k | BASED)) {
-                            let v = std::mem::take(&mut s.regs[r]);
-                            s.regs[r] = self.g.rebased(self.f.entry, key, k, v);
-                        }
-                    }
                     let t = match e {
                         Exit::Jump(t) | Exit::JumpExchange(t) | Exit::ExceptionReturn(t) => {
                             Some(xv(self.g, t))
@@ -5493,6 +5496,12 @@ impl Run<'_, '_> {
                     .any(|t| matches!(t, Tok::Fn { origin, .. } if *origin == site))
             {
                 self.g.op_keep(k, &v);
+            }
+            // A literal, a constant and an index: its object ([`BASED`];
+            // after it is kept by its operands, as made: another
+            // instruction's sum of the same operands has its own).
+            if !self.g.based.is_empty() && matches!(inst.op, Op::Bin(..) | Op::Adc { .. }) {
+                v = self.g.rebased(self.f.entry, key, i, v);
             }
             vals[i] = v;
         }

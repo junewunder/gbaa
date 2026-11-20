@@ -991,10 +991,12 @@ Unit `native/fnref-ram-anchors`, 2026-11-20 on quack, behind
   somewhere in the first global, and the store went there, unread by the
   load at `anchor + 8`. The per-function pass that finds indexed
   accesses (`ram_indexed`) has the whole expression, literal, constant
-  and step, for each load, store, stored value and call argument, and
-  the run takes the object from that. An array's own literal with
+  and step, at the instruction that makes the sum, and the run takes the
+  sum's object from that there, so every use of the pointer has it (an
+  access, an argument, a result, a spill). An array's own literal with
   `arr[i + 1]` is the same object either way; a constant that would go
-  below the literal is left alone.
+  below the literal is left alone. What it takes on trust: the index is
+  not negative from the literal plus the constant.
 
 **Counts**, `fn_words_not_proven` (and proven), before this unit to
 after:
