@@ -8,7 +8,8 @@
 //!   and four-register adapter `a_<key>` keep the key: a stop's backtrace
 //!   finds the lifted functions on the stack by those
 //!   (`native_record::stop::functions_in`), and the body is defined right
-//!   below the named entry.
+//!   below the named entry (so a named function keeps its `x_` where an
+//!   unnamed one's body would be its `f_`: `super::one_entry`).
 //! - A constant address in a named datum (`let v3: u32 = 0x3001234u32;`,
 //!   the only form the printer gives a constant): the datum's name, as a
 //!   `pub const` in `main.rs`, with the address in a comment

@@ -299,7 +299,7 @@ impl Run {
                 "the planted store's lift",
             )?;
             must(
-                &mut just(&["build-recompiled", &out]),
+                &mut just(&["build-recompiled", &out, "guest-pc"]),
                 &log(&format!("lift-{n}-planted.build.txt")),
                 "the planted store's build",
             )?;
@@ -322,7 +322,7 @@ impl Run {
                 &format!("the {flag} lift"),
             )?;
             must(
-                &mut just(&["build-recompiled", &out]),
+                &mut just(&["build-recompiled", &out, "guest-pc"]),
                 &log(&format!("lift-{n}-{tag}.build.txt")),
                 &format!("the {flag} build"),
             )?;
@@ -342,7 +342,7 @@ impl Run {
             "the packed layout's lift",
         )?;
         must(
-            &mut just(&["build-recompiled", &packed]),
+            &mut just(&["build-recompiled", &packed, "guest-pc"]),
             &log(&format!("lift-{n}-packed.build.txt")),
             "the packed layout's build",
         )?;
@@ -352,7 +352,7 @@ impl Run {
         route.args(&p.route_flags);
         let out = format!("out/lift-{n}");
         must(
-            &mut just(&["build-recompiled", &out]),
+            &mut just(&["build-recompiled", &out, "guest-pc"]),
             &log(&format!("lift-{n}.build.txt")),
             "the lift's build",
         )?;
@@ -389,7 +389,7 @@ impl Run {
                 return Err(format!("{n}: the planted hard hole's lift passed"));
             }
             let blog = log(&format!("lift-{n}-planted-hole.build.txt"));
-            let (built, text) = run(&mut just(&["build-recompiled", &out]), &blog)?;
+            let (built, text) = run(&mut just(&["build-recompiled", &out, "guest-pc"]), &blog)?;
             if built {
                 return Err(format!("{n}: the planted hard hole's crate built"));
             }
