@@ -2945,3 +2945,37 @@ fn an_idle_loops_exit_syncs_in_native_code() {
     assert!(text.contains("rt::idle_edge(m)"), "{text}");
     assert!(text.contains("rt::idle_exit(m)"), "{text}");
 }
+
+#[test]
+fn a_function_taking_only_its_parameters_has_its_body_in_its_plain_entry() {
+    // Reset: `mov r0, #7; ldr r1, =0x03000000; bl f; str r0, [r1]; b .`,
+    // `f: add r0, r0, #1; bx lr`: f takes r0 by name, and its extended
+    // entry calls the plain one (native/lift-register-locals).
+    let rom: Vec<u8> = [
+        0xE3A0_0007u32, // 0x00 mov r0, #7
+        0xE3A0_1403,    // 0x04 mov r1, #0x03000000
+        0xEB00_0002,    // 0x08 bl 0x18
+        0xE581_0000,    // 0x0c str r0, [r1]
+        0xEAFF_FFFE,    // 0x10 b .
+        0xE1A0_0000,    // 0x14 nop
+        0xE280_0001,    // 0x18 add r0, r0, #1
+        0xE12F_FF1E,    // 0x1c bx lr
+    ]
+    .iter()
+    .flat_map(|w| w.to_le_bytes())
+    .collect();
+    let lifted = crate::native::lift(&rom, "t", &crate::native::Holes::default());
+    assert!(lifted.holes.is_empty(), "{:?}", lifted.holes);
+    let text: String = lifted.files.iter().map(|(_, t)| t.as_str()).collect();
+    assert!(
+        text.contains("pub fn f_08000018(g: &mut Game, _: u32, r0: u32) -> Result<u32, Exit> {"),
+        "{text}"
+    );
+    assert!(
+        text.contains("pub fn x_08000018(g: &mut Game, s: Regs) -> Result<u32, Exit> { f_08000018(g, s.r[13], s.r[0]) }"),
+        "{text}"
+    );
+    assert!(!text.contains("(g, Regs::call("), "{text}");
+    assert_eq!(lifted.metrics.get("regs_call_entries"), Some(0));
+    assert_eq!(lifted.metrics.get("unpacked_unread"), Some(0));
+}

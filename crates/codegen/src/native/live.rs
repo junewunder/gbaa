@@ -96,6 +96,9 @@ fn walk(insts: &[Inst], out: impl Fn(usize) -> Live, mut dead: impl FnMut(usize)
             // have no SPSR, `GetSpsr` reads the CPSR.
             Op::GetCpsr | Op::GetSpsr => live |= FLAGS,
             Op::SetCpsr { mask, .. } if !guarded && mask.contains(PsrMask::FLAGS) => live &= !FLAGS,
+            // The flags an IRQ would see: the lift prints none (no IRQ
+            // yield), so what it takes isn't read.
+            Op::YieldFlag(..) => kept = false,
             ref op if pure(op) => kept = needed[i],
             _ => {}
         }
@@ -150,12 +153,25 @@ pub fn dead_and_live(
     blocks: &[&[Inst]],
     out: impl Fn(usize, usize) -> (Vec<usize>, Live),
 ) -> (Vec<Vec<bool>>, Vec<Live>) {
+    dead_and_live_killing(blocks, out, |_, _| 0)
+}
+
+/// [`dead_and_live`], with what the exit at inst `i` of block `b` itself
+/// sets as printed, `kills(b, i)` (a call's results, a BIOS call's): not
+/// live before it for the blocks it goes on at, though `out`'s own reads
+/// still are.
+pub fn dead_and_live_killing(
+    blocks: &[&[Inst]],
+    out: impl Fn(usize, usize) -> (Vec<usize>, Live),
+    kills: impl Fn(usize, usize) -> Live,
+) -> (Vec<Vec<bool>>, Vec<Live>) {
     let n = blocks.len();
     // The least fixpoint: nothing live, growing.
     let mut live_in: Vec<Live> = vec![0; n];
     let after = |live_in: &[Live], b: usize, i: usize| {
         let (succ, extra) = out(b, i);
-        succ.iter().fold(extra, |l, &s| l | live_in[s])
+        let on = succ.iter().fold(0, |l, &s| l | live_in[s]);
+        on & !(kills(b, i) & !KEPT) | extra
     };
     let mut changed = true;
     while changed {
@@ -178,6 +194,83 @@ pub fn dead_and_live(
         })
         .collect();
     (dead, live_in)
+}
+
+/// A write of a register whose value only its own block reads
+/// ([`block_local`]): what reads it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Local {
+    /// Its `GetReg`s (the block's insts) before the register is written
+    /// again.
+    pub reads: Vec<usize>,
+    /// Whether an exit that prints its reads through the block's names
+    /// reads it.
+    pub by_exit: bool,
+}
+
+/// The writes of r0-r12 whose value only its own block reads, by
+/// `GetReg`s and its exits, before the register is written again (unit
+/// `native/lift-register-locals`): `local[b][i]` for an unguarded
+/// `SetReg` with no exit after it, up to the next unguarded write of its
+/// register, after which the register is live (`out` and `live_in` as
+/// [`dead_and_live`] takes and gives them), and no guarded write of it
+/// there (the old value would join the new). An exit `by_name(b, i)`
+/// gives `Some(kills)` for one that prints its own reads through the
+/// block's names (a direct call's arguments, a return's results), and
+/// what it sets (a call's results): only what is live after it but those
+/// flows on. The lift prints such a value, where something printed reads
+/// it, as a `let` of its own, not a write of the register's local.
+pub fn block_local(
+    blocks: &[&[Inst]],
+    live_in: &[Live],
+    out: impl Fn(usize, usize) -> (Vec<usize>, Live),
+    by_name: impl Fn(usize, usize) -> Option<Live>,
+) -> Vec<Vec<Option<Local>>> {
+    // What flows on past exit `i`, and what it reads by name.
+    let after = |b: usize, i: usize| {
+        let (succ, extra) = out(b, i);
+        let on = succ.iter().fold(0, |l, &s| l | live_in[s]);
+        match by_name(b, i) {
+            Some(kills) => (on & !kills, extra),
+            None => (on | extra, 0),
+        }
+    };
+    blocks
+        .iter()
+        .enumerate()
+        .map(|(b, insts)| {
+            (0..insts.len())
+                .map(|i| {
+                    let r = match insts[i].op {
+                        Op::SetReg(r, _) if insts[i].guard.is_none() && r.index() < 13 => r.index(),
+                        _ => return None,
+                    };
+                    let mut l = Local::default();
+                    for (j, inst) in insts.iter().enumerate().skip(i + 1) {
+                        match inst.op {
+                            Op::GetReg(q) if q.index() == r => l.reads.push(j),
+                            Op::SetReg(q, _) if q.index() == r => {
+                                return inst.guard.is_none().then_some(l);
+                            }
+                            Op::Exit(_) => {
+                                let (on, named) = after(b, j);
+                                if on & reg(r) != 0 {
+                                    return None;
+                                }
+                                l.by_exit |= named & reg(r) != 0;
+                                if inst.guard.is_none() {
+                                    return Some(l);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    // The block's end with no exit: nothing follows.
+                    Some(l)
+                })
+                .collect()
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -256,5 +349,82 @@ mod tests {
         // A fall into another function reads everything.
         let dead = super::dead(&[&b1], |_, _| (Vec::new(), ALL));
         assert_eq!(dead[0], [false, false, false]);
+    }
+    #[test]
+    fn a_value_only_its_block_reads_is_local() {
+        let one = ValueId(0);
+        // r1 = 1; r1 read; r2 = 1 (read by the jump's next block); exit.
+        let b0 = [
+            inst(Op::Const(1)),
+            inst(Op::SetReg(Reg(1), one)),
+            inst(Op::GetReg(Reg(1))),
+            inst(Op::SetReg(Reg(2), one)),
+            Inst {
+                op: Op::SetReg(Reg(3), one),
+                guard: Some(one),
+            },
+            inst(Op::SetReg(Reg(4), one)),
+            Inst {
+                op: Op::SetReg(Reg(4), one),
+                guard: Some(one),
+            },
+            inst(Op::Exit(Exit::Jump(one))),
+        ];
+        let b1 = [inst(Op::GetReg(Reg(2))), inst(Op::Exit(Exit::Jump(one)))];
+        let out = |b: usize, _: usize| {
+            if b == 0 {
+                (vec![1], 0)
+            } else {
+                (Vec::new(), 0)
+            }
+        };
+        let (_, live_in) = dead_and_live(&[&b0, &b1], out);
+        let local = block_local(&[&b0, &b1], &live_in, out, |_, _| None);
+        let is: Vec<bool> = local[0].iter().map(Option::is_some).collect();
+        assert_eq!(local[0][1].as_ref().map(|l| l.reads.clone()), Some(vec![2]));
+        assert_eq!(
+            is,
+            [false, true, false, false, false, false, false, false],
+            "r1 is the block's own; r2 is read after the jump; a guarded write \
+             is never one; r4's value joins a guarded write's"
+        );
+        // A call that reads r0 and r1 by name and sets r0, whose return
+        // site reads r0 and r1: r0's argument is the block's own, r1's
+        // goes on.
+        let call = [
+            inst(Op::Const(1)),
+            inst(Op::SetReg(Reg(0), one)),
+            inst(Op::SetReg(Reg(1), one)),
+            inst(Op::Exit(Exit::Jump(one))),
+        ];
+        // The return site returns r0 + r1 in r4.
+        let after = [
+            inst(Op::GetReg(Reg(0))),
+            inst(Op::GetReg(Reg(1))),
+            inst(Op::Bin(analysis::ir::BinOp::Add, ValueId(0), ValueId(1))),
+            inst(Op::SetReg(Reg(4), ValueId(2))),
+            inst(Op::Exit(Exit::Jump(one))),
+        ];
+        let out = |b: usize, _: usize| {
+            if b == 0 {
+                (vec![1], reg(0) | reg(1))
+            } else {
+                (Vec::new(), reg(4))
+            }
+        };
+        let (_, live_in) = dead_and_live(&[&call, &after], out);
+        let by_name = |b: usize, _: usize| (b == 0).then_some(reg(0));
+        let local = block_local(&[&call, &after], &live_in, out, by_name);
+        let read_by_call = Local {
+            reads: Vec::new(),
+            by_exit: true,
+        };
+        assert_eq!(local[0], [None, Some(read_by_call), None, None]);
+        let local = block_local(&[&call, &after], &live_in, out, |_, _| None);
+        assert_eq!(
+            local[0],
+            [None, None, None, None],
+            "read by a call's printed names"
+        );
     }
 }
