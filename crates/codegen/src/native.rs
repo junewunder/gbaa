@@ -4481,12 +4481,23 @@ impl FnPrinter<'_, '_> {
         self.shapes.get(&k).copied()
     }
 
+    /// What a call of `k`'s extended entry ([`taking`]) assigns its
+    /// results to: the entry returns what the plain one does, all of
+    /// r0-r3 or a shaped function's results (one that echoes a register
+    /// may be shaped; one that takes any isn't).
+    fn entry_lhs(&self, k: u32) -> String {
+        match self.shape(k) {
+            None => "[r0, r1, r2, r3] = ".into(),
+            Some(c) => lhs(c.results),
+        }
+    }
+
     /// A plain call of `k` with this function's registers: what it
     /// assigns its results to, and the call (without `?`).
     fn call(&self, k: u32) -> (String, String) {
         let (m, e) = (self.passed(k), self.echoes(k));
         if m | e != 0 {
-            return ("[r0, r1, r2, r3] = ".into(), taking(k, self.taken(m) | e));
+            return (self.entry_lhs(k), taking(k, self.taken(m) | e));
         }
         match self.shape(k) {
             None if self.holes.lr.contains(&k) => (
@@ -4582,7 +4593,8 @@ impl FnPrinter<'_, '_> {
                 }
                 write!(
                     t,
-                    "{e:#010x} => {{ [r0, r1, r2, r3] = {}?; }} ",
+                    "{e:#010x} => {{ {}{}?; }} ",
+                    self.entry_lhs(e),
                     taking(e, m)
                 )
                 .unwrap();
