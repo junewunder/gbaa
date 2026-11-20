@@ -228,9 +228,10 @@
 //! read before it is written. A
 //! pointer below the one returned (`free`'s `ptr - 12`) is the
 //! allocator's header: a pointer into the RAM the allocator returned
-//! ([`G::heap_lower`]), read and written as that RAM is. On `c/heap` it
-//! narrows the callee sets and proves no more words yet: a load through
-//! `gEffects[i]` still reads every global's cell
+//! ([`G::heap_lower`]), read and written as that RAM is. On `c/heap`,
+//! with the registers' rules on too ([`live_env`]), it proves all 8
+//! function words on both compilers, where the RAM rules prove 2 and
+//! main 1; alone it narrows the callee sets and proves no more
 //! (`docs/research/fnref-held-words.md`, "The heap by allocation site").
 //!
 //! **Registers at a call** (`native/fnref-live-registers`;
