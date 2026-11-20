@@ -254,17 +254,43 @@ impl Form {
     /// The Rust expression, value `x` printed as `val(x)` (its name, or
     /// its inlined expression in parentheses) where the form allows.
     pub fn text_with(&self, val: &dyn Fn(ValueId) -> String) -> String {
+        self.text_named(val, &|_, _| None)
+    }
+
+    /// [`Form::text_with`], a compare of a value with a constant `name`
+    /// gives a name for (one of a field's named values) printing that
+    /// name.
+    pub fn text_named(
+        &self,
+        val: &dyn Fn(ValueId) -> String,
+        name: &dyn Fn(ValueId, u32) -> Option<String>,
+    ) -> String {
         match &self.f {
             F::Cmp { l, rel, r, signed } => format!(
                 "{} {} {}",
                 side(l, *signed, true, val),
                 rel.text(),
-                side(r, *signed, false, val)
+                named_side(l, r, *signed, name).unwrap_or_else(|| side(r, *signed, false, val))
             ),
             F::Bool(b) => format!("{b}"),
             F::Text(t) => t.clone(),
         }
     }
+}
+
+/// A compare's constant side by its name, where `name` gives one for the
+/// value on the other side and the constant (native/lift-value-names).
+fn named_side(
+    l: &Side,
+    r: &Side,
+    signed: bool,
+    name: &dyn Fn(ValueId, u32) -> Option<String>,
+) -> Option<String> {
+    let (&Side::Val(x), &Side::Const(k)) = (l, r) else {
+        return None;
+    };
+    let n = name(x, k)?;
+    Some(if signed { format!("({n} as i32)") } else { n })
 }
 
 /// A side as Rust. A constant on the left is typed (nothing else gives
