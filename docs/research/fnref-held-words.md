@@ -977,7 +977,7 @@ constant offsets the code uses with the anchor) is the next unit
 ## RAM objects under GCC's anchors, and from the names, as landed
 
 Unit `native/fnref-ram-anchors`, 2026-11-20 on quack, behind
-`GBAA_FNREF_RAM`. Two rules (`fnref.rs`, `ram_parts` and `G::rebased`):
+`GBAA_FNREF_RAM` (off by default; off, the flow is main's). Two rules (`fnref.rs`, `ram_parts` and `G::rebased`):
 
 - **A global the names files name is an object, whole.** Its start and
   its end are object starts, and a start the code's literals put inside
@@ -1081,4 +1081,9 @@ third `native/fnref-live-registers`.
 main at the same day's end: with `GBAA_FNREF_HEAP` and `GBAA_FNREF_LIVE`
 on, c/heap proves all 8 words on both compilers (6 not proven with the
 RAM and registers' switches alone, 7 off), 4 of 4 call sets complete and
-exact.
+exact. The gain needs the registers' rules: with the heap switch alone
+it is 7 still, as with the RAM switch alone. Emerald with the heap and
+registers' switches on and pret's `Alloc` and `AllocZeroed` named:
+settles in 26 rounds, 1,385 s, 0.95 GB, its 554 indirect calls with the
+same 103 complete sets (1,329 s with the RAM and registers' switches, 557 s
+off): the RAM rules' cost, which is its own unit (`native/fnref-ram-reruns`).
