@@ -77,6 +77,10 @@ pub struct Game {
     /// The return address of the last call of a stand-in that reads it
     /// (`lr = true` in its holes file): the caller's `bl` sets it.
     pub lr: u32,
+    /// r4-r11 as a function that gives them back to its callers left
+    /// them (hand-written code sharing its caller's registers): its
+    /// returns set it, the direct call takes them (`native/lift-gives`).
+    pub gave: [u32; 8],
     /// The tasks a game's task switcher runs ([`task_resume`]).
     pub tasks: Tasks,
     /// Where a `SoftReset` restarts the program ([`soft_reset`]), while
@@ -182,6 +186,7 @@ impl Game {
             banked: [IRQ_STACK, 0x0300_7FE0, 0],
             spsr: 0,
             lr: RET,
+            gave: [0; 8],
             tasks: Tasks::default(),
             reset: None,
             bios_latch: runtime::bus::BIOS_LATCH_AFTER_BOOT,
