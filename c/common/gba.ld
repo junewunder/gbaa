@@ -57,6 +57,9 @@ SECTIONS {
     .debug_ranges   0 : { *(.debug_ranges) }
     .debug_rnglists 0 : { *(.debug_rnglists) }
     .debug_line_str 0 : { *(.debug_line_str) }
+    .debug_loclists 0 : { *(.debug_loclists) }
+    .debug_str_offsets 0 : { *(.debug_str_offsets) }
+    .debug_addr     0 : { *(.debug_addr) }
     .symtab  0 : { *(.symtab) }
     .strtab  0 : { *(.strtab) }
     .shstrtab 0 : { *(.shstrtab) }

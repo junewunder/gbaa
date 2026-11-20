@@ -365,6 +365,10 @@ fn main() -> ExitCode {
                     locals: map.locals.clone(),
                 }));
             }
+            // A text table: constants pointing at text get its comment.
+            if map.text.is_some() {
+                holes.text = Some(std::sync::Arc::new(map));
+            }
         }
         Err(e) => {
             eprintln!("gbaa-lift: names: {e}");

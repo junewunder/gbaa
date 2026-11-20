@@ -55,14 +55,59 @@ format = 1
 # [from, to). Variables agbcc gave no location are left out.
 [locals]
 0x08000191 = [
-  { name = "color", slot = 0, from = 0x08000190, to = 0x0800022c, type = "u16", param = true },
+  { name = "x", reg = 0, from = 0x08000190, to = 0x0800022c, type = "s32", param = true },
+  { name = "y", reg = 1, from = 0x08000190, to = 0x080001b4, type = "s32", param = true },
+  { name = "y", reg = 1, from = 0x0800020a, to = 0x08000210, type = "s32", param = true },
+  { name = "w", reg = 2, from = 0x08000190, to = 0x08000196, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x08000196, to = 0x080001a0, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x080001a2, to = 0x080001ae, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x080001b0, to = 0x080001de, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x080001f8, to = 0x08000216, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x08000218, to = 0x0800022c, type = "s32", param = true },
+  { name = "h", reg = 3, from = 0x08000190, to = 0x080001b4, type = "s32", param = true },
+  { name = "h", reg = 3, from = 0x0800020a, to = 0x0800020c, type = "s32", param = true },
+  { name = "h", reg = 5, from = 0x08000228, to = 0x0800022c, type = "s32", param = true },
+  { name = "color", slot = 16, from = 0x08000190, to = 0x0800022c, type = "u16", param = true },
 ]
 0x0800022d = [
   { name = "x", reg = 0, from = 0x0800022c, to = 0x0800024a, type = "s32", param = true },
+  { name = "y", reg = 1, from = 0x0800022c, to = 0x08000234, type = "s32", param = true },
+  { name = "y", reg = 1, from = 0x08000236, to = 0x0800023c, type = "s32", param = true },
   { name = "color", reg = 2, from = 0x0800022c, to = 0x0800024a, type = "u16", param = true },
 ]
 0x08000281 = [
   { name = "state", reg = 0, from = 0x08000280, to = 0x08000290, type = "u8", param = true },
+]
+0x08000291 = [
+  { name = "s", reg = 0, from = 0x08000290, to = 0x080002a4, type = "struct Script *", param = true },
+  { name = "s", reg = 4, from = 0x080002a4, to = 0x08000382, type = "struct Script *", param = true },
+  { name = "s", reg = 4, from = 0x08000388, to = 0x0800038c, type = "struct Script *", param = true },
+  { name = "s", reg = 0, from = 0x0800038c, to = 0x080003a0, type = "struct Script *", param = true },
+  { name = "ran", reg = 5, from = 0x080002a4, to = 0x0800037e, type = "u32" },
+  { name = "ran", reg = 5, from = 0x08000388, to = 0x0800038c, type = "u32" },
+]
+0x080003a1 = [
+  { name = "p", reg = 0, from = 0x080003a0, to = 0x080003c8, type = "struct Pen *", param = true },
+  { name = "p", reg = 4, from = 0x080003c8, to = 0x080003ea, type = "struct Pen *", param = true },
+  { name = "p", reg = 4, from = 0x080003f4, to = 0x080003fe, type = "struct Pen *", param = true },
+  { name = "p", reg = 0, from = 0x080003fe, to = 0x0800040e, type = "struct Pen *", param = true },
+  { name = "p", reg = 4, from = 0x0800040e, to = 0x0800041e, type = "struct Pen *", param = true },
+  { name = "p", reg = 0, from = 0x0800041e, to = 0x08000422, type = "struct Pen *", param = true },
+  { name = "p", reg = 4, from = 0x08000422, to = 0x08000432, type = "struct Pen *", param = true },
+  { name = "p", reg = 0, from = 0x08000432, to = 0x08000446, type = "struct Pen *", param = true },
+  { name = "p", reg = 4, from = 0x08000446, to = 0x0800044c, type = "struct Pen *", param = true },
+  { name = "p", reg = 0, from = 0x0800044c, to = 0x0800045c, type = "struct Pen *", param = true },
+  { name = "p", reg = 4, from = 0x0800045c, to = 0x08000468, type = "struct Pen *", param = true },
+  { name = "p", reg = 0, from = 0x08000468, to = 0x08000478, type = "struct Pen *", param = true },
+  { name = "p", reg = 4, from = 0x08000478, to = 0x080004a0, type = "struct Pen *", param = true },
+  { name = "p", reg = 0, from = 0x080004a0, to = 0x080004a6, type = "struct Pen *", param = true },
+  { name = "p", reg = 4, from = 0x080004a6, to = 0x080004dc, type = "struct Pen *", param = true },
+  { name = "p", reg = 0, from = 0x080004dc, to = 0x080004de, type = "struct Pen *", param = true },
+  { name = "p", reg = 4, from = 0x080004de, to = 0x080004ea, type = "struct Pen *", param = true },
+  { name = "p", reg = 0, from = 0x080004ea, to = 0x080004ec, type = "struct Pen *", param = true },
+  { name = "p", reg = 4, from = 0x080004ec, to = 0x080004f8, type = "struct Pen *", param = true },
+  { name = "p", reg = 0, from = 0x080004f8, to = 0x080004fa, type = "struct Pen *", param = true },
+  { name = "p", reg = 4, from = 0x080004fa, to = 0x08000514, type = "struct Pen *", param = true },
 ]
 0x08000515 = [
   { name = "n", reg = 0, from = 0x08000514, to = 0x0800054c, type = "u32", param = true },
