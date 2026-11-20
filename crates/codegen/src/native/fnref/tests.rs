@@ -2660,3 +2660,98 @@ fn any_allocations_pointer_reads_and_reaches_every_site() {
     let v = read(&mut g, 3, 2);
     assert!(v.toks.contains(&h), "{v:?}");
 }
+
+#[test]
+fn pointers_into_many_ram_objects_are_some_objects() {
+    // With no objects found, each RAM is one object: use distinct starts.
+    RAM_ON.with(|c| c.set(true));
+    let mut v = Val::default();
+    for i in 0..OBJS_MAX as u32 {
+        v.toks.insert(Tok::Ram(0x0300_0100 + i * 0x100));
+    }
+    v.cap();
+    assert_eq!(v.toks.len(), OBJS_MAX);
+    // One more: somewhere in some object, which takes each in, and an
+    // exact RAM address too; the stacks' pointer stays its own.
+    v.toks
+        .extend([Tok::Ram(0x0300_4000), STACK, Tok::Num(0x0300_0004)]);
+    v.cap();
+    assert_eq!(v.toks.iter().collect::<Vec<_>>(), [&STACK, &ANYOBJ]);
+    assert!(v.takes_in(Tok::Ram(0x0300_0100)) && v.takes_in(Tok::Num(0x0200_0000)));
+    assert!(!v.takes_in(LOOSE));
+    RAM_ON.with(|c| c.set(false));
+}
+
+#[test]
+fn many_reads_of_single_objects_are_one_of_every_object() {
+    RAM_ON.with(|c| c.set(true));
+    let obj = |k: u32| Tok::Ref {
+        src: Src::Obj(obj_cell(0x0300_0000 + k * 0x100), 4),
+        xf: Xf::ID,
+    };
+    let all = Tok::Ref {
+        src: Src::Objs(4),
+        xf: Xf::ID,
+    };
+    let mut v = Val::default();
+    v.toks.extend((0..OBJ_REFS as u32).map(obj));
+    v.cap();
+    assert_eq!(v.toks.len(), OBJ_REFS);
+    assert!(!v.takes_in(obj(9)));
+    // One more: the read of every object's, which takes each in.
+    v.toks.insert(obj(9));
+    v.cap();
+    assert_eq!(v.toks.iter().collect::<Vec<_>>(), [&all]);
+    assert!(v.takes_in(obj(3)));
+    // At another width it is another read.
+    let bytes = Tok::Ref {
+        src: Src::Obj(obj_cell(0x0300_0000), 1),
+        xf: Xf::ID,
+    };
+    assert!(!v.takes_in(bytes));
+    RAM_ON.with(|c| c.set(false));
+}
+
+#[test]
+fn a_store_through_some_objects_pointer_is_read_at_a_constant_address() {
+    // A pointer into more objects than the bound, stored through: a load
+    // at a constant address in any of them reads it.
+    let e = 0x0800_1001;
+    let mut a = B::default();
+    let i = a.get(1);
+    let mut p = None;
+    for k in 0..=OBJS_MAX as u32 {
+        let lit = a.k(0x0300_0200 + k * 0x400);
+        let x = a.bin(BinOp::Add, lit, i);
+        p = Some(match p {
+            None => x,
+            Some(q) => {
+                let c = a.op(Op::GetFlag(Flag::Z));
+                a.op(Op::Select { c, a: q, b: x })
+            }
+        });
+    }
+    let f = a.pool(POOL, F);
+    a.st(Width::Word, p.unwrap(), f);
+    let store = (e, vec![(e, a.end(None, Edge::Return))]);
+    let mut b = B::default();
+    let c = b.k(0x0300_0a00);
+    let t = b.ld(Width::Word, c);
+    let f = run_ram(&[store, calling(0x0800_2001, b, t)]);
+    assert_eq!(site(&f).callees, BTreeSet::from([F]), "{f:?}");
+}
+
+#[test]
+fn a_function_s_read_ranges_are_kept_once() {
+    let mut rd = Rd::default();
+    for _ in 0..3 {
+        rd.range(8, 11);
+        rd.range(0, 100);
+        rd.range(200, 200);
+        rd.range(4, 4);
+    }
+    assert_eq!(rd.ranges.len(), 4);
+    rd.settle();
+    // Those inside another are left out.
+    assert_eq!(rd.ranges, [(0, 100), (200, 200)]);
+}
