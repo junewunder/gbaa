@@ -19,8 +19,8 @@
 //! `bl` (a task that calls its setup, then switches on its state). Undefined instructions, lone halves of a Thumb
 //! `bl`, BIOS calls that don't exist, long runs of one word, instructions
 //! no game runs (user-bank `ldm`), Thumb shifts by 32 (a ROM pointer's
-//! upper half), a Thumb `bx` to a register last set by a shift left
-//! ([`shifted_bx`]), and a first instruction that is
+//! upper half), a Thumb `bx` to a register last set by a shift left, or
+//! to one of r4-r12 the body never set ([`shifted_bx`]), and a first instruction that is
 //! conditional or pops fail it. An ARM body must be mostly unconditional.
 //! Then the value-set analysis from the candidate must return with sp
 //! where it started: data decoded as code usually pops its caller's frame.
@@ -29,7 +29,7 @@
 //! 4, being loaded from a literal pool by code found, sitting next to a
 //! known function start in a table (or beside another Thumb pointer, two
 //! words from one: a table of structs of two function pointers and a word
-//! of data; or in a column of starts, one record of three to eight words
+//! of data; or in a column of starts, one record of two to eight words
 //! from one and two from another: [`column`]) or being a constant getter (pool
 //! loads, then `bx lr`: [`getter`]) scores 2, and more than one word
 //! pointing there scores 1. A candidate needs [`MIN_SCORE`]. A batch takes
@@ -196,10 +196,13 @@ pub fn batch(
     out
 }
 
-/// The record sizes [`column`] tries, in bytes: a table of structs whose
-/// records are wider than two words (narrower ones are the neighbour
-/// rules' already).
-const COLUMN_STRIDES: std::ops::RangeInclusive<u32> = 3..=8;
+/// The record sizes [`column`] tries, in words: a table of structs of two
+/// words or more. One word is the neighbour rule's; two words is the pair
+/// rule's only where the record's other word is a Thumb pointer too, so
+/// records of a handler and a word of data need the column: WarioWare's
+/// tables of empty `bx lr` callbacks (0x083db40c: 0x0809dd55 and
+/// 0x0809dd59 between two starts found by their pushes).
+const COLUMN_STRIDES: std::ops::RangeInclusive<u32> = 2..=8;
 
 /// Whether the word at `at` sits in a column of known function starts: one
 /// record of some size ([`COLUMN_STRIDES`], in words) away from one and
@@ -580,6 +583,8 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
 /// Whether `i` is a Thumb `bx rM` whose rM was last set, in the straight
 /// run of instructions before it (back to `start`), by a shift left by an
 /// immediate: a jump into ARM state to an address made only by a shift.
+/// Or whose rM is one of r4-r12 and nothing in that run (all of it, back
+/// to `start`) set: a jump to what the caller left there.
 /// No switch does that (a switch's targets come from a table or an add);
 /// data does: Emerald Rogue's battle-script pointer 0x0826c5e7, loaded for
 /// its script pusher and taken for a Thumb start, ends in `lsls r1, r1, #6`
@@ -617,7 +622,12 @@ fn shifted_bx(prog: &Program, start: u32, i: &Insn) -> bool {
             _ => return false,
         }
     }
-    false
+    // Back at the start with rM never written: a jump to a register the
+    // caller left in r4-r12, which no compiler's code does (agbcc's
+    // `_call_via_rN` and m4a's stubs jump through r0-r3 or lr). Data does:
+    // WarioWare's byte pointer 0x083db2d7, loaded as an address and taken
+    // for a Thumb start, ends in `bx r9` eight instructions on.
+    (4..=12).contains(&(rm as u8))
 }
 
 /// The fewest instructions a body ending in an indirect jump needs.

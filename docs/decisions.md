@@ -278,6 +278,17 @@ switch, but it counts toward the trickle.
   true starts, none false); Emerald 0.9997 / 0.9575 to 0.9997 / 0.9583
   (13 more), modern GCC 0.9996 / 0.7873 to 0.9996 / 0.7922 (78 more, one
   more jump table), none false; agb's 1.0 precision kept.
+  **Two-word records, and a `bx` nothing set** (2026-11-20,
+  native/warioware-builds): the column takes records of two words too
+  (the pair rule wants the other word a Thumb pointer, so a handler and a
+  word of data had no rule): WarioWare's tables of empty `bx lr`
+  callbacks, 356 more starts there, every one sampled a `bx lr` stub.
+  And a Thumb body whose `bx` jumps through one of r4-r12 that nothing
+  from its start set fails validation (no compiler jumps to a register
+  its caller left; WarioWare's byte pointer 0x083db2d7 ended in `bx r9`).
+  Emerald 0.9997 / 0.9583 kept with one false start fewer (5 to 4),
+  modern GCC 0.9996 / 0.7922 to 0.9996 / 0.7924 (4 more true, none
+  false).
 - **Checking discovery:** precision and recall of function starts against
   the pokeemerald ELF, specified in `research/discovery-prior-art.md`
   ("Proposed discovery-accuracy check"). Baseline to beat: 99.87% precision,

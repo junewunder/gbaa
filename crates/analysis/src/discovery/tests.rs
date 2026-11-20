@@ -244,6 +244,41 @@ fn pointer_scan_rejects_a_bx_to_a_shifted_register() {
 }
 
 #[test]
+fn pointer_scan_rejects_a_bx_to_a_register_the_body_never_set() {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        .h(0x100, 0x4770)
+        // WarioWare's byte table decoded as Thumb: ldrb r0, [r1, #3];
+        // ldrb r0, [r5, #1]; lsls r0, r5, #1; movs r1, r0; bx r9.
+        .h(0x300, 0x78c8)
+        .h(0x302, 0x7868)
+        .h(0x304, 0x0068)
+        .h(0x306, 0x0001)
+        .h(0x308, 0x4748)
+        // The same with r9 set first: mov r9, r0.
+        .h(0x340, 0x78c8)
+        .h(0x342, 0x7868)
+        .h(0x344, 0x4681)
+        .h(0x346, 0x0001)
+        .h(0x348, 0x4748)
+        // And through r1, which a veneer's caller sets: bx r1.
+        .h(0x380, 0x78c8)
+        .h(0x382, 0x7868)
+        .h(0x384, 0x0068)
+        .h(0x386, 0x0002)
+        .h(0x388, 0x4708)
+        // All beside a function found already.
+        .w(0x400, thumb(0x300))
+        .w(0x404, thumb(0x100))
+        .w(0x408, thumb(0x340))
+        .w(0x40c, thumb(0x380));
+    let d = a.run();
+    assert!(!d.funcs.contains_key(&thumb(0x300)));
+    assert_eq!(d.funcs.get(&thumb(0x340)), Some(&Evidence::Scanned));
+    assert_eq!(d.funcs.get(&thumb(0x380)), Some(&Evidence::Scanned));
+}
+
+#[test]
 fn scanned_code_reaching_an_undefined_insn_is_data() {
     let mut a = Asm::new();
     a.entry(0x100)
