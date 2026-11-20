@@ -1492,8 +1492,8 @@ route = "units/c-fnptr-gcc-600.toml"
 planted_store = 0x08000390
 
 [program.c-fnptr-gcc.bars]
-computed_unknown_unnamed = 19
-lines = 861
+computed_unknown_unnamed = 17
+lines = 860
 lines_prelude = 1265
 functions = 18
 functions_iwram = 0
@@ -1511,7 +1511,7 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 187
+value_lets = 186
 reg_local_writes = 85
 unpacked_unread = 0
 regs_call_entries = 0
@@ -1816,8 +1816,8 @@ route = "units/c-chain-gcc-600.toml"
 planted_store = 0x08000550
 
 [program.c-chain-gcc.bars]
-computed_unknown_unnamed = 18
-lines = 846
+computed_unknown_unnamed = 10
+lines = 843
 lines_prelude = 1265
 functions = 13
 functions_iwram = 0
@@ -1835,7 +1835,7 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 206
+value_lets = 203
 reg_local_writes = 89
 unpacked_unread = 0
 regs_call_entries = 0

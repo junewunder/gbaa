@@ -1,4 +1,6 @@
-//! pret's DWARF 2 (agbcc's): each function's prototype and locals, the
+//! pret's DWARF 2 (agbcc's), and modern GCC's DWARF 2 to 5 (location
+//! lists, `.debug_loclists`, its frame base from `.debug_frame`): each
+//! function's prototype and locals, the
 //! line table, the globals' types, and struct, union and enum layouts, for
 //! the source map's `proto`, `[locals]`, `[lines]` and `[types]`
 //! (`docs/mod-view-design.md`, "What it holds").
@@ -50,6 +52,9 @@ pub struct Func {
     /// Its end address (exclusive).
     pub end: u32,
     pub locals: Vec<Local>,
+    /// How many variables `locals` holds: one may have a row for each range
+    /// of a location list (modern GCC's, moving it between registers).
+    pub located: usize,
     /// Variables with no home DWARF gives (agbcc drops the location of
     /// one it keeps in more than one place), by name.
     pub homeless: Vec<String>,
@@ -171,7 +176,12 @@ pub fn fix_abbrevs(info: &[u8], abbrev: &[u8]) -> (Vec<u8>, Vec<u8>) {
         if len == 0 || len == 0xffff_ffff {
             break;
         }
-        let off = u32::from_le_bytes(info[at + 6..at + 10].try_into().unwrap());
+        // DWARF 5 puts a unit type and the address size before the
+        // abbrev offset; 2 to 4 put it straight after the version.
+        let version = u16::from_le_bytes(info[at + 4..at + 6].try_into().unwrap());
+        let o = if version >= 5 { at + 8 } else { at + 6 };
+        let Some(off) = info.get(o..o + 4) else { break };
+        let off = u32::from_le_bytes(off.try_into().unwrap());
         let new = *moved.entry(off).or_insert_with(|| {
             let n = out.len() as u32;
             if (off as usize) < abbrev.len() {
@@ -181,7 +191,7 @@ pub fn fix_abbrevs(info: &[u8], abbrev: &[u8]) -> (Vec<u8>, Vec<u8>) {
             }
             n
         });
-        info[at + 6..at + 10].copy_from_slice(&new.to_le_bytes());
+        info[o..o + 4].copy_from_slice(&new.to_le_bytes());
         at += 4 + len;
     }
     (info, out)
@@ -255,6 +265,7 @@ pub fn load(elf: &[u8]) -> Result<Debug, String> {
     }
     let line = fix_lines(sect(".debug_line"), starts);
     let dwarf = sections(&info, &abbrev, &line, &sect)?;
+    let cfa = cfa_offsets(sect(".debug_frame"));
     let mut d = Debug::default();
     let mut units = dwarf.units();
     loop {
@@ -274,11 +285,52 @@ pub fn load(elf: &[u8]) -> Result<Debug, String> {
                 continue;
             }
         };
-        if let Err(e) = read_unit(&dwarf, &unit, &mut d) {
+        if let Err(e) = read_unit(&dwarf, &unit, &cfa, &mut d) {
             d.bad_units.push(format!("unit at 0x{at:x}, reading: {e}"));
         }
     }
     Ok(d)
+}
+
+/// Each function's frame size after its prologue, by its start address:
+/// where `.debug_frame` says the CFA (`sp` at entry) is `sp` plus an
+/// offset over the longest stretch of the function. Modern GCC gives a
+/// frame base of `DW_OP_call_frame_cfa` (DWARF 3 and later), and a
+/// `DW_OP_fbreg` slot is an offset from that; agbcc writes no CFI.
+fn cfa_offsets(frame: &[u8]) -> HashMap<u32, i32> {
+    use gimli::UnwindSection as _;
+    let mut out = HashMap::new();
+    let mut sec = gimli::DebugFrame::new(frame, LittleEndian);
+    sec.set_address_size(4);
+    let bases = gimli::BaseAddresses::default();
+    let mut ctx = gimli::UnwindContext::new();
+    let mut entries = sec.entries(&bases);
+    while let Ok(Some(e)) = entries.next() {
+        let gimli::CieOrFde::Fde(partial) = e else {
+            continue;
+        };
+        let Ok(fde) = partial.parse(gimli::DebugFrame::cie_from_offset) else {
+            continue;
+        };
+        let Ok(mut rows) = fde.rows(&sec, &bases, &mut ctx) else {
+            continue;
+        };
+        let mut best: Option<(u64, i32)> = None;
+        while let Ok(Some(row)) = rows.next_row() {
+            if let gimli::CfaRule::RegisterAndOffset { register, offset } = row.cfa()
+                && register.0 == 13
+            {
+                let len = row.end_address() - row.start_address();
+                if best.is_none_or(|(l, _)| len > l) {
+                    best = Some((len, *offset as i32));
+                }
+            }
+        }
+        if let Some((_, off)) = best {
+            out.insert(fde.initial_address() as u32 & !1, off);
+        }
+    }
+    out
 }
 
 struct Cx<'a, 'u> {
@@ -462,8 +514,10 @@ fn addr(e: &gimli::DebuggingInformationEntry<'_, '_, R<'_>>, at: gimli::DwAt) ->
 }
 
 /// A location expression's home: `DW_OP_reg<n>`, or `DW_OP_breg13`/
-/// `DW_OP_breg7`/`DW_OP_fbreg` plus an offset (a stack slot).
-fn home(expr: &[u8]) -> Option<Home> {
+/// `DW_OP_breg7`/`DW_OP_fbreg` plus an offset (a stack slot). `fb` is the
+/// frame base's offset from `sp` after the prologue (`None`: not known, so
+/// no `DW_OP_fbreg` slot).
+fn home(expr: &[u8], fb: Option<i32>) -> Option<Home> {
     let (&op, rest) = expr.split_first()?;
     let sleb = |b: &[u8]| {
         let mut r = EndianSlice::new(b, LittleEndian);
@@ -473,7 +527,8 @@ fn home(expr: &[u8]) -> Option<Home> {
         0x50..=0x5f if rest.is_empty() => Some(Home::Reg(op - 0x50)),
         // breg13 (sp), breg7 (agbcc's Thumb frame pointer, sp after the
         // prologue), fbreg.
-        0x7d | 0x77 | 0x91 => Some(Home::Slot(sleb(rest)? as i32)),
+        0x7d | 0x77 => Some(Home::Slot(sleb(rest)? as i32)),
+        0x91 => Some(Home::Slot(sleb(rest)? as i32 + fb?)),
         _ => None,
     }
 }
@@ -513,6 +568,7 @@ fn range(e: &gimli::DebuggingInformationEntry<'_, '_, R<'_>>) -> Option<(u32, u3
 fn read_unit<'a>(
     dwarf: &'a gimli::Dwarf<R<'a>>,
     unit: &Unit<'a>,
+    cfa: &HashMap<u32, i32>,
     d: &mut Debug,
 ) -> Result<(), gimli::Error> {
     let mut cx = Cx {
@@ -587,7 +643,8 @@ fn read_unit<'a>(
                     end: hi,
                     ..Func::default()
                 };
-                locals(&cx, node, (lo, hi), &mut f)?;
+                let fb = frame_base(&cx, &e, lo, cfa);
+                locals(&cx, node, (lo, hi), fb, &mut f)?;
                 for (a, n, ty) in &f.statics {
                     d.globals.entry(*a).or_insert((n.clone(), ty.clone()));
                 }
@@ -676,10 +733,22 @@ fn layout(cx: &Cx<'_, '_>, at: gimli::UnitOffset) -> Result<Option<Layout>, giml
                 let fsize = udata(c, dw::DW_AT_byte_size).map_or(tsize, |s| s as u32);
                 // DWARF 2 counts a bitfield's bit_offset from the unit's
                 // most significant bit.
+                let mut off = off;
                 let bits = match (udata(c, dw::DW_AT_bit_size), udata(c, dw::DW_AT_bit_offset)) {
                     (Some(w), Some(bo)) => {
                         Some(((fsize * 8).saturating_sub(bo as u32 + w as u32), w as u32))
                     }
+                    // DWARF 4 and later: the bit offset from the struct's
+                    // start, the field's unit the aligned `fsize` bytes
+                    // holding its lowest bit.
+                    (Some(w), None) => match udata(c, dw::DW_AT_data_bit_offset) {
+                        Some(dbo) if fsize > 0 => {
+                            let dbo = dbo as u32;
+                            off = dbo / 8 / fsize * fsize;
+                            Some((dbo - off * 8, w as u32))
+                        }
+                        _ => None,
+                    },
                     _ => None,
                 };
                 fields.push(Field {
@@ -740,11 +809,100 @@ fn type_size(cx: &Cx<'_, '_>, t: gimli::UnitOffset, depth: u32) -> Option<u32> {
     }
 }
 
+/// The frame base's offset from `sp` after the prologue, for a function
+/// starting at `lo`: 0 with none given, agbcc's register, or `DW_OP_breg13 0`;
+/// modern GCC's location list of `DW_OP_breg13 n` (DWARF 2), its longest
+/// row's `n`; its `DW_OP_call_frame_cfa`, the CFA's offset from
+/// [`cfa_offsets`]. `None` for anything else, whose slots are left out.
+fn frame_base(
+    cx: &Cx<'_, '_>,
+    e: &gimli::DebuggingInformationEntry<'_, '_, R<'_>>,
+    lo: u32,
+    cfa: &HashMap<u32, i32>,
+) -> Option<i32> {
+    let breg13 = |x: &[u8]| match x.split_first() {
+        Some((0x7d, rest)) => EndianSlice::new(rest, LittleEndian)
+            .read_sleb128()
+            .ok()
+            .map(|v| v as i32),
+        _ => None,
+    };
+    let v = match e.attr_value(dw::DW_AT_frame_base) {
+        Ok(Some(v)) => v,
+        _ => return Some(0),
+    };
+    let expr = match &v {
+        AttributeValue::Exprloc(x) => Some(x.0.slice()),
+        AttributeValue::Block(b) => Some(b.slice()),
+        _ => None,
+    };
+    if let Some(x) = expr {
+        return match x {
+            [0x9c] => cfa.get(&(lo & !1)).copied(),
+            // agbcc's `DW_OP_reg7`/`DW_OP_reg13`: sp after the prologue.
+            _ => Some(breg13(x).unwrap_or(0)),
+        };
+    }
+    let mut it = cx.dwarf.attr_locations(cx.unit, v).ok()??;
+    let mut best: Option<(u64, i32)> = None;
+    while let Ok(Some(l)) = it.next() {
+        let len = l.range.end.saturating_sub(l.range.begin);
+        if let Some(n) = breg13(l.data.0.slice())
+            && best.is_none_or(|(b, _)| len > b)
+        {
+            best = Some((len, n));
+        }
+    }
+    best.map(|(_, n)| n)
+}
+
+/// Where a variable lives, as rows of a home over `[from, to)` inside
+/// `span`: one row for a location expression (agbcc's, for the whole
+/// scope), one per range of a location list (modern GCC's), with
+/// adjacent ranges in one home joined.
+fn homes(
+    cx: &Cx<'_, '_>,
+    e: &gimli::DebuggingInformationEntry<'_, '_, R<'_>>,
+    span: (u32, u32),
+    fb: Option<i32>,
+) -> Result<Vec<(Home, u32, u32)>, gimli::Error> {
+    let one = |x: &[u8]| home(x, fb).map(|h| vec![(h, span.0, span.1)]);
+    let v = match e.attr_value(dw::DW_AT_location)? {
+        Some(v) => v,
+        None => return Ok(Vec::new()),
+    };
+    match &v {
+        AttributeValue::Exprloc(x) => return Ok(one(x.0.slice()).unwrap_or_default()),
+        AttributeValue::Block(b) => return Ok(one(b.slice()).unwrap_or_default()),
+        _ => {}
+    }
+    let mut out: Vec<(Home, u32, u32)> = Vec::new();
+    let Ok(Some(mut it)) = cx.dwarf.attr_locations(cx.unit, v) else {
+        return Ok(out);
+    };
+    while let Ok(Some(l)) = it.next() {
+        let from = (l.range.begin as u32).max(span.0);
+        let to = (l.range.end as u32).min(span.1);
+        if from >= to {
+            continue;
+        }
+        let Some(h) = home(l.data.0.slice(), fb) else {
+            continue;
+        };
+        match out.last_mut() {
+            Some((lh, _, lt)) if *lh == h && *lt == from => *lt = to,
+            _ => out.push((h, from, to)),
+        }
+    }
+    Ok(out)
+}
+
 /// A function's parameters and variables, with lexical blocks' ranges.
 fn locals<'a>(
     cx: &Cx<'a, '_>,
     node: gimli::EntriesTreeNode<'_, '_, '_, R<'a>>,
     span: (u32, u32),
+    fb: Option<i32>,
     f: &mut Func,
 ) -> Result<(), gimli::Error> {
     let mut ch = node.children();
@@ -754,30 +912,32 @@ fn locals<'a>(
             dw::DW_TAG_formal_parameter | dw::DW_TAG_variable => {
                 let name = cx.name_of(&e).unwrap_or_default();
                 let ty = cx.decl(cx.type_ref(&e), "", 0);
-                let at = match e.attr_value(dw::DW_AT_location)? {
-                    Some(AttributeValue::Exprloc(x)) => home(x.0.slice()),
-                    Some(AttributeValue::Block(b)) => home(b.slice()),
-                    _ => None,
-                };
-                match at {
-                    Some(home) => f.locals.push(Local {
-                        name,
+                let param = e.tag() == dw::DW_TAG_formal_parameter;
+                let homes = homes(cx, &e, span, fb)?;
+                if !homes.is_empty() {
+                    f.located += 1;
+                }
+                for &(home, from, to) in &homes {
+                    f.locals.push(Local {
+                        name: name.clone(),
                         home,
-                        from: span.0,
-                        to: span.1,
-                        ty,
-                        param: e.tag() == dw::DW_TAG_formal_parameter,
-                    }),
-                    None => match static_addr(&e) {
+                        from,
+                        to,
+                        ty: ty.clone(),
+                        param,
+                    });
+                }
+                if homes.is_empty() {
+                    match static_addr(&e) {
                         // A function's static: a global.
                         Some(a) => f.statics.push((a, name, ty)),
                         None => f.homeless.push(name),
-                    },
+                    }
                 }
             }
             dw::DW_TAG_lexical_block => {
                 let inner = range(&e).unwrap_or(span);
-                locals(cx, c, inner, f)?;
+                locals(cx, c, inner, fb, f)?;
             }
             _ => {}
         }

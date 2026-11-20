@@ -68,7 +68,19 @@ format = 1
 # [from, to). Variables agbcc gave no location are left out.
 [locals]
 0x08000191 = [
-  { name = "color", slot = 0, from = 0x08000190, to = 0x0800022c, type = "u16", param = true },
+  { name = "x", reg = 0, from = 0x08000190, to = 0x0800022c, type = "s32", param = true },
+  { name = "y", reg = 1, from = 0x08000190, to = 0x080001b4, type = "s32", param = true },
+  { name = "y", reg = 1, from = 0x0800020a, to = 0x08000210, type = "s32", param = true },
+  { name = "w", reg = 2, from = 0x08000190, to = 0x08000196, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x08000196, to = 0x080001a0, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x080001a2, to = 0x080001ae, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x080001b0, to = 0x080001de, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x080001f8, to = 0x08000216, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x08000218, to = 0x0800022c, type = "s32", param = true },
+  { name = "h", reg = 3, from = 0x08000190, to = 0x080001b4, type = "s32", param = true },
+  { name = "h", reg = 3, from = 0x0800020a, to = 0x0800020c, type = "s32", param = true },
+  { name = "h", reg = 5, from = 0x08000228, to = 0x0800022c, type = "s32", param = true },
+  { name = "color", slot = 16, from = 0x08000190, to = 0x0800022c, type = "u16", param = true },
 ]
 0x08000281 = [
   { name = "obj", reg = 0, from = 0x08000280, to = 0x080002ba, type = "struct Obj *", param = true },
@@ -77,14 +89,56 @@ format = 1
   { name = "obj", reg = 0, from = 0x080002bc, to = 0x080002ea, type = "struct Obj *", param = true },
   { name = "t", reg = 1, from = 0x080002bc, to = 0x080002ea, type = "s16" },
 ]
+0x080002ed = [
+  { name = "frame", reg = 0, from = 0x080002ec, to = 0x08000308, type = "u32", param = true },
+  { name = "i", reg = 6, from = 0x08000308, to = 0x0800033c, type = "u32" },
+  { name = "obj", reg = 4, from = 0x08000308, to = 0x08000338, type = "struct Obj *" },
+]
+0x08000369 = [
+  { name = "i", reg = 4, from = 0x0800037c, to = 0x0800038c, type = "u32" },
+]
+0x0800039d = [
+  { name = "obj", reg = 0, from = 0x0800039c, to = 0x080003b8, type = "const struct Obj *", param = true },
+  { name = "obj", reg = 4, from = 0x080003b8, to = 0x080003de, type = "const struct Obj *", param = true },
+  { name = "color", reg = 1, from = 0x0800039c, to = 0x080003a4, type = "u16", param = true },
+  { name = "color", reg = 5, from = 0x080003a4, to = 0x080003de, type = "u16", param = true },
+  { name = "size", reg = 7, from = 0x080003b0, to = 0x080003de, type = "s32" },
+]
+0x080003e9 = [
+  { name = "obj", reg = 0, from = 0x080003e8, to = 0x08000402, type = "const struct Obj *", param = true },
+  { name = "color", reg = 1, from = 0x080003e8, to = 0x080003ee, type = "u16", param = true },
+  { name = "color", reg = 12, from = 0x080003ee, to = 0x0800040d, type = "u16", param = true },
+  { name = "size", reg = 2, from = 0x080003fa, to = 0x0800040d, type = "s32" },
+]
+0x08000419 = [
+  { name = "frame", reg = 0, from = 0x08000418, to = 0x08000424, type = "u32", param = true },
+]
 0x08000449 = [
   { name = "", reg = 0, from = 0x08000448, to = 0x08000474, type = "void", param = true },
 ]
 0x08000475 = [
   { name = "kind", reg = 0, from = 0x08000474, to = 0x080004c0, type = "u8", param = true },
+  { name = "x", reg = 1, from = 0x08000474, to = 0x0800049a, type = "s16", param = true },
+  { name = "y", reg = 2, from = 0x08000474, to = 0x08000484, type = "s16", param = true },
+  { name = "y", reg = 7, from = 0x08000484, to = 0x080004b0, type = "s16", param = true },
+  { name = "dx", reg = 3, from = 0x08000474, to = 0x0800047a, type = "s16", param = true },
+  { name = "dx", reg = 6, from = 0x0800047a, to = 0x080004b0, type = "s16", param = true },
+  { name = "dy", slot = 20, from = 0x08000474, to = 0x0800047a, type = "s16", param = true },
+  { name = "dy", slot = 20, from = 0x08000480, to = 0x080004c0, type = "s16", param = true },
 ]
 0x080004c1 = [
   { name = "cb", reg = 0, from = 0x080004c0, to = 0x080004e0, type = "Callback", param = true },
+]
+0x080004e1 = [
+  { name = "cb", reg = 0, from = 0x080004e0, to = 0x080004ee, type = "Callback", param = true },
+  { name = "cb", reg = 4, from = 0x080004ee, to = 0x08000526, type = "Callback", param = true },
+  { name = "i", reg = 3, from = 0x08000502, to = 0x08000506, type = "u32" },
+  { name = "j", reg = 3, from = 0x08000514, to = 0x08000518, type = "u32" },
+  { name = "j", reg = 3, from = 0x0800051a, to = 0x0800051e, type = "u32" },
+]
+0x08000531 = [
+  { name = "frame", reg = 0, from = 0x08000530, to = 0x08000546, type = "u32", param = true },
+  { name = "frame", reg = 0, from = 0x08000554, to = 0x08000562, type = "u32", param = true },
 ]
 
 # The line table: each row's address and its line, in the `src` of the

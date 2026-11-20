@@ -169,10 +169,10 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   at, writes `$GBAA_DATA/names/<build>.toml` and prints the report, then
   loads that file as codegen's source map (`codegen::names`) and fails
   unless every function gets an identifier of its own. It also reads the
-  ELF's DWARF 2 (`pret_names::dwarf`, gimli, agbcc's unterminated abbrev
+  ELF's DWARF 2 to 5 (`pret_names::dwarf`, gimli, agbcc's unterminated abbrev
   tables and short line programs mended first): `src` and `proto` on
-  functions, `type` on data, `[locals]`, `[lines]` and `[types]`, and a
-  `dwarf:` report line; and from the tree's `include/constants/` and
+  functions, `type` on data, `[locals]` (a row per range of a location list),
+  `[lines]` and `[types]`, and a `dwarf:` report line; and from the tree's `include/constants/` and
   `src/`, `[values]`: the `#define` families fields take
   (`docs/mod-view-design.md`, "Value names"), with a `values:` line; and
   the tree's `charmap.txt` as `[text]`, for the readable print's string
