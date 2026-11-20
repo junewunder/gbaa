@@ -407,6 +407,11 @@ pub struct Holes {
     /// (`native/taker-test-program`): the native check must catch it on
     /// `agb/native-takes`.
     pub takes_zeroed: bool,
+    /// Stage A's old call of a function that gives r4-r11 back to its
+    /// callers (`gbaa-lift --gives-kept`): the caller keeps its own, as
+    /// every call did. The planted control of `native/lift-gives`: the
+    /// native check must catch it on `agb/native-gives`.
+    pub gives_kept: bool,
     /// The stack-locals check's planted control (`gbaa-lift --plant-slot
     /// AT`, `native/frame-locals`): the store of the instruction at this
     /// address, which must be to a slot printed as a Rust local, stores
@@ -1923,6 +1928,24 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             .collect::<Vec<_>>()
             .concat(),
         soft.passes.len(),
+    )
+    .unwrap();
+    writeln!(
+        report,
+        "registers given back (native/lift-gives): {} functions give back one of r4-r11 they changed{}; {} direct calls take them",
+        soft.givers.len(),
+        soft.givers
+            .iter()
+            .map(|&(k, m)| {
+                let regs: Vec<String> = (4..12)
+                    .filter(|r| m & 1 << (r - 4) != 0)
+                    .map(|r| format!("r{r}"))
+                    .collect();
+                format!(" f_{k:08x} {}", regs.join(" "))
+            })
+            .collect::<Vec<_>>()
+            .concat(),
+        soft.gives_taken,
     )
     .unwrap();
     writeln!(
@@ -3562,6 +3585,10 @@ struct Soft {
     passes: BTreeSet<(u32, u32)>,
     /// The functions that take one of r4-r11 from their callers.
     takers: Vec<(u32, u8)>,
+    /// The functions that give one of r4-r11 back to their callers
+    /// ([`Summary::gives`]), and the calls printed that take them.
+    givers: Vec<(u32, u8)>,
+    gives_taken: usize,
     dyn_jumps: usize,
     /// Jumps by value to the entry lr printed as a plain return, and those
     /// still through `call_fn`, the entry lr not proven `RET`
@@ -4322,6 +4349,9 @@ impl FnPrinter<'_, '_> {
             ns => format!("    let ({}) = ({});\n", ns.join(", "), from.join(", ")),
         };
         let taker = self.me.is_none() && self.passed(k) != 0;
+        if self.gives(k) != 0 {
+            self.soft.givers.push((k, self.gives(k)));
+        }
         let params: u8 = self.me.map_or(0xf, |sh| sh.params);
         // r4-r11 as they came reach no use (a save, its restore unread:
         // callers keep their own) and come back in no result it gives
@@ -4634,7 +4664,13 @@ impl FnPrinter<'_, '_> {
             .values()
             .map(|gb| &gb.block.insts[..])
             .collect();
-        let results = live::low(self.returned());
+        // (What it gives back of r4-r11, its returns read too.)
+        let results = live::low(self.returned()) | live::high(self.gives(self.f.entry));
+        // What a direct call of `k` passes of r4-r11, and what it sets of
+        // them after (given back: live before it too, so never a block's
+        // own `let`).
+        let high = |k: u32| live::high(self.passed(k) | self.echoes(k) | self.gives(k));
+        let plain = |k: u32| self.passed(k) | self.echoes(k) | self.gives(k) == 0;
         let out = |b: usize, i: usize| {
             let Some(x) = xs[b].iter().find(|x| x.index == i) else {
                 return (Vec::new(), live::ALL);
@@ -4659,22 +4695,15 @@ impl FnPrinter<'_, '_> {
                         && (!self.all.contains(&ret) || self.holes.fall_as_tail_call) =>
                 {
                     let reads = match self.shape(target) {
-                        Some(c) if self.passed(target) | self.echoes(target) == 0 => {
-                            live::low(c.params)
-                        }
-                        _ => live::low(0xf) | live::high(self.passed(target) | self.echoes(target)),
+                        Some(c) if plain(target) => live::low(c.params),
+                        _ => live::low(0xf) | high(target),
                     };
                     (Vec::new(), reads)
                 }
                 // A shaped callee's call prints its parameters only.
                 Plan::Call { target, ret } => match self.shape(target) {
-                    Some(c) if self.passed(target) | self.echoes(target) == 0 => {
-                        then(ret, live::low(c.params))
-                    }
-                    _ => then(
-                        ret,
-                        live::low(0xf) | live::high(self.passed(target) | self.echoes(target)),
-                    ),
+                    Some(c) if plain(target) => then(ret, live::low(c.params)),
+                    _ => then(ret, live::low(0xf) | high(target)),
                 },
                 Plan::CallVia { reg, ret, .. } => then(
                     ret,
@@ -4727,10 +4756,7 @@ impl FnPrinter<'_, '_> {
         let by_name = |b: usize, i: usize| {
             let x = xs[b].iter().find(|x| x.index == i)?;
             match x.plan {
-                Plan::Call { target, ret }
-                    if self.passed(target) | self.echoes(target) == 0
-                        && index.contains_key(&ret) =>
-                {
+                Plan::Call { target, ret } if plain(target) && index.contains_key(&ret) => {
                     Some(live::low(self.shape(target).map_or(0xf, |c| c.results)))
                 }
                 Plan::Dynamic { ret: None, .. } if !self.reads_target(x) => Some(0),
@@ -7005,7 +7031,7 @@ impl FnPrinter<'_, '_> {
                 ),
             )
         };
-        self.tail(callee.map(|c| c.results), &lhs, &call)
+        self.tail(Some(k), callee.map(|c| c.results), &lhs, &call)
     }
 
     /// What `k` takes of r4-r11 from its callers (bit `n - 4` for rN,
@@ -7029,6 +7055,37 @@ impl FnPrinter<'_, '_> {
         self.sums
             .get(k)
             .map_or(0, |s| s.echoes.values().fold(0, |m, &n| m | 1 << (n - 4)))
+    }
+
+    /// What `k` gives back of r4-r11 to a direct call (bit `n - 4` for
+    /// rN, [`Summary::gives`]): 0 for a stand-in.
+    fn gives(&self, k: u32) -> u8 {
+        if self.holes.standins.contains_key(&k) {
+            return 0;
+        }
+        self.sums.get(k).map_or(0, |s| s.gives)
+    }
+
+    /// After a direct call of `k`: this function's locals take what `k`
+    /// gives back (`Game::gave`, set by `k`'s returns: [`FnPrinter::ret`]).
+    /// Nothing with `--gives-kept` ([`Holes::gives_kept`]).
+    fn take_given(&self, k: u32) -> String {
+        if self.holes.gives_kept {
+            return String::new();
+        }
+        (4..12)
+            .filter(|r| self.gives(k) & 1 << (r - 4) != 0)
+            .map(|r| format!(" r{r} = g.gave[{}];", r - 4))
+            .collect()
+    }
+
+    /// Before a return of this function's: what it gives back, into
+    /// `Game::gave`.
+    fn give(&self) -> String {
+        (4..12)
+            .filter(|r| self.gives(self.f.entry) & 1 << (r - 4) != 0)
+            .map(|r| format!("g.gave[{}] = {}; ", r - 4, self.reg(r)))
+            .collect()
     }
 
     /// What a call passes of `m` (bits of r4-r11 its callee takes): all
@@ -7112,9 +7169,11 @@ impl FnPrinter<'_, '_> {
     }
 
     /// The call statement: `lhs call?;`.
-    fn call_stmt(&self, k: u32) -> String {
+    fn call_stmt(&mut self, k: u32) -> String {
         let (lhs, call) = self.call(k);
-        format!("{lhs}{call}?;")
+        let given = self.take_given(k);
+        self.soft.gives_taken += usize::from(!given.is_empty());
+        format!("{lhs}{call}?;{given}")
     }
 
     /// Register `r` as the code printing now reads it: what this block
@@ -7172,17 +7231,41 @@ impl FnPrinter<'_, '_> {
             ),
             Some(s) => self.regs_value(s.results),
         };
-        format!("return Ok({e});")
+        format!("{}return Ok({e});", self.give())
     }
 
-    /// A tail call, `call` giving `results` (`None`: all of r0-r3) into
-    /// `lhs`: returned as it is where this function gives the same.
-    fn tail(&self, results: Option<u8>, lhs: &str, call: &str) -> String {
-        if results == self.me.map(|m| m.results) {
-            format!("return {call};")
-        } else {
-            format!("{lhs}{call}?; {}", self.ret())
+    /// A tail call, `call` of `k` (`None`: through `call_fn`) giving
+    /// `results` (`None`: all of r0-r3) into `lhs`: returned as it is
+    /// where this function gives the same. One that gives r4-r11 back
+    /// ([`Summary::gives`]) takes what `k` gives first, then returns its
+    /// own: `k` gives every one of them it may change (the summaries'
+    /// closure over jumps), or it is a hole.
+    fn tail(&mut self, k: Option<u32>, results: Option<u8>, lhs: &str, call: &str) -> String {
+        let mine = self.gives(self.f.entry);
+        if mine == 0 {
+            return if results == self.me.map(|m| m.results) {
+                format!("return {call};")
+            } else {
+                format!("{lhs}{call}?; {}", self.ret())
+            };
         }
+        let given = match k {
+            Some(k) => {
+                // (No summary here: another code context's function,
+                // which may change any of them.)
+                let changes = self.sums.get(k).map_or(0xff, |s| (s.changes >> 4) as u8);
+                if mine & changes & !self.gives(k) != 0 {
+                    self.hole(
+                        self.f.entry & !1,
+                        HoleKind::Takes,
+                        format!("gives r4-r11 back to its callers and jumps into {k:#010x}, which changes one and doesn't give it back (a stand-in, or another code context's)"),
+                    );
+                }
+                self.take_given(k)
+            }
+            None => String::new(),
+        };
+        format!("{lhs}{call}?;{given} {}", self.ret())
     }
 
     fn call_then(&mut self, call: String, ret: u32, at: u32) -> String {
@@ -7449,6 +7532,7 @@ impl FnPrinter<'_, '_> {
                     // match's last arm, as a target's jump may fall through
                     // (structured).
                     self.tail(
+                        None,
                         None,
                         "[r0, r1, r2, r3] = ",
                         &format!("call_fn(g, {k}, r13, {regs})"),

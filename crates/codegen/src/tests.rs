@@ -1064,18 +1064,52 @@ fn a_summary_of_a_function_that_clobbers_r4_fails_its_proof() {
             );
             assert_eq!(f.changes, 1 << 4);
             assert!(caller.holes.iter().any(|h| h.contains("doesn't keep them")));
-            // The loop reads the r4 it changed: the caller's hole is hard.
+            // The loop reads the r4 it changed: the callee gives it back
+            // (native/lift-gives), no hole of the caller's.
             assert!(
-                caller
-                    .holes
-                    .contains("0x08000008: reads r4-r11 a callee changed: r4, by 0x08000015"),
+                !caller.holes.iter().any(|h| h.contains("a callee changed")),
                 "{:?}",
                 caller.holes
             );
+            assert_eq!(f.gives, 1 << 0);
         }
         // Neither reads an argument.
         assert_eq!((caller.params, f.params), (0, 0));
     }
+}
+
+#[test]
+fn a_register_given_back_through_a_caller_is_given_by_both() {
+    // `d: push {lr}; bl c; ldr r0, [r5, #0]; pop {r1}; bx r1`, `c: push
+    // {lr}; bl k; pop {r1}; bx r1`, `k: movs r5, #1; bx lr`: d reads the
+    // r5 k left, through c, which never touches it. c gives it back, so
+    // k must give it to c first: c's local is its own otherwise.
+    let (rom, d) = thumb_program(
+        &[
+            0xB500, // 0x00 push {lr}
+            0xF000, 0xF805, // 0x02 bl 0x10
+            0x6828, // 0x06 ldr r0, [r5, #0]
+            0xBC02, // 0x08 pop {r1}
+            0x4708, // 0x0a bx r1
+            0x46C0, // 0x0c nop
+            0x46C0, // 0x0e nop
+            0xB500, // 0x10 push {lr}
+            0xF000, 0xF803, // 0x12 bl 0x1c
+            0xBC02, // 0x16 pop {r1}
+            0x4708, // 0x18 bx r1
+            0x46C0, // 0x1a nop
+            0x2501, // 0x1c movs r5, #1
+            0x4770, // 0x1e bx lr
+        ],
+        &[2, 4, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2],
+        &[0x0800_0001, 0x0800_0011, 0x0800_001d],
+    );
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    assert_eq!(hard_holes(&sums, 0x0800_0001), Vec::<String>::new());
+    assert_eq!(sums.by_entry[&0x0800_0011].gives, 1 << 1);
+    assert_eq!(sums.by_entry[&0x0800_001d].gives, 1 << 1);
+    assert_eq!(sums.by_entry[&0x0800_0001].gives, 0);
 }
 
 /// The summary holes of `f` of `sums` that are hard.
@@ -1519,10 +1553,12 @@ fn pointer_call_to_a_reader(unset: bool) -> (Vec<u8>, Discovery) {
 }
 
 #[test]
-fn a_register_a_callee_changed_is_not_passed_on() {
+fn a_register_a_callee_changed_is_given_back_and_passed_on() {
     // `c: push {lr}; bl a; bl b; pop {r0}; bx r0`, `a: movs r5, #1; bx
     // lr`, `b: ldr r0, [r5, #0]; bx lr`: the machine gives b the r5 a
-    // left, the lift c's own local.
+    // left, and so does the lift: a gives it back to c
+    // (native/lift-gives), whose call of b passes it. A stand-in for a
+    // can't give: c's local is its own there, a hard hole.
     let (rom, d) = thumb_program(
         &[
             0xB500, // 0x00 push {lr}
@@ -1541,10 +1577,21 @@ fn a_register_a_callee_changed_is_not_passed_on() {
     );
     let ctx = Ctx::new(&rom, &d);
     let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
-    assert_eq!(
-        hard_holes(&sums, 0x0800_0001),
-        vec!["0x08000008: reads r4-r11 a callee changed: r5, by 0x08000011".to_string()]
-    );
+    assert_eq!(hard_holes(&sums, 0x0800_0001), Vec::<String>::new());
+    assert_eq!(sums.by_entry[&0x0800_0011].gives, 1 << 1);
+    assert_eq!(sums.by_entry[&0x0800_0015].gives, 0);
+    {
+        use crate::saves::{Assume, Passing, Sets, summarize_passing};
+        let mut passing = Passing::default();
+        passing.replaced.insert(0x0800_0011);
+        let funcs = build_all(&ctx).funcs;
+        let sums = summarize_passing(&ctx, &funcs, Assume::default(), &Sets::new(), &passing);
+        assert_eq!(
+            hard_holes(&sums, 0x0800_0001),
+            vec!["0x08000008: reads r4-r11 a callee changed: r5, by 0x08000011".to_string()]
+        );
+        assert_eq!(sums.by_entry[&0x0800_0011].gives, 0);
+    }
     let c = &sums.by_entry[&0x0800_0001];
     assert_eq!(
         c.passes,
