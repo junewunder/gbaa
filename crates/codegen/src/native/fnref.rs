@@ -7234,16 +7234,19 @@ impl G {
 /// program start's copies of ROM data to RAM (source, destination, bytes).
 /// `allocs`: the functions the holes file names as allocators, looked at
 /// only with `GBAA_FNREF_HEAP` set ([`heap_env`]).
-/// `named`: the program's named data, start and size in bytes, as its
-/// names files give them: with the RAM pointers on ([`ram_on`]) each such
-/// global in RAM is an object ([`ram_parts`]).
-pub fn follow(
-    fns: &[FnIn],
-    img: &dyn Image,
-    copies: &[(u32, u32, u32)],
-    allocs: &BTreeSet<u32>,
-    named: &BTreeMap<u32, u32>,
-) -> Flow {
+/// What the lift knows of a program besides its code, for [`follow`].
+#[derive(Clone, Copy, Debug)]
+pub struct Program<'a> {
+    /// The functions the holes file names as allocators, looked at only
+    /// with `GBAA_FNREF_HEAP` set ([`heap_env`]).
+    pub allocs: &'a BTreeSet<u32>,
+    /// Its named data, start and size in bytes, as its names files give
+    /// them: with the RAM pointers on ([`ram_on`]) each such global in
+    /// RAM is an object ([`ram_parts`]).
+    pub named: &'a BTreeMap<u32, u32>,
+}
+
+pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)], known: Program) -> Flow {
     let none = BTreeSet::new();
     let heap = heap_env();
     follow_live(
@@ -7251,9 +7254,9 @@ pub fn follow(
         img,
         copies,
         ram_env() || heap,
-        if heap { allocs } else { &none },
+        if heap { known.allocs } else { &none },
         live_env(),
-        named,
+        known.named,
     )
 }
 
