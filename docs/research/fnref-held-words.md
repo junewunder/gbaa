@@ -720,3 +720,62 @@ the mask kept.
 r0, r1, #1; cmp r0, #4; bhi` on the result of the call to 0x0808ac00, a
 switch on a call's result, which holds function addresses only through
 the empty callee sets' over-approximation. agb lift bars all held.
+
+## RAM pointers in a closed world, in progress
+
+Unit `native/fnref-ram-pointers`, 2026-11-19 on quack (commit 7a29e22e);
+on main behind `GBAA_FNREF_RAM=1`, off by default
+(`native/fnref-ram-switch`: off, the flow is main's, every lift metric and
+Metroid's the same), so the pieces after it land one by one. The rule (`fnref.rs`, "The closed world"): memory keeps
+every RAM pointer stored as a word, an exact one (`Num`) or one somewhere in
+an object (`Tok::Ram`: a RAM literal plus an index, `&tasks[i]`), so a
+number read from memory is no RAM address, and a load through a value with
+no RAM pointer reads nothing in RAM. Objects are RAM cut at the literals the
+code indexes from (`ram_parts`, from the reverted `ram_objects`), each
+literal stored or passed as `&a[i]` counting too. A store through a pointer
+into an object goes to that object's own cell; a load through one reads
+every cell, that cell and the pile (never more than an unplaced load read
+before); a load at a constant address reads its cell, its object's and the
+pile. sp is `STACK`, with its own cell for frame slots that escape.
+
+**Before** (main at ee88430f, `gbaa-recompile --summaries ROM --callee-sets`
+with the roads): Nightmare 2,720 words held, 2,113 first by a pile read (34
+minutes); Metroid 604 proven, 200 not, its flow 32 s in 22 rounds.
+
+**Where it stands.** Metroid 604 and 200 again, but the flow takes 164 s in
+26 rounds (5 times main's). The C programs' bars hold; on the agb programs
+19 metrics go under their bars and two programs go over: native-takes gets
+a hard hole (`f_080001c9` reads r8 at entry, now in a callee set) and 58
+words not proven (55), native-irq-hold 60 (58) with `ref_unexplained` 64
+(48) and four code-shape counts a few over. Their cause, seen on
+native-takes: a closure called through a pointer (a loose function,
+`f_080034ad`) gets its environment pointer in r0 as an unknown, which the
+closed world reads as no RAM address, so its loads read nothing and its
+calls are incomplete. Nightmare isn't measured: its first round ran over 9
+minutes with the roads on (they turn the kept ops off).
+
+**What it took to get there**, each a rule now on the branch:
+
+- An op on a RAM pointer other than plus, less or a mask makes a number,
+  as on a ROM pointer. Made a dropped pointer instead, every byte read from
+  memory holding pointers became one, and a table indexed by it read
+  everything: 851 holes in Metroid's first round against 231.
+- A function's address compared with a RAM address is an equality compare,
+  not arithmetic (a RAM address is never a function's nor a dense ID).
+- A word load's rotation by an unknown keeps a RAM pointer, as it keeps a
+  ROM one (agb's ARM code lost its allocator's pointer there).
+- The program start's copies store their RAM and ROM pointer words, and a
+  load the value sets bound to ROM reads those words even when its tokens
+  say RAM.
+- A load through an empty value (nothing stored there yet) reads nothing:
+  an early round's empty read made a call incomplete, and its arguments
+  went to every loose function for good.
+- Cost: each object's read as explicit tokens made Metroid's run 40 times
+  as long; as `Ref`s with a log per memory (so a Ref reads only what its
+  own memory gained) 6 times; reading every cell plus the object's own cell
+  instead of the object's cells, and more than two exact RAM addresses in a
+  value made pointers into their objects, 5 times.
+
+**Left:** loose functions' parameters (the closed world needs a RAM token
+there, without every closure's r0 becoming "anywhere"), the run's cost, and
+Nightmare's count.
