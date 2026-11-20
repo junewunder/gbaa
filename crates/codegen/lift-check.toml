@@ -31,7 +31,7 @@ rom = "agb/affine.gba"
 route = "units/affine-600.toml"
 
 [program.affine.bars]
-lines = 25366
+lines = 24965
 lines_prelude = 1265
 functions = 109
 functions_iwram = 3
@@ -49,7 +49,9 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 8017
+value_lets = 8007
+reg_local_writes = 3276
+unpacked_unread = 0
 bank_sp_calls = 257
 loops_not_for = 142
 load_const_ram = 0
@@ -98,7 +100,7 @@ rom = "agb/mosaic-modes.gba"
 route = "units/mosaic-modes-600.toml"
 
 [program.mosaic-modes.bars]
-lines = 18360
+lines = 18057
 lines_prelude = 1265
 functions = 102
 functions_iwram = 3
@@ -116,7 +118,9 @@ blocks_in_match = 46
 compare_trees_left = 11
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 5548
+value_lets = 5543
+reg_local_writes = 2294
+unpacked_unread = 0
 bank_sp_calls = 214
 loops_not_for = 123
 load_const_ram = 0
@@ -173,7 +177,7 @@ planted_store = 0x08000186
 planted_hole = { drop_standin = 0x08002728, names = "error: hard hole in f_08002728 at 0x08002730: CPU state: mrs" }
 
 [program.native-spike.bars]
-lines = 26382
+lines = 25973
 lines_prelude = 1265
 functions = 110
 functions_iwram = 3
@@ -191,7 +195,9 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 8687
+value_lets = 8677
+reg_local_writes = 3376
+unpacked_unread = 0
 bank_sp_calls = 263
 loops_not_for = 144
 load_const_ram = 0
@@ -244,7 +250,7 @@ route = "units/native-fallthrough-600.toml"
 planted_flags = ["--fall-as-tail-call"]
 
 [program.native-fallthrough.bars]
-lines = 24921
+lines = 24527
 lines_prelude = 1265
 functions = 112
 functions_iwram = 3
@@ -262,7 +268,9 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7983
+value_lets = 7978
+reg_local_writes = 3272
+unpacked_unread = 0
 bank_sp_calls = 260
 loops_not_for = 138
 load_const_ram = 0
@@ -316,7 +324,7 @@ route = "units/native-irq-hold-601.toml"
 planted_flags = ["--irq-at-waits"]
 
 [program.native-irq-hold.bars]
-lines = 25177
+lines = 24764
 lines_prelude = 1265
 functions = 114
 functions_iwram = 3
@@ -334,7 +342,9 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 8053
+value_lets = 8043
+reg_local_writes = 3288
+unpacked_unread = 0
 bank_sp_calls = 267
 loops_not_for = 142
 load_const_ram = 0
@@ -390,7 +400,7 @@ route = "units/native-frame-locals-600.toml"
 planted_flags = ["--plant-slot=0x08000182"]
 
 [program.native-frame-locals.bars]
-lines = 24945
+lines = 24526
 lines_prelude = 1265
 functions = 113
 functions_iwram = 3
@@ -408,7 +418,9 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7984
+value_lets = 7972
+reg_local_writes = 3260
+unpacked_unread = 0
 bank_sp_calls = 261
 loops_not_for = 138
 load_const_ram = 0
@@ -461,7 +473,7 @@ route = "units/native-ime-release-601.toml"
 planted_flags = ["--ime-at-waits"]
 
 [program.native-ime-release.bars]
-lines = 25156
+lines = 24738
 lines_prelude = 1265
 functions = 113
 functions_iwram = 3
@@ -479,7 +491,9 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 8038
+value_lets = 8028
+reg_local_writes = 3280
+unpacked_unread = 0
 bank_sp_calls = 271
 loops_not_for = 142
 load_const_ram = 0
@@ -536,7 +550,7 @@ route = "units/native-bios-calls-600.toml"
 # (native/ref-heap-static-arrays).
 
 [program.native-bios-calls.bars]
-lines = 25297
+lines = 24890
 lines_prelude = 1265
 functions = 109
 functions_iwram = 3
@@ -554,7 +568,9 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 8080
+value_lets = 8070
+reg_local_writes = 3333
+unpacked_unread = 0
 bank_sp_calls = 259
 loops_not_for = 139
 load_const_ram = 0
@@ -611,7 +627,7 @@ route = "units/native-bios-more-600.toml"
 # restarts the program.
 
 [program.native-bios-more.bars]
-lines = 26397
+lines = 26043
 lines_prelude = 1265
 functions = 104
 functions_iwram = 3
@@ -629,7 +645,9 @@ blocks_in_match = 512
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 9070
+value_lets = 9065
+reg_local_writes = 3353
+unpacked_unread = 0
 bank_sp_calls = 265
 loops_not_for = 113
 load_const_ram = 0
@@ -691,7 +709,7 @@ planted_store = 0x08000288
 planted_hole = { drop_standin = 0x080001a4, names = "error: hard hole in f_080001a4 at 0x080001c0: CPU state: a stack switch" }
 
 [program.native-tasks.bars]
-lines = 25431
+lines = 24990
 lines_prelude = 1265
 functions = 122
 functions_iwram = 3
@@ -709,7 +727,9 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 8098
+value_lets = 8078
+reg_local_writes = 3252
+unpacked_unread = 0
 bank_sp_calls = 270
 loops_not_for = 141
 load_const_ram = 0
@@ -776,7 +796,7 @@ route = "units/native-dma-600.toml"
 planted_store = 0x08000180
 
 [program.native-dma.bars]
-lines = 18241
+lines = 17914
 lines_prelude = 1265
 functions = 107
 functions_iwram = 3
@@ -794,7 +814,9 @@ blocks_in_match = 46
 compare_trees_left = 10
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 5544
+value_lets = 5540
+reg_local_writes = 2315
+unpacked_unread = 0
 bank_sp_calls = 220
 loops_not_for = 120
 load_const_ram = 0
@@ -852,7 +874,7 @@ route = "units/native-save-600.toml"
 planted_store = 0x080002ac
 
 [program.native-save.bars]
-lines = 25197
+lines = 24787
 lines_prelude = 1265
 functions = 112
 functions_iwram = 3
@@ -870,7 +892,9 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 8086
+value_lets = 8076
+reg_local_writes = 3275
+unpacked_unread = 0
 bank_sp_calls = 263
 loops_not_for = 139
 load_const_ram = 0
@@ -924,7 +948,7 @@ route = "units/native-bios-region-601.toml"
 # (nowhere); agb/native-bios-region/src/main.rs.
 
 [program.native-bios-region.bars]
-lines = 25086
+lines = 24683
 lines_prelude = 1265
 functions = 114
 functions_iwram = 3
@@ -942,7 +966,9 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 8014
+value_lets = 8004
+reg_local_writes = 3276
+unpacked_unread = 0
 bank_sp_calls = 268
 loops_not_for = 140
 load_const_ram = 0
@@ -997,7 +1023,7 @@ route = "units/native-bios-affine-600.toml"
 # agb/native-bios-affine/src/main.rs.
 
 [program.native-bios-affine.bars]
-lines = 25378
+lines = 24986
 lines_prelude = 1265
 functions = 110
 functions_iwram = 3
@@ -1015,7 +1041,9 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 8154
+value_lets = 8149
+reg_local_writes = 3321
+unpacked_unread = 0
 bank_sp_calls = 258
 loops_not_for = 139
 load_const_ram = 0
@@ -1072,7 +1100,7 @@ route = "units/native-serial-600.toml"
 planted_store = 0x0800017c
 
 [program.native-serial.bars]
-lines = 26016
+lines = 25602
 lines_prelude = 1265
 functions = 117
 functions_iwram = 3
@@ -1090,7 +1118,9 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 8388
+value_lets = 8378
+reg_local_writes = 3332
+unpacked_unread = 0
 bank_sp_calls = 270
 loops_not_for = 142
 load_const_ram = 0
@@ -1149,7 +1179,7 @@ route = "units/native-irq-wrapper-600.toml"
 planted_store = 0x080001f4
 
 [program.native-irq-wrapper.bars]
-lines = 25495
+lines = 25059
 lines_prelude = 1265
 functions = 118
 functions_iwram = 3
@@ -1167,7 +1197,9 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 8155
+value_lets = 8138
+reg_local_writes = 3314
+unpacked_unread = 0
 bank_sp_calls = 273
 loops_not_for = 142
 load_const_ram = 0
@@ -1221,7 +1253,7 @@ route = "units/native-takes-600.toml"
 planted_flags = ["--takes-zeroed"]
 
 [program.native-takes.bars]
-lines = 24940
+lines = 24532
 lines_prelude = 1265
 functions = 113
 functions_iwram = 3
@@ -1239,7 +1271,9 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7991
+value_lets = 7981
+reg_local_writes = 3266
+unpacked_unread = 0
 bank_sp_calls = 262
 loops_not_for = 138
 load_const_ram = 0
@@ -1293,7 +1327,7 @@ route = "units/c-fnptr-agbcc-600.toml"
 planted_store = 0x080005d4
 
 [program.c-fnptr-agbcc.bars]
-lines = 962
+lines = 889
 lines_prelude = 1265
 functions = 18
 functions_iwram = 0
@@ -1311,7 +1345,9 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 204
+value_lets = 195
+reg_local_writes = 75
+unpacked_unread = 0
 bank_sp_calls = 13
 loops_not_for = 8
 load_const_ram = 0
@@ -1365,7 +1401,7 @@ route = "units/c-fnptr-gcc-600.toml"
 planted_store = 0x08000390
 
 [program.c-fnptr-gcc.bars]
-lines = 1019
+lines = 936
 lines_prelude = 1265
 functions = 18
 functions_iwram = 0
@@ -1383,7 +1419,9 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 223
+value_lets = 209
+reg_local_writes = 85
+unpacked_unread = 0
 bank_sp_calls = 18
 loops_not_for = 9
 load_const_ram = 0
@@ -1439,7 +1477,7 @@ route = "units/c-switch-agbcc-600.toml"
 planted_store = 0x080005ca
 
 [program.c-switch-agbcc.bars]
-lines = 937
+lines = 889
 lines_prelude = 1265
 functions = 10
 functions_iwram = 0
@@ -1457,7 +1495,9 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 223
+value_lets = 217
+reg_local_writes = 71
+unpacked_unread = 0
 bank_sp_calls = 31
 loops_not_for = 5
 load_const_ram = 0
@@ -1513,7 +1553,7 @@ route = "units/c-switch-gcc-600.toml"
 planted_store = 0x080005a0
 
 [program.c-switch-gcc.bars]
-lines = 1012
+lines = 955
 lines_prelude = 1265
 functions = 10
 functions_iwram = 0
@@ -1531,7 +1571,9 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 252
+value_lets = 241
+reg_local_writes = 97
+unpacked_unread = 0
 bank_sp_calls = 39
 loops_not_for = 6
 load_const_ram = 0
@@ -1585,7 +1627,7 @@ route = "units/c-chain-agbcc-600.toml"
 planted_store = 0x0800058e
 
 [program.c-chain-agbcc.bars]
-lines = 1011
+lines = 966
 lines_prelude = 1265
 functions = 13
 functions_iwram = 0
@@ -1603,7 +1645,9 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 272
+value_lets = 264
+reg_local_writes = 104
+unpacked_unread = 0
 bank_sp_calls = 17
 loops_not_for = 8
 load_const_ram = 0
@@ -1657,7 +1701,7 @@ route = "units/c-chain-gcc-600.toml"
 planted_store = 0x08000550
 
 [program.c-chain-gcc.bars]
-lines = 1025
+lines = 972
 lines_prelude = 1265
 functions = 13
 functions_iwram = 0
@@ -1675,7 +1719,9 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 261
+value_lets = 251
+reg_local_writes = 89
+unpacked_unread = 0
 bank_sp_calls = 19
 loops_not_for = 10
 load_const_ram = 0

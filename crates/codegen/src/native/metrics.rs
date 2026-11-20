@@ -55,6 +55,13 @@
 //! r0`), printed as a plain return where the entry lr is proven `RET`,
 //! `entry_lr_returns` (no bar: it should rise), and those still through
 //! `call_fn`, `entry_lr_returns_call_fn` (barred, at 0).
+//!
+//! Register locals (`native/lift-register-locals`): `reg_local_writes`,
+//! the writes of r0-r12's `mut` locals printed (barred; a value only its
+//! own block reads is a `let` instead, so what is left goes on into
+//! another block), and `unpacked_unread`, the functions whose extended
+//! entry takes a register or flag from its `Regs` that its code never
+//! reads as it came (barred, at 0).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;

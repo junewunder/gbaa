@@ -25,7 +25,10 @@
 //!    ([`modules::split`]); the report (hard holes, `Soft`, frames) and
 //!    the [`metrics`].
 //! 4. `FnPrinter`, one function's Rust: `print` (signature, locals, the
-//!    block loop); `block` (a block's IR as statements: memory accesses,
+//!    block loop, and `unpack`: the extended entry's registers its code
+//!    reads as they came); `dead_writes` (liveness: the writes left out,
+//!    and those only their block reads, printed as `let`s that `reg`
+//!    reads); `block` (a block's IR as statements: memory accesses,
 //!    typed fields via `typed_as`, `bank_sp(g, r13)` before I/O stores
 //!    but where the bank already holds it (`redundant_banks`); `count`
 //!    tallies each access for the metrics; `used` drops what nothing
@@ -34,7 +37,7 @@
 //!    `ret`, and `exit`: branches, calls by value, `swi`, idle and spin
 //!    loops).
 //! 5. Free helpers: `dyn_targets` (a jump by value's known targets);
-//!    signatures from a [`Shape`] (`plain`, `ret_ty`, `ret_expr`, `tuple`,
+//!    signatures from a [`Shape`] (`plain`, `ret_ty`, `tuple`,
 //!    `lhs`, `args`); locals' text (`local_addr`, `local_read`,
 //!    `local_write`); IR to Rust (`expr`, `konst`, `pure`,
 //!    `dead_addresses`, `v`, `flag`, `shift`). Then the tests.
@@ -1125,6 +1128,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     lr_ret: lr_ret.contains(&f.entry),
                     dead: BTreeMap::new(),
                     live_in: BTreeMap::new(),
+                    local: BTreeMap::new(),
+                    bound: Default::default(),
                     fors: BTreeMap::new(),
                     steps: BTreeMap::new(),
                     tail_for: false,
@@ -1361,6 +1366,13 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         } else {
             ""
         }
+    )
+    .unwrap();
+    writeln!(
+        report,
+        "register locals: {} writes printed, {} register values as lets of their own; \
+         {} registers and flags unpacked at entries, {} functions unpacking one never read as it came",
+        soft.reg_writes, soft.reg_lets, soft.unpacked, soft.unpacked_unread
     )
     .unwrap();
     writeln!(
@@ -1626,6 +1638,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // The `let`s of IR values printed (native/lift-inline-temps): a pure
     // value used once, or a constant, prints inside its use instead.
     m.push("value_lets", soft.value_lets);
+    // Register locals (native/lift-register-locals): writes of r0-r12's
+    // mut locals printed (a value only its block reads is a `let`), and
+    // functions whose entry unpacks a register or flag never read as it
+    // came (bar 0).
+    m.push("reg_local_writes", soft.reg_writes);
+    m.push("unpacked_unread", n(soft.unpacked_unread));
     // Structured loops (native/lift-for-loops): those printed as `for`
     // (no bar: it should rise) and the rest, as `loop` (barred).
     m.push("loops_for", soft.loops_for);
@@ -2410,6 +2428,16 @@ struct Soft {
     /// printed inside their use instead ([`FnPrinter::inline`]).
     value_lets: u64,
     inlined: u64,
+    /// Writes of r0-r12's locals printed (`reg_local_writes`), and the
+    /// register values printed as `let`s of their own instead
+    /// ([`live::block_local`]; native/lift-register-locals).
+    reg_writes: u64,
+    reg_lets: u64,
+    /// Functions whose entry unpacks a register or flag their code never
+    /// reads as it came (`unpacked_unread`; bar 0), and the registers and
+    /// flags unpacked in all.
+    unpacked_unread: usize,
+    unpacked: u64,
     /// The structured loops printed as `for` ([`FnPrinter::find_fors`])
     /// and as `loop`.
     loops_for: u64,
@@ -2476,6 +2504,13 @@ struct FnPrinter<'a, 'b> {
     dead: BTreeMap<u32, Vec<bool>>,
     /// What is live at each block's start, as `dead` has it.
     live_in: BTreeMap<u32, live::Live>,
+    /// The writes of r0-r12 only their own block reads, by block
+    /// ([`FnPrinter::dead_writes`]): each prints as a `let`.
+    local: BTreeMap<u32, Vec<bool>>,
+    /// What each of r0-r12 holds as the block printing now let it
+    /// (`native/lift-register-locals`): a name or a constant its reads
+    /// print instead of the register's local.
+    bound: [Option<String>; 13],
     /// The loops printed as `for`, by label ([`FnPrinter::find_fors`]),
     /// and the write of each one's step, left out: its block and inst.
     fors: BTreeMap<usize, counted::For>,
@@ -2772,13 +2807,15 @@ impl FnPrinter<'_, '_> {
             "pub fn x_{k:08x}(g: &mut Game, s: Regs) -> Result<{ty}, Exit> {{"
         )
         .unwrap();
-        s.push_str("    let Regs { r: [mut r0, mut r1, mut r2, mut r3, mut r4, mut r5, mut r6, mut r7, mut r8, mut r9, mut r10, mut r11, mut r12, mut r13, mut r14], f: [mut nf, mut zf, mut cf, mut vf] } = s;\n");
+        // The registers it reads as they came go in after the body prints
+        // ([`FnPrinter::unpack`]).
+        let head = s.len();
         s.push_str(&self.declare_locals());
         // The entry first: label 0.
         let mut order: Vec<u32> = vec![f.entry];
         order.extend(f.blocks.keys().copied().filter(|&k| k != f.entry));
         self.labels = order.iter().enumerate().map(|(i, &k)| (k, i)).collect();
-        (self.dead, self.live_in) = self.dead_writes();
+        (self.dead, self.live_in, self.local) = self.dead_writes();
         self.banked = self.redundant_banks();
         if let Some(p) = self.plan(&order) {
             if !self.holes.no_for_loops {
@@ -2799,6 +2836,8 @@ impl FnPrinter<'_, '_> {
                 writeln!(s, "{l}").unwrap();
             }
             s.push_str("}\n\n");
+            let u = self.unpack(&s[head..]);
+            s.insert_str(head, &u);
             return s;
         }
         self.soft.fns_match += 1;
@@ -2813,7 +2852,67 @@ impl FnPrinter<'_, '_> {
             s.push_str(&self.arm(label));
         }
         s.push_str("            _ => unreachable!(),\n        }\n    }\n}\n\n");
+        let u = self.unpack(&s[head..]);
+        s.insert_str(head, &u);
         s
+    }
+
+    /// The extended entry's registers and flags (native/lift-register-locals):
+    /// of those `body` names, each it reads as it came (live at the entry
+    /// block's start, [`FnPrinter::dead_writes`]) taken from `s`, the rest
+    /// declared (zero or false: nothing reads that before writing it). sp
+    /// is always taken: the printed code passes it by name (calls,
+    /// `bank_sp`), which liveness doesn't see. A `mut` only for a register
+    /// the body writes.
+    fn unpack(&mut self, body: &str) -> String {
+        let words = rust_words(body);
+        let live = self
+            .live_in
+            .get(&self.f.entry)
+            .copied()
+            .unwrap_or(live::ALL);
+        let written = written_words(body);
+        let (mut taken_names, mut taken_from) = (Vec::new(), Vec::new());
+        let (mut zero_names, mut zeros) = (Vec::new(), Vec::new());
+        let mut unread = false;
+        let regs = (0..15).map(|r| (format!("r{r}"), live::reg(r), format!("s.r[{r}]"), "0u32"));
+        let flags = Flag::ALL.into_iter().map(|fl| {
+            (
+                flag(fl).to_string(),
+                live::flag(fl),
+                format!("s.f[{}]", fl.index()),
+                "false",
+            )
+        });
+        for (name, bit, from, zero) in regs.chain(flags) {
+            if !words.contains(&name) {
+                continue;
+            }
+            let m = if written.contains(&name) { "mut " } else { "" };
+            let taken = live & bit != 0 || name == "r13";
+            if taken {
+                self.soft.unpacked += 1;
+                taken_names.push(format!("{m}{name}"));
+                taken_from.push(from);
+            } else {
+                zero_names.push(format!("{m}{name}"));
+                zeros.push(zero.to_string());
+            }
+            unread |= taken && live & bit == 0 && name != "r13";
+        }
+        self.soft.unpacked_unread += usize::from(unread);
+        // One line: `let (mut r0, r13, mut r1) = (s.r[0], s.r[13], 0u32);`.
+        taken_names.extend(zero_names);
+        taken_from.extend(zeros);
+        match &taken_names[..] {
+            [] => String::new(),
+            [n] => format!("    let {n} = {};\n", taken_from[0]),
+            names => format!(
+                "    let ({}) = ({});\n",
+                names.join(", "),
+                taken_from.join(", ")
+            ),
+        }
     }
 
     /// Block `label`'s code as an arm of a `match b`. The block's guest
@@ -2847,14 +2946,24 @@ impl FnPrinter<'_, '_> {
     /// The writes of r0-r12 and the flags nothing printed reads after
     /// them, by block ([`live::dead`]; unit `native/lift-dead-writes`), as
     /// [`FnPrinter::exit`] prints each exit: a jump to a block reads what
-    /// it does; a return its results; a direct call its parameters (all
-    /// of r0-r3, which is more than a shaped callee's) and the r4-r11 its
-    /// callee takes, then what its return site reads; a call through
+    /// it does; a return its results; a direct call its parameters (a
+    /// shaped callee's; all of r0-r3 for a four-register one) and the
+    /// r4-r11 its callee takes, then what its return site reads; a call through
     /// `call_fn` r0-r11 (a `[[takes]]` site passes some of r4-r11); a
     /// `swi` r0-r3; anything into another function's extended entry, or
     /// that this function can't follow, everything. `--keep-dead-writes`
     /// prints them all the same, counted (`dead_flag_writes`).
-    fn dead_writes(&self) -> (BTreeMap<u32, Vec<bool>>, BTreeMap<u32, live::Live>) {
+    ///
+    /// Also the writes of r0-r12 only their own block reads
+    /// ([`live::block_local`]), which print as `let`s.
+    #[allow(clippy::type_complexity)]
+    fn dead_writes(
+        &self,
+    ) -> (
+        BTreeMap<u32, Vec<bool>>,
+        BTreeMap<u32, live::Live>,
+        BTreeMap<u32, Vec<bool>>,
+    ) {
         let keys: Vec<u32> = self.f.blocks.keys().copied().collect();
         let index: BTreeMap<u32, usize> = keys.iter().enumerate().map(|(i, &k)| (k, i)).collect();
         let xs: Vec<Vec<ExitInfo>> = self
@@ -2870,7 +2979,8 @@ impl FnPrinter<'_, '_> {
             .map(|gb| &gb.block.insts[..])
             .collect();
         let results = live::low(self.me.map_or(0xf, |m| m.results));
-        let (dead, live_in) = live::dead_and_live(&insts, |b, i| {
+        let lr_returns = self.sums.get(self.f.entry).map(|s| &s.lr_returns);
+        let out = |b: usize, i: usize| {
             let Some(x) = xs[b].iter().find(|x| x.index == i) else {
                 return (Vec::new(), live::ALL);
             };
@@ -2886,15 +2996,29 @@ impl FnPrinter<'_, '_> {
             };
             match x.plan {
                 Plan::Static(k) | Plan::Rekey(k) => to(k),
-                Plan::Call { target, ret } => {
-                    then(ret, live::low(0xf) | live::high(self.passed(target)))
-                }
+                // A shaped callee's call prints its parameters only.
+                Plan::Call { target, ret } => match self.shape(target) {
+                    Some(c) if self.passed(target) | self.echoes(target) == 0 => {
+                        then(ret, live::low(c.params))
+                    }
+                    _ => then(
+                        ret,
+                        live::low(0xf) | live::high(self.passed(target) | self.echoes(target)),
+                    ),
+                },
                 Plan::CallVia { reg, ret, .. } => then(
                     ret,
                     live::low(0xf) | live::high(0xff) | live::reg(reg.index()),
                 ),
                 Plan::Dynamic { ret: Some(ret), .. } => {
                     then(ret, live::low(0xf) | live::high(0xff))
+                }
+                Plan::Dynamic { ret: None, .. }
+                    if self.lr_ret && lr_returns.is_some_and(|r| r.contains(&x.at)) =>
+                {
+                    // A jump to the entry lr, printed as a plain return
+                    // ([`FnPrinter::exit`]): its results only.
+                    (Vec::new(), results)
                 }
                 Plan::Dynamic {
                     ret: None, target, ..
@@ -2916,10 +3040,34 @@ impl FnPrinter<'_, '_> {
                 Plan::Undefined { trap: true } => (Vec::new(), 0),
                 Plan::Undefined { trap: false } => (Vec::new(), live::ALL),
             }
-        });
+        };
+        let (dead, live_in) = live::dead_and_live(&insts, out);
+        // The exits that print their reads through the block's names
+        // ([`FnPrinter::reg`]): a direct call but a taker's (its
+        // arguments; it sets its results) returning to a block of this
+        // function's, and a plain return.
+        let by_name = |b: usize, i: usize| {
+            let x = xs[b].iter().find(|x| x.index == i)?;
+            match x.plan {
+                Plan::Call { target, ret }
+                    if self.passed(target) | self.echoes(target) == 0
+                        && index.contains_key(&ret) =>
+                {
+                    Some(live::low(self.shape(target).map_or(0xf, |c| c.results)))
+                }
+                Plan::Dynamic { ret: None, .. }
+                    if self.lr_ret && lr_returns.is_some_and(|r| r.contains(&x.at)) =>
+                {
+                    Some(0)
+                }
+                _ => None,
+            }
+        };
+        let local = live::block_local(&insts, &live_in, out, by_name);
         (
             keys.iter().copied().zip(dead).collect(),
-            keys.into_iter().zip(live_in).collect(),
+            keys.iter().copied().zip(live_in).collect(),
+            keys.into_iter().zip(local).collect(),
         )
     }
 
@@ -3557,6 +3705,16 @@ impl FnPrinter<'_, '_> {
         self.unguard = Vec::new();
         self.scrutinee = None;
         let outer = std::mem::replace(&mut self.inl, vec![None; insts.len()]);
+        // A register value only this block reads prints as a `let`
+        // ([`live::block_local`]), but in a block printed in pieces (a
+        // compare tree's, a `for`'s): its reads go by `bound`.
+        let outer_bound = std::mem::take(&mut self.bound);
+        let local: Vec<bool> = match self.local.get(&self.cur) {
+            Some(l) if l.len() == insts.len() && from == 0 && tree.is_none() && step.is_none() => {
+                l.clone()
+            }
+            _ => vec![false; insts.len()],
+        };
         for (i, inst) in insts.iter().enumerate() {
             let id = ValueId(i as u32);
             if i < from {
@@ -3566,6 +3724,13 @@ impl FnPrinter<'_, '_> {
                 continue;
             }
             if dead[i] || skip[i] || (pure(&inst.op) && !used[i]) {
+                continue;
+            }
+            // A read of a register this block let: the `let`'s name.
+            if let Op::GetReg(r) = inst.op
+                && let Some(Some(b)) = self.bound.get(r.index())
+            {
+                self.inl[i] = Some(b.clone());
                 continue;
             }
             // A narrowing idiom counts printed inline or as a `let`; so
@@ -3623,7 +3788,25 @@ impl FnPrinter<'_, '_> {
             match inst.op {
                 Op::Insn(a) => at = a,
                 Op::Timing(_) | Op::YieldFlag(..) => {}
-                Op::SetReg(r, x) => stmt(&mut s, format!("r{} = {};", r.index(), self.whole(x))),
+                Op::SetReg(r, x) if local[i] => {
+                    // Its own `let`, or (a name or a constant) none.
+                    let e = self.whole(x);
+                    let b = if plain_value(&e) {
+                        e
+                    } else {
+                        writeln!(s, "{ind}let {}: u32 = {e};", v(id)).unwrap();
+                        v(id)
+                    };
+                    self.bound[r.index()] = Some(b);
+                    self.soft.reg_lets += 1;
+                }
+                Op::SetReg(r, x) => {
+                    if let Some(b) = self.bound.get_mut(r.index()) {
+                        *b = None;
+                        self.soft.reg_writes += 1;
+                    }
+                    stmt(&mut s, format!("r{} = {};", r.index(), self.whole(x)))
+                }
                 Op::SetFlag(fl, x) => stmt(&mut s, format!("{} = {};", flag(fl), self.whole(x))),
                 Op::GetReg(r) => {
                     self.soft.value_lets += 1;
@@ -3829,6 +4012,7 @@ impl FnPrinter<'_, '_> {
             writeln!(s, "{ind}    }}\n{ind}}}").unwrap();
         }
         self.inl = outer;
+        self.bound = outer_bound;
         s
     }
 
@@ -4236,7 +4420,10 @@ impl FnPrinter<'_, '_> {
                     continue;
                 }
                 let body = match insts[d].op {
-                    Op::SetReg(r, x) => format!("r{} = {};", r.index(), self.whole(x)),
+                    Op::SetReg(r, x) => {
+                        self.soft.reg_writes += u64::from(r.index() < 13);
+                        format!("r{} = {};", r.index(), self.whole(x))
+                    }
                     Op::SetFlag(fl, x) => format!("{} = {};", flag(fl), self.whole(x)),
                     _ => unreachable!("a run defers register and flag writes"),
                 };
@@ -4486,20 +4673,26 @@ impl FnPrinter<'_, '_> {
     fn call(&self, k: u32) -> (String, String) {
         let (m, e) = (self.passed(k), self.echoes(k));
         if m | e != 0 {
-            return ("[r0, r1, r2, r3] = ".into(), taking(k, self.taken(m) | e));
+            return (self.results_lhs(k), taking(k, self.taken(m) | e));
         }
+        let four = (0..4).map(|r| self.reg(r)).collect::<Vec<_>>().join(", ");
         match self.shape(k) {
             None if self.holes.lr.contains(&k) => (
                 "[r0, r1, r2, r3] = ".into(),
-                format!("{{ g.lr = r14; f_{k:08x}(g, r13, [r0, r1, r2, r3]) }}"),
+                format!("{{ g.lr = r14; f_{k:08x}(g, r13, [{four}]) }}"),
             ),
             None => (
                 "[r0, r1, r2, r3] = ".into(),
-                format!("f_{k:08x}(g, r13, [r0, r1, r2, r3])"),
+                format!("f_{k:08x}(g, r13, [{four}])"),
             ),
             Some(c) => (
                 lhs(c.results),
-                format!("f_{k:08x}(g, r13{})", args(c.params)),
+                format!(
+                    "f_{k:08x}(g, r13{})",
+                    shape::regs(c.params)
+                        .map(|r| format!(", {}", self.reg(r)))
+                        .collect::<String>()
+                ),
             ),
         }
     }
@@ -4510,9 +4703,36 @@ impl FnPrinter<'_, '_> {
         format!("{lhs}{call}?;")
     }
 
+    /// Register `r` as the code printing now reads it: what this block
+    /// let it be ([`FnPrinter::bound`]), or its local.
+    fn reg(&self, r: usize) -> String {
+        match self.bound.get(r) {
+            Some(Some(b)) => b.clone(),
+            _ => format!("r{r}"),
+        }
+    }
+
+    /// The registers of `m` (bit `n` for rN of r0-r3), each as
+    /// [`FnPrinter::reg`] reads it, as a value: `()`, `r0`, `(r0, v3)`.
+    fn regs_value(&self, m: u8) -> String {
+        let rs: Vec<String> = shape::regs(m).map(|r| self.reg(r)).collect();
+        match &rs[..] {
+            [] => "()".into(),
+            [r] => r.clone(),
+            _ => format!("({})", rs.join(", ")),
+        }
+    }
+
     /// The return statement.
     fn ret(&self) -> String {
-        format!("return Ok({});", ret_expr(self.me))
+        let e = match self.me {
+            None => format!(
+                "[{}]",
+                (0..4).map(|r| self.reg(r)).collect::<Vec<_>>().join(", ")
+            ),
+            Some(s) => self.regs_value(s.results),
+        };
+        format!("return Ok({e});")
     }
 
     /// A tail call, `call` giving `results` (`None`: all of r0-r3) into
@@ -4537,6 +4757,15 @@ impl FnPrinter<'_, '_> {
             "unreachable!(\"a call that never returns returned\")".to_string()
         };
         format!("{call}\n                    {then}")
+    }
+
+    /// What a call of `k`'s extended entry (`x_`, [`taking`]) assigns its
+    /// results to: a shaped callee's results, else all of r0-r3.
+    fn results_lhs(&self, k: u32) -> String {
+        match self.shape(k) {
+            Some(c) => lhs(c.results),
+            None => "[r0, r1, r2, r3] = ".into(),
+        }
     }
 
     /// An indirect call at `at` to key `k` through `call_fn`: all of
@@ -4582,7 +4811,8 @@ impl FnPrinter<'_, '_> {
                 }
                 write!(
                     t,
-                    "{e:#010x} => {{ [r0, r1, r2, r3] = {}?; }} ",
+                    "{e:#010x} => {{ {}{}?; }} ",
+                    self.results_lhs(e),
                     taking(e, m)
                 )
                 .unwrap();
@@ -5175,14 +5405,6 @@ fn ret_ty(s: Option<Shape>) -> String {
     }
 }
 
-/// Its return value, from the registers.
-fn ret_expr(s: Option<Shape>) -> String {
-    match s {
-        None => "[r0, r1, r2, r3]".into(),
-        Some(s) => tuple(s.results),
-    }
-}
-
 /// The registers of `m` as a value: `()`, `r0`, `(r0, r1)`.
 fn tuple(m: u8) -> String {
     let rs: Vec<String> = shape::regs(m).map(|r| format!("r{r}")).collect();
@@ -5388,6 +5610,66 @@ fn tree_lets(insts: &[Inst], run: &switch::Run, skip: &[bool]) -> String {
         }
     }
     s
+}
+
+/// The words of `text` that may name a local: identifiers not after a `.`
+/// and not starting with a digit.
+fn rust_words(text: &str) -> BTreeSet<String> {
+    let b = text.as_bytes();
+    let word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+    let mut out = BTreeSet::new();
+    let mut i = 0;
+    while i < b.len() {
+        if !word(b[i]) {
+            i += 1;
+            continue;
+        }
+        let s = i;
+        while i < b.len() && word(b[i]) {
+            i += 1;
+        }
+        if !b[s].is_ascii_digit() && (s == 0 || b[s - 1] != b'.') {
+            out.insert(text[s..i].to_string());
+        }
+    }
+    out
+}
+
+/// The locals `text` assigns: `x = `, `x += `, and each name of a tuple's
+/// or array's assignment (`[r0, r1] = `), or of a `for mut x`.
+fn written_words(text: &str) -> BTreeSet<String> {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?:^|[^A-Za-z0-9_.])(?:([A-Za-z_][A-Za-z0-9_]*)|[\[(]([^\[\]()=;]*)[\])]) *(?:[-+*/%^&|]|<<|>>)?= *[^=]",
+        )
+        .expect("a valid pattern")
+    });
+    let mut out = BTreeSet::new();
+    for c in re.captures_iter(text) {
+        if let Some(w) = c.get(1) {
+            out.insert(w.as_str().to_string());
+        }
+        if let Some(ws) = c.get(2) {
+            out.extend(rust_words(ws.as_str()));
+        }
+    }
+    out
+}
+
+/// Whether `e` is a value's name (`v7`) or a constant (`0x10u32`): what
+/// a register's `let` may stand for in its reads unprinted.
+fn plain_value(e: &str) -> bool {
+    let name = e
+        .strip_prefix('v')
+        .is_some_and(|d| !d.is_empty() && d.bytes().all(|b| b.is_ascii_digit()));
+    let constant = e.strip_suffix("u32").is_some_and(|d| {
+        d.strip_prefix("0x").map_or_else(
+            || !d.is_empty() && d.bytes().all(|b| b.is_ascii_digit()),
+            |h| !h.is_empty() && h.bytes().all(|b| b.is_ascii_hexdigit()),
+        )
+    });
+    name || constant
 }
 
 /// A pure op as a Rust expression over earlier values, each printed by
@@ -5608,7 +5890,8 @@ mod tests {
         words[4] = 0xE3A0_1000; // mov r1, #0
         words[5] = 0xEB00_0001; // bl 0x08000020 (reads r0)
         words[6] = 0xEAFF_FFFE; // b .
-        words[8] = 0xE12F_FF1E; // bx lr
+        words[8] = 0xE280_0001; // add r0, r0, #1
+        words[9] = 0xE12F_FF1E; // bx lr
         let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
         let print = |holes: &Holes| {
             let l = lift(&rom, "t", holes);
@@ -5620,7 +5903,11 @@ mod tests {
         let sum = reset
             .find(": u32 = prim::add_with_carry(r0, 0x1u32, false).0;")
             .unwrap_or_else(|| panic!("r0 + 1 a let: {reset}"));
-        let write = reset.find("r0 = 0x0u32;").expect("r0's write");
+        // r0's new value, only the call reads, is its argument
+        // (native/lift-register-locals).
+        let write = reset
+            .find("(g, r13, 0x0u32)")
+            .unwrap_or_else(|| panic!("r0's new value the call's argument: {reset}"));
         assert!(sum < write, "{reset}");
         // Constants print at their use.
         assert!(!reset.contains(": u32 = 0x"), "{reset}");
