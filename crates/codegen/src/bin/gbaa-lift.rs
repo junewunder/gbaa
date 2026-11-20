@@ -1,5 +1,5 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
-//! [--names DIR]... [--layout guest|packed] [--drop-standin KEY] [--plant AT]
+//! [--names DIR]... [--no-data-names] [--layout guest|packed] [--drop-standin KEY] [--plant AT]
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT]
 //! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
@@ -14,7 +14,10 @@
 //!
 //! RAM's globals (`codegen::native::globals`, unit `native/ram-globals`)
 //! take their names from the names files in DIR whose `[map]` names this
-//! ROM (default the repo's `names/`; none is fine; `--names` again layers
+//! ROM (default `$GBAA_DATA/names`, the mod view's maps, library ones
+//! included, with the repo's `names/` layered over it, unit
+//! `native/lift-names-default`; `--no-data-names` leaves out
+//! `$GBAA_DATA/names`; none is fine; `--names` again layers
 //! another DIR's over the ones before, as Kirby & the Amazing Mirror's
 //! lift takes katam's map from `$GBAA_DATA/names` and the repo's hand
 //! names over it, unit `native/mirror-katam-names`); so do the lifted
@@ -141,7 +144,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--text-edit FILE]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--text-edit FILE]"
         );
         ExitCode::FAILURE
     };
@@ -155,6 +158,7 @@ fn main() -> ExitCode {
     let mut keep_temps = false;
     let mut no_field_types = false;
     let mut no_local_names = false;
+    let mut no_data_names = false;
     let mut no_for_loops = false;
     let (mut holes_only, mut holes_flow) = (false, false);
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
@@ -191,6 +195,10 @@ fn main() -> ExitCode {
         }
         if a == "--no-field-types" {
             no_field_types = true;
+            continue;
+        }
+        if a == "--no-data-names" {
+            no_data_names = true;
             continue;
         }
         if a == "--no-local-names" {
@@ -354,7 +362,12 @@ fn main() -> ExitCode {
     }
     holes.holes_only = holes_only;
     holes.holes_flow = holes_flow;
+    // By default the mod view's maps (`$GBAA_DATA/names`, which apply only
+    // by the ROM's sha1), with the repo's hand names over them.
     if names.is_empty() {
+        if !no_data_names {
+            names.extend(data_dir().map(|d| d.join("names")));
+        }
         names.push(crates_dir().parent().expect("the repo").join("names"));
     }
     let sha = codegen::names::sha1_hex(&bytes);
@@ -552,5 +565,13 @@ fn main() -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+/// `$GBAA_DATA`, default `~/.local/share/gbaa`; none without either.
+fn data_dir() -> Option<PathBuf> {
+    match std::env::var_os("GBAA_DATA") {
+        Some(d) if !d.is_empty() => Some(PathBuf::from(d)),
+        _ => std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share/gbaa")),
     }
 }

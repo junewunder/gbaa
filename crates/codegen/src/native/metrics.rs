@@ -92,6 +92,14 @@
 //! return nor a `call_fn` arm (no bar: it should rise), so that the
 //! r0-r3 such an arm would pass aren't live at entry.
 //!
+//! Frames gone (`native/lift-frame-gone`): `sp_arith_unescaped`, the
+//! functions printing sp arithmetic though no slot of their frame
+//! escapes, nor do they pass sp on to code needing it exactly (barred, at
+//! 0: a frame nothing of which is in memory prints none,
+//! [`super::frame::Frame::in_locals`]), and `lr_returned`, the
+//! functions returning a register that holds only their entry lr (barred,
+//! at 0: [`crate::saves::Summary::lr_left`]).
+//!
 //! Text (`native/lift-text`): `text_notes`, the `// text: …` comments
 //! giving the text a constant points at, where the names files have a text
 //! table (no bar: it should rise; `lines` leaves them out). Editable text
