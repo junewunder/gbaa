@@ -54,7 +54,7 @@ that adds it. The owner agreed the "Not wanted" list (2026-11-19).
 | Parameters and return values from prototypes (`r0 = call!(GetMonData2, …)`) | Shapes come from the summaries, which is exact and covers games without prototypes: `fn plot(g, sp, a0, a1, a2) -> Result<u32, Exit>`, `(r0, r1) = SoftResetVBlankCallback(g, sp)?` | Has it (counts and returns). Names: next row |
 | Parameter names, and DWARF local names where liveness agrees | `a0`, `r4`, `v18` (`pen_update`'s `r4` is `p`) | Unit: `native/lift-local-names` (needs `native/lift-register-locals`, in progress) |
 | Locals as variables, values not re-synced to registers | `let vN` values inlined into their use; registers are still `r0`-`r14` | Unit: `native/lift-register-locals` (in progress) |
-| `file:line` comments from DWARF's line table | None | Unit: `native/lift-line-comments` |
+| `file:line` comments from DWARF's line table | `// c/switch/main.c:218` above the statement each source line's first instruction starts, where the names files have `[lines]` (`line_notes`: 126 on c-switch-agbcc, 105 to 181 on the C programs; none on Metroid, whose map has no `[lines]`) | Has it (`native/lift-line-comments`, 2026-11-20) |
 | Literal-pool loads folded into the access | Constants inline: `st16(g, REG_DISPSTAT, 0x8u32)`, `g.ram.gTally` | Has it |
 | Loops with their variables, `for` loops | `'l2: loop`; 95 `for` and 601 `loop` on Metroid (`native/lift-for-loops`) | Has it |
 | Switch shapes | A compare tree as a `match` on case values (`tally`: `5 => …`, `0x28 => …`). A jump table as a `match` on the target address (`pen_update`). The mod view never wrote jump tables (its design's gap 9) | Has it (more than the mod view had) |

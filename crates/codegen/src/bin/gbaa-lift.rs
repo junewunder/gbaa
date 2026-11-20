@@ -394,6 +394,9 @@ fn main() -> ExitCode {
                     locals: map.locals.clone(),
                 }));
             }
+            // A line table: each source line's first instruction gets its
+            // `// file:line` comment.
+            holes.lines = codegen::native::line_starts(&map);
             // A text table: constants pointing at text get its comment.
             if map.text.is_some() {
                 holes.text = Some(std::sync::Arc::new(map));
