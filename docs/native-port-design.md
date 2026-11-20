@@ -612,14 +612,14 @@ value shows it at the call (`fnref::Lost`, printed with a sample of each):
 | what | calls | e.g. |
 |---|---|---|
 | the target holds the large shared set (1,024 functions or more: here 6,120) | 180 | `CallCallbacks` (`gMain.callback1`), `SoundMain`, `GetCurrentMenuCB`, task functions called through `gTasks[id].func` (`Task_ShopMenu`) |
-| a ROM read cut short or too wide, or arithmetic on a ROM pointer the run gave up | 257 | sprite and object-event callbacks (`AnimateSprite`, the `MovementType_*_callback`s: 2 to 37 callees), `Task_WeatherMain`, `HandleEndTurn_FinishBattle` (249) |
+| a ROM read cut short or too wide, or arithmetic on a ROM pointer the run gave up | 257 | sprite and object-event callbacks (`AnimateSprite`, the `MovementType_*_callback`s, 2 to 37 callees in the sample), `Task_WeatherMain`, `HandleEndTurn_FinishBattle` (249) |
 | no function's address reaches the target | 14 | pointers read out of script bytes (`ScrCmd_callnative`, `Cmd_createvisualtask`, `FieldEffectScript_CallNative`), `Task_RunLoopedTask`, and the flash driver's calls through RAM copies (`ReadFlashId`, `ReadFlash`) |
 | a ROM pointer given up past 64 runs of data | 0 | |
 
 Callbacks stored through RAM globals and fields (`gMain.callback1`,
-`gTasks[].func`) are the first row: every `SetMainCallback`/`CreateTask`
-caller stores into the same few fields, so their set is the shared one
-of thousands. Sharper sets need one per field rather than the shared
+`gTasks[].func`) are most of the first row: every `SetMainCallback`/
+`CreateTask` caller stores into the same few fields, so their set is
+the shared one of thousands. Sharper sets need one per field rather than the shared
 one, and ROM reads made whole (the 256 KB cut, hulls too wide): both
 flow-precision work.
 
