@@ -55,14 +55,22 @@ pub fn high(m: u8) -> Live {
 
 /// Walk `insts` backwards with `out(i)` live after the exit at inst `i`:
 /// call `dead(i)` for each write of a register (but r13-r15) or flag
-/// nothing reads after it, and return what is live at entry.
+/// nothing reads after it, and return what is live at entry. A read
+/// whose value only reaches dead writes (an `eors`'s C kept as it was, a
+/// shift's carry chosen by an amount known not to be 0), or nothing, is
+/// no read: the printer prints a pure value only where something it
+/// prints uses it (unit `native/lift-join-shape`).
 fn walk(insts: &[Inst], out: impl Fn(usize) -> Live, mut dead: impl FnMut(usize)) -> Live {
     let mut live: Live = 0;
+    // The values something kept uses.
+    let mut need = vec![false; insts.len()];
     for (i, inst) in insts.iter().enumerate().rev() {
         let guarded = inst.guard.is_some();
-        let mut write = |bit: Live, live: &mut Live| {
+        let mut kept = true;
+        let mut write = |bit: Live, live: &mut Live, kept: &mut bool| {
             if *live & bit == 0 && bit & KEPT == 0 {
                 dead(i);
+                *kept = false;
             } else if !guarded {
                 *live &= !bit;
             }
@@ -70,15 +78,21 @@ fn walk(insts: &[Inst], out: impl Fn(usize) -> Live, mut dead: impl FnMut(usize)
         match inst.op {
             Op::Exit(_) if guarded => live |= out(i),
             Op::Exit(_) => live = out(i),
-            Op::SetReg(r, _) => write(reg(r.index()), &mut live),
-            Op::SetFlag(f, _) => write(flag(f), &mut live),
-            Op::GetReg(r) => live |= reg(r.index()),
-            Op::GetFlag(f) => live |= flag(f),
+            Op::SetReg(r, _) => write(reg(r.index()), &mut live, &mut kept),
+            Op::SetFlag(f, _) => write(flag(f), &mut live, &mut kept),
+            Op::GetReg(r) if need[i] => live |= reg(r.index()),
+            Op::GetFlag(f) if need[i] => live |= flag(f),
             // `mrs_cpsr` takes the flags; in user and system mode, which
             // have no SPSR, `GetSpsr` reads the CPSR.
             Op::GetCpsr | Op::GetSpsr => live |= FLAGS,
             Op::SetCpsr { mask, .. } if !guarded && mask.contains(PsrMask::FLAGS) => live &= !FLAGS,
+            ref op if super::pure(op) => kept = need[i],
             _ => {}
+        }
+        if kept {
+            for x in inst.op.operands().into_iter().chain(inst.guard) {
+                need[x.index()] = true;
+            }
         }
     }
     live
@@ -178,22 +192,53 @@ mod tests {
             },
             inst(Op::Exit(Exit::Jump(one))),
         ];
+        // (Into r0, which its return reads.)
         let b1 = [
             inst(Op::GetFlag(Flag::C)),
             inst(Op::SetFlag(Flag::N, z)),
+            inst(Op::SetReg(Reg(0), z)),
             inst(Op::Exit(Exit::Jump(one))),
         ];
         let dead = dead(&[&b0, &b1], |b, _| {
             if b == 0 {
                 (vec![1], 0)
             } else {
-                (Vec::new(), 0)
+                (Vec::new(), reg(0))
             }
         });
         assert_eq!(dead[0], [false, false, false, false]);
-        assert_eq!(dead[1], [false, true, false]);
+        assert_eq!(dead[1], [false, true, false, false]);
         // A fall into another function reads everything.
         let dead = super::dead(&[&b1], |_, _| (Vec::new(), ALL));
-        assert_eq!(dead[0], [false, false, false]);
+        assert_eq!(dead[0], [false, false, false, false]);
+    }
+
+    #[test]
+    fn a_read_only_dead_writes_use_is_no_read() {
+        // Block 0 sets C and goes to 1, which reads C only to write it
+        // back (an `eors`'s C kept), then sets r0 and returns it.
+        let one = ValueId(0);
+        let b0 = [
+            inst(Op::Bit(true)),
+            inst(Op::SetFlag(Flag::C, one)),
+            inst(Op::Exit(Exit::Jump(one))),
+        ];
+        let b1 = [
+            inst(Op::GetFlag(Flag::C)),
+            inst(Op::SetFlag(Flag::C, one)),
+            inst(Op::Const(1)),
+            inst(Op::SetReg(Reg(0), ValueId(2))),
+            inst(Op::Exit(Exit::Jump(ValueId(2)))),
+        ];
+        let out = |b: usize, _| {
+            if b == 0 {
+                (vec![1], 0)
+            } else {
+                (Vec::new(), reg(0))
+            }
+        };
+        let dead = dead(&[&b0, &b1], out);
+        assert_eq!(dead[0], [false, true, false], "C's write is dead");
+        assert_eq!(dead[1], [false, true, false, false, false]);
     }
 }

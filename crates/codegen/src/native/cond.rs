@@ -211,7 +211,7 @@ impl Form {
         Form { f, uses }
     }
 
-    fn not(&self) -> Form {
+    pub(crate) fn not(&self) -> Form {
         let f = match &self.f {
             F::Cmp { l, rel, r, signed } => F::Cmp {
                 l: l.clone(),

@@ -1332,7 +1332,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   heap's run types is a heap object's field through `Ref<T>`, counted in
   `ref_accesses` and `ref_types`, unbarred, and `ref_unexplained` those
   through an object's pointer no type explains, native/ref-heap); `call_fn` calls; jumps by value;
-  gap targets; compare trees on one value printed as a `match` (`compare_trees_matched`, `compare_tree_blocks` the blocks taken in, unbarred; `compare_trees_left` barred; native/lift-switch-match). `--bars FILE` fails the lift (after writing it) on any
+  gap targets; compare trees on one value printed as a `match` (`compare_trees_matched`, `compare_tree_blocks` the blocks taken in, unbarred; `compare_trees_left` barred; native/lift-switch-match); labelled blocks printed, where a join isn't an `if`, a `match` or a loop's (`labelled_blocks`), and guest blocks whose code printed more than once (`blocks_printed_again`, at 0 on the C rows), both barred (native/lift-join-shape). `--bars FILE` fails the lift (after writing it) on any
   metric over `[program.NAME.bars]`'s maximum, each named with both
   numbers (`gbaa-lift: affine: load_computed_unknown is 755, over its
   bar of 754`), and lists the metrics under their bars. Discovery's
