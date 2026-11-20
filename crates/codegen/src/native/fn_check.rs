@@ -74,10 +74,13 @@ pub struct Spec {
     pub sig: &'static str,
     /// Where the replacement came from.
     pub replacement: &'static str,
-    /// The typed globals the reference reads or writes by field (offset in
-    /// `Game::ram`, and its size): inputs a variant may change, with the
-    /// RAM the first run loaded through `ld*`.
-    pub globals: &'static [(usize, fn(&Ram) -> usize)],
+    /// The typed globals the reference reads or writes by field (each its
+    /// offset in `Game::ram` and its size, from `Ram`; not `offset_of!`,
+    /// whose bare field name the names pass would take for a word in use,
+    /// naming a global's constant `gTally_` where the lift has `gTally`):
+    /// inputs a variant may change, with the RAM the first run loaded
+    /// through `ld*`.
+    pub globals: &'static [fn(&Ram) -> (usize, usize)],
     pub seed: u64,
     /// The budget: runs compared.
     pub runs: u32,
@@ -588,8 +591,9 @@ pub fn call(
         );
         if v == 0 {
             loads = acc.loads;
-            for &(o, n) in s.globals {
-                loads.extend((o..o + n(&g.ram)).map(|o| o as u32));
+            for at in s.globals {
+                let (o, n) = at(&g.ram);
+                loads.extend((o..o + n).map(|o| o as u32));
             }
             loads.retain(|&o| !(floor as usize..sp_off).contains(&(o as usize)));
             loads.sort_unstable();

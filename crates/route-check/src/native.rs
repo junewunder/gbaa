@@ -337,7 +337,7 @@ pub fn run(
 /// Run `cmd` (a binary and its flags) along `r` into `out`: NAME.rec (if
 /// `record`), NAME-hashes.txt, NAME.txt and NAME.log. A play build (given
 /// `flags`) gets the ROM first. Returns its stderr.
-fn runner(
+pub(crate) fn runner(
     out: &Path,
     name: &str,
     cmd: &str,
