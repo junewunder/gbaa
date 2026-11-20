@@ -789,3 +789,62 @@ closure's two calls are complete again and the hard hole is gone. With the
 switch on, `just lift-metrics` has no bar over (native-takes 55 words not
 proven, native-irq-hold 58, `ref_unexplained` 48, as off); Metroid stays
 604 proven, 200 not.
+## The heap by allocation site, landed off
+
+Unit `native/fnref-heap-sites`, 2026-11-19 on quack, on main behind
+`GBAA_FNREF_HEAP=1`, off by default (off, every lift metric and Metroid's
+flow are main's: 604 proven, 200 not, the same rounds and holes). On, it
+turns the RAM-pointer rules on too, which it rests on: without the closed
+world for RAM a load through an unknown address reads every allocation.
+
+**The rule** (`fnref.rs`, "The heap by allocation site"). A direct call of
+a function the holes file names (`allocators = [0x…]`) returns a pointer
+to an allocation of its own, by call site (`Tok::Heap`: site and offset).
+A store through it goes to that site's cell for that word; through an
+index the run doesn't know, to the site's any-cell. A load reads the
+word's cell, the any-cell and the pile, and no global's cell. A pointer
+below the one returned (`free`'s `ptr - 12`) is the allocator's header,
+which is the heap's RAM, not the allocation. A value with pointers into
+more than 16 sites holds "that offset of any allocation". And a store of
+a function's address through a pointer into an allocation that may also
+be a number (one loaded from a global that was 0) no longer goes to the
+pile as well. What it takes on trust is in the module doc.
+
+**The C program.** No C program allocated, so `c/heap` is new (agbcc and
+modern GCC, in the lift check): a first-fit allocator, and sprites, a
+menu and short-lived effects allocated at three call sites, each with
+function pointers beside numbers (an effect's count is at +0, where a
+sprite keeps its update function). 8 function words; on main 1 is proven
+and 7 not, every `call_fn` set all 7 address-taken functions.
+
+**Counts on it**, RAM switch on against heap switch on:
+
+| build | not proven | callees a set, on average | of the 7, stored to the pile |
+|---|---|---|---|
+| agbcc, RAM | 7 | 7.0 | 7 |
+| agbcc, heap | 7 | 5.5 | 4 |
+| GCC, RAM | 7 | 7.0 | 7 |
+| GCC, heap | 7 | 6.5 | 6 |
+
+So the allocations are apart and the count doesn't move. What holds the
+words now, by `GBAA_FNREF_WATCH=roads`, is not the heap:
+
+- **A pointer into a global array reads every global.** `e =
+  gEffects[i]` is a load through a pointer somewhere in a RAM object,
+  which reads every cell (`G::read_in_obj`: kept so for cost), so `e` is
+  also the menu's pointer, the sprites' and the heap's head, and `e->life
+  - 1` is arithmetic on the menu's `draw`. Read exactly (an experiment:
+  only the cells in the pointer's object), the sets fall to 3 or 4
+  callees and the words are still held, because:
+- **An object runs to the next literal the code indexes from**, so
+  `gEffects`' object takes in `gHeapHead`, `gMenu` and the counters that
+  lie before `gSprites`, and the last object runs to the end of IWRAM,
+  the IRQ vector at 0x03007ffc with it. The value sets bound these loads
+  (`i < 3`); the flow doesn't use those bounds for a pointer it placed.
+- **Registers nobody reads**, as above: `heap_free` leaves its header
+  pointer in r1 to r3, and the next call passes it on.
+
+The first two are the RAM-array unit's (`native/fnref-ram-pointers`), the
+third `native/fnref-live-registers`. The heap unit stays open on them:
+its count is to fall on `c/heap` once a pointer into a global array reads
+that array alone.
