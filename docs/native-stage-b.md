@@ -254,6 +254,8 @@ typed pointers, below; until then they are soft holes, counted.
   pointer fields, DWARF variables), not from a proof; the access is the
   same `ld*`/`st*`, so a wrong type changes no byte. `gbaa-lift
   --no-field-types` leaves them out.
+- **Register locals take DWARF names** (`native/lift-local-names`). Done
+  (`codegen::native::local_names`; `gbaa-lift --no-local-names`).
 - **Lifted programs at the packed layout draw the same**
   (`native/lift-packed-layout`). Done: `gbaa-lift --layout packed`
   (`Globals::ram_struct`, `native/prelude_packed.rs`) orders `Ram`'s

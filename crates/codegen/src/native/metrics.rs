@@ -95,6 +95,12 @@
 //! crate's `src/text.rs` (no bar; that module isn't in `lines`), and
 //! `texts_left`, those the code leads to that stay in the ROM.
 //!
+//! Names (`native/lift-local-names`): `locals_named`, the DWARF register
+//! variables and prototype parameters whose local or argument took the
+//! name (no bar: it should rise), and `locals_noted`, the variables left a
+//! `// dwarf rN: name` comment instead (barred; `lines` leaves them out).
+//! Both only where the names files give `[locals]` or prototypes.
+//!
 //! I/O registers (`native/lift-io-names`): `io_named`, the constant-address
 //! I/O loads and stores printed by a register's name (`st16(g, REG_IME,
 //! …)`, [`crate::io_regs::base`]; no bar: it should rise), and
@@ -302,6 +308,7 @@ pub const UNBARRED: &[&str] = &[
     "text_notes",
     "text_statics",
     "io_named",
+    "locals_named",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each
