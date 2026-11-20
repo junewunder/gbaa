@@ -7,6 +7,7 @@ Made from each file's frontmatter (`title`, `hook`, `open: true`) by `just memor
 - [Debugging Emerald against mGBA](emerald-debugging.md) — symbols from the pokeemerald ELF, a stepping harness, and timeline frames
 - [Emerald battles by RAM pokes, and why a move doesn't animate](emerald-battle-pokes.md) — a foreign OT above level 10 ignores orders (set 0x86E); moves that fail or miss skip their animation
 - [Emerald Rogue and Imperium against mGBA](emerald-hacks.md) — timelines, menus that A doesn't leave, where ours differed, and Rogue's main loop (2026-10-23)
+- [Emerald's function-address flow settles: what stopped it, and how to look](fnref-flow-emerald-memory.md) — three kinds of junk value dripped tokens; GBAA_FNREF_GAINS shows what entries gain; check Metroid is byte-same
 - [Emerald's function-address flow: the memory fix (Ref tokens) and speed-ups](fnref-flow-emerald-history.md) — a large read is one Ref token; five slow spots; don't absorb to the object end
 - [Finding where a native program and its play build part in time](native-check-divergence.md) — diff the records frame by frame in Python, then trace each sync's clock in both builds
 - [Generated-crate builds that hang or outlive their job](generated-crate-gotchas.md) — a name error can look like a 30-minute build; `just long stop` leaves rustc holding the lock; SLP crash on p37
@@ -23,5 +24,3 @@ Made from each file's frontmatter (`title`, `hook`, `open: true`) by `just memor
 
 Unsettled investigations, one per file with `open: true` and the next step in its hook.
 Drop the flag in the session that settles it.
-
-- [Why Emerald's function-address flow doesn't settle yet](fnref-flow-emerald-memory.md) — next: print what 12k entries gain a round with memory still; suspect ROM pointers stepping down

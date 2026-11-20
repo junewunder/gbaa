@@ -1,92 +1,86 @@
 ---
-title: Why Emerald's function-address flow doesn't settle yet
-hook: next: print what 12k entries gain a round with memory still; suspect ROM pointers stepping down
-open: true
+title: Emerald's function-address flow settles: what stopped it, and how to look
+hook: three kinds of junk value dripped tokens; GBAA_FNREF_GAINS shows what entries gain; check Metroid is byte-same
 ---
 
-How it got here (where the memory went, the Ref fix, the first speed-ups):
-`fnref-flow-emerald-history.md`.
+How it got here before 2026-11-19 (where the memory went, the Ref fix, the
+first speed-ups): `fnref-flow-emerald-history.md`.
 
-**How to measure** (quack). `--callee-sets` is on main since 2026-11-08
-(indirect-call-args landed): `just long start … --mem 9G -- bash -c
-'target/release/gbaa-recompile --summaries ROM --callee-sets …'` (copy the
-binary out first if you'll rebuild while it runs: "Text file busy"). Run it as
-`just long start … --mem 9G -- bash -c '… > /tmp/x.out 2> /tmp/x.log'`
-(write to files: a piped grep loses its buffer when the cap kills it).
-`GBAA_FNREF_TRACE=` (empty) still turns tracing on: use `env -u`.
-A progress print every 500 functions (RSS from /proc/self/statm, token counts
-of entries, rets, cells, by Rc pointer) found each source below fast.
+**It settles (2026-11-19, `native/fnref-flow-emerald`).** `gbaa-recompile
+--summaries ROM --callee-sets` on pret's Emerald: 24 rounds, exit 0; 14 to
+18 min wall with four lanes running (flow 838 to 977 s), 1.05 GB peak
+(`/usr/bin/time -v`, under `just long start NAME --mem 4G`). 554 indirect
+calls, 103 with a complete callee set (4.2 callees on average). Main before
+it: round 0 alone took 684 s (it had been 31 s on 2026-11-13: the units
+merged since made it worse), round 1 19 minutes, never settled.
 
-**Profiling (2026-11-12, quack).** `perf` can't open events here (paranoid
-2, and SELinux); `eu-stack -p PID` works (ptrace_scope 0). Build a copy
-with `CARGO_TARGET_DIR=/tmp/x CARGO_PROFILE_RELEASE_DEBUG=line-tables-only`,
-run it, and every 0.4 s append `eu-stack -p $pid | head -40` to a file;
-count frames (demangle with `c++filt`), and for inlined hot spots
-`addr2line -e BIN -i -p` on the frame address less the load base
-(`main`'s printed address less `nm BIN | grep ' T main$'`). 60-100
-samples found each slow spot (the history note's list and the ones below).
+**What stopped it, in the order found.** Each was a kind of value that
+grew a few tokens a round, with nothing in it the run could use:
+1. Pointers into code. Return addresses and the sources of code copies are
+   ROM pointers that are no function's key; each instruction is its own
+   "run of data" two bytes long, so pointers "from here on" never took
+   each other in: 67,000 different ones, 447 million summed over the
+   registers after round 0. Now `Tok::RomDull`, one token for a pointer
+   into bytes that hold nothing followed (`dull`: instructions, and
+   number-only data before code), past 16 of them in a value.
+2. Junk pointers from wide ROM reads. A read "from here on" of the data
+   region takes every word that looks like a ROM address for a pointer;
+   by chance some point into literal pools, each its own run: 1,300 in
+   one value, each load through it reading them all. Past 64 runs
+   (`FROMS`) the value is a dropped pointer (`lost_rom`) and holds
+   `Tok::RomAny`, which takes in every pointer after (without it the
+   value fills and drops again each round: the review's catch).
+3. Large function sets. Tasks and callbacks are thousands; 40,000
+   registers each held a 4k-29k-token copy (900 million summed), each
+   gaining a few a round. Past 1,024 (`LARGE`) they go to one shared set
+   and the value keeps a `Ref` to it (`Large::take`), with its memory and
+   ROM reads folded in and its ROM pointers given up.
+Plus: a `Ref` that stands for nothing (every form dropped) is no token,
+and `join_capped` says "changed" only when it did (a spurious "changed"
+kept native-spike going for 256 rounds once RomDull existed).
 
-**2026-11-13, after merging main (rom-read-bound and later):** the same
-command, `just long start NAME --mem 8G`: 11:16 wall (flow 610.8 s), 2.44
-GB peak, exit 0; 14:55 (flow 807 s) on an earlier build with four other
-workers' jobs running. The first line now gives the stop: `didn't settle:
-48096722 tokens held, over its bound, after 27776 runs`; 0 of 553 sets
-complete. Ask for 8G, not 16G: on a busy night a 16G job never gets its
-turn (three waited over an hour while 4G jobs passed them). The
-native-tasks bar went 57 to 59 by june's call
-(d/raise-native-tasks-unproven-function); the reason is beside the bar.
+**How to look.** `GBAA_FNREF_TRACE=1 GBAA_FNREF_GAINS=1`: each round prints
+what entries and results gained by kind (`gains round N: 4909 result r0
++[] -[] lost`), the tokens by kind distinct/summed over all registers, and
+the set with the most pointers "from here on" with each one's run length.
+The summed counts named every cause above: read them first. `eu-stack -p
+PID` sampled 60 times says where a round's time goes (`perf` can't open
+events on quack). Write output to files (`> x.out 2> x.log`): a piped grep
+loses its buffer when the cap kills the job. Copy the binary out before
+rebuilding ("Text file busy").
 
-**What the 48M tokens were (2026-11-13, `native/fnref-flow-emerald`).**
-Copies. Counted by content (the trace's `held` lines, every 4,096
-functions run: sets by pointer, and those not equal to one before), the
-run that stopped at the bound held 44M tokens in 86,000 sets, 3M of them
-distinct: one 3,409-token set 685 times in entries, results and calls by
-value. Three makers of copies: a join into a set others share makes a new
-one (two entries reaching the same tokens by different joins); a join
-whose additions the cap drops again (a ROM pointer under a "from here
-on") copied the set and left it equal; and `all_holed` kept 845 of a
-function's own large sets alive (9M tokens). Now: `Sets` finds a kept set
-by content (weakly held; `Rc::make_mut` moves a changed one, so the table
-is never stale), `join_capped` asks `takes_in` first, `all_holed` holds
-weak pointers, and `G::held` counts the caches it missed (11M).
+**Checking a flow change costs nothing elsewhere.** `just lift-metrics`
+(15 s) must print "0 over their bars, 0 under": the agb and C programs
+never reach the three bounds. Metroid settles in 20 s: run main's binary
+and yours with `GBAA_FNREF_TRACE=1` and `cmp` the outputs (but for the
+seconds) and the `hole at` lines; its last round must read 17 rounds, pile
+about 1,500, holes 273, 68 of 70 sets complete. What broke Metroid on the
+way, each silently (7 of 70 complete): collapsing every pointer into code
+at once (keep up to 16 exact: Metroid walks pointers through routines);
+calling a collapsed pointer `& mask` dropped (Metroid masks junk values
+with 0xffff0000 and ~0x20: now a number, and `& ~3` stays a pointer); and
+making a code address a plain number (an unknown number as an address
+reads all of RAM, a known code pointer reads nothing: native-tasks lost
+every proven word).
 
-**Speed, in the order found** (eu-stack, as above; each exact: the agb
-metrics and Emerald's per-round counts didn't move). Ops on large values
-kept by the operands' kept sets (`G::op_kept`: shift, `mvn`, binary ops,
-compares, `expand`); a call by value joining each distinct result set
-once (`Once`: 6,000 callees return a few sets); a cell's token logged the
-first time any cell gets it (`cells_all`), and `exp_update` making each
-read's gain once. Round 0: 88 s to 31 s. Round 1 ends at 177 s (never
-before), round 2 at 536 s; rounds 3 to 5 at 1,079, 1,629 and 2,194 s with
-`just lift-check` running beside them.
+**Tried earlier, dropped (2026-11-14):** in-round reruns, saturating large
+sets with every form, one shared set of whole values (it dragged ROM
+pointers into every large value: the shared set now takes functions'
+tokens only), closing large sets' forms. None changed which entries
+changed.
 
-**Where it stands.** It doesn't settle in seven rounds (stopped by hand
-at 53 minutes, in round 7): every round reruns 15,200 functions, and
-12,300 entries change in each though memory has all but stopped (pile
-16,920, 23,841, 24,309, 24,574, 24,632, 24,632 tokens after rounds 1 to
-6, unchanged in round 6; holes 9,414 and taken 6,664 from round 2 on).
-Held tokens are flat (24M after round 3, 22M in round 7), peak RSS 1.5
-GB: the bound is no longer what stops it. Next: (1) find what 12,300
-entries gain a round with memory still (print an entry's new tokens
-under the trace). Not checked, the first suspect: ROM pointers stepping
-down. `bin_tok` makes `RomFrom(a) - n` a `RomFrom(a - n)` and `Rom(a) -
-n` a lower `Rom`, the cap only takes in pointers above a "from here on",
-and arithmetic on functions' addresses (holes) leaves `Rom`s all over the
-code, each its own run of data: a pointer walked down through calls would
-move a step a round through every entry the big callee sets share, with
-no end before the 256 rounds. (2) rerun a function by the `Ref` values
-it looked at, not by pile width; (3) left in
-the round-2 profile: `St::join`'s cap at every edge (17%), shift
-`split_refs` misses when the Refs' values change (17%), a load's
-`join_capped` per pointer (8%). The op memo's results aren't `share`d
-(one 1,426-token set 91 times in the cache): cheap to add.
+**Other games, same day** (`gbaa-lift --holes-only --flow`, main against
+this): WarioWare 6 hard holes both (273 s to 116 s), moonbeam 7 both (682
+s to 170 s), Emerald 13 with the flow as without. Nightmare with
+`skip_fn_flow` taken out of its holes file: 0 hard holes in 217 s (main:
+3 and no build, 25 min), because its pile-wide sets (976 callees) are now
+large values whose calls count as incomplete: 1 of 54 sets complete, 51
+on main. A complete set of a thousand callees was what made its holes.
 
-**Checking a flow change is exact (2026-11-13).** Metroid settles, so it
-shows what Emerald can't: put `git show origin/main:…/fnref.rs` in the
-tree, build with another `CARGO_TARGET_DIR`, copy the binary out,
-restore, and run both with the trace. This branch against main: the same
-output, 20 rounds, the same end counts and hole addresses; 15.1 s against
-42.7 s, 173k tokens held against 2.06M. The review found `join_capped`
-inexact where pointers a "from here on" covers push the cap past its 16
-exact pointers (fixed; the test now compares each case with `join`), and
-the op memo wrong under `GBAA_FNREF_OFF=move` (off under any of them).
+**Left.** A round is still 100 to 200 s while the pile grows (rounds 1 to
+4): half of it joins in `give_all` through callee sets of thousands. 451
+of Emerald's 554 sets are incomplete (`lost_rom`: ROM reads cut at 256 KB,
+and the bounds above); making them sharper is flow-precision work, not
+this unit's. One flag says both "may be a function the run dropped" and
+"may be a ROM pointer it dropped": a call through a large value that only
+lost pointers would still be complete with two.
