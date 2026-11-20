@@ -32,7 +32,9 @@
 //! checked at run time, and the type is a label: a temporary in a
 //! variable's register that happens to be dereferenced at one of its
 //! type's fields prints as that field. Only an access that lands on a
-//! field, or inside one, is printed typed.
+//! field, or inside one, is printed typed. Which of the bitfields sharing
+//! bytes an access is, by the bits it changes or reads, is
+//! [`super::bitfields`]'.
 
 use std::collections::BTreeMap;
 
@@ -337,9 +339,17 @@ pub fn rust(t: &Types, ty: &Ty) -> String {
 /// The printed pointer to the `w` bytes at `at`, reached from `p`, a
 /// printed value `k` bytes into the object (`k <= at.off`): its
 /// expression, and whether the whole access is named (else its last step
-/// is `.field::<uN>(off)`). `None` where it lands on no field.
-pub fn pointer(t: &Types, at: &At, w: u32, p: &str, k: u32) -> Option<(String, bool)> {
-    let (steps, rest) = t.path(&at.ty, at.off, w, None);
+/// is `.field::<uN>(off)`). `None` where it lands on no field. `bits`
+/// picks one of the bitfields the access holds ([`super::bitfields`]).
+pub fn pointer(
+    t: &Types,
+    at: &At,
+    w: u32,
+    p: &str,
+    k: u32,
+    bits: Option<(u32, u32)>,
+) -> Option<(String, bool)> {
+    let (steps, rest) = t.path(&at.ty, at.off, w, bits);
     if steps.is_empty() && rest.is_some() {
         return None;
     }
@@ -360,10 +370,75 @@ pub fn pointer(t: &Types, at: &At, w: u32, p: &str, k: u32) -> Option<(String, b
     Some((e, rest.is_none()))
 }
 
+/// The accessors of the accesses that load or store several fields at
+/// once ([`crate::types::Types::joined`], native/lift-bitfields), by
+/// struct, offset and width: each one's name and the fields it holds.
+pub type Joined = BTreeMap<(String, u32, u32), (String, Vec<String>)>;
+
+/// The printed pointer of an access of `w` bytes at `at` that holds
+/// bitfields with others, from `p`, `k` bytes into the object: through
+/// the accessor named for its fields (`.left_up_speed_hue()`), which
+/// `joined` gets if it lacks it. `None` where it holds no bitfield.
+pub fn joined_pointer(
+    t: &Types,
+    joined: &mut Joined,
+    at: &At,
+    w: u32,
+    p: &str,
+    k: u32,
+) -> Option<String> {
+    let (steps, st, off, ids) = t.joined(&at.ty, at.off, w)?;
+    t.marker(&st)?;
+    let key = (st.clone(), off, w);
+    let name = match joined.get(&key) {
+        Some((n, _)) => n.clone(),
+        None => {
+            let mut n = ids.join("_");
+            if joined.iter().any(|((s, _, _), (m, _))| *s == st && *m == n) {
+                n = format!("{n}_at{off}_u{}", 8 * w);
+            }
+            joined.insert(key, (n.clone(), ids));
+            n
+        }
+    };
+    let ty = rust(t, &at.ty);
+    let mut e = match k {
+        0 => format!("Ref::<{ty}>::new({p})"),
+        k => format!("Ref::<{ty}>::to({p}, {k:#x})"),
+    };
+    for s in &steps {
+        match s {
+            Step::Field(f) => e.push_str(&format!(".{f}()")),
+            Step::Idx(n) => e.push_str(&format!(".idx({n})")),
+        }
+    }
+    e.push_str(&format!(".{name}()"));
+    Some(e)
+}
+
 /// The lifted crate's `t` module: every struct and union of the names
-/// files as a marker type, its fields accessors on `Ref`.
-pub fn module(t: &Types) -> String {
+/// files as a marker type, its fields accessors on `Ref`; and the
+/// accessors the lift's joined accesses take ([`joined_pointer`]).
+pub fn module(t: &Types, joined: &Joined) -> String {
     let m = t.markers();
+    let js = joined.iter().filter_map(|((st, off, w), (name, ids))| {
+        let id = quote::format_ident!("{}", t.marker(st)?);
+        let n = quote::format_ident!("{name}");
+        let ty = quote::format_ident!("u{}", 8 * w);
+        let off = proc_macro2::Literal::u32_unsuffixed(*off);
+        let doc = format!(
+            " The {w} bytes at {off} that hold `{}` together, as one access loads or stores them",
+            ids.join("`, `")
+        );
+        Some(quote::quote! {
+            impl Ptr<#id> {
+                #[doc = #doc]
+                pub const fn #n(self) -> Ptr<#ty> {
+                    self.field(#off)
+                }
+            }
+        })
+    });
     let text = crate::emit::pretty(quote::quote! {
         /// The names files' structs and unions as marker types, each
         /// field an accessor on a `Ref` to one (native/lift-typed-access;
@@ -372,6 +447,7 @@ pub fn module(t: &Types) -> String {
         pub mod t {
             use crate::{Bits, Guest, Ptr};
             #m
+            #(#js)*
         }
     });
     format!("{FIELDS_PRELUDE}\n{text}")
@@ -466,7 +542,7 @@ fields = [
         ];
         let a = flow(&m, 0x0800_0001, &[&b], |_, _| Vec::new(), |_, _| None);
         let p = |i: usize, w: u32, v: &str, k: u32| {
-            pointer(&m.types, &a[&(0, i)], w, v, k).map(|(e, named)| {
+            pointer(&m.types, &a[&(0, i)], w, v, k, None).map(|(e, named)| {
                 assert!(named);
                 e
             })
@@ -493,7 +569,8 @@ fields = [
                 },
                 1,
                 "p",
-                5
+                5,
+                None
             ),
             Some((
                 "Ref::<t::Kirby>::to(p, 0x5).next().field::<u8>(0x1)".into(),
