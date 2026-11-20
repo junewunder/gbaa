@@ -207,6 +207,7 @@ pub mod banks;
 pub mod bitfields;
 pub mod cond;
 pub mod counted;
+pub mod cut;
 pub mod fields;
 pub mod first_stop;
 pub mod fnref;
@@ -459,6 +460,21 @@ pub struct Holes {
     /// static name (`gbaa-lift --text-edit FILE`; [`text_statics`]): an
     /// editor's edit, made by the lifter, for a mod's check.
     pub text_edits: BTreeMap<String, String>,
+    /// A mod's cut functions (unit `native/lift-mod-cut`, [`cut`]): by
+    /// key, the Rust that takes the place of the function's whole printed
+    /// text (its entries, as `gbaa-lift --cut` cut them), after the names
+    /// pass. Unlike a stand-in it keeps the lifted signature, so its
+    /// callers are printed as for the lift. From a replace file's
+    /// `[[cut]] entry = 0x…, name = "…", file = "src/….rs"`, whose files
+    /// `gbaa-lift` reads into here.
+    pub cuts: BTreeMap<u32, String>,
+    /// The replace file's cut files, by key, relative to it.
+    pub cut_files: BTreeMap<u32, String>,
+    /// The ROM a replace file's cuts were cut from (`[mod] rom_sha1`).
+    pub cut_rom: Option<String>,
+    /// The functions whose printed text [`Lifted::cut_texts`] keeps
+    /// (`gbaa-lift --cut`).
+    pub cut_want: BTreeSet<u32>,
     /// Where `Ram`'s globals are (`gbaa-lift --layout`): the guest's
     /// offsets, or the play layout's order ([`globals::Layout`]).
     pub layout: Layout,
@@ -549,6 +565,14 @@ impl Holes {
                 h.skip_fn_flow = Some(why.to_string());
                 continue;
             }
+            if k == "mod" {
+                let m = v.as_table().ok_or("mod: not a table")?;
+                if let Some(r) = m.get("rom_sha1") {
+                    let r = r.as_str().ok_or("mod: rom_sha1: not a string")?;
+                    h.cut_rom = Some(r.to_string());
+                }
+                continue;
+            }
             if k == "allocators" {
                 let list = v.as_array().ok_or("allocators: not a list of keys")?;
                 for e in list {
@@ -602,6 +626,10 @@ impl Holes {
                                 None => return Err("standin: lr: not a bool".into()),
                             },
                         }
+                    }
+                    "cut" => {
+                        let entry = int(e.get("entry").ok_or("cut: missing entry")?, "entry")?;
+                        h.cut_files.insert(entry, str_of(e, "file")?);
                     }
                     "jump" => {
                         let at = int(e.get("at").ok_or("jump: missing at")?, "at")?;
@@ -780,6 +808,10 @@ pub struct Lifted {
     pub report: String,
     /// The counts the bars hold ([`metrics`]).
     pub metrics: Metrics,
+    /// By key, the printed text (as the crate has it, names and all) of
+    /// the functions of [`Holes::cut_want`] and [`Holes::cuts`], as lifted:
+    /// before a cut takes its place.
+    pub cut_texts: BTreeMap<u32, String>,
 }
 
 /// The literals of `funcs`' constant jumps (not calls) to a RAM
@@ -1391,6 +1423,21 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             what: "the holes file's stand-in matches no function".into(),
         });
     }
+    for &k in holes.cuts.keys().chain(&holes.cut_want) {
+        let what = if !all.contains(&k) {
+            "the mod's cut matches no function"
+        } else if holes.standins.contains_key(&k) || holes.fn_check.contains_key(&k) {
+            "the mod's cut is of a function the holes file replaces or the check checks: cut the lift only"
+        } else {
+            continue;
+        };
+        hard.push(Hole {
+            func: k,
+            at: k,
+            kind: HoleKind::HolesFile,
+            what: what.into(),
+        });
+    }
     for (&f, (code, _)) in &holes.standins {
         for &k in takers
             .iter()
@@ -1471,6 +1518,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             ),
             holes: hard,
             metrics: Metrics::default(),
+            cut_texts: BTreeMap::new(),
         };
     }
     fns.sort_unstable();
@@ -1606,6 +1654,23 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 &holes.names,
             )
         });
+    // A mod's cut (unit `native/lift-mod-cut`): the function's text as
+    // lifted kept for `gbaa-lift --cut`, then the cut's in its place.
+    let cut_texts: BTreeMap<u32, String> = out
+        .iter()
+        .filter(|(k, _)| holes.cut_want.contains(k) || holes.cuts.contains_key(k))
+        .cloned()
+        .collect();
+    let mut cut_in = 0;
+    for (k, t) in out.iter_mut() {
+        if let Some(c) = holes.cuts.get(k) {
+            *t = c.clone();
+            if !t.ends_with('\n') {
+                t.push('\n');
+            }
+            cut_in += 1;
+        }
+    }
     // The names files' types, declared: like the names' constants, not
     // lifted code, so not in `lines`.
     // The struct globals' structs (`ram_t`, printed with `Ram`) too.
@@ -2154,6 +2219,13 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     if let Some(n) = named {
         writeln!(report, "{}", n.line()).unwrap();
     }
+    if cut_in != 0 {
+        writeln!(
+            report,
+            "a mod's cut (gbaa-lift --replace's [[cut]]): {cut_in} functions printed as the mod has them"
+        )
+        .unwrap();
+    }
     if let Some(l) = typed_line {
         writeln!(report, "{l}").unwrap();
     }
@@ -2168,6 +2240,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         holes: hard,
         report,
         metrics: m,
+        cut_texts,
     }
 }
 
