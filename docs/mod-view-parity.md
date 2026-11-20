@@ -20,7 +20,7 @@ The lifts were Metroid (`gbaa-lift` on pret's `mzm_us.gba` with
 ## The table
 
 "Has it" means the lift prints or does it today. "Unit" names the open unit
-that adds it. "Not wanted" rows are the list the owner was asked about.
+that adds it. The owner agreed the "Not wanted" list (2026-11-19).
 
 ### Names
 
@@ -74,7 +74,7 @@ that adds it. "Not wanted" rows are the list the owner was asked about.
 
 ### Not wanted
 
-The owner was asked about this list.
+The owner agreed to leave all seven out (2026-11-19).
 
 | The mod view | Why not for the lift |
 |---|---|
