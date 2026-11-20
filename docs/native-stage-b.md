@@ -15,6 +15,11 @@ written by `just lift-metrics --write-doc docs/native-stage-b.numbers.md`.
 What is still open and steers later units is under "Known gaps", at the
 end. `docs/budgets.toml` holds this file to a line budget.
 
+The lift is also what the mod view was meant to be (the owner,
+2026-11-19). What the mod view printed or did, and whether the lift has
+it, is in [mod-view-parity.md](mod-view-parity.md), with the unit for
+each wanted gap and the list left out.
+
 ## Where stage A left us
 
 `gbaa-lift` (`native-port-design.md`, "The stage-A lifter as built") lifts a
