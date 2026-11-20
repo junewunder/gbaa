@@ -160,6 +160,13 @@ impl RomData {
         (o.elem == w && o.base <= lo && end <= o.base + o.n * o.elem).then_some(o)
     }
 
+    /// An object that holds any of the bytes `lo..end` (guest addresses).
+    pub fn overlapping(&self, lo: u32, end: u32) -> Option<&RomObj> {
+        self.objs
+            .values()
+            .find(|o| o.base < end && lo < o.base + o.n * o.elem)
+    }
+
     pub fn len(&self) -> usize {
         self.objs.len()
     }

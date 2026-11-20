@@ -34,6 +34,7 @@ pub mod softfloat;
 pub mod sound;
 pub mod spins;
 pub mod state;
+pub mod text;
 pub mod timer;
 #[cfg(feature = "timing-lab")]
 pub mod timing_lab;

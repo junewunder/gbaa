@@ -9,6 +9,9 @@
 //! JOY bus registers, `POSTFLG` and `HALTCNT`, which pret leaves out, are
 //! GBATEK's. An access no register of its width starts at prints from the
 //! narrowest register holding it: `REG_VCOUNT.field::<u8>(0)`.
+//!
+//! The native lift prints the same names as addresses ([`base`]):
+//! `st16(g, REG_IME, 0x1u32)`.
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -169,6 +172,22 @@ pub fn at(x: u32, w: u32) -> Option<(&'static str, Option<u32>)> {
         .map(|&(n, a, s)| (n, (a != x || s != w).then_some(x - a)))
 }
 
+/// The register a native lift names an access of `w` bytes at `x` by
+/// (`native/lift-io-names`), as an address, and the offset into it: the
+/// one of width `w` at `x`, else the narrowest register holding `x` (a
+/// word access at `IE` is `REG_IE`, writing `IF` too; a byte of `VCOUNT`'s
+/// high half is `REG_VCOUNT + 1`). `None` where no register holds `x`.
+pub fn base(x: u32, w: u32) -> Option<(&'static str, u32)> {
+    REGS.iter()
+        .find(|&&(_, a, s)| a == x && s == w)
+        .or_else(|| {
+            REGS.iter()
+                .filter(|&&(_, a, s)| a <= x && x - a < s)
+                .min_by_key(|r| r.2)
+        })
+        .map(|&(n, a, _)| (n, x - a))
+}
+
 /// A register's identifier: `REG_` and its name.
 pub fn ident(name: &str) -> String {
     format!("REG_{name}")
@@ -216,5 +235,15 @@ mod tests {
         assert_eq!(at(0x0400_0200, 4), None);
         assert_eq!(at(0x0400_0000, 1), Some(("DISPCNT", Some(0))));
         assert_eq!(at(0x0400_0060, 1), Some(("NR10", None)));
+    }
+
+    #[test]
+    fn a_native_access_finds_its_base() {
+        assert_eq!(base(0x0400_0208, 2), Some(("IME", 0)));
+        assert_eq!(base(0x0400_0200, 4), Some(("IE", 0)));
+        assert_eq!(base(0x0400_0104, 4), Some(("TM1CNT", 0)));
+        assert_eq!(base(0x0400_0007, 1), Some(("VCOUNT", 1)));
+        assert_eq!(base(0x0400_0206, 2), None);
+        assert_eq!(base(0x0400_0800, 4), None);
     }
 }

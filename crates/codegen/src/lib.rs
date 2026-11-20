@@ -14,7 +14,7 @@
 //! - [`print`]: a block's insts as Rust expressions and statements;
 //! - [`emit`]: the generated crate's files;
 //! - [`fn_diff`]: the crate of the per-function differential runs;
-//! - [`io_regs`]: the GBA's I/O registers by name, for the readable form;
+//! - [`io_regs`]: the GBA's I/O registers by name, for the readable form and the native lift;
 //! - [`names`]: the source map: names by address, and their identifiers;
 //! - [`dwarf`]: what a readable block prints from DWARF: names, lines, calls;
 //! - [`modcopy`]: a mod copy: functions cut out as Rust, built back in;
