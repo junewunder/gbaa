@@ -590,17 +590,38 @@ its returns to a hole is one, and takes it to leave r0–r3 unknown);
 `gbaa-recompile --summaries --callee-sets` takes an indirect call whose
 callee set the function-address flow proves complete
 (`codegen::native::fnref`) as calling exactly those
-(`codegen::saves::summarize_sets`). Not measured on Emerald yet: of its
-553 indirect calls, none has a set, because the flow didn't finish on
-its 15,158 functions in 35 minutes (past 8 GB and growing). With
-`native/fnref-flow-scale` landed (Metroid settles in 151 s) it still
-didn't: killed at a 14 GB cap after 5 minutes (2026-11-07). Since
-2026-11-13 the run no longer dies or stops at its token bound (those 48M
-were copies; equal sets kept once, it holds 24M at 1.5 GB), but seven
-rounds in 53 minutes hadn't settled it: still no set is complete. Making it
-settle on Emerald is `native/fnref-flow-emerald`; the re-measurement
-of the 656, and what keeps sets incomplete (callbacks stored through RAM
-globals such as `gMain.callback1`), is `native/indirect-call-args-emerald`.
+(`codegen::saves::summarize_sets`). On Emerald, 2026-11-19
+(`native/indirect-call-args-emerald`; the flow settles since
+`native/fnref-flow-emerald`: 11 minutes, 1.1 GB), its 15,205 functions
+by today's discovery: the flow reaches all 554 indirect calls and proves 103
+complete (4.3 callees on average). With those:
+
+| | without sets | with sets |
+|---|---|---|
+| agree | 13,357 | 13,437 |
+| disagree | 1,666 | 1,586 |
+| an indirect call reads r0–r3 | 656 | 601 |
+| a caller passes on a register the prototype doesn't return | 622 | 585 |
+| trusting indirect calls to read nothing (the floor) | 695 | 695 |
+
+So complete sets take 55 of the 656 off; 601 remain, every one through
+an incomplete set (`CallCallbacks`'s `gMain.callback1()` is still the
+first of the sample). What leaves the 451 incomplete, as the target's
+value shows it at the call (`fnref::Lost`, printed with a sample of each):
+
+| what | calls | e.g. |
+|---|---|---|
+| the target holds the large shared set (1,024 functions or more: here 6,129) | 180 | `CallCallbacks` (`gMain.callback1`), `SoundMain`, `GetCurrentMenuCB`, task functions called through `gTasks[id].func` (`Task_ShopMenu`) |
+| a ROM read cut short or too wide, or arithmetic on a ROM pointer the run gave up | 257 | sprite and object-event callbacks (`AnimateSprite`, the `MovementType_*_callback`s, 2 to 37 callees in the sample), `Task_WeatherMain`, `HandleEndTurn_FinishBattle` (249) |
+| no function's address reaches the target | 14 | pointers read out of script bytes (`ScrCmd_callnative`, `Cmd_createvisualtask`, `FieldEffectScript_CallNative`), `Task_RunLoopedTask`, and the flash driver's calls through RAM copies (`ReadFlashId`, `ReadFlash`) |
+| a ROM pointer given up past 64 runs of data | 0 | |
+
+Callbacks stored through RAM globals and fields (`gMain.callback1`,
+`gTasks[].func`) are most of the first row: every `SetMainCallback`/
+`CreateTask` caller stores into the same few fields, so their set is
+the shared one of thousands. Sharper sets need one per field rather than the shared
+one, and ROM reads made whole (the 256 KB cut, hulls too wide): both
+flow-precision work.
 
 ## 6. Holes
 
@@ -872,9 +893,15 @@ for data). Two forms:
   a `static` initialised from the ROM's bytes at build time, with pointer
   fields as `&'static` references to the other statics they point at
   (Rust statics can refer to each other): `static gMonIconTable: [&[u8];
-  N] = [&ICON_BULBASAUR, …]`. Strings are `&'static [u8]` in the game's
-  encoding (the mod view's text tables print them). Being Rust statics,
-  they stay out of `Game`: ROM is immutable and needs no handle.
+  N] = [&ICON_BULBASAUR, …]`. Being Rust statics, they stay out of
+  `Game`: ROM is immutable and needs no handle.
+- **Text, as literals** (`native/lift-text-editable`). Each string the
+  code's constants lead to that the game's text table decodes is a static
+  in the crate's `src/text.rs` (`codegen::native::text_statics`), a string
+  literal the table encodes into the ROM at build time (`runtime::text`):
+  an edit shows on screen. A longer one moves past the ROM's end, the ROM
+  words that point at it pointed there, where those are every reader; one
+  a computed load reads stays in the ROM, counted (`texts_left`).
 - **Bytes, where they aren't.** The ROM's data stays one
   `include_bytes!` (as the play build's does, `crates/desktop/src/lib.rs`)
   and a pointer into it is a `RomRef<T>`, an offset with typed views. A

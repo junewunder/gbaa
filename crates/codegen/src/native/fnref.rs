@@ -1992,6 +1992,39 @@ pub struct Site {
     pub complete: bool,
     /// A jump by value (a tail call), not a call.
     pub tail: bool,
+    /// Why it isn't complete (`None` when it is), for the counts.
+    pub lost: Option<Lost>,
+}
+
+/// What left a callee set incomplete, as the target's value shows it at
+/// the call: the first that applies, in this order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Lost {
+    /// No whole function's address reaches the target.
+    NoCallee,
+    /// It holds the large shared set ([`LARGE`] functions or more), whose
+    /// ROM pointers are given up ([`Large::take`]).
+    Large,
+    /// A ROM pointer given up past [`FROMS`] runs ([`Tok::RomAny`]).
+    RomAny,
+    /// A ROM read cut short or too wide to make, or arithmetic on a ROM
+    /// pointer the run gave up on.
+    RomRead,
+}
+
+impl Lost {
+    pub const ALL: [Lost; 4] = [Lost::NoCallee, Lost::Large, Lost::RomAny, Lost::RomRead];
+
+    pub fn text(self) -> &'static str {
+        match self {
+            Lost::NoCallee => "no function's address reaches the target",
+            Lost::Large => "the target holds the large shared set (1,024 functions or more)",
+            Lost::RomAny => "a ROM pointer given up (past 64 runs of data)",
+            Lost::RomRead => {
+                "a ROM read cut short or too wide, or arithmetic on a lost ROM pointer"
+            }
+        }
+    }
 }
 
 /// What the run found.
@@ -4621,10 +4654,22 @@ impl Run<'_, '_> {
         // Unless the run dropped one: a ROM read it cut short or couldn't
         // make, or a ROM pointer it lost.
         let complete = !callees.is_empty() && !t.lost_rom;
+        let lost = if complete {
+            None
+        } else if callees.is_empty() {
+            Some(Lost::NoCallee)
+        } else if callees.len() >= LARGE {
+            Some(Lost::Large)
+        } else if t.toks.contains(&Tok::RomAny) {
+            Some(Lost::RomAny)
+        } else {
+            Some(Lost::RomRead)
+        };
         let site = Site {
             callees: callees.clone(),
             complete,
             tail,
+            lost,
         };
         if !tail || !callees.is_empty() {
             self.g.flow.sites.insert(at, site);

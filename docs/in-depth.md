@@ -210,8 +210,8 @@ the game's RAM, named after its address (`d_0300000c`) because this program
 has no file of names. Its argument is a named parameter, `r0`, used
 directly. The rest is the literal part: the argument keeps its register's
 name, the stack pointer is passed though nothing here uses it (`_`), and
-the extended entry `x_08000271`, which another function's code may jump
-into with every register, still sits beside it.
+`pc(0x08000271)` keeps the guest address for a stop to name (it does
+nothing outside a check build).
 
 ```c
 void pen_set(u8 state)
@@ -222,9 +222,8 @@ void pen_set(u8 state)
 ```
 
 ```rust
-pub fn x_08000271(g: &mut Game, s: Regs) -> Result<(), Exit> { f_08000271(g, s.r[13], s.r[0]) }
 pub fn f_08000271(g: &mut Game, _: u32, r0: u32) -> Result<(), Exit> {
-    runtime::guest_pc::set(0x08000271);
+    pc(0x08000271);
     g.ram.d_0300000c = r0 as u8;
     g.ram.d_0300000d = 0x0u32 as u8;
     return Ok(());

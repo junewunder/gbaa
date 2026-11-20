@@ -16,9 +16,9 @@
 //! backtrace's symbol names ([`functions_in`]), so one the compiler
 //! inlined into its caller doesn't show, and a hand-written program has
 //! none. `pc` is the guest address of the last block the program entered
-//! (`runtime::guest_pc`, which every lifted block sets; unit
-//! `native/first-stop-guest-pc`), the same key form, empty for a
-//! hand-written program: the block the panic is in, or the loop a time
+//! (`runtime::guest_pc`, which every lifted block sets in a build with the
+//! crate's `guest-pc` feature; unit `native/first-stop-guest-pc`), the
+//! same key form, empty for a hand-written program or a plain build: the block the panic is in, or the loop a time
 //! limit stopped. A line with no `pc` field (one written before it) reads.
 
 /// What every stop line starts with.
