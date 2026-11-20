@@ -207,14 +207,13 @@ typed pointers, below; until then they are soft holes, counted.
 
 ### 5. Typed data
 
-- **ROM data as typed statics** (`native/rom-statics`). ROM objects read at
-  constant addresses or through pool pointers become `static`s typed by the
-  widths the code reads them at (`[u16; N]`), loads from them indexing. A
-  pointer loaded from ROM data stays a `RomRef` (a soft hole, counted).
-  Needs the dense IDs, so a function-pointer word in a table is an
-  `FnRef`. Bar: the computed ROM loads at most a quarter of their bar
-  (constant ROM loads are already 0: each was a literal pool's word, which
-  the IR has as a constant, so `native/ram-globals` dropped them).
+- **ROM data as typed statics** (`native/rom-data-statics`). Done
+  (`native/rom_data.rs`): a computed load the value sets bound to ROM
+  indexes a static view of `ROM` typed by its width, one object per width
+  from overlapping extents, the pointer checked (`ROM_0808CAD0[rix(a,
+  0x808cad0, 2, 12)]`); extents over 256 KB stay bytes. A word loaded
+  from one is still a guest address. Function words as `FnRef`s and
+  pointers as `RomRef`s are `native/rom-statics`', after the dense IDs.
 - **RAM globals as typed fields** (`native/ram-globals`). Done
   (`crates/codegen/src/native/globals.rs`): constant-address RAM accesses
   carved into globals, the fields of `Ram` at the guest's offsets under
@@ -331,8 +330,8 @@ a bar lowered". After that, three lines of work can go side by side:
   rewrite how calls and continuations print); following function
   addresses waits on parameters (the `FNS` adapters); dense IDs wait on
   that and on the heap by allocation site, and indirect-call arguments
-  on dense IDs; ROM statics wait on the dense IDs (a function word in a
-  table must already be an `FnRef`). The escape analysis needs only the
+  on dense IDs; ROM statics' function words wait on the dense IDs (a
+  function word in a table must already be an `FnRef`). The escape analysis needs only the
   bars; stack locals wait on it and on parameters (a function's signature
   decides what's in its frame). The packed layout waits on RAM globals;
   typed pointers wait on RAM globals and stack locals, since a pointer is
