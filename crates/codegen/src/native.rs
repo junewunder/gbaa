@@ -1062,7 +1062,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             }
         }
     }
-    let globals = Globals::carve(&ram, &ranges, &holes.names);
+    let mut globals = Globals::carve(&ram, &ranges, &holes.names);
+    // A global the names files type as a struct is that struct, its
+    // accesses its fields (native/lift-struct-globals).
+    if let Some(t) = &holes.types {
+        globals.type_structs(t, &ram, &ranges);
+    }
     // ROM's objects: what the computed loads the value sets bound to ROM
     // reach (native/rom-data-statics).
     let rom_data = RomData::carve(&rom_ranges, rom.len() as u32);
@@ -1542,10 +1547,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         });
     // The names files' types, declared: like the names' constants, not
     // lifted code, so not in `lines`.
-    let mut type_lines = 0;
+    // The struct globals' structs (`ram_t`, printed with `Ram`) too.
+    let mut type_lines = globals.structs().lines().count();
     if let Some(maps) = &holes.fields {
         let text = fields::module(&maps.types);
-        type_lines = text.lines().count();
+        type_lines += text.lines().count();
         main.push_str(&text);
     }
     let plains: Vec<String> = fns_reached
