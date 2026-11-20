@@ -239,7 +239,7 @@ pub fn cut(
 
 /// `git merge-file src orig new`: the change from `orig` to `new` merged
 /// into `src` in place. The conflicts it left.
-fn merge_file(src: &Path, orig: &Path, new: &Path) -> Result<usize, String> {
+pub(crate) fn merge_file(src: &Path, orig: &Path, new: &Path) -> Result<usize, String> {
     let st = std::process::Command::new("git")
         .args(["merge-file", "-L", "src", "-L", "orig", "-L", "new"])
         .args([src, orig, new])
