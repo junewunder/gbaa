@@ -152,3 +152,64 @@ fn a_name_the_crate_has_takes_a_suffix() {
     assert_eq!(numbered("f_08000001"), Some(0x0800_0001));
     assert_eq!(numbered("g_08000001"), None);
 }
+
+/// Since native/lift-inline-temps a single-use constant prints inside its
+/// use, not on a `let` line of its own (native/lift-data-names-inline).
+#[test]
+fn an_inlined_constant_prints_as_its_name() {
+    let (fns, data) = names();
+    let frames = "_RNvCsgHtZ1jaOG4l_12native_spike6FRAMES";
+    let table = "_RNvNtCsik9bTz99YjW_3agb9interrupt15INTERRUPT_TABLE";
+    let mut head = MAIN.to_string();
+    let mut fns_table = String::new();
+    let mut funcs = vec![(
+        0x0800_2201,
+        "pub fn f_08002201(g: &mut Game, sp: u32) -> Result<(), Exit> {\n\
+         \x20   r0 = 0x20000c0u32;\n\
+         \x20   r1 = f_0800061b(g, sp, 0x2000018u32)?.wrapping_add(0x20000c0u32.wrapping_sub(r0));\n\
+         \x20   g.set(Ref::<t::S>::new(0x2000014u32 as u32).x(), r1);\n\
+         \x20   match r1 { 0x20000c0u32 => {}, 0x2000014u32 => {}, _ => {} }\n\
+         \x20   // 0x20000c0u32 in a comment\n\
+         \x20   let v9: u32 = r0.wrapping_add(0x4u32); let w = x0x20000c0u32;\n\
+         \x20   panic!(\"at 0x20000c0u32\")\n}\n"
+            .to_string(),
+    )];
+    let n = apply(
+        &mut head,
+        RAM,
+        &mut fns_table,
+        &mut funcs,
+        &[0x0800_2201],
+        &fns,
+        &data,
+    );
+    let f = &funcs[0].1;
+    assert!(
+        f.contains(&format!("r0 = {frames} /* 0x020000c0 */;")),
+        "{f}"
+    );
+    assert!(
+        f.contains(&format!(
+            "(g, sp, ({table} + 0x8) /* 0x02000018 */)?.wrapping_add({frames} /* 0x020000c0 */.wrapping_sub(r0));"
+        )),
+        "{f}"
+    );
+    assert!(
+        f.contains(&format!("new(({table} + 0x4) /* 0x02000014 */ as u32)")),
+        "{f}"
+    );
+    // A pattern takes the name, but not a sum.
+    assert!(
+        f.contains(&format!(
+            "{{ {frames} /* 0x020000c0 */ => {{}}, 0x2000014u32 => {{}}"
+        )),
+        "{f}"
+    );
+    // Not in a comment, a string, a longer word, or outside a datum.
+    assert!(f.contains("// 0x20000c0u32 in a comment"), "{f}");
+    assert!(f.contains("panic!(\"at 0x20000c0u32\")"), "{f}");
+    assert!(f.contains("let w = x0x20000c0u32;"), "{f}");
+    assert!(f.contains("r0.wrapping_add(0x4u32)"), "{f}");
+    assert!(head.contains(&format!("pub const {frames}: u32 = 0x020000c0;")));
+    assert_eq!((n.data, n.constants, n.unnamed), (2, 5, 1));
+}

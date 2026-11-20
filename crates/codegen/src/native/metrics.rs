@@ -107,6 +107,12 @@
 //! (barred, at 0 on the C programs and Metroid). The registers' constants
 //! in `main.rs` are data, not in `lines`.
 //!
+//! Data names (`native/lift-data-names-inline`, [`super::named`]): in a
+//! lift with names, `data_constants_named`, the constant addresses inside
+//! a named datum printed by its name (no bar: it should rise), and
+//! `data_constants_unnamed`, those left as numbers (barred, at 0 on the C
+//! programs).
+//!
 //! Entries (`native/lift-one-entry`): `entries_beyond_one` counts the
 //! entries the lifted functions print beyond the one each needs (an
 //! extended entry `x_` something falls, jumps or calls into, or a named
@@ -297,6 +303,7 @@ pub const UNBARRED: &[&str] = &[
     "lines_types",
     "named_field_accesses",
     "named_inside_accesses",
+    "data_constants_named",
     "ref_types",
     "functions_structured",
     "functions_structured_pct",

@@ -2029,6 +2029,13 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         m.push("fn_words_proven", n(fn_proven));
         m.push("fn_words_not_proven", n(f.1.len() - fn_proven));
     }
+    // Only a lift with names has them (native/lift-data-names-inline):
+    // the data constants named, and those inside a named datum left as
+    // numbers (barred).
+    if let Some(d) = named {
+        m.push("data_constants_named", n(d.constants));
+        m.push("data_constants_unnamed", n(d.unnamed));
+    }
     m.push("gap_targets", n(gaps.len()));
     writeln!(
         report,
