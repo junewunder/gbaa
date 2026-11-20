@@ -207,10 +207,11 @@ This is `pen_set` from one of the repo's own C test programs
 `gPen.state` and `gPen.step` are the bytes at addresses 0x0300000c and
 0x0300000d. The lifter has turned each into a field of the struct that holds
 the game's RAM, named after its address (`d_0300000c`) because this program
-has no file of names. The rest is the literal part: the CPU's registers are
-still there as local variables, and the function still loads `gPen`'s address
-into `r1` and a zero into `r2` as the machine code did, though nothing reads
-them now. The long line that unpacks the registers is shortened here.
+has no file of names. Its argument is a named parameter, `r0`, used
+directly. The rest is the literal part: the argument keeps its register's
+name, the stack pointer is passed though nothing here uses it (`_`), and
+the extended entry `x_08000271`, which another function's code may jump
+into with every register, still sits beside it.
 
 ```c
 void pen_set(u8 state)
@@ -221,14 +222,11 @@ void pen_set(u8 state)
 ```
 
 ```rust
-pub fn x_08000271(g: &mut Game, s: Regs) -> Result<(), Exit> {
-    let Regs { r: [mut r0, mut r1, /* r2 to r14 */], f: [mut nf, mut zf, mut cf, mut vf] } = s;
+pub fn x_08000271(g: &mut Game, s: Regs) -> Result<(), Exit> { f_08000271(g, s.r[13], s.r[0]) }
+pub fn f_08000271(g: &mut Game, _: u32, r0: u32) -> Result<(), Exit> {
     runtime::guest_pc::set(0x08000271);
-    r1 = 0x3000008u32;
-    r2 = 0x0u32;
     g.ram.d_0300000c = r0 as u8;
     g.ram.d_0300000d = 0x0u32 as u8;
-    let v22: u32 = r14;
     return Ok(());
 }
 ```

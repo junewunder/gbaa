@@ -1102,10 +1102,10 @@ fn flash_call(g: &mut Game, k: u32, a: [u32; 4]) -> Option<[u32; 4]> {
 /// A lifted function's four-register form (`a_<key>` if shaped): sp, r0-r3 in; r0-r3 out.
 pub type Fn = fn(&mut Game, u32, [u32; 4]) -> Result<[u32; 4], Exit>;
 
-/// Every register and flag a function's extended entry (`x_<key>`) starts
-/// with: r0-r14, and N, Z, C, V. A fall or jump from one function into
-/// another's entry passes its own, as the hardware runs on with them; a
-/// call (`f_<key>`) starts with [`Regs::call`].
+/// Every register and flag a function's extended entry (`x_<key>`) takes:
+/// r0-r14, N, Z, C, V. A fall or jump into another function passes its own,
+/// as the hardware runs on with them; a call (`f_<key>`) passes [`Regs::call`]'s
+/// (or, if `f_` has the body, as it takes only its parameters, `x_` calls it).
 pub struct Regs {
     pub r: [u32; 15],
     pub f: [bool; 4],
