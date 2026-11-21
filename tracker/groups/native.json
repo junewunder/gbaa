@@ -2029,12 +2029,6 @@
       "check": "recorded",
       "needs": ["native/fnref-flow", "native/metroid-route-again"],
       "uses": ["heavy"],
-      "record": {
-        "state": "parked",
-        "why": "the function-flow thread (2026-11-20): its rules are on main behind GBAA_FNREF_LIVE, off, and meet the bar. Turning it on by default changes Metroid's lifted code, so it waits for {unit:native/metroid-route-again}; then that thread runs Metroid's route with the switch on and flips it. No lane takes it.",
-        "by": "59a5588e",
-        "at": "2026-11-20T09:15:16Z"
-      },
       "notes": [
         {
           "at": "2026-11-20T09:52:44Z",
