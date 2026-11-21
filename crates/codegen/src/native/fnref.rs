@@ -65,8 +65,9 @@
 //! bounds it to ROM, the words there (to the object's end, where the
 //! bounds start at a literal the function loads: a table read from its
 //! start), and where it bounds it to RAM, those cells and objects.
-//! (`native/fnref-ram-pointers`; with `GBAA_FNREF_RAM` set, [`ram_on`].
-//! Off, the default, there are no objects and no stacks' cell: an
+//! (`native/fnref-ram-pointers`; [`ram_on`], the default since
+//! `native/fnref-ram-default`. With `GBAA_FNREF_RAM=0`, as the flow was
+//! before, there are no objects and no stacks' cell: an
 //! escaping slot or a stack argument is the pile's, and a load through a
 //! value the run can't place, or a ROM pointer "from here on" stored
 //! through, reads or writes the pile and every cell, or the cells the
@@ -178,8 +179,8 @@
 //! from parts wouldn't, and its constants would show as not proven (they
 //! are never read as a whole word).
 //!
-//! RAM addresses too (`native/fnref-ram-pointers`, `GBAA_FNREF_RAM` set;
-//! off by default until its pieces land, `native/fnref-ram-switch`):
+//! RAM addresses too (`native/fnref-ram-pointers`; on by default,
+//! `GBAA_FNREF_RAM=0` turns it off, `native/fnref-ram-default`):
 //! memory keeps each
 //! RAM pointer stored as a word (an exact one, or one somewhere in an
 //! object), and the program start's copies of RAM addresses, so a number
@@ -217,8 +218,9 @@
 //! stack.
 //!
 //! **The heap by allocation site** (`native/fnref-heap-sites`;
-//! `GBAA_FNREF_HEAP` set, [`heap_env`], off by default, and on only over
-//! the RAM pointers' rules above). A direct call of a function the holes
+//! [`heap_env`]: on by default, `GBAA_FNREF_HEAP=0` turns it off; only
+//! over the RAM pointers' rules above, and for a program whose holes file
+//! names its allocators). A direct call of a function the holes
 //! file names as an allocator (`allocators = [0x…]`) returns a pointer to
 //! an allocation of its own, by call site ([`Tok::Heap`],
 //! [`G::heap_alloc`]): plus or less a constant it is that offset of it,
@@ -292,10 +294,11 @@
 //! operands held each address by ([`G::roads`]):
 //! `docs/research/fnref-held-words.md` is made with both, and with
 //! `GBAA_FNREF_OFF` ([`off_env`]), which measures what the words would be
-//! without one kind of hole. `GBAA_FNREF_RAM=1` turns the closed world's
-//! RAM pointers on ([`ram_on`]), `GBAA_FNREF_HEAP=1` those and the
-//! allocation sites ([`heap_env`]), `GBAA_FNREF_LIVE=0` turns the
-//! registers' rules at a call off ([`live_env`]).
+//! without one kind of hole. `GBAA_FNREF_RAM=0` turns the closed world's
+//! RAM pointers off ([`ram_on`]; the allocation sites with them),
+//! `GBAA_FNREF_HEAP=0` the allocation sites alone ([`heap_env`]),
+//! `GBAA_FNREF_LIVE=0` the registers' rules at a call ([`live_env`]):
+//! each is the flow as it was before that piece, for measuring.
 //!
 //! Precision: the one pile is the limit (`docs/native-stage-b.md`, "Known
 //! gaps", the pile). agb keeps closures and trait objects on its heap, so a
@@ -1431,29 +1434,30 @@ pub fn live_env() -> bool {
     std::env::var_os("GBAA_FNREF_LIVE").is_none_or(|v| v != "0")
 }
 
-/// `GBAA_FNREF_HEAP` as set: whether the run splits the heap by
-/// allocation site (`native/fnref-heap-sites`), off by default. On, the
-/// RAM pointers' rules are on too ([`ram_on`]: without the closed world a
-/// load through an unknown address would read every allocation), and a
-/// direct call of an allocator the holes file names (`allocators =
-/// [0x…]`) returns a pointer to an object of its own ([`Tok::Heap`]).
-/// Off, the list is not looked at and no such token is made.
+/// Whether the run splits the heap by allocation site
+/// (`native/fnref-heap-sites`): on, unless `GBAA_FNREF_HEAP=0` or the RAM
+/// pointers' rules are off ([`ram_env`]: without the closed world a load
+/// through an unknown address would read every allocation). On, a direct
+/// call of an allocator the holes file names (`allocators = [0x…]`)
+/// returns a pointer to an object of its own ([`Tok::Heap`]); a program
+/// whose holes file names none has no such token. Off, the list is not
+/// looked at.
 pub fn heap_env() -> bool {
-    std::env::var_os("GBAA_FNREF_HEAP").is_some_and(|v| !v.is_empty() && v != "0")
+    ram_env() && std::env::var_os("GBAA_FNREF_HEAP").is_none_or(|v| v != "0")
 }
 
 /// Whether the run follows RAM pointers in a closed world
-/// (`native/fnref-ram-pointers`): `GBAA_FNREF_RAM` set, off by default
-/// (`native/fnref-ram-switch`), so its rules land one by one while the
-/// flow stays main's. Off, no [`Tok::Ram`] is made, a RAM address is a
-/// number as any other, and memory is the frames, the cells and the pile.
+/// (`native/fnref-ram-pointers`): on, unless `GBAA_FNREF_RAM=0`
+/// ([`ram_env`]; the default since `native/fnref-ram-default`,
+/// 2026-11-21). Off, no [`Tok::Ram`] is made, a RAM address is a number
+/// as any other, and memory is the frames, the cells and the pile.
 fn ram_on() -> bool {
     RAM_ON.with(|c| c.get())
 }
 
-/// `GBAA_FNREF_RAM` as set ([`ram_on`]).
+/// [`ram_on`], as the environment has it: on, unless `GBAA_FNREF_RAM=0`.
 fn ram_env() -> bool {
-    std::env::var_os("GBAA_FNREF_RAM").is_some_and(|v| !v.is_empty() && v != "0")
+    std::env::var_os("GBAA_FNREF_RAM").is_none_or(|v| v != "0")
 }
 
 /// Sets [`RAM_ON`] and [`RAM_OBJS`] for a run, and clears them after.
@@ -7589,7 +7593,7 @@ pub fn follow(fns: &[FnIn], img: &dyn Image, copies: &[(u32, u32, u32)], known: 
         fns,
         img,
         copies,
-        ram_env() || heap,
+        ram_env(),
         if heap { known.allocs } else { &none },
         live_env(),
         known.named,

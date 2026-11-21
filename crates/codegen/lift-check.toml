@@ -561,7 +561,7 @@ planted_flags = ["--ime-at-waits"]
 
 [program.native-ime-release.bars]
 io_unnamed = 19
-lines = 20738
+lines = 20736
 lines_prelude = 1328
 texts_left = 0
 functions = 113
@@ -574,7 +574,7 @@ functions_summary_hole = 79
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 50
 hard_holes = 0
-entries_beyond_one = 24
+entries_beyond_one = 23
 guest_pc_plain = 0
 functions_result_unneeded = 0
 blocks = 1731
@@ -1000,7 +1000,7 @@ sp_accesses_local_slot = 0
 sp_accesses_escaping_slot = 757
 sp_accesses_callers_frame = 2
 call_fn_calls = 65
-call_fn_four_complete = 60
+call_fn_four_complete = 58
 jumps_by_value = 8
 branches_on_raw_flags = 22
 # A fall into the next function after a call to a panic whose summary may
@@ -1443,7 +1443,7 @@ sp_accesses_local_slot = 0
 sp_accesses_escaping_slot = 679
 sp_accesses_callers_frame = 7
 call_fn_calls = 65
-call_fn_four_complete = 60
+call_fn_four_complete = 58
 jumps_by_value = 8
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
@@ -1710,7 +1710,7 @@ call_fn_four_complete = 2
 jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
-fn_words_not_proven = 6
+fn_words_not_proven = 0
 gap_targets = 0
 
 [program.c-fnptr-gcc]
@@ -1729,7 +1729,7 @@ io_unnamed = 0
 computed_unknown_unnamed = 17
 bitfield_arith = 0
 bitfield_joined = 0
-lines = 730
+lines = 723
 lines_prelude = 1328
 texts_left = 0
 functions = 18
@@ -1751,8 +1751,8 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 168
-reg_local_writes = 85
+value_lets = 164
+reg_local_writes = 82
 unpacked_unread = 0
 regs_call_entries = 0
 unread_lets = 0
@@ -1801,7 +1801,7 @@ call_fn_four_complete = 2
 jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
-fn_words_not_proven = 10
+fn_words_not_proven = 5
 gap_targets = 0
 
 [program.c-switch-agbcc]
@@ -1894,7 +1894,7 @@ call_fn_four_complete = 0
 jumps_by_value = 2
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
-fn_words_not_proven = 1
+fn_words_not_proven = 0
 gap_targets = 0
 
 [program.c-switch-gcc]
@@ -1987,7 +1987,7 @@ call_fn_four_complete = 0
 jumps_by_value = 2
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
-fn_words_not_proven = 1
+fn_words_not_proven = 0
 gap_targets = 0
 
 [program.c-chain-agbcc]
@@ -2078,7 +2078,7 @@ call_fn_four_complete = 0
 jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
-fn_words_not_proven = 1
+fn_words_not_proven = 0
 gap_targets = 0
 
 [program.c-chain-gcc]
@@ -2169,7 +2169,7 @@ call_fn_four_complete = 0
 jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
-fn_words_not_proven = 1
+fn_words_not_proven = 0
 gap_targets = 0
 
 [program.c-heap-agbcc]
@@ -2261,7 +2261,7 @@ call_fn_four_complete = 0
 jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
-fn_words_not_proven = 7
+fn_words_not_proven = 0
 gap_targets = 0
 
 [program.c-heap-gcc]
@@ -2353,7 +2353,7 @@ call_fn_four_complete = 0
 jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
-fn_words_not_proven = 7
+fn_words_not_proven = 0
 gap_targets = 0
 
 [program.c-bits-agbcc]
@@ -2445,7 +2445,7 @@ call_fn_four_complete = 0
 jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
-fn_words_not_proven = 1
+fn_words_not_proven = 0
 gap_targets = 0
 
 [program.c-bits-gcc]
@@ -2537,5 +2537,5 @@ call_fn_four_complete = 0
 jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
-fn_words_not_proven = 1
+fn_words_not_proven = 0
 gap_targets = 0

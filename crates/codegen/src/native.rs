@@ -501,9 +501,9 @@ pub struct Holes {
     /// The program's allocators, by key (`allocators = [0x…]` in the
     /// holes file; unit `native/fnref-heap-sites`): functions that return
     /// a pointer to memory nothing else points to yet (`malloc`, a
-    /// wrapper that zeroes it). With `GBAA_FNREF_HEAP` set the function
-    /// flow gives each direct call of one an object of its own
-    /// ([`fnref::heap_env`]); else the list isn't looked at.
+    /// wrapper that zeroes it). The function flow gives each direct call
+    /// of one an object of its own ([`fnref::heap_env`]: unless
+    /// `GBAA_FNREF_HEAP=0`, when the list isn't looked at).
     pub allocators: BTreeSet<u32>,
     /// Find the hard holes only (`gbaa-lift --holes-only`; the hole
     /// report's lift, native/holes-match-lift): no heap pointers, no

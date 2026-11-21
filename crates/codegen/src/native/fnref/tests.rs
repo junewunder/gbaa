@@ -139,18 +139,19 @@ fn run(fns: &[Built]) -> Flow {
 }
 
 thread_local! {
-    /// [`run_ram`]'s: the RAM pointers' rules on whatever
-    /// `GBAA_FNREF_RAM` says.
-    static FORCE_RAM: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// The RAM pointers' rules on ([`run_ram`]) or off, whatever
+    /// `GBAA_FNREF_RAM` says; `None`: as it says ([`ram_env`], on by
+    /// default).
+    static FORCE_RAM: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
 }
 
 /// [`run`] with the RAM pointers' rules on ([`ram_on`],
 /// `native/fnref-ram-switch`). The rest of the tests run as
-/// `GBAA_FNREF_RAM` says: off, main's flow; on, 7a29e22e's.
+/// `GBAA_FNREF_RAM` says: on by default, off with `GBAA_FNREF_RAM=0`.
 fn run_ram(fns: &[Built]) -> Flow {
-    FORCE_RAM.with(|c| c.set(true));
+    FORCE_RAM.with(|c| c.set(Some(true)));
     let f = run(fns);
-    FORCE_RAM.with(|c| c.set(false));
+    FORCE_RAM.with(|c| c.set(None));
     f
 }
 
@@ -202,7 +203,7 @@ fn run_bounded(
             reads: LEAVES.with(|c| c.borrow().get(e).map_or(0xf, |m| m.1)),
         })
         .collect();
-    let ram = ram_env() || FORCE_RAM.with(|c| c.get());
+    let ram = FORCE_RAM.with(|c| c.get()).unwrap_or_else(ram_env);
     let allocs = ALLOCS.with(|c| c.borrow().clone());
     let live = LEAVES.with(|c| !c.borrow().is_empty());
     let named = NAMED.with(|c| c.borrow().clone());
@@ -1873,9 +1874,9 @@ fn reading_a_record_in_the_next_block(ram: bool) -> Flow {
             (ret, B::default().end(None, Edge::Return)),
         ],
     )];
-    FORCE_RAM.with(|c| c.set(ram));
+    FORCE_RAM.with(|c| c.set(Some(ram)));
     let f = run_img(&fns, &BTreeMap::new(), &records_img());
-    FORCE_RAM.with(|c| c.set(false));
+    FORCE_RAM.with(|c| c.set(None));
     f
 }
 
@@ -2010,9 +2011,9 @@ fn a_record_by_a_parameter(callers: &[Built]) -> Flow {
     let t = b.ld(Width::Word, a);
     let mut fns = vec![calling(0x0800_1001, b, t)];
     fns.extend(callers.iter().cloned());
-    FORCE_RAM.with(|c| c.set(true));
+    FORCE_RAM.with(|c| c.set(Some(true)));
     let f = run_img(&fns, &BTreeMap::new(), &records_img());
-    FORCE_RAM.with(|c| c.set(false));
+    FORCE_RAM.with(|c| c.set(None));
     f
 }
 
@@ -2072,9 +2073,9 @@ fn a_store_through_a_ram_functions_address_is_read_back_only_through_it() {
     let up = b.shift(ShiftType::Lsl, v, 4);
     b.set(0, up);
     let y = (0x0800_2001, vec![(0x0800_2001, b.end(None, Edge::Return))]);
-    FORCE_RAM.with(|c| c.set(true));
+    FORCE_RAM.with(|c| c.set(Some(true)));
     let flow = run_img(&[x, y], &BTreeMap::new(), &img);
-    FORCE_RAM.with(|c| c.set(false));
+    FORCE_RAM.with(|c| c.set(None));
     assert!(site(&flow).callees.contains(&F), "{flow:?}");
     assert!(flow.proven(POOL), "{flow:?}");
 }
@@ -3432,7 +3433,7 @@ fn a_callback_s_pointer_is_its_callers_once_every_call_is_seen() {
     };
     // With the RAM pointers alone, CB's r0 may be anything a caller the
     // run can't see passes: its load reads every cell, F's too.
-    FORCE_RAM.with(|c| c.set(true));
+    FORCE_RAM.with(|c| c.set(Some(true)));
     let f = run_img(&fns(), &BTreeMap::new(), &img());
     assert_eq!(site(&f).callees, BTreeSet::from([F, H]), "{f:?}");
     // With calls that wait, every call of CB is seen: r0 is `&A1[i]`,
@@ -3440,7 +3441,7 @@ fn a_callback_s_pointer_is_its_callers_once_every_call_is_seen() {
     LEAVES.with(|c| c.borrow_mut().insert(1, (0, 0b1111)));
     let f = run_img(&fns(), &BTreeMap::new(), &img());
     LEAVES.with(|c| c.borrow_mut().clear());
-    FORCE_RAM.with(|c| c.set(false));
+    FORCE_RAM.with(|c| c.set(None));
     assert_eq!(site(&f).callees, BTreeSet::from([H]), "{f:?}");
     assert!(site(&f).complete, "{f:?}");
 }

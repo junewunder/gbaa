@@ -1246,6 +1246,66 @@ address keeps what is stored through the address as a number (the copy
 loop's own stores). Nothing is read less than before: a load through the
 function's address reads both.
 
+**Counts.** `just holes-all --flow` without the switch and with it, side
+by side (seconds a game's whole report takes; the registers' rules on in
+both):
+
+| game | without | with |
+|---|---|---|
+| Metroid | 81 | 86 |
+| WarioWare | 217 | 213 |
+| Amazing Mirror | 156 | 159 |
+| Nightmare | 239 | 215 |
+| moonbeam | 209 | 187 |
+| Emerald | 986 | 921 |
+| Minish Cap | 276 | 234 |
+| Emerald Rogue | 1,360 | 1,554 |
+| Imperium | 1,460 | 1,910 |
+
+Every game's row of holes is the same (56 hard holes over the nine).
+Imperium, an Emerald hack with no holes file or names, is the one game
+past 1.3 times (1.31); Rogue, the other, is at 1.14. The
+flow's own time in two of them, with `GBAA_FNREF_TRACE`: WarioWare 53 s
+with the switch, 61 s without (1,116 s before the rule); Emerald (retail
+ROM, its names and holes file) 771 s in 15 rounds with, 846 s in 18
+without. The C programs' and Metroid's words and callee sets didn't
+move.
+
 Tried and not needed once that was in: joining only the tokens a value
 lacks (`Val::union` by a difference: WarioWare 1,116 s to about 450 s),
 and capping what a load takes of a cell at a constant address (to 205 s).
+
+## The RAM pointers and the heap on by default
+
+Unit `native/fnref-ram-default`, 2026-11-21 on quack. The three switches
+are on now; each turns its piece off for measuring: `GBAA_FNREF_RAM=0`
+(the closed world, and the allocation sites with it), `GBAA_FNREF_HEAP=0`
+(the allocation sites alone: they need a holes file's `allocators`),
+`GBAA_FNREF_LIVE=0` (the registers at a call).
+
+What was checked before the flip, each with the switches set as the
+default now has them: `just lift-check` (every program's native check and
+planted controls) passes; Metroid's, the Amazing Mirror's and Nightmare's
+lifts made again each pass their native route against the play build
+(2,700, 3,000 and 3,000 frames, nothing different; the Mirror's lift
+doesn't run the flow, by its holes file); the nine-game hole report is the
+table above. No bar was raised: native-dma's line count, over by one when
+the pieces first came together, is under its bar since the RAM reruns
+unit. 17 bars were lowered to what they measure, the C programs'
+`fn_words_not_proven` among them:
+
+| program | before | now |
+|---|---|---|
+| c-fnptr-agbcc | 6 | 0 |
+| c-fnptr-gcc | 10 | 5 |
+| c-chain and c-switch, both compilers | 1 | 0 |
+| c-heap, both compilers | 7 | 0 |
+| Metroid (its lift, no bar here) | 201 | 124 |
+
+Emerald's flow alone (`gbaa-recompile --summaries ROM --callee-sets`, side
+by side): 617 s in 15 rounds at 1.02 GB with the RAM pointers and the
+registers' rules, 644 s in 25 rounds at 1.06 GB with neither; its 554
+indirect calls keep 103 complete sets of 4.3 callees, so the precision the
+defaults add shows on the C programs and Metroid, not yet on Emerald's
+sets (451 are incomplete for ROM reads the run gives up on, another
+unit's).
