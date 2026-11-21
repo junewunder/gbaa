@@ -3827,3 +3827,4 @@
 {"at":"2026-11-21T08:26:11Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"claim","id":"native/metroid-route-again","text":"Metroid's native route check passes again: claimed"}
 {"at":"2026-11-21T09:09:34Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"done","id":"native/metroid-route-again","text":"Metroid's native route check passes again: done"}
 {"at":"2026-11-21T09:09:49Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"unpark","id":"native/fnref-live-registers","text":"Function flow passes only registers a callee reads: back from parked"}
+{"at":"2026-11-21T09:09:51Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"claim","id":"native/fnref-live-registers","text":"Function flow passes only registers a callee reads: claimed"}

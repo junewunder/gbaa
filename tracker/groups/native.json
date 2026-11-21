@@ -2029,6 +2029,15 @@
       "check": "recorded",
       "needs": ["native/fnref-flow", "native/metroid-route-again"],
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "ad83b7bb",
+        "session": "ad83b7bb-0c11-428a-ac96-c63f74d95b01",
+        "host": "quack",
+        "pid": 1396423,
+        "start": "69084358",
+        "at": "2026-11-21T09:09:51Z"
+      },
       "notes": [
         {
           "at": "2026-11-20T09:52:44Z",
