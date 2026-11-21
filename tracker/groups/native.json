@@ -4093,13 +4093,7 @@
       "title": "Function flow: a table field's stride across blocks",
       "detail": "From {unit:native/fnref-ram-anchors} (docs/research/fnref-held-words.md, 'RAM objects under GCC's anchors'). With GBAA_FNREF_RAM and GBAA_FNREF_LIVE on, c-fnptr built by modern GCC keeps 9 of 14 function words not proven where agbcc's has 0: its callee sets mix sObjOps' update and draw fields (5 callees where 3 and 2 are right), because GCC computes &sObjOps[kind] once and keeps it in a register across blocks, and the stride a ROM table's field pointer carries (Tok::RomStep, {unit:native/fnref-table-fields}) is found a block at a time (strides in crates/codegen/src/native/fnref.rs), so the load in the next block reads every word of the table. Carry the stride with the value (the token already has it once made: check where it is lost, at the block's edge or at the index's scaling in an earlier block) or follow the scale through registers across blocks as ram_indexed does. Done when: a unit test; fn_words_not_proven on c-fnptr-gcc lower with those switches (value in the evidence) or with none; no bar over off; Metroid's not higher; just check passes.",
       "check": "recorded",
-      "needs": ["native/fnref-table-fields"],
-      "record": {
-        "state": "parked",
-        "why": "the function-flow thread (2026-11-20, june's instruction of 2026-11-19): one thread owns fnref.rs; it unparks and claims it. No lane takes it.",
-        "by": "59a5588e",
-        "at": "2026-11-20T10:59:36Z"
-      }
+      "needs": ["native/fnref-table-fields"]
     },
     {
       "id": "native/fnref-pile-const-loads",
