@@ -4068,13 +4068,10 @@
       "check": "recorded",
       "needs": ["native/fnref-ram-pointers"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "ad83b7bb",
-        "session": "ad83b7bb-0c11-428a-ac96-c63f74d95b01",
-        "host": "quack",
-        "pid": 1396423,
-        "start": "69084358",
-        "at": "2026-11-21T04:39:27Z"
+        "at": "2026-11-21T07:29:20Z",
+        "evidence": "At 788694ef, just check green (quack, 2026-11-21). Flow alone (gbaa-recompile --summaries ROM --callee-sets, GBAA_FNREF_TRACE), each set side by side on one build. Emerald: off 644 s 25 rounds 1.06 GB; RAM+LIVE 617 s 15 rounds 1.02 GB (0.96x; before 1,310 s against 598 s, 2.2x); HEAP+LIVE with pret's Alloc and AllocZeroed named 686 s 0.95 GB (1.07x; 1,385 s before). A quieter set: 563 / 561 / 592 s. Metroid, three sets: off 18.1 s 21 rounds, RAM+LIVE 25.4 s 30 rounds (1.40x in each set; main's binary with the switches 36.5 s, 2.0x). With the switches the results are the same as main's with them: Emerald's and Metroid's callee-set output byte for byte (but the time line), Metroid 690 words proven 124 not (613/201 off), C programs' fn_words_not_proven 0 0 0 0 0 9 6 6 0 0 (c-heap 0 0 with HEAP+LIVE), lift-metrics 0 over 16 under (native-dma's one line over is gone). Off: lift-metrics 0 over 0 under; Metroid's and Emerald's traces are main's line for line (hole at and round lines, seconds cut). What changed (fnref.rs): a function reruns by the value each kept read gave (Exp::ver, Rd::refs) and a load by the read's flags; an object cell's read is always a Ref, OBJ_REFS 4 to 8 with it (at 4 c-fnptr-gcc lost a word); a kept read takes single objects' cells past OBJ_REFS as every object's; a function a run changed something for runs the same round if later in the order; the trace says what reran functions for memory. Review: a fresh subagent read the diff; one real bug (the loose functions' kept join not made again in round 0 under the pickup), fixed before the final runs; nothing else. docs/research/fnref-held-words.md, 'The RAM switch's reruns'."
       },
       "round": "2026-11-21T04:39:27Z"
     },
