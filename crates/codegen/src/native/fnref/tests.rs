@@ -1843,6 +1843,212 @@ fn strides_follow_a_scaled_index_through_its_registers() {
     assert_eq!(strides(&b.insts)[twelve.index()], 4);
 }
 
+/// Modern GCC's shape (`native/fnref-table-fields-blocks`): the index
+/// scaled to a record in one block and kept in r5, the field at +4
+/// loaded and called in the next (`ldr r3, [r3, r5]` after a call).
+fn reading_a_record_in_the_next_block(ram: bool) -> Flow {
+    let e = 0x0800_1001;
+    let mut b = B::default();
+    let c = b.k(CELL);
+    let i = b.ld(Width::Byte, c);
+    let two = b.shift(ShiftType::Lsl, i, 1);
+    let three = b.bin(BinOp::Add, two, i);
+    let x = b.shift(ShiftType::Lsl, three, 2);
+    b.set(5, x);
+    let first = b.end(None, Edge::Goto(vec![e + 0x20]));
+    let mut b = B::default();
+    let x = b.get(5);
+    let tb = b.pool(0x0800_0410, TB);
+    let p = b.bin(BinOp::Add, x, tb);
+    let o = b.k(4);
+    let a = b.bin(BinOp::Add, p, o);
+    let t = b.ld(Width::Word, a);
+    let ret = e + 0x30;
+    let call = b.end(Some(t), Edge::Call { target: None, ret });
+    let fns = [(
+        e,
+        vec![
+            (e, first),
+            (e + 0x20, call),
+            (ret, B::default().end(None, Edge::Return)),
+        ],
+    )];
+    FORCE_RAM.with(|c| c.set(ram));
+    let f = run_img(&fns, &BTreeMap::new(), &records_img());
+    FORCE_RAM.with(|c| c.set(false));
+    f
+}
+
+#[test]
+fn a_stride_kept_in_a_register_reaches_the_next_block() {
+    // With the RAM pointers: the call through the field at +4 calls only
+    // what that field holds, and the field at +8 is never read.
+    let f = reading_a_record_in_the_next_block(true);
+    assert_eq!(site(&f).callees, BTreeSet::from([F, H]));
+    assert!(site(&f).complete);
+    assert!(f.read.contains(&(TB + 4)) && f.read.contains(&(TB + 16)));
+    assert!(!f.read.contains(&(TB + 8)) && !f.read.contains(&(TB + 20)));
+    // Without, as before: the next block knows no scale, and the load
+    // reads every word of the table from its start on.
+    let f = reading_a_record_in_the_next_block(false);
+    assert!(f.read.contains(&(TB + 8)) && f.read.contains(&(TB + 20)));
+}
+
+#[test]
+fn a_registers_stride_at_a_blocks_entry_is_what_every_way_in_gives() {
+    // r5 = 12 * a byte, then a call: r5 is kept over it, r0 isn't.
+    let e = 0x0800_1001;
+    let scaled = |b: &mut B, by: u32| {
+        let c = b.k(CELL);
+        let i = b.ld(Width::Byte, c);
+        let k = b.k(by);
+        let x = b.bin(BinOp::Mul, i, k);
+        b.set(5, x);
+        b.set(0, x);
+    };
+    let mut b = B::default();
+    scaled(&mut b, 12);
+    let first = b.end(
+        None,
+        Edge::Call {
+            target: None,
+            ret: e + 0x20,
+        },
+    );
+    // The block after it loops to itself with r5 = 8 * a byte.
+    let mut b = B::default();
+    scaled(&mut b, 8);
+    let second = b.end(None, Edge::Goto(vec![e + 0x20]));
+    let blocks = [(e, first), (e + 0x20, second)];
+    let f = FnIn {
+        entry: e,
+        blocks: blocks
+            .iter()
+            .map(|(k, (insts, out, pools))| {
+                (
+                    *k,
+                    FBlock {
+                        insts,
+                        exits: BTreeMap::from([(insts.len() - 1, out.clone())]),
+                        pools: pools.clone(),
+                        hulls: BTreeMap::new(),
+                        bases: BTreeMap::new(),
+                    },
+                )
+            })
+            .collect(),
+        frame: None,
+        leaves: 0,
+        reads: 0xf,
+    };
+    let (steps, calls) = steps_in(&f, 0b0010);
+    assert_eq!(steps[&e].of, [1; 16]);
+    // (What the callers pass under 2^16: r1, as told.)
+    assert_eq!(steps[&e].small, 0b0010);
+    // 12 from the call, 8 from the loop: 4.
+    assert_eq!(steps[&(e + 0x20)].of[5], 4);
+    assert_eq!(steps[&(e + 0x20)].of[0], 1);
+    // A product is no number under 2^16; r1 is unknown after the call.
+    assert_eq!(steps[&(e + 0x20)].small, 0);
+    assert!(calls.is_empty(), "the call is through a register");
+    // And a read of r5 as it came is a whole number of its entry's; of
+    // r1 that came under 2^16 and is scaled, of its factor.
+    let mut b = B::default();
+    let x = b.get(5);
+    let y = b.shift(ShiftType::Lsl, x, 1);
+    let i = b.get(1);
+    let k = b.k(12);
+    let z = b.bin(BinOp::Mul, i, k);
+    let w = b.get(2);
+    let v = b.bin(BinOp::Mul, w, k);
+    let mut entry = Steps::NONE;
+    entry.of[5] = 12;
+    entry.small = 0b0010;
+    let (s, small) = strides_in(&b.insts, &entry);
+    assert_eq!((s[x.index()], s[y.index()]), (12, 2));
+    assert_eq!((s[z.index()], s[v.index()]), (12, 4));
+    assert!(small[i.index()] && small[k.index()] && !small[z.index()] && !small[w.index()]);
+}
+
+/// A function of one block calling `to` directly with r0 = `r0`.
+fn passing(e: u32, to: u32, r0: impl Fn(&mut B) -> ValueId) -> Built {
+    let mut b = B::default();
+    let v = r0(&mut b);
+    b.set(0, v);
+    let ret = e + 0x10;
+    (
+        e,
+        vec![
+            (
+                e,
+                b.end(
+                    None,
+                    Edge::Call {
+                        target: Some(to),
+                        ret,
+                    },
+                ),
+            ),
+            (ret, B::default().end(None, Edge::Return)),
+        ],
+    )
+}
+
+/// Modern GCC's `sObjOps[kind].fn` for a `u8 kind` parameter: r0 scaled
+/// by 12 as it came (old GCC shifts it down to a byte first), the field
+/// at +4 called.
+fn a_record_by_a_parameter(callers: &[Built]) -> Flow {
+    let mut b = B::default();
+    let i = b.get(0);
+    let two = b.shift(ShiftType::Lsl, i, 1);
+    let three = b.bin(BinOp::Add, two, i);
+    let x = b.shift(ShiftType::Lsl, three, 2);
+    let tb = b.pool(0x0800_0410, TB);
+    let p = b.bin(BinOp::Add, x, tb);
+    let o = b.k(4);
+    let a = b.bin(BinOp::Add, p, o);
+    let t = b.ld(Width::Word, a);
+    let mut fns = vec![calling(0x0800_1001, b, t)];
+    fns.extend(callers.iter().cloned());
+    FORCE_RAM.with(|c| c.set(true));
+    let f = run_img(&fns, &BTreeMap::new(), &records_img());
+    FORCE_RAM.with(|c| c.set(false));
+    f
+}
+
+#[test]
+fn a_parameter_every_caller_passes_small_is_a_records_index() {
+    let byte = |b: &mut B| {
+        let c = b.k(CELL);
+        b.ld(Width::Byte, c)
+    };
+    let word = |b: &mut B| {
+        let c = b.k(CELL);
+        b.ld(Width::Word, c)
+    };
+    // Every caller passes a byte or a small constant: the field at +8
+    // is never read.
+    let f = a_record_by_a_parameter(&[
+        passing(0x0800_2001, 0x0800_1001, byte),
+        passing(0x0800_3001, 0x0800_1001, |b| b.k(1)),
+    ]);
+    assert!(f.read.contains(&(TB + 4)) && f.read.contains(&(TB + 16)));
+    assert!(!f.read.contains(&(TB + 8)) && !f.read.contains(&(TB + 20)));
+    // One passes a word: 12 times it may wrap, and every word is read.
+    let f = a_record_by_a_parameter(&[
+        passing(0x0800_2001, 0x0800_1001, byte),
+        passing(0x0800_3001, 0x0800_1001, word),
+    ]);
+    assert!(f.read.contains(&(TB + 8)) && f.read.contains(&(TB + 20)));
+    // No caller the run sees: it may be called with anything.
+    let f = a_record_by_a_parameter(&[]);
+    assert!(f.read.contains(&(TB + 8)) && f.read.contains(&(TB + 20)));
+    // A caller that passes its own r0 on, which a caller the run can't
+    // see gave it: anything, too.
+    let f = a_record_by_a_parameter(&[passing(0x0800_2001, 0x0800_1001, |b| b.get(0))]);
+    assert!(f.read.contains(&(TB + 8)) && f.read.contains(&(TB + 20)));
+}
+
 /// One block of one function at 0x0800_1001, ending in `edge`.
 fn alone(b: B, edge: Edge) -> Built {
     (0x0800_1001, vec![(0x0800_1001, b.end(None, edge))])

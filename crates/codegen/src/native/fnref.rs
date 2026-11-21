@@ -34,7 +34,10 @@
 //!   only those the value-set analysis bounds the load to
 //!   (`native/fnref-rom-read-bound`); through a table's start plus an
 //!   index scaled by a record's size ([`Tok::RomStep`], the scale from
-//!   the block's own shifts and adds: [`strides`]) and a field's offset,
+//!   the block's own shifts and adds: [`strides`]; with the RAM pointers
+//!   on, also from a register scaled in an earlier block, and of a
+//!   parameter every caller passes under 2^16: [`steps_in`], [`smalls`],
+//!   `native/fnref-table-fields-blocks`) and a field's offset,
 //!   it reads only that field of each record (`native/fnref-table-fields`:
 //!   a byte flag beside two handlers gives the flag's bytes, not the
 //!   handlers');
@@ -4576,6 +4579,9 @@ struct Run<'a, 'g> {
     /// Per block, the insts whose value only a flag nothing reads takes
     /// ([`unused`]): they make no holes.
     unused: BTreeMap<u32, Vec<bool>>,
+    /// What each register is a whole number of at each block's entry
+    /// ([`steps_in`]; with the RAM pointers, else empty).
+    steps: std::rc::Rc<BTreeMap<u32, Steps>>,
     /// The instruction's op read where an allocation is
     /// ([`G::heap_lower`]): its result isn't kept by its operands
     /// ([`G::op_kept`]), which don't say where that was.
@@ -5138,7 +5144,10 @@ impl Run<'_, '_> {
         self.at = at;
         self.g.now = (self.f.entry, at);
         let mut vals: Vec<Val> = vec![Val::default(); b.insts.len()];
-        let strides = strides(b.insts);
+        let strides = match self.steps.get(&key) {
+            Some(e) if *e != Steps::NONE => strides_in(b.insts, e).0,
+            _ => strides(b.insts),
+        };
         let b_insts = b.insts;
         let none = Val::default();
         let unused = self.unused[&key].clone();
@@ -6895,6 +6904,182 @@ fn strides(insts: &[Inst]) -> Vec<u32> {
         .collect()
 }
 
+/// What the registers hold at a block's entry, of what [`strides`]
+/// tells of values ([`steps_in`]): what each is a whole number of (1,
+/// nothing known), and which are under 2^16 (bit `n` for rN).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct Steps {
+    of: [u32; 16],
+    small: u16,
+}
+
+impl Steps {
+    const NONE: Steps = Steps {
+        of: [1; 16],
+        small: 0,
+    };
+}
+
+/// [`strides`], given the registers at the block's entry (`entry`,
+/// [`steps_in`]), and whether each value is under 2^16. A register read
+/// as it came, and what is that value still, is a whole number of its
+/// entry's stride; one that came under 2^16, scaled, is a whole number of
+/// its factor, as a byte the block loads is. (One of a stride scaled
+/// again keeps only what [`strides`] gives it: the product may wrap.)
+fn strides_in(insts: &[Inst], entry: &Steps) -> (Vec<u32>, Vec<bool>) {
+    let mut out = strides(insts);
+    // The first read of each register the block hasn't written (nor
+    // banked: a mode switch) is the root [`factors`] gives its value.
+    let mut came = [true; 16];
+    let mut root: Vec<Option<usize>> = vec![None; insts.len()];
+    for (i, inst) in insts.iter().enumerate() {
+        match inst.op {
+            Op::GetReg(r) if came[r.index()] => root[i] = Some(r.index()),
+            Op::SetReg(r, _) => came[r.index()] = false,
+            Op::SetCpsr { .. } | Op::SetSpsr { .. } | Op::SetUserReg(..) => came = [false; 16],
+            _ => {}
+        }
+    }
+    let mut small = vec![false; insts.len()];
+    for (i, &(of, f, sm)) in factors(insts).iter().enumerate() {
+        let came_small = root[of].is_some_and(|r| entry.small & 1 << r != 0);
+        let konst = match insts[of].op {
+            Op::Const(c) => c <= 0xffff,
+            Op::Bit(_) => true,
+            _ => false,
+        };
+        small[i] = f == 1 && (sm || came_small || konst);
+        if f == 1 {
+            if let Some(r) = root[of]
+                && entry.of[r] > 1
+            {
+                out[i] = entry.of[r];
+            }
+        } else if came_small && (2..=0xffff).contains(&f) {
+            out[i] = f as u32;
+        }
+    }
+    (out, small)
+}
+
+/// The registers at the entry of each block of `f`
+/// (`native/fnref-table-fields-blocks`), given which of r0 to r3 every
+/// caller passes under 2^16 (`small`, [`smalls`]); and, for each direct
+/// call and tail call in it, which of r0 to r3 it passes so. A register
+/// is a whole number of the stride [`strides`] found for the value it was
+/// set to in every block that comes before, the greatest all of them
+/// share. Modern GCC scales `kind` to `sObjOps`' record once and keeps it
+/// in r5 over a call (`ldr r3, [r3, r5]` in the block after it), and a
+/// stride found a block at a time made that load a read of every word of
+/// the table: `update` and `draw` both. It also leaves a `u8` parameter
+/// as its caller passed it, where old GCC shifts it down again, so
+/// `sObjOps[kind].tint` scaled a word, which may wrap: only its 4 was
+/// kept, and the halfword read took the functions' halves. A call leaves
+/// r4 to r11 as they were, as the run takes it to ([`Run::exit`]); r0 to
+/// r3, r12 and lr are unknown after one, r0 to r3 after a BIOS call; a
+/// mode switch banks them all.
+fn steps_in(f: &FnIn, small: u8) -> (BTreeMap<u32, Steps>, Vec<(u32, u8)>) {
+    let mut ins: BTreeMap<u32, Steps> = BTreeMap::new();
+    let mut calls: BTreeMap<(u32, usize), (u32, u8)> = BTreeMap::new();
+    if !f.blocks.contains_key(&f.entry) {
+        return (ins, Vec::new());
+    }
+    ins.insert(
+        f.entry,
+        Steps {
+            of: [1; 16],
+            small: small as u16 & 0xf,
+        },
+    );
+    let mut work: BTreeSet<u32> = BTreeSet::from([f.entry]);
+    while let Some(k) = work.pop_first() {
+        let b = &f.blocks[&k];
+        let (st, sm) = strides_in(b.insts, &ins[&k]);
+        let mut now = ins[&k];
+        for (i, inst) in b.insts.iter().enumerate() {
+            match inst.op {
+                // (Not pc: a read of it is the instruction's address.)
+                Op::SetReg(r, x) if r.index() != 15 => {
+                    let (r, x) = (r.index(), x.index());
+                    // (A conditional write: that value or the one before.)
+                    let was = inst
+                        .guard
+                        .is_some()
+                        .then_some((now.of[r], now.small & 1 << r != 0));
+                    now.of[r] = was.map_or(st[x], |w| gcd(w.0, st[x]));
+                    now.small &= !(1 << r);
+                    if sm[x] && was.is_none_or(|w| w.1) {
+                        now.small |= 1 << r;
+                    }
+                }
+                Op::SetCpsr { .. } | Op::SetSpsr { .. } | Op::SetUserReg(..) => now = Steps::NONE,
+                _ => {}
+            }
+            let Some(out) = b.exits.get(&i) else {
+                continue;
+            };
+            if let Edge::Call {
+                target: Some(t), ..
+            }
+            | Edge::Tail(Some(t)) = out.edge
+            {
+                calls.insert((k, i), (t, now.small as u8 & 0xf));
+            }
+            let (to, lost): (&[u32], &[usize]) = match &out.edge {
+                Edge::Goto(ks) | Edge::TailOr(ks) => (ks, &[]),
+                Edge::Call { ret, .. } => (std::slice::from_ref(ret), &[0, 1, 2, 3, 12, 14]),
+                Edge::Swi(next) => (std::slice::from_ref(next), &[0, 1, 2, 3]),
+                _ => (&[], &[]),
+            };
+            let mut after = now;
+            for &r in lost {
+                after.of[r] = 1;
+                after.small &= !(1 << r);
+            }
+            for k in to.iter().filter(|k| f.blocks.contains_key(k)) {
+                let changed = match ins.get_mut(k) {
+                    Some(e) => {
+                        let was = *e;
+                        for (a, b) in e.of.iter_mut().zip(after.of) {
+                            *a = gcd(*a, b);
+                        }
+                        e.small &= after.small;
+                        was != *e
+                    }
+                    None => {
+                        ins.insert(*k, after);
+                        true
+                    }
+                };
+                if changed {
+                    work.insert(*k);
+                }
+            }
+        }
+    }
+    (ins, calls.into_values().collect())
+}
+
+/// Which of r0 to r3 every direct call and tail call of each function
+/// passes under 2^16 ([`steps_in`]): all four until a call passes one
+/// that isn't known to be. Only by what the caller itself makes so (a
+/// load, a mask, a constant), never its own parameter passed on: the
+/// caller may be one a caller the run can't see calls, with anything.
+/// And only for a function no such caller may call: a loose one runs as
+/// if none were ([`follow_live`]).
+fn smalls(fns: &[FnIn]) -> std::collections::HashMap<u32, u8, Fx> {
+    let mut small: std::collections::HashMap<u32, u8, Fx> =
+        fns.iter().map(|f| (f.entry, 0xf)).collect();
+    for f in fns {
+        for (t, bits) in steps_in(f, 0).1 {
+            if let Some(s) = small.get_mut(&t) {
+                *s &= bits;
+            }
+        }
+    }
+    small
+}
+
 /// Each value of a block as `factor * root` ([`strides`]): (root,
 /// factor, root under 2^16), a factor over 2^32 kept as 0.
 fn factors(insts: &[Inst]) -> Vec<(usize, u64, bool)> {
@@ -7530,6 +7715,10 @@ fn follow_live(
     let mut readers: std::collections::HashMap<u32, BTreeSet<u32>, Fx> = Default::default();
     let mut read_fwd: std::collections::HashMap<u32, BTreeSet<u32>, Fx> = Default::default();
     let mut incomplete: BTreeSet<u32> = BTreeSet::new();
+    // [`steps_in`] of each function, made when it first runs.
+    let mut step_ins: std::collections::HashMap<(u32, u8), std::rc::Rc<BTreeMap<u32, Steps>>, Fx> =
+        Default::default();
+    let small_in = if ram { smalls(fns) } else { Default::default() };
     for round in 0..=256 {
         g.changed = false;
         let was = std::mem::replace(
@@ -7636,6 +7825,21 @@ fn follow_live(
                 rets_read: BTreeSet::new(),
                 at: 0,
                 unused: unused(f),
+                steps: if ram {
+                    // (What its callers pass counts only while every
+                    // caller is one the run sees.)
+                    let small = if loose.contains(&f.entry) {
+                        0
+                    } else {
+                        small_in[&f.entry]
+                    };
+                    step_ins
+                        .entry((f.entry, small))
+                        .or_insert_with(|| std::rc::Rc::new(steps_in(f, small).0))
+                        .clone()
+                } else {
+                    Default::default()
+                },
                 lowered: false,
             };
             if f.blocks.contains_key(&f.entry) {

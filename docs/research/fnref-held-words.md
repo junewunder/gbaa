@@ -1163,3 +1163,48 @@ words 690 proven and 124 not (613 and 201 off), the C programs' words not
 proven 0, 0, 0, 0, 0 (c-fnptr-agbcc), 9 (c-fnptr-gcc), 6, 6, 0, 0. With
 the switches on `just lift-metrics` has no bar over now (native-dma's one
 line with it: 16 under).
+
+## A table field's stride across blocks and calls, as landed
+
+Unit `native/fnref-table-fields-blocks`, 2026-11-21 on quack, behind
+`GBAA_FNREF_RAM` (off, the flow is main's). c-fnptr built by modern GCC
+kept 9 of its 14 function words not proven with the RAM and registers'
+switches where agbcc's has 0. Two things held them, each a shape modern
+GCC makes and old GCC doesn't (`fnref.rs`, `steps_in`, `smalls`,
+`strides_in`):
+
+- **The scaled index kept in a register over a call.** `cb_objects`
+  scales `kind` to `sObjOps`' 12-byte record once, in r5, and the second
+  field's load comes in the block after the first field's call (`ldr r3,
+  [r3, r5]`). The stride was found a block at a time, so that load read
+  every word of the table and `ops->update` called the draw functions
+  too. Each register's stride is now followed through the function's
+  blocks before it runs: what the block that set it found, the greatest
+  every way in shares, kept over a call in r4 to r11 as the run keeps
+  their values.
+- **A `u8` parameter scaled as it came.** `add_obj(u8 kind, …)` scales
+  r0 with no shift down to a byte first (the caller's to do, under the
+  modern ABI), so 12 times it might wrap and only its 4 was kept: the
+  halfword read of `.tint` took halves of the functions, which went to
+  `obj->color` and from there into every object's arithmetic. A register
+  of r0 to r3 that every direct call and tail call passes under 2^16 by
+  what the caller itself makes (a byte or halfword load, a mask, a
+  constant; never the caller's own parameter passed on, which a caller
+  the run can't see may have given it: the review's catch)
+  is under 2^16 at the entry, for a function no caller the run can't see
+  may call (a loose one runs without it, and reruns so when it becomes
+  one).
+
+**Counts**, `fn_words_not_proven` with the RAM and registers' switches:
+c-fnptr-gcc 9 to 5 (9 of 14 proven), every other C and agb program as
+before, Metroid 690 proven and 124 not as before; Emerald's and Metroid's
+callee sets byte for byte as before. On c-fnptr-gcc the three calls
+through `sObjOps` hold exactly their field's functions (update 3, draw 2
+and 2, where update held 5), and the two callback calls the five
+callbacks (9 before). With the switches off, `just lift-metrics` 0 over
+and 0 under.
+
+**Left on c-fnptr-gcc:** the five callbacks' words, held by a byte read
+somewhere in the RAM object at `gNumCallbacks` (the callbacks' array
+under GCC's anchor reads as one object with the counters beside it) and
+by a pile read: the anchors' objects, not a ROM table's stride.
