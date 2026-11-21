@@ -3814,3 +3814,4 @@
 {"at":"2026-11-21T04:30:16Z","actor":"session","tag":"74e66c41","host":"quack","cmd":"edit","id":"native/lift-pret-score","text":"The lift scored against pret: Emerald and Metroid, one table: edited (priority)"}
 {"at":"2026-11-21T04:34:47Z","actor":"session","tag":"74e66c41","host":"quack","cmd":"edit","id":"native/lift-for-bounds","text":"Loops counted to a variable bound print as for: edited (title, detail)"}
 {"at":"2026-11-21T04:34:49Z","actor":"session","tag":"74e66c41","host":"quack","cmd":"add-unit","id":"native/lift-for-index","text":"new unit: A for loop's counter indexes arrays as elements"}
+{"at":"2026-11-21T04:34:51Z","actor":"session","tag":"74e66c41","host":"quack","cmd":"edit","id":"native/lift-signature-holes","text":"Emerald's signatures print from pret's prototypes: edited (title, detail)"}
