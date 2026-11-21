@@ -2051,32 +2051,41 @@ fn a_parameter_every_caller_passes_small_is_a_records_index() {
 }
 
 #[test]
-fn a_store_through_a_ram_functions_address_is_read_back_only_through_it() {
+fn a_store_through_a_ram_functions_address_is_read_back_through_it_and_at_it() {
     // A routine copied to RAM, its address a function's
-    // (`native/fnref-ram-lift-cost`).
+    // (`native/fnref-ram-lift-cost`). F's address is stored through the
+    // routine's address (a cell of the routine's own, [`fn_cell`]), then
+    // loaded back and called: through the routine's address, and through
+    // the same address as a number (an ARM routine's address is its
+    // buffer's, and the program's own store may go through it).
     const RF: u32 = 0x0300_0801;
     let mut img = Img::new();
     img.fns.insert(RF);
-    // F's address stored through the routine's address, loaded back
-    // through it and called.
+    for back in [RF, RF & !1] {
+        let mut b = B::default();
+        let r = b.k(RF);
+        let f = b.pool(POOL, F);
+        b.st(Width::Word, r, f);
+        let a = b.k(back);
+        let t = b.ld(Width::Word, a);
+        FORCE_RAM.with(|c| c.set(Some(true)));
+        let flow = run_img(&[calling(0x0800_1001, b, t)], &BTreeMap::new(), &img);
+        FORCE_RAM.with(|c| c.set(None));
+        assert!(site(&flow).callees.contains(&F), "{back:#x}: {flow:?}");
+    }
+    // A load elsewhere in RAM doesn't read it: shifted there, F's word
+    // stays proven.
     let mut b = B::default();
     let r = b.k(RF);
     let f = b.pool(POOL, F);
     b.st(Width::Word, r, f);
-    let t = b.ld(Width::Word, r);
-    let x = calling(0x0800_1001, b, t);
-    // Another function loads the word at that address, as a number, and
-    // shifts it: no function's address is there.
-    let mut b = B::default();
-    let c = b.k(RF & !1);
+    let c = b.k(CELL);
     let v = b.ld(Width::Word, c);
     let up = b.shift(ShiftType::Lsl, v, 4);
     b.set(0, up);
-    let y = (0x0800_2001, vec![(0x0800_2001, b.end(None, Edge::Return))]);
     FORCE_RAM.with(|c| c.set(Some(true)));
-    let flow = run_img(&[x, y], &BTreeMap::new(), &img);
+    let flow = run_img(&[alone(b, Edge::Return)], &BTreeMap::new(), &img);
     FORCE_RAM.with(|c| c.set(None));
-    assert!(site(&flow).callees.contains(&F), "{flow:?}");
     assert!(flow.proven(POOL), "{flow:?}");
 }
 

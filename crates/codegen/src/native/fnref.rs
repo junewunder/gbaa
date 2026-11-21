@@ -1524,9 +1524,19 @@ fn in_cell(o: u32) -> u32 {
 /// whose holes file names seven routines copied to RAM, 2,600 functions'
 /// addresses stored there 1.2 million times a round. As a cell of this
 /// kind it is read as a [`Tok::Ref`] ([`G::read_obj`]); the cell at the
-/// address keeps what is stored through the address as a number.
+/// address keeps what is stored through the address as a number. Every
+/// load that read the cell at the address reads this one too
+/// ([`G::read_fn_cells`]: one at the address, through a pointer into its
+/// object, over a range that holds it, of every cell): an ARM routine's
+/// address is its buffer's, and a store through it may be the program's
+/// own (the review's catch).
 fn fn_cell(c: u32) -> u32 {
     obj_cell(c) + 0x0400_0000
+}
+
+/// Whether cell `k` is a [`fn_cell`].
+fn is_fn_cell(k: u32) -> bool {
+    (0x1400_0000..0x1800_0000).contains(&k)
 }
 
 /// Whether cell `k` is an [`in_cell`]: a copy of constant addresses'
@@ -2350,6 +2360,9 @@ struct G {
     /// the read of every cell stored to, so only a cell first stored to
     /// this round has none here).
     obj_was: std::collections::HashMap<(u32, u8), Val, Fx>,
+    /// A [`fn_cell`] was first stored to this round: what looked for
+    /// them reruns ([`Rd::fns`]).
+    fn_cell_new: bool,
     /// The count [`Exp::ver`] is taken from.
     exp_ver: u64,
     /// Whether a function reruns by the values its reads gave
@@ -2431,7 +2444,7 @@ struct G {
     /// kind ([`G::gain`]), and the samples said of each kind.
     gains: Option<BTreeMap<String, (usize, usize)>>,
     /// The allocators (`native/fnref-heap-sites`: the holes file's
-    /// `allocators`, with `GBAA_FNREF_HEAP` set; else none): a direct
+    /// `allocators`; none with `GBAA_FNREF_HEAP=0`): a direct
     /// call of one returns a pointer to an allocation of its own
     /// ([`G::heap_alloc`]).
     allocs: BTreeSet<u32>,
@@ -2691,6 +2704,9 @@ struct Rd {
     /// Emerald's 15,000 in each of its last twenty rounds.
     refs: Vec<(Tok, u64)>,
     refs_seen: std::collections::HashMap<Tok, u64, Fx>,
+    /// It looked for the cells of RAM functions' addresses
+    /// ([`G::read_fn_cells`]): it reruns when there is another.
+    fns: bool,
 }
 
 impl Rd {
@@ -2891,12 +2907,30 @@ impl G {
             self.read_cells(w, into);
             self.read_objs(w, into);
         } else {
-            let o = ram_obj(o).0;
+            let (o, end) = ram_obj(o);
             self.read_obj(in_cell(o), w, into);
             self.read_obj(obj_cell(o), w, into);
             self.read_obj(ANYOBJ_CELL, w, into);
+            self.read_fn_cells(o, end.saturating_sub(1).max(o), w, into);
         }
         self.read_pile(w, into);
+    }
+
+    /// What a load at width `w` of RAM at `lo..=hi` reads of what was
+    /// stored through the addresses of the functions there
+    /// ([`fn_cell`]): each such cell there is (kept by what its read
+    /// gives, as any object's), and the function reruns when another is
+    /// first stored to ([`Rd::fns`]).
+    fn read_fn_cells(&mut self, lo: u32, hi: u32, w: u8, into: &mut Val) {
+        self.rd.fns = true;
+        let (a, b) = (fn_cell(lo), fn_cell(hi));
+        if a > b {
+            return;
+        }
+        let cs: Vec<u32> = self.cells.range(a..=b).map(|(&c, _)| c).collect();
+        for c in cs {
+            self.read_obj(c, w, into);
+        }
     }
 
     /// What a load at width `w` reads of what was stored somewhere in a
@@ -3181,7 +3215,12 @@ impl G {
                 }
                 &mut self.pile
             }
-            Store::Cell(a) => self.cells.entry(a).or_default(),
+            Store::Cell(a) => {
+                if is_fn_cell(a) && !self.cells.contains_key(&a) {
+                    self.fn_cell_new = true;
+                }
+                self.cells.entry(a).or_default()
+            }
             Store::Spill(f) => self.spills.entry(f).or_default(),
         };
         let new: Vec<(Tok, u8)> = toks.iter().copied().filter(|t| m.insert(*t)).collect();
@@ -3216,6 +3255,20 @@ impl G {
                         .entry(a)
                         .or_default()
                         .extend(new.iter().copied());
+                    // (What is stored through a RAM function's address is
+                    // in RAM: a read of every cell holds it.)
+                    if is_fn_cell(a) {
+                        self.cell_reads = Default::default();
+                        for &(t, sw) in &new {
+                            if self.cells_all.insert((t, sw)) {
+                                self.log_total += 1;
+                                self.mem_log.entry(CELLS).or_default().push((t, sw));
+                                for w in [1u8, 2, 4] {
+                                    from_mem_one(t, sw, w, &mut self.cell_raw[w as usize]);
+                                }
+                            }
+                        }
+                    }
                     for &(t, sw) in &new {
                         if !is_in_cell(a) && self.objs_all.insert((t, sw)) {
                             self.log_total += 1;
@@ -5806,11 +5859,14 @@ impl Run<'_, '_> {
                         if ram {
                             self.g.read_obj(obj_cell(ram_obj(c).0), w, &mut out);
                             self.g.read_obj(ANYOBJ_CELL, w, &mut out);
-                            // (And what was stored through a function's
-                            // address, through it.)
-                            if matches!(t, Tok::Fn { .. }) {
-                                self.g.read_obj(fn_cell(c), w, &mut out);
-                            }
+                            // (And what was stored through the address
+                            // of a function there.)
+                            self.g.read_fn_cells(
+                                c.saturating_sub(3),
+                                c + w as u32 - 1,
+                                w,
+                                &mut out,
+                            );
                         }
                         self.g.read_pile(w, &mut out);
                     } else if self.img.word(c).is_some() {
@@ -5961,6 +6017,7 @@ impl Run<'_, '_> {
                             self.g.read_obj(obj_cell(o), w, &mut out);
                         }
                         self.g.read_obj(ANYOBJ_CELL, w, &mut out);
+                        self.g.read_fn_cells(lo.saturating_sub(3), hi, w, &mut out);
                     }
                     // An I/O read, too.
                     out.unk = true;
@@ -6298,9 +6355,7 @@ impl Run<'_, '_> {
                             }
                             if ram_on() {
                                 self.g.read_obj(ANYOBJ_CELL, 4, into);
-                                if matches!(t, Tok::Fn { .. }) {
-                                    self.g.read_obj(fn_cell(lo), 4, into);
-                                }
+                                self.g.read_fn_cells(lo.saturating_sub(3), hi - 1, 4, into);
                             }
                         }
                         _ => anywhere = true,
@@ -7573,12 +7628,12 @@ impl G {
 /// over every code context) from its sources to its uses. `copies`: the
 /// program start's copies of ROM data to RAM (source, destination, bytes).
 /// `allocs`: the functions the holes file names as allocators, looked at
-/// only with `GBAA_FNREF_HEAP` set ([`heap_env`]).
+/// unless `GBAA_FNREF_HEAP=0` ([`heap_env`]).
 /// What the lift knows of a program besides its code, for [`follow`].
 #[derive(Clone, Copy, Debug)]
 pub struct Program<'a> {
-    /// The functions the holes file names as allocators, looked at only
-    /// with `GBAA_FNREF_HEAP` set ([`heap_env`]).
+    /// The functions the holes file names as allocators, looked at
+    /// unless `GBAA_FNREF_HEAP=0` ([`heap_env`]).
     pub allocs: &'a BTreeSet<u32>,
     /// Its named data, start and size in bytes, as its names files give
     /// them: with the RAM pointers on ([`ram_on`]) each such global in
@@ -8102,6 +8157,7 @@ fn follow_live(
         }
         let large = std::mem::take(&mut g.large.changed);
         let heap = std::mem::take(&mut g.heap_changed);
+        let fn_new = std::mem::take(&mut g.fn_cell_new);
         // Every kept read brought up to date, so that one a function
         // looked into and none has since says whether it changed.
         if g.by_value_read {
@@ -8192,6 +8248,7 @@ fn follow_live(
                         || r.objs & objs_w != 0
                         || r.large && large
                         || r.heap && heap
+                        || r.fns && fn_new
                         || r.at.iter().any(|x| at.contains(x))
                         || stale(&g, r)
                         || r.ranges

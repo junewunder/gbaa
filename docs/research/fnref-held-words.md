@@ -1243,8 +1243,12 @@ of a function in RAM, as a function's address and not a number, is kept in
 a cell of that function's own, which a load through that function's
 address reads as a `Ref`, as any object's cell is read. The cell at the
 address keeps what is stored through the address as a number (the copy
-loop's own stores). Nothing is read less than before: a load through the
-function's address reads both.
+loop's own stores). Nothing is read less than before: every load that
+read the cell at the address reads the function's cell too (one at the
+address, through a pointer into its object, over a range that holds it,
+of every cell). The first version left that to loads through the
+function's address alone, which a fresh reviewer caught: an ARM routine's
+address is its buffer's, and a store through it may be the program's own.
 
 **Counts.** `just holes-all --flow` without the switch and with it, side
 by side (seconds a game's whole report takes; the registers' rules on in

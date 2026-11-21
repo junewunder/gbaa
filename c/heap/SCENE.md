@@ -30,4 +30,4 @@ Mode 3, BG2 on, black. Frame 600: hash `95692f5f4d510086`, the same in mGBA
 0.10.5 and our interpreter (`just mgba-diff`, 2026-11-19).
 
 The allocators are named in `holes/c-heap-<cc>.toml` (`allocators`), which
-the function flow reads with `GBAA_FNREF_HEAP` set (native/fnref-heap-sites).
+the function flow reads unless `GBAA_FNREF_HEAP=0` (native/fnref-heap-sites).
