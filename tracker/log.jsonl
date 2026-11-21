@@ -3836,3 +3836,4 @@
 {"at":"2026-11-21T10:56:32Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"claim","id":"native/fnref-ram-lift-cost","text":"Function flow, RAM switch on: the lifts' cost near main's: claimed"}
 {"at":"2026-11-21T13:12:28Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"done","id":"native/fnref-ram-lift-cost","text":"Function flow, RAM switch on: the lifts' cost near main's: done"}
 {"at":"2026-11-21T13:12:31Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"unpark","id":"native/fnref-ram-default","text":"Function flow: the RAM pointers on by default: back from parked"}
+{"at":"2026-11-21T13:12:36Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"claim","id":"native/fnref-ram-default","text":"Function flow: the RAM pointers on by default: claimed"}

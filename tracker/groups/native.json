@@ -4087,7 +4087,17 @@
       "title": "Function flow: the RAM pointers on by default",
       "detail": "From {unit:native/fnref-ram-pointers}. Turn GBAA_FNREF_RAM on by default once its cost is near main's ({unit:native/fnref-ram-reruns}) and the registers' rules are on ({unit:native/fnref-live-registers}: its unseen-callers rule needs them). Before: just holes-all --flow on main, and --against it after; just lift-check with the switch on; Metroid's native route check with its lift made so. native-dma's lines bar goes from 15887 to 15888 with its cause (two callee sets that were every address-taken function by early rounds' spread are empty and incomplete, and a constant equal to a function's key joins FNS): just tracker decide --for-run. Lower the C programs' fn_words_not_proven bars to what they then measure. Done when: the default is on, every bar held or raised with its cause in the evidence, the checks above pass, just check passes.",
       "check": "recorded",
-      "needs": ["native/fnref-ram-reruns", "native/fnref-live-registers", "native/fnref-ram-lift-cost"]
+      "needs": ["native/fnref-ram-reruns", "native/fnref-live-registers", "native/fnref-ram-lift-cost"],
+      "record": {
+        "state": "claimed",
+        "by": "ad83b7bb",
+        "session": "ad83b7bb-0c11-428a-ac96-c63f74d95b01",
+        "host": "quack",
+        "pid": 1396423,
+        "start": "69084358",
+        "at": "2026-11-21T13:12:36Z"
+      },
+      "round": "2026-11-21T13:12:36Z"
     },
     {
       "id": "native/fnref-table-fields-blocks",
