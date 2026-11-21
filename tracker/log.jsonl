@@ -3833,3 +3833,4 @@
 {"at":"2026-11-21T10:56:14Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"edit","id":"native/fnref-ram-default","text":"Function flow: the RAM pointers on by default: edited (add-needs)"}
 {"at":"2026-11-21T10:56:16Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"park","id":"native/fnref-ram-lift-cost","text":"Function flow, RAM switch on: the lifts' cost near main's: parked: the function-flow thread (2026-11-21, june's instruction of 2026-11-19): one thread owns fnref.rs; it unparks and claims it. No lane takes it."}
 {"at":"2026-11-21T10:56:30Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"unpark","id":"native/fnref-ram-lift-cost","text":"Function flow, RAM switch on: the lifts' cost near main's: back from parked"}
+{"at":"2026-11-21T10:56:32Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"claim","id":"native/fnref-ram-lift-cost","text":"Function flow, RAM switch on: the lifts' cost near main's: claimed"}
