@@ -890,6 +890,13 @@ its callees' didn't stop at a hole:
 program's count moves. What holds the C programs' words is the RAM
 globals (the next section but one).
 
+**On by default** since 2026-11-21 (`GBAA_FNREF_LIVE=0` turns the rules
+off). It waited on Metroid's native route check, which was failing for a
+cause of the play build's (`native/metroid-route-again`); with that fixed,
+Metroid lifted with the rules on passes its route (2,700 frames, nothing
+different, audio the same), its words 690 proven and 124 not where 613 and
+201. `just lift-metrics` is 0 over and 0 under either way, so no bar moves.
+
 ## A pointer into a RAM array stays in it, as landed
 
 Unit `native/fnref-ram-pointers`, 2026-11-20 on quack, behind

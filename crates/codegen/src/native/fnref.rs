@@ -247,12 +247,12 @@
 //! main 1; alone it narrows the callee sets and proves no more
 //! (`docs/research/fnref-held-words.md`, "The heap by allocation site").
 //!
-//! **Registers at a call** (`native/fnref-live-registers`;
-//! `GBAA_FNREF_LIVE` set, [`live_env`], off by default). As above, a call
+//! **Registers at a call** (`native/fnref-live-registers`; [`live_env`]:
+//! on by default, `GBAA_FNREF_LIVE=0` turns it off). Without it a call
 //! passes r0-r3 and takes all four back as the callee's returns hold
 //! them, so a register a callee never writes comes back as every
 //! caller's value of it joined, and a leftover in a scratch register
-//! travels the program. On, three rules, each from the callee's summary
+//! travels the program. With it, three rules, each from the callee's summary
 //! ([`crate::saves::Summary`]) where its run and its callees' didn't stop
 //! at a hole: a register the callee leaves as it came on every return
 //! ([`FnIn::leaves`]) is the caller's own value after the call
@@ -294,8 +294,8 @@
 //! `GBAA_FNREF_OFF` ([`off_env`]), which measures what the words would be
 //! without one kind of hole. `GBAA_FNREF_RAM=1` turns the closed world's
 //! RAM pointers on ([`ram_on`]), `GBAA_FNREF_HEAP=1` those and the
-//! allocation sites ([`heap_env`]), `GBAA_FNREF_LIVE=1` the registers'
-//! rules at a call ([`live_env`]).
+//! allocation sites ([`heap_env`]), `GBAA_FNREF_LIVE=0` turns the
+//! registers' rules at a call off ([`live_env`]).
 //!
 //! Precision: the one pile is the limit (`docs/native-stage-b.md`, "Known
 //! gaps", the pile). agb keeps closures and trait objects on its heap, so a
@@ -1415,8 +1415,10 @@ thread_local! {
     static RAM_ON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
-/// `GBAA_FNREF_LIVE` as set: whether a call takes back only the registers
-/// its callee may change (`native/fnref-live-registers`), off by default.
+/// Whether a call takes back only the registers its callee may change
+/// (`native/fnref-live-registers`): on, unless `GBAA_FNREF_LIVE=0` (on by
+/// default since 2026-11-21, when Metroid's native route passed with it;
+/// off, the flow is what it was before the unit, for measuring).
 /// The flow took all of r0-r3 back as the callee's returns hold them, so
 /// a register a callee never writes came back as every caller's value of
 /// it joined: a handler called through r0 that returns nothing "returned"
@@ -1424,10 +1426,9 @@ thread_local! {
 /// from every address-taken function. On, a register the callee leaves as
 /// it came on every return ([`FnIn::leaves`]) keeps the caller's own
 /// value after the call, which is what the machine does and what the
-/// lifted program has (a shaped callee doesn't return it). Off, the flow
-/// is main's.
+/// lifted program has (a shaped callee doesn't return it).
 pub fn live_env() -> bool {
-    std::env::var_os("GBAA_FNREF_LIVE").is_some_and(|v| !v.is_empty() && v != "0")
+    std::env::var_os("GBAA_FNREF_LIVE").is_none_or(|v| v != "0")
 }
 
 /// `GBAA_FNREF_HEAP` as set: whether the run splits the heap by

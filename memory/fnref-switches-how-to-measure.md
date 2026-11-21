@@ -7,10 +7,11 @@ Where the pieces stand is the tracker's (`just find function flow`) and
 `docs/research/fnref-held-words.md`. This is how to measure one (2026-11-20,
 the function-flow thread).
 
-**The switches** (`crates/codegen/src/native/fnref.rs`; each off unless set,
-non-empty and not `0`): `GBAA_FNREF_LIVE` (registers at a call, and calls
-with no callee yet wait), `GBAA_FNREF_RAM` (RAM pointers in a closed world),
-`GBAA_FNREF_HEAP` (allocation sites; turns RAM on). The RAM rule for unseen
+**The switches** (`crates/codegen/src/native/fnref.rs`): the registers'
+rules (registers at a call, and calls with no callee yet wait) are on by
+default since 2026-11-21, `GBAA_FNREF_LIVE=0` turns them off; `GBAA_FNREF_RAM`
+(RAM pointers in a closed world) and `GBAA_FNREF_HEAP` (allocation sites;
+turns RAM on) are each off unless set, non-empty and not `0`. The RAM rule for unseen
 callers and the heap's gain on c/heap both need LIVE on too: measure RAM and
 HEAP with it.
 
