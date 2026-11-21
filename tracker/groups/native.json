@@ -4113,7 +4113,14 @@
         "why": "the function-flow thread (2026-11-20, june's instruction of 2026-11-19): one thread owns fnref.rs; it unparks and claims it. No lane takes it.",
         "by": "59a5588e",
         "at": "2026-11-20T11:33:02Z"
-      }
+      },
+      "notes": [
+        {
+          "at": "2026-11-21T08:26:00Z",
+          "by": "ad83b7bb",
+          "text": "2026-11-21, switches on: the 34 at 0x08000b06 are never stored to the pile themselves. The pile holds Refs to every cell and object stored narrow (bytewise copies through unplaced pointers), so the global's load reads its own word as Hi/Lo/Part and cmp #0 holes them."
+        }
+      ]
     },
     {
       "id": "native/fn-check-spike-digest",
