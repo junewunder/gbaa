@@ -3822,3 +3822,4 @@
 {"at":"2026-11-21T07:29:20Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"done","id":"native/fnref-ram-reruns","text":"Function flow, RAM switch on: Emerald near main's: done"}
 {"at":"2026-11-21T07:29:39Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"unpark","id":"native/fnref-table-fields-blocks","text":"Function flow: a table field's stride across blocks: back from parked"}
 {"at":"2026-11-21T07:29:41Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"claim","id":"native/fnref-table-fields-blocks","text":"Function flow: a table field's stride across blocks: claimed"}
+{"at":"2026-11-21T08:25:52Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"done","id":"native/fnref-table-fields-blocks","text":"Function flow: a table field's stride across blocks: done"}

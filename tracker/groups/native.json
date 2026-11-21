@@ -4095,13 +4095,10 @@
       "check": "recorded",
       "needs": ["native/fnref-table-fields"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "ad83b7bb",
-        "session": "ad83b7bb-0c11-428a-ac96-c63f74d95b01",
-        "host": "quack",
-        "pid": 1396423,
-        "start": "69084358",
-        "at": "2026-11-21T07:29:41Z"
+        "at": "2026-11-21T08:25:52Z",
+        "evidence": "At the commit above, just check green (quack, 2026-11-21). Behind GBAA_FNREF_RAM; off, lift-metrics 0 over 0 under and Metroid's and Emerald's flow traces are main's line for line. Two causes, both modern GCC's shapes: the scaled index kept in r5 over a call (the card's), and add_obj's u8 kind scaled as it came (a word, so only its 4 was kept). Rule: each register's stride and whether it is under 2^16 followed through the function's blocks (steps_in), and r0-r3 under 2^16 at the entry of a function every direct call passes them so by what the caller itself makes (smalls; a loose function runs without). With GBAA_FNREF_RAM and GBAA_FNREF_LIVE: c-fnptr-gcc fn_words_not_proven 9 to 5 (9 of 14 proven), calls through sObjOps exact (update 3 callees where 5, draw 2 and 2), the two callback calls 5 callees where 9; every other C and agb program's row as before (lift-metrics 0 over, 17 under); Metroid 690 proven 124 not and its callee sets byte for byte as before; Emerald the same sets but the loose functions an incomplete call reaches 6,086 to 6,077, flow 964 s against 993 s off side by side on a busy machine. Unit tests: a_stride_kept_in_a_register_reaches_the_next_block, a_registers_stride_at_a_blocks_entry_is_what_every_way_in_gives, a_parameter_every_caller_passes_small_is_a_records_index. Review: a fresh subagent read the diff; one real bug (a loose caller's own parameter passed on counted as small), fixed with its test case; nothing else. The 5 left are the callbacks' words, held by the RAM object under GCC's anchor, not a ROM table. docs/research/fnref-held-words.md, 'A table field's stride across blocks and calls'."
       },
       "round": "2026-11-21T07:29:41Z"
     },
