@@ -2318,7 +2318,6 @@ mod tests {
             crate::settings::load(Some(&path)).unwrap().directions_apart,
             Some(true)
         );
-        std::fs::remove_dir_all(&dir).unwrap();
         // Apart, one direction takes a lone button, and then they can't
         // be together: the switch stays on, and says why.
         // Down to Right's row (its D-pad and right stick), and its
@@ -2348,6 +2347,9 @@ mod tests {
         go(&mut m, &[Nav::Undo]);
         assert!(shows(&mut m, "Up / Down / Left / Right"));
         assert!(shows(&mut m, "A remove D-pad from the directions"));
+        // Last: every switch above saves settings again, which would
+        // make the folder again if it were removed any sooner.
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
