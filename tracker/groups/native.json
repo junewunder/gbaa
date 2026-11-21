@@ -4436,13 +4436,10 @@
       "needs": ["native/fnref-ram-reruns"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "ad83b7bb",
-        "session": "ad83b7bb-0c11-428a-ac96-c63f74d95b01",
-        "host": "quack",
-        "pid": 1396423,
-        "start": "69084358",
-        "at": "2026-11-21T10:56:32Z"
+        "at": "2026-11-21T13:12:28Z",
+        "evidence": "Commit ad9f8f58; just check green at 4ba6acc5, the next commit, which holds it (quack, 2026-11-21). Cause: every store through a value that is 'some function' went to the cell at each RAM routine's address (the holes files' [[copy]] routines) and every load through one read it back token by token: on WarioWare 2,600 functions' addresses stored 1.2 million times a round. Rule (GBAA_FNREF_RAM on only): such a store goes to a cell of the function's own (fn_cell), read as a Ref through that function's address. just holes-all --flow without the RAM switch and with it, side by side (out/holes/lc-live, lc-ram), seconds a game: Metroid 81/86, WarioWare 217/213, Amazing Mirror 156/159, Nightmare 239/215, moonbeam 209/187, Emerald 986/921, Minish Cap 276/234, Rogue 1,360/1,554 (1.14x), Imperium 1,460/1,910 (1.31x). So eight games are within 1.3 times and Imperium is 0.01 over it: its first two rounds cost 182 s and 228 s where 77 s and 186 s (samples: no one place; the kept reads' upkeep spread over op_kept, split_refs and exp_take), not the junk cell; left as it is, said here. Every game's hole row is the same (56 hard over the nine). The flow's own time, traced: WarioWare with its holes file 53 s with the switch against 61 s without (1,116 s before); Emerald, retail ROM with names and holes file, 771 s in 15 rounds against 846 s in 18. fn_words_not_proven with the switch: C programs 0 0 0 0 0 5 6 6 0 0 and Metroid 124, as before the rule; Metroid's words and callee sets line for line. Off: lift-metrics 0 over 0 under at ad9f8f58. Unit test a_store_through_a_ram_functions_address_is_read_back_only_through_it (fails with the rule off). Tried, not needed: Val::union by a difference, capped constant-cell reads. docs/research/fnref-held-words.md, 'The RAM switch's cost in the lifts'."
       },
       "round": "2026-11-21T10:56:32Z"
     }
