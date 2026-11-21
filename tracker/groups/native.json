@@ -2030,13 +2030,10 @@
       "needs": ["native/fnref-flow", "native/metroid-route-again"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "ad83b7bb",
-        "session": "ad83b7bb-0c11-428a-ac96-c63f74d95b01",
-        "host": "quack",
-        "pid": 1396423,
-        "start": "69084358",
-        "at": "2026-11-21T09:09:51Z"
+        "at": "2026-11-21T10:55:36Z",
+        "evidence": "On by default at the commit above (GBAA_FNREF_LIVE=0 turns the rules off); just check green (quack, 2026-11-21). Metroid lifted with the rules: route-check --native on units/metroid-native.toml pass (2700 frames, 0 differences in pictures, RAM, I/O, palette, VRAM and OAM; audio the same), on the runtime fixed by Metroid's native route check passes again ({unit:native/metroid-route-again}). fn_words_not_proven on Metroid 201 to 124 (690 proven; 814 words); its callee sets byte for byte what main gave with the switch set. just lift-metrics 0 over 0 under by default and with GBAA_FNREF_LIVE=0: no C or agb bar moves, none raised (native-dma's line count is over only with the RAM switch too, and no longer since the RAM reruns unit). just holes-all --flow with the rules off and on, side by side (out/holes/ff-off, ff-live): every game's row the same, total 56 hard holes both (Metroid 0, WarioWare 7, Amazing Mirror 0, Nightmare 0, moonbeam 7, Emerald 0, Minish Cap 10, Rogue 18, Imperium 14). Emerald's flow alone, side by side: 732 s 20 rounds 0.97 GB with, 804 s 25 rounds 1.06 GB without (a busy machine); Metroid's 27.5 s with, 23 to 30 s without; WarioWare's with its holes file 69 s with, 119 s without. Unit tests as landed with the rules (2026-11-20)."
       },
       "notes": [
         {
