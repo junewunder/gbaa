@@ -1039,7 +1039,7 @@
         {
           "at": "2026-11-07T11:07:28Z",
           "by": "7cd800aa",
-          "text": "Branch 384c7a34: scan rejects Thumb lsr/asr #32. holes-all vs out/holes/base-68f040fd; Imperium via just holes (not in main's corpus). Answer a: set the 2 bars to measured, just check, verifier. On landing drop mods/metroid/holes.toml stand-in 0x087603d9 (data, not a start now)."
+          "text": "Branch 384c7a34: scan rejects Thumb lsr/asr #32. holes-all vs out/holes/base-74f20b1b; Imperium via just holes (not in main's corpus). Answer a: set the 2 bars to measured, just check, verifier. On landing drop mods/metroid/holes.toml stand-in 0x087603d9 (data, not a start now)."
         }
       ]
     },
@@ -1259,7 +1259,7 @@
         "by": "b3d0fb3e",
         "checker": "a64859a25a26ba9d2",
         "at": "2026-11-12T05:44:14Z",
-        "evidence": "Verifier (fresh context) PASS: just check exit 0 after merging main; holes-all --against out/holes/390bd812-dirty (out/holes/tailcall) names 36 hard entry-read functions, matching the doc's table; soft kinds hold only fully-masked reads and only-jumped ones (Rogue 15, Nightmare 1, moonbeam 1). Review fix: tail calls/falls from called functions count as calls, with a test.",
+        "evidence": "Verifier (fresh context) PASS: just check exit 0 after merging main; holes-all --against out/holes/2359ecdd-dirty (out/holes/tailcall) names 36 hard entry-read functions, matching the doc's table; soft kinds hold only fully-masked reads and only-jumped ones (Rogue 15, Nightmare 1, moonbeam 1). Review fix: tail calls/falls from called functions count as calls, with a test.",
         "host": "quack"
       },
       "notes": [
