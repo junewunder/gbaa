@@ -4038,7 +4038,17 @@
       "id": "native/metroid-route-again",
       "title": "Metroid's native route check passes again",
       "detail": "Seen 2026-11-20 on quack ({unit:native/lift-text-editable}'s branch, which leaves the play build and the lift's code alone): route-check --native target/recompiled/release/gbaa-native-metroid target/recompiled/release/gbaa-metroid units/metroid-native.toml --name metroid --holes mods/metroid/holes.toml (with or without --timing native; play build from just recompile ROM out/metroid --timing native) fails before comparing the lift: the play build's compiled code differs from its interpreter at frame 2, audio 4 samples vs 0. Also the lift's frame 2700 hash is ed1480981464edfd, not the route's 0fba0effc3dce0ef (the lift at 6655b470 gives the same, so not that unit's). Find what changed since the 2026-11-14 pass ({unit:native/metroid-native-check}) and make route-check --native pass on the route again; just check passes.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "ad83b7bb",
+        "session": "ad83b7bb-0c11-428a-ac96-c63f74d95b01",
+        "host": "quack",
+        "pid": 1396423,
+        "start": "69084358",
+        "at": "2026-11-21T08:26:11Z"
+      },
+      "round": "2026-11-21T08:26:11Z"
     },
     {
       "id": "native/lift-global-bitfields",
