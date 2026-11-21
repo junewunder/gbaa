@@ -1510,6 +1510,21 @@ fn in_cell(o: u32) -> u32 {
     obj_cell(o) + 0x0800_0000
 }
 
+/// Where what is stored through the address of a function in RAM is kept
+/// (`native/fnref-ram-lift-cost`): a cell of its own, as [`obj_cell`] is,
+/// between those and the [`in_cell`]s, which only a load through that
+/// function's address reads (and one of every object's cell). A value that
+/// is "some function" holds a RAM routine's address with the rest, so
+/// every store through such a value went to the cell at that address and
+/// every load through one read it back, token by token: on WarioWare,
+/// whose holes file names seven routines copied to RAM, 2,600 functions'
+/// addresses stored there 1.2 million times a round. As a cell of this
+/// kind it is read as a [`Tok::Ref`] ([`G::read_obj`]); the cell at the
+/// address keeps what is stored through the address as a number.
+fn fn_cell(c: u32) -> u32 {
+    obj_cell(c) + 0x0400_0000
+}
+
 /// Whether cell `k` is an [`in_cell`]: a copy of constant addresses'
 /// cells, which a read of every cell holds already, and so no part of
 /// "what was stored somewhere in an object" ([`G::objs_all`]). (Counted
@@ -5787,6 +5802,11 @@ impl Run<'_, '_> {
                         if ram {
                             self.g.read_obj(obj_cell(ram_obj(c).0), w, &mut out);
                             self.g.read_obj(ANYOBJ_CELL, w, &mut out);
+                            // (And what was stored through a function's
+                            // address, through it.)
+                            if matches!(t, Tok::Fn { .. }) {
+                                self.g.read_obj(fn_cell(c), w, &mut out);
+                            }
                         }
                         self.g.read_pile(w, &mut out);
                     } else if self.img.word(c).is_some() {
@@ -6063,6 +6083,10 @@ impl Run<'_, '_> {
         let mut anywhere = !ram && (a.unk || a.mem || a.toks.is_empty());
         for &t in &a.toks {
             match t {
+                // (Through a RAM function's address: its own cell.)
+                Tok::Fn { key: c, .. } if is_ram(c) && ram => {
+                    self.g.store(Store::Cell(fn_cell(ram_canon(c))), toks)
+                }
                 Tok::Num(c) | Tok::Fn { key: c, .. } if is_ram(c) => {
                     self.g.store(Store::Cell(ram_canon(c)), toks)
                 }
@@ -6270,6 +6294,9 @@ impl Run<'_, '_> {
                             }
                             if ram_on() {
                                 self.g.read_obj(ANYOBJ_CELL, 4, into);
+                                if matches!(t, Tok::Fn { .. }) {
+                                    self.g.read_obj(fn_cell(lo), 4, into);
+                                }
                             }
                         }
                         _ => anywhere = true,

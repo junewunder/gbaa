@@ -1215,3 +1215,37 @@ and 0 under.
 somewhere in the RAM object at `gNumCallbacks` (the callbacks' array
 under GCC's anchor reads as one object with the counters beside it) and
 by a pile read: the anchors' objects, not a ROM table's stride.
+
+## The RAM switch's cost in the lifts, as landed
+
+Unit `native/fnref-ram-lift-cost`, 2026-11-21 on quack, behind
+`GBAA_FNREF_RAM` (off, the flow is main's). "The RAM switch's reruns"
+measured the flow alone, on a ROM with no holes file. `just holes-all
+--flow` with the switch on then took three times as long on WarioWare
+(17.7 minutes against 5.5) and over twice on Emerald (47 minutes and not
+done, against 21), the two of the first six games whose holes files name
+routines copied to RAM (`[[copy]]`).
+
+**The cause** was one cell. A value that is "some function" (a callback
+read from a table, a register nobody set) holds every address-taken
+function's address, a RAM routine's with the rest. A store through such
+a value goes nowhere for a ROM function (ROM isn't written), and for the
+RAM routine to the cell at its address; a load through one reads that
+cell back. So the cell at each RAM routine's address was where the
+program's junk met: on WarioWare 2,600 functions' addresses, 200 ROM
+pointers and 500 reads, stored 1.2 million times a round and joined into
+1.4 million loads token by token (a counter in `G::read_cell` by address,
+and one in `Run::store` by the kind of token the address was, found it
+in two runs; samples named `union < read_cell < load_raw`).
+
+**The rule** (`fnref.rs`, `fn_cell`): what is stored through the address
+of a function in RAM, as a function's address and not a number, is kept in
+a cell of that function's own, which a load through that function's
+address reads as a `Ref`, as any object's cell is read. The cell at the
+address keeps what is stored through the address as a number (the copy
+loop's own stores). Nothing is read less than before: a load through the
+function's address reads both.
+
+Tried and not needed once that was in: joining only the tokens a value
+lacks (`Val::union` by a difference: WarioWare 1,116 s to about 450 s),
+and capping what a load takes of a cell at a constant address (to 205 s).

@@ -2049,6 +2049,36 @@ fn a_parameter_every_caller_passes_small_is_a_records_index() {
     assert!(f.read.contains(&(TB + 8)) && f.read.contains(&(TB + 20)));
 }
 
+#[test]
+fn a_store_through_a_ram_functions_address_is_read_back_only_through_it() {
+    // A routine copied to RAM, its address a function's
+    // (`native/fnref-ram-lift-cost`).
+    const RF: u32 = 0x0300_0801;
+    let mut img = Img::new();
+    img.fns.insert(RF);
+    // F's address stored through the routine's address, loaded back
+    // through it and called.
+    let mut b = B::default();
+    let r = b.k(RF);
+    let f = b.pool(POOL, F);
+    b.st(Width::Word, r, f);
+    let t = b.ld(Width::Word, r);
+    let x = calling(0x0800_1001, b, t);
+    // Another function loads the word at that address, as a number, and
+    // shifts it: no function's address is there.
+    let mut b = B::default();
+    let c = b.k(RF & !1);
+    let v = b.ld(Width::Word, c);
+    let up = b.shift(ShiftType::Lsl, v, 4);
+    b.set(0, up);
+    let y = (0x0800_2001, vec![(0x0800_2001, b.end(None, Edge::Return))]);
+    FORCE_RAM.with(|c| c.set(true));
+    let flow = run_img(&[x, y], &BTreeMap::new(), &img);
+    FORCE_RAM.with(|c| c.set(false));
+    assert!(site(&flow).callees.contains(&F), "{flow:?}");
+    assert!(flow.proven(POOL), "{flow:?}");
+}
+
 /// One block of one function at 0x0800_1001, ending in `edge`.
 fn alone(b: B, edge: Edge) -> Built {
     (0x0800_1001, vec![(0x0800_1001, b.end(None, edge))])
