@@ -86,8 +86,18 @@
 //! (a worklist, by rounds) until nothing they read changes: their entry,
 //! a callee's results, and of memory only what their loads gave (the pile
 //! or every cell at a width, compared with what it gave at the round's
-//! start; the cells at the addresses they read). The memory reads are
-//! kept and grown store by store, and a call through a large callee set
+//! start; the cells at the addresses they read). With the RAM pointers
+//! on, by the values those reads gave (`native/fnref-ram-reruns`): a
+//! function that looked into a kept read reruns when that read holds
+//! another value ([`Rd::refs`], [`Exp::ver`]), one that only loaded it
+//! when the read's flags change, and a read of an object's cell is always
+//! such a read ([`G::read_obj`]). By the memory read, a store of a
+//! callback's address to one more global reran every function that had
+//! looked at the pile, which holds a read of every object's cell; the
+//! `GBAA_FNREF_TRACE` round lines say what reran how many. And a
+//! function a run changed the entry of, or a callee's results for, runs
+//! in the same round if it comes later in the order (the pickup). The memory
+//! reads are kept and grown store by store, and a call through a large callee set
 //! gives only what it hadn't before, the callees that held the same set
 //! sharing what it joins to. On Metroid (2,616 functions) the run
 //! settles in 12 rounds, about 150 s on quack
@@ -266,7 +276,9 @@
 //! Nothing printed changes: the report lists the words, the holes and the
 //! callee sets ([`Flow::report`]), and the metrics count the words not
 //! proven (barred) and proven. `GBAA_FNREF_TRACE=1` prints each round of
-//! the run and each use not allowed, with its operands; with
+//! the run (with what reran functions for memory: each kind of read, the
+//! functions it reran and those nothing else did) and each use not
+//! allowed, with its operands; with
 //! `GBAA_FNREF_GAINS=1` too, what entries and results gained each round,
 //! by kind ([`G::gain`]), and what all of them hold between them: the
 //! tokens by kind, the set with the most pointers "from here on" (what
@@ -879,8 +891,6 @@ fn heap_off(s: u32, k: u32, d: i64) -> Tok {
 /// through a pointer into an object reads with that object's
 /// (`native/fnref-ram-cost`).
 const ANYOBJ: Tok = Tok::Ram(3);
-/// (Above [`STACK_CELL`]: a read of every object's cell is kept by the
-/// cells from there up, [`G::read_objs`].)
 const ANYOBJ_CELL: u32 = 0x0fff_fff8;
 /// More RAM objects than this pointed into by one value: somewhere in
 /// some object ([`ANYOBJ`]). A parameter every caller passes its own
@@ -896,8 +906,12 @@ const OBJS_READ: usize = 4;
 /// pointers on, Metroid's registers held hundreds of such reads between
 /// them (one an object, width and form), and every shift, compare and
 /// call looked through each: its run took five times main's
-/// (`native/fnref-ram-cost`).
-const OBJ_REFS: usize = 4;
+/// (`native/fnref-ram-cost`). Eight: a load through a pointer into an
+/// object is three such reads ([`G::read_in_obj`]), each a `Ref` however
+/// little it holds ([`G::read_obj`]), and two loads joined stay apart (at
+/// four, c/fnptr built by GCC read every global for its sprite's field
+/// and lost its IRQ handler's word).
+const OBJ_REFS: usize = 8;
 
 /// The lowest [`Tok::Ref`].
 const REF0: Tok = Tok::Ref {
@@ -1500,11 +1514,6 @@ fn in_cell(o: u32) -> u32 {
 fn is_in_cell(k: u32) -> bool {
     (0x1800_0000..HEAP_BASE).contains(&k)
 }
-
-/// The cells a read of every object's is kept by ([`Rd::range`]): the
-/// stacks', the objects' and the allocations', not the [`in_cell`]s
-/// between.
-const OBJ_CELLS: [(u32, u32); 2] = [(STACK_CELL, 0x17ff_ffff), (HEAP_BASE, u32::MAX)];
 
 /// The RAM object whose [`obj_cell`] `c` is.
 fn obj_of_cell(c: u32) -> Option<u32> {
@@ -2312,6 +2321,18 @@ struct G {
     /// cell doesn't read them, a read of every object does
     /// ([`G::objs_all`]).
     obj_reads: std::collections::HashMap<(u32, u8), Val, Fx>,
+    /// What each of those gave before this round's first store to its
+    /// cell: the functions that read it rerun if it gives something else
+    /// at the round's end ([`Rd::at`], [`G::objs_changed`], which keeps
+    /// the read of every cell stored to, so only a cell first stored to
+    /// this round has none here).
+    obj_was: std::collections::HashMap<(u32, u8), Val, Fx>,
+    /// The count [`Exp::ver`] is taken from.
+    exp_ver: u64,
+    /// Whether a function reruns by the values its reads gave
+    /// ([`Rd::refs`]) and not by which memory they were of: with the RAM
+    /// pointers ([`ram_on`]).
+    by_value_read: bool,
     obj_raw_vals: std::collections::HashMap<(u32, u8), Val, Fx>,
     /// What every object's and stack's cell holds, and its reads by
     /// width, as [`G::cells_all`] and [`G::cell_raw`] are the cells'.
@@ -2628,9 +2649,57 @@ struct Rd {
     incomplete: bool,
     /// It looked at where an allocation is ([`G::heap_lower`]).
     heap: bool,
+    /// Every object's and stack's cell at some widths (bit `w`,
+    /// [`G::read_objs`]), and single ones' at a width ([`G::read_obj`]):
+    /// kept by what each load took of the read (its flags, with its
+    /// `Ref`), not by which cell was stored to (`native/fnref-ram-reruns`:
+    /// a store to any object's cell reran every function that had read
+    /// every object's, 13,000 of Emerald's 15,000 a round).
+    objs: u8,
+    at: Vec<(u32, u8)>,
+    at_seen: std::collections::HashSet<(u32, u8), Fx>,
+    /// The kept reads it looked into ([`G::ref_val`]), each with which
+    /// value it held ([`Exp::ver`]): with the RAM pointers on, what it
+    /// reruns by in place of the memory each is made of. A read of the
+    /// pile is of every object's cell and the large set too, through the
+    /// reads the pile holds, and a store to any of them that the read
+    /// already held (a callback's address stored to one more global)
+    /// reran every function that had looked at the pile: 13,000 of
+    /// Emerald's 15,000 in each of its last twenty rounds.
+    refs: Vec<(Tok, u64)>,
+    refs_seen: std::collections::HashMap<Tok, u64, Fx>,
 }
 
 impl Rd {
+    /// The run read object cell `k` at width `w`. Once each, as
+    /// [`Rd::range`].
+    fn cell(&mut self, k: u32, w: u8) {
+        if self.at_seen.insert((k, w)) {
+            self.at.push((k, w));
+        }
+    }
+
+    /// The run looked at `r`'s kept value `e`. By that value
+    /// (`by_value`, [`G::by_value_read`]): it reruns when `e` holds
+    /// another. Else by the memory `e` is made of.
+    fn exp(&mut self, r: Tok, e: &Exp, by_value: bool) {
+        if by_value {
+            // (The first it saw: one that changed under it reruns it.)
+            self.refs_seen.entry(r).or_insert(e.ver);
+            return;
+        }
+        self.pile |= e.pile;
+        self.all_cells |= e.cells;
+        for &(k, w) in &e.objs {
+            if k == OBJS {
+                self.objs |= 1 << w;
+            } else {
+                self.cell(k, w);
+            }
+        }
+        self.large |= e.large;
+    }
+
     /// The run read the cells in `lo..=hi`. Once each: a load says so at
     /// every pass over its block, and a kept read each time it is looked
     /// at, which on Metroid was 175 million entries for 213 thousand
@@ -2646,6 +2715,9 @@ impl Rd {
     /// run is kept by between rounds.
     fn settle(&mut self) {
         self.seen = Default::default();
+        self.at_seen = Default::default();
+        self.at.shrink_to_fit();
+        self.refs = std::mem::take(&mut self.refs_seen).into_iter().collect();
         self.ranges
             .sort_unstable_by_key(|&(lo, hi)| (lo, std::cmp::Reverse(hi)));
         let mut top: Option<u32> = None;
@@ -2806,12 +2878,20 @@ impl G {
 
     /// What a load at width `w` reads of what was stored somewhere in a
     /// RAM object or a stack, by its cell `k` ([`obj_cell`],
-    /// [`STACK_CELL`]): as a [`Tok::Ref`] when large, as a ROM read is
-    /// ([`rom_ref`]).
+    /// [`STACK_CELL`]): a [`Tok::Ref`] whenever it holds anything, with
+    /// the read's flags. Never its tokens themselves, as a small ROM read
+    /// gives ([`rom_ref`]): a cell thousands of functions read (the
+    /// stacks', [`ANYOBJ_CELL`]) reran them all at each store to it, and
+    /// one that grew past the bound gave every value that held its tokens
+    /// a `Ref` besides, which then went from results to callers a round a
+    /// call (`native/fnref-ram-reruns`: Emerald's rounds 4 to 15, a third
+    /// of its run). A function that looks into the `Ref` reruns when its
+    /// value changes ([`Rd::refs`]); one that only loaded it, when the
+    /// read's flags do or it first holds something ([`Rd::at`]).
     fn read_obj(&mut self, k: u32, w: u8, into: &mut Val) {
-        self.rd.range(k, k);
+        self.rd.cell(k, w);
         let r = self.obj_read(k, w);
-        if r.toks.len() < 64 {
+        if r.toks.is_empty() {
             let r = r.clone();
             into.union(&r);
         } else {
@@ -2866,20 +2946,45 @@ impl G {
             .clone()
     }
 
-    /// A load at width `w` from anywhere reads every object's and
-    /// stack's cell, as it reads every cell: the [`Tok::Ref`] and the
-    /// read's flags.
-    fn read_objs(&mut self, w: u8, into: &mut Val) {
-        for (lo, hi) in OBJ_CELLS {
-            self.rd.range(lo, hi);
+    /// The object cells of `cells` (those stored to this round) whose
+    /// read at a width gives a load something else than at the round's
+    /// start ([`G::read_obj`]: its flags, and whether it holds anything),
+    /// with that width. One first stored to this round counts at every
+    /// width.
+    fn objs_changed(&mut self, cells: &BTreeSet<u32>) -> std::collections::HashSet<(u32, u8), Fx> {
+        let mut was = std::mem::take(&mut self.obj_was);
+        let mut out: std::collections::HashSet<(u32, u8), Fx> = Default::default();
+        for &k in cells.iter().filter(|k| !is_ram(**k)) {
+            for w in [1u8, 2, 4] {
+                let now = self.obj_read(k, w);
+                let gives = |v: &Val| (v.toks.is_empty(), v.mem, v.unk, v.lost_rom);
+                if was.remove(&(k, w)).is_none_or(|v| gives(&v) != gives(now)) {
+                    out.insert((k, w));
+                }
+            }
         }
+        debug_assert!(was.is_empty());
+        out
+    }
+
+    /// What a load at width `w` reads of every object's and stack's
+    /// cell, capped: kept until one changes.
+    fn objs_read(&mut self, w: u8) -> &Val {
         let i = w as usize;
         if self.objs_reads[i].is_none() {
             let mut v = self.objs_raw[i].clone();
             v.cap();
             self.objs_reads[i] = Some(v);
         }
-        let r = self.objs_reads[i].as_ref().unwrap();
+        self.objs_reads[i].as_ref().unwrap()
+    }
+
+    /// A load at width `w` from anywhere reads every object's and
+    /// stack's cell, as it reads every cell: the [`Tok::Ref`] and the
+    /// read's flags.
+    fn read_objs(&mut self, w: u8, into: &mut Val) {
+        self.rd.objs |= 1 << w;
+        let r = self.objs_read(w);
         let (mem, unk, lost_rom) = (r.mem, r.unk, r.lost_rom);
         into.join(&Val {
             toks: [Tok::Ref {
@@ -3074,7 +3179,9 @@ impl G {
                 Store::Cell(a) if !is_ram(a) => {
                     self.cells_changed.insert(a);
                     for w in [1u8, 2, 4] {
-                        self.obj_reads.remove(&(a, w));
+                        if let Some(v) = self.obj_reads.remove(&(a, w)) {
+                            self.obj_was.entry((a, w)).or_insert(v);
+                        }
                         if let Some(v) = self.obj_raw_vals.get_mut(&(a, w)) {
                             for &(t, sw) in &new {
                                 from_mem_one(t, sw, w, v);
@@ -3218,18 +3325,7 @@ impl G {
         if let Some(e) = self.ref_exp.get(&r)
             && self.exp_current(e)
         {
-            self.rd.pile |= e.pile;
-            self.rd.all_cells |= e.cells;
-            for &k in &e.objs {
-                if k == OBJS {
-                    for (lo, hi) in OBJ_CELLS {
-                        self.rd.range(lo, hi);
-                    }
-                } else {
-                    self.rd.range(k, k);
-                }
-            }
-            self.rd.large |= e.large;
+            self.rd.exp(r, e, self.by_value_read);
             return e.v.clone();
         }
         let mut e = match self.ref_exp.remove(&r) {
@@ -3238,8 +3334,10 @@ impl G {
                 let Tok::Ref { src, xf } = r else {
                     unreachable!("not a Ref: {r:?}")
                 };
+                self.exp_ver += 1;
                 let mut e = Exp {
                     large_at: self.large.log.len(),
+                    ver: self.exp_ver,
                     ..Exp::default()
                 };
                 self.exp_add(&mut e, vec![(src, xf)]);
@@ -3255,23 +3353,15 @@ impl G {
         };
         if !self.exp_current(&e) {
             let was = (std::rc::Rc::as_ptr(&e.v.toks.0), e.v.toks.len());
-            self.exp_update(&mut e);
+            if self.exp_update(&mut e) {
+                self.exp_ver += 1;
+                e.ver = self.exp_ver;
+            }
             if was != (std::rc::Rc::as_ptr(&e.v.toks.0), e.v.toks.len()) {
                 self.sets.share(&mut e.v.toks);
             }
         }
-        self.rd.pile |= e.pile;
-        self.rd.all_cells |= e.cells;
-        for &k in &e.objs {
-            if k == OBJS {
-                for (lo, hi) in OBJ_CELLS {
-                    self.rd.range(lo, hi);
-                }
-            } else {
-                self.rd.range(k, k);
-            }
-        }
-        self.rd.large |= e.large;
+        self.rd.exp(r, &e, self.by_value_read);
         let v = e.v.clone();
         self.ref_exp.insert(r, e);
         v
@@ -3290,9 +3380,30 @@ impl G {
     /// holds, each with the forms the `Ref`s on the way give) into `e`,
     /// those it hasn't read yet, whole. Memory is read as stored, uncapped,
     /// so that what it gains later can be added alone ([`exp_merge`] caps).
-    fn exp_add(&mut self, e: &mut Exp, mut work: Vec<(Src, Xf)>) {
+    fn exp_add(&mut self, e: &mut Exp, mut work: Vec<(Src, Xf)>) -> bool {
         let mut d = Val::default();
         while let Some((src, xf)) = work.pop() {
+            // More single objects' cells than a value keeps apart
+            // ([`OBJ_REFS`]): the rest are every object's, as in a value
+            // ([`Val::cap`]). The pile holds a `Ref` for each object's
+            // cell stored to it, hundreds, and every kept read that
+            // reaches the pile took each in by itself, form by form: on
+            // Metroid 100,000 such reads in the first round, 11 million
+            // tokens, and half of Emerald's first two rounds
+            // (`native/fnref-ram-reruns`).
+            let src = match src {
+                Src::Obj(k, w)
+                    if !e.objs.contains(&(k, w))
+                        && e.objs.iter().filter(|o| o.0 != OBJS).count() >= OBJ_REFS =>
+                {
+                    if is_in_cell(k) {
+                        Src::Cells(w)
+                    } else {
+                        Src::Objs(w)
+                    }
+                }
+                s => s,
+            };
             if !e.seen.insert((src, xf)) {
                 continue;
             }
@@ -3313,11 +3424,11 @@ impl G {
                 Src::RomFrom(lo, end, w, k) => self.rom_from[&(lo, end, w, k)].clone(),
                 Src::Hull(lo, hi, w) => self.rom_hull[&(lo, hi, w)].clone(),
                 Src::Obj(k, w) => {
-                    e.objs.insert(k);
+                    e.objs.insert((k, w));
                     self.obj_raw_read(k, w)
                 }
                 Src::Objs(w) => {
-                    e.objs.insert(OBJS);
+                    e.objs.insert((OBJS, w));
                     self.objs_raw[w as usize].clone()
                 }
                 Src::Large => {
@@ -3330,16 +3441,17 @@ impl G {
             };
             exp_take(&mut d, &read, xf, &mut work);
         }
-        exp_merge(e, d);
+        exp_merge(e, d)
     }
 
     /// Brings `e` up to date: what was stored since it was made, read
     /// through each memory read it holds, and whatever new reads that
-    /// reaches, whole.
-    fn exp_update(&mut self, e: &mut Exp) {
+    /// reaches, whole. Whether that made its value another.
+    fn exp_update(&mut self, e: &mut Exp) -> bool {
         let mut work = Vec::new();
         let mut d = Val::default();
         let mems = e.mems.clone();
+
         // What each read gained (the pile's or every cell's, at a width),
         // made once and taken through each of the forms it is seen by: a
         // value a token and form at a time was most of Emerald's third
@@ -3374,11 +3486,12 @@ impl G {
             }
         }
         e.large_at = self.large.log.len();
-        exp_merge(e, d);
+        let mut changed = exp_merge(e, d);
         work.retain(|x| !e.seen.contains(x));
         if !work.is_empty() {
-            self.exp_add(e, work);
+            changed |= self.exp_add(e, work);
         }
+        changed
     }
 
     /// `v` with its [`Tok::Ref`]s taken in, to look at its tokens. A
@@ -4339,8 +4452,9 @@ struct Exp {
     seen: BTreeSet<(Src, Xf)>,
     pile: u8,
     cells: u8,
-    /// The object cells it reads ([`Src::Obj`]; [`OBJS`]: every one).
-    objs: BTreeSet<u32>,
+    /// The object cells it reads, each at a width ([`Src::Obj`];
+    /// [`OBJS`]: every one).
+    objs: BTreeSet<(u32, u8)>,
     /// How much of each memory's log ([`G::mem_log`]) it has read, and
     /// of all of it ([`G::log_total`]) when it last read to the end.
     at: BTreeMap<u32, usize>,
@@ -4351,6 +4465,9 @@ struct Exp {
     /// [`Large::log`] it has read.
     large: bool,
     large_at: usize,
+    /// Which value `v` is, of all the kept reads' ([`G::exp_ver`]):
+    /// another each time it changes.
+    ver: u64,
 }
 
 /// [`G::mem_log`]'s tag of a memory read.
@@ -4364,13 +4481,15 @@ fn src_tag(src: Src) -> Option<u32> {
     }
 }
 
-/// Takes `d`, read uncapped, into `e`. Its numbers and ROM pointers are
+/// Takes `d`, read uncapped, into `e`, and says whether `e.v` is another
+/// value for it. Its numbers and ROM pointers are
 /// kept as read (`e.raw`), and `e.v` holds the cap of them all: capping
 /// what each store adds onto the capped value would widen by the order of
 /// the stores, and leave a pointer out that the capped read of memory
 /// takes in, which is what [`follow`] reruns a function by (`snap`).
-fn exp_merge(e: &mut Exp, mut d: Val) {
+fn exp_merge(e: &mut Exp, mut d: Val) -> bool {
     let nums = Tok::Num(0)..REF0;
+    let was = (e.v.toks.len(), e.v.mem, e.v.unk, e.v.lost_rom);
     d.drop_range(REF0..);
     let new: Vec<Tok> = d
         .toks
@@ -4383,7 +4502,7 @@ fn exp_merge(e: &mut Exp, mut d: Val) {
     d.drop_range(nums.clone());
     e.v.union(&d);
     if new.is_empty() && !unk {
-        return;
+        return was != (e.v.toks.len(), e.v.mem, e.v.unk, e.v.lost_rom);
     }
     e.raw.extend(new);
     let mut p = Val {
@@ -4395,10 +4514,13 @@ fn exp_merge(e: &mut Exp, mut d: Val) {
     e.v.unk |= p.unk;
     // (The cap gives up pointers into too many runs: [`FROMS`].)
     e.v.lost_rom |= p.lost_rom;
+    let mut changed = false;
     if !p.toks.iter().eq(e.v.toks.range(nums.clone())) {
         e.v.drop_range(nums);
         e.v.toks.add_all(p.toks.iter().copied().collect());
+        changed = true;
     }
+    changed || was != (e.v.toks.len(), e.v.mem, e.v.unk, e.v.lost_rom)
 }
 
 /// Takes `read`, a read seen through forms `xf`, into `v`; the `Ref`s it
@@ -7312,6 +7434,7 @@ fn follow_live(
             .map(|f| (f.entry, f.reads))
             .collect(),
         defer: live,
+        by_value_read: ram,
         based: fns
             .iter()
             .filter(|_| ram)
@@ -7385,6 +7508,7 @@ fn follow_live(
             let (p, c) = (g.pile_read(w).clone(), g.cells_read(w).clone());
             v.push(p);
             v.push(c);
+            v.push(g.objs_read(w).clone());
         }
         v
     };
@@ -7393,6 +7517,19 @@ fn follow_live(
     g.pile_changed = false;
     let mut loose: BTreeSet<u32> = BTreeSet::new();
     let mut ran = 0usize;
+    // Each function's place in the order they run in. With the RAM
+    // pointers on, a function whose entry or whose callee's results a run
+    // changed runs in the same round where it comes later in that order
+    // (the pickup, `native/fnref-ram-reruns`), not a round later: a
+    // change went one call a round (Metroid's flow 41 rounds to 30,
+    // Emerald's 21 to 15, the results the same).
+    let pos: std::collections::HashMap<u32, usize, Fx> =
+        fns.iter().enumerate().map(|(i, f)| (f.entry, i)).collect();
+    debug_assert_eq!(pos.len(), fns.len(), "a function listed twice");
+    let pickup = g.by_value_read;
+    let mut readers: std::collections::HashMap<u32, BTreeSet<u32>, Fx> = Default::default();
+    let mut read_fwd: std::collections::HashMap<u32, BTreeSet<u32>, Fx> = Default::default();
+    let mut incomplete: BTreeSet<u32> = BTreeSet::new();
     for round in 0..=256 {
         g.changed = false;
         let was = std::mem::replace(
@@ -7429,7 +7566,15 @@ fn follow_live(
         if round == 256 {
             break;
         }
-        for f in fns.iter().filter(|f| dirty.contains(&f.entry)) {
+        let mut queue: BTreeSet<usize> = dirty.iter().filter_map(|k| pos.get(k).copied()).collect();
+        // (With the pickup: what changed this round, and what reruns in
+        // the next.)
+        let mut next: BTreeSet<u32> = BTreeSet::new();
+        let mut seen_entries: BTreeSet<u32> = BTreeSet::new();
+        let mut seen_rets: BTreeSet<u32> = BTreeSet::new();
+        let mut loose_ret_at: Option<usize> = None;
+        while let Some(i) = queue.pop_first() {
+            let f = &fns[i];
             let mut entry = g
                 .entry
                 .get(&f.entry)
@@ -7522,9 +7667,68 @@ fn follow_live(
                 run.block(k);
             }
             let r = std::mem::take(&mut run.rets_read);
-            reads.insert(f.entry, r);
             let mut rd = std::mem::take(&mut g.rd);
             rd.settle();
+            if pickup {
+                // Whose results it read, the other way round; an
+                // incomplete call's (every loose function's) by its flag.
+                let new: BTreeSet<u32> = if rd.incomplete {
+                    incomplete.insert(f.entry);
+                    r.difference(&loose).copied().collect()
+                } else {
+                    incomplete.remove(&f.entry);
+                    r.clone()
+                };
+                if let Some(old) = read_fwd.get(&f.entry) {
+                    for k in old.difference(&new) {
+                        if let Some(s) = readers.get_mut(k) {
+                            s.remove(&f.entry);
+                        }
+                    }
+                }
+                for &k in &new {
+                    readers.entry(k).or_default().insert(f.entry);
+                }
+                read_fwd.insert(f.entry, new);
+                // What this run changed for a function later in the
+                // order runs it this round; for one at or before it, the
+                // next.
+                let mut push = |x: u32, queue: &mut BTreeSet<usize>| match pos.get(&x) {
+                    Some(&p) if p > i => {
+                        queue.insert(p);
+                    }
+                    Some(_) => {
+                        next.insert(x);
+                    }
+                    None => {}
+                };
+                for e in std::mem::take(&mut g.dirty_entry) {
+                    push(e, &mut queue);
+                    seen_entries.insert(e);
+                }
+                for k in std::mem::take(&mut g.dirty_ret) {
+                    if let Some(s) = readers.get(&k) {
+                        for &x in s {
+                            push(x, &mut queue);
+                        }
+                    }
+                    if loose.contains(&k) {
+                        // (What their results join to is kept: made
+                        // again for the incomplete calls still to run.
+                        // [`G::give_ret`] does that by `G::loose`, which
+                        // is empty in the first round.)
+                        g.loose_rets = None;
+                        if loose_ret_at.is_none() {
+                            for &x in &incomplete {
+                                push(x, &mut queue);
+                            }
+                        }
+                        loose_ret_at = Some(i);
+                    }
+                    seen_rets.insert(k);
+                }
+            }
+            reads.insert(f.entry, r);
             rds.insert(f.entry, rd);
             // The memory bound, every 64 functions run.
             ran += 1;
@@ -7597,8 +7801,18 @@ fn follow_live(
         }
         dirty = std::mem::take(&mut g.dirty_entry);
         let rets = std::mem::take(&mut g.dirty_ret);
-        let n_entry = dirty.len();
-        let n_rets = rets.len();
+        let mut n_entry = dirty.len();
+        let mut n_rets = rets.len();
+        if pickup {
+            // (An incomplete call that ran before the last loose
+            // function's results changed.)
+            if let Some(at) = loose_ret_at {
+                next.extend(incomplete.iter().copied().filter(|x| pos[x] <= at));
+            }
+            dirty.extend(next);
+            n_entry = seen_entries.len();
+            n_rets = seen_rets.len();
+        }
         dirty.extend(
             reads
                 .iter()
@@ -7612,7 +7826,9 @@ fn follow_live(
         // the cells that did.
         let mut pile_w = 0u8;
         let mut cells_w = 0u8;
+        let mut objs_w = 0u8;
         let cells = std::mem::take(&mut g.cells_changed);
+        let at = g.objs_changed(&cells);
         // The IRQ vector's function is called by the BIOS: one stored
         // there now runs again, as that ([`IRQ_VECTOR`]).
         if cells.contains(&IRQ_VECTOR)
@@ -7626,24 +7842,122 @@ fn follow_live(
         if std::mem::take(&mut g.pile_changed) || !cells.is_empty() {
             let now = snap(&mut g);
             for (i, w) in [1u8, 2, 4].into_iter().enumerate() {
-                if now[2 * i] != snapped[2 * i] {
+                // By the values the reads gave, a load takes only the
+                // read's flags with its `Ref` ([`G::read_mem`]): what
+                // looks into it is kept by that ([`Rd::refs`]).
+                let other = |a: &Val, b: &Val| {
+                    if g.by_value_read {
+                        (a.mem, a.unk, a.lost_rom) != (b.mem, b.unk, b.lost_rom)
+                    } else {
+                        a != b
+                    }
+                };
+                if other(&now[3 * i], &snapped[3 * i]) {
                     pile_w |= 1 << w;
                 }
-                if now[2 * i + 1] != snapped[2 * i + 1] {
+                if other(&now[3 * i + 1], &snapped[3 * i + 1]) {
                     cells_w |= 1 << w;
+                }
+                if other(&now[3 * i + 2], &snapped[3 * i + 2]) {
+                    objs_w |= 1 << w;
                 }
             }
             snapped = now;
         }
         let large = std::mem::take(&mut g.large.changed);
         let heap = std::mem::take(&mut g.heap_changed);
+        // Every kept read brought up to date, so that one a function
+        // looked into and none has since says whether it changed.
+        if g.by_value_read {
+            let kept: Vec<Tok> = g.ref_exp.keys().copied().collect();
+            for r in kept {
+                g.ref_val(r);
+            }
+        }
+        let stale = |g: &G, r: &Rd| {
+            r.refs
+                .iter()
+                .any(|(t, v)| g.ref_exp.get(t).is_none_or(|e| e.ver != *v))
+        };
+        if trace {
+            // Why functions rerun for memory: each reason's functions, and
+            // those of them nothing else reruns.
+            let kind = |c: u32| match c {
+                c if is_ram(c) => 4,
+                STACK_CELL => 5,
+                ANYOBJ_CELL => 6,
+                c if is_in_cell(c) => 8,
+                c if c >= HEAP_BASE => 9,
+                _ => 7,
+            };
+            let names = [
+                "pile",
+                "every cell",
+                "large",
+                "heap",
+                "a RAM cell",
+                "the stacks' cell",
+                "the any-object cell",
+                "an object's cell",
+                "an object's constant cells",
+                "an allocation's cell",
+                "every object's cell",
+                "a kept read's value",
+            ];
+            let mut n = [(0usize, 0usize); 12];
+            for (f, r) in &rds {
+                let mut why = [false; 12];
+                why[11] = stale(&g, r);
+                why[0] = r.pile & pile_w != 0;
+                why[1] = r.all_cells & cells_w != 0;
+                why[2] = r.large && large;
+                why[3] = r.heap && heap;
+                why[10] = r.objs & objs_w != 0;
+                for &(lo, hi) in &r.ranges {
+                    for &c in cells.range(lo..=hi) {
+                        why[kind(c)] = true;
+                    }
+                }
+                for x in r.at.iter().filter(|x| at.contains(x)) {
+                    why[kind(x.0)] = true;
+                }
+                let only = !dirty.contains(f) && why.iter().filter(|w| **w).count() == 1;
+                for (i, w) in why.iter().enumerate() {
+                    if *w {
+                        n[i].0 += 1;
+                        n[i].1 += only as usize;
+                    }
+                }
+            }
+            let mut by = [0usize; 10];
+            for &c in &cells {
+                by[kind(c)] += 1;
+            }
+            let line: Vec<String> = names
+                .iter()
+                .zip(n)
+                .enumerate()
+                .filter(|(_, (_, n))| n.0 > 0)
+                .map(|(i, (k, n))| match i {
+                    0..4 | 10 | 11 => format!("{k} {}/{}", n.0, n.1),
+                    _ => format!("{k} {}/{} ({} stored to)", n.0, n.1, by[i]),
+                })
+                .collect();
+            eprintln!(
+                "fnref round {round} reruns for memory (functions/by that alone): {}",
+                line.join(", ")
+            );
+        }
         dirty.extend(
             rds.iter()
                 .filter(|(_, r)| {
                     r.pile & pile_w != 0
                         || r.all_cells & cells_w != 0
+                        || r.objs & objs_w != 0
                         || r.large && large
                         || r.heap && heap
+                        || r.at.iter().any(|x| at.contains(x))
+                        || stale(&g, r)
                         || r.ranges
                             .iter()
                             .any(|&(lo, hi)| cells.range(lo..=hi).next().is_some())

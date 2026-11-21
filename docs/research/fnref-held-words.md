@@ -1087,3 +1087,79 @@ registers' switches on and pret's `Alloc` and `AllocZeroed` named:
 settles in 26 rounds, 1,385 s, 0.95 GB, its 554 indirect calls with the
 same 103 complete sets (1,329 s with the RAM and registers' switches, 557 s
 off): the RAM rules' cost, which is its own unit (`native/fnref-ram-reruns`).
+
+## The RAM switch's reruns, as landed
+
+Unit `native/fnref-ram-reruns`, 2026-11-21 on quack, behind
+`GBAA_FNREF_RAM` (off, the flow is main's: Metroid's and Emerald's traces
+line for line, `just lift-metrics` 0 over and 0 under). With the RAM and
+registers' switches on, Emerald's flow took 1,310 s against 598 s off, side
+by side. `GBAA_FNREF_TRACE` now prints, each round, what reran functions for
+memory: each kind of read, the functions it reran, and those nothing else
+reran. What it showed, in the order found, each a rule now (`fnref.rs`,
+`Rd`, `G::read_obj`, `G::exp_add`, the pickup in `follow_live`):
+
+- **A store to any object's cell reran every function that had read
+  "every object's cell"**: 13,000 of Emerald's 15,000, in each of rounds 4
+  to 10, for one to twenty cells stored to. That read is kept by what it
+  gave at each width now, as the pile's was.
+- **The pile holds a read of every object's cell, of single ones', and of
+  the large set**, so a function that looked into the pile reran for a
+  store to any of them, though the value it saw was the same (a callback's
+  address stored to one more global). A function now reruns by the value
+  each kept read gave it (a count on the read, another each time its value
+  changes; every kept read is brought up to date at the round's end), and
+  one that only loaded a read, by the read's flags. Emerald: 2.2 times
+  the time off to 1.8 (1,024 s against 570 s).
+- **A small read of an object's cell was its tokens, a large one a
+  `Ref`** (the bound of 64, as for ROM reads). The stacks' cell and the
+  any-object cell were read so by 2,000 to 10,000 functions, which all
+  reran at each store; and a cell that grew past 64 gave every value that
+  held its tokens a `Ref` besides, which went from results to callers one
+  call a round: rounds 4 to 15, 2,000 to 8,000 reruns each, with nothing
+  like it off. Every read of an object's cell that holds anything is a
+  `Ref` now. With that the bound on single objects' reads in a value
+  (`OBJ_REFS`) went from 4 to 8: a load through a pointer into an object is
+  three such reads, and at 4 c-fnptr built by GCC read every global for a
+  sprite's field and lost its IRQ handler's word (10 not proven; 9 at 8).
+  Emerald: 1.24 times (834 s against 675 s, the machine busier), settled
+  at round 13 where it took 19.
+- **A kept read that reached the pile took in every object's cell the
+  pile held a `Ref` to, one by one and form by form**: 100,000 such reads
+  in Metroid's first round, 11 million tokens, against 5,000 reads off;
+  twice the time of Emerald's first two rounds. Past `OBJ_REFS` single
+  objects' cells a kept read takes the rest as every object's, as a value
+  does. Metroid's first round 3.0 s to 1.7 s; Emerald 1.05 times (640 s
+  against 610 s).
+- **A change went one call a round.** A function whose entry a run
+  changed, or a callee's results, now runs in the same round where it comes
+  later in the order (the pickup). Metroid 41 rounds to 30, Emerald 21 to
+  15, about 5% of the time (Emerald 590 s against 620 s without it and
+  585 s off); the results the same.
+
+Tried and dropped: making only the two shared cells (the stacks', the
+any-object) always a `Ref` (Emerald slower than before); and per-op
+sampling of the last rounds (nothing stands out there).
+
+**Counts**, flow alone, each row run side by side on one build:
+
+| | off | RAM and registers on, before | after |
+|---|---|---|---|
+| Emerald | 644 s, 25 rounds, 1.06 GB | 1,310 s, 26 rounds, 0.95 GB (off then 598 s) | 617 s, 15 rounds, 1.02 GB |
+| Emerald, heap switch too, pret's allocators named | | 1,385 s (2026-11-20) | 686 s, 15 rounds, 0.95 GB |
+| Metroid | 18.1 s, 21 rounds, 145 MB | 36.5 s, 39 rounds, 164 MB | 25.4 s, 30 rounds, 157 MB |
+
+(The last column and "off" are one set of runs side by side on the landed
+code, another project's job on the machine too; a quieter set gave Emerald
+563 s off, 561 s on and 592 s with the heap switch. Metroid: the mean of
+three sets, 1.40 times in each.) So Emerald is at main's time, 1.07 times
+with the heap switch, and Metroid at 1.4 times, where it was 2.0. A fresh
+reviewer of the diff found one bug, fixed before these runs: in the first
+round the kept join of the loose functions' results wasn't made again
+when the pickup ran an incomplete call after one of them changed. The results are the same as before the unit with the
+switches on: Emerald's and Metroid's callee sets byte for byte (554 calls,
+103 complete sets of 4.3 callees; 70 calls, 68 complete, 28.2), Metroid's
+words 690 proven and 124 not (613 and 201 off), the C programs' words not
+proven 0, 0, 0, 0, 0 (c-fnptr-agbcc), 9 (c-fnptr-gcc), 6, 6, 0, 0. With
+the switches on `just lift-metrics` has no bar over now (native-dma's one
+line with it: 16 under).

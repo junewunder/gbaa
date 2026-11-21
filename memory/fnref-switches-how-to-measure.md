@@ -54,6 +54,18 @@ a set per Ref; a value holding hundreds of per-object reads (bounds
 cells (`in_cell`) counted as "object cells", which reran every function that
 read every object at each store to a global.
 
+**What reran what** (`native/fnref-ram-reruns`, 2026-11-21): the trace's
+"reruns for memory" line gives, per kind of read, the functions it reran
+and those nothing else did. Read it before profiling: Emerald's 2.2 times
+was three such lines (every object's cell, the stacks' and any-object
+cells, the pile's Refs). With the RAM switch a function reruns by the value
+a kept read gave (`Exp::ver`), an object cell's read is always a `Ref`, and
+later functions a run changed run in the same round. The first two rounds'
+cost was kept reads taking in each object's cell the pile holds (a counter
+in `exp_add` by `Src` kind, tokens summed, found it in one Metroid run).
+Emerald side by side now: 563 s off, 561 s on, 592 s with the heap switch
+(644, 617 and 686 with another job on the machine: compare within a set).
+
 **Landing.** Main moves during the ten minutes `just check` takes. Check
 the branch merged with main, merge, and compare `git diff --stat <checked>
 HEAD -- . ':!tracker'` before pushing; when only `tracker:` commits came in
