@@ -3808,3 +3808,4 @@
 {"at":"2026-11-21T04:30:02Z","actor":"session","tag":"74e66c41","host":"quack","cmd":"add-unit","id":"native/lift-stack-arrays","text":"new unit: A stack array passed by address is a typed local"}
 {"at":"2026-11-21T04:30:05Z","actor":"session","tag":"74e66c41","host":"quack","cmd":"add-unit","id":"native/lift-pointer-types","text":"new unit: Parameters and locals carry their pointer types"}
 {"at":"2026-11-21T04:30:07Z","actor":"session","tag":"74e66c41","host":"quack","cmd":"add-unit","id":"native/lift-signature-holes","text":"new unit: Emerald's four-register functions get real signatures"}
+{"at":"2026-11-21T04:30:09Z","actor":"session","tag":"74e66c41","host":"quack","cmd":"add-unit","id":"native/lift-returns-read","text":"new unit: A call takes back only the registers its caller reads"}
