@@ -3806,3 +3806,4 @@
 {"at":"2026-11-20T21:46:02Z","actor":"session","tag":"05e154e8","host":"quack","cmd":"merged","id":"native/mirror-native-route","text":"Amazing Mirror's lift matches the play build into play: on main"}
 {"at":"2026-11-21T04:30:00Z","actor":"session","tag":"74e66c41","host":"quack","cmd":"add-unit","id":"native/lift-for-bounds","text":"new unit: Loops counted to a variable bound print as for, indexed"}
 {"at":"2026-11-21T04:30:02Z","actor":"session","tag":"74e66c41","host":"quack","cmd":"add-unit","id":"native/lift-stack-arrays","text":"new unit: A stack array passed by address is a typed local"}
+{"at":"2026-11-21T04:30:05Z","actor":"session","tag":"74e66c41","host":"quack","cmd":"add-unit","id":"native/lift-pointer-types","text":"new unit: Parameters and locals carry their pointer types"}
