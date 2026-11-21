@@ -4066,13 +4066,7 @@
       "title": "Function flow, RAM switch on: Emerald near main's",
       "detail": "From {unit:native/fnref-ram-pointers}. With GBAA_FNREF_RAM and GBAA_FNREF_LIVE on, Emerald's flow settles in 22 rounds, 1,329 s at 0.95 GB against 557 s off and 477 to 587 s with GBAA_FNREF_LIVE alone (gbaa-recompile --summaries ROM --callee-sets under just long start NAME --mem 4G). Most of a round is reruns for memory that changed, not entries: 13,000 functions rerun where 700 entries changed, because a function that read every cell, an object's cell or the pile reruns when any such store is new. Measure which read (GBAA_FNREF_TRACE's round lines; eu-stack -i on a build with line tables names inlined callers) and rerun by what a function's reads gave, as the pile and every-cell reads already do by width. Done when: with both switches Emerald's flow within 1.3 times main's, Metroid's within 1.5, fn_words_not_proven on the C programs and Metroid not higher than now; off, the flow is main's; just check passes.",
       "check": "recorded",
-      "needs": ["native/fnref-ram-pointers"],
-      "record": {
-        "state": "parked",
-        "why": "the function-flow thread (2026-11-20, june's instruction of 2026-11-19): one thread owns fnref.rs; it unparks and claims each as it gets to it. No lane takes them.",
-        "by": "59a5588e",
-        "at": "2026-11-20T10:26:15Z"
-      }
+      "needs": ["native/fnref-ram-pointers"]
     },
     {
       "id": "native/fnref-ram-default",
