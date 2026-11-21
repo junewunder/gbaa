@@ -4040,13 +4040,10 @@
       "detail": "Seen 2026-11-20 on quack ({unit:native/lift-text-editable}'s branch, which leaves the play build and the lift's code alone): route-check --native target/recompiled/release/gbaa-native-metroid target/recompiled/release/gbaa-metroid units/metroid-native.toml --name metroid --holes mods/metroid/holes.toml (with or without --timing native; play build from just recompile ROM out/metroid --timing native) fails before comparing the lift: the play build's compiled code differs from its interpreter at frame 2, audio 4 samples vs 0. Also the lift's frame 2700 hash is ed1480981464edfd, not the route's 0fba0effc3dce0ef (the lift at 6655b470 gives the same, so not that unit's). Find what changed since the 2026-11-14 pass ({unit:native/metroid-native-check}) and make route-check --native pass on the route again; just check passes.",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "ad83b7bb",
-        "session": "ad83b7bb-0c11-428a-ac96-c63f74d95b01",
-        "host": "quack",
-        "pid": 1396423,
-        "start": "69084358",
-        "at": "2026-11-21T08:26:11Z"
+        "at": "2026-11-21T09:09:34Z",
+        "evidence": "At the commit above, just check green (quack, 2026-11-21). Cause: since 2c7b18e6 (every V-blank a frame end) a sync stops at the V-blank it started and Machine::catch_up walks the line events left due at the next frame's start, in run_frame and run_raw; a guest run (run_guest, the compiled play build's) never returns per frame and its frame-end switch didn't, so the walk came at the code's next tick, after its stores. Metroid's first immediate DMA crosses two V-blanks: frame 2, 4 samples against the interpreter's none. Fix: dispatch::switch walks them (catch_up) and shows a V-blank reached there as a frame of its own. Play build (just recompile ROM out/metroid --timing native --name metroid) and lift (just lift --name metroid) rebuilt on it: route-check --native target/recompiled/release/gbaa-native-metroid target/recompiled/release/gbaa-metroid units/metroid-native.toml --name metroid --holes mods/metroid/holes.toml: pass (2700 frames, 0 differences in pictures, RAM, I/O, palette, VRAM and OAM; audio the same in 2700 frames), failing as the card says before the fix. Also on the changed runtime: the Amazing Mirror's native route passes (3000 frames, audio the same), and just unit metroid-native passes (mGBA matches at all four checkpoints; recompiled = interpreted). The card's other note, the lift's frame 2700 hash: lift and play build both draw a0c2…, 4bdb…, ed26… at 350, 700 and 1900 as the route has them and bd8fd6e2281cc138 at 2700 where the route (mGBA, exact timing) has 0fba…; the native check compares the lift with the play build at native timing, not with those hashes, and at exact timing the route's hold. Unit test a_guest_run_starts_each_frame_with_what_the_vblank_left_due (fails without the fix). Review: a fresh subagent read the diff: no bug; its two small points taken (no extra frame shown after a front end's fault; the test's comment). memory/guest-run-frame-start.md."
       },
       "round": "2026-11-21T08:26:11Z"
     },
