@@ -3830,3 +3830,4 @@
 {"at":"2026-11-21T09:09:51Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"claim","id":"native/fnref-live-registers","text":"Function flow passes only registers a callee reads: claimed"}
 {"at":"2026-11-21T10:55:36Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"done","id":"native/fnref-live-registers","text":"Function flow passes only registers a callee reads: done"}
 {"at":"2026-11-21T10:56:12Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"add-unit","id":"native/fnref-ram-lift-cost","text":"new unit: Function flow, RAM switch on: the lifts' cost near main's"}
+{"at":"2026-11-21T10:56:14Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"edit","id":"native/fnref-ram-default","text":"Function flow: the RAM pointers on by default: edited (add-needs)"}
