@@ -1444,6 +1444,14 @@
       "at": "2026-11-20T21:14:34Z",
       "scope": ["native/lift-gives"],
       "until": "2026-11-22T05:00:00Z"
+    },
+    {
+      "id": "d/signatures-print-from-the-names-files",
+      "title": "Signatures print from the names files' prototypes where they exist",
+      "why": "june, 2026-11-20: Emerald's lift takes parameter counts and results from pret's prototypes rather than only from the lift's own summaries; a game with no decomp will have them worked out by an agent or an algorithm later anyway. The summaries stay as the safety check and as the score of what an unworked game gets.",
+      "by": "owner",
+      "at": "2026-11-21T04:34:53Z",
+      "scope": ["native/lift-signature-holes", "native/lift-returns-read"]
     }
   ]
 }
