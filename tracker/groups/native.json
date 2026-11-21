@@ -4390,7 +4390,14 @@
       "id": "native/lift-returns-read",
       "title": "A call takes back only the registers its caller reads",
       "detail": "From the owner, 2026-11-20. A shaped function returns every register it may change, so scratch registers a callee merely clobbered print as results: (r0, r2, r3) = GetMonData2(g, r13, v19, 0x3au32, r2)? where C has one return value, and r2 is passed in only because the callee's summary reads it on some path. docs/native-stage-b.md, known gaps, shapes return too much. Wanted: a function's results are the registers some caller reads after the call before writing them (whole program, with the callee sets for indirect calls; a function whose address is taken keeps what any indirect caller may read); a clobbered register nobody reads is not returned and the caller's copy is dead (AAPCS says r1-r3 are, but prove it per function, don't assume: hand-written assembly returns in r1-r3). The same for parameters only a dead path reads. Metrics: functions returning more than one register, and tuple-assigning calls (new, barred); score against pret's prototypes (void / one value) in {unit:native/lift-pret-score}. Check (code-shape work, judged on the C programs, Metroid and Emerald): just lift-check passes with 0 differences on every program and every planted fault caught; the metric barred on the C rows and in the private bars of Metroid and Emerald; both games build and run 600 of 600 frames headless; Emerald route check still 0 differences once {unit:native/emerald-native-route} is done; just check passes.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-21T04:34:56Z",
+          "by": "74e66c41",
+          "text": "2026-11-20: where a names-file prototype exists, the signatures-from-prototypes unit prints its result. This unit is the analysis for functions with none, scored against the prototypes."
+        }
+      ]
     },
     {
       "id": "native/lift-indent",
