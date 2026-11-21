@@ -357,7 +357,7 @@
         "state": "done",
         "by": "00c5224e",
         "at": "2026-11-18T07:38:58Z",
-        "evidence": "just check passes after merging main (71bfafa). Codegen emits Code::fns (per-function ROM ranges, hash, direct callees, keys); runtime Code::mark_stale + Bus::stale drop stale functions and transitive callers from dispatch. Unit tests: runtime (flipped byte runs interpreted, state equals interpreter-only run; caller propagation), codegen (ranges/calls/keys, stale spreads to caller). End to end: jsmolka arm.gba recompiled --timing exact, call-stale-arm 300 frames: byte at 0x2d0 flipped -> 'stale 1', r12=0x64 and all registers equal --interp; leaf 0x1ef8 flipped -> 'stale 5 changed 1 callers 4', registers equal --interp. Decision recorded: a stale function's direct callers go stale too.",
+        "evidence": "just check passes after merging main (990274b). Codegen emits Code::fns (per-function ROM ranges, hash, direct callees, keys); runtime Code::mark_stale + Bus::stale drop stale functions and transitive callers from dispatch. Unit tests: runtime (flipped byte runs interpreted, state equals interpreter-only run; caller propagation), codegen (ranges/calls/keys, stale spreads to caller). End to end: jsmolka arm.gba recompiled --timing exact, call-stale-arm 300 frames: byte at 0x2d0 flipped -> 'stale 1', r12=0x64 and all registers equal --interp; leaf 0x1ef8 flipped -> 'stale 5 changed 1 callers 4', registers equal --interp. Decision recorded: a stale function's direct callers go stale too.",
         "host": "pyon"
       }
     },
@@ -372,7 +372,7 @@
         "state": "done",
         "by": "29dbec4e",
         "at": "2026-11-18T13:05:44Z",
-        "evidence": "just check passes after merging main (6bedb39). Desktop's whole-ROM refusal replaced by crates/desktop/src/changed.rs (solo and netplay room, which gets Gba::set_stale); script writes to cart0-2 patch a ROM copy and take the same path; states keep the loaded ROM's CRC. Tests: desktop a_changed_function_goes_stale, a_patched_rom_runs_its_changed_function_interpreted (patched copy and script patch equal --interp state), a_room_on_a_patched_rom_computes_what_the_interpreter_does (fails without set_stale); script cart_writes_patch_the_rom_and_read_back_at_once. End to end: c-fnptr-gcc recompiled --timing exact, fill_rect's clip 240->200 patched, 300 frames: copy and script patch both print '4 of 18 compiled functions stale (1 changed, 3 calling them)', --hash --regs equal --interp, frame hash differs from the unpatched ROM's.",
+        "evidence": "just check passes after merging main (38b4625). Desktop's whole-ROM refusal replaced by crates/desktop/src/changed.rs (solo and netplay room, which gets Gba::set_stale); script writes to cart0-2 patch a ROM copy and take the same path; states keep the loaded ROM's CRC. Tests: desktop a_changed_function_goes_stale, a_patched_rom_runs_its_changed_function_interpreted (patched copy and script patch equal --interp state), a_room_on_a_patched_rom_computes_what_the_interpreter_does (fails without set_stale); script cart_writes_patch_the_rom_and_read_back_at_once. End to end: c-fnptr-gcc recompiled --timing exact, fill_rect's clip 240->200 patched, 300 frames: copy and script patch both print '4 of 18 compiled functions stale (1 changed, 3 calling them)', --hash --regs equal --interp, frame hash differs from the unpatched ROM's.",
         "host": "quack"
       },
       "notes": [

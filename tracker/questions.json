@@ -1416,7 +1416,7 @@
       },
       "answer": {
         "key": "b",
-        "note": "The runaway fix is on main now (b565bece): merge main, re-compare Emerald, land.",
+        "note": "The runaway fix is on main now (e403f221): merge main, re-compare Emerald, land.",
         "by": "owner",
         "via": "ed09cc1f",
         "at": "2026-11-07T15:08:20Z",
@@ -1490,7 +1490,7 @@
     {
       "id": "q/raise-lift-bars-rom-widening",
       "title": "Raise lift bars for the ROM-widening fix's honest rise?",
-      "context": "{unit:native/fnref-romfrom-absorb} is done on its branch (commit a1683db): the flow no longer drops ROM pointers past the next code when widening. It was unsound: on mosaic-modes the call in core::fmt pad was 'complete' with 18 callees and now has 30. Following those real callees makes ref_unexplained (object-pointer accesses no type explains) rise on every program: affine 35->92, mosaic-modes 34->91, native-spike 39->97, native-fallthrough/frame-locals/bios-calls 35->92, irq-hold/ime-release 93->155 (packed variants alike); native-spike fn_words_not_proven 53->54 (a word was 'proven' only because a path was missed). No bar can be lowered to pass; bars rise only with your OK.",
+      "context": "{unit:native/fnref-romfrom-absorb} is done on its branch (commit 8f3dcab): the flow no longer drops ROM pointers past the next code when widening. It was unsound: on mosaic-modes the call in core::fmt pad was 'complete' with 18 callees and now has 30. Following those real callees makes ref_unexplained (object-pointer accesses no type explains) rise on every program: affine 35->92, mosaic-modes 34->91, native-spike 39->97, native-fallthrough/frame-locals/bios-calls 35->92, irq-hold/ime-release 93->155 (packed variants alike); native-spike fn_words_not_proven 53->54 (a word was 'proven' only because a path was missed). No bar can be lowered to pass; bars rise only with your OK.",
       "options": [
         {
           "key": "a",
@@ -1741,7 +1741,7 @@
     {
       "id": "q/nightmare-s-flow-lift-land",
       "title": "Nightmare's flow lift: land the rule though 3 holes remain?",
-      "context": "Nightmare's lift skips the function flow because MPlayMain leaves its entry r8 in r0 and the flow's pile-wide callee sets (about 2,000 functions per pointer call) let callers that read r0 reach it: 1 hard hole. This branch (5b5c7bc) adds a sound rule for every game: a function returning one of r4-r11 exactly as it came is passed that register at each call, so its own hole goes and a caller's read of the result becomes the caller's read. On Nightmare with the flow MPlayMain's hole is gone, but 3 functions that read r0 after a _call_via_r0 call whose pile-wide set includes MPlayMain now hold it (each reads r8 through a chain of 6 to 200 callers, up to pointer-called ones): 3 hard holes, no build. Removing them needs sharper sets, the parked flow-precision work. Amazing Mirror (0) and Minish Cap (27, no holes file) with the flow, and Metroid, WarioWare, moonbeam and Emerald without it, have the same hard holes before and after.",
+      "context": "Nightmare's lift skips the function flow because MPlayMain leaves its entry r8 in r0 and the flow's pile-wide callee sets (about 2,000 functions per pointer call) let callers that read r0 reach it: 1 hard hole. This branch (609318d) adds a sound rule for every game: a function returning one of r4-r11 exactly as it came is passed that register at each call, so its own hole goes and a caller's read of the result becomes the caller's read. On Nightmare with the flow MPlayMain's hole is gone, but 3 functions that read r0 after a _call_via_r0 call whose pile-wide set includes MPlayMain now hold it (each reads r8 through a chain of 6 to 200 callers, up to pointer-called ones): 3 hard holes, no build. Removing them needs sharper sets, the parked flow-precision work. Amazing Mirror (0) and Minish Cap (27, no holes file) with the flow, and Metroid, WarioWare, moonbeam and Emerald without it, have the same hard holes before and after.",
       "options": [
         {
           "key": "a",
@@ -1845,7 +1845,7 @@
       },
       "answer": {
         "key": "a",
-        "note": "june's 2026-11-19 yes to building C ENet (option a) already said: build it and rerun two gbaa games through the fixed relay. Running it is now in factory/auto-mode.json (b7f4187c). If a session is still refused, note the exact command and stop; don't ask again.",
+        "note": "june's 2026-11-19 yes to building C ENet (option a) already said: build it and rerun two gbaa games through the fixed relay. Running it is now in factory/auto-mode.json (f5c9c381). If a session is still refused, note the exact command and stop; don't ask again.",
         "by": "owner",
         "via": "094c9ec7",
         "at": "2026-11-19T22:43:57Z",

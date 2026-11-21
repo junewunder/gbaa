@@ -1037,7 +1037,7 @@
     {
       "id": "d/land-bios-calls-unit-emerald",
       "title": "Land the BIOS-calls unit with Emerald's runaway compared later: Keep all eight",
-      "why": "The runaway fix is on main now (b565bece): merge main, re-compare Emerald, land.",
+      "why": "The runaway fix is on main now (e403f221): merge main, re-compare Emerald, land.",
       "by": "owner",
       "at": "2026-11-07T15:08:20Z",
       "question": "q/land-bios-calls-unit-emerald",
@@ -1284,7 +1284,7 @@
     {
       "id": "d/four-lift-check-lines-bars-raised-for-the-tail",
       "title": "Four lift-check lines bars raised for the tail-call frame flush",
-      "why": "From {unit:native/ram-copy-jump-only}: {unit:native/nightmare-mixer-pointer} (d6770ed) stores a live frame's locals before a tail call and landed after the bars were set; lift-check failed on main since. With it reverted each count equals its bar. native-spike 71806 to 72079, mosaic-modes 49227 to 49498, native-bios-more 70166 to 70431, native-dma 48433 to 48698. Old values unsound (frames unstored); lift-check passes whole, native check green.",
+      "why": "From {unit:native/ram-copy-jump-only}: {unit:native/nightmare-mixer-pointer} (ad7ce19) stores a live frame's locals before a tail call and landed after the bars were set; lift-check failed on main since. With it reverted each count equals its bar. native-spike 71806 to 72079, mosaic-modes 49227 to 49498, native-bios-more 70166 to 70431, native-dma 48433 to 48698. Old values unsound (frames unstored); lift-check passes whole, native check green.",
       "by": "d206f186",
       "at": "2026-11-14T21:07:33Z",
       "scope": ["native/ram-copy-jump-only"],
@@ -1380,7 +1380,7 @@
     {
       "id": "d/may-lane-run-c-enet",
       "title": "May a lane run the C ENet relay it built for Rogue co-op: Allow running it",
-      "why": "june's 2026-11-19 yes to building C ENet (option a) already said: build it and rerun two gbaa games through the fixed relay. Running it is now in factory/auto-mode.json (b7f4187c). If a session is still refused, note the exact command and stop; don't ask again.",
+      "why": "june's 2026-11-19 yes to building C ENet (option a) already said: build it and rerun two gbaa games through the fixed relay. Running it is now in factory/auto-mode.json (f5c9c381). If a session is still refused, note the exact command and stop; don't ask again.",
       "by": "owner",
       "at": "2026-11-19T22:43:57Z",
       "question": "q/may-lane-run-c-enet",

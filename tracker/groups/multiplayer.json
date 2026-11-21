@@ -547,7 +547,7 @@
         "state": "done",
         "by": "72579059",
         "at": "2026-11-19T23:04:50Z",
-        "evidence": "Two headless gbaa-desktop --rogue runs met via the PokeConnect clerk (Host/Join), each drawing the other player (2026-11-18). Now through C ENet 1.3.17 (spikes/enet-relay/relay.c, fixed to reach the host before listening for the joiner, 1 s host-connect timeout): host --rogue 127.0.0.1:47100, joiner 47101 started 3 s later; 3/3 runs + 1 after merging main: both print rogue: connected, host 'player 1 joined', frame-6900 dumps show the other player+follower on both screens; relay passed 1 handshake each way, ~270 game states, ~1650 player states each way. Started together: 2/3 (game's handshake timeout vs wall clock, documented). multiplayer.md wire-compat paragraph updated. just check passed after merging main (0a1fe4e5).",
+        "evidence": "Two headless gbaa-desktop --rogue runs met via the PokeConnect clerk (Host/Join), each drawing the other player (2026-11-18). Now through C ENet 1.3.17 (spikes/enet-relay/relay.c, fixed to reach the host before listening for the joiner, 1 s host-connect timeout): host --rogue 127.0.0.1:47100, joiner 47101 started 3 s later; 3/3 runs + 1 after merging main: both print rogue: connected, host 'player 1 joined', frame-6900 dumps show the other player+follower on both screens; relay passed 1 handshake each way, ~270 game states, ~1650 player states each way. Started together: 2/3 (game's handshake timeout vs wall clock, documented). multiplayer.md wire-compat paragraph updated. just check passed after merging main (11d3a69c).",
         "host": "quack",
         "landed": "2026-11-19T23:12:50Z"
       },
@@ -620,7 +620,7 @@
         "state": "done",
         "by": "78de4417",
         "at": "2026-11-06T04:39:07Z",
-        "evidence": "Private branch's work replayed on public main (71be9531, merge with main after). quack 2026-11-05: room-sim wander --players 4 --console gba and --players 3 pass every seat; private cu session: 3 then 4 Kirby windows via local gbaa-server, titled player 1-4, mark Connected 3/3 and 4/4, each on its own Kirby in Rainbow Route, one hash each (3: 27f2caeb at 3000, 4: 245b958b at 3600); headless 4 peers c894de98 after a CATCH_UP fix for an early goodbye; just check passes after the merge. Frame cost on quack in docs/research/multiplayer.md; Deck runs left for later by june's 2026-11-01 decision (may-lane-ssh-onto-your), in {unit:multiplayer/four-kirbys-deck}.",
+        "evidence": "Private branch's work replayed on public main (8e379bbd, merge with main after). quack 2026-11-05: room-sim wander --players 4 --console gba and --players 3 pass every seat; private cu session: 3 then 4 Kirby windows via local gbaa-server, titled player 1-4, mark Connected 3/3 and 4/4, each on its own Kirby in Rainbow Route, one hash each (3: 27f2caeb at 3000, 4: 245b958b at 3600); headless 4 peers c894de98 after a CATCH_UP fix for an early goodbye; just check passes after the merge. Frame cost on quack in docs/research/multiplayer.md; Deck runs left for later by june's 2026-11-01 decision (may-lane-ssh-onto-your), in {unit:multiplayer/four-kirbys-deck}.",
         "host": "quack"
       },
       "notes": [
@@ -701,7 +701,7 @@
         {
           "at": "2026-11-06T13:27:21Z",
           "by": "31168110",
-          "text": "Not our overlays: Controls draws no report/mark at its foot. Suspect Steam's floating OSK: SDL x11 opens steam://open/keyboard on text_input.start (window.rs:1105, no rect for Netplay fields); a tap outside closes it. Asked owner for a Deck test. Main merged (62910042)."
+          "text": "Not our overlays: Controls draws no report/mark at its foot. Suspect Steam's floating OSK: SDL x11 opens steam://open/keyboard on text_input.start (window.rs:1105, no rect for Netplay fields); a tap outside closes it. Asked owner for a Deck test. Main merged (4280e66e)."
         },
         {
           "at": "2026-11-06T03:21:25Z",
@@ -896,7 +896,7 @@
         "state": "done",
         "by": "954f0eb1",
         "at": "2026-11-08T21:50:22Z",
-        "evidence": "just emerald-wireless (runtime::link::rfu, crates/emerald-save/src/bin/emerald-wireless.rs) after merging main at 51b5017: alice.sav and bob.sav both in Oldale's Union Room (frames 3529, 3479); BOB registers Torchic at the trading board, ALICE offers Mudkip, BOB accepts, trade and save run; first Pokémon swapped (1a2b3c4d <-> 9a8b7c6d); second run identical (states 0ddcc166e736c0ae 566c499d6b8d9e67, 228071 transfers in 10500 frames). just check passes. New unit tests cover the NINTENDO handshake against afska's log, a command and a wait event on the port, host/child packets.",
+        "evidence": "just emerald-wireless (runtime::link::rfu, crates/emerald-save/src/bin/emerald-wireless.rs) after merging main at 8deb22b: alice.sav and bob.sav both in Oldale's Union Room (frames 3529, 3479); BOB registers Torchic at the trading board, ALICE offers Mudkip, BOB accepts, trade and save run; first Pokémon swapped (1a2b3c4d <-> 9a8b7c6d); second run identical (states 0ddcc166e736c0ae 566c499d6b8d9e67, 228071 transfers in 10500 frames). just check passes. New unit tests cover the NINTENDO handshake against afska's log, a command and a wait event on the port, host/child packets.",
         "host": "quack"
       }
     },
@@ -908,7 +908,7 @@
         "state": "done",
         "by": "a897fc66",
         "at": "2026-11-12T06:25:44Z",
-        "evidence": "Homebrew single-pak sender (netplay::demo::single_pak_sender: GBATEK handshake, then SWI 0x25) boots a cartless seat 1 through two local netplay peers: just ping-sim rough --console single-pak passes (10 hashes and end match the straight run on both seats; calm and wander pass too), after merging main. Unit tests: a_cartless_seat_boots_what_the_sender_sends (child at 0x020000C0+, mark written, header/program copied, boot mode 3, ID 1, MultiBoot r0=0; boots ~frame 18 after 237 transfers), a_single_pak_session_rolls_back_to_the_straight_run (in-process rollback over a lossy net), ping_sim::rough_single_pak, runtime link tests for the failing paths and cartless HardReset; snap v4 with a pinned v3 state. just check passes on the merged branch (1c68875).",
+        "evidence": "Homebrew single-pak sender (netplay::demo::single_pak_sender: GBATEK handshake, then SWI 0x25) boots a cartless seat 1 through two local netplay peers: just ping-sim rough --console single-pak passes (10 hashes and end match the straight run on both seats; calm and wander pass too), after merging main. Unit tests: a_cartless_seat_boots_what_the_sender_sends (child at 0x020000C0+, mark written, header/program copied, boot mode 3, ID 1, MultiBoot r0=0; boots ~frame 18 after 237 transfers), a_single_pak_session_rolls_back_to_the_straight_run (in-process rollback over a lossy net), ping_sim::rough_single_pak, runtime link tests for the failing paths and cartless HardReset; snap v4 with a pinned v3 state. just check passes on the merged branch (c60e876).",
         "host": "quack"
       },
       "notes": [
@@ -973,7 +973,7 @@
         "state": "done",
         "by": "441eea3e",
         "at": "2026-11-18T07:07:29Z",
-        "evidence": "A peer 20+ frames behind now runs unpaced until within 2 (Rollback::catching_up). Check, quack load ~18: just rollback-feel wander (Kirby) --headless --paced --frames 2400 --stop 2@20+4, seat 2's presses ending at frame 1000: before (catch-up off) 22.9 s / 26.2 s 10+ frames apart, gbaa-pingsim fails; after 4.3 s (stopped seat) / 7.9 s (other, the 4 s stop included), passes, hashes equal; with presses every second also passes (4.4 / 7.7 s). Feel budgets test passes unchanged, new a_peer_back_from_a_stall_catches_up_in_seconds passes. just check passes before and after merging main (eefd23a).",
+        "evidence": "A peer 20+ frames behind now runs unpaced until within 2 (Rollback::catching_up). Check, quack load ~18: just rollback-feel wander (Kirby) --headless --paced --frames 2400 --stop 2@20+4, seat 2's presses ending at frame 1000: before (catch-up off) 22.9 s / 26.2 s 10+ frames apart, gbaa-pingsim fails; after 4.3 s (stopped seat) / 7.9 s (other, the 4 s stop included), passes, hashes equal; with presses every second also passes (4.4 / 7.7 s). Feel budgets test passes unchanged, new a_peer_back_from_a_stall_catches_up_in_seconds passes. just check passes before and after merging main (1c0d277).",
         "host": "quack"
       }
     },
@@ -986,7 +986,7 @@
         "state": "done",
         "by": "688d2c6c",
         "at": "2026-11-12T09:46:24Z",
-        "evidence": "Review fix made: --rogue usage line realigned to column 20 (63e2cd3, whitespace only). Union Room check from 2026-11-12 on quack stands: two windows in a private cu session through a local gbaa-server traded (BOB sent over TORCHIC / ALICE sent over MUDKIP), 10600 frames, 0 late, 0 resent. Main merged (582c725); just check passed after the merge.",
+        "evidence": "Review fix made: --rogue usage line realigned to column 20 (c1d45f8, whitespace only). Union Room check from 2026-11-12 on quack stands: two windows in a private cu session through a local gbaa-server traded (BOB sent over TORCHIC / ALICE sent over MUDKIP), 10600 frames, 0 late, 0 resent. Main merged (c1d45f8); just check passed after the merge.",
         "host": "quack"
       },
       "notes": [
@@ -1029,19 +1029,19 @@
         "by": "3a56352f",
         "checker": "f137e839",
         "at": "2026-11-17T22:40:22Z",
-        "evidence": "just check passed on c2f938c3 (main + this branch), merged to main at c48619a0 (later changes are comments only); the pacer test runs on a made-up clock",
+        "evidence": "just check passed on 19188c7c (main + this branch), merged to main at 9b75ea91 (later changes are comments only); the pacer test runs on a made-up clock",
         "host": "quack"
       },
       "notes": [
         {
           "at": "2026-11-15T01:12:49Z",
           "by": "3a56352f",
-          "text": "main merged again (c52dd8a); the pacer test passes alone (cargo test -p desktop pacer). just check cut off by lane stop again: start the session with just check, then record done."
+          "text": "main merged again (5151521); the pacer test passes alone (cargo test -p desktop pacer). just check cut off by lane stop again: start the session with just check, then record done."
         },
         {
           "at": "2026-11-15T01:10:36Z",
           "by": "67143e6c",
-          "text": "Fix committed on the unit branch (e6fc18d): Pacer::step(now, period) returns the sleep; the test drives it on synthetic instants, so load can't move it. The test passes; main is merged in. just check was cut off by the lane stop time: run it, then record done."
+          "text": "Fix committed on the unit branch (5151521): Pacer::step(now, period) returns the sleep; the test drives it on synthetic instants, so load can't move it. The test passes; main is merged in. just check was cut off by the lane stop time: run it, then record done."
         },
         {
           "at": "2026-11-14T15:53:48Z",

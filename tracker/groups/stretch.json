@@ -336,7 +336,7 @@
         "state": "done",
         "by": "05552eed",
         "at": "2026-11-18T05:34:06Z",
-        "evidence": "Cause: Export::serve put the menu on a built connection's object server, which subscribes to method calls from a spawned task, so the reader's first call (Properties.Get Version) could go unanswered for good. Reproduced 8/600 and 13/1200 hangs running the test 32 at a time; a 10 s method timeout showed the stall at that first call. Fix: Builder::serve_at, which waits for the subscription before build() (the same race could hit Plasma's first call in the app), plus a 60 s method timeout on the test's connections. After the fix 1500/1500 passed under the same load. just check after merging main: exit 0 (commits 8f80fc4, d2fb771).",
+        "evidence": "Cause: Export::serve put the menu on a built connection's object server, which subscribes to method calls from a spawned task, so the reader's first call (Properties.Get Version) could go unanswered for good. Reproduced 8/600 and 13/1200 hangs running the test 32 at a time; a 10 s method timeout showed the stall at that first call. Fix: Builder::serve_at, which waits for the subscription before build() (the same race could hit Plasma's first call in the app), plus a 60 s method timeout on the test's connections. After the fix 1500/1500 passed under the same load. just check after merging main: exit 0 (commits 9b3f359, d832335).",
         "host": "quack"
       },
       "notes": [
