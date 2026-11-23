@@ -3924,18 +3924,22 @@
       "needs": ["native/metroid-dwarf-map"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "0ccfa39e",
-        "session": "0ccfa39e-9a4c-43d4-98de-26f08c1546d1",
-        "host": "quack",
-        "pid": 2306166,
-        "start": "90698249",
-        "at": "2026-11-23T19:15:32Z",
+        "at": "2026-11-23T19:34:50Z",
+        "evidence": "katam builds agbcc -g by default, byte-identical ROM (sha1 274b102b). Names map: 321 types, 14,474 locals in 4,901 fns, 99,340 lines covering all 5,024 C fns. Mirror's lift reads it: 0 hard holes, line_notes 95120, locals_named 4582. Latest main merged; just check passed (exit 0).",
         "branch": "unit/native/mirror-dwarf-map",
-        "resumed": "16736a4f",
-        "prevSession": "16736a4f-f5bc-4cb5-b40c-429d86e5a28b",
-        "pushed": true,
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-23T19:34:50Z",
+          "by": "0ccfa39e",
+          "host": "quack",
+          "pid": 2306166,
+          "start": "90698249",
+          "beats": true,
+          "session": "0ccfa39e-9a4c-43d4-98de-26f08c1546d1",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
