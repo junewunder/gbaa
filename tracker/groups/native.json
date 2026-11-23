@@ -4396,6 +4396,11 @@
       "uses": ["heavy"],
       "notes": [
         {
+          "at": "2026-11-23T18:47:24Z",
+          "by": "f3f3ccb1",
+          "text": "f3f3ccb1 ({unit:native/emerald-native-route} branch): reading (a). sNamingScreen is NULL when SpriteCB_Underscore runs once after the screen frees it; [[open_bus]] at 0x080e4a6e and 0x080e4aa2 in mods/emerald/holes.toml take the lift past it (frame 3965 on units/emerald-native.toml)."
+        },
+        {
           "at": "2026-11-20T21:22:22Z",
           "by": "190f663c",
           "text": "june's input when it stopped: holding B and mashing A through the new-game intro (Birch's speech into the naming screen), frame 7175. A route with those presses should reach it."
