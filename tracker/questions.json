@@ -1925,6 +1925,38 @@
         "at": "2026-11-20T17:13:26Z",
         "decision": "d/may-mod-view-deleted-happens"
       }
+    },
+    {
+      "id": "q/may-native-check-skip-struct",
+      "title": "May the native check skip struct padding copied from stack garbage?",
+      "context": "Emerald's lift against its play build (units/emerald-native.toml, {unit:native/emerald-native-route}): from frame 977 four EWRAM bytes differ for the rest of the run, the two padding bytes (+0xe, +0xf) of sTempTextPrinter and of sTextPrinters[0]. AddTextPrinter copies a whole TextPrinterTemplate, padding included, from its caller's stack, where the template's last two bytes were never written: the play build has what older frames left there (0x0300, 0x0101, 0x0202), the lift 0, because it keeps pushes and non-escaping slots as Rust locals (stage A's design) and never writes them to IWRAM. No code reads those bytes; pictures match on all 5400 frames. route-check --native compares every RAM byte but the stack and code copies, so as it stands this route can never pass.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Name them in the holes file",
+          "changes": "a [[garbage]] entry (address range, why) in mods/emerald/holes.toml that route-check --native leaves out and prints each run, as it does the stack and code copies; the check is loosened only by bytes a person named and explained; the lift is unchanged"
+        },
+        {
+          "key": "b",
+          "label": "Lift writes the stack exactly",
+          "changes": "the lift writes every push and spilled slot to the guest stack in IWRAM, so stack garbage matches the play build's; the check stays whole, but every lifted function gets slower and longer, undoing part of the frame-locals work"
+        },
+        {
+          "key": "c",
+          "label": "Not yet",
+          "changes": "Emerald's route waits; the other two causes found on it go ahead on their own",
+          "parks": true
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/emerald-native-route"],
+      "asked": {
+        "at": "2026-11-23T18:37:20Z",
+        "by": "f3f3ccb1",
+        "host": "quack",
+        "unit": "native/emerald-native-route"
+      },
+      "answer": null
     }
   ]
 }
