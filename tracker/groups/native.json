@@ -4303,21 +4303,9 @@
         "by": "fd5d52d6",
         "at": "2026-11-23T17:26:00Z",
         "evidence": "just pret-score (crates/pret-score, games.toml) prints the table for both, from fresh lifts at 1527f8de (Emerald: gbaa-lift with mods/emerald/holes.toml, 28 min, 1.4 GB; Metroid lifted, built, 600 of 600 frames no stop). Emerald / Metroid: functions named 15147/15144 map, 2612/2612; lines 849598/421436 C (2.02x), 245682/362552; line notes 178606/186515, 61261/62685; locals 15224+7031/23196, 2609+1920/4754; values_named 121/1852 (the map's [values] holds 1852 names, not the card's 2807), 1058/1495; named fields 55148/74607, 7370/9677; texts 1029 statics 2277 left, 121 0; loops for 353 loop 4030, 101 593; fn words 403/10991, 690/814; lines per source line median 3.71 (14974 fns), 3.50 (2557), worst 20 each listed. Emerald's note says it builds ({unit:native/emerald-builds} done) and scores reading until its first stops. summary.toml kept, --against/--from. Entry in docs/tools/commands.md (budget 2011 to 2021, reason in docs/budgets.toml). 6 unit tests. just check passed (long job, exit 0) on a8500300, main merged (no change).",
-        "branch": "unit/native/lift-pret-score",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-23T17:26:00Z",
-          "by": "fd5d52d6",
-          "host": "quack",
-          "pid": 2306795,
-          "start": "90698916",
-          "beats": true,
-          "session": "fd5d52d6-556f-4ede-9ada-968b7dbe3e78",
-          "lane": "quack/2"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-23T16:41:41Z"
+        "landed": "2026-11-23T17:31:52Z"
+      }
     },
     {
       "id": "native/lift-value-args",
