@@ -4371,6 +4371,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-23T18:47:22Z",
+          "by": "f3f3ccb1",
+          "text": "units/emerald-native.toml (5400 f) added. Fixed: naming [[open_bus]], tileset callbacks [[roots]], RTC via Hw::gpio. Left: play SIO32 at f3, m4a compressed audio f2150, text padding f977 (asked). Lift ~25 min busy."
+        },
+        {
           "at": "2026-11-20T21:14:37Z",
           "by": "190f663c",
           "text": "Emerald's lift needs both [[copy]] in mods/emerald/holes.toml (IntrMain, librfu_intr) and the 4 [[takes]]; first build's cost: lift ~13 min, build+run ~9 min. gbaa-native-emerald --headless --frames N runs it."
