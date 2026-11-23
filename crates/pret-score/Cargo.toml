@@ -1,0 +1,15 @@
+[package]
+name = "pret-score"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# The lift scored against pret (native/lift-pret-score; `just pret-score`):
+# each game's lift (its metrics.toml, report.txt and printed source) beside
+# what the pret names map it was lifted with offers, one table.
+
+[dependencies]
+analysis = { path = "../analysis" }
+codegen = { path = "../codegen" }
+serde = { version = "1", features = ["derive"] }
+toml = "1"
