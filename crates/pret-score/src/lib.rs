@@ -4,6 +4,20 @@
 //! offers (`[functions]`, `[lines]`, `[locals]`, `[values]`) and the
 //! decomp's C lines; one table, a row per measure, a column per game.
 //! `just pret-score`; docs/tools/commands.md.
+//!
+//! The rows, each the lift's number(s) / what the map offers:
+//! functions named (`report.txt`'s count) of the map's `[functions]`;
+//! `lines` of the decomp's C lines (every `src/**/*.c`); `line_notes` of
+//! `[lines]`' rows; `locals_named` + `locals_noted` of `[locals]`'
+//! variables; `values_named` of `[values]`' names; `named_field_accesses`
+//! of the computed accesses (it plus `computed_unknown_unnamed`);
+//! `text_statics` and `texts_left`; `loops_for` and `loops_not_for`;
+//! `fn_words_proven` of the fn words; the built lift's run (`[run]`, which
+//! `just lift` writes; `not run` without it). And one direct measure from
+//! the printed source ([`fn_lines`]): each function's printed lines (not
+//! blank, not a comment) per distinct `// file:line` note in it; the
+//! median over the functions with a note, and under the table the
+//! [`WORST`] by name (an `x_<key>` entry named by its one-line wrapper).
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

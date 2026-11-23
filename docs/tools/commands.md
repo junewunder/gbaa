@@ -1428,32 +1428,15 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   that generated numbers file (header, date, commit): rerun it when a
   unit changes the metrics, rather than copying numbers into the plan.
 - `just pret-score [--out DIR] [--against DIR2] [--from DIR] [--only NAME]…`
-  (native/lift-pret-score; `crates/pret-score`): the lift's printing
-  scored against pret, Emerald (the benchmark) and Metroid (whose lift
-  builds and passes its native check). The games are
-  `crates/pret-score/games.toml`: each one's lift folder, the names map it
-  was lifted with (under `$GBAA_DATA`, `just pret-names`), the decomp's
-  checkout and a note printed under the table. It reads the lifts as they
-  are: lift each first (`just lift ROM --name emerald`, or `gbaa-lift`
-  alone into `out/lift-<name>` when the build isn't wanted; Emerald's
-  lift alone took 16 minutes and 1.3 GB). One table, a row per measure, a
-  column per game, each cell the lift's number / what the map offers:
-  functions named (`report.txt`'s count) of the map's `[functions]`;
-  `lines` of the decomp's C lines (every `src/**/*.c`); `line_notes` of
-  `[lines]`' rows; `locals_named` + `locals_noted` of `[locals]`'
-  variables; `values_named` of `[values]`' names; `named_field_accesses`
-  of the computed accesses (it plus `computed_unknown_unnamed`);
-  `text_statics` and `texts_left`; `loops_for` and `loops_not_for`;
-  `fn_words_proven` of the fn words; the built lift's run (`[run]`, from
-  `just lift`; `not run` without it). And one direct measure, from the
-  printed source: each function's printed lines (not blank, not a
-  comment) per distinct `// file:line` note in it, its median over the
-  functions with a note, and under the table the 20 worst by name (an
-  `x_<key>` entry named by its one-line wrapper). Writes
-  `OUT/summary.toml` (default `out/pret-score/<git short hash>[-dirty]`);
-  `--against DIR2` shows each lift number's change from DIR2's summary in
-  brackets, `--from DIR` prints DIR's summary without reading anything
-  else. About 45 s for both (Emerald's source is most of it). Light.
+  (native/lift-pret-score; what each measure is: `crates/pret-score`'s
+  module doc): the lift's printing scored against pret, Emerald and
+  Metroid, one table: a row per measure, a column per game, each cell the
+  lift's number / what its names map offers. The games, their lifts, maps
+  and decomps: `crates/pret-score/games.toml`. It reads the lifts as they
+  are: lift each first (`just lift`; `gbaa-lift` alone when no build is
+  wanted: Emerald's took 28 min, 1.4 GB). Writes `OUT/summary.toml`
+  (default `out/pret-score/<git short hash>[-dirty]`); `--against DIR2`
+  shows changes in brackets, `--from DIR` prints DIR's summary. About 5 s.
 - `just native-ten [ROM]` (native/emerald-ten; scores in
   `docs/native-port-design.md`, "Emerald's ten, scored"): fn-diff for
   native functions (`crates/native-fn-diff`). Emerald's ten, lifted by
