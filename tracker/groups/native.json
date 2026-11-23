@@ -3925,16 +3925,17 @@
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
-        "by": "16736a4f",
-        "session": "16736a4f-f5bc-4cb5-b40c-429d86e5a28b",
+        "by": "0ccfa39e",
+        "session": "0ccfa39e-9a4c-43d4-98de-26f08c1546d1",
         "host": "quack",
-        "pid": 3424233,
-        "start": "57918558",
-        "at": "2026-11-20T13:35:41Z",
+        "pid": 2306166,
+        "start": "90698249",
+        "at": "2026-11-23T19:15:32Z",
         "branch": "unit/native/mirror-dwarf-map",
-        "beats": true,
+        "resumed": "16736a4f",
+        "prevSession": "16736a4f-f5bc-4cb5-b40c-429d86e5a28b",
         "pushed": true,
-        "ended": "2026-11-20T13:45:22Z"
+        "beats": true
       },
       "notes": [
         {
