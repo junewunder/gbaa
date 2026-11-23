@@ -4506,6 +4506,12 @@
       "check": "recorded",
       "needs": ["native/lift-for-bounds"],
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/emerald-sio32-play-timing",
+      "title": "Emerald play build: librfu ID-check IRQs as interpreted",
+      "detail": "Found by {unit:native/emerald-native-route}: route-check --native on units/emerald-native.toml fails at frame 3, the play build's compiled code against its own interpreter at --timing native: gRfuSIO32Id (0x030078a6) and SIODATA32's high half (0x04000122) are 0x0000 compiled, 0xffff interpreted, alternating for 91 frames of 5400 (the lift agrees with the interpreter). AgbRFU_checkID polls a timer (while TMxCNT_L < 32) while Sio32IDIntr restarts the unplugged transfer from inside the serial IRQ (SIOCNT start bit, which io.rs's sio_unplugged ends at once with its IRQ), so each IRQ chains the next and the count taken depends on where time points fall; the handlers are IWRAM copies the play build interprets (librfu_intr 0x03004664, IntrMain 0x03002750). Find where compiled and interpreted part (memory/native-check-divergence.md) and fix it in the play build or the runtime. Done when: on units/emerald-native.toml the play build's compiled and interpreted records match (route-check --native gets past that check); just check passes.",
+      "uses": ["heavy"]
     }
   ]
 }

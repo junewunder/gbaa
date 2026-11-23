@@ -3848,3 +3848,4 @@
 {"at":"2026-11-23T18:19:37Z","actor":"loop","tag":"1c7acd5d","host":"quack","cmd":"add-unit","id":"native/lift-for-ram-bounds","text":"new unit: Loops to a bound read from RAM print as for"}
 {"at":"2026-11-23T18:19:47Z","actor":"loop","tag":"1c7acd5d","host":"quack","cmd":"add-unit","id":"native/lift-for-top-tested","text":"new unit: Loops tested at the top print as for"}
 {"at":"2026-11-23T18:19:50Z","actor":"loop","tag":"1c7acd5d","host":"quack","cmd":"add-unit","id":"native/lift-for-step-via","text":"new unit: A counter stepped through a second register prints as for"}
+{"at":"2026-11-23T18:36:54Z","actor":"loop","tag":"f3f3ccb1","host":"quack","cmd":"add-unit","id":"native/emerald-sio32-play-timing","text":"new unit: Emerald play build: librfu ID-check IRQs as interpreted"}
