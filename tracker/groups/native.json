@@ -4430,6 +4430,13 @@
         "branch": "unit/native/lift-for-bounds",
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-23T19:36:18Z",
+          "by": "1c7acd5d",
+          "text": "code done on the branch (native::bounds, c/loops in lift-check). lift-check passed at d4e065ef: 30 programs, 0 differences, every plant caught. Metroid 195 fors, 499 loops left, 600/600, bar in mods. Left: just check, Emerald rerun, merge main."
+        }
+      ],
       "round": "2026-11-23T17:31:59Z"
     },
     {
