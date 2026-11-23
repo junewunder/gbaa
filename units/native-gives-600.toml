@@ -1,0 +1,12 @@
+# agb/native-gives for 600 frames with no input: the gives-back program of the
+# stage-A lifter's check (native/lift-gives; `just lift-check`),
+# its lift (gbaa-lift) against the play build at --timing native by
+# route-check --native. What it draws: agb/native-gives/SCENE.md.
+rom = "$GBAA_DATA/agb/native-gives.gba"
+
+[[checkpoint]]
+name = "native-gives-600"
+frame = 600
+hash = "4d01eb2f27a15a02"
+# Verified: mGBA 0.10.5 (`just mgba-diff`) draws the same at frame 600
+# (2026-11-20).

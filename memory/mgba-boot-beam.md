@@ -1,6 +1,6 @@
 ---
 title: Where mGBA's beam is at the hand-over, and what matching it took
-hook: mGBA hands over on line 126, H-blank 91 cycles off; ours does too, which needed each V-blank of a long DMA to end a frame (2026-11-18)
+hook: line 126, H-blank 91 cycles off; ours too, so each V-blank of a long DMA ends a frame
 ---
 
 Found on the long-fill frame offset (oracle/long-fill-frame-offset), fixed

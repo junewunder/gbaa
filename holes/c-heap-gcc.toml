@@ -1,6 +1,6 @@
 # The lift's holes file for c/heap built by modern GCC (`just lift`,
 # crates/codegen/src/native.rs): no stand-ins, only its allocators
 # (`nm c-heap-gcc.elf`: heap_alloc, heap_alloc_zeroed), which the
-# function flow gives an object a call site with GBAA_FNREF_HEAP set
+# function flow gives an object a call site (not with GBAA_FNREF_HEAP=0)
 # (native/fnref-heap-sites).
 allocators = [0x080003c9, 0x08000425]

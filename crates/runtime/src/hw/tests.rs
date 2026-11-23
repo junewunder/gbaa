@@ -737,17 +737,19 @@ fn an_idle_loops_way_out_syncs_only_past_the_next_event() {
 }
 
 #[test]
-fn a_frame_is_presented_at_its_syncs_end() {
+fn a_frame_is_presented_at_its_vblank_line() {
     let mut g = game(10);
     g.hw.on_frame_end(|g: &mut Game| g.ram.seen_line = g.hw.line());
     // To just short of V-blank, then a price that runs two lines past it
-    // in one sync (a DMA's, no stall): presented after the whole walk, at
-    // line 162, as the play build presents when its sync returns.
+    // in one sync (a DMA's, no stall): presented at line 160, where the
+    // play build's walk stops and ends the frame, and the walk goes on to
+    // line 162 after it, as the play build's next run's `catch_up`.
     spend(&mut *g, VBLANK_LINE as u32 * LINE_DOTS - 1).unwrap();
     assert_eq!(g.hw.frames(), 0);
     g.hw.sound.io.now += 2 * LINE_DOTS as u64 + 1;
     idle_exit(&mut *g).unwrap();
-    assert_eq!((g.hw.frames(), g.ram.seen_line), (1, VBLANK_LINE + 2));
+    assert_eq!((g.hw.frames(), g.ram.seen_line), (1, VBLANK_LINE));
+    assert_eq!(g.hw.line(), VBLANK_LINE + 2);
 }
 
 #[test]
