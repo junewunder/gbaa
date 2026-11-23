@@ -4498,6 +4498,14 @@
       "check": "recorded",
       "needs": ["native/lift-for-bounds"],
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-for-step-via",
+      "title": "A counter stepped through a second register prints as for",
+      "detail": "From {unit:native/lift-for-bounds}: agbcc often computes i + 1 into another register early in the body and moves it back in the latch (HealPlayerParty: r9 = r8 + 1 at the top, r8 = r9 as u8 at the end); native::bounds evaluates only the latch, so the step isn't of the counter ('step not of the counter' with GBAA_FOR_WHY=1). Carry the counter's sums through the blocks that dominate the latch inside the loop, the second register written once. Check as the parent's (just lift-check 0 differences, bars on C rows, Metroid and Emerald, 600 of 600 frames, just check).",
+      "check": "recorded",
+      "needs": ["native/lift-for-bounds"],
+      "uses": ["heavy"]
     }
   ]
 }
