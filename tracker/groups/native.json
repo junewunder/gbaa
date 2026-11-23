@@ -4351,13 +4351,25 @@
       "needs": ["native/emerald-first-stops"],
       "uses": ["heavy"],
       "priority": 30,
+      "record": {
+        "state": "claimed",
+        "by": "f3f3ccb1",
+        "session": "f3f3ccb1-54d8-4faf-8da8-651f26ab1050",
+        "host": "quack",
+        "pid": 2306166,
+        "start": "90698249",
+        "at": "2026-11-23T16:41:33Z",
+        "branch": "unit/native/emerald-native-route",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-20T21:14:37Z",
           "by": "190f663c",
           "text": "Emerald's lift needs both [[copy]] in mods/emerald/holes.toml (IntrMain, librfu_intr) and the 4 [[takes]]; first build's cost: lift ~13 min, build+run ~9 min. gbaa-native-emerald --headless --frames N runs it."
         }
-      ]
+      ],
+      "round": "2026-11-23T16:41:33Z"
     },
     {
       "id": "native/lift-rtc",
