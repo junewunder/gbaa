@@ -4297,7 +4297,19 @@
       "detail": "From the owner, 2026-11-20: Emerald with pret's map is the benchmark for how good the lift's printing is, Metroid beside it because its lift builds and passes its native check. A Rust tool (no bash logic) that reads a lift's metrics.toml and the names map it was lifted with and prints one table, a row per measure, a column per game, each as lift / what the map offers: functions named; lines against the decomp's C lines; line notes of [lines]; locals named and noted of [locals]; values_named of [values] names; named field accesses of the computed accesses (named_field_accesses and computed_unknown_unnamed); texts as statics and left; loops as for and loop; fn words proven. And one direct measure: the lift's lines per source line per function, from the line notes (median and the worst 20 functions by name). It keeps the last run (a summary.toml, as holes-all does) and prints changes --against it. First numbers, a whole Emerald lift at 05ad9fc0 with mods/emerald/holes.toml (16 min, 1.3 GB): 847,411 lines against 421,436 of C; 15,147 of 15,208 functions named; line_notes 178,597 of 186,515; locals_named 15,224 and locals_noted 7,031 of 23,196; values_named 121 of 2,807 names; named fields 55,148, unnamed 19,349; text_statics 1,029, texts_left 2,276; for 353, loop 4,026. Emerald's column scores reading only until {unit:native/emerald-builds} is done: say so in the table. Done when: the recipe prints the table for both games, its entry is in docs/tools/commands.md, just check passes.",
       "check": "recorded",
       "uses": ["heavy"],
-      "priority": 28
+      "priority": 28,
+      "record": {
+        "state": "claimed",
+        "by": "fd5d52d6",
+        "session": "fd5d52d6-556f-4ede-9ada-968b7dbe3e78",
+        "host": "quack",
+        "pid": 2306795,
+        "start": "90698916",
+        "at": "2026-11-23T16:41:41Z",
+        "branch": "unit/native/lift-pret-score",
+        "beats": true
+      },
+      "round": "2026-11-23T16:41:41Z"
     },
     {
       "id": "native/lift-value-args",
