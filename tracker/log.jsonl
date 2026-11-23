@@ -3851,3 +3851,4 @@
 {"at":"2026-11-23T18:36:54Z","actor":"loop","tag":"f3f3ccb1","host":"quack","cmd":"add-unit","id":"native/emerald-sio32-play-timing","text":"new unit: Emerald play build: librfu ID-check IRQs as interpreted"}
 {"at":"2026-11-23T18:37:02Z","actor":"loop","tag":"f3f3ccb1","host":"quack","cmd":"add-unit","id":"native/emerald-m4a-compressed","text":"new unit: Emerald's lift mixes m4a's compressed samples as play does"}
 {"at":"2026-11-23T18:37:20Z","actor":"loop","tag":"f3f3ccb1","host":"quack","cmd":"ask","text":"asked the owner: May the native check skip struct padding copied from stack garbage?","q":"q/may-native-check-skip-struct"}
+{"at":"2026-11-23T18:37:27Z","actor":"loop","tag":"f3f3ccb1","host":"quack","cmd":"edit","id":"native/emerald-native-route","text":"Emerald's lift matches the play build on a route: edited (add-needs)"}

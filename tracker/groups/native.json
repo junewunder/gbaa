@@ -4356,7 +4356,7 @@
       "id": "native/emerald-native-route",
       "title": "Emerald's lift matches the play build on a route",
       "detail": "After {unit:native/emerald-first-stops}: Emerald's lift (just lift ROM out/lift-emerald --name emerald; the holes file is mods/emerald/holes.toml) builds and runs 600 of 600 frames headless with no stop (2026-11-20, main 59263d82), but nothing has compared what it draws. As {unit:native/mirror-native-route} did for the Amazing Mirror: route-check --native on a route for Emerald (units/emerald-intro.toml and units/emerald-newgame.toml exist for the play build; a native one from boot through the intro and title into the new game, 3000 frames or more), the lift against the play build at --timing native: pictures, RAM, I/O, audio. Fix what stops or differs on the way (each a rule where general, the holes file where the game's own). This is the check {unit:native/lift-pret-score} needs before Emerald's printing is scored. Whole lift about 13 minutes, release build about 8, under 12 GB together (holes-only 80 s: iterate with it). Done when: route-check --native passes on that route with 0 differences; just check passes.",
-      "needs": ["native/emerald-first-stops"],
+      "needs": ["native/emerald-first-stops", "native/emerald-sio32-play-timing"],
       "uses": ["heavy"],
       "priority": 30,
       "record": {
