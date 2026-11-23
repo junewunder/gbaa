@@ -4420,15 +4420,22 @@
       "uses": ["heavy"],
       "priority": 26,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "1c7acd5d",
-        "session": "1c7acd5d-ddcb-4a2c-bac1-0168654983e3",
-        "host": "quack",
-        "pid": 2306795,
-        "start": "90698916",
-        "at": "2026-11-23T17:31:59Z",
+        "at": "2026-11-23T19:39:23Z",
+        "evidence": "At d4e065ef (main merged, up to date): just lift-check passed, 30 programs 0 differences incl. new c-loops-agbcc/gcc (c/loops, mGBA-matched 45ce6655274c0721), every planted fault caught; loops_not_for barred on C rows (lowered). Metroid 195 for/499 loop (was 101/593), 600/600, bar 499 in mods/metroid/lift-bars.toml (its lines_prelude and entries_beyond_one over-bars predate this: 1328/2997 on a 2026-11-21 lift in the main checkout). Emerald 993/3390 (was 353/4030), 600/600, bars in new mods/emerald/lift-bars.toml (lifted with the committed holes file). Emerald route check waits on {unit:native/emerald-native-route}. just check passed. Counters named by local_names where DWARF allows; x_ bodies keep notes.",
         "branch": "unit/native/lift-for-bounds",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-23T19:39:23Z",
+          "by": "1c7acd5d",
+          "host": "quack",
+          "pid": 2306795,
+          "start": "90698916",
+          "beats": true,
+          "session": "1c7acd5d-ddcb-4a2c-bac1-0168654983e3",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
