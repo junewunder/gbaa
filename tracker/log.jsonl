@@ -3846,3 +3846,4 @@
 {"at":"2026-11-23T17:31:52Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-pret-score","text":"The lift scored against pret: Emerald and Metroid, one table: on main"}
 {"at":"2026-11-23T17:31:59Z","actor":"loop","tag":"1c7acd5d","host":"quack","cmd":"claim","id":"native/lift-for-bounds","text":"Loops counted to a variable bound print as for: claimed"}
 {"at":"2026-11-23T18:19:37Z","actor":"loop","tag":"1c7acd5d","host":"quack","cmd":"add-unit","id":"native/lift-for-ram-bounds","text":"new unit: Loops to a bound read from RAM print as for"}
+{"at":"2026-11-23T18:19:47Z","actor":"loop","tag":"1c7acd5d","host":"quack","cmd":"add-unit","id":"native/lift-for-top-tested","text":"new unit: Loops tested at the top print as for"}
