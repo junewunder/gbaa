@@ -4512,6 +4512,12 @@
       "title": "Emerald play build: librfu ID-check IRQs as interpreted",
       "detail": "Found by {unit:native/emerald-native-route}: route-check --native on units/emerald-native.toml fails at frame 3, the play build's compiled code against its own interpreter at --timing native: gRfuSIO32Id (0x030078a6) and SIODATA32's high half (0x04000122) are 0x0000 compiled, 0xffff interpreted, alternating for 91 frames of 5400 (the lift agrees with the interpreter). AgbRFU_checkID polls a timer (while TMxCNT_L < 32) while Sio32IDIntr restarts the unplugged transfer from inside the serial IRQ (SIOCNT start bit, which io.rs's sio_unplugged ends at once with its IRQ), so each IRQ chains the next and the count taken depends on where time points fall; the handlers are IWRAM copies the play build interprets (librfu_intr 0x03004664, IntrMain 0x03002750). Find where compiled and interpreted part (memory/native-check-divergence.md) and fix it in the play build or the runtime. Done when: on units/emerald-native.toml the play build's compiled and interpreted records match (route-check --native gets past that check); just check passes.",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/emerald-m4a-compressed",
+      "title": "Emerald's lift mixes m4a's compressed samples as play does",
+      "detail": "Found by {unit:native/emerald-native-route}: on units/emerald-native.toml (lift against the play build's interpreter, records diffed by hand: route-check --native stops earlier, at {unit:native/emerald-sio32-play-timing}) audio and gSoundInfo differ from frame 2150 (Birch's speech) in 1191 frames, pictures never. At 2150 the channel at gSoundInfo+0x110 (a compressed sample: type & 0x30) has count 0x7b6, fw 0x007fea00, currentPointer 0xaf, xpi 2 in the play build; in the lift count 0x865 (unmoved), fw 0, currentPointer 0, xpi 0, and m4a_1's decoding buffer (0x03001300, 0x40 bytes) differs. The path is SoundMainRAM's bl to SoundMainRAM_Unk1 (IWRAM 0x03001e64, ROM 0x082df49c, ARM), lifted as x_03001e64 (takes r4, r5, r8-r11; gives r9), whose r2, r3 and r9 the caller stores to count, currentPointer and fw at 0x03001e28. Find the lift's error (just fn-check on 0x03001e64 with --interp-every, or traces) and fix it as a rule. Done when: those records match from 2150 on; just check passes.",
+      "uses": ["heavy"]
     }
   ]
 }
