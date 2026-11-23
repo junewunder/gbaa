@@ -118,6 +118,9 @@ pub struct For {
     pub first: u32,
     pub last: u32,
     pub step: i32,
+    /// The range's Rust where it isn't `first` to `last` by `step`: one
+    /// [`super::bounds`] proved.
+    pub text: Option<String>,
 }
 
 impl For {
@@ -131,12 +134,16 @@ impl For {
             first,
             last,
             step,
+            text: None,
         })
     }
 
     /// The range's Rust: `(lo..=hi)`, `.rev()` counting down, and
     /// `.step_by(k)` by a step of more than one.
     pub fn range(&self) -> String {
+        if let Some(t) = &self.text {
+            return t.clone();
+        }
         let lo = crate::print::word(self.first.min(self.last), true);
         let hi = crate::print::word(self.first.max(self.last), false);
         let mut s = format!("({lo}..={hi})");

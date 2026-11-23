@@ -205,6 +205,7 @@ use std::fmt::Write as _;
 
 pub mod banks;
 pub mod bitfields;
+pub mod bounds;
 pub mod cond;
 pub mod counted;
 pub mod cut;
@@ -4963,7 +4964,12 @@ impl FnPrinter<'_, '_> {
                     }
                 }
                 plan::Node::Loop { label, body } => {
-                    if let Some((f, h, step)) = self.counted_loop(*label, body) {
+                    let found = self
+                        .counted_loop(*label, body)
+                        .or_else(|| self.bounded_loop(*label, body));
+                    if let Some((f, h, step)) = found
+                        && !self.steps.contains_key(&h)
+                    {
                         self.fors.insert(*label, f);
                         self.steps.insert(h, step);
                     }
@@ -5112,6 +5118,206 @@ impl FnPrinter<'_, '_> {
             return Some((f, h, step));
         }
         None
+    }
+
+    /// Loop `label` (`body`) as a `for` over a range [`bounds::prove`]
+    /// proves (unit `native/lift-for-bounds`): a body of any number of
+    /// blocks, whose one jump back to its start is its latch's, guarded;
+    /// one way in from outside it. With its latch's key and the inst of
+    /// its step.
+    ///
+    /// The counter is the register written once in all that is printed
+    /// inside the loop, by the latch before its jump back, and by no call
+    /// (r0-r3 by any, r4-r11 by one that gives them back). The binding
+    /// shadows it, so: the latch reads it nowhere after its step, and its
+    /// exits after the step go where it isn't live; no edge out of what is
+    /// printed inside goes where it is. A pointer call inside (whose
+    /// writes aren't known) leaves the loop a `loop`.
+    fn bounded_loop(
+        &self,
+        label: usize,
+        body: &[plan::Node],
+    ) -> Option<(counted::For, u32, usize)> {
+        let r = self.bounded_why(label, body);
+        if std::env::var_os("GBAA_FOR_WHY").is_some()
+            && let Err(why) = &r
+        {
+            eprintln!("for-why {:#010x} 'l{label}: {why}", self.f.entry);
+        }
+        r.ok()
+    }
+
+    /// [`FnPrinter::bounded_loop`], or why not (`GBAA_FOR_WHY` prints
+    /// it).
+    fn bounded_why(
+        &self,
+        label: usize,
+        body: &[plan::Node],
+    ) -> Result<(counted::For, u32, usize), String> {
+        let h = self.key_of(label);
+        if h == self.f.entry {
+            return Err("the entry".into());
+        }
+        // The blocks printed inside, and each edge out of one: its block,
+        // its exit's index among the block's exits, and its target.
+        // Blocks in an inner loop are `nested`: run more than once a round.
+        let mut inside: Vec<u32> = Vec::new();
+        let mut nested: Vec<u32> = Vec::new();
+        let mut edges: Vec<(u32, usize, u32)> = Vec::new();
+        let mut todo: Vec<(&plan::Node, bool)> = body.iter().map(|n| (n, false)).collect();
+        while let Some((n, inner)) = todo.pop() {
+            match n {
+                plan::Node::Block { node, exits: outs } => {
+                    let k = self.key_of(*node);
+                    inside.push(k);
+                    if inner {
+                        nested.push(k);
+                    }
+                    for (i, o) in outs.iter().enumerate() {
+                        for e in &o.edges {
+                            if let plan::How::Inline(s) = &e.how {
+                                todo.extend(s.iter().map(|n| (n, inner)));
+                            }
+                            edges.push((k, i, self.key_of(e.to)));
+                        }
+                    }
+                }
+                plan::Node::Loop { body, .. } => todo.extend(body.iter().map(|n| (n, true))),
+                plan::Node::Labeled { body, .. } => todo.extend(body.iter().map(|n| (n, inner))),
+                plan::Node::Region { .. } => return Err("a region inside".into()),
+            }
+        }
+        // The one jump back.
+        let backs: Vec<&(u32, usize, u32)> = edges.iter().filter(|e| e.2 == h).collect();
+        let [&(l, bi, _)] = backs[..] else {
+            return Err(format!("{} jumps back", backs.len()));
+        };
+        if nested.contains(&l) {
+            return Err("the latch in an inner loop".into());
+        }
+        let lb = &self.f.blocks[&l];
+        let lxs = exits(self.ctx, lb);
+        let back = *lxs.get(bi).ok_or("no exit")?;
+        let latch = &lb.block.insts;
+        if !matches!(back.plan, Plan::Static(k) | Plan::Rekey(k) if k == h)
+            || latch[back.index].guard.is_none()
+        {
+            return Err("jump back not a guarded jump".into());
+        }
+        // What the loop writes: each register a block inside sets, or a
+        // call or `swi` may.
+        let (mut written, mut by_calls): (u16, u16) = (0, 0);
+        for k in &inside {
+            let b = &self.f.blocks[k];
+            for i in &b.block.insts {
+                match i.op {
+                    Op::SetReg(q, _) => written |= 1 << q.index(),
+                    Op::SetCpsr { .. } | Op::SetUserReg(..) => return Err("a CPSR write".into()),
+                    _ => {}
+                }
+            }
+            for x in exits(self.ctx, b) {
+                match x.plan {
+                    Plan::Static(_) | Plan::Rekey(_) | Plan::Undefined { .. } => {}
+                    Plan::Call { target, .. } => {
+                        by_calls |= 0xf | u16::from(self.gives(target)) << 4;
+                    }
+                    Plan::Swi { .. } => by_calls |= 0xf,
+                    Plan::Dynamic { ret: None, .. } => {}
+                    Plan::Dynamic { ret: Some(_), .. } | Plan::CallVia { .. } => {
+                        return Err("a pointer call".into());
+                    }
+                }
+            }
+        }
+        // The one way in, from outside.
+        let mut ins = Vec::new();
+        for (&k, b) in &self.f.blocks {
+            if inside.contains(&k) {
+                continue;
+            }
+            for x in exits(self.ctx, b) {
+                if self.jumps(&b.block.insts[x.index].op, &x).contains(&h) {
+                    ins.push((k, x));
+                }
+            }
+        }
+        let [(p, ref px)] = ins[..] else {
+            return Err(format!("{} ways in", ins.len()));
+        };
+        if !matches!(px.plan, Plan::Static(_) | Plan::Rekey(_)) {
+            return Err("way in not a jump".into());
+        }
+        let mut why = String::new();
+        let kept = 0x1fff & !(written | by_calls);
+        for r in 0..13 {
+            let bit = live::reg(r);
+            let set = |i: &Inst| matches!(i.op, Op::SetReg(q, _) if q.index() == r);
+            let get = |i: &Inst| matches!(i.op, Op::GetReg(q) if q.index() == r);
+            let sets: usize = inside
+                .iter()
+                .map(|k| {
+                    self.f.blocks[k]
+                        .block
+                        .insts
+                        .iter()
+                        .filter(|i| set(i))
+                        .count()
+                })
+                .sum();
+            if sets != 1 || by_calls & 1 << r != 0 {
+                continue;
+            }
+            let Some(step) = (0..back.index).find(|&i| set(&latch[i])) else {
+                continue;
+            };
+            if latch[step + 1..].iter().any(get) {
+                continue;
+            }
+            let dead_at = |t: u32| self.live_in.get(&t).is_some_and(|v| v & bit == 0);
+            // The latch's exits after the step: plain jumps where it isn't
+            // live.
+            let after_ok = lxs.iter().filter(|x| x.index > step).all(
+                |x| matches!(x.plan, Plan::Static(t) | Plan::Rekey(t) if t == h || dead_at(t)),
+            );
+            // Out of what's printed inside: where it isn't live.
+            let out_ok = edges
+                .iter()
+                .filter(|e| !inside.contains(&e.2))
+                .all(|e| dead_at(e.2));
+            if !after_ok || !out_ok {
+                why += &format!("r{r} read after the loop; ");
+                continue;
+            }
+            let proven = match bounds::why(&bounds::Loop {
+                reg: r,
+                latch,
+                back: back.index,
+                way_in: &self.f.blocks[&p].block.insts,
+                enter: px.index,
+                kept: kept & !(1 << r),
+            }) {
+                Ok(p) => p,
+                Err(w) => {
+                    why += &format!("r{r}: {w}; ");
+                    continue;
+                }
+            };
+            let f = counted::For {
+                reg: r,
+                mutable: false,
+                first: 0,
+                last: 0,
+                step: 0,
+                text: Some(proven.range),
+            };
+            return Ok((f, l, proven.step));
+        }
+        Err(if why.is_empty() {
+            "no counter".into()
+        } else {
+            why
+        })
     }
 
     /// The keys an exit's printed code may jump to ([`FnPrinter::exit`]):
@@ -8446,6 +8652,12 @@ fn tree_lets(
 
 /// The words of `text` that may name a local: identifiers not after a `.`
 /// and not starting with a digit.
+/// Whether the word at `s` of `b` follows a `.` (a field or method), not
+/// a range's `..` (`0..r5`, a `for`'s: unit `native/lift-for-bounds`).
+pub(crate) fn after_dot(b: &[u8], s: usize) -> bool {
+    s > 0 && b[s - 1] == b'.' && !(s > 1 && b[s - 2] == b'.')
+}
+
 fn rust_words(text: &str) -> BTreeSet<String> {
     let b = text.as_bytes();
     let word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
@@ -8460,7 +8672,7 @@ fn rust_words(text: &str) -> BTreeSet<String> {
         while i < b.len() && word(b[i]) {
             i += 1;
         }
-        if !b[s].is_ascii_digit() && (s == 0 || b[s - 1] != b'.') {
+        if !b[s].is_ascii_digit() && !after_dot(b, s) {
             out.insert(text[s..i].to_string());
         }
     }
