@@ -3928,19 +3928,8 @@
         "by": "0ccfa39e",
         "at": "2026-11-23T19:34:50Z",
         "evidence": "katam builds agbcc -g by default, byte-identical ROM (sha1 274b102b). Names map: 321 types, 14,474 locals in 4,901 fns, 99,340 lines covering all 5,024 C fns. Mirror's lift reads it: 0 hard holes, line_notes 95120, locals_named 4582. Latest main merged; just check passed (exit 0).",
-        "branch": "unit/native/mirror-dwarf-map",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-23T19:34:50Z",
-          "by": "0ccfa39e",
-          "host": "quack",
-          "pid": 2306166,
-          "start": "90698249",
-          "beats": true,
-          "session": "0ccfa39e-9a4c-43d4-98de-26f08c1546d1",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "landed": "2026-11-23T19:40:40Z"
       },
       "notes": [
         {
@@ -3948,8 +3937,7 @@
           "by": "16736a4f",
           "text": "Done but for just check (cut off at stop). Branch has main merged. katam builds -g by default; map: 14,474 locals/4,901 fns, 99,340 lines (all 5,024 C fns). Lift (holes minus [[open_bus]]): 0 hard holes, line_notes 95120, locals_named 4582. Run just check, then just done."
         }
-      ],
-      "round": "2026-11-20T13:35:41Z"
+      ]
     },
     {
       "id": "native/llm-pilot-mirror",
