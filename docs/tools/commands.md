@@ -1427,6 +1427,16 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `--write-doc docs/native-stage-b.numbers.md` also writes the table as
   that generated numbers file (header, date, commit): rerun it when a
   unit changes the metrics, rather than copying numbers into the plan.
+- `just pret-score [--out DIR] [--against DIR2] [--from DIR] [--only NAME]…`
+  (native/lift-pret-score; what each measure is: `crates/pret-score`'s
+  module doc): the lift's printing scored against pret, Emerald and
+  Metroid, one table: a row per measure, a column per game, each cell the
+  lift's number / what its names map offers. The games, their lifts, maps
+  and decomps: `crates/pret-score/games.toml`. It reads the lifts as they
+  are: lift each first (`just lift`; `gbaa-lift` alone when no build is
+  wanted: Emerald's took 28 min, 1.4 GB). Writes `OUT/summary.toml`
+  (default `out/pret-score/<git short hash>[-dirty]`); `--against DIR2`
+  shows changes in brackets, `--from DIR` prints DIR's summary. About 5 s.
 - `just native-ten [ROM]` (native/emerald-ten; scores in
   `docs/native-port-design.md`, "Emerald's ten, scored"): fn-diff for
   native functions (`crates/native-fn-diff`). Emerald's ten, lifted by

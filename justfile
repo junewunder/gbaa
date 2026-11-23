@@ -1073,6 +1073,12 @@ lift-metrics *args:
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift --bin gbaa-lift-check
     {{cap}} MemoryMax=4G target/release/gbaa-lift-check crates/codegen/lift-check.toml --data {{quote(gbaa_data)}} --metrics-only "$@"
 
+# The lift scored against pret (native/lift-pret-score; crates/pret-score; docs/tools/commands.md): for each game of crates/pret-score/games.toml (Emerald, Metroid), its lift as it is in out/lift-<name> (lift it first) beside what the pret names map it was lifted with offers, one table: functions named, lines against the decomp's C lines, line notes, locals, value names, named fields, texts, loops, fn words proven, the median lines per source line per function and the worst 20. Writes OUT/summary.toml. ARGS: --out DIR (default out/pret-score/<git short hash>[-dirty]), --against DIR2 (changes in brackets), --from DIR (print DIR's summary), --only NAME. About 15 s.
+[positional-arguments]
+pret-score *args:
+    {{lock}} cargo build -q --release -p pret-score
+    {{cap}} MemoryMax=4G target/release/pret-score --data {{quote(gbaa_data)}} "$@"
+
 # Milestone 2's pass check (#32): `recompile-check` (at TIMING, exact unless told), then the two frame dumps (out/<name>/{interp,recompiled}.png) must be byte-identical. Prints the guest-cycle split between recompiled code and the interpreter fallback (decision 1). Heavy: builds a generated crate.
 first-frame rom frames="60" timing="exact":
     #!/usr/bin/env bash
