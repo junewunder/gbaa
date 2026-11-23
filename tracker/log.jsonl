@@ -3844,3 +3844,4 @@
 {"at":"2026-11-23T16:41:53Z","actor":"session","tag":"b02646d0","host":"quack","cmd":"overseer","text":"overseer 562264 on quack attached, replacing e38d76 on quack"}
 {"at":"2026-11-23T17:26:00Z","actor":"loop","tag":"fd5d52d6","host":"quack","cmd":"done","id":"native/lift-pret-score","text":"The lift scored against pret: Emerald and Metroid, one table: done"}
 {"at":"2026-11-23T17:31:52Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-pret-score","text":"The lift scored against pret: Emerald and Metroid, one table: on main"}
+{"at":"2026-11-23T17:31:59Z","actor":"loop","tag":"1c7acd5d","host":"quack","cmd":"claim","id":"native/lift-for-bounds","text":"Loops counted to a variable bound print as for: claimed"}
