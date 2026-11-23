@@ -98,7 +98,9 @@ if ! built "$mzm/mzm_us.elf" "$mzm" \
   echo "$mzm_sha  $mzm/mzm_us.gba" | sha1sum -c
 fi
 
-# Kirby & the Amazing Mirror (USA).
+# Kirby & the Amazing Mirror (USA). Its Makefile builds with agbcc -g by
+# default (DINFO ?= 1) and stays byte-identical, so katam.toml has [types],
+# [locals] and [lines] with no wrapper (native/mirror-dwarf-map).
 katam="$src/katam"
 if ! built "$katam/katam.elf" "$katam"; then
   baserom "Kirby & The Amazing Mirror.gba" 274b102b6d940f46861a92b4e65f89a51815c12c "$katam/baserom.gba"
