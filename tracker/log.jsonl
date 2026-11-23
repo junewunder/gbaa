@@ -3841,3 +3841,4 @@
 {"at":"2026-11-21T13:35:46Z","actor":"session","tag":"ad83b7bb","host":"quack","cmd":"done","id":"native/fnref-ram-default","text":"Function flow: the RAM pointers on by default: done"}
 {"at":"2026-11-23T16:41:33Z","actor":"loop","tag":"f3f3ccb1","host":"quack","cmd":"claim","id":"native/emerald-native-route","text":"Emerald's lift matches the play build on a route: claimed"}
 {"at":"2026-11-23T16:41:41Z","actor":"loop","tag":"fd5d52d6","host":"quack","cmd":"claim","id":"native/lift-pret-score","text":"The lift scored against pret: Emerald and Metroid, one table: claimed"}
+{"at":"2026-11-23T16:41:53Z","actor":"session","tag":"b02646d0","host":"quack","cmd":"overseer","text":"overseer 562264 on quack attached, replacing e38d76 on quack"}
