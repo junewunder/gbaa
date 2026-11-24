@@ -145,6 +145,9 @@ pub struct Summary {
     /// For each register in `passed_after`, a caller that passes it on
     /// and how.
     pub passed_by: BTreeMap<u8, (u32, Cause)>,
+    /// For each register in `read_after`, a caller whose own instruction
+    /// reads it, and that instruction's address.
+    pub read_by: BTreeMap<u8, (u32, u32)>,
     /// The registers callers return as their own result without reading
     /// (`return f(x);`), where a caller of theirs reads it with its own
     /// instruction or forwards it again.
@@ -1363,6 +1366,7 @@ pub fn summarize_passing(
             read_after: 0,
             passed_after: 0,
             passed_by: BTreeMap::new(),
+            read_by: BTreeMap::new(),
             forwarded_after: 0,
             forwards: sum.forwards(),
             keeps: proof.kept.contains(&k),
@@ -1472,8 +1476,9 @@ pub fn summarize_passing(
     for (caller, u) in used {
         for ((c, r), cause) in u {
             if let Some(s) = sums.get_mut(&c) {
-                if let Cause::Reads(_) = cause {
+                if let Cause::Reads(at) = cause {
                     s.read_after |= 1 << r;
+                    s.read_by.entry(r).or_insert((caller, at));
                 } else {
                     s.passed_after |= 1 << r;
                     s.passed_by.entry(r).or_insert((caller, cause));
