@@ -86,7 +86,8 @@ pub struct Indexed {
     /// The index, and the bytes one step of it is.
     pub i: ValueId,
     pub s: u32,
-    /// The constant added after.
+    /// The constants added, in the scaled sum or after, less those taken
+    /// off (two's complement): where the element is, with the base.
     pub c: u32,
 }
 
@@ -96,6 +97,10 @@ pub struct Indexed {
 pub struct Flow {
     pub access: BTreeMap<(usize, usize), At>,
     pub index: BTreeMap<(usize, usize), Indexed>,
+    /// The values (adds) that are a typed pointer plus a scaled index,
+    /// an element's address however it is used (native/lift-element-address;
+    /// [`address_indexed`]).
+    pub value: BTreeMap<(usize, usize), Indexed>,
 }
 
 /// The typed accesses of one function: by block (an index into
@@ -151,10 +156,12 @@ pub fn flow(
     let mut slots: BTreeMap<i32, Option<At>> = BTreeMap::new();
     let mut access = BTreeMap::new();
     let mut index = BTreeMap::new();
+    let mut value = BTreeMap::new();
     for round in 0.. {
         let mut changed = false;
         access.clear();
         index.clear();
+        value.clear();
         for b in 0..blocks.len() {
             let Some(mut regs) = ins[b].clone() else {
                 continue;
@@ -190,6 +197,11 @@ pub fn flow(
                             (None, Some(p), None, _, BinOp::Add) => Some(indexed(t, p)),
                             _ => None,
                         };
+                        if op == BinOp::Add
+                            && let Some(x) = indexed_at(insts, &vt, ValueId(i as u32))
+                        {
+                            value.insert((b, i), x);
+                        }
                     }
                     // Thumb's `adds rd, rn, #k` and `mov rd, rn` (`adds
                     // rd, rn, #0`), `subs` as `a + !b + 1`: an add with
@@ -217,6 +229,9 @@ pub fn flow(
                             },
                             _ => None,
                         };
+                        if let Some(x) = indexed_at(insts, &vt, ValueId(i as u32)) {
+                            value.insert((b, i), x);
+                        }
                     }
                     Op::Load { width, addr } => {
                         if let Some(s) = slot(b, i) {
@@ -306,13 +321,18 @@ pub fn flow(
             break;
         }
     }
-    Flow { access, index }
+    Flow {
+        access,
+        index,
+        value,
+    }
 }
 
 /// `addr` as `base + i * s + c`: a typed pointer plus a value the block
 /// doesn't know scaled by a constant (through shifts left, multiplies
 /// and adds of it to itself: `((i << 2) + i) << 3` is `i * 40`), and
-/// maybe a constant after.
+/// maybe constants added or taken off, in the scaled sum or after; `c`
+/// all of them.
 fn indexed_at(insts: &[Inst], vt: &[Option<At>], addr: ValueId) -> Option<Indexed> {
     let konst = |x: ValueId| match insts[x.index()].op {
         Op::Const(c) | Op::Pool(c) => Some(c),
@@ -344,17 +364,29 @@ fn indexed_at(insts: &[Inst], vt: &[Option<At>], addr: ValueId) -> Option<Indexe
     if konst(other).is_some() {
         return None;
     }
+    // A constant taken off the scaled index (`(i - 1) * s` folded to
+    // `i * s - s`; Thumb's `subs` is `a + !k + 1`).
+    let (other, less) = match insts[other.index()].op {
+        Op::Bin(BinOp::Sub, m, k) if let Some(k) = konst(k) => (m, k),
+        Op::Adc { a, b, c } if insts[c.index()].op == Op::Bit(true) => match insts[b.index()].op {
+            Op::Not(k) if let Some(k) = konst(k) => (a, k),
+            _ => (other, 0),
+        },
+        _ => (other, 0),
+    };
     let (k, i) = crate::print::linear(insts, &|_| None, other, 8);
     let (i, s) = i?;
-    if k != 0 || s == 0 || konst(i).is_some() {
+    if s == 0 || konst(i).is_some() {
         return None;
     }
+    // The constants in the sum go with the one on top: [`element`]
+    // finds the element they land in.
     Some(Indexed {
         base,
         at: vt[base.index()].clone()?,
         i,
         s,
-        c,
+        c: c.wrapping_add(k).wrapping_sub(less),
     })
 }
 
@@ -466,36 +498,7 @@ pub fn pointer(
 /// element, the element's own offset. As [`pointer`] returns; `None`
 /// where neither fits or it lands on no field.
 pub fn pointer_indexed(t: &Types, x: &Indexed, w: u32, p: &str, i: &str) -> Option<(String, bool)> {
-    let b = &x.at;
-    let ty = rust(t, &b.ty);
-    let mut e = match b.off {
-        0 => format!("Ref::<{ty}>::new({p})"),
-        k => format!("Ref::<{ty}>::to({p}, {k:#x})"),
-    };
-    let push = |e: &mut String, steps: &[Step]| {
-        for s in steps {
-            match s {
-                Step::Field(f) => e.push_str(&format!(".{f}()")),
-                Step::Idx(n) => e.push_str(&format!(".idx({n})")),
-            }
-        }
-    };
-    let (elem, off) = match t.array_at(&b.ty, b.off, x.s) {
-        // A byte offset into a struct is no element.
-        Some((to, elem, k, o)) if x.s > 1 || to.is_empty() => {
-            push(&mut e, &to);
-            match k {
-                0 => e.push_str(&format!(".idx({i})")),
-                k => e.push_str(&format!(".idx({i}.wrapping_add({k:#x}))")),
-            }
-            (elem, o.wrapping_add(x.c))
-        }
-        _ if t.size(&b.ty) == x.s => {
-            e.push_str(&format!(".add({i})"));
-            (b.ty.clone(), b.off.wrapping_add(x.c))
-        }
-        _ => return None,
-    };
+    let (mut e, elem, off, _) = element(t, x, p, i)?;
     if off.checked_add(w).is_none_or(|end| end > t.size(&elem)) {
         return None;
     }
@@ -503,11 +506,124 @@ pub fn pointer_indexed(t: &Types, x: &Indexed, w: u32, p: &str, i: &str) -> Opti
     if steps.is_empty() && rest.is_some() {
         return None;
     }
-    push(&mut e, &steps);
+    push_steps(&mut e, &steps);
     if let Some(o) = rest {
         e.push_str(&format!(".field::<u{}>({o:#x})", 8 * w));
     }
     Some((e, rest.is_none()))
+}
+
+/// The printed address an indexed value ([`Indexed`]) is, from the
+/// printed base `p` and index `i` (native/lift-element-address): the
+/// element's (`Ref::<[t::Mon; 6]>::new(gParty).idx(i).addr()`, C's
+/// `&gParty[i]`), or a field's in it where the constant added lands
+/// on one's first byte (`.idx(i).hp().addr()`, `&gParty[i].hp`; the
+/// outermost such field). The same value as the code's, as
+/// [`pointer_indexed`]'s. `None` where no element fits, the offset is
+/// no field's start, or a step is one byte; or, for a `global` base (a
+/// constant address), where it isn't in an array of such steps.
+pub fn address_indexed(t: &Types, x: &Indexed, global: bool, p: &str, i: &str) -> Option<String> {
+    // A byte sum is no element's address.
+    if x.s < 2 {
+        return None;
+    }
+    let (mut e, elem, off, other) = element(t, x, p, i)?;
+    // A global that isn't an array has no `i`th: an address past it
+    // (modern GCC's section anchor plus an offset to another global).
+    if global && other {
+        return None;
+    }
+    if off >= t.size(&elem).max(1) {
+        return None;
+    }
+    push_steps(&mut e, &field_start(t, &elem, off)?);
+    e.push_str(".addr()");
+    Some(e)
+}
+
+/// The steps from a `ty` to the outermost field (or array element) that
+/// starts `off` bytes in: none for 0. Not a bitfield's accessor.
+fn field_start(t: &Types, ty: &Ty, off: u32) -> Option<Vec<Step>> {
+    if off == 0 {
+        return Some(Vec::new());
+    }
+    let (step, inner, o) = match ty {
+        Ty::Array(e, n) => {
+            let es = t.size(e);
+            if es == 0 || off / es >= *n {
+                return None;
+            }
+            (Step::Idx(off / es), &**e, off % es)
+        }
+        Ty::Named(name) => {
+            let (_, fs) = t.fields_of(name)?;
+            let &(id, f_off, f_ty, _) = fs.iter().find(|&&(_, f_off, f_ty, bits)| {
+                !bits && f_off <= off && off < f_off + t.size(f_ty).max(1)
+            })?;
+            (Step::Field(id.to_string()), f_ty, off - f_off)
+        }
+        _ => return None,
+    };
+    let mut steps = field_start(t, inner, o)?;
+    steps.insert(0, step);
+    Some(steps)
+}
+
+fn push_steps(e: &mut String, steps: &[Step]) {
+    for s in steps {
+        match s {
+            Step::Field(f) => e.push_str(&format!(".{f}()")),
+            Step::Idx(n) => e.push_str(&format!(".idx({n})")),
+        }
+    }
+}
+
+/// The element an indexed value reaches, from the printed base `p` and
+/// index `i`: its printed `Ref` (an element of the array of `x.s`-byte
+/// elements the base points into, `.idx(i)`, or the `i`th object of the
+/// base's type on from it, `.add(i)`), its type, the offset into it and
+/// whether it is the latter.
+fn element(t: &Types, x: &Indexed, p: &str, i: &str) -> Option<(String, Ty, u32, bool)> {
+    let b = &x.at;
+    let ty = rust(t, &b.ty);
+    let mut e = match b.off {
+        0 => format!("Ref::<{ty}>::new({p})"),
+        k => format!("Ref::<{ty}>::to({p}, {k:#x})"),
+    };
+    let s = i64::from(x.s);
+    if s == 0 {
+        return None;
+    }
+    // Where in the base's object the constants land: the base's own
+    // offset and what is added (`i * s + c`), signed.
+    let off = i64::from(b.off.wrapping_add(x.c) as i32);
+    let size = i64::from(t.size(&b.ty));
+    // `i` plus `q` elements.
+    let idx = |q: i64| match q {
+        0 => i.to_string(),
+        q if q > 0 => format!("{i}.wrapping_add({q:#x})"),
+        q => format!("{i}.wrapping_sub({:#x})", -q),
+    };
+    // Before the object: `&a[i - j]`, its `- j * s` folded into the
+    // constant (`i * s - s + a`), so `j` elements back; a few at most
+    // (else a constant that is no offset in the object).
+    let back = if off < 0 { (-off + s - 1) / s } else { 0 };
+    let array = (back <= 4 && off + back * s < size)
+        .then(|| t.array_at(&b.ty, (off + back * s) as u32, x.s))
+        .flatten();
+    match array {
+        // A byte offset into a struct is no element.
+        Some((to, elem, k, o)) if x.s > 1 || to.is_empty() => {
+            push_steps(&mut e, &to);
+            e.push_str(&format!(".idx({})", idx(i64::from(k) - back)));
+            Some((e, elem, o, false))
+        }
+        _ if size == s && off.div_euclid(s).abs() <= 16 => {
+            e.push_str(&format!(".add({})", idx(off.div_euclid(s))));
+            Some((e, b.ty.clone(), off.rem_euclid(s) as u32, true))
+        }
+        _ => None,
+    }
 }
 
 /// The accessors of the accesses that load or store several fields at
@@ -852,6 +968,81 @@ fields = [
         let mut x = f.index[&(0, 15)].clone();
         x.s = 4;
         assert_eq!(pointer_indexed(&m.types, &x, 2, "p", "i"), None);
+    }
+
+    #[test]
+    fn a_scaled_index_s_sum_prints_as_the_element_s_address() {
+        let m = maps();
+        // &gKirbys[r1] (i << 3), &gKirbys[r1].next; &kirby[r1] and
+        // &kirby[r1].pos.y ((i << 2) + (i << 2)), passed to a call.
+        let b = [
+            inst(Op::Insn(0x0800_0000)),
+            inst(Op::GetReg(Reg(1))),
+            inst(Op::Const(3)),
+            inst(Op::Shift {
+                kind: armv4t::sem::ShiftType::Lsl,
+                v: ValueId(1),
+                amount: ValueId(2),
+            }),
+            inst(Op::Const(0x0300_0010)),
+            inst(Op::Bin(BinOp::Add, ValueId(4), ValueId(3))),
+            inst(Op::Const(4)),
+            inst(Op::Bin(BinOp::Add, ValueId(5), ValueId(6))),
+            inst(Op::SetReg(Reg(2), ValueId(7))),
+            inst(Op::GetReg(Reg(0))),
+            inst(Op::Const(2)),
+            inst(Op::Shift {
+                kind: armv4t::sem::ShiftType::Lsl,
+                v: ValueId(1),
+                amount: ValueId(10),
+            }),
+            inst(Op::Bin(BinOp::Add, ValueId(11), ValueId(11))),
+            inst(Op::Bin(BinOp::Add, ValueId(9), ValueId(12))),
+            inst(Op::Bin(BinOp::Add, ValueId(13), ValueId(10))),
+            inst(Op::Const(1)),
+            inst(Op::Bin(BinOp::Add, ValueId(13), ValueId(15))),
+            inst(Op::SetReg(Reg(0), ValueId(14))),
+            inst(Op::Exit(Exit::Jump(ValueId(1)))),
+        ];
+        let f = flow(&m, 0x0800_0001, &[&b], |_, _| Vec::new(), |_, _| None);
+        let a = |i: usize, global: bool| {
+            let x = &f.value[&(0, i)];
+            assert_eq!(x.i, ValueId(1));
+            address_indexed(&m.types, x, global, "p", "i")
+        };
+        assert_eq!(
+            a(5, true).as_deref(),
+            Some("Ref::<[t::Kirby; 4]>::new(p).idx(i).addr()")
+        );
+        assert_eq!(
+            a(7, true).as_deref(),
+            Some("Ref::<[t::Kirby; 4]>::new(p).idx(i).next().addr()")
+        );
+        assert_eq!(
+            a(13, false).as_deref(),
+            Some("Ref::<t::Kirby>::new(p).add(i).addr()")
+        );
+        assert_eq!(
+            a(14, false).as_deref(),
+            Some("Ref::<t::Kirby>::new(p).add(i).pos().y().addr()")
+        );
+        // A constant base that is one object, not an array, has no `i`th.
+        assert_eq!(a(13, true), None);
+        // `&gKirbys[i - 1]`, its `- 8` folded: i * 8 - 8 + gKirbys.
+        let mut x = f.value[&(0, 5)].clone();
+        x.c = 8u32.wrapping_neg();
+        assert_eq!(
+            address_indexed(&m.types, &x, true, "p", "i").as_deref(),
+            Some("Ref::<[t::Kirby; 4]>::new(p).idx(i.wrapping_sub(0x1)).addr()")
+        );
+        // `&gKirbys[i + 1].next`: i * 8 + 12.
+        x.c = 12;
+        assert_eq!(
+            address_indexed(&m.types, &x, true, "p", "i").as_deref(),
+            Some("Ref::<[t::Kirby; 4]>::new(p).idx(i.wrapping_add(0x1)).next().addr()")
+        );
+        // An offset that is no field's start is no field's address.
+        assert_eq!(a(16, false), None);
     }
 
     #[test]

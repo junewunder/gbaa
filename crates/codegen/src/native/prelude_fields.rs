@@ -20,6 +20,13 @@ impl<T> Ref<T> {
         Ref(a, std::marker::PhantomData)
     }
 
+    /// The guest address: C's `&x` of what this points at, an element's
+    /// or a field's address printed by name (native/lift-element-address).
+    #[inline(always)]
+    pub const fn addr(self) -> u32 {
+        self.0
+    }
+
     /// A field `off` bytes in.
     #[inline(always)]
     pub const fn field<F>(self, off: u32) -> Ref<F> {

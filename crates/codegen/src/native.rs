@@ -1507,6 +1507,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     banked: BTreeMap::new(),
                     field_at: BTreeMap::new(),
                     field_idx: BTreeMap::new(),
+                    elem_addr: BTreeMap::new(),
                     inl: Vec::new(),
                     frameless: false,
                     sp_exact: sp_exact.contains(&f.entry),
@@ -2241,8 +2242,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     if holes.fields.is_some() {
         writeln!(
             report,
-            "named fields (native/lift-typed-access): {} accesses through a pointer the names files type print as a named field, {} as bytes inside one; {} of them as an element by a variable index (native/lift-index-names)",
-            soft.named_fields, soft.named_inside, soft.named_index,
+            "named fields (native/lift-typed-access): {} accesses through a pointer the names files type print as a named field, {} as bytes inside one; {} of them as an element by a variable index (native/lift-index-names); {} values print as an element's or its field's address by name (native/lift-element-address)",
+            soft.named_fields, soft.named_inside, soft.named_index, soft.elem_addrs.len(),
         )
         .unwrap();
         writeln!(
@@ -2466,6 +2467,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("named_field_accesses", soft.named_fields);
     m.push("named_inside_accesses", soft.named_inside);
     m.push("named_index_accesses", soft.named_index);
+    m.push("named_element_addresses", n(soft.elem_addrs.len()));
     // Only a lift with types has it, and its bar: what the types leave.
     if holes.fields.is_some() {
         let unknown = |st| soft.access.get(&(st, Where::Unknown)).copied().unwrap_or(0);
@@ -4171,6 +4173,9 @@ struct Soft {
     /// design, a guest address here; native/rom-statics).
     rom_refs: BTreeSet<u32>,
     narrowings: BTreeSet<(u32, u32, usize)>,
+    /// Values printed as an element's (or its field's) address by name
+    /// (native/lift-element-address): (function, block, inst).
+    elem_addrs: BTreeSet<(u32, u32, usize)>,
     /// A load's rotate by its address's low bits still printed
     /// ([`aligned`]).
     rotates_left: BTreeSet<(u32, u32, usize)>,
@@ -4365,6 +4370,11 @@ struct FnPrinter<'a, 'b> {
     /// Those of them whose address is a typed pointer plus a scaled index
     /// (native/lift-index-names), by block and inst.
     field_idx: BTreeMap<(u32, usize), fields::Indexed>,
+    /// The values that are an element's address (or a field's in it) by
+    /// a typed pointer plus a scaled index, printed by name where
+    /// [`fields::address_indexed`] names one
+    /// (native/lift-element-address), by block and inst.
+    elem_addr: BTreeMap<(u32, usize), fields::Indexed>,
     /// The current block's values printed inside their use, by value:
     /// their expressions ([`FnPrinter::inline`]; `None`, a `let`).
     inl: Vec<Option<String>>,
@@ -4627,7 +4637,7 @@ impl FnPrinter<'_, '_> {
         order.extend(f.blocks.keys().copied().filter(|&k| k != f.entry));
         self.labels = order.iter().enumerate().map(|(i, &k)| (k, i)).collect();
         (self.dead, self.live_in, self.local) = self.dead_writes();
-        (self.field_at, self.field_idx) = self.field_types();
+        (self.field_at, self.field_idx, self.elem_addr) = self.field_types();
         self.banked = self.redundant_banks();
         // A catch point prints in the `match` form: a restore goes on at
         // its save's return site's label ([`longjmp`]).
@@ -5199,6 +5209,7 @@ impl FnPrinter<'_, '_> {
     ) -> (
         BTreeMap<(u32, usize), fields::At>,
         BTreeMap<(u32, usize), fields::Indexed>,
+        BTreeMap<(u32, usize), fields::Indexed>,
     ) {
         let Some(maps) = self.holes.fields.as_deref() else {
             return Default::default();
@@ -5253,6 +5264,33 @@ impl FnPrinter<'_, '_> {
         (
             at.access.into_iter().map(|(k, a)| (key(k), a)).collect(),
             at.index.into_iter().map(|(k, x)| (key(k), x)).collect(),
+            // Only one used other than as an access's address, which
+            // prints the element's field ([`fields::pointer_indexed`]).
+            at.value
+                .into_iter()
+                .filter(|&((b, i), _)| {
+                    let v = ValueId(i as u32);
+                    insts[b].iter().any(|inst| match inst.op {
+                        Op::Load { .. } => false,
+                        Op::Store { value, .. } => value == v,
+                        // A halfword or word access's alignment mask, or
+                        // its rotate's amount.
+                        Op::Bin(BinOp::And, a, m)
+                            if a == v
+                                && matches!(insts[b][m.index()].op,
+                                    Op::Const(k) | Op::Pool(k) if [1, 3, !1, !3].contains(&k)) =>
+                        {
+                            false
+                        }
+                        ref op => op.operands().contains(&v),
+                    })
+                })
+                .filter(|((b, _), x)| {
+                    let global = konst(insts[*b], x.base).is_some();
+                    fields::address_indexed(&maps.types, x, global, "", "").is_some()
+                })
+                .map(|(k, x)| (key(k), x))
+                .collect(),
         )
     }
 
@@ -7518,6 +7556,9 @@ impl FnPrinter<'_, '_> {
                 base.into_iter().chain(idx).chain([value]).collect()
             }
             _ if let Some(f) = &conds[i] => f.uses.clone(),
+            // An element's address by name: its pointer and index, over
+            // a narrowing form's sum.
+            _ if let Some(x) = self.elem_addr.get(&(self.cur, i)) => vec![x.base, x.i],
             _ if let Some((x, f)) = forms[i] => [x].into_iter().chain(f.others()).collect(),
             Op::Exit(_) if self.blind.get(i).copied().unwrap_or(false) => Vec::new(),
             ref op => op.operands(),
@@ -7658,7 +7699,7 @@ impl FnPrinter<'_, '_> {
     /// Inst `i`'s value ([`FnPrinter::value`]), or the ID it holds where
     /// it is a dense function's constant ([`Dense::at`]).
     fn value_at(
-        &self,
+        &mut self,
         i: usize,
         op: &Op,
         cond: &Option<cond::Form>,
@@ -7666,8 +7707,23 @@ impl FnPrinter<'_, '_> {
     ) -> String {
         match self.dense.get(&(self.cur, i as u32)) {
             Some(id) => format!("{id:#x}u32"),
+            None if cond.is_none()
+                && let Some(e) = self.elem_address(i) =>
+            {
+                self.soft.elem_addrs.insert((self.f.entry, self.cur, i));
+                e
+            }
             None => self.value(op, cond, form),
         }
+    }
+
+    /// Inst `i`'s value as an element's address by name, if it is one
+    /// ([`FnPrinter::elem_addr`]; native/lift-element-address).
+    fn elem_address(&self, i: usize) -> Option<String> {
+        let x = self.elem_addr.get(&(self.cur, i))?;
+        let maps = self.holes.fields.as_deref()?;
+        let global = konst(&self.f.blocks[&self.cur].block.insts, x.base).is_some();
+        fields::address_indexed(&maps.types, x, global, &self.val(x.base), &self.val(x.i))
     }
 
     /// Value `x` where an operand goes: its name, or its inlined
