@@ -3982,3 +3982,4 @@
 {"at":"2026-11-24T09:52:02Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane2-native-lift-global-bitfields","text":"new unit: Merge main on quack lane 2"}
 {"at":"2026-11-24T09:52:07Z","actor":"loop","tag":"8b57c265","host":"quack","cmd":"claim","id":"merge/quack-lane2-native-lift-global-bitfields","text":"Merge main on quack lane 2: claimed"}
 {"at":"2026-11-24T09:54:53Z","actor":"loop","tag":"f4ff2870","host":"quack","cmd":"add-unit","id":"native/lift-frame-exact-irq-reach","text":"new unit: Exact sp: IRQ wrappers' reach narrowed on Metroid"}
+{"at":"2026-11-24T09:55:04Z","actor":"loop","tag":"f4ff2870","host":"quack","cmd":"edit","id":"native/lift-frame-exact-irq-reach","text":"Exact sp: IRQ wrappers' reach narrowed on Metroid: edited (check, tags, needs, detail)"}

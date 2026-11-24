@@ -4886,7 +4886,11 @@
     {
       "id": "native/lift-frame-exact-irq-reach",
       "title": "Exact sp: IRQ wrappers' reach narrowed on Metroid",
-      "uses": ["heavy"]
+      "detail": "After {unit:native/lift-frame-exact-narrow} Metroid still keeps 1194 functions' sp arithmetic only to pass sp on (894 frames gone); without the IRQ rule it would keep ~740. Both IRQ wrappers stay in exact_sp's set as unknown: their final jump by value (the return to the BIOS stub, after msr back to IRQ mode, on the IRQ stack) isn't proven. Handler-reachable code also holds: IWRAM sound code (0x03003ba0, 0x030041fc, 0x030042a4) whose returns through a loaded value aren't proven; SramCheck/SramWriteUnchecked (code run from the stack: a call by value to a frame address); BitFill (a DMA register store Recovery can't place, its channel a parameter); the stand-in 0x030016c5 (own by fiat). Narrow these so irq goes off on Metroid. Check: just lift-check passes; Metroid 600 of 600 frames and its native route (memory/metroid-native-route-run.md) 0 differences; sp_arith_exact down on Metroid; just check.",
+      "check": "recorded",
+      "needs": ["native/lift-frame-exact-narrow"],
+      "uses": ["heavy"],
+      "tags": ["slow-check"]
     }
   ]
 }
