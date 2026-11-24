@@ -168,6 +168,12 @@ pub struct Frame {
     /// r3` with r3 the stack's top, before a reset). Nothing on the old
     /// stack is reached after one in a function that never returns.
     pub fresh: BTreeSet<u32>,
+    /// The exits, by their instruction's address, leaving the function
+    /// (a call, a tail call, a BIOS call, a return) with sp a constant: a
+    /// stack of its own, which the reset's crt0 sets each mode's sp to
+    /// before it calls the game's main. What runs there doesn't run on
+    /// the sp the function was entered with.
+    pub apart: BTreeSet<u32>,
 }
 
 impl Frame {
@@ -497,6 +503,8 @@ struct Raw {
     switches: BTreeSet<u32>,
     /// Those whose value is a constant ([`Frame::fresh`]), apart.
     fresh: BTreeSet<u32>,
+    /// [`Frame::apart`].
+    apart: BTreeSet<u32>,
 }
 
 struct Run<'a, 'e> {
@@ -691,6 +699,9 @@ impl Run<'_, '_> {
 
     /// `addr`: the address of the instruction the exit belongs to.
     fn exit(&mut self, at: (u32, usize), addr: u32, e: &Edge, s: &State) {
+        if matches!(s.regs[13], V::Const(_)) && !matches!(e, Edge::Goto(_)) {
+            self.raw.apart.insert(addr);
+        }
         match e {
             Edge::Goto(ks) => {
                 for &k in ks {
@@ -1006,6 +1017,7 @@ fn resolve(raw: Raw, reads: &dyn Fn(Option<u32>) -> Reads, env: &dyn Env) -> Fra
         flush,
         switches: raw.switches,
         fresh: raw.fresh,
+        apart: raw.apart,
     }
 }
 
@@ -1133,6 +1145,27 @@ pub fn edge(ctx: &Ctx, f: &Func, all: &BTreeSet<u32>, gb: &GBlock, x: &ExitInfo)
     }
 }
 
+/// Function `f`'s blocks for the run, each exit's edge as the lifter
+/// prints it ([`edge`]). `all`: every function's entry.
+pub fn fblocks<'a>(ctx: &Ctx, f: &'a Func, all: &BTreeSet<u32>) -> BTreeMap<u32, FBlock<'a>> {
+    f.blocks
+        .iter()
+        .map(|(&k, gb)| {
+            let edges = exits(ctx, gb)
+                .iter()
+                .map(|x| (x.index, edge(ctx, f, all, gb, x)))
+                .collect();
+            (
+                k,
+                FBlock {
+                    insts: &gb.block.insts,
+                    edges,
+                },
+            )
+        })
+        .collect()
+}
+
 /// The frames of one lifted context's functions, as the lifter prints
 /// them ([`edge`]). `named`: the indirect calls a holes file's
 /// `[[takes]]` names, by address.
@@ -1145,26 +1178,7 @@ pub fn of_code(
     let all: BTreeSet<u32> = funcs.iter().map(|f| f.entry).collect();
     let fs: Vec<(u32, BTreeMap<u32, FBlock>)> = funcs
         .iter()
-        .map(|f| {
-            let bs = f
-                .blocks
-                .iter()
-                .map(|(&k, gb)| {
-                    let edges = exits(ctx, gb)
-                        .iter()
-                        .map(|x| (x.index, edge(ctx, f, &all, gb, x)))
-                        .collect();
-                    (
-                        k,
-                        FBlock {
-                            insts: &gb.block.insts,
-                            edges,
-                        },
-                    )
-                })
-                .collect();
-            (f.entry, bs)
-        })
+        .map(|f| (f.entry, fblocks(ctx, f, &all)))
         .collect();
     let env = FromSummaries {
         sums,
@@ -1173,6 +1187,9 @@ pub fn of_code(
     };
     frames(&fs, &env)
 }
+
+mod stores;
+pub use stores::{SP, StoreFn, stores};
 
 #[cfg(test)]
 mod tests;

@@ -21,8 +21,9 @@
 //!
 //! `route-check --lift-mod-run STOCK MOD [--sides N] units/NAME.toml`: a
 //! lift mod's frames beside the stock lift's, native programs both: the
-//! frames that differ listed, side-by-side PNGs of up to N of them (`just
-//! lift-mod-run`, [`lift_mod_run`]).
+//! frames that differ listed, side-by-side PNGs of up to N of them and a
+//! zoom on each one's differing pixels (`just lift-mod-run`,
+//! [`lift_mod_run`]).
 //!
 //! `route-check --args units/NAME.toml`: the arguments every runner is
 //! given for the route (ROM, frames, presses, state, dump frames), then
