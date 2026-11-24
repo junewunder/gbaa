@@ -4882,6 +4882,11 @@
           "text": "From the Amazing Mirror mod note: route-check --lift-mod-run could name the first RAM field to differ per frame (gKirbys[0].base.xspeed at 1661: 332 stock, 352 mod). Reuse codegen::native::fn_check_names' table (FN_CHECK_RAM) and fn_check.rs's ram_name walk."
         }
       ]
+    },
+    {
+      "id": "native/lift-frame-exact-irq-reach",
+      "title": "Exact sp: IRQ wrappers' reach narrowed on Metroid",
+      "uses": ["heavy"]
     }
   ]
 }
