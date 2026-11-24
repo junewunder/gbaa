@@ -4028,3 +4028,4 @@
 {"at":"2026-11-24T11:26:24Z","actor":"loop","tag":"60303338","host":"quack","cmd":"done","id":"merge/quack-lane2-native-ram-jump-passes-regs","text":"Merge main on quack lane 2: done"}
 {"at":"2026-11-24T11:30:58Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane2-native-ram-jump-passes-regs","text":"Merge main on quack lane 2: on main"}
 {"at":"2026-11-24T11:30:58Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/ram-jump-passes-regs","text":"A jump into a RAM copy passes the r4-r11 it reads: on main"}
+{"at":"2026-11-24T11:31:03Z","actor":"loop","tag":"f1d95093","host":"quack","cmd":"claim","id":"native/warioware-builds","text":"WarioWare's lift builds: its hard holes closed: claimed (picking up after 597d5e84)"}

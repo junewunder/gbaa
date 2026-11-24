@@ -3781,17 +3781,17 @@
       "uses": ["heavy"],
       "record": {
         "state": "claimed",
-        "by": "597d5e84",
-        "session": "597d5e84-a0f0-4387-96ae-dc29a79638d2",
+        "by": "f1d95093",
+        "session": "f1d95093-e300-412c-96ec-b3b48651d98f",
         "host": "quack",
-        "pid": 3424233,
-        "start": "57918558",
-        "at": "2026-11-20T11:49:46Z",
+        "pid": 2962519,
+        "start": "95218086",
+        "at": "2026-11-24T11:31:03Z",
         "branch": "unit/native/warioware-builds",
-        "beats": true,
-        "handedBack": "2026-11-20T13:16:22Z",
+        "resumed": "597d5e84",
+        "prevSession": "597d5e84-a0f0-4387-96ae-dc29a79638d2",
         "pushed": true,
-        "ended": "2026-11-20T13:16:34Z"
+        "beats": true
       },
       "notes": [
         {
