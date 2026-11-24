@@ -69,7 +69,7 @@ pub type Key = (u32, bool);
 /// past such a call into whatever followed, before the call or the pool
 /// after it was known): it reaches no return at all, every indirect jump
 /// resolved and none leaving it (an interworking thunk's `bx` into ARM
-/// code).
+/// code), nor a tail call through a pointer (a call-via-register stub's).
 fn probe_says(r: &FuncResult, old: Bl) -> Bl {
     if r.capped {
         return Bl::Call;
@@ -85,7 +85,7 @@ fn probe_says(r: &FuncResult, old: Bl) -> Bl {
         };
     }
     let resolved = r.jumps.values().all(|j| matches!(j, JumpRes::Resolved(_)));
-    let ends = r.ret_sp.is_empty() && r.exits.is_empty() && resolved;
+    let ends = r.ret_sp.is_empty() && r.exits.is_empty() && r.tail_calls.is_empty() && resolved;
     if old == Bl::Jump && !(ends && (r.stopped || !r.no_returns.is_empty())) {
         Bl::Jump
     } else if ends {
