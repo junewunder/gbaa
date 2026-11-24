@@ -2,8 +2,8 @@
 # Written by `just pret-names` (crates/pret-names). Don't edit.
 
 [map]
-rom_sha1 = "8ce23d73720eb8ea4cf7e2eb5cdecdb5702ef728"
-source = "c-loops-agbcc.elf"
+rom_sha1 = "ffce9cf52175734e13d1fd745622a72dc3642589"
+source = "pret/c@4c2bfb01"
 format = 1
 #
 # Keys are codegen's function keys (bit 0 set = Thumb; an IWRAM copy's
@@ -24,7 +24,11 @@ format = 1
 0x080003ad = { name = "draw_odd", size = 60, file = "loops-main.o", src = "c/loops/main.c", proto = "void draw_odd(s32 n)" }
 0x080003e9 = { name = "grow", size = 64, file = "loops-main.o", src = "c/loops/main.c", proto = "void grow(u8 n)" }
 0x08000429 = { name = "grid", size = 128, file = "loops-main.o", src = "c/loops/main.c", proto = "void grid(s32 rows, s32 from, s32 to)" }
-0x080004a9 = { name = "AgbMain", size = 372, file = "loops-main.o", src = "c/loops/main.c", proto = "void AgbMain(void)" }
+0x080004a9 = { name = "move_bars", size = 48, file = "loops-main.o", src = "c/loops/main.c", proto = "void move_bars(s32 n)" }
+0x080004d9 = { name = "pocket_count", size = 42, file = "loops-main.o", src = "c/loops/main.c", proto = "s32 pocket_count(const struct Pocket *p, u16 id)" }
+0x08000505 = { name = "add_rows", size = 56, file = "loops-main.o", src = "c/loops/main.c", proto = "void add_rows(s32 n)" }
+0x0800053d = { name = "sum_movers", size = 36, file = "loops-main.o", src = "c/loops/main.c", proto = "s32 sum_movers(const struct Bar *b, s32 n)" }
+0x08000561 = { name = "AgbMain", size = 628, file = "loops-main.o", src = "c/loops/main.c", proto = "void AgbMain(void)" }
 
 # Our entries pret has no symbol for, inside one of its functions.
 [inside]
@@ -46,12 +50,16 @@ format = 1
 # pret's data: variables, tables and buffers in RAM and ROM.
 [data]
 0x02000000 = { name = "__ewram_start", size = 0, aliases = ["__ewram_end"] }
-0x03000000 = { name = "gLens", size = 24, aliases = ["__data_end", "__bss_start", "__data_start"], type = "u16 [12]" }
-0x03000020 = { name = "gRow", size = 28, type = "struct Row" }
-0x0300003c = { name = "gFrame", size = 4, type = "u32" }
-0x03000040 = { name = "gBarCount", size = 4, type = "u8" }
-0x03000044 = { name = "__bss_end", size = 0 }
-0x0800061c = { name = "sColors", size = 16, file = "loops-main.o", type = "const const u16 [8]" }
+0x03000000 = { name = "gSlots", size = 48, aliases = ["__data_end", "__bss_start", "__data_start"], type = "struct Slot [12]" }
+0x03000030 = { name = "gLens", size = 24, type = "u16 [12]" }
+0x03000050 = { name = "gRow", size = 28, type = "struct Row" }
+0x0300006c = { name = "gFrame", size = 4, type = "u32" }
+0x03000070 = { name = "gBarCount", size = 4, type = "u8" }
+0x03000078 = { name = "gPocket", size = 8, type = "struct Pocket" }
+0x03000080 = { name = "gMovers", size = 48, type = "struct Bar [6]" }
+0x030000b0 = { name = "gTotals", size = 24, type = "u16 [12]" }
+0x030000c8 = { name = "__bss_end", size = 0 }
+0x080007d4 = { name = "sColors", size = 16, file = "loops-main.o", type = "const const u16 [8]" }
 
 # Each function's parameters and variables from DWARF: a register (`reg`)
 # or a stack slot (`slot`, an offset from sp after the prologue), over
@@ -111,9 +119,29 @@ format = 1
   { name = "j", reg = 4, from = 0x08000428, to = 0x080004a8, type = "s32" },
 ]
 0x080004a9 = [
-  { name = "i", reg = 3, from = 0x080004a8, to = 0x0800061c, type = "s32" },
-  { name = "total", reg = 5, from = 0x080004a8, to = 0x0800061c, type = "s32" },
-  { name = "at", reg = 4, from = 0x080004a8, to = 0x0800061c, type = "s32" },
+  { name = "n", reg = 0, from = 0x080004a8, to = 0x080004d8, type = "s32", param = true },
+  { name = "i", reg = 2, from = 0x080004a8, to = 0x080004d8, type = "s32" },
+]
+0x080004d9 = [
+  { name = "p", reg = 0, from = 0x080004d8, to = 0x08000502, type = "const struct Pocket *", param = true },
+  { name = "id", reg = 4, from = 0x080004d8, to = 0x08000502, type = "u16", param = true },
+  { name = "i", reg = 3, from = 0x080004d8, to = 0x08000502, type = "s32" },
+  { name = "n", reg = 1, from = 0x080004d8, to = 0x08000502, type = "s32" },
+]
+0x08000505 = [
+  { name = "n", reg = 1, from = 0x08000504, to = 0x0800053c, type = "s32", param = true },
+  { name = "i", reg = 1, from = 0x08000504, to = 0x0800053c, type = "s32" },
+]
+0x0800053d = [
+  { name = "b", reg = 2, from = 0x0800053c, to = 0x08000560, type = "const struct Bar *", param = true },
+  { name = "n", reg = 1, from = 0x0800053c, to = 0x08000560, type = "s32", param = true },
+  { name = "i", reg = 3, from = 0x0800053c, to = 0x08000560, type = "s32" },
+  { name = "s", reg = 4, from = 0x0800053c, to = 0x08000560, type = "s32" },
+]
+0x08000561 = [
+  { name = "i", reg = 1, from = 0x08000560, to = 0x080007d4, type = "s32" },
+  { name = "total", reg = 4, from = 0x08000560, to = 0x080007d4, type = "s32" },
+  { name = "at", reg = 5, from = 0x08000560, to = 0x080007d4, type = "s32" },
 ]
 
 # The line table: each row's address and its line, in the `src` of the
@@ -147,95 +175,159 @@ format = 1
 0x0800025c = 22
 0x08000266 = 23
 0x08000268 = 24
-0x08000270 = 29
-0x0800027c = 30
-0x08000280 = 31
-0x08000282 = 32
-0x08000292 = 33
-0x080002ac = 34
-0x080002b8 = 38
-0x080002ba = 39
-0x080002bc = 41
-0x080002c2 = 42
-0x080002c6 = 41
-0x080002ce = 43
-0x080002d0 = 44
-0x080002d4 = 48
-0x080002d6 = 51
-0x080002e2 = 52
-0x080002f4 = 51
-0x08000300 = 53
-0x08000310 = 57
-0x08000314 = 60
-0x0800031e = 61
-0x08000332 = 60
-0x0800033c = 62
-0x08000344 = 66
-0x08000346 = 69
-0x08000360 = 70
-0x0800036c = 69
-0x08000376 = 71
-0x08000380 = 75
-0x08000384 = 78
-0x0800038a = 79
-0x08000394 = 78
-0x0800039c = 79
-0x080003a2 = 82
-0x080003a4 = 83
-0x080003ac = 87
-0x080003b0 = 90
-0x080003b8 = 91
-0x080003c0 = 93
-0x080003d4 = 90
-0x080003dc = 95
-0x080003e8 = 99
-0x080003ee = 102
-0x080003fa = 103
-0x0800040a = 104
-0x08000412 = 105
-0x08000414 = 102
-0x0800041e = 107
-0x08000428 = 111
-0x0800043a = 114
-0x08000440 = 115
-0x0800045a = 116
-0x0800047e = 115
-0x08000486 = 114
-0x0800048e = 117
-0x080004a8 = 120
-0x080004b4 = 123
-0x080004be = 124
-0x080004c0 = 123
-0x080004c8 = 125
-0x080004cc = 126
-0x080004e4 = 127
-0x080004f0 = 128
-0x080004f4 = 129
-0x08000504 = 130
-0x0800050c = 131
-0x0800051c = 132
-0x08000520 = 131
-0x0800052c = 134
-0x08000538 = 135
-0x08000544 = 136
-0x0800054c = 137
-0x08000568 = 138
-0x0800056c = 139
-0x08000572 = 141
-0x0800058a = 142
-0x08000596 = 143
-0x080005a6 = 144
-0x080005b6 = 145
-0x080005c8 = 146
-0x080005d8 = 147
-0x080005ec = 148
-0x080005f6 = 149
-0x080005fc = 150
-0x08000602 = 127
-0x0800061c = "c/loops/main.c:152"
+0x08000270 = 60
+0x0800027c = 61
+0x08000280 = 62
+0x08000282 = 63
+0x08000292 = 64
+0x080002ac = 65
+0x080002b8 = 69
+0x080002ba = 70
+0x080002bc = 72
+0x080002c2 = 73
+0x080002c6 = 72
+0x080002ce = 74
+0x080002d0 = 75
+0x080002d4 = 79
+0x080002d6 = 82
+0x080002e2 = 83
+0x080002f4 = 82
+0x08000300 = 84
+0x08000310 = 88
+0x08000314 = 91
+0x0800031e = 92
+0x08000332 = 91
+0x0800033c = 93
+0x08000344 = 97
+0x08000346 = 100
+0x08000360 = 101
+0x0800036c = 100
+0x08000376 = 102
+0x08000380 = 106
+0x08000384 = 109
+0x0800038a = 110
+0x08000394 = 109
+0x0800039c = 110
+0x080003a2 = 113
+0x080003a4 = 114
+0x080003ac = 118
+0x080003b0 = 121
+0x080003b8 = 122
+0x080003c0 = 124
+0x080003d4 = 121
+0x080003dc = 126
+0x080003e8 = 130
+0x080003ee = 133
+0x080003fa = 134
+0x0800040a = 135
+0x08000412 = 136
+0x08000414 = 133
+0x0800041e = 138
+0x08000428 = 142
+0x0800043a = 145
+0x08000440 = 146
+0x0800045a = 147
+0x0800047e = 146
+0x08000486 = 145
+0x0800048e = 148
+0x080004a8 = 152
+0x080004aa = 155
+0x080004b4 = 156
+0x080004bc = 157
+0x080004c4 = 158
+0x080004c6 = 155
+0x080004ce = 160
+0x080004d8 = 164
+0x080004de = 165
+0x080004e0 = 167
+0x080004e8 = 168
+0x080004ee = 169
+0x080004f2 = 167
+0x080004fa = 171
+0x080004fc = 172
+0x08000504 = 176
+0x08000508 = 179
+0x08000514 = 180
+0x0800051c = 179
+0x08000528 = 181
+0x0800053c = 185
+0x08000540 = 186
+0x08000542 = 188
+0x08000548 = 189
+0x08000550 = 188
+0x08000558 = 190
+0x0800055a = 191
+0x08000560 = 194
+0x0800056c = 197
+0x0800057a = 198
+0x0800057c = 197
+0x08000584 = 199
+0x08000588 = 200
+0x08000590 = 201
+0x08000592 = 202
+0x08000594 = 203
+0x0800059c = 200
+0x080005a6 = 205
+0x080005ac = 206
+0x080005b2 = 207
+0x080005b6 = 205
+0x080005be = 209
+0x080005c0 = 210
+0x080005da = 212
+0x080005de = 213
+0x080005ee = 214
+0x080005f6 = 215
+0x08000606 = 216
+0x0800060a = 215
+0x08000616 = 218
+0x08000622 = 219
+0x0800062e = 220
+0x08000636 = 221
+0x0800065c = 222
+0x08000660 = 223
+0x08000666 = 225
+0x08000680 = 226
+0x0800068e = 227
+0x0800069e = 228
+0x080006ae = 229
+0x080006c4 = 230
+0x080006d2 = 231
+0x080006e6 = 232
+0x080006f0 = 233
+0x080006f8 = 235
+0x080006fe = 236
+0x0800070a = 237
+0x08000712 = 238
+0x08000720 = 239
+0x0800073c = 240
+0x0800074a = 241
+0x0800076a = 242
+0x08000778 = 243
+0x0800079a = 244
+0x080007a0 = 211
+0x080007d4 = "c/loops/main.c:246"
 
 # Structs, unions and enums by C name (a typedef's for an anonymous one):
 # fields with byte offset, size, type and bitfield bits [lowest, width].
+
+[types."struct Bar"]
+kind = "struct"
+size = 8
+fields = [
+  { name = "len", off = 0, size = 2, type = "u16" },
+  { name = "hue", off = 2, size = 1, type = "u8" },
+  { name = "pad", off = 3, size = 1, type = "u8" },
+  { name = "dx", off = 4, size = 2, type = "s16" },
+  { name = "dy", off = 6, size = 2, type = "s16" },
+]
+
+[types."struct Pocket"]
+kind = "struct"
+size = 8
+fields = [
+  { name = "slots", off = 0, size = 4, type = "struct Slot *" },
+  { name = "cap", off = 4, size = 1, type = "u8" },
+]
 
 [types."struct Row"]
 kind = "struct"
@@ -244,6 +336,14 @@ fields = [
   { name = "count", off = 0, size = 1, type = "u8" },
   { name = "hue", off = 1, size = 1, type = "u8" },
   { name = "len", off = 2, size = 24, type = "u16 [12]" },
+]
+
+[types."struct Slot"]
+kind = "struct"
+size = 4
+fields = [
+  { name = "id", off = 0, size = 2, type = "u16" },
+  { name = "qty", off = 2, size = 2, type = "u16" },
 ]
 
 # #define families of pret's include/constants/ that a field takes, by

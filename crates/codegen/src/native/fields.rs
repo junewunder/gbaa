@@ -101,6 +101,22 @@ pub struct Flow {
     /// an element's address however it is used (native/lift-element-address;
     /// [`address_indexed`]).
     pub value: BTreeMap<(usize, usize), Indexed>,
+    /// The reads of a pointer a `for` steps beside its variable
+    /// ([`Steps`]): each the element it is, with itself as base and
+    /// index (the printer names both).
+    pub stepped: BTreeMap<(usize, usize), Indexed>,
+}
+
+/// Pointers a `for` steps beside its variable, printed as the element
+/// they are (unit `native/lift-for-index`): by block (an index into
+/// `blocks`) and register, the bytes one round steps it; and the steps'
+/// `SetReg`s, by block and inst, which the flow leaves out, as the
+/// printed code does: the register keeps its value from before the loop,
+/// what it points at there.
+#[derive(Clone, Debug, Default)]
+pub struct Steps {
+    pub reads: BTreeMap<(usize, usize), u32>,
+    pub skip: std::collections::BTreeSet<(usize, usize)>,
 }
 
 /// The typed accesses of one function: by block (an index into
@@ -116,6 +132,20 @@ pub fn flow(
     blocks: &[&[Inst]],
     out: impl Fn(usize, usize) -> Vec<(usize, After)>,
     slot: impl Fn(usize, usize) -> Option<i32>,
+) -> Flow {
+    flow_stepped(maps, entry, blocks, out, slot, &Steps::default())
+}
+
+/// [`flow`], with the pointers `steps` names stepped beside a `for`'s
+/// variable: each read of one is an element ([`Flow::stepped`]), and an
+/// access through it, or it plus a constant, indexes that element.
+pub fn flow_stepped(
+    maps: &Maps,
+    entry: u32,
+    blocks: &[&[Inst]],
+    out: impl Fn(usize, usize) -> Vec<(usize, After)>,
+    slot: impl Fn(usize, usize) -> Option<i32>,
+    steps: &Steps,
 ) -> Flow {
     let t = &maps.types;
     let locals = maps.locals.get(&entry).map_or(&[][..], Vec::as_slice);
@@ -157,11 +187,13 @@ pub fn flow(
     let mut access = BTreeMap::new();
     let mut index = BTreeMap::new();
     let mut value = BTreeMap::new();
+    let mut stepped = BTreeMap::new();
     for round in 0.. {
         let mut changed = false;
         access.clear();
         index.clear();
         value.clear();
+        stepped.clear();
         for b in 0..blocks.len() {
             let Some(mut regs) = ins[b].clone() else {
                 continue;
@@ -184,6 +216,21 @@ pub fn flow(
                     }
                     Op::GetReg(r) => {
                         vt[i] = regs[r.index()].clone().or_else(|| local(r.index(), pc, pc));
+                        if let Some(&s) = steps.reads.get(&(b, r.index()))
+                            && let Some(at) = &vt[i]
+                        {
+                            let v = ValueId(i as u32);
+                            stepped.insert(
+                                (b, i),
+                                Indexed {
+                                    base: v,
+                                    at: at.clone(),
+                                    i: v,
+                                    s,
+                                    c: 0,
+                                },
+                            );
+                        }
                     }
                     Op::Bin(op @ (BinOp::Add | BinOp::Sub), x, y) => {
                         let (tx, ty) = (&vt[x.index()], &vt[y.index()]);
@@ -202,6 +249,15 @@ pub fn flow(
                         {
                             value.insert((b, i), x);
                         }
+                    }
+                    // A typed word load's rotate, which its typed `get`
+                    // prints without (native/lift-aligned-loads): the
+                    // pointer it loaded.
+                    Op::Shift { v, amount, .. }
+                        if vt[v.index()].is_some()
+                            && super::aligned::load_shift(insts, v, amount).is_some() =>
+                    {
+                        vt[i] = vt[v.index()].clone();
                     }
                     // Thumb's `adds rd, rn, #k` and `mov rd, rn` (`adds
                     // rd, rn, #0`), `subs` as `a + !b + 1`: an add with
@@ -238,7 +294,9 @@ pub fn flow(
                             vt[i] = slots.get(&s).cloned().flatten();
                         } else if let Some(p) = &vt[addr.index()] {
                             access.insert((b, i), p.clone());
-                            if let Some(x) = indexed_at(insts, &vt, addr) {
+                            if let Some(x) = stepped_at(insts, &stepped, b, addr)
+                                .or_else(|| indexed_at(insts, &vt, addr))
+                            {
                                 index.insert((b, i), x);
                             }
                             if width == Width::Word
@@ -262,11 +320,14 @@ pub fn flow(
                             }
                         } else if let Some(p) = &vt[addr.index()] {
                             access.insert((b, i), p.clone());
-                            if let Some(x) = indexed_at(insts, &vt, addr) {
+                            if let Some(x) = stepped_at(insts, &stepped, b, addr)
+                                .or_else(|| indexed_at(insts, &vt, addr))
+                            {
                                 index.insert((b, i), x);
                             }
                         }
                     }
+                    Op::SetReg(..) if steps.skip.contains(&(b, i)) => {}
                     Op::SetReg(r, v) => {
                         let r = r.index();
                         // The flow has nothing: the variable whose home
@@ -325,7 +386,37 @@ pub fn flow(
         access,
         index,
         value,
+        stepped,
     }
+}
+
+/// `addr` as a stepped pointer's read ([`Steps`]) plus maybe a constant:
+/// that element, `c` bytes in.
+fn stepped_at(
+    insts: &[Inst],
+    stepped: &BTreeMap<(usize, usize), Indexed>,
+    b: usize,
+    addr: ValueId,
+) -> Option<Indexed> {
+    let konst = |x: ValueId| match insts[x.index()].op {
+        Op::Const(c) | Op::Pool(c) => Some(c),
+        _ => None,
+    };
+    let read = |x: ValueId| stepped.get(&(b, x.index()));
+    if let Some(x) = read(addr) {
+        return Some(x.clone());
+    }
+    let (x, y) = match insts[addr.index()].op {
+        Op::Bin(BinOp::Add, x, y) => (x, y),
+        Op::Adc { a, b: y, c } if insts[c.index()].op == Op::Bit(false) => (a, y),
+        _ => return None,
+    };
+    let (p, c) = match (read(x), read(y)) {
+        (Some(p), None) => (p, konst(y)?),
+        (None, Some(p)) => (p, konst(x)?),
+        _ => return None,
+    };
+    Some(Indexed { c, ..p.clone() })
 }
 
 /// `addr` as `base + i * s + c`: a typed pointer plus a value the block
@@ -1100,5 +1191,72 @@ fields = [
         .access;
         assert!(a.contains_key(&(2, 4)), "through the slot's pointer");
         assert!(!a.contains_key(&(2, 7)), "r4 is a pointer one way only");
+    }
+
+    /// `p = kirby->next` (a word load and its rotate), then `p` a stepped
+    /// pointer (native/lift-for-index): its read is the element, and an
+    /// access through it plus 2 that element's `pos.y`.
+    #[test]
+    fn a_stepped_pointer_reads_the_element_a_loaded_pointer_typed() {
+        use armv4t::sem::ShiftType;
+        let m = maps();
+        let b = [
+            inst(Op::Insn(0x0800_0000)),
+            inst(Op::GetReg(Reg(0))),
+            inst(Op::Const(4)),
+            inst(Op::Bin(BinOp::Add, ValueId(1), ValueId(2))),
+            inst(Op::Load {
+                width: Width::Word,
+                addr: ValueId(3),
+            }),
+            inst(Op::Const(3)),
+            inst(Op::Bin(BinOp::And, ValueId(3), ValueId(5))),
+            inst(Op::Shift {
+                kind: ShiftType::Lsl,
+                v: ValueId(6),
+                amount: ValueId(5),
+            }),
+            inst(Op::Shift {
+                kind: ShiftType::Ror,
+                v: ValueId(4),
+                amount: ValueId(7),
+            }),
+            inst(Op::SetReg(Reg(1), ValueId(8))),
+            inst(Op::GetReg(Reg(1))),
+            inst(Op::Const(2)),
+            inst(Op::Bin(BinOp::Add, ValueId(10), ValueId(11))),
+            inst(Op::Load {
+                width: Width::Half,
+                addr: ValueId(12),
+            }),
+            inst(Op::Exit(Exit::Jump(ValueId(1)))),
+        ];
+        // Without steps: the rotate keeps the loaded pointer's type.
+        let plain = flow(&m, 0x0800_0001, &[&b], |_, _| Vec::new(), |_, _| None);
+        assert!(plain.access.contains_key(&(0, 13)));
+        assert!(plain.stepped.is_empty() && !plain.index.contains_key(&(0, 13)));
+        let mut steps = Steps::default();
+        steps.reads.insert((0, 1), 8);
+        let f = flow_stepped(
+            &m,
+            0x0800_0001,
+            &[&b],
+            |_, _| Vec::new(),
+            |_, _| None,
+            &steps,
+        );
+        let x = &f.stepped[&(0, 10)];
+        assert_eq!(
+            address_indexed(&m.types, x, false, "r1", "i").as_deref(),
+            Some("Ref::<t::Kirby>::new(r1).add(i).addr()")
+        );
+        let y = &f.index[&(0, 13)];
+        assert_eq!((y.base, y.i, y.c), (ValueId(10), ValueId(10), 2));
+        assert_eq!(
+            pointer_indexed(&m.types, y, 2, "r1", "i")
+                .map(|(e, _)| e)
+                .as_deref(),
+            Some("Ref::<t::Kirby>::new(r1).add(i).pos().y()")
+        );
     }
 }

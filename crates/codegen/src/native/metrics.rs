@@ -49,7 +49,11 @@
 //!   bar) print as an element by a variable index (`.idx(i)`, `.add(i)`;
 //!   native/lift-index-names). `named_element_addresses` (no bar) counts
 //!   the values, not accesses, printed as an element's or its field's
-//!   address by name (`.idx(i).addr()`, native/lift-element-address). A lift with types also has
+//!   address by name (`.idx(i).addr()`, native/lift-element-address);
+//!   `for_stepped_elements` (no bar) the pointers a `for` steps beside its
+//!   variable printed as the element they are, and `for_counter_arith`
+//!   (barred) the `for`s whose body still multiplies or shifts the
+//!   variable (native/lift-for-index). A lift with types also has
 //!   `computed_unknown_unnamed`, barred: the `computed_unknown` accesses
 //!   no type names. Of those through a typed pointer that hold bitfields
 //!   (`super::bitfields`, native/lift-bitfields): `bitfield_sets` print
@@ -365,6 +369,7 @@ pub const UNBARRED: &[&str] = &[
     "compare_trees_matched",
     "compare_tree_blocks",
     "loops_for",
+    "for_stepped_elements",
     "narrowing_casts",
     "plain_entry_bodies",
     "closed_tables",
