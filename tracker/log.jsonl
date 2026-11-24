@@ -4257,3 +4257,4 @@
 {"at":"2026-11-24T22:33:28Z","actor":"foreman","tag":"6056824b","host":"quack","cmd":"decide","text":"decided: libgcc division is known by its names-file symbol","d":"d/libgcc-division-is-known-by-its-names-file"}
 {"at":"2026-11-24T22:33:30Z","actor":"foreman","tag":"6056824b","host":"quack","cmd":"decide","text":"decided: In a sprint the foreman commits the private game bars","d":"d/in-a-sprint-the-foreman-commits-the-private"}
 {"at":"2026-11-24T22:33:32Z","actor":"foreman","tag":"6056824b","host":"quack","cmd":"decide","text":"decided: Rogue's r11 is passed exactly, not zeroed","d":"d/rogue-s-r11-is-passed-exactly-not-zeroed"}
+{"at":"2026-11-24T22:35:32Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/game-lift-bars-refresh","text":"Metroid's and Emerald's private lift bars match main again: edited (detail, priority)"}
