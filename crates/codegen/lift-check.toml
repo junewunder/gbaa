@@ -2835,6 +2835,8 @@ route = "units/c-list-agbcc-600.toml"
 planted_store = 0x080005f8
 
 [program.c-list-agbcc.bars]
+rom_static_fn_keys = 4
+rom_refs = 0
 lines = 700
 io_unnamed = 0
 texts_left = 0
@@ -2929,6 +2931,8 @@ route = "units/c-list-gcc-600.toml"
 planted_store = 0x08000612
 
 [program.c-list-gcc.bars]
+rom_static_fn_keys = 4
+rom_refs = 0
 lines = 782
 io_unnamed = 0
 texts_left = 0
@@ -3111,6 +3115,8 @@ route = "units/native-ime-i-set-601.toml"
 planted_flags = ["--irq-at-waits"]
 
 [program.native-ime-i-set.bars]
+rom_static_fn_keys = 3
+rom_refs = 17
 io_unnamed = 19
 lines = 20778
 lines_prelude = 1337
