@@ -5243,21 +5243,9 @@
         "by": "5f29d09f",
         "at": "2026-11-24T20:41:11Z",
         "evidence": "gbaa-lift out/rom-links/kirby-mirror.gba --name kirby-mirror --holes mods/kirby-mirror/holes.toml --cut DIR sub_0805B2FC now cuts KirbyGroundAccel (0x0805b2fd) with 21 // src/kirby.c:N comments (had none; was 'names no function'). Names layers keep src/size/file/proto (renamed) and old names as aka; resolve() for --cut/--find; new unit test. just check passed (exit 0) on b80ffa43, main merged (up to date).",
-        "branch": "unit/native/names-keep-source-lines",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T20:41:11Z",
-          "by": "5f29d09f",
-          "host": "quack",
-          "pid": 2962519,
-          "start": "95218086",
-          "beats": true,
-          "session": "5f29d09f-bec3-404c-879e-56e521199252",
-          "lane": "quack/2"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-24T20:14:21Z"
+        "landed": "2026-11-24T20:46:01Z"
+      }
     },
     {
       "id": "native/rogue-build",
