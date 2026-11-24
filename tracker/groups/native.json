@@ -5475,8 +5475,9 @@
       "title": "Pointer types the lift proves, scored against DWARF",
       "detail": "Split from {unit:native/lift-pointer-types}: the types a pointer variable is bound to come today from the names files (t::, refs_bound_named) or a heap run (refs_bound_proven). Wanted, for a game with no decomp: types the lift proves (value sets, heap Refs' tokens, what a callee does with its parameter, carried to callers and callees until they agree), counted apart from the names files' types, and the names files used as the answer key: how many proven types agree with DWARF's on Emerald and Metroid, a row of the pret score (just pret-score). Check: just lift-check 0 differences; the pret score shows the agreement; just check. Sprint 2026-11-24: a measurement, any numbers land, but defined: proven types computed with the names file's types off (--no-field-types); 'agrees' is every access offset and width being a field of DWARF's type; the row gives agree / disagree / unproven. After {unit:native/lift-pointer-signatures}.",
       "check": "recorded",
-      "needs": ["native/lift-pointer-registers"],
-      "uses": ["heavy"]
+      "needs": ["native/lift-pointer-registers", "native/lift-pointer-signatures"],
+      "uses": ["heavy"],
+      "priority": 76
     },
     {
       "id": "native/lift-returns-past-holes",
