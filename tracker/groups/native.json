@@ -4112,15 +4112,22 @@
       "uses": ["heavy"],
       "tags": ["slow-check"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "f4ff2870",
-        "session": "f4ff2870-e314-4e2e-9ad1-f90b20e396b5",
-        "host": "quack",
-        "pid": 2963642,
-        "start": "95218853",
-        "at": "2026-11-24T08:02:26Z",
+        "at": "2026-11-24T09:55:17Z",
+        "evidence": "Commit afd05f6, merge b7326fe. Metroid (quack): frames gone 371 -> 894, sp kept only to pass on exactly 1698 -> 1194 (frames-gone report line; new metric sp_arith_exact, barred on all rows). just lift-check passed (31 programs, 0 differences, every planted fault and both planted holes caught) and Metroid's lift ran 600 of 600 frames, no stop, its native route 2700 frames 0 differences incl. RAM outside the stack; both on the code before the I/O exemption was cut to DMA registers only (stricter: Metroid 1193 -> 1194, other rows the same by lift-metrics). c-loops-gcc 5 -> 9 frames gone; agb rows unchanged. 6 new unit tests. just check passed after merging main.",
         "branch": "unit/native/lift-frame-exact-narrow",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T09:55:17Z",
+          "by": "f4ff2870",
+          "host": "quack",
+          "pid": 2963642,
+          "start": "95218853",
+          "beats": true,
+          "session": "f4ff2870-e314-4e2e-9ad1-f90b20e396b5",
+          "lane": "quack/3"
+        }
       },
       "round": "2026-11-24T08:02:26Z"
     },
