@@ -784,21 +784,9 @@
         "by": "5416770a",
         "at": "2026-11-24T12:03:22Z",
         "evidence": "Merged origin/main into unit/native/lift-aligned-loads; settled the mirror-machine-count.md conflict keeping branch row 5 (aligned-loads counts) and main row 6 (add-zero done); just check passed (exit 0).",
-        "branch": "unit/native/lift-aligned-loads",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T12:03:22Z",
-          "by": "5416770a",
-          "host": "quack",
-          "pid": 2963642,
-          "start": "95218853",
-          "beats": true,
-          "session": "5416770a-4868-4252-829c-cc785c7fc1a5",
-          "lane": "quack/3"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-24T11:57:13Z"
+        "landed": "2026-11-24T12:10:42Z"
+      }
     }
   ]
 }

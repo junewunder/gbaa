@@ -4040,3 +4040,5 @@
 {"at":"2026-11-24T11:57:08Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane3-native-lift-aligned-loads","text":"new unit: Merge main on quack lane 3"}
 {"at":"2026-11-24T11:57:13Z","actor":"loop","tag":"5416770a","host":"quack","cmd":"claim","id":"merge/quack-lane3-native-lift-aligned-loads","text":"Merge main on quack lane 3: claimed"}
 {"at":"2026-11-24T12:03:22Z","actor":"loop","tag":"5416770a","host":"quack","cmd":"done","id":"merge/quack-lane3-native-lift-aligned-loads","text":"Merge main on quack lane 3: done"}
+{"at":"2026-11-24T12:10:42Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane3-native-lift-aligned-loads","text":"Merge main on quack lane 3: on main"}
+{"at":"2026-11-24T12:10:42Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-aligned-loads","text":"A load the lift proves aligned drops its rotate: on main"}

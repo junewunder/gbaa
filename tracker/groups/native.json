@@ -4507,19 +4507,8 @@
         "by": "c08a6e47",
         "at": "2026-11-24T11:56:54Z",
         "evidence": "Amazing Mirror's lift (mods holes, default names): ShiftType::Ror in src/m_*.rs 44,881 -> 12,090 (new barred metric load_rotates_left 13,040); its native route units/kirby-mirror-native.toml passes 3,000 frames, 0 differences, audio the same. C programs' Ror 364 -> 34 (c-heap-agbcc 30->5, c-chain-agbcc 41->1), load_rotates_left barred on all 37 programs. just lift-check passed (all programs' native checks, planted faults caught); after merging main, lift-check --only c-jump-agbcc/c-jump-gcc/native-ram-jump passed and just check passed. Left: raw loads through untyped pointer params, filed as {unit:native/lift-aligned-params}.",
-        "branch": "unit/native/lift-aligned-loads",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T11:56:54Z",
-          "by": "c08a6e47",
-          "host": "quack",
-          "pid": 2963642,
-          "start": "95218853",
-          "beats": true,
-          "session": "c08a6e47-2a16-43d7-acf1-12b1f784150d",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "landed": "2026-11-24T12:10:42Z"
       },
       "notes": [
         {
@@ -4532,8 +4521,7 @@
           "by": "9cee3887",
           "text": "Mirror LLM pilot (docs/research/llm-pilot.md, round two): rewrites dropped rotates for pointer parameters (Kirby's, a sprite's: 7 of 20), aligned in the game but provable only from callers or the struct's alignment; and for stack arguments (2): sp is always aligned."
         }
-      ],
-      "round": "2026-11-24T10:39:15Z"
+      ]
     },
     {
       "id": "native/lift-add-zero",
