@@ -4431,15 +4431,22 @@
       "uses": ["heavy"],
       "tags": ["native"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "fd9d0b98",
-        "session": "fd9d0b98-cdac-4f2e-8216-f606fefdbd7f",
-        "host": "quack",
-        "pid": 2962048,
-        "start": "95217572",
-        "at": "2026-11-24T11:04:26Z",
+        "at": "2026-11-24T11:11:02Z",
+        "evidence": "At fc74eb7b (review fix: ret_ty doc back above it; main merged, up to date): just check passed; just lift-check --only c-jump-agbcc --only c-jump-gcc passed (600 frames, 0 differences, planted fault caught, both compilers). moonbeam: its longjmp at 0x08038328 no longer a hard hole (7 -> 6, bf9bba9f).",
         "branch": "unit/native/lift-longjmp",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T11:11:02Z",
+          "by": "fd9d0b98",
+          "host": "quack",
+          "pid": 2962048,
+          "start": "95217572",
+          "beats": true,
+          "session": "fd9d0b98-cdac-4f2e-8216-f606fefdbd7f",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
