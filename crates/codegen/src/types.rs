@@ -122,6 +122,10 @@ pub struct Bitfield<'a> {
     pub c: &'a str,
 }
 
+/// A field as [`Types::fields_of`] gives it: identifier, offset, type and
+/// whether it is a bitfield.
+pub type FieldOf<'a> = (&'a str, u32, &'a Ty, bool);
+
 /// A function's prototype as the readable form prints it (the spike's gap
 /// 7): what arrives in r0–r3 and whether r0 is the value it returns.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -520,6 +524,20 @@ impl Types {
             .filter(|f| f.bits.is_none())
             .find(|f| (f.off..f.off + self.size(&f.ty)).contains(&off))
             .map(|f| (&f.ty, off - f.off))
+    }
+
+    /// The struct or union `name`'s size and each field's identifier,
+    /// offset, type and whether it is a bitfield (its accessor's bytes),
+    /// in the map's order (native/lift-mod-run-edit-report: the per-function
+    /// check names a RAM byte by them).
+    pub fn fields_of(&self, name: &str) -> Option<(u32, Vec<FieldOf<'_>>)> {
+        let d = self.defs.get(name)?;
+        let fs = d
+            .fields
+            .iter()
+            .map(|f| (f.ident.as_str(), f.off, &f.ty, f.bits.is_some()))
+            .collect();
+        Some((d.size, fs))
     }
 
     /// The struct `name` as `Ram`'s `ram_t` lays it out
