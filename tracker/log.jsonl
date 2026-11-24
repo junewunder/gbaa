@@ -3979,3 +3979,4 @@
 {"at":"2026-11-24T09:51:11Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/metroid-fn-check-stop","text":"Metroid's fn-check program stops at a jump to 0x03001945: on main"}
 {"at":"2026-11-24T09:51:16Z","actor":"loop","tag":"68e9a5ec","host":"quack","cmd":"claim","id":"native/lift-mod-run-zoom","text":"lift-mod-run's side PNGs zoom on the differing pixels: claimed"}
 {"at":"2026-11-24T09:51:45Z","actor":"loop","tag":"f2d7754b","host":"quack","cmd":"done","id":"native/lift-global-bitfields","text":"A typed global's bitfield prints as its field: done"}
+{"at":"2026-11-24T09:52:02Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane2-native-lift-global-bitfields","text":"new unit: Merge main on quack lane 2"}
