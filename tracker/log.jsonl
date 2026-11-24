@@ -4264,3 +4264,4 @@
 {"at":"2026-11-24T22:35:41Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/imperium-first-stops","text":"Imperium's lift runs 600 frames: its first stops: edited (priority)"}
 {"at":"2026-11-24T22:35:43Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-lent-print","text":"Lent stack slots print as locals, borrowers as Lent: edited (priority)"}
 {"at":"2026-11-24T22:35:45Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-pointer-registers","text":"Register locals hold the Ref type the lift's flow gives: edited (priority)"}
+{"at":"2026-11-24T22:35:47Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/emerald-native-route","text":"Emerald's lift matches the play build on a route: edited (priority)"}

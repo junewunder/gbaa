@@ -4721,7 +4721,7 @@
         "native/emerald-m4a-compressed"
       ],
       "uses": ["heavy"],
-      "priority": 30,
+      "priority": 89,
       "notes": [
         {
           "at": "2026-11-24T21:59:47Z",
