@@ -4864,7 +4864,8 @@
         "start": "95218853",
         "at": "2026-11-24T15:40:16Z",
         "branch": "unit/native/lift-stack-arrays",
-        "beats": true
+        "beats": true,
+        "handedBack": "2026-11-24T16:28:59Z"
       },
       "notes": [
         {
