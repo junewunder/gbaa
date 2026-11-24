@@ -4589,7 +4589,19 @@
       "title": "A value read twice is named for what it holds",
       "detail": "docs/research/mirror-machine-count.md, row 1. A single-use value is printed inside its use already; the rest are let vN (v74 = g.ram.gNumTasks). Name each from what it holds: the global or field it loads, the local or parameter it feeds, the DWARF local of its register at that line. Bar on 04e94cca: 606,337 'vN' tokens in Mirror's src/m_*.rs (value_lets 208,204). Done when: vN falls, lift-check passes.",
       "needs": ["native/mirror-dwarf-map"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "d938b67f",
+        "session": "d938b67f-60f6-466a-bbe6-ac81a76ad3a4",
+        "host": "quack",
+        "pid": 2962519,
+        "start": "95218086",
+        "at": "2026-11-24T12:43:41Z",
+        "branch": "unit/native/lift-let-names",
+        "beats": true
+      },
+      "round": "2026-11-24T12:43:41Z"
     },
     {
       "id": "native/lift-pret-score",
