@@ -96,7 +96,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
 - `just nightly [--out DIR] [--against DIR] [--only NAME]… [--skip STEP]…
   [--step-minutes N]` (native/nightly-corpus; `crates/hole-report/src/nightly.rs`
   has the whole of it): each game of `holes/corpus.toml` through the hole
-  report, its play and readable builds and `just lift` (with the corpus's
+  report, its play build and `just lift` (with the corpus's
   `lift` name), a step that fails or passes `--step-minutes` (default 120)
   recorded and the rest run. Writes `out/nightly/<date>/summary.toml`,
   `summary.txt` and `<name>/summary.txt` (hard holes by kind, built or not,
@@ -673,41 +673,12 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   that call, past a budget; the per-game list is
   `crates/runtime/spins.toml`) and the BIOS's copies move it; its build
   runs only at `--timing native` or `--interp`.
-  `just timing-modes` runs `out/kirby-{exact,static,instant}` (built first,
-  the doc says how) along timing-lab's route and compares them with exact.
   `just snapshots-readable [ROM] [NAMES] [LIST] [FILE]` rewrites
   `mods/emerald/snapshots/emerald-readable.rs` from
   `emerald-readable.list` with pret's map (about 30 s with the saves proof, not heavy).
   `just sst-gen 500 4000 --readable` runs sst-gen with each generated fn
   readable (2026-10-27, the readable lowering: 22,500 cases and 4,000
   sequences, 0 differ).
-- `just readable-states ROM NAMES LIST [--every N] ROUTE…` (heavy: builds
-  two generated crates; NAMES `""`: unnamed): the named play view (`out/<name>-named`) and the
-  same with `--readable LIST` (`out/<name>-readable`) built and run through
-  `route-check --same-states` as `names-states` does. A list line `*` is
-  every function printed, the IWRAM copies' and continuation roots' too
-  (`emit::all_entries`): `mods/emerald/readable/all.list`.
-  `mods/emerald/readable/200.list` is the 200 functions the build cost was
-  measured on. Emerald, every function readable, the new-game route with
-  `--every 250`, 2026-10-28: 15,155 of 15,157 listed functions readable
-  (112,737 of 112,838 blocks), all 23 frames the same, 642,730 bytes each;
-  named and typed with `pokeemerald.toml`, 2026-10-28: 15,167 of 15,167
-  (112,738 of 112,940 blocks), all 23 the same.
-  `just readable-suites [--every N]` runs it unnamed with `all.list` on
-  the CPU suites: jsmolka's arm, thumb, memory, nes and bios tests and
-  both armwrestler builds, along `units/jsmolka-*.toml` and
-  `units/armwrestler-*.toml` (the armwrestler routes walk every page as
-  `just armwrestler` does, each page a checkpoint). 2026-10-28,
-  `mod/readable-exact`, `--every 25`: all seven the same at every point
-  (12 points each for jsmolka's, 20 for armwrestler's); blocks in the
-  readable form, arm 1 of 150, thumb 122 of 177, memory 0 of 77, nes 0
-  of 3, bios 0 of 64, armwrestler 64 of 201 (the form takes Thumb ROM
-  blocks only; the rest are ARM). The same day `just sst-gen 500 4000
-  --readable`: 22,500 cases and 4,000 sequences, 0 differ. `just
-  own-state-check ROM N K "" "--readable mods/emerald/readable/all.list"`
-  checks our save states with every function readable: Emerald 1000 100
-  (15,167 functions, 112,738 of 112,940 blocks readable) and
-  armwrestler-fixed 200 150 pass (2026-10-28).
 - `just liveness-states ROM [--every N] ROUTE…` (heavy: builds two
   generated crates, about 5 min each for Emerald): recompiles ROM with flag
   liveness on and off (`out/<name>-liveness`, `out/<name>-no-liveness`),
@@ -724,30 +695,6 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `--every 50`, 2026-10-24: all 184 frames the same, 642,720 bytes each;
   25 min with both builds (before the fix, the new-game route's frame 950
   differed).
-- The naming loop (`docs/mod-view-design.md`, "The naming loop";
-  `crates/naming`; not heavy, but every `ask` spends the owner's model
-  usage, so it runs only on the capped sample until june passes the
-  naming gate). `just naming prepare ROM PRET OUT [--seed N]` draws the
-  sample from the functions PRET (`$GBAA_DATA/names/pokeemerald.toml`)
-  names, leaving out libgcc, m4a and the SDK's libraries, whose names
-  every print is given: 100 per size class, about 30 whole subtrees first;
-  it writes `OUT/sample.toml` (about 20 s on Emerald). `just naming ask
-  ROM OUT ROUND [--jobs N] [--model M] [--limit N]` asks `claude -p`
-  (no tools, safe mode, from an empty folder in `/tmp`; default model
-  Sonnet 5.5, 6 at a time) for each function's name: ROUND `0` (code
-  alone), `1` (bottom-up, callees' round-1 names, round 0's data vote),
-  `2` (callers' names too), or the leak controls `nocode` and `recog`.
-  Each answer, with its tokens, seconds and list cost, goes to
-  `OUT/<round>/<key>.toml`, its prompt to `<key>.prompt`; a rerun asks
-  only what is missing. `just naming score OUT` scores every round
-  against pret (subtoken P/R/F1, exact match, data by vote, cost) and
-  writes `OUT/report.md`. Emerald's sample is `work/mod-naming/s1/`.
-  The sibling leak control: `just naming sibling ROM PRET SIB_ROM SIB_PRET
-  OUT [--seed N] [--count 30]` (FireRed's ROM and names, then Emerald's)
-  writes a sample of ROM's functions whose code, call offsets masked and
-  8+ instructions, is the same as one of SIB_ROM's (unique in each) under
-  another, non-placeholder pret name; `ask … 0` and `score` as above, the
-  report adding how many answers give the sibling's name. About 40 s.
 - Matching functions across a compiler change
   (`docs/research/cross-compiler-matching.md`; `crates/xmatch`; heavy only
   in that it runs discovery twice). `just xmatch score A.gba A.toml B.gba
@@ -789,19 +736,13 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   [--jobs N] [--gap N] [--min S] [--seed N]` (mod/opus-library-judge;
   spends the owner's model usage: `--limit` caps the new calls, default 0,
   which only scores what OUT holds) takes each ROM as the game, names it
-  from the others' libraries, and asks `claude -p` (as `naming ask`, default
-  Opus 5.5, 4 at a time) which of the three nearest reference library
+  from the others' libraries, and asks `claude -p` (no tools, safe mode, from an
+  empty folder in `/tmp`; default Opus 5.5, 4 at a time) which of the three nearest reference library
   functions each unnamed library-looking function is (within `--gap` 16
   functions of named library code on both sides), or none; answers in
   `OUT/<game>/<key>.toml`, prompts beside them, the score in
   `OUT/report.md`. About 4 min without calls; the six-ROM trial is
   `work/opus-judge/trial/`.
-- `just names-states ROM NAMES [--every N] ROUTE…` (heavy: builds two
-  generated crates): `--names-check`, then the unnamed and named prints
-  (`out/<name>-unnamed`, `out/<name>-named`, NAMES the source map, e.g.
-  `$GBAA_DATA/names/pokeemerald.toml`) built and run through
-  `route-check --same-states` as `liveness-states` does. Names change no
-  lowering, so any difference is a naming bug.
 - A mod copy (`docs/mod-view-design.md`, "A mod copy";
   `codegen::modcopy`). `just mod-cut ROM NAMES DIR FUNC…`
   (`gbaa-recompile ROM --names NAMES --cut DIR FUNC…`, FUNCs by pret name
@@ -832,18 +773,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   'start@400,start@700,a@800,a@950'` with `--frames 1002 --state-at 1001
   --state-out S` (frame 1001 ends inside the call), `--state S --frames
   300`, and `--frames 1300 --rewind 1000+31`: each loaded or rewound run
-  prints `(1 at a call the mod added …)` and runs on. `just mod-states ROM NAMES DIR [--every N] ROUTE…`
-  (heavy: two generated crates) builds the named print and the modded one
-  (`out/<name>-named`, `out/<name>-mod`) and runs `route-check
-  --same-states`, printing that resume count per route. To see an
-  edit: `just mod-run ROM NAMES DIR [--dump-at N,…] ROUTE` (heavy: the
-  same two crates; NAMES `""` names both from the maps in
-  `$GBAA_DATA/names` that name ROM by sha1) runs both along ROUTE (`route-check --mod-run`),
-  dumps the frames `--dump-at` names (default the route's checkpoints),
-  says which pairs are the same and writes `out/mod-run/<route>/side-N.png`
-  for each that differs: stock, the mod, and stock dimmed with the
-  differing pixels in red, left to right. It never fails on a difference
-  (that is what a mod is for), only when a build can't run.
+  prints `(1 at a call the mod added …)` and runs on.
 - What to cut for a change to a struct field (`codegen::find`;
   `docs/research/agent-first-mod.md`, item 5). `just mod-find ROM NAMES
   FIELD` (`gbaa-recompile --find ROM FIELD --names NAMES`; NAMES "": the
