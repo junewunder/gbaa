@@ -656,18 +656,22 @@
       "branch": "unit/native/mirror-native-route",
       "minMinutes": 30,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "76c036e3",
-        "session": "76c036e3-61c3-4066-8bd7-9fca8fc0ec7e",
-        "host": "quack",
-        "pid": 2964711,
-        "start": "95219683",
-        "at": "2026-11-24T05:15:04Z",
+        "at": "2026-11-24T05:15:21Z",
+        "evidence": "Branch already landed on main as merge 480e438 (Merge unit/native/mirror-native-route), which the loop gated on just check; git merge origin/main here fast-forwarded to 6376e70 with no conflicts, nothing left to merge.",
         "branch": "unit/native/mirror-native-route",
-        "resumed": "00941e5d",
-        "prevSession": "00941e5d-e9a2-4202-8da6-072eb475efb9",
-        "pushed": true,
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T05:15:21Z",
+          "by": "76c036e3",
+          "host": "quack",
+          "pid": 2964711,
+          "start": "95219683",
+          "beats": true,
+          "session": "76c036e3-61c3-4066-8bd7-9fca8fc0ec7e",
+          "lane": "quack/4"
+        }
       },
       "notes": [
         {

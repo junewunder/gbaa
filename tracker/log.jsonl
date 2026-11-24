@@ -3869,3 +3869,4 @@
 {"at":"2026-11-24T05:14:52Z","actor":"loop","tag":"7733e7b3","host":"quack","cmd":"claim","id":"native/lift-find-field","text":"The lift finds a field's writers for a modder: claimed (picking up after 7a3a3987)"}
 {"at":"2026-11-24T05:14:57Z","actor":"loop","tag":"c1790615","host":"quack","cmd":"claim","id":"native/lift-cut-header-helpers","text":"A lift cut's header explains pin, ix/rix and sext: claimed (picking up after 15fb1e04)"}
 {"at":"2026-11-24T05:15:04Z","actor":"loop","tag":"76c036e3","host":"quack","cmd":"claim","id":"merge/quack-lane4-native-mirror-native-route","text":"Merge main on quack lane 4: claimed (picking up after 00941e5d)"}
+{"at":"2026-11-24T05:15:21Z","actor":"loop","tag":"76c036e3","host":"quack","cmd":"done","id":"merge/quack-lane4-native-mirror-native-route","text":"Merge main on quack lane 4: done"}
