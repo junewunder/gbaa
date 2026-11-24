@@ -208,10 +208,12 @@ use std::fmt::Write as _;
 
 pub mod banks;
 pub mod bitfields;
+pub mod bounds;
 pub mod cond;
 pub mod counted;
 pub mod cut;
 pub mod fields;
+pub mod find_field;
 pub mod first_stop;
 pub mod fnref;
 pub mod frame;
@@ -493,6 +495,9 @@ pub struct Holes {
     /// The functions whose printed text [`Lifted::cut_texts`] keeps
     /// (`gbaa-lift --cut`).
     pub cut_want: BTreeSet<u32>,
+    /// Record each RAM access the lift resolves ([`Lifted::touches`];
+    /// `gbaa-lift --find FIELD`, [`find_field`]).
+    pub find_touches: bool,
     /// Where `Ram`'s globals are (`gbaa-lift --layout`): the guest's
     /// offsets, or the play layout's order ([`globals::Layout`]).
     pub layout: Layout,
@@ -845,6 +850,9 @@ pub struct Lifted {
     /// At `--fn-ids dense`, the ROM words the crate's copy of the ROM
     /// holds as IDs: by address, the ID ([`dense_ids`]).
     pub dense_words: BTreeMap<u32, u32>,
+    /// With [`Holes::find_touches`], each load and store of a printed
+    /// function whose RAM place the lift knows ([`find_field`]).
+    pub touches: Vec<find_field::Touch>,
 }
 
 /// The literals of `funcs`' constant jumps (not calls) to a RAM
@@ -1568,6 +1576,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             metrics: Metrics::default(),
             cut_texts: BTreeMap::new(),
             dense_words: BTreeMap::new(),
+            touches: std::mem::take(&mut soft.touches),
         };
     }
     fns.sort_unstable();
@@ -2390,6 +2399,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             true => dense.words,
             false => BTreeMap::new(),
         },
+        touches: soft.touches,
     }
 }
 
@@ -3696,6 +3706,8 @@ fn one_entry(
 
 #[derive(Default)]
 struct Soft {
+    /// Each resolved RAM access, with [`Holes::find_touches`].
+    touches: Vec<find_field::Touch>,
     /// Each printed function's entries ([`one_entry`]).
     entries: BTreeMap<u32, Entries>,
     /// Loads (false) and stores (true) by where their address is.
@@ -5158,7 +5170,12 @@ impl FnPrinter<'_, '_> {
                     }
                 }
                 plan::Node::Loop { label, body } => {
-                    if let Some((f, h, step)) = self.counted_loop(*label, body) {
+                    let found = self
+                        .counted_loop(*label, body)
+                        .or_else(|| self.bounded_loop(*label, body));
+                    if let Some((f, h, step)) = found
+                        && !self.steps.contains_key(&h)
+                    {
                         self.fors.insert(*label, f);
                         self.steps.insert(h, step);
                     }
@@ -5307,6 +5324,250 @@ impl FnPrinter<'_, '_> {
             return Some((f, h, step));
         }
         None
+    }
+
+    /// Loop `label` (`body`) as a `for` over a range [`bounds::prove`]
+    /// proves (unit `native/lift-for-bounds`): a body of any number of
+    /// blocks, whose one jump back to its start is its latch's, guarded;
+    /// one way in from outside it. With its latch's key and the inst of
+    /// its step.
+    ///
+    /// The counter is the register written once in a round (the blocks
+    /// the latch is reached from without passing the start), by the latch
+    /// before its jump back, and by no call there (r0-r3 by any, r4-r11 by
+    /// one that gives them back); the bound's register written nowhere in
+    /// a round. The binding shadows the counter, so: the latch reads it
+    /// nowhere after its step, and its exits after the step go where it
+    /// isn't live; no edge out of what is printed inside goes where it is.
+    /// What is printed inside but runs once the loop is done may write it:
+    /// the binding is `mut`. A pointer call in a round (whose writes
+    /// aren't known) leaves the loop a `loop`.
+    fn bounded_loop(
+        &self,
+        label: usize,
+        body: &[plan::Node],
+    ) -> Option<(counted::For, u32, usize)> {
+        let r = self.bounded_why(label, body);
+        if std::env::var_os("GBAA_FOR_WHY").is_some()
+            && let Err(why) = &r
+        {
+            eprintln!("for-why {:#010x} 'l{label}: {why}", self.f.entry);
+        }
+        r.ok()
+    }
+
+    /// [`FnPrinter::bounded_loop`], or why not (`GBAA_FOR_WHY` prints
+    /// it).
+    fn bounded_why(
+        &self,
+        label: usize,
+        body: &[plan::Node],
+    ) -> Result<(counted::For, u32, usize), String> {
+        let h = self.key_of(label);
+        if h == self.f.entry {
+            return Err("the entry".into());
+        }
+        // The blocks printed inside, and each edge out of one: its block,
+        // its exit's index among the block's exits, and its target.
+        let mut inside: Vec<u32> = Vec::new();
+        let mut edges: Vec<(u32, usize, u32)> = Vec::new();
+        let mut todo: Vec<&plan::Node> = body.iter().collect();
+        while let Some(n) = todo.pop() {
+            match n {
+                plan::Node::Block { node, exits: outs } => {
+                    let k = self.key_of(*node);
+                    inside.push(k);
+                    for (i, o) in outs.iter().enumerate() {
+                        for e in &o.edges {
+                            if let plan::How::Inline(s) = &e.how {
+                                todo.extend(s);
+                            }
+                            edges.push((k, i, self.key_of(e.to)));
+                        }
+                    }
+                }
+                plan::Node::Loop { body, .. } | plan::Node::Labeled { body, .. } => {
+                    todo.extend(body)
+                }
+                plan::Node::Region { .. } => return Err("a region inside".into()),
+            }
+        }
+        // The one jump back.
+        let backs: Vec<&(u32, usize, u32)> = edges.iter().filter(|e| e.2 == h).collect();
+        let [&(l, bi, _)] = backs[..] else {
+            return Err(format!("{} jumps back", backs.len()));
+        };
+        // The latch runs once a round: no way round from it back to it
+        // but through the start (an inner loop's cycle).
+        let mut seen: Vec<u32> = Vec::new();
+        let mut go: Vec<u32> = vec![l];
+        while let Some(k) = go.pop() {
+            for e in edges
+                .iter()
+                .filter(|e| e.0 == k && e.2 != h && inside.contains(&e.2))
+            {
+                if e.2 == l {
+                    return Err("the latch in an inner loop".into());
+                }
+                if !seen.contains(&e.2) {
+                    seen.push(e.2);
+                    go.push(e.2);
+                }
+            }
+        }
+        let lb = &self.f.blocks[&l];
+        let lxs = exits(self.ctx, lb);
+        let back = *lxs.get(bi).ok_or("no exit")?;
+        let latch = &lb.block.insts;
+        if !matches!(back.plan, Plan::Static(k) | Plan::Rekey(k) if k == h)
+            || latch[back.index].guard.is_none()
+        {
+            return Err("jump back not a guarded jump".into());
+        }
+        // The round: the blocks the latch is reached from without passing
+        // the start. The rest printed inside run once the loop is done.
+        let mut round: Vec<u32> = vec![l];
+        let mut go: Vec<u32> = vec![l];
+        while let Some(k) = go.pop() {
+            if k == h {
+                continue;
+            }
+            for e in edges.iter().filter(|e| e.2 == k && inside.contains(&e.0)) {
+                if !round.contains(&e.0) {
+                    round.push(e.0);
+                    go.push(e.0);
+                }
+            }
+        }
+        // What each part writes: each register a block sets, or a call or
+        // `swi` may (all of them, a pointer call: unknown).
+        let (mut written, mut by_calls, mut after): (u16, u16, u16) = (0, 0, 0);
+        for k in &inside {
+            let b = &self.f.blocks[k];
+            let on = round.contains(k);
+            let mut w: u16 = 0;
+            for i in &b.block.insts {
+                match i.op {
+                    Op::SetReg(q, _) => w |= 1 << q.index(),
+                    Op::SetCpsr { .. } | Op::SetUserReg(..) if on => {
+                        return Err("a CPSR write".into());
+                    }
+                    Op::SetCpsr { .. } | Op::SetUserReg(..) => w = u16::MAX,
+                    _ => {}
+                }
+            }
+            let mut c: u16 = 0;
+            for x in exits(self.ctx, b) {
+                match x.plan {
+                    Plan::Static(_) | Plan::Rekey(_) | Plan::Undefined { .. } => {}
+                    Plan::Call { target, .. } => c |= 0xf | u16::from(self.gives(target)) << 4,
+                    Plan::Swi { .. } => c |= 0xf,
+                    Plan::Dynamic { ret: None, .. } => {}
+                    Plan::Dynamic { ret: Some(_), .. } | Plan::CallVia { .. } if on => {
+                        return Err("a pointer call".into());
+                    }
+                    Plan::Dynamic { ret: Some(_), .. } | Plan::CallVia { .. } => c = u16::MAX,
+                }
+            }
+            if on {
+                written |= w;
+                by_calls |= c;
+            } else {
+                after |= w | c;
+            }
+        }
+        // The one way in, from outside.
+        let mut ins = Vec::new();
+        for (&k, b) in &self.f.blocks {
+            if inside.contains(&k) {
+                continue;
+            }
+            for x in exits(self.ctx, b) {
+                if self.jumps(&b.block.insts[x.index].op, &x).contains(&h) {
+                    ins.push((k, x));
+                }
+            }
+        }
+        let [(p, ref px)] = ins[..] else {
+            return Err(format!("{} ways in", ins.len()));
+        };
+        if !matches!(px.plan, Plan::Static(_) | Plan::Rekey(_)) {
+            return Err("way in not a jump".into());
+        }
+        let mut why = String::new();
+        let kept = 0x1fff & !(written | by_calls);
+        for r in 0..13 {
+            let bit = live::reg(r);
+            let set = |i: &Inst| matches!(i.op, Op::SetReg(q, _) if q.index() == r);
+            let get = |i: &Inst| matches!(i.op, Op::GetReg(q) if q.index() == r);
+            let sets: usize = round
+                .iter()
+                .map(|k| {
+                    self.f.blocks[k]
+                        .block
+                        .insts
+                        .iter()
+                        .filter(|i| set(i))
+                        .count()
+                })
+                .sum();
+            if sets == 1 && by_calls & 1 << r != 0 {
+                why += &format!("r{r} written by a call; ");
+            }
+            if sets != 1 || by_calls & 1 << r != 0 {
+                continue;
+            }
+            let Some(step) = (0..back.index).find(|&i| set(&latch[i])) else {
+                continue;
+            };
+            if latch[step + 1..].iter().any(get) {
+                why += &format!("r{r} read after its step; ");
+                continue;
+            }
+            let dead_at = |t: u32| self.live_in.get(&t).is_some_and(|v| v & bit == 0);
+            // The latch's exits after the step: plain jumps where it isn't
+            // live.
+            let after_ok = lxs.iter().filter(|x| x.index > step).all(
+                |x| matches!(x.plan, Plan::Static(t) | Plan::Rekey(t) if t == h || dead_at(t)),
+            );
+            // Out of what's printed inside: where it isn't live.
+            let out_ok = edges
+                .iter()
+                .filter(|e| !inside.contains(&e.2))
+                .all(|e| dead_at(e.2));
+            if !after_ok || !out_ok {
+                why += &format!("r{r} read after the loop; ");
+                continue;
+            }
+            let proven = match bounds::why(&bounds::Loop {
+                reg: r,
+                latch,
+                back: back.index,
+                way_in: &self.f.blocks[&p].block.insts,
+                enter: px.index,
+                kept: kept & !(1 << r),
+            }) {
+                Ok(p) => p,
+                Err(w) => {
+                    why += &format!("r{r}: {w}; ");
+                    continue;
+                }
+            };
+            let f = counted::For {
+                reg: r,
+                mutable: after & 1 << r != 0,
+                first: 0,
+                last: 0,
+                step: 0,
+                text: Some(proven.range),
+            };
+            return Ok((f, l, proven.step));
+        }
+        Err(if why.is_empty() {
+            "no counter".into()
+        } else {
+            why
+        })
     }
 
     /// The keys an exit's printed code may jump to ([`FnPrinter::exit`]):
@@ -5701,6 +5962,56 @@ impl FnPrinter<'_, '_> {
         (typed, objs, refs)
     }
 
+    /// Each load and store of the block from `from` on whose RAM place
+    /// the lift knows, into [`Soft::touches`] ([`find_field`]): a
+    /// constant address, one the value sets bound (each element of an
+    /// array global it indexes, else each aligned slot of its range), or
+    /// a field through a pointer the names files type.
+    fn touches(&mut self, insts: &[Inst], from: usize, objs: &[Option<Obj>]) {
+        let mut pc = 0;
+        for (i, inst) in insts.iter().enumerate() {
+            if let Op::Insn(a) = inst.op {
+                pc = a;
+            }
+            let write = match inst.op {
+                Op::Store { .. } => true,
+                Op::Load { .. } => false,
+                _ => continue,
+            };
+            if i < from {
+                continue;
+            }
+            let place = if let Some((lo, w)) = const_access(insts, &inst.op) {
+                find_field::Place::Ram {
+                    lo,
+                    hi: lo,
+                    w,
+                    stride: w,
+                }
+            } else if let Some((lo, hi, w)) = computed_ram(self.ctx, insts, &inst.op, pc) {
+                let stride = match &objs[i] {
+                    Some(Obj::Index { elem, .. }) => (*elem).max(w),
+                    _ => w,
+                };
+                find_field::Place::Ram { lo, hi, w, stride }
+            } else if let Some((at, w, _)) = self.typed_access(i, inst) {
+                find_field::Place::Typed {
+                    ty: at.ty.clone(),
+                    off: at.off,
+                    w,
+                }
+            } else {
+                continue;
+            };
+            self.soft.touches.push(find_field::Touch {
+                func: self.f.entry,
+                at: pc,
+                write,
+                place,
+            });
+        }
+    }
+
     /// The bitfields access `i` of the block can name through a pointer
     /// the names files type ([`fields`], [`crate::types::Types::bits_at`]):
     /// empty for any other access or inst, or one that holds bitfields
@@ -5781,6 +6092,9 @@ impl FnPrinter<'_, '_> {
         let ind = "                ";
         let from = std::mem::take(&mut self.rest_from);
         let (typed, objs, refs) = self.accesses(insts);
+        if self.holes.find_touches {
+            self.touches(insts, from, &objs);
+        }
         self.load_values = (0..insts.len())
             .filter(|&i| matches!(insts[i].op, Op::Load { .. }))
             .filter_map(|i| Some((i, self.access_values(insts, i, &typed, &refs)?)))
@@ -8675,6 +8989,12 @@ fn tree_lets(
     s
 }
 
+/// Whether the word at `s` of `b` follows a `.` (a field or method), not
+/// a range's `..` (`0..r5`, a `for`'s: unit `native/lift-for-bounds`).
+pub(crate) fn after_dot(b: &[u8], s: usize) -> bool {
+    s > 0 && b[s - 1] == b'.' && !(s > 1 && b[s - 2] == b'.')
+}
+
 /// The words of `text` that may name a local: identifiers not after a `.`
 /// and not starting with a digit.
 fn rust_words(text: &str) -> BTreeSet<String> {
@@ -8691,7 +9011,7 @@ fn rust_words(text: &str) -> BTreeSet<String> {
         while i < b.len() && word(b[i]) {
             i += 1;
         }
-        if !b[s].is_ascii_digit() && (s == 0 || b[s - 1] != b'.') {
+        if !b[s].is_ascii_digit() && !after_dot(b, s) {
             out.insert(text[s..i].to_string());
         }
     }

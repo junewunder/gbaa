@@ -35,7 +35,7 @@ use armv4t::sem::ShiftType;
 
 /// A comparison's relation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Rel {
+pub enum Rel {
     Eq,
     Ne,
     Lt,
@@ -45,6 +45,11 @@ enum Rel {
 }
 
 impl Rel {
+    /// The opposite relation: `a rel b` false.
+    pub fn negated(self) -> Rel {
+        self.not()
+    }
+
     fn not(self) -> Rel {
         match self {
             Rel::Eq => Rel::Ne,
@@ -57,7 +62,7 @@ impl Rel {
     }
 
     /// The same relation with its sides swapped.
-    fn mirror(self) -> Rel {
+    pub fn mirror(self) -> Rel {
         match self {
             Rel::Lt => Rel::Gt,
             Rel::Gt => Rel::Lt,
@@ -78,7 +83,7 @@ impl Rel {
         }
     }
 
-    fn holds<T: Ord>(self, a: T, b: T) -> bool {
+    pub fn holds<T: Ord>(self, a: T, b: T) -> bool {
         match self {
             Rel::Eq => a == b,
             Rel::Ne => a != b,
@@ -133,7 +138,29 @@ pub struct Form {
     pub uses: Vec<ValueId>,
 }
 
+/// One side of a comparison, for code that reasons about it
+/// ([`Form::compare`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Opnd {
+    Val(ValueId),
+    Const(u32),
+}
+
 impl Form {
+    /// The comparison it is, `l rel r` (`signed`: as `i32`s), where its
+    /// sides are values or constants.
+    pub fn compare(&self) -> Option<(Opnd, Rel, Opnd, bool)> {
+        let F::Cmp { l, rel, r, signed } = &self.f else {
+            return None;
+        };
+        let o = |s: &Side| match *s {
+            Side::Val(x) => Some(Opnd::Val(x)),
+            Side::Const(k) => Some(Opnd::Const(k)),
+            Side::And(..) => None,
+        };
+        Some((o(l)?, *rel, o(r)?, *signed))
+    }
+
     fn new(f: F, uses: Vec<ValueId>) -> Form {
         Form { f, uses }.normal()
     }
