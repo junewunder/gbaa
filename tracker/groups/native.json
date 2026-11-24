@@ -5038,17 +5038,17 @@
       "priority": 97,
       "record": {
         "state": "claimed",
-        "by": "a67a0150",
-        "session": "a67a0150-1e0c-4ab1-a123-7046e9f53591",
+        "by": "990952a6",
+        "session": "990952a6-7c29-45d0-bbbc-f6d9830334f4",
         "host": "quack",
-        "pid": 1616693,
-        "start": "100832556",
-        "at": "2026-11-24T20:50:36Z",
+        "pid": 1981823,
+        "start": "101567893",
+        "at": "2026-11-24T22:53:10Z",
         "branch": "unit/native/lift-for-ram-bounds",
-        "beats": true,
-        "handedBack": "2026-11-24T21:14:42Z",
+        "resumed": "a67a0150",
+        "prevSession": "a67a0150-1e0c-4ab1-a123-7046e9f53591",
         "pushed": true,
-        "ended": "2026-11-24T21:14:57Z"
+        "beats": true
       },
       "notes": [
         {
