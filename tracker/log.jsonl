@@ -4085,3 +4085,4 @@
 {"at":"2026-11-24T15:09:29Z","actor":"loop","tag":"af2ac9d3","host":"quack","cmd":"edit","id":"native/lift-element-address","text":"An array element's address prints as the element, not sums: edited (tags)"}
 {"at":"2026-11-24T15:09:32Z","actor":"loop","tag":"af2ac9d3","host":"quack","cmd":"done","id":"native/lift-element-address","text":"An array element's address prints as the element, not sums: done"}
 {"at":"2026-11-24T15:15:00Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-element-address","text":"An array element's address prints as the element, not sums: on main"}
+{"at":"2026-11-24T15:15:06Z","actor":"loop","tag":"3ec7bc8f","host":"quack","cmd":"claim","id":"native/lift-for-index","text":"A for loop's counter indexes arrays as elements: claimed"}

@@ -4870,13 +4870,25 @@
       "needs": ["native/lift-for-bounds", "native/lift-element-address"],
       "uses": ["heavy"],
       "priority": 25,
+      "record": {
+        "state": "claimed",
+        "by": "3ec7bc8f",
+        "session": "3ec7bc8f-e8b3-4c78-83c4-a21a8d23381d",
+        "host": "quack",
+        "pid": 2962048,
+        "start": "95217572",
+        "at": "2026-11-24T15:15:06Z",
+        "branch": "unit/native/lift-for-index",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-24T14:47:44Z",
           "by": "af2ac9d3",
           "text": "{unit:native/lift-element-address} names an element's address where base and scaled index meet in one block (Emerald 7,676). Left: the multiply kept in a register and added to its base in another block (r4 = 0x64*v4), and two scaled indices in one sum (0x58*v30 + ((v14>>4)<<1))."
         }
-      ]
+      ],
+      "round": "2026-11-24T15:15:06Z"
     },
     {
       "id": "native/fnref-ram-lift-cost",
