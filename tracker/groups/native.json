@@ -5357,6 +5357,13 @@
       "detail": "From {unit:native/lift-signature-holes}: GCC's prologue pushes r3 only to keep sp 8-byte aligned, and its pop puts it back; the summaries count the push as a read of r3 (Cause::Reads), so a prototype that doesn't pass r3 is refused (c-fnptr-gcc's cb_objects and main_cb_run, c-loops-gcc's draw_global and draw_row: proto_shapes_refused 2 each). A pushed register whose slot only its own pop reads, and that the function doesn't return, is no read. Check: those rows' proto_shapes_refused 2 -> 0, bars lowered; just lift-check passes; just check passes.",
       "check": "recorded",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-proto-two-forms",
+      "title": "Emerald: GetMonData's two-argument calls take a prototype",
+      "detail": "From {unit:native/lift-signature-holes}: pret declares GetMonData with two parameters and with three (GetBoxMonData2 and GetBoxMonData3 at one address), so a two-argument call passes whatever r2 holds and GetBoxMonData reads it for the fields that copy out. The summaries prove the read, so Emerald refuses 682 prototypes (501 callers pass their entry r2 on, 181 whose callers pass the r2 they left) and 194 more through return f(x) and falls: 876 of its 888 proto_shapes_refused (docs/research/signature-holes.md). Where every call's field is a constant that copies nothing out, the read isn't reached: a per-call reading of the field (the values names give MON_DATA_*) could take the prototype there. Check (code-shape work, judged on the C programs and Emerald): Emerald's proto_shapes_refused down, barred in mods/emerald/lift-bars.toml; Emerald builds and runs 600 of 600 frames headless, and its route check stays at 0 differences once {unit:native/emerald-native-route} is done; just lift-check passes; just check passes.",
+      "check": "recorded",
+      "uses": ["heavy"]
     }
   ]
 }
