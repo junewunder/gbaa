@@ -4276,3 +4276,4 @@
 {"at":"2026-11-24T22:36:07Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-libgcc-div","text":"libgcc's division calls print as / and %: edited (priority)"}
 {"at":"2026-11-24T22:36:09Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-stack-typed-locals","text":"A lent stack local takes its DWARF type: edited (priority, add-needs)"}
 {"at":"2026-11-24T22:36:11Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-lend-wider","text":"More pointer parameters borrowed: compares and walks: edited (priority, add-needs)"}
+{"at":"2026-11-24T22:36:13Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-lent-games","text":"Lent stack locals on Metroid and Emerald: edited (priority, add-needs)"}
