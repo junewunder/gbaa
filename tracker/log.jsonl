@@ -4223,3 +4223,4 @@
 {"at":"2026-11-24T22:32:01Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/emerald-m4a-compressed","text":"Emerald's lift mixes m4a's compressed samples as play does: edited (detail)"}
 {"at":"2026-11-24T22:32:04Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/emerald-native-route","text":"Emerald's lift matches the play build on a route: edited (detail)"}
 {"at":"2026-11-24T22:32:06Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/imperium-first-stops","text":"Imperium's lift runs 600 frames: its first stops: edited (detail)"}
+{"at":"2026-11-24T22:32:09Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-takes-across-copies","text":"A takes site may pass r4-r11 into another code context: edited (detail)"}
