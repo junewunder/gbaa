@@ -4219,19 +4219,8 @@
         "by": "c1790615",
         "at": "2026-11-24T05:28:28Z",
         "evidence": "cut::head adds one header line each for pin(addr, off), ix/rix and prim::sext, only where the cut uses them; a Metroid cut of SamusInit showed all four (session 203737ec); codegen cut tests pass. Latest main merged (dac9754); just check passed (exit 0) after the merge.",
-        "branch": "unit/native/lift-cut-header-helpers",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T05:28:28Z",
-          "by": "c1790615",
-          "host": "quack",
-          "pid": 2963642,
-          "start": "95218853",
-          "beats": true,
-          "session": "c1790615-1b03-4f09-93c5-92709b5b99ad",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "landed": "2026-11-24T05:41:53Z"
       },
       "notes": [
         {
@@ -4244,8 +4233,7 @@
           "by": "203737ec",
           "text": "Done but for just check (stopped at lane stop). Branch has the work + main merged + fmt. cut::head adds pin/ix/rix/prim::sext lines only where used; a Metroid cut of SamusInit showed all four; codegen cut tests pass. Next: run just check, then just done."
         }
-      ],
-      "round": "2026-11-20T13:45:30Z"
+      ]
     },
     {
       "id": "native/ram-jump-passes-regs",
