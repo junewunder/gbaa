@@ -26,3 +26,10 @@ hook: binutils 15.2 rejects agbcc's .debug_abbrev; Fedora gdb reads it (info sco
   `.section .text` (`scripts/agbcc-dwarf`).
 - mzm pipes preproc into cpp, so units are named `<stdin>`: sed the line
   markers to the C file's name before agbcc.
+
+## katam needs nothing (2026-11-20)
+
+- katam's Makefile passes `-g` already (`DINFO ?= 1`) and appends `.text`
+  before its align, so `katam.elf` has DWARF and the ROM matches: katam.toml
+  has 14,474 located locals in 4,901 functions and 99,340 lines covering
+  all 5,024 C functions. Check the Makefile before writing a wrapper.

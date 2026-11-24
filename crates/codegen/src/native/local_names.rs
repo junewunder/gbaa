@@ -147,7 +147,7 @@ fn uses(facts: &Facts, r: usize) -> Uses {
 
 /// Whether `w` is one of the printer's own names: `r4`, `v12`, `l8`,
 /// `a0`, `f_08000101` and the like, `g` and `sp`.
-fn printers(w: &str) -> bool {
+pub(crate) fn printers(w: &str) -> bool {
     let b = w.as_bytes();
     let digits = |r: &[u8]| !r.is_empty() && r.iter().all(u8::is_ascii_digit);
     let hex = |r: &[u8]| !r.is_empty() && r.iter().all(u8::is_ascii_hexdigit);
@@ -375,7 +375,7 @@ pub fn rename(text: &str, renames: &BTreeMap<String, String>) -> String {
                 i += 1;
             }
             let w = &text[s..i];
-            let after_dot_or_tick = s > 0 && matches!(b[s - 1], b'.' | b'\'');
+            let after_dot_or_tick = super::after_dot(b, s) || (s > 0 && b[s - 1] == b'\'');
             match renames.get(w) {
                 Some(n) if !after_dot_or_tick && !b[s].is_ascii_digit() => out.push_str(n),
                 _ => out.push_str(w),

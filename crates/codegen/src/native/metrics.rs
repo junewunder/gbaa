@@ -37,14 +37,23 @@
 //!   statics (`super::rom_data`, native/rom-data-statics) indexes it:
 //!   `load_rom_static` (no bar: it should rise), with `rom_statics` the
 //!   statics, whose one-line declarations `lines` leaves out, as it does
-//!   `lines_types` (data, not code). The rest stay `load_computed_rom`.
+//!   `lines_types` (data, not code). The rest stay `load_computed_rom`
+//!   (the report lists them). Of the loads from a word static, `rom_refs`
+//!   counts those whose static holds a pointer into ROM data (the soft
+//!   hole of a `RomRef`, native/rom-statics; barred).
 //!   One through a pointer the names files type (`super::fields`,
 //!   native/lift-typed-access) prints as a named field over the same
 //!   byte access, so it keeps its count here too: `named_field_accesses`
 //!   (no bar: it should rise) and, where it lands inside a field,
 //!   `named_inside_accesses`; of either, `named_index_accesses` (no
 //!   bar) print as an element by a variable index (`.idx(i)`, `.add(i)`;
-//!   native/lift-index-names). A lift with types also has
+//!   native/lift-index-names). `named_element_addresses` (no bar) counts
+//!   the values, not accesses, printed as an element's or its field's
+//!   address by name (`.idx(i).addr()`, native/lift-element-address);
+//!   `for_stepped_elements` (no bar) the pointers a `for` steps beside its
+//!   variable printed as the element they are, and `for_counter_arith`
+//!   (barred) the `for`s whose body still multiplies or shifts the
+//!   variable (native/lift-for-index). A lift with types also has
 //!   `computed_unknown_unnamed`, barred: the `computed_unknown` accesses
 //!   no type names. Of those through a typed pointer that hold bitfields
 //!   (`super::bitfields`, native/lift-bitfields): `bitfield_sets` print
@@ -70,9 +79,20 @@
 //! guest block's code printed where it had already: both barred, the
 //! second at 0 on the C programs.
 //!
+//! Casts (`super::casts`, native/lift-cast-types): `casts`, the integer
+//! casts (` as u8` to ` as i64`) the function modules print (barred).
+//! A value printed at a width is compared, narrowed and shifted in it.
+//!
 //! Function words (`super::fnref`): the words of ROM outside code that hold
 //! a function's key, `fn_words_not_proven` those the flow didn't prove
 //! (barred), `fn_words_proven` the rest (no bar: it should rise).
+//! Dense IDs (`native/fnref-dense`): `fn_ids_dense`, the functions every
+//! address of which the flow proved, which `--fn-ids dense` numbers from
+//! 1 (no bar: it should rise), and `fn_keys_left`, the function words in
+//! ROM and the code's constants such a build leaves as keys (barred; 0 on
+//! the C programs): counted whatever the build's IDs; of those,
+//! `rom_static_fn_keys` the words the flow read that a ROM static holds
+//! (native/rom-statics; barred, 0 on the C programs).
 //!
 //! Returns (`native/lift-pop-return`): the jumps by value the summaries
 //! proved a jump to the function's entry lr (`pop {pc}`, `pop {r0}; bx
@@ -96,7 +116,8 @@
 //!
 //! Frames gone (`native/lift-frame-gone`): `sp_arith_unescaped`, the
 //! functions printing sp arithmetic though no slot of their frame
-//! escapes, nor do they pass sp on to code needing it exactly (barred, at
+//! escapes, nor do they pass sp on to code needing it exactly or write
+//! their locals to the frame for a callee ([`super::frame::Frame::flush`]) (barred, at
 //! 0: a frame nothing of which is in memory prints none,
 //! [`super::frame::Frame::in_locals`]), and `lr_returned`, the
 //! functions returning a register that holds only their entry lr (barred,
@@ -119,6 +140,15 @@
 //! name (no bar: it should rise), and `locals_noted`, the variables left a
 //! `// dwarf rN: name` comment instead (barred; `lines` leaves them out).
 //! Both only where the names files give `[locals]` or prototypes.
+//! `lets_named` (`native/lift-let-names`): the values printed as their
+//! own `let` that took a name from what they hold, not `vN` (no bar: it
+//! should rise; [`super::value_names`]).
+//! Pointer variables (`native/lift-pointer-types`, [`super::ref_binds`]):
+//! `refs_bound_named` and `refs_bound_proven`, the parameters and `let`s
+//! declared the `Ref<T>` their accesses make of them, by where `T` came
+//! from (the names files', a heap run's; no bars: they should rise), and
+//! `ref_new_at_use`, the `Ref::<T>::new(…)` and `Ref::<T>::to(…)` still
+//! printed at a use (barred).
 //!
 //! I/O registers (`native/lift-io-names`): `io_named`, the constant-address
 //! I/O loads and stores printed by a register's name (`st16(g, REG_IME,
@@ -130,8 +160,10 @@
 //! Value names (`native/lift-value-names`): `values_named`, the constants
 //! a store to or compare with a field or global that takes a family of
 //! the names files' `[values]` prints by its name (`g.ram.gPen.state =
-//! PEN_RIGHT as u8`; no bar: it should rise). Their constants in
-//! `main.rs` are data, not in `lines`.
+//! PEN_RIGHT as u8`; no bar: it should rise), and those a call passes to
+//! a parameter that takes one, alone or as a sum's constant
+//! (`fill_rect(g, r13, 0x0u32, ROW_BAR, …)`; `native/lift-value-args`).
+//! Their constants in `main.rs` are data, not in `lines`.
 //!
 //! Data names (`native/lift-data-names-inline`, [`super::named`]): in a
 //! lift with names, `data_constants_named`, the constant addresses inside
@@ -315,11 +347,13 @@ pub fn lower_bars(
 
 /// The metrics with no bar: they are meant to rise.
 pub const UNBARRED: &[&str] = &[
+    "proto_shapes",
     "functions_recognised",
     "ram_globals",
     "load_ram_global",
     "store_ram_global",
     "fn_words_proven",
+    "fn_ids_dense",
     "call_fn_complete",
     "load_ram_object",
     "load_rom_static",
@@ -330,6 +364,7 @@ pub const UNBARRED: &[&str] = &[
     "named_field_accesses",
     "named_inside_accesses",
     "named_index_accesses",
+    "named_element_addresses",
     "bitfield_sets",
     "data_constants_named",
     "ref_types",
@@ -341,6 +376,7 @@ pub const UNBARRED: &[&str] = &[
     "compare_trees_matched",
     "compare_tree_blocks",
     "loops_for",
+    "for_stepped_elements",
     "narrowing_casts",
     "plain_entry_bodies",
     "closed_tables",
@@ -350,6 +386,9 @@ pub const UNBARRED: &[&str] = &[
     "io_named",
     "values_named",
     "locals_named",
+    "lets_named",
+    "refs_bound_named",
+    "refs_bound_proven",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each

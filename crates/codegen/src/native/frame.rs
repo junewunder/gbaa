@@ -32,7 +32,9 @@
 //! whose address is a word of the ROM may be the callee. A tail call made
 //! with a local still at or above its sp hands the frame on: the locals go
 //! to its bytes before it too, whatever the callee is known to read (one
-//! in another context, a RAM copy, isn't known here).
+//! in another context, a RAM copy, isn't known here). So does a call
+//! whose return site is another function's entry, which the callee
+//! returns into: a tail call after the call.
 //!
 //! The lift (`native/frame-locals`) prints the slots that don't escape, in
 //! the function's own frame, as Rust locals ([`Frame::locals`]), and their
@@ -49,6 +51,11 @@
 //! followed one call deep (a tail call's callee's reach isn't the tail
 //! caller's). `gbaa-lift --shadow-locals` checks a lift against both at
 //! run time.
+//!
+//! Which escaping slots only lend their address to callees that borrow it
+//! ([`lend`], `native/lift-stack-arrays`) uses each direct call's exact
+//! frame addresses in r0-r3 ([`Frame::lends`]) and every other pass
+//! ([`Frame::passed_else`]).
 //!
 //! The run is on [`FBlock`]s (a block's IR and what each exit does), so
 //! the tests build them by hand; [`of_code`] builds them from a lifted
@@ -155,7 +162,8 @@ pub struct Frame {
     /// frame from an address above its own sp (a pointer to a stack
     /// argument), and the frame is done with after it (the callee never
     /// returns, or it is a tail call); and every tail call made with a
-    /// slot of the frame at or above its sp, which the callee runs on.
+    /// slot of the frame at or above its sp, which the callee runs on (a
+    /// call returning into another function's entry is one, after it).
     pub flush: BTreeSet<(u32, usize)>,
     /// Its stack switches ([`switches`](Frame::switches)): the
     /// instructions that set sp to a value not made from the frame's.
@@ -165,6 +173,20 @@ pub struct Frame {
     /// r3` with r3 the stack's top, before a reset). Nothing on the old
     /// stack is reached after one in a function that never returns.
     pub fresh: BTreeSet<u32>,
+    /// The exits, by their instruction's address, leaving the function
+    /// (a call, a tail call, a BIOS call, a return) with sp a constant: a
+    /// stack of its own, which the reset's crt0 sets each mode's sp to
+    /// before it calls the game's main. What runs there doesn't run on
+    /// the sp the function was entered with.
+    pub apart: BTreeSet<u32>,
+    /// The exact frame addresses each direct call passes in r0-r3, by its
+    /// exit's (block, inst index): (register, offset). What the slots of
+    /// `native/lift-stack-arrays` lend ([`lend`]).
+    pub lends: BTreeMap<(u32, usize), BTreeSet<(u8, i32)>>,
+    /// The frame addresses passed to callees any other way: made by
+    /// arithmetic the run didn't follow, in r4-r11, to a pointer call, a
+    /// tail call or a BIOS call. A slot one of these reaches isn't lent.
+    pub passed_else: BTreeSet<i32>,
 }
 
 impl Frame {
@@ -468,7 +490,8 @@ impl State {
 }
 
 /// One call: its sp (if known), its callee (if known), and whether it is
-/// a tail call or a fall.
+/// a tail call or a fall (or a call that returns into another function's
+/// entry, which the frame is handed on to).
 type Call = (Option<i32>, Option<u32>, bool);
 
 /// What one function's run found, before the program's other functions
@@ -493,10 +516,18 @@ struct Raw {
     switches: BTreeSet<u32>,
     /// Those whose value is a constant ([`Frame::fresh`]), apart.
     fresh: BTreeSet<u32>,
+    /// [`Frame::apart`].
+    apart: BTreeSet<u32>,
+    /// [`Frame::lends`].
+    lends: BTreeMap<(u32, usize), BTreeSet<(u8, i32)>>,
+    /// [`Frame::passed_else`].
+    passed_else: BTreeSet<i32>,
 }
 
 struct Run<'a, 'e> {
     blocks: &'a BTreeMap<u32, FBlock<'a>>,
+    /// Every function's entry.
+    entries: &'a BTreeSet<u32>,
     env: &'e dyn Env,
     ins: BTreeMap<u32, State>,
     work: Vec<u32>,
@@ -527,10 +558,21 @@ impl Run<'_, '_> {
         }
     }
 
-    fn pass(&mut self, regs: u16, s: &State, k: Kind) {
+    /// `lend`: the exit of a direct call, which may borrow an exact frame
+    /// address in r0-r3 ([`Frame::lends`]).
+    fn pass(&mut self, regs: u16, s: &State, k: Kind, lend: Option<(u32, usize)>) {
         for (r, v) in s.regs[..16].iter().enumerate() {
             if regs & 1 << r != 0 && r != 13 {
                 self.escape(v, k);
+                if k != Kind::Call {
+                    continue;
+                }
+                match (lend, v) {
+                    (Some(at), V::Sp(o)) if r < 4 => {
+                        self.raw.lends.entry(at).or_default().insert((r as u8, *o));
+                    }
+                    _ => self.raw.passed_else.extend(v.bases()),
+                }
             }
         }
     }
@@ -685,6 +727,9 @@ impl Run<'_, '_> {
 
     /// `addr`: the address of the instruction the exit belongs to.
     fn exit(&mut self, at: (u32, usize), addr: u32, e: &Edge, s: &State) {
+        if matches!(s.regs[13], V::Const(_)) && !matches!(e, Edge::Goto(_)) {
+            self.raw.apart.insert(addr);
+        }
         match e {
             Edge::Goto(ks) => {
                 for &k in ks {
@@ -692,8 +737,17 @@ impl Run<'_, '_> {
                 }
             }
             Edge::Call { target, ret } => {
-                self.pass(self.env.params(*target, addr) & 0xfff, s, Kind::Call);
-                self.raw.calls.insert(at, (Run::sp(s), *target, false));
+                let lend = target.map(|_| at);
+                self.pass(self.env.params(*target, addr) & 0xfff, s, Kind::Call, lend);
+                // A return site that is no block of this function, where
+                // the callee returns: another function's entry, which the
+                // call returns into, as a tail call after it (the lift's
+                // `call_then`): it runs on in the frame (agbcc's shared
+                // epilogue pops it; native/entry-jump-test-program).
+                let into = !self.blocks.contains_key(ret)
+                    && self.entries.contains(ret)
+                    && self.env.returns(*target);
+                self.raw.calls.insert(at, (Run::sp(s), *target, into));
                 let mut after = s.clone();
                 for r in [0, 1, 2, 3, 12, 14] {
                     after.regs[r] = V::Other;
@@ -703,11 +757,14 @@ impl Run<'_, '_> {
                     Some(sp) => after.words.retain(|&k, _| k >= sp),
                     None => after.words.clear(),
                 }
+                if into {
+                    self.pass(0x5fff, &after, Kind::Call, None);
+                }
                 self.flow(*ret, &after);
             }
-            Edge::Return => self.pass(0xf, s, Kind::Returned),
+            Edge::Return => self.pass(0xf, s, Kind::Returned, None),
             Edge::Tail(t) => {
-                self.pass(0x5fff, s, Kind::Call);
+                self.pass(0x5fff, s, Kind::Call, None);
                 self.raw.calls.insert(at, (Run::sp(s), *t, true));
             }
             Edge::TailOr(ks) => {
@@ -715,7 +772,7 @@ impl Run<'_, '_> {
                 self.exit(at, addr, &Edge::Goto(ks.clone()), s);
             }
             Edge::Swi(next) => {
-                self.pass(0xf, s, Kind::Call);
+                self.pass(0xf, s, Kind::Call, None);
                 let mut after = s.clone();
                 for r in &mut after.regs[..4] {
                     *r = V::Other;
@@ -742,8 +799,9 @@ fn origin(insts: &[Inst], mut x: ValueId) -> ValueId {
     }
 }
 
-/// One function's run, from `entry` over `blocks`.
-fn run(entry: u32, blocks: &BTreeMap<u32, FBlock>, env: &dyn Env) -> Raw {
+/// One function's run, from `entry` over `blocks`; `entries`, every
+/// function's.
+fn run(entry: u32, blocks: &BTreeMap<u32, FBlock>, entries: &BTreeSet<u32>, env: &dyn Env) -> Raw {
     let mut held = BTreeMap::new();
     let (mut switches, mut fresh) = (BTreeSet::new(), BTreeSet::new());
     // Each pass's `holds` only grows, and feeds the next: rerun until it
@@ -751,6 +809,7 @@ fn run(entry: u32, blocks: &BTreeMap<u32, FBlock>, env: &dyn Env) -> Raw {
     for _ in 0..8 {
         let mut r = Run {
             blocks,
+            entries,
             env,
             ins: BTreeMap::new(),
             work: Vec::new(),
@@ -987,6 +1046,9 @@ fn resolve(raw: Raw, reads: &dyn Fn(Option<u32>) -> Reads, env: &dyn Env) -> Fra
         flush,
         switches: raw.switches,
         fresh: raw.fresh,
+        apart: raw.apart,
+        lends: raw.lends,
+        passed_else: raw.passed_else,
     }
 }
 
@@ -996,7 +1058,11 @@ pub fn frames<'a>(
     funcs: &[(u32, BTreeMap<u32, FBlock<'a>>)],
     env: &dyn Env,
 ) -> BTreeMap<u32, Frame> {
-    let raws: Vec<(u32, Raw)> = funcs.iter().map(|(e, bs)| (*e, run(*e, bs, env))).collect();
+    let entries: BTreeSet<u32> = funcs.iter().map(|(e, _)| *e).collect();
+    let raws: Vec<(u32, Raw)> = funcs
+        .iter()
+        .map(|(e, bs)| (*e, run(*e, bs, &entries, env)))
+        .collect();
     let by: BTreeMap<u32, Reads> = raws.iter().map(|(e, r)| (*e, Reads::of(r))).collect();
     let most = Reads::most(&by, |f| env.taken(f));
     let reads = |c: Option<u32>| c.and_then(|c| by.get(&c).copied()).unwrap_or(most);
@@ -1110,6 +1176,27 @@ pub fn edge(ctx: &Ctx, f: &Func, all: &BTreeSet<u32>, gb: &GBlock, x: &ExitInfo)
     }
 }
 
+/// Function `f`'s blocks for the run, each exit's edge as the lifter
+/// prints it ([`edge`]). `all`: every function's entry.
+pub fn fblocks<'a>(ctx: &Ctx, f: &'a Func, all: &BTreeSet<u32>) -> BTreeMap<u32, FBlock<'a>> {
+    f.blocks
+        .iter()
+        .map(|(&k, gb)| {
+            let edges = exits(ctx, gb)
+                .iter()
+                .map(|x| (x.index, edge(ctx, f, all, gb, x)))
+                .collect();
+            (
+                k,
+                FBlock {
+                    insts: &gb.block.insts,
+                    edges,
+                },
+            )
+        })
+        .collect()
+}
+
 /// The frames of one lifted context's functions, as the lifter prints
 /// them ([`edge`]). `named`: the indirect calls a holes file's
 /// `[[takes]]` names, by address.
@@ -1122,26 +1209,7 @@ pub fn of_code(
     let all: BTreeSet<u32> = funcs.iter().map(|f| f.entry).collect();
     let fs: Vec<(u32, BTreeMap<u32, FBlock>)> = funcs
         .iter()
-        .map(|f| {
-            let bs = f
-                .blocks
-                .iter()
-                .map(|(&k, gb)| {
-                    let edges = exits(ctx, gb)
-                        .iter()
-                        .map(|x| (x.index, edge(ctx, f, &all, gb, x)))
-                        .collect();
-                    (
-                        k,
-                        FBlock {
-                            insts: &gb.block.insts,
-                            edges,
-                        },
-                    )
-                })
-                .collect();
-            (f.entry, bs)
-        })
+        .map(|f| (f.entry, fblocks(ctx, f, &all)))
         .collect();
     let env = FromSummaries {
         sums,
@@ -1150,6 +1218,10 @@ pub fn of_code(
     };
     frames(&fs, &env)
 }
+
+pub mod lend;
+mod stores;
+pub use stores::{SP, StoreFn, stores};
 
 #[cfg(test)]
 mod tests;

@@ -31,3 +31,7 @@ hook: katam matches our ROM; gKirbys at 0x02020EE0; Lua keysRead drives Kirby on
   0x03000000 + offset (EWRAM: 0x02000000 + offset*4). Most screens keep a state function pointer
   in it (main menu +0x9CC, sub-game menu +0x154, link +0x40): set it to reach a drawing state.
   The link code rewrites `gUnk_02038580` on its own; write it again just before the state.
+- Every Kirby is made in `sub_080332BC` (`code_080332BC.c:26`, key 0x080332bd): `CreateKirby` for
+  all four, then `sub_0800ECAC` (the AI controller) for each from `numHumans` (1 in story) up.
+  Bounding the first loop to `numHumans` and skipping the second leaves one Kirby, and the route
+  plays on (native/mirror-cpu-kirbys-off, `docs/research/mirror-cpu-kirbys-off.md`).

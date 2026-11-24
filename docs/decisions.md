@@ -278,6 +278,28 @@ switch, but it counts toward the trickle.
   true starts, none false); Emerald 0.9997 / 0.9575 to 0.9997 / 0.9583
   (13 more), modern GCC 0.9996 / 0.7873 to 0.9996 / 0.7922 (78 more, one
   more jump table), none false; agb's 1.0 precision kept.
+  **A table whose base code loads** (2026-11-24,
+  native/c-list-test-program): "beside it" also covers a pointer in a run
+  of two or more Thumb pointers (at most 64 words back) whose first word's
+  address code loads from a literal pool: a table of function pointers
+  indexed from its base. `c/list`'s `kActs` built by modern GCC (`ldr r3,
+  [r3, r0]` from the table's address) holds three leaves with no push and
+  no start beside them; the native lift otherwise calls one it lacks.
+  Modern-GCC Emerald 0.9998 / 0.7922 to 0.9998 / 0.7927 (8 more true
+  starts, none false); Emerald (1.0000 / 0.9583) and Amazing Mirror
+  (0.9998 / 0.9642) unchanged; Minish Cap against tmc's ELF 0.9993 /
+  0.8714 to 0.9993 / 0.8728 (12 more true starts, none false); Metroid's
+  starts unchanged; agb's 1.0 precision kept.
+  **Two-word records** (2026-11-20, native/warioware-builds): the column
+  takes records of two words too (the pair rule wants the other word a
+  Thumb pointer, so a handler and a word of data had no rule):
+  WarioWare's tables of empty `bx lr` callbacks, 356 more starts there,
+  every one sampled a `bx lr` stub. (Its byte pointer 0x083db2d7, ending
+  in `bx r9` nothing set, is the entry-register `bx` rule's.) Measured
+  against main 8f5c171f (2026-11-24): Emerald 1.0000 / 0.9583 unchanged,
+  modern-GCC Emerald 0.9998 / 0.7927 to 0.9998 / 0.7929 (4 more true
+  starts, none false), agb's 1.0 precision kept; the corpus hole report
+  unchanged in every count.
 - **Checking discovery:** precision and recall of function starts against
   the pokeemerald ELF, specified in `research/discovery-prior-art.md`
   ("Proposed discovery-accuracy check"). Baseline to beat: 99.87% precision,

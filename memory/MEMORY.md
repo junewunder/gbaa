@@ -3,6 +3,7 @@
 One line per file: a link and a few words. The fact lives in the file, not here.
 Made from each file's frontmatter (`title`, `hook`, `open: true`) by `just memory`; don't edit it by hand.
 
+- [A guest run never returns per frame](guest-run-frame-start.md) — what run_frame does at a frame's start must be in dispatch::switch too
 - [Cross-building for Windows and running under Wine in podman](windows-wine.md) — SDL3 needs CMake's MinGW toolchain file; Wine without wine-common stalls 5 min at first boot (2026-10-24)
 - [Debugging Emerald against mGBA](emerald-debugging.md) — symbols from the pokeemerald ELF, a stepping harness, and timeline frames
 - [Emerald battles by RAM pokes, and why a move doesn't animate](emerald-battle-pokes.md) — a foreign OT above level 10 ignores orders (set 0x86E); moves that fail or miss skip their animation
@@ -15,11 +16,13 @@ Made from each file's frontmatter (`title`, `hook`, `open: true`) by `just memor
 - [Measuring and profiling the function flow's switches](fnref-switches-how-to-measure.md) — run off and on side by side; eu-stack -i on a line-table build; an empty VAR= is set
 - [mGBA's blending quirks (windows and sprites)](mgba-blend-quirks.md) — with the OBJ window on, mGBA brightens non-target sprites; semi sprites ignore the window's effect bit
 - [pokeemerald's DWARF (locals, types, lines) through gdb](pokeemerald-dwarf.md) — binutils 15.2 rejects agbcc's .debug_abbrev; Fedora gdb reads it (info scope, ptype, info line) (2026-10-26)
+- [Running Metroid's native route against a lift variant](metroid-native-route-run.md) — lift, three builds and route-check --native in one long job: 6 min on quack, so check a lifter change on a game
 - [SDL3's static build, and testing a window under gamescope](sdl-build-and-gamescope.md) — spotting SDL's X11 driver; gamescope in a lane needs WAYLAND_DISPLAY unset; cu type can overtake cu key
+- [The C test ROMs in $GBAA_DATA are shared by every lane](shared-c-roms.md) — another lane's `just c-tests` from an older branch swaps them under you; build main's into a symlinked private data dir (2026-11-24)
 - [Timing a hand-patched generated build, and testing a value](variant-builds-and-mirror-runs.md) — patch call sites, not call!; a copied crate needs its own --target-dir; use a positive control
-- [What a whole lift of each corpus game costs, and the holes-only one](lift-cost-corpus.md) — whole lifts 1-30 min under 3 GB (Mirror 3 min since 2026-11-20) (ask no 16G: it blocks other jobs); holes-only 9 s-3.5 min, 0.6 GB
+- [What a whole lift of each corpus game costs, and the holes-only one](lift-cost-corpus.md) — whole lifts 1-30 min under 3 GB (ask no 16G: it blocks other jobs); holes-only 9 s-3.5 min, 0.6 GB
 - [Where a generated crate's build time goes](generated-build-cost.md) — LLVM, not rustc's front end: p07 checks in 4.7 s of a 60 s build; how to measure one part (2026-10-24)
-- [Where mGBA's beam is at the hand-over, and what matching it took](mgba-boot-beam.md) — mGBA hands over on line 126, H-blank 91 cycles off; ours does too, which needed each V-blank of a long DMA to end a frame (2026-11-18)
+- [Where mGBA's beam is at the hand-over, and what matching it took](mgba-boot-beam.md) — line 126, H-blank 91 cycles off; ours too, so each V-blank of a long DMA ends a frame
 
 ## Open
 

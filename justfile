@@ -233,6 +233,11 @@ decomp-names:
     target/release/pret-names {{quote(gbaa_data / "src/mzm/mzm_us.elf")}} {{quote(gbaa_data / "src/mzm/mzm_us.gba")}} {{quote(gbaa_data / "names/mzm.toml")}} 0
     target/release/pret-names {{quote(gbaa_data / "src/katam/katam.elf")}} {{quote(gbaa_data / "src/katam/katam.gba")}} {{quote(gbaa_data / "names/katam.toml")}} 0
 
+# A C program's names files (c/README.md; native/lift-value-args): pret-names on `just c-tests`' two builds of c/NAME, its source read from c/NAME (the #define families its calls pass), into names/c-NAME-{agbcc,gcc}.toml. Seconds.
+c-names name:
+    {{lock}} cargo build -q --release -p pret-names
+    for cc in agbcc gcc; do target/release/pret-names {{quote(gbaa_data / "c")}}/c-{{name}}-$cc.elf {{quote(gbaa_data / "c")}}/c-{{name}}-$cc.gba names/c-{{name}}-$cc.toml 0 --src c/{{name}}; done
+
 # Rogue's source map from that build's symbols (pret-names): writes $GBAA_DATA/names/pokeemerald-rogue.toml. Needs `just fetch-rogue`.
 rogue-names show="10":
     {{lock}} cargo build -q --release -p pret-names
@@ -332,7 +337,7 @@ agb-tests:
         echo "$out/$name.gba"
     done
 
-# Builds the C test programs in this repo's c/ (source only; c/README.md), each twice: with agbcc (GCC 2.95, jiangzhengwenjz's, $GBAA_DATA/src/agbcc-jzw) and with modern arm-none-eabi-gcc ($GBAA_DATA/toolchains/arm-gnu-toolchain-15.2.rel1), both from scripts/fetch-decomps.sh. Each links c/common's crt0.s and draw.c with its compiler's libgcc.a. Writes $GBAA_DATA/c/c-<name>-agbcc.{elf,gba} and c-<name>-gcc.{elf,gba}; objects in $GBAA_DATA/c/build/.
+# Builds the C test programs in this repo's c/ (source only; c/README.md), each twice: with agbcc (GCC 2.95, jiangzhengwenjz's, $GBAA_DATA/src/agbcc-jzw) and with modern arm-none-eabi-gcc ($GBAA_DATA/toolchains/arm-gnu-toolchain-15.2.rel1), both from scripts/fetch-decomps.sh. Each links c/common's crt0.s and draw.c, and the folder's own .s files (c/jump's setjmp.s), with its compiler's libgcc.a. Writes $GBAA_DATA/c/c-<name>-agbcc.{elf,gba} and c-<name>-gcc.{elf,gba}; objects in $GBAA_DATA/c/build/.
 c-tests:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -356,6 +361,12 @@ c-tests:
             rm -rf "$obj" && mkdir -p "$obj"
             "${as[@]}" -o "$obj/crt0.o" c/common/crt0.s
             objs=("$obj/crt0.o")
+            # A program's own assembly (c/jump's setjmp.s), the same for both.
+            for s in "$dir"*.s; do
+                [ -e "$s" ] || continue
+                "${as[@]}" -o "$obj/$name-$(basename "$s" .s).o" "$s"
+                objs+=("$obj/$name-$(basename "$s" .s).o")
+            done
             for src in c/common/*.c "$dir"*.c; do
                 o="$obj/$(basename "$(dirname "$src")")-$(basename "$src" .c)"
                 if [ $cc = agbcc ]; then
@@ -998,7 +1009,24 @@ lift rom out="" *flags:
     [ "$lifted" = 0 ] || exit "$lifted"
     exit "$first"
 
-# The per-function check (native/fn-check-any, native/fn-check-interp; codegen::native's fn_check_texts and native/fn_check.rs; docs/tools/commands.md): lifts ROM with `gbaa-lift --fn-check KEY` for each KEY given (with the holes file as `just lift` finds it, and FLAGS: --replace FILE for replacements outside it, --seed N, --runs N, --plant AT for a planted wrong replacement of a function with no stand-in, --plant-reference to plant it in the lift too, --interp-every N), into out/fn-check-<name>, builds it and runs it headless: each function's replacement against its lift from the program's own calls and their variants, until every budget is spent. Prints per function its runs, budget, time, seed and digest, and the first differences with the byte named; and the runs the interpreter also checked against the lift, untimed, every Nth (8; native/fn-check-interp), and whether it agreed. --frames N (default 18000) is where it gives up waiting for calls. Fails on a difference or a budget not spent. Heavy: builds a generated crate.
+# Where a field is set, for a mod's cut (native/lift-find-field; codegen::native::find_field; docs/tools/commands.md): lifts ROM as `just lift` does (its holes file, names from $GBAA_DATA/names and names/) without writing it, and lists the lifted functions that write and read FIELD (a field of a struct the names files type, in any global or through a typed pointer, or a datum by name: maxEnergy, gEquipment), writers and readers apart, by `// file:line` and path (gEquipment.maxEnergy); then those that may (their address one of several). FLAGS go to gbaa-lift (--name NAME for a ROM file name that isn't the game's). Fails when nothing names it. About 60 s and 1.2 GB on Metroid, not heavy.
+[positional-arguments]
+lift-find rom field *flags:
+    #!/usr/bin/env bash
+    set -eu
+    rom={{quote(join(invocation_directory(), rom))}}
+    field=$2
+    shift 2
+    name=$(basename "$rom" .gba | tr '[:upper:]' '[:lower:]')
+    prev=""
+    for a in "$@"; do [ "$prev" = --name ] && name=$a; prev=$a; done
+    holes=()
+    if [ -f "holes/$name.toml" ]; then holes=(--holes "holes/$name.toml")
+    elif [ -f "mods/$name/holes.toml" ]; then holes=(--holes "mods/$name/holes.toml"); fi
+    {{lock}} cargo build -q --release -p codegen --bin gbaa-lift
+    {{cap}} MemoryMax=4G target/release/gbaa-lift "$rom" --find "$field" "${holes[@]}" "$@"
+
+# The per-function check (native/fn-check-any, native/fn-check-interp; codegen::native's fn_check_texts and native/fn_check.rs; docs/tools/commands.md): lifts ROM with `gbaa-lift --fn-check KEY` for each KEY given (with the holes file as `just lift` finds it, and FLAGS: --replace FILE for replacements outside it, --seed N, --runs N, --plant AT for a planted wrong replacement of a function with no stand-in, --plant-reference to plant it in the lift too, --interp-every N), into out/fn-check-<name>, builds it and runs it headless (--input PRESSES: gbaa-desktop's presses, to reach code past the no-input run): each function's replacement against its lift from the program's own calls and their variants, until every budget is spent. Prints per function its runs, budget, time, seed and digest, and the first differences with the byte named; and the runs the interpreter also checked against the lift, untimed, every Nth (8; native/fn-check-interp), and whether it agreed. --frames N (default 18000) is where it gives up waiting for calls. Fails on a difference or a budget not spent. Heavy: builds a generated crate.
 [positional-arguments]
 fn-check rom *flags:
     #!/usr/bin/env bash
@@ -1008,9 +1036,11 @@ fn-check rom *flags:
     shift
     frames=18000
     args=()
+    input=()
     while [ $# -gt 0 ]; do
         case "$1" in
             --frames) frames=$2; shift 2 ;;
+            --input) input=(--input "$2"); shift 2 ;;
             --name) name=$2; shift 2 ;;
             *) args+=("$1"); shift ;;
         esac
@@ -1023,9 +1053,9 @@ fn-check rom *flags:
     mkdir -p "$out"
     {{cap}} MemoryMax=4G target/release/gbaa-lift "$rom" "$out" --name "fn-check-$name" "${holes[@]}" "${args[@]}" > "$out.lift.txt" || { tail -5 "$out.lift.txt"; exit 1; }
     just build-recompiled "$out" guest-pc
-    {{cap}} MemoryMax=3G target/recompiled/release/gbaa-native-fn-check-"$name" --headless --frames "$frames"
+    {{cap}} MemoryMax=3G target/recompiled/release/gbaa-native-fn-check-"$name" --headless --frames "$frames" "${input[@]}"
 
-# A lift mod's frames beside the stock lift's (native/lift-mod-run; the mod view's mod-run for the lift; docs/tools/commands.md): lifts ROM as `just lift` does (its holes file, names from $GBAA_DATA/names and names/) twice, stock into out/lift-mod-run-<name>/stock and with the mod at DIR (a `gbaa-lift --cut` directory: DIR/replace.toml) into out/lift-mod-run-<name>/mod, builds both and runs both headless along ROUTE (route-check --lift-mod-run): lists the frames whose pictures differ, as runs, and writes out/lift-mod-run/<route>/side-N.png for up to 16 of them (FLAGS: --sides N): stock, the mod, stock dimmed with the differing pixels in red. Then the per-function check of each cut function (`just fn-check ROM --replace DIR/replace.toml --fn-check-cuts`: the cut against its lift, from the program's own calls; its report in out/lift-mod-run-<name>/fn-check.txt). Never fails on a difference, in the frames or a function, only when a lift, build or run can't. Heavy: builds three generated crates.
+# A lift mod's frames beside the stock lift's (native/lift-mod-run; the mod view's mod-run for the lift; docs/tools/commands.md): lifts ROM as `just lift` does (its holes file, names from $GBAA_DATA/names and names/) twice, stock into out/lift-mod-run-<name>/stock and with the mod at DIR (a `gbaa-lift --cut` directory: DIR/replace.toml) into out/lift-mod-run-<name>/mod, builds both and runs both headless along ROUTE (route-check --lift-mod-run): lists the frames whose pictures differ, as runs, and writes out/lift-mod-run/<route>/side-N.png for up to 16 of them (FLAGS: --sides N): stock, the mod, stock dimmed with the differing pixels in red; and for each the differing pixels' bounding box, printed, and zoom-N.png: that box from stock and the mod, scaled up (native/lift-mod-run-zoom). The game's name (its holes file, its crates, OUT) is --name NAME's if given, else DIR's parent's for a mod in mods/<name>/ (native/lift-mod-run-name), else the ROM's file name lowercased; fn-check is given it too. Then the per-function check of each cut function (`just fn-check ROM --name NAME --replace DIR/replace.toml --fn-check-cuts`: the cut against its lift, from the program's own calls, a difference reported as the edit by field, `IWRAM 0x03001530 gEquipment.maxEnergy (u16): 99 lift, 45 cut`, and the program's own stop apart (native/lift-mod-run-edit-report); its report in out/lift-mod-run-<name>/fn-check.txt). Never fails on a difference, in the frames or a function, only when a lift, build or run can't. Heavy: builds three generated crates.
 [positional-arguments]
 lift-mod-run rom dir route *flags:
     #!/usr/bin/env bash
@@ -1033,8 +1063,22 @@ lift-mod-run rom dir route *flags:
     rom={{quote(join(invocation_directory(), rom))}}
     dir={{quote(join(invocation_directory(), dir))}}
     route={{quote(join(invocation_directory(), route))}}
-    name=$(basename "$rom" .gba | tr '[:upper:]' '[:lower:]')
     shift 3
+    # The game's name (its holes file, crate and out folder): --name NAME, else DIR's parent for a
+    # mod in mods/<name>/<mod>, else the ROM's file name lowercased. The rest of FLAGS go to route-check.
+    name=""
+    flags=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name) name=$2; shift 2 ;;
+            *) flags+=("$1"); shift ;;
+        esac
+    done
+    if [ -z "$name" ]; then
+        parent=$(dirname "$(realpath -ms "$dir")")
+        if [ "$(basename "$(dirname "$parent")")" = mods ]; then name=$(basename "$parent")
+        else name=$(basename "$rom" .gba | tr '[:upper:]' '[:lower:]'); fi
+    fi
     [ -f "$dir/replace.toml" ] || { echo "no $dir/replace.toml: cut it with gbaa-lift ROM OUT --cut $dir KEY..." >&2; exit 2; }
     holes=()
     if [ -f "holes/$name.toml" ]; then holes=(--holes "holes/$name.toml")
@@ -1050,10 +1094,10 @@ lift-mod-run rom dir route *flags:
     just build-recompiled "$out/stock"
     just build-recompiled "$out/mod"
     bin=target/recompiled/release/gbaa-native-"$name"
-    GBAA_DATA={{quote(gbaa_data)}} {{cap}} MemoryMax=8G target/release/route-check --lift-mod-run "$bin"-stock "$bin"-mod "$@" "$route"
+    GBAA_DATA={{quote(gbaa_data)}} {{cap}} MemoryMax=8G target/release/route-check --lift-mod-run "$bin"-stock "$bin"-mod "${flags[@]}" "$route"
     # Each cut against its lift; a difference is the mod's, not a failure.
-    just fn-check "$rom" --replace "$dir/replace.toml" --fn-check-cuts > "$out/fn-check.txt" 2>&1 || true
-    grep -E '^fn-check:|^ +[a-z]' "$out/fn-check.txt" || true
+    just fn-check "$rom" --name "$name" --replace "$dir/replace.toml" --fn-check-cuts > "$out/fn-check.txt" 2>&1 || true
+    grep -E '^fn-check:|^ +[A-Za-z]' "$out/fn-check.txt" || true
     grep -q '^fn-check: [0-9]* functions' "$out/fn-check.txt" || { tail -20 "$out/fn-check.txt"; echo "fn-check didn't run: $out/fn-check.txt" >&2; exit 1; }
 
 # Where a built lift stops (native/native-first-stop; codegen::native::first_stop; docs/tools/commands.md): runs OUT's program (a lift `just lift` built into target/recompiled) headless for 600 frames in its own 3 GB scope and writes how far it got to OUT/metrics.toml ([run]: frames_run, stop, what, detail, functions) and the end of OUT/report.txt: every frame, or the stop's kind (an unmodelled I/O register by address and name, memory the program hasn't got, a call to no function, another panic, the time limit, killed) with the lifted functions on the stack. `just lift` ends with it. ARGS: --frames N, --time-limit SECONDS, --bin FILE, --not-built (the build failed). A lift with hard holes can't build, so its stop is not-built and nothing is run; a build that failed with none records no run (it may only have been refused or killed); a binary older than OUT's sources is refused. A stop isn't a failure: exits 0 once recorded.
@@ -1061,7 +1105,7 @@ first-stop out *args:
     {{lock}} cargo build -q --release -p codegen --bin gbaa-first-stop
     target/release/gbaa-first-stop {{quote(out)}} {{args}}
 
-# The stage-A lifter's check (native/lift-stage-a, native/lift-bars; docs/native-stage-b.md, "How every piece is checked"): gbaa-lift-check runs the programs of crates/codegen/lift-check.toml (one table each: ROM under $GBAA_DATA, route, flags, bars; today agb/native-spike, agb/affine, agb/mosaic-modes, agb/native-fallthrough, agb/native-irq-hold, agb/native-frame-locals, agb/native-ime-release, agb/native-bios-calls, agb/native-bios-more, agb/native-tasks, agb/native-dma, agb/native-save, agb/native-bios-region, agb/native-bios-affine, agb/native-serial, agb/native-irq-wrapper and agb/native-takes from `just agb-tests`, and the C programs c-fnptr, c-switch, c-chain and c-heap, each built by agbcc and by modern GCC, from `just c-tests`). First each is lifted with `--bars`, failing on any metric over its bar, named with both numbers; then each lift and its play build (--timing native) are built and route-check --native compares them for the route's 600 frames (601 for native-irq-hold, native-ime-release and native-bios-region) with no replaced-library list: pictures, RAM outside the stack and code copies, I/O, display memories. Controls from the file: the spike lifted with a planted wrong store (planted_store, the V-blank handler's frame count) must be caught, and with portable_atomic's interrupt::disable stand-in dropped (planted_hole) the lift and the crate's build must fail naming f_08002728's mrs, a critical section's (native-tasks likewise: task_fib's store made one more, and its yield's stand-in dropped, naming its stack switch; native-dma's dma_set DMAxCNT store made one more; native-save's an SRAM strb; native-serial's sio_set SIOCNT store; native-irq-wrapper's IE put back after its wrapper's handler call; each C program's store of a global counter); native-fallthrough, native-irq-hold, native-frame-locals, native-ime-release and native-takes lifted with each of their planted_flags (--fall-as-tail-call: the old fall into another function as a tail call; --irq-at-waits: the old IRQ at a wait inside a critical section; --plant-slot=0x08000182: a store to a stack local, fl_keep's x + 7, made one more; --ime-at-waits: the old IRQ held past the store that sets IME again; --takes-zeroed: the old call of a function that takes r4-r11 from its callers, with them zeroed) must be caught by the native check. Each program is also lifted at the play layout (--layout packed: globals in the lifter's order; native/lift-packed-layout), which route-check --packed holds to the guest layout's frames and records. ARGS: --only NAME. Writes out/lift-*. Heavy: builds about eighty generated crates (each program's lift, packed lift and play build, seventeen planted lifts, and the two planted holes' builds that must fail; about 26 minutes: the nine programs besides native-spike, native-save, native-bios-region and native-bios-more took 17 on quack).
+# The stage-A lifter's check (native/lift-stage-a, native/lift-bars; docs/native-stage-b.md, "How every piece is checked"): gbaa-lift-check runs the programs of crates/codegen/lift-check.toml (one table each: ROM under $GBAA_DATA, route, flags, bars; today agb/native-spike, agb/affine, agb/mosaic-modes, agb/native-fallthrough, agb/native-irq-hold, agb/native-frame-locals, agb/native-ime-release, agb/native-bios-calls, agb/native-bios-more, agb/native-tasks, agb/native-dma, agb/native-save, agb/native-bios-region, agb/native-bios-affine, agb/native-serial, agb/native-irq-wrapper, agb/native-takes, agb/native-ram-jump, agb/native-gives, agb/native-entry-jump and agb/native-ime-i-set from `just agb-tests`, and the C programs c-fnptr, c-switch, c-chain, c-heap, c-bits, c-loops, c-list and c-jump, each built by agbcc and by modern GCC, from `just c-tests`). First each is lifted with `--bars`, failing on any metric over its bar, named with both numbers; then each lift and its play build (--timing native) are built and route-check --native compares them for the route's 600 frames (601 for native-irq-hold, native-ime-release, native-ime-i-set and native-bios-region) with no replaced-library list: pictures, RAM outside the stack and code copies, I/O, display memories. Controls from the file: the spike lifted with a planted wrong store (planted_store, the V-blank handler's frame count) must be caught, and with portable_atomic's interrupt::disable stand-in dropped (planted_hole) the lift and the crate's build must fail naming f_08002728's mrs, a critical section's (native-tasks likewise: task_fib's store made one more, and its yield's stand-in dropped, naming its stack switch; native-dma's dma_set DMAxCNT store made one more; native-save's an SRAM strb; native-serial's sio_set SIOCNT store; native-irq-wrapper's IE put back after its wrapper's handler call; each C program's store of a global counter); native-fallthrough, native-irq-hold, native-frame-locals, native-ime-release, native-takes, native-ram-jump, native-gives, native-entry-jump and native-ime-i-set lifted with each of their planted_flags (--fall-as-tail-call: the old fall, jump or call's return into another function as a tail call; --irq-at-waits: the old IRQ at a wait inside a critical section, or at an IME store while I is set; --plant-slot=0x08000182: a store to a stack local, fl_keep's x + 7, made one more; --ime-at-waits: the old IRQ held past the store that sets IME again; --takes-zeroed: the old call of a function that takes r4-r11 from its callers, with them zeroed; --gives-kept: the old call of a function that gives r4-r11 back, the caller's left as they were) must be caught by the native check. Each program is also lifted at the play layout (--layout packed: globals in the lifter's order; native/lift-packed-layout), which route-check --packed holds to the guest layout's frames and records, and with dense function IDs (--fn-ids dense, native/fnref-dense), which route-check --dense holds to the same frames and records but RAM. ARGS: --only NAME. Writes out/lift-*. Heavy: builds about a hundred and fifteen generated crates (each program's lift, packed lift, dense lift and play build, twenty planted lifts, and the two planted holes' builds that must fail; about 26 minutes: the nine programs besides native-spike, native-save, native-bios-region and native-bios-more took 17 on quack).
 lift-check *args:
     {{lock}} cargo build -q --release -p route-check
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift --bin gbaa-lift-check
@@ -1072,6 +1116,12 @@ lift-check *args:
 lift-metrics *args:
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift --bin gbaa-lift-check
     {{cap}} MemoryMax=4G target/release/gbaa-lift-check crates/codegen/lift-check.toml --data {{quote(gbaa_data)}} --metrics-only "$@"
+
+# The lift scored against pret (native/lift-pret-score; crates/pret-score; docs/tools/commands.md): for each game of crates/pret-score/games.toml (Emerald, Metroid), its lift as it is in out/lift-<name> (lift it first) beside what the pret names map it was lifted with offers, one table: functions named, lines against the decomp's C lines, line notes, locals, value names, named fields, texts, loops, fn words proven, the median lines per source line per function and the worst 20. Writes OUT/summary.toml. ARGS: --out DIR (default out/pret-score/<git short hash>[-dirty]), --against DIR2 (changes in brackets), --from DIR (print DIR's summary), --only NAME. About 15 s.
+[positional-arguments]
+pret-score *args:
+    {{lock}} cargo build -q --release -p pret-score
+    {{cap}} MemoryMax=4G target/release/pret-score --data {{quote(gbaa_data)}} "$@"
 
 # Milestone 2's pass check (#32): `recompile-check` (at TIMING, exact unless told), then the two frame dumps (out/<name>/{interp,recompiled}.png) must be byte-identical. Prints the guest-cycle split between recompiled code and the interpreter fallback (decision 1). Heavy: builds a generated crate.
 first-frame rom frames="60" timing="exact":

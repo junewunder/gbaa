@@ -358,13 +358,15 @@ impl<'a> Ctx<'a> {
 
     /// The targets of the resolved jump at `at` (a Thumb `bl` into a case
     /// helper is recorded under the pair's first half), as keys; for one
-    /// Recovery left unresolved, those the holes file gives
+    /// Recovery left unresolved, or took for a tail call through a
+    /// pointer and didn't record, those the holes file gives
     /// ([`Ctx::given_jumps`]), if it gives any.
     pub fn table_targets(&self, at: u32, thumb: bool) -> Option<Vec<u32>> {
         let jumps = &self.disc.rec.jumps;
-        let a = std::iter::once(at)
-            .chain(thumb.then(|| at.wrapping_sub(2)))
-            .find(|a| jumps.contains_key(a))?;
+        let mut at2 = std::iter::once(at).chain(thumb.then(|| at.wrapping_sub(2)));
+        let Some(a) = at2.clone().find(|a| jumps.contains_key(a)) else {
+            return at2.find_map(|a| self.given_jumps.get(&a).cloned());
+        };
         match &jumps[&a] {
             JumpRes::Resolved(j) => {
                 Some(j.targets.iter().map(|&t| key(t & !1, t & 1 != 0)).collect())

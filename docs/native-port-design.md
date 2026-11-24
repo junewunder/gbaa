@@ -635,7 +635,7 @@ is found at build time. Each kind, how it is found and what can stand in:
 | **Return-address arithmetic not resolved to one block per site** | the scrambled-return-address tool (`crates/interp/examples/lr_numbers.rs`) finds it dynamically; the value analysis statically | a hand-written replacement function |
 | **Code that runs from RAM and changes** (Emerald Rogue's mixer stamping templates into its loop, `codegen::variants`; agb_flash's routine copied onto the stack; code built at run time) | `Discovery::copies`, `codegen::seen`'s copies seen running, the overlay guards' invalidations (`runtime/src/overlay.rs`) | a copy that never changes is just code (crt0's `.iwram`): no hole. Variants seen become one function each, and the store that patches the loop a field saying which runs; else a hand-written replacement |
 | **Pointer arithmetic or casts the types don't explain** (an access through a `Ref<T>` at an offset that isn't a field of `T`, a cast between unrelated structs, a pointer into the middle of a global used as another type) | the typed lift: every access must resolve to a path | in stage A it isn't a hole (bytes work); in stage B a byte view of that object, listed |
-| **CPU state the program doesn't have**: mode switches outside the recognised IRQ wrapper, `msr`/`mrs` used for anything else, stack switching (a game's own threads or coroutines), `setjmp`/`longjmp` | the lift: an instruction with no native meaning | a hand-written replacement (threads as Rust closures or a state machine) |
+| **CPU state the program doesn't have**: mode switches outside the recognised IRQ wrapper, `msr`/`mrs` used for anything else, stack switching (a game's own threads or coroutines); not `setjmp`/`longjmp`, whose restore the lift prints as an unwinding to `setjmp`'s caller (native/lift-longjmp, `codegen::native::longjmp`) | the lift: an instruction with no native meaning | a hand-written replacement (threads as Rust closures or a state machine) |
 | **Hardware or BIOS outside the library**: an unimplemented BIOS call (decision 12's list), open-bus or BIOS-region reads, a register the library doesn't model | the lift | add it to the library |
 | **Behaviour that depends on cycle timing** (a raster effect timed by instruction count, a timer read used as more than a seed) | not by the native oracle, which times the same way (section 7): by the play build at `--timing native` against `exact` on a route, where a difference is looked at by eye, as instant timing's were (Kirby's lag frames) | a cost the library charges (as for BIOS copies, section 7), or a hand change; most such games tolerate it already under instant timing |
 
@@ -1075,16 +1075,16 @@ with the native check and no replaced-library list.
 - Every function is `fn f_<key>(g: &mut Game, sp: u32, a: [u32; 4]) ->
   Result<[u32; 4], Exit>`. (Since `native/lift-params`, only those whose
   summary has a hole: the rest take their parameters and give their
-  results, `docs/native-stage-b.md`, piece 3.) r0-r3 go in and come back; r4-r12, `lr` and
+  results, `docs/native-stage-b.md`, piece 3; a prototype's, hole or not.) r0-r3 go in and come back; r4-r12, `lr` and
   NZCV are Rust locals (a write nothing reads left out: `native::live`; an entry takes only those its code reads as they came (a function that takes no more than sp, its parameters, an lr proven `RET` and r4-r11 its summary shows unused has its body in its plain entry, the parameters named arguments, and its extended entry calls that), and a value only its own block reads, a direct call's arguments and a return's results included, is a `let` of its own, so a register stays a `mut` local only where its value goes on into another block: native/lift-register-locals); each block's IR values
-  are `let`s, but a pure one used once, or a constant, prints inside its use (native/lift-inline-temps); a sum prints as `wrapping_add` or `wrapping_sub`, never `add_with_carry(..).0`, and nothing prints a `let` it doesn't read: a read only a dead write takes makes nothing live, a load of RAM nothing reads isn't printed, and a compare tree's arm prints only the writes and `let`s it reads (native/lift-plain-arith; metrics `adc_sums` and `unread_lets`, `native::unread`). A counted loop of one block prints as a `for` over its range, proven by running it from a constant start (native/lift-for-loops, `native::counted`). Because every function keeps r4-r11 in its own locals, a callee can't change its
+  are `let`s, but a pure one used once, or a constant, prints inside its use (native/lift-inline-temps); a sum prints as `wrapping_add` or `wrapping_sub`, never `add_with_carry(..).0`, and nothing prints a `let` it doesn't read: a read only a dead write takes makes nothing live, a load of RAM nothing reads isn't printed, and a compare tree's arm prints only the writes and `let`s it reads (native/lift-plain-arith; metrics `adc_sums` and `unread_lets`, `native::unread`). A counted loop of one block prints as a `for` over its range, proven by running it from a constant start (native/lift-for-loops, `native::counted`); a loop of any number of blocks, calls, `break` and `continue` included, counting by a constant step to a constant or a register it doesn't write, as `for i in 0..n` or `(b + 1..=s).rev()`, the guard before it proving the range isn't empty and nothing wrapping (native/lift-for-bounds, `native::bounds`); its step may go through a second register written once a round in a block on every way to the latch (agbcc's `r9 = r8 + 1` early, `r8 = r9 as u8` at the end; native/lift-for-step-via). Because every function keeps r4-r11 in its own locals, a callee can't change its
   caller's, so the lift is exact for any callee that follows AAPCS,
   whatever the summary proof says. The summary is printed above each
   function (`/// Reads {r0, r1}; returns {r0}`), and a function whose
   summary breaks that (`analysis::holes::SUMMARY_HARD`: it returns sp
-  changed, reads r4-r11 a callee changed, or changes them and reads one
-  as it came, a register parameter) is a hard hole. One that only uses
-  r4-r11 as scratch, where no caller reads them after, is lifted as is.
+  changed, reads r4-r11 a stand-in changed, or reads one as it came
+  where a pointer call enters it, a register parameter) is a hard hole.
+  One that only uses r4-r11 as scratch, where no caller reads them after, is lifted as is; one whose direct caller does read them gives them back (`Summary::gives`, native/lift-gives: its returns leave them in `Game::gave`, the call takes them, and a function it jumps into gives what it may change too; the Pokémon games' m4a mixer needs it, `agb/native-gives` checks it).
   The 47-50 functions per program whose proof fails for other reasons
   (an indirect call, a callee that never returns) are listed in the
   report as soft.
@@ -1109,7 +1109,7 @@ with the native check and no replaced-library list.
   rules), and the ROM's bytes.
 - Function pointers are their keys (`--fn-ids rom` only): the lift loads
   them from ROM bytes and RAM (agb's vtables and closures), so it can't
-  renumber them. `call_fn` binary-searches `FNS`.
+  renumber them. `call_fn` binary-searches `FNS` (stage B: `--fn-ids dense`).
 - BIOS: `Halt` is `hw::halt`; `IntrWait` and `VBlankIntrWait` are the play
   build's loop over `0x0300_7FF8` and `hw::halt`; `CpuSet` copies and
   spends `cpu_set_cycles`; `Div`. Idle edges get `hw::idle`, spin edges
@@ -1138,11 +1138,11 @@ with the native check and no replaced-library list.
   can't resolve.
 - **Discovery's gaps are decoded at lift.** A jump into ROM where
   discovery has no code (it took a `bl`'s second half for a literal
-  pool, or stopped a scanned fragment short) would fall to the
-  interpreter in the play build; the lifter decodes from each such
-  target until it meets known code, again until none are left, joins
-  split `bl` halves, and lists the targets. The spike has 22,
-  affine 5, mosaic-modes 143 (much of one large function).
+  pool, or stopped a scanned fragment short) would fall to the play
+  build's interpreter; the lifter decodes from each (a `bx pc` veneer's
+  ARM too) to known code or a `bx pc` (in ARM a `b`), again till none
+  are left, joins split `bl` halves, and lists the targets. The spike
+  has 22, affine 5, mosaic-modes 143 (much of one large function).
 
 **Measured** (`just lift-check`, 2 minutes on quack):
 
@@ -1229,6 +1229,42 @@ as a seed, a budget and a digest, never as states.
   is caught too (`--plant-reference`). A run it can't follow (a wait: no
   time passes) is counted, not compared ("none compared" if all).
 - Not yet: a function first called past the lift's stop can't be checked.
+
+## Stack locals passed by address (`native/lift-stack-arrays`)
+
+Designed 2026-11-24 (printing: `native/lift-lent-print`). A slot whose
+address only reaches callees is a Rust local; the rest stays bytes.
+
+- **A borrowed parameter** is a direct callee's r0-r3, never a pointer
+  call's (`call_fn`), whose value the callee only adds constants to,
+  loads and stores through (at a constant offset, or at an index: a
+  checked one), and passes on in r0-r3 to another borrowed parameter. A
+  store of it, a return of it, a compare, a BIOS call or a pointer call
+  with it, a join with another value: it isn't borrowed. Every caller
+  must pass a lent slot or a borrowed parameter of its own there (one
+  type a parameter). The greatest such set, over the call graph
+  (`frame::lend`).
+- **A lent slot** is an escaping one whose only escapes are passes of an
+  exact frame address to borrowed parameters. Its object (the slots from
+  that address up to the saved registers, as for any escape) is one
+  local, `[u8; N]` by access width; DWARF's type where a names file has
+  one is a later step (`native/lift-stack-typed-locals`).
+- **A pointer to a host local** is a `Lent<'_>`, the prelude's
+  `&[Cell<u8>]` (copyable, aliasable: two arguments may be the same
+  object, as `rect_union(&a, &a)` is, with `g: &mut Game` beside them).
+  It has no guest address: a borrowed parameter is never a number, so
+  nothing compares or stores it, and an access past its end panics,
+  naming the function. Other pointers stay guest addresses, unchanged.
+- **sp.** A function whose slots are all locals or lent keeps nothing in
+  memory: no sp, no `bank_sp` (`native/lift-frame-gone`'s rule, with lent
+  slots counted as locals). A slot whose address reaches RAM keeps the
+  guest stack, sp exact where it must be (`native/lift-frame-exact-narrow`).
+- **Checked by** the native check as today's locals are: it compares RAM,
+  and a lent local's bytes reach RAM only through code the lift prints.
+  `--shadow-locals` keeps a lent local in the frame's bytes too (the
+  `Lent` carries its guest address there) and reports a load that
+  differs: a write the analysis missed. The planted control makes a store
+  through a borrowed parameter one more (`--plant-lent=ADDR`).
 
 ## The units that follow
 

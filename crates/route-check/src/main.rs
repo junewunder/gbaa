@@ -21,8 +21,9 @@
 //!
 //! `route-check --lift-mod-run STOCK MOD [--sides N] units/NAME.toml`: a
 //! lift mod's frames beside the stock lift's, native programs both: the
-//! frames that differ listed, side-by-side PNGs of up to N of them (`just
-//! lift-mod-run`, [`lift_mod_run`]).
+//! frames that differ listed, side-by-side PNGs of up to N of them and a
+//! zoom on each one's differing pixels (`just lift-mod-run`,
+//! [`lift_mod_run`]).
 //!
 //! `route-check --args units/NAME.toml`: the arguments every runner is
 //! given for the route (ROM, frames, presses, state, dump frames), then
@@ -35,7 +36,7 @@
 //! ([`windows`]).
 //!
 //! `route-check --native NATIVE PLAY ROUTE [--replaced FILE] [--holes
-//! FILE] [--name NAME] [--packed BIN] [--planted BIN]`: a native program
+//! FILE] [--name NAME] [--packed BIN] [--dense BIN] [--planted BIN]`: a native program
 //! against its play build at `--timing native`, every frame's picture, RAM,
 //! I/O, display memories and audio ([`native`], `just native-check`).
 //!
@@ -68,7 +69,7 @@ const USAGE: &str = "usage: route-check units/NAME.toml [--through CHECKPOINT]\n
                      route-check --args ROUTE.toml\n       \
                      route-check --windows units/NAME.toml [--through CHECKPOINT]\n       \
                      route-check --native NATIVE PLAY ROUTE [--replaced FILE] [--holes FILE] \
-                     [--name NAME] [--packed BIN] [--planted BIN]... [--no-audio WHY]\n       \
+                     [--name NAME] [--packed BIN] [--dense BIN] [--planted BIN]... [--no-audio WHY]\n       \
                      (any of them with --timing T: our builds at T, not exact)";
 
 /// How a check ended, other than passing.

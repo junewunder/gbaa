@@ -17,7 +17,9 @@
 //!    (`--planted`). Each is lifted once more at the play layout
 //!    (`--layout packed`, unit `native/lift-packed-layout`), which must
 //!    draw the same frames and record the same RAM as the guest layout
-//!    (`--packed`).
+//!    (`--packed`); and once with dense function IDs (`--fn-ids dense`,
+//!    unit `native/fnref-dense`), which must draw the same frames and
+//!    record the same but RAM (`--dense`).
 //! 3. **The planted hard hole.** A program with `planted_hole` is lifted
 //!    with that stand-in dropped, from a fresh OUT: the lift and the
 //!    crate's build must both fail, the build naming the hole.
@@ -349,6 +351,26 @@ impl Run {
         route
             .arg("--packed")
             .arg(format!("target/recompiled/release/gbaa-native-{n}-packed"));
+        // Dense function IDs (native/fnref-dense): the same program with
+        // the function addresses the flow proved as IDs from 1 must draw
+        // the ROM keys' frames.
+        let dense = format!("out/lift-{n}-dense");
+        let mut c = lift(&rom, n, &dense);
+        c.args(["--name", &format!("{n}-dense"), "--fn-ids", "dense"])
+            .args(&p.lift_flags);
+        must(
+            &mut c,
+            &log(&format!("lift-{n}-dense.txt")),
+            "the dense IDs' lift",
+        )?;
+        must(
+            &mut just(&["build-recompiled", &dense, "guest-pc"]),
+            &log(&format!("lift-{n}-dense.build.txt")),
+            "the dense IDs' build",
+        )?;
+        route
+            .arg("--dense")
+            .arg(format!("target/recompiled/release/gbaa-native-{n}-dense"));
         route.args(&p.route_flags);
         let out = format!("out/lift-{n}");
         must(

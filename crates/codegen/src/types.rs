@@ -97,11 +97,38 @@ pub struct Types {
     /// its parameter's C type is an enum family's (`PenState state`), by
     /// key and register.
     arg_values: BTreeMap<(u32, usize), String>,
+    /// Those of `arg_values` the decomp's calls pass a sum of one of the
+    /// family's names (`[values]`' `sums`): a sum's constant there takes
+    /// its name.
+    arg_sums: BTreeSet<(u32, usize)>,
 }
 
-/// A plain struct ([`Types::plain`]): its marker's identifier, its size
-/// and its fields' identifiers, offsets and types.
-pub type Plain<'a> = (&'a str, u32, Vec<(&'a str, u32, &'a Ty)>);
+/// A struct as `Ram`'s `ram_t` lays it out ([`Types::layout`]).
+#[derive(Clone, Debug)]
+pub struct Layout<'a> {
+    /// Its marker's identifier.
+    pub ident: &'a str,
+    pub size: u32,
+    /// Each field's identifier, offset and type, by offset: a bitfield's
+    /// is its storage's, one field for the bitfields sharing bytes.
+    pub fields: Vec<(String, u32, Ty)>,
+    pub bits: Vec<Bitfield<'a>>,
+}
+
+/// A bitfield of a [`Layout`]: its identifier, its storage field's, its
+/// bits in that field (lowest, width), and its C declaration.
+#[derive(Clone, Debug)]
+pub struct Bitfield<'a> {
+    pub ident: &'a str,
+    pub storage: String,
+    pub lo: u32,
+    pub n: u32,
+    pub c: &'a str,
+}
+
+/// A field as [`Types::fields_of`] gives it: identifier, offset, type and
+/// whether it is a bitfield.
+pub type FieldOf<'a> = (&'a str, u32, &'a Ty, bool);
 
 /// A function's prototype as the readable form prints it (the spike's gap
 /// 7): what arrives in r0–r3 and whether r0 is the value it returns.
@@ -122,7 +149,7 @@ pub struct Proto {
 
 /// Names an accessor can't take: `Ptr`'s own methods and Rust's keywords.
 const PTR_METHODS: &[&str] = &[
-    "at", "field", "idx", "add", "clone", "self", "Self", "super", "crate",
+    "at", "field", "idx", "add", "addr", "clone", "self", "Self", "super", "crate",
 ];
 
 impl Types {
@@ -297,13 +324,82 @@ impl Types {
                 t.protos.insert(k, p);
             }
         }
+        // The parameters the decomp's calls pass a family's names to
+        // (native/lift-value-args): argument register `i` where each
+        // parameter before it is one register. The prototype is the
+        // function's DWARF's, whatever its name there (`GetMonData2`'s
+        // is `GetMonData3`'s: one address).
+        for (fam, v) in &m.values {
+            if !t.values.contains_key(fam) {
+                continue;
+            }
+            for (f, i) in &v.args {
+                for (&k, item) in &m.functions {
+                    if &item.name != f {
+                        continue;
+                    }
+                    let regs = item
+                        .proto
+                        .as_deref()
+                        .map_or(0, |c| t.one_register_params(c, &enums));
+                    if *i < regs {
+                        let have = t.arg_values.entry((k, *i)).or_insert_with(|| fam.clone());
+                        if *have == *fam && v.sums.contains(&(f.clone(), *i)) {
+                            t.arg_sums.insert((k, *i));
+                        }
+                    }
+                }
+            }
+        }
         t
     }
 
+    /// How many of prototype `c`'s parameters from the first are one
+    /// register each (a pointer, an array, an integer of 32 bits or less),
+    /// up to four. The function's name is the one `c` gives.
+    fn one_register_params(&self, c: &str, enums: &BTreeMap<&str, u32>) -> usize {
+        let Some(open) = c.find('(') else { return 0 };
+        let Some(name) = c[..open]
+            .rsplit(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
+            .next()
+            .filter(|n| !n.is_empty())
+        else {
+            return 0;
+        };
+        let Some((_, params)) = crate::dwarf::proto_params(c, name) else {
+            return 0;
+        };
+        params
+            .iter()
+            .take(4)
+            .take_while(|(_, ty)| {
+                let ty = normal(ty);
+                if ty.contains('[') && !ty.contains('(') {
+                    return true;
+                }
+                matches!(
+                    self.read(&ty, enums),
+                    Some(Ty::Ptr(_) | Ty::U8 | Ty::U16 | Ty::U32)
+                )
+            })
+            .count()
+    }
+
     /// The names of the values function `key`'s argument in register `r`
-    /// takes, by value, where its parameter's type is an enum family's.
+    /// takes, by value, where its parameter's type is an enum family's or
+    /// the decomp's calls pass it the family's names (native/lift-value-args).
     pub fn values_of_arg(&self, key: u32, r: usize) -> Option<&BTreeMap<u32, String>> {
         self.values.get(self.arg_values.get(&(key, r))?)
+    }
+
+    /// [`Types::values_of_arg`] where the decomp's calls also pass that
+    /// argument a sum one of the names is the base of (`MON_DATA_MOVE1 +
+    /// j`): a sum's constant there takes its name.
+    pub fn sum_values_of_arg(&self, key: u32, r: usize) -> Option<&BTreeMap<u32, String>> {
+        if !self.arg_sums.contains(&(key, r)) {
+            return None;
+        }
+        self.values_of_arg(key, r)
     }
 
     /// Whether the map gives any function's prototype.
@@ -503,29 +599,184 @@ impl Types {
             .map(|f| (&f.ty, off - f.off))
     }
 
-    /// The struct `name` as plain fields (native/lift-struct-globals):
-    /// its marker's identifier, its size and each field's identifier,
-    /// offset and type, by offset. `None` for a union, a struct with a
-    /// bitfield, or one whose fields overlap.
-    pub fn plain(&self, name: &str) -> Option<Plain<'_>> {
+    /// The struct or union `name`'s size and each field's identifier,
+    /// offset, type and whether it is a bitfield (its accessor's bytes),
+    /// in the map's order (native/lift-mod-run-edit-report: the per-function
+    /// check names a RAM byte by them).
+    pub fn fields_of(&self, name: &str) -> Option<(u32, Vec<FieldOf<'_>>)> {
         let d = self.defs.get(name)?;
-        if d.union || d.fields.iter().any(|f| f.bits.is_some()) {
-            return None;
-        }
-        let mut fs: Vec<(&str, u32, &Ty)> = d
+        let fs = d
             .fields
             .iter()
-            .map(|f| (f.ident.as_str(), f.off, &f.ty))
+            .map(|f| (f.ident.as_str(), f.off, &f.ty, f.bits.is_some()))
             .collect();
+        Some((d.size, fs))
+    }
+
+    /// The struct `name` as `Ram`'s `ram_t` lays it out
+    /// (native/lift-struct-globals): its fields by offset, none
+    /// overlapping. The bitfields whose accessors share bytes are one
+    /// storage field (native/lift-global-bitfields), the unsigned integer
+    /// of their bytes, or wider over padding up to the next field where
+    /// that is one, named for them all (`left_up_speed_hue`; one alone:
+    /// `<field>_bits`). `None` for a union, one whose fields overlap, or
+    /// one with bitfields' bytes no aligned integer holds.
+    pub fn layout(&self, name: &str) -> Option<Layout<'_>> {
+        let d = self.defs.get(name)?;
+        if d.union {
+            return None;
+        }
+        // Each bitfield's accessor bytes; runs of them that overlap are
+        // one storage.
+        let mut bfs: Vec<&F> = d.fields.iter().filter(|f| f.bits.is_some()).collect();
+        bfs.sort_by_key(|f| (f.off, f.bits.map_or(0, |b| b.0)));
+        let mut groups: Vec<(u32, u32, Vec<&F>)> = Vec::new();
+        for f in bfs {
+            let (a, b) = (f.off, f.off + self.size(&f.ty));
+            match groups.last_mut() {
+                Some((_, hi, fs)) if a < *hi => {
+                    *hi = (*hi).max(b);
+                    fs.push(f);
+                }
+                _ => groups.push((a, b, vec![f])),
+            }
+        }
+        let mut fs: Vec<(String, u32, Ty)> = d
+            .fields
+            .iter()
+            .filter(|f| f.bits.is_none())
+            .map(|f| (f.ident.clone(), f.off, f.ty.clone()))
+            .collect();
+        let starts: Vec<u32> = fs
+            .iter()
+            .map(|f| f.1)
+            .chain(groups.iter().map(|g| g.0))
+            .collect();
+        let mut bits = Vec::new();
+        for (lo, hi, mut gfs) in groups {
+            // The bits counted from the storage's start, low first.
+            let at = |f: &F| 8 * (f.off - lo) + f.bits.map_or(0, |b| b.0);
+            gfs.sort_by_key(|f| at(f));
+            let next = starts
+                .iter()
+                .copied()
+                .filter(|&s| s >= hi)
+                .min()
+                .unwrap_or(d.size);
+            let fits = |s: u32| s >= hi - lo && lo % s == 0 && lo + s <= d.size;
+            let s = [4, 2, 1]
+                .into_iter()
+                .filter(|&s| fits(s) && lo + s <= next)
+                .find(|&s| lo + s == next)
+                .or_else(|| [1, 2, 4].into_iter().find(|&s| fits(s) && lo + s <= next))?;
+            let ids: Vec<&str> = gfs.iter().map(|f| f.ident.as_str()).collect();
+            let storage = match &ids[..] {
+                [one] => format!("{one}_bits"),
+                _ => ids.join("_"),
+            };
+            for f in &gfs {
+                let (_, n) = f.bits.expect("a bitfield");
+                bits.push(Bitfield {
+                    ident: &f.ident,
+                    storage: storage.clone(),
+                    lo: at(f),
+                    n,
+                    c: &f.c,
+                });
+            }
+            fs.push((storage, lo, by_size(s)));
+        }
         fs.sort_by_key(|f| f.1);
         let mut end = 0;
-        for &(_, off, ty) in &fs {
-            if off < end {
+        for (_, off, ty) in &fs {
+            if *off < end {
                 return None;
             }
             end = off + self.size(ty);
         }
-        (end <= d.size).then_some((d.ident.as_str(), d.size, fs))
+        // Each name once: the fields' (a storage's may be a field's), and
+        // the bitfields' methods' (`x` and `set_x`).
+        let mut seen = BTreeSet::new();
+        if !fs.iter().all(|f| seen.insert(f.0.clone())) {
+            return None;
+        }
+        let mut seen = BTreeSet::new();
+        if !bits
+            .iter()
+            .flat_map(|b| [b.ident.to_string(), format!("set_{}", b.ident)])
+            .all(|n| seen.insert(n))
+        {
+            return None;
+        }
+        (end <= d.size).then_some(Layout {
+            ident: d.ident.as_str(),
+            size: d.size,
+            fields: fs,
+            bits,
+        })
+    }
+
+    /// Each typed datum: its address and type.
+    pub fn globals(&self) -> impl Iterator<Item = (u32, &Ty)> {
+        self.globals.iter().map(|(&k, (ty, _))| (k, ty))
+    }
+
+    /// The fields named `name` that `ty` holds, at any depth (`gbaa-lift
+    /// --find`): each one's offset in `ty`, size and path from `ty`
+    /// (`.inner[].maxEnergy`, an array's elements as `[]`), at most
+    /// `cap` of them. A field's name is its accessor's, a bitfield's
+    /// bytes those of its accessor.
+    pub fn spans_of(&self, ty: &Ty, name: &str, cap: usize) -> Vec<(u32, u32, String)> {
+        let mut out = Vec::new();
+        self.spans_into(ty, name, 0, "", cap, &mut out);
+        out
+    }
+
+    fn spans_into(
+        &self,
+        ty: &Ty,
+        name: &str,
+        at: u32,
+        path: &str,
+        cap: usize,
+        out: &mut Vec<(u32, u32, String)>,
+    ) {
+        match ty {
+            Ty::Array(e, n) => {
+                let es = self.size(e);
+                if es == 0 {
+                    return;
+                }
+                let one = self.spans_of(e, name, cap);
+                if one.is_empty() {
+                    return;
+                }
+                for i in 0..*n {
+                    for (o, s, p) in &one {
+                        if out.len() >= cap {
+                            return;
+                        }
+                        out.push((at + i * es + o, *s, format!("{path}[]{p}")));
+                    }
+                }
+            }
+            Ty::Named(n) => {
+                let Some(d) = self.defs.get(n) else { return };
+                for f in &d.fields {
+                    if out.len() >= cap {
+                        return;
+                    }
+                    let p = format!("{path}.{}", f.ident);
+                    if f.ident.trim_end_matches('_') == name {
+                        out.push((at + f.off, self.size(&f.ty).max(1), p.clone()));
+                    }
+                    if f.bits.is_none() {
+                        self.spans_into(&f.ty, name, at + f.off, &p, cap, out);
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 
     /// The typed datum `x` lands on or in, as its address and type.
@@ -795,6 +1046,22 @@ impl Types {
             };
         }
         self.values.get(fam?)
+    }
+
+    /// The type `steps` (whole fields and elements, as [`Types::walk`]
+    /// gives them) lead to from `ty`.
+    pub fn at_steps<'a>(&'a self, ty: &'a Ty, steps: &[Step]) -> Option<&'a Ty> {
+        let mut ty = ty;
+        for s in steps {
+            ty = match (s, ty) {
+                (Step::Idx(_), Ty::Array(e, _)) => e,
+                (Step::Field(id), Ty::Named(n)) => {
+                    &self.defs.get(n)?.fields.iter().find(|f| &f.ident == id)?.ty
+                }
+                _ => return None,
+            };
+        }
+        Some(ty)
     }
 
     /// The names of the values the global at `addr` takes (`[values]`'

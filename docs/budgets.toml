@@ -10,10 +10,11 @@
 # native/mirror-lifts (its card asks for its lift's numbers here, as each
 # game's lift unit's); 416 after native/lift-typed-access (its piece's
 # line, six lines); 421 after native/mod-view-parity (the link to its
-# table, mod-view-parity.md).
+# table, mod-view-parity.md); 422 after native/lift-signature-holes (piece
+# 3's line for shapes from the prototypes).
 [[doc]]
 path = "docs/native-stage-b.md"
-max_lines = 421
+max_lines = 422
 
 # The hole report's method and findings, cut from 667 lines on 2026-11-06;
 # 390 after native/nightmare-cpu-state added Nightmare's task switcher
@@ -48,10 +49,13 @@ max_lines = 640
 # native/c-test-programs' `just c-tests` (4 lines, the rest in c/README.md);
 # 2006 after native/fn-check-any's `just fn-check` (11 lines, its numbers in
 # the tracker's evidence); 2011 after native/fn-check-interp's interpreter
-# in that entry (4 lines, and 1 from the two branches' merge).
+# in that entry (4 lines, and 1 from the two branches' merge); 2021 after
+# native/lift-pret-score's `just pret-score` (10 lines, the measures in
+# its crate's module doc); 2023 after native/fnref-dense's `--fn-ids` and
+# `--dense` (2 lines).
 [[doc]]
 path = "docs/tools/commands.md"
-max_lines = 2011
+max_lines = 2023
 
 # 1254 after native/hw-serial-registers added the serial registers' entry
 # to section 7's as-built list (4 lines: what the library keeps and that
@@ -63,10 +67,12 @@ max_lines = 2011
 # 1308 after native/indirect-call-args-emerald (21 lines: its card asks
 # for Emerald's counts with callee sets and what keeps sets incomplete in
 # section 5's paragraph, two short tables); 1314 after
-# native/lift-text-editable's bullet on text as literals (6 lines).
+# native/lift-text-editable's bullet on text as literals (6 lines); 1350
+# after native/lift-stack-arrays' design section (36 lines: its card asks
+# for what a pointer to a host local is, before the work).
 [[doc]]
 path = "docs/native-port-design.md"
-max_lines = 1314
+max_lines = 1350
 
 [[doc]]
 path = "AGENTS.md"

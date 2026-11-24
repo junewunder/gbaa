@@ -595,6 +595,35 @@ fn a_tail_call_with_the_frame_live_writes_the_locals_to_memory_first() {
 }
 
 #[test]
+fn a_call_returning_into_another_entry_writes_the_locals_to_memory_first() {
+    // agb/native-entry-jump's ej_c: `push {r4, lr}`, a `bl` whose return
+    // site is ej_e's entry, which pops ej_c's frame.
+    let mut b = B::default();
+    b.prologue();
+    let a = b.sp(0);
+    let x = b.get(0);
+    b.st(a, x);
+    let call = Edge::Call {
+        target: Some(9),
+        ret: 20,
+    };
+    let fns = vec![
+        func(1, vec![(1, b, call.clone())]),
+        func(20, vec![(20, B::default(), Edge::Return)]),
+    ];
+    let exit = fns[0].1[0].1.len() - 1;
+    let f = frames_of(&fns).remove(&1).unwrap();
+    assert!(f.slots.iter().all(|s| !s.escapes()), "{:?}", f.slots);
+    assert_eq!(f.flush, BTreeSet::from([(1, exit)]));
+    // A return site that is no function's entry (the callee never
+    // returns) hands nothing on.
+    let mut b = B::default();
+    b.prologue();
+    let fns = vec![func(1, vec![(1, b, call)])];
+    assert!(frames_of(&fns)[&1].flush.is_empty());
+}
+
+#[test]
 fn a_tail_call_after_the_epilogue_writes_nothing() {
     let (f, _) = tail_with_sp(16);
     assert!(f.flush.is_empty(), "{:?}", f.flush);
@@ -717,4 +746,305 @@ fn a_stack_address_in_r8_escapes_at_a_named_pointer_call_only() {
     // Any other passes r0-r3 only: nothing escapes.
     let f = one_named(make(), &BTreeSet::new());
     assert!(f.slots.iter().all(|s| !s.escapes()), "{:?}", f.slots);
+}
+
+/// [`stores`] over `fns` (their frames from [`frames`]): a store to a
+/// constant in `0x04xxxxxx` is I/O's.
+fn stores_of(fns: &Fns) -> BTreeMap<u32, u16> {
+    let fs: Vec<(u32, BTreeMap<u32, FBlock>)> = fns
+        .iter()
+        .map(|(e, bs)| {
+            let m = bs
+                .iter()
+                .map(|(k, insts, edge)| {
+                    (
+                        *k,
+                        FBlock {
+                            insts,
+                            edges: BTreeMap::from([(insts.len() - 1, edge.clone())]),
+                        },
+                    )
+                })
+                .collect();
+            (*e, m)
+        })
+        .collect();
+    let frames = frames(&fs, &AllFour);
+    let io = |insts: &[Inst], a: ValueId, _: u32| matches!(insts[a.index()].op, Op::Const(c) if c >> 24 == 4);
+    let sfs: Vec<StoreFn> = fs
+        .iter()
+        .map(|(e, b)| StoreFn {
+            entry: *e,
+            blocks: b,
+            frame: frames.get(e),
+            io: &io,
+        })
+        .collect();
+    stores(&sfs, &|_| None)
+}
+
+/// A caller (function 1) passing a pointer to its local in `reg` to
+/// `callee` (function 9, or one not lifted), then running `after` on the
+/// call's return; and function 9, from `body`.
+fn lend(reg: u8, callee: u32, body: impl FnOnce(&mut B), after: impl FnOnce(&mut B)) -> Fns {
+    let mut b = B::default();
+    b.prologue();
+    let p = b.sp(0);
+    b.set(reg, p);
+    let mut r = B::default();
+    after(&mut r);
+    let mut c = B::default();
+    body(&mut c);
+    vec![
+        func(
+            1,
+            vec![
+                (
+                    1,
+                    b,
+                    Edge::Call {
+                        target: Some(callee),
+                        ret: 2,
+                    },
+                ),
+                (2, r, Edge::Return),
+            ],
+        ),
+        func(9, vec![(9, c, Edge::Return)]),
+    ]
+}
+
+/// Stores `v` to the global at 0x03000100.
+fn to_global(b: &mut B, v: ValueId) {
+    let g = b.k(0x0300_0100);
+    b.st(g, v);
+}
+
+#[test]
+fn a_frame_lent_to_a_callee_that_writes_through_it_isnt_stored() {
+    let fns = lend(
+        0,
+        9,
+        |c| {
+            let p = c.get(0);
+            let x = c.k(7);
+            c.st(p, x);
+        },
+        |_| {},
+    );
+    let s = stores_of(&fns);
+    assert_eq!(s[&9], 0);
+    assert_eq!(s[&1] & SP, 0, "{s:x?}");
+    // The frame escapes all the same: the callee writes its bytes.
+    assert!(frames_of(&fns)[&1].escaping() > 0);
+}
+
+#[test]
+fn a_frame_lent_to_a_callee_that_stores_the_pointer_is_stored() {
+    let fns = lend(
+        0,
+        9,
+        |c| {
+            let p = c.get(0);
+            to_global(c, p);
+        },
+        |_| {},
+    );
+    let s = stores_of(&fns);
+    assert_eq!(s[&9], 1);
+    assert_ne!(s[&1] & SP, 0, "{s:x?}");
+}
+
+#[test]
+fn a_pointer_handed_back_is_stored_only_if_the_caller_stores_it() {
+    // memcpy's destination, returned in r0.
+    let back = |c: &mut B| {
+        let p = c.get(0);
+        c.set(0, p);
+    };
+    let s = stores_of(&lend(0, 9, back, |_| {}));
+    assert_eq!(s[&1] & SP, 0, "{s:x?}");
+    let s = stores_of(&lend(0, 9, back, |r| {
+        let v = r.get(0);
+        to_global(r, v);
+    }));
+    assert_ne!(s[&1] & SP, 0, "{s:x?}");
+}
+
+#[test]
+fn a_call_to_code_not_lifted_takes_r0_to_r3_alone() {
+    // Not lifted: what it gets may be stored, r0-r3 only (all a call
+    // passes); and it may hand back what it got.
+    let s = stores_of(&lend(0, 77, |_| {}, |_| {}));
+    assert_ne!(s[&1] & SP, 0, "{s:x?}");
+    let s = stores_of(&lend(7, 77, |_| {}, |_| {}));
+    assert_eq!(s[&1] & SP, 0, "{s:x?}");
+}
+
+#[test]
+fn a_stack_address_stored_to_io_alone_isnt_stored() {
+    // A DMA's source: the native check doesn't compare it.
+    let mut b = B::default();
+    b.prologue();
+    let p = b.sp(0);
+    let dma = b.k(0x0400_00D4);
+    b.st(dma, p);
+    let s = stores_of(&vec![func(1, vec![(1, b, Edge::Return)])]);
+    assert_eq!(s[&1] & SP, 0, "{s:x?}");
+    let mut b = B::default();
+    b.prologue();
+    let p = b.sp(0);
+    to_global(&mut b, p);
+    let s = stores_of(&vec![func(1, vec![(1, b, Edge::Return)])]);
+    assert_ne!(s[&1] & SP, 0, "{s:x?}");
+}
+
+#[test]
+fn a_spill_slot_reused_holds_only_what_was_last_stored() {
+    // A pointer to a local spilled to a slot, then a number over it, then
+    // the slot stored to a global: the number goes, not the pointer.
+    let mut b = B::default();
+    b.prologue();
+    let slot = b.sp(4);
+    let p = b.sp(0);
+    b.st(slot, p);
+    let slot = b.sp(4);
+    let n = b.k(5);
+    b.st(slot, n);
+    let slot = b.sp(4);
+    let v = b.ld(slot);
+    to_global(&mut b, v);
+    let s = stores_of(&vec![func(1, vec![(1, b, Edge::Return)])]);
+    assert_eq!(s[&1] & SP, 0, "{s:x?}");
+}
+
+/// `native/lift-stack-arrays`: every function takes r0 (known), takes
+/// none of r4-r11, and no caller reads a result.
+struct LendR0;
+
+impl lend::LendEnv for LendR0 {
+    fn params(&self, _: u32) -> (u8, bool) {
+        (1, true)
+    }
+    fn takes(&self, _: u32) -> u16 {
+        0
+    }
+    fn read_after(&self, _: u32) -> u8 {
+        0
+    }
+    fn taken(&self, _: u32) -> bool {
+        false
+    }
+}
+
+fn lends_of(fns: &Fns) -> lend::Lends {
+    let fs: Vec<(u32, BTreeMap<u32, FBlock>)> = fns
+        .iter()
+        .map(|(e, bs)| {
+            let m = bs
+                .iter()
+                .map(|(k, insts, edge)| {
+                    (
+                        *k,
+                        FBlock {
+                            insts,
+                            edges: BTreeMap::from([(insts.len() - 1, edge.clone())]),
+                        },
+                    )
+                })
+                .collect();
+            (*e, m)
+        })
+        .collect();
+    let frames = frames(&fs, &AllFour);
+    lend::lends(&fs, &frames, &LendR0)
+}
+
+/// Function 1 writes its local at -16, passes its address in r0 to `2`,
+/// then reads the word at -12; `callee` is function 2's one block.
+fn lender(callee: B) -> Fns {
+    let mut a = B::default();
+    a.prologue();
+    let l = a.sp(0);
+    let five = a.k(5);
+    a.st(l, five);
+    a.set(0, l);
+    let mut b = B::default();
+    let l = b.sp(4);
+    b.ld(l);
+    vec![
+        func(
+            1,
+            vec![
+                (
+                    1,
+                    a,
+                    Edge::Call {
+                        target: Some(2),
+                        ret: 3,
+                    },
+                ),
+                (3, b, Edge::Return),
+            ],
+        ),
+        func(2, vec![(2, callee, Edge::Return)]),
+    ]
+}
+
+#[test]
+fn a_slot_passed_to_a_borrowing_callee_is_lent() {
+    // The callee reads and writes through r0 + 4.
+    let mut c = B::default();
+    let p = c.get(0);
+    let four = c.k(4);
+    let q = c.add(p, four);
+    let x = c.ld(q);
+    c.st(q, x);
+    let l = lends_of(&lender(c));
+    assert_eq!(l.borrowed, BTreeMap::from([(2, 1)]));
+    // It reaches bytes 4..8 of what it was passed: the slot at -12 is
+    // lent; the one at -16, which the frame took to escape with it (an
+    // object runs up to the saved r4 at -8), is reached by nothing.
+    assert_eq!(l.lent, BTreeMap::from([(1, BTreeSet::from([-12]))]));
+}
+
+#[test]
+fn a_callee_storing_its_pointer_borrows_nothing() {
+    // `*(0x03000000) = r0`: the address reaches RAM.
+    let mut c = B::default();
+    let p = c.get(0);
+    let g = c.k(0x0300_0000);
+    c.st(g, p);
+    let l = lends_of(&lender(c));
+    assert!(l.borrowed.is_empty());
+    assert!(l.lent.is_empty());
+}
+
+#[test]
+fn a_callee_another_caller_passes_ram_borrows_nothing() {
+    let mut c = B::default();
+    let p = c.get(0);
+    c.ld(p);
+    let mut fns = lender(c);
+    // Function 4 passes a global's address to 2.
+    let mut d = B::default();
+    let g = d.k(0x0300_0000);
+    d.set(0, g);
+    fns.push(func(
+        4,
+        vec![
+            (
+                4,
+                d,
+                Edge::Call {
+                    target: Some(2),
+                    ret: 5,
+                },
+            ),
+            (5, B::default(), Edge::Return),
+        ],
+    ));
+    let l = lends_of(&fns);
+    assert!(l.borrowed.is_empty());
+    assert!(l.lent.is_empty());
 }

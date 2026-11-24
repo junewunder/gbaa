@@ -14,10 +14,12 @@ Source only in git. GCC writes DWARF 2 (`-gdwarf-2 -gstrict-dwarf`), as
 agbcc does (`pret-names` reads GCC 15's default DWARF 5 as well, and the
 location lists both give: native/names-location-lists; `gba.ld` keeps
 DWARF 5's sections). `names/c-<name>-<cc>.toml`
-are the programs' names files (`target/release/pret-names ELF ROM OUT`),
-which give their lifts types (native/lift-typed-access); a changed ROM
-needs its file made again, or its lift has no names.
+are the programs' names files (`target/release/pret-names ELF ROM OUT`;
+`just c-names NAME` for one whose source's `#define`s the file names,
+c/switch's), which give their lifts types (native/lift-typed-access); a
+changed ROM needs its file made again, or its lift has no names.
 
+- A program's own `.s` files are assembled into it too (`jump/setjmp.s`).
 - `common/`: our own start-up and hardware, no game's or library's code
   (no libtonc, no libgba). `crt0.s` (ARM: points the BIOS's IRQ vector at
   its `irq_handler`, copies `.data`, zeroes `.bss` and `.ewram`, calls
@@ -47,9 +49,12 @@ needs its file made again, or its lift has no names.
 | `switch/`   | switches compiled to jump tables: a script interpreter, a state machine; a sparse one compiled to compares |
 | `chain/`    | a stack struct passed by pointer down a call chain; a struct returned by value |
 | `heap/`     | a first-fit allocator; sprites, a menu and short-lived effects allocated at three call sites, function pointers beside numbers in each |
-| `bits/`     | bitfields in a byte and a halfword through a pointer: written one field at a time, constant and computed, and read and written joined by the compiler |
+| `bits/`     | bitfields in a byte and a halfword through a pointer: written one field at a time, constant and computed, and read and written joined by the compiler; a global's bitfields at its constant address |
+| `loops/`    | counted loops to a parameter, a global and a field; nested, counting down, breaking out, skipping rounds, a `u8` counter; arrays indexed by the counter: of structs, a field array through a pointer, two by one counter, a pointer stepped beside it |
+| `list/`     | a linked list over a static node pool: a free list and a sorted live list through one `next`, inserted into through a `Node **`, removed from and walked each frame, an `act` function pointer per node |
+| `jump/`     | errors thrown with `longjmp` out of a recursion to an outer and an inner `setjmp` (`setjmp.s`: the ARM pair behind Thumb entries, a program's own assembly) |
 
-The five programs (ten ROMs) are in the lifter's check (`just
+The eight programs (sixteen ROMs) are in the lifter's check (`just
 lift-check`, `crates/codegen/lift-check.toml`'s `c-*` tables, routes
 `units/c-<name>-<cc>-600.toml`), each with a planted store. A new program:
 copy `template/`, write its `SCENE.md`, run `just c-tests`, then add its

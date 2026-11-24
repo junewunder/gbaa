@@ -485,7 +485,9 @@ fn what_a_probe_says() {
 
 /// m4a's `ply_*` routines keep the return address in r12 (`mov r12, lr`)
 /// and leave by `bx r12`: a return, not an unresolved jump. A `bx` through
-/// any other register stays a jump.
+/// any other register, with sp and lr as they came, is a tail call through
+/// a pointer (librfu's callback stubs under modern GCC); with a frame
+/// pushed it stays a jump.
 #[test]
 fn bx_through_a_copy_of_lr_is_a_return() {
     let mut a = Asm::new();
@@ -502,7 +504,27 @@ fn bx_through_a_copy_of_lr_is_a_return() {
         .h(0x02, 0x4760); // bx r12
     let p = a.program(0x04);
     let r = crate::vsa::func::analyze(&p, ROM_BASE, true, &mut |_, _| Bl::Call);
-    assert_eq!(r.jumps[&(ROM_BASE + 0x02)], JumpRes::Unresolved);
+    assert!(r.jumps.is_empty(), "{:?}", r.jumps);
+    assert_eq!(r.tail_calls, [ROM_BASE + 0x02].into());
+    // A stub of it still leaves: a `bl` to one isn't a call that never
+    // returns.
+    assert_eq!(probe_says(&r, Bl::Call), Bl::Call);
+
+    let mut a = Asm::new();
+    a.h(0x00, 0xb510) // push {r4, lr}
+        .h(0x02, 0x468c) // mov r12, r1
+        .h(0x04, 0x4760); // bx r12
+    let p = a.program(0x06);
+    let r = crate::vsa::func::analyze(&p, ROM_BASE, true, &mut |_, _| Bl::Call);
+    assert_eq!(r.jumps[&(ROM_BASE + 0x04)], JumpRes::Unresolved);
+    assert!(r.tail_calls.is_empty());
+
+    // `mov pc` isn't a tail call however sp and lr stand: a switch's.
+    let mut a = Asm::new();
+    a.h(0x00, 0x468f); // mov pc, r1
+    let p = a.program(0x02);
+    let r = crate::vsa::func::analyze(&p, ROM_BASE, true, &mut |_, _| Bl::Call);
+    assert_eq!(r.jumps[&ROM_BASE], JumpRes::Unresolved);
 }
 
 /// A `bl` to an interworking veneer (`bx pc; nop`, then ARM code)

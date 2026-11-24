@@ -1,0 +1,12 @@
+# agb/native-ram-jump for 600 frames with no input: the RAM-jump program of
+# the stage-A lifter's check (native/ram-jump-passes-regs; `just lift-check`),
+# its lift (gbaa-lift) against the play build at --timing native by
+# route-check --native. What it draws: agb/native-ram-jump/SCENE.md.
+rom = "$GBAA_DATA/agb/native-ram-jump.gba"
+
+[[checkpoint]]
+name = "native-ram-jump-600"
+frame = 600
+hash = "ba172157a4755a93"
+# Verified: mGBA 0.10.5 (`just mgba-diff`) draws the same at frame 600
+# (2026-11-24).

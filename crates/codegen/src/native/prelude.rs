@@ -77,6 +77,10 @@ pub struct Game {
     /// The return address of the last call of a stand-in that reads it
     /// (`lr = true` in its holes file): the caller's `bl` sets it.
     pub lr: u32,
+    /// r4-r11 as a function that gives them back to its callers left
+    /// them (hand-written code sharing its caller's registers): its
+    /// returns set it, the direct call takes them (`native/lift-gives`).
+    pub gave: [u32; 8],
     /// The tasks a game's task switcher runs ([`task_resume`]).
     pub tasks: Tasks,
     /// Where a `SoftReset` restarts the program ([`soft_reset`]), while
@@ -182,12 +186,14 @@ impl Game {
             banked: [IRQ_STACK, 0x0300_7FE0, 0],
             spsr: 0,
             lr: RET,
+            gave: [0; 8],
             tasks: Tasks::default(),
             reset: None,
             bios_latch: runtime::bus::BIOS_LATCH_AFTER_BOOT,
         });
         // The save chip the ROM's library tag names, as the play build's bus.
         g.hw.save = runtime::save::Save::new(runtime::save::Kind::detect(ROM));
+        g.hw.gpio = runtime::gpio::Gpio::for_rom(ROM);
         g.hw.irq.set_handler(irq_entry);
         g.hw.on_frame_end(record);
         g
@@ -249,7 +255,7 @@ fn irq_entry(g: &mut Game) {
         return;
     }
     g.bios_latch = runtime::bus::BIOS_LATCH_IN_IRQ;
-    let k = if h & 1 != 0 { h } else { h & !3 };
+    let k = if h & 1 != 0 || is_dense_id(h) { h } else { h & !3 };
     // IRQ mode, I set, as the exception enters it, the CPSR it stopped in
     // the SPSR; back as it was on the return (the BIOS's `subs pc, lr,
     // #4` restores the SPSR, which a wrapper that nests puts back). The
@@ -406,6 +412,15 @@ fn unexplained(a: u32, off: usize, e: usize, n: usize) -> ! {
 #[repr(transparent)]
 pub struct Ref<T>(pub u32, std::marker::PhantomData<T>);
 
+// A copy, whatever `T` is (a derive would ask `T: Copy`): a pointer
+// variable is declared one (native/lift-pointer-types).
+impl<T> Clone for Ref<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T> Copy for Ref<T> {}
+
 impl<T> Ref<T> {
     #[inline(always)]
     pub fn new(a: u32) -> Ref<T> {
@@ -416,6 +431,14 @@ impl<T> Ref<T> {
     #[inline(always)]
     pub fn to(a: u32, off: u32) -> Ref<T> {
         Ref(a.wrapping_sub(off), std::marker::PhantomData)
+    }
+
+    /// The guest address: C's `&x` of what this points at, an element's
+    /// or a field's address printed by name (native/lift-element-address),
+    /// or a pointer variable used as a number (native/lift-pointer-types).
+    #[inline(always)]
+    pub const fn addr(self) -> u32 {
+        self.0
     }
 }
 
@@ -525,6 +548,12 @@ fn io_write16(g: &mut Game, o: u32, v: u32) {
     hw::write_io(g, o, v as u16);
 }
 
+/// A ROM halfword the program loads: the GPIO port's registers once it
+/// has taken a store, as runtime::bus's.
+fn rom_half(g: &Game, o: usize) -> u32 {
+    g.hw.gpio.read(o).map_or_else(|| rom16(o), u32::from)
+}
+
 fn rom16(o: usize) -> u32 {
     // Past the ROM's end, the texts an edit made longer (`text::EXTRA`).
     let moved = || {
@@ -563,7 +592,7 @@ pub fn ld8(g: &mut Game, a: u32) -> u32 {
         7 => g.hw.ppu.oam[(a & 0x3FF) as usize] as u32,
         8..=0xD => {
             let o = (a & 0x1FF_FFFF) as usize;
-            (rom16(o & !1) >> ((o & 1) * 8)) & 0xFF
+            (rom_half(g, o & !1) >> ((o & 1) * 8)) & 0xFF
         }
         0 if a < BIOS_SIZE => bios_read(g, a, 1),
         0xE | 0xF => g.hw.save.read(a as u16) as u32,
@@ -583,7 +612,7 @@ pub fn ld16(g: &mut Game, a: u32) -> u32 {
         6 => vram_at(g, a).map_or(0, |o| le(&g.hw.ppu.vram, o)),
         7 => le(&g.hw.ppu.oam, (a & 0x3FE) as usize),
         0xD if eeprom_at(g, a) => g.hw.save.eeprom_status() as u32,
-        8..=0xD => rom16((a & 0x1FF_FFFE) as usize),
+        8..=0xD => rom_half(g, (a & 0x1FF_FFFE) as usize),
         0 if a < BIOS_SIZE => bios_read(g, a, 2),
         // The save has an 8-bit bus: wider loads see the byte repeated.
         0xE | 0xF => g.hw.save.read((a & !1) as u16) as u32 * 0x0101,
@@ -603,7 +632,7 @@ pub fn ld32(g: &mut Game, a: u32) -> u32 {
         }
         5..=7 => ld16(g, a) | ld16(g, a.wrapping_add(2)) << 16,
         // ROM (the EEPROM answers halfword loads only, as the play build's).
-        8..=0xD => rom16((a & 0x1FF_FFFE) as usize) | rom16((a.wrapping_add(2) & 0x1FF_FFFE) as usize) << 16,
+        8..=0xD => rom_half(g, (a & 0x1FF_FFFE) as usize) | rom_half(g, (a.wrapping_add(2) & 0x1FF_FFFE) as usize) << 16,
         0xE | 0xF => g.hw.save.read((a & !3) as u16) as u32 * 0x0101_0101,
         0 if a < BIOS_SIZE => bios_read(g, a, 4),
         _ => unmapped("a word load", a),
@@ -618,8 +647,9 @@ pub fn st8(g: &mut Game, a: u32, v: u32) {
         return;
     }
     match a >> 24 {
-        // POSTFLG and HALTCNT: a byte, not a halfword, as only one halts.
+        // POSTFLG and HALTCNT (only one halts), a sound or timer register: a byte, as the play build's bus.
         4 if io_at(a) & !1 == runtime::io::reg::POSTFLG => hw::write_postflg8(g, io_at(a), v),
+        4 if !io_unused(io_at(a) & !1) && hw::write_io8(g, io_at(a), v) => {}
         4 => {
             let o = io_at(a);
             let shift = (o & 1) * 8;
@@ -677,7 +707,9 @@ pub fn st16(g: &mut Game, a: u32, v: u32) {
             g.hw.ppu.oam[o..o + 2].copy_from_slice(&b);
         }
         0xD if eeprom_at(g, a) => g.hw.save.eeprom_write(v as u16, 1),
-        0 | 1 | 8..=0xD => {}
+        // The cartridge's GPIO port (its clock), as runtime::bus.
+        8 => g.hw.gpio.write(a & 0xFF_FFFE, v as u16),
+        0 | 1 | 9..=0xD => {}
         // The addressed byte lane at the unaligned address, as runtime::bus;
         // mGBA 0.10.5 drops these stores (units/native-save-600.toml).
         0xE | 0xF => g.hw.save.write(a as u16, b[(a & 1) as usize]),
@@ -1091,11 +1123,14 @@ pub fn sound_bias(g: &mut Game, level: u32) {
     st16(g, SOUNDBIAS, old & !0x3FF | if level == 0 { 0 } else { 0x200 });
 }
 
-/// A function pointer's call: `k` is the function's key (its ROM or IWRAM
-/// address, bit 0 for Thumb), the ID of every function in stage A
-/// (`--fn-ids rom`).
+/// A function pointer's call: `k` is the function's ID, its key (its ROM
+/// or IWRAM address, bit 0 for Thumb), or at `--fn-ids dense` for a
+/// function the flow proved its index in `DENSE` from 1.
 #[inline(never)]
 pub fn call_fn(g: &mut Game, k: u32, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+    if is_dense_id(k) {
+        return (DENSE[k as usize - 1])(g, sp, a);
+    }
     match FNS.binary_search_by_key(&k, |&(e, _)| e) {
         Ok(i) => (FNS[i].1)(g, sp, a),
         Err(_) => match flash_call(g, k, a) {
@@ -1103,6 +1138,39 @@ pub fn call_fn(g: &mut Game, k: u32, sp: u32, a: [u32; 4]) -> Result<[u32; 4], E
             None => panic!("a call or jump to {k:#010x}, which is no function's entry"),
         },
     }
+}
+
+/// A context restore's return (`longjmp`'s; native/lift-longjmp): into
+/// the caller of the save that stored `buf`, with r0-r3, by unwinding.
+pub fn restore(buf: u32, r: [u32; 4]) -> ! {
+    std::panic::resume_unwind(Box::new(Restored { buf, r }))
+}
+
+/// What a [`restore`] unwinds with.
+pub struct Restored {
+    buf: u32,
+    r: [u32; 4],
+}
+
+/// A catch point's body (a caller of `setjmp`), run till a [`restore`].
+pub fn catch_restore<T>(body: impl FnOnce() -> T) -> Result<T, Box<dyn std::any::Any + Send>> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(body))
+}
+
+/// The registers a restore of `buf` returns with; any other unwinding
+/// (another buffer's, a panic) goes on up.
+pub fn restored(thrown: Box<dyn std::any::Any + Send>, buf: u32) -> [u32; 4] {
+    match thrown.downcast::<Restored>() {
+        Ok(t) if buf != 0 && t.buf == buf => t.r,
+        Ok(t) => std::panic::resume_unwind(t),
+        Err(p) => std::panic::resume_unwind(p),
+    }
+}
+
+/// Whether `k` is a dense function's ID (`--fn-ids dense`).
+#[inline(always)]
+pub fn is_dense_id(k: u32) -> bool {
+    k.wrapping_sub(1) < DENSE.len() as u32
 }
 
 /// A call into RAM holding one of the flash save library's stack routines
