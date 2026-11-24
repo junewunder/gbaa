@@ -4075,3 +4075,4 @@
 {"at":"2026-11-24T14:32:02Z","actor":"loop","tag":"66d510b9","host":"quack","cmd":"done","id":"native/land-emerald-route-lifter","text":"Land the Emerald route branch's lifter parts on main: done"}
 {"at":"2026-11-24T14:38:16Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/land-emerald-route-lifter","text":"Land the Emerald route branch's lifter parts on main: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-24T14:38:22Z","actor":"loop","tag":"209afec8","host":"quack","cmd":"claim","id":"native/land-emerald-route-lifter","text":"Land the Emerald route branch's lifter parts on main: claimed"}
+{"at":"2026-11-24T14:45:46Z","actor":"loop","tag":"d938b67f","host":"quack","cmd":"done","id":"native/lift-let-names","text":"A value read twice is named for what it holds: done"}
