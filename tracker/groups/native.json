@@ -4154,16 +4154,17 @@
       "detail": "From {unit:native/lift-agent-mod} (hurt 3): nothing on the lift's path found SamusInit as the writer of gEquipment.maxEnergy; the agent grepped the decomp (the obvious sStartingHealthAmmo is the wrong place). The mod view's just mod-find ROM '' maxEnergy answers it but the mod view is being retired. A gbaa-lift --find FIELD (or a just recipe) lists the lifted functions writing and reading a named field or global, with their line comments, and the --cut entry in docs/tools/commands.md points to it. Check: on Metroid it names SamusInit for maxEnergy; just check.",
       "record": {
         "state": "claimed",
-        "by": "7a3a3987",
-        "session": "7a3a3987-2cca-4058-b5dc-7828326f164d",
+        "by": "7733e7b3",
+        "session": "7733e7b3-848d-4547-83f2-b203bc3df8ef",
         "host": "quack",
-        "pid": 3423777,
-        "start": "57918139",
-        "at": "2026-11-20T13:43:19Z",
+        "pid": 2962519,
+        "start": "95218086",
+        "at": "2026-11-24T05:14:52Z",
         "branch": "unit/native/lift-find-field",
-        "beats": true,
+        "resumed": "7a3a3987",
+        "prevSession": "7a3a3987-2cca-4058-b5dc-7828326f164d",
         "pushed": true,
-        "ended": "2026-11-20T13:54:12Z"
+        "beats": true
       },
       "notes": [
         {
