@@ -4430,26 +4430,12 @@
       "detail": "A context restore (newlib's longjmp, ldm r0!,{r4-r12,sp,lr}; moonbeam 0x08038328, Duktape's error throw) is a CPU state hard hole in every lift that has one (Minish Cap's OAM builder longjmps on overflow too). Lift it generally: e.g. setjmp's caller as a catch point the restore unwinds to (a Rust panic or a loop over a resume flag), r4-r11 and sp from the saved block. Done when: moonbeam's longjmp is no hard hole, a C test program using setjmp/longjmp (both compilers) passes the lift check, just check passes.",
       "uses": ["heavy"],
       "tags": ["native"],
-      "record": {
-        "state": "done",
-        "by": "eb832f19",
-        "at": "2026-11-24T10:58:50Z",
-        "evidence": "A restore a save matches now unwinds to the save's direct caller (codegen::native::longjmp, prelude restore/catch_restore; decision 'A context restore unwinds to its save's direct caller'). moonbeam lift: 6 hard holes, longjmp's 0x08038328 restore gone (2 catch points printed). New c/jump (setjmp.s, newlib's shape) both compilers: lift-check --only c-jump-gcc and c-jump-agbcc pass (0 hard holes, 600 frames equal to the play build incl. packed/dense, planted store caught; frame 600 c65f548e64c1e8f9 = mGBA). All 36 lift-check tables within bars. just check passed after merging main. Unit test a_context_restore_a_save_matches_unwinds_to_the_saves_caller.",
-        "branch": "unit/native/lift-longjmp",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-24T10:58:50Z",
-          "by": "eb832f19",
-          "host": "quack",
-          "pid": 2962048,
-          "start": "95217572",
-          "beats": true,
-          "session": "eb832f19-0499-490c-aa4c-e04d62575dea",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
       "notes": [
+        {
+          "at": "2026-11-24T11:04:20Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/native.rs:9063-9127: the new `CTX_REGS`, `CTX_BACK`, `catch_form` and `fill_ctx_regs` were inserted between `ret_ty`'s doc comment and `fn ret_ty`. As a result, the line `/// A function's re…"
+        },
         {
           "at": "2026-11-24T10:58:55Z",
           "by": "eb832f19",
@@ -4461,6 +4447,18 @@
           "text": "Minish Cap has two: OAM builder 0x030065e8 (ldr sp,[r11,#20]; ldr pc,[r11,#24], holes at 0x03006708/0x0300670c) and 0x03005f24, UpdateEntities' resume (DeleteThisEntity): sp from a global struct [0x03005fe4..+12], then into the loop at 0x03005fa4. Not setjmp's ldm block."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-24T11:04:20Z",
+        "findings": "- crates/codegen/src/native.rs:9063-9127: the new `CTX_REGS`, `CTX_BACK`, `catch_form` and `fill_ctx_regs` were inserted between `ret_ty`'s doc comment and `fn ret_ty`. As a result, the line `/// A function's return type: all of r0-r3 (None), or its results.` now attaches to `const CTX_REGS`, so CTX_REGS shows two unrelated doc paragraphs and `ret_ty` has no doc comment. To fix, move that `///` line back to just above `fn ret_ty` (around line 9127), or move the four new items above it so the doc line stays above `fn ret_ty`.",
+        "sent": {
+          "evidence": "A restore a save matches now unwinds to the save's direct caller (codegen::native::longjmp, prelude restore/catch_restore; decision 'A context restore unwinds to its save's direct caller'). moonbeam lift: 6 hard holes, longjmp's 0x08038328 restore gone (2 catch points printed). New c/jump (setjmp.s, newlib's shape) both compilers: lift-check --only c-jump-gcc and c-jump-agbcc pass (0 hard holes, 600 frames equal to the play build incl. packed/dense, planted store caught; frame 600 c65f548e64c1e8f9 = mGBA). All 36 lift-check tables within bars. just check passed after merging main. Unit test a_context_restore_a_save_matches_unwinds_to_the_saves_caller.",
+          "by": "eb832f19",
+          "host": "quack",
+          "branch": "unit/native/lift-longjmp",
+          "change": "a1390a322a0059b93331f6f32c8eb5abc564ff7d"
+        }
+      },
       "round": "2026-11-24T10:13:40Z"
     },
     {
