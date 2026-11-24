@@ -1066,6 +1066,17 @@
         "native/lift-mod-run",
         "native/lift-agent-mod"
       ],
+      "record": {
+        "state": "claimed",
+        "by": "2ddc0f0e",
+        "session": "2ddc0f0e-b949-424a-a034-82dcabd6d691",
+        "host": "quack",
+        "pid": 1558077,
+        "start": "100707199",
+        "at": "2026-11-24T21:53:53Z",
+        "branch": "unit/mod/retire",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-20T13:50:54Z",

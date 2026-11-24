@@ -4199,3 +4199,4 @@
 {"at":"2026-11-24T21:49:24Z","actor":"loop","tag":"2137232b","host":"quack","cmd":"done","id":"native/names-straddling-bitfields","text":"pret-names places agbcc's bitfield that straddles its unit: done"}
 {"at":"2026-11-24T21:53:48Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane4-native-lift-for-step-via","text":"Merge main on quack lane 4: on main"}
 {"at":"2026-11-24T21:53:48Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-for-step-via","text":"A counter stepped through a second register prints as for: on main"}
+{"at":"2026-11-24T21:53:53Z","actor":"loop","tag":"2ddc0f0e","host":"quack","cmd":"claim","id":"mod/retire","text":"The mod view is retired: claimed"}
