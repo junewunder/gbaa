@@ -3898,6 +3898,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T13:24:50Z",
+          "by": "e3ab08da",
+          "text": "mods/emerald/holes.toml has [[roots]], which main's gbaa-lift/gbaa-holes reject (unknown table roots): Emerald drops out of holes-all until that lands. Full lift-check after the merge wasn't rerun to the end; bars pass."
+        },
+        {
           "at": "2026-11-20T13:04:13Z",
           "by": "d72f2c00",
           "text": "Jumps: mov pc tables at lits 0x08020814 (table 0x08149df8, idx (r4+13)&0xffff), 0x080275b8 (0x08149e78, idx = 0x08010b7c's return), 0x0802dd3c (0x08149f08, r11). Tables abut, so length isn't next-table: keep entries inside each fn; find bounds. Summary: 0x08025a29 reads r8."
