@@ -31,3 +31,14 @@ What found Metroid's six timing causes in one session (native/metroid-native-che
   meant a store's width: native `st8` made a byte store to a sound register a halfword, retriggering.
 - **VCOUNT only, frame 1**: the native `sync` presented after its whole walk, the play build's stops at
   the V-blank (sched.rs `catch_up`, 2026-11-18). A big boot DMA overshoots by tens of lines.
+- **route-check stops at the first failing check** (Emerald, native/emerald-native-route, 2026-11-23):
+  when the play build's compiled run differs from its interpreter, the lift isn't compared at all, but
+  all three records are written. Diff `interp.rec` against `native.rec` yourself (the Python reader
+  above, skipping the stack from the lowest sp, the code copies and `KEYINPUT`, which the check
+  doesn't compare) to see every cause at once. Two 1.7 GB records diff in a few minutes in plain
+  Python if each region is compared in 256-byte chunks before byte by byte.
+- **What Emerald showed**: an RTC the play build has and the lift lacked (rtc.c's `sErrorStatus`
+  0x90, frame 10; now `Hw::gpio`); a function only data points at (tileset callbacks; the holes
+  file's `[[roots]]`); bytes copied from uninitialised stack (struct padding), which differ because
+  the lift never writes folded pushes to IWRAM. Name each address with the pokeemerald ELF's `nm -S`
+  and the `.map` (the `.bss` of an object file when `nm` has no symbol).
