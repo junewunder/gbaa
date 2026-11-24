@@ -4729,7 +4729,14 @@
       "id": "native/lift-rtc",
       "title": "A lifted game's cartridge clock answers (Emerald's RTC)",
       "detail": "june played Emerald's lift (2026-11-20, main 59263d82, target/recompiled/release/gbaa-native-emerald --scale 4) and got the game's message that the internal battery has run dry: the cartridge's real-time clock doesn't answer natively. The play build has it: runtime::gpio (the GPIO port at 0x080000C4-C9 and the Seiko S-3511 behind it, as mGBA's, by game code HAS_RTC), on the bus (crates/runtime/src/bus.rs). The lifted program's loads and stores don't reach it: the native hardware library has no GPIO port, so the game's clock probe reads the ROM's own bytes. Give the native side the same port (the lift's halfword stores and loads at those addresses going to runtime::gpio's model, the clock's time from the host as the play build takes it), with a test program or a route that reads the clock, and the native check comparing it against the play build. Done when: Emerald's lift boots without the battery message and its clock reads as the play build's on a route (route-check --native, 0 differences); just check passes.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-24T13:30:53Z",
+          "by": "9a39864c",
+          "text": "The Emerald route branch (commit e9b0b8c9) may already do this; {unit:native/land-emerald-route-lifter} brings it to main first. Check it before starting."
+        }
+      ]
     },
     {
       "id": "native/emerald-naming-stop",
