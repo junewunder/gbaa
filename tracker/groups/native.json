@@ -561,6 +561,17 @@
       "needs": ["native/fnref-dense"],
       "uses": ["heavy"],
       "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "09555f4f",
+        "session": "09555f4f-b148-4f91-83c9-22e57ab92c10",
+        "host": "quack",
+        "pid": 2964711,
+        "start": "95219683",
+        "at": "2026-11-24T07:03:03Z",
+        "branch": "unit/native/rom-statics",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-20T04:16:21Z",
@@ -577,7 +588,8 @@
           "by": "cec56176",
           "text": "From {unit:native/ram-globals}: every constant ROM load was a dead literal-pool load (the IR has the word as Pool); the lifter now drops unused ROM loads, so load_const_rom is 0 on all programs and this unit's bar is effectively the computed ROM loads."
         }
-      ]
+      ],
+      "round": "2026-11-24T07:03:03Z"
     },
     {
       "id": "native/ram-globals",
