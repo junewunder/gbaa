@@ -4430,6 +4430,17 @@
       "detail": "A context restore (newlib's longjmp, ldm r0!,{r4-r12,sp,lr}; moonbeam 0x08038328, Duktape's error throw) is a CPU state hard hole in every lift that has one (Minish Cap's OAM builder longjmps on overflow too). Lift it generally: e.g. setjmp's caller as a catch point the restore unwinds to (a Rust panic or a loop over a resume flag), r4-r11 and sp from the saved block. Done when: moonbeam's longjmp is no hard hole, a C test program using setjmp/longjmp (both compilers) passes the lift check, just check passes.",
       "uses": ["heavy"],
       "tags": ["native"],
+      "record": {
+        "state": "claimed",
+        "by": "fd9d0b98",
+        "session": "fd9d0b98-cdac-4f2e-8216-f606fefdbd7f",
+        "host": "quack",
+        "pid": 2962048,
+        "start": "95217572",
+        "at": "2026-11-24T11:04:26Z",
+        "branch": "unit/native/lift-longjmp",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-24T11:04:20Z",
