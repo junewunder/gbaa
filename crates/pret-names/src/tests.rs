@@ -594,3 +594,39 @@ fn a_parameter_takes_the_family_pret_calls_pass_it() {
     );
     assert!(m.typed.has_values());
 }
+
+#[test]
+fn a_bitfield_straddling_its_unit_is_placed_from_lower() {
+    use dwarf::place_bits;
+    // agbcc's struct { u8 a:4, b:2, c:1, d:1; u16 beats:10; }: `beats`
+    // is at bits 8-17, DWARF 2 a u16 unit at 2 with bit_offset 14.
+    assert_eq!(
+        place_bits(2, 2, Some(10), Some(14), None),
+        (0, 4, Some((8, 10)))
+    );
+    // The byte's fields stay as they were: `a` at bits 0-3, `d` at 7.
+    assert_eq!(
+        place_bits(0, 1, Some(4), Some(4), None),
+        (0, 1, Some((0, 4)))
+    );
+    assert_eq!(
+        place_bits(0, 1, Some(1), Some(0), None),
+        (0, 1, Some((7, 1)))
+    );
+    // A u16 field inside its unit: `level : 6` after `beats : 10`.
+    assert_eq!(
+        place_bits(0, 2, Some(6), Some(0), None),
+        (0, 2, Some((10, 6)))
+    );
+    // DWARF 4 counts from the struct's start: the same straddle.
+    assert_eq!(
+        place_bits(0, 2, Some(10), None, Some(8)),
+        (0, 4, Some((8, 10)))
+    );
+    assert_eq!(
+        place_bits(0, 2, Some(6), None, Some(26)),
+        (2, 2, Some((10, 6)))
+    );
+    // Not a bitfield.
+    assert_eq!(place_bits(4, 2, None, None, None), (4, 2, None));
+}
