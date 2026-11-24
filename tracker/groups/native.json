@@ -3999,15 +3999,23 @@
       "needs": ["native/lift-agent-mod", "native/mirror-native-route"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "e4b6a739",
-        "session": "e4b6a739-32a1-41e4-a7f8-b109b54dbac3",
-        "host": "quack",
-        "pid": 2962519,
-        "start": "95218086",
-        "at": "2026-11-24T06:14:53Z",
+        "checker": "ae1c221bf0ba0378e",
+        "at": "2026-11-24T06:35:10Z",
+        "evidence": "Mod mods/kirby-mirror/walk-speed (private 860c5d4): KirbyGroundAccel walk cap 0x14c->0x298, one-line diff. lift-mod-run on units/kirby-mirror-native.toml: 1337 of 3000 frames differ, 1664-3000; verifier saw Kirby ahead at 1664 (red only on Kirby), hit by Waddle Dee at 1753, stock-hashes match the route's 1400/2200/3000 checkpoints and frames 1-1663 equal. Write-up docs/research/mirror-agent-mod.md (6 hurts ranked, fixes, vs Metroid); filed cut-callee-shapes, lift-find-on-route, names-keep-source-lines. just check passed after merging main.",
         "branch": "unit/native/mirror-agent-mod",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T06:35:10Z",
+          "by": "e4b6a739",
+          "host": "quack",
+          "pid": 2962519,
+          "start": "95218086",
+          "beats": true,
+          "session": "e4b6a739-32a1-41e4-a7f8-b109b54dbac3",
+          "lane": "quack/2"
+        }
       },
       "round": "2026-11-24T06:14:53Z"
     },
