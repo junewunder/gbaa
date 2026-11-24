@@ -110,6 +110,13 @@ any real game.
   handler runs on the right stack (once per run of such stores at one sp,
   native/lift-bank-sp-once). Control `--ime-at-waits`; program
   `agb/native-ime-release` (frame 601 matches mGBA).
+- **`IME` set again while I is set** (`native/ime-i-set-test-program`).
+  The play build dropped the `IME` write's release when I was set, so an
+  `msr` clearing I found nothing held; the lift takes it there, as mGBA
+  does. Done: `Machine::tick_native` marks what's pending as held then,
+  outside IRQ mode (a wrapper putting `IME` back returns through the
+  BIOS, where the lift runs nothing). Control `--irq-at-waits`; program
+  `agb/native-ime-i-set` (frame 601 matches mGBA).
 - **Task switchers on host coroutines** (`native/task-coroutines`). Done:
   a stack switch is a hard hole; the prelude's `task_resume` and kin run
   tasks on coroutines for the stand-ins. Program `agb/native-tasks`.
@@ -359,12 +366,8 @@ What the done pieces left open, for the units that come next.
   a fall passes on as parameters, so `x_` stays whole for fall targets. A
   stand-in, and a jump through a register to a target no table names
   (`call_fn`), are still entered by the plain entry.
-- **IME with I set** (piece 1). The play build drops `IME_ON` when I is
-  set at the tick after the `IME` write, so "I set, `IME` on, `msr`
-  clears I" waits for the next time point where the hardware library
-  takes it at the `msr`; fixing only the play build would split it from
-  the lift's IRQ wrapper. A store to `IME` through an address the
-  recompiler can't fold still ticks at its block's end.
+- **A store to `IME` the recompiler can't fold** (piece 1) still ticks
+  at its block's end, not at the store.
 - **Shapes return too much** (piece 3). Many shaped functions return all
   four registers, because a caller whose run stopped (a fall into library
   code) calls them, and a jump by value the run didn't prove a return
