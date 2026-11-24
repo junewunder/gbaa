@@ -998,6 +998,23 @@ lift rom out="" *flags:
     [ "$lifted" = 0 ] || exit "$lifted"
     exit "$first"
 
+# Where a field is set, for a mod's cut (native/lift-find-field; codegen::native::find_field; docs/tools/commands.md): lifts ROM as `just lift` does (its holes file, names from $GBAA_DATA/names and names/) without writing it, and lists the lifted functions that write and read FIELD (a field of a struct the names files type, in any global or through a typed pointer, or a datum by name: maxEnergy, gEquipment), writers and readers apart, by `// file:line` and path (gEquipment.maxEnergy); then those that may (their address one of several). FLAGS go to gbaa-lift (--name NAME for a ROM file name that isn't the game's). Fails when nothing names it. About 60 s and 1.2 GB on Metroid, not heavy.
+[positional-arguments]
+lift-find rom field *flags:
+    #!/usr/bin/env bash
+    set -eu
+    rom={{quote(join(invocation_directory(), rom))}}
+    field=$2
+    shift 2
+    name=$(basename "$rom" .gba | tr '[:upper:]' '[:lower:]')
+    prev=""
+    for a in "$@"; do [ "$prev" = --name ] && name=$a; prev=$a; done
+    holes=()
+    if [ -f "holes/$name.toml" ]; then holes=(--holes "holes/$name.toml")
+    elif [ -f "mods/$name/holes.toml" ]; then holes=(--holes "mods/$name/holes.toml"); fi
+    {{lock}} cargo build -q --release -p codegen --bin gbaa-lift
+    {{cap}} MemoryMax=4G target/release/gbaa-lift "$rom" --find "$field" "${holes[@]}" "$@"
+
 # The per-function check (native/fn-check-any, native/fn-check-interp; codegen::native's fn_check_texts and native/fn_check.rs; docs/tools/commands.md): lifts ROM with `gbaa-lift --fn-check KEY` for each KEY given (with the holes file as `just lift` finds it, and FLAGS: --replace FILE for replacements outside it, --seed N, --runs N, --plant AT for a planted wrong replacement of a function with no stand-in, --plant-reference to plant it in the lift too, --interp-every N), into out/fn-check-<name>, builds it and runs it headless: each function's replacement against its lift from the program's own calls and their variants, until every budget is spent. Prints per function its runs, budget, time, seed and digest, and the first differences with the byte named; and the runs the interpreter also checked against the lift, untimed, every Nth (8; native/fn-check-interp), and whether it agreed. --frames N (default 18000) is where it gives up waiting for calls. Fails on a difference or a budget not spent. Heavy: builds a generated crate.
 [positional-arguments]
 fn-check rom *flags:

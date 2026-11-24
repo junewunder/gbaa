@@ -3,7 +3,8 @@
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT]
 //! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
-//! [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...]`:
+//! [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...]`,
+//! or `gbaa-lift ROM --find FIELD [FLAGS]`:
 //! the stage-A lifter (`codegen::native`; docs/native-port-design.md,
 //! stage A). Writes the whole program as a Rust crate to OUT (`Cargo.toml`,
 //! `src/`, a copy of the ROM for its data, `report.txt`, and its metrics
@@ -143,6 +144,13 @@
 //! crate is written as usual. A lift with `--replace` of a cut whose
 //! `orig/` isn't what it prints says so: re-cut to merge.
 //!
+//! `--find FIELD` (unit `native/lift-find-field`; `just lift-find`;
+//! `codegen::native::find_field`) lifts and writes nothing (no OUT): it
+//! lists the functions whose loads and stores the lift places on FIELD,
+//! a field of a struct the names files type or a datum by name, writers
+//! then readers, by source line and path, then those whose address is
+//! one of several, the field's among them. Fails when nothing names it.
+//!
 //! `--holes-only` finds the hard holes and writes nothing (OUT is
 //! ignored): no function-address flow, heap pointers or modules
 //! (`codegen::native::Holes::holes_only`, the hole report's lift), so not
@@ -166,12 +174,16 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...] | gbaa-lift ROM --find FIELD [FLAGS]"
         );
         ExitCode::FAILURE
     };
-    let [rom, out, rest @ ..] = &args[..] else {
-        return usage();
+    // `gbaa-lift ROM --find FIELD` needs no OUT.
+    let finding = args.get(1).is_some_and(|a| a == "--find");
+    let (rom, out, rest) = match &args[..] {
+        [rom, rest @ ..] if finding => (rom, "", rest),
+        [rom, out, rest @ ..] => (rom, out.as_str(), rest),
+        _ => return usage(),
     };
     let (mut name, mut holes, mut bars) = (None, None, None);
     let mut names: Vec<PathBuf> = Vec::new();
@@ -191,6 +203,7 @@ fn main() -> ExitCode {
     let mut layout = codegen::native::globals::Layout::Guest;
     let mut text_edit = None;
     let (mut cut_dir, mut cut_keys): (Option<PathBuf>, Vec<String>) = (None, Vec::new());
+    let mut find: Option<String> = None;
     let hex = |s: &str| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok();
     let mut it = rest.iter().peekable();
     while let Some(a) = it.next() {
@@ -291,6 +304,7 @@ fn main() -> ExitCode {
             ("--plant", Some(a)) if hex(a).is_some() => plant = hex(a),
             ("--fn-check", Some(k)) if hex(k).is_some() => fn_check.push(hex(k).unwrap()),
             ("--replace", Some(f)) => replace = Some(PathBuf::from(f)),
+            ("--find", Some(f)) => find = Some(f.clone()),
             ("--text-edit", Some(f)) => text_edit = Some(PathBuf::from(f)),
             ("--seed", Some(n)) if n.parse::<u64>().is_ok() => seed = n.parse().ok(),
             ("--runs", Some(n)) if n.parse::<u32>().is_ok_and(|n| n > 0) => runs = n.parse().ok(),
@@ -427,6 +441,7 @@ fn main() -> ExitCode {
         return usage();
     }
     holes.holes_only = holes_only;
+    holes.find_touches = find.is_some();
     holes.holes_flow = holes_flow;
     // By default the mod view's maps (`$GBAA_DATA/names`, which apply only
     // by the ROM's sha1), with the repo's hand names over them.
@@ -571,6 +586,28 @@ fn main() -> ExitCode {
         None => None,
     };
     let lifted = codegen::native::lift(&bytes, &name, &holes);
+    if let Some(field) = &find {
+        use codegen::native::find_field;
+        let names = find_field::Names {
+            data: &holes.names,
+            types: holes.types.as_deref(),
+            lines: &holes.lines,
+            fns: &holes.fn_names,
+        };
+        if !find_field::known(field, &names) {
+            eprintln!(
+                "gbaa-lift: --find {field}: no names file has a field or datum of that name for this ROM"
+            );
+            return ExitCode::FAILURE;
+        }
+        let hits = find_field::find(&lifted.touches, field, &names);
+        print!("{}", find_field::report(field, &hits));
+        return if hits.is_empty() {
+            ExitCode::FAILURE
+        } else {
+            ExitCode::SUCCESS
+        };
+    }
     if holes_only {
         print!("{}", lifted.report);
         let n = codegen::native::holes_by_kind(&lifted.holes);
