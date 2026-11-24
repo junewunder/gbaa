@@ -4742,6 +4742,7 @@
     {
       "id": "native/lift-mod-run-ab",
       "title": "lift-mod-run compares a mod with its switch flipped",
+      "detail": "Showing a mod's switch (a const) off gives stock's frames took a copy of the mod with it flipped and a second full run (stock lifted again, 4.5 min), since lift-mod-run compares only with stock and writes over out/lift-mod-run/<route>/. Let it take a second mod, or --set NAME=VALUE, as the reference, and write under the mod's name. From docs/research/mirror-cpu-kirbys-off.md, hurt 4. Done: on Amazing Mirror's cpu-kirbys-off mod one command shows the switch on equals stock and off differs.",
       "uses": ["heavy"]
     }
   ]
