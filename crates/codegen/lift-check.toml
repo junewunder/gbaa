@@ -42,7 +42,8 @@
 # play build's bus, not its pair rewritten (Amazing Mirror's PSG differed).
 # lines_prelude raised 1337 -> 1364 (native/lift-longjmp): restore,
 # catch_restore and restored, a context restore's return by unwinding into
-# the caller of its save (setjmp's).
+# the caller of its save (setjmp's). native-ram-jump's, added beside it, was
+# left at 1337 until native/moonbeam-builds.
 # lines_prelude raised 1364 -> 1373 (native/land-emerald-route-lifter, from
 # native/emerald-native-route): ROM loads read the cartridge's GPIO port
 # (rom_half) and halfword ROM stores reach it, with Hw::gpio set from the ROM,
