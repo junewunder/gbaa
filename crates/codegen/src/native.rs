@@ -108,9 +108,10 @@
 //!   stops the program, so no call runs it on zeroes. A RAM copy's
 //!   function whose key the ROM holds only as a constant jump's literal
 //!   (m4a's mixer, from `SoundMain`'s `bx r3`) needs no `[[takes]]`: no
-//!   pointer reaches it ([`jump_literals`]), and a jumper that hands on a
-//!   register it takes as it came is a hard hole (unit
-//!   `native/ram-copy-jump-only`). A context save
+//!   pointer reaches it ([`jump_literals`]; unit
+//!   `native/ram-copy-jump-only`), and a jumper that hands on a register
+//!   it reads as it came takes it from its callers in turn
+//!   ([`Passing::foreign`], unit `native/ram-jump-passes-regs`). A context save
 //!   (`setjmp`'s `stm`, `saves::summary`'s `context_saves`) is no read.
 //! - A function's blocks are printed from the structuring plan
 //!   ([`crate::plan`], as the mod view's structured codegen has it; unit
@@ -1351,9 +1352,44 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         let takes = |k| c.sums.get(k).is_some_and(|s| s.takes != 0);
         passing.replaced.iter().any(|&k| takes(k))
     });
-    if !sets.is_empty() || !passing.named.is_empty() || replaced_takes {
+    // And what each jump into another context's function passes it: the
+    // jumper takes what the target takes (`Passing::foreign`), and its
+    // callers in turn. A context whose jumps' targets take more than its
+    // summaries saw is summarized again, until none does (each pass only
+    // adds takers: a few at most).
+    passing.foreign = foreign_takes(&codes);
+    let jumps_take = codes.iter().any(|c| {
+        c.sums.by_entry.values().any(|s| {
+            s.foreign
+                .iter()
+                .any(|(k, &m)| passing.foreign.get(k).is_some_and(|t| t & m != 0))
+        })
+    });
+    if !sets.is_empty() || !passing.named.is_empty() || replaced_takes || jumps_take {
         for c in &mut codes {
             c.sums = summarize_passing(&c.ctx, &c.funcs, Assume::default(), &sets, &passing);
+        }
+    }
+    for _ in 0..8 {
+        let now = foreign_takes(&codes);
+        let changed: BTreeSet<u32> = now
+            .iter()
+            .filter(|&(k, t)| passing.foreign.get(k) != Some(t))
+            .map(|(&k, _)| k)
+            .collect();
+        if changed.is_empty() {
+            break;
+        }
+        passing.foreign = now;
+        for c in &mut codes {
+            let jumps = c
+                .sums
+                .by_entry
+                .values()
+                .any(|s| s.foreign.keys().any(|k| changed.contains(k)));
+            if jumps {
+                c.sums = summarize_passing(&c.ctx, &c.funcs, Assume::default(), &sets, &passing);
+            }
         }
     }
     let shapes = shapes_of(&codes, &all, holes);
@@ -1566,12 +1602,13 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             });
         }
     }
-    // A jump into another context's function passes every register, but
-    // its summary there can't see what this one hands on as it came
-    // (`Summary::foreign`): a register the target reads at entry must be
-    // the jumper's own (m4a's SoundMain sets r4, r5, r6 and r8 before its
-    // jump into the IWRAM mixer), else it is the jumper's caller's, which
-    // no summary passes.
+    // A jump into another context's function passes every register, and
+    // the jumper takes from its callers what the target reads as it came
+    // (`Passing::foreign`, unit `native/ram-jump-passes-regs`; m4a's
+    // SoundMain sets r4, r5, r6 and r8 itself before its jump into the
+    // IWRAM mixer, WarioWare's sound driver's callers before 0x080efe6d's
+    // into its routines). A register the target reads that the jumper's
+    // summary didn't take (the passes above didn't settle) is a hole.
     for c in &codes {
         for (&f, s) in &c.sums.by_entry {
             if holes.standins.contains_key(&f) {
@@ -1585,9 +1622,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 else {
                     continue;
                 };
-                if t.takes & m != 0 {
+                let missed = t.takes & m & !passing.foreign.get(&k).copied().unwrap_or(0);
+                if missed != 0 {
                     let regs: Vec<String> = (4..12)
-                        .filter(|r| t.takes & m & 1 << (r - 4) != 0)
+                        .filter(|r| missed & 1 << (r - 4) != 0)
                         .map(|r| format!("r{r}"))
                         .collect();
                     hard.push(Hole {
@@ -3591,6 +3629,28 @@ fn exact_sp(
         }
         irq = now;
     }
+}
+
+/// What each function of every context takes of r4-r11 from its callers
+/// ([`Summary::takes`]) where another context jumps into it
+/// ([`Summary::foreign`]): [`Passing::foreign`].
+fn foreign_takes(codes: &[Code]) -> BTreeMap<u32, u8> {
+    let mut out = BTreeMap::new();
+    for (i, c) in codes.iter().enumerate() {
+        for s in c.sums.by_entry.values() {
+            for &k in s.foreign.keys() {
+                let t = codes
+                    .iter()
+                    .enumerate()
+                    .filter(|&(j, _)| j != i)
+                    .find_map(|(_, o)| o.sums.get(k));
+                if let Some(t) = t {
+                    out.insert(k, t.takes);
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Whether a store may run the IRQ handlers in the native build: one that
@@ -10144,12 +10204,55 @@ mod tests {
             hs.iter().any(|h| h.contains("reads r4-r11 at entry: r4")),
             "{hs:?}"
         );
-        // The jumper hands on the r4 it came with: its callers', which no
-        // summary passes.
-        let hs = text(jump_into_a_copy(NOP, NOP, false));
+        // The jumper handing on the r4 it came with takes it from its
+        // callers: `a_jump_into_a_copy_passes_what_the_copy_reads`.
+    }
+
+    /// A function at 0x08000010 that jumps into a copy at 0x03000000
+    /// (`ldr r3, =0x03000000; bx r3`) reading r4 as it came, `bl`ed by
+    /// the reset after `set` (and through a pointer too, its key a ROM
+    /// word, where `pointer`): the hard holes.
+    fn jump_with_callers_regs(set: u32, pointer: bool) -> Vec<String> {
+        let mut words = vec![0xE1A0_0000u32; 0x48];
+        words[0] = set;
+        words[1] = 0xEB00_0001; // bl 0x08000010
+        words[2] = 0xEAFF_FFFE; // b .
+        words[4] = 0xE59F_3008; // ldr r3, [pc, #8]: the word at 0x20
+        words[6] = 0xE12F_FF13; // bx r3
+        words[8] = 0x0300_0000;
+        words[9] = if pointer { 0x0800_0010 } else { 0 };
+        words[0x40] = 0xE594_0000; // ldr r0, [r4]
+        words[0x41] = 0xE12F_FF1E; // bx lr
+        let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let mut holes = Holes::parse(
+            "[[copy]]\nsrc = 0x08000100\ndst = 0x03000000\nlen = 8\nroots = [0x03000000]\nwhy = \"t\"\n",
+        )
+        .unwrap();
+        holes.holes_only = true;
+        lift(&rom, "t", &holes)
+            .holes
+            .iter()
+            .map(|h| h.to_string())
+            .collect()
+    }
+
+    /// A jump into another context's function passes it every register:
+    /// the jumper takes what the target reads as it came from its callers,
+    /// as a tail call's caller does (native/ram-jump-passes-regs).
+    #[test]
+    fn a_jump_into_a_copy_passes_what_the_copy_reads() {
+        const SET_R4: u32 = 0xE3A0_4402; // mov r4, #0x02000000
+        // Its caller sets r4 and calls it directly: no hole.
+        assert_eq!(jump_with_callers_regs(SET_R4, false), Vec::<String>::new());
+        // A pointer may call it, with r4 zeroed: the read is hard, its.
+        let hs = jump_with_callers_regs(SET_R4, true);
         assert!(
-            hs.iter().any(|h| h
-                .contains("a jump into 0x03000000, another code context's, with r4 as they came")),
+            hs.iter().any(|h| h.contains("hard hole in f_08000010")
+                && h.contains("reads r4-r11 at entry: r4, which 0x03000000 takes")),
+            "{hs:?}"
+        );
+        assert!(
+            !hs.iter().any(|h| h.contains("another code context's")),
             "{hs:?}"
         );
     }
