@@ -3883,19 +3883,8 @@
         "by": "e3ab08da",
         "at": "2026-11-24T13:24:42Z",
         "evidence": "gbaa-lift on moonbeam: 0 hard holes (was 6: two bx pc veneers fixed in the lifter's gap decoding; three switch tables and an r8/r9 [[takes]] for the VM's closure call in mods/moonbeam/holes.toml, mods df140be). just lift: built, first stop 600 of 600 frames, no stop. holes-all --against main's (b702e947): no game rose, moonbeam 2->0, total 7->5 (Emerald's step fails in both runs: its holes file's [[roots]] isn't on main yet). just check passes after merging origin/main (311d7c41). lift-check pre-merge: bars all within but native-ram-jump's lines_prelude (main's own 1364, bar fixed); native route checks passing until stopped for the merge.",
-        "branch": "unit/native/moonbeam-builds",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T13:24:42Z",
-          "by": "e3ab08da",
-          "host": "quack",
-          "pid": 2962048,
-          "start": "95217572",
-          "beats": true,
-          "session": "e3ab08da-72ed-45d5-939f-f3aa18bbdaa0",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "landed": "2026-11-24T13:46:26Z"
       },
       "notes": [
         {
@@ -3913,8 +3902,7 @@
           "by": "d72f2c00",
           "text": "Holes-only at 04e94cca: hard 7. longjmp 0x08038328 is CPU state: filed {unit:native/lift-longjmp}, needed. No code x2: veneers bx pc at 0x08043148 (ARM b 0x08042e28, ldivmod?) and 0x08043174 (b 0x08038478, strcmp) not decoded as code; discovery bug?"
         }
-      ],
-      "round": "2026-11-20T12:59:19Z"
+      ]
     },
     {
       "id": "native/rogue-imperium-build",
