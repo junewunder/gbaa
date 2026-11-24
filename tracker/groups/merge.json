@@ -675,6 +675,14 @@
           "text": "Merge committed on the branch: lift-check.toml keeps main's lines bars + branch's lines_prelude 1323; numbers doc regenerated; lift-metrics 0 over. just check was stopped at lane stop time: rerun it, then record done."
         }
       ]
+    },
+    {
+      "id": "merge/quack-lane1-native-entry-jump-test-program",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/native/entry-jump-test-program` holds {unit:native/entry-jump-test-program}, finished but not on main: merging main conflicts in justfile. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/native/entry-jump-test-program"
     }
   ]
 }

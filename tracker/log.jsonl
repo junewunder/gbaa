@@ -3927,3 +3927,4 @@
 {"at":"2026-11-24T07:02:59Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/fnref-dense","text":"Function pointers as dense FnRef IDs: on main"}
 {"at":"2026-11-24T07:03:03Z","actor":"loop","tag":"09555f4f","host":"quack","cmd":"claim","id":"native/rom-statics","text":"Function words in ROM statics as FnRefs: claimed"}
 {"at":"2026-11-24T07:07:10Z","actor":"loop","tag":"88798491","host":"quack","cmd":"done","id":"native/entry-jump-test-program","text":"A test program: a b and a returning call into an entry: done"}
+{"at":"2026-11-24T07:07:23Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane1-native-entry-jump-test-program","text":"new unit: Merge main on quack lane 1"}
