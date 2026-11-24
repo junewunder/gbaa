@@ -4236,3 +4236,4 @@
 {"at":"2026-11-24T22:32:31Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-pointer-registers","text":"Register locals hold the Ref type the lift's flow gives: edited (detail)"}
 {"at":"2026-11-24T22:32:33Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-pointer-signatures","text":"Pointer parameters take Ref types in their signatures: edited (detail)"}
 {"at":"2026-11-24T22:32:35Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-proven-pointer-types","text":"Pointer types the lift proves, scored against DWARF: edited (detail)"}
+{"at":"2026-11-24T22:32:37Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-returns-read","text":"A call takes back only the registers its caller reads: edited (detail)"}
