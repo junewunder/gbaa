@@ -42,7 +42,8 @@
 # play build's bus, not its pair rewritten (Amazing Mirror's PSG differed).
 # lines_prelude raised 1337 -> 1364 (native/lift-longjmp): restore,
 # catch_restore and restored, a context restore's return by unwinding into
-# the caller of its save (setjmp's).
+# the caller of its save (setjmp's). native-ram-jump's, added beside it, was
+# left at 1337 until native/moonbeam-builds.
 # lines_prelude raised 1328 -> 1337 (native/fnref-dense): call_fn and irq_entry
 # take a dense function's ID (`DENSE`, empty at --fn-ids rom). fn_keys_left
 # (native/fnref-dense): the function words and code constants a --fn-ids dense
@@ -1631,7 +1632,7 @@ planted_flags = ["--takes-zeroed"]
 [program.native-ram-jump.bars]
 io_unnamed = 19
 lines = 20541
-lines_prelude = 1337
+lines_prelude = 1364
 texts_left = 0
 functions = 113
 functions_iwram = 4
