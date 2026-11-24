@@ -4177,6 +4177,13 @@
         },
         "pushed": true
       },
+      "notes": [
+        {
+          "at": "2026-11-24T10:04:09Z",
+          "by": "b9afc3fc",
+          "text": "From {unit:native/lift-equipment-words}: type_structs now ignores computed ranges unless one indexes the global by its elements (Obj::Index), so the byte sweeps over gHazeInfo/gSectionInfo no longer veto them; only plain() (bitfields) does."
+        }
+      ],
       "round": "2026-11-24T08:18:36Z"
     },
     {
