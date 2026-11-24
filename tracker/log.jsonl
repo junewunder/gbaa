@@ -3867,3 +3867,4 @@
 {"at":"2026-11-24T05:14:30Z","actor":"session","tag":"9a39864c","host":"quack","cmd":"overseer","text":"overseer f14c6a on quack attached, replacing 562264 on quack"}
 {"at":"2026-11-24T05:14:46Z","actor":"loop","tag":"554a944d","host":"quack","cmd":"claim","id":"native/lift-for-bounds","text":"Loops counted to a variable bound print as for: claimed"}
 {"at":"2026-11-24T05:14:52Z","actor":"loop","tag":"7733e7b3","host":"quack","cmd":"claim","id":"native/lift-find-field","text":"The lift finds a field's writers for a modder: claimed (picking up after 7a3a3987)"}
+{"at":"2026-11-24T05:14:57Z","actor":"loop","tag":"c1790615","host":"quack","cmd":"claim","id":"native/lift-cut-header-helpers","text":"A lift cut's header explains pin, ix/rix and sext: claimed (picking up after 15fb1e04)"}

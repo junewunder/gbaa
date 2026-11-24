@@ -4200,19 +4200,17 @@
       "minMinutes": 40,
       "record": {
         "state": "claimed",
-        "by": "15fb1e04",
-        "session": "15fb1e04-9feb-4620-9b0a-8e1f840d39c9",
+        "by": "c1790615",
+        "session": "c1790615-1b03-4f09-93c5-92709b5b99ad",
         "host": "quack",
-        "pid": 3424233,
-        "start": "57918558",
-        "at": "2026-11-20T13:50:13Z",
+        "pid": 2963642,
+        "start": "95218853",
+        "at": "2026-11-24T05:14:57Z",
         "branch": "unit/native/lift-cut-header-helpers",
-        "resumed": "203737ec",
-        "prevSession": "203737ec-fd2b-4c35-8725-3c34034692b5",
+        "resumed": "15fb1e04",
+        "prevSession": "15fb1e04-9feb-4620-9b0a-8e1f840d39c9",
         "pushed": true,
-        "beats": true,
-        "handedBack": "2026-11-20T13:50:29Z",
-        "ended": "2026-11-20T13:50:42Z"
+        "beats": true
       },
       "notes": [
         {
