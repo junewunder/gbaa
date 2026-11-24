@@ -700,15 +700,22 @@
       "lane": "quack/2",
       "branch": "unit/native/c-list-test-program",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "79cd9198",
-        "session": "79cd9198-1cd4-4750-94db-508de374b137",
-        "host": "quack",
-        "pid": 2962519,
-        "start": "95218086",
-        "at": "2026-11-24T08:04:06Z",
+        "at": "2026-11-24T08:13:39Z",
+        "evidence": "Merged origin/main 75c4e032 clean; just check then failed only in leak-check (home paths in names/c-list-*.toml). Regenerated them with relative paths; c-list-gcc bars moved by main's bx tail-call rule (act_* now reached). just check passes; lift-check --only c-list-gcc and c-list-agbcc pass. Commit 6be6eac1.",
         "branch": "unit/native/c-list-test-program",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T08:13:39Z",
+          "by": "79cd9198",
+          "host": "quack",
+          "pid": 2962519,
+          "start": "95218086",
+          "beats": true,
+          "session": "79cd9198-1cd4-4750-94db-508de374b137",
+          "lane": "quack/2"
+        }
       },
       "round": "2026-11-24T08:04:06Z"
     }
