@@ -171,9 +171,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   unless every function gets an identifier of its own. It also reads the
   ELF's DWARF 2 to 5 (`pret_names::dwarf`, gimli, agbcc's unterminated abbrev
   tables and short line programs mended first): `src` and `proto` on
-  functions (`src` alone, the tree's `src/X.c`, on a function of an object
-  `X.o` built without DWARF: agb_flash, siirtc, librfu_intr;
-  native/lift-modules-by-source), `type` on data, `[locals]` (a row per range of a location list),
+  functions (`src` alone, `src/X.c`, on an object `X.o` built without DWARF), `type` on data, `[locals]` (a row per range of a location list),
   `[lines]` and `[types]`, and a `dwarf:` report line; and from the tree's `include/constants/` and
   `src/`, `[values]`: the `#define` families fields take, and the enums a field or global takes by its C type (`docs/mod-view-design.md`, "Value names"), with a `values:` line; and
   the tree's `charmap.txt` as `[text]`, for the readable print's string
@@ -1287,10 +1285,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   [--plant AT] [--copies N] [--holes-only]` (`codegen::native`; `--fn-ids dense`: each function whose every address the flow proved is an ID from 1 in the crate's ROM copy and the code's constants, `DENSE`, native/fnref-dense) writes the whole
   program to OUT (default `out/lift-<name>`) as `src/`: `main.rs` (the
   prelude, RAM, `ENTRY`), `fns.rs` (`FNS`) and the functions in modules
-  of about 4,000 lines, which rustc builds in parallel: a function the names
-  files give a source file in that file's, `script_pokemon_util.rs` (its
-  first line names the file; numbered `_1`, `_2`, … past 4,000 lines;
-  native/lift-modules-by-source), the rest in `m_<first key>.rs`
+  of about 4,000 lines, which rustc builds in parallel: by source file where the names give one (`script_pokemon_util.rs`, `_1`, `_2`… past 4,000 lines), else `m_<first key>.rs`
   (`codegen::native::modules`, native/lift-modules; `--copies N` writes
   them N times over under new names, a synthetic large lift for measuring
   the build); every
