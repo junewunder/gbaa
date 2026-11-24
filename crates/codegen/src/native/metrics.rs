@@ -96,7 +96,8 @@
 //!
 //! Frames gone (`native/lift-frame-gone`): `sp_arith_unescaped`, the
 //! functions printing sp arithmetic though no slot of their frame
-//! escapes, nor do they pass sp on to code needing it exactly (barred, at
+//! escapes, nor do they pass sp on to code needing it exactly or write
+//! their locals to the frame for a callee ([`super::frame::Frame::flush`]) (barred, at
 //! 0: a frame nothing of which is in memory prints none,
 //! [`super::frame::Frame::in_locals`]), and `lr_returned`, the
 //! functions returning a register that holds only their entry lr (barred,

@@ -1352,8 +1352,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
   `agb/native-frame-locals`, `agb/native-ime-release`, `agb/native-bios-calls`,
   `agb/native-bios-more` (SoftReset too), `agb/native-tasks`, `agb/native-dma`, `agb/native-save` (SRAM),
-  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`, `agb/native-serial`, `agb/native-irq-wrapper` (both its IRQ wrappers lifted, their `msr` and `mrs` run), `agb/native-takes` (two functions that take r8 and r9 from their caller, one called through a pointer the holes file's `[[takes]]` names), `agb/native-gives` (two functions that leave r9 changed for their caller, one through its jump into the other)
-  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers, native/lift-irq-wrapper-tail, native/taker-test-program, native/lift-gives), and the C programs `c-fnptr`, `c-switch`, `c-chain`, `c-heap`, `c-bits` and `c-loops`, each built by agbcc and by modern GCC (`c-fnptr-agbcc`, `c-fnptr-gcc`, …: twelve ROMs from `just c-tests`, native/c-test-programs, native/fnref-heap-sites, native/lift-bitfields, native/lift-for-bounds; each with a `planted_store`) on
+  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`, `agb/native-serial`, `agb/native-irq-wrapper` (both its IRQ wrappers lifted, their `msr` and `mrs` run), `agb/native-takes` (two functions that take r8 and r9 from their caller, one called through a pointer the holes file's `[[takes]]` names), `agb/native-gives` (two functions that leave r9 changed for their caller, one through its jump into the other), `agb/native-entry-jump` (a `b` into another function's entry, and a call whose return site is one)
+  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers, native/lift-irq-wrapper-tail, native/taker-test-program, native/lift-gives, native/entry-jump-test-program), and the C programs `c-fnptr`, `c-switch`, `c-chain`, `c-heap`, `c-bits` and `c-loops`, each built by agbcc and by modern GCC (`c-fnptr-agbcc`, `c-fnptr-gcc`, …: twelve ROMs from `just c-tests`, native/c-test-programs, native/fnref-heap-sites, native/lift-bitfields, native/lift-for-bounds; each with a `planted_store`) on
   `units/<name>-600.toml` (the spike's is `units/native-spike.toml`,
   native-irq-hold's, native-ime-release's and native-bios-region's
   `-601`). First every program is lifted with `--bars`
@@ -1368,8 +1368,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   stack switch); native-dma's (0x08000180, `dma_set`'s `DMAxCNT`, a unit
   more), native-save's (0x080002ac, an SRAM `strb`), native-serial's (0x0800017c, `SIOCNT`) and native-irq-wrapper's (0x080001f4, the wrapper's `IE` put back after its handler call: `frame 33: I/O byte 0x04000200`) too.
   native-fallthrough, native-irq-hold, native-frame-locals,
-  native-ime-release, native-takes and native-gives lifted with their `planted_flags`
-  (`--fall-as-tail-call`, the old fall into another function;
+  native-ime-release, native-takes, native-gives and native-entry-jump lifted with their `planted_flags`
+  (`--fall-as-tail-call`, the old fall, jump or call's return into another function;
   `--irq-at-waits`, the old IRQ run at a wait inside a critical section;
   `--plant-slot=0x08000182`, `fl_keep`'s store to a stack local made one
   more, native/frame-locals; `--ime-at-waits`, the old IRQ held past the

@@ -52,8 +52,10 @@
 //! instruction at AT (hex) store its value plus one, a planted wrong store
 //! the native check must catch; `--fall-as-tail-call` prints a fall or
 //! jump into another function's entry as stage A first did, a tail call
-//! with r4-r12 and the flags zeroed, which the native check must catch on
-//! `agb/native-fallthrough` (unit `native/lift-fallthrough`);
+//! with r4-r12 and the flags zeroed (after a call that returns into one
+//! too), which the native check must catch on
+//! `agb/native-fallthrough` (unit `native/lift-fallthrough`) and
+//! `agb/native-entry-jump` (unit `native/entry-jump-test-program`);
 //! `--irq-at-waits` runs an IRQ at a wait whatever the CPSR's I bit, as
 //! stage A first did, where the hardware holds it until a critical
 //! section's end, which the native check must catch on

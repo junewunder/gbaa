@@ -353,12 +353,12 @@ What the done pieces left open, for the units that come next.
 
 - **Falls and calls into an entry** (piece 1). A call that returns into
   another function's entry passes the callee's r0-r3 and the caller's
-  other registers and flags as before the call; neither that path nor a
-  `b` (rather than a fall) into an entry has a test program. The
-  summaries don't count r4-r11 or flags a fall passes on as parameters,
-  so `x_` stays whole for fall targets. A stand-in, and a jump through a
-  register to a target no table names (`call_fn`), are still entered by
-  the plain entry.
+  other registers and flags as before the call (a callee that changes
+  flags the entry reads is lifted wrong). `agb/native-entry-jump` checks
+  it and a `b` into an entry. The summaries don't count r4-r11 or flags
+  a fall passes on as parameters, so `x_` stays whole for fall targets. A
+  stand-in, and a jump through a register to a target no table names
+  (`call_fn`), are still entered by the plain entry.
 - **IME with I set** (piece 1). The play build drops `IME_ON` when I is
   set at the tick after the `IME` write, so "I set, `IME` on, `msr`
   clears I" waits for the next time point where the hardware library

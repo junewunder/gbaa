@@ -375,9 +375,11 @@ pub struct Holes {
     pub fn_check_interp: u32,
     /// Stage A's old fall into another function (`gbaa-lift
     /// --fall-as-tail-call`): a tail call through its plain entry, which
-    /// starts it with r4-r12 and the flags zeroed. The fallthrough check's
-    /// planted control (`native/lift-fallthrough`): the native check must
-    /// catch it on `agb/native-fallthrough`.
+    /// starts it with r4-r12 and the flags zeroed (after a call that
+    /// returns into one too). The fallthrough check's planted
+    /// control (`native/lift-fallthrough`): the native check must catch it
+    /// on `agb/native-fallthrough` and `agb/native-entry-jump`
+    /// (`native/entry-jump-test-program`).
     pub fall_as_tail_call: bool,
     /// Stage A's old dead writes (`gbaa-lift --keep-dead-writes`): every
     /// write of a register or flag printed, read or not, those nothing
@@ -1968,7 +1970,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     .unwrap();
     writeln!(
         report,
-        "frames gone (native/lift-frame-gone): {} functions keep nothing of their frame in memory and print no sp arithmetic, {} of them still passing sp on (a callee's or a BIOS call's frame, bank_sp); {} more with no slot escaping keep their sp arithmetic to pass sp on as the guest has it, to code whose frame escapes (stored stack addresses the native check holds to the guest's), {} print sp arithmetic for no such reason; {} stack locals left out, written and never read; {} functions return their entry lr{}",
+        "frames gone (native/lift-frame-gone): {} functions keep nothing of their frame in memory and print no sp arithmetic, {} of them still passing sp on (a callee's or a BIOS call's frame, bank_sp); {} more with no slot escaping keep their sp arithmetic to pass sp on as the guest has it, to code whose frame escapes (stored stack addresses the native check holds to the guest's) or that runs on their frame (written to memory for it), {} print sp arithmetic for no such reason; {} stack locals left out, written and never read; {} functions return their entry lr{}",
         soft.frameless,
         soft.frameless_pass_sp,
         soft.sp_arith_exact,
@@ -3121,7 +3123,14 @@ fn exact_sp(
                         }
                     };
                     match x.plan {
-                        Plan::Call { target, .. } => callee(target),
+                        Plan::Call { target, ret } => {
+                            callee(target);
+                            // A return site that is another function's
+                            // entry: the call returns into it, on this sp.
+                            if !f.blocks.contains_key(&ret) && all.contains(&ret) {
+                                p.to.insert(ret);
+                            }
+                        }
                         Plan::Static(t) | Plan::Rekey(t) => {
                             if !f.blocks.contains_key(&t) && all.contains(&t) {
                                 p.to.insert(t);
@@ -4227,7 +4236,9 @@ impl FnPrinter<'_, '_> {
             self.soft.frameless += 1;
             self.soft.frameless_pass_sp += usize::from(reads_name(body, "r13"));
         } else if self.frame.is_some_and(|f| !f.lost && f.escaping() == 0) && arith {
-            if self.sp_exact {
+            // Writing its locals to the frame for a callee ([`Frame::flush`])
+            // is a reason too: the callee runs on that sp.
+            if self.sp_exact || self.frame.is_some_and(|f| !f.flush.is_empty()) {
                 self.soft.sp_arith_exact += 1;
             } else {
                 self.soft.sp_arith_unescaped += 1;
@@ -4703,8 +4714,7 @@ impl FnPrinter<'_, '_> {
                 // returns): the `unreachable!` after it reads nothing
                 // ([`FnPrinter::call_then`]).
                 Plan::Call { target, ret }
-                    if !index.contains_key(&ret)
-                        && (!self.all.contains(&ret) || self.holes.fall_as_tail_call) =>
+                    if !index.contains_key(&ret) && !self.all.contains(&ret) =>
                 {
                     let reads = match self.shape(target) {
                         Some(c) if plain(target) => live::low(c.params),
@@ -7585,10 +7595,11 @@ impl FnPrinter<'_, '_> {
     fn call_then(&mut self, call: String, ret: u32, at: u32) -> String {
         // A return site that is another function's entry: the call
         // returns into it, as a fall (a callee that never returns never
-        // gets there). One with no code: the callee never returns.
+        // gets there; `--fall-as-tail-call` makes it a tail call, as for a
+        // fall). One with no code: the callee never returns.
         let then = if self.labels.contains_key(&ret) {
             self.goto(ret, at)
-        } else if self.all.contains(&ret) && !self.holes.fall_as_tail_call {
+        } else if self.all.contains(&ret) {
             self.fall_into(ret)
         } else {
             "unreachable!(\"a call that never returns returned\")".to_string()
