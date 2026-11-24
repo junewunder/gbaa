@@ -74,6 +74,10 @@ pub struct Spec {
     pub sig: &'static str,
     /// Where the replacement came from.
     pub replacement: &'static str,
+    /// The replacement is a mod's cut (`--fn-check-cuts`, under
+    /// `just lift-mod-run`): a difference from the lift is the edit,
+    /// reported as such, not a failure.
+    pub cut: bool,
     /// The typed globals the reference reads or writes by field (each its
     /// offset in `Game::ram` and its size, from `Ram`; not `offset_of!`,
     /// whose bare field name the names pass would take for a word in use,
@@ -89,6 +93,93 @@ pub struct Spec {
 }
 
 type F = fn(&mut Game, u32, [u32; 4]) -> Result<[u32; 4], Exit>;
+
+/// A RAM datum's type as the names files give it (the lift's
+/// `FN_CHECK_RAM`, by crates/codegen/src/native/fn_check_names.rs): what a
+/// differing byte is named by.
+pub enum Ty {
+    /// An integer or pointer of this many bytes.
+    Scalar(u32),
+    /// Elements, how many and each one's size.
+    Array(&'static Ty, u32, u32),
+    /// A struct's or union's fields, a plain one before a bitfield on
+    /// the same bytes, and its size.
+    Struct(&'static [Field], u32),
+    /// Bytes of no type the names give.
+    Bytes(u32),
+}
+
+pub struct Field {
+    pub name: &'static str,
+    pub off: u32,
+    pub ty: &'static Ty,
+}
+
+impl Ty {
+    fn size(&self) -> u32 {
+        match self {
+            Ty::Scalar(n) | Ty::Bytes(n) => *n,
+            Ty::Array(_, n, es) => n * es,
+            Ty::Struct(_, n) => *n,
+        }
+    }
+}
+
+/// The named place holding RAM offset `o`: the path to the deepest field
+/// or element holding it (`gEquipment.maxEnergy`, `gSprites[3].pose`), the
+/// RAM offset it starts at and its size when it is an integer (else 0).
+fn ram_name(o: usize) -> Option<(String, usize, u32)> {
+    let a = addr(o);
+    let i = crate::FN_CHECK_RAM.partition_point(|e| e.0 <= a).checked_sub(1)?;
+    let (lo, name, mut ty) = crate::FN_CHECK_RAM[i];
+    let mut off = a - lo;
+    if off >= ty.size().max(1) {
+        return None;
+    }
+    let mut path = name.to_string();
+    loop {
+        match ty {
+            Ty::Scalar(n) => return Some((path, o - off as usize, *n)),
+            Ty::Bytes(_) => {
+                if off > 0 {
+                    path += &format!("+{off:#x}");
+                }
+                return Some((path, o, 0));
+            }
+            Ty::Array(e, n, es) => {
+                let i = off / (*es).max(1);
+                if i >= *n {
+                    return Some((path, o, 0));
+                }
+                path += &format!("[{i}]");
+                off -= i * es;
+                ty = e;
+            }
+            Ty::Struct(fs, _) => {
+                let Some(f) = fs
+                    .iter()
+                    .find(|f| f.off <= off && off < f.off + f.ty.size().max(1))
+                else {
+                    path += &format!("+{off:#x}");
+                    return Some((path, o, 0));
+                };
+                path += &format!(".{}", f.name);
+                off -= f.off;
+                ty = f.ty;
+            }
+        }
+    }
+}
+
+/// What the two sides of a compare are called: the check's own words, or
+/// for a mod's cut the lift and the cut.
+fn sides(cut: bool) -> (&'static str, &'static str) {
+    if cut {
+        ("lift", "cut")
+    } else {
+        ("reference", "replacement")
+    }
+}
 
 #[derive(Default)]
 struct Tally {
@@ -219,23 +310,48 @@ fn compare(
     new: [u32; 4],
     results: u8,
     skip: (usize, usize),
+    cut: bool,
 ) -> Option<String> {
+    let (rw, nw) = sides(cut);
     let ram = &g.ram[..];
     if let Some(o) = (0..ram.len()).find(|&o| ram[o] != r.ram[o] && !(skip.0..skip.1).contains(&o))
     {
         let region = if o < EWRAM { "EWRAM" } else { "IWRAM" };
-        return Some(format!(
-            "{region} byte {:#010x}: {:#04x} reference, {:#04x} replacement",
-            addr(o),
-            r.ram[o],
-            ram[o]
-        ));
+        // Named by field where the names files type it, an integer
+        // field's value whole and in decimal.
+        let int = |m: &[u8], lo: usize, n: u32| {
+            m[lo..lo + n as usize]
+                .iter()
+                .rev()
+                .fold(0u32, |v, &b| v << 8 | b as u32)
+        };
+        return Some(match ram_name(o) {
+            Some((path, lo, n @ (1 | 2 | 4))) if lo + n as usize <= ram.len() => format!(
+                "{region} {:#010x} {path} (u{}): {} {rw}, {} {nw}",
+                addr(lo),
+                n * 8,
+                int(&r.ram, lo, n),
+                int(ram, lo, n)
+            ),
+            Some((path, _, _)) => format!(
+                "{region} byte {:#010x} ({path}): {} {rw}, {} {nw}",
+                addr(o),
+                r.ram[o],
+                ram[o]
+            ),
+            None => format!(
+                "{region} byte {:#010x}: {:#04x} {rw}, {:#04x} {nw}",
+                addr(o),
+                r.ram[o],
+                ram[o]
+            ),
+        });
     }
     for (i, o) in (0..0x400u32).step_by(2).enumerate() {
         let v = g.hw.raw16(o);
         if v != r.io[i] {
             return Some(format!(
-                "I/O register {o:#05x}: {:#06x} reference, {v:#06x} replacement",
+                "I/O register {o:#05x}: {:#06x} {rw}, {v:#06x} {nw}",
                 r.io[i]
             ));
         }
@@ -247,7 +363,7 @@ fn compare(
     ] {
         if let Some(o) = (0..a.len()).find(|&o| a[o] != b[o]) {
             return Some(format!(
-                "{what} byte {o:#x}: {:#04x} reference, {:#04x} replacement",
+                "{what} byte {o:#x}: {:#04x} {rw}, {:#04x} {nw}",
                 a[o], b[o]
             ));
         }
@@ -255,14 +371,14 @@ fn compare(
     for (i, what, v) in [(0, "sp (system mode's)", g.sp), (1, "CPSR", g.cpsr)] {
         if v != r.regs[i] {
             return Some(format!(
-                "{what}: {:#010x} reference, {v:#010x} replacement",
+                "{what}: {:#010x} {rw}, {v:#010x} {nw}",
                 r.regs[i]
             ));
         }
     }
     if r.regs[8] != g.hw.frames() as u32 {
         return Some(format!(
-            "frames presented: {} reference, {} replacement",
+            "frames presented: {} {rw}, {} {nw}",
             r.regs[8],
             g.hw.frames()
         ));
@@ -270,7 +386,7 @@ fn compare(
     for n in (0..4).filter(|n| results & 1 << n != 0) {
         if out[n] != new[n] {
             return Some(format!(
-                "r{n} on return: {:#010x} reference, {:#010x} replacement",
+                "r{n} on return: {:#010x} {rw}, {:#010x} {nw}",
                 out[n], new[n]
             ));
         }
@@ -678,11 +794,13 @@ pub fn call(
         }
         local.digest = h;
         let what = match n {
-            Err(p) => Some(format!("the replacement panicked: {p}")),
-            Ok(Err(Exit)) => Some(
-                "the replacement stopped the program (Exit) where the reference returned".into(),
-            ),
-            Ok(Ok(new)) => compare(&after, out, g, new, s.results, skip),
+            Err(p) => Some(format!("the {} panicked: {p}", sides(s.cut).1)),
+            Ok(Err(Exit)) => Some(format!(
+                "the {} stopped the program (Exit) where the {} returned",
+                sides(s.cut).1,
+                sides(s.cut).0
+            )),
+            Ok(Ok(new)) => compare(&after, out, g, new, s.results, skip, s.cut),
         };
         if let Some(w) = what {
             local.differ += 1;
@@ -730,7 +848,7 @@ pub fn call(
     if all_spent {
         let frames = *SPENT_AT.lock().unwrap().get_or_insert(g.hw.frames());
         if std::env::var_os("GBAA_FN_CHECK_RUN_ON").is_none() {
-            std::process::exit(report(Some(frames)));
+            std::process::exit(report(Ok(frames)));
         }
     }
     reference(g, sp, a)
@@ -747,24 +865,31 @@ fn tally(ts: &mut Vec<(u32, Tally)>, key: u32) -> &mut Tally {
     &mut ts[i].1
 }
 
-/// Print each function's line and the verdict; the exit code.
-fn report(frames: Option<u64>) -> i32 {
+/// Print each function's line and the verdict; the exit code. `end`:
+/// the frame by which every budget was spent, or how the program ended
+/// short of them (its stop's message, if it stopped on a panic).
+fn report(end: Result<u64, Option<String>>) -> i32 {
     let ts = TALLIES.lock().unwrap();
     let mut ok = true;
-    match frames {
-        Some(n) => println!(
+    match &end {
+        Ok(n) => println!(
             "fn-check: {} functions, every budget spent in {n} frames",
             FN_CHECKS.len()
         ),
-        None => println!(
+        Err(_) => println!(
             "fn-check: {} functions; the program stopped",
             FN_CHECKS.len()
         ),
     }
+    // A cut's difference from its lift is the edit (under lift-mod-run).
+    let mut edits = 0;
     for s in FN_CHECKS {
         let none = Tally::default();
         let t = ts.iter().find(|t| t.0 == s.key).map_or(&none, |t| &t.1);
-        let verdict = if t.differ > 0 {
+        let verdict = if t.differ > 0 && s.cut && t.interp_differ == 0 {
+            edits += 1;
+            format!("differs from its lift (the edit) in {} runs", t.differ)
+        } else if t.differ > 0 {
             ok = false;
             format!("{} DIFFER", t.differ)
         } else if t.interp_differ > 0 {
@@ -773,6 +898,10 @@ fn report(frames: Option<u64>) -> i32 {
         } else if t.runs == 0 {
             ok = false;
             "NOT RUN (never called, or every run's reference stopped)".to_string()
+        } else if t.runs < s.runs && s.cut {
+            // A cut called less often than its budget: what ran is the
+            // report, the same as its lift.
+            format!("the same as its lift, in {} runs", t.runs)
         } else if t.runs < s.runs {
             ok = false;
             format!("short of its budget ({} runs)", t.runs)
@@ -827,13 +956,24 @@ fn report(frames: Option<u64>) -> i32 {
         }
     }
     let wall = START.lock().unwrap().map(|t| t.elapsed());
-    println!(
-        "fn-check: {}{}",
-        if ok { "pass" } else { "FAIL" },
-        wall.map_or(String::new(), |w| format!(
-            " ({w:.2?} since the first check)"
-        ))
-    );
+    let wall = wall.map_or(String::new(), |w| format!(" ({w:.2?} since the first check)"));
+    // The program's own stop, apart from the checks: what the lift can't
+    // run yet, after the runs above.
+    if let Err(stop) = &end {
+        println!(
+            "fn-check: the program stopped before every budget was spent, after the runs above ({})",
+            stop.as_deref().unwrap_or("its frames ran out")
+        );
+    }
+    let cuts = FN_CHECKS.iter().filter(|s| s.cut).count();
+    if ok && cuts == FN_CHECKS.len() {
+        // Every function a mod's cut (lift-mod-run): the edit is the news.
+        println!(
+            "fn-check: {edits} of {cuts} cuts differ from their lifts (the edit){wall}"
+        );
+        return if end.is_ok() { 0 } else { 1 };
+    }
+    println!("fn-check: {}{wall}", if ok { "pass" } else { "FAIL" });
     if ok { 0 } else { 1 }
 }
 
@@ -846,13 +986,18 @@ pub fn main(play: fn() -> std::process::ExitCode) -> std::process::ExitCode {
     }
     // A stop (a panic: what the lift can't run yet) ends the program as
     // the frames running out does; the report says what was checked.
-    let _ = std::panic::catch_unwind(play);
+    let stop = std::panic::catch_unwind(play).err().map(|p| {
+        p.downcast_ref::<String>()
+            .cloned()
+            .or_else(|| p.downcast_ref::<&str>().map(|s| s.to_string()))
+            .unwrap_or_else(|| "a panic".into())
+    });
     // Every budget spent (`GBAA_FN_CHECK_RUN_ON` ran on past it): the
     // report's verdict is the exit code. Otherwise the program stopped
     // short of the budgets, a failure whatever the runs so far showed.
     let spent = *SPENT_AT.lock().unwrap();
     match spent {
-        Some(frames) => std::process::ExitCode::from(report(Some(frames)) as u8),
-        None => std::process::ExitCode::from(report(None).max(1) as u8),
+        Some(frames) => std::process::ExitCode::from(report(Ok(frames)) as u8),
+        None => std::process::ExitCode::from(report(Err(stop)).max(1) as u8),
     }
 }
