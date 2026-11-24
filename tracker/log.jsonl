@@ -4109,3 +4109,4 @@
 {"at":"2026-11-24T16:36:00Z","actor":"loop","tag":"3ca58cea","host":"quack","cmd":"add-unit","id":"native/lift-lent-games","text":"new unit: Lent stack locals on Metroid and Emerald"}
 {"at":"2026-11-24T16:36:07Z","actor":"loop","tag":"3ca58cea","host":"quack","cmd":"edit","id":"native/lift-stack-typed-locals","text":"A lent stack local takes its DWARF type: edited (needs)"}
 {"at":"2026-11-24T16:36:10Z","actor":"loop","tag":"3ca58cea","host":"quack","cmd":"edit","id":"native/lift-lend-wider","text":"More pointer parameters borrowed: compares and walks: edited (needs)"}
+{"at":"2026-11-24T16:36:12Z","actor":"loop","tag":"3ca58cea","host":"quack","cmd":"edit","id":"native/lift-stack-arrays","text":"Stack arrays by address: design and the lend analysis: edited (title, detail)"}
