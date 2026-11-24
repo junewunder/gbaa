@@ -150,8 +150,10 @@
 //! Value names (`native/lift-value-names`): `values_named`, the constants
 //! a store to or compare with a field or global that takes a family of
 //! the names files' `[values]` prints by its name (`g.ram.gPen.state =
-//! PEN_RIGHT as u8`; no bar: it should rise). Their constants in
-//! `main.rs` are data, not in `lines`.
+//! PEN_RIGHT as u8`; no bar: it should rise), and those a call passes to
+//! a parameter that takes one, alone or as a sum's constant
+//! (`fill_rect(g, r13, 0x0u32, ROW_BAR, …)`; `native/lift-value-args`).
+//! Their constants in `main.rs` are data, not in `lines`.
 //!
 //! Data names (`native/lift-data-names-inline`, [`super::named`]): in a
 //! lift with names, `data_constants_named`, the constant addresses inside

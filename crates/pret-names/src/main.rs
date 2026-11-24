@@ -108,13 +108,20 @@ fn run(args: &[String]) -> Result<(), String> {
     {
         return dump(elf, names);
     }
+    const USAGE: &str = "usage: pret-names ELF ROM OUT [SHOW] [--src DIR]";
     let [elf, rom, out, rest @ ..] = args else {
-        return Err("usage: pret-names ELF ROM OUT [SHOW]".into());
+        return Err(USAGE.into());
+    };
+    // The source tree: the ELF's folder (pret's), or --src DIR (a C
+    // program of c/, built elsewhere).
+    let (rest, src_dir) = match rest {
+        [r @ .., flag, d] if flag == "--src" => (r, Some(std::path::PathBuf::from(d))),
+        r => (r, None),
     };
     let show = match rest {
         [] => 10,
         [n] => n.parse().map_err(|e| format!("SHOW {n}: {e}"))?,
-        _ => return Err("usage: pret-names ELF ROM OUT [SHOW]".into()),
+        _ => return Err(USAGE.into()),
     };
     let elf_bytes = std::fs::read(elf).map_err(|e| format!("{elf}: {e}"))?;
     let rom_bytes = std::fs::read(rom).map_err(|e| format!("{rom}: {e}"))?;
@@ -134,20 +141,43 @@ fn run(args: &[String]) -> Result<(), String> {
     }
     let names = match_names(&syms, &rom_bytes, &ours(&rom_bytes));
     let dbg = pret_names::dwarf::load(&elf_bytes).map_err(|e| format!("{elf}: {e}"))?;
-    let header = [
-        format!("Names for {rom}, from pret's symbols in {elf}."),
-        "Written by `just pret-names` (crates/pret-names). Don't edit.".to_string(),
-    ];
+    let file = |p: &str| {
+        std::path::Path::new(p)
+            .file_name()
+            .map_or(p.to_string(), |f| f.to_string_lossy().into_owned())
+    };
+    // A C program of c/ (--src): its file names and folder only, no
+    // machine's paths, as the repo keeps its names file.
+    let header = match &src_dir {
+        Some(d) => [
+            format!(
+                "Names for {} ({}/, built by `just c-tests`), from its ELF's symbols and DWARF.",
+                file(rom),
+                d.display()
+            ),
+            "Written by `just c-names` (crates/pret-names). Don't edit.".to_string(),
+        ],
+        None => [
+            format!("Names for {rom}, from pret's symbols in {elf}."),
+            "Written by `just pret-names` (crates/pret-names). Don't edit.".to_string(),
+        ],
+    };
     if let Some(dir) = std::path::Path::new(out).parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
     let sha = codegen::names::sha1_hex(&rom_bytes);
-    let mut text = names.toml(&header, &sha, &source(elf), Some(&dbg));
+    let from = match &src_dir {
+        Some(d) => format!("gbaa {}/ ({}, just c-tests)", d.display(), file(elf)),
+        None => source(elf),
+    };
+    let mut text = names.toml(&header, &sha, &from, Some(&dbg));
     // pret's constants headers and source beside the ELF, for the fields'
     // value names.
-    let src = std::path::Path::new(elf)
-        .parent()
-        .unwrap_or(std::path::Path::new("."));
+    let src = src_dir.as_deref().unwrap_or_else(|| {
+        std::path::Path::new(elf)
+            .parent()
+            .unwrap_or(std::path::Path::new("."))
+    });
     let fams = {
         use pret_names::values::*;
         let mut fams = families(&read_defines(src), &read_uses(src), &dbg.types);
@@ -171,6 +201,40 @@ fn run(args: &[String]) -> Result<(), String> {
         }
         let en = enum_families(&enums, &dbg.types, &globals, &fams);
         fams.extend(en);
+        // The parameters pret's calls pass a family's names to
+        // (native/lift-value-args): a call of a function, or of a macro
+        // that picks one by its count (`GetMonData(…)`: `GetMonData2`),
+        // reaches the names file's function at that symbol's address.
+        let mut all_enums = read_all_enums(src);
+        all_enums.extend(dwarf_enums(&dbg.types));
+        let by_addr: BTreeMap<u32, &str> = names
+            .entries
+            .iter()
+            .filter_map(|e| match &e.name {
+                pret_names::Name::Func { name, .. } => {
+                    Some((e.rom.unwrap_or(e.key) & !1, name.as_str()))
+                }
+                _ => None,
+            })
+            .collect();
+        let funcs: BTreeMap<&str, u32> = syms
+            .iter()
+            .filter(|s| s.kind == disc_check::SymKind::Func)
+            .map(|s| (s.name.as_str(), s.value & !1))
+            .collect();
+        let resolve = |f: &str, n: usize| {
+            let a = funcs
+                .get(f)
+                .or_else(|| funcs.get(format!("{f}{n}").as_str()))?;
+            by_addr.get(a).map(|s| s.to_string())
+        };
+        arg_families(
+            &read_defines(src),
+            &all_enums,
+            &read_calls(src),
+            resolve,
+            &mut fams,
+        );
         fams
     };
     text.push_str(&pret_names::values::toml(&fams));
@@ -200,10 +264,11 @@ fn run(args: &[String]) -> Result<(), String> {
     print!("{}", dwarf_report(&names, &dbg));
     println!("text: {} charmap.txt entries", chars.len());
     println!(
-        "values: {} families of #define names and enums, taken by {} fields and {} globals",
+        "values: {} families of #define names and enums, taken by {} fields, {} globals and {} parameters",
         fams.len(),
         fams.values().map(|f| f.fields.len()).sum::<usize>(),
-        fams.values().map(|f| f.globals.len()).sum::<usize>()
+        fams.values().map(|f| f.globals.len()).sum::<usize>(),
+        fams.values().map(|f| f.args.len()).sum::<usize>()
     );
     loads(out, &sha)
 }

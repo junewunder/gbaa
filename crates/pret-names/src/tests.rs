@@ -507,3 +507,82 @@ fn a_declaration_types_a_label_by_its_name() {
     assert_eq!(d.data_fields(0x0200_0010, "gB"), ", type = \"u16 [4]\"");
     assert_eq!(d.data_fields(0x0200_0010, "gC"), "");
 }
+#[test]
+fn a_parameter_takes_the_family_pret_calls_pass_it() {
+    use values::*;
+    // Calls with constants, a sum's base, a string with a comma, a
+    // comment, nested calls and a keyword that isn't one.
+    let c = "void HealPlayerParty(void) {\n\
+             u16 hp = GetMonData(&gPlayerParty[i], MON_DATA_MAX_HP);\n\
+             x = GetMonData(&p[i], MON_DATA_MOVE1 + j, buf); /* GetMonData(m, MON_DATA_X) */\n\
+             Print(\"a, b\", FONT_NORMAL); if (FOO_A) Use(Twice(SE_A), SE_B ++);\n\
+             SetMode(MODE_A); SetMode(TRUE); Both(ONE_A); Both(TWO_B); Clear(); }";
+    let calls = calls_in(c);
+    let got: Vec<(&str, usize, usize, &str)> = calls
+        .iter()
+        .map(|c| (c.func.as_str(), c.nargs, c.index, c.name.as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("GetMonData", 2, 1, "MON_DATA_MAX_HP"),
+            ("GetMonData", 3, 1, "MON_DATA_MOVE1"),
+            ("Print", 2, 1, "FONT_NORMAL"),
+            ("Twice", 1, 0, "SE_A"),
+            ("SetMode", 1, 0, "MODE_A"),
+            ("SetMode", 1, 0, "TRUE"),
+            ("Both", 1, 0, "ONE_A"),
+            ("Both", 1, 0, "TWO_B"),
+        ]
+    );
+    let h = "#define FONT_SMALL 0\n#define FONT_NORMAL 1\n#define SE_A 1\n#define SE_B 2\n\
+             #define MODE_A 0\n#define MODE_B 1\n#define ONE_A 1\n#define ONE_B 2\n\
+             #define TWO_A 1\n#define TWO_B 2\n";
+    let defs = defines_in(h, "include/constants/x.h");
+    // pret's anonymous enum of a header outside constants/.
+    let enums = enums_any(
+        "enum {\n MON_DATA_PERSONALITY,\n MON_DATA_MAX_HP = 0x3a,\n MON_DATA_MOVE1 = 13,\n};\n",
+        "include/pokemon.h",
+    );
+    assert_eq!(enums[0].name, "");
+    // GetMonData is a macro that picks GetMonData2 or GetMonData3 by its
+    // count, one address: the names file calls it GetMonData2.
+    let resolve = |f: &str, n: usize| match (f, n) {
+        ("GetMonData", 2 | 3) => Some("GetMonData2".to_string()),
+        ("Print" | "SetMode" | "Both" | "Twice", _) => Some(f.to_string()),
+        _ => None,
+    };
+    let mut fams = std::collections::BTreeMap::new();
+    arg_families(&defs, &enums, &calls, resolve, &mut fams);
+    assert_eq!(fams["MON_DATA"].args, ["GetMonData2:1"]);
+    // A call passes MON_DATA_MOVE1 + j: a sum there may take a name.
+    assert_eq!(fams["MON_DATA"].sums, ["GetMonData2:1"]);
+    assert!(fams["FONT"].sums.is_empty());
+    assert_eq!(fams["MON_DATA"].file, "include/pokemon.h");
+    assert_eq!(
+        fams["MON_DATA"].names[1],
+        ("MON_DATA_MAX_HP".to_string(), 0x3a)
+    );
+    assert_eq!(fams["FONT"].args, ["Print:1"]);
+    // One call passes SE_A alone; SE_B's `++` isn't a constant's sum.
+    assert_eq!(fams["SE"].args, ["Twice:0"]);
+    // TRUE is no family's: SetMode takes none. ONE_A and TWO_B are two
+    // families' and share values: Both takes none.
+    assert!(!fams.contains_key("MODE"));
+    assert!(!fams.contains_key("ONE") && !fams.contains_key("TWO"));
+    // What it writes loads as codegen reads it, and ties the register.
+    let text = format!(
+        "[map]\nrom_sha1 = \"00\"\n[functions]\n0x08000101 = {{ name = \"GetMonData2\", proto = \"u32 GetMonData3(struct Pokemon *mon, s32 field, u8 *data)\" }}\n{}",
+        toml(&fams)
+    );
+    let m = codegen::names::SourceMap::from_texts("00", &[&text]).unwrap();
+    assert_eq!(m.values["MON_DATA"].args, [("GetMonData2".to_string(), 1)]);
+    let vs = m.typed.values_of_arg(0x0800_0101, 1).unwrap();
+    assert_eq!(vs[&13], "MON_DATA_MOVE1");
+    assert!(m.typed.values_of_arg(0x0800_0101, 0).is_none());
+    assert_eq!(
+        m.typed.sum_values_of_arg(0x0800_0101, 1).unwrap()[&13],
+        "MON_DATA_MOVE1"
+    );
+    assert!(m.typed.has_values());
+}
