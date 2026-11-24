@@ -1064,7 +1064,8 @@
         "native/lift-line-comments",
         "native/lift-mod-cut",
         "native/lift-mod-run",
-        "native/lift-agent-mod"
+        "native/lift-agent-mod",
+        "mod/retire-readable-codegen"
       ],
       "record": {
         "state": "claimed",

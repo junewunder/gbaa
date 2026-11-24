@@ -4206,3 +4206,4 @@
 {"at":"2026-11-24T21:54:52Z","actor":"loop","tag":"2ddc0f0e","host":"quack","cmd":"add-unit","id":"mod/half-speed-on-lift","text":"new unit: Kirby's half-speed mod ported to a lift cut"}
 {"at":"2026-11-24T21:54:59Z","actor":"loop","tag":"2ddc0f0e","host":"quack","cmd":"edit","id":"mod/half-speed-on-lift","text":"Kirby's half-speed mod ported to a lift cut: edited (uses)"}
 {"at":"2026-11-24T21:55:01Z","actor":"loop","tag":"2ddc0f0e","host":"quack","cmd":"edit","id":"mod/retire-recompile","text":"gbaa-recompile loses --readable, --mod, --cut, --names: edited (add-needs)"}
+{"at":"2026-11-24T21:55:03Z","actor":"loop","tag":"2ddc0f0e","host":"quack","cmd":"edit","id":"mod/retire","text":"The mod view is retired: edited (add-needs)"}
