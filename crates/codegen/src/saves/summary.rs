@@ -202,8 +202,9 @@ pub struct Summary {
     /// constant `bx r3` into its IWRAM mixer), by target: the registers
     /// of r4–r11 (bit `n - 4` for rN) that may still hold bits of their
     /// entry values there, on some path. The lift jumps with every
-    /// register, so the target takes these from this function's callers,
-    /// which no summary here sees ([`Passing::pointed`]).
+    /// register, so the target takes these from this function's callers:
+    /// those [`Passing::foreign`] says it takes are this function's reads,
+    /// which it takes in turn.
     pub foreign: BTreeMap<u32, u8>,
     pub undefined_reads: BTreeMap<(u32, u8), Option<u32>>,
     /// The holes of entry values of r4–r11 returned in r0–r3, by the
@@ -299,6 +300,13 @@ pub struct Passing {
     /// jumped into or called directly, as a ROM function whose key no
     /// word holds. `None`: every one (no ROM to look in).
     pub pointed: Option<BTreeSet<u32>>,
+    /// Another code context's functions, by key: what each takes of
+    /// r4–r11 ([`Summary::takes`], bit `n - 4` for rN). A jump into one
+    /// (WarioWare's sound driver's `bx r0` into its six IWRAM routines)
+    /// runs its extended entry with every register the jumper has, so
+    /// the jumper takes from its callers those it still has as they came,
+    /// as a tail call's caller does (unit `native/ram-jump-passes-regs`).
+    pub foreign: BTreeMap<u32, u8>,
 }
 
 fn defines(params: u8, exit: &[Bits; 5]) -> u16 {
@@ -797,6 +805,25 @@ impl<'a> Sum<'a> {
         }
     }
 
+    /// A jump at `at` into `to`, a function of another code context's,
+    /// in `s`: it runs on in `to`'s extended entry with every register,
+    /// so what `to` takes ([`Passing::foreign`]) is this function's own
+    /// read, as for a tail call ([`Sum::call`]).
+    pub(super) fn jump_out(&mut self, s: &State, at: u32, to: u32) {
+        let takes = self.passing.foreign.get(&to).copied().unwrap_or(0);
+        for n in entry_regs(takes) {
+            if let Some((regs, _)) = s.regs[n as usize].taint() {
+                for e in entry_regs(regs) {
+                    self.entry_reads.insert((at, e, Via::Takes(to, n)));
+                }
+            }
+            let by = s.chg[n as usize - 4];
+            if by != 0 {
+                self.changed_read(at, n, by);
+            }
+        }
+    }
+
     /// The call at `at` to `targets` in `s`, the state before it: where a
     /// callee returns one of r4–r11 as it came ([`Summary::echoes`]),
     /// which of this function's entry values the register the lift
@@ -1067,18 +1094,39 @@ const CONTEXT: u16 = 0x6ff0;
 /// `jmp_buf` for pointers would): such a reader finds the lift's zeroes
 /// there, as it does in a stack frame's saved registers.
 fn context_saves(funcs: &[Func]) -> BTreeSet<u32> {
+    context_pairs(funcs.iter()).0
+}
+
+/// The context saves ([`context_saves`]) of `funcs`, and the restores a
+/// save matches, each with its base register (`longjmp`'s `ldm r0!`: r0):
+/// the restores the lift prints as a return into the caller of the save
+/// that stored the block (native/lift-longjmp).
+pub fn context_pairs<'a>(
+    funcs: impl Iterator<Item = &'a Func> + Clone,
+) -> (BTreeSet<u32>, BTreeMap<u32, u8>) {
     let blocks = |load: bool| {
         funcs
-            .iter()
+            .clone()
             .flat_map(|f| f.blocks.values())
             .flat_map(|b| &b.insns)
-            .filter_map(move |&(at, i)| context_block(&i, load).map(|(m, r)| (at, m, r)))
+            .filter_map(move |&(at, i)| context_block(&i, load).map(|(m, r)| (at, m, r, i)))
     };
-    let restores: Vec<(BlockMode, u16)> = blocks(true).map(|(_, m, r)| (m, r)).collect();
-    blocks(false)
-        .filter(|&(_, m, r)| restores.contains(&(m, r)))
-        .map(|(at, ..)| at)
-        .collect()
+    let restores: Vec<(u32, BlockMode, u16, Instr)> = blocks(true).collect();
+    let saves: Vec<(u32, BlockMode, u16, Instr)> = blocks(false)
+        .filter(|&(_, m, r, _)| restores.iter().any(|x| (x.1, x.2) == (m, r)))
+        .collect();
+    let base = |i: &Instr| match *i {
+        Instr::Block { rn, .. } => rn as u8,
+        _ => unreachable!("a context block is a block transfer"),
+    };
+    (
+        saves.iter().map(|x| x.0).collect(),
+        restores
+            .iter()
+            .filter(|x| saves.iter().any(|s| (s.1, s.2) == (x.1, x.2)))
+            .map(|x| (x.0, base(&x.3)))
+            .collect(),
+    )
 }
 
 /// `i`'s way and registers if it is a context block transfer the way
