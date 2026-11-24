@@ -4288,3 +4288,4 @@
 {"at":"2026-11-24T22:36:34Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-frame-exact-irq-reach","text":"Exact sp: IRQ wrappers' reach narrowed on Metroid: edited (priority, add-needs)"}
 {"at":"2026-11-24T22:36:36Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/rogue-build","text":"Rogue's lift builds: GenerateFloorLayout's r11 passed: edited (priority, add-needs)"}
 {"at":"2026-11-24T22:36:38Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-for-ram-bounds","text":"Loops to a bound read from RAM print as for: edited (priority)"}
+{"at":"2026-11-24T22:36:41Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-for-top-tested","text":"Loops tested at the top print as for: edited (priority)"}

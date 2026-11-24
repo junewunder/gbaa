@@ -5088,6 +5088,7 @@
       "check": "recorded",
       "needs": ["native/lift-for-bounds"],
       "uses": ["heavy"],
+      "priority": 97,
       "minMinutes": 60,
       "record": {
         "state": "claimed",
