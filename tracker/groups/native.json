@@ -3989,7 +3989,19 @@
       "detail": "{unit:native/lift-agent-mod} on the game the owner wants to mod: an agent with no lifter context makes one small Amazing Mirror change (Kirby's walk speed, a starting value) through the cut, the build and the side-by-side frames, on {unit:native/mirror-native-route}'s route, and writes what hurt, ranked, with the fix each suggests, in docs/research/ beside the Metroid write-up, saying what differs from Metroid. The mod lives in mods/kirby-mirror/. Independent check: a verifier sees the change on screen in the mod's frames and the stock frames unchanged elsewhere.",
       "check": "independent",
       "needs": ["native/lift-agent-mod", "native/mirror-native-route"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "e4b6a739",
+        "session": "e4b6a739-32a1-41e4-a7f8-b109b54dbac3",
+        "host": "quack",
+        "pid": 2962519,
+        "start": "95218086",
+        "at": "2026-11-24T06:14:53Z",
+        "branch": "unit/native/mirror-agent-mod",
+        "beats": true
+      },
+      "round": "2026-11-24T06:14:53Z"
     },
     {
       "id": "native/mirror-cpu-kirbys-off",
