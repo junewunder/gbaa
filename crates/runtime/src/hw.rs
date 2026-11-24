@@ -544,6 +544,7 @@ pub struct Checkpoint<G: Native> {
     dma: Dma<G>,
     sound: Sound<G>,
     save: crate::save::Save,
+    gpio: crate::gpio::Gpio,
     frame_end: Option<fn(&mut G)>,
     line: u16,
     frames: u64,
@@ -571,6 +572,9 @@ pub struct Hw<G: Native> {
     /// The cartridge's save chip, as the play build emulates it: the
     /// program sets its kind ([`crate::save::Kind::detect`] on its ROM).
     pub save: crate::save::Save,
+    /// The cartridge's GPIO port and its clock, as the play build's
+    /// ([`crate::gpio`]): the program sets it from its ROM.
+    pub gpio: crate::gpio::Gpio,
     pub host: G::Host,
     /// Run just before each present, after V-blank DMA
     /// ([`Hw::on_frame_end`]).
@@ -624,6 +628,7 @@ impl<G: Native> Hw<G> {
             dma: Dma::default(),
             sound: Sound::new(),
             save: crate::save::Save::new(crate::save::Kind::Flash512),
+            gpio: crate::gpio::Gpio::for_rom(&[]),
             host,
             frame_end: None,
             // The play build's start ([`crate::sched::START_LINE`]).
@@ -651,6 +656,7 @@ impl<G: Native> Hw<G> {
             dma: self.dma.clone(),
             sound: self.sound.clone(),
             save: self.save.clone(),
+            gpio: self.gpio.clone(),
             frame_end: self.frame_end,
             line: self.line,
             frames: self.frames,
@@ -675,6 +681,7 @@ impl<G: Native> Hw<G> {
         self.dma = c.dma.clone();
         self.sound = c.sound.clone();
         self.save.clone_from(&c.save);
+        self.gpio.clone_from(&c.gpio);
         self.frame_end = c.frame_end;
         self.line = c.line;
         self.frames = c.frames;
