@@ -128,7 +128,8 @@
 //!   later blocks print nothing in the arms (else they print once, as a
 //!   `match` of their own). A function the plan doesn't take (a block no printed jump reaches, one
 //!   nested too deep) stays a whole `loop { match b }` over local labels
-//!   (0 the entry). Each block starts with `pc` (prelude) of its guest
+//!   (0 the entry). The text is then indented 4 spaces a brace level
+//!   ([`indent`], unit `native/lift-indent`). Each block starts with `pc` (prelude) of its guest
 //!   address, which a stop names (unit `native/first-stop-guest-pc`:
 //!   compiled code keeps no other pc): `runtime::guest_pc::set` in a build
 //!   with the crate's `guest-pc` feature (`just lift`'s, the checks'),
@@ -227,6 +228,7 @@ pub mod fnref;
 pub mod frame;
 pub mod globals;
 pub mod heap;
+pub mod indent;
 pub mod lift_check;
 pub mod live;
 pub mod local_names;
@@ -1865,6 +1867,13 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // after the names pass, which would take its strings for words in use.
     if !holes.fn_check.is_empty() {
         main.push_str(&fn_check_names::table(&holes.names, holes.types.as_deref()));
+    }
+    // Each statement at its block's depth (native/lift-indent): the
+    // pieces above carry fixed indents. Before the cut's base text is kept,
+    // so a cut and its re-cut see the same text; a cut itself is left as
+    // written.
+    for (_, t) in out.iter_mut() {
+        *t = indent::reindent(t);
     }
     // A mod's cut (unit `native/lift-mod-cut`): the function's text as
     // lifted kept for `gbaa-lift --cut`, then the cut's in its place.
@@ -10652,7 +10661,12 @@ mod tests {
         let at = t.find(&note).unwrap_or_else(|| panic!("{note} in {t}"));
         let next = t[at..].lines().nth(1).unwrap();
         assert!(next.contains("0x8000020"), "{next}");
-        assert_eq!(t.replace(&format!("                {note}\n"), ""), plain);
+        // The note's line, at whatever depth it sits, is all that differs.
+        let without: String = t
+            .split_inclusive('\n')
+            .filter(|l| l.trim() != note)
+            .collect();
+        assert_eq!(without, plain);
         assert_eq!(m.get("text_notes"), Some(1));
         assert_eq!(pm.get("text_notes"), Some(0));
         assert_eq!(m.get("lines"), pm.get("lines"));
