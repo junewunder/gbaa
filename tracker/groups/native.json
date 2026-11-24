@@ -4878,6 +4878,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T18:36:32Z",
+          "by": "51bbc90d",
+          "text": "Branch has it all, main merged at 31955b1. Passed: lift-check (GBAA_DATA=private dir, memory/shared-c-roms.md), Metroid 600/600 (ref_new_at_use 8164 to 2703). Left: Emerald just lift on the last commit (5747598 fixes main's open-bus vN not printed) and just check; then done."
+        },
+        {
           "at": "2026-11-24T06:22:39Z",
           "by": "9cee3887",
           "text": "Mirror LLM pilot (docs/research/llm-pilot.md, round two): 10 of 20 rewrites bind the pointer parameter once (let k = Ref::<t::Kirby>::new(a[0])) and use k.field() throughout; the lift rebuilds Ref::new(v) per access."
