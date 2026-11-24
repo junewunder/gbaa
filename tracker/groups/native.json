@@ -5138,6 +5138,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T21:48:50Z",
+          "by": "1caecb3a",
+          "text": "Shared $GBAA_DATA/c ROMs are main's c-loops (no heal_rows) until this lands; lift-check for c-loops needs the branch's ROMs in a private data dir (memory/shared-c-roms.md)."
+        },
+        {
           "at": "2026-11-24T21:40:56Z",
           "by": "85a8eaf9",
           "text": "Shared GBAA_DATA/c still holds main's c-loops ROMs (no heal_rows): once this lands, run just c-tests into the shared GBAA_DATA, or lift-check's c-loops bars and route miss. Emerald bar raise committed in mods 7595417 (not pushed, as the others)."
@@ -5146,11 +5151,6 @@
           "at": "2026-11-24T20:13:55Z",
           "by": "358be71f",
           "text": "Next: also drop the via write when the dropped step was its only reader (for_counter_arith). Lane 1's for-ram-bounds edits c/loops/SCENE.md and c-loops bars too: expect a conflict. Metroid 233/463, 600/600; lines_prelude 1373 > bar 1364 (not this unit)."
-        },
-        {
-          "at": "2026-11-24T20:13:49Z",
-          "by": "358be71f",
-          "text": "Emerald at bdcb5a24: 1078 for/3305 loop, lifts; build fails: naming_screen GetTextEntryPosition 'cannot find v45, v23' (typed template->maxChars load; no for there, so likely main's: unconfirmed at aa820315). for_counter_arith 241 > bar 235: the via add r9=r8+1 stays printed."
         }
       ],
       "round": "2026-11-24T19:42:11Z"

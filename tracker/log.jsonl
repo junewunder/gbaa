@@ -4195,3 +4195,4 @@
 {"at":"2026-11-24T21:41:10Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane4-native-lift-for-step-via","text":"new unit: Merge main on quack lane 4"}
 {"at":"2026-11-24T21:41:15Z","actor":"loop","tag":"1caecb3a","host":"quack","cmd":"claim","id":"merge/quack-lane4-native-lift-for-step-via","text":"Merge main on quack lane 4: claimed"}
 {"at":"2026-11-24T21:48:48Z","actor":"loop","tag":"1caecb3a","host":"quack","cmd":"done","id":"merge/quack-lane4-native-lift-for-step-via","text":"Merge main on quack lane 4: done"}
+{"at":"2026-11-24T21:48:50Z","actor":"loop","tag":"1caecb3a","host":"quack","cmd":"note","id":"native/lift-for-step-via","text":"A counter stepped through a second register prints as for: note: Shared $GBAA_DATA/c ROMs are main's c-loops (no heal_rows) until this lands; lift-check for c-loops needs the branch's ROMs in a private data dir (memory/shared-c-roms.md)."}
