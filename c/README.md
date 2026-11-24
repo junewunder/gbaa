@@ -49,8 +49,9 @@ needs its file made again, or its lift has no names.
 | `heap/`     | a first-fit allocator; sprites, a menu and short-lived effects allocated at three call sites, function pointers beside numbers in each |
 | `bits/`     | bitfields in a byte and a halfword through a pointer: written one field at a time, constant and computed, and read and written joined by the compiler |
 | `loops/`    | counted loops to a parameter, a global and a field; nested, counting down, breaking out, skipping rounds, a `u8` counter |
+| `list/`     | a linked list over a static node pool: a free list and a sorted live list through one `next`, inserted into through a `Node **`, removed from and walked each frame, an `act` function pointer per node |
 
-The six programs (twelve ROMs) are in the lifter's check (`just
+The seven programs (fourteen ROMs) are in the lifter's check (`just
 lift-check`, `crates/codegen/lift-check.toml`'s `c-*` tables, routes
 `units/c-<name>-<cc>-600.toml`), each with a planted store. A new program:
 copy `template/`, write its `SCENE.md`, run `just c-tests`, then add its
