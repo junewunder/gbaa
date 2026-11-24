@@ -5106,6 +5106,17 @@
       "detail": "mods/emerald/holes.toml already has [[roots]] and [[open_bus]], whose parsers live only on {unit:native/emerald-native-route}'s branch (origin unit/native/emerald-native-route, commit e9b0b8c9), so main's gbaa-lift/gbaa-holes reject Emerald's holes file and Emerald drops out of holes-all and lifts on main (two lanes hit this tonight). That branch waits on two other units. Bring its general parts to main now: [[roots]] (discover_with), [[open_bus]], the cartridge RTC (Hw Gpio), with their tests, not units/emerald-native.toml's unfinished route claim. Overlaps {unit:native/lift-rtc} and {unit:native/emerald-naming-stop}: if this lands them, record them done with evidence. Leave the route branch mergeable (merge main back into it). Done when: main lifts Emerald with the committed holes file, holes-all includes Emerald, just check passes.",
       "uses": ["heavy"],
       "priority": 30,
+      "record": {
+        "state": "claimed",
+        "by": "209afec8",
+        "session": "209afec8-d655-4445-b79d-efd9ab0d9fcc",
+        "host": "quack",
+        "pid": 2963642,
+        "start": "95218853",
+        "at": "2026-11-24T14:38:22Z",
+        "branch": "unit/native/land-emerald-route-lifter",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-24T14:38:16Z",
