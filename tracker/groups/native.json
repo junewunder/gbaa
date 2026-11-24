@@ -4075,7 +4075,19 @@
       "id": "native/ime-i-set-test-program",
       "title": "A test program: IME turned on while I is set",
       "detail": "docs/native-stage-b.md, Known gaps, IME with I set: the play build drops IME_ON when I is set at the tick after the IME write, so 'I set, IME on, msr clears I' takes its IRQ at the next time point, where the hardware library takes it at the msr; fixing only the play build would split the two. Add a test program that does exactly that and draws when the handler ran (as agb/native-ime-release and native-irq-hold do), ask mGBA which is right (just mgba-diff), and make the play build and the hardware library both match it. Done when: the program is a row of lift-check.toml with bars and a planted fault, just lift-check passes with 0 differences, mgba-diff agrees on its frame; just check passes.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "5549a28e",
+        "session": "5549a28e-0bcf-4743-aff3-f795cc038050",
+        "host": "quack",
+        "pid": 2962048,
+        "start": "95217572",
+        "at": "2026-11-24T07:25:11Z",
+        "branch": "unit/native/ime-i-set-test-program",
+        "beats": true
+      },
+      "round": "2026-11-24T07:25:11Z"
     },
     {
       "id": "native/c-list-test-program",

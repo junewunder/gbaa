@@ -3933,3 +3933,4 @@
 {"at":"2026-11-24T07:20:00Z","actor":"loop","tag":"d26ff255","host":"quack","cmd":"done","id":"merge/quack-lane1-native-entry-jump-test-program","text":"Merge main on quack lane 1: done"}
 {"at":"2026-11-24T07:25:06Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane1-native-entry-jump-test-program","text":"Merge main on quack lane 1: on main"}
 {"at":"2026-11-24T07:25:06Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/entry-jump-test-program","text":"A test program: a b and a returning call into an entry: on main"}
+{"at":"2026-11-24T07:25:11Z","actor":"loop","tag":"5549a28e","host":"quack","cmd":"claim","id":"native/ime-i-set-test-program","text":"A test program: IME turned on while I is set: claimed"}
