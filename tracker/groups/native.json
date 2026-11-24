@@ -4116,19 +4116,8 @@
         "by": "8347a61f",
         "at": "2026-11-24T10:34:35Z",
         "evidence": "lift-check passed (31 programs, 0 differences, every planted fault and hole caught, commit afd05f6); Metroid lift 600 of 600 frames, native route 2700 frames 0 differences; frameless (frames gone) 371 -> 894, sp_arith_exact 1698 -> 1194. Review fix: sp_arith_exact bars in mods f38ca78 (Metroid 1194, Emerald 9706, measured by gbaa-lift on this branch); Metroid --bars lift no longer names sp_arith_exact. Merged origin/main 71d6c27 (duplicate bars fixed, d500fd5); just check passes.",
-        "branch": "unit/native/lift-frame-exact-narrow",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T10:34:35Z",
-          "by": "8347a61f",
-          "host": "quack",
-          "pid": 2963642,
-          "start": "95218853",
-          "beats": true,
-          "session": "8347a61f-b8ec-48bf-8548-9a1bd63ec15d",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "landed": "2026-11-24T10:39:11Z"
       },
       "notes": [
         {
@@ -4146,20 +4135,7 @@
           "by": "f4ff2870",
           "text": "mods/metroid/lift-bars.toml (and emerald's) need sp_arith_exact (Metroid 1194) before a --bars lift; not added: mods had another lane's uncommitted edit to metroid/lift-bars.toml. Merge also added main's missing rom_refs/rom_static_fn_keys bars (c-list, ime-i-set)."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-24T10:04:36Z",
-        "findings": "- mods/metroid/lift-bars.toml and mods/emerald/lift-bars.toml (the private mods repo, linked into lane clones): the branch adds a new barred metric, `sp_arith_exact` (pushed in crates/codegen/src/native.rs at the new `m.push(\"sp_arith_exact\", …)` around line 2352). It is not in UNBARRED, so any `--bars` lift of a program without that bar fails with \"sp_arith_exact is N and has no bar\" (crates/codegen/src/native/metrics.rs:410). Neither game's bars file has the bar yet: grep finds only `sp_arith_unescaped` in both. The card's own note says the session skipped adding it because another lane had an uncommitted edit to metroid/lift-bars.toml. Once this lands, every Metroid or Emerald `--bars` lift on main breaks. Fix: add `sp_arith_exact = 1194` to mods/metroid/lift-bars.toml next to `sp_arith_unescaped`, after checking the other lane's edit is committed or merging alongside it. For Emerald, run its lift once and add `sp_arith_exact = <value>` to mods/emerald/lift-bars.toml. Commit both in the mods repo, then run a Metroid `--bars` lift to confirm it passes.",
-        "sent": {
-          "evidence": "Commit afd05f6, merge b7326fe. Metroid (quack): frames gone 371 -> 894, sp kept only to pass on exactly 1698 -> 1194 (frames-gone report line; new metric sp_arith_exact, barred on all rows). just lift-check passed (31 programs, 0 differences, every planted fault and both planted holes caught) and Metroid's lift ran 600 of 600 frames, no stop, its native route 2700 frames 0 differences incl. RAM outside the stack; both on the code before the I/O exemption was cut to DMA registers only (stricter: Metroid 1193 -> 1194, other rows the same by lift-metrics). c-loops-gcc 5 -> 9 frames gone; agb rows unchanged. 6 new unit tests. just check passed after merging main.",
-          "by": "f4ff2870",
-          "host": "quack",
-          "branch": "unit/native/lift-frame-exact-narrow",
-          "change": "eeb9618a121b62c4117a1e72f71cdf99f89534a2"
-        }
-      },
-      "round": "2026-11-24T08:02:26Z"
+      ]
     },
     {
       "id": "native/metroid-route-again",
