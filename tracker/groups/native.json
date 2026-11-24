@@ -4112,15 +4112,22 @@
       "uses": ["heavy"],
       "tags": ["slow-check"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "8347a61f",
-        "session": "8347a61f-b8ec-48bf-8548-9a1bd63ec15d",
-        "host": "quack",
-        "pid": 2963642,
-        "start": "95218853",
-        "at": "2026-11-24T10:04:42Z",
+        "at": "2026-11-24T10:34:35Z",
+        "evidence": "lift-check passed (31 programs, 0 differences, every planted fault and hole caught, commit afd05f6); Metroid lift 600 of 600 frames, native route 2700 frames 0 differences; frameless (frames gone) 371 -> 894, sp_arith_exact 1698 -> 1194. Review fix: sp_arith_exact bars in mods f38ca78 (Metroid 1194, Emerald 9706, measured by gbaa-lift on this branch); Metroid --bars lift no longer names sp_arith_exact. Merged origin/main 71d6c27 (duplicate bars fixed, d500fd5); just check passes.",
         "branch": "unit/native/lift-frame-exact-narrow",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T10:34:35Z",
+          "by": "8347a61f",
+          "host": "quack",
+          "pid": 2963642,
+          "start": "95218853",
+          "beats": true,
+          "session": "8347a61f-b8ec-48bf-8548-9a1bd63ec15d",
+          "lane": "quack/3"
+        }
       },
       "notes": [
         {
