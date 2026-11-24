@@ -6385,6 +6385,7 @@ impl FnPrinter<'_, '_> {
                 why += &format!("r{r} read after the loop; ");
                 continue;
             }
+            let via = self.step_via(r, kept & !(1 << r), by_calls, l, h, &round, &edges);
             let proven = match bounds::why(&bounds::Loop {
                 reg: r,
                 latch,
@@ -6392,6 +6393,7 @@ impl FnPrinter<'_, '_> {
                 way_in: &self.f.blocks[&p].block.insts,
                 enter: px.index,
                 kept: kept & !(1 << r),
+                via: &via,
             }) {
                 Ok(p) => p,
                 Err(w) => {
@@ -6417,6 +6419,81 @@ impl FnPrinter<'_, '_> {
         } else {
             why
         })
+    }
+
+    /// The registers loop `h`'s latch `l` starts each round with a known
+    /// value of, for [`bounds::Loop::via`]: each written once in the round
+    /// (and by no call there), in a block other than the latch that every
+    /// way from the start to the latch passes, as a [`bounds::Sym`] over
+    /// the counter `r` and the registers `kept` nothing in the loop
+    /// writes, all as they were at the loop's start (unit
+    /// `native/lift-for-step-via`: agbcc's `r9 = r8 + 1` early in the
+    /// body, `r8 = r9 as u8` in the latch).
+    #[allow(clippy::too_many_arguments)]
+    fn step_via(
+        &self,
+        r: usize,
+        kept: u16,
+        by_calls: u16,
+        l: u32,
+        h: u32,
+        round: &[u32],
+        edges: &[(u32, usize, u32)],
+    ) -> Vec<(usize, bounds::Sym)> {
+        // Whether every way from the start to the latch within the round
+        // passes block `d`.
+        let on_every_way = |d: u32| {
+            if d == h {
+                return true;
+            }
+            let mut seen: Vec<u32> = vec![h];
+            let mut go: Vec<u32> = vec![h];
+            while let Some(k) = go.pop() {
+                for e in edges.iter().filter(|e| e.0 == k) {
+                    let t = e.2;
+                    if t == l {
+                        return false;
+                    }
+                    if t != d && t != h && round.contains(&t) && !seen.contains(&t) {
+                        seen.push(t);
+                        go.push(t);
+                    }
+                }
+            }
+            true
+        };
+        let mut via = Vec::new();
+        for q in 0..13 {
+            if q == r || by_calls & 1 << q != 0 {
+                continue;
+            }
+            let set = |i: &Inst| matches!(i.op, Op::SetReg(x, _) if x.index() == q);
+            let mut at = round
+                .iter()
+                .filter(|k| self.f.blocks[*k].block.insts.iter().any(set));
+            let (Some(&d), None) = (at.next(), at.next()) else {
+                continue;
+            };
+            let insts = &self.f.blocks[&d].block.insts;
+            if d == l || insts.iter().filter(|i| set(i)).count() != 1 || !on_every_way(d) {
+                continue;
+            }
+            // The counter is written only by the latch: at `d` it is as
+            // at the loop's start.
+            let mut regs: [Option<bounds::Sym>; 16] = Default::default();
+            for (x, s) in regs.iter_mut().enumerate() {
+                if x == r || kept & 1 << x != 0 {
+                    *s = Some(bounds::Sym::reg(x));
+                }
+            }
+            bounds::eval(insts, &mut regs, insts.len());
+            if let Some(s) = regs[q].take()
+                && s.base.is_none_or(|b| b < 16)
+            {
+                via.push((q, s));
+            }
+        }
+        via
     }
 
     /// The keys an exit's printed code may jump to ([`FnPrinter::exit`]):
