@@ -1956,7 +1956,14 @@
         "host": "quack",
         "unit": "native/emerald-native-route"
       },
-      "answer": null
+      "answer": {
+        "key": "a",
+        "note": "june took the default",
+        "by": "owner",
+        "via": "9a39864c",
+        "at": "2026-11-24T05:25:27Z",
+        "decision": "d/may-native-check-skip-struct"
+      }
     },
     {
       "id": "q/narrow-loop-unit-bounds-held",

@@ -1461,6 +1461,15 @@
       "at": "2026-11-24T05:23:06Z",
       "question": "q/narrow-loop-unit-bounds-held",
       "via": "9a39864c"
+    },
+    {
+      "id": "d/may-native-check-skip-struct",
+      "title": "May the native check skip struct padding copied from stack garbage: Name them in the holes file",
+      "why": "june took the default",
+      "by": "owner",
+      "at": "2026-11-24T05:25:27Z",
+      "question": "q/may-native-check-skip-struct",
+      "via": "9a39864c"
     }
   ]
 }
