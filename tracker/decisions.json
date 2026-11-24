@@ -1495,6 +1495,14 @@
       "by": "eb832f19",
       "at": "2026-11-24T10:33:40Z",
       "scope": ["group:native"]
+    },
+    {
+      "id": "d/a-typed-field-s-get-checks-its-pointer-s",
+      "title": "A typed field's get checks its pointer's alignment",
+      "why": "From {unit:native/lift-aligned-loads}: a typed Game::get (a C T* from the names files) now stops the program on a pointer its type's alignment rules out, as Game::at already does for heap Refs, so the load prints without the misaligned ldr/ldrh rotate. C makes a misaligned T* undefined; sp is taken word-aligned, as frame locals already do. Lift-check and Mirror's 3,000-frame native route pass with no stop.",
+      "by": "c08a6e47",
+      "at": "2026-11-24T11:56:48Z",
+      "scope": ["native/*"]
     }
   ]
 }
