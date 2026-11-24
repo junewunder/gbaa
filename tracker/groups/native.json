@@ -4289,6 +4289,13 @@
         "branch": "unit/native/lift-equipment-words",
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-24T09:00:28Z",
+          "by": "f2d7754b",
+          "text": "Seen from {unit:native/lift-global-bitfields}: Metroid's gHazeInfo and gSectionInfo (structs with bitfields) stay words only because type_structs' computed ranges reach them (byte sweeps, e.g. 0x4005b..0x4015b); their layouts and accesses fit. gHatchData, gBombChains: struct arrays."
+        }
+      ],
       "round": "2026-11-24T08:54:47Z"
     },
     {
