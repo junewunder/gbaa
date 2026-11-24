@@ -1505,6 +1505,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     frameless: false,
                     sp_exact: sp_exact.contains(&f.entry),
                     load_values: BTreeMap::new(),
+                    arg_sums: BTreeMap::new(),
                     printed: BTreeSet::new(),
                     fall: None,
                     tail_edge: false,
@@ -4328,6 +4329,11 @@ struct FnPrinter<'a, 'b> {
     /// of named values (`[values]`; native/lift-value-names), by inst: the
     /// names by value, which a compare of the load with one prints.
     load_values: BTreeMap<usize, BTreeMap<u32, String>>,
+    /// The current block's last write, by inst, of each argument register
+    /// its call (its exit's) passes to a parameter that takes a family of
+    /// named values: the names by value, which a sum's constant there
+    /// prints as (`j.wrapping_add(MON_DATA_MOVE1)`; native/lift-value-args).
+    arg_sums: BTreeMap<usize, BTreeMap<u32, String>>,
 }
 
 /// The value of a constant as the printer writes it (`0x2u32`).
@@ -6465,6 +6471,7 @@ impl FnPrinter<'_, '_> {
             .filter(|&i| matches!(insts[i].op, Op::Load { .. }))
             .filter_map(|i| Some((i, self.access_values(insts, i, &typed, &refs)?)))
             .collect();
+        self.arg_sums = self.arg_sums(insts, xs);
         let banks = self.store_banks(insts, &typed, &objs, &refs);
         let banked = match self.banked.get(&self.cur) {
             Some(r) if r.len() == insts.len() => r.clone(),
@@ -6769,7 +6776,7 @@ impl FnPrinter<'_, '_> {
                 Op::Timing(_) | Op::YieldFlag(..) => {}
                 Op::SetReg(r, x) if local[i] => {
                     // Its own `let`, or (a name or a constant) none.
-                    let e = self.whole(x);
+                    let e = self.arg_sum(i, self.whole(x));
                     let b = if plain_value(&e) {
                         e
                     } else {
@@ -6784,7 +6791,8 @@ impl FnPrinter<'_, '_> {
                         *b = None;
                         self.soft.reg_writes += 1;
                     }
-                    stmt(&mut s, format!("r{} = {};", r.index(), self.whole(x)))
+                    let e = self.arg_sum(i, self.whole(x));
+                    stmt(&mut s, format!("r{} = {e};", r.index()))
                 }
                 Op::SetFlag(fl, x) => stmt(&mut s, format!("{} = {};", flag(fl), self.whole(x))),
                 Op::GetReg(r) => {
@@ -7211,6 +7219,65 @@ impl FnPrinter<'_, '_> {
         self.soft.value_names.borrow_mut().insert(n.clone(), k);
         self.soft.values_named.set(self.soft.values_named.get() + 1);
         Some(n.clone())
+    }
+
+    /// [`FnPrinter::arg_sums`] of a block: for its exit's direct call,
+    /// each argument register's last write before it, unguarded, where
+    /// the callee's parameter takes named values.
+    fn arg_sums(&self, insts: &[Inst], xs: &[ExitInfo]) -> BTreeMap<usize, BTreeMap<u32, String>> {
+        let mut out = BTreeMap::new();
+        let Some(t) = self.holes.values.as_deref() else {
+            return out;
+        };
+        for x in xs {
+            let Plan::Call { target, .. } = x.plan else {
+                continue;
+            };
+            for r in 0..4 {
+                let Some(vs) = t.values_of_arg(target, r) else {
+                    continue;
+                };
+                let last = insts[..x.index.min(insts.len())]
+                    .iter()
+                    .rposition(|inst| matches!(inst.op, Op::SetReg(w, _) if w.index() == r));
+                if let Some(i) = last
+                    && insts[i].guard.is_none()
+                {
+                    out.insert(i, vs.clone());
+                }
+            }
+        }
+        out
+    }
+
+    /// `e`, the value inst `i` writes to an argument register
+    /// ([`FnPrinter::arg_sums`]), with a sum's constant that is one of the
+    /// parameter's named values by that name: `j.wrapping_add(0xd)` is
+    /// `j.wrapping_add(MON_DATA_MOVE1)` (a sum of 0 isn't one). A
+    /// constant alone is the call's to name ([`FnPrinter::arg_reg`]).
+    fn arg_sum(&self, i: usize, e: String) -> String {
+        let Some(vs) = self.arg_sums.get(&i) else {
+            return e;
+        };
+        let Some(head) = e.strip_suffix(')') else {
+            return e;
+        };
+        let Some(at) = head.rfind(".wrapping_add(") else {
+            return e;
+        };
+        let k = &head[at + ".wrapping_add(".len()..];
+        let k = k.strip_suffix("u32").unwrap_or(k);
+        let Some(c) = k
+            .strip_prefix("0x")
+            .and_then(|h| u32::from_str_radix(&h.replace('_', ""), 16).ok())
+            .filter(|&c| c != 0)
+        else {
+            return e;
+        };
+        match self.value_name(vs, c) {
+            Some(n) => format!("{}.wrapping_add({n})", &head[..at]),
+            None => e,
+        }
     }
 
     /// `k` by its name where `x` is the current block's load of a field

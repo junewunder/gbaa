@@ -320,11 +320,67 @@ impl Types {
                 t.protos.insert(k, p);
             }
         }
+        // The parameters the decomp's calls pass a family's names to
+        // (native/lift-value-args): argument register `i` where each
+        // parameter before it is one register. The prototype is the
+        // function's DWARF's, whatever its name there (`GetMonData2`'s
+        // is `GetMonData3`'s: one address).
+        for (fam, v) in &m.values {
+            if !t.values.contains_key(fam) {
+                continue;
+            }
+            for (f, i) in &v.args {
+                for (&k, item) in &m.functions {
+                    if &item.name != f {
+                        continue;
+                    }
+                    let regs = item
+                        .proto
+                        .as_deref()
+                        .map_or(0, |c| t.one_register_params(c, &enums));
+                    if *i < regs {
+                        t.arg_values.entry((k, *i)).or_insert_with(|| fam.clone());
+                    }
+                }
+            }
+        }
         t
     }
 
+    /// How many of prototype `c`'s parameters from the first are one
+    /// register each (a pointer, an array, an integer of 32 bits or less),
+    /// up to four. The function's name is the one `c` gives.
+    fn one_register_params(&self, c: &str, enums: &BTreeMap<&str, u32>) -> usize {
+        let Some(open) = c.find('(') else { return 0 };
+        let Some(name) = c[..open]
+            .rsplit(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
+            .next()
+            .filter(|n| !n.is_empty())
+        else {
+            return 0;
+        };
+        let Some((_, params)) = crate::dwarf::proto_params(c, name) else {
+            return 0;
+        };
+        params
+            .iter()
+            .take(4)
+            .take_while(|(_, ty)| {
+                let ty = normal(ty);
+                if ty.contains('[') && !ty.contains('(') {
+                    return true;
+                }
+                matches!(
+                    self.read(&ty, enums),
+                    Some(Ty::Ptr(_) | Ty::U8 | Ty::U16 | Ty::U32)
+                )
+            })
+            .count()
+    }
+
     /// The names of the values function `key`'s argument in register `r`
-    /// takes, by value, where its parameter's type is an enum family's.
+    /// takes, by value, where its parameter's type is an enum family's or
+    /// the decomp's calls pass it the family's names (native/lift-value-args).
     pub fn values_of_arg(&self, key: u32, r: usize) -> Option<&BTreeMap<u32, String>> {
         self.values.get(self.arg_values.get(&(key, r))?)
     }

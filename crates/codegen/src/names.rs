@@ -105,6 +105,10 @@ pub struct Values {
     pub names: Vec<(String, u32)>,
     pub fields: Vec<(String, String)>,
     pub globals: Vec<String>,
+    /// The function parameters the decomp's calls pass its names to, as
+    /// (function's name, parameter index) (`GetMonData2`, 1;
+    /// native/lift-value-args).
+    pub args: Vec<(String, usize)>,
 }
 
 /// Every map file, layered, and the identifier of each named key.
@@ -443,6 +447,15 @@ fn values(v: &toml::Value, at: &str) -> Result<Values, String> {
             .ok_or_else(|| format!("{at}: a global is its name"))?;
         globals.push(g.to_string());
     }
+    let mut args = Vec::new();
+    for a in arr("args") {
+        let (f, i) = a
+            .as_str()
+            .and_then(|a| a.rsplit_once(':'))
+            .and_then(|(f, i)| Some((f, i.parse().ok()?)))
+            .ok_or_else(|| format!("{at}: an arg is \"function:index\""))?;
+        args.push((f.to_string(), i));
+    }
     let mut names = Vec::new();
     for n in arr("names") {
         let n = n
@@ -465,6 +478,7 @@ fn values(v: &toml::Value, at: &str) -> Result<Values, String> {
         names,
         fields,
         globals,
+        args,
     })
 }
 

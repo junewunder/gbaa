@@ -8,6 +8,13 @@
 
 #define BACKDROP 0
 
+/* The rows things are drawn at: a #define family passed to fill_rect's y,
+ * as pret's games pass theirs to int parameters (GetMonData's
+ * MON_DATA_*), which the names file links by these calls
+ * (native/lift-value-args). */
+#define ROW_CLEAR 16
+#define ROW_BAR 150
+
 enum {
     CMD_END,
     CMD_WAIT,
@@ -147,7 +154,7 @@ NOINLINE u32 script_run(struct Script *s)
             s->pc += 2;
             break;
         case CMD_CLEAR:
-            fill_rect(16, 16, 112, 64, BACKDROP);
+            fill_rect(16, ROW_CLEAR, 112, 64, BACKDROP);
             break;
         case CMD_DOT:
             plot(s->x - 2, s->y - 2, sColors[6]);
@@ -248,7 +255,7 @@ void AgbMain(void)
         pen_update(&gPen);
         tally(gFrame & 127);
         fill_rect(gPen.x, gPen.y, 2, 2, gPen.color);
-        fill_rect(0, 150, (gCommands & 127) + 1, 4, sColors[gFrame & 7]);
+        fill_rect(0, ROW_BAR, (gCommands & 127) + 1, 4, sColors[gFrame & 7]);
         gFrame++;
     }
 }
