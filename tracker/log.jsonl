@@ -4119,3 +4119,5 @@
 {"at":"2026-11-24T16:53:55Z","actor":"loop","tag":"39785f55","host":"quack","cmd":"done","id":"merge/quack-lane2-native-lift-modules-by-source","text":"Merge main on quack lane 2: done"}
 {"at":"2026-11-24T16:58:48Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-stack-arrays","text":"Stack arrays by address: design and the lend analysis: on main"}
 {"at":"2026-11-24T16:58:52Z","actor":"loop","tag":"c2904337","host":"quack","cmd":"claim","id":"native/lift-signature-holes","text":"Emerald's signatures print from pret's prototypes: claimed"}
+{"at":"2026-11-24T17:06:01Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane2-native-lift-modules-by-source","text":"Merge main on quack lane 2: on main"}
+{"at":"2026-11-24T17:06:01Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-modules-by-source","text":"The lift's modules are named for the decomp's source files: on main"}

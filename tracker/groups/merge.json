@@ -800,21 +800,9 @@
         "by": "39785f55",
         "at": "2026-11-24T16:53:55Z",
         "evidence": "Merged origin/main; settled crates/pret-names/src/main.rs keeping main's --src header/source and the branch's obj_srcs lookup (now under src_dir or the ELF's folder); just check passed (exit 0) after the merge.",
-        "branch": "unit/native/lift-modules-by-source",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T16:53:55Z",
-          "by": "39785f55",
-          "host": "quack",
-          "pid": 2962519,
-          "start": "95218086",
-          "beats": true,
-          "session": "39785f55-6f6c-4d4c-bbb9-a60c5b3b3c41",
-          "lane": "quack/2"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-24T16:44:01Z"
+        "landed": "2026-11-24T17:06:01Z"
+      }
     }
   ]
 }
