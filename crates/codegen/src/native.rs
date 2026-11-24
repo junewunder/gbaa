@@ -209,6 +209,7 @@ use frame::{Frame, Kind, Local};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
+pub mod aligned;
 pub mod banks;
 pub mod bitfields;
 pub mod bounds;
@@ -2380,6 +2381,9 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // printed (no bar: they should rise).
     m.push("shift_pairs_left", n(soft.pairs_left.len()));
     m.push("narrowing_casts", n(soft.narrowings.len()));
+    // Loads' rotates by their address's low bits still printed, the
+    // address not proven aligned (native/lift-aligned-loads; barred).
+    m.push("load_rotates_left", n(soft.rotates_left.len()));
     // Flag writes printed that nothing reads (native/lift-dead-writes):
     // none, but with --keep-dead-writes.
     m.push("dead_flag_writes", soft.dead_flag_writes);
@@ -4108,6 +4112,9 @@ struct Soft {
     /// design, a guest address here; native/rom-statics).
     rom_refs: BTreeSet<u32>,
     narrowings: BTreeSet<(u32, u32, usize)>,
+    /// A load's rotate by its address's low bits still printed
+    /// ([`aligned`]).
+    rotates_left: BTreeSet<(u32, u32, usize)>,
     /// Flag writes printed, and of them those nothing reads
     /// ([`FnPrinter::dead_writes`]: none but with `--keep-dead-writes`).
     flag_writes: u64,
@@ -6533,8 +6540,30 @@ impl FnPrinter<'_, '_> {
         // value they narrow or shift ([`narrow`]).
         let none = BTreeMap::new();
         let known = narrow::values(insts, self.starts.get(&self.cur).unwrap_or(&none));
+        // A load's rotate by an amount proven 0 prints as the load
+        // ([`aligned`]): proven by the address's arithmetic, or by the
+        // prelude's check of a heap object's or a typed field's pointer.
+        let kz = aligned::zero_bits(insts, &known);
+        let checked: Vec<bool> = (0..insts.len())
+            .map(|i| {
+                // A stack local's slot is at an offset its accesses'
+                // widths divide, from the entry sp ([`frame`]).
+                let local = self
+                    .frame
+                    .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
+                let heap = typed[i].is_none()
+                    && objs[i].is_none()
+                    && refs[i].is_some()
+                    && self.callers_off(i).is_none();
+                matches!(insts[i].op, Op::Load { .. }) && (local || heap)
+            })
+            .collect();
+        let zero = aligned::zero_shifts(insts, &kz, &checked);
         let forms: Vec<_> = (0..insts.len())
-            .map(|i| narrow::form(insts, &known, i))
+            .map(|i| match insts[i].op {
+                Op::Shift { v, .. } if zero[i] => Some((v, narrow::Form::Same)),
+                _ => narrow::form(insts, &known, i),
+            })
             .collect();
         let pairs = narrow::guest_pairs(&self.f.blocks[&self.cur].insns);
         self.soft.shift_pairs.extend(&pairs);
@@ -6547,6 +6576,23 @@ impl FnPrinter<'_, '_> {
         // `native/lift-inline-temps`); the block's own, a nested block's
         // (an inlined edge's) set aside while that prints.
         let mut inline = self.inline(insts, &typed, &refs, &skip, &dead, &uses, &conds, &forms);
+        // A rotate proven 0 is its load's name wherever it is read, not a
+        // `let` copying it; or, its one use, the expression inlined. But
+        // not where a condition's form names it (its text prints `vN`).
+        let named: BTreeSet<usize> = conds
+            .iter()
+            .flatten()
+            .filter(|f| !f.takes_inlined())
+            .flat_map(|f| f.uses.iter().map(|x| x.index()))
+            .collect();
+        for (i, f) in forms.iter().enumerate() {
+            if let Some((x, narrow::Form::Same)) = f
+                && !inline[x.index()]
+                && !named.contains(&i)
+            {
+                inline[i] = true;
+            }
+        }
         if let Some(x) = scrutinee {
             inline[x.index()] = false;
         }
@@ -6637,6 +6683,13 @@ impl FnPrinter<'_, '_> {
                 self.soft.narrowings.insert((self.f.entry, self.cur, i));
             } else if matches!(inst.op, Op::Shift { .. }) && pairs.contains(&at) {
                 self.soft.pairs_left.insert(at);
+            }
+            // A load's rotate still printed ([`aligned`]).
+            if let Op::Shift { v: x, amount, .. } = inst.op
+                && forms[i].is_none_or(|(_, f)| f != narrow::Form::Same)
+                && aligned::load_shift(insts, x, amount).is_some()
+            {
+                self.soft.rotates_left.insert((self.f.entry, self.cur, i));
             }
             if inline[i] {
                 let e = self.value_at(i, &inst.op, &conds[i], forms[i]);
