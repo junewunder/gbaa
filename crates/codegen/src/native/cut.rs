@@ -30,7 +30,8 @@ pub const HEAD: &str = "// Cut by `gbaa-lift --cut` (crates/codegen/src/native/c
 //   returns r0. The `x_<key>`/`a_<key>` lines are the other entries'.\n\
 // - A function that can't stop returns its value bare; one that can,\n\
 //   `Result<_, Exit>` (`?` after a call that can). Keep that as cut.\n\
-// - `lN` is the stack slot N bytes below the entry sp; `vN` a value;\n\
+// - `lN` is the stack slot N bytes below the entry sp; `vN` a value\n\
+//   (one the lift could tell holds a global, field or variable is named so);\n\
 //   `RET` the lr a call leaves (a return's marker); `bank_sp(g, r13)`\n\
 //   comes before what may run a handler.\n";
 
