@@ -4421,6 +4421,17 @@
       "detail": "From the owner, 2026-11-20: loops as for is the first readability bar to move. Emerald's lift prints 353 loops as for and 4,030 as loop; pret's C has about 3,960 for loops (grep of pokeemerald src). {unit:native/lift-for-loops} proves only constant-start one-block loops; most C loops count to a parameter, a global or a field (HealPlayerParty: for (i = 0; i < gPlayerPartyCount; i++), lifted as 'l1: loop with r8 and a guard if before it). Wanted: (1) a guarded loop whose counter starts at a constant or a value and is compared to a bound that doesn't change in the body prints as for i in a..b (the guard before the loop is the proof the range isn't empty; narrow widths wrap as the C type does, so prove no wrap or keep loop); bodies of several blocks, with calls, with continue and break; down-counting as (a..b).rev(). (2) the counter is one variable named from DWARF (i, j), not a register beside a // dwarf note. Indexing by the counter is the next unit, {unit:native/lift-for-index}. A C test program in c/ with each loop shape (bound from a parameter, a global, a field; nested; down-counting; break inside; u8 counter). hw::spin on the back edge of a loop that calls functions is timing the play build shares: keep it as the body's last statement unless a proven counted loop can drop it in both builds with the route checks unchanged. Metrics: loops_for up, loops_not_for down; bar loops_not_for on the C rows and the games. Example: HealPlayerParty and CheckBagHasItem in out/lift-emerald. Check (code-shape work, judged on the C programs, Metroid and Emerald): just lift-check passes with 0 differences on every program and every planted fault caught; the metric barred on the C rows and in the private bars of Metroid and Emerald; both games build and run 600 of 600 frames headless; Emerald route check still 0 differences once {unit:native/emerald-native-route} is done; just check passes.",
       "uses": ["heavy"],
       "priority": 26,
+      "record": {
+        "state": "claimed",
+        "by": "e05cd9ee",
+        "session": "e05cd9ee-8882-41b4-8c2c-828884da23df",
+        "host": "quack",
+        "pid": 2962519,
+        "start": "95218086",
+        "at": "2026-11-24T05:32:54Z",
+        "branch": "unit/native/lift-for-bounds",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-24T05:18:05Z",
