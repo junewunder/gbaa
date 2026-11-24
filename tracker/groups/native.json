@@ -5383,7 +5383,9 @@
       "title": "Values compared signed print as i32 through their uses",
       "detail": "docs/research/mirror-machine-count.md row 8, what {unit:native/lift-cast-types} left: Mirror's signed compares of u32 values, (vN as i32) 6,521 and (rN as i32) 1,166. Most such values are also added, stored or passed, so typing one let i32 alone adds casts there; a function-wide signedness (i32 wrapping arithmetic from a signed source to its compares) is the work. Done when: Mirror's casts metric falls, lift-check passes, C programs and a game judged. Sprint 2026-11-24: count prim::sext in casts first and re-base the bars with that cause. Mirror's 7,687 'as i32' compares halved, or the evidence says what holds them. A value also shifted right or compared unsigned stays u32. Mirror's native route 0 differences. Not beside {unit:native/lift-pointer-registers}.",
       "check": "recorded",
+      "needs": ["native/lift-pointer-registers"],
       "uses": ["heavy"],
+      "priority": 71,
       "notes": [
         {
           "at": "2026-11-24T13:29:10Z",
