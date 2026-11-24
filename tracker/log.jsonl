@@ -3896,3 +3896,4 @@
 {"at":"2026-11-24T06:21:21Z","actor":"loop","tag":"91d18000","host":"quack","cmd":"add-unit","id":"native/fnref-dense-keys-left","text":"new unit: Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid"}
 {"at":"2026-11-24T06:21:29Z","actor":"loop","tag":"91d18000","host":"quack","cmd":"decide","text":"decided: Dense IDs land with fn_keys_left as measured, not 0","d":"d/dense-ids-land-with-fn-keys-left-as-measured"}
 {"at":"2026-11-24T06:21:49Z","actor":"loop","tag":"9cee3887","host":"quack","cmd":"add-unit","id":"native/lift-field-base","text":"new unit: A field address held in a register prints on its base"}
+{"at":"2026-11-24T06:21:57Z","actor":"loop","tag":"9cee3887","host":"quack","cmd":"add-unit","id":"native/lift-arm-values","text":"new unit: Labelled breaks print as early returns and arm values"}
