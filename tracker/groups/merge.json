@@ -707,6 +707,14 @@
         "host": "quack",
         "landed": "2026-11-24T08:18:31Z"
       }
+    },
+    {
+      "id": "merge/quack-lane1-native-ime-i-set-test-program",
+      "title": "Merge main on quack lane 1",
+      "detail": "Branch `unit/native/ime-i-set-test-program` holds {unit:native/ime-i-set-test-program}, finished but not on main: merging main conflicts in docs/native-stage-b.numbers.md docs/tools/commands.md justfile. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/1",
+      "branch": "unit/native/ime-i-set-test-program"
     }
   ]
 }
