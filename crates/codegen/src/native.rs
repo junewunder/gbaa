@@ -215,6 +215,7 @@ pub mod cut;
 pub mod fields;
 pub mod find_field;
 pub mod first_stop;
+pub mod fn_check_names;
 pub mod fnref;
 pub mod frame;
 pub mod globals;
@@ -1764,6 +1765,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                 &holes.names,
             )
         });
+    // The per-function check's RAM names (native/lift-mod-run-edit-report):
+    // after the names pass, which would take its strings for words in use.
+    if !holes.fn_check.is_empty() {
+        main.push_str(&fn_check_names::table(&holes.names, holes.types.as_deref()));
+    }
     // A mod's cut (unit `native/lift-mod-cut`): the function's text as
     // lifted kept for `gbaa-lift --cut`, then the cut's in its place.
     let cut_texts: BTreeMap<u32, String> = out
@@ -3141,6 +3147,7 @@ fn fn_check_texts(
         }
         "the holes file's stand-in".to_string()
     };
+    let cut = holes.cuts.contains_key(&k);
     let regs = |m: u8| -> String {
         let v: Vec<String> = (0..4)
             .filter(|r| m & 1 << r != 0)
@@ -3200,7 +3207,7 @@ fn fn_check_texts(
         .collect();
     writeln!(
         t,
-        "pub static CHECK_{k:08x}: fn_check::Spec = fn_check::Spec {{ key: {k:#010x}, name: \"f_{k:08x}\", params: {params:#x}, results: {results:#x}, sig: {sig:?}, replacement: {replacement:?}, globals: &[{}], seed: {}, runs: {}, digest: {} }};",
+        "pub static CHECK_{k:08x}: fn_check::Spec = fn_check::Spec {{ key: {k:#010x}, name: \"f_{k:08x}\", params: {params:#x}, results: {results:#x}, sig: {sig:?}, replacement: {replacement:?}, cut: {cut}, globals: &[{}], seed: {}, runs: {}, digest: {} }};",
         globals.join(", "),
         chk.seed,
         chk.runs,
