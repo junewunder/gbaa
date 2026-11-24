@@ -4857,17 +4857,17 @@
       "minMinutes": 180,
       "record": {
         "state": "claimed",
-        "by": "66065018",
-        "session": "66065018-5139-497f-b9ca-a8662426a0d5",
+        "by": "3ca58cea",
+        "session": "3ca58cea-0207-418c-8adf-1cec823264b1",
         "host": "quack",
         "pid": 2963642,
         "start": "95218853",
-        "at": "2026-11-24T15:40:16Z",
+        "at": "2026-11-24T16:29:18Z",
         "branch": "unit/native/lift-stack-arrays",
-        "beats": true,
-        "handedBack": "2026-11-24T16:28:59Z",
+        "resumed": "66065018",
+        "prevSession": "66065018-5139-497f-b9ca-a8662426a0d5",
         "pushed": true,
-        "ended": "2026-11-24T16:29:11Z"
+        "beats": true
       },
       "notes": [
         {
