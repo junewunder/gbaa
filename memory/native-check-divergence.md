@@ -25,3 +25,9 @@ What found Metroid's six timing causes in one session (native/metroid-native-che
 - The causes were all "where time is brought up to date": an idle loop's not-taken exit, a present
   mid-walk, a BIOS stall in one piece, the sound walked after a DMA, a timer re-run by a stale event,
   an IRQ taken at the next tick. Under native timing look first at which sync an event lands in.
+- **Audio only, RAM and I/O equal** (Amazing Mirror, native/mirror-native-route): hash each chunk's
+  `fifo` and `psg` apart in `sound::hand_off` (native) and `Machine::hand_off_audio` (play; it doesn't
+  call `hand_off`), run both with `--native-record` (else play makes no chunks). PSG alone differing
+  meant a store's width: native `st8` made a byte store to a sound register a halfword, retriggering.
+- **VCOUNT only, frame 1**: the native `sync` presented after its whole walk, the play build's stops at
+  the V-blank (sched.rs `catch_up`, 2026-11-18). A big boot DMA overshoots by tens of lines.

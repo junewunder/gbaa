@@ -1,0 +1,69 @@
+# Kirby & the Amazing Mirror: reset, the opening, Start through the title, A through the file and the
+# intro into the first room (Kirby first stands at frame 1340, memory/kirby-amazing-mirror.md), then
+# right with jumps for 3,000 frames (he ignores the D-pad for over 100 frames after first standing:
+# moves begin 300 after). The lift (`just lift … --name kirby-mirror`) against the play build at
+# --timing native (`just recompile … out/kirby-mirror-play --timing native --name kirby-mirror-play`),
+# by route-check --native … --name kirby-mirror: 0 differences, audio too (native/mirror-native-route,
+# 2026-11-20). At frame 1324 the game reads open bus (its holes file's [[open_bus]]). Headless, no
+# save: a blank cartridge.
+rom = "$HOME/ROMs/gba/Kirby & The Amazing Mirror.gba"
+
+# Start past the opening and the title.
+[[press]]
+button = "start"
+at = 400
+
+[[press]]
+button = "start"
+at = 700
+
+# A through the file select and the intro.
+[[press]]
+button = "a"
+at = 800
+
+[[press]]
+button = "a"
+at = 950
+
+[[press]]
+button = "a"
+at = 1100
+
+[[press]]
+button = "a"
+at = 1300
+
+[[press]]
+button = "a"
+at = 1500
+
+# Right through the first room, jumping now and then.
+[[press]]
+button = "right"
+at = 1650
+hold = 1300
+
+[[press]]
+button = "a"
+from = 1700
+to = 2900
+every = 150
+hold = 20
+
+# The hashes are the play build's at --timing native (the lift's the same), not yet checked against
+# mGBA.
+[[checkpoint]]
+name = "first-room-1400"
+frame = 1400
+hash = "bd56b227cde29c70"
+
+[[checkpoint]]
+name = "first-room-2200"
+frame = 2200
+hash = "9fde6d6603127aa8"
+
+[[checkpoint]]
+name = "first-room-3000"
+frame = 3000
+hash = "aac84f9474152781"

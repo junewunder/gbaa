@@ -24,7 +24,9 @@ elif [ "${FACTORY_SKILL_FROM:-}" != deploy ]; then
 fi
 # `just` reads the skill's recipes through .tracker/skill (factory/factory.just imports them).
 if [ -n "${_fl:-}" ] && [ "$(readlink "$FACTORY_ROOT/.tracker/skill" 2>/dev/null)" != "$_fl" ]; then
-  mkdir -p "$FACTORY_ROOT/.tracker" && ln -sfn "$_fl" "$FACTORY_ROOT/.tracker/skill.new.$$" && mv -T "$FACTORY_ROOT/.tracker/skill.new.$$" "$FACTORY_ROOT/.tracker/skill"
+  # (Renamed over the old link in one step: GNU mv's -T, macOS's -h.)
+  mkdir -p "$FACTORY_ROOT/.tracker" && ln -sfn "$_fl" "$FACTORY_ROOT/.tracker/skill.new.$$" \
+    && { mv -T "$FACTORY_ROOT/.tracker/skill.new.$$" "$FACTORY_ROOT/.tracker/skill" 2>/dev/null || mv -h "$FACTORY_ROOT/.tracker/skill.new.$$" "$FACTORY_ROOT/.tracker/skill"; }
 fi
 # The Node the stubs run: the one deployed beside this copy (deploy.sh puts it there, as the
 # skill's runtime/node.txt pins it), else the deployed current's (a copy chosen by hand), else,

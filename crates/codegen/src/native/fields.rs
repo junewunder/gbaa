@@ -534,7 +534,9 @@ pub fn joined_pointer(
         Some((n, _)) => n.clone(),
         None => {
             let mut n = ids.join("_");
-            if joined.iter().any(|((s, _, _), (m, _))| *s == st && *m == n) {
+            // One field alone has the field's own accessor's name (pret's
+            // `u32 numFrames : 8` of MonSpritesGfxManager, a whole byte).
+            if ids.len() == 1 || joined.iter().any(|((s, _, _), (m, _))| *s == st && *m == n) {
                 n = format!("{n}_at{off}_u{}", 8 * w);
             }
             joined.insert(key, (n.clone(), ids));

@@ -46,3 +46,13 @@ C to 61k of assembly), and its names are mostly placeholders
   it would turn the LLM pilot's "passed its tests" into "proved" for the
   functions it covers. june (2026-11-13): park it until the pilot shows how
   often tests miss.
+- **A rewrite loop that grows the printer.** By hand, apart from the
+  factory: pick about 20 lifted functions of different shapes, have an
+  agent rewrite each toward the decomp's C (still Rust against the lift's
+  own types), check each rewrite against its lift (`just fn-check`), then
+  sort the edits by kind. A kind that recurs becomes a unit for a printing
+  transform; one-offs are dropped. It is for the gaps with no known
+  printed form yet (stack arrays, locals that are only a comment, calls
+  returning `(r0, r2, r3)`). The score is the pret table
+  (`native/lift-pret-score`). It needs a lift that builds: Metroid now,
+  Emerald after `native/emerald-builds`. june (2026-11-20).

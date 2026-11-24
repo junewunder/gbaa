@@ -1,6 +1,6 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
 //! [--names DIR]... [--no-data-names] [--layout guest|packed] [--drop-standin KEY] [--plant AT]
-//! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT]
+//! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT]
 //! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
 //! [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...]`,
@@ -64,7 +64,10 @@
 //! `native/ime-release`); `--takes-zeroed` starts a function that takes
 //! r4-r11 from its callers with them zeroed at every call that passes
 //! them, as stage A first did, which the native check must catch on
-//! `agb/native-takes` (unit `native/taker-test-program`); `--plant-slot=AT`
+//! `agb/native-takes` (unit `native/taker-test-program`); `--gives-kept`
+//! leaves a caller's r4-r11 as they were after a call of a function that
+//! gives them back, as stage A first did, which the native check must
+//! catch on `agb/native-gives` (unit `native/lift-gives`); `--plant-slot=AT`
 //! makes the store of the instruction at AT, which must be to a stack slot
 //! printed as a Rust local, store its value plus one, which the native
 //! check must catch on `agb/native-frame-locals` (unit
@@ -168,7 +171,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...] | gbaa-lift ROM --find FIELD [FLAGS]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...] | gbaa-lift ROM --find FIELD [FLAGS]"
         );
         ExitCode::FAILURE
     };
@@ -183,6 +186,7 @@ fn main() -> ExitCode {
     let mut names: Vec<PathBuf> = Vec::new();
     let (mut drop, mut plant, mut tail, mut irq_at_waits) = (None, None, false, false);
     let (mut ime_at_waits, mut takes_zeroed, mut keep_dead) = (false, false, false);
+    let mut gives_kept = false;
     let mut keep_temps = false;
     let mut no_field_types = false;
     let mut no_local_names = false;
@@ -214,6 +218,10 @@ fn main() -> ExitCode {
         }
         if a == "--takes-zeroed" {
             takes_zeroed = true;
+            continue;
+        }
+        if a == "--gives-kept" {
+            gives_kept = true;
             continue;
         }
         if a == "--keep-dead-writes" {
@@ -399,6 +407,7 @@ fn main() -> ExitCode {
     holes.irq_at_waits = irq_at_waits;
     holes.ime_at_waits = ime_at_waits;
     holes.takes_zeroed = takes_zeroed;
+    holes.gives_kept = gives_kept;
     holes.keep_dead_writes = keep_dead;
     holes.keep_temps = keep_temps;
     holes.no_for_loops = no_for_loops;

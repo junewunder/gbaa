@@ -1004,8 +1004,9 @@ fn run_sound<G: Native>(g: &mut G) {
 /// Bring everything up to the clock moved on by `cycles`, as the play
 /// build's `Machine::sync` does: each beam event due ([`line_event`]: a
 /// line drawn, H-blank DMA, V-blank's DMA), with the sound brought up to
-/// the clock before each and after; the frame presented if V-blank started
-/// ([`present`]); then the next event is found ([`Hw::next_event`]), and
+/// the clock before each and after; the frame presented at each V-blank
+/// the walk starts, before the events past it ([`present`]); then the next
+/// event is found ([`Hw::next_event`]), and
 /// the handlers of what's requested run. Returns whether V-blank started.
 fn sync<G: Native>(g: &mut G, cycles: u32) -> Result<bool, Exit> {
     if g.hw().exited {
@@ -1019,16 +1020,17 @@ fn sync<G: Native>(g: &mut G, cycles: u32) -> Result<bool, Exit> {
     let mut vblank = false;
     while g.hw().sound.io.now >= g.hw().next_line_event {
         run_sound(g);
-        vblank |= line_event(g)?;
+        if line_event(g)? {
+            // The play build's walk stops at the V-blank it started and
+            // ends the frame there (`Machine::sync`); its next run's
+            // `catch_up` walks the rest before any code runs. So the frame
+            // is presented at its line, and the walk goes on after.
+            vblank = true;
+            settle_sound(g);
+            present(g)?;
+        }
     }
-    run_sound(g);
-    let hw = g.hw();
-    if crate::sound::half_full(&hw.sound.mixer) {
-        hand_off(hw);
-    }
-    if vblank {
-        present(g)?;
-    }
+    settle_sound(g);
     let hw = g.hw();
     let io = &hw.sound.io;
     hw.next_event = crate::timer::next_event(io, crate::sound::clocks(io))
@@ -1040,6 +1042,16 @@ fn sync<G: Native>(g: &mut G, cycles: u32) -> Result<bool, Exit> {
     }
     dispatch(g);
     Ok(vblank)
+}
+
+/// The sound brought up to the clock, and handed off if a buffer is half
+/// full: where the play build's sync ends its walk.
+fn settle_sound<G: Native>(g: &mut G) {
+    run_sound(g);
+    let hw = g.hw();
+    if crate::sound::half_full(&hw.sound.mixer) {
+        hand_off(hw);
+    }
 }
 
 /// The sound since the last hand-off, to [`Host::audio`].
@@ -1119,12 +1131,13 @@ fn line_event<G: Native>(g: &mut G) -> Result<bool, Exit> {
     Ok(true)
 }
 
-/// The frame presented, at the end of the [`sync`] whose walk started
-/// V-blank, as the play build presents it when its sync returns: after
-/// every event the clock had passed (a DMA's or a BIOS copy's price that
-/// ran past line 160, the V-blank DMA's own) and the sound brought up to
-/// it, so the record holds the beam's line, the RAM and the samples as
-/// the play build's does. Then the keys are latched.
+/// The frame presented where the [`sync`] whose walk started V-blank
+/// stops it, as the play build presents it when its sync returns: after
+/// the V-blank's line event (and the V-blank DMA's price) with the sound
+/// brought up to it, but before the events past it that a DMA's or a BIOS
+/// copy's price ran over (the walk goes on after the present), so the
+/// record holds the beam's line, the RAM and the samples as the play
+/// build's does. Then the keys are latched.
 fn present<G: Native>(g: &mut G) -> Result<(), Exit> {
     let hw = g.hw();
     hw.frames += 1;
@@ -1216,6 +1229,24 @@ pub fn write_io<G: Native>(g: &mut G, o: u32, v: u16) {
     if o == reg::POSTFLG {
         store_halt(g);
     }
+}
+
+/// A byte store of `v` at I/O offset `o` to a sound or timer register
+/// ([`Sound::has`]), as the play build's bus makes it: one byte wide
+/// through the sound path, so the PSG sees that byte written, not its pair
+/// rewritten with what it holds (a stored trigger bit would restart its
+/// channel, a length byte reload its counter). Returns `false`, storing
+/// nothing, for any other register: its byte goes in a halfword with the
+/// other kept, the caller's.
+pub fn write_io8<G: Native>(g: &mut G, o: u32, v: u8) -> bool {
+    if !Sound::<G>::has(o & !1) {
+        return false;
+    }
+    if crate::sound::counts_before_write(o) {
+        run_sound(g);
+    }
+    g.hw().sound_store(o, 1, v as u32);
+    true
 }
 
 /// A byte store of `v` to `POSTFLG` (`o` 0x300: bit 0 kept) or `HALTCNT`

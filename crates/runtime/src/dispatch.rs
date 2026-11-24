@@ -968,16 +968,30 @@ fn switch<P: Platform>(m: &mut Machine<P>) -> bool {
     let Some(f) = m.nest.frame_end else {
         return false;
     };
-    // Compiled code called outside a run has no counts to keep.
-    // SAFETY: see `Nest::stats`.
-    if let Some(s) = unsafe { m.nest.stats.as_mut() } {
-        s.switches += 1;
-        // A guest's outermost run doesn't return to note it.
-        s.max_stack = s.max_stack.max(m.nest.stack_top - m.nest.stack_low);
+    loop {
+        // Compiled code called outside a run has no counts to keep.
+        // SAFETY: see `Nest::stats`.
+        if let Some(s) = unsafe { m.nest.stats.as_mut() } {
+            s.switches += 1;
+            // A guest's outermost run doesn't return to note it.
+            s.max_stack = s.max_stack.max(m.nest.stack_top - m.nest.stack_low);
+        }
+        f(m as *mut Machine<P> as *mut ());
+        m.sched.frame_ended = false;
+        // The next frame's start, as [`Machine::run_frame`] has it: the
+        // events the V-blank left due are walked before any instruction
+        // runs, and another V-blank reached there is a frame of its own
+        // (`native/metroid-route-again`: without this the walk came at
+        // the guest's next tick, after its stores, and Metroid's compiled
+        // play build made 4 samples in frame 2 where its interpreter made
+        // none).
+        m.catch_up();
+        // (A front end that stopped the run with a fault isn't shown
+        // the frame that walk ended.)
+        if !m.sched.frame_ended || m.fault.is_some() {
+            return true;
+        }
     }
-    f(m as *mut Machine<P> as *mut ());
-    m.sched.frame_ended = false;
-    true
 }
 
 /// [`settle`]'s and [`yield_at`]'s run: the dispatcher from the CPU's key,

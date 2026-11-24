@@ -217,6 +217,28 @@ fn pointer_scan_rejects_a_shift_by_32() {
 }
 
 #[test]
+fn pointer_scan_rejects_a_block_transfer_of_no_registers() {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        .h(0x100, 0x4770)
+        // push {lr}; ldmia r4!, {} (text bytes 0x00 0xcc); pop {pc}.
+        .h(0x300, 0xb500)
+        .h(0x302, 0xcc00)
+        .h(0x304, 0xbd00)
+        // The same with a register in the list: ldmia r4!, {r0}.
+        .h(0x340, 0xb500)
+        .h(0x342, 0xcc01)
+        .h(0x344, 0xbd00)
+        // Both beside a function found already.
+        .w(0x400, thumb(0x300))
+        .w(0x404, thumb(0x100))
+        .w(0x408, thumb(0x340));
+    let d = a.run();
+    assert!(!d.funcs.contains_key(&thumb(0x300)));
+    assert_eq!(d.funcs.get(&thumb(0x340)), Some(&Evidence::Scanned));
+}
+
+#[test]
 fn pointer_scan_rejects_a_bx_to_a_shifted_register() {
     let mut a = Asm::new();
     a.entry(0x100)
