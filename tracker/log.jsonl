@@ -4232,3 +4232,4 @@
 {"at":"2026-11-24T22:32:22Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-lent-frameless","text":"A frame of only locals and lent slots takes no sp: edited (detail)"}
 {"at":"2026-11-24T22:32:25Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-lent-games","text":"Lent stack locals on Metroid and Emerald: edited (detail)"}
 {"at":"2026-11-24T22:32:27Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-stack-typed-locals","text":"A lent stack local takes its DWARF type: edited (detail)"}
+{"at":"2026-11-24T22:32:29Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-lend-wider","text":"More pointer parameters borrowed: compares and walks: edited (detail)"}
