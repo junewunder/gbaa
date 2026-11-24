@@ -4503,15 +4503,22 @@
       "detail": "docs/research/mirror-machine-count.md, row 5. Every ldr the lifter can't prove aligned keeps prim::shift(ShiftType::Ror, v, (addr & 3) << 3), even (n << 2) + an aligned base, or a typed field of a struct whose base is aligned. Prove alignment from the address's arithmetic (and Ref's checked alignment where the prelude has it) and print the plain value. Bar on 04e94cca: 44,881 ShiftType::Ror in Mirror's src/m_*.rs. Done when: the count falls, lift-check passes, the C programs and a game judged (decision).",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "c08a6e47",
-        "session": "c08a6e47-2a16-43d7-acf1-12b1f784150d",
-        "host": "quack",
-        "pid": 2963642,
-        "start": "95218853",
-        "at": "2026-11-24T10:39:15Z",
+        "at": "2026-11-24T11:56:54Z",
+        "evidence": "Amazing Mirror's lift (mods holes, default names): ShiftType::Ror in src/m_*.rs 44,881 -> 12,090 (new barred metric load_rotates_left 13,040); its native route units/kirby-mirror-native.toml passes 3,000 frames, 0 differences, audio the same. C programs' Ror 364 -> 34 (c-heap-agbcc 30->5, c-chain-agbcc 41->1), load_rotates_left barred on all 37 programs. just lift-check passed (all programs' native checks, planted faults caught); after merging main, lift-check --only c-jump-agbcc/c-jump-gcc/native-ram-jump passed and just check passed. Left: raw loads through untyped pointer params, filed as {unit:native/lift-aligned-params}.",
         "branch": "unit/native/lift-aligned-loads",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T11:56:54Z",
+          "by": "c08a6e47",
+          "host": "quack",
+          "pid": 2963642,
+          "start": "95218853",
+          "beats": true,
+          "session": "c08a6e47-2a16-43d7-acf1-12b1f784150d",
+          "lane": "quack/3"
+        }
       },
       "notes": [
         {
