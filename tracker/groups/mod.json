@@ -1077,7 +1077,8 @@
         "at": "2026-11-24T21:53:53Z",
         "branch": "unit/mod/retire",
         "beats": true,
-        "handedBack": "2026-11-24T22:05:09Z"
+        "handedBack": "2026-11-24T22:05:09Z",
+        "pushed": true
       },
       "notes": [
         {
