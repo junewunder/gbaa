@@ -1528,6 +1528,14 @@
       "by": "c2904337",
       "at": "2026-11-24T19:18:19Z",
       "scope": ["native/*"]
+    },
+    {
+      "id": "d/a-store-through-a-sum-with-a-non-ram-constant",
+      "title": "A store through a sum with a non-RAM constant stays out of RAM",
+      "why": "From {unit:native/lift-for-ram-bounds}: the per-function RAM-store summary (native::writes) takes a store whose address is a constant in non-RAM, non-I/O space (0x05-0x0F) plus an index, scaled by shifts (GCC's (0x03000000 + x) << 1 for VRAM), as not in RAM: C's rule that pointer arithmetic stays in its object, as the function flow treats a pointer into dull bytes as a number. Without it every drawing callee writes anywhere and no loop around one prints as for. I/O sums, and stores Recovery can't place, stay writes anywhere; the IRQ handlers' writes join every loop's check.",
+      "by": "1fbd91b3",
+      "at": "2026-11-24T20:29:45Z",
+      "scope": ["group:native"]
     }
   ]
 }
