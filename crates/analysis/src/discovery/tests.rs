@@ -157,6 +157,33 @@ fn pointer_scan_takes_a_column_of_struct_records() {
 }
 
 #[test]
+fn pointer_scan_takes_a_table_whose_base_code_loads() {
+    // c/list's kActs as modern GCC builds it: a table of Thumb pointers to
+    // leaves with no push, indexed from its base, which code loads.
+    let table = |loaded: bool| {
+        let mut a = Asm::new();
+        a.entry(0x100)
+            .h(0x100, 0x4900) // ldr r1, [pc, #0]
+            .h(0x102, 0x4770) // bx lr
+            .w(0x104, if loaded { B + 0x400 } else { 0x0601_0000 });
+        for (i, f) in [0x300, 0x320, 0x340].into_iter().enumerate() {
+            a.h(f, 0x2001 + i as u16).h(f + 2, 0x4770); // movs r0, #n; bx lr
+            a.w(0x400 + 4 * i as u32, thumb(f));
+        }
+        a.run()
+    };
+    let d = table(true);
+    for f in [0x300, 0x320, 0x340] {
+        assert_eq!(d.funcs.get(&thumb(f)), Some(&Evidence::Scanned), "0x{f:x}");
+    }
+    // The same table with no code loading its base: nothing.
+    let d = table(false);
+    for f in [0x300, 0x320, 0x340] {
+        assert!(!d.funcs.contains_key(&thumb(f)), "0x{f:x}");
+    }
+}
+
+#[test]
 fn pointer_scan_takes_a_lone_pool_getter() {
     let mut a = Asm::new();
     a.entry(0x100)
@@ -207,6 +234,28 @@ fn pointer_scan_rejects_a_shift_by_32() {
         .h(0x340, 0x2001)
         .h(0x342, 0x0868)
         .h(0x344, 0x4770)
+        // Both beside a function found already.
+        .w(0x400, thumb(0x300))
+        .w(0x404, thumb(0x100))
+        .w(0x408, thumb(0x340));
+    let d = a.run();
+    assert!(!d.funcs.contains_key(&thumb(0x300)));
+    assert_eq!(d.funcs.get(&thumb(0x340)), Some(&Evidence::Scanned));
+}
+
+#[test]
+fn pointer_scan_rejects_a_block_transfer_of_no_registers() {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        .h(0x100, 0x4770)
+        // push {lr}; ldmia r4!, {} (text bytes 0x00 0xcc); pop {pc}.
+        .h(0x300, 0xb500)
+        .h(0x302, 0xcc00)
+        .h(0x304, 0xbd00)
+        // The same with a register in the list: ldmia r4!, {r0}.
+        .h(0x340, 0xb500)
+        .h(0x342, 0xcc01)
+        .h(0x344, 0xbd00)
         // Both beside a function found already.
         .w(0x400, thumb(0x300))
         .w(0x404, thumb(0x100))
@@ -276,6 +325,58 @@ fn pointer_scan_rejects_a_bx_to_a_register_the_body_never_set() {
     assert!(!d.funcs.contains_key(&thumb(0x300)));
     assert_eq!(d.funcs.get(&thumb(0x340)), Some(&Evidence::Scanned));
     assert_eq!(d.funcs.get(&thumb(0x380)), Some(&Evidence::Scanned));
+}
+
+#[test]
+fn pointer_scan_rejects_a_bx_through_an_entry_register() {
+    let mut a = Asm::new();
+    a.entry(0x100)
+        .h(0x100, 0x4770)
+        // Emerald's battle script at 0x082db591 decoded as Thumb: lsls r0,
+        // r1, #12; subs r1, #2; movs r0, r4; bx r2, r2 as it came.
+        .h(0x300, 0x0308)
+        .h(0x302, 0x3902)
+        .h(0x304, 0x0020)
+        .h(0x306, 0x4710)
+        // The same with the jump's target loaded: ldr r2, [r2, #0].
+        .h(0x340, 0x0308)
+        .h(0x342, 0x3902)
+        .h(0x344, 0x6812)
+        .h(0x346, 0x4710)
+        // Both beside a function found already.
+        .w(0x400, thumb(0x300))
+        .w(0x404, thumb(0x100))
+        .w(0x408, thumb(0x340));
+    let d = a.run();
+    assert!(!d.funcs.contains_key(&thumb(0x300)));
+    assert_eq!(d.funcs.get(&thumb(0x340)), Some(&Evidence::Scanned));
+}
+
+#[test]
+fn pointer_scan_rejects_an_embedded_gba_image() {
+    // An ARM candidate, `b` over a header to `bx lr`, beside a function
+    // found already.
+    let image = |logo: bool| {
+        let mut a = Asm::new();
+        a.entry(0x100)
+            .h(0x100, 0x4770)
+            .w(0x500, 0xea00_002e)
+            .w(0x5c0, 0xe12f_ff1e)
+            .w(0x600, B + 0x500)
+            .w(0x604, thumb(0x100));
+        if logo {
+            // The 156 bytes after its first word are the ROM's own header
+            // logo's (here whatever 0x04 holds).
+            let h = a.0[4..4 + 156].to_vec();
+            a.0[0x504..0x504 + 156].copy_from_slice(&h);
+        }
+        a.run()
+    };
+    assert_eq!(
+        image(false).funcs.get(&(B + 0x500)),
+        Some(&Evidence::Scanned)
+    );
+    assert!(!image(true).funcs.contains_key(&(B + 0x500)));
 }
 
 #[test]

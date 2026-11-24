@@ -77,6 +77,10 @@ pub struct Game {
     /// The return address of the last call of a stand-in that reads it
     /// (`lr = true` in its holes file): the caller's `bl` sets it.
     pub lr: u32,
+    /// r4-r11 as a function that gives them back to its callers left
+    /// them (hand-written code sharing its caller's registers): its
+    /// returns set it, the direct call takes them (`native/lift-gives`).
+    pub gave: [u32; 8],
     /// The tasks a game's task switcher runs ([`task_resume`]).
     pub tasks: Tasks,
     /// Where a `SoftReset` restarts the program ([`soft_reset`]), while
@@ -182,6 +186,7 @@ impl Game {
             banked: [IRQ_STACK, 0x0300_7FE0, 0],
             spsr: 0,
             lr: RET,
+            gave: [0; 8],
             tasks: Tasks::default(),
             reset: None,
             bios_latch: runtime::bus::BIOS_LATCH_AFTER_BOOT,
@@ -249,7 +254,7 @@ fn irq_entry(g: &mut Game) {
         return;
     }
     g.bios_latch = runtime::bus::BIOS_LATCH_IN_IRQ;
-    let k = if h & 1 != 0 { h } else { h & !3 };
+    let k = if h & 1 != 0 || is_dense_id(h) { h } else { h & !3 };
     // IRQ mode, I set, as the exception enters it, the CPSR it stopped in
     // the SPSR; back as it was on the return (the BIOS's `subs pc, lr,
     // #4` restores the SPSR, which a wrapper that nests puts back). The
@@ -618,8 +623,9 @@ pub fn st8(g: &mut Game, a: u32, v: u32) {
         return;
     }
     match a >> 24 {
-        // POSTFLG and HALTCNT: a byte, not a halfword, as only one halts.
+        // POSTFLG and HALTCNT (only one halts), a sound or timer register: a byte, as the play build's bus.
         4 if io_at(a) & !1 == runtime::io::reg::POSTFLG => hw::write_postflg8(g, io_at(a), v),
+        4 if !io_unused(io_at(a) & !1) && hw::write_io8(g, io_at(a), v) => {}
         4 => {
             let o = io_at(a);
             let shift = (o & 1) * 8;
@@ -1091,11 +1097,14 @@ pub fn sound_bias(g: &mut Game, level: u32) {
     st16(g, SOUNDBIAS, old & !0x3FF | if level == 0 { 0 } else { 0x200 });
 }
 
-/// A function pointer's call: `k` is the function's key (its ROM or IWRAM
-/// address, bit 0 for Thumb), the ID of every function in stage A
-/// (`--fn-ids rom`).
+/// A function pointer's call: `k` is the function's ID, its key (its ROM
+/// or IWRAM address, bit 0 for Thumb), or at `--fn-ids dense` for a
+/// function the flow proved its index in `DENSE` from 1.
 #[inline(never)]
 pub fn call_fn(g: &mut Game, k: u32, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+    if is_dense_id(k) {
+        return (DENSE[k as usize - 1])(g, sp, a);
+    }
     match FNS.binary_search_by_key(&k, |&(e, _)| e) {
         Ok(i) => (FNS[i].1)(g, sp, a),
         Err(_) => match flash_call(g, k, a) {
@@ -1103,6 +1112,39 @@ pub fn call_fn(g: &mut Game, k: u32, sp: u32, a: [u32; 4]) -> Result<[u32; 4], E
             None => panic!("a call or jump to {k:#010x}, which is no function's entry"),
         },
     }
+}
+
+/// A context restore's return (`longjmp`'s; native/lift-longjmp): into
+/// the caller of the save that stored `buf`, with r0-r3, by unwinding.
+pub fn restore(buf: u32, r: [u32; 4]) -> ! {
+    std::panic::resume_unwind(Box::new(Restored { buf, r }))
+}
+
+/// What a [`restore`] unwinds with.
+pub struct Restored {
+    buf: u32,
+    r: [u32; 4],
+}
+
+/// A catch point's body (a caller of `setjmp`), run till a [`restore`].
+pub fn catch_restore<T>(body: impl FnOnce() -> T) -> Result<T, Box<dyn std::any::Any + Send>> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(body))
+}
+
+/// The registers a restore of `buf` returns with; any other unwinding
+/// (another buffer's, a panic) goes on up.
+pub fn restored(thrown: Box<dyn std::any::Any + Send>, buf: u32) -> [u32; 4] {
+    match thrown.downcast::<Restored>() {
+        Ok(t) if buf != 0 && t.buf == buf => t.r,
+        Ok(t) => std::panic::resume_unwind(t),
+        Err(p) => std::panic::resume_unwind(p),
+    }
+}
+
+/// Whether `k` is a dense function's ID (`--fn-ids dense`).
+#[inline(always)]
+pub fn is_dense_id(k: u32) -> bool {
+    k.wrapping_sub(1) < DENSE.len() as u32
 }
 
 /// A call into RAM holding one of the flash save library's stack routines

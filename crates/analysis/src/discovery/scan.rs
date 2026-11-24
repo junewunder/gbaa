@@ -18,19 +18,25 @@
 //! opening with `push {…, lr}` whose only way on is an indirect jump after a
 //! `bl` (a task that calls its setup, then switches on its state). Undefined instructions, lone halves of a Thumb
 //! `bl`, BIOS calls that don't exist, long runs of one word, instructions
-//! no game runs (user-bank `ldm`), Thumb shifts by 32 (a ROM pointer's
-//! upper half), a Thumb `bx` to a register last set by a shift left, or
-//! to one of r4-r12 the body never set ([`shifted_bx`]), and a first instruction that is
+//! no game runs (user-bank `ldm`, an `ldm` or `stm` of no registers), Thumb shifts by 32 (a ROM pointer's
+//! upper half), a Thumb `bx` to a register last set by a shift left
+//! ([`shifted_bx`]) or through the value it had on entry ([`entry_bx`]),
+//! and a first instruction that is
 //! conditional or pops fail it. An ARM body must be mostly unconditional.
 //! Then the value-set analysis from the candidate must return with sp
 //! where it started: data decoded as code usually pops its caller's frame.
+//!
+//! An ARM candidate heading an embedded GBA program (the Nintendo logo
+//! after its first word, [`embedded_image`]) isn't one: that code runs
+//! from where it is loaded, often another GBA.
 //!
 //! **Ranking.** A `push {…, lr}` prologue only ranks candidates: it scores
 //! 4, being loaded from a literal pool by code found, sitting next to a
 //! known function start in a table (or beside another Thumb pointer, two
 //! words from one: a table of structs of two function pointers and a word
 //! of data; or in a column of starts, one record of two to eight words
-//! from one and two from another: [`column`]) or being a constant getter (pool
+//! from one and two from another: [`column`]; or in a run of Thumb
+//! pointers whose base code loads: [`based`]) or being a constant getter (pool
 //! loads, then `bx lr`: [`getter`]) scores 2, and more than one word
 //! pointing there scores 1. A candidate needs [`MIN_SCORE`]. A batch takes
 //! candidates best first and drops any whose body overlaps one taken
@@ -95,6 +101,8 @@ pub fn batch(
     stats.batches += 1;
     let mut cands: BTreeMap<u32, Cand> = BTreeMap::new();
     let len = prog.rom().len() as u32;
+    // The ROM addresses code loads from a literal pool: a table's base.
+    let loaded: HashSet<u32> = view.pools.iter().filter_map(|&p| prog.read(p, 4)).collect();
     for at in (ROM_BASE..ROM_BASE + (len & !3)).step_by(4) {
         if view.insn_at(at).is_some() || view.insn_at(at + 2).is_some() || view.in_table(at) {
             continue;
@@ -120,7 +128,8 @@ pub fn batch(
             || start_at(at + 4)
             || ((thumb_ptr(at.wrapping_sub(4)) || thumb_ptr(at + 4))
                 && (start_at(at.wrapping_sub(8)) || start_at(at + 8)))
-            || column(at, &start_at);
+            || column(at, &start_at)
+            || based(at, &loaded, &thumb_ptr);
     }
     stats.candidates += cands.len();
 
@@ -128,6 +137,9 @@ pub fn batch(
     let mut ranked: Vec<(u32, u32, Body)> = Vec::new();
     for (&w, c) in &cands {
         let (a, thumb) = (w & !1, w & 1 != 0);
+        if !thumb && embedded_image(prog, a) {
+            continue;
+        }
         let push = prog.decode(a, thumb).is_some_and(|i| is_push_lr(&i));
         let score = 4 * push as u32
             + 2 * (c.pooled || c.table || getter(prog, a, thumb)) as u32
@@ -218,6 +230,32 @@ fn column(at: u32, start_at: &dyn Fn(u32) -> bool) -> bool {
     })
 }
 
+/// The most words [`based`] walks back to a table's base.
+const BASED_MAX: u32 = 64;
+
+/// Whether the word at `at` is in a run of two or more Thumb pointers
+/// whose first word's address code loads from a literal pool: a table of
+/// function pointers indexed from its base (c/list's `kActs` as modern GCC
+/// builds it, `ldr r3, [r3, r0]` from the table's address, its leaves with
+/// no push and no start found beside them).
+fn based(at: u32, loaded: &HashSet<u32>, thumb_ptr: &dyn Fn(u32) -> bool) -> bool {
+    if !thumb_ptr(at) {
+        return false;
+    }
+    let mut b = at;
+    for _ in 0..BASED_MAX {
+        if loaded.contains(&b) && (b != at || thumb_ptr(at + 4)) {
+            return true;
+        }
+        let prev = b.wrapping_sub(4);
+        if !thumb_ptr(prev) {
+            return false;
+        }
+        b = prev;
+    }
+    false
+}
+
 /// The highest BIOS call number.
 const BIOS_MAX: u32 = 0x2a;
 /// More identical instructions in a row than this is data.
@@ -233,15 +271,23 @@ fn repeated(prog: &Program, i: &Insn) -> bool {
 }
 
 /// Instructions games don't run outside the BIOS and exception handlers,
-/// or that make no sense: user-bank or SPSR-restoring `ldm`/`stm`, pc
+/// or that make no sense: user-bank or SPSR-restoring `ldm`/`stm`, one
+/// with an empty register list (an ARM7TDMI moves r15 alone and the base
+/// by 0x40; no compiler or assembler writes it, and the Thumb halfwords
+/// 0xc000 to 0xcf00 are text bytes: Emerald's string at 0x085ef6a1, loaded
+/// from a pool, ran through `ldmia r4!, {}` to a pop of pc), pc
 /// written by an ALU op other than `mov`, `add` or `sub`, and writeback
 /// to pc.
 fn implausible(i: &Instr) -> bool {
     use armv4t::decode::{AluOp, Index};
     match *i {
         Instr::Block {
-            psr, rn, writeback, ..
-        } => psr || (rn == Reg::Pc && writeback),
+            psr,
+            rn,
+            writeback,
+            regs,
+            ..
+        } => psr || regs == 0 || (rn == Reg::Pc && writeback),
         Instr::Alu {
             op, rd: Reg::Pc, ..
         } => !op.is_compare() && !matches!(op, AluOp::Mov | AluOp::Add | AluOp::Sub),
@@ -495,7 +541,7 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
                         work.push((next, soft));
                     }
                 } else if writes_pc(&i.instr) {
-                    if thumb && shifted_bx(prog, start, &i) {
+                    if thumb && (shifted_bx(prog, start, &i) || entry_bx(prog, start, &i)) {
                         if !soft {
                             return None;
                         }
@@ -583,8 +629,6 @@ pub fn validate(prog: &Program, view: &View, start: u32, thumb: bool) -> Option<
 /// Whether `i` is a Thumb `bx rM` whose rM was last set, in the straight
 /// run of instructions before it (back to `start`), by a shift left by an
 /// immediate: a jump into ARM state to an address made only by a shift.
-/// Or whose rM is one of r4-r12 and nothing in that run (all of it, back
-/// to `start`) set: a jump to what the caller left there.
 /// No switch does that (a switch's targets come from a table or an add);
 /// data does: Emerald Rogue's battle-script pointer 0x0826c5e7, loaded for
 /// its script pusher and taken for a Thumb start, ends in `lsls r1, r1, #6`
@@ -622,12 +666,64 @@ fn shifted_bx(prog: &Program, start: u32, i: &Insn) -> bool {
             _ => return false,
         }
     }
-    // Back at the start with rM never written: a jump to a register the
-    // caller left in r4-r12, which no compiler's code does (agbcc's
-    // `_call_via_rN` and m4a's stubs jump through r0-r3 or lr). Data does:
-    // WarioWare's byte pointer 0x083db2d7, loaded as an address and taken
-    // for a Thumb start, ends in `bx r9` eight instructions on.
-    (4..=12).contains(&(rm as u8))
+    false
+}
+
+/// Whether `i` is a Thumb `bx rM` (rM not lr) that a straight run of
+/// instructions from `start`, one at least, reaches without writing rM: a
+/// jump through the value rM had on entry. A compiler's Thumb code jumps
+/// through a register it loaded or computed (a switch, `_call_via_rN`
+/// called with `bl`); data does this: Emerald's battle-script pointer
+/// 0x082db591, loaded for its script pusher, decodes as four instructions
+/// and `bx r2`; its movement-action bytes at 0x0850dbaf, listed beside
+/// Thumb pointers, as sixteen and `bx r8`. A `bx rM` at `start` itself (a
+/// lone `_call_via_rN`) isn't a run. Anything in the run that may write rM,
+/// or may branch, ends the search with no.
+fn entry_bx(prog: &Program, start: u32, i: &Insn) -> bool {
+    let Instr::Bx { rm, .. } = i.instr else {
+        return false;
+    };
+    if rm == Reg::Lr || i.addr <= start {
+        return false;
+    }
+    let mut a = start;
+    while a < i.addr {
+        let Some(p) = prog.decode(a, true) else {
+            return false;
+        };
+        if p.size != 2 || p.bl.is_some() || writes_pc(&p.instr) {
+            return false;
+        }
+        let writes = match p.instr {
+            Instr::Alu { op, rd, .. } => !op.is_compare() && rd == rm,
+            Instr::Mul { rd, .. } => rd == rm,
+            Instr::Load { rd, addr, .. } => rd == rm || addr.rn == rm,
+            Instr::Store { addr, .. } => addr.rn == rm,
+            Instr::Block { load, rn, regs, .. } => rn == rm || (load && regs & 1 << rm as u32 != 0),
+            _ => true,
+        };
+        if writes {
+            return false;
+        }
+        a = p.next();
+    }
+    a == i.addr
+}
+
+/// Whether the ARM candidate at `a` heads an embedded GBA program: the
+/// 156 bytes after its first word are the Nintendo logo, as at 0x08000004
+/// in the ROM's own header. Such a program runs from where it is loaded,
+/// not from here: a multiboot image the game sends down the link cable
+/// (Emerald's Berry fix program at 0x089a6550) at 0x02000000 on another
+/// GBA, its code jumping to EWRAM where this ROM has no code; Metroid: Zero
+/// Mission's classic NES game (0x08754bd0) from the copy its launcher
+/// makes, which the stage-A lift leaves out.
+fn embedded_image(prog: &Program, a: u32) -> bool {
+    const LOGO: u32 = 156;
+    let rom = prog.rom();
+    let (h, o) = (4usize, (a - ROM_BASE + 4) as usize);
+    let n = LOGO as usize;
+    o > h && o + n <= rom.len() && rom[h..h + n] == rom[o..o + n]
 }
 
 /// The fewest instructions a body ending in an indirect jump needs.

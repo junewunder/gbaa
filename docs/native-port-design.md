@@ -635,7 +635,7 @@ is found at build time. Each kind, how it is found and what can stand in:
 | **Return-address arithmetic not resolved to one block per site** | the scrambled-return-address tool (`crates/interp/examples/lr_numbers.rs`) finds it dynamically; the value analysis statically | a hand-written replacement function |
 | **Code that runs from RAM and changes** (Emerald Rogue's mixer stamping templates into its loop, `codegen::variants`; agb_flash's routine copied onto the stack; code built at run time) | `Discovery::copies`, `codegen::seen`'s copies seen running, the overlay guards' invalidations (`runtime/src/overlay.rs`) | a copy that never changes is just code (crt0's `.iwram`): no hole. Variants seen become one function each, and the store that patches the loop a field saying which runs; else a hand-written replacement |
 | **Pointer arithmetic or casts the types don't explain** (an access through a `Ref<T>` at an offset that isn't a field of `T`, a cast between unrelated structs, a pointer into the middle of a global used as another type) | the typed lift: every access must resolve to a path | in stage A it isn't a hole (bytes work); in stage B a byte view of that object, listed |
-| **CPU state the program doesn't have**: mode switches outside the recognised IRQ wrapper, `msr`/`mrs` used for anything else, stack switching (a game's own threads or coroutines), `setjmp`/`longjmp` | the lift: an instruction with no native meaning | a hand-written replacement (threads as Rust closures or a state machine) |
+| **CPU state the program doesn't have**: mode switches outside the recognised IRQ wrapper, `msr`/`mrs` used for anything else, stack switching (a game's own threads or coroutines); not `setjmp`/`longjmp`, whose restore the lift prints as an unwinding to `setjmp`'s caller (native/lift-longjmp, `codegen::native::longjmp`) | the lift: an instruction with no native meaning | a hand-written replacement (threads as Rust closures or a state machine) |
 | **Hardware or BIOS outside the library**: an unimplemented BIOS call (decision 12's list), open-bus or BIOS-region reads, a register the library doesn't model | the lift | add it to the library |
 | **Behaviour that depends on cycle timing** (a raster effect timed by instruction count, a timer read used as more than a seed) | not by the native oracle, which times the same way (section 7): by the play build at `--timing native` against `exact` on a route, where a difference is looked at by eye, as instant timing's were (Kirby's lag frames) | a cost the library charges (as for BIOS copies, section 7), or a hand change; most such games tolerate it already under instant timing |
 
@@ -1077,14 +1077,14 @@ with the native check and no replaced-library list.
   summary has a hole: the rest take their parameters and give their
   results, `docs/native-stage-b.md`, piece 3.) r0-r3 go in and come back; r4-r12, `lr` and
   NZCV are Rust locals (a write nothing reads left out: `native::live`; an entry takes only those its code reads as they came (a function that takes no more than sp, its parameters, an lr proven `RET` and r4-r11 its summary shows unused has its body in its plain entry, the parameters named arguments, and its extended entry calls that), and a value only its own block reads, a direct call's arguments and a return's results included, is a `let` of its own, so a register stays a `mut` local only where its value goes on into another block: native/lift-register-locals); each block's IR values
-  are `let`s, but a pure one used once, or a constant, prints inside its use (native/lift-inline-temps); a sum prints as `wrapping_add` or `wrapping_sub`, never `add_with_carry(..).0`, and nothing prints a `let` it doesn't read: a read only a dead write takes makes nothing live, a load of RAM nothing reads isn't printed, and a compare tree's arm prints only the writes and `let`s it reads (native/lift-plain-arith; metrics `adc_sums` and `unread_lets`, `native::unread`). A counted loop of one block prints as a `for` over its range, proven by running it from a constant start (native/lift-for-loops, `native::counted`). Because every function keeps r4-r11 in its own locals, a callee can't change its
+  are `let`s, but a pure one used once, or a constant, prints inside its use (native/lift-inline-temps); a sum prints as `wrapping_add` or `wrapping_sub`, never `add_with_carry(..).0`, and nothing prints a `let` it doesn't read: a read only a dead write takes makes nothing live, a load of RAM nothing reads isn't printed, and a compare tree's arm prints only the writes and `let`s it reads (native/lift-plain-arith; metrics `adc_sums` and `unread_lets`, `native::unread`). A counted loop of one block prints as a `for` over its range, proven by running it from a constant start (native/lift-for-loops, `native::counted`); a loop of any number of blocks, calls, `break` and `continue` included, counting by a constant step to a constant or a register it doesn't write, as `for i in 0..n` or `(b + 1..=s).rev()`, the guard before it proving the range isn't empty and nothing wrapping (native/lift-for-bounds, `native::bounds`). Because every function keeps r4-r11 in its own locals, a callee can't change its
   caller's, so the lift is exact for any callee that follows AAPCS,
   whatever the summary proof says. The summary is printed above each
   function (`/// Reads {r0, r1}; returns {r0}`), and a function whose
   summary breaks that (`analysis::holes::SUMMARY_HARD`: it returns sp
-  changed, reads r4-r11 a callee changed, or changes them and reads one
-  as it came, a register parameter) is a hard hole. One that only uses
-  r4-r11 as scratch, where no caller reads them after, is lifted as is.
+  changed, reads r4-r11 a stand-in changed, or reads one as it came
+  where a pointer call enters it, a register parameter) is a hard hole.
+  One that only uses r4-r11 as scratch, where no caller reads them after, is lifted as is; one whose direct caller does read them gives them back (`Summary::gives`, native/lift-gives: its returns leave them in `Game::gave`, the call takes them, and a function it jumps into gives what it may change too; the Pokémon games' m4a mixer needs it, `agb/native-gives` checks it).
   The 47-50 functions per program whose proof fails for other reasons
   (an indirect call, a callee that never returns) are listed in the
   report as soft.
@@ -1109,7 +1109,7 @@ with the native check and no replaced-library list.
   rules), and the ROM's bytes.
 - Function pointers are their keys (`--fn-ids rom` only): the lift loads
   them from ROM bytes and RAM (agb's vtables and closures), so it can't
-  renumber them. `call_fn` binary-searches `FNS`.
+  renumber them. `call_fn` binary-searches `FNS` (stage B: `--fn-ids dense`).
 - BIOS: `Halt` is `hw::halt`; `IntrWait` and `VBlankIntrWait` are the play
   build's loop over `0x0300_7FF8` and `hw::halt`; `CpuSet` copies and
   spends `cpu_set_cycles`; `Div`. Idle edges get `hw::idle`, spin edges

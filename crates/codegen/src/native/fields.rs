@@ -19,6 +19,9 @@
 //! - **Steps.** A typed pointer plus or minus a constant is that many
 //!   bytes on in its object; plus anything else, an element of the array
 //!   there, or the same place in another object of its type (`p + i`).
+//!   An access through `p + i * s`, `s` the size of that array's
+//!   elements or of `p`'s type, prints the element by its index
+//!   (`.idx(i)`, `.add(i)`; [`pointer_indexed`], native/lift-index-names).
 //!   A word a frame's local slot holds ([`super::frame`]) is what every
 //!   store to the slot stored.
 //! - **Joins.** Over the function's blocks, forwards: a register is
@@ -71,8 +74,33 @@ pub enum After {
 
 type Regs = [Option<At>; 16];
 
+/// A typed access whose address is a typed pointer plus a value scaled
+/// by a constant, and maybe a constant on top (`base + i * s + c`;
+/// native/lift-index-names): what prints it as an element,
+/// `.idx(i)` or `.add(i)` ([`pointer_indexed`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Indexed {
+    /// The pointer, and where it points.
+    pub base: ValueId,
+    pub at: At,
+    /// The index, and the bytes one step of it is.
+    pub i: ValueId,
+    pub s: u32,
+    /// The constant added after.
+    pub c: u32,
+}
+
+/// What [`flow`] finds: by block (an index into its `blocks`) and inst,
+/// each typed access's place, and those that index an element.
+#[derive(Clone, Debug, Default)]
+pub struct Flow {
+    pub access: BTreeMap<(usize, usize), At>,
+    pub index: BTreeMap<(usize, usize), Indexed>,
+}
+
 /// The typed accesses of one function: by block (an index into
-/// `blocks`) and inst, where the address is in its object.
+/// `blocks`) and inst, where the address is in its object, and the ones
+/// that are a typed pointer plus a scaled index ([`Flow`]).
 ///
 /// `blocks[0]` is the entry. `out(b, i)` says where the exit at inst `i`
 /// of block `b` goes on in the function; `slot(b, i)` names the frame's
@@ -83,7 +111,7 @@ pub fn flow(
     blocks: &[&[Inst]],
     out: impl Fn(usize, usize) -> Vec<(usize, After)>,
     slot: impl Fn(usize, usize) -> Option<i32>,
-) -> BTreeMap<(usize, usize), At> {
+) -> Flow {
     let t = &maps.types;
     let locals = maps.locals.get(&entry).map_or(&[][..], Vec::as_slice);
     // What each variable points at, if it is a pointer.
@@ -122,9 +150,11 @@ pub fn flow(
     // A slot's word: unset, or what every store to it stored.
     let mut slots: BTreeMap<i32, Option<At>> = BTreeMap::new();
     let mut access = BTreeMap::new();
+    let mut index = BTreeMap::new();
     for round in 0.. {
         let mut changed = false;
         access.clear();
+        index.clear();
         for b in 0..blocks.len() {
             let Some(mut regs) = ins[b].clone() else {
                 continue;
@@ -193,6 +223,9 @@ pub fn flow(
                             vt[i] = slots.get(&s).cloned().flatten();
                         } else if let Some(p) = &vt[addr.index()] {
                             access.insert((b, i), p.clone());
+                            if let Some(x) = indexed_at(insts, &vt, addr) {
+                                index.insert((b, i), x);
+                            }
                             if width == Width::Word
                                 && let Some((_, Ty::Ptr(to))) = t.walk(&p.ty, p.off, 4, None)
                             {
@@ -214,6 +247,9 @@ pub fn flow(
                             }
                         } else if let Some(p) = &vt[addr.index()] {
                             access.insert((b, i), p.clone());
+                            if let Some(x) = indexed_at(insts, &vt, addr) {
+                                index.insert((b, i), x);
+                            }
                         }
                     }
                     Op::SetReg(r, v) => {
@@ -270,7 +306,56 @@ pub fn flow(
             break;
         }
     }
-    access
+    Flow { access, index }
+}
+
+/// `addr` as `base + i * s + c`: a typed pointer plus a value the block
+/// doesn't know scaled by a constant (through shifts left, multiplies
+/// and adds of it to itself: `((i << 2) + i) << 3` is `i * 40`), and
+/// maybe a constant after.
+fn indexed_at(insts: &[Inst], vt: &[Option<At>], addr: ValueId) -> Option<Indexed> {
+    let konst = |x: ValueId| match insts[x.index()].op {
+        Op::Const(c) | Op::Pool(c) => Some(c),
+        _ => None,
+    };
+    let no_carry = |c: ValueId| insts[c.index()].op == Op::Bit(false);
+    // The two operands of an add, with no carry in.
+    let add = |x: ValueId| match insts[x.index()].op {
+        Op::Bin(BinOp::Add, a, b) => Some((a, b)),
+        Op::Adc { a, b, c } if no_carry(c) => Some((a, b)),
+        _ => None,
+    };
+    // A small constant on top (not an address the types place).
+    let small = |x: ValueId| konst(x).filter(|_| vt[x.index()].is_none());
+    let (sum, c) = match add(addr) {
+        Some((x, y)) => match (small(x), small(y)) {
+            (None, Some(c)) if vt[x.index()].is_some() => (x, c),
+            (Some(c), None) if vt[y.index()].is_some() => (y, c),
+            _ => (addr, 0),
+        },
+        None => (addr, 0),
+    };
+    let (x, y) = add(sum)?;
+    let (base, other) = match (&vt[x.index()], &vt[y.index()]) {
+        (Some(_), None) => (x, y),
+        (None, Some(_)) => (y, x),
+        _ => return None,
+    };
+    if konst(other).is_some() {
+        return None;
+    }
+    let (k, i) = crate::print::linear(insts, &|_| None, other, 8);
+    let (i, s) = i?;
+    if k != 0 || s == 0 || konst(i).is_some() {
+        return None;
+    }
+    Some(Indexed {
+        base,
+        at: vt[base.index()].clone()?,
+        i,
+        s,
+        c,
+    })
 }
 
 /// Whether a value of `op` could be a pointer: not a narrow load, a
@@ -370,6 +455,61 @@ pub fn pointer(
     Some((e, rest.is_none()))
 }
 
+/// The printed pointer to the `w` bytes an indexed access ([`Indexed`])
+/// reaches, from the printed base `p` and index `i`: an element of the
+/// array of `x.s`-byte elements the base points into
+/// (`Ref::<[t::Obj; 4]>::new(p).idx(i).color()`, the base `k` elements
+/// in as `.idx(i.wrapping_add(k))`), or, where a whole object of the
+/// base's type is `x.s` bytes, the `i`th object on from it
+/// (`Ref::<t::Body>::new(p).add(i).color()`). The same address as the
+/// code's: the base less its offset in its object, the steps to the
+/// element, the element's own offset. As [`pointer`] returns; `None`
+/// where neither fits or it lands on no field.
+pub fn pointer_indexed(t: &Types, x: &Indexed, w: u32, p: &str, i: &str) -> Option<(String, bool)> {
+    let b = &x.at;
+    let ty = rust(t, &b.ty);
+    let mut e = match b.off {
+        0 => format!("Ref::<{ty}>::new({p})"),
+        k => format!("Ref::<{ty}>::to({p}, {k:#x})"),
+    };
+    let push = |e: &mut String, steps: &[Step]| {
+        for s in steps {
+            match s {
+                Step::Field(f) => e.push_str(&format!(".{f}()")),
+                Step::Idx(n) => e.push_str(&format!(".idx({n})")),
+            }
+        }
+    };
+    let (elem, off) = match t.array_at(&b.ty, b.off, x.s) {
+        // A byte offset into a struct is no element.
+        Some((to, elem, k, o)) if x.s > 1 || to.is_empty() => {
+            push(&mut e, &to);
+            match k {
+                0 => e.push_str(&format!(".idx({i})")),
+                k => e.push_str(&format!(".idx({i}.wrapping_add({k:#x}))")),
+            }
+            (elem, o.wrapping_add(x.c))
+        }
+        _ if t.size(&b.ty) == x.s => {
+            e.push_str(&format!(".add({i})"));
+            (b.ty.clone(), b.off.wrapping_add(x.c))
+        }
+        _ => return None,
+    };
+    if off.checked_add(w).is_none_or(|end| end > t.size(&elem)) {
+        return None;
+    }
+    let (steps, rest) = t.path(&elem, off, w, None);
+    if steps.is_empty() && rest.is_some() {
+        return None;
+    }
+    push(&mut e, &steps);
+    if let Some(o) = rest {
+        e.push_str(&format!(".field::<u{}>({o:#x})", 8 * w));
+    }
+    Some((e, rest.is_none()))
+}
+
 /// The accessors of the accesses that load or store several fields at
 /// once ([`crate::types::Types::joined`], native/lift-bitfields), by
 /// struct, offset and width: each one's name and the fields it holds.
@@ -394,7 +534,9 @@ pub fn joined_pointer(
         Some((n, _)) => n.clone(),
         None => {
             let mut n = ids.join("_");
-            if joined.iter().any(|((s, _, _), (m, _))| *s == st && *m == n) {
+            // One field alone has the field's own accessor's name (pret's
+            // `u32 numFrames : 8` of MonSpritesGfxManager, a whole byte).
+            if ids.len() == 1 || joined.iter().any(|((s, _, _), (m, _))| *s == st && *m == n) {
                 n = format!("{n}_at{off}_u{}", 8 * w);
             }
             joined.insert(key, (n.clone(), ids));
@@ -551,7 +693,7 @@ fields = [
             }),
             inst(Op::Exit(Exit::Jump(ValueId(1)))),
         ];
-        let a = flow(&m, 0x0800_0001, &[&b], |_, _| Vec::new(), |_, _| None);
+        let a = flow(&m, 0x0800_0001, &[&b], |_, _| Vec::new(), |_, _| None).access;
         let p = |i: usize, w: u32, v: &str, k: u32| {
             pointer(&m.types, &a[&(0, i)], w, v, k, None).map(|(e, named)| {
                 assert!(named);
@@ -637,7 +779,8 @@ fields = [
                 _ => Vec::new(),
             },
             |_, _| None,
-        );
+        )
+        .access;
         let kirby = Ty::Named("struct Kirby".into());
         let at = |off| At {
             ty: kirby.clone(),
@@ -648,6 +791,67 @@ fields = [
         assert_eq!(a.get(&(1, 4)), Some(&at(4)));
         assert_eq!(a.get(&(1, 7)), Some(&at(4)));
         assert_eq!(a.get(&(1, 12)), Some(&at(0)));
+    }
+
+    #[test]
+    fn a_scaled_index_prints_as_an_element() {
+        let m = maps();
+        // r0: kirby. gKirbys[r1].next, the index as i << 3;
+        // kirby[r1].pos.y, as (i << 2) + (i << 2).
+        let b = [
+            inst(Op::Insn(0x0800_0000)),
+            inst(Op::GetReg(Reg(1))),
+            inst(Op::Const(3)),
+            inst(Op::Shift {
+                kind: armv4t::sem::ShiftType::Lsl,
+                v: ValueId(1),
+                amount: ValueId(2),
+            }),
+            inst(Op::Const(0x0300_0010)),
+            inst(Op::Bin(BinOp::Add, ValueId(4), ValueId(3))),
+            inst(Op::Const(4)),
+            inst(Op::Bin(BinOp::Add, ValueId(5), ValueId(6))),
+            inst(Op::Load {
+                width: Width::Word,
+                addr: ValueId(7),
+            }),
+            inst(Op::GetReg(Reg(0))),
+            inst(Op::Const(2)),
+            inst(Op::Shift {
+                kind: armv4t::sem::ShiftType::Lsl,
+                v: ValueId(1),
+                amount: ValueId(10),
+            }),
+            inst(Op::Bin(BinOp::Add, ValueId(11), ValueId(11))),
+            inst(Op::Bin(BinOp::Add, ValueId(9), ValueId(12))),
+            inst(Op::Bin(BinOp::Add, ValueId(13), ValueId(10))),
+            inst(Op::Load {
+                width: Width::Half,
+                addr: ValueId(14),
+            }),
+            inst(Op::Exit(Exit::Jump(ValueId(1)))),
+        ];
+        let f = flow(&m, 0x0800_0001, &[&b], |_, _| Vec::new(), |_, _| None);
+        let p = |i: usize, w: u32| {
+            let x = &f.index[&(0, i)];
+            assert_eq!(x.i, ValueId(1));
+            pointer_indexed(&m.types, x, w, "p", "i").map(|(e, named)| {
+                assert!(named);
+                e
+            })
+        };
+        assert_eq!(
+            p(8, 4).as_deref(),
+            Some("Ref::<[t::Kirby; 4]>::new(p).idx(i).next()")
+        );
+        assert_eq!(
+            p(15, 2).as_deref(),
+            Some("Ref::<t::Kirby>::new(p).add(i).pos().y()")
+        );
+        // A step that is no element's size is no index.
+        let mut x = f.index[&(0, 15)].clone();
+        x.s = 4;
+        assert_eq!(pointer_indexed(&m.types, &x, 2, "p", "i"), None);
     }
 
     #[test]
@@ -701,7 +905,8 @@ fields = [
                 _ => Vec::new(),
             },
             |b, i| ((b == 0 && i == 2) || (b == 2 && i == 1)).then_some(-4),
-        );
+        )
+        .access;
         assert!(a.contains_key(&(2, 4)), "through the slot's pointer");
         assert!(!a.contains_key(&(2, 7)), "r4 is a pointer one way only");
     }

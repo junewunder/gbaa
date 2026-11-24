@@ -890,6 +890,13 @@ its callees' didn't stop at a hole:
 program's count moves. What holds the C programs' words is the RAM
 globals (the next section but one).
 
+**On by default** since 2026-11-21 (`GBAA_FNREF_LIVE=0` turns the rules
+off). It waited on Metroid's native route check, which was failing for a
+cause of the play build's (`native/metroid-route-again`); with that fixed,
+Metroid lifted with the rules on passes its route (2,700 frames, nothing
+different, audio the same), its words 690 proven and 124 not where 613 and
+201. `just lift-metrics` is 0 over and 0 under either way, so no bar moves.
+
 ## A pointer into a RAM array stays in it, as landed
 
 Unit `native/fnref-ram-pointers`, 2026-11-20 on quack, behind
@@ -1087,3 +1094,222 @@ registers' switches on and pret's `Alloc` and `AllocZeroed` named:
 settles in 26 rounds, 1,385 s, 0.95 GB, its 554 indirect calls with the
 same 103 complete sets (1,329 s with the RAM and registers' switches, 557 s
 off): the RAM rules' cost, which is its own unit (`native/fnref-ram-reruns`).
+
+## The RAM switch's reruns, as landed
+
+Unit `native/fnref-ram-reruns`, 2026-11-21 on quack, behind
+`GBAA_FNREF_RAM` (off, the flow is main's: Metroid's and Emerald's traces
+line for line, `just lift-metrics` 0 over and 0 under). With the RAM and
+registers' switches on, Emerald's flow took 1,310 s against 598 s off, side
+by side. `GBAA_FNREF_TRACE` now prints, each round, what reran functions for
+memory: each kind of read, the functions it reran, and those nothing else
+reran. What it showed, in the order found, each a rule now (`fnref.rs`,
+`Rd`, `G::read_obj`, `G::exp_add`, the pickup in `follow_live`):
+
+- **A store to any object's cell reran every function that had read
+  "every object's cell"**: 13,000 of Emerald's 15,000, in each of rounds 4
+  to 10, for one to twenty cells stored to. That read is kept by what it
+  gave at each width now, as the pile's was.
+- **The pile holds a read of every object's cell, of single ones', and of
+  the large set**, so a function that looked into the pile reran for a
+  store to any of them, though the value it saw was the same (a callback's
+  address stored to one more global). A function now reruns by the value
+  each kept read gave it (a count on the read, another each time its value
+  changes; every kept read is brought up to date at the round's end), and
+  one that only loaded a read, by the read's flags. Emerald: 2.2 times
+  the time off to 1.8 (1,024 s against 570 s).
+- **A small read of an object's cell was its tokens, a large one a
+  `Ref`** (the bound of 64, as for ROM reads). The stacks' cell and the
+  any-object cell were read so by 2,000 to 10,000 functions, which all
+  reran at each store; and a cell that grew past 64 gave every value that
+  held its tokens a `Ref` besides, which went from results to callers one
+  call a round: rounds 4 to 15, 2,000 to 8,000 reruns each, with nothing
+  like it off. Every read of an object's cell that holds anything is a
+  `Ref` now. With that the bound on single objects' reads in a value
+  (`OBJ_REFS`) went from 4 to 8: a load through a pointer into an object is
+  three such reads, and at 4 c-fnptr built by GCC read every global for a
+  sprite's field and lost its IRQ handler's word (10 not proven; 9 at 8).
+  Emerald: 1.24 times (834 s against 675 s, the machine busier), settled
+  at round 13 where it took 19.
+- **A kept read that reached the pile took in every object's cell the
+  pile held a `Ref` to, one by one and form by form**: 100,000 such reads
+  in Metroid's first round, 11 million tokens, against 5,000 reads off;
+  twice the time of Emerald's first two rounds. Past `OBJ_REFS` single
+  objects' cells a kept read takes the rest as every object's, as a value
+  does. Metroid's first round 3.0 s to 1.7 s; Emerald 1.05 times (640 s
+  against 610 s).
+- **A change went one call a round.** A function whose entry a run
+  changed, or a callee's results, now runs in the same round where it comes
+  later in the order (the pickup). Metroid 41 rounds to 30, Emerald 21 to
+  15, about 5% of the time (Emerald 590 s against 620 s without it and
+  585 s off); the results the same.
+
+Tried and dropped: making only the two shared cells (the stacks', the
+any-object) always a `Ref` (Emerald slower than before); and per-op
+sampling of the last rounds (nothing stands out there).
+
+**Counts**, flow alone, each row run side by side on one build:
+
+| | off | RAM and registers on, before | after |
+|---|---|---|---|
+| Emerald | 644 s, 25 rounds, 1.06 GB | 1,310 s, 26 rounds, 0.95 GB (off then 598 s) | 617 s, 15 rounds, 1.02 GB |
+| Emerald, heap switch too, pret's allocators named | | 1,385 s (2026-11-20) | 686 s, 15 rounds, 0.95 GB |
+| Metroid | 18.1 s, 21 rounds, 145 MB | 36.5 s, 39 rounds, 164 MB | 25.4 s, 30 rounds, 157 MB |
+
+(The last column and "off" are one set of runs side by side on the landed
+code, another project's job on the machine too; a quieter set gave Emerald
+563 s off, 561 s on and 592 s with the heap switch. Metroid: the mean of
+three sets, 1.40 times in each.) So Emerald is at main's time, 1.07 times
+with the heap switch, and Metroid at 1.4 times, where it was 2.0. A fresh
+reviewer of the diff found one bug, fixed before these runs: in the first
+round the kept join of the loose functions' results wasn't made again
+when the pickup ran an incomplete call after one of them changed. The results are the same as before the unit with the
+switches on: Emerald's and Metroid's callee sets byte for byte (554 calls,
+103 complete sets of 4.3 callees; 70 calls, 68 complete, 28.2), Metroid's
+words 690 proven and 124 not (613 and 201 off), the C programs' words not
+proven 0, 0, 0, 0, 0 (c-fnptr-agbcc), 9 (c-fnptr-gcc), 6, 6, 0, 0. With
+the switches on `just lift-metrics` has no bar over now (native-dma's one
+line with it: 16 under).
+
+## A table field's stride across blocks and calls, as landed
+
+Unit `native/fnref-table-fields-blocks`, 2026-11-21 on quack, behind
+`GBAA_FNREF_RAM` (off, the flow is main's). c-fnptr built by modern GCC
+kept 9 of its 14 function words not proven with the RAM and registers'
+switches where agbcc's has 0. Two things held them, each a shape modern
+GCC makes and old GCC doesn't (`fnref.rs`, `steps_in`, `smalls`,
+`strides_in`):
+
+- **The scaled index kept in a register over a call.** `cb_objects`
+  scales `kind` to `sObjOps`' 12-byte record once, in r5, and the second
+  field's load comes in the block after the first field's call (`ldr r3,
+  [r3, r5]`). The stride was found a block at a time, so that load read
+  every word of the table and `ops->update` called the draw functions
+  too. Each register's stride is now followed through the function's
+  blocks before it runs: what the block that set it found, the greatest
+  every way in shares, kept over a call in r4 to r11 as the run keeps
+  their values.
+- **A `u8` parameter scaled as it came.** `add_obj(u8 kind, …)` scales
+  r0 with no shift down to a byte first (the caller's to do, under the
+  modern ABI), so 12 times it might wrap and only its 4 was kept: the
+  halfword read of `.tint` took halves of the functions, which went to
+  `obj->color` and from there into every object's arithmetic. A register
+  of r0 to r3 that every direct call and tail call passes under 2^16 by
+  what the caller itself makes (a byte or halfword load, a mask, a
+  constant; never the caller's own parameter passed on, which a caller
+  the run can't see may have given it: the review's catch)
+  is under 2^16 at the entry, for a function no caller the run can't see
+  may call (a loose one runs without it, and reruns so when it becomes
+  one).
+
+**Counts**, `fn_words_not_proven` with the RAM and registers' switches:
+c-fnptr-gcc 9 to 5 (9 of 14 proven), every other C and agb program as
+before, Metroid 690 proven and 124 not as before; Emerald's and Metroid's
+callee sets byte for byte as before. On c-fnptr-gcc the three calls
+through `sObjOps` hold exactly their field's functions (update 3, draw 2
+and 2, where update held 5), and the two callback calls the five
+callbacks (9 before). With the switches off, `just lift-metrics` 0 over
+and 0 under.
+
+**Left on c-fnptr-gcc:** the five callbacks' words, held by a byte read
+somewhere in the RAM object at `gNumCallbacks` (the callbacks' array
+under GCC's anchor reads as one object with the counters beside it) and
+by a pile read: the anchors' objects, not a ROM table's stride.
+
+## The RAM switch's cost in the lifts, as landed
+
+Unit `native/fnref-ram-lift-cost`, 2026-11-21 on quack, behind
+`GBAA_FNREF_RAM` (off, the flow is main's). "The RAM switch's reruns"
+measured the flow alone, on a ROM with no holes file. `just holes-all
+--flow` with the switch on then took three times as long on WarioWare
+(17.7 minutes against 5.5) and over twice on Emerald (47 minutes and not
+done, against 21), the two of the first six games whose holes files name
+routines copied to RAM (`[[copy]]`).
+
+**The cause** was one cell. A value that is "some function" (a callback
+read from a table, a register nobody set) holds every address-taken
+function's address, a RAM routine's with the rest. A store through such
+a value goes nowhere for a ROM function (ROM isn't written), and for the
+RAM routine to the cell at its address; a load through one reads that
+cell back. So the cell at each RAM routine's address was where the
+program's junk met: on WarioWare 2,600 functions' addresses, 200 ROM
+pointers and 500 reads, stored 1.2 million times a round and joined into
+1.4 million loads token by token (a counter in `G::read_cell` by address,
+and one in `Run::store` by the kind of token the address was, found it
+in two runs; samples named `union < read_cell < load_raw`).
+
+**The rule** (`fnref.rs`, `fn_cell`): what is stored through the address
+of a function in RAM, as a function's address and not a number, is kept in
+a cell of that function's own, which a load through that function's
+address reads as a `Ref`, as any object's cell is read. The cell at the
+address keeps what is stored through the address as a number (the copy
+loop's own stores). Nothing is read less than before: every load that
+read the cell at the address reads the function's cell too (one at the
+address, through a pointer into its object, over a range that holds it,
+of every cell). The first version left that to loads through the
+function's address alone, which a fresh reviewer caught: an ARM routine's
+address is its buffer's, and a store through it may be the program's own.
+
+**Counts.** `just holes-all --flow` without the switch and with it, side
+by side (seconds a game's whole report takes; the registers' rules on in
+both):
+
+| game | without | with |
+|---|---|---|
+| Metroid | 81 | 86 |
+| WarioWare | 217 | 213 |
+| Amazing Mirror | 156 | 159 |
+| Nightmare | 239 | 215 |
+| moonbeam | 209 | 187 |
+| Emerald | 986 | 921 |
+| Minish Cap | 276 | 234 |
+| Emerald Rogue | 1,360 | 1,554 |
+| Imperium | 1,460 | 1,910 |
+
+Every game's row of holes is the same (56 hard holes over the nine).
+Imperium, an Emerald hack with no holes file or names, is the one game
+past 1.3 times (1.31); Rogue, the other, is at 1.14. The
+flow's own time in two of them, with `GBAA_FNREF_TRACE`: WarioWare 53 s
+with the switch, 61 s without (1,116 s before the rule); Emerald (retail
+ROM, its names and holes file) 771 s in 15 rounds with, 846 s in 18
+without. The C programs' and Metroid's words and callee sets didn't
+move.
+
+Tried and not needed once that was in: joining only the tokens a value
+lacks (`Val::union` by a difference: WarioWare 1,116 s to about 450 s),
+and capping what a load takes of a cell at a constant address (to 205 s).
+
+## The RAM pointers and the heap on by default
+
+Unit `native/fnref-ram-default`, 2026-11-21 on quack. The three switches
+are on now; each turns its piece off for measuring: `GBAA_FNREF_RAM=0`
+(the closed world, and the allocation sites with it), `GBAA_FNREF_HEAP=0`
+(the allocation sites alone: they need a holes file's `allocators`),
+`GBAA_FNREF_LIVE=0` (the registers at a call).
+
+What was checked before the flip, each with the switches set as the
+default now has them: `just lift-check` (every program's native check and
+planted controls) passes; Metroid's, the Amazing Mirror's and Nightmare's
+lifts made again each pass their native route against the play build
+(2,700, 3,000 and 3,000 frames, nothing different; the Mirror's lift
+doesn't run the flow, by its holes file); the nine-game hole report is the
+table above. No bar was raised: native-dma's line count, over by one when
+the pieces first came together, is under its bar since the RAM reruns
+unit. 17 bars were lowered to what they measure, the C programs'
+`fn_words_not_proven` among them:
+
+| program | before | now |
+|---|---|---|
+| c-fnptr-agbcc | 6 | 0 |
+| c-fnptr-gcc | 10 | 5 |
+| c-chain and c-switch, both compilers | 1 | 0 |
+| c-heap, both compilers | 7 | 0 |
+| Metroid (its lift, no bar here) | 201 | 124 |
+
+Emerald's flow alone (`gbaa-recompile --summaries ROM --callee-sets`, side
+by side): 617 s in 15 rounds at 1.02 GB with the RAM pointers and the
+registers' rules, 644 s in 25 rounds at 1.06 GB with neither; its 554
+indirect calls keep 103 complete sets of 4.3 callees, so the precision the
+defaults add shows on the C programs and Metroid, not yet on Emerald's
+sets (451 are incomplete for ROM reads the run gives up on, another
+unit's).
