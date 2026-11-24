@@ -5178,19 +5178,8 @@
         "by": "209afec8",
         "at": "2026-11-24T15:31:07Z",
         "evidence": "Main lifts Emerald with the committed holes file: [[roots]] (discover_with), [[open_bus]] and the cartridge RTC (Hw::gpio, prelude rom_half) from the route branch (d3acc29). just lift (099f5ac) 600 of 600 frames, no stop; holes-all --only emerald (088c89b): hard 0, 600 of 600. Route-check --native on units/emerald-native.toml: lift ran 5400 frames past the naming screen, 0 of 5400 pictures differ from play. So recorded done: {unit:native/lift-rtc} and {unit:native/emerald-naming-stop}. Route branch: main and this branch merged into it as 6bf5bee (local branch merge/emerald-native-route; only units/emerald-native.toml differs), push refused to the session, noted on {unit:native/emerald-native-route}. just check passed at 088c89b (main 9e1e3a0 merged).",
-        "branch": "unit/native/land-emerald-route-lifter",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T15:31:07Z",
-          "by": "209afec8",
-          "host": "quack",
-          "pid": 2963642,
-          "start": "95218853",
-          "beats": true,
-          "session": "209afec8-d655-4445-b79d-efd9ab0d9fcc",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "landed": "2026-11-24T15:40:11Z"
       },
       "notes": [
         {
@@ -5198,20 +5187,7 @@
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - Card step missing, the cartridge-clock unit ({unit:native/lift-rtc}): the card says that if this unit lands that work, the session should record it done with evidence. This branch does land it. `crates/runtime…"
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-24T14:38:16Z",
-        "findings": "- Card step missing, the cartridge-clock unit ({unit:native/lift-rtc}): the card says that if this unit lands that work, the session should record it done with evidence. This branch does land it. `crates/runtime/src/hw.rs` adds `Hw::gpio`, `crates/codegen/src/native/prelude.rs` wires `rom_half` and the halfword ROM store to `Gpio`, and `memory/native-check-divergence.md:+25` says the RTC failure is fixed. But the Evidence never mentions {unit:native/lift-rtc}. Fix: run `just done native/lift-rtc --evidence \"…\"` citing this branch's `Hw::gpio`/prelude commit d3acc29 and the Emerald lift result (600 of 600 frames, no RTC error at frame 10), then add a line to this unit's Evidence saying so.\n- Card step not answered, the naming-screen stop ({unit:native/emerald-naming-stop}): the card says to record it done if this branch lands it. The Evidence says `[[open_bus]]` was already on main and that the Emerald lift ran 600 frames with no stop, but it doesn't say whether that run reaches the naming screen, so we can't tell whether that stop is fixed. Fix: run the lift (or route) far enough to reach the naming screen. If it gets past it, record {unit:native/emerald-naming-stop} done with that evidence; if it doesn't, say so in this unit's Evidence so that unit stays open on purpose.\n- Card step unclear, merging main back into the route branch (unit/native/emerald-native-route, e9b0b8c9): the card says to leave the route branch mergeable by merging main back into it. The Evidence only says \"Route branch merges with main's bars (noted)\", which doesn't say whether the merge was committed and pushed to origin unit/native/emerald-native-route or only tried. Fix: merge main (with this unit) into the route branch, resolve the overlap in native.rs `roots` parsing, the prelude GPIO and the lift-check.toml `lines_prelude` bars, push it, and put the resulting commit hash in the Evidence.",
-        "sent": {
-          "evidence": "Branch d3acc29+merge 099f5ac: [[roots]] parse+discover_with, Hw::gpio RTC in prelude (lines_prelude 1364->1373), tests from e9b0b8c9; [[open_bus]] already on main. just holes-all --only emerald: hard 0 (241 s); just lift Emerald with mods/emerald/holes.toml: 600 of 600 frames, no stop; just check passes before and after merging main. Route branch merges with main's bars (noted).",
-          "by": "66d510b9",
-          "host": "quack",
-          "branch": "unit/native/land-emerald-route-lifter",
-          "change": "79932f3c21af4498f3da723f6668a8c6c2c87686"
-        }
-      },
-      "round": "2026-11-24T13:39:21Z"
+      ]
     }
   ]
 }
