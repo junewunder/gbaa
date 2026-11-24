@@ -1015,7 +1015,7 @@ lift-find rom field *flags:
     {{lock}} cargo build -q --release -p codegen --bin gbaa-lift
     {{cap}} MemoryMax=4G target/release/gbaa-lift "$rom" --find "$field" "${holes[@]}" "$@"
 
-# The per-function check (native/fn-check-any, native/fn-check-interp; codegen::native's fn_check_texts and native/fn_check.rs; docs/tools/commands.md): lifts ROM with `gbaa-lift --fn-check KEY` for each KEY given (with the holes file as `just lift` finds it, and FLAGS: --replace FILE for replacements outside it, --seed N, --runs N, --plant AT for a planted wrong replacement of a function with no stand-in, --plant-reference to plant it in the lift too, --interp-every N), into out/fn-check-<name>, builds it and runs it headless: each function's replacement against its lift from the program's own calls and their variants, until every budget is spent. Prints per function its runs, budget, time, seed and digest, and the first differences with the byte named; and the runs the interpreter also checked against the lift, untimed, every Nth (8; native/fn-check-interp), and whether it agreed. --frames N (default 18000) is where it gives up waiting for calls. Fails on a difference or a budget not spent. Heavy: builds a generated crate.
+# The per-function check (native/fn-check-any, native/fn-check-interp; codegen::native's fn_check_texts and native/fn_check.rs; docs/tools/commands.md): lifts ROM with `gbaa-lift --fn-check KEY` for each KEY given (with the holes file as `just lift` finds it, and FLAGS: --replace FILE for replacements outside it, --seed N, --runs N, --plant AT for a planted wrong replacement of a function with no stand-in, --plant-reference to plant it in the lift too, --interp-every N), into out/fn-check-<name>, builds it and runs it headless (--input PRESSES: gbaa-desktop's presses, to reach code past the no-input run): each function's replacement against its lift from the program's own calls and their variants, until every budget is spent. Prints per function its runs, budget, time, seed and digest, and the first differences with the byte named; and the runs the interpreter also checked against the lift, untimed, every Nth (8; native/fn-check-interp), and whether it agreed. --frames N (default 18000) is where it gives up waiting for calls. Fails on a difference or a budget not spent. Heavy: builds a generated crate.
 [positional-arguments]
 fn-check rom *flags:
     #!/usr/bin/env bash
@@ -1025,9 +1025,11 @@ fn-check rom *flags:
     shift
     frames=18000
     args=()
+    input=()
     while [ $# -gt 0 ]; do
         case "$1" in
             --frames) frames=$2; shift 2 ;;
+            --input) input=(--input "$2"); shift 2 ;;
             --name) name=$2; shift 2 ;;
             *) args+=("$1"); shift ;;
         esac
@@ -1040,7 +1042,7 @@ fn-check rom *flags:
     mkdir -p "$out"
     {{cap}} MemoryMax=4G target/release/gbaa-lift "$rom" "$out" --name "fn-check-$name" "${holes[@]}" "${args[@]}" > "$out.lift.txt" || { tail -5 "$out.lift.txt"; exit 1; }
     just build-recompiled "$out" guest-pc
-    {{cap}} MemoryMax=3G target/recompiled/release/gbaa-native-fn-check-"$name" --headless --frames "$frames"
+    {{cap}} MemoryMax=3G target/recompiled/release/gbaa-native-fn-check-"$name" --headless --frames "$frames" "${input[@]}"
 
 # A lift mod's frames beside the stock lift's (native/lift-mod-run; the mod view's mod-run for the lift; docs/tools/commands.md): lifts ROM as `just lift` does (its holes file, names from $GBAA_DATA/names and names/) twice, stock into out/lift-mod-run-<name>/stock and with the mod at DIR (a `gbaa-lift --cut` directory: DIR/replace.toml) into out/lift-mod-run-<name>/mod, builds both and runs both headless along ROUTE (route-check --lift-mod-run): lists the frames whose pictures differ, as runs, and writes out/lift-mod-run/<route>/side-N.png for up to 16 of them (FLAGS: --sides N): stock, the mod, stock dimmed with the differing pixels in red. Then the per-function check of each cut function (`just fn-check ROM --replace DIR/replace.toml --fn-check-cuts`: the cut against its lift, from the program's own calls; its report in out/lift-mod-run-<name>/fn-check.txt). Never fails on a difference, in the frames or a function, only when a lift, build or run can't. Heavy: builds three generated crates.
 [positional-arguments]
