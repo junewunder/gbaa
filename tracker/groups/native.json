@@ -4571,6 +4571,13 @@
           "lane": "quack/4"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-24T13:12:00Z",
+          "by": "447b29d7",
+          "text": "A mod cut (gbaa-lift --cut) now prints without markers, so existing cuts' orig/ read stale once: re-cut merges. A cut's blocks name no pc in guest-pc builds unless its text keeps pc(0x…) lines (strip_modules takes those into pcs.txt too)."
+        }
+      ],
       "round": "2026-11-24T11:52:41Z"
     },
     {
