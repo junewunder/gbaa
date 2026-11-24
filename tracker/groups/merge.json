@@ -803,6 +803,14 @@
         "host": "quack",
         "landed": "2026-11-24T17:06:01Z"
       }
+    },
+    {
+      "id": "merge/quack-lane4-native-lift-for-step-via",
+      "title": "Merge main on quack lane 4",
+      "detail": "Branch `unit/native/lift-for-step-via` holds {unit:native/lift-for-step-via}, finished but not on main: merging main conflicts in crates/codegen/lift-check.toml. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/4",
+      "branch": "unit/native/lift-for-step-via"
     }
   ]
 }
