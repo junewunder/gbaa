@@ -340,6 +340,15 @@ pub struct Holes {
     pub lr: BTreeSet<u32>,
     /// By the jump's instruction address: its targets (keys), and why.
     pub jumps: BTreeMap<u32, (Vec<u32>, String)>,
+    /// Function starts only data reaches (`[[roots]] keys = [0x…], why =
+    /// "…"`): a callback in a ROM struct that discovery's pointer scan
+    /// doesn't rank as code (Emerald's tileset init callbacks), as
+    /// `gbaa-holes` counts its run's calls through a register to code
+    /// discovery lacked. By key (interworking form, in ROM), and why. They
+    /// join discovery's first descent ([`discovery::discover_with`]), so
+    /// the lift has them as functions where the play build would hand them
+    /// to its interpreter.
+    pub roots: BTreeMap<u32, String>,
     /// By function key: the indirect calls (their addresses) that reach a
     /// function reading one of r4-r11 as it came, and why (`[[takes]]
     /// entry = 0x…, sites = [0x…], why = "…"`): each passes it the
@@ -590,7 +599,7 @@ impl Holes {
     /// Parse a holes file: `[[standin]] entry = 0x…, why = "…", code =
     /// '''…'''` (and `lr = true` for [`Holes::lr`], `check = { seed, runs,
     /// digest }` for [`Holes::checks`]), `[[jump]] at = 0x…, targets = [0x…], why = "…"`,
-    /// `[[takes]]` ([`Holes::takes`]), `[[copy]]` ([`Holes::copies_seen`]),
+    /// `[[takes]]` ([`Holes::takes`]), `[[roots]]` ([`Holes::roots`]), `[[copy]]` ([`Holes::copies_seen`]),
     /// `[[stack]]` ([`Holes::stacks`]), `[[open_bus]] at = 0x…, why = "…"`
     /// ([`Holes::open_bus`]), and at the top, `skip_fn_flow =
     /// "why"` and `allocators = [0x…]` ([`Holes::allocators`]).
@@ -722,6 +731,22 @@ impl Holes {
                             roots,
                             why: str_of(e, "why")?,
                         });
+                    }
+                    "roots" => {
+                        let why = str_of(e, "why")?;
+                        let keys = e
+                            .get("keys")
+                            .and_then(|v| v.as_array())
+                            .ok_or("roots: missing keys")?;
+                        for v in keys {
+                            let k = int(v, "keys")?;
+                            if !(0x0800_0000..0x0A00_0000).contains(&(k & !1)) {
+                                return Err(format!("roots: {k:#010x} is outside the ROM"));
+                            }
+                            if h.roots.insert(k, why.clone()).is_some() {
+                                return Err(format!("roots: {k:#010x} twice"));
+                            }
+                        }
                     }
                     "open_bus" => {
                         let at = int(e.get("at").ok_or("open_bus: missing at")?, "at")?;
@@ -978,7 +1003,9 @@ struct Code<'a> {
 
 /// Lift `rom` whole. `name` is the program's name for its front end.
 pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
-    let mut disc = discovery::discover(rom.to_vec());
+    // The holes file's roots: function starts only data reaches.
+    let roots: Vec<u32> = holes.roots.keys().copied().collect();
+    let mut disc = discovery::discover_with(rom.to_vec(), &roots);
     // Discovery's gaps: a jump into ROM where it found no code (a scanned
     // fragment it stopped short in, a `bl`'s second half it took for a
     // literal pool; a `bx` to a known place, a `bx pc` veneer's ARM
@@ -1511,6 +1538,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     banked: BTreeMap::new(),
                     field_at: BTreeMap::new(),
                     field_idx: BTreeMap::new(),
+                    elem_addr: BTreeMap::new(),
                     inl: Vec::new(),
                     frameless: false,
                     sp_exact: sp_exact.contains(&f.entry),
@@ -2245,8 +2273,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     if holes.fields.is_some() {
         writeln!(
             report,
-            "named fields (native/lift-typed-access): {} accesses through a pointer the names files type print as a named field, {} as bytes inside one; {} of them as an element by a variable index (native/lift-index-names)",
-            soft.named_fields, soft.named_inside, soft.named_index,
+            "named fields (native/lift-typed-access): {} accesses through a pointer the names files type print as a named field, {} as bytes inside one; {} of them as an element by a variable index (native/lift-index-names); {} values print as an element's or its field's address by name (native/lift-element-address)",
+            soft.named_fields, soft.named_inside, soft.named_index, soft.elem_addrs.len(),
         )
         .unwrap();
         writeln!(
@@ -2470,6 +2498,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("named_field_accesses", soft.named_fields);
     m.push("named_inside_accesses", soft.named_inside);
     m.push("named_index_accesses", soft.named_index);
+    m.push("named_element_addresses", n(soft.elem_addrs.len()));
     // Only a lift with types has it, and its bar: what the types leave.
     if holes.fields.is_some() {
         let unknown = |st| soft.access.get(&(st, Where::Unknown)).copied().unwrap_or(0);
@@ -4175,6 +4204,9 @@ struct Soft {
     /// design, a guest address here; native/rom-statics).
     rom_refs: BTreeSet<u32>,
     narrowings: BTreeSet<(u32, u32, usize)>,
+    /// Values printed as an element's (or its field's) address by name
+    /// (native/lift-element-address): (function, block, inst).
+    elem_addrs: BTreeSet<(u32, u32, usize)>,
     /// A load's rotate by its address's low bits still printed
     /// ([`aligned`]).
     rotates_left: BTreeSet<(u32, u32, usize)>,
@@ -4369,6 +4401,11 @@ struct FnPrinter<'a, 'b> {
     /// Those of them whose address is a typed pointer plus a scaled index
     /// (native/lift-index-names), by block and inst.
     field_idx: BTreeMap<(u32, usize), fields::Indexed>,
+    /// The values that are an element's address (or a field's in it) by
+    /// a typed pointer plus a scaled index, printed by name where
+    /// [`fields::address_indexed`] names one
+    /// (native/lift-element-address), by block and inst.
+    elem_addr: BTreeMap<(u32, usize), fields::Indexed>,
     /// The current block's values printed inside their use, by value:
     /// their expressions ([`FnPrinter::inline`]; `None`, a `let`).
     inl: Vec<Option<String>>,
@@ -4631,7 +4668,7 @@ impl FnPrinter<'_, '_> {
         order.extend(f.blocks.keys().copied().filter(|&k| k != f.entry));
         self.labels = order.iter().enumerate().map(|(i, &k)| (k, i)).collect();
         (self.dead, self.live_in, self.local) = self.dead_writes();
-        (self.field_at, self.field_idx) = self.field_types();
+        (self.field_at, self.field_idx, self.elem_addr) = self.field_types();
         self.banked = self.redundant_banks();
         // A catch point prints in the `match` form: a restore goes on at
         // its save's return site's label ([`longjmp`]).
@@ -5203,6 +5240,7 @@ impl FnPrinter<'_, '_> {
     ) -> (
         BTreeMap<(u32, usize), fields::At>,
         BTreeMap<(u32, usize), fields::Indexed>,
+        BTreeMap<(u32, usize), fields::Indexed>,
     ) {
         let Some(maps) = self.holes.fields.as_deref() else {
             return Default::default();
@@ -5257,6 +5295,33 @@ impl FnPrinter<'_, '_> {
         (
             at.access.into_iter().map(|(k, a)| (key(k), a)).collect(),
             at.index.into_iter().map(|(k, x)| (key(k), x)).collect(),
+            // Only one used other than as an access's address, which
+            // prints the element's field ([`fields::pointer_indexed`]).
+            at.value
+                .into_iter()
+                .filter(|&((b, i), _)| {
+                    let v = ValueId(i as u32);
+                    insts[b].iter().any(|inst| match inst.op {
+                        Op::Load { .. } => false,
+                        Op::Store { value, .. } => value == v,
+                        // A halfword or word access's alignment mask, or
+                        // its rotate's amount.
+                        Op::Bin(BinOp::And, a, m)
+                            if a == v
+                                && matches!(insts[b][m.index()].op,
+                                    Op::Const(k) | Op::Pool(k) if [1, 3, !1, !3].contains(&k)) =>
+                        {
+                            false
+                        }
+                        ref op => op.operands().contains(&v),
+                    })
+                })
+                .filter(|((b, _), x)| {
+                    let global = konst(insts[*b], x.base).is_some();
+                    fields::address_indexed(&maps.types, x, global, "", "").is_some()
+                })
+                .map(|(k, x)| (key(k), x))
+                .collect(),
         )
     }
 
@@ -7522,6 +7587,9 @@ impl FnPrinter<'_, '_> {
                 base.into_iter().chain(idx).chain([value]).collect()
             }
             _ if let Some(f) = &conds[i] => f.uses.clone(),
+            // An element's address by name: its pointer and index, over
+            // a narrowing form's sum.
+            _ if let Some(x) = self.elem_addr.get(&(self.cur, i)) => vec![x.base, x.i],
             _ if let Some((x, f)) = forms[i] => [x].into_iter().chain(f.others()).collect(),
             Op::Exit(_) if self.blind.get(i).copied().unwrap_or(false) => Vec::new(),
             ref op => op.operands(),
@@ -7662,7 +7730,7 @@ impl FnPrinter<'_, '_> {
     /// Inst `i`'s value ([`FnPrinter::value`]), or the ID it holds where
     /// it is a dense function's constant ([`Dense::at`]).
     fn value_at(
-        &self,
+        &mut self,
         i: usize,
         op: &Op,
         cond: &Option<cond::Form>,
@@ -7670,8 +7738,23 @@ impl FnPrinter<'_, '_> {
     ) -> String {
         match self.dense.get(&(self.cur, i as u32)) {
             Some(id) => format!("{id:#x}u32"),
+            None if cond.is_none()
+                && let Some(e) = self.elem_address(i) =>
+            {
+                self.soft.elem_addrs.insert((self.f.entry, self.cur, i));
+                e
+            }
             None => self.value(op, cond, form),
         }
+    }
+
+    /// Inst `i`'s value as an element's address by name, if it is one
+    /// ([`FnPrinter::elem_addr`]; native/lift-element-address).
+    fn elem_address(&self, i: usize) -> Option<String> {
+        let x = self.elem_addr.get(&(self.cur, i))?;
+        let maps = self.holes.fields.as_deref()?;
+        let global = konst(&self.f.blocks[&self.cur].block.insts, x.base).is_some();
+        fields::address_indexed(&maps.types, x, global, &self.val(x.base), &self.val(x.i))
     }
 
     /// Value `x` where an operand goes: its name, or its inlined
@@ -10728,6 +10811,14 @@ why = "a table"
         assert!(Holes::parse("[[open_bus]]\nwhy = \"x\"\n").is_err());
         let twice = "[[open_bus]]\nat = 0x10\nwhy = \"x\"\n";
         assert!(Holes::parse(&format!("{twice}{twice}")).is_err());
+        // Roots: function starts only data reaches, one why for the list.
+        let h = Holes::parse("[[roots]]\nkeys = [0x080a0b21, 0x080a0c01]\nwhy = \"tilesets\"\n")
+            .unwrap();
+        assert_eq!(h.roots.len(), 2);
+        assert_eq!(h.roots[&0x080a_0c01], "tilesets");
+        assert!(Holes::parse("[[roots]]\nkeys = [0x03000001]\nwhy = \"x\"\n").is_err());
+        assert!(Holes::parse("[[roots]]\nkeys = [0x08000001, 0x08000001]\nwhy = \"x\"\n").is_err());
+        assert!(Holes::parse("[[roots]]\nwhy = \"x\"\n").is_err());
         let h = Holes::parse(
             "[[takes]]\nentry = 0x08000015\nsites = [0x08000006, 0x08000020]\nwhy = \"its caller's r5\"\n",
         )
