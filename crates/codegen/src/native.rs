@@ -132,7 +132,9 @@
 //!   address, which a stop names (unit `native/first-stop-guest-pc`:
 //!   compiled code keeps no other pc): `runtime::guest_pc::set` in a build
 //!   with the crate's `guest-pc` feature (`just lift`'s, the checks'),
-//!   nothing in a plain one (unit `native/lift-one-entry`); calls are Rust calls; a return is a jump to the value
+//!   nothing in a plain one (unit `native/lift-one-entry`). The printer
+//!   prints them; [`pc_marks`] takes them out of src/ into `pcs.txt`, and
+//!   the crate's build script puts them back in a `guest-pc` build; calls are Rust calls; a return is a jump to the value
 //!   `lr` held on entry, [`RET`] (prelude), told by value since compiled
 //!   code moves it through the stack.
 //! - Memory is `ld8/16/32` and `st8/16/32` over `Game::ram` (EWRAM then
@@ -231,6 +233,7 @@ pub mod metrics;
 pub mod modules;
 pub mod named;
 pub mod narrow;
+pub mod pc_marks;
 pub mod rom_data;
 pub mod shape;
 pub mod switch;
@@ -860,6 +863,9 @@ pub struct Lifted {
     /// With [`Holes::find_touches`], each load and store of a printed
     /// function whose RAM place the lift knows ([`find_field`]).
     pub touches: Vec<find_field::Touch>,
+    /// Where each block's `pc` was taken out of the modules
+    /// ([`pc_marks`]): the crate's `pcs.txt`.
+    pub pc_table: String,
 }
 
 /// The literals of `funcs`' constant jumps (not calls) to a RAM
@@ -1654,6 +1660,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             cut_texts: BTreeMap::new(),
             dense_words: BTreeMap::new(),
             touches: std::mem::take(&mut soft.touches),
+            pc_table: String::new(),
         };
     }
     fns.sort_unstable();
@@ -1821,7 +1828,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .iter()
         .filter(|(k, _)| holes.cut_want.contains(k) || holes.cuts.contains_key(k))
         .filter(|(k, _)| !holes.fn_check.contains_key(k))
-        .cloned()
+        // As the crate's src/ has it: no block markers (pc_marks).
+        .map(|(k, t)| (*k, pc_marks::strip(t).0))
         .collect();
     let mut cut_in = 0;
     for (k, t) in out.iter_mut() {
@@ -1855,6 +1863,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     }
     let plains: Vec<String> = fns_reached.iter().map(|&k| plain(k)).collect();
     let mut files = modules::split(main, table, &plains, &out, holes.copies);
+    // The block markers out of the text, into `pcs.txt` (native/lift-pc-markers).
+    let pc_table = pc_marks::strip_modules(&mut files.files);
     if dense_fns.is_empty() {
         // DENSE's blank line, comment and empty table.
         files.wiring += 3;
@@ -2522,6 +2532,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             false => BTreeMap::new(),
         },
         touches: soft.touches,
+        pc_table,
     }
 }
 

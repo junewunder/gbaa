@@ -78,7 +78,7 @@ The owner agreed to leave all seven out (2026-11-19).
 
 | The mod view | Why not for the lift |
 |---|---|
-| `insn!` markers, and assembly as text or comments (`--asm-text`, `--asm-comments`) | The lift is meant to read as a program, not a CPU. Each block's guest pc stays (`runtime::guest_pc::set`, only in check builds once `native/lift-one-entry` lands), and `just dis` gives the assembly at that pc |
+| `insn!` markers, and assembly as text or comments (`--asm-text`, `--asm-comments`) | The lift is meant to read as a program, not a CPU. Each block's guest pc stays out of the text (`pcs.txt`, put back in check builds' copies for `runtime::guest_pc::set`: `native/lift-pc-markers`), and `just dis` gives the assembly at that pc |
 | A readable form per function (`--readable LIST`) beside the play view | The lift is one form for every function |
 | Timing macros (`tick!`, `call!` writing lr, `ret!`, `regs!`) | The lift has no cycle counting or guest call frames for them to stand for |
 | Resumes inside a modded function (run in the interpreter, counted) | A lifted program never resumes at a guest pc: no save states mid-function, no `MAX_DEPTH` unwind |

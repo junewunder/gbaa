@@ -8,7 +8,9 @@
 //! separate codegen units in parallel.
 //!
 //! - `src/main.rs`: the prelude, RAM's struct, `NAME` and `ENTRY`, then a
-//!   `mod` and a glob `use` for every other file;
+//!   `mod` (`lifted_mod!` for a module of functions, which a `guest-pc`
+//!   build takes from the build script's copy: [`super::pc_marks`]) and a
+//!   glob `use` for every other file;
 //! - `src/fns.rs`: the `FNS` table (and `COPIES`, below);
 //! - `src/m_<key>.rs`: the functions from the one keyed `<key>` on. Each
 //!   starts `use crate::*;`, so it sees the prelude and, through the root's
@@ -29,6 +31,24 @@ pub const MODULE_LINES: usize = 4000;
 /// The lines each module file starts with, besides its functions: not
 /// lifted code, so the `lines` metric leaves them out.
 const MODULE_HEAD: &str = "use crate::*;\nuse armv4t::sem::ShiftType;\nuse armv4t::sem::prim;\nuse armv4t::sem::prim::MulKind;\n\n";
+
+/// The macro that declares a module of lifted functions (in main.rs, after
+/// the prelude): `src/<m>.rs`, or in a build with the `guest-pc` feature the
+/// copy the crate's build script wrote with each block's `pc` put back
+/// ([`super::pc_marks`]).
+const LIFTED_MOD: &str =
+    "// A module of lifted functions: with `guest-pc`, build.rs's copy with each block's `pc`.\n\
+macro_rules! lifted_mod {
+    ($m:ident) => {
+        #[cfg(not(feature = \"guest-pc\"))]
+        mod $m;
+        #[cfg(feature = \"guest-pc\")]
+        mod $m {
+            include!(concat!(env!(\"OUT_DIR\"), \"/\", stringify!($m), \".rs\"));
+        }
+    };
+}
+";
 
 /// A lifted crate's sources: `(path under src/, text)`, `main.rs` first.
 pub struct Files {
@@ -126,8 +146,15 @@ pub fn split(
         // `COPIES` isn't lifted code.
         wiring += 4 + n + 1;
     }
+    root.push_str(LIFTED_MOD);
+    wiring += LIFTED_MOD.lines().count();
     for m in &uses {
-        writeln!(root, "mod {m};\nuse {m}::*;").unwrap();
+        let decl = if m == "fns" {
+            "mod fns;".to_string()
+        } else {
+            format!("lifted_mod!({m});")
+        };
+        writeln!(root, "{decl}\nuse {m}::*;").unwrap();
         wiring += 2;
     }
     wiring += 1;
@@ -173,7 +200,11 @@ mod tests {
                 "m_08000300.rs"
             ]
         );
-        assert!(f.files[0].1.contains("mod m_08000100;\nuse m_08000100::*;"));
+        assert!(
+            f.files[0]
+                .1
+                .contains("lifted_mod!(m_08000100);\nuse m_08000100::*;")
+        );
         let total: usize = f.files.iter().map(|(_, t)| t.lines().count()).sum();
         // What's left once the wiring is out: the head, FNS and the functions.
         assert_eq!(
