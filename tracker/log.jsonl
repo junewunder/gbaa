@@ -3966,3 +3966,4 @@
 {"at":"2026-11-24T08:49:58Z","actor":"loop","tag":"2d61bb47","host":"quack","cmd":"done","id":"native/fn-check-spike-digest","text":"native-spike's fn-check digest recorded again: done"}
 {"at":"2026-11-24T08:51:27Z","actor":"loop","tag":"d78e67ee","host":"quack","cmd":"done","id":"native/lift-mod-run-name","text":"lift-mod-run takes the game's name from the mod: done"}
 {"at":"2026-11-24T08:54:43Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/fn-check-spike-digest","text":"native-spike's fn-check digest recorded again: on main"}
+{"at":"2026-11-24T08:54:47Z","actor":"loop","tag":"b9afc3fc","host":"quack","cmd":"claim","id":"native/lift-equipment-words","text":"Metroid's gEquipment prints by field, not u32 words: claimed"}

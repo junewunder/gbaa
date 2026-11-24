@@ -4289,7 +4289,19 @@
       "id": "native/lift-equipment-words",
       "title": "Metroid's gEquipment prints by field, not u32 words",
       "detail": "From {unit:native/lift-agent-mod} (hurt 2): SamusInit's maxEnergy = 99 prints as g.ram.gEquipment[0] = g.ram.gEquipment[0] & 0xffff0000 | ((0x63 & 0xffff) << 0); the lift's Ram has gEquipment: [u32; 5], though mzm.toml types it struct Equipment (no bitfield; BeamBombFlags/SuitMiscFlags/boolu8 fields). Find why struct-globals left it words (the store is through a pinned pointer r8 = gEquipment) and print g.ram.gEquipment.maxEnergy = 99, decimal into a named field. Check: lift-check 0 differences; Metroid 600 of 600 frames; just check.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "b9afc3fc",
+        "session": "b9afc3fc-aa37-45bf-919b-238502d77d5f",
+        "host": "quack",
+        "pid": 2964711,
+        "start": "95219683",
+        "at": "2026-11-24T08:54:47Z",
+        "branch": "unit/native/lift-equipment-words",
+        "beats": true
+      },
+      "round": "2026-11-24T08:54:47Z"
     },
     {
       "id": "native/lift-find-field",
