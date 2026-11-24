@@ -4866,6 +4866,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T16:53:50Z",
+          "by": "3ca58cea",
+          "text": "Merged main again at fb8a337 after recording; just check rerun there passed. The printing work starts at {unit:native/lift-lent-print}: Lends.through has each borrowed access, Lends.reach each param's bytes; locals print in declare_locals/local_at in native.rs."
+        },
+        {
           "at": "2026-11-24T16:28:52Z",
           "by": "66065018",
           "text": "Printing hints: Lends::through has each borrowed access; Lends::reach each param's bytes. A slot freed by reach-narrowing (escapes by Call, not in FrameLends.reached) can be a plain local too. Callers from RAM-copy contexts aren't seen by the lend run yet."
