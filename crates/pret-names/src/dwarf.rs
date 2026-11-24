@@ -731,26 +731,13 @@ fn layout(cx: &Cx<'_, '_>, at: gimli::UnitOffset) -> Result<Option<Layout>, giml
                     .and_then(|t| type_size(cx, t, 0))
                     .unwrap_or(0);
                 let fsize = udata(c, dw::DW_AT_byte_size).map_or(tsize, |s| s as u32);
-                // DWARF 2 counts a bitfield's bit_offset from the unit's
-                // most significant bit.
-                let mut off = off;
-                let bits = match (udata(c, dw::DW_AT_bit_size), udata(c, dw::DW_AT_bit_offset)) {
-                    (Some(w), Some(bo)) => {
-                        Some(((fsize * 8).saturating_sub(bo as u32 + w as u32), w as u32))
-                    }
-                    // DWARF 4 and later: the bit offset from the struct's
-                    // start, the field's unit the aligned `fsize` bytes
-                    // holding its lowest bit.
-                    (Some(w), None) => match udata(c, dw::DW_AT_data_bit_offset) {
-                        Some(dbo) if fsize > 0 => {
-                            let dbo = dbo as u32;
-                            off = dbo / 8 / fsize * fsize;
-                            Some((dbo - off * 8, w as u32))
-                        }
-                        _ => None,
-                    },
-                    _ => None,
-                };
+                let (off, fsize, bits) = place_bits(
+                    off,
+                    fsize,
+                    udata(c, dw::DW_AT_bit_size),
+                    udata(c, dw::DW_AT_bit_offset),
+                    udata(c, dw::DW_AT_data_bit_offset),
+                );
                 fields.push(Field {
                     name,
                     off,
@@ -779,6 +766,46 @@ fn layout(cx: &Cx<'_, '_>, at: gimli::UnitOffset) -> Result<Option<Layout>, giml
         dw::DW_TAG_union_type => Layout::Union { size, fields },
         _ => Layout::Enum { size, values },
     }))
+}
+
+/// A member's offset, unit size and bits (lowest, width) from its
+/// DWARF: `off` and `fsize` its data_member_location and byte_size (or
+/// its type's), then bit_size and either DWARF 2's bit_offset (from the
+/// unit's most significant bit) or DWARF 4's data_bit_offset (from the
+/// struct's start). The unit is the aligned `fsize` bytes holding the
+/// field's lowest bit, widened (doubled, aligned) while the field runs
+/// past it: agbcc lets a bitfield straddle its type's unit
+/// (`u8 a : 8; u16 b : 10;` puts `b` at bits 8-17, a DWARF 2 unit at 2
+/// with bit_offset 14), which only a wider unit from lower holds.
+pub(crate) fn place_bits(
+    off: u32,
+    fsize: u32,
+    bit_size: Option<u64>,
+    bit_offset: Option<u64>,
+    data_bit_offset: Option<u64>,
+) -> (u32, u32, Option<(u32, u32)>) {
+    let Some(w) = bit_size else {
+        return (off, fsize, None);
+    };
+    let w = w as u32;
+    // The field's lowest bit, from the struct's start.
+    let at = match (bit_offset, data_bit_offset) {
+        (Some(bo), _) => i64::from(off + fsize) * 8 - bo as i64 - i64::from(w),
+        (None, Some(dbo)) => dbo as i64,
+        (None, None) => return (off, fsize, None),
+    };
+    if fsize == 0 || at < 0 {
+        return (off, fsize, None);
+    }
+    let at = at as u32;
+    let mut size = fsize;
+    loop {
+        let start = at / 8 / size * size;
+        if at + w <= (start + size) * 8 || size >= 8 {
+            return (start, size, Some((at - start * 8, w)));
+        }
+        size *= 2;
+    }
 }
 
 /// A type's size in bytes, following typedefs, qualifiers and arrays.

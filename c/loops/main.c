@@ -5,7 +5,8 @@
  * u8 does) and one starting from a value. Each draws a column of bars.
  * Then arrays indexed by the counter (native/lift-for-index): an array of
  * structs, a field array through a pointer, two arrays by one counter
- * and a pointer stepped beside the counter. */
+ * and a pointer stepped beside the counter. Last, a u8 counter stepped
+ * through a second register (native/lift-for-step-via). */
 #include "gba.h"
 #include "draw.h"
 
@@ -190,6 +191,21 @@ NOINLINE s32 sum_movers(const struct Bar *b, s32 n)
     return s;
 }
 
+/* A u8 counter stepped through a second register (native/lift-for-step-via):
+ * with an inner loop and i read after it, agbcc computes i + 1 into another
+ * register before the inner loop and moves it back at the end, as in pret's
+ * HealPlayerParty. */
+NOINLINE void heal_rows(u8 n)
+{
+    u8 i, j;
+
+    for (i = 0; i < n; i++) {
+        for (j = 0; j < 4; j++)
+            bar(120 + j * 28, 140 + i * 4, gLens[j] + i, j);
+        bar(92, 140 + i * 4, 4 + i, i + 4);
+    }
+}
+
 void AgbMain(void)
 {
     s32 i, total, at;
@@ -241,6 +257,7 @@ void AgbMain(void)
         fill_rect(0, 124, 4 * pocket_count(&gPocket, (gFrame >> 2) & 3), 2, RGB(31, 31, 16));
         fill_rect(0, 132, 240, 2, BACKDROP);
         fill_rect(0, 132, gTotals[(gFrame >> 1) & 3] & 0x7f, 2, RGB(16, 16, 16));
+        heal_rows(1 + (gFrame & 3));
         gFrame++;
     }
 }

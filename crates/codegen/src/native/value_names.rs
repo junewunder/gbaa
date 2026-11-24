@@ -60,7 +60,7 @@ struct Binding {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Tok {
+pub(super) enum Tok {
     /// A word's bytes.
     Word(usize, usize),
     Punct(u8),
@@ -68,7 +68,7 @@ enum Tok {
 
 /// `text`'s tokens: words and punctuation, but strings, char literals,
 /// labels and comments. `None` where it can't tell (an unclosed string).
-fn tokens(text: &str) -> Option<Vec<(Tok, usize)>> {
+pub(super) fn tokens(text: &str) -> Option<Vec<(Tok, usize)>> {
     let b = text.as_bytes();
     let word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
     let mut out = Vec::new();

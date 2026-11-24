@@ -12,8 +12,6 @@
 //!   lift's hard holes by kind;
 //! - `play`: the play build, `just recompile ROM out/nightly/play-<name>
 //!   --name <name> --timing instant` then `just build-recompiled` on it;
-//! - `readable`: the same with every function readable (`--readable` a
-//!   list of `*`), into `out/nightly/readable-<name>`;
 //! - `lift`: `just lift ROM out/nightly/lift-<name> --name <lift>` (the
 //!   corpus's `lift`, the name its holes file is found by), which builds the
 //!   lift and runs it headless (`just first-stop`): the frames it ran and
@@ -46,7 +44,7 @@ use serde::{Deserialize, Serialize};
 use crate::corpus::{CorpusFile, Line};
 
 /// The steps, in the order each game takes them.
-pub const STEPS: [&str; 4] = ["holes", "play", "readable", "lift"];
+pub const STEPS: [&str; 3] = ["holes", "play", "lift"];
 
 /// One step's outcome.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -57,7 +55,7 @@ pub struct Step {
     pub seconds: f64,
     /// Killed at the time limit.
     pub timed_out: bool,
-    /// For a build step (play, readable, lift): the crate built. False
+    /// For a build step (play, lift): the crate built. False
     /// for the hole report, which builds nothing.
     pub built: bool,
     /// What went wrong, short: the step that failed, the log's last line.
@@ -172,7 +170,7 @@ pub fn changes(now: &Game, was: &Game) -> (Vec<String>, bool) {
         (Some(n), None) => out.push(format!("hole report ran: hard {}", hard_text(n))),
         _ => {}
     }
-    for step in ["play", "readable", "lift"] {
+    for step in ["play", "lift"] {
         let (Some(n), Some(w)) = (now.step.get(step), was.step.get(step)) else {
             continue;
         };
@@ -213,9 +211,8 @@ pub fn game_text(g: &Game, against: &str) -> String {
     writeln!(s, "  hard holes: {hard}").unwrap();
     writeln!(
         s,
-        "  play build: {}; readable build: {}; lift: {}",
+        "  play build: {}; lift: {}",
         built_text(g.step.get("play")),
-        built_text(g.step.get("readable")),
         built_text(g.step.get("lift"))
     )
     .unwrap();
@@ -365,16 +362,9 @@ fn just(args: &[&std::ffi::OsStr]) -> Command {
     c
 }
 
-/// A play or readable build: recompile into `dir`, then build it.
-fn build(
-    rom: &Path,
-    dir: &Path,
-    name: &str,
-    extra: &[&std::ffi::OsStr],
-    log: &Path,
-    limit: Duration,
-) -> Step {
-    let mut a: Vec<&std::ffi::OsStr> = vec![
+/// The play build: recompile into `dir`, then build it.
+fn build(rom: &Path, dir: &Path, name: &str, log: &Path, limit: Duration) -> Step {
+    let a: Vec<&std::ffi::OsStr> = vec![
         "recompile".as_ref(),
         rom.as_os_str(),
         dir.as_os_str(),
@@ -383,7 +373,6 @@ fn build(
         "--timing".as_ref(),
         "instant".as_ref(),
     ];
-    a.extend_from_slice(extra);
     let mut s = run(just(&a), log, limit);
     if s.exit != Some(0) {
         s.why = format!("recompile: {}", s.why);
@@ -409,7 +398,7 @@ fn build(
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: gbaa-holes --nightly FILE --roms DIR [--out DIR] [--against DIR] [--only NAME]... [--skip holes|play|readable|lift]... [--step-minutes N]"
+        "usage: gbaa-holes --nightly FILE --roms DIR [--out DIR] [--against DIR] [--only NAME]... [--skip holes|play|lift]... [--step-minutes N]"
     );
     ExitCode::from(2)
 }
@@ -480,10 +469,7 @@ pub fn main(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let readable_list = out.join("readable-all.list");
-    if let Err(e) = std::fs::create_dir_all(&out)
-        .and_then(|()| std::fs::write(&readable_list, "# every function readable\n*\n"))
-    {
+    if let Err(e) = std::fs::create_dir_all(&out) {
         eprintln!("gbaa-holes: {}: {e}", out.display());
         return ExitCode::from(2);
     }
@@ -549,22 +535,12 @@ pub fn main(args: &[String]) -> ExitCode {
             }
             game.step.insert("holes".into(), st);
         }
-        for (step, extra) in [
-            ("play", None),
-            ("readable", Some(readable_list.as_os_str())),
-        ] {
-            if !todo(step) {
-                continue;
-            }
-            let log = dir.join(format!("{step}.log"));
+        if todo("play") {
+            let log = dir.join("play.log");
             let _ = std::fs::remove_file(&log);
-            let crate_dir = root.join(format!("{step}-{}", g.name));
-            let extra: Vec<&std::ffi::OsStr> = match extra {
-                Some(l) => vec!["--readable".as_ref(), l],
-                None => vec![],
-            };
-            let st = build(&rom, &crate_dir, &g.name, &extra, &log, limit);
-            game.step.insert(step.into(), st);
+            let crate_dir = root.join(format!("play-{}", g.name));
+            let st = build(&rom, &crate_dir, &g.name, &log, limit);
+            game.step.insert("play".into(), st);
         }
         if todo("lift") {
             let log = dir.join("lift.log");
@@ -717,7 +693,7 @@ mod tests {
             }),
             ..Game::default()
         };
-        for s in ["holes", "play", "readable", "lift"] {
+        for s in ["holes", "play", "lift"] {
             g.step.insert(
                 s.into(),
                 Step {
@@ -749,7 +725,7 @@ mod tests {
     fn a_lost_build_and_fewer_frames_are_worse() {
         let (c, worse) = changes(&game(0, false, 10), &game(0, true, 10));
         assert!(worse);
-        assert_eq!(c.len(), 3, "{c:?}");
+        assert_eq!(c.len(), 2, "{c:?}");
         assert!(c[0].starts_with("play build: built -> not built"), "{c:?}");
         let (c, worse) = changes(&game(0, true, 5), &game(0, true, 10));
         assert!(worse);
@@ -767,7 +743,6 @@ mod tests {
     fn a_skipped_step_isnt_compared() {
         let mut now = game(0, false, 10);
         now.step.remove("play");
-        now.step.remove("readable");
         now.step.remove("lift");
         now.run = None;
         let (c, worse) = changes(&now, &game(0, true, 600));
@@ -783,7 +758,7 @@ mod tests {
         let t = game_text(&g, "out/nightly/2026-11-13");
         assert_eq!(
             t,
-            "g\n  hard holes: 2 (jumps 1, BIOS 1)\n  play build: built; readable build: built; lift: built\n  run: 600 of 600 frames, panic\n  changes against out/nightly/2026-11-13:\n    hard holes 3 (jumps 3) -> 2 (jumps 1, BIOS 1)\n"
+            "g\n  hard holes: 2 (jumps 1, BIOS 1)\n  play build: built; lift: built\n  run: 600 of 600 frames, panic\n  changes against out/nightly/2026-11-13:\n    hard holes 3 (jumps 3) -> 2 (jumps 1, BIOS 1)\n"
         );
         let n = Night {
             game: vec![g],
