@@ -2909,4 +2909,6 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 59
 fn_keys_left = 64
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5
