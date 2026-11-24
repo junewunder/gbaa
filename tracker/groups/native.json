@@ -5442,6 +5442,9 @@
     {
       "id": "native/lift-for-ram-bounds-games",
       "title": "Games' loops to a bound in RAM print as for",
+      "detail": "From {unit:native/lift-for-ram-bounds}: the store summary (native::writes) and loaded bounds (bounds.rs, loaded_bound) print c-loops' draw_global and draw_row as for, but no Metroid or Emerald loop reaches the store check. Find what stops them (GBAA_FOR_WHY=1 on gbaa-lift) and print them: Metroid fails on shape first; Emerald's IRQ handler calls through its table, so its writes may be anywhere (a complete callee set from the function flow would narrow it). Check: Metroid's and Emerald's loops_not_for bars lowered, both 600 of 600 frames, just lift-check, just check.",
+      "check": "recorded",
+      "needs": ["native/lift-for-ram-bounds"],
       "uses": ["heavy"],
       "notes": [
         {
