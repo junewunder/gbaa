@@ -37,7 +37,10 @@
 //!   statics (`super::rom_data`, native/rom-data-statics) indexes it:
 //!   `load_rom_static` (no bar: it should rise), with `rom_statics` the
 //!   statics, whose one-line declarations `lines` leaves out, as it does
-//!   `lines_types` (data, not code). The rest stay `load_computed_rom`.
+//!   `lines_types` (data, not code). The rest stay `load_computed_rom`
+//!   (the report lists them). Of the loads from a word static, `rom_refs`
+//!   counts those whose static holds a pointer into ROM data (the soft
+//!   hole of a `RomRef`, native/rom-statics; barred).
 //!   One through a pointer the names files type (`super::fields`,
 //!   native/lift-typed-access) prints as a named field over the same
 //!   byte access, so it keeps its count here too: `named_field_accesses`
@@ -77,7 +80,9 @@
 //! address of which the flow proved, which `--fn-ids dense` numbers from
 //! 1 (no bar: it should rise), and `fn_keys_left`, the function words in
 //! ROM and the code's constants such a build leaves as keys (barred; 0 on
-//! the C programs): counted whatever the build's IDs.
+//! the C programs): counted whatever the build's IDs; of those,
+//! `rom_static_fn_keys` the words the flow read that a ROM static holds
+//! (native/rom-statics; barred, 0 on the C programs).
 //!
 //! Returns (`native/lift-pop-return`): the jumps by value the summaries
 //! proved a jump to the function's entry lr (`pop {pc}`, `pop {r0}; bx
