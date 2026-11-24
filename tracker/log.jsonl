@@ -4250,3 +4250,4 @@
 {"at":"2026-11-24T22:33:01Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-frame-exact-irq-reach","text":"Exact sp: IRQ wrappers' reach narrowed on Metroid: edited (detail)"}
 {"at":"2026-11-24T22:33:03Z","actor":"session","tag":"6056824b","host":"quack","cmd":"add-unit","id":"native/lift-restore-saved-block","text":"new unit: A restore loading sp and pc from a saved block unwinds"}
 {"at":"2026-11-24T22:33:05Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/minish-builds","text":"Minish Cap's lift builds: its hard holes closed: edited (add-needs)"}
+{"at":"2026-11-24T22:33:07Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/imperium-first-stops","text":"Imperium's lift runs 600 frames: its first stops: edited (needs)"}
