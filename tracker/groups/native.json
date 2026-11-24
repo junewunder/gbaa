@@ -4570,7 +4570,14 @@
       "title": "A takes site may pass r4-r11 into another code context",
       "detail": "The holes file's [[takes]] sites pass r4-r11 only to a callee in the same code context: Summaries::call looks the callee's takes up in its own context's sums (crates/codegen/src/saves/summary.rs), so a site in an IWRAM copy calling a ROM function (or the other way) is 'matches no indirect call'. Minish Cap needs it: ZeldaFollowAction (0x08060ba1) reads r5 as it came; NPC5 (site 0x080609f6) and NPCUpdate pass it, NPCUpdate is called by the IWRAM entity loop UpdateEntities (0x03005f40, site 0x03005f94), itself pointer-called from ROM (0x0805e5e2, 0x0805e600), so the chain crosses twice. Summarize the contexts to a fixpoint with each other's takes, and print the passing at such a site. Done when: a [[takes]] site in one context reaching a taker in another passes its registers (a unit test of two contexts), Minish Cap's ZeldaFollowAction hole closes with holes-file takes entries, just lift-check and just check pass.",
       "check": "recorded",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-24T05:45:00Z",
+          "by": "c2d4d707",
+          "text": "Near {unit:native/ram-jump-passes-regs} (a jump into a copy passing r4-r11 across contexts): the same cross-context summaries may serve both; do them together if one lands first. Minish's two entries (0x08060ba1, 0x080609e9) are in mods/minish-cap/holes.toml already."
+        }
+      ]
     }
   ]
 }
