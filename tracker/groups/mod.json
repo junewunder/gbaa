@@ -1098,6 +1098,13 @@
       "detail": "Owner said delete (2026-11-20). Per docs/research/mod-view-retirement.md: gbaa-recompile's --readable, --mod, --cut, --names-check, --snapshots --readable, --names/--names-dir; find.rs, readable snapshots in snapshot.rs, names/check.rs; modcopy.rs except merge_file (move it to a shared module the lift cut uses); recipes mod-cut, mod-find, snapshots-readable, the --readable option of sst-gen, fn-diff, own-state-check, kirby-controller's mod-view cut; private: mods/emerald/readable, emerald-readable snapshots, text-speed, main-menu, spikes. Done when gone and just check passes.",
       "check": "recorded",
       "needs": ["mod/retire-tools"]
+    },
+    {
+      "id": "mod/retire-readable-codegen",
+      "title": "Codegen's readable printing is gone",
+      "detail": "Owner said delete (2026-11-20). Per docs/research/mod-view-retirement.md: emit.rs readable_items/readable_impl/readable_macros and the readable argument; lower.rs readable_plan/exit_readable/readable_blocks; func.rs readable fields; print.rs and text.rs readable printer; fn_diff.rs readable picks. Keep what the lift calls (the list's 'What stays'): move those helpers to a shared module. Done when gone and just check passes.",
+      "check": "recorded",
+      "needs": ["mod/retire-recompile"]
     }
   ]
 }
