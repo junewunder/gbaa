@@ -4927,6 +4927,17 @@
       "uses": ["heavy"],
       "tags": ["slow-check"],
       "priority": 95,
+      "record": {
+        "state": "claimed",
+        "by": "c69dfdbb",
+        "session": "c69dfdbb-9a16-4c43-9b36-8c0384924b32",
+        "host": "quack",
+        "pid": 1983326,
+        "start": "101568883",
+        "at": "2026-11-24T22:53:20Z",
+        "branch": "unit/native/lift-returns-read",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-24T19:42:05Z",
