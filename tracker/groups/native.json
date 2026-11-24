@@ -3875,6 +3875,17 @@
       "detail": "moonbeam had 7 hard holes on 2026-11-19 (jumps 3, no code 2, CPU state 1, summaries 1 in the 2026-11-14 table) and 438 undiscovered bytes, far more than any other game. It is modern GCC with newlib: {unit:native/moonbeam-taker-chain} and docs/research/entry-read-takers.md have its setjmp. Close each by a lifter or discovery rule where the cause is general, by the game's holes file (mods/<game>/holes.toml, each entry with its reason) only where it is the game's own. Run just holes-all on main before and --against it after (just long start, --mem 4G is enough: memory/lift-cost-corpus.md): no other game's hard holes may rise. A cause too big for about 3 hours becomes its own unit, needed by this one. Done when: just lift on moonbeam has 0 hard holes and builds, its first stop is recorded (and filed as a unit if it isn't 600 of 600); just check passes.",
       "needs": ["native/lift-longjmp"],
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "e3ab08da",
+        "session": "e3ab08da-72ed-45d5-939f-f3aa18bbdaa0",
+        "host": "quack",
+        "pid": 2962048,
+        "start": "95217572",
+        "at": "2026-11-24T11:16:04Z",
+        "branch": "unit/native/moonbeam-builds",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-20T13:04:13Z",
