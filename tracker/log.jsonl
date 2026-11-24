@@ -4068,3 +4068,4 @@
 {"at":"2026-11-24T13:39:17Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-cast-types","text":"Values typed by width so the lift drops its casts: on main"}
 {"at":"2026-11-24T13:39:21Z","actor":"loop","tag":"66d510b9","host":"quack","cmd":"claim","id":"native/land-emerald-route-lifter","text":"Land the Emerald route branch's lifter parts on main: claimed"}
 {"at":"2026-11-24T13:46:26Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/moonbeam-builds","text":"moonbeam's lift builds: its hard holes closed: on main"}
+{"at":"2026-11-24T13:46:32Z","actor":"loop","tag":"af2ac9d3","host":"quack","cmd":"claim","id":"native/lift-element-address","text":"An array element's address prints as the element, not sums: claimed"}
