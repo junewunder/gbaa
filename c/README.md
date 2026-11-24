@@ -48,8 +48,9 @@ needs its file made again, or its lift has no names.
 | `chain/`    | a stack struct passed by pointer down a call chain; a struct returned by value |
 | `heap/`     | a first-fit allocator; sprites, a menu and short-lived effects allocated at three call sites, function pointers beside numbers in each |
 | `bits/`     | bitfields in a byte and a halfword through a pointer: written one field at a time, constant and computed, and read and written joined by the compiler |
+| `loops/`    | counted loops to a parameter, a global and a field; nested, counting down, breaking out, skipping rounds, a `u8` counter |
 
-The five programs (ten ROMs) are in the lifter's check (`just
+The six programs (twelve ROMs) are in the lifter's check (`just
 lift-check`, `crates/codegen/lift-check.toml`'s `c-*` tables, routes
 `units/c-<name>-<cc>-600.toml`), each with a planted store. A new program:
 copy `template/`, write its `SCENE.md`, run `just c-tests`, then add its
