@@ -4608,6 +4608,13 @@
           "lane": "quack/2"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-24T14:45:52Z",
+          "by": "d938b67f",
+          "text": "Left as vN: bool compares, sums, loads with nothing named behind them. Mirror's lift was built and played before merging main (pc-markers, cast-types), not after; just check and codegen tests passed after. The pass: native/value_names.rs, last on each function's text."
+        }
+      ],
       "round": "2026-11-24T12:43:41Z"
     },
     {
