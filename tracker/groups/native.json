@@ -4660,6 +4660,7 @@
       "title": "An array element's address prints as the element, not sums",
       "detail": "From {unit:native/lift-pret-score}'s first numbers. {unit:native/lift-index-names} prints an access through a variable index as .idx(i) (13,229 on Emerald), but an element's address that is passed on or kept, not loaded through, still prints as arithmetic: &gPlayerParty[i] in HealPlayerParty (src/script_pokemon_util.c:39) is 0x64u32.wrapping_mul(r8).wrapping_add(0x20244ec), then passed to GetMonData2. Where a value is a typed global array's base plus an index times its element size (and a field's offset), print the element's address by name (the typed path's address, as the accesses do: same value), also when the base is a constant the multiply was folded into. Metric: a count of such addresses printed by name on the C rows, Metroid and Emerald; wrapping_mul by an element size left, falling. Check: just lift-check passes with 0 differences and every planted fault caught; Metroid's typed lift and a --no-field-types lift give the same frame hashes; just check passes.",
       "uses": ["heavy"],
+      "tags": ["slow-check"],
       "record": {
         "state": "claimed",
         "by": "af2ac9d3",
