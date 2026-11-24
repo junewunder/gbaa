@@ -3994,3 +3994,4 @@
 {"at":"2026-11-24T10:08:04Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane2-native-lift-global-bitfields","text":"Merge main on quack lane 2: on main"}
 {"at":"2026-11-24T10:08:04Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-global-bitfields","text":"A typed global's bitfield prints as its field: on main"}
 {"at":"2026-11-24T10:08:09Z","actor":"loop","tag":"91ffb568","host":"quack","cmd":"claim","id":"native/ram-jump-passes-regs","text":"A jump into a RAM copy passes the r4-r11 it reads: claimed"}
+{"at":"2026-11-24T10:12:20Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane4-native-lift-equipment-words","text":"new unit: Merge main on quack lane 4"}

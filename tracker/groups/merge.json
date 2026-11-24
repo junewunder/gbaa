@@ -739,6 +739,14 @@
         "host": "quack",
         "landed": "2026-11-24T10:08:04Z"
       }
+    },
+    {
+      "id": "merge/quack-lane4-native-lift-equipment-words",
+      "title": "Merge main on quack lane 4",
+      "detail": "Branch `unit/native/lift-equipment-words` holds {unit:native/lift-equipment-words}, finished but not on main: merging main conflicts in crates/codegen/src/native.rs crates/codegen/src/native/globals.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/4",
+      "branch": "unit/native/lift-equipment-words"
     }
   ]
 }
