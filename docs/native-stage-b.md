@@ -111,12 +111,9 @@ any real game.
   native/lift-bank-sp-once). Control `--ime-at-waits`; program
   `agb/native-ime-release` (frame 601 matches mGBA).
 - **`IME` set again while I is set** (`native/ime-i-set-test-program`).
-  The play build dropped the `IME` write's release when I was set, so an
-  `msr` clearing I found nothing held; the lift takes it there, as mGBA
-  does. Done: `Machine::tick_native` marks what's pending as held then,
-  outside IRQ mode (a wrapper putting `IME` back returns through the
-  BIOS, where the lift runs nothing). Control `--irq-at-waits`; program
-  `agb/native-ime-i-set` (frame 601 matches mGBA).
+  Done: the `msr` that clears I takes it, as mGBA and the lift do
+  (`Machine::tick_native` holds it, outside IRQ mode). Control
+  `--irq-at-waits`; program `agb/native-ime-i-set`.
 - **Task switchers on host coroutines** (`native/task-coroutines`). Done:
   a stack switch is a hard hole; the prelude's `task_resume` and kin run
   tasks on coroutines for the stand-ins. Program `agb/native-tasks`.
