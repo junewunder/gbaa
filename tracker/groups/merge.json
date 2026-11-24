@@ -748,15 +748,22 @@
       "lane": "quack/4",
       "branch": "unit/native/lift-equipment-words",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "119d7968",
-        "session": "119d7968-6ec2-420f-8c6c-6a195240cbd5",
-        "host": "quack",
-        "pid": 2964711,
-        "start": "95219683",
-        "at": "2026-11-24T10:12:26Z",
+        "at": "2026-11-24T10:18:22Z",
+        "evidence": "Merged origin/main at 4ea66ac: native.rs keeps main's bitfield setters with the branch's constant-literal store as fallback; globals.rs doc joined; duplicate rom_static_fn_keys/rom_refs bars in lift-check.toml kept once. just check passed (exit 0).",
         "branch": "unit/native/lift-equipment-words",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T10:18:22Z",
+          "by": "119d7968",
+          "host": "quack",
+          "pid": 2964711,
+          "start": "95219683",
+          "beats": true,
+          "session": "119d7968-6ec2-420f-8c6c-6a195240cbd5",
+          "lane": "quack/4"
+        }
       },
       "round": "2026-11-24T10:12:26Z"
     }
