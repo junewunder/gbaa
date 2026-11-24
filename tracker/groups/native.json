@@ -5424,7 +5424,8 @@
       "detail": "Split from {unit:native/lift-stack-arrays} at ~3 hours. Its design (docs/native-port-design.md, 'Stack locals passed by address') and analysis (frame::lend: Lends.lent, .borrowed, .through, .reach) are on main. Wanted: print each lent slot as a Rust local [u8; N] (by access width) and each borrowed parameter as a Lent<'_> (the prelude's &[Cell<u8>]); callers pass the local; accesses through it are element accesses, past its end a panic naming the function. --shadow-locals keeps a lent local in the frame's bytes too (the Lent carries its guest address) and reports a load that differs; --plant-lent=ADDR makes a store through a borrowed parameter one more, caught by lift-check. Today only c-chain-gcc lends (5 slots, 8 accesses). Check (code-shape work, judged on the C programs): just lift-check 0 differences on every program, every planted fault (--plant-lent included) caught; just check. Sprint 2026-11-24: it changes every lift, and the lend run doesn't see callers in RAM copies, so: Metroid still builds and passes its native route (units/metroid-native.toml, 0 differences). --plant-lent goes in c-chain-gcc's planted_flags; a --shadow-locals lift of c-chain-gcc reports nothing. '[u8; N]' is N the object's bytes.",
       "check": "recorded",
       "needs": ["native/lift-stack-arrays"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "priority": 92
     },
     {
       "id": "native/lift-lent-frameless",
