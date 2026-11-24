@@ -1496,6 +1496,48 @@ fields = [
     }
 
     #[test]
+    fn a_bitfield_straddling_its_unit_reads_from_the_struct_start() {
+        // agbcc's struct { u8 a:4, b:2, c:1, d:1; u16 beats:10; }, as
+        // pret-names places it: beats in the word at 0, bits 8-17.
+        let text = format!(
+            r#"[map]
+rom_sha1 = "{SHA}"
+[data]
+0x03000000 = {{ name = "gClock", size = 4, type = "struct Clock" }}
+[types."struct Clock"]
+kind = "struct"
+size = 4
+fields = [
+  {{ name = "a", off = 0, size = 1, type = "u8", bits = [0, 4] }},
+  {{ name = "b", off = 0, size = 1, type = "u8", bits = [4, 2] }},
+  {{ name = "c", off = 0, size = 1, type = "u8", bits = [6, 1] }},
+  {{ name = "d", off = 0, size = 1, type = "u8", bits = [7, 1] }},
+  {{ name = "beats", off = 0, size = 4, type = "u16", bits = [8, 10] }},
+]
+"#
+        );
+        let m = SourceMap::from_texts(SHA, &[&text]).unwrap();
+        let t = &m.typed;
+        let clock = t.global_at(0x0300_0000).unwrap().1.clone();
+        let f = |s: &str| Step::Field(s.into());
+        // A word's load and `>> 8 & 0x3ff`: beats; the byte's `& 0xf`: a.
+        assert_eq!(
+            t.path(&clock, 0, 4, Some((8, 10))),
+            (vec![f("beats")], None)
+        );
+        assert_eq!(t.path(&clock, 0, 1, Some((0, 4))), (vec![f("a")], None));
+        let text = t.module(&m).to_string();
+        let want =
+            "pub const fn beats (self) -> Ptr < Bits < u32 , 8 , 10 > > { self . field (0) }";
+        assert!(text.contains(want), "{want} in {text}");
+        // One word holds them all.
+        let l = t.layout("struct Clock").unwrap();
+        assert_eq!(l.fields, [("a_b_c_d_beats".to_string(), 0, Ty::U32)]);
+        let beats = l.bits.iter().find(|b| b.ident == "beats").unwrap();
+        assert_eq!((beats.lo, beats.n), (8, 10));
+    }
+
+    #[test]
     fn the_module_declares_globals_and_accessors() {
         let m = map();
         let text = m.typed.module(&m).to_string();
