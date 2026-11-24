@@ -1545,6 +1545,14 @@
       "at": "2026-11-24T21:33:59Z",
       "scope": ["native/lift-for-step-via"],
       "until": "2026-11-24T23:00:01Z"
+    },
+    {
+      "id": "d/game-judged-lifter-units-pass-the-game-s-native",
+      "title": "Game-judged lifter units pass the game's native route",
+      "why": "Sprint of 2026-11-24, foreman in june's place, shown to her at the cut: '600 of 600 frames' compares nothing. A unit judged on Metroid or the Amazing Mirror runs that game's native route (units/metroid-native.toml 2,700 frames, units/kirby-mirror-native.toml 3,000) with 0 differences, on the head that lands.",
+      "by": "6056824b",
+      "at": "2026-11-24T22:33:24Z",
+      "scope": ["native/*"]
     }
   ]
 }
