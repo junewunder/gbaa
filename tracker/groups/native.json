@@ -4043,7 +4043,19 @@
       "id": "native/entry-jump-test-program",
       "title": "A test program: a b and a returning call into an entry",
       "detail": "docs/native-stage-b.md, Known gaps, falls and calls into an entry: a call that returns into another function's entry, and a b (not a fall) into an entry, have no test program, so those paths are checked by no run. Add one as {unit:native/taker-test-program} did (source only in the repo; just agb-tests builds it): hand-written assembly for both shapes, each drawing what its registers held, a row in crates/codegen/lift-check.toml with its bars and a planted fault, and a 600-frame route. Fix what it finds, or file it if large. Done when: just lift-check passes with the new row, 0 differences and the planted fault caught; just check passes.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "88798491",
+        "session": "88798491-3f87-4ad9-b48f-804e82becdf5",
+        "host": "quack",
+        "pid": 2962048,
+        "start": "95217572",
+        "at": "2026-11-24T06:38:24Z",
+        "branch": "unit/native/entry-jump-test-program",
+        "beats": true
+      },
+      "round": "2026-11-24T06:38:24Z"
     },
     {
       "id": "native/ime-i-set-test-program",
