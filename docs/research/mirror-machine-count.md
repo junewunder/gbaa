@@ -134,7 +134,10 @@ where it is passed exactly.
 function that soft-resets (in the multiboot code) and `call_fn`, a call through a function
 pointer, which may reach any function. With `skip_fn_flow` in Mirror's holes file (the flow took
 37 min on 2026-11-14) no indirect call has a callee set (`call_fn_complete` 0 of 376), so every
-caller of a function pointer, and every caller of those, returns `Result`. The Kirby state
+caller of a function pointer, and every caller of those, returns `Result`. Since `native/mirror-flow-on`
+(2026-11-24, the flow on, 6 min for the whole lift, build and run) 33 of the 376 have a
+complete callee set and `Result<` falls to 7,979 (`)?` 9,987); `Regs::call` is 2,195
+and the `call_fn(` sites still 396. The Kirby state
 machine is exactly that:
 
     [r0, r1, r2, r3] = call_fn(g, if r4 & 1 != 0 { r4 } else { r4 & !3 }, r13, [r0, r1, r2, r3])?;

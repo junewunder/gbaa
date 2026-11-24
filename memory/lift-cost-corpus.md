@@ -11,6 +11,7 @@ holes files applied (`mods/<game>/holes.toml`), one job each:
 | Metroid | 30 s | | 9 s | |
 | WarioWare | 283 s | | 14 s | |
 | Kirby & the Amazing Mirror | ~50 min (heap pass 1,771 s) | 0.5 GB | 36 s | 1,054 s |
+| Kirby & the Amazing Mirror, flow on (2026-11-24, lift+build+run) | 6 min | 0.76 GB | | |
 | Kirby: Nightmare (skip_fn_flow) | 54 s | 0.4 GB | 20 s | |
 | Kirby: Nightmare, flow on (2026-11-14) | 491 s | 0.45 GB | | |
 | Kirby: Nightmare, flow on (2026-11-20, lift+build+run) | ~4 min | 0.44 GB | | |
@@ -40,7 +41,9 @@ holes files applied (`mods/<game>/holes.toml`), one job each:
   in r0, native/nightmare-fn-flow-again) went with native/fnref-flow-emerald
   (a pile-wide set is a large value, its calls incomplete): its holes file
   has no skip_fn_flow since native/nightmare-flow-on (2026-11-20; 0 hard
-  holes, builds, 600 of 600 frames as with the flow off).
+  holes, builds, 600 of 600 frames as with the flow off). Mirror's likewise
+  since native/mirror-flow-on (2026-11-24): the flow that took 37 min
+  on 2026-11-14 now takes the whole lift+build+run 6 min.
 - `just holes-all` over the nine took 29 min at 0711e3d2 (2026-11-20, two
   runs; Imperium 9 min, Rogue 5). Its first-stop
   column reads the lifts when it runs: `--from DIR` keeps DIR's saved stops,
