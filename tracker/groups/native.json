@@ -4847,18 +4847,22 @@
       "uses": ["heavy"],
       "minMinutes": 180,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "3ca58cea",
-        "session": "3ca58cea-0207-418c-8adf-1cec823264b1",
-        "host": "quack",
-        "pid": 2963642,
-        "start": "95218853",
-        "at": "2026-11-24T16:29:18Z",
+        "at": "2026-11-24T16:47:58Z",
+        "evidence": "Split at ~3 hours per the owner's rule; this unit narrowed to its design and analysis. Design: docs/native-port-design.md 'Stack locals passed by address'. Analysis: frame::lend (borrowed parameters, lent slots, frame lends), tests in frame/tests.rs, report line 'lent slots' (c-chain-gcc: 5 slots, 8 accesses). just check passed (exit 0) at 54549e4, main merged (up to date). Rest filed: {unit:native/lift-lent-print}, {unit:native/lift-lent-frameless}, {unit:native/lift-lent-games}.",
         "branch": "unit/native/lift-stack-arrays",
-        "resumed": "66065018",
-        "prevSession": "66065018-5139-497f-b9ca-a8662426a0d5",
-        "pushed": true,
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T16:47:58Z",
+          "by": "3ca58cea",
+          "host": "quack",
+          "pid": 2963642,
+          "start": "95218853",
+          "beats": true,
+          "session": "3ca58cea-0207-418c-8adf-1cec823264b1",
+          "lane": "quack/3"
+        }
       },
       "notes": [
         {
