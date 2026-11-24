@@ -1,7 +1,7 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
 //! [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT]
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT]
-//! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]]
+//! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-for-loops] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
 //! [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...]`,
 //! or `gbaa-lift ROM --find FIELD [FLAGS]`:
@@ -34,7 +34,10 @@
 //! take their variables' names where liveness agrees, else a `// dwarf
 //! r4: name` comment where the variable's range starts
 //! (`codegen::native::local_names`, unit `native/lift-local-names`);
-//! `--no-local-names` leaves that out. `--layout guest` (the
+//! `--no-local-names` leaves that out. A value printed as its own `let`
+//! takes a name from what it holds (a global's, a field's, its register's
+//! variable's: `codegen::native::value_names`, unit
+//! `native/lift-let-names`); `--no-let-names` leaves them `vN`. `--layout guest` (the
 //! default) puts them at the guest's offsets, the native check's layout;
 //! `--layout packed` makes them fields in the lifter's order, the rest of
 //! RAM bytes, the play layout, which must draw the same frames (unit
@@ -183,7 +186,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...] | gbaa-lift ROM --find FIELD [FLAGS]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...] | gbaa-lift ROM --find FIELD [FLAGS]"
         );
         ExitCode::FAILURE
     };
@@ -204,6 +207,7 @@ fn main() -> ExitCode {
     let mut no_local_names = false;
     let mut no_data_names = false;
     let mut no_for_loops = false;
+    let mut no_let_names = false;
     let (mut holes_only, mut holes_flow) = (false, false);
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
     let (mut fn_check, mut replace, mut seed, mut runs) = (Vec::new(), None, None, None);
@@ -255,6 +259,10 @@ fn main() -> ExitCode {
         }
         if a == "--no-local-names" {
             no_local_names = true;
+            continue;
+        }
+        if a == "--no-let-names" {
+            no_let_names = true;
             continue;
         }
         if a == "--no-for-loops" {
@@ -427,6 +435,7 @@ fn main() -> ExitCode {
     holes.keep_dead_writes = keep_dead;
     holes.keep_temps = keep_temps;
     holes.no_for_loops = no_for_loops;
+    holes.no_let_names = no_let_names;
     holes.plant_slot = plant_slot;
     holes.shadow_locals = shadow;
     holes.copies = copies;
