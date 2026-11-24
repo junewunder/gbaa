@@ -52,7 +52,7 @@ are a line or two.
 | 3 | A u32 as an address: typed pointer built from a bare u32 | `Ref::<…>::new(` | 62,289 | 572 | Mirror's DWARF map (types of parameters and locals), then stage B's typed pointers; none filed for the u32 itself |
 | 4 | Block markers `pc(0x…)` | `\bpc\(0x` | 58,170 | 714 | filed: `native/lift-pc-markers` |
 | 5 | Load rotates for a misaligned address | `ShiftType::Ror` | 44,881 | 432 | filed: `native/lift-aligned-loads` |
-| 6 | Adds of zero (Thumb's `adds rd, rs, #0` as a move) | `wrapping_add\(0x0\)` | 41,107 | 367 | filed: `native/lift-add-zero` |
+| 6 | Adds of zero (Thumb's `adds rd, rs, #0` as a move) | `wrapping_add\(0x0\)` | 41,107 | 367 | done (`native/lift-add-zero`, 2026-11-24): 0 |
 | 7 | A u32 as an address: byte loads and stores through a computed value | `\b(ld\|st)(8\|16\|32)\(g,` | 40,309 | 238 | Mirror's DWARF map and `native/lift-index-names` (merging); `load_computed_unknown` 48,412, `store_computed_unknown` 33,281 |
 | 8 | Casts | ` as (u8\|u16\|u32\|i8\|i16\|i32\|u64\|i64)\b` | 39,068 | 368 | filed: `native/lift-cast-types`; `narrowing_casts` 7,265 |
 | 9 | sp passed to a callee | `\(g, (r13\|sp)[,)]` | 29,362 | 311 | Exact sp passed only where a stack address reaches RAM (`native/lift-frame-exact-narrow`, ready); stage A keeps sp a parameter by decision |
@@ -115,6 +115,10 @@ prove aligned keeps the rotate, even through a typed field of a struct it knows 
     r0 = v2.wrapping_add(0x0);
     task = prim::shift(…).0.wrapping_add(0x0);
 
+Since `native/lift-add-zero` (2026-11-24) the sum prints as the value it
+copies (`r0 = v2;`; `narrow::Form::Copy`), whatever reads its flags: 0 in
+the whole lift (main at 7995104 with the change, flow on).
+
 **8. Casts.** Halfword and byte arguments narrowed on entry, signed compares as `i32`:
 
     structSize = r1 as u16 as u32;
@@ -168,7 +172,8 @@ units do):
   bars `call_fn_complete` 0 of 376 and 9,231 `Result<`.
 - `native/lift-aligned-loads`: a load proven aligned drops its rotate; bar
   44,881 `ShiftType::Ror`.
-- `native/lift-add-zero`: an add of zero prints as the value; bar 41,107.
+- `native/lift-add-zero`: an add of zero prints as the value; bar 41,107
+  (done 2026-11-24: 0).
 - `native/lift-pc-markers`: block markers out of the text a modder reads;
   bar 58,170.
 - `native/lift-cast-types`: values typed by width so the casts go; bar
