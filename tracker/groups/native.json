@@ -4571,19 +4571,8 @@
         "by": "447b29d7",
         "at": "2026-11-24T13:11:55Z",
         "evidence": "Amazing Mirror's lift (gbaa-lift with mods/kirby-mirror/holes.toml): 'pc(0x' in src/m_*.rs 58,170 -> 0, all 58,170 kept in the crate's pcs.txt; its build.rs puts them back in a guest-pc build's OUT_DIR copy, byte-identical to main's lift text (affine, all 7 modules cmp'd). Stops still name their block: the guest-pc affine build stopped by --time-limit prints pc=080007b7, a block in pcs.txt. just lift-check passed (after merging main's native-ram-jump prelude bar fix); just check passed after the final merge of main. codegen unit tests strip/restore round-trip.",
-        "branch": "unit/native/lift-pc-markers",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T13:11:55Z",
-          "by": "447b29d7",
-          "host": "quack",
-          "pid": 2964711,
-          "start": "95219683",
-          "beats": true,
-          "session": "447b29d7-9a21-4031-944f-ed501f038fcb",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "landed": "2026-11-24T13:28:06Z"
       },
       "notes": [
         {
@@ -4591,8 +4580,7 @@
           "by": "447b29d7",
           "text": "A mod cut (gbaa-lift --cut) now prints without markers, so existing cuts' orig/ read stale once: re-cut merges. A cut's blocks name no pc in guest-pc builds unless its text keeps pc(0x…) lines (strip_modules takes those into pcs.txt too)."
         }
-      ],
-      "round": "2026-11-24T11:52:41Z"
+      ]
     },
     {
       "id": "native/lift-cast-types",
