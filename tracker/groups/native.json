@@ -4349,21 +4349,9 @@
         "by": "9441b6bd",
         "at": "2026-11-24T09:46:12Z",
         "evidence": "Cause: a RAM copy missing from the holes file, not fn-check. The stock lift also stopped at frame 2998 with no input. just holes --frames 18000 --press l@1 showed the game copies ROM 0x0805d768 (0x1b8 bytes) to 0x03001944 only when nothing is pressed; that was the only copy missing. Added it as a [[copy]] in mods/metroid/holes.toml (mods repo 73c9ce9). Rerun of just fn-check ROM --name metroid --replace mods/metroid/energy/replace.toml --fn-check-cuts: ran all 18,000 frames ('its frames ran out'); SamusInit was checked from 19 of 19 calls, against 1 before. just check passes (exit 0) after merging main; main had nothing new.",
-        "branch": "unit/native/metroid-fn-check-stop",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T09:46:12Z",
-          "by": "9441b6bd",
-          "host": "quack",
-          "pid": 2962048,
-          "start": "95217572",
-          "beats": true,
-          "session": "9441b6bd-af04-4199-8a3a-898efc3bf512",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-24T09:35:48Z"
+        "landed": "2026-11-24T09:51:11Z"
+      }
     },
     {
       "id": "native/lift-mod-run-zoom",
