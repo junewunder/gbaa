@@ -139,7 +139,7 @@ fn run(args: &[String]) -> Result<(), String> {
         let n = pret_names::name_stdin_files(&mut syms, &pret_names::map_sections(&text));
         println!("{n} <stdin> objects named from {}", map.display());
     }
-    let names = match_names(&syms, &rom_bytes, &ours(&rom_bytes));
+    let mut names = match_names(&syms, &rom_bytes, &ours(&rom_bytes));
     let dbg = pret_names::dwarf::load(&elf_bytes).map_err(|e| format!("{elf}: {e}"))?;
     let file = |p: &str| {
         std::path::Path::new(p)
@@ -166,18 +166,29 @@ fn run(args: &[String]) -> Result<(), String> {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
     let sha = codegen::names::sha1_hex(&rom_bytes);
-    let from = match &src_dir {
-        Some(d) => format!("gbaa {}/ ({}, just c-tests)", d.display(), file(elf)),
-        None => source(elf),
-    };
-    let mut text = names.toml(&header, &sha, &from, Some(&dbg));
-    // pret's constants headers and source beside the ELF, for the fields'
-    // value names.
+    // pret's constants headers and source beside the ELF (or a C
+    // program's folder, --src), for the fields' value names.
     let src = src_dir.as_deref().unwrap_or_else(|| {
         std::path::Path::new(elf)
             .parent()
             .unwrap_or(std::path::Path::new("."))
     });
+    // An object built without DWARF (agb_flash.o): its C file in the
+    // tree's src/, for its functions' `src`.
+    for e in &names.entries {
+        let Some(stem) = e.file.as_deref().and_then(|f| f.strip_suffix(".o")) else {
+            continue;
+        };
+        let c = format!("src/{stem}.c");
+        if src.join(&c).is_file() {
+            names.obj_srcs.insert(format!("{stem}.o"), c);
+        }
+    }
+    let from = match &src_dir {
+        Some(d) => format!("gbaa {}/ ({}, just c-tests)", d.display(), file(elf)),
+        None => source(elf),
+    };
+    let mut text = names.toml(&header, &sha, &from, Some(&dbg));
     let fams = {
         use pret_names::values::*;
         let mut fams = families(&read_defines(src), &read_uses(src), &dbg.types);
