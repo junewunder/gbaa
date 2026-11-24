@@ -3883,3 +3883,4 @@
 {"at":"2026-11-24T05:32:54Z","actor":"loop","tag":"e05cd9ee","host":"quack","cmd":"claim","id":"native/lift-for-bounds","text":"Loops counted to a variable bound print as for: claimed"}
 {"at":"2026-11-24T05:41:53Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-cut-header-helpers","text":"A lift cut's header explains pin, ix/rix and sext: on main"}
 {"at":"2026-11-24T05:41:57Z","actor":"loop","tag":"e794753c","host":"quack","cmd":"claim","id":"native/rogue-imperium-build","text":"Rogue's and Imperium's lifts build: claimed"}
+{"at":"2026-11-24T05:44:50Z","actor":"loop","tag":"c2d4d707","host":"quack","cmd":"add-unit","id":"native/lift-takes-across-copies","text":"new unit: A takes site may pass r4-r11 into another code context"}
