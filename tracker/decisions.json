@@ -1520,6 +1520,14 @@
       "at": "2026-11-24T17:13:58Z",
       "scope": ["native/lift-for-index"],
       "until": "2026-11-24T21:00:01Z"
+    },
+    {
+      "id": "d/the-summaries-refuse-a-prototype-only-on-a",
+      "title": "The summaries refuse a prototype only on a proven read",
+      "why": "From {unit:native/lift-signature-holes}: a prototype shape is refused where an instruction or a BIOS call reads a register it doesn't pass (the function's own, or at the end of the callees it passes it to), a caller's instruction reads a result it doesn't return (also over return f(x) and falls), it returns a result as it came that it isn't passed, or it takes or gives r4-r11. An indirect call's taken read of all four is no proof, nor is a read past a hole: the native check and fn-check catch those (planted: c-chain-agbcc --plant-proto).",
+      "by": "c2904337",
+      "at": "2026-11-24T19:18:19Z",
+      "scope": ["native/*"]
     }
   ]
 }
