@@ -15,10 +15,12 @@
 //!   `forwarded_after`: its direct callers, and indirect ones whose
 //!   complete callee set has it; the summary's `results` are these it
 //!   defines);
-//! - r0, always: an indirect call's caller reads it where the callee set
-//!   is incomplete (the summaries take such a callee to define r0 and
-//!   leave r1-r3 undefined), and a call through `call_fn` gets it back
-//!   from the function's adapter; every function's demand includes it;
+//! - r0, where a pointer can reach it ([`Node::addressed`], `FNS`'s
+//!   functions; native/lift-returns-read): an indirect call's caller reads
+//!   it where the callee set is incomplete (the summaries take such a
+//!   callee to define r0 and leave r1-r3 undefined), and a call through
+//!   `call_fn` gets it back from the function's adapter. One no pointer
+//!   reaches gives back only what its callers read (a C `void` nothing);
 //! - all of r0-r3 where a caller's reads aren't known: a direct caller
 //!   whose run stopped at a hole (what it reads past the hole is unseen),
 //!   one in another code context (the ROM and an IWRAM copy are
@@ -31,13 +33,20 @@
 //! - what may be read after a function that falls or jumps into its
 //!   entry, since its return goes there ([`Shape`]'s demand is a fixed
 //!   point over those jumps), and after one that jumps to a function by
-//!   value (a tail call through `call_fn`) wherever it may go.
+//!   value (a tail call through `call_fn`) where it may go: any function
+//!   a pointer reaches (a jump after a context restore, `longjmp`'s, goes
+//!   back into its save's caller by unwinding, no function's return).
 //!
 //! A result it may leave as it came on some paths (its entry value) is a
 //! parameter too, so that path returns what the caller passed. A register
 //! it never changes isn't a result: the caller's value stands; nor is one
 //! that holds only its entry lr on every return ([`Summary::lr_left`]:
-//! agbcc's `pop {r0}; bx r0`), the return address, no value.
+//! agbcc's `pop {r0}; bx r0`), the return address, no value. One it may
+//! change but no caller reads isn't a result either ([`changed`]), and a
+//! caller's copy of it is dead across the call (`FnPrinter::clobbers`):
+//! a scratch register clobbered prints as nothing. Hand-written code
+//! returning in r1-r3 (`__aeabi_uidivmod`'s remainder) keeps them, as
+//! its callers read them.
 
 use crate::func::{Ctx, Func, Plan, exits};
 use crate::saves::{Summaries, Summary};
@@ -132,6 +141,10 @@ pub struct Node<'a> {
     /// A stand-in from the holes file replaces it: it keeps the
     /// four-register form.
     pub standin: bool,
+    /// Its address may be taken (`FNS`'s: a pointer can reach it), so
+    /// an indirect call whose callee set is incomplete, or a tail call
+    /// by value, may reach it.
+    pub addressed: bool,
 }
 
 /// The shapes, and why the rest have none.
@@ -178,7 +191,10 @@ pub fn shapes(nodes: &BTreeMap<u32, Node>) -> Shapes {
         .iter()
         .map(|(&k, n)| {
             let d = match n.sum {
-                Some(s) => (s.read_after | s.passed_after | s.forwarded_after) as u8 & 0xf | 1,
+                Some(s) => {
+                    (s.read_after | s.passed_after | s.forwarded_after) as u8 & 0xf
+                        | u8::from(n.addressed)
+                }
                 None => 0xf,
             };
             (k, d)
@@ -236,8 +252,9 @@ pub fn shapes(nodes: &BTreeMap<u32, Node>) -> Shapes {
                 }
             }
         }
-        for t in demand.values_mut() {
-            if *t | by_value != *t {
+        // A tail call by value goes only where a pointer can.
+        for (k, t) in demand.iter_mut() {
+            if nodes[k].addressed && *t | by_value != *t {
                 *t |= by_value;
                 grew = true;
             }
@@ -272,15 +289,10 @@ fn shape(s: &Summary, demand: u8) -> Shape {
             results: 0,
         };
     }
-    let (mut changed, mut entry) = (0u8, 0u8);
-    for (r, &b) in s.exit[..4].iter().enumerate() {
-        if b.entry {
-            entry |= 1 << r;
-        }
-        if b.def || b.clob || !b.entry {
-            changed |= 1 << r;
-        }
-    }
+    let changed = changed(s);
+    let entry = (0..4)
+        .filter(|&r| s.exit[r].entry)
+        .fold(0u8, |m, r| m | 1 << r);
     // The entry lr left in a register (agbcc's `pop {r0}; bx r0`) is
     // no value a caller reads (`native/lift-frame-gone`).
     let results = (demand & changed | s.results as u8 & 0xf) & !s.lr_left;
@@ -290,6 +302,18 @@ fn shape(s: &Summary, demand: u8) -> Shape {
     }
 }
 
+/// The registers of r0-r3 a returning function's summary says it may
+/// leave other than they came (bit `n` for rN). Those of them that aren't
+/// its results no caller reads after it: a caller's copy is dead there.
+pub fn changed(s: &Summary) -> u8 {
+    (0..4)
+        .filter(|&r| {
+            let b = s.exit[r];
+            b.def || b.clob || !b.entry
+        })
+        .fold(0, |m, r| m | 1 << r)
+}
+
 /// The summaries of one context's functions, by key.
 pub fn nodes_of<'a>(
     ctx_index: usize,
@@ -297,6 +321,7 @@ pub fn nodes_of<'a>(
     sums: &'a Summaries,
     edges: impl Fn(&Func) -> Edges,
     standin: impl Fn(u32) -> bool,
+    addressed: impl Fn(u32) -> bool,
 ) -> Vec<(u32, Node<'a>)> {
     funcs
         .iter()
@@ -308,6 +333,7 @@ pub fn nodes_of<'a>(
                     sum: sums.get(f.entry),
                     edges: edges(f),
                     standin: standin(f.entry),
+                    addressed: addressed(f.entry),
                 },
             )
         })
@@ -353,6 +379,7 @@ mod tests {
                 calls_by_value: BTreeSet::new(),
             },
             standin: false,
+            addressed: true,
         }
     }
 
@@ -482,6 +509,37 @@ mod tests {
         let s = shapes(&nodes);
         assert_eq!(s.shaped[&2].results, 0b0011);
         assert_eq!(s.shaped[&1].results, 0b0011);
+    }
+
+    #[test]
+    fn a_function_no_pointer_reaches_gives_only_what_its_callers_read() {
+        // f changes r0-r2; its one caller reads r1 after it. Not
+        // addressed: no r0 for an indirect caller, nor a tail call by
+        // value's demand (t jumps by value to an unknown place, its caller
+        // reading r0-r3).
+        let f = sum(0b0001, 0b0010, [DEF, DEF, DEF, KEEP]);
+        let mut main = sum(0, 0, [DEF; 4]);
+        main.callees.insert(1);
+        let mut t = sum(0, 0, [DEF; 4]);
+        t.read_after = 0xf;
+        t.holes
+            .insert("0x08000300: a jump to an unknown place".into());
+        let mut tn = node(&t, &[], &[]);
+        tn.edges.by_value.insert(0x0800_0300);
+        let mut fnode = node(&f, &[], &[]);
+        fnode.addressed = false;
+        let g = sum(0b0001, 0, [DEF, DEF, DEF, KEEP]);
+        let nodes = BTreeMap::from([
+            (1, fnode),
+            (2, node(&main, &[1], &[])),
+            (3, tn),
+            (4, node(&g, &[], &[])),
+        ]);
+        let s = shapes(&nodes);
+        assert_eq!(s.by_value, 0xf);
+        assert_eq!(s.shaped[&1].results, 0b0010);
+        // g's address is taken: what the tail call's caller reads.
+        assert_eq!(s.shaped[&4].results, 0b0111);
     }
 
     #[test]

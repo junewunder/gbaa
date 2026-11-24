@@ -110,6 +110,12 @@
 //! return nor a `call_fn` arm (no bar: it should rise), so that the
 //! r0-r3 such an arm would pass aren't live at entry.
 //!
+//! Results (native/lift-returns-read): `results_several`, the shaped
+//! functions giving back more than one of r0-r3, and `tuple_calls`, the
+//! statements assigning a call's results to a tuple of two or more
+//! (`(r1, r2) = f(g, …)`, read from the text): both barred, as C gives
+//! back one value or none.
+//!
 //! Frames gone (`native/lift-frame-gone`): `sp_arith_unescaped`, the
 //! functions printing sp arithmetic though no slot of their frame
 //! escapes, nor do they pass sp on to code needing it exactly or write

@@ -365,11 +365,23 @@ What the done pieces left open, for the units that come next.
   (`call_fn`), are still entered by the plain entry.
 - **A store to `IME` the recompiler can't fold** (piece 1) still ticks
   at its block's end, not at the store.
-- **Shapes return too much** (piece 3). Many shaped functions return all
-  four registers, because a caller whose run stopped (a fall into library
-  code) calls them, and a jump by value the run didn't prove a return
-  adds r0 to every function. `native/indirect-call-args` and the stack
-  units narrow those as the summaries' holes close.
+- **Shapes return too much** (piece 3). A shaped function's results are
+  the registers some caller reads after it (native/lift-returns-read):
+  r0 and what a tail call by value leaves read go only to functions a
+  pointer reaches (`FNS`), a `longjmp` restore's jump is no tail call,
+  and a register a callee clobbers that isn't a result is dead in its
+  caller across the call. Metroid went from 1,976 functions giving back
+  several registers to 1,061, tuple-assigning calls 7,292 to 5,110, and
+  scored against mzm's prototypes, void or one value as C has it, 34 of
+  2,554 to 793 (`just pret-score`); every C program but c-jump-gcc's
+  `__aeabi_uidivmod` (quotient and remainder, read) gives back one value
+  or none. What is left: a caller whose run stopped at a hole (a fall
+  into library code) still reads all four of each callee, a function in
+  another code context likewise, a function a pointer reaches takes all
+  that any unknown jump by value's callers read (Metroid's IWRAM
+  0x03003ba0 makes that all four), and a parameter only a path the
+  summaries can't prove dead reads is still one (`GetMonData2`'s r2).
+  Metrics `results_several` and `tuple_calls`, barred.
 - **The pile** (piece 3, function addresses). Most words aren't proven
   and nearly every `call_fn` set is every address-taken function. No one
   kind of read holds them (`research/fnref-held-words.md`). The pieces
