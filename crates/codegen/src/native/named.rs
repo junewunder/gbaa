@@ -68,7 +68,7 @@ fn words(text: &str, out: &mut BTreeSet<String>) {
         while i < b.len() && word(b[i]) {
             i += 1;
         }
-        if !b[s].is_ascii_digit() && (s == 0 || b[s - 1] != b'.') {
+        if !b[s].is_ascii_digit() && !super::after_dot(b, s) {
             out.insert(text[s..i].to_string());
         }
     }

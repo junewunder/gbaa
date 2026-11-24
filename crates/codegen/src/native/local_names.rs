@@ -375,7 +375,7 @@ pub fn rename(text: &str, renames: &BTreeMap<String, String>) -> String {
                 i += 1;
             }
             let w = &text[s..i];
-            let after_dot_or_tick = s > 0 && matches!(b[s - 1], b'.' | b'\'');
+            let after_dot_or_tick = super::after_dot(b, s) || (s > 0 && b[s - 1] == b'\'');
             match renames.get(w) {
                 Some(n) if !after_dot_or_tick && !b[s].is_ascii_digit() => out.push_str(n),
                 _ => out.push_str(w),

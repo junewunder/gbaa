@@ -90,9 +90,12 @@
 //! report and `value_lets` count the `let`s. A measure by hand too.
 //!
 //! `--no-for-loops` prints every structured loop as a `loop`, as stage A
-//! first did; the lift prints a counted loop of one block as a `for` over
-//! its range (unit `native/lift-for-loops`). The report counts both
-//! (`loops_for`, `loops_not_for`). A measure by hand too.
+//! first did; the lift prints a counted loop as a `for` over its range: of
+//! one block from a constant start (unit `native/lift-for-loops`), or of
+//! any number of blocks to a bound the guard before it proves the range
+//! of (unit `native/lift-for-bounds`). The report counts both
+//! (`loops_for`, `loops_not_for`). A measure by hand too. `GBAA_FOR_WHY=1`
+//! prints to stderr why each loop of several blocks stays a `loop`.
 //!
 //! `src/` is `main.rs` (the prelude, RAM, `ENTRY`), `fns.rs` (`FNS`) and
 //! the functions in modules of about 4,000 lines (`codegen::native::modules`,
