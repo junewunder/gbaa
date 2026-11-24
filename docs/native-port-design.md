@@ -1232,8 +1232,8 @@ as a seed, a budget and a digest, never as states.
 
 ## Stack locals passed by address (`native/lift-stack-arrays`)
 
-Designed 2026-11-24. A slot whose address only reaches callees, to read
-and write through, is a Rust local; the rest of the stack stays bytes.
+Designed 2026-11-24 (printing: `native/lift-lent-print`). A slot whose
+address only reaches callees is a Rust local; the rest stays bytes.
 
 - **A borrowed parameter** is a direct callee's r0-r3, never a pointer
   call's (`call_fn`), whose value the callee only adds constants to,

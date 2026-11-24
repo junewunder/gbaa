@@ -206,8 +206,8 @@ local), so locals need an escape analysis first.
   every local in the frame's bytes too, `shadow local:` where a load
   differs (`docs/tools/commands.md`). Frameless: `native/lift-frame-gone`.
 
-Escaping slots passed as `&mut`: `native/lift-stack-arrays` (design:
-`docs/native-port-design.md`; analysis `frame::lend`, not yet printed).
+Escaping slots passed as `&mut`: `native/lift-stack-arrays` (design,
+`frame::lend`), printed by `native/lift-lent-print` and its follow-ups.
 
 ### 5. Typed data
 
