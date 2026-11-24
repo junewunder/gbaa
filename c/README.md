@@ -14,9 +14,10 @@ Source only in git. GCC writes DWARF 2 (`-gdwarf-2 -gstrict-dwarf`), as
 agbcc does (`pret-names` reads GCC 15's default DWARF 5 as well, and the
 location lists both give: native/names-location-lists; `gba.ld` keeps
 DWARF 5's sections). `names/c-<name>-<cc>.toml`
-are the programs' names files (`target/release/pret-names ELF ROM OUT`),
-which give their lifts types (native/lift-typed-access); a changed ROM
-needs its file made again, or its lift has no names.
+are the programs' names files (`target/release/pret-names ELF ROM OUT`;
+`just c-names NAME` for one whose source's `#define`s the file names,
+c/switch's), which give their lifts types (native/lift-typed-access); a
+changed ROM needs its file made again, or its lift has no names.
 
 - A program's own `.s` files are assembled into it too (`jump/setjmp.s`).
 - `common/`: our own start-up and hardware, no game's or library's code
