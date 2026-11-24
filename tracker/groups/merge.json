@@ -732,15 +732,22 @@
       "lane": "quack/2",
       "branch": "unit/native/lift-global-bitfields",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "8b57c265",
-        "session": "8b57c265-fe22-445d-ac88-9c351202219d",
-        "host": "quack",
-        "pid": 2962519,
-        "start": "95218086",
-        "at": "2026-11-24T09:52:07Z",
+        "at": "2026-11-24T10:00:30Z",
+        "evidence": "Merged origin/main at 82469ab5; types.rs conflict settled keeping the branch's Types::layout and main's Types::fields_of (plain() had no callers left). just check passed (exit 0) after the merge.",
         "branch": "unit/native/lift-global-bitfields",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T10:00:30Z",
+          "by": "8b57c265",
+          "host": "quack",
+          "pid": 2962519,
+          "start": "95218086",
+          "beats": true,
+          "session": "8b57c265-fe22-445d-ac88-9c351202219d",
+          "lane": "quack/2"
+        }
       },
       "round": "2026-11-24T09:52:07Z"
     }
