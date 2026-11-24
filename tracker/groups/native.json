@@ -3779,6 +3779,17 @@
       "detail": "WarioWare had 6 hard holes with the flow on 2026-11-19 ({unit:native/fnref-flow-emerald}'s evidence; the 2026-11-14 table: jumps 3, summaries 3). Close each by a lifter or discovery rule where the cause is general, by the game's holes file (mods/<game>/holes.toml, each entry with its reason) only where it is the game's own. Run just holes-all on main before and --against it after (just long start, --mem 4G is enough: memory/lift-cost-corpus.md): no other game's hard holes may rise. A cause too big for about 3 hours becomes its own unit, needed by this one. Done when: just lift on WarioWare has 0 hard holes and builds, its first stop is recorded (and filed as a unit if it isn't 600 of 600); just check passes.",
       "needs": ["native/ram-jump-passes-regs"],
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "2a675964",
+        "session": "2a675964-4b7e-4687-bdc7-79bd8dffd895",
+        "host": "quack",
+        "pid": 2962519,
+        "start": "95218086",
+        "at": "2026-11-24T12:32:15Z",
+        "branch": "unit/native/warioware-builds",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-24T12:32:10Z",
