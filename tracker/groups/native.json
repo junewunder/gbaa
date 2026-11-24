@@ -4445,7 +4445,19 @@
       "title": "A jump into a RAM copy passes the r4-r11 it reads",
       "detail": "WarioWare's sound driver: 0x080efe6d (ROM, Thumb) tail-jumps through the loader's table at 0x030068b0 into six ARM routines it copied to IWRAM (mods/warioware/holes.toml lists them), which read r4-r11 its callers set. The lift counts each as a hard hole ('a jump into 0x…, another code context's, with r4… as they came'; 6 of WarioWare's 7, and 0x03006900's r10 read at entry is the same cause). Make such a jump pass the registers the target's summary reads, the jumper taking them from its callers as a direct call's callee does (docs/research/native-holes.md, 'Entry reads of r4-r11'), checked on a test program (agb/native-takes' kind) with a planted control. Done when: WarioWare's lift has none of these holes; just holes-all --against main shows no game's hard holes up; just lift-check's bars hold; just check passes.",
       "check": "independent",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "91ffb568",
+        "session": "91ffb568-7dbe-4e4c-ac23-83a344f9da7c",
+        "host": "quack",
+        "pid": 2962519,
+        "start": "95218086",
+        "at": "2026-11-24T10:08:09Z",
+        "branch": "unit/native/ram-jump-passes-regs",
+        "beats": true
+      },
+      "round": "2026-11-24T10:08:09Z"
     },
     {
       "id": "native/lift-longjmp",
