@@ -5378,15 +5378,22 @@
       "uses": ["heavy"],
       "priority": 100,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "e601e02d",
-        "session": "e601e02d-14ee-414b-a2f5-20bb17652527",
-        "host": "quack",
-        "pid": 1981458,
-        "start": "101567385",
-        "at": "2026-11-24T22:53:05Z",
+        "at": "2026-11-24T23:47:24Z",
+        "evidence": "At main dd9a7df9 and mods 066d9b6 (pushed): just lift Metroid --bars mods/metroid/lift-bars.toml prints 'every metric within its bar', 0 over/no-bar/names-no-metric, 600 of 600 frames; Emerald (holes file mods 571d124, --mem 12G) the same, 600 of 600. results_several, tuple_calls removed (noted on {unit:native/lift-returns-read}); ref_new_at_use added (Emerald also bitfield_joined, data_constants_unnamed, fn_keys_left, rom_static_fn_keys). Rises explained in the files: lines_prelude 1390 (main's prelude); for_counter_arith Metroid 33 (lift-for-step-via), Emerald 259 (lift-for-top-tested, +37 fors); Emerald functions/blocks +25, fn_words_not_proven +27 (holes file's 25 roots). No repo code changed: branch equals main, so no just check rerun.",
         "branch": "unit/native/game-lift-bars-refresh",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T23:47:24Z",
+          "by": "e601e02d",
+          "host": "quack",
+          "pid": 1981458,
+          "start": "101567385",
+          "beats": true,
+          "session": "e601e02d-14ee-414b-a2f5-20bb17652527",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
