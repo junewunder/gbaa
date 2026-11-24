@@ -4357,7 +4357,19 @@
       "id": "native/lift-mod-run-zoom",
       "title": "lift-mod-run's side PNGs zoom on the differing pixels",
       "detail": "From {unit:native/lift-agent-mod} (hurt 5): side-N.png is three 1x frames (728x160); Metroid's energy edit is 10-13 pixels of HUD digits, which the agent cropped and scaled by hand. Print each listed frame's differing-pixel bounding box and add a panel (or second PNG) with that box scaled up for stock and the mod. Check: lift-mod-run on c-switch-agbcc's pen_update mod shows the box; just check.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "68e9a5ec",
+        "session": "68e9a5ec-74ff-42bc-a7e5-09056138c6dc",
+        "host": "quack",
+        "pid": 2962048,
+        "start": "95217572",
+        "at": "2026-11-24T09:51:16Z",
+        "branch": "unit/native/lift-mod-run-zoom",
+        "beats": true
+      },
+      "round": "2026-11-24T09:51:16Z"
     },
     {
       "id": "native/lift-cut-header-helpers",
