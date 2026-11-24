@@ -4324,15 +4324,22 @@
       "detail": "From {unit:native/lift-agent-mod} (hurt 4): after 'lift-mod-run: pass' the run prints the cut's fn-check as 'SamusInit … 8 DIFFER', 'IWRAM byte 0x03001530: 0x63 reference, 0x2d replacement', 'fn-check: FAIL': the expected edit reads as a broken build. Under lift-mod-run say 'differs from its lift (the edit)', the byte by field name (gEquipment.maxEnergy) and in decimal, and a program stop apart from the check. Check: lift-mod-run on mods/metroid/energy; just check.",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "f17b6716",
-        "session": "f17b6716-09d6-4a23-8557-a687c90a2617",
-        "host": "quack",
-        "pid": 2962048,
-        "start": "95217572",
-        "at": "2026-11-24T08:59:48Z",
+        "at": "2026-11-24T09:31:02Z",
+        "evidence": "just lift-mod-run on mods/metroid/energy (Metroid ROM, units/metroid-native.toml): 'lift-mod-run: pass (895 of 2700 frames differ)', then fn-check: 'SamusInit … differs from its lift (the edit) in 8 runs', 'IWRAM 0x03001530 gEquipment.maxEnergy (u16): 99 lift, 45 cut', the stop on its own line ('the program stopped … after the runs above (a call or jump to 0x03001945 …)'), last line '1 of 1 cuts differ from their lifts (the edit)', no FAIL. native-spike fn-check unchanged (same, digest as recorded). just check passes after merging main (f56483b0).",
         "branch": "unit/native/lift-mod-run-edit-report",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T09:31:02Z",
+          "by": "f17b6716",
+          "host": "quack",
+          "pid": 2962048,
+          "start": "95217572",
+          "beats": true,
+          "session": "f17b6716-09d6-4a23-8557-a687c90a2617",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
