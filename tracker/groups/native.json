@@ -3971,15 +3971,22 @@
       "needs": ["native/mirror-machine-count", "native/lift-frame-gone"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "9cee3887",
-        "session": "9cee3887-4b81-4877-836d-53dd4ad6b81a",
-        "host": "quack",
-        "pid": 2962048,
-        "start": "95217572",
-        "at": "2026-11-24T05:45:40Z",
+        "at": "2026-11-24T06:30:56Z",
+        "evidence": "All 20 written (mods/kirby-mirror/llm-pilot.toml, private; 7 Kirby controller, 5 task, 2 menu states, MultiSioInit, leaves, loops, switches) and all pass: just fn-check with the 20 keys --replace that file --input (the native route's presses, new flag) --frames 3200 --interp-every 0: 'fn-check: pass', every budget spent in 2954 frames, each digest as recorded, rerun after merging main. Route: lift with all 20 in place vs the --timing native play build, route-check --native units/kirby-mirror-native.toml: pass, 3000 frames, 0 differences, audio same. Patterns with counts and provability in docs/research/llm-pilot.md round two; filed {unit:native/lift-field-base}, {unit:native/lift-arm-values}, {unit:native/lift-mask-fold}, {unit:native/lift-task-struct}, {unit:native/lift-libgcc-div}, and tooling {unit:native/fn-check-interp-pop-r0}, {unit:native/standin-lift-names}. just check passes after merging main (exit 0).",
         "branch": "unit/native/llm-pilot-mirror",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T06:30:56Z",
+          "by": "9cee3887",
+          "host": "quack",
+          "pid": 2962048,
+          "start": "95217572",
+          "beats": true,
+          "session": "9cee3887-4b81-4877-836d-53dd4ad6b81a",
+          "lane": "quack/1"
+        }
       },
       "round": "2026-11-24T05:45:40Z"
     },
