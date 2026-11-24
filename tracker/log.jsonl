@@ -4244,3 +4244,4 @@
 {"at":"2026-11-24T22:32:48Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-arm-values","text":"Labelled breaks print as early returns and arm values: edited (detail)"}
 {"at":"2026-11-24T22:32:50Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-mask-fold","text":"A chain of constant and-masks prints as one mask: edited (detail)"}
 {"at":"2026-11-24T22:32:52Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-signed-values","text":"Values compared signed print as i32 through their uses: edited (detail)"}
+{"at":"2026-11-24T22:32:54Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-aligned-params","text":"Untyped pointer loads drop rotates their callers prove 0: edited (detail)"}
