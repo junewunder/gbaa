@@ -4991,6 +4991,13 @@
       "title": "Untyped pointer loads drop rotates their callers prove 0",
       "detail": "Follows {unit:native/lift-aligned-loads}: Mirror's ShiftType::Ror fell 44,881 to 12,090 (load_rotates_left 13,040); what is left is raw ld32/ld16 through an untyped pointer parameter or loaded pointer plus an offset (r4.wrapping_add(0x24): 5,874), aligned only as callers make it. Carry each register's known-zero low bits across blocks and from every caller's arguments (or a checked Ref where the pointer came from), as codegen::native::aligned does within a block. Done when: load_rotates_left falls on Mirror and the C rows, lift-check passes.",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/warioware-stop-30003a8",
+      "title": "WarioWare's lift: the call to IWRAM 0x030003a8 (frame 39)",
+      "detail": "WarioWare's lift (0 hard holes, builds: {unit:native/warioware-builds}) stops at frame 39 of 600: f_080021c9's bl 0x080f41c4 (bx r4) calls *(0x03003fec) = 0x030003a8, no function. 0x08003da0 copies ROM 0x080007e4..0x08000910 (ARM, 0x12c bytes) there via 0x0800100c and stores the pointer. The routine is a resumable DMA3 run-length feeder: it saves r0,r6-r9,lr with stm to IWRAM and resumes later with ldm + bx lr, adjusts lr (sub lr, lr, #24) before returning, and writes its own literal (str r11, [pc, #248]). Likely a [[copy]] in mods/warioware/holes.toml plus a stand-in or lifter support for the saved-lr resume. Done when: just lift on WarioWare has 0 hard holes, builds, and its first stop is past frame 39 (recorded, filed as a unit if not 600 of 600); just check passes.",
+      "check": "recorded",
+      "uses": ["heavy"]
     }
   ]
 }
