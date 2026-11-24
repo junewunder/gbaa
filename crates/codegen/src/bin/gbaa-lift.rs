@@ -1,7 +1,7 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
 //! [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT]
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT]
-//! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-for-loops] [--copies N] [--holes-only [--flow]]
+//! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-ref-binds] [--no-for-loops] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
 //! [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...]`,
 //! or `gbaa-lift ROM --find FIELD [FLAGS]`:
@@ -37,7 +37,10 @@
 //! `--no-local-names` leaves that out. A value printed as its own `let`
 //! takes a name from what it holds (a global's, a field's, its register's
 //! variable's: `codegen::native::value_names`, unit
-//! `native/lift-let-names`); `--no-let-names` leaves them `vN`. `--layout guest` (the
+//! `native/lift-let-names`); `--no-let-names` leaves them `vN`. A pointer
+//! variable is declared the `Ref<T>` its accesses make of it
+//! (`codegen::native::ref_binds`, unit `native/lift-pointer-types`);
+//! `--no-ref-binds` leaves it `u32`, each access making its `Ref`. `--layout guest` (the
 //! default) puts them at the guest's offsets, the native check's layout;
 //! `--layout packed` makes them fields in the lifter's order, the rest of
 //! RAM bytes, the play layout, which must draw the same frames (unit
@@ -186,7 +189,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...] | gbaa-lift ROM --find FIELD [FLAGS]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-ref-binds] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...] | gbaa-lift ROM --find FIELD [FLAGS]"
         );
         ExitCode::FAILURE
     };
@@ -208,6 +211,7 @@ fn main() -> ExitCode {
     let mut no_data_names = false;
     let mut no_for_loops = false;
     let mut no_let_names = false;
+    let mut no_ref_binds = false;
     let (mut holes_only, mut holes_flow) = (false, false);
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
     let (mut fn_check, mut replace, mut seed, mut runs) = (Vec::new(), None, None, None);
@@ -259,6 +263,10 @@ fn main() -> ExitCode {
         }
         if a == "--no-local-names" {
             no_local_names = true;
+            continue;
+        }
+        if a == "--no-ref-binds" {
+            no_ref_binds = true;
             continue;
         }
         if a == "--no-let-names" {
@@ -436,6 +444,7 @@ fn main() -> ExitCode {
     holes.keep_temps = keep_temps;
     holes.no_for_loops = no_for_loops;
     holes.no_let_names = no_let_names;
+    holes.no_ref_binds = no_ref_binds;
     holes.plant_slot = plant_slot;
     holes.shadow_locals = shadow;
     holes.copies = copies;
