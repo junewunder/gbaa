@@ -657,19 +657,17 @@
       "minMinutes": 30,
       "record": {
         "state": "claimed",
-        "by": "00941e5d",
-        "session": "00941e5d-e9a2-4202-8da6-072eb475efb9",
+        "by": "76c036e3",
+        "session": "76c036e3-61c3-4066-8bd7-9fca8fc0ec7e",
         "host": "quack",
-        "pid": 3424758,
-        "start": "57919012",
-        "at": "2026-11-20T13:47:24Z",
+        "pid": 2964711,
+        "start": "95219683",
+        "at": "2026-11-24T05:15:04Z",
         "branch": "unit/native/mirror-native-route",
-        "resumed": "a9a46ec9",
-        "prevSession": "a9a46ec9-967f-4ea1-85a2-dba1c6ebd1bd",
+        "resumed": "00941e5d",
+        "prevSession": "00941e5d-e9a2-4202-8da6-072eb475efb9",
         "pushed": true,
-        "beats": true,
-        "handedBack": "2026-11-20T13:48:50Z",
-        "ended": "2026-11-20T13:48:58Z"
+        "beats": true
       },
       "notes": [
         {
