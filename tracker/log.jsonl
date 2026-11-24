@@ -4066,3 +4066,4 @@
 {"at":"2026-11-24T13:31:00Z","actor":"oversee","tag":"9a39864c","host":"quack","cmd":"edit","id":"native/emerald-naming-stop","text":"Emerald's lift stops on the naming screen (open-bus load): edited (add-needs)"}
 {"at":"2026-11-24T13:31:02Z","actor":"oversee","tag":"9a39864c","host":"quack","cmd":"decide","text":"decided: Emerald route's lifter parts land on main ahead of the route","d":"d/emerald-route-s-lifter-parts-land-on-main-ahead"}
 {"at":"2026-11-24T13:39:17Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-cast-types","text":"Values typed by width so the lift drops its casts: on main"}
+{"at":"2026-11-24T13:39:21Z","actor":"loop","tag":"66d510b9","host":"quack","cmd":"claim","id":"native/land-emerald-route-lifter","text":"Land the Emerald route branch's lifter parts on main: claimed"}
