@@ -1479,6 +1479,14 @@
       "at": "2026-11-24T06:21:29Z",
       "scope": ["native/fnref-dense"],
       "until": "2026-11-24T21:00:01Z"
+    },
+    {
+      "id": "d/discovery-s-table-evidence-covers-a-table-whose",
+      "title": "Discovery's table evidence covers a table whose base code loads",
+      "why": "A Thumb pointer in a run of two or more Thumb pointers whose first word's address code loads from a pool is a function-pointer table indexed from its base (c/list's kActs by modern GCC: leaves with no push, none found beside them; the native lift otherwise calls one it lacks). Modern-GCC Emerald +8 true starts, Minish Cap +12, none false; Emerald, Amazing Mirror, Metroid unchanged; docs/decisions.md 5d.",
+      "by": "e48d610c",
+      "at": "2026-11-24T07:46:30Z",
+      "scope": ["native/*"]
     }
   ]
 }
