@@ -5004,7 +5004,19 @@
       "detail": "From {unit:native/lift-for-bounds}: a loop counting to a global's or a field's value it loads each round (draw_global and draw_row in c/loops; HealPlayerParty's gPlayerPartyCount, most of pret's) stays a loop: the for evaluates its bound once, so the body must be shown not to write it. Needs a per-function summary of what RAM a call may store to (transitively; a computed store an unknown write), and the stores in the body kept off the bound's bytes; then print the load (as the latch prints it) as the range's end. GBAA_FOR_WHY=1 on gbaa-lift says why each loop stays one ('jump back not a compare' for these). Check as the parent's: just lift-check 0 differences with c-loops among the programs, loops_not_for barred on the C rows and Metroid's and Emerald's bars, both games 600 of 600 frames, just check.",
       "check": "recorded",
       "needs": ["native/lift-for-bounds"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "1fbd91b3",
+        "session": "1fbd91b3-4822-44bf-9b77-6bfc87a7e408",
+        "host": "quack",
+        "pid": 2962048,
+        "start": "95217572",
+        "at": "2026-11-24T18:32:29Z",
+        "branch": "unit/native/lift-for-ram-bounds",
+        "beats": true
+      },
+      "round": "2026-11-24T18:32:29Z"
     },
     {
       "id": "native/lift-for-top-tested",
