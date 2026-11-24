@@ -5226,6 +5226,14 @@
       "detail": "frame::lend ({unit:native/lift-stack-arrays}) takes a parameter out on any compare that reaches a branch (26 of the C programs' pointer parameters), a store of it (19), arithmetic past a constant offset (10: a pointer walk, an index) and a return (8: a struct return's hidden pointer, also a summary hole in agbcc's rect_union). GBAA_LEND_DEBUG=1 lists each. Widen it: a null check of a borrowed pointer (never null), an index checked against the Lent's length, a struct return's pointer returned unread. Check: lent accesses up on the C rows; just lift-check 0 differences, every planted fault caught; just check.",
       "needs": ["native/lift-stack-arrays"],
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-lent-print",
+      "title": "Lent stack slots print as locals, borrowers as Lent",
+      "detail": "Split from {unit:native/lift-stack-arrays} at ~3 hours. Its design (docs/native-port-design.md, 'Stack locals passed by address') and analysis (frame::lend: Lends.lent, .borrowed, .through, .reach) are on main. Wanted: print each lent slot as a Rust local [u8; N] (by access width) and each borrowed parameter as a Lent<'_> (the prelude's &[Cell<u8>]); callers pass the local; accesses through it are element accesses, past its end a panic naming the function. --shadow-locals keeps a lent local in the frame's bytes too (the Lent carries its guest address) and reports a load that differs; --plant-lent=ADDR makes a store through a borrowed parameter one more, caught by lift-check. Today only c-chain-gcc lends (5 slots, 8 accesses). Check (code-shape work, judged on the C programs): just lift-check 0 differences on every program, every planted fault (--plant-lent included) caught; just check.",
+      "check": "recorded",
+      "needs": ["native/lift-stack-arrays"],
+      "uses": ["heavy"]
     }
   ]
 }

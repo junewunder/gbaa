@@ -4104,3 +4104,4 @@
 {"at":"2026-11-24T16:29:18Z","actor":"loop","tag":"3ca58cea","host":"quack","cmd":"claim","id":"native/lift-stack-arrays","text":"A stack array passed by address is a typed local: claimed (picking up after 66065018)"}
 {"at":"2026-11-24T16:33:08Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-value-args","text":"A constant passed to a call prints as pret's name for it: on main"}
 {"at":"2026-11-24T16:33:13Z","actor":"loop","tag":"51bbc90d","host":"quack","cmd":"claim","id":"native/lift-pointer-types","text":"Parameters and locals carry their pointer types: claimed"}
+{"at":"2026-11-24T16:35:42Z","actor":"loop","tag":"3ca58cea","host":"quack","cmd":"add-unit","id":"native/lift-lent-print","text":"new unit: Lent stack slots print as locals, borrowers as Lent"}
