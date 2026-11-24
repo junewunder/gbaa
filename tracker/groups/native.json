@@ -4469,15 +4469,22 @@
       "detail": "docs/research/mirror-machine-count.md, rows 14, 19, 21. As Nightmare's lift with the function flow back on ({unit:native/nightmare-flow-on}): take skip_fn_flow out of mods/kirby-mirror/holes.toml so call_fn sites get callee sets and Result goes where nothing exits. Bars on 04e94cca: call_fn_complete 0 of 376; 9,231 'Result<' in src/m_*.rs (Exit is born only in soft_reset's one caller and call_fn). Done when: the lift has 0 hard holes, builds, both numbers fall, and lift-check passes.",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "7630b372",
-        "session": "7630b372-561f-42c9-82bb-20b7885d93bf",
-        "host": "quack",
-        "pid": 2964711,
-        "start": "95219683",
-        "at": "2026-11-24T10:23:02Z",
+        "at": "2026-11-24T11:00:43Z",
+        "evidence": "skip_fn_flow out of mods/kirby-mirror/holes.toml (private 5e3bac5). On main merged in (3901850): just lift with the flow on: 0 hard holes, builds, 600 of 600 frames no stop, ~6 min, 755M. call_fn_complete 0 -> 33 of 376; 'Result<' in src/m_*.rs 9,231 -> 7,979 (flow-off baseline lifted at 71d6c27 matched the card). just lift-check passed; just check passed.",
         "branch": "unit/native/mirror-flow-on",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T11:00:43Z",
+          "by": "7630b372",
+          "host": "quack",
+          "pid": 2964711,
+          "start": "95219683",
+          "beats": true,
+          "session": "7630b372-561f-42c9-82bb-20b7885d93bf",
+          "lane": "quack/4"
+        }
       },
       "notes": [
         {
