@@ -308,11 +308,9 @@ first tests stage A and the shortcuts on a real agbcc game that builds.
   lift 48 s at 0.38 GB, the crate alone builds in 80 s, rustc 6.78 GB.
 - **Kirby Amazing Mirror lifts with no hard holes and builds**
   (`native/mirror-lifts`). Done (2026-11-14, quack;
-  `mods/kirby-mirror/holes.toml`, `skip_fn_flow`: 37 min without):
-  2,626,434 lines in 751 files, lift 45 s at 0.62 GB, the crate built in
-  107 s at 11.7 GB; first stop frame 2, the m4a mixer as Nightmare's.
-  Since 2026-11-24 (`native/mirror-flow-on`) without `skip_fn_flow`: the
-  flow-on lift (6 min) has 0 hard holes and runs 600 of 600 frames.
+  `mods/kirby-mirror/holes.toml`): 2,626,434 lines in 751 files, lift
+  45 s at 0.62 GB, the crate built in 107 s at 11.7 GB. The flow on since
+  `native/mirror-flow-on` (2026-11-24): 0 hard holes, 600 of 600 frames.
 - **katam's names and types in the Amazing Mirror's lift** (`native/mirror-katam-names`).
 
 Emerald comes after typed RAM and pointers, typed from pret's DWARF (the
