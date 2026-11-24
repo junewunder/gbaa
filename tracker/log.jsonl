@@ -4089,3 +4089,4 @@
 {"at":"2026-11-24T15:20:35Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-value-args","text":"A constant passed to a call prints as pret's name for it: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-24T15:20:41Z","actor":"loop","tag":"3af99f7a","host":"quack","cmd":"claim","id":"native/lift-value-args","text":"A constant passed to a call prints as pret's name for it: claimed"}
 {"at":"2026-11-24T15:30:49Z","actor":"loop","tag":"209afec8","host":"quack","cmd":"done","id":"native/emerald-naming-stop","text":"Emerald's lift stops on the naming screen (open-bus load): done"}
+{"at":"2026-11-24T15:30:51Z","actor":"loop","tag":"209afec8","host":"quack","cmd":"done","id":"native/lift-rtc","text":"A lifted game's cartridge clock answers (Emerald's RTC): done"}
