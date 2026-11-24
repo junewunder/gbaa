@@ -4018,21 +4018,9 @@
         "checker": "verifier-lane2-mirrorcheck",
         "at": "2026-11-24T07:17:48Z",
         "evidence": "Mod mods/kirby-mirror/cpu-kirbys-off (private 991e667): cut of sub_080332BC, CreateKirby only for human players and no AI loop behind const CPU_KIRBYS. Verifier reran lift-mod-run on units/kirby-mirror-native.toml: off, 1667 of 3000 frames differ (1334-3000), only pink Kirby in every mod frame looked at, he moves the same and the cloud room loads; on, no frame differs of 3000. fn-check fails only on the filed callee-shape E0308. Write-up docs/research/mirror-cpu-kirbys-off.md; just check passed.",
-        "branch": "unit/native/mirror-cpu-kirbys-off",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T07:17:48Z",
-          "by": "d88dc2ac",
-          "host": "quack",
-          "pid": 2962519,
-          "start": "95218086",
-          "beats": true,
-          "session": "d88dc2ac-cbc4-420c-9f44-f9998c8802fe",
-          "lane": "quack/2"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-24T06:46:35Z"
+        "landed": "2026-11-24T07:34:14Z"
+      }
     },
     {
       "id": "native/rom-data-statics",
