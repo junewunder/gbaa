@@ -4281,3 +4281,4 @@
 {"at":"2026-11-24T22:36:18Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/gcc-switch-recovery","text":"Recovery resolves the modern-GCC switches Rogue lists: edited (priority, add-needs)"}
 {"at":"2026-11-24T22:36:20Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/fnref-dense-keys-left","text":"Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid: edited (priority)"}
 {"at":"2026-11-24T22:36:22Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-arm-values","text":"Labelled breaks print as early returns and arm values: edited (priority)"}
+{"at":"2026-11-24T22:36:25Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-mask-fold","text":"A chain of constant and-masks prints as one mask: edited (priority)"}
