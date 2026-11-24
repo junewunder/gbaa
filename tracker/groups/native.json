@@ -4954,7 +4954,14 @@
     {
       "id": "native/game-lift-bars-refresh",
       "title": "Metroid's and Emerald's private lift bars match main again",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-24T10:34:47Z",
+          "by": "8347a61f",
+          "text": "Metroid --bars lift on main fails 33 metrics: no bar for rom_static_fn_keys, fn_keys_left, rom_refs, locals_noted, bitfield_*; over: entries_beyond_one 2998>809, lines_prelude 1337>1314, functions_iwram 9>8. Emerald similar; its holes file needs [[roots]] (not on main)."
+        }
+      ]
     }
   ]
 }
