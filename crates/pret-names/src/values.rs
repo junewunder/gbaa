@@ -38,6 +38,13 @@ pub struct Family {
     /// Globals of the enum's type that take it, by name (`gMainGameMode`;
     /// [`enum_families`]).
     pub globals: Vec<String>,
+    /// Function parameters pret's calls pass its names to, as
+    /// `function:index` by the names file's function name
+    /// (`GetMonData2:1`; [`arg_families`]).
+    pub args: Vec<String>,
+    /// Those of `args` some call passes a sum one of its names is the
+    /// base of (`MON_DATA_MOVE1 + j`).
+    pub sums: Vec<String>,
 }
 
 /// Names that mark a family's bounds rather than one of its values.
@@ -45,28 +52,27 @@ const BOUNDS: &[&str] = &["COUNT", "MAX", "MIN", "FIRST", "LAST", "START", "END"
 
 /// The defines of `src`'s `include/constants/*.h` whose value is a
 /// non-negative number literal (`0x1f`, `12`), by header name and then in
-/// each header's order; a name defined twice keeps its first. A tree
-/// with no such headers has none.
+/// each header's order; a name defined twice keeps its first. A flat
+/// tree with no `include/constants/` (a C program of `c/`) gives its own
+/// `.h` and `.c` files' ([`flat`]).
 pub fn read_defines(src: &Path) -> Vec<Define> {
     let dir = src.join("include/constants");
-    let Ok(rd) = std::fs::read_dir(&dir) else {
-        return Vec::new();
+    let files = if dir.is_dir() {
+        files_in(&dir, &["h"])
+    } else {
+        flat(src, &["h"])
     };
-    let mut files: Vec<_> = rd
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().is_some_and(|x| x == "h"))
-        .collect();
-    files.sort();
     let mut out = Vec::new();
     let mut seen = BTreeSet::new();
     for p in files {
         let Ok(text) = std::fs::read_to_string(&p) else {
             continue;
         };
-        let file = format!(
-            "include/constants/{}",
-            p.file_name().unwrap().to_string_lossy()
-        );
+        let file = p
+            .strip_prefix(src)
+            .unwrap_or(&p)
+            .to_string_lossy()
+            .into_owned();
         for d in defines_in(&text, &file) {
             if seen.insert(d.name.clone()) {
                 out.push(d);
@@ -74,6 +80,29 @@ pub fn read_defines(src: &Path) -> Vec<Define> {
         }
     }
     out
+}
+
+/// The files of `dir` (not below it) with one of `exts`, by name.
+fn files_in(dir: &Path, exts: &[&str]) -> Vec<std::path::PathBuf> {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut files: Vec<_> = rd
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.is_file() && p.extension().is_some_and(|x| exts.iter().any(|e| x == *e)))
+        .collect();
+    files.sort();
+    files
+}
+
+/// A flat tree's files (a C program of `c/`, its source beside nothing
+/// else): `src`'s own `exts` files and the `.c` files too, by name.
+fn flat(src: &Path, exts: &[&str]) -> Vec<std::path::PathBuf> {
+    let mut all: Vec<&str> = exts.to_vec();
+    if !all.contains(&"c") {
+        all.push("c");
+    }
+    files_in(src, &all)
 }
 
 /// The `#define NAME <number>` lines of one header's `text`: an upper-case
@@ -300,8 +329,7 @@ fn family(defines: &[Define], prefix: &str) -> Option<Family> {
     (names.len() >= 2).then(|| Family {
         file: file.to_string(),
         names,
-        fields: Vec::new(),
-        globals: Vec::new(),
+        ..Family::default()
     })
 }
 
@@ -311,7 +339,8 @@ pub fn toml(fams: &BTreeMap<String, Family>) -> String {
         "\n# #define families of pret's include/constants/ that a field takes, by\n\
          # the prefix its name spells (`optionsTextSpeed`: OPTIONS_TEXT_SPEED_*),\n\
          # and enums a field or global takes by its type (`GameMode`):\n\
-         # each value's one name, the fields, as `type.field`, and the globals.\n",
+         # each value's one name, the fields, as `type.field`, the globals,\n\
+         # and the parameters pret's calls pass them to, as `function:index`.\n",
     );
     for (prefix, f) in fams {
         writeln!(o, "\n[values.{}]", quoted(prefix)).unwrap();
@@ -321,6 +350,14 @@ pub fn toml(fams: &BTreeMap<String, Family>) -> String {
         if !f.globals.is_empty() {
             let gs: Vec<String> = f.globals.iter().map(|s| quoted(s)).collect();
             writeln!(o, "globals = [{}]", gs.join(", ")).unwrap();
+        }
+        if !f.args.is_empty() {
+            let xs: Vec<String> = f.args.iter().map(|s| quoted(s)).collect();
+            writeln!(o, "args = [{}]", xs.join(", ")).unwrap();
+        }
+        if !f.sums.is_empty() {
+            let xs: Vec<String> = f.sums.iter().map(|s| quoted(s)).collect();
+            writeln!(o, "sums = [{}]", xs.join(", ")).unwrap();
         }
         o.push_str("names = [\n");
         for (n, v) in &f.names {
@@ -400,6 +437,14 @@ fn uncommented(text: &str) -> String {
 /// other value (an expression, a negative number) or a preprocessor line
 /// inside is left out whole.
 pub fn enums_in(text: &str, file: &str) -> Vec<Enum> {
+    let mut es = enums_any(text, file);
+    es.retain(|e| !e.name.is_empty());
+    es
+}
+
+/// [`enums_in`] with the anonymous enums too (`enum { MON_DATA_HP, … }`),
+/// each with an empty name.
+pub fn enums_any(text: &str, file: &str) -> Vec<Enum> {
     let t = uncommented(text);
     let word = |c: char| c.is_ascii_alphanumeric() || c == '_';
     let mut out = Vec::new();
@@ -434,9 +479,6 @@ pub fn enums_in(text: &str, file: &str) -> Vec<Enum> {
             continue;
         };
         let Some(end) = body.find('}') else { continue };
-        if name.is_empty() {
-            continue;
-        }
         if let Some(values) = enumerators(&body[..end]) {
             out.push(Enum {
                 name,
@@ -575,6 +617,30 @@ fn enum_of<'a>(enums: &'a BTreeMap<String, &'a Enum>, ty: &str) -> Option<&'a En
         .copied()
 }
 
+/// An enum's [`Family`], before its takers: its names less the bounds
+/// (`…_COUNT`) and any value two share.
+fn enum_family(e: &Enum) -> Family {
+    let vals: Vec<&(String, u32)> = e
+        .values
+        .iter()
+        .filter(|(n, _)| !BOUNDS.contains(&n.rsplit('_').next().unwrap_or(n)))
+        .collect();
+    let mut count: BTreeMap<u32, usize> = BTreeMap::new();
+    for (_, v) in &vals {
+        *count.entry(*v).or_default() += 1;
+    }
+    let names: Vec<(String, u32)> = vals
+        .into_iter()
+        .filter(|(_, v)| count[v] == 1)
+        .cloned()
+        .collect();
+    Family {
+        file: e.file.clone(),
+        names,
+        ..Family::default()
+    }
+}
+
 /// The enum families ([`Family`]) the fields of `types` and the globals
 /// of `globals` (each global's C type, by name) take by their type: per
 /// enum, its names less the bounds (`…_COUNT`) and any value two share,
@@ -593,28 +659,7 @@ pub fn enum_families(
         by.entry(e.name.clone()).or_insert(e);
     }
     let mut out: BTreeMap<String, Family> = BTreeMap::new();
-    let fam = |e: &Enum| {
-        let vals: Vec<&(String, u32)> = e
-            .values
-            .iter()
-            .filter(|(n, _)| !BOUNDS.contains(&n.rsplit('_').next().unwrap_or(n)))
-            .collect();
-        let mut count: BTreeMap<u32, usize> = BTreeMap::new();
-        for (_, v) in &vals {
-            *count.entry(*v).or_default() += 1;
-        }
-        let names: Vec<(String, u32)> = vals
-            .into_iter()
-            .filter(|(_, v)| count[v] == 1)
-            .cloned()
-            .collect();
-        Family {
-            file: e.file.clone(),
-            names,
-            fields: Vec::new(),
-            globals: Vec::new(),
-        }
-    };
+    let fam = enum_family;
     let fits = |f: &Family, bits: u32| {
         let max = f.names.iter().map(|&(_, v)| v).max().unwrap_or(0);
         f.names.len() >= 2 && (bits >= 32 || max >> bits == 0)
@@ -655,6 +700,369 @@ pub fn enum_families(
         }
         if let Some(e) = enum_of(&by, ty) {
             take(e, size * 8, name.clone(), true);
+        }
+    }
+    out
+}
+
+/// One constant argument of a call in pret's C (native/lift-value-args):
+/// `GetMonData(mon, MON_DATA_MAX_HP)` passes `MON_DATA_MAX_HP` as its
+/// argument 1 of 2, and `GetMonData(mon, MON_DATA_MOVE1 + j)` its sum's
+/// base `MON_DATA_MOVE1`.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CallArg {
+    /// The callee as the call writes it (a function or a macro).
+    pub func: String,
+    /// How many arguments the call passes.
+    pub nargs: usize,
+    pub index: usize,
+    pub name: String,
+    /// The argument is a sum `name` is the base of.
+    pub sum: bool,
+}
+
+/// The [`CallArg`]s of `src/`'s `.c` files, at any depth; a flat tree's
+/// own `.c` files where there is no `src/`.
+pub fn read_calls(src: &Path) -> Vec<CallArg> {
+    let mut out = Vec::new();
+    if !src.join("src").is_dir() {
+        for p in files_in(src, &["c"]) {
+            if let Ok(text) = std::fs::read_to_string(&p) {
+                out.extend(calls_in(&text));
+            }
+        }
+        out.sort();
+        return out;
+    }
+    let mut dirs = vec![src.join("src")];
+    while let Some(d) = dirs.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                dirs.push(p);
+            } else if p.extension().is_some_and(|x| x == "c")
+                && let Ok(text) = std::fs::read_to_string(&p)
+            {
+                out.extend(calls_in(&text));
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+/// Words a `(` follows that aren't calls.
+const NOT_CALLS: &[&str] = &[
+    "if", "while", "for", "switch", "return", "sizeof", "case", "do", "else",
+];
+
+/// [`read_calls`] of one file's `text`: each `f(a, b, …)` whose argument
+/// is a constant's name alone (an upper-case word) or a sum it is the
+/// base of (`NAME + j`). Calls inside arguments count too.
+pub fn calls_in(text: &str) -> Vec<CallArg> {
+    let t = uncommented(text);
+    let b = t.as_bytes();
+    let word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        // Skip string and character literals.
+        if b[i] == b'"' || b[i] == b'\'' {
+            i = literal_end(b, i);
+            continue;
+        }
+        if !word(b[i]) || (i > 0 && word(b[i - 1])) {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < b.len() && word(b[i]) {
+            i += 1;
+        }
+        let func = &t[start..i];
+        if func.as_bytes()[0].is_ascii_digit() || NOT_CALLS.contains(&func) {
+            continue;
+        }
+        let mut k = i;
+        while k < b.len() && b[k].is_ascii_whitespace() {
+            k += 1;
+        }
+        if b.get(k) != Some(&b'(') {
+            continue;
+        }
+        let Some(args) = split_args(&t, k) else {
+            continue;
+        };
+        let nargs = args.len();
+        for (index, a) in args.iter().enumerate() {
+            if let Some((name, sum)) = const_base(a) {
+                out.push(CallArg {
+                    func: func.to_string(),
+                    nargs,
+                    index,
+                    name: name.to_string(),
+                    sum,
+                });
+            }
+        }
+    }
+    out
+}
+
+/// The index past the string or character literal at `i`.
+fn literal_end(b: &[u8], i: usize) -> usize {
+    let q = b[i];
+    let mut j = i + 1;
+    while j < b.len() && b[j] != q && b[j] != b'\n' {
+        j += if b[j] == b'\\' { 2 } else { 1 };
+    }
+    j + 1
+}
+
+/// The arguments of the call whose `(` is at `open`, each trimmed, split
+/// at the commas outside brackets and literals; `None` if it never closes.
+fn split_args(t: &str, open: usize) -> Option<Vec<&str>> {
+    let b = t.as_bytes();
+    let mut depth = 0usize;
+    let mut start = open + 1;
+    let mut out = Vec::new();
+    let mut j = open;
+    while j < b.len() {
+        match b[j] {
+            b'"' | b'\'' => {
+                j = literal_end(b, j);
+                continue;
+            }
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    let last = t[start..j].trim();
+                    if !(out.is_empty() && last.is_empty()) {
+                        out.push(last);
+                    }
+                    return Some(out);
+                }
+            }
+            b',' if depth == 1 => {
+                out.push(t[start..j].trim());
+                start = j + 1;
+            }
+            _ => {}
+        }
+        j += 1;
+    }
+    None
+}
+
+/// The constant an argument `a` is, or is the base of a sum of (then
+/// `true`): an upper-case word of two or more characters alone, or before
+/// `+`.
+fn const_base(a: &str) -> Option<(&str, bool)> {
+    let end = a
+        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .unwrap_or(a.len());
+    let (name, rest) = a.split_at(end);
+    let upper = name.len() >= 2
+        && name.starts_with(|c: char| c.is_ascii_uppercase())
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_');
+    let rest = rest.trim_start();
+    let sum = rest.starts_with('+') && !rest.starts_with("++");
+    (upper && (rest.is_empty() || sum)).then_some((name, sum))
+}
+
+/// The families pret's calls tie to function parameters (native/lift-
+/// value-args), added to `fams` with each parameter in its `args`.
+/// `resolve` gives the names file's function a call of `func` with
+/// `nargs` arguments reaches (a macro's too, as pret's `GetMonData(…)`
+/// that picks `GetMonData2` or `GetMonData3` by its count), or `None`.
+///
+/// A parameter takes a family only where every constant name pret's
+/// calls pass it is one of that family's: a define family (each name a
+/// define of one header, the family the longest prefix they share spells,
+/// as [`families`] makes it) or an enum (each an enumerator of one
+/// `enums`, keyed by its name, or an anonymous one's by its enumerators'
+/// shared prefix). A name of no family or of another (`TRUE`, a define of
+/// a second header), or names two enums both hold, ties none: the tie is
+/// the decomp's or there is none.
+pub fn arg_families(
+    defines: &[Define],
+    enums: &[Enum],
+    calls: &[CallArg],
+    resolve: impl Fn(&str, usize) -> Option<String>,
+    fams: &mut BTreeMap<String, Family>,
+) {
+    let mut at: BTreeMap<(String, usize), BTreeSet<&str>> = BTreeMap::new();
+    let mut sums: BTreeSet<(String, usize)> = BTreeSet::new();
+    let mut resolved: BTreeMap<(&str, usize), Option<String>> = BTreeMap::new();
+    for c in calls {
+        if c.index >= 4 {
+            continue;
+        }
+        let f = resolved
+            .entry((&c.func, c.nargs))
+            .or_insert_with(|| resolve(&c.func, c.nargs));
+        if let Some(f) = f {
+            at.entry((f.clone(), c.index)).or_default().insert(&c.name);
+            if c.sum {
+                sums.insert((f.clone(), c.index));
+            }
+        }
+    }
+    let def: BTreeMap<&str, &Define> = defines.iter().map(|d| (d.name.as_str(), d)).collect();
+    let mut enum_of: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
+    for (i, e) in enums.iter().enumerate() {
+        for (n, _) in &e.values {
+            enum_of.entry(n.as_str()).or_default().push(i);
+        }
+    }
+    let mut tried: BTreeMap<String, Option<Family>> = BTreeMap::new();
+    for ((f, index), names) in at {
+        let taker = format!("{f}:{index}");
+        let sum = sums.contains(&(f.clone(), index));
+        let pick = if names.iter().all(|n| def.contains_key(n)) {
+            define_family(defines, &def, &names, &mut tried)
+        } else if names.iter().all(|n| enum_of.contains_key(n)) {
+            enum_arg_family(enums, &enum_of, &names)
+        } else {
+            None
+        };
+        let Some((key, fam)) = pick else { continue };
+        match fams.get_mut(&key) {
+            // The same family, from a field's or global's tie.
+            Some(have) if have.file == fam.file && have.names == fam.names => {
+                if sum {
+                    have.sums.push(taker.clone());
+                }
+                have.args.push(taker);
+            }
+            Some(_) => {}
+            None => {
+                let mut fam = fam;
+                if sum {
+                    fam.sums.push(taker.clone());
+                }
+                fam.args.push(taker);
+                fams.insert(key, fam);
+            }
+        }
+    }
+}
+
+/// The define family every one of `names` is in, by key: the longest
+/// prefix of whole words they share (short of one name whole) whose
+/// family is their header's and holds each of them by its prefix.
+fn define_family(
+    defines: &[Define],
+    def: &BTreeMap<&str, &Define>,
+    names: &BTreeSet<&str>,
+    tried: &mut BTreeMap<String, Option<Family>>,
+) -> Option<(String, Family)> {
+    let file = &def[names.first()?].file;
+    if names.iter().any(|n| &def[n].file != file) {
+        return None;
+    }
+    let words: Vec<Vec<&str>> = names.iter().map(|n| n.split('_').collect()).collect();
+    let shortest = words.iter().map(Vec::len).min()?;
+    let mut common = 0;
+    while common < shortest - 1 && words.iter().all(|w| w[common] == words[0][common]) {
+        common += 1;
+    }
+    for len in (1..=common).rev() {
+        let prefix = words[0][..len].join("_");
+        let fam = tried
+            .entry(prefix.clone())
+            .or_insert_with(|| family(defines, &prefix));
+        if let Some(fam) = fam
+            && &fam.file == file
+        {
+            return Some((prefix, fam.clone()));
+        }
+    }
+    None
+}
+
+/// The one enum every one of `names` is an enumerator of, as a family
+/// keyed as [`enum_families`] keys it, or an anonymous enum by the prefix
+/// of whole words its enumerators share.
+fn enum_arg_family(
+    enums: &[Enum],
+    enum_of: &BTreeMap<&str, Vec<usize>>,
+    names: &BTreeSet<&str>,
+) -> Option<(String, Family)> {
+    let mut all: Option<BTreeSet<usize>> = None;
+    for n in names {
+        let these: BTreeSet<usize> = enum_of[n].iter().copied().collect();
+        all = Some(match all {
+            None => these,
+            Some(a) => a.intersection(&these).copied().collect(),
+        });
+    }
+    // Two enums of one name (a header's and the DWARF's `enum Sound_`)
+    // are one: the first, as in [`enum_families`]. Of two names, none.
+    let key_of = |e: &Enum| e.name.strip_suffix('_').unwrap_or(&e.name).to_string();
+    let mut it = all?.into_iter().map(|i| &enums[i]);
+    let e = it.next()?;
+    if it.any(|o| e.name.is_empty() || key_of(o) != key_of(e)) {
+        return None;
+    }
+    let key = if e.name.is_empty() {
+        let words: Vec<Vec<&str>> = e
+            .values
+            .iter()
+            .map(|(n, _)| n.split('_').collect())
+            .collect();
+        let shortest = words.iter().map(Vec::len).min()?;
+        let mut common = 0;
+        while common < shortest - 1 && words.iter().all(|w| w[common] == words[0][common]) {
+            common += 1;
+        }
+        if common == 0 {
+            return None;
+        }
+        words[0][..common].join("_")
+    } else {
+        key_of(e)
+    };
+    let fam = enum_family(e);
+    (fam.names.len() >= 2).then_some((key, fam))
+}
+
+/// The enums of `src`'s `include/` headers at any depth, anonymous ones
+/// too ([`enums_any`]), by path; a flat tree's own `.h` and `.c` files'
+/// where there is no `include/`.
+pub fn read_all_enums(src: &Path) -> Vec<Enum> {
+    let inc = src.join("include");
+    let mut out = Vec::new();
+    let mut dirs = vec![inc.clone()];
+    let mut files = Vec::new();
+    if !inc.is_dir() {
+        files = flat(src, &["h"]);
+        dirs.clear();
+    }
+    while let Some(d) = dirs.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                dirs.push(p);
+            } else if p.extension().is_some_and(|x| x == "h") {
+                files.push(p);
+            }
+        }
+    }
+    files.sort();
+    for p in files {
+        if let Ok(text) = std::fs::read_to_string(&p) {
+            let rel = p.strip_prefix(src).unwrap_or(&p).to_string_lossy();
+            out.extend(enums_any(&text, &rel));
         }
     }
     out

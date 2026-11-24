@@ -233,6 +233,11 @@ decomp-names:
     target/release/pret-names {{quote(gbaa_data / "src/mzm/mzm_us.elf")}} {{quote(gbaa_data / "src/mzm/mzm_us.gba")}} {{quote(gbaa_data / "names/mzm.toml")}} 0
     target/release/pret-names {{quote(gbaa_data / "src/katam/katam.elf")}} {{quote(gbaa_data / "src/katam/katam.gba")}} {{quote(gbaa_data / "names/katam.toml")}} 0
 
+# A C program's names files (c/README.md; native/lift-value-args): pret-names on `just c-tests`' two builds of c/NAME, its source read from c/NAME (the #define families its calls pass), into names/c-NAME-{agbcc,gcc}.toml. Seconds.
+c-names name:
+    {{lock}} cargo build -q --release -p pret-names
+    for cc in agbcc gcc; do target/release/pret-names {{quote(gbaa_data / "c")}}/c-{{name}}-$cc.elf {{quote(gbaa_data / "c")}}/c-{{name}}-$cc.gba names/c-{{name}}-$cc.toml 0 --src c/{{name}}; done
+
 # Rogue's source map from that build's symbols (pret-names): writes $GBAA_DATA/names/pokeemerald-rogue.toml. Needs `just fetch-rogue`.
 rogue-names show="10":
     {{lock}} cargo build -q --release -p pret-names
