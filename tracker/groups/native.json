@@ -3969,7 +3969,19 @@
       "title": "LLM pilot, round two: 20 Amazing Mirror functions",
       "detail": "As {unit:native/llm-pilot-metroid} and {unit:native/llm-pilot-patterns}, on the game the owner wants to mod and on today's lift: Claude rewrites 20 Amazing Mirror functions of mixed kind (Kirby's controller, a task function, a menu state, link code, a leaf, a loop, a switch) as plain typed Rust from the named lift. Each goes into mods/kirby-mirror/ as a stand-in with its per-function check (just fn-check; game-derived, never in the public repo). Then list the transformations the rewrites repeat in docs/research/llm-pilot.md with counts and whether an algorithm could prove each, leaving out what {unit:native/mirror-machine-count} already filed, and file the provable ones as lifter units. Done when: the 20 are written, each passes or its failure is written up, and the units are filed; just check passes.",
       "needs": ["native/mirror-machine-count", "native/lift-frame-gone"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "9cee3887",
+        "session": "9cee3887-4b81-4877-836d-53dd4ad6b81a",
+        "host": "quack",
+        "pid": 2962048,
+        "start": "95217572",
+        "at": "2026-11-24T05:45:40Z",
+        "branch": "unit/native/llm-pilot-mirror",
+        "beats": true
+      },
+      "round": "2026-11-24T05:45:40Z"
     },
     {
       "id": "native/mirror-agent-mod",
