@@ -4937,19 +4937,8 @@
         "by": "ce4e72fe",
         "at": "2026-11-24T18:20:53Z",
         "evidence": "native::indent re-indents each lifted function by brace depth (4 spaces a level) before cut base and pc markers; test lift_indent lifts c-loops-agbcc and finds every module line at 4x its depth (passes, not skipped). just lift-check passed (all programs, planted faults caught); just check exit 0 at 6efc46a0. commands.md says pre-indent cuts conflict on whitespace: keep --ours side re-indented or re-cut.",
-        "branch": "unit/native/lift-indent",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T18:20:53Z",
-          "by": "ce4e72fe",
-          "host": "quack",
-          "pid": 2962048,
-          "start": "95217572",
-          "beats": true,
-          "session": "ce4e72fe-7c7c-460c-8ffc-481c58f0c630",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "landed": "2026-11-24T18:32:23Z"
       },
       "notes": [
         {
@@ -4957,8 +4946,7 @@
           "by": "ce4e72fe",
           "text": "Shared $GBAA_DATA/c/c-loops-agbcc.gba was rebuilt at 12:19 from c/loops sources older than {unit:native/lift-for-index} (14 functions, bars want 18), failing lift-check bars; just c-tests from main fixed it. A lane on an old branch running c-tests will undo it."
         }
-      ],
-      "round": "2026-11-24T17:20:59Z"
+      ]
     },
     {
       "id": "native/lift-for-index",
