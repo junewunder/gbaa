@@ -28,8 +28,16 @@
 //! The naming is a label, as [`super::fields`]' is: the printed access is
 //! the same `ld*`/`st*`. Where a store's `e` isn't proven to lie in the
 //! field, its name trusts the compiler's mask (`(old & k) | e` writes the
-//! bits `k` clears); only the fold needs the proof, since `set_bits`
-//! masks `v`.
+//! bits `k` clears; not where `e` is a constant, whose bits are known);
+//! only the fold needs the proof, since `set_bits` masks `v`.
+//!
+//! A struct global's bitfield at its constant address (unit
+//! `native/lift-global-bitfields`) is named the same way, and prints as
+//! code, not a label, only where that is proven: a fold as its setter, a
+//! named store that isn't one as its setter where it is proven to change
+//! only the field of what its load read and nothing can have written
+//! memory between ([`Found::sets`]), and a load whose uses read only its
+//! field's bits as its getter ([`Found::reads`]).
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -59,6 +67,15 @@ pub struct Found {
     pub bits: BTreeMap<usize, (u32, u32)>,
     /// The stores printed as `set_bits`, by inst.
     pub folds: BTreeMap<usize, Fold>,
+    /// The named loads every use of which reads only their field's bits
+    /// (not a store's keeping half): one printed as the field's value
+    /// in place reads what the code does (native/lift-global-bitfields).
+    pub reads: BTreeSet<usize>,
+    /// The named stores that aren't folds but proven to change only
+    /// their field's bits of their load's, which are still memory's: no
+    /// store, exit or mode change between, both under one condition. Each stores what the field's setter would,
+    /// given the value stored (native/lift-global-bitfields).
+    pub sets: BTreeSet<usize>,
 }
 
 /// A named store's load, its field, and the values from the load to the
@@ -135,6 +152,11 @@ pub fn find(
             .collect();
         if let Some(fold) = fold(insts, &users, s, l, f, w, &between) {
             out.folds.insert(s, fold);
+        } else if quiet(insts, l, s)
+            && insts[l].guard == insts[s].guard
+            && !kept(insts, value.index(), l, false) & w & !run(f.0, f.1) == 0
+        {
+            out.sets.insert(s);
         }
         chains.insert(
             s,
@@ -188,6 +210,9 @@ pub fn find(
         };
         if let Some(f) = f {
             out.bits.insert(l, f);
+            if via.is_none() {
+                out.reads.insert(l);
+            }
         }
     }
     out
@@ -269,14 +294,7 @@ fn fold(
         return None;
     };
     let m = run(f.0, f.1);
-    // Nothing between the load and the store may write memory or leave.
-    if (l + 1..s).any(|i| {
-        matches!(
-            insts[i].op,
-            Op::Store { .. } | Op::Exit(_) | Op::SetCpsr { .. } | Op::SetSpsr { .. }
-        )
-    }) || l > s
-    {
+    if !quiet(insts, l, s) {
         return None;
     }
     // All under the store's condition (an ARM `strbne`'s), if any.
@@ -319,6 +337,18 @@ fn fold(
     Some(Fold { load: l, v })
 }
 
+/// Whether load `l` comes before store `s` with nothing between that
+/// may write memory or leave.
+fn quiet(insts: &[Inst], l: usize, s: usize) -> bool {
+    l < s
+        && !(l + 1..s).any(|i| {
+            matches!(
+                insts[i].op,
+                Op::Store { .. } | Op::Exit(_) | Op::SetCpsr { .. } | Op::SetSpsr { .. }
+            )
+        })
+}
+
 /// What `e` (its bits all in the field `f`) puts in the field: `y` of
 /// `y << lo` or `(y & m) << lo` with `m` keeping the field's width, else
 /// `e >> lo`.
@@ -342,8 +372,8 @@ fn value_of(insts: &[Inst], e: ValueId, f: (u32, u32)) -> FoldValue {
 }
 
 /// The bits of value `x` known to be those load `l` read. `trust`: in
-/// `(a & k) | b`, `b` has no bits `k` keeps (the compiler's mask says so;
-/// else only what [`zeros`] proves).
+/// `(a & k) | b`, `b` has no bits `k` keeps (the compiler's mask says so,
+/// where `b` isn't a constant; else only what [`zeros`] proves).
 pub fn kept(insts: &[Inst], x: usize, l: usize, trust: bool) -> u32 {
     if x == l {
         return u32::MAX;
@@ -355,12 +385,15 @@ pub fn kept(insts: &[Inst], x: usize, l: usize, trust: bool) -> u32 {
     match insts[x].op {
         Op::Bin(BinOp::And, a, b) => (kk(a) & (ones(b) | kk(b))) | (kk(b) & ones(a)),
         Op::Bin(BinOp::Or, a, b) => {
-            // `(y & k) | e`: `e` lies in the bits `k` clears.
-            let mask = |v: ValueId| match insts[v.index()].op {
-                Op::Bin(BinOp::And, p, q) if trust => k(q).or_else(|| k(p)).unwrap_or(0),
+            // `(y & k) | e`: `e` lies in the bits `k` clears, unless it is
+            // a constant, whose bits are known.
+            let mask = |v: ValueId, e: ValueId| match insts[v.index()].op {
+                Op::Bin(BinOp::And, p, q) if trust && k(e).is_none() => {
+                    k(q).or_else(|| k(p)).unwrap_or(0)
+                }
                 _ => 0,
             };
-            let (za, zb) = (z(a) | mask(b), z(b) | mask(a));
+            let (za, zb) = (z(a) | mask(b, a), z(b) | mask(a, b));
             (kk(a) & (zb | kk(b))) | (kk(b) & za)
         }
         Op::Bin(BinOp::Xor, a, b) => (kk(a) & z(b)) | (kk(b) & z(a)),
@@ -425,12 +458,15 @@ fn reaches(insts: &[Inst], x: usize, l: usize) -> bool {
 
 /// Each value's address key: the same for two values the block computes
 /// as the same base plus the same constant (a register read twice with no
-/// write between is one base).
+/// write between is one base; a constant is its value, as a global's
+/// address).
 fn addr_keys(insts: &[Inst]) -> Vec<(usize, u32)> {
     let mut keys: Vec<(usize, u32)> = Vec::with_capacity(insts.len());
     let mut reg_read: BTreeMap<usize, usize> = BTreeMap::new();
     for (i, inst) in insts.iter().enumerate() {
         let key = match inst.op {
+            // A constant address is its own key: a global's.
+            Op::Const(c) | Op::Pool(c) => (usize::MAX, c),
             Op::GetReg(r) => (*reg_read.entry(r.index()).or_insert(i), 0),
             Op::SetReg(r, _) => {
                 reg_read.remove(&r.index());
@@ -666,5 +702,93 @@ mod tests {
             found(&b, &[set.index()]).bits.get(&old.index()),
             Some(&(2, 2))
         );
+    }
+
+    #[test]
+    fn a_global_at_its_constant_address_is_named_and_set() {
+        // speed = 0; hue = 1; joined: (old & ~0xc) | 0x10, at a constant
+        // address each time. 0x10 is hue's, not speed's: no field, even
+        // trusting the mask.
+        let mut b = B::default();
+        let a = b.k(0x0300_0002);
+        let old = b.op(Op::Load {
+            width: Width::Byte,
+            addr: a,
+        });
+        let k = b.k(0xffff_fff3);
+        let kept = b.bin(BinOp::And, k, old);
+        let hue = b.k(0x10);
+        let new = b.bin(BinOp::Or, kept, hue);
+        let a2 = b.k(0x0300_0002);
+        let s = b.op(Op::Store {
+            width: Width::Byte,
+            addr: a2,
+            value: new,
+        });
+        let f = found(&b, &[]);
+        assert!(!f.bits.contains_key(&s.index()));
+        assert!(f.sets.is_empty());
+        // hue = (old >> 4) + 1 with old also kept: named, not a fold (old
+        // has another use), proven to change hue alone: a set. Not with a
+        // store between: its bits of old may not be memory's then.
+        for between in [false, true] {
+            let mut b = B::default();
+            let a = b.k(0x0300_0002);
+            let old = b.op(Op::Load {
+                width: Width::Byte,
+                addr: a,
+            });
+            b.op(Op::SetReg(Reg(1), old));
+            let k = b.k(0xf);
+            let kept = b.bin(BinOp::And, old, k);
+            let hue = b.shift(ShiftType::Lsr, old, 4);
+            let one = b.k(1);
+            let up = b.bin(BinOp::Add, hue, one);
+            let fifteen = b.k(0xf);
+            let m = b.bin(BinOp::And, up, fifteen);
+            let e = b.shift(ShiftType::Lsl, m, 4);
+            let new = b.bin(BinOp::Or, kept, e);
+            if between {
+                b.store(one);
+            }
+            let a2 = b.k(0x0300_0002);
+            let s = b.op(Op::Store {
+                width: Width::Byte,
+                addr: a2,
+                value: new,
+            });
+            let f = found(&b, &[]);
+            assert_eq!(f.bits.get(&s.index()), Some(&(4, 4)));
+            assert!(f.folds.is_empty());
+            assert_eq!(f.sets.contains(&s.index()), !between);
+        }
+    }
+
+    #[test]
+    fn a_load_only_its_field_reads_is_a_read() {
+        // speed = (old << 28) >> 30: a read of speed alone.
+        let mut b = B::default();
+        let old = b.load();
+        let up = b.shift(ShiftType::Lsl, old, 28);
+        let speed = b.shift(ShiftType::Lsr, up, 30);
+        b.op(Op::SetReg(Reg(1), speed));
+        let f = found(&b, &[]);
+        assert_eq!(f.bits.get(&old.index()), Some(&(2, 2)));
+        assert!(f.reads.contains(&old.index()));
+        // A load named through the store that keeps the rest of it isn't.
+        let mut b = B::default();
+        let old = b.load();
+        let k = b.k(0xffff_fffd);
+        let kept = b.bin(BinOp::And, old, k);
+        let up = b.shift(ShiftType::Lsr, old, 1);
+        let one = b.k(1);
+        let not = b.bin(BinOp::Xor, up, one);
+        let bit = b.bin(BinOp::And, not, one);
+        let e = b.shift(ShiftType::Lsl, bit, 1);
+        let new = b.bin(BinOp::Or, kept, e);
+        b.store(new);
+        let f = found(&b, &[]);
+        assert_eq!(f.bits.get(&old.index()), Some(&(1, 1)));
+        assert!(f.reads.is_empty());
     }
 }

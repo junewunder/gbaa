@@ -22,8 +22,22 @@ bounce and steps its `hue` (left and right walls) or takes 3 off its
 bounces show as a bar at x `60 i`, `bounces` pixels wide, grey at its
 `shade`; under it a dot in the ball's colour at x `60 i + trail`, which
 moves one pixel a frame over eight. Every 64 frames `ball_blink` turns one
-ball's `visible` over and steps its `speed` (1, 2, 3, 1, …).
+ball's `visible` over and steps its `speed` (1, 2, 3, 1, …): the clock's
+`next` says which.
 
-Mode 3, BG2 on, black. Frame 600: hash `5622c9d81c4b4c64`, the same in
+A clock, `gClock` (`struct Clock`), keeps its own bitfields: in a halfword
+`beats` (10 bits) and `level` (6), in a byte `tick` (4), `next` (2), `run`
+and `flash`. Every access to it is at its constant address, not through a
+pointer (`clock_step`, `clock_draw`, `AgbMain`). Once the balls are placed
+`AgbMain` sets `next` to 0 and `run` (one store, joined). While `run` is
+set, each frame `tick` counts up, wrapping at 16; at each wrap `flash`
+turns over, `beats` counts one more and `level` is `beats >> 2`. Under the
+dots, a row at y 6 shows `tick` pixels and one at y 7 `level` pixels, white
+while `flash` is set, else dark grey. The blinking ball is `gBalls[next]`,
+and `next` steps on after each blink. (The halfword's fields come first:
+agbcc would let `beats` straddle a byte's fields' unit, which pret-names
+doesn't place yet.)
+
+Mode 3, BG2 on, black. Frame 600: hash `f6f42298fc5e3e54`, the same in
 mGBA 0.10.5 and our interpreter, and in both builds (`just mgba-diff`,
-2026-11-20).
+2026-11-24).
