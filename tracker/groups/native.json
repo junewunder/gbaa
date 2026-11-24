@@ -5354,13 +5354,25 @@
       "detail": "The private bars (mods/metroid/lift-bars.toml, mods/emerald/lift-bars.toml) no longer match what main's lifter measures: they bar results_several and tuple_calls, which only the unlanded {unit:native/lift-returns-read} branch measures ('names no metric'), lack ref_new_at_use (Emerald's also bitfield_joined, data_constants_unnamed, fn_keys_left, rom_static_fn_keys), and hold lines_prelude at 1364 where main has 1390; Emerald's were measured with an old holes file. Lift each on main's head with the committed holes file, one at a time (just long start --mem 4G Metroid, --mem 12G Emerald), and set every bar to its measured value; a rise no landed unit explains is filed, not blessed. Remove the two unlanded metrics and note on that unit that it adds them again. Commit and push mods. Done when: at one named main commit and one mods commit, both lifts with --bars print no 'over its bar', 'has no bar' or 'names no metric', and both run 600 of 600 frames. Don't edit a bars file while git -C mods status shows another lane's changes to it.",
       "uses": ["heavy"],
       "priority": 100,
+      "record": {
+        "state": "claimed",
+        "by": "e601e02d",
+        "session": "e601e02d-14ee-414b-a2f5-20bb17652527",
+        "host": "quack",
+        "pid": 1981458,
+        "start": "101567385",
+        "at": "2026-11-24T22:53:05Z",
+        "branch": "unit/native/game-lift-bars-refresh",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-24T10:34:47Z",
           "by": "8347a61f",
           "text": "Metroid --bars lift on main fails 33 metrics: no bar for rom_static_fn_keys, fn_keys_left, rom_refs, locals_noted, bitfield_*; over: entries_beyond_one 2998>809, lines_prelude 1337>1314, functions_iwram 9>8. Emerald similar; its holes file needs [[roots]] (not on main)."
         }
-      ]
+      ],
+      "round": "2026-11-24T22:53:05Z"
     },
     {
       "id": "native/lift-aligned-params",
