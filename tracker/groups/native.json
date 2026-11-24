@@ -5098,6 +5098,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T20:13:55Z",
+          "by": "358be71f",
+          "text": "Next: also drop the via write when the dropped step was its only reader (for_counter_arith). Lane 1's for-ram-bounds edits c/loops/SCENE.md and c-loops bars too: expect a conflict. Metroid 233/463, 600/600; lines_prelude 1373 > bar 1364 (not this unit)."
+        },
+        {
           "at": "2026-11-24T20:13:49Z",
           "by": "358be71f",
           "text": "Emerald at bdcb5a24: 1078 for/3305 loop, lifts; build fails: naming_screen GetTextEntryPosition 'cannot find v45, v23' (typed template->maxChars load; no for there, so likely main's: unconfirmed at aa820315). for_counter_arith 241 > bar 235: the via add r9=r8+1 stays printed."
