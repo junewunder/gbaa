@@ -4865,6 +4865,13 @@
         "branch": "unit/native/lift-stack-arrays",
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-24T16:28:43Z",
+          "by": "66065018",
+          "text": "branch has the design section + frame::lend analysis (report 'lent slots'; just check green). Only c-chain-gcc lends (8 accesses). Left: print Lent params/locals, drop sp, --shadow-locals, --plant-lent, metric+bars, games. Widening filed separately."
+        }
+      ],
       "round": "2026-11-24T15:40:16Z"
     },
     {
