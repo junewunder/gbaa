@@ -4851,19 +4851,8 @@
         "by": "3ca58cea",
         "at": "2026-11-24T16:47:58Z",
         "evidence": "Split at ~3 hours per the owner's rule; this unit narrowed to its design and analysis. Design: docs/native-port-design.md 'Stack locals passed by address'. Analysis: frame::lend (borrowed parameters, lent slots, frame lends), tests in frame/tests.rs, report line 'lent slots' (c-chain-gcc: 5 slots, 8 accesses). just check passed (exit 0) at 54549e4, main merged (up to date). Rest filed: {unit:native/lift-lent-print}, {unit:native/lift-lent-frameless}, {unit:native/lift-lent-games}.",
-        "branch": "unit/native/lift-stack-arrays",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T16:47:58Z",
-          "by": "3ca58cea",
-          "host": "quack",
-          "pid": 2963642,
-          "start": "95218853",
-          "beats": true,
-          "session": "3ca58cea-0207-418c-8adf-1cec823264b1",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "landed": "2026-11-24T16:58:48Z"
       },
       "notes": [
         {
@@ -4881,8 +4870,7 @@
           "by": "66065018",
           "text": "branch has the design section + frame::lend analysis (report 'lent slots'; just check green). Only c-chain-gcc lends (8 accesses). Left: print Lent params/locals, drop sp, --shadow-locals, --plant-lent, metric+bars, games. Widening filed separately."
         }
-      ],
-      "round": "2026-11-24T15:40:16Z"
+      ]
     },
     {
       "id": "native/lift-pointer-types",
