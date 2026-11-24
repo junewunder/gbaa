@@ -1452,6 +1452,15 @@
       "by": "owner",
       "at": "2026-11-21T04:34:53Z",
       "scope": ["native/lift-signature-holes", "native/lift-returns-read"]
+    },
+    {
+      "id": "d/narrow-loop-unit-bounds-held",
+      "title": "Narrow the for-loop unit to bounds held in registers: Narrow it",
+      "why": "This unit lands as it is, scoped to bounds held in registers; global and field bounds, top-tested loops and step-via counters are done by the three follow-up units, which then can start. HealPlayerParty prints as for only after all three.",
+      "by": "owner",
+      "at": "2026-11-24T05:23:06Z",
+      "question": "q/narrow-loop-unit-bounds-held",
+      "via": "9a39864c"
     }
   ]
 }

@@ -1982,7 +1982,13 @@
         "host": "quack",
         "unit": "native/lift-for-bounds"
       },
-      "answer": null
+      "answer": {
+        "key": "a",
+        "by": "owner",
+        "via": "9a39864c",
+        "at": "2026-11-24T05:23:06Z",
+        "decision": "d/narrow-loop-unit-bounds-held"
+      }
     }
   ]
 }
