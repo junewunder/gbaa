@@ -1097,13 +1097,25 @@
       "title": "Mod-view tools are gone: naming, mod-run, nightly step",
       "detail": "Owner said delete (2026-11-20). Per docs/research/mod-view-retirement.md 'What goes': delete crates/naming, route-check's mod_run.rs (--mod-run; lift_mod_run.rs stays), hole-report nightly's readable step, the just recipes naming, mod-run, mod-states, names-states, readable-states, readable-suites, timing-modes, and their docs/tools/commands.md entries. Done when they are gone and just check passes.",
       "check": "recorded",
+      "record": {
+        "state": "claimed",
+        "by": "8b80f2e1",
+        "session": "8b80f2e1-d02e-474e-aeab-830d63add5cf",
+        "host": "quack",
+        "pid": 1609731,
+        "start": "100806701",
+        "at": "2026-11-24T22:03:32Z",
+        "branch": "unit/mod/retire-tools",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-24T21:55:19Z",
           "by": "2ddc0f0e",
           "text": "Also drop the parked naming gate ({unit:mod/naming-gate}): crates/naming goes, and the owner left naming out of the lift (2026-11-20). The list: docs/research/mod-view-retirement.md, from branch unit/mod/retire."
         }
-      ]
+      ],
+      "round": "2026-11-24T22:03:32Z"
     },
     {
       "id": "mod/retire-recompile",
