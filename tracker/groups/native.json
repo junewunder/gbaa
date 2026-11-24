@@ -4129,6 +4129,13 @@
           "lane": "quack/3"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-24T09:55:20Z",
+          "by": "f4ff2870",
+          "text": "mods/metroid/lift-bars.toml (and emerald's) need sp_arith_exact (Metroid 1194) before a --bars lift; not added: mods had another lane's uncommitted edit to metroid/lift-bars.toml. Merge also added main's missing rom_refs/rom_static_fn_keys bars (c-list, ime-i-set)."
+        }
+      ],
       "round": "2026-11-24T08:02:26Z"
     },
     {
