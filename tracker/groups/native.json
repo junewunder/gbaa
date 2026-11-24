@@ -4144,15 +4144,22 @@
       "check": "recorded",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "f2d7754b",
-        "session": "f2d7754b-1304-439e-b07b-81be9f8e400d",
-        "host": "quack",
-        "pid": 2962519,
-        "start": "95218086",
-        "at": "2026-11-24T08:18:36Z",
+        "at": "2026-11-24T09:51:45Z",
+        "evidence": "On the branch with main merged (68b9a418): just lift-check passed, 34 programs 0 differences, 58 planted faults caught; c-bits-agbcc/-gcc now have gClock, a struct global with bitfields at its constant address (frame 600 f6f42298fc5e3e54 = mGBA 0.10.5, both builds). It prints as a ram_t struct: storage fields named for their bitfields, getters/setters where proven (agbcc: 8 setters or set_bits, gcc 4; flash() read). Metroid builds and runs 600 of 600 frames (gCurrentDemo now typed; bitfield arithmetic 353 to 329). just check passed. Main's missing rom_refs/rom_static_fn_keys bars for c-list and native-ime-i-set added. Shared GBAA_DATA c-bits ROMs rebuilt to match names.",
         "branch": "unit/native/lift-global-bitfields",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T09:51:45Z",
+          "by": "f2d7754b",
+          "host": "quack",
+          "pid": 2962519,
+          "start": "95218086",
+          "beats": true,
+          "session": "f2d7754b-1304-439e-b07b-81be9f8e400d",
+          "lane": "quack/2"
+        }
       },
       "round": "2026-11-24T08:18:36Z"
     },
