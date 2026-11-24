@@ -4726,6 +4726,11 @@
       "uses": ["heavy"],
       "notes": [
         {
+          "at": "2026-11-24T14:31:55Z",
+          "by": "66d510b9",
+          "text": "Hw::gpio and rom_half (the RTC) are on main via {unit:native/land-emerald-route-lifter}; Emerald's lift runs 600 frames. Left: the route-check --native this card asks for (route branch's units/emerald-native.toml still has other causes)."
+        },
+        {
           "at": "2026-11-24T13:30:53Z",
           "by": "9a39864c",
           "text": "The Emerald route branch (commit e9b0b8c9) may already do this; {unit:native/land-emerald-route-lifter} brings it to main first. Check it before starting."
