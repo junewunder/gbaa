@@ -214,3 +214,37 @@ fn an_irq_held_by_the_i_bit_is_taken_when_msr_clears_it() {
     assert_eq!(m.now(), HBLANK_START, "no time passed");
     assert!(m.take_irq());
 }
+
+/// An IRQ pending when `IME` is set again while the CPSR's I bit is set
+/// is held by I alone, and taken as soon as an `msr` clears I, as the
+/// hardware and the native library take it (native/ime-i-set-test-program,
+/// `agb/native-ime-i-set`). In IRQ mode, a wrapper putting `IME` back, it
+/// waits for the next time point, as in the native library.
+#[test]
+fn an_irq_released_by_ime_while_i_is_set_is_taken_at_the_msr() {
+    use armv4t::interp::I_BIT;
+    for irq_mode in [false, true] {
+        let mut m = native(&[
+            NOP,
+            0xE129_F000, // msr cpsr_fc, r0
+            NOP,
+            B_SELF,
+        ]);
+        if irq_mode {
+            m.cpu.write_cpsr(m.cpu.cpsr & !0x1F | mode::IRQ, !0);
+        }
+        m.cpu.cpsr |= I_BIT;
+        m.cpu.r[0] = m.cpu.cpsr & !I_BIT;
+        m.bus.write16(IO + reg::IE, irq::VBLANK);
+        m.bus.write16(IO + reg::IF, 0);
+        m.bus.io.request_irq(irq::VBLANK);
+        // IME on with I set: held.
+        m.bus.write16(IO + reg::IME, 1);
+        assert!(!m.step());
+        assert!(!m.take_irq());
+        // The msr clears I: taken at once, outside IRQ mode.
+        assert_eq!(m.step(), !irq_mode, "irq mode {irq_mode}");
+        assert_eq!(m.now(), 0, "no time passed");
+        assert_eq!(m.take_irq(), !irq_mode, "irq mode {irq_mode}");
+    }
+}
