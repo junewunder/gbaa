@@ -528,6 +528,69 @@ impl Types {
         (end <= d.size).then_some((d.ident.as_str(), d.size, fs))
     }
 
+    /// Each typed datum: its address and type.
+    pub fn globals(&self) -> impl Iterator<Item = (u32, &Ty)> {
+        self.globals.iter().map(|(&k, (ty, _))| (k, ty))
+    }
+
+    /// The fields named `name` that `ty` holds, at any depth (`gbaa-lift
+    /// --find`): each one's offset in `ty`, size and path from `ty`
+    /// (`.inner[].maxEnergy`, an array's elements as `[]`), at most
+    /// `cap` of them. A field's name is its accessor's, a bitfield's
+    /// bytes those of its accessor.
+    pub fn spans_of(&self, ty: &Ty, name: &str, cap: usize) -> Vec<(u32, u32, String)> {
+        let mut out = Vec::new();
+        self.spans_into(ty, name, 0, "", cap, &mut out);
+        out
+    }
+
+    fn spans_into(
+        &self,
+        ty: &Ty,
+        name: &str,
+        at: u32,
+        path: &str,
+        cap: usize,
+        out: &mut Vec<(u32, u32, String)>,
+    ) {
+        match ty {
+            Ty::Array(e, n) => {
+                let es = self.size(e);
+                if es == 0 {
+                    return;
+                }
+                let one = self.spans_of(e, name, cap);
+                if one.is_empty() {
+                    return;
+                }
+                for i in 0..*n {
+                    for (o, s, p) in &one {
+                        if out.len() >= cap {
+                            return;
+                        }
+                        out.push((at + i * es + o, *s, format!("{path}[]{p}")));
+                    }
+                }
+            }
+            Ty::Named(n) => {
+                let Some(d) = self.defs.get(n) else { return };
+                for f in &d.fields {
+                    if out.len() >= cap {
+                        return;
+                    }
+                    let p = format!("{path}.{}", f.ident);
+                    if f.ident.trim_end_matches('_') == name {
+                        out.push((at + f.off, self.size(&f.ty).max(1), p.clone()));
+                    }
+                    if f.bits.is_none() {
+                        self.spans_into(&f.ty, name, at + f.off, &p, cap, out);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// The typed datum `x` lands on or in, as its address and type.
     pub fn global_at(&self, x: u32) -> Option<(u32, &Ty)> {
         let (&k, (ty, _)) = self.globals.range(..=x).next_back()?;
