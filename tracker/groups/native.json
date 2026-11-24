@@ -4659,6 +4659,11 @@
       "id": "native/lift-find-on-route",
       "title": "lift-find narrows a field's writers to those a route ran",
       "detail": "From {unit:native/mirror-agent-mod} (hurt 1): just lift-find on Kirby's xspeed lists 1139 writers and 547 readers (every enemy, boss and state); the walk's KirbyGroundAccel is one line among them. What found it was a Lua write watch on gKirbys[0].base.xspeed during frames 1655-1700 of the mirror route (8 s): pc 0x0805B382. Wanted: lift-find --route R --frames A-B (or a recipe) runs the play build along the route with a write watch on the field's address and lists only the functions that wrote it there, with the values. Check: on the mirror route, frames 1650-1700, xspeed names KirbyGroundAccel (and KirbyWalk); just check."
+    },
+    {
+      "id": "native/names-keep-source-lines",
+      "title": "A names file's rename keeps the decomp's source lines",
+      "detail": "From {unit:native/mirror-agent-mod} (hurt 3): names/kirby-amazing-mirror.toml renames katam's sub_0805B2FC to KirbyGroundAccel, and the lift then drops the function's // src/kirby.c:N line comments (the cut has none; lift-find prints 0x0805b356 where its neighbour sub_0805B3A0 prints src/kirby.c:14508). --cut sub_0805B2FC says 'names no function'. Wanted: a rename keeps the decomp entry's src and lines, and --cut and lift-find take either name (the katam = field). Check: the cut of 0x0805b2fd has kirby.c line comments and --cut sub_0805B2FC cuts it; just check."
     }
   ]
 }
