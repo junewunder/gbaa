@@ -1456,12 +1456,12 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   3 GB. Not heavy (no generated crate).
 - `just fn-check ROM [--name NAME] --fn-check KEY... [--replace FILE]
   [--seed N] [--runs N] [--plant AT [--plant-reference]] [--interp-every N]
-  [--frames N]` (native/fn-check-any, native/fn-check-interp;
+  [--frames N] [--input PRESSES]` (native/fn-check-any, native/fn-check-interp;
   `docs/native-port-design.md`, "The per-function check"): a function's
   replacement (its stand-in, from the holes file or `--replace FILE`; a mod's cut, `--fn-check-cuts` for all of them, behind an adapter to its lifted signature; with
   none, the lift, which `--plant AT` makes a planted wrong one) against
   its lift, both native, from the program's own calls and seeded variants
-  of them, headless with no input, until each budget is spent. Prints per
+  of them, headless with no input (or `--input`'s presses, gbaa-desktop's), until each budget is spent. Prints per
   function its runs, budget, time, seed, digest, runs skipped (past 600
   frames), the first differences, each naming the byte, and how many
   runs the interpreter (untimed, every Nth: 8) checked against the lift
