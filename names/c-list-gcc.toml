@@ -1,9 +1,9 @@
-# Names for /home/meadow/.local/share/gbaa/c/c-list-gcc.gba, from pret's symbols in /home/meadow/.local/share/gbaa/c/c-list-gcc.elf.
+# Names for c-list-gcc.gba, from pret's symbols in c-list-gcc.elf.
 # Written by `just pret-names` (crates/pret-names). Don't edit.
 
 [map]
 rom_sha1 = "8036de9d2a9040b8882e5061e702588fcfcb97bb"
-source = "/home/meadow/.local/share/gbaa/c/c-list-gcc.elf"
+source = "c-list-gcc.elf"
 format = 1
 #
 # Keys are codegen's function keys (bit 0 set = Thumb; an IWRAM copy's
@@ -16,6 +16,9 @@ format = 1
 0x0800018d = { name = "VBlankIntrWait", size = 0, file = "crt0.o" }
 0x08000191 = { name = "fill_rect", size = 156, file = "draw.c", src = "c/common/draw.c", proto = "void fill_rect(s32 x, s32 y, s32 w, s32 h, u16 color)" }
 0x0800022d = { name = "plot", size = 30, file = "draw.c", src = "c/common/draw.c", proto = "void plot(s32 x, s32 y, u16 color)" }
+0x08000281 = { name = "act_slide", size = 38, file = "main.c", src = "c/list/main.c", proto = "void act_slide(struct Node *n)" }
+0x080002a9 = { name = "act_blink", size = 36, file = "main.c", src = "c/list/main.c", proto = "void act_blink(struct Node *n)" }
+0x080002cd = { name = "act_fall", size = 42, file = "main.c", src = "c/list/main.c", proto = "void (void)" }
 0x080002f9 = { name = "pool_init", size = 40, file = "main.c", src = "c/list/main.c", proto = "void pool_init(void)" }
 0x08000321 = { name = "pool_get", size = 20, file = "main.c", src = "c/list/main.c", proto = "struct Node *pool_get(void)" }
 0x08000335 = { name = "pool_put", size = 16, file = "main.c", src = "c/list/main.c", proto = "void pool_put(struct Node *n)" }
@@ -37,9 +40,6 @@ format = 1
 [missed]
 0x0800024d = { name = "memcpy", size = 26, why = "unreached; no ROM word points at it" }
 0x08000269 = { name = "memset", size = 22, why = "unreached; no ROM word points at it" }
-0x08000281 = { name = "act_slide", size = 38, why = "unreached; a ROM word points at it" }
-0x080002a9 = { name = "act_blink", size = 36, why = "unreached; a ROM word points at it" }
-0x080002cd = { name = "act_fall", size = 42, why = "unreached; a ROM word points at it" }
 
 # Code copied out of ROM to run in RAM (BIOS copies discovery found), by
 # destination: the pret functions in it, keyed by run address.
@@ -82,6 +82,15 @@ format = 1
   { name = "y", reg = 1, from = 0x0800022c, to = 0x08000234, type = "s32", param = true },
   { name = "y", reg = 1, from = 0x08000236, to = 0x0800023c, type = "s32", param = true },
   { name = "color", reg = 2, from = 0x0800022c, to = 0x0800024a, type = "u16", param = true },
+]
+0x08000281 = [
+  { name = "n", reg = 0, from = 0x08000280, to = 0x080002a6, type = "struct Node *", param = true },
+]
+0x080002a9 = [
+  { name = "n", reg = 0, from = 0x080002a8, to = 0x080002cc, type = "struct Node *", param = true },
+]
+0x080002cd = [
+  { name = "", reg = 0, from = 0x080002cc, to = 0x080002f6, type = "void", param = true },
 ]
 0x08000321 = [
   { name = "n", reg = 0, from = 0x08000320, to = 0x08000334, type = "struct Node *" },

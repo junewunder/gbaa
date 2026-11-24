@@ -1,9 +1,9 @@
-# Names for /home/meadow/.local/share/gbaa/c/c-list-agbcc.gba, from pret's symbols in /home/meadow/.local/share/gbaa/c/c-list-agbcc.elf.
+# Names for c-list-agbcc.gba, from pret's symbols in c-list-agbcc.elf.
 # Written by `just pret-names` (crates/pret-names). Don't edit.
 
 [map]
 rom_sha1 = "b0f516e019ff4e89f647ae86d6153eaf23d0ac4b"
-source = "/home/meadow/.local/share/gbaa/c/c-list-agbcc.elf"
+source = "c-list-agbcc.elf"
 format = 1
 #
 # Keys are codegen's function keys (bit 0 set = Thumb; an IWRAM copy's
