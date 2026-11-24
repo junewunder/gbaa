@@ -5442,7 +5442,14 @@
     {
       "id": "native/lift-for-ram-bounds-games",
       "title": "Games' loops to a bound in RAM print as for",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-24T20:30:01Z",
+          "by": "1fbd91b3",
+          "text": "From {unit:native/lift-for-ram-bounds}: C loops print as for, no game loop does. Metroid GBAA_FOR_WHY: shape fails first (step not of the counter 198, compare not of counter and bound 108). Emerald: IRQ handler's table calls likely make its writes anywhere (unchecked)."
+        }
+      ]
     }
   ]
 }
