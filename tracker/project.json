@@ -7,5 +7,17 @@
   "last_call": 10,
   "private_words": ["$GBAA_DATA/leak-words.txt", "~/.local/share/gbaa/leak-words.txt"],
   "checkin_at": "2026-11-12T19:04:33Z",
-  "checkin_most": 28
+  "checkin_most": 28,
+  "lanes_off": {
+    "at": "2026-11-24T22:17:30Z",
+    "by": "6056824b",
+    "for": "a sprint: the native lift tonight, games reaching play and the lift's readability, until 02:00",
+    "were": [
+      {
+        "machine": "quack",
+        "lanes": 4,
+        "until": 1795561201
+      }
+    ]
+  }
 }

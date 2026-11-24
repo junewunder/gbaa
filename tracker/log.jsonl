@@ -4214,3 +4214,4 @@
 {"at":"2026-11-24T22:03:27Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/names-straddling-bitfields","text":"pret-names places agbcc's bitfield that straddles its unit: on main"}
 {"at":"2026-11-24T22:03:32Z","actor":"loop","tag":"8b80f2e1","host":"quack","cmd":"claim","id":"mod/retire-tools","text":"Mod-view tools are gone: naming, mod-run, nightly step: claimed"}
 {"at":"2026-11-24T22:05:09Z","actor":"loop","tag":"2ddc0f0e","host":"quack","cmd":"unclaim","id":"mod/retire","text":"The mod view is retired: handed back by its session, its work kept (2 commits on its branch); can't start until Codegen's readable printing is gone (mod/retire-readable-codegen) is done"}
+{"at":"2026-11-24T22:17:30Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"lanes","text":"the lanes are held off for a sprint: the native lift tonight, games reaching play and the lift's readability, until 02:00"}
