@@ -1109,7 +1109,7 @@ with the native check and no replaced-library list.
   rules), and the ROM's bytes.
 - Function pointers are their keys (`--fn-ids rom` only): the lift loads
   them from ROM bytes and RAM (agb's vtables and closures), so it can't
-  renumber them. `call_fn` binary-searches `FNS`.
+  renumber them. `call_fn` binary-searches `FNS` (stage B: `--fn-ids dense`).
 - BIOS: `Halt` is `hw::halt`; `IntrWait` and `VBlankIntrWait` are the play
   build's loop over `0x0300_7FF8` and `hw::halt`; `CpuSet` copies and
   spends `cpu_set_cycles`; `Div`. Idle edges get `hw::idle`, spin edges
