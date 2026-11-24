@@ -4640,7 +4640,14 @@
       "detail": "Takes the target Function pointers as dense FnRef IDs ({unit:native/fnref-dense}) landed short of: its bar, 0 ROM keys left in a --fn-ids dense build (metric fn_keys_left, crates/codegen/lift-check.toml), judged on the C programs and a game. As landed: 0 on every C program but c-fnptr-gcc's 6 (its five callback-list pool words and main_cb_run's, all 'arithmetic' at a byte compare of gNumCallbacks, held by a pile read; with them f_08000531's proven word stays a key); Metroid 326 (124 words not proven, 189 code constants not proven, the rest proven words of functions with an unproven one). What holds c-fnptr-gcc's (found 2026-11-24): (1) remove_callback's gCallbacks[j-1] is the anchor plus 0x54 plus 4j, so G::rebased puts it in gNumCallbacks' object (BASED trusts literal plus constant); also ram_indexed loses it because the IR folds anchor+88 into a constant (K + index makes no B) and 'subs r5, #4' is Adc with carry 1. A patch for those three moved the hole but proved nothing more: (2) main_cb_run's push of r3 (the _call_via_r3 pointer) goes to the stacks' cell 0x0ffffff0 and the pile, which a constant-address byte load reads. Done when: fn_keys_left 0 on c-fnptr-gcc (bar lowered), Metroid's measured lower (say what holds the rest); lift-check green; Metroid's dense build passes route-check --native --dense on units/metroid-native.toml.",
       "check": "independent",
       "needs": ["native/fnref-dense"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-24T06:58:00Z",
+          "by": "91d18000",
+          "text": "Checker of {unit:native/fnref-dense}: dense_ids' usable doesn't exclude flows with lost ROM reads (Val::lost_rom), whose values may carry an unrecorded key into a compare; none of the C/agb programs or Metroid has any. Before a game that does: no dense IDs then (Flow needs a flag)."
+        }
+      ]
     },
     {
       "id": "native/lift-field-base",
