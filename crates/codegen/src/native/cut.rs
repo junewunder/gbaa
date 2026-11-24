@@ -31,8 +31,8 @@ pub const HEAD: &str = "// Cut by `gbaa-lift --cut` (crates/codegen/src/native/c
 // - A function that can't stop returns its value bare; one that can,\n\
 //   `Result<_, Exit>` (`?` after a call that can). Keep that as cut.\n\
 // - `lN` is the stack slot N bytes below the entry sp; `vN` a value;\n\
-//   `RET` the lr a call leaves (a return's marker). `pc(0x…)` names the\n\
-//   guest block for a stop's backtrace; `bank_sp(g, r13)` comes before what may run a handler.\n";
+//   `RET` the lr a call leaves (a return's marker); `bank_sp(g, r13)`\n\
+//   comes before what may run a handler.\n";
 
 /// The header's last line, after the helpers'.
 const HEAD_END: &str = "// - Call another function by its Rust name, as the lift does.\n\n";
