@@ -5174,15 +5174,22 @@
       "uses": ["heavy"],
       "priority": 30,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "209afec8",
-        "session": "209afec8-d655-4445-b79d-efd9ab0d9fcc",
-        "host": "quack",
-        "pid": 2963642,
-        "start": "95218853",
-        "at": "2026-11-24T14:38:22Z",
+        "at": "2026-11-24T15:31:07Z",
+        "evidence": "Main lifts Emerald with the committed holes file: [[roots]] (discover_with), [[open_bus]] and the cartridge RTC (Hw::gpio, prelude rom_half) from the route branch (d3acc29). just lift (099f5ac) 600 of 600 frames, no stop; holes-all --only emerald (088c89b): hard 0, 600 of 600. Route-check --native on units/emerald-native.toml: lift ran 5400 frames past the naming screen, 0 of 5400 pictures differ from play. So recorded done: {unit:native/lift-rtc} and {unit:native/emerald-naming-stop}. Route branch: main and this branch merged into it as 6bf5bee (local branch merge/emerald-native-route; only units/emerald-native.toml differs), push refused to the session, noted on {unit:native/emerald-native-route}. just check passed at 088c89b (main 9e1e3a0 merged).",
         "branch": "unit/native/land-emerald-route-lifter",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T15:31:07Z",
+          "by": "209afec8",
+          "host": "quack",
+          "pid": 2963642,
+          "start": "95218853",
+          "beats": true,
+          "session": "209afec8-d655-4445-b79d-efd9ab0d9fcc",
+          "lane": "quack/3"
+        }
       },
       "notes": [
         {
