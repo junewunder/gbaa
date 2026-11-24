@@ -562,15 +562,23 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "09555f4f",
-        "session": "09555f4f-b148-4f91-83c9-22e57ab92c10",
-        "host": "quack",
-        "pid": 2964711,
-        "start": "95219683",
-        "at": "2026-11-24T07:03:03Z",
+        "checker": "228e86d4",
+        "at": "2026-11-24T08:14:18Z",
+        "evidence": "Fresh-context verifier 228e86d4: diff reviewed, no bugs (wide-extent rule sound, object() matches carve). lift-metrics 0 over/under: rom_static_fn_keys 0 on all 14 C programs, load_computed_rom 0 everywhere as on main. Metroid after merge: load_computed_rom 19 -> 3, rom_static_fn_keys 38 (split to {unit:native/rom-statics-metroid-keys}), rom_refs 633; route-check --native --dense pass 2700 frames. just check green (author and checker); full just lift-check passed before merge, --only native-entry-jump after.",
         "branch": "unit/native/rom-statics",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T08:14:18Z",
+          "by": "09555f4f",
+          "host": "quack",
+          "pid": 2964711,
+          "start": "95219683",
+          "beats": true,
+          "session": "09555f4f-b148-4f91-83c9-22e57ab92c10",
+          "lane": "quack/4"
+        }
       },
       "notes": [
         {
