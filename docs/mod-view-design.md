@@ -246,6 +246,26 @@ names = [
   prints a constant stored to or compared with one, or passed to a
   parameter of that type, by its name (`g.ram.gMainGameMode = GM_INTRO
   as u16`), each a `pub const` of `main.rs`.
+- **Parameters by the decomp's calls** (native/lift-value-args): pret's
+  families are mostly `#define`s or anonymous enums passed to an `int`
+  parameter (`GetMonData(mon, MON_DATA_MAX_HP)`). `pret_names::values`
+  reads every call in `src/**/*.c` whose argument is a constant's name, or
+  a sum it is the base of (`MON_DATA_MOVE1 + j`), and resolves the callee
+  to the names file's function by its symbol (a macro that picks one by
+  its count, `GetMonData` to `GetMonData2`, too). A parameter takes a
+  family (`args = ["GetMonData2:1"]`) only where every name pret passes it
+  is one family's: the defines of one header under the longest prefix
+  they share, or one enum's enumerators (an anonymous enum keyed by its
+  enumerators' prefix, `MON_DATA`; of a header's and the DWARF's enum of
+  one name, the header's). A name of no family or of another (`TRUE`)
+  ties none: the tie is the decomp's or there is none. The native lift
+  ties the argument register where every parameter before it is one
+  register, and prints the call's constant there by its name, and a sum
+  written to the register for the call as `j.wrapping_add(MON_DATA_MOVE1)`
+  (a sum of 0 stays). Metroid: 104 parameters of 45 families; Emerald
+  366 of 141. A C program's names file reads its own folder
+  (`pret-names … --src c/NAME`, `just c-names NAME`): c/switch passes
+  `ROW_CLEAR` and `ROW_BAR` to `fill_rect`'s y.
 
 ### Text
 
