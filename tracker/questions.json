@@ -1957,6 +1957,32 @@
         "unit": "native/emerald-native-route"
       },
       "answer": null
+    },
+    {
+      "id": "q/narrow-loop-unit-bounds-held",
+      "title": "Narrow the for-loop unit to bounds held in registers?",
+      "context": "{unit:native/lift-for-bounds} prints counted loops as for when the bound is a parameter or other register value the loop never writes: several blocks, calls, continue, counting down, u8 counters. Emerald 993 for / 3390 loop (was 353 / 4030), Metroid 195 / 499, 600 of 600 frames, lift-check clean. The loop's review sent it back: the card's own example HealPlayerParty (bound gPlayerPartyCount, a global) and CheckBagHasItem (a field) still print as loop, as do c/loops' draw_global, draw_row, grid and first_long. Those need three more pieces, each filed: a bound loaded from RAM ({unit:native/lift-for-ram-bounds}: a summary of what RAM every function may write, and, for a loop with calls, interrupt handlers too, which in Emerald run through function pointers, so it likely also needs your rule that a handler doesn't write a non-volatile global, as C assumes); a loop tested at the top with a break ({unit:native/lift-for-top-tested}); and a counter stepped through a second register, as HealPlayerParty's is ({unit:native/lift-for-step-via}). Together that is well past the 3-hour split.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Narrow it",
+          "changes": "This unit lands as it is, scoped to bounds held in registers; global and field bounds, top-tested loops and step-via counters are done by the three follow-up units, which then can start. HealPlayerParty prints as for only after all three."
+        },
+        {
+          "key": "b",
+          "label": "Keep the card whole",
+          "changes": "This unit stays open and its follow-ups' work is done on its branch before anything lands; the 640 extra for loops in Emerald wait until then, and the work runs several sessions."
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/lift-for-bounds"],
+      "asked": {
+        "at": "2026-11-24T05:18:00Z",
+        "by": "554a944d",
+        "host": "quack",
+        "unit": "native/lift-for-bounds"
+      },
+      "answer": null
     }
   ]
 }

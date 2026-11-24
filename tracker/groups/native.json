@@ -4419,15 +4419,10 @@
       "uses": ["heavy"],
       "priority": 26,
       "record": {
-        "state": "claimed",
+        "state": "blocked",
+        "on": "q/narrow-loop-unit-bounds-held",
         "by": "554a944d",
-        "session": "554a944d-7ddb-4fe8-bcd2-3928c2d89c2a",
-        "host": "quack",
-        "pid": 2962048,
-        "start": "95217572",
-        "at": "2026-11-24T05:14:46Z",
-        "branch": "unit/native/lift-for-bounds",
-        "beats": true
+        "at": "2026-11-24T05:18:00Z"
       },
       "notes": [
         {
