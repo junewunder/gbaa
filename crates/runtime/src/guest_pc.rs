@@ -4,7 +4,9 @@
 //! address, the key of the block (bit 0 set for Thumb), through the lifted
 //! crate's `pc`, which calls it only with the crate's `guest-pc` feature
 //! (`just lift`'s and the checks' builds; a plain build sets none, unit
-//! `native/lift-one-entry`). A program that
+//! `native/lift-one-entry`). The crate's src/ has no such line: its
+//! `pcs.txt` keeps where each goes, and its build script puts them back in
+//! a `guest-pc` build (unit `native/lift-pc-markers`). A program that
 //! stops (a panic, its time limit) says where with [`get`] in its stop
 //! line (`native_record::stop`). It names the block, not the instruction
 //! in it: one relaxed store per block is the whole cost. A hand-written
