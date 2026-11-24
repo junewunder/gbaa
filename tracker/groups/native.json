@@ -4083,15 +4083,22 @@
       "detail": "No C program in c/ follows pointers held in memory, so pointer work (Ref types, the heap's types, typed paths through a field that is a pointer) is judged only on games. Add c/list as {unit:native/c-test-programs} added the others, built by agbcc and by modern GCC: nodes from a static pool, linked through a next field, walked, inserted and removed each frame, one field a function pointer called per node, the result drawn. names/c-list-*.toml with its types, two rows in lift-check.toml with bars (the computed-unknown and ref metrics among them) and a planted store, a 600-frame route. Done when: just c-tests builds both, just lift-check passes with 0 differences and the planted faults caught; just check passes.",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "e48d610c",
-        "session": "e48d610c-6c81-436f-b9a9-3a1447de0f29",
-        "host": "quack",
-        "pid": 2962519,
-        "start": "95218086",
-        "at": "2026-11-24T07:34:20Z",
+        "at": "2026-11-24T07:52:17Z",
+        "evidence": "just c-tests built c-list-agbcc and c-list-gcc (both match mGBA at frame 600, d24942cc384e478d). just lift-check --only c-list-agbcc --only c-list-gcc passed: 600 frames, 0 differences, packed and dense layouts the same, planted gFrame++ store caught in both. The gcc lift first stopped calling act_fall (no discovery evidence for a base-indexed fn table); fixed by a new scan rule (decisions.md 5d; Emerald/Mirror/Metroid unchanged, modern Emerald +8, Minish Cap +12 true starts, none false). just check passed. Commit fdcd0655.",
         "branch": "unit/native/c-list-test-program",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T07:52:17Z",
+          "by": "e48d610c",
+          "host": "quack",
+          "pid": 2962519,
+          "start": "95218086",
+          "beats": true,
+          "session": "e48d610c-6c81-436f-b9a9-3a1447de0f29",
+          "lane": "quack/2"
+        }
       },
       "round": "2026-11-24T07:34:20Z"
     },
