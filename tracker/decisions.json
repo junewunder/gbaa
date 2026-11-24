@@ -1536,6 +1536,15 @@
       "by": "1fbd91b3",
       "at": "2026-11-24T20:29:45Z",
       "scope": ["group:native"]
+    },
+    {
+      "id": "d/emerald-s-for-counter-arith-bar-rises-235-to",
+      "title": "Emerald's for_counter_arith bar rises 235 to 241 for step-via",
+      "why": "From {unit:native/lift-for-step-via}: 9 Emerald loops more print as for; 4 of them shift their counter, which the metric counts only in a for. +2 more come from the holes file's 25 new roots (237 with the unit's via off). Native check (lift-check) green; Emerald 600/600.",
+      "by": "85a8eaf9",
+      "at": "2026-11-24T21:33:59Z",
+      "scope": ["native/lift-for-step-via"],
+      "until": "2026-11-24T23:00:01Z"
     }
   ]
 }
