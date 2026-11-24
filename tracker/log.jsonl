@@ -4050,3 +4050,4 @@
 {"at":"2026-11-24T12:38:57Z","actor":"loop","tag":"2a675964","host":"quack","cmd":"done","id":"native/warioware-builds","text":"WarioWare's lift builds: its hard holes closed: done"}
 {"at":"2026-11-24T12:43:35Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/warioware-builds","text":"WarioWare's lift builds: its hard holes closed: on main"}
 {"at":"2026-11-24T12:43:41Z","actor":"loop","tag":"d938b67f","host":"quack","cmd":"claim","id":"native/lift-let-names","text":"A value read twice is named for what it holds: claimed"}
+{"at":"2026-11-24T12:48:52Z","actor":"loop","tag":"3411b93a","host":"quack","cmd":"add-unit","id":"native/lift-signed-values","text":"new unit: Values compared signed print as i32 through their uses"}

@@ -5037,6 +5037,13 @@
       "detail": "WarioWare's lift (0 hard holes, builds: {unit:native/warioware-builds}) stops at frame 39 of 600: f_080021c9's bl 0x080f41c4 (bx r4) calls *(0x03003fec) = 0x030003a8, no function. 0x08003da0 copies ROM 0x080007e4..0x08000910 (ARM, 0x12c bytes) there via 0x0800100c and stores the pointer. The routine is a resumable DMA3 run-length feeder: it saves r0,r6-r9,lr with stm to IWRAM and resumes later with ldm + bx lr, adjusts lr (sub lr, lr, #24) before returning, and writes its own literal (str r11, [pc, #248]). Likely a [[copy]] in mods/warioware/holes.toml plus a stand-in or lifter support for the saved-lr resume. Done when: just lift on WarioWare has 0 hard holes, builds, and its first stop is past frame 39 (recorded, filed as a unit if not 600 of 600); just check passes.",
       "check": "recorded",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-signed-values",
+      "title": "Values compared signed print as i32 through their uses",
+      "detail": "docs/research/mirror-machine-count.md row 8, what {unit:native/lift-cast-types} left: Mirror's signed compares of u32 values, (vN as i32) 6,521 and (rN as i32) 1,166. Most such values are also added, stored or passed, so typing one let i32 alone adds casts there; a function-wide signedness (i32 wrapping arithmetic from a signed source to its compares) is the work. Done when: Mirror's casts metric falls, lift-check passes, C programs and a game judged.",
+      "check": "recorded",
+      "uses": ["heavy"]
     }
   ]
 }
