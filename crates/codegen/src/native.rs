@@ -9060,7 +9060,6 @@ fn plain(shapes: &BTreeMap<u32, Shape>, never: &BTreeSet<u32>, k: u32) -> String
     }
 }
 
-/// A function's return type: all of r0-r3 (`None`), or its results.
 /// What a catch point's call of a context save stores, till its function
 /// prints whole: the registers [`catch_form`] sets back.
 const CTX_REGS: &str = "\u{5}";
@@ -9124,6 +9123,7 @@ fn fill_ctx_regs(s: &str) -> String {
     format!("{head}{rest}")
 }
 
+/// A function's return type: all of r0-r3 (`None`), or its results.
 fn ret_ty(s: Option<Shape>) -> String {
     match s.map(|s| s.results.count_ones()) {
         None => "[u32; 4]".into(),
