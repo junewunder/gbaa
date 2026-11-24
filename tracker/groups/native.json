@@ -4426,6 +4426,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T05:18:05Z",
+          "by": "554a944d",
+          "text": "Review fixes made (99d705fa: after_dot doc order; docs say Metroid 195 for / 499 loop). Asked the owner to narrow the card to register-held bounds (q/narrow-loop-unit-bounds-held). If yes: merge main, just check, just done. If no: do ram-bounds, top-tested, step-via here."
+        },
+        {
           "at": "2026-11-23T19:45:08Z",
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - The card's main cases still print as `loop`. Its example is HealPlayerParty (`for (i = 0; i < gPlayerPartyCount; i++)`, a bound that is a global), and it asks for bounds from a parameter, a global and a field,…"
@@ -4434,11 +4439,6 @@
           "at": "2026-11-23T19:38:37Z",
           "by": "1c7acd5d",
           "text": "Emerald rerun at d4e065ef done: 993 fors, 3390 loops left, 600/600; bars committed in mods (5b598d8, metroid 499). Only left: just check (cut off by the 14:50 stop), merge main, then just done. Follow-ups filed: lift-for-ram-bounds, -top-tested, -step-via."
-        },
-        {
-          "at": "2026-11-23T19:36:21Z",
-          "by": "1c7acd5d",
-          "text": "Emerald: lift with the holes file as committed (git -C mods show HEAD:emerald/holes.toml), as the shared one has another lane's uncommitted [[roots]]. At ecd46a0d: 801 fors, 3582 loops, 600/600. Bars: mods/emerald/lift-bars.toml (pass --bars), lower loops_not_for after the rerun."
         }
       ],
       "review": {
