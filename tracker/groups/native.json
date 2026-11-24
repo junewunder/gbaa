@@ -4867,15 +4867,22 @@
       "uses": ["heavy"],
       "minMinutes": 60,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "a1175287",
-        "session": "a1175287-9c83-40ff-9573-de79131c0d85",
-        "host": "quack",
-        "pid": 1609731,
-        "start": "100806701",
-        "at": "2026-11-24T20:46:18Z",
+        "at": "2026-11-24T21:27:21Z",
+        "evidence": "On 0f5940f3 (c05eb64 + latest main e0e6793 merged): just lift Metroid --name metroid: 600 of 600 frames, no stop; ref_new_at_use 2955, refs_bound_named 1977, refs_bound_proven 408. just lift Emerald --name emerald: 600 of 600, no stop; ref_new_at_use 33780, refs_bound_named 20326, refs_bound_proven 1906. just lift-check: passed (0 differences, every planted fault caught). just check: passed (exit 0).",
         "branch": "unit/native/lift-pointer-types",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T21:27:21Z",
+          "by": "a1175287",
+          "host": "quack",
+          "pid": 1609731,
+          "start": "100806701",
+          "beats": true,
+          "session": "a1175287-9c83-40ff-9573-de79131c0d85",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
