@@ -4123,3 +4123,4 @@
 {"at":"2026-11-24T17:06:01Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-modules-by-source","text":"The lift's modules are named for the decomp's source files: on main"}
 {"at":"2026-11-24T17:06:07Z","actor":"loop","tag":"c2e64a37","host":"quack","cmd":"claim","id":"native/lift-returns-read","text":"A call takes back only the registers its caller reads: claimed"}
 {"at":"2026-11-24T17:11:24Z","actor":"loop","tag":"51bbc90d","host":"quack","cmd":"add-unit","id":"native/lift-pointer-registers","text":"new unit: Register locals hold the Ref type the lift's flow gives"}
+{"at":"2026-11-24T17:11:28Z","actor":"loop","tag":"51bbc90d","host":"quack","cmd":"add-unit","id":"native/lift-pointer-signatures","text":"new unit: Pointer parameters take Ref types in their signatures"}
