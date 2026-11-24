@@ -5153,21 +5153,9 @@
         "by": "ff3481df",
         "at": "2026-11-24T21:59:42Z",
         "evidence": "Cause: codegen split a native block after an IME store only when that block folded its address; Sio32IDMain's second IME=1 goes through r4 loaded before the first split, so compiled code took the serial IRQ once where the interpreter took it twice. build_func now keeps IME stores proven by the whole block (test added). Rebuilt the play build at --timing native; route-check --native on units/emerald-native.toml (the route branch's file): play.rec and interp.rec byte-identical over 5400 frames (were apart from frame 3). The lift binary there (stale, 15:05) stopped at frame 3845, the route unit's. just check passes after merging main.",
-        "branch": "unit/native/emerald-sio32-play-timing",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T21:59:42Z",
-          "by": "ff3481df",
-          "host": "quack",
-          "pid": 1616693,
-          "start": "100832556",
-          "beats": true,
-          "session": "ff3481df-b945-4cc9-b915-fc5b593d4199",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-24T21:15:03Z"
+        "landed": "2026-11-24T22:31:05Z"
+      }
     },
     {
       "id": "native/emerald-m4a-compressed",
