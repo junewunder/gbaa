@@ -4129,7 +4129,19 @@
       "detail": "From {unit:native/lift-frame-gone}: exact_sp (native.rs) keeps sp arithmetic in any frameless function passing sp on to code whose frame escapes by any Kind, or to bank_sp when an IRQ wrapper's handlers reach such code. Metroid keeps 1698 functions so (370 frameless), agb rows ~30, C rows 0-1. Narrow it to frames whose stack addresses may be stored outside the stack (a callee's Stored escape, or a pointer the heap/flow run sees reach RAM), so the rest print no sp arithmetic. Check: just lift-check 0 differences, every planted fault caught; Metroid 600 of 600 frames; frameless count up on Metroid; just check.",
       "check": "recorded",
       "uses": ["heavy"],
-      "tags": ["slow-check"]
+      "tags": ["slow-check"],
+      "record": {
+        "state": "claimed",
+        "by": "f4ff2870",
+        "session": "f4ff2870-e314-4e2e-9ad1-f90b20e396b5",
+        "host": "quack",
+        "pid": 2963642,
+        "start": "95218853",
+        "at": "2026-11-24T08:02:26Z",
+        "branch": "unit/native/lift-frame-exact-narrow",
+        "beats": true
+      },
+      "round": "2026-11-24T08:02:26Z"
     },
     {
       "id": "native/metroid-route-again",

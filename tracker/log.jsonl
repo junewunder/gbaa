@@ -3945,3 +3945,4 @@
 {"at":"2026-11-24T07:57:30Z","actor":"loop","tag":"e794753c","host":"quack","cmd":"note","id":"native/rogue-imperium-build","text":"Rogue's and Imperium's lifts build: note: holes-all on main fails Emerald: mods/emerald/holes.toml has [[roots]], whose parser is only on {unit:native/emerald-native-route}'s branch; compare Emerald with a copy lacking [[roots]]. Rogue's last hole split to {unit:native/rogue-build}."}
 {"at":"2026-11-24T07:57:32Z","actor":"loop","tag":"e794753c","host":"quack","cmd":"done","id":"native/rogue-imperium-build","text":"Rogue's and Imperium's lifts build: done"}
 {"at":"2026-11-24T08:02:21Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/rogue-imperium-build","text":"Rogue's and Imperium's lifts build: on main"}
+{"at":"2026-11-24T08:02:26Z","actor":"loop","tag":"f4ff2870","host":"quack","cmd":"claim","id":"native/lift-frame-exact-narrow","text":"Exact sp passed only where a stack address reaches RAM: claimed"}
