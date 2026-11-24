@@ -4441,6 +4441,13 @@
           "lane": "quack/2"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-24T11:20:15Z",
+          "by": "91ffb568",
+          "text": "mods/emerald/holes.toml (mods 571d124) has a [[roots]] table no main code parses yet: holes-all stops on Emerald ('unknown table roots') until that unit lands; this unit compared Emerald with mods 5c20f6c's file."
+        }
+      ],
       "round": "2026-11-24T10:08:09Z"
     },
     {
