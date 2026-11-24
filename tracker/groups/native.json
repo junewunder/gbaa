@@ -4111,6 +4111,17 @@
       "check": "recorded",
       "uses": ["heavy"],
       "tags": ["slow-check"],
+      "record": {
+        "state": "claimed",
+        "by": "8347a61f",
+        "session": "8347a61f-b8ec-48bf-8548-9a1bd63ec15d",
+        "host": "quack",
+        "pid": 2963642,
+        "start": "95218853",
+        "at": "2026-11-24T10:04:42Z",
+        "branch": "unit/native/lift-frame-exact-narrow",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-24T10:04:36Z",
