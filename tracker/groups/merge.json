@@ -660,19 +660,8 @@
         "by": "76c036e3",
         "at": "2026-11-24T05:15:21Z",
         "evidence": "Branch already landed on main as merge 480e438 (Merge unit/native/mirror-native-route), which the loop gated on just check; git merge origin/main here fast-forwarded to 6376e70 with no conflicts, nothing left to merge.",
-        "branch": "unit/native/mirror-native-route",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T05:15:21Z",
-          "by": "76c036e3",
-          "host": "quack",
-          "pid": 2964711,
-          "start": "95219683",
-          "beats": true,
-          "session": "76c036e3-61c3-4066-8bd7-9fca8fc0ec7e",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "landed": "2026-11-24T05:15:32Z"
       },
       "notes": [
         {
@@ -685,8 +674,7 @@
           "by": "a9a46ec9",
           "text": "Merge committed on the branch: lift-check.toml keeps main's lines bars + branch's lines_prelude 1323; numbers doc regenerated; lift-metrics 0 over. just check was stopped at lane stop time: rerun it, then record done."
         }
-      ],
-      "round": "2026-11-20T13:43:40Z"
+      ]
     }
   ]
 }
