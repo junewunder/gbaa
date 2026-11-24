@@ -768,21 +768,9 @@
         "by": "60303338",
         "at": "2026-11-24T11:26:24Z",
         "evidence": "Merged origin/main into unit/native/ram-jump-passes-regs; settled conflicts in docs/tools/commands.md and justfile by keeping both lists (native-ram-jump plus main's c-jump/sixteen ROMs/lift-longjmp, twenty planted lifts); just check exit 0 after merge.",
-        "branch": "unit/native/ram-jump-passes-regs",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T11:26:24Z",
-          "by": "60303338",
-          "host": "quack",
-          "pid": 2962519,
-          "start": "95218086",
-          "beats": true,
-          "session": "60303338-097c-4a75-8cc1-c58c0be96005",
-          "lane": "quack/2"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-24T11:20:33Z"
+        "landed": "2026-11-24T11:30:58Z"
+      }
     }
   ]
 }

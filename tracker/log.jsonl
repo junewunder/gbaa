@@ -4026,3 +4026,5 @@
 {"at":"2026-11-24T11:20:28Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane2-native-ram-jump-passes-regs","text":"new unit: Merge main on quack lane 2"}
 {"at":"2026-11-24T11:20:33Z","actor":"loop","tag":"60303338","host":"quack","cmd":"claim","id":"merge/quack-lane2-native-ram-jump-passes-regs","text":"Merge main on quack lane 2: claimed"}
 {"at":"2026-11-24T11:26:24Z","actor":"loop","tag":"60303338","host":"quack","cmd":"done","id":"merge/quack-lane2-native-ram-jump-passes-regs","text":"Merge main on quack lane 2: done"}
+{"at":"2026-11-24T11:30:58Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane2-native-ram-jump-passes-regs","text":"Merge main on quack lane 2: on main"}
+{"at":"2026-11-24T11:30:58Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/ram-jump-passes-regs","text":"A jump into a RAM copy passes the r4-r11 it reads: on main"}
