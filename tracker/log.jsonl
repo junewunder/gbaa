@@ -3900,3 +3900,4 @@
 {"at":"2026-11-24T06:21:59Z","actor":"loop","tag":"9cee3887","host":"quack","cmd":"add-unit","id":"native/lift-mask-fold","text":"new unit: A chain of constant and-masks prints as one mask"}
 {"at":"2026-11-24T06:22:06Z","actor":"loop","tag":"9cee3887","host":"quack","cmd":"add-unit","id":"native/lift-task-struct","text":"new unit: Mirror's task struct lookups print as one helper"}
 {"at":"2026-11-24T06:22:13Z","actor":"loop","tag":"9cee3887","host":"quack","cmd":"add-unit","id":"native/lift-libgcc-div","text":"new unit: libgcc's division calls print as / and %"}
+{"at":"2026-11-24T06:22:24Z","actor":"loop","tag":"9cee3887","host":"quack","cmd":"add-unit","id":"native/fn-check-interp-pop-r0","text":"new unit: fn-check: lift and interpreter part on a popped lr in r0"}
