@@ -4239,3 +4239,4 @@
 {"at":"2026-11-24T22:32:37Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-returns-read","text":"A call takes back only the registers its caller reads: edited (detail)"}
 {"at":"2026-11-24T22:32:39Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-returns-past-holes","text":"Results read past a stopped caller; dead-path parameters: edited (detail)"}
 {"at":"2026-11-24T22:32:41Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-proto-r3-align","text":"GCC's push of r3 to align the stack reads no parameter: edited (detail)"}
+{"at":"2026-11-24T22:32:44Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-libgcc-div","text":"libgcc's division calls print as / and %: edited (detail)"}
