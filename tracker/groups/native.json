@@ -4067,21 +4067,9 @@
         "by": "88798491",
         "at": "2026-11-24T07:07:10Z",
         "evidence": "just lift-check --only native-entry-jump --only native-fallthrough: passed. agb/native-entry-jump 600 frames, 0 differences in pictures, RAM, I/O, display memories; packed layout same; planted --fall-as-tail-call caught (frame 1: EWRAM byte 0x020000c4: play 0x3b, native 0x3c). Before the fix the lift stopped at frame 0 (ej_e popped ej_c's frame, kept as Rust locals): frame.rs now hands the frame on at a call returning into an entry. mGBA matches frame 600 (034490afe017b4ef). No other program's metrics moved (lift-metrics). just check passed before and after merging main (docs only).",
-        "branch": "unit/native/entry-jump-test-program",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T07:07:10Z",
-          "by": "88798491",
-          "host": "quack",
-          "pid": 2962048,
-          "start": "95217572",
-          "beats": true,
-          "session": "88798491-3f87-4ad9-b48f-804e82becdf5",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-24T06:38:24Z"
+        "landed": "2026-11-24T07:25:06Z"
+      }
     },
     {
       "id": "native/ime-i-set-test-program",
