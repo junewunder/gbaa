@@ -254,7 +254,7 @@ fn irq_entry(g: &mut Game) {
         return;
     }
     g.bios_latch = runtime::bus::BIOS_LATCH_IN_IRQ;
-    let k = if h & 1 != 0 { h } else { h & !3 };
+    let k = if h & 1 != 0 || is_dense_id(h) { h } else { h & !3 };
     // IRQ mode, I set, as the exception enters it, the CPSR it stopped in
     // the SPSR; back as it was on the return (the BIOS's `subs pc, lr,
     // #4` restores the SPSR, which a wrapper that nests puts back). The
@@ -1097,11 +1097,14 @@ pub fn sound_bias(g: &mut Game, level: u32) {
     st16(g, SOUNDBIAS, old & !0x3FF | if level == 0 { 0 } else { 0x200 });
 }
 
-/// A function pointer's call: `k` is the function's key (its ROM or IWRAM
-/// address, bit 0 for Thumb), the ID of every function in stage A
-/// (`--fn-ids rom`).
+/// A function pointer's call: `k` is the function's ID, its key (its ROM
+/// or IWRAM address, bit 0 for Thumb), or at `--fn-ids dense` for a
+/// function the flow proved its index in `DENSE` from 1.
 #[inline(never)]
 pub fn call_fn(g: &mut Game, k: u32, sp: u32, a: [u32; 4]) -> Result<[u32; 4], Exit> {
+    if is_dense_id(k) {
+        return (DENSE[k as usize - 1])(g, sp, a);
+    }
     match FNS.binary_search_by_key(&k, |&(e, _)| e) {
         Ok(i) => (FNS[i].1)(g, sp, a),
         Err(_) => match flash_call(g, k, a) {
@@ -1109,6 +1112,12 @@ pub fn call_fn(g: &mut Game, k: u32, sp: u32, a: [u32; 4]) -> Result<[u32; 4], E
             None => panic!("a call or jump to {k:#010x}, which is no function's entry"),
         },
     }
+}
+
+/// Whether `k` is a dense function's ID (`--fn-ids dense`).
+#[inline(always)]
+pub fn is_dense_id(k: u32) -> bool {
+    k.wrapping_sub(1) < DENSE.len() as u32
 }
 
 /// A call into RAM holding one of the flash save library's stack routines

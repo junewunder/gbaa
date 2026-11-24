@@ -1251,7 +1251,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   guest-layout`: RAM as the ROM's EWRAM and IWRAM, each global at its
   link address), the spike also in the play layout, the spike and
   psg-square with their planted faults, then runs `route-check --native NATIVE PLAY
-  ROUTE [--replaced FILE] [--holes FILE] [--name N] [--packed BIN] [--planted BIN]...` on
+  ROUTE [--replaced FILE] [--holes FILE] [--name N] [--packed BIN] [--dense BIN] [--planted BIN]...` on
   `units/native-spike.toml` (600 frames), `units/psg-square.toml`
   (120) and `units/direct-sound.toml` (300). Each build writes every
   frame's record at its present
@@ -1281,8 +1281,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
 - `just lift ROM [OUT] [FLAGS]` (native/lift-stage-a;
   `docs/native-port-design.md`, "The stage-A lifter as built"): the
   stage-A lifter. `gbaa-lift ROM OUT [--name NAME] [--holes FILE]
-  [--bars FILE] [--names DIR]... [--layout guest|packed] [--drop-standin KEY]
-  [--plant AT] [--copies N] [--holes-only]` (`codegen::native`) writes the whole
+  [--bars FILE] [--names DIR]... [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY]
+  [--plant AT] [--copies N] [--holes-only]` (`codegen::native`; `--fn-ids dense`: each function whose every address the flow proved is an ID from 1 in the crate's ROM copy and the code's constants, `DENSE`, native/fnref-dense) writes the whole
   program to OUT (default `out/lift-<name>`) as `src/`: `main.rs` (the
   prelude, RAM, `ENTRY`), `fns.rs` (`FNS`) and the functions in modules
   of about 4,000 lines, `m_<first key>.rs`, which rustc builds in parallel
@@ -1352,8 +1352,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `agb/mosaic-modes`, `agb/native-fallthrough`, `agb/native-irq-hold`,
   `agb/native-frame-locals`, `agb/native-ime-release`, `agb/native-bios-calls`,
   `agb/native-bios-more` (SoftReset too), `agb/native-tasks`, `agb/native-dma`, `agb/native-save` (SRAM),
-  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`, `agb/native-serial`, `agb/native-irq-wrapper` (both its IRQ wrappers lifted, their `msr` and `mrs` run), `agb/native-takes` (two functions that take r8 and r9 from their caller, one called through a pointer the holes file's `[[takes]]` names), `agb/native-gives` (two functions that leave r9 changed for their caller, one through its jump into the other)
-  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers, native/lift-irq-wrapper-tail, native/taker-test-program, native/lift-gives), and the C programs `c-fnptr`, `c-switch`, `c-chain`, `c-heap` and `c-bits`, each built by agbcc and by modern GCC (`c-fnptr-agbcc`, `c-fnptr-gcc`, …: ten ROMs from `just c-tests`, native/c-test-programs, native/fnref-heap-sites, native/lift-bitfields; each with a `planted_store`) on
+  `agb/native-bios-region` (the BIOS latch), `agb/native-bios-affine`, `agb/native-serial`, `agb/native-irq-wrapper` (both its IRQ wrappers lifted, their `msr` and `mrs` run), `agb/native-takes` (two functions that take r8 and r9 from their caller, one called through a pointer the holes file's `[[takes]]` names), `agb/native-gives` (two functions that leave r9 changed for their caller, one through its jump into the other), `agb/native-entry-jump` (a `b` into another function's entry, and a call whose return site is one)
+  (`just agb-tests`; units native/lift-bios-calls, -bios-affine, native/hw-serial-registers, native/lift-irq-wrapper-tail, native/taker-test-program, native/lift-gives, native/entry-jump-test-program), and the C programs `c-fnptr`, `c-switch`, `c-chain`, `c-heap`, `c-bits` and `c-loops`, each built by agbcc and by modern GCC (`c-fnptr-agbcc`, `c-fnptr-gcc`, …: twelve ROMs from `just c-tests`, native/c-test-programs, native/fnref-heap-sites, native/lift-bitfields, native/lift-for-bounds; each with a `planted_store`) on
   `units/<name>-600.toml` (the spike's is `units/native-spike.toml`,
   native-irq-hold's, native-ime-release's and native-bios-region's
   `-601`). First every program is lifted with `--bars`
@@ -1368,15 +1368,17 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   stack switch); native-dma's (0x08000180, `dma_set`'s `DMAxCNT`, a unit
   more), native-save's (0x080002ac, an SRAM `strb`), native-serial's (0x0800017c, `SIOCNT`) and native-irq-wrapper's (0x080001f4, the wrapper's `IE` put back after its handler call: `frame 33: I/O byte 0x04000200`) too.
   native-fallthrough, native-irq-hold, native-frame-locals,
-  native-ime-release, native-takes and native-gives lifted with their `planted_flags`
-  (`--fall-as-tail-call`, the old fall into another function;
+  native-ime-release, native-takes, native-gives and native-entry-jump lifted with their `planted_flags`
+  (`--fall-as-tail-call`, the old fall, jump or call's return into another function;
   `--irq-at-waits`, the old IRQ run at a wait inside a critical section;
   `--plant-slot=0x08000182`, `fl_keep`'s store to a stack local made one
   more, native/frame-locals; `--ime-at-waits`, the old IRQ held past the
   store that sets `IME` again to the next wait, native/ime-release; `--takes-zeroed`, a taker's r4-r11 passed as zeroes, native/taker-test-program; `--gives-kept`, a caller's r4-r11 left as they were after a call that gives them back, native/lift-gives) must be caught too. Each program is lifted once more with `--layout packed`
   (`out/lift-<name>-packed`), passed as `--packed`: it must draw the guest
   layout's frames and record the same bytes, nothing skipped
-  (native/lift-packed-layout). Passes with `every metric within its bar`,
+  (native/lift-packed-layout); and with `--fn-ids dense`
+  (`out/lift-<name>-dense`), passed as `--dense`: the same frames and
+  records but RAM (native/fnref-dense). Passes with `every metric within its bar`,
   a `pass (60x frames, 0 differences …; the play layout draws the same 60x
   frames, its records the same …)` line per program, `planted fault caught
   (…-planted: frame 2: EWRAM byte 0x020000c0 …)`, `(…-fall-as-tail-call: frame 1: EWRAM byte 0x020000c4 …)`,
@@ -1456,12 +1458,12 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   3 GB. Not heavy (no generated crate).
 - `just fn-check ROM [--name NAME] --fn-check KEY... [--replace FILE]
   [--seed N] [--runs N] [--plant AT [--plant-reference]] [--interp-every N]
-  [--frames N]` (native/fn-check-any, native/fn-check-interp;
+  [--frames N] [--input PRESSES]` (native/fn-check-any, native/fn-check-interp;
   `docs/native-port-design.md`, "The per-function check"): a function's
   replacement (its stand-in, from the holes file or `--replace FILE`; a mod's cut, `--fn-check-cuts` for all of them, behind an adapter to its lifted signature; with
   none, the lift, which `--plant AT` makes a planted wrong one) against
   its lift, both native, from the program's own calls and seeded variants
-  of them, headless with no input, until each budget is spent. Prints per
+  of them, headless with no input (or `--input`'s presses, gbaa-desktop's), until each budget is spent. Prints per
   function its runs, budget, time, seed, digest, runs skipped (past 600
   frames), the first differences, each naming the byte, and how many
   runs the interpreter (untimed, every Nth: 8) checked against the lift

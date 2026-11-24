@@ -1,5 +1,8 @@
 # LLM pilot: 20 Metroid functions as plain Rust
 
+Round two, 20 Amazing Mirror functions on today's lift, is at the end
+("Round two").
+
 Unit `native/llm-pilot-metroid`, 2026-11-17 (with june, 6 functions) and
 2026-11-18 (headless, 14) on quack. june's decision: LLM passes may
 alternate with the algorithmic lift. Claude rewrote 20 functions of
@@ -287,7 +290,12 @@ a one-block loop run over its range from a constant start, shares
 `lower::counted`; DoSoundAction's countdown prints as `for r0 in
 (0..=11).rev()`, ResetFreeOam's loop, whose start is a value read from
 RAM, stays a `loop` (no proof of its range without one). Metroid: 95 of
-696 loops; the C programs: their startup's clear of IWRAM.
+696 loops; the C programs: their startup's clear of IWRAM. Then
+`native/lift-for-bounds` (`codegen::native::bounds`): loops of several
+blocks, to a parameter's bound, counting down, proven symbolically from
+the guard before the loop; Metroid 195 of 694 (2026-11-23). A bound read
+from RAM each round (a global's, a field's) stays a `loop`: nothing yet
+shows the body's calls leave it.
 
 **Compare trees as `match`.** agbcc compiles a small switch as a
 binary search of `cmp`/`beq`/`bgt` on one register (IntroHandler
@@ -320,3 +328,189 @@ check caught two of the three, and the lifter can drop the rotate only
 where a value set proves the address aligned, which a pointer read from
 RAM never is. Rolling TitleScreenVBlank's eight unrolled scroll copies
 into a loop is one function, so not filed.
+
+## Round two: 20 Amazing Mirror functions (`native/llm-pilot-mirror`)
+
+2026-11-24, headless on quack, main at 4ff1b2c1. The same pilot on Kirby &
+the Amazing Mirror, the game the owner wants to mod, from today's lift
+(katam's names and types: typed field access, `// file:line` comments,
+narrowing casts, plain returns). The rewrites are in the private
+`mods/kirby-mirror/llm-pilot.toml`, the route's presses in
+`llm-pilot.input` beside it; nothing here quotes them.
+
+### How
+
+- **Reaching gameplay.** The per-function check runs with no input, and
+  Mirror's no-input run never reaches Kirby's controller. `just fn-check`
+  now takes `--input PRESSES` (gbaa-desktop's presses, passed to the
+  program), and the check ran along the native route's presses
+  (`units/kirby-mirror-native.toml`: Start and A into the first room, then
+  right with jumps) for 3,200 frames. A scouting run with `--runs 1` over 46
+  candidates from katam's map and `names/kirby-amazing-mirror.toml` found
+  36 called; the link code past `MultiSioInit` (main, send, receive, the
+  link screen) and the pause menu are not reached on the route.
+- **From what.** The lift (`out/fn-check-kirby-mirror`, each `ref_f_KEY`)
+  only. Unlike round one, the disassembly wasn't needed: the lift now reads
+  as C with registers (typed fields, line numbers, conditions as
+  comparisons), 15 to 220 lines a function.
+- **Shape.** As round one: `(g, sp, [r0..r3]) -> [r0..r3]`. Typed access
+  works in a stand-in (`Ref::<t::Kirby>::new(a[0])`, `k.base().xspeed()`),
+  so the rewrites are typed where the lift is. Globals and calls are still
+  by address and key (`call_fn`): a lift name in a stand-in's text, even
+  in its `why`, makes the name picker rename the lift's (the report says
+  `TaskGetNextSlot_`). A pointer read from RAM may be odd in the check's
+  variants, so loads through one rotate as the ARM's (a nested `rd`
+  helper); a pointer parameter is moved only by multiples of 4, so loads
+  through it are plain.
+- **The interpreter.** Run with `--interp-every 0`: on this lift the
+  interpreter disagrees with the lift itself in 12 of the 46 scouted
+  functions, every time on r0 after a `pop {r0}; bx r0` return in a
+  function whose summary has a hole (lift: r0 as it came; interpreter: the
+  return address). That is the check's or the lift's, not a rewrite's:
+  filed as `native/fn-check-interp-pop-r0`.
+
+### Results
+
+All 20 pass together (`just fn-check … --replace
+mods/kirby-mirror/llm-pilot.toml --fn-check` all 20 `--frames 3200
+--interp-every 0 --input …`: "every budget spent in 2954 frames", 9 s of
+checking), each digest recorded. Every one passed on the first build that
+compiled; the only failures were three borrow errors (a `g` load inside
+another call's arguments), fixed in a minute.
+
+| # | Function | Kind | Bytes | Budget | Result |
+|---|---|---|---|---|---|
+| 1 | ObjectSetBounds | leaf, stack argument | 28 | 500 | pass |
+| 2 | ObjectSetHitbox | leaf, abs and halves | 86 | 500 | pass |
+| 3 | AnimCmd_JumpBack | leaf, sprite command | 12 | 250 | pass |
+| 4 | TaskGetNextSlot | task pool | 38 | 13 (2 calls) | pass |
+| 5 | IwramMalloc | loop, first-fit heap | 104 | 500 | pass |
+| 6 | TasksExec | task loop, pointer calls, spin | 228 | 1000 | pass |
+| 7 | TaskCreate | task, allocators, list insert | 314 | 500 | pass |
+| 8 | TaskDestroy | task, destructor call, unlink, free | 184 | 230 | pass |
+| 9 | GetInput | input, key-repeat loop | 252 | 1000 | pass |
+| 10 | VramMalloc | nested loops | 184 | 500 | pass |
+| 11 | sub_08141E74 | main menu's task (state call) | 76 | 1000 | pass |
+| 12 | TitleScreenMain | menu state, switch on a state | 168 | 1000 | pass |
+| 13 | MultiSioInit | link code, I/O | 248 | 3 (1 call) | pass |
+| 14 | KirbyReadInput | controller: input by player | 328 | 1000 | pass |
+| 15 | KirbyEnterStand | controller: state entry | 240 | 170 | pass |
+| 16 | KirbyEnterWalk | controller: state entry | 196 | 110 | pass |
+| 17 | KirbyEnterFall | controller: switch on animation | 300 | 60 | pass |
+| 18 | KirbyGroundFriction | controller: compare tree | 204 | 1000 | pass |
+| 19 | KirbyGroundAccel | controller: speed | 164 | 1000 | pass |
+| 20 | sub_08154FE8 | arithmetic: angle of a vector | 190 | 1000 | pass |
+
+Budgets are what the route's calls give (8 runs a call less those whose
+reference panicked: up to 81% for `TasksExec`, whose variants scramble
+task pointers). Three are small: `TaskGetNextSlot` (2 calls, 13 runs),
+`MultiSioInit` (1 call, 3 runs) and `TaskDestroy` (230 of 500).
+
+Time: scouting 10 min (one check build), reading the 20 lifts 15 min,
+writing all 20 in one pass 15 min, fixes and the second build 5 min; the
+route check and this write-up the rest, about 1 h 30 min in all. Tokens
+weren't metered: the lifts read are about 2,000 lines (some 30,000 input
+tokens), the rewrites about 900 lines of TOML (some 10,000 output
+tokens), 2 to 8 times shorter than their lifts.
+
+**The route check.** The lift with all 20 in place (`just lift … --name
+kirby-mirror --layout guest --replace mods/kirby-mirror/llm-pilot.toml`:
+20 stand-ins, 600 of 600 frames, no stop) against the `--timing native`
+play build, `route-check --native` on `units/kirby-mirror-native.toml`:
+pass, 3,000 frames, 0 differences in pictures, RAM, I/O, palette, VRAM
+and OAM, audio the same.
+
+**A planted check.** Two deliberate faults in a copy: "fixing"
+KirbyGroundFriction so a slowing from the left also stops at 0 was caught
+(1 run in 1,000, the EWRAM byte of his speed named); an off-by-four in
+IwramMalloc's split test (`free > size` for `free >= size + 4`) was not, in
+500 runs: block sizes are multiples of 4, so only a free size the check's
+random bytes never made (one to three over) tells them apart.
+
+### What round two says
+
+- **The lift is now the thing to read.** Round one read the disassembly;
+  this round the lift alone was enough, and the rewrites came out right
+  the first time, register traffic included. What made that possible is
+  round one's filed units (plain returns, comparisons, casts, temporaries
+  inline, one bank a run, `for`, `match`) and the typed names.
+- **A quirk kept is a quirk found.** KirbyGroundFriction stops a slowing
+  speed at 0 from the right only: from the left the sign test compares
+  0x8000 with 0xffff8000 and never matches, so friction can push him
+  through 0 to the right. The rewrite keeps it (the check would catch a
+  fix, as above) and says so in its `why`.
+- **Still the cost of stage A.** Every rewrite carries the scratch
+  registers its callers may read, the saved r8 that comes back in r3
+  (TaskCreate, GetInput, VramMalloc, TasksExec), the exact sp it banks and
+  passes, and the stack word a callee takes as its fifth argument. As in
+  round one, that is half the work and none of the meaning.
+- **The check's reach.** Input widens it to gameplay, but only what one
+  route calls; the link code past its init and the pause menu stay out of
+  reach, and functions called once or twice get a budget of a few runs.
+  Random variants miss faults that need structured inputs (the
+  off-by-four).
+
+### The rewrites' repeated transformations
+
+Over the 20, against the lift each was read from: what was done to more
+than one, whether an algorithm could prove it (exact on every input), and
+the unit. Left out: what `native/mirror-machine-count` counted and filed
+(`vN` names, `pc(…)`, rotates, adds of zero, casts, `Result`), and round
+one's, which the lift now does. "In" counts rewrites; "lift" counts
+occurrences in Mirror's whole lift (`src/m_*.rs`, at 4ff1b2c1 with the 20
+stand-ins).
+
+| Pattern | In | Lift | Provable? | Unit |
+|---|---|---|---|---|
+| A field's address held in a register (`Ref::<T>::to(r, off)`) as its base's field | 8 | 12,035 | yes | new: `native/lift-field-base` |
+| A value chosen in each arm (`r3 = 0x14c; if … { r3 = 0x1ac; break 'b2 }`) as an `if`/`match` value; a break to the function's end as `return` | 13 (10 values, 4 returns) | 7,177 labelled blocks | yes | new: `native/lift-arm-values` |
+| A chain of `&` with constant masks as one mask (`x & !0x0c001f72`) | 3 | 386 | yes | new: `native/lift-mask-fold` |
+| The task struct lookup (katam's `TaskGetStructPtr`: `flags & 0x10`, IWRAM bytes or EWRAM words) as one helper | 4 | 1,070 | yes (the same expression); its name from the names files | new: `native/lift-task-struct` |
+| A call to libgcc's division (`__divsi3`) as `/` | 1 (and Metroid's FixedInverse) | 218 | yes, where only the quotient is read | new: `native/lift-libgcc-div` |
+| A pointer parameter bound once as `Ref<T>` | 10 | | yes | `native/lift-pointer-types` (ready) |
+| Rotates dropped for a pointer parameter (always aligned in the game) | 7 | | only from callers' facts or the type's alignment | noted on `native/lift-aligned-loads` |
+| Rotates dropped for a stack argument (`sp` is always aligned) | 2 | | yes | noted on `native/lift-aligned-loads` |
+| The same bounds-and-hitbox sequence as one nested helper | 3 | | n/a (copied code in the source) | none |
+| Scratch registers, saved r8 in r3, exact sp | 20 | | no: forced | none (stage A) |
+
+**Field bases.** agbcc keeps `&kirby->unk56` or `&kirby->xspeed` in a
+register and uses it for a load, a store and a reload; the lift types the
+access by subtracting the offset back (`Ref::<t::Kirby>::to(r3,
+0x56).base().unk56()`) from a register whose value it built as `kirby +
+0x56` a few lines up. The rewrites name the field on the base (8 of 20:
+KirbyReadInput, Enter{Stand,Walk,Fall}, GroundFriction, ObjectSetBounds,
+ObjectSetHitbox, MultiSioInit). Where the base is still live under a name,
+printing it is exact.
+
+**Arm values and returns.** Of the 12 rewrites whose lifts have labelled
+blocks, none kept one. A register set differently in each arm and read
+after the join became `let x = if … { … } else { … }` or a `match` in 10
+rewrites (7 of those 12: KirbyGroundAccel's top speed from two flags,
+GroundFriction's friction by animation, KirbyReadInput's source of keys,
+TasksExec's which-tasks-run, TaskCreate's struct address, TitleScreenMain's
+next state, the angle's numerator and denominator; and 3 whose lifts used
+plain `if`s: the task struct pointer in sub_08141E74, TaskGetNextSlot's
+task, ObjectSetHitbox's half sizes). A break to code that only returns
+became `return` in 4 (IwramMalloc, VramMalloc, TaskDestroy,
+KirbyGroundAccel); the other 2 became plain `if`/`else` or a `match`
+(KirbyEnterStand, GetInput). Both are exact where each arm only computes
+the value, or the label's tail is the epilogue.
+
+**Mask chains.** Clearing flags bit by bit compiles to one `and` each, and
+the lift folds none: KirbyEnterStand's four masks are one,
+`!0x0c001f72`. Constant folding.
+
+**The task struct lookup.** Every task function starts with the same two
+arms (katam's `TaskGetStructPtr`): 1,070 times in the lift. Recognising the
+expression is exact; a name needs the names files (a decomp macro has no
+symbol).
+
+**Division.** `__divsi3` returns the quotient in r0 and its scratch in
+r1-r3, so a rewrite as `/` is exact only where nothing reads r1-r3 after
+the call: round one's FixedInverse failed on r2 for that reason, round
+two's angle function passed because its callers read only r0 and r3.
+Needs `native/lift-returns-read`.
+
+Tooling found on the way, filed: the interpreter cross-check's r0
+(`native/fn-check-interp-pop-r0`) and stand-ins naming the lift's globals
+and functions (`native/standin-lift-names`).

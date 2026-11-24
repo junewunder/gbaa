@@ -35,7 +35,7 @@
 //! ([`windows`]).
 //!
 //! `route-check --native NATIVE PLAY ROUTE [--replaced FILE] [--holes
-//! FILE] [--name NAME] [--packed BIN] [--planted BIN]`: a native program
+//! FILE] [--name NAME] [--packed BIN] [--dense BIN] [--planted BIN]`: a native program
 //! against its play build at `--timing native`, every frame's picture, RAM,
 //! I/O, display memories and audio ([`native`], `just native-check`).
 //!
@@ -68,7 +68,7 @@ const USAGE: &str = "usage: route-check units/NAME.toml [--through CHECKPOINT]\n
                      route-check --args ROUTE.toml\n       \
                      route-check --windows units/NAME.toml [--through CHECKPOINT]\n       \
                      route-check --native NATIVE PLAY ROUTE [--replaced FILE] [--holes FILE] \
-                     [--name NAME] [--packed BIN] [--planted BIN]... [--no-audio WHY]\n       \
+                     [--name NAME] [--packed BIN] [--dense BIN] [--planted BIN]... [--no-audio WHY]\n       \
                      (any of them with --timing T: our builds at T, not exact)";
 
 /// How a check ended, other than passing.

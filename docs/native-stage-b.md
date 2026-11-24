@@ -156,13 +156,13 @@ build for the host.
   `fn_words_not_proven` (barred) and `fn_words_proven`.
   `GBAA_FNREF_TRACE=1` traces it. Proofs are weak on agb: see "Known
   gaps", the pile.
-- **Function pointers as dense IDs** (`native/fnref-dense`). The proven
-  words rewritten in the lifter's copy of ROM data, `FNS` dense from 1
-  under a new `--fn-ids dense`; ROM keys stay the native check's (RAM holds
-  the play build's numbers). Check: `lift-check` green with ROM keys, and
-  each program's dense build draws the same 600 frames (`route-check
-  --native … --packed`); bar: 0 ROM keys left in a dense build. Waits on
-  the heap split by allocation site (`native/fnref-heap-sites`).
+- **Function pointers as dense IDs** (`native/fnref-dense`). Done
+  (`native::dense_ids`): at `--fn-ids dense` a function every address of
+  which the flow proved is an ID from 1 (`DENSE`) in the crate's ROM copy
+  and the code's constants; the rest keep their keys, which `call_fn`
+  still finds. `lift-check` builds each program so (`route-check
+  --dense`: the same frames, records but RAM). Metrics `fn_ids_dense`,
+  `fn_keys_left` (0 on the C programs but c-fnptr-gcc's 6; Metroid 326).
 - **Indirect calls pass what their callees read**
   (`native/indirect-call-args`). Done: a call (not a jump by value)
   whose `native/fnref-flow` callee set is complete reads the union of
@@ -353,12 +353,12 @@ What the done pieces left open, for the units that come next.
 
 - **Falls and calls into an entry** (piece 1). A call that returns into
   another function's entry passes the callee's r0-r3 and the caller's
-  other registers and flags as before the call; neither that path nor a
-  `b` (rather than a fall) into an entry has a test program. The
-  summaries don't count r4-r11 or flags a fall passes on as parameters,
-  so `x_` stays whole for fall targets. A stand-in, and a jump through a
-  register to a target no table names (`call_fn`), are still entered by
-  the plain entry.
+  other registers and flags as before the call (a callee that changes
+  flags the entry reads is lifted wrong). `agb/native-entry-jump` checks
+  it and a `b` into an entry. The summaries don't count r4-r11 or flags
+  a fall passes on as parameters, so `x_` stays whole for fall targets. A
+  stand-in, and a jump through a register to a target no table names
+  (`call_fn`), are still entered by the plain entry.
 - **IME with I set** (piece 1). The play build drops `IME_ON` when I is
   set at the tick after the `IME` write, so "I set, `IME` on, `msr`
   clears I" waits for the next time point where the hardware library

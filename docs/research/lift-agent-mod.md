@@ -145,3 +145,6 @@ minutes for three crates, and its summary (`895 of 2700 frames differ:
 red sat exactly on the digits, so it was plain nothing else changed. The
 modded crate built with no warnings from the edit, and the change showed on
 the first run.
+
+The same trial on Kirby & the Amazing Mirror (native/mirror-agent-mod, a
+walk-speed mod) and what differed from Metroid: `mirror-agent-mod.md`.
