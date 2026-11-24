@@ -5425,7 +5425,7 @@
     {
       "id": "native/lift-lent-frameless",
       "title": "A frame of only locals and lent slots takes no sp",
-      "detail": "Split from {unit:native/lift-stack-arrays}. After {unit:native/lift-lent-print}: a function whose slots are all locals or lent keeps nothing in memory, so it prints no sp arithmetic and needs no bank_sp ({unit:native/lift-frame-gone}'s rule, Frame::in_locals, with lent slots counted as locals); a slot whose address reaches RAM keeps the guest stack. Metrics sp_accesses_escaping_slot and bank_sp_calls go down and are barred on the C rows. Check (judged on the C programs): just lift-check 0 differences on every program, every planted fault caught, --shadow-locals clean; the metrics barred; just check.",
+      "detail": "Split from {unit:native/lift-stack-arrays}. After {unit:native/lift-lent-print}: a function whose slots are all locals or lent keeps nothing in memory, so it prints no sp arithmetic and needs no bank_sp ({unit:native/lift-frame-gone}'s rule, Frame::in_locals, with lent slots counted as locals); a slot whose address reaches RAM keeps the guest stack. Metrics sp_accesses_escaping_slot and bank_sp_calls go down and are barred on the C rows. Check (judged on the C programs): just lift-check 0 differences on every program, every planted fault caught, --shadow-locals clean; the metrics barred; just check. Sprint 2026-11-24: done when reads: c-chain-gcc's two bars lowered, the evidence naming the functions gone frameless; --shadow-locals lifts of c-chain-gcc and Metroid run their routes with no report. Not beside {unit:native/lift-frame-exact-irq-reach} (exact_sp).",
       "check": "recorded",
       "needs": ["native/lift-lent-print"],
       "uses": ["heavy"]

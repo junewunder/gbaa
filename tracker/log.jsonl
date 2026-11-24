@@ -4229,3 +4229,4 @@
 {"at":"2026-11-24T22:32:16Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/gcc-switch-recovery","text":"Recovery resolves the modern-GCC switches Rogue lists: edited (detail)"}
 {"at":"2026-11-24T22:32:18Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/warioware-stop-30003a8","text":"WarioWare's lift: the call to IWRAM 0x030003a8 (frame 39): edited (detail)"}
 {"at":"2026-11-24T22:32:20Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-lent-print","text":"Lent stack slots print as locals, borrowers as Lent: edited (detail)"}
+{"at":"2026-11-24T22:32:22Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-lent-frameless","text":"A frame of only locals and lent slots takes no sp: edited (detail)"}
