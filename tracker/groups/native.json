@@ -4931,7 +4931,19 @@
     {
       "id": "native/lift-indent",
       "title": "Lifted statements are indented by their nesting",
-      "detail": "From the owner, 2026-11-20. In out/lift-emerald every statement sits at 16 spaces whatever its depth, pc(..) and loop/block openers at 4, and a call at 20: HealPlayerParty's two nested loops read flat. Print each statement at its block's depth (4 spaces a level), openers and closers with it, comments (// src/file.c:31, // dwarf r8: i) at the statement they belong to. No rustfmt run over the lift (850,000 lines; and a cut's three-way merge wants stable text): the printer does it. A printer test on a C program's lift: every line's leading spaces are 4 times its brace depth. A re-cut of an older cut still merges (git merge-file ignores nothing: say in docs/tools/commands.md that cuts made before this need --ours whitespace or a re-cut). Done when: the test passes, just lift-check and just check pass."
+      "detail": "From the owner, 2026-11-20. In out/lift-emerald every statement sits at 16 spaces whatever its depth, pc(..) and loop/block openers at 4, and a call at 20: HealPlayerParty's two nested loops read flat. Print each statement at its block's depth (4 spaces a level), openers and closers with it, comments (// src/file.c:31, // dwarf r8: i) at the statement they belong to. No rustfmt run over the lift (850,000 lines; and a cut's three-way merge wants stable text): the printer does it. A printer test on a C program's lift: every line's leading spaces are 4 times its brace depth. A re-cut of an older cut still merges (git merge-file ignores nothing: say in docs/tools/commands.md that cuts made before this need --ours whitespace or a re-cut). Done when: the test passes, just lift-check and just check pass.",
+      "record": {
+        "state": "claimed",
+        "by": "ce4e72fe",
+        "session": "ce4e72fe-7c7c-460c-8ffc-481c58f0c630",
+        "host": "quack",
+        "pid": 2962048,
+        "start": "95217572",
+        "at": "2026-11-24T17:20:59Z",
+        "branch": "unit/native/lift-indent",
+        "beats": true
+      },
+      "round": "2026-11-24T17:20:59Z"
     },
     {
       "id": "native/lift-for-index",
