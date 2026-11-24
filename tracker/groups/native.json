@@ -3898,7 +3898,19 @@
       "title": "Rogue's and Imperium's lifts build",
       "detail": "After {unit:native/emerald-builds}, whose fixes should close most of these: Emerald Rogue had 20 hard holes and Imperium 17 on 2026-11-19 ({unit:native/fnref-flow-emerald}). Re-measure both, then close what is left. Their lifts take about 30 minutes and 2.8 GB each. Close each by a lifter or discovery rule where the cause is general, by the game's holes file (mods/<game>/holes.toml, each entry with its reason) only where it is the game's own. Run just holes-all on main before and --against it after (just long start, --mem 4G is enough: memory/lift-cost-corpus.md): no other game's hard holes may rise. A cause too big for about 3 hours becomes its own unit, needed by this one. Done when: both lift with 0 hard holes and build, each first stop recorded (and filed as a unit if it isn't 600 of 600); if one game needs over 3 hours alone, split it off; just check passes.",
       "needs": ["native/emerald-builds"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "e794753c",
+        "session": "e794753c-2faf-43c6-9880-66be4dc07d40",
+        "host": "quack",
+        "pid": 2963642,
+        "start": "95218853",
+        "at": "2026-11-24T05:41:57Z",
+        "branch": "unit/native/rogue-imperium-build",
+        "beats": true
+      },
+      "round": "2026-11-24T05:41:57Z"
     },
     {
       "id": "native/mirror-machine-count",

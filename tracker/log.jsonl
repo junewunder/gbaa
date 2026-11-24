@@ -3882,3 +3882,4 @@
 {"at":"2026-11-24T05:32:47Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-find-field","text":"The lift finds a field's writers for a modder: on main"}
 {"at":"2026-11-24T05:32:54Z","actor":"loop","tag":"e05cd9ee","host":"quack","cmd":"claim","id":"native/lift-for-bounds","text":"Loops counted to a variable bound print as for: claimed"}
 {"at":"2026-11-24T05:41:53Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-cut-header-helpers","text":"A lift cut's header explains pin, ix/rix and sext: on main"}
+{"at":"2026-11-24T05:41:57Z","actor":"loop","tag":"e794753c","host":"quack","cmd":"claim","id":"native/rogue-imperium-build","text":"Rogue's and Imperium's lifts build: claimed"}
