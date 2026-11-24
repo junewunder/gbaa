@@ -33,8 +33,9 @@
 //!   a known function start;
 //! - a function summary whose hole breaks the lift's calling convention
 //!   ([`SUMMARY_HARD`]): a return with sp changed (a run-time sp
-//!   adjustment: a variable-length array), a read of r4-r11 a callee
-//!   changed or that came in as a parameter.
+//!   adjustment: a variable-length array), a read of r4-r11 a stand-in
+//!   changed (a lifted callee gives them back: `native/lift-gives`) or
+//!   that came in as a parameter.
 //!
 //! The flash save library's stack routines ([`crate::flash`]) are none of
 //! these: a call into RAM whose target held a recognised routine every time
@@ -508,7 +509,8 @@ pub fn summary_kind(hole: &str) -> String {
 /// each caller's r4-r11 and sp in its own locals and passes only r0-r3,
 /// so it is wrong where a function returns with sp moved (by a run-time
 /// amount, as a variable-length array does), where a caller reads one of
-/// r4-r11 that a callee changed, where a function entered through a
+/// r4-r11 that a stand-in changed (a lifted callee gives it back to a
+/// direct call: `native/lift-gives`), where a function entered through a
 /// pointer reads one of r4-r11 as it came and some of its bits reach a use
 /// (a register parameter: an address, a condition, a value stored, passed
 /// on or returned; a direct call passes it, `takes r4-r11 from its

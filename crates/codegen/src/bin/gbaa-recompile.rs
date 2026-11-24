@@ -73,8 +73,8 @@
 //! callee set reads and leaves what its callees do
 //! ([`codegen::native::callee_sets`], [`codegen::saves::summarize_sets`];
 //! the function-address flow; `--allocators`: the program's allocators,
-//! as a holes file's `allocators` names them, for the flow with
-//! `GBAA_FNREF_HEAP` set), and the incomplete sets are counted by what
+//! as a holes file's `allocators` names them, for the flow's allocation
+//! sites), and the incomplete sets are counted by what
 //! left them so ([`codegen::native::fnref::Lost`]), N of each.
 //!
 //! `gbaa-recompile --snapshots ROM FILE`: write to FILE the smallest

@@ -48,10 +48,12 @@ max_lines = 640
 # native/c-test-programs' `just c-tests` (4 lines, the rest in c/README.md);
 # 2006 after native/fn-check-any's `just fn-check` (11 lines, its numbers in
 # the tracker's evidence); 2011 after native/fn-check-interp's interpreter
-# in that entry (4 lines, and 1 from the two branches' merge).
+# in that entry (4 lines, and 1 from the two branches' merge); 2021 after
+# native/lift-pret-score's `just pret-score` (10 lines, the measures in
+# its crate's module doc).
 [[doc]]
 path = "docs/tools/commands.md"
-max_lines = 2011
+max_lines = 2021
 
 # 1254 after native/hw-serial-registers added the serial registers' entry
 # to section 7's as-built list (4 lines: what the library keeps and that

@@ -426,6 +426,34 @@ fn a_guest_run_switches_at_the_frame_end_as_unwinding_stops() {
 }
 
 #[test]
+fn a_guest_run_starts_each_frame_with_what_the_vblank_left_due() {
+    // A long DMA's time, ticked at once over three V-blanks. The tick
+    // stops at the first; the run's start walks to the second, a frame
+    // with no instruction run, and the start of the frame after it to the
+    // third, another; then the code runs to a fourth. The events left
+    // after a V-blank are walked at the next frame's start, before any
+    // instruction, in a guest run as in runs that unwind
+    // (`native/metroid-route-again`: a guest run walked them at its
+    // code's next tick, a block later).
+    let (mut a, mut b) = (irq_machine(), irq_machine());
+    a.tick((3 * crate::sched::FRAME_CYCLES) as u32);
+    b.tick((3 * crate::sched::FRAME_CYCLES) as u32);
+    let (mut sa, mut sb) = (Stats::default(), Stats::default());
+    let mut want = Vec::new();
+    for _ in 0..3 {
+        assert_eq!(run(&mut a, Some(&LOOP), None, &mut sa), Stop::FrameEnd);
+        want.push((a.cpu.r, a.cpu.pc, a.cpu.cpsr, a.now()));
+    }
+    // (The first two end with no instruction run: the clock stands.)
+    assert_eq!(want[0].3, want[1].3);
+    b.nest.frame_end = Some(frame_end_switch);
+    assert_eq!(run_guest(&mut b, &LOOP, &mut sb), Stop::Fault);
+    assert_eq!(FRAME_ENDS.take(), want);
+    assert_eq!(sb.switches, 3, "{sb:?}");
+    b.nest.forget_run();
+}
+
+#[test]
 fn keys_and_lookup() {
     let mut cpu = Cpu {
         pc: 0x0800_0102,

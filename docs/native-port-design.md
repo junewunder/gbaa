@@ -1082,9 +1082,9 @@ with the native check and no replaced-library list.
   whatever the summary proof says. The summary is printed above each
   function (`/// Reads {r0, r1}; returns {r0}`), and a function whose
   summary breaks that (`analysis::holes::SUMMARY_HARD`: it returns sp
-  changed, reads r4-r11 a callee changed, or changes them and reads one
-  as it came, a register parameter) is a hard hole. One that only uses
-  r4-r11 as scratch, where no caller reads them after, is lifted as is.
+  changed, reads r4-r11 a stand-in changed, or reads one as it came
+  where a pointer call enters it, a register parameter) is a hard hole.
+  One that only uses r4-r11 as scratch, where no caller reads them after, is lifted as is; one whose direct caller does read them gives them back (`Summary::gives`, native/lift-gives: its returns leave them in `Game::gave`, the call takes them, and a function it jumps into gives what it may change too; the Pokémon games' m4a mixer needs it, `agb/native-gives` checks it).
   The 47-50 functions per program whose proof fails for other reasons
   (an indirect call, a callee that never returns) are listed in the
   report as soft.

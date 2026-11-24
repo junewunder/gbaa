@@ -1,0 +1,23 @@
+# The games `just pret-score` scores (crates/pret-score): a column each, in
+# this order.
+#   name    the short name (`--only NAME`)
+#   lift    the lift's folder (`just lift ROM` writes out/lift-<name>)
+#   map     the names map it was lifted with, under $GBAA_DATA (`just
+#           pret-names`, `just pret-names-more`): what pret offers
+#   decomp  the decomp's checkout under $GBAA_DATA; its C lines are every
+#           src/**/*.c
+#   note    printed under the table
+
+[[game]]
+name = "emerald"
+lift = "out/lift-emerald"
+map = "names/pokeemerald.toml"
+decomp = "src/pokeemerald"
+note = "its lift builds since its summaries' holes were closed (native/emerald-builds, done); it doesn't yet run its 600 frames (native/emerald-first-stops), so the column scores reading"
+
+[[game]]
+name = "metroid"
+lift = "out/lift-metroid"
+map = "names/mzm.toml"
+decomp = "src/mzm"
+note = "its lift builds and passes its native check"
