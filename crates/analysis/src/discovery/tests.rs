@@ -157,6 +157,33 @@ fn pointer_scan_takes_a_column_of_struct_records() {
 }
 
 #[test]
+fn pointer_scan_takes_a_table_whose_base_code_loads() {
+    // c/list's kActs as modern GCC builds it: a table of Thumb pointers to
+    // leaves with no push, indexed from its base, which code loads.
+    let table = |loaded: bool| {
+        let mut a = Asm::new();
+        a.entry(0x100)
+            .h(0x100, 0x4900) // ldr r1, [pc, #0]
+            .h(0x102, 0x4770) // bx lr
+            .w(0x104, if loaded { B + 0x400 } else { 0x0601_0000 });
+        for (i, f) in [0x300, 0x320, 0x340].into_iter().enumerate() {
+            a.h(f, 0x2001 + i as u16).h(f + 2, 0x4770); // movs r0, #n; bx lr
+            a.w(0x400 + 4 * i as u32, thumb(f));
+        }
+        a.run()
+    };
+    let d = table(true);
+    for f in [0x300, 0x320, 0x340] {
+        assert_eq!(d.funcs.get(&thumb(f)), Some(&Evidence::Scanned), "0x{f:x}");
+    }
+    // The same table with no code loading its base: nothing.
+    let d = table(false);
+    for f in [0x300, 0x320, 0x340] {
+        assert!(!d.funcs.contains_key(&thumb(f)), "0x{f:x}");
+    }
+}
+
+#[test]
 fn pointer_scan_takes_a_lone_pool_getter() {
     let mut a = Asm::new();
     a.entry(0x100)
