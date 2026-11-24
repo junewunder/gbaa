@@ -5225,7 +5225,19 @@
     {
       "id": "native/names-keep-source-lines",
       "title": "A names file's rename keeps the decomp's source lines",
-      "detail": "From {unit:native/mirror-agent-mod} (hurt 3): names/kirby-amazing-mirror.toml renames katam's sub_0805B2FC to KirbyGroundAccel, and the lift then drops the function's // src/kirby.c:N line comments (the cut has none; lift-find prints 0x0805b356 where its neighbour sub_0805B3A0 prints src/kirby.c:14508). --cut sub_0805B2FC says 'names no function'. Wanted: a rename keeps the decomp entry's src and lines, and --cut and lift-find take either name (the katam = field). Check: the cut of 0x0805b2fd has kirby.c line comments and --cut sub_0805B2FC cuts it; just check."
+      "detail": "From {unit:native/mirror-agent-mod} (hurt 3): names/kirby-amazing-mirror.toml renames katam's sub_0805B2FC to KirbyGroundAccel, and the lift then drops the function's // src/kirby.c:N line comments (the cut has none; lift-find prints 0x0805b356 where its neighbour sub_0805B3A0 prints src/kirby.c:14508). --cut sub_0805B2FC says 'names no function'. Wanted: a rename keeps the decomp entry's src and lines, and --cut and lift-find take either name (the katam = field). Check: the cut of 0x0805b2fd has kirby.c line comments and --cut sub_0805B2FC cuts it; just check.",
+      "record": {
+        "state": "claimed",
+        "by": "5f29d09f",
+        "session": "5f29d09f-bec3-404c-879e-56e521199252",
+        "host": "quack",
+        "pid": 2962519,
+        "start": "95218086",
+        "at": "2026-11-24T20:14:21Z",
+        "branch": "unit/native/names-keep-source-lines",
+        "beats": true
+      },
+      "round": "2026-11-24T20:14:21Z"
     },
     {
       "id": "native/rogue-build",
