@@ -3909,6 +3909,13 @@
         "branch": "unit/native/rogue-imperium-build",
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-24T07:57:30Z",
+          "by": "e794753c",
+          "text": "holes-all on main fails Emerald: mods/emerald/holes.toml has [[roots]], whose parser is only on {unit:native/emerald-native-route}'s branch; compare Emerald with a copy lacking [[roots]]. Rogue's last hole split to {unit:native/rogue-build}."
+        }
+      ],
       "round": "2026-11-24T05:41:57Z"
     },
     {
