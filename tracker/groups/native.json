@@ -4343,7 +4343,19 @@
       "id": "native/metroid-fn-check-stop",
       "title": "Metroid's fn-check program stops at a jump to 0x03001945",
       "detail": "From {unit:native/lift-agent-mod} (hurt 4): just fn-check on Metroid (under lift-mod-run, ROM via a symlink named metroid.gba, the cut mods/metroid/energy) ran 2,997 of 18,000 frames with no input and panicked: 'a call or jump to 0x03001945, which is no function's entry', pc 0x0805d601. Not the mod's (after SamusInit's check). Find whether the lift or fn-check's build misses a RAM copy's entry (holes file) and fix. Check: fn-check runs its frames; just check.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "9441b6bd",
+        "session": "9441b6bd-af04-4199-8a3a-898efc3bf512",
+        "host": "quack",
+        "pid": 2962048,
+        "start": "95217572",
+        "at": "2026-11-24T09:35:48Z",
+        "branch": "unit/native/metroid-fn-check-stop",
+        "beats": true
+      },
+      "round": "2026-11-24T09:35:48Z"
     },
     {
       "id": "native/lift-mod-run-zoom",
