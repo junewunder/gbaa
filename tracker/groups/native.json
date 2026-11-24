@@ -5201,7 +5201,7 @@
     {
       "id": "native/lift-arm-values",
       "title": "Labelled breaks print as early returns and arm values",
-      "detail": "docs/research/llm-pilot.md, round two. Of the 20 pilot rewrites, 12 had lifts with labelled blocks and none kept one: a register set differently in each arm and read after the join (r3 = 0x14c; if … { r3 = 0x1ac; break 'b2 }) became let top = if … { … } else { … } or a match (10 rewrites), and a break to code that only returns became return (4). Exact where each arm only computes the value, or the label's tail is the epilogue. Bar on 4ff1b2c1: labelled_blocks 7,177 in Mirror's lift (the metric). Builds on {unit:native/lift-join-shape}'s printer. Done when: the count falls, lift-check passes, the C programs and a game judged (decision).",
+      "detail": "docs/research/llm-pilot.md, round two. Of the 20 pilot rewrites, 12 had lifts with labelled blocks and none kept one: a register set differently in each arm and read after the join (r3 = 0x14c; if … { r3 = 0x1ac; break 'b2 }) became let top = if … { … } else { … } or a match (10 rewrites), and a break to code that only returns became return (4). Exact where each arm only computes the value, or the label's tail is the epilogue. Bar on 4ff1b2c1: labelled_blocks 7,177 in Mirror's lift (the metric). Builds on {unit:native/lift-join-shape}'s printer. Done when: the count falls, lift-check passes, the C programs and a game judged (decision). Sprint 2026-11-24: 'falls' is: labelled_blocks bars lowered on the C rows and Metroid; Metroid's native route 0 differences; the evidence counts blocks turned to arm values, to returns, and left, by cause.",
       "uses": ["heavy"]
     },
     {
