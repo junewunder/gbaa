@@ -5066,6 +5066,7 @@
       "check": "recorded",
       "needs": ["native/lift-for-bounds"],
       "uses": ["heavy"],
+      "minMinutes": 60,
       "record": {
         "state": "claimed",
         "by": "702486fe",
