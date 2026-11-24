@@ -1251,7 +1251,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   guest-layout`: RAM as the ROM's EWRAM and IWRAM, each global at its
   link address), the spike also in the play layout, the spike and
   psg-square with their planted faults, then runs `route-check --native NATIVE PLAY
-  ROUTE [--replaced FILE] [--holes FILE] [--name N] [--packed BIN] [--planted BIN]...` on
+  ROUTE [--replaced FILE] [--holes FILE] [--name N] [--packed BIN] [--dense BIN] [--planted BIN]...` on
   `units/native-spike.toml` (600 frames), `units/psg-square.toml`
   (120) and `units/direct-sound.toml` (300). Each build writes every
   frame's record at its present
@@ -1281,8 +1281,8 @@ by hand through `just capped`, `just long start` or that systemd-run line;
 - `just lift ROM [OUT] [FLAGS]` (native/lift-stage-a;
   `docs/native-port-design.md`, "The stage-A lifter as built"): the
   stage-A lifter. `gbaa-lift ROM OUT [--name NAME] [--holes FILE]
-  [--bars FILE] [--names DIR]... [--layout guest|packed] [--drop-standin KEY]
-  [--plant AT] [--copies N] [--holes-only]` (`codegen::native`) writes the whole
+  [--bars FILE] [--names DIR]... [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY]
+  [--plant AT] [--copies N] [--holes-only]` (`codegen::native`; `--fn-ids dense`: each function whose every address the flow proved is an ID from 1 in the crate's ROM copy and the code's constants, `DENSE`, native/fnref-dense) writes the whole
   program to OUT (default `out/lift-<name>`) as `src/`: `main.rs` (the
   prelude, RAM, `ENTRY`), `fns.rs` (`FNS`) and the functions in modules
   of about 4,000 lines, `m_<first key>.rs`, which rustc builds in parallel
@@ -1376,7 +1376,9 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   store that sets `IME` again to the next wait, native/ime-release; `--takes-zeroed`, a taker's r4-r11 passed as zeroes, native/taker-test-program; `--gives-kept`, a caller's r4-r11 left as they were after a call that gives them back, native/lift-gives) must be caught too. Each program is lifted once more with `--layout packed`
   (`out/lift-<name>-packed`), passed as `--packed`: it must draw the guest
   layout's frames and record the same bytes, nothing skipped
-  (native/lift-packed-layout). Passes with `every metric within its bar`,
+  (native/lift-packed-layout); and with `--fn-ids dense`
+  (`out/lift-<name>-dense`), passed as `--dense`: the same frames and
+  records but RAM (native/fnref-dense). Passes with `every metric within its bar`,
   a `pass (60x frames, 0 differences …; the play layout draws the same 60x
   frames, its records the same …)` line per program, `planted fault caught
   (…-planted: frame 2: EWRAM byte 0x020000c0 …)`, `(…-fall-as-tail-call: frame 1: EWRAM byte 0x020000c4 …)`,
