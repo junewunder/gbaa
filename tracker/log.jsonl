@@ -3908,3 +3908,4 @@
 {"at":"2026-11-24T06:29:39Z","actor":"loop","tag":"e4b6a739","host":"quack","cmd":"add-unit","id":"native/lift-find-on-route","text":"new unit: lift-find narrows a field's writers to those a route ran"}
 {"at":"2026-11-24T06:29:41Z","actor":"loop","tag":"e4b6a739","host":"quack","cmd":"add-unit","id":"native/names-keep-source-lines","text":"new unit: A names file's rename keeps the decomp's source lines"}
 {"at":"2026-11-24T06:29:47Z","actor":"loop","tag":"e4b6a739","host":"quack","cmd":"edit","id":"native/lift-find-on-route","text":"lift-find narrows a field's writers to those a route ran: edited (uses)"}
+{"at":"2026-11-24T06:29:49Z","actor":"loop","tag":"e4b6a739","host":"quack","cmd":"note","id":"native/lift-mod-run-name","text":"lift-mod-run takes the game's name from the mod: note: Amazing Mirror hit it too ({unit:native/mirror-agent-mod}): 'Kirby & The Amazing Mirror.gba' names no holes file; same symlink workaround, out/rom-links/kirby-mirror.gba."}
