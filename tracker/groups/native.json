@@ -4941,15 +4941,22 @@
       "uses": ["heavy"],
       "priority": 25,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "3ec7bc8f",
-        "session": "3ec7bc8f-e8b3-4c78-83c4-a21a8d23381d",
-        "host": "quack",
-        "pid": 2962048,
-        "start": "95217572",
-        "at": "2026-11-24T15:15:06Z",
+        "at": "2026-11-24T17:14:01Z",
+        "evidence": "A pointer a for steps beside its variable prints as the element (Ref::<[t::Bar; 6]>::new(r1).idx(i_first.wrapping_sub(i)).len()); a typed word load's rotate keeps its pointer's type; a loaded start bounds a for. just lift-check (pre-merge, all 37 programs): every metric within its bar, 37 passes with 0 differences, 64 planted faults and holes caught; after merging main, c-loops-agbcc and -gcc again pass with 0 differences and their planted stores caught; just check passes (b56e5dd8). New for_counter_arith barred on every row (C rows 0, c-loops-agbcc 1: y = 8 + i*6) and in mods' Emerald (234) and Metroid (26) bars; for_stepped_elements 92 Emerald, 10 Metroid, 9 and 2 c-loops. named_index_accesses Emerald 13581 -> 14696, Metroid 804 -> 1000. c/loops gains an array of structs, a field array through a pointer, two arrays by one counter, a stepped pointer (both builds match mGBA at frame 600, f7dfbac3dbb5ca31). Emerald (holes file mods 5c20f6c) and Metroid build and run 600 of 600 frames headless; Metroid typed vs --no-field-types: same 2,700 frame hashes and records on its route's input. Idx has no run-time check. Emerald route check: not yet comparable, its route unit open.",
         "branch": "unit/native/lift-for-index",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T17:14:01Z",
+          "by": "3ec7bc8f",
+          "host": "quack",
+          "pid": 2962048,
+          "start": "95217572",
+          "beats": true,
+          "session": "3ec7bc8f-e8b3-4c78-83c4-a21a8d23381d",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
