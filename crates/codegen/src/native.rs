@@ -7544,6 +7544,7 @@ impl FnPrinter<'_, '_> {
                         Width::Half => ("ld16", " & !1"),
                         Width::Word => ("ld32", " & !3"),
                     };
+                    let mut typed_addr: Option<String> = None;
                     let mem = match (&typed[i], &objs[i], refs[i]) {
                         _ if let Some(o) = self.callers_off(i) => {
                             format!("{f}(g, {}{m})", callers_addr(o))
@@ -7564,7 +7565,11 @@ impl FnPrinter<'_, '_> {
                             o.load(&format!("{}{m}", self.val(addr)), bytes(width))
                         }
                         (None, None, Some(r)) if r.named => {
-                            format!("g.get({})", self.field_ptr(i, r, addr))
+                            let p = self.field_ptr(i, r, addr);
+                            // An open-bus load's address is the field's:
+                            // the sum it folds in isn't printed.
+                            typed_addr = Some(format!("{p}.addr()"));
+                            format!("g.get({p})")
                         }
                         (None, None, Some(r)) => match r.base {
                             Some((b, c)) => self.heap.load(r.f, &self.val(b), r.f.off - c),
@@ -7585,9 +7590,9 @@ impl FnPrinter<'_, '_> {
                     let mem = match self.holes.open_bus.contains_key(&at) {
                         true => {
                             self.soft.open_bus_printed.insert(at);
+                            let a = typed_addr.unwrap_or_else(|| self.val(addr));
                             format!(
-                                "{{ let a: u32 = {}{m}; if a >> 28 != 0 {{ 0 }} else {{ {f}(g, a) }} }}",
-                                self.val(addr)
+                                "{{ let a: u32 = {a}{m}; if a >> 28 != 0 {{ 0 }} else {{ {f}(g, a) }} }}"
                             )
                         }
                         false => mem,
