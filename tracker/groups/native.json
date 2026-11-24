@@ -4648,6 +4648,12 @@
       "title": "Stand-ins may name the lift's globals and functions",
       "detail": "docs/research/llm-pilot.md (both rounds). A word in a stand-in's text, its why included (printed as a comment), is taken by the name picker (codegen::native::named::apply), so a stand-in that says TaskGetNextSlot or gCurTask renames the lift's own to TaskGetNextSlot_ and can't use the name; LLM-written stand-ins use addresses and call_fn by key instead (17 constants in Mirror's pilot). Let a stand-in's words that are the names files' names refer to the lift's (and keep why out of the scan). Done when: a stand-in using a global and a function by name builds and passes fn-check, lift-check passes.",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/cut-callee-shapes",
+      "title": "A cut's calls build in fn-check's lift too",
+      "detail": "From {unit:native/mirror-agent-mod} (docs/research/mirror-agent-mod.md, hurt 2): a cut prints its callees' return shapes as its lift had them (KirbyGroundAccel: r3 = KirbyGroundFriction(...), a u32). fn-check's lift (--fn-check-cuts) checks the cut behind an adapter that reads r0-r3, so the callee's shape widens to (r1, r2, r3) and the cut no longer compiles; lift-mod-run exits 1, fn-check never runs. Fix: the cut's call sites adapt to whatever shape the build gives (or fn-check keeps the lift's shapes). Check: lift-mod-run on mods/kirby-mirror/walk-speed reaches fn-check and reports KirbyGroundAccel; Metroid's energy mod still does; just check.",
+      "uses": ["heavy"]
     }
   ]
 }
