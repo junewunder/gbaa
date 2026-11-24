@@ -4180,19 +4180,8 @@
         "by": "7733e7b3",
         "at": "2026-11-24T05:28:10Z",
         "evidence": "just lift-find '<Metroid ZM USA>' maxEnergy --name metroid: first writer 'SamusInit (0x0800bcb9): src/samus.c:8087 gEquipment.maxEnergy' (8 writers, 17 readers, 4 may write, 3 may read); --cut entry in docs/tools/commands.md points to it; main merged; just check passed (exit 0)",
-        "branch": "unit/native/lift-find-field",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T05:28:10Z",
-          "by": "7733e7b3",
-          "host": "quack",
-          "pid": 2962519,
-          "start": "95218086",
-          "beats": true,
-          "session": "7733e7b3-848d-4547-83f2-b203bc3df8ef",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "landed": "2026-11-24T05:32:47Z"
       },
       "notes": [
         {
@@ -4200,8 +4189,7 @@
           "by": "7a3a3987",
           "text": "Built and committed on the branch (a8998fcf): just lift-find ROM FIELD names SamusInit src/samus.c:8087 for maxEnergy on Metroid (--name metroid). Left: just check (cut off at the lane's stop), merge main, record done."
         }
-      ],
-      "round": "2026-11-20T13:43:19Z"
+      ]
     },
     {
       "id": "native/lift-mod-run-edit-report",
