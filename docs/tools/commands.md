@@ -1337,7 +1337,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   bar of 754`), and lists the metrics under their bars. Discovery's
   gaps (a jump into ROM it has no code at) are decoded by the lifter and
   listed (a `bl` whose return site is a known literal pool is taken never
-  to return). `--drop-standin KEY` and `--plant AT` are the check's planted
+  to return; it stops at a `bx pc`, in ARM a `b`). `--drop-standin KEY` and `--plant AT` are the check's planted
   hard hole and wrong store; `--fall-as-tail-call` prints a fall into
   another function's entry as the old tail call (r4-r12 and the flags
   zeroed, native/lift-fallthrough), the fallthrough control. `--holes-only` (the hole report's lift, native/holes-match-lift) writes nothing and exits 0: no function-address flow (unless `--flow`: its callee sets can add summary holes), heap pointers or modules, it prints each kind's count (`codegen::native::HoleKind`) and each hole, 9 s to 3.5 min on the corpus under 0.6 GB. About 6 s to lift, 15 s-2 min to build.

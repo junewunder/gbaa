@@ -1138,11 +1138,11 @@ with the native check and no replaced-library list.
   can't resolve.
 - **Discovery's gaps are decoded at lift.** A jump into ROM where
   discovery has no code (it took a `bl`'s second half for a literal
-  pool, or stopped a scanned fragment short) would fall to the
-  interpreter in the play build; the lifter decodes from each such
-  target until it meets known code, again until none are left, joins
-  split `bl` halves, and lists the targets. The spike has 22,
-  affine 5, mosaic-modes 143 (much of one large function).
+  pool, or stopped a scanned fragment short) would fall to the play
+  build's interpreter; the lifter decodes from each (a `bx pc` veneer's
+  ARM too) to known code or a `bx pc` (in ARM a `b`), again till none
+  are left, joins split `bl` halves, and lists the targets. The spike
+  has 22, affine 5, mosaic-modes 143 (much of one large function).
 
 **Measured** (`just lift-check`, 2 minutes on quack):
 
