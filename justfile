@@ -1044,7 +1044,7 @@ fn-check rom *flags:
     just build-recompiled "$out" guest-pc
     {{cap}} MemoryMax=3G target/recompiled/release/gbaa-native-fn-check-"$name" --headless --frames "$frames" "${input[@]}"
 
-# A lift mod's frames beside the stock lift's (native/lift-mod-run; the mod view's mod-run for the lift; docs/tools/commands.md): lifts ROM as `just lift` does (its holes file, names from $GBAA_DATA/names and names/) twice, stock into out/lift-mod-run-<name>/stock and with the mod at DIR (a `gbaa-lift --cut` directory: DIR/replace.toml) into out/lift-mod-run-<name>/mod, builds both and runs both headless along ROUTE (route-check --lift-mod-run): lists the frames whose pictures differ, as runs, and writes out/lift-mod-run/<route>/side-N.png for up to 16 of them (FLAGS: --sides N): stock, the mod, stock dimmed with the differing pixels in red. Then the per-function check of each cut function (`just fn-check ROM --replace DIR/replace.toml --fn-check-cuts`: the cut against its lift, from the program's own calls; its report in out/lift-mod-run-<name>/fn-check.txt). Never fails on a difference, in the frames or a function, only when a lift, build or run can't. Heavy: builds three generated crates.
+# A lift mod's frames beside the stock lift's (native/lift-mod-run; the mod view's mod-run for the lift; docs/tools/commands.md): lifts ROM as `just lift` does (its holes file, names from $GBAA_DATA/names and names/) twice, stock into out/lift-mod-run-<name>/stock and with the mod at DIR (a `gbaa-lift --cut` directory: DIR/replace.toml) into out/lift-mod-run-<name>/mod, builds both and runs both headless along ROUTE (route-check --lift-mod-run): lists the frames whose pictures differ, as runs, and writes out/lift-mod-run/<route>/side-N.png for up to 16 of them (FLAGS: --sides N): stock, the mod, stock dimmed with the differing pixels in red. The game's name (its holes file, its crates, OUT) is --name NAME's if given, else DIR's parent's for a mod in mods/<name>/ (native/lift-mod-run-name), else the ROM's file name lowercased; fn-check is given it too. Then the per-function check of each cut function (`just fn-check ROM --name NAME --replace DIR/replace.toml --fn-check-cuts`: the cut against its lift, from the program's own calls; its report in out/lift-mod-run-<name>/fn-check.txt). Never fails on a difference, in the frames or a function, only when a lift, build or run can't. Heavy: builds three generated crates.
 [positional-arguments]
 lift-mod-run rom dir route *flags:
     #!/usr/bin/env bash
@@ -1052,8 +1052,22 @@ lift-mod-run rom dir route *flags:
     rom={{quote(join(invocation_directory(), rom))}}
     dir={{quote(join(invocation_directory(), dir))}}
     route={{quote(join(invocation_directory(), route))}}
-    name=$(basename "$rom" .gba | tr '[:upper:]' '[:lower:]')
     shift 3
+    # The game's name (its holes file, crate and out folder): --name NAME, else DIR's parent for a
+    # mod in mods/<name>/<mod>, else the ROM's file name lowercased. The rest of FLAGS go to route-check.
+    name=""
+    flags=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name) name=$2; shift 2 ;;
+            *) flags+=("$1"); shift ;;
+        esac
+    done
+    if [ -z "$name" ]; then
+        parent=$(dirname "$(realpath -ms "$dir")")
+        if [ "$(basename "$(dirname "$parent")")" = mods ]; then name=$(basename "$parent")
+        else name=$(basename "$rom" .gba | tr '[:upper:]' '[:lower:]'); fi
+    fi
     [ -f "$dir/replace.toml" ] || { echo "no $dir/replace.toml: cut it with gbaa-lift ROM OUT --cut $dir KEY..." >&2; exit 2; }
     holes=()
     if [ -f "holes/$name.toml" ]; then holes=(--holes "holes/$name.toml")
@@ -1069,9 +1083,9 @@ lift-mod-run rom dir route *flags:
     just build-recompiled "$out/stock"
     just build-recompiled "$out/mod"
     bin=target/recompiled/release/gbaa-native-"$name"
-    GBAA_DATA={{quote(gbaa_data)}} {{cap}} MemoryMax=8G target/release/route-check --lift-mod-run "$bin"-stock "$bin"-mod "$@" "$route"
+    GBAA_DATA={{quote(gbaa_data)}} {{cap}} MemoryMax=8G target/release/route-check --lift-mod-run "$bin"-stock "$bin"-mod "${flags[@]}" "$route"
     # Each cut against its lift; a difference is the mod's, not a failure.
-    just fn-check "$rom" --replace "$dir/replace.toml" --fn-check-cuts > "$out/fn-check.txt" 2>&1 || true
+    just fn-check "$rom" --name "$name" --replace "$dir/replace.toml" --fn-check-cuts > "$out/fn-check.txt" 2>&1 || true
     grep -E '^fn-check:|^ +[a-z]' "$out/fn-check.txt" || true
     grep -q '^fn-check: [0-9]* functions' "$out/fn-check.txt" || { tail -20 "$out/fn-check.txt"; echo "fn-check didn't run: $out/fn-check.txt" >&2; exit 1; }
 
