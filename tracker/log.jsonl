@@ -4002,3 +4002,4 @@
 {"at":"2026-11-24T10:22:58Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane4-native-lift-equipment-words","text":"Merge main on quack lane 4: on main"}
 {"at":"2026-11-24T10:22:58Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-equipment-words","text":"Metroid's gEquipment prints by field, not u32 words: on main"}
 {"at":"2026-11-24T10:23:02Z","actor":"loop","tag":"7630b372","host":"quack","cmd":"claim","id":"native/mirror-flow-on","text":"Mirror's lift with the function flow back on: claimed"}
+{"at":"2026-11-24T10:33:40Z","actor":"loop","tag":"eb832f19","host":"quack","cmd":"decide","text":"decided: A context restore unwinds to its save's direct caller","d":"d/a-context-restore-unwinds-to-its-save-s-direct"}

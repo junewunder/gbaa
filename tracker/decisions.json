@@ -1487,6 +1487,14 @@
       "by": "e48d610c",
       "at": "2026-11-24T07:46:30Z",
       "scope": ["native/*"]
+    },
+    {
+      "id": "d/a-context-restore-unwinds-to-its-save-s-direct",
+      "title": "A context restore unwinds to its save's direct caller",
+      "why": "From {unit:native/lift-longjmp}: a restore (longjmp's ldm) a save matches keeps its buffer and returns by a Rust unwind (prelude restore/catch_restore). A function calling a save directly (setjmp's caller) prints in match form inside catch_restore: each save call keeps the buffer, return label, r4-r11 and sp; a restore of that buffer sets them back and goes on there with r0-r3. Other unwinds go on up. Not handled: a save called through a pointer; two live saves in one function (the last wins). A jmp_buf outside the stack differs from the play build in its r4-r12/lr words (zeroes natively), which the native check would flag; c-jump keeps its buffers on the stack as Duktape does.",
+      "by": "eb832f19",
+      "at": "2026-11-24T10:33:40Z",
+      "scope": ["group:native"]
     }
   ]
 }
