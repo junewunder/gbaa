@@ -264,10 +264,11 @@ fn run(args: &[String]) -> Result<(), String> {
     print!("{}", dwarf_report(&names, &dbg));
     println!("text: {} charmap.txt entries", chars.len());
     println!(
-        "values: {} families of #define names and enums, taken by {} fields and {} globals",
+        "values: {} families of #define names and enums, taken by {} fields, {} globals and {} parameters",
         fams.len(),
         fams.values().map(|f| f.fields.len()).sum::<usize>(),
-        fams.values().map(|f| f.globals.len()).sum::<usize>()
+        fams.values().map(|f| f.globals.len()).sum::<usize>(),
+        fams.values().map(|f| f.args.len()).sum::<usize>()
     );
     loads(out, &sha)
 }

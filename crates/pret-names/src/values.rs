@@ -42,6 +42,9 @@ pub struct Family {
     /// `function:index` by the names file's function name
     /// (`GetMonData2:1`; [`arg_families`]).
     pub args: Vec<String>,
+    /// Those of `args` some call passes a sum one of its names is the
+    /// base of (`MON_DATA_MOVE1 + j`).
+    pub sums: Vec<String>,
 }
 
 /// Names that mark a family's bounds rather than one of its values.
@@ -326,9 +329,7 @@ fn family(defines: &[Define], prefix: &str) -> Option<Family> {
     (names.len() >= 2).then(|| Family {
         file: file.to_string(),
         names,
-        fields: Vec::new(),
-        globals: Vec::new(),
-        args: Vec::new(),
+        ..Family::default()
     })
 }
 
@@ -353,6 +354,10 @@ pub fn toml(fams: &BTreeMap<String, Family>) -> String {
         if !f.args.is_empty() {
             let xs: Vec<String> = f.args.iter().map(|s| quoted(s)).collect();
             writeln!(o, "args = [{}]", xs.join(", ")).unwrap();
+        }
+        if !f.sums.is_empty() {
+            let xs: Vec<String> = f.sums.iter().map(|s| quoted(s)).collect();
+            writeln!(o, "sums = [{}]", xs.join(", ")).unwrap();
         }
         o.push_str("names = [\n");
         for (n, v) in &f.names {
@@ -712,6 +717,8 @@ pub struct CallArg {
     pub nargs: usize,
     pub index: usize,
     pub name: String,
+    /// The argument is a sum `name` is the base of.
+    pub sum: bool,
 }
 
 /// The [`CallArg`]s of `src/`'s `.c` files, at any depth; a flat tree's
@@ -791,12 +798,13 @@ pub fn calls_in(text: &str) -> Vec<CallArg> {
         };
         let nargs = args.len();
         for (index, a) in args.iter().enumerate() {
-            if let Some(name) = const_base(a) {
+            if let Some((name, sum)) = const_base(a) {
                 out.push(CallArg {
                     func: func.to_string(),
                     nargs,
                     index,
                     name: name.to_string(),
+                    sum,
                 });
             }
         }
@@ -850,9 +858,10 @@ fn split_args(t: &str, open: usize) -> Option<Vec<&str>> {
     None
 }
 
-/// The constant an argument `a` is, or is the base of a sum of: an
-/// upper-case word of two or more characters alone, or before `+`.
-fn const_base(a: &str) -> Option<&str> {
+/// The constant an argument `a` is, or is the base of a sum of (then
+/// `true`): an upper-case word of two or more characters alone, or before
+/// `+`.
+fn const_base(a: &str) -> Option<(&str, bool)> {
     let end = a
         .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
         .unwrap_or(a.len());
@@ -863,8 +872,8 @@ fn const_base(a: &str) -> Option<&str> {
             .bytes()
             .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_');
     let rest = rest.trim_start();
-    (upper && (rest.is_empty() || (rest.starts_with('+') && !rest.starts_with("++"))))
-        .then_some(name)
+    let sum = rest.starts_with('+') && !rest.starts_with("++");
+    (upper && (rest.is_empty() || sum)).then_some((name, sum))
 }
 
 /// The families pret's calls tie to function parameters (native/lift-
@@ -889,6 +898,7 @@ pub fn arg_families(
     fams: &mut BTreeMap<String, Family>,
 ) {
     let mut at: BTreeMap<(String, usize), BTreeSet<&str>> = BTreeMap::new();
+    let mut sums: BTreeSet<(String, usize)> = BTreeSet::new();
     let mut resolved: BTreeMap<(&str, usize), Option<String>> = BTreeMap::new();
     for c in calls {
         if c.index >= 4 {
@@ -899,6 +909,9 @@ pub fn arg_families(
             .or_insert_with(|| resolve(&c.func, c.nargs));
         if let Some(f) = f {
             at.entry((f.clone(), c.index)).or_default().insert(&c.name);
+            if c.sum {
+                sums.insert((f.clone(), c.index));
+            }
         }
     }
     let def: BTreeMap<&str, &Define> = defines.iter().map(|d| (d.name.as_str(), d)).collect();
@@ -911,6 +924,7 @@ pub fn arg_families(
     let mut tried: BTreeMap<String, Option<Family>> = BTreeMap::new();
     for ((f, index), names) in at {
         let taker = format!("{f}:{index}");
+        let sum = sums.contains(&(f.clone(), index));
         let pick = if names.iter().all(|n| def.contains_key(n)) {
             define_family(defines, &def, &names, &mut tried)
         } else if names.iter().all(|n| enum_of.contains_key(n)) {
@@ -922,11 +936,17 @@ pub fn arg_families(
         match fams.get_mut(&key) {
             // The same family, from a field's or global's tie.
             Some(have) if have.file == fam.file && have.names == fam.names => {
+                if sum {
+                    have.sums.push(taker.clone());
+                }
                 have.args.push(taker);
             }
             Some(_) => {}
             None => {
                 let mut fam = fam;
+                if sum {
+                    fam.sums.push(taker.clone());
+                }
                 fam.args.push(taker);
                 fams.insert(key, fam);
             }

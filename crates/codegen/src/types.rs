@@ -97,6 +97,10 @@ pub struct Types {
     /// its parameter's C type is an enum family's (`PenState state`), by
     /// key and register.
     arg_values: BTreeMap<(u32, usize), String>,
+    /// Those of `arg_values` the decomp's calls pass a sum of one of the
+    /// family's names (`[values]`' `sums`): a sum's constant there takes
+    /// its name.
+    arg_sums: BTreeSet<(u32, usize)>,
 }
 
 /// A struct as `Ram`'s `ram_t` lays it out ([`Types::layout`]).
@@ -339,7 +343,10 @@ impl Types {
                         .as_deref()
                         .map_or(0, |c| t.one_register_params(c, &enums));
                     if *i < regs {
-                        t.arg_values.entry((k, *i)).or_insert_with(|| fam.clone());
+                        let have = t.arg_values.entry((k, *i)).or_insert_with(|| fam.clone());
+                        if *have == *fam && v.sums.contains(&(f.clone(), *i)) {
+                            t.arg_sums.insert((k, *i));
+                        }
                     }
                 }
             }
@@ -383,6 +390,16 @@ impl Types {
     /// the decomp's calls pass it the family's names (native/lift-value-args).
     pub fn values_of_arg(&self, key: u32, r: usize) -> Option<&BTreeMap<u32, String>> {
         self.values.get(self.arg_values.get(&(key, r))?)
+    }
+
+    /// [`Types::values_of_arg`] where the decomp's calls also pass that
+    /// argument a sum one of the names is the base of (`MON_DATA_MOVE1 +
+    /// j`): a sum's constant there takes its name.
+    pub fn sum_values_of_arg(&self, key: u32, r: usize) -> Option<&BTreeMap<u32, String>> {
+        if !self.arg_sums.contains(&(key, r)) {
+            return None;
+        }
+        self.values_of_arg(key, r)
     }
 
     /// Whether the map gives any function's prototype.

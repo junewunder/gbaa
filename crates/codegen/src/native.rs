@@ -7233,7 +7233,9 @@ impl FnPrinter<'_, '_> {
 
     /// [`FnPrinter::arg_sums`] of a block: for its exit's direct call,
     /// each argument register's last write before it, unguarded, where
-    /// the callee's parameter takes named values.
+    /// the callee's parameter takes named values and the decomp's calls
+    /// pass it a sum of one ([`crate::types::Types::sum_values_of_arg`]):
+    /// `side + BIT_FLANK` gives `GetBattlerAtPosition`'s none.
     fn arg_sums(&self, insts: &[Inst], xs: &[ExitInfo]) -> BTreeMap<usize, BTreeMap<u32, String>> {
         let mut out = BTreeMap::new();
         let Some(t) = self.holes.values.as_deref() else {
@@ -7244,7 +7246,7 @@ impl FnPrinter<'_, '_> {
                 continue;
             };
             for r in 0..4 {
-                let Some(vs) = t.values_of_arg(target, r) else {
+                let Some(vs) = t.sum_values_of_arg(target, r) else {
                     continue;
                 };
                 let last = insts[..x.index.min(insts.len())]

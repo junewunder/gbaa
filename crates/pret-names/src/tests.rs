@@ -555,6 +555,9 @@ fn a_parameter_takes_the_family_pret_calls_pass_it() {
     let mut fams = std::collections::BTreeMap::new();
     arg_families(&defs, &enums, &calls, resolve, &mut fams);
     assert_eq!(fams["MON_DATA"].args, ["GetMonData2:1"]);
+    // A call passes MON_DATA_MOVE1 + j: a sum there may take a name.
+    assert_eq!(fams["MON_DATA"].sums, ["GetMonData2:1"]);
+    assert!(fams["FONT"].sums.is_empty());
     assert_eq!(fams["MON_DATA"].file, "include/pokemon.h");
     assert_eq!(
         fams["MON_DATA"].names[1],
@@ -577,5 +580,9 @@ fn a_parameter_takes_the_family_pret_calls_pass_it() {
     let vs = m.typed.values_of_arg(0x0800_0101, 1).unwrap();
     assert_eq!(vs[&13], "MON_DATA_MOVE1");
     assert!(m.typed.values_of_arg(0x0800_0101, 0).is_none());
+    assert_eq!(
+        m.typed.sum_values_of_arg(0x0800_0101, 1).unwrap()[&13],
+        "MON_DATA_MOVE1"
+    );
     assert!(m.typed.has_values());
 }
