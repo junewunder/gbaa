@@ -4280,3 +4280,4 @@
 {"at":"2026-11-24T22:36:16Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-proven-pointer-types","text":"Pointer types the lift proves, scored against DWARF: edited (priority, add-needs)"}
 {"at":"2026-11-24T22:36:18Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/gcc-switch-recovery","text":"Recovery resolves the modern-GCC switches Rogue lists: edited (priority, add-needs)"}
 {"at":"2026-11-24T22:36:20Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/fnref-dense-keys-left","text":"Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid: edited (priority)"}
+{"at":"2026-11-24T22:36:22Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-arm-values","text":"Labelled breaks print as early returns and arm values: edited (priority)"}
