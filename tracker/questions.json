@@ -1996,6 +1996,33 @@
         "at": "2026-11-24T05:23:06Z",
         "decision": "d/narrow-loop-unit-bounds-held"
       }
+    },
+    {
+      "id": "q/mirror-s-task-struct-lookups",
+      "title": "Mirror's task-struct lookups: a per-game helper in the lift?",
+      "context": "{unit:native/lift-task-struct} wants the lift to recognise the Amazing Mirror's inlined two-arm task lookup and print it as one helper call. No C test program has the shape, and it needs a per-game declaration of the helper.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Leave it to the LLM pass",
+          "changes": "the algorithmic lift stays game-agnostic; the unit is dropped",
+          "drops": ["native/lift-task-struct"]
+        },
+        {
+          "key": "b",
+          "label": "Build it, declared privately",
+          "changes": "the lift gains a general inlined-helper matcher, Mirror's declaration lives in mods/kirby-mirror/, and c/ gains a program with the shape",
+          "releases": ["native/lift-task-struct"]
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/lift-task-struct"],
+      "asked": {
+        "at": "2026-11-24T22:37:12Z",
+        "by": "6056824b",
+        "host": "quack"
+      },
+      "answer": null
     }
   ]
 }
