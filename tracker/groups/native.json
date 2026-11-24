@@ -5207,7 +5207,7 @@
     {
       "id": "native/lift-mask-fold",
       "title": "A chain of constant and-masks prints as one mask",
-      "detail": "docs/research/llm-pilot.md, round two. Clearing flags bit by bit compiles to one and each; the lift prints ((((x & 0xfffffffd) & 0xffffef8f) & 0xf3ffffff) & 0xf7fff0ff), the pilot rewrite x & !0x0c001f72 (KirbyEnterStand; 3 of the 20). Fold and/or chains of constants, printing a mask with more set bits than clear as !CLEARED. Bar on 4ff1b2c1: 386 '& 0x…u32) & 0x' in Mirror's src/m_*.rs. Done when: the count falls near 0, lift-check passes, the C programs and a game judged (decision).",
+      "detail": "docs/research/llm-pilot.md, round two. Clearing flags bit by bit compiles to one and each; the lift prints ((((x & 0xfffffffd) & 0xffffef8f) & 0xf3ffffff) & 0xf7fff0ff), the pilot rewrite x & !0x0c001f72 (KirbyEnterStand; 3 of the 20). Fold and/or chains of constants, printing a mask with more set bits than clear as !CLEARED. Bar on 4ff1b2c1: 386 '& 0x…u32) & 0x' in Mirror's src/m_*.rs. Done when: the count falls near 0, lift-check passes, the C programs and a game judged (decision). Sprint 2026-11-24: only chains whose intermediates have one use; or-chains fold, and-then-or doesn't; bitfield_* bars don't rise. New metric mask_chains, Mirror at most 20, each one left explained. No C program has such a chain: c/bits gains one agbcc emits, or codegen unit tests cover each fold. Mirror's native route 0 differences; grep src/*.rs, not src/m_*.rs. Not beside {unit:native/lift-task-struct}.",
       "uses": ["heavy"]
     },
     {
