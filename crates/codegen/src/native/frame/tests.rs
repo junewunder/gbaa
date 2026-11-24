@@ -917,3 +917,134 @@ fn a_spill_slot_reused_holds_only_what_was_last_stored() {
     let s = stores_of(&vec![func(1, vec![(1, b, Edge::Return)])]);
     assert_eq!(s[&1] & SP, 0, "{s:x?}");
 }
+
+/// `native/lift-stack-arrays`: every function takes r0 (known), takes
+/// none of r4-r11, and no caller reads a result.
+struct LendR0;
+
+impl lend::LendEnv for LendR0 {
+    fn params(&self, _: u32) -> (u8, bool) {
+        (1, true)
+    }
+    fn takes(&self, _: u32) -> u16 {
+        0
+    }
+    fn read_after(&self, _: u32) -> u8 {
+        0
+    }
+    fn taken(&self, _: u32) -> bool {
+        false
+    }
+}
+
+fn lends_of(fns: &Fns) -> lend::Lends {
+    let fs: Vec<(u32, BTreeMap<u32, FBlock>)> = fns
+        .iter()
+        .map(|(e, bs)| {
+            let m = bs
+                .iter()
+                .map(|(k, insts, edge)| {
+                    (
+                        *k,
+                        FBlock {
+                            insts,
+                            edges: BTreeMap::from([(insts.len() - 1, edge.clone())]),
+                        },
+                    )
+                })
+                .collect();
+            (*e, m)
+        })
+        .collect();
+    let frames = frames(&fs, &AllFour);
+    lend::lends(&fs, &frames, &LendR0)
+}
+
+/// Function 1 writes its local at -16, passes its address in r0 to `2`,
+/// then reads the word at -12; `callee` is function 2's one block.
+fn lender(callee: B) -> Fns {
+    let mut a = B::default();
+    a.prologue();
+    let l = a.sp(0);
+    let five = a.k(5);
+    a.st(l, five);
+    a.set(0, l);
+    let mut b = B::default();
+    let l = b.sp(4);
+    b.ld(l);
+    vec![
+        func(
+            1,
+            vec![
+                (
+                    1,
+                    a,
+                    Edge::Call {
+                        target: Some(2),
+                        ret: 3,
+                    },
+                ),
+                (3, b, Edge::Return),
+            ],
+        ),
+        func(2, vec![(2, callee, Edge::Return)]),
+    ]
+}
+
+#[test]
+fn a_slot_passed_to_a_borrowing_callee_is_lent() {
+    // The callee reads and writes through r0 + 4.
+    let mut c = B::default();
+    let p = c.get(0);
+    let four = c.k(4);
+    let q = c.add(p, four);
+    let x = c.ld(q);
+    c.st(q, x);
+    let l = lends_of(&lender(c));
+    assert_eq!(l.borrowed, BTreeMap::from([(2, 1)]));
+    // It reaches bytes 4..8 of what it was passed: the slot at -12 is
+    // lent; the one at -16, which the frame took to escape with it (an
+    // object runs up to the saved r4 at -8), is reached by nothing.
+    assert_eq!(l.lent, BTreeMap::from([(1, BTreeSet::from([-12]))]));
+}
+
+#[test]
+fn a_callee_storing_its_pointer_borrows_nothing() {
+    // `*(0x03000000) = r0`: the address reaches RAM.
+    let mut c = B::default();
+    let p = c.get(0);
+    let g = c.k(0x0300_0000);
+    c.st(g, p);
+    let l = lends_of(&lender(c));
+    assert!(l.borrowed.is_empty());
+    assert!(l.lent.is_empty());
+}
+
+#[test]
+fn a_callee_another_caller_passes_ram_borrows_nothing() {
+    let mut c = B::default();
+    let p = c.get(0);
+    c.ld(p);
+    let mut fns = lender(c);
+    // Function 4 passes a global's address to 2.
+    let mut d = B::default();
+    let g = d.k(0x0300_0000);
+    d.set(0, g);
+    fns.push(func(
+        4,
+        vec![
+            (
+                4,
+                d,
+                Edge::Call {
+                    target: Some(2),
+                    ret: 5,
+                },
+            ),
+            (5, B::default(), Edge::Return),
+        ],
+    ));
+    let l = lends_of(&fns);
+    assert!(l.borrowed.is_empty());
+    assert!(l.lent.is_empty());
+}

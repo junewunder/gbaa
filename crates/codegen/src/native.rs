@@ -471,6 +471,10 @@ pub struct Holes {
     /// its name ([`named`]; unit `native/lift-fn-names`). Not with
     /// `--copies`, whose copies would repeat them.
     pub fn_names: BTreeMap<u32, String>,
+    /// Each function's source file by key, from the same files (`src`,
+    /// `src/script_pokemon_util.c`): the function goes in that file's
+    /// module ([`modules`]; unit `native/lift-modules-by-source`).
+    pub fn_srcs: BTreeMap<u32, String>,
     /// The same files' types (`codegen::types`), when they give any: the
     /// report counts the constant RAM accesses that land on a named field
     /// of a typed global ([`typed_fields`]; unit
@@ -1534,6 +1538,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     bound: Default::default(),
                     fors: BTreeMap::new(),
                     steps: BTreeMap::new(),
+                    ptr_cands: Vec::new(),
+                    ptr_steps: BTreeMap::new(),
+                    ptr_reads: BTreeMap::new(),
+                    first_lets: BTreeSet::new(),
                     tail_for: false,
                     banked: BTreeMap::new(),
                     field_at: BTreeMap::new(),
@@ -1902,7 +1910,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         main.push_str(&text);
     }
     let plains: Vec<String> = fns_reached.iter().map(|&k| plain(k)).collect();
-    let mut files = modules::split(main, table, &plains, &out, holes.copies);
+    let mut files = modules::split(main, table, &plains, &out, &holes.fn_srcs, holes.copies);
     // The block markers out of the text, into `pcs.txt` (native/lift-pc-markers).
     let pc_table = pc_marks::strip_modules(&mut files.files);
     if dense_fns.is_empty() {
@@ -2083,6 +2091,27 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         soft.sp_slots[2],
     )
     .unwrap();
+    {
+        let skip: BTreeSet<u32> = holes.standins.keys().copied().collect();
+        let (mut slots, mut fns, mut acc, mut borrowed, mut ptrs) = (0, 0, 0, 0, 0);
+        for c in &codes {
+            let l = frame::lend::of_code(&c.ctx, &c.funcs, &c.sums, &c.frames, &skip);
+            slots += l.lent.values().map(BTreeSet::len).sum::<usize>();
+            fns += l.lent.len();
+            acc += l.accesses(&c.frames);
+            borrowed += l
+                .borrowed
+                .values()
+                .map(|m| m.count_ones() as usize)
+                .sum::<usize>();
+            ptrs += l.pointers;
+        }
+        writeln!(
+            report,
+            "lent slots (native/lift-stack-arrays): {slots} escaping slots in {fns} functions lend their address only to borrowed parameters ({borrowed} of {ptrs} pointer parameters borrowed), {acc} sp-relative accesses to them"
+        )
+        .unwrap();
+    }
     match (&fnrefs, &holes.skip_fn_flow) {
         (Some(f), _) => report.push_str(&f.0.report(&f.1, &f.2)),
         (None, why) => writeln!(
@@ -2358,11 +2387,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             - text_lines),
     );
     // The integer casts the lifted functions print (native/lift-cast-types):
-    // in the function modules, `m_<key>.rs` and an IWRAM copy's `m<i>_<key>.rs`.
+    // in the function modules ([`modules::is_module`]).
     let n_casts: usize = files
         .files
         .iter()
-        .filter(|(p, _)| p.starts_with('m') && p.as_str() != "main.rs")
+        .filter(|(p, _)| modules::is_module(p))
         .map(|(_, t)| casts::count(t))
         .sum();
     m.push("casts", n(n_casts));
@@ -2488,6 +2517,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // (no bar: it should rise) and the rest, as `loop` (barred).
     m.push("loops_for", soft.loops_for);
     m.push("loops_not_for", soft.loops_plain);
+    // Indexing by a `for`'s variable (native/lift-for-index): the `for`s
+    // whose body still multiplies or shifts it (barred), and the pointers
+    // stepped beside it printed as the element they are (no bar).
+    m.push("for_counter_arith", soft.for_counter_arith);
+    m.push("for_stepped_elements", soft.ptrs_stepped);
     // Joins (native/lift-join-shape): the labelled blocks printed, where
     // the flow isn't an `if`, a `match` or a loop's, and the guest blocks
     // whose code printed more than once (both barred).
@@ -4280,6 +4314,11 @@ struct Soft {
     /// and as `loop`.
     loops_for: u64,
     loops_plain: u64,
+    /// The `for`s whose body still multiplies or shifts the variable
+    /// (barred), and the pointers stepped beside one printed as the
+    /// element they are (no bar; native/lift-for-index).
+    for_counter_arith: u64,
+    ptrs_stepped: u64,
     /// Labelled blocks printed (a `break` leaves each), and the times a
     /// guest block's code printed again where it had printed already
     /// (unit `native/lift-join-shape`).
@@ -4401,6 +4440,17 @@ struct FnPrinter<'a, 'b> {
     /// and the write of each one's step, left out: its block and inst.
     fors: BTreeMap<usize, counted::For>,
     steps: BTreeMap<u32, usize>,
+    /// The pointers a `for` steps beside its variable that print as the
+    /// element they are ([`counted::Stepped`]; native/lift-for-index):
+    /// the candidates the typed flow takes; their steps, left out, by
+    /// block; and their reads, by block and inst: the element, the
+    /// register's name and the index's Rust.
+    ptr_cands: Vec<counted::Stepped>,
+    ptr_steps: BTreeMap<u32, Vec<usize>>,
+    ptr_reads: BTreeMap<(u32, usize), (fields::Indexed, String, String)>,
+    /// The `for`s whose variable's first value a stepped pointer's index
+    /// takes, kept before the loop as `rN_first`, by label.
+    first_lets: BTreeSet<usize>,
     /// Whether the code printed last may end in a `for`: unlike a `loop`,
     /// it has type `()`, so at the function's end `unreachable!()` follows.
     tail_for: bool,
@@ -4685,7 +4735,7 @@ impl FnPrinter<'_, '_> {
         order.extend(f.blocks.keys().copied().filter(|&k| k != f.entry));
         self.labels = order.iter().enumerate().map(|(i, &k)| (k, i)).collect();
         (self.dead, self.live_in, self.local) = self.dead_writes();
-        (self.field_at, self.field_idx, self.elem_addr) = self.field_types();
+        (self.field_at, self.field_idx, self.elem_addr, _) = self.field_types();
         self.banked = self.redundant_banks();
         // A catch point prints in the `match` form: a restore goes on at
         // its save's return site's label ([`longjmp`]).
@@ -4693,6 +4743,7 @@ impl FnPrinter<'_, '_> {
         if let Some(p) = plan {
             if !self.holes.no_for_loops {
                 self.find_fors(&p.tree);
+                self.stepped_ptrs();
             }
             self.soft.fns_structured += 1;
             self.soft.blocks_match += p.region_blocks;
@@ -4920,8 +4971,16 @@ impl FnPrinter<'_, '_> {
         if self.holes.no_ref_binds {
             return;
         }
-        let (text, n) = ref_binds::bind(&s[head..]);
-        if n != ref_binds::Bound::default() {
+        // Its entries as printed stay ([`one_entry`] finds them so): a
+        // parameter's binding goes after them.
+        let all = self.soft.entries.get(&self.f.entry).map(Entries::all);
+        let after = all
+            .as_ref()
+            .and_then(|e| s[head..].find(e.as_str()).map(|i| i + e.len()))
+            .unwrap_or(0);
+        let (text, n) = ref_binds::bind(&s[head..], after);
+        let kept = all.is_none_or(|e| !s[head..].contains(&e) || text.contains(&e));
+        if n != ref_binds::Bound::default() && kept {
             s.replace_range(head.., &text);
             self.soft.refs_bound_named += n.named;
             self.soft.refs_bound_proven += n.proven;
@@ -4958,7 +5017,15 @@ impl FnPrinter<'_, '_> {
         if n.renames.is_empty() && n.notes.is_empty() {
             return;
         }
-        let renamed = local_names::rename(&s[start..], &n.renames);
+        // A `for` variable's first value, kept beside it
+        // ([`FnPrinter::first_lets`]), takes its name too.
+        let mut renames = n.renames.clone();
+        for (r, name) in &n.renames {
+            if r.strip_prefix('r').is_some_and(|d| d.parse::<u8>().is_ok()) {
+                renames.insert(format!("{r}_first"), format!("{name}_first"));
+            }
+        }
+        let renamed = local_names::rename(&s[start..], &renames);
         let (text, noted) = local_names::insert_notes(&renamed, &n.notes);
         s.replace_range(start.., &text);
         if let Some(e) = self.soft.entries.get_mut(&k) {
@@ -5274,6 +5341,7 @@ impl FnPrinter<'_, '_> {
         BTreeMap<(u32, usize), fields::At>,
         BTreeMap<(u32, usize), fields::Indexed>,
         BTreeMap<(u32, usize), fields::Indexed>,
+        BTreeMap<(u32, usize), fields::Indexed>,
     ) {
         let Some(maps) = self.holes.fields.as_deref() else {
             return Default::default();
@@ -5289,7 +5357,18 @@ impl FnPrinter<'_, '_> {
             .iter()
             .map(|k| &self.f.blocks[k].block.insts[..])
             .collect();
-        let at = fields::flow(
+        // The pointers stepped beside a `for`'s variable
+        // ([`FnPrinter::ptr_cands`]).
+        let mut steps = fields::Steps::default();
+        for c in &self.ptr_cands {
+            for k in &c.round {
+                steps
+                    .reads
+                    .insert((index[k], c.reg), (c.by as i32).unsigned_abs());
+            }
+            steps.skip.insert((index[&c.latch], c.step));
+        }
+        let at = fields::flow_stepped(
             maps,
             self.f.entry,
             &insts,
@@ -5323,6 +5402,7 @@ impl FnPrinter<'_, '_> {
                 let (l, d, n) = self.frame?.local_at(&self.locals, keys[b], i)?;
                 (l.word && d == 0 && n == 4).then_some(l.lo)
             },
+            &steps,
         );
         let key = |(b, i): (usize, usize)| (keys[b], i);
         (
@@ -5355,6 +5435,7 @@ impl FnPrinter<'_, '_> {
                 })
                 .map(|(k, x)| (key(k), x))
                 .collect(),
+            at.stepped.into_iter().map(|(k, x)| (key(k), x)).collect(),
         )
     }
 
@@ -5842,9 +5923,222 @@ impl FnPrinter<'_, '_> {
                     .iter()
                     .any(|k| self.f.blocks[k].block.insts.iter().any(set))
                 || (r < 4 && (calls(&xs) || inside.iter().any(|k| calls(&others(k)))));
+            let mut all = inside.clone();
+            all.push(h);
+            f.ptrs = self.stepped_in(&f, h, back.index, &[h], &all, h);
             return Some((f, h, step));
         }
         None
+    }
+
+    /// The registers loop `f` steps beside its variable by a constant
+    /// a round that may print as the element they are
+    /// ([`counted::Stepped`]; unit `native/lift-for-index`), for the
+    /// typed flow to name ([`FnPrinter::stepped_ptrs`]). The variable
+    /// starts at a constant and steps by 1. The register is written once
+    /// in a round (`round`, `latch` last), by the latch before its jump
+    /// back (`back`): itself plus a constant, unguarded; read nowhere
+    /// after that in the latch, nor in what is printed inside the loop
+    /// (`inside`) outside a round. Nothing but its reads in a round sees
+    /// it: no exit of `inside` reads it (a call's parameters, a return's
+    /// results), no call writes it, and it isn't live where an exit
+    /// leaves the loop. So the printed register keeps its value from
+    /// before the loop, and each read in a round, the element, prints
+    /// the guest's value.
+    fn stepped_in(
+        &self,
+        f: &counted::For,
+        latch: u32,
+        back: usize,
+        round: &[u32],
+        inside: &[u32],
+        h: u32,
+    ) -> Vec<counted::Stepped> {
+        if self.holes.fields.is_none() || !(f.step == 1 || f.step == -1) {
+            return Vec::new();
+        }
+        let insts = &self.f.blocks[&latch].block.insts;
+        let dead_at = |t: u32, bit: live::Live| self.live_in.get(&t).is_some_and(|v| v & bit == 0);
+        let konst = |x: ValueId| match insts[x.index()].op {
+            Op::Const(c) | Op::Pool(c) => Some(c),
+            _ => None,
+        };
+        let mut out = Vec::new();
+        for r in (0..13).filter(|&r| r != f.reg) {
+            let bit = live::reg(r);
+            let set = |i: &Inst| matches!(i.op, Op::SetReg(q, _) if q.index() == r);
+            let get = |i: &Inst| matches!(i.op, Op::GetReg(q) if q.index() == r);
+            let sets: usize = round
+                .iter()
+                .map(|k| {
+                    self.f.blocks[k]
+                        .block
+                        .insts
+                        .iter()
+                        .filter(|i| set(i))
+                        .count()
+                })
+                .sum();
+            if sets != 1 {
+                continue;
+            }
+            let Some(st) = (0..back).find(|&i| set(&insts[i])) else {
+                continue;
+            };
+            if insts[st].guard.is_some() || insts[st + 1..].iter().any(get) {
+                continue;
+            }
+            // Itself plus a constant.
+            let Op::SetReg(_, x) = insts[st].op else {
+                continue;
+            };
+            let is_r = |v: ValueId| get(&insts[v.index()]);
+            let by = match insts[x.index()].op {
+                Op::Bin(BinOp::Add, a, b) if is_r(a) => konst(b),
+                Op::Bin(BinOp::Add, a, b) if is_r(b) => konst(a),
+                Op::Bin(BinOp::Sub, a, b) if is_r(a) => konst(b).map(u32::wrapping_neg),
+                Op::Adc { a, b, c } if is_r(a) => {
+                    match (&insts[b.index()].op, &insts[c.index()].op) {
+                        (Op::Const(k) | Op::Pool(k), Op::Bit(false)) => Some(*k),
+                        (Op::Not(n), Op::Bit(true)) => konst(*n).map(u32::wrapping_neg),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            };
+            let Some(by) = by.filter(|&b| b != 0 && (b as i32).unsigned_abs() <= 0x1_0000) else {
+                continue;
+            };
+            // Read only in a round: not in what runs once the loop is done.
+            if inside
+                .iter()
+                .filter(|k| !round.contains(k))
+                .any(|k| self.f.blocks[k].block.insts.iter().any(get))
+            {
+                continue;
+            }
+            // No exit sees it but going round again, or where it is dead.
+            let leaves = |t: u32| t != h && !inside.contains(&t) && !dead_at(t, bit);
+            let mut ok = true;
+            for k in inside {
+                let on = round.contains(k);
+                for x in exits(self.ctx, &self.f.blocks[k]) {
+                    ok &= match x.plan {
+                        Plan::Static(t) | Plan::Rekey(t) => !leaves(t),
+                        Plan::Call { target, ret } => {
+                            let hi = live::high(
+                                self.passed(target) | self.echoes(target) | self.gives(target),
+                            );
+                            r >= 4
+                                && hi & bit == 0
+                                && !leaves(ret)
+                                && !(on && self.gives(target) & 1 << (r - 4) != 0)
+                        }
+                        Plan::Swi { next } => r >= 4 && !leaves(next),
+                        Plan::Undefined { trap } => trap,
+                        _ => false,
+                    };
+                }
+            }
+            if !ok {
+                continue;
+            }
+            // The element's index: rounds gone by, the way it steps; from
+            // a start not a constant, the variable's first value, kept
+            // before the loop ([`FnPrinter::first_lets`]).
+            let up = (f.step > 0) == ((by as i32) > 0);
+            let v = format!("r{}", f.reg);
+            let first = match f.start {
+                Some(k) => format!("{k:#x}u32"),
+                None => format!("{v}_first"),
+            };
+            let index = match (up, f.start) {
+                (true, Some(0)) => v,
+                (true, _) => format!("{v}.wrapping_sub({first})"),
+                (false, _) => format!("{first}.wrapping_sub({v})"),
+            };
+            out.push(counted::Stepped {
+                reg: r,
+                latch,
+                step: st,
+                by,
+                round: round.to_vec(),
+                index,
+            });
+        }
+        out
+    }
+
+    /// The pointers stepped beside a `for`'s variable
+    /// ([`FnPrinter::stepped_in`]) the typed flow names an element of at
+    /// every read in a round, with the flow over the rest left as they
+    /// are: their steps left out, their reads printed as the element
+    /// (native/lift-for-index).
+    fn stepped_ptrs(&mut self) {
+        let Some(maps) = self.holes.fields.clone() else {
+            return;
+        };
+        let mut labels: BTreeMap<(u32, usize), usize> = BTreeMap::new();
+        let mut cands: Vec<counted::Stepped> = Vec::new();
+        for (&l, f) in &self.fors {
+            for c in &f.ptrs {
+                labels.insert((c.latch, c.step), l);
+                cands.push(c.clone());
+            }
+        }
+        // One loop's register only.
+        let regs: Vec<(u32, usize)> = cands.iter().map(|c| (c.latch, c.reg)).collect();
+        cands.retain(|c| regs.iter().filter(|&&(_, r)| r == c.reg).count() == 1);
+        while !cands.is_empty() {
+            self.ptr_cands = cands.clone();
+            let (at, idx, elem, stepped) = self.field_types();
+            let named = |c: &counted::Stepped| {
+                c.round.iter().all(|k| {
+                    let insts = &self.f.blocks[k].block.insts;
+                    let end = if *k == c.latch { c.step } else { insts.len() };
+                    (0..end).all(|i| {
+                        !matches!(insts[i].op, Op::GetReg(q) if q.index() == c.reg)
+                            || stepped.get(&(*k, i)).is_some_and(|x| {
+                                fields::address_indexed(&maps.types, x, false, "", "").is_some()
+                            })
+                    })
+                })
+            };
+            let n = cands.len();
+            if std::env::var_os("GBAA_STEP_WHY").is_some() {
+                for c in &cands {
+                    eprintln!(
+                        "step-why {:#010x} r{} by {:#x}: named {}",
+                        self.f.entry,
+                        c.reg,
+                        c.by,
+                        named(c)
+                    );
+                }
+            }
+            cands.retain(named);
+            if cands.len() < n {
+                continue;
+            }
+            for c in &cands {
+                if c.index.contains("_first") {
+                    self.first_lets.insert(labels[&(c.latch, c.step)]);
+                }
+                self.ptr_steps.entry(c.latch).or_default().push(c.step);
+                for (&(k, i), x) in &stepped {
+                    let is_c = c.round.contains(&k)
+                        && matches!(self.f.blocks[&k].block.insts[i].op, Op::GetReg(q) if q.index() == c.reg);
+                    if is_c {
+                        self.ptr_reads
+                            .insert((k, i), (x.clone(), format!("r{}", c.reg), c.index.clone()));
+                    }
+                }
+            }
+            self.soft.ptrs_stepped += cands.len() as u64;
+            (self.field_at, self.field_idx, self.elem_addr) = (at, idx, elem);
+            return;
+        }
+        self.ptr_cands.clear();
     }
 
     /// Loop `label` (`body`) as a `for` over a range [`bounds::prove`]
@@ -6074,14 +6368,17 @@ impl FnPrinter<'_, '_> {
                     continue;
                 }
             };
-            let f = counted::For {
+            let mut f = counted::For {
                 reg: r,
                 mutable: after & 1 << r != 0,
-                first: 0,
+                first: proven.start.unwrap_or(0),
                 last: 0,
-                step: 0,
+                step: proven.by,
                 text: Some(proven.range),
+                start: proven.start,
+                ptrs: Vec::new(),
             };
+            f.ptrs = self.stepped_in(&f, l, back.index, &round, &inside, h);
             return Ok((f, l, proven.step));
         }
         Err(if why.is_empty() {
@@ -6206,7 +6503,18 @@ impl FnPrinter<'_, '_> {
                 let b = self.seq(body);
                 self.loops.pop();
                 (self.fall, self.direct) = (after, direct);
-                let s = format!("    'l{label}: {head} {{\n{b}    }}\n");
+                if let Some(f) = self.fors.get(label)
+                    && counter_arith(&b, f.reg)
+                {
+                    self.soft.for_counter_arith += 1;
+                }
+                let first = match self.fors.get(label) {
+                    Some(f) if self.first_lets.contains(label) => {
+                        format!("    let r{0}_first: u32 = r{0};\n", f.reg)
+                    }
+                    _ => String::new(),
+                };
+                let s = format!("{first}    'l{label}: {head} {{\n{b}    }}\n");
                 self.tail_for = is_for;
                 s
             }
@@ -6676,6 +6984,9 @@ impl FnPrinter<'_, '_> {
         let keep = self.holes.keep_dead_writes;
         // A `for`'s step, which its range takes the place of.
         let step = self.steps.get(&self.cur).copied();
+        // A pointer stepped beside it, which its element takes the place
+        // of ([`FnPrinter::stepped_ptrs`]).
+        let ptr_steps = self.ptr_steps.get(&self.cur).cloned().unwrap_or_default();
         // A frame nothing is in memory of prints no sp arithmetic
         // (native/lift-frame-gone).
         let frameless = self.frameless;
@@ -6685,6 +6996,7 @@ impl FnPrinter<'_, '_> {
             .map(|(i, &u)| {
                 (u && !keep)
                     || step == Some(i)
+                    || ptr_steps.contains(&i)
                     || (frameless && matches!(insts[i].op, Op::SetReg(r, _) if r.index() == 13))
             })
             .collect();
@@ -6980,7 +7292,10 @@ impl FnPrinter<'_, '_> {
                 Op::SetFlag(fl, x) => stmt(&mut s, format!("{} = {};", flag(fl), self.whole(x))),
                 Op::GetReg(r) => {
                     self.soft.value_lets += 1;
-                    writeln!(s, "{ind}let {}: u32 = r{};", v(id), r.index()).unwrap()
+                    let e = self
+                        .stepped_read(i)
+                        .unwrap_or_else(|| format!("r{}", r.index()));
+                    writeln!(s, "{ind}let {}: u32 = {e};", v(id)).unwrap()
                 }
                 Op::GetFlag(fl) => {
                     self.soft.value_lets += 1;
@@ -7482,7 +7797,10 @@ impl FnPrinter<'_, '_> {
             .expect("a named access has types");
         if let Some(ix) = r.idx {
             let x = &self.field_idx[&(self.cur, i)];
-            let (p, ix) = (self.val(x.base), self.val(ix));
+            let (p, ix) = match self.ptr_reads.get(&(self.cur, x.base.index())) {
+                Some((_, p, ix)) if x.base == x.i => (p.clone(), ix.clone()),
+                _ => (self.val(x.base), self.val(ix)),
+            };
             let (e, whole) = fields::pointer_indexed(&maps.types, x, r.f.width as u32, &p, &ix)
                 .expect("checked when the access was found");
             self.soft.named_index += 1;
@@ -7678,6 +7996,10 @@ impl FnPrinter<'_, '_> {
             }
             Op::Load { .. } if local || field || callers => Vec::new(),
             Op::Store { value, .. } if local || field || callers => vec![value],
+            // An element through a stepped pointer: named by the loop's
+            // variable, not the pointer's read ([`FnPrinter::field_ptr`]).
+            Op::Load { .. } if idx.is_some() && self.stepped_access(i) => Vec::new(),
+            Op::Store { value, .. } if idx.is_some() && self.stepped_access(i) => vec![value],
             Op::Load { .. } if base.is_some() => base.into_iter().chain(idx).collect(),
             Op::Store { value, .. } if base.is_some() => {
                 base.into_iter().chain(idx).chain([value]).collect()
@@ -7834,6 +8156,7 @@ impl FnPrinter<'_, '_> {
     ) -> String {
         match self.dense.get(&(self.cur, i as u32)) {
             Some(id) => format!("{id:#x}u32"),
+            None if let Some(e) = self.stepped_read(i) => e,
             None if cond.is_none()
                 && let Some(e) = self.elem_address(i) =>
             {
@@ -7842,6 +8165,26 @@ impl FnPrinter<'_, '_> {
             }
             None => self.value(op, cond, form),
         }
+    }
+
+    /// Whether the access at inst `i` is an element through a pointer
+    /// stepped beside a `for`'s variable ([`FnPrinter::stepped_ptrs`]).
+    fn stepped_access(&self, i: usize) -> bool {
+        self.field_idx.get(&(self.cur, i)).is_some_and(|x| {
+            x.base == x.i && self.ptr_reads.contains_key(&(self.cur, x.base.index()))
+        })
+    }
+
+    /// Inst `i`'s value where it reads a pointer stepped beside a `for`'s
+    /// variable ([`FnPrinter::stepped_ptrs`]): the element's address
+    /// (native/lift-for-index).
+    fn stepped_read(&self, i: usize) -> Option<String> {
+        let (x, p, ix) = self.ptr_reads.get(&(self.cur, i))?;
+        let maps = self.holes.fields.as_deref()?;
+        Some(
+            fields::address_indexed(&maps.types, x, false, p, ix)
+                .expect("checked when the pointer was found"),
+        )
     }
 
     /// Inst `i`'s value as an element's address by name, if it is one
@@ -10074,6 +10417,36 @@ fn expr(op: &Op, v: &dyn Fn(ValueId) -> String, w: &dyn Fn(ValueId) -> String) -
     }
 }
 
+/// Whether `body`, a `for`'s printed body, still multiplies or shifts its
+/// variable (`rN`, or a `let` of it): an index the lift printed as
+/// arithmetic (native/lift-for-index's `for_counter_arith`).
+fn counter_arith(body: &str, reg: usize) -> bool {
+    let mut names = vec![format!("r{reg}")];
+    for l in body.lines() {
+        let l = l.trim();
+        if let Some(rest) = l.strip_prefix("let ")
+            && let Some((name, val)) = rest.split_once(": u32 = ")
+            && val.strip_suffix(';') == Some(names[0].as_str())
+        {
+            names.push(name.to_string());
+        }
+    }
+    let word = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    names.iter().any(|n| {
+        body.match_indices(n.as_str()).any(|(at, _)| {
+            let before = body[..at].chars().next_back();
+            let after = &body[at + n.len()..];
+            if before.is_some_and(word) || after.chars().next().is_some_and(word) {
+                return false;
+            }
+            after.starts_with(" <<")
+                || after.starts_with(".wrapping_mul(")
+                || body[..at].ends_with(".wrapping_mul(")
+                || body[..at].ends_with("u32 * ")
+        })
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -10959,5 +11332,29 @@ why = "a table"
             }),
             "prim::shift(ShiftType::Asr, v4, v5, false).0"
         );
+    }
+
+    /// A `for`'s body that still scales its variable, by name or a `let`
+    /// of it, counts; one that only adds to it or names it as an index
+    /// doesn't (native/lift-for-index).
+    #[test]
+    fn counter_arith_finds_a_scaled_variable() {
+        assert!(counter_arith("    let v3: u32 = r4 << 2;\n", 4));
+        assert!(counter_arith(
+            "    let v1: u32 = r4;\n    x = (v1 << 1).wrapping_add(v1);\n",
+            4
+        ));
+        assert!(counter_arith(
+            "    x = 0x64u32.wrapping_mul(r8).wrapping_add(0x20244ec);\n",
+            8
+        ));
+        assert!(!counter_arith(
+            "    x = r14 << 2;\n    y = r4.wrapping_add(0x1);\n",
+            4
+        ));
+        assert!(!counter_arith(
+            "    g.get(Ref::<[u16; 12]>::new(r6).idx(r4));\n",
+            4
+        ));
     }
 }

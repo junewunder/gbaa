@@ -214,9 +214,9 @@ pub fn eval(insts: &[Inst], regs: &mut [Option<Sym>; 16], end: usize) -> Vec<Opt
             }
             _ => None,
         };
-        // Any other pure value: itself.
+        // Any other pure value, or a load's (fixed once loaded): itself.
         if vals[i].is_none()
-            && super::pure(&inst.op)
+            && (super::pure(&inst.op) || matches!(inst.op, Op::Load { .. }))
             && !matches!(inst.op, Op::GetReg(_) | Op::GetFlag(_))
         {
             vals[i] = Some(Sym {
@@ -340,11 +340,14 @@ pub struct Loop<'a> {
     pub kept: u16,
 }
 
-/// A proven range: the index of the latch's step, and the range's Rust.
+/// A proven range: the index of the latch's step, and the range's Rust;
+/// the counter's start where it is a constant, and its step a round.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Proven {
     pub step: usize,
     pub range: String,
+    pub start: Option<u32>,
+    pub by: i32,
 }
 
 fn text(s: &Sym, reg: usize) -> Option<String> {
@@ -546,7 +549,12 @@ pub fn why(l: &Loop) -> Result<Proven, &'static str> {
         }
         range.push_str(&format!(".step_by({by})"));
     }
-    Ok(Proven { step, range })
+    Ok(Proven {
+        step,
+        range,
+        start: s.as_const(),
+        by: c as i32,
+    })
 }
 
 #[cfg(test)]
@@ -663,7 +671,9 @@ mod tests {
             prove(&lp),
             Some(Proven {
                 step: 6,
-                range: "0..r5".into()
+                range: "0..r5".into(),
+                start: Some(0),
+                by: 1,
             })
         );
         // Without the guard, nothing says n > 0.
@@ -675,6 +685,21 @@ mod tests {
                 ..lp
             }),
             None
+        );
+        // n loaded (`p->cap`, unit native/lift-for-index): a value fixed
+        // once loaded, which the guard bounds as it does a register's.
+        let mut loaded = w.clone();
+        loaded[0] = i(Op::Load {
+            width: armv4t::sem::Width::Word,
+            addr: v(1),
+        });
+        assert_eq!(
+            prove(&Loop {
+                way_in: &loaded,
+                ..lp
+            })
+            .map(|p| p.range),
+            Some("0..r5".into())
         );
         // r5 written in the loop: not a bound.
         assert_eq!(prove(&Loop { kept: 0, ..lp }), None);

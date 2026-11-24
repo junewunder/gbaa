@@ -12,7 +12,8 @@
 //!   type (`let n_copy: Ref<t::Node> = n;`);
 //! - a parameter `w: u32` keeps its type in the signature (callers and
 //!   adapters pass the guest's word) and is bound again as the body's
-//!   first line, `let w: Ref<T> = Ref::new(w);`;
+//!   first line, `let w: Ref<T> = Ref::new(w);`, after the `{` line the
+//!   function's entries end with;
 //! - each `Ref::<T>::new(w)` prints `w`, and every other use `w.addr()`
 //!   (C's pointer as an integer: a compare, arithmetic, an argument).
 //!
@@ -78,8 +79,10 @@ struct Cand {
     lett: Option<(usize, usize, usize)>,
 }
 
-/// `text` (one or more functions) with its pointer variables bound.
-pub fn bind(text: &str) -> (String, Bound) {
+/// `text` (one or more functions) with its pointer variables bound; a
+/// parameter's binding goes no earlier than byte `after` (the end of the
+/// entries the printer finds by their text).
+pub fn bind(text: &str, after: usize) -> (String, Bound) {
     let mut bound = Bound::default();
     let Some(toks) = tokens(text) else {
         return (text.to_string(), bound);
@@ -90,7 +93,7 @@ pub fn bind(text: &str) -> (String, Bound) {
         if word(text, &toks, i) == Some("fn")
             && word(text, &toks, i + 1).is_some()
             && punct(&toks, i + 2) == Some(b'(')
-            && let Some(next) = one_fn(text, &toks, i + 2, &mut edits, &mut bound)
+            && let Some(next) = one_fn(text, &toks, i + 2, after, &mut edits, &mut bound)
         {
             i = next;
             continue;
@@ -151,6 +154,7 @@ fn one_fn(
     text: &str,
     toks: &[(Tok, usize)],
     lp: usize,
+    after: usize,
     edits: &mut Vec<(usize, usize, String)>,
     bound: &mut Bound,
 ) -> Option<usize> {
@@ -407,9 +411,15 @@ fn one_fn(
                 }
             }
             None => {
-                let at = toks[open].1 + 1;
+                // After the `{` line, and the entries' text if it goes on
+                // past it (`one_entry` finds them by it).
+                let b = toks[open].1 + 1;
+                let mut at = text[b..].find('\n').map_or(b, |n| b + n + 1);
+                if at < after && after <= toks[close].1 {
+                    at = after;
+                }
                 let n = &c.name;
-                edits.push((at, at, format!("\n    let {n}: Ref<{t}> = Ref::new({n});")));
+                edits.push((at, at, format!("    let {n}: Ref<{t}> = Ref::new({n});\n")));
             }
         }
     }
@@ -463,7 +473,7 @@ mod tests {
     #[test]
     fn binds_a_parameter_and_its_copy() {
         let t = "pub fn act(g: &mut Game, r13: u32, n: u32) -> () {\n    let n_copy: u32 = n;\n    let x: u32 = g.get(Ref::<t::Node>::new(n_copy).x());\n    g.set(Ref::<t::Node>::new(n).dx(), x);\n    if n == 0 { return; }\n    g.set(Ref::<t::Node>::new(n_copy).x(), x);\n}\n";
-        let (o, b) = bind(t);
+        let (o, b) = bind(t, 0);
         assert_eq!(
             b,
             Bound {
@@ -482,7 +492,7 @@ mod tests {
     #[test]
     fn wraps_a_let_and_keeps_other_uses() {
         let t = "fn f(g: &mut Game) {\n    let p: u32 = ld32(g, 0x3000000);\n    let v: u32 = (g.at(Ref::<H_08000290>::to(p, 0x8)).f_8 as u32);\n    g.at_mut(Ref::<H_08000290>::new(p)).f_8 = v as u16;\n    call(g, p.wrapping_add(4));\n}\n";
-        let (o, b) = bind(t);
+        let (o, b) = bind(t, 0);
         assert_eq!(
             b,
             Bound {
@@ -507,7 +517,7 @@ mod tests {
             "fn f(g: &mut Game, n: u32) {\n    g.get(Ref::<t::A>::new(n).x());\n    g.get(Ref::<t::B>::new(n).y());\n}\n",
             "fn f(g: &mut Game, n: u32) {\n    g.get(Ref::<t::A>::to(n, 4).x());\n}\n",
         ] {
-            let (o, b) = bind(t);
+            let (o, b) = bind(t, 0);
             assert_eq!(o, t);
             assert_eq!(b, Bound::default());
         }
@@ -516,7 +526,7 @@ mod tests {
     #[test]
     fn lets_of_one_name_in_two_blocks() {
         let t = "fn f(g: &mut Game) {\n    if c {\n    let n: u32 = r5;\n    g.get(Ref::<t::A>::new(n).x());\n    } else {\n    let n: u32 = r4;\n    g.set(Ref::<t::A>::new(n).y(), n);\n    }\n}\n";
-        let (o, b) = bind(t);
+        let (o, b) = bind(t, 0);
         assert_eq!(b.named, 2);
         assert!(
             o.contains("let n: Ref<t::A> = Ref::new(r5);\n    g.get(n.x());"),
@@ -526,10 +536,10 @@ mod tests {
         // An outer `let` or parameter a block's `let` shadows is bound
         // around it.
         let t = "fn f(g: &mut Game, n: u32) {\n    g.get(Ref::<t::A>::new(n).x());\n    {\n    let n: u32 = r4;\n    g.get(Ref::<t::B>::new(n).y());\n    }\n    call(g, n);\n}\n";
-        let (o, b) = bind(t);
+        let (o, b) = bind(t, 0);
         assert_eq!(b.named, 2);
         assert!(
-            o.contains("let n: Ref<t::A> = Ref::new(n);\n    g.get(n.x());"),
+            o.contains("{\n    let n: Ref<t::A> = Ref::new(n);\n    g.get(n.x());"),
             "{o}"
         );
         assert!(
@@ -544,7 +554,7 @@ mod tests {
         // The first's uses end at the second's `;`: its right side still
         // reads the first. One in a block inside hides it only there.
         let t = "fn f(g: &mut Game) {\n    let b: u32 = r4;\n    g.get(Ref::<t::A>::new(b).x());\n    {\n    let b: u32 = 7;\n    call(g, b);\n    }\n    g.get(Ref::<t::A>::new(b).y());\n    let b: u32 = b.wrapping_add(4);\n    g.get(Ref::<t::A>::new(b).z());\n}\n";
-        let (o, bd) = bind(t);
+        let (o, bd) = bind(t, 0);
         assert_eq!(bd.named, 2);
         assert!(
             o.contains("let b: Ref<t::A> = Ref::new(r4);\n    g.get(b.x());"),
@@ -557,22 +567,37 @@ mod tests {
     #[test]
     fn a_function_returning_an_array() {
         let t = "pub fn f(g: &mut Game, mut r13: u32, [mut r0, mut r1, mut r2, mut r3]: [u32; 4]) -> Result<[u32; 4], Exit> {\n    let n: u32 = r4;\n    g.get(Ref::<t::A>::new(n).x());\n    Ok([r0, r1, r2, r3])\n}\n";
-        let (o, b) = bind(t);
+        let (o, b) = bind(t, 0);
         assert_eq!(b.named, 1, "{o}");
     }
 
     #[test]
     fn a_compare_is_a_use_not_a_macro() {
         let t = "fn f(g: &mut Game) {\n    let p: u32 = r8;\n    g.set(Ref::<u8>::new(p), 1);\n    let c: bool = p != r1;\n}\n";
-        let (o, _) = bind(t);
+        let (o, _) = bind(t, 0);
         assert!(o.contains("let c: bool = p.addr() != r1;"), "{o}");
+    }
+
+    #[test]
+    fn a_parameter_binds_after_the_entries() {
+        let head = "pub fn f(g: &mut Game, r13: u32, s: u32) -> () {\n    let (mut r4, mut r1) = (0u32, 0u32);\n";
+        let t = format!("{head}    g.get(Ref::<t::A>::new(s).x());\n}}\n");
+        let (o, _) = bind(&t, head.len());
+        assert!(o.starts_with(head), "{o}");
+        assert!(
+            o.contains("= (0u32, 0u32);\n    let s: Ref<t::A> = Ref::new(s);\n    g.get(s.x());"),
+            "{o}"
+        );
     }
 
     #[test]
     fn an_array_type_and_fields_of_the_same_name() {
         let t = "fn f(g: &mut Game, x: u32, i: u32) {\n    let a: u32 = g.get(Ref::<[t::Obj; 4]>::new(x).idx(i).x());\n    g.ram.x = a;\n}\n";
-        let (o, _) = bind(t);
-        assert!(o.contains("let x: Ref<[t::Obj; 4]> = Ref::new(x);"), "{o}");
+        let (o, _) = bind(t, 0);
+        assert!(
+            o.contains("{\n    let x: Ref<[t::Obj; 4]> = Ref::new(x);\n"),
+            "{o}"
+        );
         assert!(o.contains("g.get(x.idx(i).x())"), "{o}");
         assert!(o.contains("g.ram.x = a;"), "{o}");
     }

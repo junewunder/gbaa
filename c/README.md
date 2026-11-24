@@ -50,7 +50,7 @@ changed ROM needs its file made again, or its lift has no names.
 | `chain/`    | a stack struct passed by pointer down a call chain; a struct returned by value |
 | `heap/`     | a first-fit allocator; sprites, a menu and short-lived effects allocated at three call sites, function pointers beside numbers in each |
 | `bits/`     | bitfields in a byte and a halfword through a pointer: written one field at a time, constant and computed, and read and written joined by the compiler; a global's bitfields at its constant address |
-| `loops/`    | counted loops to a parameter, a global and a field; nested, counting down, breaking out, skipping rounds, a `u8` counter |
+| `loops/`    | counted loops to a parameter, a global and a field; nested, counting down, breaking out, skipping rounds, a `u8` counter; arrays indexed by the counter: of structs, a field array through a pointer, two by one counter, a pointer stepped beside it |
 | `list/`     | a linked list over a static node pool: a free list and a sorted live list through one `next`, inserted into through a `Node **`, removed from and walked each frame, an `act` function pointer per node |
 | `jump/`     | errors thrown with `longjmp` out of a recursion to an outer and an inner `setjmp` (`setjmp.s`: the ARM pair behind Thumb entries, a program's own assembly) |
 

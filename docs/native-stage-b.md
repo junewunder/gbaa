@@ -206,8 +206,8 @@ local), so locals need an escape analysis first.
   every local in the frame's bytes too, `shadow local:` where a load
   differs (`docs/tools/commands.md`). Frameless: `native/lift-frame-gone`.
 
-Escaping slots passed as `&mut` (the design's section 1 form 1) come with
-typed pointers, below; until then they are soft holes, counted.
+Escaping slots passed as `&mut`: `native/lift-stack-arrays` (design,
+`frame::lend`), printed by `native/lift-lent-print` and its follow-ups.
 
 ### 5. Typed data
 
@@ -281,7 +281,7 @@ first tests stage A and the shortcuts on a real agbcc game that builds.
 
 - **Lifted crates split into modules that build**
   (`native/lift-modules`). Done (`codegen::native::modules`): modules of
-  about 4,000 lines, so rustc's codegen runs on several cores.
+  about 4,000 lines, so rustc's codegen runs on several cores; by source file where the names give one.
 - **Metroid lifts with no hard holes and builds**
   (`native/metroid-lifts`). Done (2026-11-08, quack): `--name metroid`,
   `mods/metroid/holes.toml` (private: its stand-ins port the game's code),
@@ -346,7 +346,7 @@ Not filed, for stage C or later: the 8 jumps by value per program as a
 `match` on the target's code (the structuring plan takes them as jumps to
 labels; native/lift-structured), the functions whose
 callee-saves aren't proven (soft: each function keeps its own r4-r11),
-escaping stack slots as `&mut`, and replacing agb's allocator. Also not
+and replacing agb's allocator. Also not
 filed: discovery's own fix for the gaps the lifter decodes (a `bl`'s
 second half taken for a pool, a scan stopped short; `gap_targets`); file
 it if a game needs it.
