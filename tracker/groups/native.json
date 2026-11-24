@@ -4262,19 +4262,8 @@
         "by": "d78e67ee",
         "at": "2026-11-24T08:51:27Z",
         "evidence": "just lift-mod-run '$HOME/ROMs/gba/Metroid - Zero Mission (USA).gba' mods/metroid/energy units/metroid-native.toml, no symlink and no flag (name metroid from mods/metroid/): 'metroid-native: 895 of 2700 frames differ: 1806-2700', lift-mod-run: pass, fn-check ran (1 function, the mod's 0x2d vs 0x63 as expected). --name NAME overrides; passed on to fn-check. just check passed (exit 0) after merging origin/main (up to date). Commit dba35ba1.",
-        "branch": "unit/native/lift-mod-run-name",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T08:51:27Z",
-          "by": "d78e67ee",
-          "host": "quack",
-          "pid": 2962048,
-          "start": "95217572",
-          "beats": true,
-          "session": "d78e67ee-c428-4f84-8766-298c84dd1f23",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "landed": "2026-11-24T08:59:42Z"
       },
       "notes": [
         {
@@ -4282,8 +4271,7 @@
           "by": "e4b6a739",
           "text": "Amazing Mirror hit it too ({unit:native/mirror-agent-mod}): 'Kirby & The Amazing Mirror.gba' names no holes file; same symlink workaround, out/rom-links/kirby-mirror.gba."
         }
-      ],
-      "round": "2026-11-24T08:37:21Z"
+      ]
     },
     {
       "id": "native/lift-equipment-words",
