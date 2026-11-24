@@ -16,6 +16,7 @@ Made from each file's frontmatter (`title`, `hook`, `open: true`) by `just memor
 - [Measuring and profiling the function flow's switches](fnref-switches-how-to-measure.md) — run off and on side by side; eu-stack -i on a line-table build; an empty VAR= is set
 - [mGBA's blending quirks (windows and sprites)](mgba-blend-quirks.md) — with the OBJ window on, mGBA brightens non-target sprites; semi sprites ignore the window's effect bit
 - [pokeemerald's DWARF (locals, types, lines) through gdb](pokeemerald-dwarf.md) — binutils 15.2 rejects agbcc's .debug_abbrev; Fedora gdb reads it (info scope, ptype, info line) (2026-10-26)
+- [Running Metroid's native route against a lift variant](metroid-native-route-run.md) — lift, three builds and route-check --native in one long job: 6 min on quack, so check a lifter change on a game
 - [SDL3's static build, and testing a window under gamescope](sdl-build-and-gamescope.md) — spotting SDL's X11 driver; gamescope in a lane needs WAYLAND_DISPLAY unset; cu type can overtake cu key
 - [Timing a hand-patched generated build, and testing a value](variant-builds-and-mirror-runs.md) — patch call sites, not call!; a copied crate needs its own --target-dir; use a positive control
 - [What a whole lift of each corpus game costs, and the holes-only one](lift-cost-corpus.md) — whole lifts 1-30 min under 3 GB (ask no 16G: it blocks other jobs); holes-only 9 s-3.5 min, 0.6 GB

@@ -110,6 +110,10 @@ any real game.
   handler runs on the right stack (once per run of such stores at one sp,
   native/lift-bank-sp-once). Control `--ime-at-waits`; program
   `agb/native-ime-release` (frame 601 matches mGBA).
+- **`IME` set again while I is set** (`native/ime-i-set-test-program`).
+  Done: the `msr` that clears I takes it, as mGBA and the lift do
+  (`Machine::tick_native` holds it, outside IRQ mode). Control
+  `--irq-at-waits`; program `agb/native-ime-i-set`.
 - **Task switchers on host coroutines** (`native/task-coroutines`). Done:
   a stack switch is a hard hole; the prelude's `task_resume` and kin run
   tasks on coroutines for the stand-ins. Program `agb/native-tasks`.
@@ -156,13 +160,13 @@ build for the host.
   `fn_words_not_proven` (barred) and `fn_words_proven`.
   `GBAA_FNREF_TRACE=1` traces it. Proofs are weak on agb: see "Known
   gaps", the pile.
-- **Function pointers as dense IDs** (`native/fnref-dense`). The proven
-  words rewritten in the lifter's copy of ROM data, `FNS` dense from 1
-  under a new `--fn-ids dense`; ROM keys stay the native check's (RAM holds
-  the play build's numbers). Check: `lift-check` green with ROM keys, and
-  each program's dense build draws the same 600 frames (`route-check
-  --native … --packed`); bar: 0 ROM keys left in a dense build. Waits on
-  the heap split by allocation site (`native/fnref-heap-sites`).
+- **Function pointers as dense IDs** (`native/fnref-dense`). Done
+  (`native::dense_ids`): at `--fn-ids dense` a function every address of
+  which the flow proved is an ID from 1 (`DENSE`) in the crate's ROM copy
+  and the code's constants; the rest keep their keys, which `call_fn`
+  still finds. `lift-check` builds each program so (`route-check
+  --dense`: the same frames, records but RAM). Metrics `fn_ids_dense`,
+  `fn_keys_left` (0 on the C programs but c-fnptr-gcc's 6; Metroid 326).
 - **Indirect calls pass what their callees read**
   (`native/indirect-call-args`). Done: a call (not a jump by value)
   whose `native/fnref-flow` callee set is complete reads the union of
@@ -211,9 +215,9 @@ typed pointers, below; until then they are soft holes, counted.
   (`native/rom_data.rs`): a computed load the value sets bound to ROM
   indexes a static view of `ROM` typed by its width, one object per width
   from overlapping extents, the pointer checked (`ROM_0808CAD0[rix(a,
-  0x808cad0, 2, 12)]`); extents over 256 KB stay bytes. A word loaded
-  from one is still a guest address. Function words as `FnRef`s and
-  pointers as `RomRef`s are `native/rom-statics`', after the dense IDs.
+  0x808cad0, 2, 12)]`); over 256 KB bytes, but to 512 KB where the flow read
+  no function word (`native/rom-statics`). A function word in one is a dense
+  ID where proven (`rom_static_fn_keys`); a ROM pointer a number (`rom_refs`).
 - **RAM globals as typed fields** (`native/ram-globals`). Done
   (`crates/codegen/src/native/globals.rs`): constant-address RAM accesses
   carved into globals, the fields of `Ram` at the guest's offsets under
@@ -304,9 +308,9 @@ first tests stage A and the shortcuts on a real agbcc game that builds.
   lift 48 s at 0.38 GB, the crate alone builds in 80 s, rustc 6.78 GB.
 - **Kirby Amazing Mirror lifts with no hard holes and builds**
   (`native/mirror-lifts`). Done (2026-11-14, quack;
-  `mods/kirby-mirror/holes.toml`, `skip_fn_flow`: 37 min without):
-  2,626,434 lines in 751 files, lift 45 s at 0.62 GB, the crate built in
-  107 s at 11.7 GB; first stop frame 2, the m4a mixer as Nightmare's.
+  `mods/kirby-mirror/holes.toml`): 2,626,434 lines in 751 files, lift
+  45 s at 0.62 GB, the crate built in 107 s at 11.7 GB. The flow on since
+  `native/mirror-flow-on` (2026-11-24): 0 hard holes, 600 of 600 frames.
 - **katam's names and types in the Amazing Mirror's lift** (`native/mirror-katam-names`).
 
 Emerald comes after typed RAM and pointers, typed from pret's DWARF (the
@@ -353,18 +357,14 @@ What the done pieces left open, for the units that come next.
 
 - **Falls and calls into an entry** (piece 1). A call that returns into
   another function's entry passes the callee's r0-r3 and the caller's
-  other registers and flags as before the call; neither that path nor a
-  `b` (rather than a fall) into an entry has a test program. The
-  summaries don't count r4-r11 or flags a fall passes on as parameters,
-  so `x_` stays whole for fall targets. A stand-in, and a jump through a
-  register to a target no table names (`call_fn`), are still entered by
-  the plain entry.
-- **IME with I set** (piece 1). The play build drops `IME_ON` when I is
-  set at the tick after the `IME` write, so "I set, `IME` on, `msr`
-  clears I" waits for the next time point where the hardware library
-  takes it at the `msr`; fixing only the play build would split it from
-  the lift's IRQ wrapper. A store to `IME` through an address the
-  recompiler can't fold still ticks at its block's end.
+  other registers and flags as before the call (a callee that changes
+  flags the entry reads is lifted wrong). `agb/native-entry-jump` checks
+  it and a `b` into an entry. The summaries don't count r4-r11 or flags
+  a fall passes on as parameters, so `x_` stays whole for fall targets. A
+  stand-in, and a jump through a register to a target no table names
+  (`call_fn`), are still entered by the plain entry.
+- **A store to `IME` the recompiler can't fold** (piece 1) still ticks
+  at its block's end, not at the store.
 - **Shapes return too much** (piece 3). Many shaped functions return all
   four registers, because a caller whose run stopped (a fall into library
   code) calls them, and a jump by value the run didn't prove a return

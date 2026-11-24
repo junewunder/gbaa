@@ -18,6 +18,11 @@
 //! - any other shift by a constant 1 to 31 as Rust's operator:
 //!   `x << c`, `x >> c`, `((x as i32) >> c) as u32`, `x.rotate_right(c)`.
 //!
+//! A narrowed or shifted value that already printed at a width goes
+//! through [`super::casts`]: `(x as u16 as u32) as u8 as u32` is `x as u8
+//! as u32`, and an arithmetic shift of `x as i16 as u32` by less than 16
+//! shifts the `i16`.
+//!
 //! The metrics: `shift_pairs_left` (barred) counts the guest's shift
 //! pairs, a `lsl #c` and the `lsr #c` or `asr #c` of its result right
 //! after it, whose second shift still printed as a shift (one the IR
@@ -164,6 +169,10 @@ pub enum Form {
     },
     /// A shift by a constant 1 to 31.
     Shift(ShiftType, u32),
+    /// `x + 0` (`adds rd, rs, #0`, agbcc's move, or `subs rd, rs, #0`):
+    /// `x` itself (`native/lift-add-zero`). Its flags are their own
+    /// values, so the sum prints as the value it copies whatever reads them.
+    Copy,
     /// `x + k`, `x - k` and `k - x`, a constant `k`.
     AddConst(u32),
     SubConst(u32),
@@ -175,6 +184,9 @@ pub enum Form {
     AddCarry(ValueId, ValueId),
     /// `x + c`.
     CarryOnly(ValueId),
+    /// `x` itself: a load's rotate by an amount proven 0
+    /// ([`super::aligned`]).
+    Same,
 }
 
 impl Form {
@@ -193,6 +205,7 @@ impl Form {
     /// ([`Form::others`]) each as `w` prints a whole expression.
     pub fn print_with(self, x: &str, w: &dyn Fn(ValueId) -> String) -> String {
         match self {
+            Form::Copy => x.to_string(),
             Form::AddConst(k) => format!("{x}.wrapping_add({k:#x})"),
             Form::SubConst(k) => format!("{x}.wrapping_sub({k:#x})"),
             Form::ConstSub(0) => format!("{x}.wrapping_neg()"),
@@ -214,11 +227,12 @@ impl Form {
     /// [`Form::print_with`] of a form that reads no other value.
     pub fn print(self, x: &str) -> String {
         match self {
-            Form::Narrow { bits: 8, signed } => {
-                format!("{x} as {}8 as u32", if signed { "i" } else { "u" })
-            }
-            Form::Narrow { bits: 16, signed } => {
-                format!("{x} as {}16 as u32", if signed { "i" } else { "u" })
+            Form::Narrow {
+                bits: b @ (8 | 16),
+                signed,
+            } => {
+                let t = format!("{}{b}", if signed { "i" } else { "u" });
+                format!("{} as u32", super::casts::cast(x, &t))
             }
             Form::Narrow {
                 bits,
@@ -227,8 +241,9 @@ impl Form {
             Form::Narrow { bits, signed: true } => format!("prim::sext({x}, {bits})"),
             Form::Shift(ShiftType::Lsl, c) => format!("{x} << {c}"),
             Form::Shift(ShiftType::Lsr, c) => format!("{x} >> {c}"),
-            Form::Shift(ShiftType::Asr, c) => format!("(({x} as i32) >> {c}) as u32"),
+            Form::Shift(ShiftType::Asr, c) => super::casts::asr(x, c),
             Form::Shift(ShiftType::Ror, c) => format!("{x}.rotate_right({c})"),
+            Form::Same => x.to_string(),
             f => panic!("{f:?} reads another value"),
         }
     }
@@ -317,7 +332,9 @@ fn sum(
         _ => None,
     };
     let add = |x: ValueId, k: u32| {
-        Some(if (k as i32) < 0 {
+        Some(if k == 0 {
+            (x, Form::Copy)
+        } else if (k as i32) < 0 {
             (x, Form::SubConst(k.wrapping_neg()))
         } else {
             (x, Form::AddConst(k))
@@ -368,6 +385,30 @@ pub fn guest_pairs(insns: &[(u32, Instr)]) -> Vec<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `adds r0, r1, #0` and `subs r0, r1, #0` (`r1 + !0 + 1`) print as
+    /// `r1`'s value itself.
+    #[test]
+    fn an_add_of_zero_is_a_copy() {
+        use armv4t::sem::Reg;
+        let i = |op| Inst { op, guard: None };
+        for (k, carry) in [(0, false), (!0, true)] {
+            let insts = [
+                i(Op::GetReg(Reg(1))),
+                i(Op::Const(k)),
+                i(Op::Bit(carry)),
+                i(Op::Adc {
+                    a: ValueId(0),
+                    b: ValueId(1),
+                    c: ValueId(2),
+                }),
+            ];
+            let known = values(&insts, &BTreeMap::new());
+            let (x, f) = form(&insts, &known, 3).unwrap();
+            assert_eq!((x, f), (ValueId(0), Form::Copy));
+            assert_eq!(f.print_with("v0", &|_| unreachable!()), "v0");
+        }
+    }
 
     #[test]
     fn forms_print_as_casts() {

@@ -24,18 +24,22 @@
 //!   is a bit of the value; a constant shift's carry out is one too;
 //! - a combination of closed forms is their combination.
 //!
+//! A side printed at a width compares in it ([`super::casts`]): `(x as
+//! i16 as u32) as i32 <= 9` prints `(x as i16) <= 9`, and a signed
+//! compare's constant is an `i32` literal.
+//!
 //! What stays raw: a flag from another block (`GetFlag`), one an
 //! instruction's condition selected (`BSelect`), a multiply's carry, and
 //! an add with carry in from a flag. [`raw`] counts the conditions resting
 //! on one: the metric `branches_on_raw_flags`.
 
-use super::{konst, v};
+use super::{casts, konst, v};
 use analysis::ir::{BinOp, BitOp, Inst, Op, ValueId};
 use armv4t::sem::ShiftType;
 
 /// A comparison's relation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Rel {
+pub enum Rel {
     Eq,
     Ne,
     Lt,
@@ -45,6 +49,11 @@ enum Rel {
 }
 
 impl Rel {
+    /// The opposite relation: `a rel b` false.
+    pub fn negated(self) -> Rel {
+        self.not()
+    }
+
     fn not(self) -> Rel {
         match self {
             Rel::Eq => Rel::Ne,
@@ -57,7 +66,7 @@ impl Rel {
     }
 
     /// The same relation with its sides swapped.
-    fn mirror(self) -> Rel {
+    pub fn mirror(self) -> Rel {
         match self {
             Rel::Lt => Rel::Gt,
             Rel::Gt => Rel::Lt,
@@ -78,7 +87,7 @@ impl Rel {
         }
     }
 
-    fn holds<T: Ord>(self, a: T, b: T) -> bool {
+    pub fn holds<T: Ord>(self, a: T, b: T) -> bool {
         match self {
             Rel::Eq => a == b,
             Rel::Ne => a != b,
@@ -133,7 +142,29 @@ pub struct Form {
     pub uses: Vec<ValueId>,
 }
 
+/// One side of a comparison, for code that reasons about it
+/// ([`Form::compare`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Opnd {
+    Val(ValueId),
+    Const(u32),
+}
+
 impl Form {
+    /// The comparison it is, `l rel r` (`signed`: as `i32`s), where its
+    /// sides are values or constants.
+    pub fn compare(&self) -> Option<(Opnd, Rel, Opnd, bool)> {
+        let F::Cmp { l, rel, r, signed } = &self.f else {
+            return None;
+        };
+        let o = |s: &Side| match *s {
+            Side::Val(x) => Some(Opnd::Val(x)),
+            Side::Const(k) => Some(Opnd::Const(k)),
+            Side::And(..) => None,
+        };
+        Some((o(l)?, *rel, o(r)?, *signed))
+    }
+
     fn new(f: F, uses: Vec<ValueId>) -> Form {
         Form { f, uses }.normal()
     }
@@ -266,12 +297,17 @@ impl Form {
         name: &dyn Fn(ValueId, u32) -> Option<String>,
     ) -> String {
         match &self.f {
-            F::Cmp { l, rel, r, signed } => format!(
-                "{} {} {}",
-                side(l, *signed, true, val),
-                rel.text(),
-                named_side(l, r, *signed, name).unwrap_or_else(|| side(r, *signed, false, val))
-            ),
+            F::Cmp { l, rel, r, signed } => {
+                if let Some(t) = narrow_side(l, *rel, r, *signed, val, name) {
+                    return t;
+                }
+                format!(
+                    "{} {} {}",
+                    side(l, *signed, true, val),
+                    rel.text(),
+                    named_side(l, r, *signed, name).unwrap_or_else(|| side(r, *signed, false, val))
+                )
+            }
             F::Bool(b) => format!("{b}"),
             F::Text(t) => t.clone(),
         }
@@ -293,12 +329,39 @@ fn named_side(
     Some(if signed { format!("({n} as i32)") } else { n })
 }
 
+/// A compare of a value extended from a narrower type (`x as u8 as u32`,
+/// a `u16` field's load) in that type ([`casts::narrow_cmp`]), where the
+/// other side is a constant (one no name is given for) or a value
+/// extended from the same type.
+fn narrow_side(
+    l: &Side,
+    rel: Rel,
+    r: &Side,
+    signed: bool,
+    val: &dyn Fn(ValueId) -> String,
+    name: &dyn Fn(ValueId, u32) -> Option<String>,
+) -> Option<String> {
+    let &Side::Val(x) = l else {
+        return None;
+    };
+    let rt;
+    let r = match *r {
+        Side::Const(k) if name(x, k).is_none() => Ok(k),
+        Side::Val(y) => {
+            rt = val(y);
+            Err(rt.as_str())
+        }
+        _ => return None,
+    };
+    casts::narrow_cmp(&val(x), rel.text(), r, signed)
+}
+
 /// A side as Rust. A constant on the left is typed (nothing else gives
 /// its type); on the right it takes the other side's.
 fn side(s: &Side, signed: bool, left: bool, val: &dyn Fn(ValueId) -> String) -> String {
     match (s, signed) {
         (Side::Val(x), false) => val(*x),
-        (Side::Val(x), true) => format!("({} as i32)", val(*x)),
+        (Side::Val(x), true) => format!("({})", casts::cast(&val(*x), "i32")),
         (Side::And(a, b), false) => format!("({} & {})", and(a, val), and(b, val)),
         (Side::And(..), true) => format!("({} as i32)", side(s, false, false, val)),
         (&Side::Const(k), false) if left => format!("{k:#x}u32"),
@@ -306,6 +369,8 @@ fn side(s: &Side, signed: bool, left: bool, val: &dyn Fn(ValueId) -> String) -> 
         (&Side::Const(k), true) if !left && (-0x10000..=0x10000).contains(&(k as i32)) => {
             format!("{}", k as i32)
         }
+        // An `i32` literal: any but the least, which Rust can't negate.
+        (&Side::Const(k), true) if !left && k != 0x8000_0000 => casts::literal(k as i32 as i64),
         (&Side::Const(k), true) => format!("({k:#x}u32 as i32)"),
     }
 }

@@ -40,10 +40,26 @@
 # native/lift-gives' 1322 -> 1327; 1322 -> 1323 on its branch): st8 passes a
 # byte store to a sound or timer register on as a byte (hw::write_io8), as the
 # play build's bus, not its pair rewritten (Amazing Mirror's PSG differed).
-# lines_prelude raised 1328 -> 1337 (native/emerald-native-route): ROM loads read
-# the cartridge's GPIO port (rom_half) and halfword ROM stores reach it, with
-# Hw::gpio set from the ROM, as the play build's bus: Emerald's RTC probe failed
-# in the lift (rtc.c's sErrorStatus 0x90 from frame 10).
+# lines_prelude raised 1337 -> 1364 (native/lift-longjmp): restore,
+# catch_restore and restored, a context restore's return by unwinding into
+# the caller of its save (setjmp's). native-ram-jump's, added beside it, was
+# left at 1337 until native/moonbeam-builds.
+# lines_prelude raised 1364 -> 1373 (native/land-emerald-route-lifter, from
+# native/emerald-native-route): ROM loads read the cartridge's GPIO port
+# (rom_half) and halfword ROM stores reach it, with Hw::gpio set from the ROM,
+# as the play build's bus: Emerald's RTC probe failed in the lift (rtc.c's
+# sErrorStatus 0x90 from frame 10).
+# lines_prelude raised 1328 -> 1337 (native/fnref-dense): call_fn and irq_entry
+# take a dense function's ID (`DENSE`, empty at --fn-ids rom). fn_keys_left
+# (native/fnref-dense): the function words and code constants a --fn-ids dense
+# build leaves as keys, at the values measured; 0 on the C programs but
+# c-fnptr-gcc, whose callback words a frame's pushed r3 holds in the stacks'
+# cell (an indirect call's callee assumed to read the caller's frame).
+# rom_static_fn_keys and rom_refs (native/rom-statics), at the values
+# measured: the function words the flow read in a ROM static that a dense
+# build leaves as keys (agb's 3 in a byte static, read a byte at a time), and
+# the loads from a word static that holds a pointer into ROM data (a RomRef's
+# soft hole).
 
 [program.affine]
 rom = "agb/affine.gba"
@@ -51,8 +67,9 @@ route = "units/affine-600.toml"
 
 [program.affine.bars]
 io_unnamed = 19
-lines = 21006
-lines_prelude = 1337
+lines = 20124
+lines_prelude = 1373
+casts = 305
 texts_left = 0
 functions = 109
 functions_iwram = 3
@@ -73,16 +90,18 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7243
-reg_local_writes = 3088
+load_rotates_left = 291
+value_lets = 6438
+reg_local_writes = 3086
 unpacked_unread = 0
 regs_call_entries = 13
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 257
 sp_arith_unescaped = 0
+sp_arith_exact = 33
 lr_returned = 0
-loops_not_for = 142
+loops_not_for = 140
 labelled_blocks = 206
 blocks_printed_again = 0
 load_const_ram = 0
@@ -124,6 +143,9 @@ branches_on_raw_flags = 30
 entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 55
+fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 sp_accesses_callers_frame = 7
 
 [program.mosaic-modes]
@@ -132,8 +154,9 @@ route = "units/mosaic-modes-600.toml"
 
 [program.mosaic-modes.bars]
 io_unnamed = 19
-lines = 15353
-lines_prelude = 1337
+lines = 14669
+lines_prelude = 1373
+casts = 270
 texts_left = 0
 functions = 102
 functions_iwram = 3
@@ -154,16 +177,18 @@ blocks_in_match = 46
 compare_trees_left = 10
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 4908
-reg_local_writes = 2209
+load_rotates_left = 283
+value_lets = 4271
+reg_local_writes = 2206
 unpacked_unread = 0
 regs_call_entries = 15
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 214
 sp_arith_unescaped = 0
+sp_arith_exact = 28
 lr_returned = 0
-loops_not_for = 123
+loops_not_for = 120
 labelled_blocks = 171
 blocks_printed_again = 0
 load_const_ram = 0
@@ -207,6 +232,9 @@ branches_on_raw_flags = 22
 entry_lr_returns_call_fn = 1
 gap_targets = 24
 fn_words_not_proven = 54
+fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 sp_accesses_callers_frame = 4
 
 [program.native-spike]
@@ -221,8 +249,9 @@ planted_hole = { drop_standin = 0x08002728, names = "error: hard hole in f_08002
 
 [program.native-spike.bars]
 io_unnamed = 19
-lines = 22242
-lines_prelude = 1337
+lines = 21137
+lines_prelude = 1373
+casts = 422
 texts_left = 0
 functions = 110
 functions_iwram = 3
@@ -243,16 +272,18 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7755
-reg_local_writes = 3195
+load_rotates_left = 291
+value_lets = 6728
+reg_local_writes = 3193
 unpacked_unread = 0
 regs_call_entries = 15
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 263
 sp_arith_unescaped = 0
+sp_arith_exact = 30
 lr_returned = 0
-loops_not_for = 144
+loops_not_for = 142
 labelled_blocks = 213
 blocks_printed_again = 0
 load_const_ram = 0
@@ -294,6 +325,9 @@ branches_on_raw_flags = 36
 entry_lr_returns_call_fn = 0
 gap_targets = 22
 fn_words_not_proven = 58
+fn_keys_left = 62
+rom_static_fn_keys = 3
+rom_refs = 16
 sp_accesses_callers_frame = 8
 
 [program.native-fallthrough]
@@ -306,8 +340,9 @@ planted_flags = ["--fall-as-tail-call"]
 
 [program.native-fallthrough.bars]
 io_unnamed = 19
-lines = 20571
-lines_prelude = 1337
+lines = 19696
+lines_prelude = 1373
+casts = 306
 texts_left = 0
 functions = 112
 functions_iwram = 3
@@ -328,16 +363,18 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7209
-reg_local_writes = 3088
+load_rotates_left = 290
+value_lets = 6412
+reg_local_writes = 3086
 unpacked_unread = 0
 regs_call_entries = 15
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 260
 sp_arith_unescaped = 0
+sp_arith_exact = 33
 lr_returned = 0
-loops_not_for = 138
+loops_not_for = 136
 labelled_blocks = 206
 blocks_printed_again = 0
 load_const_ram = 0
@@ -379,6 +416,9 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 56
+fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 sp_accesses_callers_frame = 8
 
 [program.native-irq-hold]
@@ -392,8 +432,9 @@ planted_flags = ["--irq-at-waits"]
 
 [program.native-irq-hold.bars]
 io_unnamed = 19
-lines = 20775
-lines_prelude = 1337
+lines = 19894
+lines_prelude = 1373
+casts = 305
 texts_left = 0
 functions = 114
 functions_iwram = 3
@@ -414,16 +455,18 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7269
-reg_local_writes = 3104
+load_rotates_left = 297
+value_lets = 6467
+reg_local_writes = 3102
 unpacked_unread = 0
 regs_call_entries = 13
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 267
 sp_arith_unescaped = 0
+sp_arith_exact = 33
 lr_returned = 0
-loops_not_for = 142
+loops_not_for = 140
 labelled_blocks = 210
 blocks_printed_again = 0
 load_const_ram = 0
@@ -465,6 +508,9 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 gap_targets = 11
 fn_words_not_proven = 58
+fn_keys_left = 62
+rom_static_fn_keys = 3
+rom_refs = 17
 sp_accesses_callers_frame = 7
 
 [program.native-frame-locals]
@@ -480,8 +526,9 @@ planted_flags = ["--plant-slot=0x08000182"]
 
 [program.native-frame-locals.bars]
 io_unnamed = 19
-lines = 20543
-lines_prelude = 1337
+lines = 19666
+lines_prelude = 1373
+casts = 309
 texts_left = 0
 functions = 113
 functions_iwram = 3
@@ -502,16 +549,18 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7202
-reg_local_writes = 3072
+load_rotates_left = 291
+value_lets = 6404
+reg_local_writes = 3070
 unpacked_unread = 0
 regs_call_entries = 13
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 261
 sp_arith_unescaped = 0
+sp_arith_exact = 33
 lr_returned = 0
-loops_not_for = 138
+loops_not_for = 136
 labelled_blocks = 206
 blocks_printed_again = 0
 load_const_ram = 0
@@ -554,6 +603,9 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 55
+fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 
 [program.native-ime-release]
 rom = "agb/native-ime-release.gba"
@@ -565,8 +617,9 @@ planted_flags = ["--ime-at-waits"]
 
 [program.native-ime-release.bars]
 io_unnamed = 19
-lines = 20736
-lines_prelude = 1337
+lines = 19855
+lines_prelude = 1373
+casts = 293
 texts_left = 0
 functions = 113
 functions_iwram = 3
@@ -587,16 +640,18 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7257
-reg_local_writes = 3094
+load_rotates_left = 297
+value_lets = 6455
+reg_local_writes = 3092
 unpacked_unread = 0
 regs_call_entries = 13
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 271
 sp_arith_unescaped = 0
+sp_arith_exact = 34
 lr_returned = 0
-loops_not_for = 142
+loops_not_for = 140
 labelled_blocks = 210
 blocks_printed_again = 0
 load_const_ram = 0
@@ -639,6 +694,9 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 gap_targets = 15
 fn_words_not_proven = 58
+fn_keys_left = 62
+rom_static_fn_keys = 3
+rom_refs = 17
 
 [program.native-bios-calls]
 rom = "agb/native-bios-calls.gba"
@@ -654,8 +712,9 @@ route = "units/native-bios-calls-600.toml"
 
 [program.native-bios-calls.bars]
 io_unnamed = 19
-lines = 20924
-lines_prelude = 1337
+lines = 20039
+lines_prelude = 1373
+casts = 309
 texts_left = 0
 functions = 109
 functions_iwram = 3
@@ -676,16 +735,18 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7300
-reg_local_writes = 3140
+load_rotates_left = 294
+value_lets = 6493
+reg_local_writes = 3138
 unpacked_unread = 0
 regs_call_entries = 13
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 259
 sp_arith_unescaped = 0
+sp_arith_exact = 33
 lr_returned = 0
-loops_not_for = 139
+loops_not_for = 137
 labelled_blocks = 206
 blocks_printed_again = 0
 load_const_ram = 0
@@ -728,6 +789,9 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 gap_targets = 7
 fn_words_not_proven = 55
+fn_keys_left = 58
+rom_static_fn_keys = 3
+rom_refs = 17
 
 [program.native-bios-more]
 rom = "agb/native-bios-more.gba"
@@ -743,8 +807,9 @@ route = "units/native-bios-more-600.toml"
 
 [program.native-bios-more.bars]
 io_unnamed = 19
-lines = 22584
-lines_prelude = 1337
+lines = 21194
+lines_prelude = 1373
+casts = 404
 texts_left = 0
 functions = 104
 functions_iwram = 3
@@ -765,16 +830,18 @@ blocks_in_match = 512
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 8151
-reg_local_writes = 3178
+load_rotates_left = 312
+value_lets = 6821
+reg_local_writes = 3176
 unpacked_unread = 0
 regs_call_entries = 16
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 265
 sp_arith_unescaped = 0
+sp_arith_exact = 29
 lr_returned = 0
-loops_not_for = 113
+loops_not_for = 111
 labelled_blocks = 157
 blocks_printed_again = 0
 load_const_ram = 0
@@ -819,6 +886,9 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 2
 gap_targets = 165
 fn_words_not_proven = 55
+fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 16
 
 [program.native-tasks]
 rom = "agb/native-tasks.gba"
@@ -837,8 +907,9 @@ planted_hole = { drop_standin = 0x080001a4, names = "error: hard hole in f_08000
 
 [program.native-tasks.bars]
 io_unnamed = 19
-lines = 20954
-lines_prelude = 1337
+lines = 20079
+lines_prelude = 1373
+casts = 304
 texts_left = 0
 functions = 122
 functions_iwram = 3
@@ -859,16 +930,18 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7306
-reg_local_writes = 3067
+load_rotates_left = 324
+value_lets = 6509
+reg_local_writes = 3064
 unpacked_unread = 0
 regs_call_entries = 13
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 270
 sp_arith_unescaped = 0
+sp_arith_exact = 39
 lr_returned = 0
-loops_not_for = 141
+loops_not_for = 138
 labelled_blocks = 213
 blocks_printed_again = 0
 load_const_ram = 0
@@ -925,6 +998,9 @@ gap_targets = 5
 # 0x080073d8, f_03000094, which an msr there takes. An accident of the
 # widening both ways: read without the stride the count stays 59.
 fn_words_not_proven = 60
+fn_keys_left = 68
+rom_static_fn_keys = 3
+rom_refs = 17
 
 [program.native-dma]
 rom = "agb/native-dma.gba"
@@ -936,8 +1012,9 @@ planted_store = 0x08000180
 
 [program.native-dma.bars]
 io_unnamed = 19
-lines = 15134
-lines_prelude = 1337
+lines = 14463
+lines_prelude = 1373
+casts = 273
 texts_left = 0
 functions = 107
 functions_iwram = 3
@@ -958,16 +1035,18 @@ blocks_in_match = 46
 compare_trees_left = 10
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 4898
-reg_local_writes = 2234
+load_rotates_left = 291
+value_lets = 4276
+reg_local_writes = 2232
 unpacked_unread = 0
 regs_call_entries = 15
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 220
 sp_arith_unescaped = 0
+sp_arith_exact = 28
 lr_returned = 0
-loops_not_for = 120
+loops_not_for = 118
 labelled_blocks = 171
 blocks_printed_again = 0
 load_const_ram = 0
@@ -1012,6 +1091,9 @@ branches_on_raw_flags = 22
 entry_lr_returns_call_fn = 1
 gap_targets = 80
 fn_words_not_proven = 61
+fn_keys_left = 67
+rom_static_fn_keys = 3
+rom_refs = 16
 
 [program.native-save]
 rom = "agb/native-save.gba"
@@ -1026,8 +1108,9 @@ planted_store = 0x080002ac
 
 [program.native-save.bars]
 io_unnamed = 19
-lines = 20794
-lines_prelude = 1337
+lines = 19910
+lines_prelude = 1373
+casts = 333
 texts_left = 0
 functions = 112
 functions_iwram = 3
@@ -1048,16 +1131,18 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7308
-reg_local_writes = 3090
+load_rotates_left = 292
+value_lets = 6502
+reg_local_writes = 3088
 unpacked_unread = 0
 regs_call_entries = 13
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 263
 sp_arith_unescaped = 0
+sp_arith_exact = 35
 lr_returned = 0
-loops_not_for = 139
+loops_not_for = 137
 labelled_blocks = 208
 blocks_printed_again = 0
 load_const_ram = 0
@@ -1099,6 +1184,9 @@ jumps_by_value = 8
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 55
+fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5
 
 [program.native-bios-region]
@@ -1112,8 +1200,9 @@ route = "units/native-bios-region-601.toml"
 
 [program.native-bios-region.bars]
 io_unnamed = 19
-lines = 20702
-lines_prelude = 1337
+lines = 19826
+lines_prelude = 1373
+casts = 293
 texts_left = 0
 functions = 114
 functions_iwram = 3
@@ -1134,16 +1223,18 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7240
-reg_local_writes = 3094
+load_rotates_left = 298
+value_lets = 6439
+reg_local_writes = 3092
 unpacked_unread = 0
 regs_call_entries = 13
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 268
 sp_arith_unescaped = 0
+sp_arith_exact = 35
 lr_returned = 0
-loops_not_for = 140
+loops_not_for = 138
 labelled_blocks = 206
 blocks_printed_again = 0
 load_const_ram = 0
@@ -1185,6 +1276,9 @@ jumps_by_value = 8
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 59
+fn_keys_left = 63
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 11
 
 [program.native-bios-affine]
@@ -1199,8 +1293,9 @@ route = "units/native-bios-affine-600.toml"
 
 [program.native-bios-affine.bars]
 io_unnamed = 19
-lines = 21019
-lines_prelude = 1337
+lines = 20123
+lines_prelude = 1373
+casts = 385
 texts_left = 0
 functions = 110
 functions_iwram = 3
@@ -1221,16 +1316,18 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7376
-reg_local_writes = 3132
+load_rotates_left = 305
+value_lets = 6559
+reg_local_writes = 3130
 unpacked_unread = 0
 regs_call_entries = 13
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 258
 sp_arith_unescaped = 0
+sp_arith_exact = 33
 lr_returned = 0
-loops_not_for = 139
+loops_not_for = 137
 labelled_blocks = 208
 blocks_printed_again = 0
 load_const_ram = 0
@@ -1272,6 +1369,9 @@ jumps_by_value = 9
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 56
+fn_keys_left = 60
+rom_static_fn_keys = 3
+rom_refs = 18
 gap_targets = 5
 
 [program.native-serial]
@@ -1288,8 +1388,9 @@ planted_store = 0x0800017c
 
 [program.native-serial.bars]
 io_unnamed = 19
-lines = 21515
-lines_prelude = 1337
+lines = 20555
+lines_prelude = 1373
+casts = 420
 texts_left = 0
 functions = 117
 functions_iwram = 3
@@ -1310,16 +1411,18 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7604
-reg_local_writes = 3142
+load_rotates_left = 346
+value_lets = 6724
+reg_local_writes = 3140
 unpacked_unread = 0
 regs_call_entries = 13
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 270
 sp_arith_unescaped = 0
+sp_arith_exact = 36
 lr_returned = 0
-loops_not_for = 142
+loops_not_for = 140
 labelled_blocks = 214
 blocks_printed_again = 0
 load_const_ram = 0
@@ -1361,6 +1464,9 @@ jumps_by_value = 9
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 58
+fn_keys_left = 61
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5
 
 [program.native-irq-wrapper]
@@ -1379,8 +1485,9 @@ planted_store = 0x080001f4
 
 [program.native-irq-wrapper.bars]
 io_unnamed = 19
-lines = 21037
-lines_prelude = 1337
+lines = 20146
+lines_prelude = 1373
+casts = 312
 texts_left = 0
 functions = 118
 functions_iwram = 3
@@ -1401,16 +1508,18 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7362
-reg_local_writes = 3126
+load_rotates_left = 301
+value_lets = 6549
+reg_local_writes = 3124
 unpacked_unread = 0
 regs_call_entries = 16
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 273
 sp_arith_unescaped = 0
+sp_arith_exact = 33
 lr_returned = 0
-loops_not_for = 142
+loops_not_for = 140
 labelled_blocks = 210
 blocks_printed_again = 0
 load_const_ram = 0
@@ -1452,6 +1561,9 @@ jumps_by_value = 8
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 60
+fn_keys_left = 68
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5
 
 [program.native-takes]
@@ -1465,8 +1577,9 @@ planted_flags = ["--takes-zeroed"]
 
 [program.native-takes.bars]
 io_unnamed = 19
-lines = 20562
-lines_prelude = 1337
+lines = 19687
+lines_prelude = 1373
+casts = 305
 texts_left = 0
 functions = 113
 functions_iwram = 3
@@ -1487,16 +1600,18 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7201
-reg_local_writes = 3078
+load_rotates_left = 290
+value_lets = 6405
+reg_local_writes = 3076
 unpacked_unread = 0
 regs_call_entries = 13
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 262
 sp_arith_unescaped = 0
+sp_arith_exact = 33
 lr_returned = 0
-loops_not_for = 138
+loops_not_for = 136
 labelled_blocks = 206
 blocks_printed_again = 0
 load_const_ram = 0
@@ -1538,6 +1653,102 @@ jumps_by_value = 8
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 55
+fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
+gap_targets = 5
+
+[program.native-ram-jump]
+rom = "agb/native-ram-jump.gba"
+route = "units/native-ram-jump-600.toml"
+# A jump into a RAM copy passes the registers it reads
+# (native/ram-jump-passes-regs): tj_jump jumps into tj_c, copied to IWRAM,
+# which reads r8 and r9 as tj_set, tj_jump's caller, left them; the report
+# says tj_jump takes them. Stage A's old call (--takes-zeroed) passes tj_jump
+# none.
+planted_flags = ["--takes-zeroed"]
+
+[program.native-ram-jump.bars]
+io_unnamed = 19
+lines = 19669
+lines_prelude = 1373
+casts = 306
+texts_left = 0
+functions = 113
+functions_iwram = 4
+functions_lifted = 110
+functions_unrecognised = 113
+functions_replaced = 3
+standins = 3
+functions_summary_hole = 83
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 52
+hard_holes = 0
+entries_beyond_one = 23
+guest_pc_plain = 0
+functions_result_unneeded = 0
+blocks = 1713
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+load_rotates_left = 290
+value_lets = 6397
+reg_local_writes = 3073
+unpacked_unread = 0
+regs_call_entries = 14
+unread_lets = 0
+adc_sums = 0
+bank_sp_calls = 261
+sp_arith_unescaped = 0
+sp_arith_exact = 34
+lr_returned = 0
+loops_not_for = 136
+labelled_blocks = 206
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 12
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 227
+load_computed_ram = 0
+load_computed_io = 6
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 704
+store_const_ram = 0
+store_const_io = 25
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 449
+store_computed_ram = 1
+store_computed_io = 6
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 347
+pointer_unexplained = 1
+ref_unexplained = 35
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 669
+sp_accesses_callers_frame = 7
+call_fn_calls = 62
+call_fn_four_complete = 57
+jumps_by_value = 9
+branches_on_raw_flags = 28
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 54
+fn_keys_left = 57
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5
 
 [program.native-gives]
@@ -1551,8 +1762,9 @@ planted_flags = ["--gives-kept"]
 
 [program.native-gives.bars]
 io_unnamed = 19
-lines = 20546
-lines_prelude = 1337
+lines = 19671
+lines_prelude = 1373
+casts = 305
 texts_left = 0
 functions = 113
 functions_iwram = 3
@@ -1573,16 +1785,18 @@ blocks_in_match = 206
 compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 7192
-reg_local_writes = 3074
+load_rotates_left = 290
+value_lets = 6396
+reg_local_writes = 3072
 unpacked_unread = 0
 regs_call_entries = 13
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 262
 sp_arith_unescaped = 0
+sp_arith_exact = 34
 lr_returned = 0
-loops_not_for = 138
+loops_not_for = 136
 labelled_blocks = 206
 blocks_printed_again = 0
 load_const_ram = 0
@@ -1624,6 +1838,9 @@ jumps_by_value = 8
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 55
+fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5
 
 [program.c-fnptr-agbcc]
@@ -1642,8 +1859,9 @@ io_unnamed = 0
 computed_unknown_unnamed = 5
 bitfield_arith = 0
 bitfield_joined = 0
-lines = 646
-lines_prelude = 1337
+lines = 635
+lines_prelude = 1373
+casts = 55
 texts_left = 0
 functions = 18
 functions_iwram = 0
@@ -1664,16 +1882,18 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 154
-reg_local_writes = 75
+load_rotates_left = 2
+value_lets = 146
+reg_local_writes = 74
 unpacked_unread = 0
 regs_call_entries = 1
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 13
 sp_arith_unescaped = 0
+sp_arith_exact = 0
 lr_returned = 0
-loops_not_for = 8
+loops_not_for = 7
 labelled_blocks = 0
 blocks_printed_again = 0
 load_const_ram = 0
@@ -1715,6 +1935,9 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-fnptr-gcc]
@@ -1733,8 +1956,9 @@ io_unnamed = 0
 computed_unknown_unnamed = 17
 bitfield_arith = 0
 bitfield_joined = 0
-lines = 723
-lines_prelude = 1337
+lines = 711
+lines_prelude = 1373
+casts = 43
 texts_left = 0
 functions = 18
 functions_iwram = 0
@@ -1755,16 +1979,18 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 164
-reg_local_writes = 82
+load_rotates_left = 2
+value_lets = 153
+reg_local_writes = 81
 unpacked_unread = 0
 regs_call_entries = 0
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 18
 sp_arith_unescaped = 0
+sp_arith_exact = 0
 lr_returned = 0
-loops_not_for = 9
+loops_not_for = 8
 labelled_blocks = 6
 blocks_printed_again = 0
 load_const_ram = 0
@@ -1806,6 +2032,9 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 5
+fn_keys_left = 6
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-switch-agbcc]
@@ -1826,8 +2055,9 @@ io_unnamed = 0
 computed_unknown_unnamed = 14
 bitfield_arith = 0
 bitfield_joined = 0
-lines = 671
-lines_prelude = 1337
+lines = 650
+lines_prelude = 1373
+casts = 30
 texts_left = 0
 functions = 10
 functions_iwram = 0
@@ -1848,16 +2078,18 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 183
-reg_local_writes = 60
+load_rotates_left = 3
+value_lets = 164
+reg_local_writes = 59
 unpacked_unread = 0
 regs_call_entries = 0
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 31
 sp_arith_unescaped = 0
+sp_arith_exact = 0
 lr_returned = 0
-loops_not_for = 5
+loops_not_for = 4
 labelled_blocks = 6
 blocks_printed_again = 0
 load_const_ram = 0
@@ -1899,6 +2131,9 @@ jumps_by_value = 2
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 2
 gap_targets = 0
 
 [program.c-switch-gcc]
@@ -1919,8 +2154,9 @@ io_unnamed = 0
 computed_unknown_unnamed = 15
 bitfield_arith = 0
 bitfield_joined = 0
-lines = 753
-lines_prelude = 1337
+lines = 730
+lines_prelude = 1373
+casts = 44
 texts_left = 0
 functions = 10
 functions_iwram = 0
@@ -1941,7 +2177,8 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 200
+load_rotates_left = 0
+value_lets = 177
 reg_local_writes = 86
 unpacked_unread = 0
 regs_call_entries = 0
@@ -1949,6 +2186,7 @@ unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 39
 sp_arith_unescaped = 0
+sp_arith_exact = 0
 lr_returned = 0
 loops_not_for = 6
 labelled_blocks = 11
@@ -1992,6 +2230,9 @@ jumps_by_value = 2
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 2
 gap_targets = 0
 
 [program.c-chain-agbcc]
@@ -2010,8 +2251,9 @@ io_unnamed = 0
 computed_unknown_unnamed = 5
 bitfield_arith = 0
 bitfield_joined = 0
-lines = 706
-lines_prelude = 1337
+lines = 680
+lines_prelude = 1373
+casts = 69
 texts_left = 0
 functions = 13
 functions_iwram = 0
@@ -2032,16 +2274,18 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 206
-reg_local_writes = 104
+load_rotates_left = 1
+value_lets = 188
+reg_local_writes = 100
 unpacked_unread = 0
 regs_call_entries = 1
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 17
 sp_arith_unescaped = 0
+sp_arith_exact = 0
 lr_returned = 0
-loops_not_for = 8
+loops_not_for = 4
 labelled_blocks = 2
 blocks_printed_again = 0
 load_const_ram = 0
@@ -2083,6 +2327,9 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-chain-gcc]
@@ -2101,8 +2348,9 @@ io_unnamed = 0
 computed_unknown_unnamed = 10
 bitfield_arith = 0
 bitfield_joined = 0
-lines = 710
-lines_prelude = 1337
+lines = 695
+lines_prelude = 1373
+casts = 49
 texts_left = 0
 functions = 13
 functions_iwram = 0
@@ -2123,16 +2371,18 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 195
-reg_local_writes = 89
+load_rotates_left = 4
+value_lets = 183
+reg_local_writes = 88
 unpacked_unread = 0
 regs_call_entries = 0
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 19
 sp_arith_unescaped = 0
+sp_arith_exact = 0
 lr_returned = 0
-loops_not_for = 10
+loops_not_for = 9
 labelled_blocks = 6
 blocks_printed_again = 0
 load_const_ram = 0
@@ -2174,6 +2424,9 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-heap-agbcc]
@@ -2193,8 +2446,9 @@ io_unnamed = 0
 computed_unknown_unnamed = 11
 bitfield_arith = 0
 bitfield_joined = 0
-lines = 773
-lines_prelude = 1337
+lines = 757
+lines_prelude = 1373
+casts = 34
 texts_left = 0
 functions = 22
 functions_iwram = 0
@@ -2215,16 +2469,18 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 167
-reg_local_writes = 101
+load_rotates_left = 7
+value_lets = 155
+reg_local_writes = 99
 unpacked_unread = 0
 regs_call_entries = 1
 unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 21
 sp_arith_unescaped = 0
+sp_arith_exact = 0
 lr_returned = 0
-loops_not_for = 8
+loops_not_for = 6
 labelled_blocks = 6
 blocks_printed_again = 0
 load_const_ram = 0
@@ -2266,6 +2522,9 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-heap-gcc]
@@ -2285,8 +2544,9 @@ io_unnamed = 0
 computed_unknown_unnamed = 37
 bitfield_arith = 0
 bitfield_joined = 0
-lines = 802
-lines_prelude = 1337
+lines = 789
+lines_prelude = 1373
+casts = 31
 texts_left = 0
 functions = 19
 functions_iwram = 0
@@ -2307,7 +2567,8 @@ blocks_in_match = 0
 compare_trees_left = 0
 dead_flag_writes = 0
 shift_pairs_left = 0
-value_lets = 194
+load_rotates_left = 18
+value_lets = 181
 reg_local_writes = 93
 unpacked_unread = 0
 regs_call_entries = 0
@@ -2315,6 +2576,7 @@ unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 25
 sp_arith_unescaped = 0
+sp_arith_exact = 0
 lr_returned = 0
 loops_not_for = 10
 labelled_blocks = 9
@@ -2358,6 +2620,9 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-bits-agbcc]
@@ -2367,43 +2632,50 @@ route = "units/c-bits-agbcc-600.toml"
 # by agbcc (GCC 2.95) with `just c-tests`: structs with bitfields in a byte and a
 # halfword, read and written through a pointer, one field at a time and
 # joined by the compiler. The planted store is ball_paint's b->hue = i * 3,
-# a set_bits.
+# a set_bits. The clock, gClock, is a global with bitfields read and written
+# at its constant address (native/lift-global-bitfields): its fields print
+# as its ram_t struct's getters and setters; its bars raised with the two
+# functions it added (lines, blocks, value lets, bitfield_joined: its
+# storage fields and the words over both).
 planted_store = 0x08000292
 
 [program.c-bits-agbcc.bars]
-lines = 444
+lines = 502
 io_unnamed = 0
 texts_left = 0
-lines_prelude = 1337
-functions = 13
+lines_prelude = 1373
+casts = 40
+functions = 15
 functions_iwram = 0
-functions_lifted = 13
-functions_unrecognised = 13
+functions_lifted = 15
+functions_unrecognised = 15
 functions_replaced = 0
 standins = 0
 functions_summary_hole = 1
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 0
 hard_holes = 0
-entries_beyond_one = 15
+entries_beyond_one = 17
 functions_result_unneeded = 0
 guest_pc_plain = 0
-blocks = 51
+blocks = 62
 functions_in_match = 0
 blocks_in_match = 0
 compare_trees_left = 0
 shift_pairs_left = 0
+load_rotates_left = 0
 dead_flag_writes = 0
 bank_sp_calls = 18
 sp_arith_unescaped = 0
+sp_arith_exact = 0
 lr_returned = 0
-value_lets = 100
-reg_local_writes = 48
+value_lets = 109
+reg_local_writes = 51
 unpacked_unread = 0
 regs_call_entries = 0
 unread_lets = 0
 adc_sums = 0
-loops_not_for = 6
+loops_not_for = 4
 labelled_blocks = 0
 blocks_printed_again = 0
 load_const_ram = 0
@@ -2426,7 +2698,7 @@ store_const_rom = 0
 store_const_display = 0
 store_const_sram = 0
 store_const_other = 0
-store_sp = 5
+store_sp = 9
 store_computed_ram = 0
 store_computed_io = 0
 store_computed_rom = 0
@@ -2440,9 +2712,9 @@ locals_noted = 4
 data_constants_unnamed = 0
 computed_unknown_unnamed = 2
 bitfield_arith = 0
-bitfield_joined = 8
+bitfield_joined = 22
 sp_accesses_local_slot = 0
-sp_accesses_escaping_slot = 5
+sp_accesses_escaping_slot = 9
 sp_accesses_callers_frame = 1
 call_fn_calls = 0
 call_fn_four_complete = 0
@@ -2450,6 +2722,9 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-bits-gcc]
@@ -2459,38 +2734,47 @@ route = "units/c-bits-gcc-600.toml"
 # by modern arm-none-eabi-gcc with `just c-tests`: structs with bitfields in a byte and a
 # halfword, read and written through a pointer, one field at a time and
 # joined by the compiler. The planted store is ball_paint's b->hue = i * 3,
-# a set_bits.
+# a set_bits. The clock, gClock, is a global with bitfields read and written
+# at its constant address (native/lift-global-bitfields): its fields print
+# as its ram_t struct's getters and setters; its bars raised with the two
+# functions it added (lines, blocks, value lets, bitfield_joined: its
+# storage fields and the words over both). Its locals_noted 0 -> 29: the names file
+# made again gives GCC's location lists' variables, which the old one
+# (before native/names-location-lists) didn't.
 planted_store = 0x080002a2
 
 [program.c-bits-gcc.bars]
-lines = 495
+lines = 566
 io_unnamed = 0
 texts_left = 0
-lines_prelude = 1337
-functions = 13
+lines_prelude = 1373
+casts = 44
+functions = 15
 functions_iwram = 0
-functions_lifted = 13
-functions_unrecognised = 13
+functions_lifted = 15
+functions_unrecognised = 15
 functions_replaced = 0
 standins = 0
 functions_summary_hole = 1
 four_register_functions_without_summary_hole = 0
 callee_saves_unproven = 0
 hard_holes = 0
-entries_beyond_one = 15
+entries_beyond_one = 17
 functions_result_unneeded = 0
 guest_pc_plain = 0
-blocks = 59
+blocks = 71
 functions_in_match = 0
 blocks_in_match = 0
 compare_trees_left = 0
 shift_pairs_left = 0
+load_rotates_left = 0
 dead_flag_writes = 0
-bank_sp_calls = 20
+bank_sp_calls = 21
 sp_arith_unescaped = 0
+sp_arith_exact = 0
 lr_returned = 0
-value_lets = 106
-reg_local_writes = 60
+value_lets = 119
+reg_local_writes = 68
 unpacked_unread = 0
 regs_call_entries = 0
 unread_lets = 0
@@ -2518,7 +2802,7 @@ store_const_rom = 0
 store_const_display = 0
 store_const_sram = 0
 store_const_other = 0
-store_sp = 5
+store_sp = 9
 store_computed_ram = 0
 store_computed_io = 0
 store_computed_rom = 0
@@ -2528,13 +2812,13 @@ store_computed_other = 0
 store_computed_unknown = 20
 pointer_unexplained = 0
 ref_unexplained = 5
-locals_noted = 0
+locals_noted = 29
 data_constants_unnamed = 0
-computed_unknown_unnamed = 5
+computed_unknown_unnamed = 3
 bitfield_arith = 0
-bitfield_joined = 10
+bitfield_joined = 22
 sp_accesses_local_slot = 0
-sp_accesses_escaping_slot = 5
+sp_accesses_escaping_slot = 9
 sp_accesses_callers_frame = 1
 call_fn_calls = 0
 call_fn_four_complete = 0
@@ -2542,4 +2826,774 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
+
+[program.c-loops-agbcc]
+rom = "c/c-loops-agbcc.gba"
+route = "units/c-loops-agbcc-600.toml"
+# A C program (native/lift-for-bounds; c/README.md, c/loops/SCENE.md), built
+# by agbcc (GCC 2.95) with `just c-tests`: counted loops to a parameter, a
+# global, a field, nested, counting down, breaking out, a u8 counter. The
+# planted store is AgbMain's gFrame++.
+planted_store = 0x08000600
+
+[program.c-loops-agbcc.bars]
+lines = 619
+io_unnamed = 0
+texts_left = 0
+lines_prelude = 1373
+casts = 59
+functions = 14
+functions_iwram = 0
+functions_lifted = 14
+functions_unrecognised = 14
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 1
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 0
+hard_holes = 0
+entries_beyond_one = 16
+functions_result_unneeded = 0
+guest_pc_plain = 0
+blocks = 72
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 0
+shift_pairs_left = 0
+load_rotates_left = 4
+dead_flag_writes = 0
+bank_sp_calls = 13
+sp_arith_unescaped = 0
+sp_arith_exact = 0
+lr_returned = 0
+value_lets = 115
+reg_local_writes = 92
+unpacked_unread = 0
+regs_call_entries = 0
+unread_lets = 0
+adc_sums = 0
+loops_not_for = 9
+labelled_blocks = 0
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 1
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 11
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 7
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 6
+pointer_unexplained = 0
+ref_unexplained = 6
+locals_noted = 8
+data_constants_unnamed = 0
+computed_unknown_unnamed = 7
+bitfield_arith = 0
+bitfield_joined = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 7
+sp_accesses_callers_frame = 1
+call_fn_calls = 0
+call_fn_four_complete = 0
+jumps_by_value = 0
+branches_on_raw_flags = 0
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 0
+fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
+gap_targets = 0
+
+[program.c-loops-gcc]
+rom = "c/c-loops-gcc.gba"
+route = "units/c-loops-gcc-600.toml"
+# A C program (native/lift-for-bounds; c/README.md, c/loops/SCENE.md), built
+# by modern arm-none-eabi-gcc with `just c-tests`: counted loops to a parameter, a
+# global, a field, nested, counting down, breaking out, a u8 counter. The
+# planted store is AgbMain's gFrame++.
+planted_store = 0x080005d4
+
+[program.c-loops-gcc.bars]
+lines = 707
+io_unnamed = 0
+texts_left = 0
+lines_prelude = 1373
+casts = 47
+functions = 14
+functions_iwram = 0
+functions_lifted = 14
+functions_unrecognised = 14
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 1
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 0
+hard_holes = 0
+entries_beyond_one = 16
+functions_result_unneeded = 0
+guest_pc_plain = 0
+blocks = 78
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 0
+shift_pairs_left = 0
+load_rotates_left = 8
+dead_flag_writes = 0
+bank_sp_calls = 16
+sp_arith_unescaped = 0
+sp_arith_exact = 0
+lr_returned = 0
+value_lets = 137
+reg_local_writes = 112
+unpacked_unread = 0
+regs_call_entries = 0
+unread_lets = 0
+adc_sums = 0
+loops_not_for = 14
+labelled_blocks = 4
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 1
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 11
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 7
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 5
+pointer_unexplained = 0
+ref_unexplained = 0
+locals_noted = 41
+data_constants_unnamed = 0
+computed_unknown_unnamed = 13
+bitfield_arith = 0
+bitfield_joined = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 7
+sp_accesses_callers_frame = 1
+call_fn_calls = 0
+call_fn_four_complete = 0
+jumps_by_value = 0
+branches_on_raw_flags = 0
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 0
+fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
+gap_targets = 0
+
+[program.c-list-agbcc]
+rom = "c/c-list-agbcc.gba"
+route = "units/c-list-agbcc-600.toml"
+# A C program (native/c-list-test-program; c/README.md, c/list/SCENE.md), built
+# by agbcc (GCC 2.95) with `just c-tests`: a linked list over a
+# static node pool (a free list and a sorted live list through one next
+# field), walked, inserted into through a Node ** and removed from each
+# frame, each node's act function pointer called. The planted store is
+# AgbMain's gFrame++.
+planted_store = 0x080005f8
+
+[program.c-list-agbcc.bars]
+rom_refs = 0
+sp_arith_exact = 0
+rom_static_fn_keys = 4
+lines = 676
+io_unnamed = 0
+texts_left = 0
+lines_prelude = 1373
+casts = 28
+functions = 17
+functions_iwram = 0
+functions_lifted = 17
+functions_unrecognised = 17
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 3
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 1
+hard_holes = 0
+entries_beyond_one = 21
+functions_result_unneeded = 0
+guest_pc_plain = 0
+blocks = 75
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 0
+shift_pairs_left = 0
+load_rotates_left = 4
+dead_flag_writes = 0
+bank_sp_calls = 18
+sp_arith_unescaped = 0
+lr_returned = 0
+value_lets = 151
+reg_local_writes = 81
+unpacked_unread = 0
+regs_call_entries = 0
+unread_lets = 0
+adc_sums = 0
+loops_not_for = 8
+labelled_blocks = 3
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 1
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 44
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 9
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 27
+pointer_unexplained = 0
+ref_unexplained = 0
+locals_noted = 13
+data_constants_unnamed = 0
+computed_unknown_unnamed = 7
+bitfield_arith = 0
+bitfield_joined = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 9
+sp_accesses_callers_frame = 1
+call_fn_calls = 1
+call_fn_four_complete = 0
+jumps_by_value = 0
+branches_on_raw_flags = 0
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 4
+fn_keys_left = 4
+gap_targets = 0
+
+[program.c-list-gcc]
+rom = "c/c-list-gcc.gba"
+route = "units/c-list-gcc-600.toml"
+# A C program (native/c-list-test-program; c/README.md, c/list/SCENE.md), built
+# by modern arm-none-eabi-gcc with `just c-tests`: a linked list over a
+# static node pool (a free list and a sorted live list through one next
+# field), walked, inserted into through a Node ** and removed from each
+# frame, each node's act function pointer called. The planted store is
+# AgbMain's gFrame++.
+planted_store = 0x08000612
+
+[program.c-list-gcc.bars]
+rom_refs = 0
+sp_arith_exact = 0
+rom_static_fn_keys = 4
+lines = 751
+io_unnamed = 0
+texts_left = 0
+lines_prelude = 1373
+casts = 37
+functions = 17
+functions_iwram = 0
+functions_lifted = 17
+functions_unrecognised = 17
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 3
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 1
+hard_holes = 0
+entries_beyond_one = 21
+functions_result_unneeded = 0
+guest_pc_plain = 0
+blocks = 83
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 0
+shift_pairs_left = 0
+load_rotates_left = 5
+dead_flag_writes = 0
+bank_sp_calls = 23
+sp_arith_unescaped = 0
+lr_returned = 0
+value_lets = 176
+reg_local_writes = 96
+unpacked_unread = 0
+regs_call_entries = 0
+unread_lets = 0
+adc_sums = 0
+loops_not_for = 10
+labelled_blocks = 6
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 1
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 43
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 9
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 28
+pointer_unexplained = 0
+ref_unexplained = 0
+locals_noted = 46
+data_constants_unnamed = 0
+computed_unknown_unnamed = 15
+bitfield_arith = 0
+bitfield_joined = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 9
+sp_accesses_callers_frame = 1
+call_fn_calls = 1
+call_fn_four_complete = 0
+jumps_by_value = 0
+branches_on_raw_flags = 0
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 4
+fn_keys_left = 4
+gap_targets = 0
+
+[program.c-jump-agbcc]
+rom = "c/c-jump-agbcc.gba"
+route = "units/c-jump-agbcc-600.toml"
+# A C program (native/lift-longjmp; c/README.md, c/jump/SCENE.md), built
+# by agbcc (GCC 2.95) with `just c-tests`: errors thrown with longjmp
+# out of a recursive search to an outer and an inner setjmp (c/jump/setjmp.s,
+# newlib's ARM pair behind Thumb entries), each catch drawing what it caught
+# and a value kept across the setjmp. The planted store is AgbMain's gFrame++.
+planted_store = 0x080004ae
+
+[program.c-jump-agbcc.bars]
+lines = 704
+locals_noted = 4
+io_unnamed = 0
+texts_left = 0
+lines_prelude = 1373
+casts = 15
+rom_refs = 0
+functions = 15
+functions_iwram = 0
+functions_lifted = 15
+functions_unrecognised = 15
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 7
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 3
+hard_holes = 0
+entries_beyond_one = 17
+functions_result_unneeded = 0
+guest_pc_plain = 0
+blocks = 73
+functions_in_match = 2
+blocks_in_match = 19
+compare_trees_left = 0
+shift_pairs_left = 0
+load_rotates_left = 0
+dead_flag_writes = 0
+bank_sp_calls = 7
+sp_arith_unescaped = 0
+sp_arith_exact = 2
+lr_returned = 0
+value_lets = 133
+reg_local_writes = 74
+unpacked_unread = 0
+regs_call_entries = 4
+unread_lets = 0
+adc_sums = 0
+loops_not_for = 7
+labelled_blocks = 0
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 11
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 11
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 7
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 13
+pointer_unexplained = 0
+ref_unexplained = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 17
+sp_accesses_callers_frame = 1
+call_fn_calls = 0
+call_fn_four_complete = 0
+jumps_by_value = 2
+branches_on_raw_flags = 0
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 0
+fn_keys_left = 0
+rom_static_fn_keys = 0
+data_constants_unnamed = 0
+gap_targets = 1
+
+[program.c-jump-gcc]
+rom = "c/c-jump-gcc.gba"
+route = "units/c-jump-gcc-600.toml"
+# A C program (native/lift-longjmp; c/README.md, c/jump/SCENE.md), built
+# by modern arm-none-eabi-gcc with `just c-tests`: errors thrown with longjmp
+# out of a recursive search to an outer and an inner setjmp (c/jump/setjmp.s,
+# newlib's ARM pair behind Thumb entries), each catch drawing what it caught
+# and a value kept across the setjmp. The planted store is AgbMain's gFrame++.
+planted_store = 0x0800047c
+
+[program.c-jump-gcc.bars]
+lines = 847
+locals_noted = 21
+io_unnamed = 0
+texts_left = 0
+lines_prelude = 1373
+casts = 14
+rom_refs = 0
+functions = 17
+functions_iwram = 0
+functions_lifted = 17
+functions_unrecognised = 17
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 7
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 3
+hard_holes = 0
+entries_beyond_one = 22
+functions_result_unneeded = 0
+guest_pc_plain = 0
+blocks = 79
+functions_in_match = 2
+blocks_in_match = 19
+compare_trees_left = 0
+shift_pairs_left = 0
+load_rotates_left = 0
+dead_flag_writes = 0
+bank_sp_calls = 15
+sp_arith_unescaped = 0
+sp_arith_exact = 2
+lr_returned = 0
+value_lets = 171
+reg_local_writes = 94
+unpacked_unread = 0
+regs_call_entries = 5
+unread_lets = 0
+adc_sums = 0
+loops_not_for = 9
+labelled_blocks = 4
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 1
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 11
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 2
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 13
+pointer_unexplained = 0
+ref_unexplained = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 2
+sp_accesses_callers_frame = 1
+call_fn_calls = 0
+call_fn_four_complete = 0
+jumps_by_value = 7
+branches_on_raw_flags = 13
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 0
+fn_keys_left = 0
+rom_static_fn_keys = 0
+data_constants_unnamed = 0
+gap_targets = 0
+
+[program.native-entry-jump]
+rom = "agb/native-entry-jump.gba"
+route = "units/native-entry-jump-600.toml"
+# Jumps and returning calls into an entry (native/entry-jump-test-program):
+# ej_a b's into ej_b with r4 and the carry ej_b reads; ej_c's bl to ej_d
+# returns into ej_e's entry with ej_d's r0 and ej_c's r4 and carry. Stage
+# A's old tail call (--fall-as-tail-call) zeroes them for ej_b and takes
+# ej_c's call for one that never returns.
+planted_flags = ["--fall-as-tail-call"]
+
+[program.native-entry-jump.bars]
+io_unnamed = 19
+lines = 19795
+lines_prelude = 1373
+casts = 305
+texts_left = 0
+functions = 116
+functions_iwram = 3
+functions_lifted = 113
+functions_unrecognised = 116
+functions_replaced = 3
+standins = 3
+functions_summary_hole = 83
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 52
+hard_holes = 0
+entries_beyond_one = 23
+guest_pc_plain = 0
+functions_result_unneeded = 0
+blocks = 1719
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+load_rotates_left = 296
+value_lets = 6431
+reg_local_writes = 3094
+unpacked_unread = 0
+regs_call_entries = 17
+unread_lets = 0
+adc_sums = 0
+bank_sp_calls = 260
+sp_arith_unescaped = 0
+sp_arith_exact = 34
+lr_returned = 0
+loops_not_for = 136
+labelled_blocks = 206
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 12
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 223
+load_computed_ram = 0
+load_computed_io = 6
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 710
+store_const_ram = 0
+store_const_io = 25
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 448
+store_computed_ram = 0
+store_computed_io = 6
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 355
+pointer_unexplained = 0
+ref_unexplained = 46
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 662
+sp_accesses_callers_frame = 9
+call_fn_calls = 63
+call_fn_four_complete = 56
+jumps_by_value = 8
+branches_on_raw_flags = 28
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 59
+fn_keys_left = 64
+rom_static_fn_keys = 3
+rom_refs = 17
+gap_targets = 5
+
+[program.native-ime-i-set]
+rom = "agb/native-ime-i-set.gba"
+route = "units/native-ime-i-set-601.toml"
+# IME set again while I is set (native/ime-i-set-test-program): is_probe
+# clears IME and sets I, polls VCOUNT past line 160, sets IME, then an msr
+# clears I, where the hardware takes the V-blank IRQ. Stage A's old IRQs
+# (--irq-at-waits) ignore I and run it at the IME store.
+planted_flags = ["--irq-at-waits"]
+
+[program.native-ime-i-set.bars]
+rom_refs = 17
+sp_arith_exact = 33
+rom_static_fn_keys = 3
+io_unnamed = 19
+lines = 19900
+lines_prelude = 1373
+casts = 304
+texts_left = 0
+functions = 115
+functions_iwram = 3
+functions_lifted = 110
+functions_unrecognised = 115
+functions_replaced = 5
+standins = 5
+functions_summary_hole = 80
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 51
+hard_holes = 0
+entries_beyond_one = 23
+guest_pc_plain = 0
+functions_result_unneeded = 0
+blocks = 1737
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+load_rotates_left = 297
+value_lets = 6466
+reg_local_writes = 3103
+unpacked_unread = 0
+regs_call_entries = 13
+unread_lets = 0
+adc_sums = 0
+bank_sp_calls = 270
+sp_arith_unescaped = 0
+lr_returned = 0
+loops_not_for = 140
+labelled_blocks = 210
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 17
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 216
+load_computed_ram = 0
+load_computed_io = 7
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 722
+store_const_ram = 0
+store_const_io = 36
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 444
+store_computed_ram = 0
+store_computed_io = 2
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 355
+pointer_unexplained = 0
+ref_unexplained = 48
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 653
+call_fn_calls = 65
+call_fn_four_complete = 60
+jumps_by_value = 8
+branches_on_raw_flags = 28
+entry_lr_returns_call_fn = 0
+gap_targets = 15
+fn_words_not_proven = 58
+fn_keys_left = 62
+sp_accesses_callers_frame = 7

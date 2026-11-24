@@ -37,7 +37,10 @@
 //!   statics (`super::rom_data`, native/rom-data-statics) indexes it:
 //!   `load_rom_static` (no bar: it should rise), with `rom_statics` the
 //!   statics, whose one-line declarations `lines` leaves out, as it does
-//!   `lines_types` (data, not code). The rest stay `load_computed_rom`.
+//!   `lines_types` (data, not code). The rest stay `load_computed_rom`
+//!   (the report lists them). Of the loads from a word static, `rom_refs`
+//!   counts those whose static holds a pointer into ROM data (the soft
+//!   hole of a `RomRef`, native/rom-statics; barred).
 //!   One through a pointer the names files type (`super::fields`,
 //!   native/lift-typed-access) prints as a named field over the same
 //!   byte access, so it keeps its count here too: `named_field_accesses`
@@ -70,9 +73,20 @@
 //! guest block's code printed where it had already: both barred, the
 //! second at 0 on the C programs.
 //!
+//! Casts (`super::casts`, native/lift-cast-types): `casts`, the integer
+//! casts (` as u8` to ` as i64`) the function modules print (barred).
+//! A value printed at a width is compared, narrowed and shifted in it.
+//!
 //! Function words (`super::fnref`): the words of ROM outside code that hold
 //! a function's key, `fn_words_not_proven` those the flow didn't prove
 //! (barred), `fn_words_proven` the rest (no bar: it should rise).
+//! Dense IDs (`native/fnref-dense`): `fn_ids_dense`, the functions every
+//! address of which the flow proved, which `--fn-ids dense` numbers from
+//! 1 (no bar: it should rise), and `fn_keys_left`, the function words in
+//! ROM and the code's constants such a build leaves as keys (barred; 0 on
+//! the C programs): counted whatever the build's IDs; of those,
+//! `rom_static_fn_keys` the words the flow read that a ROM static holds
+//! (native/rom-statics; barred, 0 on the C programs).
 //!
 //! Returns (`native/lift-pop-return`): the jumps by value the summaries
 //! proved a jump to the function's entry lr (`pop {pc}`, `pop {r0}; bx
@@ -96,7 +110,8 @@
 //!
 //! Frames gone (`native/lift-frame-gone`): `sp_arith_unescaped`, the
 //! functions printing sp arithmetic though no slot of their frame
-//! escapes, nor do they pass sp on to code needing it exactly (barred, at
+//! escapes, nor do they pass sp on to code needing it exactly or write
+//! their locals to the frame for a callee ([`super::frame::Frame::flush`]) (barred, at
 //! 0: a frame nothing of which is in memory prints none,
 //! [`super::frame::Frame::in_locals`]), and `lr_returned`, the
 //! functions returning a register that holds only their entry lr (barred,
@@ -320,6 +335,7 @@ pub const UNBARRED: &[&str] = &[
     "load_ram_global",
     "store_ram_global",
     "fn_words_proven",
+    "fn_ids_dense",
     "call_fn_complete",
     "load_ram_object",
     "load_rom_static",

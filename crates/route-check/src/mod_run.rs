@@ -18,8 +18,8 @@ use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 
 /// The gap between panels, in pixels, and its grey.
-const GAP: usize = 4;
-const GAP_GREY: u8 = 0x40;
+pub(crate) const GAP: usize = 4;
+pub(crate) const GAP_GREY: u8 = 0x40;
 
 /// Run both builds along `route` and compare their frames at `at` (empty:
 /// the route's checkpoints). Ok: how many pairs differ, and where.

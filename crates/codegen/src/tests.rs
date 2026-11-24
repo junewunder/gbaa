@@ -1936,6 +1936,48 @@ fn a_context_restore_is_a_named_hard_hole() {
 }
 
 #[test]
+fn a_context_restore_a_save_matches_unwinds_to_the_saves_caller() {
+    // `c` calls newlib's `setjmp` with r0 a buffer, keeping it in r4, and
+    // `longjmp`s to it with 5; the second return of `setjmp` returns.
+    let words: [u32; 20] = [
+        0xE3A0_0403, // 0x00 mov r0, #0x03000000
+        0xEB00_0007, // 0x04 bl c
+        0xEAFF_FFFE, // 0x08 b .
+        0xE8A0_7FF0, // 0x0c setjmp: stm r0!, {r4-r12, sp, lr}
+        0xE3A0_0000, // 0x10 mov r0, #0
+        0xE12F_FF1E, // 0x14 bx lr
+        0xE8B0_7FF0, // 0x18 longjmp: ldm r0!, {r4-r12, sp, lr}
+        0xE1B0_0001, // 0x1c movs r0, r1
+        0x03A0_0001, // 0x20 moveq r0, #1
+        0xE12F_FF1E, // 0x24 bx lr
+        0xE92D_4010, // 0x28 c: push {r4, lr}
+        0xE1A0_4000, // 0x2c mov r4, r0
+        0xEBFF_FFF5, // 0x30 bl setjmp
+        0xE350_0000, // 0x34 cmp r0, #0
+        0x18BD_4010, // 0x38 popne {r4, lr}
+        0x112F_FF1E, // 0x3c bxne lr
+        0xE1A0_0004, // 0x40 mov r0, r4
+        0xE3A0_1005, // 0x44 mov r1, #5
+        0xEBFF_FFF2, // 0x48 bl longjmp
+        0xEAFF_FFFE, // 0x4c b .
+    ];
+    let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let lifted = crate::native::lift(&rom, "t", &crate::native::Holes::default());
+    let holes: Vec<String> = lifted.holes.iter().map(|h| h.what.clone()).collect();
+    assert!(holes.is_empty(), "{holes:?}");
+    let text: String = lifted.files.iter().map(|(_, t)| t.as_str()).collect();
+    // The restore keeps its buffer and returns by unwinding.
+    assert!(text.contains("ctx_buf = r0;"), "{text}");
+    assert!(text.contains("restore(ctx_buf, ["), "{text}");
+    // The save's caller catches it: the buffer, the return site's label
+    // and its r4 and sp kept at the call, set back with r0-r3 there.
+    assert!(text.contains("catch_restore(||"), "{text}");
+    assert!(text.contains("ctx_regs = [r4, r13];"), "{text}");
+    assert!(text.contains("r4 = ctx_regs[0];"), "{text}");
+    assert!(text.contains("r0 = got[0];"), "{text}");
+}
+
+#[test]
 fn a_context_save_its_restore_reloads_takes_nothing() {
     const NOP: u32 = 0xE1A0_0000;
     const SAVE: u32 = 0xE8A0_7FF0;
@@ -3029,4 +3071,37 @@ fn a_function_taking_only_its_parameters_has_its_body_in_its_plain_entry() {
     assert!(!text.contains("(g, Regs::call("), "{text}");
     assert_eq!(lifted.metrics.get("regs_call_entries"), Some(0));
     assert_eq!(lifted.metrics.get("unpacked_unread"), Some(0));
+}
+
+#[test]
+fn gap_code_stops_at_a_veneers_bx_pc_and_its_arm_b() {
+    // Two interworking veneers side by side, as newlib's (moonbeam's at
+    // 0x08043148): `bx pc; b .-2` in Thumb, then ARM `b` to the routine.
+    // Decoding the first as gap code in Thumb stops at its `bx pc`, so its
+    // ARM word isn't taken for Thumb; that word, decoded in ARM, stops at
+    // its `b`, so the next veneer's Thumb isn't taken for ARM. Either way
+    // round each keeps its own state.
+    let rom: Vec<u8> = [
+        0xE7FD_4778u32, // 0x00 bx pc; b 0x00
+        0xEA00_0005,    // 0x04 b 0x20
+        0xE7FD_4778,    // 0x08 bx pc; b 0x08
+        0xEA00_0003,    // 0x0c b 0x20
+        0xE1A0_0000,    // 0x10 nop
+    ]
+    .iter()
+    .flat_map(|w| w.to_le_bytes())
+    .collect();
+    let thumb = |d: &Discovery, a: u32| d.code.get(&(ROM_BASE + a)).map(|c| c.thumb);
+    for order in [[1, 4, 9, 0xc], [9, 0xc, 1, 4]] {
+        let mut d = Discovery::default();
+        for k in order {
+            crate::native::force_code(&rom, &mut d, ROM_BASE + k);
+        }
+        assert_eq!(thumb(&d, 0), Some(true), "{order:?}");
+        assert_eq!(thumb(&d, 2), None, "{order:?}");
+        assert_eq!(thumb(&d, 4), Some(false), "{order:?}");
+        assert_eq!(thumb(&d, 8), Some(true), "{order:?}");
+        assert_eq!(thumb(&d, 0xc), Some(false), "{order:?}");
+        assert_eq!(thumb(&d, 0x10), None, "{order:?}");
+    }
 }
