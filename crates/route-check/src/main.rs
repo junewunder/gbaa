@@ -15,10 +15,6 @@
 //! binaries, each optionally followed by its flags (`"BIN
 //! --interp-blocks"`) ([`same_states`]).
 //!
-//! `route-check --mod-run STOCK MOD [--dump-at N,…] units/NAME.toml`: a
-//! mod's frames beside stock's, a side-by-side PNG of each pair that
-//! differs (`just mod-run`, [`mod_run`]).
-//!
 //! `route-check --lift-mod-run STOCK MOD [--sides N] units/NAME.toml`: a
 //! lift mod's frames beside the stock lift's, native programs both: the
 //! frames that differ listed, side-by-side PNGs of up to N of them and a
@@ -50,7 +46,6 @@
 //! 75 when this machine couldn't run the check (a build refused or broke).
 
 mod lift_mod_run;
-mod mod_run;
 mod native;
 mod route;
 mod same_states;
@@ -64,7 +59,6 @@ use std::process::{Command, ExitCode, Stdio};
 const USAGE: &str = "usage: route-check units/NAME.toml [--through CHECKPOINT]\n       \
                      route-check --missing ROUTE.toml…\n       \
                      route-check --same-states A B [--every N] ROUTE.toml…\n       \
-                     route-check --mod-run STOCK MOD [--dump-at N,…] ROUTE.toml\n       \
                      route-check --lift-mod-run STOCK MOD [--sides N] ROUTE.toml\n       \
                      route-check --args ROUTE.toml\n       \
                      route-check --windows units/NAME.toml [--through CHECKPOINT]\n       \
@@ -148,31 +142,6 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
         return report("same-states", same_states::run(a, b, every, routes, &vars));
-    }
-    if let [flag, stock, modded, rest @ ..] = args.as_slice()
-        && flag == "--mod-run"
-    {
-        let (at, route) = match rest {
-            [d, list, route] if d == "--dump-at" => {
-                match list
-                    .split(',')
-                    .map(str::parse)
-                    .collect::<Result<Vec<u64>, _>>()
-                {
-                    Ok(at) => (at, route),
-                    Err(_) => {
-                        eprintln!("{USAGE}");
-                        return ExitCode::from(2);
-                    }
-                }
-            }
-            [route] => (Vec::new(), route),
-            _ => {
-                eprintln!("{USAGE}");
-                return ExitCode::from(2);
-            }
-        };
-        return report("mod-run", mod_run::run(stock, modded, &at, route, &vars));
     }
     if let [flag, stock, modded, rest @ ..] = args.as_slice()
         && flag == "--lift-mod-run"

@@ -18,5 +18,3 @@ runtime = { path = "../runtime" }
 fn-diff = { path = "../fn-diff" }
 # libraries.toml, the library objects.
 toml = "1"
-# `judge`: claude -p as the naming loop runs it.
-naming = { path = "../naming" }
