@@ -4228,7 +4228,14 @@
       "id": "native/lift-mod-run-edit-report",
       "title": "lift-mod-run reports a cut's edit by field, not FAIL",
       "detail": "From {unit:native/lift-agent-mod} (hurt 4): after 'lift-mod-run: pass' the run prints the cut's fn-check as 'SamusInit … 8 DIFFER', 'IWRAM byte 0x03001530: 0x63 reference, 0x2d replacement', 'fn-check: FAIL': the expected edit reads as a broken build. Under lift-mod-run say 'differs from its lift (the edit)', the byte by field name (gEquipment.maxEnergy) and in decimal, and a program stop apart from the check. Check: lift-mod-run on mods/metroid/energy; just check.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-24T06:30:39Z",
+          "by": "e4b6a739",
+          "text": "From the Amazing Mirror mod (docs/research/mirror-agent-mod.md, hurt 6): a speed change spreads over the screen; naming the first RAM field to differ (gKirbys[0].base.xspeed at frame 1661: 332 stock, 352 mod) would say the cause where the PNGs show only effects."
+        }
+      ]
     },
     {
       "id": "native/metroid-fn-check-stop",
