@@ -215,9 +215,9 @@ typed pointers, below; until then they are soft holes, counted.
   (`native/rom_data.rs`): a computed load the value sets bound to ROM
   indexes a static view of `ROM` typed by its width, one object per width
   from overlapping extents, the pointer checked (`ROM_0808CAD0[rix(a,
-  0x808cad0, 2, 12)]`); extents over 256 KB stay bytes. A word loaded
-  from one is still a guest address. Function words as `FnRef`s and
-  pointers as `RomRef`s are `native/rom-statics`', after the dense IDs.
+  0x808cad0, 2, 12)]`); over 256 KB bytes, but to 512 KB where the flow read
+  no function word (`native/rom-statics`). A function word in one is a dense
+  ID where proven (`rom_static_fn_keys`); a ROM pointer a number (`rom_refs`).
 - **RAM globals as typed fields** (`native/ram-globals`). Done
   (`crates/codegen/src/native/globals.rs`): constant-address RAM accesses
   carved into globals, the fields of `Ram` at the guest's offsets under
