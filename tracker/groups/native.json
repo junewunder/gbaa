@@ -3780,18 +3780,22 @@
       "needs": ["native/ram-jump-passes-regs"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "f1d95093",
-        "session": "f1d95093-e300-412c-96ec-b3b48651d98f",
-        "host": "quack",
-        "pid": 2962519,
-        "start": "95218086",
-        "at": "2026-11-24T11:31:03Z",
+        "at": "2026-11-24T12:27:01Z",
+        "evidence": "just lift on WarioWare at eeabe108 (main merged): 0 hard holes, builds, first stop 39 of 600 frames, no-function 0x030003a8 (a resumable IWRAM DMA routine), filed as {unit:native/warioware-stop-30003a8}. holes-all main 8f5c171f vs branch: every count equal (Emerald via its pre-[[roots]] holes file, equal). disc-pret Emerald unchanged, modern 0.7927 to 0.7929 none false; disc-agb, jt-score pass. just check exit 0 after merging main 6437708c.",
         "branch": "unit/native/warioware-builds",
-        "resumed": "597d5e84",
-        "prevSession": "597d5e84-a0f0-4387-96ae-dc29a79638d2",
-        "pushed": true,
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T12:27:01Z",
+          "by": "f1d95093",
+          "host": "quack",
+          "pid": 2962519,
+          "start": "95218086",
+          "beats": true,
+          "session": "f1d95093-e300-412c-96ec-b3b48651d98f",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
