@@ -1,9 +1,9 @@
-# Names for /home/meadow/Documents/homelab/gbaa-lane1/target/gbaa-data-overlay/c/c-loops-agbcc.gba, from pret's symbols in /home/meadow/Documents/homelab/gbaa-lane1/target/gbaa-data-overlay/c/c-loops-agbcc.elf.
+# Names for c-loops-agbcc.gba, from pret's symbols in c-loops-agbcc.elf.
 # Written by `just pret-names` (crates/pret-names). Don't edit.
 
 [map]
 rom_sha1 = "ffce9cf52175734e13d1fd745622a72dc3642589"
-source = "pret/c@897edb20"
+source = "pret/c@4c2bfb01"
 format = 1
 #
 # Keys are codegen's function keys (bit 0 set = Thumb; an IWRAM copy's
