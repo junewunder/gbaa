@@ -4686,6 +4686,13 @@
           "lane": "quack/2"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-24T16:43:42Z",
+          "by": "7bea1fd0",
+          "text": "$GBAA_DATA/names/pokeemerald.toml on quack was written by another lane's unmerged pret-names (adds [values] args), so not regenerated here: once that lands, rerun just pret-names to give agb_flash*, siirtc, librfu_intr functions src (their own modules)."
+        }
+      ],
       "round": "2026-11-24T14:58:19Z"
     },
     {
