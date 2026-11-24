@@ -973,7 +973,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let mut disc = discovery::discover(rom.to_vec());
     // Discovery's gaps: a jump into ROM where it found no code (a scanned
     // fragment it stopped short in, a `bl`'s second half it took for a
-    // literal pool). Each such target is decoded as code from there, and
+    // literal pool; a `bx` to a known place, a `bx pc` veneer's ARM
+    // code). Each such target is decoded as code from there, and
     // again from what that reaches, so the lift has the code the play
     // build would hand to its interpreter. Listed in the report.
     // The holes file's targets for jumps Recovery left unresolved are
@@ -2558,7 +2559,12 @@ fn missing(ctx: &Ctx, funcs: &[Func]) -> BTreeSet<u32> {
     let mut out = BTreeSet::new();
     for gb in funcs.iter().flat_map(|f| f.blocks.values()) {
         for x in exits(ctx, gb) {
-            if let Plan::Static(k) | Plan::Rekey(k) = x.plan
+            // A `bx` to a known place (a `bx pc` veneer's ARM code) too.
+            if let Plan::Static(k)
+            | Plan::Rekey(k)
+            | Plan::Dynamic {
+                target: Some(k), ..
+            } = x.plan
                 && (0x0800_0000..0x0A00_0000).contains(&(k & !1))
                 && !ctx.is_code(k)
             {
@@ -2570,13 +2576,14 @@ fn missing(ctx: &Ctx, funcs: &[Func]) -> BTreeSet<u32> {
 }
 
 /// Take the ROM from `k` (a key) as code, up to the next instruction
-/// discovery has or 64 instructions on: the block builder stops at the
-/// first exit, so what lies past it is used only if something reaches it.
+/// discovery has, a Thumb `bx pc` or an ARM `b`, `bx lr` or `bx pc`, or
+/// 64 instructions on: the block builder stops at the first exit, so what
+/// lies past it is used only if something reaches it.
 /// A Thumb `bl`'s halves are joined, the prefix's entry too if discovery
 /// split them.
-fn force_code(rom: &[u8], disc: &mut Discovery, k: u32) {
+pub(crate) fn force_code(rom: &[u8], disc: &mut Discovery, k: u32) {
     use analysis::discovery::{Code, Evidence};
-    use armv4t::decode::{Instr, decode_thumb};
+    use armv4t::decode::{Cond, Instr, Reg, decode_arm, decode_thumb};
     let thumb = k & 1 != 0;
     let mut a = k & !1;
     let half = |a: u32| -> Option<u16> {
@@ -2603,17 +2610,37 @@ fn force_code(rom: &[u8], disc: &mut Discovery, k: u32) {
         }
         data(a)
     };
-    for _ in 0..64 {
-        if disc.code.get(&a).is_some_and(|c| c.thumb == thumb) {
+    // A Thumb `bx pc` ends the run too, and in ARM an unconditional `b`,
+    // `bx lr` or `bx pc` (a `bx rN` may be a call, after `mov lr, pc`):
+    // what follows is reached only by a jump, in the other state (a `bx
+    // pc` veneer's ARM code two or four bytes on, which a Thumb run past
+    // it would claim as Thumb, and the next veneer's Thumb code after
+    // that ARM `b`: newlib's, side by side). Thumb runs on past its `b`s:
+    // a gap function's every branch a round of its own would outrun the
+    // rounds. For the same reason code discovery has in the other state
+    // stops the run past its first instruction: the two would overwrite
+    // each other.
+    for i in 0..64 {
+        if disc.code.get(&a).is_some_and(|c| c.thumb == thumb || i > 0) {
             return;
         }
         if !thumb {
-            if (a - 0x0800_0000) as usize + 4 > rom.len() {
-                return;
-            }
+            let o = (a - 0x0800_0000) as usize;
+            let Some(w) = rom.get(o..o + 4) else { return };
             disc.code.insert(a, code(4));
             a += 4;
-            continue;
+            match decode_arm(u32::from_le_bytes(w.try_into().unwrap()), a - 4) {
+                Instr::Branch {
+                    cond: Cond::Al,
+                    link: false,
+                    ..
+                }
+                | Instr::Bx {
+                    cond: Cond::Al,
+                    rm: Reg::Pc | Reg::Lr,
+                } => return,
+                _ => continue,
+            }
         }
         let Some(h) = half(a) else { return };
         match decode_thumb(h, a) {
@@ -2641,6 +2668,10 @@ fn force_code(rom: &[u8], disc: &mut Discovery, k: u32) {
                 if no_return(a) {
                     return;
                 }
+            }
+            Instr::Bx { rm: Reg::Pc, .. } => {
+                disc.code.insert(a, code(2));
+                return;
             }
             _ => {
                 disc.code.insert(a, code(2));

@@ -3072,3 +3072,36 @@ fn a_function_taking_only_its_parameters_has_its_body_in_its_plain_entry() {
     assert_eq!(lifted.metrics.get("regs_call_entries"), Some(0));
     assert_eq!(lifted.metrics.get("unpacked_unread"), Some(0));
 }
+
+#[test]
+fn gap_code_stops_at_a_veneers_bx_pc_and_its_arm_b() {
+    // Two interworking veneers side by side, as newlib's (moonbeam's at
+    // 0x08043148): `bx pc; b .-2` in Thumb, then ARM `b` to the routine.
+    // Decoding the first as gap code in Thumb stops at its `bx pc`, so its
+    // ARM word isn't taken for Thumb; that word, decoded in ARM, stops at
+    // its `b`, so the next veneer's Thumb isn't taken for ARM. Either way
+    // round each keeps its own state.
+    let rom: Vec<u8> = [
+        0xE7FD_4778u32, // 0x00 bx pc; b 0x00
+        0xEA00_0005,    // 0x04 b 0x20
+        0xE7FD_4778,    // 0x08 bx pc; b 0x08
+        0xEA00_0003,    // 0x0c b 0x20
+        0xE1A0_0000,    // 0x10 nop
+    ]
+    .iter()
+    .flat_map(|w| w.to_le_bytes())
+    .collect();
+    let thumb = |d: &Discovery, a: u32| d.code.get(&(ROM_BASE + a)).map(|c| c.thumb);
+    for order in [[1, 4, 9, 0xc], [9, 0xc, 1, 4]] {
+        let mut d = Discovery::default();
+        for k in order {
+            crate::native::force_code(&rom, &mut d, ROM_BASE + k);
+        }
+        assert_eq!(thumb(&d, 0), Some(true), "{order:?}");
+        assert_eq!(thumb(&d, 2), None, "{order:?}");
+        assert_eq!(thumb(&d, 4), Some(false), "{order:?}");
+        assert_eq!(thumb(&d, 8), Some(true), "{order:?}");
+        assert_eq!(thumb(&d, 0xc), Some(false), "{order:?}");
+        assert_eq!(thumb(&d, 0x10), None, "{order:?}");
+    }
+}
