@@ -595,6 +595,35 @@ fn a_tail_call_with_the_frame_live_writes_the_locals_to_memory_first() {
 }
 
 #[test]
+fn a_call_returning_into_another_entry_writes_the_locals_to_memory_first() {
+    // agb/native-entry-jump's ej_c: `push {r4, lr}`, a `bl` whose return
+    // site is ej_e's entry, which pops ej_c's frame.
+    let mut b = B::default();
+    b.prologue();
+    let a = b.sp(0);
+    let x = b.get(0);
+    b.st(a, x);
+    let call = Edge::Call {
+        target: Some(9),
+        ret: 20,
+    };
+    let fns = vec![
+        func(1, vec![(1, b, call.clone())]),
+        func(20, vec![(20, B::default(), Edge::Return)]),
+    ];
+    let exit = fns[0].1[0].1.len() - 1;
+    let f = frames_of(&fns).remove(&1).unwrap();
+    assert!(f.slots.iter().all(|s| !s.escapes()), "{:?}", f.slots);
+    assert_eq!(f.flush, BTreeSet::from([(1, exit)]));
+    // A return site that is no function's entry (the callee never
+    // returns) hands nothing on.
+    let mut b = B::default();
+    b.prologue();
+    let fns = vec![func(1, vec![(1, b, call)])];
+    assert!(frames_of(&fns)[&1].flush.is_empty());
+}
+
+#[test]
 fn a_tail_call_after_the_epilogue_writes_nothing() {
     let (f, _) = tail_with_sp(16);
     assert!(f.flush.is_empty(), "{:?}", f.flush);

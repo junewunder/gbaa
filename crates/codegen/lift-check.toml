@@ -2822,3 +2822,91 @@ fn_keys_left = 0
 rom_static_fn_keys = 0
 rom_refs = 0
 gap_targets = 0
+
+[program.native-entry-jump]
+rom = "agb/native-entry-jump.gba"
+route = "units/native-entry-jump-600.toml"
+# Jumps and returning calls into an entry (native/entry-jump-test-program):
+# ej_a b's into ej_b with r4 and the carry ej_b reads; ej_c's bl to ej_d
+# returns into ej_e's entry with ej_d's r0 and ej_c's r4 and carry. Stage
+# A's old tail call (--fall-as-tail-call) zeroes them for ej_b and takes
+# ej_c's call for one that never returns.
+planted_flags = ["--fall-as-tail-call"]
+
+[program.native-entry-jump.bars]
+io_unnamed = 19
+lines = 20664
+lines_prelude = 1337
+texts_left = 0
+functions = 116
+functions_iwram = 3
+functions_lifted = 113
+functions_unrecognised = 116
+functions_replaced = 3
+standins = 3
+functions_summary_hole = 83
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 52
+hard_holes = 0
+entries_beyond_one = 23
+guest_pc_plain = 0
+functions_result_unneeded = 0
+blocks = 1719
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 7224
+reg_local_writes = 3094
+unpacked_unread = 0
+regs_call_entries = 17
+unread_lets = 0
+adc_sums = 0
+bank_sp_calls = 260
+sp_arith_unescaped = 0
+lr_returned = 0
+loops_not_for = 136
+labelled_blocks = 206
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 12
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 223
+load_computed_ram = 0
+load_computed_io = 6
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 710
+store_const_ram = 0
+store_const_io = 25
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 448
+store_computed_ram = 0
+store_computed_io = 6
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 355
+pointer_unexplained = 0
+ref_unexplained = 46
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 662
+sp_accesses_callers_frame = 9
+call_fn_calls = 63
+call_fn_four_complete = 56
+jumps_by_value = 8
+branches_on_raw_flags = 28
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 59
+fn_keys_left = 64
+gap_targets = 5
