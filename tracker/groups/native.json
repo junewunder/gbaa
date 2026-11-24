@@ -5511,6 +5511,12 @@
           "text": "Confirmed on main's logic: Emerald lifted at aa820315's code (step-via's via off) with mods holes 571d124 gives naming_screen_1.rs byte-identical to {unit:native/lift-for-step-via}'s, whose build fails (v45/v23). Without the two [[open_bus]]: builds, 600/600 frames."
         }
       ]
+    },
+    {
+      "id": "native/lift-restore-saved-block",
+      "title": "A restore loading sp and pc from a saved block unwinds",
+      "detail": "Minish Cap has two context restores that aren't setjmp's ldm block, so {unit:native/lift-longjmp} left them as hard holes (3 of the game's last 4): the OAM builder at IWRAM 0x030065e8 (ldr sp,[r11,#20]; ldr pc,[r11,#24]; holes at 0x03006708 and 0x0300670c), and UpdateEntities' resume at 0x03005f24 (DeleteThisEntity: sp from the struct at 0x03003dd0, then into the loop at 0x03005fa4). Lift a restore that loads sp and pc from a saved block as an unwind to the function that saved it, as the setjmp rule does for its shape, a rule where general and the holes file where the game's own; the [[takes]] passing at 0x03005f94 must stay valid after a resume. Done when: a test program with a restore of each shape passes lift-check with its planted fault caught; Minish Cap's hard holes fall by these 3 (just lift, --mem 4G); holes-all --against main shows no game's hard holes up; just check passes.",
+      "uses": ["heavy"]
     }
   ]
 }
