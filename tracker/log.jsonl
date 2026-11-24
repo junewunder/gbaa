@@ -4106,3 +4106,4 @@
 {"at":"2026-11-24T16:33:13Z","actor":"loop","tag":"51bbc90d","host":"quack","cmd":"claim","id":"native/lift-pointer-types","text":"Parameters and locals carry their pointer types: claimed"}
 {"at":"2026-11-24T16:35:42Z","actor":"loop","tag":"3ca58cea","host":"quack","cmd":"add-unit","id":"native/lift-lent-print","text":"new unit: Lent stack slots print as locals, borrowers as Lent"}
 {"at":"2026-11-24T16:35:58Z","actor":"loop","tag":"3ca58cea","host":"quack","cmd":"add-unit","id":"native/lift-lent-frameless","text":"new unit: A frame of only locals and lent slots takes no sp"}
+{"at":"2026-11-24T16:36:00Z","actor":"loop","tag":"3ca58cea","host":"quack","cmd":"add-unit","id":"native/lift-lent-games","text":"new unit: Lent stack locals on Metroid and Emerald"}
