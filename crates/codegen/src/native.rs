@@ -161,11 +161,14 @@
 //!   `call_fn` (prelude) looks them up in `FNS`; a RAM key that isn't
 //!   there but holds one of the flash save library's stack routines is
 //!   that routine's `hw::flash` call (unit `native/lift-flash-routines`).
-//!   Stage A has no dense IDs
-//!   (`--fn-ids rom` only): a literal lift loads pointers from ROM bytes
-//!   and RAM, so it can't renumber them. [`fnref`] follows every function
+//!   [`fnref`] follows every function
 //!   address to its uses and reports the ROM words dense IDs could rewrite
-//!   and each indirect call's callees (unit `native/fnref-flow`). An
+//!   and each indirect call's callees (unit `native/fnref-flow`). At
+//!   `--fn-ids dense` (unit `native/fnref-dense`, [`dense_ids`]) a
+//!   function every address of which it proved is an ID from 1 instead,
+//!   in the crate's copy of the ROM and in the code's constants, which
+//!   `call_fn` finds in `DENSE`; the rest keep their keys (`--fn-ids rom`,
+//!   the default and the native check's, keeps every key). An
 //!   indirect call whose callee set is complete is summarised as calling
 //!   exactly those (the summaries run again with the sets,
 //!   [`crate::saves::summarize_sets`]), and passes `call_fn` only what
@@ -498,6 +501,11 @@ pub struct Holes {
     /// Where `Ram`'s globals are (`gbaa-lift --layout`): the guest's
     /// offsets, or the play layout's order ([`globals::Layout`]).
     pub layout: Layout,
+    /// Function pointers as dense IDs (`gbaa-lift --fn-ids dense`, unit
+    /// `native/fnref-dense`): each function whose every address the flow
+    /// proved is its index in `DENSE` from 1 ([`dense_ids`]); else (`rom`,
+    /// the default and the native check's) every function's ID is its key.
+    pub fn_ids_dense: bool,
     /// Why the function addresses aren't followed (`skip_fn_flow = "…"`
     /// in the holes file): [`fnref::follow`] only feeds the report and
     /// stage B's metrics, and on a game it doesn't settle in a session
@@ -839,6 +847,9 @@ pub struct Lifted {
     /// the functions of [`Holes::cut_want`] and [`Holes::cuts`], as lifted:
     /// before a cut takes its place.
     pub cut_texts: BTreeMap<u32, String>,
+    /// At `--fn-ids dense`, the ROM words the crate's copy of the ROM
+    /// holds as IDs: by address, the ID ([`dense_ids`]).
+    pub dense_words: BTreeMap<u32, u32>,
     /// With [`Holes::find_touches`], each load and store of a printed
     /// function whose RAM place the lift knows ([`find_field`]).
     pub touches: Vec<find_field::Touch>,
@@ -1269,6 +1280,16 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             &global_from,
         )
     };
+    // Function pointers as dense IDs (native/fnref-dense): the plan
+    // always, for the metric; printed only at `--fn-ids dense`.
+    let dense = match &fnrefs {
+        Some((f, words, _)) => dense_ids(f, words, &ins, rom, holes),
+        None => Dense::default(),
+    };
+    let (dense_at, dense_ids_map) = match holes.fn_ids_dense {
+        true => (dense.at.clone(), dense.ids.clone()),
+        false => (BTreeMap::new(), BTreeMap::new()),
+    };
     drop(ins);
     drop(flow_ins);
     // The summaries again, each indirect call with a complete callee set
@@ -1383,6 +1404,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     globals: &globals,
                     rom_data: &rom_data,
                     args: &args,
+                    dense: &dense_at,
+                    ids: &dense_ids_map,
                     heap: &heap,
                     psr: psr_fns.place(f.entry),
                     starts: narrow::Starts::new(),
@@ -1552,6 +1575,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             holes: hard,
             metrics: Metrics::default(),
             cut_texts: BTreeMap::new(),
+            dense_words: BTreeMap::new(),
             touches: std::mem::take(&mut soft.touches),
         };
     }
@@ -1609,6 +1633,27 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         writeln!(table, "    ({k:#010x}, {}),", plain(*k)).unwrap();
     }
     table.push_str("];\n");
+    // The dense functions' entries by ID less one (native/fnref-dense);
+    // empty, one line of wiring, at `--fn-ids rom`.
+    let dense_fns: Vec<u32> = match holes.fn_ids_dense {
+        true => dense.ids.keys().copied().collect(),
+        false => Vec::new(),
+    };
+    writeln!(
+        table,
+        "\n/// By ID less one: the dense functions (`gbaa-lift --fn-ids dense`)."
+    )
+    .unwrap();
+    match dense_fns.is_empty() {
+        true => table.push_str("pub static DENSE: [Fn; 0] = [];\n"),
+        false => {
+            writeln!(table, "pub static DENSE: [Fn; {}] = [", dense_fns.len()).unwrap();
+            for k in &dense_fns {
+                writeln!(table, "    {},", plain(*k)).unwrap();
+            }
+            table.push_str("];\n");
+        }
+    }
     let n_funcs = fns.len();
     let mut main = String::new();
     main.push_str("// Generated by gbaa-lift (crates/codegen/src/native.rs). Don't edit; rerun `just lift`.\n");
@@ -1728,6 +1773,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     }
     let plains: Vec<String> = fns_reached.iter().map(|&k| plain(k)).collect();
     let mut files = modules::split(main, table, &plains, &out, holes.copies);
+    if dense_fns.is_empty() {
+        // DENSE's blank line, comment and empty table.
+        files.wiring += 3;
+    }
     // The game's text, a module of its own (native/lift-text-editable):
     // data, so not in `lines`; the prelude patches the ROM with it.
     let text_module = texts.module();
@@ -1909,6 +1958,32 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             why.as_deref().unwrap_or("")
         )
         .unwrap(),
+    }
+    if fnrefs.is_some() {
+        writeln!(
+            report,
+            "dense IDs (native/fnref-dense, --fn-ids {}): {} functions every address of which the flow proved, IDs 1 to {}: {} ROM words and {} constants in the code hold one{}; {} function words in ROM and code constants left as keys",
+            if holes.fn_ids_dense { "dense" } else { "rom: the plan, not printed" },
+            dense.ids.len(),
+            dense.ids.len(),
+            dense.words.len(),
+            dense.at.len(),
+            if dense.ids.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    " ({})",
+                    dense
+                        .ids
+                        .iter()
+                        .map(|(k, id)| format!("f_{k:08x} {id}"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            },
+            dense.left,
+        )
+        .unwrap();
     }
     writeln!(
         report,
@@ -2264,6 +2339,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         let fn_proven = f.1.keys().filter(|w| f.0.proven(**w)).count();
         m.push("fn_words_proven", n(fn_proven));
         m.push("fn_words_not_proven", n(f.1.len() - fn_proven));
+        m.push("fn_ids_dense", n(dense.ids.len()));
+        m.push("fn_keys_left", dense.left);
     }
     // Only a lift with names has them (native/lift-data-names-inline):
     // the data constants named, and those inside a named datum left as
@@ -2318,6 +2395,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         report,
         metrics: m,
         cut_texts,
+        dense_words: match holes.fn_ids_dense {
+            true => dense.words,
+            false => BTreeMap::new(),
+        },
         touches: soft.touches,
     }
 }
@@ -2532,6 +2613,115 @@ fn fn_flow(
         .collect();
     let img = FnImage { rom, all, disc };
     (fnref::follow(ins, &img, &copies, known), words)
+}
+
+/// Function pointers as dense IDs (unit `native/fnref-dense`;
+/// `docs/native-port-design.md`, section 4; `gbaa-lift --fn-ids dense`):
+/// the plan, made whatever the build's IDs, so the metric says what a
+/// dense build leaves.
+///
+/// A function is dense when the flow settled and proved every address of
+/// it the run read: each ROM word holding its key that a load read, and
+/// each constant the code makes of it ([`fnref::Flow::proven`]; one not
+/// proven may meet a dense one in a compare, so the function keeps its
+/// key everywhere). A word the run never read holds no value the program
+/// uses (the closed world, [`fnref`]): it neither stops its function
+/// being dense nor is rewritten, so it stays a key. Nor is a function
+/// whose key a stand-in's text names (hand-written code may make it). IDs
+/// are from 1 in key order; a function that isn't dense keeps its key,
+/// which `call_fn` still finds (`FNS`), so the two kinds never meet in a
+/// compare (an ID is under 2^16, a key at least `0x0200_0000`).
+#[derive(Debug, Default)]
+struct Dense {
+    /// By key, the ID of each dense function.
+    ids: BTreeMap<u32, u32>,
+    /// The ROM words that hold one: by address, the ID.
+    words: BTreeMap<u32, u32>,
+    /// The constants printed as one: by block and inst (a placed pool
+    /// load's, and a code constant's, [`fnref::Origin::Code`]).
+    at: BTreeMap<(u32, u32), u32>,
+    /// The function words in ROM and code constants a dense build leaves
+    /// as keys (metric `fn_keys_left`).
+    left: u64,
+}
+
+fn dense_ids(
+    flow: &fnref::Flow,
+    words: &BTreeMap<u32, (u32, bool)>,
+    ins: &[fnref::FnIn],
+    rom: &[u8],
+    holes: &Holes,
+) -> Dense {
+    let word = |a: u32| -> Option<u32> {
+        let o = a.checked_sub(0x0800_0000)? as usize;
+        Some(u32::from_le_bytes(rom.get(o..o + 4)?.try_into().ok()?))
+    };
+    // Each function's word origins the run read (a pool's in code
+    // included), and its code constants.
+    let mut read: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+    for &w in &flow.read {
+        if let Some(k) = word(w) {
+            read.entry(k).or_default().push(w);
+        }
+    }
+    let usable = !flow.unsettled && flow.off.is_empty() && holes.copies <= 1;
+    let named = |k: u32| {
+        holes
+            .standins
+            .values()
+            .any(|(code, _)| code.contains(&format!("{k:#010x}")))
+    };
+    let mut keys: BTreeSet<u32> = read.keys().copied().collect();
+    keys.extend(flow.consts.values());
+    let dense: Vec<u32> = keys
+        .into_iter()
+        .filter(|&k| usable && !named(k))
+        .filter(|&k| {
+            read.get(&k)
+                .is_none_or(|ws| ws.iter().all(|&w| flow.proven(w)))
+        })
+        .filter(|&k| {
+            flow.consts
+                .iter()
+                .filter(|(_, c)| **c == k)
+                .all(|(o, _)| !flow.holes.contains_key(o))
+        })
+        .collect();
+    let mut d = Dense {
+        ids: dense
+            .iter()
+            .enumerate()
+            .map(|(i, &k)| (k, i as u32 + 1))
+            .collect(),
+        ..Dense::default()
+    };
+    for (k, ws) in &read {
+        if let Some(&id) = d.ids.get(k) {
+            d.words.extend(ws.iter().map(|&w| (w, id)));
+        }
+    }
+    for f in ins {
+        for (&b, fb) in &f.blocks {
+            for (&i, w) in &fb.pools {
+                if let Some(&id) = d.words.get(w) {
+                    d.at.insert((b, i as u32), id);
+                }
+            }
+        }
+    }
+    for (o, k) in &flow.consts {
+        if let (fnref::Origin::Code(b, i), Some(&id)) = (o, d.ids.get(k)) {
+            d.at.insert((*b, *i), id);
+        }
+    }
+    let words_left = words.keys().filter(|w| !d.words.contains_key(w)).count();
+    let consts_left = flow
+        .consts
+        .values()
+        .filter(|k| !d.ids.contains_key(k))
+        .count();
+    d.left = (words_left + consts_left) as u64;
+    d
 }
 
 /// Every context's functions as the flows take them ([`fnref::FnIn`]),
@@ -3775,6 +3965,11 @@ struct FnPrinter<'a, 'b> {
     /// What each `call_fn` call with a complete callee set passes and
     /// takes back ([`call_fn_args`]), by its address.
     args: &'a Args,
+    /// The constants printed as a dense function's ID, by block and inst
+    /// ([`Dense::at`]; empty but at `--fn-ids dense`).
+    dense: &'a BTreeMap<(u32, u32), u32>,
+    /// By key, each dense function's ID (empty but at `--fn-ids dense`).
+    ids: &'a BTreeMap<u32, u32>,
     /// The heap's types and the accesses through them.
     heap: &'a heap::Heap,
     /// Whether it is the reset or an IRQ wrapper, whose `msr` and `mrs`
@@ -6093,7 +6288,7 @@ impl FnPrinter<'_, '_> {
                 self.soft.pairs_left.insert(at);
             }
             if inline[i] {
-                let e = self.value(&inst.op, &conds[i], forms[i]);
+                let e = self.value_at(i, &inst.op, &conds[i], forms[i]);
                 self.inl[i] = Some(e);
                 self.soft.inlined += 1;
                 continue;
@@ -6453,7 +6648,7 @@ impl FnPrinter<'_, '_> {
                 }
                 ref op => {
                     let ty = if is_bit(op) { "bool" } else { "u32" };
-                    let e = self.value(op, &conds[i], forms[i]);
+                    let e = self.value_at(i, op, &conds[i], forms[i]);
                     self.soft.value_lets += 1;
                     writeln!(s, "{ind}let {}: {ty} = {e};", v(id)).unwrap();
                 }
@@ -6864,6 +7059,36 @@ impl FnPrinter<'_, '_> {
         match form {
             Some((x, form)) => form.print_with(&self.val(x), &|y| self.whole(y)),
             None => expr(op, &|x| self.val(x), &|x| self.whole(x)),
+        }
+    }
+
+    /// What a jump or call by value to `t` takes as its function's key:
+    /// `form` (the Thumb bit's rule), or at `--fn-ids dense` `t` itself
+    /// where it is a dense function's ID (the prelude's `is_dense_id`).
+    fn keyed(&self, t: &str, form: String) -> String {
+        match self.ids.is_empty() {
+            true => form,
+            false => format!("(if is_dense_id({t}) {{ {t} }} else {{ {form} }})"),
+        }
+    }
+
+    /// The ID function `k` has (its key but at `--fn-ids dense`).
+    fn id(&self, k: u32) -> u32 {
+        self.ids.get(&k).copied().unwrap_or(k)
+    }
+
+    /// Inst `i`'s value ([`FnPrinter::value`]), or the ID it holds where
+    /// it is a dense function's constant ([`Dense::at`]).
+    fn value_at(
+        &self,
+        i: usize,
+        op: &Op,
+        cond: &Option<cond::Form>,
+        form: Option<(ValueId, narrow::Form)>,
+    ) -> String {
+        match self.dense.get(&(self.cur, i as u32)) {
+            Some(id) => format!("{id:#x}u32"),
+            None => self.value(op, cond, form),
         }
     }
 
@@ -7639,7 +7864,8 @@ impl FnPrinter<'_, '_> {
                 }
                 write!(
                     t,
-                    "{e:#010x} => {{ {}{}?; }} ",
+                    "{:#010x} => {{ {}{}?; }} ",
+                    self.id(e),
                     self.results_lhs(e),
                     taking(e, m)
                 )
@@ -7752,9 +7978,10 @@ impl FnPrinter<'_, '_> {
             }
             Plan::CallVia { reg, ret, .. } => {
                 let r = reg.index();
+                let t = format!("r{r}");
                 let c = self.call_fn(
                     at,
-                    &format!("if r{r} & 1 != 0 {{ r{r} }} else {{ r{r} & !3 }}"),
+                    &self.keyed(&t, format!("if {t} & 1 != 0 {{ {t} }} else {{ {t} & !3 }}")),
                 );
                 let c = self.call_then(c, ret, at);
                 writeln!(s, "{ind}{wait}{c}").unwrap();
@@ -7780,6 +8007,7 @@ impl FnPrinter<'_, '_> {
                     _ if thumb => format!("({t} | 1)"),
                     _ => format!("({t} & !3)"),
                 };
+                let k = self.keyed(&t, k);
                 if let Some(ret) = ret {
                     // An indirect call.
                     // (One that takes r4-r11 from its callers goes by
@@ -7886,7 +8114,10 @@ impl FnPrinter<'_, '_> {
                         }
                     }
                     for (ks, j) in arms {
-                        let pat: Vec<String> = ks.iter().map(|k| format!("{k:#010x}")).collect();
+                        let pat: Vec<String> = ks
+                            .iter()
+                            .map(|k| format!("{:#010x}", self.id(*k)))
+                            .collect();
                         writeln!(s, "{ind}    {} => {{ {j} }}", pat.join(" | ")).unwrap();
                     }
                     self.tail_for = tail_for;
@@ -9578,6 +9809,52 @@ mod tests {
         );
         assert!(!returns_result(&out[0].1, 1));
         assert!(returns_result(&out[1].1, 3));
+    }
+
+    #[test]
+    fn dense_ids_go_to_functions_every_read_address_of_which_is_proven() {
+        // A's two words and C's word and constant are proven; B's word
+        // isn't, so its constant stays a key too; A's unread word at 0x10
+        // stays a key and stops nothing.
+        let (a, b, c) = (0x0800_0101u32, 0x0800_0201u32, 0x0800_0301u32);
+        let rom: Vec<u8> = [a, a, b, c, a]
+            .iter()
+            .flat_map(|w| w.to_le_bytes())
+            .collect();
+        let mut flow = fnref::Flow {
+            read: [0x0800_0000, 0x0800_0004, 0x0800_0008, 0x0800_000c].into(),
+            ..Default::default()
+        };
+        flow.holes.insert(
+            fnref::Origin::Word(0x0800_0008),
+            (0x0800_0100, fnref::Why::Arithmetic),
+        );
+        flow.consts.insert(fnref::Origin::Code(0x0800_0101, 3), c);
+        flow.consts.insert(fnref::Origin::Code(0x0800_0201, 1), b);
+        let words = (0..5u32)
+            .map(|i| (0x0800_0000 + 4 * i, ([a, a, b, c, a][i as usize], false)))
+            .collect();
+        let d = dense_ids(&flow, &words, &[], &rom, &Holes::default());
+        assert_eq!(d.ids, [(a, 1), (c, 2)].into());
+        assert_eq!(
+            d.words,
+            [(0x0800_0000, 1), (0x0800_0004, 1), (0x0800_000c, 2)].into()
+        );
+        assert_eq!(d.at, [((0x0800_0101, 3), 2)].into());
+        assert_eq!(d.left, 3);
+        // A key a stand-in names stays one; an unsettled flow makes none.
+        let mut h = Holes::default();
+        h.standins.insert(
+            0x0800_0400,
+            ("call_fn(g, 0x08000101, sp, a)".into(), "".into()),
+        );
+        assert_eq!(dense_ids(&flow, &words, &[], &rom, &h).ids, [(c, 1)].into());
+        flow.unsettled = true;
+        assert!(
+            dense_ids(&flow, &words, &[], &rom, &Holes::default())
+                .ids
+                .is_empty()
+        );
     }
 
     #[test]

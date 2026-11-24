@@ -1,5 +1,5 @@
 //! `route-check --native NATIVE PLAY ROUTE [--replaced FILE] [--holes
-//! FILE] [--name NAME] [--packed BIN] [--planted BIN]`: a native program against its play build
+//! FILE] [--name NAME] [--packed BIN] [--dense BIN] [--planted BIN]`: a native program against its play build
 //! (docs/native-port-design.md, section 7; `just native-check`).
 //!
 //! Runs PLAY (the ROM's recompiled build, at `--timing native`; then again
@@ -46,6 +46,10 @@
 //! its records must be NATIVE's, nothing skipped (RAM as the guest lays it
 //! out, which a packed program records); a difference there names the
 //! guest layout's value and the play layout's.
+//! `--dense BIN`: the program lifted with dense function IDs
+//! (`gbaa-lift --fn-ids dense`, unit `native/fnref-dense`) must draw
+//! NATIVE's frames and record the same but RAM, which holds its IDs
+//! where NATIVE has keys.
 //! `--planted BIN` (any number): a build with a planted fault (one wrong
 //! store, or an old behaviour a lifter flag brings back), which must
 //! differ; its first difference is printed. A lowest sp outside IWRAM
@@ -117,6 +121,9 @@ pub struct Extra {
     /// find its holes file (default: the ROM's file name lowercased).
     pub name: Option<String>,
     pub packed: Option<String>,
+    /// `--dense BIN`: the program lifted with dense function IDs
+    /// (`gbaa-lift --fn-ids dense`).
+    pub dense: Option<String>,
     pub planted: Vec<String>,
     /// `--no-audio WHY`: the native program makes no audio and the run may
     /// pass without its audio compared, for this reason.
@@ -133,6 +140,7 @@ pub fn parse_extra(rest: &[String]) -> Result<Extra, String> {
             "--holes" => e.holes = Some(v),
             "--name" => e.name = Some(v),
             "--packed" => e.packed = Some(v),
+            "--dense" => e.dense = Some(v),
             "--planted" => e.planted.push(v),
             "--no-audio" => e.no_audio = Some(v),
             _ => return Err(format!("unknown argument {a:?}")),
@@ -303,6 +311,33 @@ pub fn run(
         parts.push(format!(
             "the play layout draws the same {} frames, its records the same",
             a.len()
+        ));
+    }
+    if let Some(p) = &extra.dense {
+        // Dense function IDs (native/fnref-dense): RAM holds IDs where
+        // NATIVE holds keys, so RAM isn't compared; the rest of the
+        // records is, the picture and the audio with it.
+        runner(&out, "dense", p, &r, &[], true)?;
+        let ram = [Skip {
+            start: 0x0200_0000,
+            end: IWRAM_END,
+            why: "dense IDs where the guest has keys".into(),
+        }];
+        compare(
+            &out.join("native.rec"),
+            &out.join("dense.rec"),
+            ("ROM keys", "dense IDs"),
+            &ram,
+            frames,
+        )
+        .map_err(|e| match e {
+            Differ::Fail(f) => Fail(format!(
+                "the dense IDs' build differs from the ROM keys' (RAM not compared): {f}"
+            )),
+            Differ::Unrun(f) => Unrun(f),
+        })?;
+        parts.push(format!(
+            "the dense IDs' build draws the same {frames} frames, its records the same but RAM"
         ));
     }
     for (i, p) in extra.planted.iter().enumerate() {
