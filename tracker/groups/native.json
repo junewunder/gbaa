@@ -5077,6 +5077,13 @@
         "branch": "unit/native/lift-for-top-tested",
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-24T20:45:09Z",
+          "by": "702486fe",
+          "text": "Work on the branch (Exit/Top tests, bounds.rs): Metroid 232->254 for, 600/600; lift-check passed; just check ok. Emerald build fails: v45/v23 out of scope in GetTextEntryPosition (naming_screen), a loop not a for; unknown if main does too. Next: lift Emerald on main, compare."
+        }
+      ],
       "round": "2026-11-24T19:23:35Z"
     },
     {
