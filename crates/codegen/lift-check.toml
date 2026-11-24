@@ -90,7 +90,7 @@ route = "units/affine-600.toml"
 
 [program.affine.bars]
 io_unnamed = 19
-lines = 18624
+lines = 18614
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 305
@@ -180,7 +180,7 @@ route = "units/mosaic-modes-600.toml"
 
 [program.mosaic-modes.bars]
 io_unnamed = 19
-lines = 13485
+lines = 13477
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 270
@@ -278,7 +278,7 @@ planted_hole = { drop_standin = 0x08002728, names = "error: hard hole in f_08002
 
 [program.native-spike.bars]
 io_unnamed = 19
-lines = 19606
+lines = 19600
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 422
@@ -372,7 +372,7 @@ planted_flags = ["--fall-as-tail-call"]
 
 [program.native-fallthrough.bars]
 io_unnamed = 19
-lines = 18198
+lines = 18192
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 306
@@ -467,7 +467,7 @@ planted_flags = ["--irq-at-waits"]
 
 [program.native-irq-hold.bars]
 io_unnamed = 19
-lines = 18378
+lines = 18372
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 305
@@ -564,7 +564,7 @@ planted_flags = ["--plant-slot=0x08000182"]
 
 [program.native-frame-locals.bars]
 io_unnamed = 19
-lines = 18166
+lines = 18160
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 309
@@ -658,7 +658,7 @@ planted_flags = ["--ime-at-waits"]
 
 [program.native-ime-release.bars]
 io_unnamed = 19
-lines = 18338
+lines = 18332
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 293
@@ -756,7 +756,7 @@ route = "units/native-bios-calls-600.toml"
 
 [program.native-bios-calls.bars]
 io_unnamed = 19
-lines = 18529
+lines = 18523
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 309
@@ -854,7 +854,7 @@ route = "units/native-bios-more-600.toml"
 
 [program.native-bios-more.bars]
 io_unnamed = 19
-lines = 20041
+lines = 20037
 lines_prelude = 1390
 ref_new_at_use = 1
 casts = 404
@@ -957,7 +957,7 @@ planted_hole = { drop_standin = 0x080001a4, names = "error: hard hole in f_08000
 
 [program.native-tasks.bars]
 io_unnamed = 19
-lines = 18547
+lines = 18539
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 304
@@ -1065,7 +1065,7 @@ planted_store = 0x08000180
 
 [program.native-dma.bars]
 io_unnamed = 19
-lines = 13258
+lines = 13254
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 273
@@ -1164,7 +1164,7 @@ planted_store = 0x080002ac
 
 [program.native-save.bars]
 io_unnamed = 19
-lines = 18401
+lines = 18395
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 333
@@ -1259,7 +1259,7 @@ route = "units/native-bios-region-601.toml"
 
 [program.native-bios-region.bars]
 io_unnamed = 19
-lines = 18316
+lines = 18310
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 293
@@ -1355,7 +1355,7 @@ route = "units/native-bios-affine-600.toml"
 
 [program.native-bios-affine.bars]
 io_unnamed = 19
-lines = 18612
+lines = 18606
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 385
@@ -1453,7 +1453,7 @@ planted_store = 0x0800017c
 
 [program.native-serial.bars]
 io_unnamed = 19
-lines = 19011
+lines = 19005
 lines_prelude = 1390
 ref_new_at_use = 1
 casts = 420
@@ -1553,7 +1553,7 @@ planted_store = 0x080001f4
 
 [program.native-irq-wrapper.bars]
 io_unnamed = 19
-lines = 18612
+lines = 18605
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 312
@@ -1648,7 +1648,7 @@ planted_flags = ["--takes-zeroed"]
 
 [program.native-takes.bars]
 io_unnamed = 19
-lines = 18187
+lines = 18181
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 305
@@ -1744,7 +1744,7 @@ planted_flags = ["--takes-zeroed"]
 
 [program.native-ram-jump.bars]
 io_unnamed = 19
-lines = 18170
+lines = 18164
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 306
@@ -1839,7 +1839,7 @@ planted_flags = ["--gives-kept"]
 
 [program.native-gives.bars]
 io_unnamed = 19
-lines = 18171
+lines = 18165
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 305
@@ -1939,7 +1939,7 @@ io_unnamed = 0
 computed_unknown_unnamed = 5
 bitfield_arith = 0
 bitfield_joined = 0
-lines = 565
+lines = 564
 lines_prelude = 1390
 ref_new_at_use = 19
 casts = 55
@@ -2013,7 +2013,7 @@ sp_accesses_local_slot = 0
 sp_accesses_escaping_slot = 10
 sp_accesses_callers_frame = 2
 call_fn_calls = 5
-call_fn_four_complete = 2
+call_fn_four_complete = 0
 jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
@@ -2343,13 +2343,13 @@ planted_store = 0x0800058e
 planted_flags = ["--plant-proto=0x08000271"]
 
 [program.c-chain-agbcc.bars]
-locals_noted = 8
+locals_noted = 7
 data_constants_unnamed = 0
 io_unnamed = 0
 computed_unknown_unnamed = 3
 bitfield_arith = 0
 bitfield_joined = 0
-lines = 614
+lines = 608
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 69
@@ -2550,7 +2550,7 @@ io_unnamed = 0
 computed_unknown_unnamed = 5
 bitfield_arith = 0
 bitfield_joined = 0
-lines = 671
+lines = 660
 lines_prelude = 1390
 ref_new_at_use = 8
 casts = 34
@@ -2596,7 +2596,7 @@ load_const_rom = 0
 load_const_display = 0
 load_const_sram = 0
 load_const_other = 0
-load_sp = 2
+load_sp = 1
 load_computed_ram = 0
 load_computed_io = 0
 load_computed_rom = 0
@@ -2621,7 +2621,7 @@ store_computed_unknown = 40
 pointer_unexplained = 0
 ref_unexplained = 2
 sp_accesses_local_slot = 0
-sp_accesses_escaping_slot = 9
+sp_accesses_escaping_slot = 8
 sp_accesses_callers_frame = 1
 call_fn_calls = 4
 call_fn_four_complete = 0
@@ -2645,7 +2645,7 @@ route = "units/c-heap-gcc-600.toml"
 planted_store = 0x0800060e
 
 [program.c-heap-gcc.bars]
-locals_noted = 33
+locals_noted = 32
 data_constants_unnamed = 0
 io_unnamed = 0
 computed_unknown_unnamed = 37
@@ -2857,7 +2857,7 @@ route = "units/c-bits-gcc-600.toml"
 planted_store = 0x080002a2
 
 [program.c-bits-gcc.bars]
-lines = 498
+lines = 496
 io_unnamed = 0
 texts_left = 0
 lines_prelude = 1390
@@ -3168,7 +3168,7 @@ planted_store = 0x080005f8
 rom_refs = 0
 sp_arith_exact = 0
 rom_static_fn_keys = 4
-lines = 597
+lines = 592
 io_unnamed = 0
 texts_left = 0
 lines_prelude = 1390
@@ -3270,7 +3270,7 @@ planted_store = 0x08000612
 rom_refs = 0
 sp_arith_exact = 0
 rom_static_fn_keys = 4
-lines = 666
+lines = 654
 io_unnamed = 0
 texts_left = 0
 lines_prelude = 1390
@@ -3565,7 +3565,7 @@ planted_flags = ["--fall-as-tail-call"]
 
 [program.native-entry-jump.bars]
 io_unnamed = 19
-lines = 18290
+lines = 18284
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 305
@@ -3663,7 +3663,7 @@ rom_refs = 17
 sp_arith_exact = 33
 rom_static_fn_keys = 3
 io_unnamed = 19
-lines = 18381
+lines = 18375
 lines_prelude = 1390
 ref_new_at_use = 3
 casts = 304
