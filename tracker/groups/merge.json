@@ -736,21 +736,9 @@
         "by": "8b57c265",
         "at": "2026-11-24T10:00:30Z",
         "evidence": "Merged origin/main at 82469ab5; types.rs conflict settled keeping the branch's Types::layout and main's Types::fields_of (plain() had no callers left). just check passed (exit 0) after the merge.",
-        "branch": "unit/native/lift-global-bitfields",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T10:00:30Z",
-          "by": "8b57c265",
-          "host": "quack",
-          "pid": 2962519,
-          "start": "95218086",
-          "beats": true,
-          "session": "8b57c265-fe22-445d-ac88-9c351202219d",
-          "lane": "quack/2"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-24T09:52:07Z"
+        "landed": "2026-11-24T10:08:04Z"
+      }
     }
   ]
 }
