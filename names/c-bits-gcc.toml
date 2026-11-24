@@ -2,7 +2,7 @@
 # Written by `just pret-names` (crates/pret-names). Don't edit.
 
 [map]
-rom_sha1 = "3cca0d10879ef7a7e21b4f03d133df2c3ae1aaaf"
+rom_sha1 = "c6492b0b02bb91b72fabaaf81369a28b2daf0262"
 source = "c-bits-gcc.elf"
 format = 1
 #
@@ -23,7 +23,9 @@ format = 1
 0x0800030d = { name = "ball_move", size = 220, file = "main.c", src = "c/bits/main.c", proto = "void ball_move(struct Ball *b)" }
 0x080003e9 = { name = "ball_draw", size = 152, file = "main.c", src = "c/bits/main.c", proto = "void ball_draw(const struct Ball *b, s32 i)" }
 0x08000481 = { name = "ball_blink", size = 62, file = "main.c", src = "c/bits/main.c", proto = "void ball_blink(struct Ball *b)" }
-0x080004c1 = { name = "AgbMain", size = 164, file = "main.c", src = "c/bits/main.c", proto = "void AgbMain(void)" }
+0x080004c1 = { name = "clock_step", size = 80, file = "main.c", src = "c/bits/main.c", proto = "void clock_step(void)" }
+0x08000511 = { name = "clock_draw", size = 104, file = "main.c", src = "c/bits/main.c", proto = "void clock_draw(void)" }
+0x08000579 = { name = "AgbMain", size = 200, file = "main.c", src = "c/bits/main.c", proto = "void AgbMain(void)" }
 
 # Our entries pret has no symbol for, inside one of its functions.
 [inside]
@@ -44,36 +46,84 @@ format = 1
 # pret's data: variables, tables and buffers in RAM and ROM.
 [data]
 0x02000000 = { name = "__ewram_start", size = 0, aliases = ["__ewram_end"] }
-0x03000000 = { name = "gBalls", size = 32, aliases = ["__data_end", "__bss_start", "__data_start"], type = "struct Ball [4]" }
-0x03000020 = { name = "gFrame", size = 4, type = "u32" }
-0x03000024 = { name = "__bss_end", size = 0 }
-0x08000564 = { name = "sColors", size = 32, file = "main.c", type = "const const u16 [16]" }
+0x03000000 = { name = "gClock", size = 4, aliases = ["__data_end", "__bss_start", "__data_start"], type = "struct Clock" }
+0x03000004 = { name = "gBalls", size = 32, type = "struct Ball [4]" }
+0x03000024 = { name = "gFrame", size = 4, type = "u32" }
+0x03000028 = { name = "__bss_end", size = 0 }
+0x08000640 = { name = "sColors", size = 32, file = "main.c", type = "const const u16 [16]" }
 
 # Each function's parameters and variables from DWARF: a register (`reg`)
 # or a stack slot (`slot`, an offset from sp after the prologue), over
 # [from, to). Variables agbcc gave no location are left out.
 [locals]
 0x08000191 = [
-  { name = "color", slot = 0, from = 0x08000190, to = 0x0800022c, type = "u16", param = true },
+  { name = "x", reg = 0, from = 0x08000190, to = 0x0800022c, type = "s32", param = true },
+  { name = "y", reg = 1, from = 0x08000190, to = 0x080001b4, type = "s32", param = true },
+  { name = "y", reg = 1, from = 0x0800020a, to = 0x08000210, type = "s32", param = true },
+  { name = "w", reg = 2, from = 0x08000190, to = 0x08000196, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x08000196, to = 0x080001a0, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x080001a2, to = 0x080001ae, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x080001b0, to = 0x080001de, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x080001f8, to = 0x08000216, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x08000218, to = 0x0800022c, type = "s32", param = true },
+  { name = "h", reg = 3, from = 0x08000190, to = 0x080001b4, type = "s32", param = true },
+  { name = "h", reg = 3, from = 0x0800020a, to = 0x0800020c, type = "s32", param = true },
+  { name = "h", reg = 5, from = 0x08000228, to = 0x0800022c, type = "s32", param = true },
+  { name = "color", slot = 16, from = 0x08000190, to = 0x0800022c, type = "u16", param = true },
 ]
 0x0800022d = [
   { name = "x", reg = 0, from = 0x0800022c, to = 0x0800024a, type = "s32", param = true },
+  { name = "y", reg = 1, from = 0x0800022c, to = 0x08000234, type = "s32", param = true },
+  { name = "y", reg = 1, from = 0x08000236, to = 0x0800023c, type = "s32", param = true },
   { name = "color", reg = 2, from = 0x0800022c, to = 0x0800024a, type = "u16", param = true },
 ]
 0x08000281 = [
   { name = "b", reg = 0, from = 0x08000280, to = 0x08000290, type = "struct Ball *", param = true },
+  { name = "i", reg = 1, from = 0x08000280, to = 0x08000286, type = "s32", param = true },
+  { name = "i", reg = 3, from = 0x08000286, to = 0x08000288, type = "s32", param = true },
 ]
 0x08000291 = [
   { name = "b", reg = 0, from = 0x08000290, to = 0x080002a6, type = "struct Ball *", param = true },
+  { name = "i", reg = 1, from = 0x08000290, to = 0x08000294, type = "s32", param = true },
 ]
 0x080002a9 = [
   { name = "b", reg = 0, from = 0x080002a8, to = 0x080002b2, type = "struct Ball *", param = true },
 ]
+0x080002b5 = [
+  { name = "b", reg = 0, from = 0x080002b4, to = 0x080002dd, type = "struct Ball *", param = true },
+  { name = "b", reg = 4, from = 0x080002dd, to = 0x08000306, type = "struct Ball *", param = true },
+  { name = "i", reg = 1, from = 0x080002b4, to = 0x080002bc, type = "s32", param = true },
+  { name = "i", reg = 5, from = 0x080002bc, to = 0x08000306, type = "s32", param = true },
+]
 0x0800030d = [
   { name = "b", reg = 0, from = 0x0800030c, to = 0x080003e8, type = "struct Ball *", param = true },
 ]
+0x080003e9 = [
+  { name = "b", reg = 0, from = 0x080003e8, to = 0x08000400, type = "const struct Ball *", param = true },
+  { name = "b", reg = 5, from = 0x08000400, to = 0x08000460, type = "const struct Ball *", param = true },
+  { name = "b", reg = 0, from = 0x08000466, to = 0x08000470, type = "const struct Ball *", param = true },
+  { name = "b", reg = 5, from = 0x08000470, to = 0x08000480, type = "const struct Ball *", param = true },
+  { name = "i", reg = 1, from = 0x080003e8, to = 0x08000400, type = "s32", param = true },
+  { name = "i", reg = 6, from = 0x08000400, to = 0x08000406, type = "s32", param = true },
+  { name = "i", reg = 1, from = 0x08000466, to = 0x0800046a, type = "s32", param = true },
+  { name = "i", reg = 6, from = 0x0800046a, to = 0x08000480, type = "s32", param = true },
+  { name = "c", reg = 7, from = 0x080003f4, to = 0x08000460, type = "u16" },
+  { name = "c", reg = 7, from = 0x08000466, to = 0x08000480, type = "u16" },
+]
 0x08000481 = [
   { name = "b", reg = 0, from = 0x08000480, to = 0x080004be, type = "struct Ball *", param = true },
+]
+0x08000511 = [
+  { name = "c", reg = 5, from = 0x0800051e, to = 0x08000560, type = "u16" },
+]
+0x08000579 = [
+  { name = "i", reg = 4, from = 0x08000588, to = 0x0800058e, type = "s32" },
+  { name = "i", reg = 1, from = 0x0800058e, to = 0x08000591, type = "s32" },
+  { name = "i", reg = 4, from = 0x08000592, to = 0x080005c6, type = "s32" },
+  { name = "i", reg = 5, from = 0x080005ce, to = 0x080005ec, type = "s32" },
+  { name = "i", reg = 1, from = 0x080005ec, to = 0x080005ef, type = "s32" },
+  { name = "i", reg = 5, from = 0x080005f0, to = 0x08000608, type = "s32" },
+  { name = "b", reg = 4, from = 0x080005ce, to = 0x08000602, type = "struct Ball *" },
 ]
 
 # The line table: each row's address and its line, in the `src` of the
@@ -131,150 +181,184 @@ format = 1
 0x08000274 = "lib.c:22"
 0x08000276 = "lib.c:21"
 0x0800027c = "lib.c:24"
-0x08000280 = "main.c:41"
-0x08000282 = "main.c:41"
-0x0800028e = "main.c:42"
-0x08000290 = "main.c:46"
-0x08000292 = "main.c:46"
-0x08000298 = "main.c:46"
-0x0800029a = "main.c:46"
-0x0800029c = "main.c:46"
-0x080002a4 = "main.c:47"
-0x080002a8 = "main.c:51"
-0x080002aa = "main.c:51"
-0x080002b0 = "main.c:52"
-0x080002b4 = "main.c:55"
-0x080002b6 = "main.c:56"
-0x080002b8 = "main.c:55"
-0x080002ba = "main.c:56"
-0x080002bc = "main.c:55"
-0x080002be = "main.c:56"
-0x080002c6 = "main.c:56"
-0x080002c8 = "main.c:57"
-0x080002cc = "main.c:58"
-0x080002ce = "main.c:57"
-0x080002d2 = "main.c:58"
-0x080002d4 = "main.c:59"
-0x080002d6 = "main.c:57"
-0x080002d8 = "main.c:58"
-0x080002da = "main.c:59"
-0x080002de = "main.c:61"
-0x080002e6 = "main.c:62"
-0x080002e8 = "main.c:60"
-0x080002ec = "main.c:62"
-0x080002ee = "main.c:62"
-0x080002f0 = "main.c:60"
-0x080002f8 = "main.c:63"
-0x080002fe = "main.c:64"
-0x08000306 = "main.c:65"
-0x0800030c = "main.c:68"
-0x0800030e = "main.c:71"
-0x08000318 = "main.c:69"
-0x0800031a = "main.c:72"
-0x0800031c = "main.c:72"
-0x0800031e = "main.c:71"
-0x08000322 = "main.c:72"
-0x0800032a = "main.c:76"
-0x0800032c = "main.c:75"
-0x08000330 = "main.c:76"
-0x08000336 = "main.c:79"
-0x08000338 = "main.c:79"
-0x0800033c = "main.c:79"
-0x08000342 = "main.c:81"
-0x08000344 = "main.c:81"
-0x0800034a = "main.c:81"
-0x08000352 = "main.c:80"
-0x0800035a = "main.c:81"
-0x0800035c = "main.c:82"
-0x0800035e = "main.c:82"
-0x08000360 = "main.c:80"
-0x0800036c = "main.c:84"
-0x0800036e = "main.c:84"
-0x08000376 = "main.c:85"
-0x08000380 = "main.c:85"
-0x0800038e = "main.c:87"
-0x08000394 = "main.c:87"
-0x08000396 = "main.c:86"
-0x0800039c = "main.c:86"
-0x080003a2 = "main.c:86"
-0x080003b4 = "main.c:89"
-0x080003b6 = "main.c:89"
-0x080003ba = "main.c:89"
-0x080003ca = "main.c:90"
-0x080003d0 = "main.c:78"
-0x080003d8 = "main.c:74"
-0x080003e8 = "main.c:94"
-0x080003ea = "main.c:93"
-0x080003ec = "main.c:94"
-0x080003ee = "main.c:94"
-0x080003f0 = "main.c:94"
-0x080003f4 = "main.c:96"
-0x080003f6 = "main.c:93"
-0x080003fc = "main.c:96"
-0x08000400 = "main.c:99"
-0x08000404 = "main.c:99"
-0x08000414 = "main.c:100"
-0x0800041a = "main.c:100"
-0x08000420 = "main.c:100"
-0x08000422 = "main.c:100"
-0x08000428 = "main.c:100"
-0x0800042a = "main.c:100"
-0x08000438 = "main.c:101"
-0x08000446 = "main.c:102"
-0x08000448 = "main.c:102"
-0x0800044c = "main.c:102"
-0x08000452 = "main.c:102"
-0x08000454 = "main.c:102"
-0x08000458 = "main.c:102"
-0x0800045a = "main.c:102"
-0x0800045e = "main.c:103"
-0x08000466 = "main.c:97"
-0x08000480 = "main.c:107"
-0x08000482 = "main.c:107"
-0x08000488 = "main.c:107"
-0x08000496 = "main.c:108"
-0x08000498 = "main.c:107"
-0x0800049a = "main.c:108"
-0x0800049c = "main.c:108"
-0x080004a2 = "main.c:111"
-0x080004a4 = "main.c:111"
-0x080004a8 = "main.c:111"
-0x080004ae = "main.c:112"
-0x080004ba = "main.c:109"
-0x080004c0 = "main.c:115"
-0x080004ca = "main.c:119"
-0x080004ce = "main.c:115"
-0x080004d0 = "main.c:120"
-0x080004d4 = "main.c:119"
-0x080004d6 = "main.c:120"
-0x080004da = "main.c:119"
-0x080004e0 = "main.c:121"
-0x080004e8 = "main.c:121"
-0x080004ee = "main.c:121"
-0x080004f4 = "main.c:121"
-0x080004f8 = "main.c:129"
-0x080004fc = "main.c:130"
-0x080004fe = "main.c:125"
-0x08000500 = "main.c:130"
-0x08000502 = "main.c:123"
-0x08000506 = "main.c:124"
-0x08000508 = "main.c:124"
-0x0800050a = "main.c:125"
-0x0800051c = "main.c:126"
-0x08000522 = "main.c:127"
-0x08000526 = "main.c:124"
-0x08000528 = "main.c:127"
-0x0800052c = "main.c:124"
-0x0800052e = "main.c:124"
-0x08000532 = "main.c:129"
-0x08000534 = "main.c:129"
-0x08000536 = "main.c:129"
-0x0800053a = "main.c:130"
-0x0800053c = "main.c:130"
-0x0800053e = "main.c:130"
-0x08000540 = "main.c:130"
-0x08000548 = "main.c:131"
-0x0800054c = "main.c:123"
+0x08000280 = "main.c:57"
+0x08000282 = "main.c:57"
+0x0800028e = "main.c:58"
+0x08000290 = "main.c:62"
+0x08000292 = "main.c:62"
+0x08000298 = "main.c:62"
+0x0800029a = "main.c:62"
+0x0800029c = "main.c:62"
+0x080002a4 = "main.c:63"
+0x080002a8 = "main.c:67"
+0x080002aa = "main.c:67"
+0x080002b0 = "main.c:68"
+0x080002b4 = "main.c:71"
+0x080002b6 = "main.c:72"
+0x080002b8 = "main.c:71"
+0x080002ba = "main.c:72"
+0x080002bc = "main.c:71"
+0x080002be = "main.c:72"
+0x080002c6 = "main.c:72"
+0x080002c8 = "main.c:73"
+0x080002cc = "main.c:74"
+0x080002ce = "main.c:73"
+0x080002d2 = "main.c:74"
+0x080002d4 = "main.c:75"
+0x080002d6 = "main.c:73"
+0x080002d8 = "main.c:74"
+0x080002da = "main.c:75"
+0x080002de = "main.c:77"
+0x080002e6 = "main.c:78"
+0x080002e8 = "main.c:76"
+0x080002ec = "main.c:78"
+0x080002ee = "main.c:78"
+0x080002f0 = "main.c:76"
+0x080002f8 = "main.c:79"
+0x080002fe = "main.c:80"
+0x08000306 = "main.c:81"
+0x0800030c = "main.c:84"
+0x0800030e = "main.c:87"
+0x08000318 = "main.c:85"
+0x0800031a = "main.c:88"
+0x0800031c = "main.c:88"
+0x0800031e = "main.c:87"
+0x08000322 = "main.c:88"
+0x0800032a = "main.c:92"
+0x0800032c = "main.c:91"
+0x08000330 = "main.c:92"
+0x08000336 = "main.c:95"
+0x08000338 = "main.c:95"
+0x0800033c = "main.c:95"
+0x08000342 = "main.c:97"
+0x08000344 = "main.c:97"
+0x0800034a = "main.c:97"
+0x08000352 = "main.c:96"
+0x0800035a = "main.c:97"
+0x0800035c = "main.c:98"
+0x0800035e = "main.c:98"
+0x08000360 = "main.c:96"
+0x0800036c = "main.c:100"
+0x0800036e = "main.c:100"
+0x08000376 = "main.c:101"
+0x08000380 = "main.c:101"
+0x0800038e = "main.c:103"
+0x08000394 = "main.c:103"
+0x08000396 = "main.c:102"
+0x0800039c = "main.c:102"
+0x080003a2 = "main.c:102"
+0x080003b4 = "main.c:105"
+0x080003b6 = "main.c:105"
+0x080003ba = "main.c:105"
+0x080003ca = "main.c:106"
+0x080003d0 = "main.c:94"
+0x080003d8 = "main.c:90"
+0x080003e8 = "main.c:110"
+0x080003ea = "main.c:109"
+0x080003ec = "main.c:110"
+0x080003ee = "main.c:110"
+0x080003f0 = "main.c:110"
+0x080003f4 = "main.c:112"
+0x080003f6 = "main.c:109"
+0x080003fc = "main.c:112"
+0x08000400 = "main.c:115"
+0x08000404 = "main.c:115"
+0x08000414 = "main.c:116"
+0x0800041a = "main.c:116"
+0x08000420 = "main.c:116"
+0x08000422 = "main.c:116"
+0x08000428 = "main.c:116"
+0x0800042a = "main.c:116"
+0x08000438 = "main.c:117"
+0x08000446 = "main.c:118"
+0x08000448 = "main.c:118"
+0x0800044c = "main.c:118"
+0x08000452 = "main.c:118"
+0x08000454 = "main.c:118"
+0x08000458 = "main.c:118"
+0x0800045a = "main.c:118"
+0x0800045e = "main.c:119"
+0x08000466 = "main.c:113"
+0x08000480 = "main.c:123"
+0x08000482 = "main.c:123"
+0x08000488 = "main.c:123"
+0x08000496 = "main.c:124"
+0x08000498 = "main.c:123"
+0x0800049a = "main.c:124"
+0x0800049c = "main.c:124"
+0x080004a2 = "main.c:127"
+0x080004a4 = "main.c:127"
+0x080004a8 = "main.c:127"
+0x080004ae = "main.c:128"
+0x080004ba = "main.c:125"
+0x080004c0 = "main.c:133"
+0x080004c4 = "main.c:133"
+0x080004c8 = "main.c:135"
+0x080004ca = "main.c:135"
+0x080004ce = "main.c:135"
+0x080004d0 = "main.c:135"
+0x080004d8 = "main.c:136"
+0x080004dc = "main.c:138"
+0x080004de = "main.c:137"
+0x080004e4 = "main.c:138"
+0x080004e6 = "main.c:138"
+0x080004e8 = "main.c:138"
+0x080004ea = "main.c:138"
+0x080004ee = "main.c:139"
+0x080004f0 = "main.c:138"
+0x080004f4 = "main.c:137"
+0x080004f6 = "main.c:138"
+0x08000506 = "main.c:141"
+0x08000510 = "main.c:144"
+0x08000512 = "main.c:145"
+0x08000514 = "main.c:145"
+0x08000516 = "main.c:144"
+0x08000518 = "main.c:145"
+0x0800051c = "main.c:145"
+0x0800051e = "main.c:147"
+0x0800052e = "main.c:148"
+0x08000532 = "main.c:148"
+0x08000540 = "main.c:149"
+0x0800054e = "main.c:150"
+0x08000550 = "main.c:150"
+0x0800055e = "main.c:151"
+0x08000566 = "main.c:145"
+0x08000578 = "main.c:154"
+0x0800057e = "main.c:158"
+0x08000580 = "main.c:154"
+0x08000588 = "main.c:159"
+0x0800058c = "main.c:158"
+0x0800058e = "main.c:159"
+0x08000592 = "main.c:158"
+0x08000598 = "main.c:160"
+0x080005a4 = "main.c:162"
+0x080005ac = "main.c:162"
+0x080005b2 = "main.c:162"
+0x080005b8 = "main.c:162"
+0x080005bc = "main.c:172"
+0x080005c0 = "main.c:173"
+0x080005c2 = "main.c:166"
+0x080005c4 = "main.c:173"
+0x080005c6 = "main.c:164"
+0x080005ca = "main.c:165"
+0x080005cc = "main.c:165"
+0x080005ce = "main.c:166"
+0x080005e0 = "main.c:167"
+0x080005e6 = "main.c:168"
+0x080005ea = "main.c:165"
+0x080005ec = "main.c:168"
+0x080005f0 = "main.c:165"
+0x080005f2 = "main.c:165"
+0x080005f6 = "main.c:170"
+0x080005fa = "main.c:171"
+0x080005fe = "main.c:172"
+0x08000600 = "main.c:172"
+0x08000602 = "main.c:172"
+0x08000606 = "main.c:173"
+0x0800060c = "main.c:173"
+0x08000614 = "main.c:174"
+0x08000626 = "main.c:176"
+0x0800062a = "main.c:164"
 
 # Structs, unions and enums by C name (a typedef's for an anonymous one):
 # fields with byte offset, size, type and bitfield bits [lowest, width].
@@ -296,6 +380,19 @@ fields = [
   { name = "shade", off = 6, size = 2, type = "u16", bits = [10, 5] },
 ]
 
+[types."struct Clock"]
+kind = "struct"
+size = 4
+fields = [
+  { name = "beats", off = 0, size = 2, type = "u16", bits = [0, 10] },
+  { name = "level", off = 0, size = 2, type = "u16", bits = [10, 6] },
+  { name = "tick", off = 2, size = 1, type = "u8", bits = [0, 4] },
+  { name = "next", off = 2, size = 1, type = "u8", bits = [4, 2] },
+  { name = "run", off = 2, size = 1, type = "u8", bits = [6, 1] },
+  { name = "flash", off = 2, size = 1, type = "u8", bits = [7, 1] },
+]
+
 # #define families of pret's include/constants/ that a field takes, by
-# the prefix its name spells (`optionsTextSpeed`: OPTIONS_TEXT_SPEED_*):
-# each value's one name, and the fields, as `type.field`.
+# the prefix its name spells (`optionsTextSpeed`: OPTIONS_TEXT_SPEED_*),
+# and enums a field or global takes by its type (`GameMode`):
+# each value's one name, the fields, as `type.field`, and the globals.
