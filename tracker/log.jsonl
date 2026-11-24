@@ -4285,3 +4285,4 @@
 {"at":"2026-11-24T22:36:27Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-signed-values","text":"Values compared signed print as i32 through their uses: edited (priority, add-needs)"}
 {"at":"2026-11-24T22:36:29Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-aligned-params","text":"Untyped pointer loads drop rotates their callers prove 0: edited (priority)"}
 {"at":"2026-11-24T22:36:32Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-for-ram-bounds-games","text":"Games' loops to a bound in RAM print as for: edited (priority, add-needs)"}
+{"at":"2026-11-24T22:36:34Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-frame-exact-irq-reach","text":"Exact sp: IRQ wrappers' reach narrowed on Metroid: edited (priority, add-needs)"}
