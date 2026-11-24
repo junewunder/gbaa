@@ -10,10 +10,11 @@
 # native/mirror-lifts (its card asks for its lift's numbers here, as each
 # game's lift unit's); 416 after native/lift-typed-access (its piece's
 # line, six lines); 421 after native/mod-view-parity (the link to its
-# table, mod-view-parity.md).
+# table, mod-view-parity.md); 422 after native/lift-signature-holes (piece
+# 3's line for shapes from the prototypes).
 [[doc]]
 path = "docs/native-stage-b.md"
-max_lines = 421
+max_lines = 422
 
 # The hole report's method and findings, cut from 667 lines on 2026-11-06;
 # 390 after native/nightmare-cpu-state added Nightmare's task switcher

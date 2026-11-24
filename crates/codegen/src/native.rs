@@ -445,6 +445,17 @@ pub struct Holes {
     /// every call did. The planted control of `native/lift-gives`: the
     /// native check must catch it on `agb/native-gives`.
     pub gives_kept: bool,
+    /// Each function's prototype as far as its registers, by key: its
+    /// parameters and results (bit `n` for rN), from the names files
+    /// (`crate::saves::proto_regs`; unit `native/lift-signature-holes`).
+    /// A function with one takes its shape from it, unless the summaries
+    /// prove it wrong ([`shape`]). Empty with `gbaa-lift
+    /// --no-prototype-shapes`: the summaries' shapes alone.
+    pub protos: BTreeMap<u32, (u8, u8)>,
+    /// The wrong-prototype control (`gbaa-lift --plant-proto=KEY`): the
+    /// function's prototype, taken unchecked, returns nothing. The native
+    /// check must catch it where a caller uses the value.
+    pub plant_proto: Option<u32>,
     /// The stack-locals check's planted control (`gbaa-lift --plant-slot
     /// AT`, `native/frame-locals`): the store of the instruction at this
     /// address, which must be to a slot printed as a Rust local, stores
@@ -1440,6 +1451,14 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         }
     }
     let shapes = shapes_of(&codes, &all, holes);
+    // The summaries' shapes alone, to score them against the prototypes
+    // (native/lift-signature-holes; `--no-prototype-shapes` prints them).
+    let sum_shapes = (!holes.protos.is_empty()).then(|| {
+        let mut h = holes.clone();
+        h.protos.clear();
+        h.plant_proto = None;
+        shapes_of(&codes, &all, &h)
+    });
     // A checked function's shape as if it weren't replaced: what its
     // callers would read, which the check compares (`--fn-check`).
     let check_shapes = (!holes.fn_check.is_empty()).then(|| {
@@ -2061,6 +2080,37 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     for (f, c) in &shapes.callee_hole {
         writeln!(report, "  f_{f:08x}: through f_{c:08x}").unwrap();
     }
+    // Prototype shapes (native/lift-signature-holes): those taken, and
+    // each refused by name with why.
+    writeln!(
+        report,
+        "parameters and results from the prototypes: {} functions of {} with one ({} of them with a summary hole); refused for {}, where the summaries prove the prototype wrong{}",
+        shapes.from_proto.len(),
+        holes.protos.len(),
+        shapes
+            .from_proto
+            .iter()
+            .filter(|k| codes.iter().any(|c| c.sums.get(**k).is_some_and(|s| !s.holes.is_empty())))
+            .count(),
+        shapes.refused.len(),
+        match holes.plant_proto {
+            Some(k) => format!("; --plant-proto: f_{k:08x} taken to return nothing"),
+            None => String::new(),
+        }
+    )
+    .unwrap();
+    for (f, why) in &shapes.refused {
+        let name = holes.fn_names.get(f).map_or("", String::as_str);
+        writeln!(report, "  prototype refused: f_{f:08x} {name}: {why}").unwrap();
+    }
+    report.push_str(&hole_causes(
+        &codes,
+        sum_shapes.as_ref().unwrap_or(&shapes),
+        holes,
+    ));
+    if let Some(alone) = &sum_shapes {
+        report.push_str(&proto_agreement(&alone.shaped, holes));
+    }
     writeln!(
         report,
         "callee-saves not proven (soft: each function's r4-r11 and sp are its own locals): {}",
@@ -2514,6 +2564,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("unpacked_unread", n(soft.unpacked_unread));
     m.push("plain_entry_bodies", n(soft.body_in_plain));
     m.push("regs_call_entries", n(soft.regs_call));
+    // Prototype shapes (native/lift-signature-holes): taken (no bar: it
+    // should rise) and refused where the summaries prove one wrong.
+    m.push("proto_shapes", n(shapes.from_proto.len()));
+    m.push("proto_shapes_refused", n(shapes.refused.len()));
     // The `let`s nothing reads, and the sums still printed as
     // `add_with_carry(..).0` (native/lift-plain-arith): none.
     let text = || files.files.iter().map(|(_, t)| t.as_str());
@@ -5117,6 +5171,10 @@ impl FnPrinter<'_, '_> {
             && taken.iter().all(|&(i, _, _)| {
                 i == 13
                     || (i < 4 && params & 1 << i != 0)
+                    // One a shaped function's liveness keeps live past its
+                    // parameters (a read past a hole the prototype
+                    // settles): 0, as `Regs::call` gives it.
+                    || (i < 4 && self.me.is_some())
                     || (i == 14 && self.lr_ret)
                     || ((4..12).contains(&i) && unused_high)
             });
@@ -5159,11 +5217,14 @@ impl FnPrinter<'_, '_> {
                     args(sh.params)
                 );
             }
-            // The entry lr, proven `RET`, r4-r11 (unused, as `Regs::call`
-            // gives them), then what it declares.
+            // The entry lr, proven `RET`, r0-r3 past its parameters and
+            // r4-r11 (unused, as `Regs::call` gives them), then what it
+            // declares.
             let (mut names, mut from): (Vec<String>, Vec<String>) = taken
                 .iter()
-                .filter(|&&(i, _, _)| (4..15).contains(&i) && i != 13)
+                .filter(|&&(i, _, _)| {
+                    (4..15).contains(&i) && i != 13 || i < 4 && params & 1 << i == 0
+                })
                 .map(|&(i, m, ref name)| {
                     let v = if i == 14 { "RET" } else { "0u32" };
                     (format!("{m}{name}"), v.to_string())
@@ -9786,6 +9847,107 @@ fn call_fn_args(sets: &Sets, codes: &[Code], shaped: &BTreeMap<u32, Shape>) -> A
     a
 }
 
+/// The report's table of why functions keep four registers without a
+/// prototype (native/lift-signature-holes; `shapes` the summaries' alone):
+/// each summary hole's kind (its
+/// text with addresses and registers left out), by the functions that
+/// have one of that kind, and those whose parameters rest on a callee's
+/// hole or that a stand-in replaces.
+fn hole_causes(codes: &[Code], shapes: &Shapes, holes: &Holes) -> String {
+    let mut kinds: BTreeMap<String, usize> = BTreeMap::new();
+    let mut holey = 0;
+    for c in codes {
+        for f in &c.funcs {
+            if holes.standins.contains_key(&f.entry) {
+                continue;
+            }
+            let Some(s) = c.sums.get(f.entry) else {
+                continue;
+            };
+            if s.holes.is_empty() {
+                continue;
+            }
+            holey += 1;
+            let mine: BTreeSet<String> = s.holes.iter().map(|h| hole_kind(h)).collect();
+            for k in mine {
+                *kinds.entry(k).or_default() += 1;
+            }
+        }
+    }
+    let mut t = format!(
+        "summary holes by kind (a function counted once per kind it has): {holey} functions with one, {} whose parameters rest on a callee's, {} stand-ins\n",
+        shapes.callee_hole.len(),
+        holes.standins.len()
+    );
+    let mut v: Vec<(&String, &usize)> = kinds.iter().collect();
+    v.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+    for (k, n) in v {
+        writeln!(t, "  {n:>6}  {k}").unwrap();
+    }
+    t
+}
+
+/// A summary hole's text with addresses, register numbers and the
+/// counts after them left out: its kind.
+fn hole_kind(h: &str) -> String {
+    let mut out = String::new();
+    let mut it = h.chars().peekable();
+    while let Some(ch) = it.next() {
+        if ch == '0' && it.peek() == Some(&'x') {
+            it.next();
+            while it.peek().is_some_and(|c| c.is_ascii_hexdigit()) {
+                it.next();
+            }
+            out.push('…');
+        } else if ch == 'r' && it.peek().is_some_and(|c| c.is_ascii_digit()) {
+            while it.peek().is_some_and(|c| c.is_ascii_digit()) {
+                it.next();
+            }
+            out.push_str("rN");
+        } else if ch.is_ascii_digit() {
+            while it.peek().is_some_and(|c| c.is_ascii_digit()) {
+                it.next();
+            }
+            out.push('N');
+        } else {
+            out.push(ch);
+        }
+    }
+    // Lists of registers or functions after a colon: one kind.
+    match out.find(": rN") {
+        Some(i) => out[..i + 4].to_string(),
+        None => out,
+    }
+}
+
+/// The summaries' shapes against the prototypes, where both speak: what
+/// a game with no prototypes gets (native/lift-signature-holes).
+fn proto_agreement(alone: &BTreeMap<u32, Shape>, holes: &Holes) -> String {
+    let (mut none, mut same, mut fewer, mut more, mut results) = (0, 0, 0, 0, 0);
+    for (k, &(params, res)) in &holes.protos {
+        let Some(sh) = alone.get(k) else {
+            none += 1;
+            continue;
+        };
+        if sh.params == params && sh.results == res {
+            same += 1;
+            continue;
+        }
+        if sh.params & !params != 0 {
+            more += 1;
+        } else if sh.params != params {
+            fewer += 1;
+        }
+        if sh.results != res {
+            results += 1;
+        }
+    }
+    format!(
+        "the summaries' shapes against the prototypes ({} with one): {none} no shape (a hole, a callee's, a stand-in); {same} the same; {fewer} fewer parameters (one the function never reads), {more} more; {results} other results (a register callers read or that is kept, against the prototype's value)\n",
+        holes.protos.len()
+    )
+}
+
 /// Every function's shape ([`shape::shapes`]), over all code contexts.
 fn shapes_of(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> Shapes {
     let mut nodes = BTreeMap::new();
@@ -9795,9 +9957,21 @@ fn shapes_of(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> Shapes {
                 dyn_targets(&c.ctx, holes, at, thumb, target).unwrap_or_default()
             })
         };
-        nodes.extend(shape::nodes_of(i, &c.funcs, &c.sums, edges, |k| {
-            holes.standins.contains_key(&k)
-        }));
+        let proto = |k: u32| {
+            let &(params, results) = holes.protos.get(&k)?;
+            Some(match holes.plant_proto == Some(k) {
+                true => (Shape { params, results: 0 }, true),
+                false => (Shape { params, results }, false),
+            })
+        };
+        nodes.extend(shape::nodes_of(
+            i,
+            &c.funcs,
+            &c.sums,
+            edges,
+            |k| holes.standins.contains_key(&k),
+            proto,
+        ));
     }
     shape::shapes(&nodes)
 }

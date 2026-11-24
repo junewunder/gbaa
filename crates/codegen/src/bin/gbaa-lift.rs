@@ -1,7 +1,7 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
 //! [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT]
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT]
-//! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-for-loops] [--copies N] [--holes-only [--flow]]
+//! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-prototype-shapes] [--plant-proto=KEY] [--no-for-loops] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
 //! [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...]`,
 //! or `gbaa-lift ROM --find FIELD [FLAGS]`:
@@ -84,6 +84,14 @@
 //! printed as a Rust local, store its value plus one, which the native
 //! check must catch on `agb/native-frame-locals` (unit
 //! `native/frame-locals`).
+//!
+//! Where the names files give a function's prototype, its parameters and
+//! result are the prototype's, hole or not, unless its summary proves
+//! the prototype wrong (`codegen::native::shape`, unit
+//! `native/lift-signature-holes`; the report lists each refused);
+//! `--no-prototype-shapes` prints the summaries' shapes alone.
+//! `--plant-proto=KEY` takes function KEY's prototype to return nothing,
+//! unchecked: a planted wrong prototype the native check must catch.
 //!
 //! `--shadow-locals` keeps every stack local in the frame's bytes as well
 //! and prints a `shadow local:` line to stderr wherever a load from a
@@ -190,7 +198,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...] | gbaa-lift ROM --find FIELD [FLAGS]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-prototype-shapes] [--plant-proto=KEY] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...] | gbaa-lift ROM --find FIELD [FLAGS]"
         );
         ExitCode::FAILURE
     };
@@ -212,6 +220,7 @@ fn main() -> ExitCode {
     let mut no_data_names = false;
     let mut no_for_loops = false;
     let mut no_let_names = false;
+    let (mut no_proto_shapes, mut plant_proto) = (false, None);
     let (mut holes_only, mut holes_flow) = (false, false);
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
     let (mut fn_check, mut replace, mut seed, mut runs) = (Vec::new(), None, None, None);
@@ -269,6 +278,10 @@ fn main() -> ExitCode {
             no_let_names = true;
             continue;
         }
+        if a == "--no-prototype-shapes" {
+            no_proto_shapes = true;
+            continue;
+        }
         if a == "--no-for-loops" {
             no_for_loops = true;
             continue;
@@ -304,6 +317,13 @@ fn main() -> ExitCode {
             continue;
         }
         // One word, so the lift check's `planted_flags` can name it.
+        if let Some(k) = a.strip_prefix("--plant-proto=") {
+            match hex(k) {
+                Some(k) => plant_proto = Some(k),
+                None => return usage(),
+            }
+            continue;
+        }
         if let Some(at) = a.strip_prefix("--plant-slot=") {
             match hex(at) {
                 Some(at) => plant_slot = Some(at),
@@ -533,6 +553,30 @@ fn main() -> ExitCode {
                     types: map.typed.clone(),
                     locals: map.locals.clone(),
                 }));
+            }
+            // Prototypes: each function's shape where the summaries don't
+            // prove it wrong (native/lift-signature-holes).
+            if !no_proto_shapes {
+                holes.protos = map
+                    .functions
+                    .iter()
+                    .filter_map(|(&k, item)| {
+                        let (params, results) =
+                            codegen::saves::proto_regs(&map, item.proto.as_deref()?, &item.name)?;
+                        Some((k, (params, results as u8 & 0xf)))
+                    })
+                    .collect();
+            }
+            if let Some(k) = plant_proto {
+                match holes.protos.get(&k) {
+                    Some(&(_, r)) if r != 0 => holes.plant_proto = Some(k),
+                    _ => {
+                        eprintln!(
+                            "gbaa-lift: --plant-proto: 0x{k:08x} has no prototype returning a value"
+                        );
+                        return ExitCode::FAILURE;
+                    }
+                }
             }
             // A line table: each source line's first instruction gets its
             // `// file:line` comment.
