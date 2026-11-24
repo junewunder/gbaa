@@ -1083,6 +1083,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T22:26:26Z",
+          "by": "8b80f2e1",
+          "text": "{unit:mod/retire-tools} left for this unit: native-port-design.md:881 still names route-check --mod-run, and mod-view-design.md names just readable-states/readable-suites/crates/naming; reword with the retired header."
+        },
+        {
           "at": "2026-11-24T21:55:21Z",
           "by": "2ddc0f0e",
           "text": "owner said delete. Split: {unit:mod/retire-tools}, {unit:mod/half-speed-on-lift}, {unit:mod/retire-recompile}, {unit:mod/retire-readable-codegen}. Left here: mod-view-design.md retired header, commands.md, design-doc rewording, decisions.md."
