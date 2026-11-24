@@ -1470,6 +1470,15 @@
       "at": "2026-11-24T05:25:27Z",
       "question": "q/may-native-check-skip-struct",
       "via": "9a39864c"
+    },
+    {
+      "id": "d/dense-ids-land-with-fn-keys-left-as-measured",
+      "title": "Dense IDs land with fn_keys_left as measured, not 0",
+      "why": "From Function pointers as dense FnRef IDs ({unit:native/fnref-dense}), 2026-11-24: its bar (0 ROM keys left in a dense build, judged on the C programs and a game) doesn't move by the dense rewrite itself: what stays a key is what the function flow doesn't prove. Landed: fn_keys_left barred at the values measured, 0 on 9 of 10 C programs, c-fnptr-gcc 6; Metroid 326 (its dense build draws the ROM keys' 2,700 frames). The target goes to {unit:native/fnref-dense-keys-left}. The checker agrees or sends it back.",
+      "by": "91d18000",
+      "at": "2026-11-24T06:21:29Z",
+      "scope": ["native/fnref-dense"],
+      "until": "2026-11-24T21:00:01Z"
     }
   ]
 }

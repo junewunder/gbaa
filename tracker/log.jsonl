@@ -3894,3 +3894,4 @@
 {"at":"2026-11-24T06:14:47Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-for-bounds","text":"Loops counted to a variable bound print as for: on main"}
 {"at":"2026-11-24T06:14:53Z","actor":"loop","tag":"e4b6a739","host":"quack","cmd":"claim","id":"native/mirror-agent-mod","text":"An agent makes a small real Amazing Mirror mod: claimed"}
 {"at":"2026-11-24T06:21:21Z","actor":"loop","tag":"91d18000","host":"quack","cmd":"add-unit","id":"native/fnref-dense-keys-left","text":"new unit: Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid"}
+{"at":"2026-11-24T06:21:29Z","actor":"loop","tag":"91d18000","host":"quack","cmd":"decide","text":"decided: Dense IDs land with fn_keys_left as measured, not 0","d":"d/dense-ids-land-with-fn-keys-left-as-measured"}
