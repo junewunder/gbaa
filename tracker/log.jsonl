@@ -4047,3 +4047,4 @@
 {"at":"2026-11-24T12:27:03Z","actor":"loop","tag":"f1d95093","host":"quack","cmd":"note","id":"native/warioware-builds","text":"WarioWare's lift builds: its hard holes closed: note: Mods' emerald/holes.toml has [[roots]] (and [[open_bus]]) that main's gbaa-holes rejects, so holes-all's Emerald row stops at exit 2; compare with mods 5c20f6c's file via --holes."}
 {"at":"2026-11-24T12:32:10Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/warioware-builds","text":"WarioWare's lift builds: its hard holes closed: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-24T12:32:15Z","actor":"loop","tag":"2a675964","host":"quack","cmd":"claim","id":"native/warioware-builds","text":"WarioWare's lift builds: its hard holes closed: claimed"}
+{"at":"2026-11-24T12:38:57Z","actor":"loop","tag":"2a675964","host":"quack","cmd":"done","id":"native/warioware-builds","text":"WarioWare's lift builds: its hard holes closed: done"}

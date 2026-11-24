@@ -3780,15 +3780,22 @@
       "needs": ["native/ram-jump-passes-regs"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "2a675964",
-        "session": "2a675964-4b7e-4687-bdc7-79bd8dffd895",
-        "host": "quack",
-        "pid": 2962519,
-        "start": "95218086",
-        "at": "2026-11-24T12:32:15Z",
+        "at": "2026-11-24T12:38:57Z",
+        "evidence": "just lift on WarioWare: 0 hard holes, builds, first stop 39 of 600 frames at the call to IWRAM 0x030003a8, filed as {unit:native/warioware-stop-30003a8}. holes-all main 8f5c171f vs branch: no game's hard holes rose. Review fixes made: two-word column test added (fails with strides 3..=8), bx r1 case dropped, r9 cases folded into the entry-register test. Main merged (up to date); just check passes (exit 0).",
         "branch": "unit/native/warioware-builds",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T12:38:57Z",
+          "by": "2a675964",
+          "host": "quack",
+          "pid": 2962519,
+          "start": "95218086",
+          "beats": true,
+          "session": "2a675964-4b7e-4687-bdc7-79bd8dffd895",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
