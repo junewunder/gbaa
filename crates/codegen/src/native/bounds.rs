@@ -12,7 +12,9 @@
 //!
 //! What [`prove`] asks, given the loop's facts ([`Loop`]):
 //! - the latch writes the counter once, as itself plus or minus 1, as a
-//!   `u32` or narrowed to a `u8` or `u16` (`(i + 1) as u8`), and jumps
+//!   `u32` or narrowed to a `u8` or `u16` (`(i + 1) as u8`), directly or
+//!   through a register an earlier block of the round set ([`Loop::via`];
+//!   unit `native/lift-for-step-via`), and jumps
 //!   back while the new value is below the bound (above it counting
 //!   down), or not equal to it; the bound a constant or a register
 //!   nothing in the loop writes, which may be narrowed too;
@@ -367,6 +369,12 @@ pub struct Loop<'a> {
     pub kept: u16,
     /// Where the loop tests its range.
     pub test: Test<'a>,
+    /// Registers the latch starts with a known value of, over the
+    /// registers at the loop's start: each written once a round, in a
+    /// block on every way to the latch (agbcc's `r9 = r8 + 1` early in
+    /// the body, `r8 = r9 as u8` in the latch; unit
+    /// `native/lift-for-step-via`).
+    pub via: &'a [(usize, Sym)],
 }
 
 /// A proven range: the index of the latch's step, and the range's Rust;
@@ -413,6 +421,11 @@ pub fn why(l: &Loop) -> Result<Proven, &'static str> {
         }
     }
     let at_start = regs.clone();
+    for (q, s) in l.via {
+        if *q != r {
+            regs[*q] = Some(s.clone());
+        }
+    }
     let writes: Vec<usize> = (0..l.back)
         .filter(|&i| matches!(l.latch[i].op, Op::SetReg(q, _) if q.index() == r))
         .collect();
@@ -767,6 +780,7 @@ mod tests {
             enter: 17,
             kept: 1 << 5,
             test: Test::Back,
+            via: &[],
         };
         assert_eq!(
             prove(&lp),
@@ -832,6 +846,7 @@ mod tests {
             enter: 17,
             kept: 1 << 5,
             test: Test::Exit(16),
+            via: &[],
         };
         assert_eq!(prove(&lp).map(|p| p.range), Some("0..r5".into()));
         // As the jump back's own guard, it is the wrong way round.
@@ -921,6 +936,7 @@ mod tests {
             enter: 3,
             kept: 1 << 5,
             test: Test::Top(&out, 10, true),
+            via: &[],
         };
         let clamped = Some("0..(r5 as i32).max(0) as u32".to_string());
         assert_eq!(prove(&lp).map(|p| p.range), clamped);
@@ -947,6 +963,45 @@ mod tests {
             why(&Loop { way_in: &w2, ..lp }).err(),
             Some("signed range may be negative")
         );
+    }
+
+    /// `r6 = r4 + 1` early in the body, `r4 = r6 + 0` in the latch (unit
+    /// native/lift-for-step-via): the step, carried through r6.
+    #[test]
+    fn a_step_through_a_second_register() {
+        let mut l = latch(false);
+        l[0] = i(Op::GetReg(Reg(6)));
+        l[1] = i(Op::Const(0));
+        let w = way_in();
+        let one = Sym {
+            add: 1,
+            ..Sym::reg(4)
+        };
+        let lp = Loop {
+            reg: 4,
+            latch: &l,
+            back: 15,
+            way_in: &w,
+            enter: 17,
+            kept: 1 << 5,
+            test: Test::Back,
+            via: &[],
+        };
+        assert_eq!(prove(&lp), None);
+        let via = [(6, one)];
+        assert_eq!(
+            prove(&Loop { via: &via, ..lp }).map(|p| (p.step, p.range)),
+            Some((6, "0..r5".into()))
+        );
+        // r6 = r5 + 1: not of the counter.
+        let via = [(
+            6,
+            Sym {
+                add: 1,
+                ..Sym::reg(5)
+            },
+        )];
+        assert_eq!(prove(&Loop { via: &via, ..lp }), None);
     }
 
     fn c(l: Sym, rel: Rel, r: Sym, signed: bool) -> Cmp {

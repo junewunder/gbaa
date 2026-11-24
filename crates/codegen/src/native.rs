@@ -238,6 +238,7 @@ pub mod modules;
 pub mod named;
 pub mod narrow;
 pub mod pc_marks;
+pub mod ref_binds;
 pub mod rom_data;
 pub mod shape;
 pub mod switch;
@@ -420,6 +421,9 @@ pub struct Holes {
     /// Every `let` of a value `vN` (`gbaa-lift --no-let-names`), none
     /// named for what it holds ([`value_names`]).
     pub no_let_names: bool,
+    /// Every pointer variable `u32` (`gbaa-lift --no-ref-binds`), none
+    /// declared the `Ref<T>` its accesses make ([`ref_binds`]).
+    pub no_ref_binds: bool,
     /// Stage A's old IRQs (`gbaa-lift --irq-at-waits`): `Game::cpsr` as
     /// bookkeeping only, so an IRQ due at a wait inside a critical section
     /// runs there, where the hardware holds it until the I bit clears. The
@@ -2549,6 +2553,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("value_lets", soft.value_lets);
     // Of those, the ones named for what they hold (native/lift-let-names).
     m.push("lets_named", n(soft.lets_named));
+    // Pointer variables declared `Ref<T>` (native/lift-pointer-types; no
+    // bar: they should rise), by where the type came from: the names
+    // files' (`t::…`) and the heap runs' (proven); and the typed pointers
+    // still made at a use, `Ref::<T>::new(…)` (barred).
+    m.push("refs_bound_named", n(soft.refs_bound_named));
+    m.push("refs_bound_proven", n(soft.refs_bound_proven));
     // Register locals (native/lift-register-locals): writes of r0-r12's
     // mut locals printed (a value only its block reads is a `let`), and
     // functions whose entry unpacks a register or flag never read as it
@@ -2566,6 +2576,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let text = || files.files.iter().map(|(_, t)| t.as_str());
     m.push("unread_lets", text().map(unread::unread_lets).sum());
     m.push("adc_sums", text().map(unread::adc_sums).sum());
+    m.push("ref_new_at_use", text().map(ref_binds::at_use).sum());
     // Structured loops (native/lift-for-loops): those printed as `for`
     // (no bar: it should rise) and the rest, as `loop` (barred).
     m.push("loops_for", soft.loops_for);
@@ -4355,6 +4366,10 @@ struct Soft {
     locals_noted: usize,
     /// The `let vN` values named for what they hold ([`value_names`]).
     lets_named: usize,
+    /// Pointer variables declared `Ref<T>` ([`ref_binds`]), by where
+    /// their type came from: the names files', a heap run's.
+    refs_bound_named: usize,
+    refs_bound_proven: usize,
     /// And those whose plain entry still packs its arguments into
     /// [`Regs::call`] for `x_` (barred): what they take as they came is
     /// more than those (a flag, r4-r12, an lr not proven `RET`).
@@ -4823,6 +4838,7 @@ impl FnPrinter<'_, '_> {
             s.insert_str(head, &e);
             self.name_locals(&mut s, head, e.len());
             self.name_values(&mut s, head);
+            self.bind_refs(&mut s, head);
             return s;
         }
         self.soft.fns_match += 1;
@@ -4854,6 +4870,7 @@ impl FnPrinter<'_, '_> {
         s.insert_str(head, &e);
         self.name_locals(&mut s, head, e.len());
         self.name_values(&mut s, head);
+        self.bind_refs(&mut s, head);
         s
     }
 
@@ -5013,6 +5030,28 @@ impl FnPrinter<'_, '_> {
         if n > 0 {
             s.replace_range(head.., &text);
             self.soft.lets_named += n;
+        }
+    }
+
+    /// The function's pointer variables declared as the `Ref<T>` their
+    /// accesses make of them ([`ref_binds`]): last, after the names.
+    fn bind_refs(&mut self, s: &mut String, head: usize) {
+        if self.holes.no_ref_binds {
+            return;
+        }
+        // Its entries as printed stay ([`one_entry`] finds them so): a
+        // parameter's binding goes after them.
+        let all = self.soft.entries.get(&self.f.entry).map(Entries::all);
+        let after = all
+            .as_ref()
+            .and_then(|e| s[head..].find(e.as_str()).map(|i| i + e.len()))
+            .unwrap_or(0);
+        let (text, n) = ref_binds::bind(&s[head..], after);
+        let kept = all.is_none_or(|e| !s[head..].contains(&e) || text.contains(&e));
+        if n != ref_binds::Bound::default() && kept {
+            s.replace_range(head.., &text);
+            self.soft.refs_bound_named += n.named;
+            self.soft.refs_bound_proven += n.proven;
         }
     }
 
@@ -6451,6 +6490,7 @@ impl FnPrinter<'_, '_> {
                 why += &format!("r{r} read after the loop; ");
                 continue;
             }
+            let via = self.step_via(r, kept & !(1 << r), by_calls, l, h, &round, &edges);
             let mut proven = Err("");
             let mut by = None;
             for &t in &tests {
@@ -6462,6 +6502,7 @@ impl FnPrinter<'_, '_> {
                     enter: px.index,
                     kept: kept & !(1 << r),
                     test: t,
+                    via: &via,
                 });
                 if proven.is_ok() {
                     by = Some(t);
@@ -6573,6 +6614,81 @@ impl FnPrinter<'_, '_> {
             return Err("flags live after the loop");
         }
         Ok((x.index, leaves))
+    }
+
+    /// The registers loop `h`'s latch `l` starts each round with a known
+    /// value of, for [`bounds::Loop::via`]: each written once in the round
+    /// (and by no call there), in a block other than the latch that every
+    /// way from the start to the latch passes, as a [`bounds::Sym`] over
+    /// the counter `r` and the registers `kept` nothing in the loop
+    /// writes, all as they were at the loop's start (unit
+    /// `native/lift-for-step-via`: agbcc's `r9 = r8 + 1` early in the
+    /// body, `r8 = r9 as u8` in the latch).
+    #[allow(clippy::too_many_arguments)]
+    fn step_via(
+        &self,
+        r: usize,
+        kept: u16,
+        by_calls: u16,
+        l: u32,
+        h: u32,
+        round: &[u32],
+        edges: &[(u32, usize, u32)],
+    ) -> Vec<(usize, bounds::Sym)> {
+        // Whether every way from the start to the latch within the round
+        // passes block `d`.
+        let on_every_way = |d: u32| {
+            if d == h {
+                return true;
+            }
+            let mut seen: Vec<u32> = vec![h];
+            let mut go: Vec<u32> = vec![h];
+            while let Some(k) = go.pop() {
+                for e in edges.iter().filter(|e| e.0 == k) {
+                    let t = e.2;
+                    if t == l {
+                        return false;
+                    }
+                    if t != d && t != h && round.contains(&t) && !seen.contains(&t) {
+                        seen.push(t);
+                        go.push(t);
+                    }
+                }
+            }
+            true
+        };
+        let mut via = Vec::new();
+        for q in 0..13 {
+            if q == r || by_calls & 1 << q != 0 {
+                continue;
+            }
+            let set = |i: &Inst| matches!(i.op, Op::SetReg(x, _) if x.index() == q);
+            let mut at = round
+                .iter()
+                .filter(|k| self.f.blocks[*k].block.insts.iter().any(set));
+            let (Some(&d), None) = (at.next(), at.next()) else {
+                continue;
+            };
+            let insts = &self.f.blocks[&d].block.insts;
+            if d == l || insts.iter().filter(|i| set(i)).count() != 1 || !on_every_way(d) {
+                continue;
+            }
+            // The counter is written only by the latch: at `d` it is as
+            // at the loop's start.
+            let mut regs: [Option<bounds::Sym>; 16] = Default::default();
+            for (x, s) in regs.iter_mut().enumerate() {
+                if x == r || kept & 1 << x != 0 {
+                    *s = Some(bounds::Sym::reg(x));
+                }
+            }
+            bounds::eval(insts, &mut regs, insts.len());
+            if let Some(s) = regs[q].take()
+                && s.base.is_none_or(|b| b < 16)
+            {
+                via.push((q, s));
+            }
+        }
+        via
     }
 
     /// The keys an exit's printed code may jump to ([`FnPrinter::exit`]):
@@ -7544,7 +7660,6 @@ impl FnPrinter<'_, '_> {
                         Width::Half => ("ld16", " & !1"),
                         Width::Word => ("ld32", " & !3"),
                     };
-                    let mut typed_addr: Option<String> = None;
                     let mem = match (&typed[i], &objs[i], refs[i]) {
                         _ if let Some(o) = self.callers_off(i) => {
                             format!("{f}(g, {}{m})", callers_addr(o))
@@ -7565,11 +7680,7 @@ impl FnPrinter<'_, '_> {
                             o.load(&format!("{}{m}", self.val(addr)), bytes(width))
                         }
                         (None, None, Some(r)) if r.named => {
-                            let p = self.field_ptr(i, r, addr);
-                            // An open-bus load's address is the field's:
-                            // the sum it folds in isn't printed.
-                            typed_addr = Some(format!("{p}.addr()"));
-                            format!("g.get({p})")
+                            format!("g.get({})", self.field_ptr(i, r, addr))
                         }
                         (None, None, Some(r)) => match r.base {
                             Some((b, c)) => self.heap.load(r.f, &self.val(b), r.f.off - c),
@@ -7590,9 +7701,9 @@ impl FnPrinter<'_, '_> {
                     let mem = match self.holes.open_bus.contains_key(&at) {
                         true => {
                             self.soft.open_bus_printed.insert(at);
-                            let a = typed_addr.unwrap_or_else(|| self.val(addr));
                             format!(
-                                "{{ let a: u32 = {a}{m}; if a >> 28 != 0 {{ 0 }} else {{ {f}(g, a) }} }}"
+                                "{{ let a: u32 = {}{m}; if a >> 28 != 0 {{ 0 }} else {{ {f}(g, a) }} }}",
+                                self.val(addr)
                             )
                         }
                         false => mem,
@@ -8148,7 +8259,7 @@ impl FnPrinter<'_, '_> {
             if skip[i] || dead[i] || (self.gone_if_unused(i, &inst.op) && uses[i] == 0) {
                 continue;
             }
-            for x in self.operands(i, inst, typed, refs, conds, forms) {
+            for x in self.operands(insts, i, inst, typed, refs, conds, forms) {
                 uses[x.index()] += 1;
             }
         }
@@ -8162,8 +8273,10 @@ impl FnPrinter<'_, '_> {
     /// the `match` replaces ([`FnPrinter::unguard`]).
     ///
     /// [`uses`]: FnPrinter::uses
+    #[allow(clippy::too_many_arguments)]
     fn operands(
         &self,
+        insts: &[Inst],
         i: usize,
         inst: &Inst,
         typed: &[Option<Place>],
@@ -8180,6 +8293,18 @@ impl FnPrinter<'_, '_> {
         let base = refs[i].and_then(|r| r.base).map(|(b, _)| b);
         let idx = refs[i].and_then(|r| r.idx);
         let fold = refs[i].and_then(|r| r.fold);
+        // A holes file's `[[open_bus]]` load prints over its address
+        // alone, whatever else would name it.
+        if let Op::Load { addr, .. } = inst.op
+            && !self.holes.open_bus.is_empty()
+            && let Some(at) = insts[..i].iter().rev().find_map(|x| match x.op {
+                Op::Insn(a) => Some(a),
+                _ => None,
+            })
+            && self.holes.open_bus.contains_key(&at)
+        {
+            return vec![addr];
+        }
         let ops = match inst.op {
             // Printed as nothing.
             Op::Timing(_) | Op::YieldFlag(..) => return Vec::new(),
@@ -8273,7 +8398,7 @@ impl FnPrinter<'_, '_> {
             let whole = !matches!(op, Op::Exit(_) | Op::SetCpsr { .. } | Op::SetSpsr { .. });
             let ops = match &conds[i] {
                 Some(f) if !f.takes_inlined() => Vec::new(),
-                _ => self.operands(i, inst, typed, refs, conds, forms),
+                _ => self.operands(insts, i, inst, typed, refs, conds, forms),
             };
             for x in ops {
                 let x = x.index();
