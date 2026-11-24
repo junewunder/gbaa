@@ -574,6 +574,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T07:40:04Z",
+          "by": "09555f4f",
+          "text": "Metroid's 38 static keys are all flow holes (fnref.rs, the flow thread's), so its 0 is split to {unit:native/rom-statics-metroid-keys}. Metroid's mods/metroid/lift-bars.toml lacks fn_keys_left and the two new metrics (another session had it modified)."
+        },
+        {
           "at": "2026-11-20T04:16:21Z",
           "by": "f415593a",
           "text": "The data half is split off as {unit:native/rom-data-statics}, which needs no dense FnRef IDs; what stays here is function-pointer words as FnRefs."
@@ -582,11 +587,6 @@
           "at": "2026-11-18T09:02:33Z",
           "by": "75073dac",
           "text": "LLM pilot rewrote ROM tables as base + i*size: GetNoteDelay 0x080020d5 (u16 periods at 0x0808cad0), IntroHandler 0x0808117d (fn table 0x08760ca8), AudioCommand_Voice 0x080022cd (12-byte voices). Metroid examples to judge it on; docs/research/llm-pilot.md."
-        },
-        {
-          "at": "2026-11-06T08:07:38Z",
-          "by": "cec56176",
-          "text": "From {unit:native/ram-globals}: every constant ROM load was a dead literal-pool load (the IR has the word as Pool); the lifter now drops unused ROM loads, so load_const_rom is 0 on all programs and this unit's bar is effectively the computed ROM loads."
         }
       ],
       "round": "2026-11-24T07:03:03Z"
