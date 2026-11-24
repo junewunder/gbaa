@@ -4201,3 +4201,4 @@
 {"at":"2026-11-24T21:53:48Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-for-step-via","text":"A counter stepped through a second register prints as for: on main"}
 {"at":"2026-11-24T21:53:53Z","actor":"loop","tag":"2ddc0f0e","host":"quack","cmd":"claim","id":"mod/retire","text":"The mod view is retired: claimed"}
 {"at":"2026-11-24T21:54:46Z","actor":"loop","tag":"2ddc0f0e","host":"quack","cmd":"add-unit","id":"mod/retire-tools","text":"new unit: Mod-view tools are gone: naming, mod-run, nightly step"}
+{"at":"2026-11-24T21:54:48Z","actor":"loop","tag":"2ddc0f0e","host":"quack","cmd":"add-unit","id":"mod/retire-recompile","text":"new unit: gbaa-recompile loses --readable, --mod, --cut, --names"}
