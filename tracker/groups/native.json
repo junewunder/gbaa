@@ -4328,19 +4328,8 @@
         "by": "f17b6716",
         "at": "2026-11-24T09:31:02Z",
         "evidence": "just lift-mod-run on mods/metroid/energy (Metroid ROM, units/metroid-native.toml): 'lift-mod-run: pass (895 of 2700 frames differ)', then fn-check: 'SamusInit … differs from its lift (the edit) in 8 runs', 'IWRAM 0x03001530 gEquipment.maxEnergy (u16): 99 lift, 45 cut', the stop on its own line ('the program stopped … after the runs above (a call or jump to 0x03001945 …)'), last line '1 of 1 cuts differ from their lifts (the edit)', no FAIL. native-spike fn-check unchanged (same, digest as recorded). just check passes after merging main (f56483b0).",
-        "branch": "unit/native/lift-mod-run-edit-report",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T09:31:02Z",
-          "by": "f17b6716",
-          "host": "quack",
-          "pid": 2962048,
-          "start": "95217572",
-          "beats": true,
-          "session": "f17b6716-09d6-4a23-8557-a687c90a2617",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "landed": "2026-11-24T09:35:43Z"
       },
       "notes": [
         {
@@ -4348,8 +4337,7 @@
           "by": "e4b6a739",
           "text": "From the Amazing Mirror mod (docs/research/mirror-agent-mod.md, hurt 6): a speed change spreads over the screen; naming the first RAM field to differ (gKirbys[0].base.xspeed at frame 1661: 332 stock, 352 mod) would say the cause where the PNGs show only effects."
         }
-      ],
-      "round": "2026-11-24T08:59:48Z"
+      ]
     },
     {
       "id": "native/metroid-fn-check-stop",
