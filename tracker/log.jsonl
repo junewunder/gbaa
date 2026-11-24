@@ -4224,3 +4224,4 @@
 {"at":"2026-11-24T22:32:04Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/emerald-native-route","text":"Emerald's lift matches the play build on a route: edited (detail)"}
 {"at":"2026-11-24T22:32:06Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/imperium-first-stops","text":"Imperium's lift runs 600 frames: its first stops: edited (detail)"}
 {"at":"2026-11-24T22:32:09Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-takes-across-copies","text":"A takes site may pass r4-r11 into another code context: edited (detail)"}
+{"at":"2026-11-24T22:32:11Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/minish-builds","text":"Minish Cap's lift builds: its hard holes closed: edited (detail)"}
