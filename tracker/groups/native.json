@@ -4099,21 +4099,9 @@
         "by": "e48d610c",
         "at": "2026-11-24T07:52:17Z",
         "evidence": "just c-tests built c-list-agbcc and c-list-gcc (both match mGBA at frame 600, d24942cc384e478d). just lift-check --only c-list-agbcc --only c-list-gcc passed: 600 frames, 0 differences, packed and dense layouts the same, planted gFrame++ store caught in both. The gcc lift first stopped calling act_fall (no discovery evidence for a base-indexed fn table); fixed by a new scan rule (decisions.md 5d; Emerald/Mirror/Metroid unchanged, modern Emerald +8, Minish Cap +12 true starts, none false). just check passed. Commit fdcd0655.",
-        "branch": "unit/native/c-list-test-program",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T07:52:17Z",
-          "by": "e48d610c",
-          "host": "quack",
-          "pid": 2962519,
-          "start": "95218086",
-          "beats": true,
-          "session": "e48d610c-6c81-436f-b9a9-3a1447de0f29",
-          "lane": "quack/2"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-24T07:34:20Z"
+        "landed": "2026-11-24T08:18:31Z"
+      }
     },
     {
       "id": "native/lift-text-editable",

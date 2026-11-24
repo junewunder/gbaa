@@ -3950,3 +3950,5 @@
 {"at":"2026-11-24T08:04:06Z","actor":"loop","tag":"79cd9198","host":"quack","cmd":"claim","id":"merge/quack-lane2-native-c-list-test-program","text":"Merge main on quack lane 2: claimed"}
 {"at":"2026-11-24T08:13:39Z","actor":"loop","tag":"79cd9198","host":"quack","cmd":"done","id":"merge/quack-lane2-native-c-list-test-program","text":"Merge main on quack lane 2: done"}
 {"at":"2026-11-24T08:14:18Z","actor":"loop","tag":"09555f4f","host":"quack","cmd":"done","id":"native/rom-statics","text":"Function words in ROM statics as FnRefs: done, checked by 228e86d4"}
+{"at":"2026-11-24T08:18:31Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane2-native-c-list-test-program","text":"Merge main on quack lane 2: on main"}
+{"at":"2026-11-24T08:18:31Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/c-list-test-program","text":"A C test program with a linked list and a node pool: on main"}
