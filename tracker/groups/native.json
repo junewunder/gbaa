@@ -4002,7 +4002,19 @@
       "detail": "From docs/ideas.md (the always-on world wants the CPU Kirbys off so they aren't wandering about): the first real mod written into the Amazing Mirror's lift as Rust. Find where the three CPU-driven Kirbys are made and driven (struct Kirby and gKirbys in katam; docs/research/kirby-controller.md), cut those functions (mods/kirby-mirror/) and turn the CPU Kirbys off behind one constant. Say in docs/research/ what the lift made hard. Independent check: on {unit:native/mirror-native-route}'s route the mod's frames show only the player's Kirby and play goes on (he moves, the room loads); with the constant off, the frames equal stock.",
       "check": "independent",
       "needs": ["native/mirror-agent-mod"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "d88dc2ac",
+        "session": "d88dc2ac-cbc4-420c-9f44-f9998c8802fe",
+        "host": "quack",
+        "pid": 2962519,
+        "start": "95218086",
+        "at": "2026-11-24T06:46:35Z",
+        "branch": "unit/native/mirror-cpu-kirbys-off",
+        "beats": true
+      },
+      "round": "2026-11-24T06:46:35Z"
     },
     {
       "id": "native/rom-data-statics",
