@@ -1582,6 +1582,14 @@
       "by": "6056824b",
       "at": "2026-11-24T22:33:30Z",
       "scope": ["native/*"]
+    },
+    {
+      "id": "d/rogue-s-r11-is-passed-exactly-not-zeroed",
+      "title": "Rogue's r11 is passed exactly, not zeroed",
+      "why": "Sprint of 2026-11-24, foreman in june's place, shown to her at the cut: GenerateFloorLayout's by-value struct carries its caller's r11 in its padding. The lift passes it through each pointer call site named by a [[takes]], rather than zeroing padding, so the lift stays exact; a missed site stops at run time, where it is found.",
+      "by": "6056824b",
+      "at": "2026-11-24T22:33:32Z",
+      "scope": ["native/rogue-build"]
     }
   ]
 }
