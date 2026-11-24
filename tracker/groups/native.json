@@ -4928,15 +4928,22 @@
       "uses": ["heavy"],
       "tags": ["slow-check"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "c2e64a37",
-        "session": "c2e64a37-522b-4b92-bd5a-4e44a366654a",
-        "host": "quack",
-        "pid": 2962519,
-        "start": "95218086",
-        "at": "2026-11-24T17:06:07Z",
+        "at": "2026-11-24T19:36:07Z",
+        "evidence": "Results are what callers read: r0 and unknown tail-call demand only for FNS functions, a longjmp restore's jump no tail call, a callee's unreturned clobbers dead in the caller. just lift-check passed at 2f545afc: 37 programs 0 differences, every planted fault caught. New metrics results_several, tuple_calls barred on every row (C rows 0/0 but c-jump-gcc 1/2, uidivmod's read remainder) and in mods' Metroid/Emerald bars. Metroid vs main's rule: results_several 1976->1061, tuple_calls 7290->5110, regs_call_entries 955->745; 600/600 frames. Emerald: 663->626, 23191->22220, 3622->3279; 600/600 frames after fixing main's open-bus-through-typed-field build break. pret-score's new results rows: Metroid void/one agree 34->793 of 2554; Emerald void 6705->6913, one 2891->2802 (unread values dropped). Emerald route unit not done: skipped. just check passed after the last main merge (c558dda1; lift-metrics 0 over there).",
         "branch": "unit/native/lift-returns-read",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T19:36:07Z",
+          "by": "c2e64a37",
+          "host": "quack",
+          "pid": 2962519,
+          "start": "95218086",
+          "beats": true,
+          "session": "c2e64a37-522b-4b92-bd5a-4e44a366654a",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
