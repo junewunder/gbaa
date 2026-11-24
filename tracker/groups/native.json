@@ -4905,19 +4905,8 @@
         "by": "c2904337",
         "at": "2026-11-24T19:18:26Z",
         "evidence": "Prototype shapes (shape.rs; report lists each refusal with its proof; --no-prototype-shapes; table in docs/research/signature-holes.md). just lift-check (pre-merge, c72339c's code) passed: 37 of 37 programs 0 differences, every planted fault caught, incl. the planted wrong prototype c-chain-agbcc --plant-proto=0x08000271 (frame 2, 12 IWRAM bytes). Bars: proto_shapes_refused on every C row (0; 2 on c-fnptr-gcc, c-loops-gcc), regs_call_entries lowered on 5 C rows; mods 9d54bc7: Metroid regs_call_entries 901->33, refused 68; Emerald 1518->122 (bar 3622), refused 888 (876 GetBoxMonData's r2). Both games 600 of 600 frames headless. Emerald route check not run: {unit:native/emerald-native-route} isn't done. just check passed after merging main (8585a9b); lift-metrics 0 over bars there.",
-        "branch": "unit/native/lift-signature-holes",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T19:18:26Z",
-          "by": "c2904337",
-          "host": "quack",
-          "pid": 2963642,
-          "start": "95218853",
-          "beats": true,
-          "session": "c2904337-c363-4edb-b766-d05827276eb2",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "landed": "2026-11-24T19:23:26Z"
       },
       "notes": [
         {
@@ -4930,8 +4919,7 @@
           "by": "51bbc90d",
           "text": "Emerald's lift on main fails to compile at GetTextEntryPosition: an [[open_bus]] load reads a vN never printed (uses counted on the typed path). Fixed on branch unit/native/lift-pointer-types (5747598, FnPrinter::operands); lands with that unit."
         }
-      ],
-      "round": "2026-11-24T16:58:52Z"
+      ]
     },
     {
       "id": "native/lift-returns-read",
