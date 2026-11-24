@@ -4639,7 +4639,19 @@
       "id": "native/lift-value-args",
       "title": "A constant passed to a call prints as pret's name for it",
       "detail": "From {unit:native/lift-pret-score}'s first numbers: values_named is 121 on Emerald where the map has 2,807 value names, the weakest row. {unit:native/lift-value-names} names a constant only where a field, global or enum-typed parameter takes a family; pret's families are mostly #defines passed to int parameters, so GetMonData(mon, MON_DATA_MAX_HP) in HealPlayerParty (src/script_pokemon_util.c:39) prints 0x3au32. Find what ties a family to a parameter (the decomp's own call sites name the constant: the source line each call's line note gives; or a parameter's name and the family's prefix) and have pret-names write it into [values], then print the name at a call's constant argument, and a sum as NAME + j where the base is a member. Never guess: a value two families hold stays a number unless the tie is the decomp's. Metric: values_named on Emerald and Metroid (rises), a C row for it (c/switch or a new program with a #define family passed to a function). Check: just lift-check passes with 0 differences and every planted fault caught; Metroid's lift builds and runs 600 of 600 frames; just check passes.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "13a4cae4",
+        "session": "13a4cae4-be28-452f-9db0-8e09fac84d4b",
+        "host": "quack",
+        "pid": 2964711,
+        "start": "95219683",
+        "at": "2026-11-24T13:28:10Z",
+        "branch": "unit/native/lift-value-args",
+        "beats": true
+      },
+      "round": "2026-11-24T13:28:10Z"
     },
     {
       "id": "native/lift-element-address",
