@@ -4724,6 +4724,11 @@
       "priority": 30,
       "notes": [
         {
+          "at": "2026-11-24T21:59:47Z",
+          "by": "ff3481df",
+          "text": "From {unit:native/emerald-sio32-play-timing}: play build compiled = interp over 5400 f after rebuild. Lane 1's gbaa-native-emerald (built 15:05, unknown branch) stopped at f3845: byte load at 0xe55ec003 in 080e3c6d (pc 080e4a61); recheck with a fresh lift."
+        },
+        {
           "at": "2026-11-24T15:31:00Z",
           "by": "209afec8",
           "text": "Main merged into this branch as local commit 6bf5bee (branch merge/emerald-native-route, quack lane 3 checkout): only units/emerald-native.toml differs from main. The session's push was refused; push it here. Lift runs 5400 frames, all pictures equal play's."
@@ -4732,11 +4737,6 @@
           "at": "2026-11-24T14:31:53Z",
           "by": "66d510b9",
           "text": "[[roots]] and the RTC (Hw::gpio) land on main via {unit:native/land-emerald-route-lifter}. Merging main into this branch conflicts only in lift-check.toml and the numbers doc: take main's (lines_prelude 1373) and regenerate with just lift-metrics --write-doc."
-        },
-        {
-          "at": "2026-11-23T18:47:22Z",
-          "by": "f3f3ccb1",
-          "text": "units/emerald-native.toml (5400 f) added. Fixed: naming [[open_bus]], tileset callbacks [[roots]], RTC via Hw::gpio. Left: play SIO32 at f3, m4a compressed audio f2150, text padding f977 (asked). Lift ~25 min busy."
         }
       ],
       "round": "2026-11-23T16:41:33Z"
