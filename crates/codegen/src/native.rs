@@ -7951,7 +7951,7 @@ impl FnPrinter<'_, '_> {
             if skip[i] || dead[i] || (self.gone_if_unused(i, &inst.op) && uses[i] == 0) {
                 continue;
             }
-            for x in self.operands(i, inst, typed, refs, conds, forms) {
+            for x in self.operands(insts, i, inst, typed, refs, conds, forms) {
                 uses[x.index()] += 1;
             }
         }
@@ -7967,6 +7967,7 @@ impl FnPrinter<'_, '_> {
     /// [`uses`]: FnPrinter::uses
     fn operands(
         &self,
+        insts: &[Inst],
         i: usize,
         inst: &Inst,
         typed: &[Option<Place>],
@@ -7983,6 +7984,18 @@ impl FnPrinter<'_, '_> {
         let base = refs[i].and_then(|r| r.base).map(|(b, _)| b);
         let idx = refs[i].and_then(|r| r.idx);
         let fold = refs[i].and_then(|r| r.fold);
+        // A holes file's `[[open_bus]]` load prints over its address
+        // alone, whatever else would name it.
+        if let Op::Load { addr, .. } = inst.op
+            && !self.holes.open_bus.is_empty()
+            && let Some(at) = insts[..i].iter().rev().find_map(|x| match x.op {
+                Op::Insn(a) => Some(a),
+                _ => None,
+            })
+            && self.holes.open_bus.contains_key(&at)
+        {
+            return vec![addr];
+        }
         let ops = match inst.op {
             // Printed as nothing.
             Op::Timing(_) | Op::YieldFlag(..) => return Vec::new(),
@@ -8076,7 +8089,7 @@ impl FnPrinter<'_, '_> {
             let whole = !matches!(op, Op::Exit(_) | Op::SetCpsr { .. } | Op::SetSpsr { .. });
             let ops = match &conds[i] {
                 Some(f) if !f.takes_inlined() => Vec::new(),
-                _ => self.operands(i, inst, typed, refs, conds, forms),
+                _ => self.operands(insts, i, inst, typed, refs, conds, forms),
             };
             for x in ops {
                 let x = x.index();
