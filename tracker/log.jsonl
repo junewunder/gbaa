@@ -4125,3 +4125,4 @@
 {"at":"2026-11-24T17:11:24Z","actor":"loop","tag":"51bbc90d","host":"quack","cmd":"add-unit","id":"native/lift-pointer-registers","text":"new unit: Register locals hold the Ref type the lift's flow gives"}
 {"at":"2026-11-24T17:11:28Z","actor":"loop","tag":"51bbc90d","host":"quack","cmd":"add-unit","id":"native/lift-pointer-signatures","text":"new unit: Pointer parameters take Ref types in their signatures"}
 {"at":"2026-11-24T17:11:30Z","actor":"loop","tag":"51bbc90d","host":"quack","cmd":"add-unit","id":"native/lift-proven-pointer-types","text":"new unit: Pointer types the lift proves, scored against DWARF"}
+{"at":"2026-11-24T17:13:58Z","actor":"loop","tag":"3ec7bc8f","host":"quack","cmd":"decide","text":"decided: Loops program bars rise with its new shapes","d":"d/loops-program-bars-rise-with-its-new-shapes"}

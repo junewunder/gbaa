@@ -1511,6 +1511,15 @@
       "by": "9a39864c",
       "at": "2026-11-24T13:31:02Z",
       "scope": ["native/land-emerald-route-lifter"]
+    },
+    {
+      "id": "d/loops-program-bars-rise-with-its-new-shapes",
+      "title": "Loops program bars rise with its new shapes",
+      "why": "{unit:native/lift-for-index} added four functions to c/loops (arrays indexed by the counter), so both c-loops tables' bars are that program's first lift at the unit, not a lifter regression; the native check stays green. Emerald's private unread_lets 5 to 6 (ScrCmd_givemon's discarded byte load now prints typed); Metroid's and Emerald's private bars raised only to main's own lift beside it.",
+      "by": "3ec7bc8f",
+      "at": "2026-11-24T17:13:58Z",
+      "scope": ["native/lift-for-index"],
+      "until": "2026-11-24T21:00:01Z"
     }
   ]
 }
