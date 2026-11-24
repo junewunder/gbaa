@@ -4480,6 +4480,17 @@
       "title": "A load the lift proves aligned drops its rotate",
       "detail": "docs/research/mirror-machine-count.md, row 5. Every ldr the lifter can't prove aligned keeps prim::shift(ShiftType::Ror, v, (addr & 3) << 3), even (n << 2) + an aligned base, or a typed field of a struct whose base is aligned. Prove alignment from the address's arithmetic (and Ref's checked alignment where the prelude has it) and print the plain value. Bar on 04e94cca: 44,881 ShiftType::Ror in Mirror's src/m_*.rs. Done when: the count falls, lift-check passes, the C programs and a game judged (decision).",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "c08a6e47",
+        "session": "c08a6e47-2a16-43d7-acf1-12b1f784150d",
+        "host": "quack",
+        "pid": 2963642,
+        "start": "95218853",
+        "at": "2026-11-24T10:39:15Z",
+        "branch": "unit/native/lift-aligned-loads",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-24T06:29:56Z",
@@ -4491,7 +4502,8 @@
           "by": "9cee3887",
           "text": "Mirror LLM pilot (docs/research/llm-pilot.md, round two): rewrites dropped rotates for pointer parameters (Kirby's, a sprite's: 7 of 20), aligned in the game but provable only from callers or the struct's alignment; and for stack arguments (2): sp is always aligned."
         }
-      ]
+      ],
+      "round": "2026-11-24T10:39:15Z"
     },
     {
       "id": "native/lift-add-zero",
