@@ -7,6 +7,6 @@ rom = "$GBAA_DATA/c/c-bits-agbcc.gba"
 [[checkpoint]]
 name = "c-bits-agbcc-600"
 frame = 600
-hash = "5622c9d81c4b4c64"
+hash = "f6f42298fc5e3e54"
 # Verified: mGBA 0.10.5 (`just mgba-diff`) draws the same at frame 600,
-# as does the program's other compiler's build (2026-11-20).
+# as does the program's other compiler's build (2026-11-24).
