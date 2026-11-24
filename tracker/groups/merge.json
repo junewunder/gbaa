@@ -794,7 +794,19 @@
       "detail": "Branch `unit/native/lift-modules-by-source` holds {unit:native/lift-modules-by-source}, finished but not on main: merging main conflicts in crates/pret-names/src/main.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
       "check": "recorded",
       "lane": "quack/2",
-      "branch": "unit/native/lift-modules-by-source"
+      "branch": "unit/native/lift-modules-by-source",
+      "record": {
+        "state": "claimed",
+        "by": "39785f55",
+        "session": "39785f55-6f6c-4d4c-bbb9-a60c5b3b3c41",
+        "host": "quack",
+        "pid": 2962519,
+        "start": "95218086",
+        "at": "2026-11-24T16:44:01Z",
+        "branch": "unit/native/lift-modules-by-source",
+        "beats": true
+      },
+      "round": "2026-11-24T16:44:01Z"
     }
   ]
 }
