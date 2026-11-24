@@ -467,6 +467,10 @@ pub struct Holes {
     /// its name ([`named`]; unit `native/lift-fn-names`). Not with
     /// `--copies`, whose copies would repeat them.
     pub fn_names: BTreeMap<u32, String>,
+    /// Each function's source file by key, from the same files (`src`,
+    /// `src/script_pokemon_util.c`): the function goes in that file's
+    /// module ([`modules`]; unit `native/lift-modules-by-source`).
+    pub fn_srcs: BTreeMap<u32, String>,
     /// The same files' types (`codegen::types`), when they give any: the
     /// report counts the constant RAM accesses that land on a named field
     /// of a typed global ([`typed_fields`]; unit
@@ -1898,7 +1902,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         main.push_str(&text);
     }
     let plains: Vec<String> = fns_reached.iter().map(|&k| plain(k)).collect();
-    let mut files = modules::split(main, table, &plains, &out, holes.copies);
+    let mut files = modules::split(main, table, &plains, &out, &holes.fn_srcs, holes.copies);
     // The block markers out of the text, into `pcs.txt` (native/lift-pc-markers).
     let pc_table = pc_marks::strip_modules(&mut files.files);
     if dense_fns.is_empty() {
@@ -2375,11 +2379,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             - text_lines),
     );
     // The integer casts the lifted functions print (native/lift-cast-types):
-    // in the function modules, `m_<key>.rs` and an IWRAM copy's `m<i>_<key>.rs`.
+    // in the function modules ([`modules::is_module`]).
     let n_casts: usize = files
         .files
         .iter()
-        .filter(|(p, _)| p.starts_with('m') && p.as_str() != "main.rs")
+        .filter(|(p, _)| modules::is_module(p))
         .map(|(_, t)| casts::count(t))
         .sum();
     m.push("casts", n(n_casts));
