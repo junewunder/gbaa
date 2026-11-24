@@ -730,7 +730,19 @@
       "detail": "Branch `unit/native/lift-global-bitfields` holds {unit:native/lift-global-bitfields}, finished but not on main: merging main conflicts in crates/codegen/src/types.rs. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
       "check": "recorded",
       "lane": "quack/2",
-      "branch": "unit/native/lift-global-bitfields"
+      "branch": "unit/native/lift-global-bitfields",
+      "record": {
+        "state": "claimed",
+        "by": "8b57c265",
+        "session": "8b57c265-fe22-445d-ac88-9c351202219d",
+        "host": "quack",
+        "pid": 2962519,
+        "start": "95218086",
+        "at": "2026-11-24T09:52:07Z",
+        "branch": "unit/native/lift-global-bitfields",
+        "beats": true
+      },
+      "round": "2026-11-24T09:52:07Z"
     }
   ]
 }
