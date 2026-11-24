@@ -281,7 +281,11 @@ first tests stage A and the shortcuts on a real agbcc game that builds.
 
 - **Lifted crates split into modules that build**
   (`native/lift-modules`). Done (`codegen::native::modules`): modules of
-  about 4,000 lines, so rustc's codegen runs on several cores.
+  about 4,000 lines, so rustc's codegen runs on several cores. Since
+  `native/lift-modules-by-source`, a function the names files give a
+  source file goes in a module named for it (`script_pokemon_util.rs`,
+  numbered `_1`, `_2`, … where it's over 4,000 lines), the rest in
+  modules named for their first function's address.
 - **Metroid lifts with no hard holes and builds**
   (`native/metroid-lifts`). Done (2026-11-08, quack): `--name metroid`,
   `mods/metroid/holes.toml` (private: its stand-ins port the game's code),
