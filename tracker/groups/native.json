@@ -4176,18 +4176,22 @@
       "title": "The lift finds a field's writers for a modder",
       "detail": "From {unit:native/lift-agent-mod} (hurt 3): nothing on the lift's path found SamusInit as the writer of gEquipment.maxEnergy; the agent grepped the decomp (the obvious sStartingHealthAmmo is the wrong place). The mod view's just mod-find ROM '' maxEnergy answers it but the mod view is being retired. A gbaa-lift --find FIELD (or a just recipe) lists the lifted functions writing and reading a named field or global, with their line comments, and the --cut entry in docs/tools/commands.md points to it. Check: on Metroid it names SamusInit for maxEnergy; just check.",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "7733e7b3",
-        "session": "7733e7b3-848d-4547-83f2-b203bc3df8ef",
-        "host": "quack",
-        "pid": 2962519,
-        "start": "95218086",
-        "at": "2026-11-24T05:14:52Z",
+        "at": "2026-11-24T05:28:10Z",
+        "evidence": "just lift-find '<Metroid ZM USA>' maxEnergy --name metroid: first writer 'SamusInit (0x0800bcb9): src/samus.c:8087 gEquipment.maxEnergy' (8 writers, 17 readers, 4 may write, 3 may read); --cut entry in docs/tools/commands.md points to it; main merged; just check passed (exit 0)",
         "branch": "unit/native/lift-find-field",
-        "resumed": "7a3a3987",
-        "prevSession": "7a3a3987-2cca-4058-b5dc-7828326f164d",
-        "pushed": true,
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T05:28:10Z",
+          "by": "7733e7b3",
+          "host": "quack",
+          "pid": 2962519,
+          "start": "95218086",
+          "beats": true,
+          "session": "7733e7b3-848d-4547-83f2-b203bc3df8ef",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
