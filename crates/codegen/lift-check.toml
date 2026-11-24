@@ -2034,7 +2034,10 @@ io_unnamed = 0
 computed_unknown_unnamed = 17
 bitfield_arith = 0
 bitfield_joined = 0
-lines = 634
+# lines raised 634 -> 635 (native/lift-pointer-types): with its prototype's
+# parameter name, bounce_update rebinds `obj` as Ref<t::Obj> in its body, until
+# native/lift-pointer-signatures types the parameter in the signature.
+lines = 635
 lines_prelude = 1390
 ref_new_at_use = 5
 casts = 43
