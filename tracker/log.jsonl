@@ -4269,3 +4269,4 @@
 {"at":"2026-11-24T22:35:52Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/minish-builds","text":"Minish Cap's lift builds: its hard holes closed: edited (priority)"}
 {"at":"2026-11-24T22:35:54Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/warioware-stop-30003a8","text":"WarioWare's lift: the call to IWRAM 0x030003a8 (frame 39): edited (priority)"}
 {"at":"2026-11-24T22:35:56Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-lent-frameless","text":"A frame of only locals and lent slots takes no sp: edited (priority)"}
+{"at":"2026-11-24T22:35:58Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-returns-past-holes","text":"Results read past a stopped caller; dead-path parameters: edited (priority, add-needs)"}
