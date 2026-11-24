@@ -4779,6 +4779,12 @@
       "detail": "june played Emerald's lift (2026-11-20, main 59263d82) and it stopped at frame 7175 on the naming screen: 'a byte load at 0xe55ec003: no memory the program has there', functions 080e3c6d (SpriteCB_Underscore), pc 080e4a61 (GetTextEntryPosition). GetTextEntryPosition loads sNamingScreen (0x080e4a66), then its template pointer (0x080e4a6c), then the template's byte at +1 (0x080e4a6e). 0xe55ec002 is the BIOS region's value after an IRQ (runtime::bus::BIOS_LATCH_AFTER_IRQ), so sNamingScreen was NULL and the template pointer was read from the BIOS region: the last load is open bus. Two readings, not told apart yet: (a) the game's own use after free (the sprite callback running once after the screen freed sNamingScreen), which the hardware and the play build survive: then it is an [[open_bus]] at = 0x080e4a6e entry in mods/emerald/holes.toml, the table {unit:native/mirror-native-route} adds (not on main on 2026-11-20); (b) the lift left sNamingScreen NULL where the play build has it set: a lift bug to find. Tell them apart by running the play build (or the interpreter) to the same screen with the same presses and watching the address 0x080e4a6e loads from. Done when: the lift passes the naming screen as the play build does on a route that enters and leaves it (route-check --native, 0 differences); just check passes.",
       "needs": ["native/land-emerald-route-lifter"],
       "uses": ["heavy"],
+      "record": {
+        "state": "done",
+        "by": "209afec8",
+        "at": "2026-11-24T15:30:49Z",
+        "evidence": "Emerald's lift passes the naming screen: on {unit:native/land-emerald-route-lifter}'s branch (099f5ac; [[open_bus]] at 0x080e4a6e/0x080e4aa2 in mods/emerald/holes.toml), route-check --native on the route branch's units/emerald-native.toml (new game, AAAAAAA at the naming screen, to the truck) ran the lift all 5400 frames with no stop, every frame's picture equal to the play build's (0 of 5400 differ; naming 3800 63d9a575…, truck 5400 26c2f9d4… as recorded). The route-check still fails before its RAM compare: the play build differs from its interpreter at frame 3 (IWRAM 0x030078a6, serial IRQ), {unit:native/emerald-native-route}'s cause, not this stop's. just check passed at 088c89b."
+      },
       "notes": [
         {
           "at": "2026-11-24T14:31:57Z",
