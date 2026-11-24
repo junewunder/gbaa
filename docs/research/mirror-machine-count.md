@@ -47,7 +47,7 @@ are a line or two.
 
 | # | What reads as a machine | Pattern | Whole lift | 30 fns | Open unit that removes it |
 |---|---|---|---:|---:|---|
-| 1 | Temporaries named `vN` | `\bv[0-9]+\b` | 606,337 | 6,163 | A multi-use value is named for what it holds (filed, `native/lift-let-names`); `value_lets` 208,204 |
+| 1 | Temporaries named `vN` | `\bv[0-9]+\b` | 606,337 | 6,163 | `native/lift-let-names` (2026-11-24): a `let` value takes the name of the global or field it loads, the local or DWARF variable it copies, or what it feeds; 305,363 left (524,112 before it on that day's printer), `lets_named` 76,366 |
 | 2 | Register names `r0`-`r14` | `\br([0-9]\|1[0-4])\b` | 359,948 | 3,377 | Mirror's names map has DWARF types, locals and lines (`native/mirror-dwarf-map`, ready): katam's locals name what's left |
 | 3 | A u32 as an address: typed pointer built from a bare u32 | `Ref::<…>::new(` | 62,289 | 572 | Mirror's DWARF map (types of parameters and locals), then stage B's typed pointers; none filed for the u32 itself |
 | 4 | Block markers `pc(0x…)` | `\bpc\(0x` | 58,170 | 714 | done (`native/lift-pc-markers`, 2026-11-24): 0, kept in the crate's `pcs.txt` and put back by its build script in a `guest-pc` build |
@@ -195,7 +195,9 @@ units do):
 - `native/lift-cast-types`: values typed by width so the casts go; bar
   39,068 (`narrowing_casts` 7,265); 35,531 after it (row 8).
 - `native/lift-let-names`: a value read twice is named for what it
-  holds; bar 606,337 `vN` (`value_lets` 208,204).
+  holds; bar 606,337 `vN` (`value_lets` 208,204). (Done 2026-11-24:
+  305,363, from 524,112 with `--no-let-names`; the rest are compares,
+  sums and loads with nothing named to go by.)
 
 Labelled blocks (7,196) and r14 return addresses (1,131) have no unit:
 smaller, and past the six.
