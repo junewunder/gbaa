@@ -3799,6 +3799,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T12:27:03Z",
+          "by": "f1d95093",
+          "text": "Mods' emerald/holes.toml has [[roots]] (and [[open_bus]]) that main's gbaa-holes rejects, so holes-all's Emerald row stops at exit 2; compare with mods 5c20f6c's file via --holes."
+        },
+        {
           "at": "2026-11-20T13:11:17Z",
           "by": "597d5e84",
           "text": "Branch: discovery rules (2-word columns, bx r4-r12 unset) + mods/warioware/holes.toml (committed in mods). Hard 6 to 7, all one kind: 0x080efe6d's jump into the IWRAM sound routines with caller r4-r11, now {unit:native/ram-jump-passes-regs}. Corpus: no rises, Emerald 13 to 9."

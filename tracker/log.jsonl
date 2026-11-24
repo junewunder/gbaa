@@ -4044,3 +4044,4 @@
 {"at":"2026-11-24T12:10:42Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-aligned-loads","text":"A load the lift proves aligned drops its rotate: on main"}
 {"at":"2026-11-24T12:10:46Z","actor":"loop","tag":"3411b93a","host":"quack","cmd":"claim","id":"native/lift-cast-types","text":"Values typed by width so the lift drops its casts: claimed"}
 {"at":"2026-11-24T12:27:01Z","actor":"loop","tag":"f1d95093","host":"quack","cmd":"done","id":"native/warioware-builds","text":"WarioWare's lift builds: its hard holes closed: done"}
+{"at":"2026-11-24T12:27:03Z","actor":"loop","tag":"f1d95093","host":"quack","cmd":"note","id":"native/warioware-builds","text":"WarioWare's lift builds: its hard holes closed: note: Mods' emerald/holes.toml has [[roots]] (and [[open_bus]]) that main's gbaa-holes rejects, so holes-all's Emerald row stops at exit 2; compare with mods 5c20f6c's file via --holes."}
