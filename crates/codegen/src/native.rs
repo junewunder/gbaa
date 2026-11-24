@@ -8606,8 +8606,8 @@ fn shapes_of(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> Shapes {
 /// (`target`), a resolved table's cases, the constant RAM address of a
 /// jump into a copy's code ([`JumpRes::Ram`]: a function of an overlay,
 /// or a hole where the jump goes), the holes file's for one Recovery
-/// didn't resolve. `Err` with the jump's address where it's unresolved
-/// and the holes file gives none.
+/// didn't resolve or took for a tail call through a pointer. `Err` with
+/// the jump's address where it's unresolved and the holes file gives none.
 fn dyn_targets(
     ctx: &Ctx,
     holes: &Holes,
@@ -8632,7 +8632,16 @@ fn dyn_targets(
             Some((ts, _)) => targets.extend(ts),
             None => return Err(a),
         },
-        None => {}
+        // Not recorded (a tail call through a pointer, `bx` with sp and
+        // lr as they came): the holes file's targets, if it gives any.
+        None => {
+            if let Some((ts, _)) = [at, at.wrapping_sub(2)]
+                .iter()
+                .find_map(|a| holes.jumps.get(a))
+            {
+                targets.extend(ts);
+            }
+        }
     }
     targets.sort_unstable();
     targets.dedup();

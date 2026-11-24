@@ -152,6 +152,13 @@ pub enum JumpRes {
     Rejected(Jump),
 }
 
+/// Whether `st` is a tail call's: sp at its entry value and lr the entry
+/// lr, so a jump from here leaves the function as a call would return.
+fn tail_state(st: &State, sp0: Sym, lr0: Sym) -> bool {
+    let lr = st.reg(Reg::LR);
+    st.sp_offset(sp0) == Some(0) && lr.sym == lr0 && lr.off == 0
+}
+
 /// Whether `word` (a halfword in Thumb) is a compiler's trap: Thumb
 /// `udf #255` from GCC or `udf #254` from LLVM, ARM 0xe7ffdefe from LLVM
 /// or 0xe7f000f0 from GCC. Modern GCC ends a path it proved dereferences
@@ -193,6 +200,10 @@ pub struct FuncResult {
     /// Every indirect jump reached (by address), from the final states. A
     /// `bl` to a callee that returns to a computed address counts.
     pub jumps: BTreeMap<u32, JumpRes>,
+    /// The `bx`s taken as tail calls through a pointer: a target not
+    /// known, with sp and lr as they came. Not in [`jumps`](FuncResult::jumps):
+    /// they leave the function as a call would return.
+    pub tail_calls: BTreeSet<u32>,
     /// sp's offset from its entry value at each return reached, if known.
     pub ret_sp: Vec<Option<i32>>,
     /// The `bl`s taken as jumps (decision 5a's far-jump rule).
@@ -745,6 +756,25 @@ impl Analysis<'_, '_> {
         out: &mut Vec<(u32, State)>,
     ) {
         let Some(ts) = self.targets(v, kind) else {
+            // A `bx` to a value not known, with sp back at its entry value
+            // and lr the entry lr, is a tail call through a pointer, not a
+            // jump of this function's: modern GCC ends librfu's ARM serial
+            // handler with a `b` to a `bx r0` stub after loading the
+            // callback (Emerald Rogue, Imperium). It goes in `tail_calls`,
+            // not `jumps`, so the lifter prints it as it does any jump
+            // Recovery has no record of: a return if it is one, else a
+            // call through `call_fn`, which stops on a value that isn't a
+            // function's entry. A switch jumps with `mov pc` (Thumb) or
+            // `ldr pc` (ARM).
+            if kind == ExitKind::Exchange
+                && v.dom.konst().is_none()
+                && tail_state(&st, self.sp0, self.lr0)
+            {
+                if self.record {
+                    self.res.tail_calls.insert(at);
+                }
+                return;
+            }
             if self.record {
                 let k = v.dom.konst().map(|k| match kind {
                     ExitKind::Exchange => k,
