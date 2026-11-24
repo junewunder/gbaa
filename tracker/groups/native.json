@@ -4662,15 +4662,22 @@
       "uses": ["heavy"],
       "tags": ["slow-check"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "af2ac9d3",
-        "session": "af2ac9d3-bec7-4d11-93dc-39ea09cab075",
-        "host": "quack",
-        "pid": 2962048,
-        "start": "95217572",
-        "at": "2026-11-24T13:46:32Z",
+        "at": "2026-11-24T15:09:32Z",
+        "evidence": "just lift-check passed at 8ca7e45a: 37 programs 0 differences, 64 planted faults caught. Metroid's typed lift and its --no-field-types lift: identical frame hashes and native records over 2,700 frames with the route's input (title, difficulty, first-room checkpoints as the route's). named_element_addresses: C rows 0-3, Metroid 390, Emerald 7,676; Emerald wrapping_mul 3,336 to 1,439, named_index_accesses 13,229 to 13,576; HealPlayerParty prints Ref::<[t::Pokemon; 6]>::new(v8).idx(v3).addr(). After merging main (0fb728c9): just check passes, lift-metrics 0 over bars.",
         "branch": "unit/native/lift-element-address",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T15:09:32Z",
+          "by": "af2ac9d3",
+          "host": "quack",
+          "pid": 2962048,
+          "start": "95217572",
+          "beats": true,
+          "session": "af2ac9d3-bec7-4d11-93dc-39ea09cab075",
+          "lane": "quack/1"
+        }
       },
       "round": "2026-11-24T13:46:32Z"
     },
