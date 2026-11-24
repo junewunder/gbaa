@@ -5035,6 +5035,7 @@
       "check": "recorded",
       "needs": ["native/lift-for-bounds", "native/lift-open-bus-typed"],
       "uses": ["heavy"],
+      "priority": 97,
       "record": {
         "state": "claimed",
         "by": "a67a0150",
