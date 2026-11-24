@@ -34,9 +34,10 @@ set, each frame `tick` counts up, wrapping at 16; at each wrap `flash`
 turns over, `beats` counts one more and `level` is `beats >> 2`. Under the
 dots, a row at y 6 shows `tick` pixels and one at y 7 `level` pixels, white
 while `flash` is set, else dark grey. The blinking ball is `gBalls[next]`,
-and `next` steps on after each blink. (The halfword's fields come first:
-agbcc would let `beats` straddle a byte's fields' unit, which pret-names
-doesn't place yet.)
+and `next` steps on after each blink. (The halfword's fields come first, so
+`beats` doesn't straddle a byte's fields' unit, as agbcc would let it;
+pret-names places such a field from the struct's start, under a unit test
+of its own.)
 
 Mode 3, BG2 on, black. Frame 600: hash `f6f42298fc5e3e54`, the same in
 mGBA 0.10.5 and our interpreter, and in both builds (`just mgba-diff`,
