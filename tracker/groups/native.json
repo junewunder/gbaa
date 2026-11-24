@@ -4868,6 +4868,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T16:28:52Z",
+          "by": "66065018",
+          "text": "Printing hints: Lends::through has each borrowed access; Lends::reach each param's bytes. A slot freed by reach-narrowing (escapes by Call, not in FrameLends.reached) can be a plain local too. Callers from RAM-copy contexts aren't seen by the lend run yet."
+        },
+        {
           "at": "2026-11-24T16:28:43Z",
           "by": "66065018",
           "text": "branch has the design section + frame::lend analysis (report 'lent slots'; just check green). Only c-chain-gcc lends (8 accesses). Left: print Lent params/locals, drop sp, --shadow-locals, --plant-lent, metric+bars, games. Widening filed separately."
