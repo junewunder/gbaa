@@ -5062,6 +5062,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T21:14:36Z",
+          "by": "a67a0150",
+          "text": "Fix 1 done 2026-11-24 on main e0e67935 merged in: Metroid 600/600 frames, loops_for 234, loops_not_for 462 (main alone 232/464). The 442 bar is {unit:native/lift-for-top-tested}'s, not on main: keep it. just check passed."
+        },
+        {
           "at": "2026-11-24T20:50:20Z",
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - The card's game check was not run on this branch as it lands. The Evidence says Metroid's 600 of 600 frames and its loops_not_for count of 500 were measured before the merge with main (aa820315), and the bar o…"
