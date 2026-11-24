@@ -5069,17 +5069,17 @@
       "minMinutes": 60,
       "record": {
         "state": "claimed",
-        "by": "702486fe",
-        "session": "702486fe-e391-4253-818a-e25816dc0591",
+        "by": "7d882d0d",
+        "session": "7d882d0d-f613-48b9-b3b8-07290b168e90",
         "host": "quack",
-        "pid": 2963642,
-        "start": "95218853",
-        "at": "2026-11-24T19:23:35Z",
+        "pid": 1607382,
+        "start": "100803860",
+        "at": "2026-11-24T20:45:49Z",
         "branch": "unit/native/lift-for-top-tested",
-        "beats": true,
-        "handedBack": "2026-11-24T20:45:19Z",
+        "resumed": "702486fe",
+        "prevSession": "702486fe-e391-4253-818a-e25816dc0591",
         "pushed": true,
-        "ended": "2026-11-24T20:45:32Z"
+        "beats": true
       },
       "notes": [
         {
