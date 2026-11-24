@@ -157,7 +157,11 @@ format = 1
   correction, or a whole game's names once the naming loop runs for real.
   Same format, same `rom_sha1`.
 - **Layering.** `gbaa-recompile ROM OUT --names A.toml --names B.toml`
-  loads them in order, and a later file wins per key. The loader refuses a
+  loads them in order, and a later file wins per key, keeping what it
+  doesn't say of the earlier entry (size, file, prototype, the source file
+  its line comments name) and the earlier name as another name, which a
+  cut or a find takes too (a hand file's `katam =` or `aka =` gives one
+  directly; native/names-keep-source-lines). The loader refuses a
   map whose `rom_sha1` isn't the ROM's, and two keys in one file that give
   one name to different addresses.
 - **The naming loop's output never feeds a build of Emerald.** It goes to
