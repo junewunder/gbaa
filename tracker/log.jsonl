@@ -3930,3 +3930,4 @@
 {"at":"2026-11-24T07:07:23Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane1-native-entry-jump-test-program","text":"new unit: Merge main on quack lane 1"}
 {"at":"2026-11-24T07:07:28Z","actor":"loop","tag":"d26ff255","host":"quack","cmd":"claim","id":"merge/quack-lane1-native-entry-jump-test-program","text":"Merge main on quack lane 1: claimed"}
 {"at":"2026-11-24T07:17:48Z","actor":"loop","tag":"d88dc2ac","host":"quack","cmd":"done","id":"native/mirror-cpu-kirbys-off","text":"A Kirby mod on the lift: the CPU Kirbys turned off: done, checked by verifier-lane2-mirrorcheck"}
+{"at":"2026-11-24T07:20:00Z","actor":"loop","tag":"d26ff255","host":"quack","cmd":"done","id":"merge/quack-lane1-native-entry-jump-test-program","text":"Merge main on quack lane 1: done"}
