@@ -121,6 +121,33 @@ pub struct For {
     /// The range's Rust where it isn't `first` to `last` by `step`: one
     /// [`super::bounds`] proved.
     pub text: Option<String>,
+    /// The variable's first value where it is a constant, and its step a
+    /// round (with `text`, `first` and `step` are these or 0).
+    pub start: Option<u32>,
+    /// The pointers stepped beside the variable that print as the
+    /// element they are ([`Stepped`]; native/lift-for-index).
+    pub ptrs: Vec<Stepped>,
+}
+
+/// A register a `for` steps by a constant each round beside its
+/// variable (agbcc's strength-reduced `p[i]`: `r4 += 8` beside `i++`),
+/// whose value at the start of a round is its value before the loop
+/// plus that many rounds' steps: printed as that element of what it
+/// pointed at before the loop, its own step left out (unit
+/// `native/lift-for-index`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Stepped {
+    pub reg: usize,
+    /// Its step's `SetReg`, in the latch (`latch`).
+    pub latch: u32,
+    pub step: usize,
+    /// Bytes a round, two's complement.
+    pub by: u32,
+    /// The blocks of a round (the latch's last); its reads there are
+    /// the element's address.
+    pub round: Vec<u32>,
+    /// The element's index, as the variable's binding (`rN`) gives it.
+    pub index: String,
 }
 
 impl For {
@@ -135,6 +162,8 @@ impl For {
             last,
             step,
             text: None,
+            start: Some(first),
+            ptrs: Vec::new(),
         })
     }
 
