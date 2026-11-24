@@ -4037,3 +4037,4 @@
 {"at":"2026-11-24T11:52:41Z","actor":"loop","tag":"447b29d7","host":"quack","cmd":"claim","id":"native/lift-pc-markers","text":"Block markers out of the lift a modder reads: claimed"}
 {"at":"2026-11-24T11:56:48Z","actor":"loop","tag":"c08a6e47","host":"quack","cmd":"decide","text":"decided: A typed field's get checks its pointer's alignment","d":"d/a-typed-field-s-get-checks-its-pointer-s"}
 {"at":"2026-11-24T11:56:54Z","actor":"loop","tag":"c08a6e47","host":"quack","cmd":"done","id":"native/lift-aligned-loads","text":"A load the lift proves aligned drops its rotate: done"}
+{"at":"2026-11-24T11:57:08Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane3-native-lift-aligned-loads","text":"new unit: Merge main on quack lane 3"}

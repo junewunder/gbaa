@@ -771,6 +771,14 @@
         "host": "quack",
         "landed": "2026-11-24T11:30:58Z"
       }
+    },
+    {
+      "id": "merge/quack-lane3-native-lift-aligned-loads",
+      "title": "Merge main on quack lane 3",
+      "detail": "Branch `unit/native/lift-aligned-loads` holds {unit:native/lift-aligned-loads}, finished but not on main: merging main conflicts in docs/research/mirror-machine-count.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/3",
+      "branch": "unit/native/lift-aligned-loads"
     }
   ]
 }
