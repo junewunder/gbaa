@@ -4163,3 +4163,4 @@
 {"at":"2026-11-24T20:14:01Z","actor":"loop","tag":"358be71f","host":"quack","cmd":"edit","id":"native/lift-for-step-via","text":"A counter stepped through a second register prints as for: edited (min-minutes)"}
 {"at":"2026-11-24T20:14:03Z","actor":"loop","tag":"358be71f","host":"quack","cmd":"unclaim","id":"native/lift-for-step-via","text":"A counter stepped through a second register prints as for: handed back by its session, its work kept (1 commit on its branch); ready"}
 {"at":"2026-11-24T20:14:21Z","actor":"loop","tag":"5f29d09f","host":"quack","cmd":"claim","id":"native/names-keep-source-lines","text":"A names file's rename keeps the decomp's source lines: claimed"}
+{"at":"2026-11-24T20:29:25Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-pointer-types","text":"Parameters and locals carry their pointer types: back to ready: the loop's review asked for fixes"}
