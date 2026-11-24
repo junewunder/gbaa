@@ -15,6 +15,12 @@ nested, the inner from a value to a bound. `AgbMain` fills `gLens` and
 copies it backwards into `gRow.len` with loops to a constant and to a
 field.
 
+Arrays indexed by the counter (unit native/lift-for-index): `move_bars`
+an array of structs (`gMovers`, 8 bytes each) a field each, `pocket_count`
+a field array through a pointer (`p->slots[i].id`, as pret's bag),
+`add_rows` two arrays by one counter, and `sum_movers` a pointer stepped
+beside the counter (`b++`).
+
 Twelve bar lengths, `gLens`, grow by 1 to 4 every fourth frame and wrap
 past 40. Four columns of bars (2 pixels high, at most 24 wide, 6 apart
 from y 8): at x 0 the first `gBarCount` (4 to 11, stepping every 16
@@ -25,8 +31,12 @@ ones, so drawing ends inside V-blank. At x 192 a grid of 3x3 squares, one
 to four rows, its columns 0 to 7 or 1 to 6 by the frame's parity, its
 colours cycling every 8 frames. At y 100 a bar the sum of the first
 `gBarCount` lengths long (its low byte), at y 108 a 20-pixel bar at the
-first length at least 20 to 35.
+first length at least 20 to 35. Six movers' lengths grow by 1 or 2 each
+frame and wrap past 40: at y 116 a bar their lengths and hues summed long
+(low byte); at y 124 one four pixels for each item the pocket's first 4
+to 11 slots hold of kind `(frame >> 2) & 3`; at y 132 one `gTotals[(frame >> 1)
+& 3]` long (its low 7 bits), the sum of `gLens` and `gRow.len`.
 
-Mode 3, BG2 on, black. Frame 600: hash `45ce6655274c0721`, the same in
+Mode 3, BG2 on, black. Frame 600: hash `f7dfbac3dbb5ca31`, the same in
 mGBA 0.10.5 and our interpreter, and in both builds (`just mgba-diff`,
-2026-11-23).
+2026-11-24).
