@@ -3784,19 +3784,8 @@
         "by": "2a675964",
         "at": "2026-11-24T12:38:57Z",
         "evidence": "just lift on WarioWare: 0 hard holes, builds, first stop 39 of 600 frames at the call to IWRAM 0x030003a8, filed as {unit:native/warioware-stop-30003a8}. holes-all main 8f5c171f vs branch: no game's hard holes rose. Review fixes made: two-word column test added (fails with strides 3..=8), bx r1 case dropped, r9 cases folded into the entry-register test. Main merged (up to date); just check passes (exit 0).",
-        "branch": "unit/native/warioware-builds",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T12:38:57Z",
-          "by": "2a675964",
-          "host": "quack",
-          "pid": 2962519,
-          "start": "95218086",
-          "beats": true,
-          "session": "2a675964-4b7e-4687-bdc7-79bd8dffd895",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "landed": "2026-11-24T12:43:35Z"
       },
       "notes": [
         {
@@ -3814,20 +3803,7 @@
           "by": "597d5e84",
           "text": "Branch: discovery rules (2-word columns, bx r4-r12 unset) + mods/warioware/holes.toml (committed in mods). Hard 6 to 7, all one kind: 0x080efe6d's jump into the IWRAM sound routines with caller r4-r11, now {unit:native/ram-jump-passes-regs}. Corpus: no rises, Emerald 13 to 9."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-24T12:32:10Z",
-        "findings": "- crates/analysis/src/discovery/tests.rs:313-327: the third case (0x380, `bx r1`) passes for the wrong reason, and its comment states a rule the code doesn't have. `entry_bx` (scan.rs:682-711) has no exception for r0-r3. It accepts 0x380 only because `ldrb r0, [r1, #3]` uses r1 as its base register, and line 700 counts that as writing r1. Under the rule as documented, a `bx r1` whose r1 is never written should be rejected. So the assertion pins a side effect, and it would fail if anyone made `entry_bx` stop treating a base register as written. Fix: drop the 0x380 case, or rewrite it so r1 really is written before the `bx` (for example `movs r1, r0`) and say so in the comment. Also, cases 0x300 and 0x340 only repeat `pointer_scan_rejects_a_bx_through_an_entry_register` (line 331) with a different register. Either fold them into that test or rename this one so it doesn't read as a new rule.\n- crates/analysis/src/discovery/scan.rs:217: the unit's one code change (`COLUMN_STRIDES` widened from 3..=8 to 2..=8, so records of two words now count) has no unit test. The only test added is about the `bx` rule, which was already on main. Add a two-word case next to `pointer_scan_takes_a_column_of_struct_records` (tests.rs:133): records of a handler plus one data word, with a leaf `bx lr` start found only because known starts sit one record (8 bytes) and two records (16 bytes) from it. Also assert that a single start one record away isn't enough, the way the existing test does.",
-        "sent": {
-          "evidence": "just lift on WarioWare at eeabe108 (main merged): 0 hard holes, builds, first stop 39 of 600 frames, no-function 0x030003a8 (a resumable IWRAM DMA routine), filed as {unit:native/warioware-stop-30003a8}. holes-all main 8f5c171f vs branch: every count equal (Emerald via its pre-[[roots]] holes file, equal). disc-pret Emerald unchanged, modern 0.7927 to 0.7929 none false; disc-agb, jt-score pass. just check exit 0 after merging main 6437708c.",
-          "by": "f1d95093",
-          "host": "quack",
-          "branch": "unit/native/warioware-builds",
-          "change": "b7ede36057134e79c262fcd1373fc797d998e1d3"
-        }
-      },
-      "round": "2026-11-20T11:49:46Z"
+      ]
     },
     {
       "id": "native/emerald-holes-code",

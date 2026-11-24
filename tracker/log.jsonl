@@ -4048,3 +4048,4 @@
 {"at":"2026-11-24T12:32:10Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/warioware-builds","text":"WarioWare's lift builds: its hard holes closed: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-24T12:32:15Z","actor":"loop","tag":"2a675964","host":"quack","cmd":"claim","id":"native/warioware-builds","text":"WarioWare's lift builds: its hard holes closed: claimed"}
 {"at":"2026-11-24T12:38:57Z","actor":"loop","tag":"2a675964","host":"quack","cmd":"done","id":"native/warioware-builds","text":"WarioWare's lift builds: its hard holes closed: done"}
+{"at":"2026-11-24T12:43:35Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/warioware-builds","text":"WarioWare's lift builds: its hard holes closed: on main"}
