@@ -5503,6 +5503,12 @@
       "detail": "From {unit:native/lift-for-ram-bounds}: Emerald with the current holes file (mods 571d124, [[open_bus]] at GetTextEntryPosition's template reads) failed to compile on that branch: naming_screen's open-bus load prints { let a: u32 = v45; ... } but v45, its address, is never let (a named field's access doesn't count its address used, FnPrinter::uses). Likely on main too (unchecked: main's run was cut off). Fix: an [[open_bus]] load counts its address as used. Check: Emerald's lift builds and runs 600 of 600 frames with the current holes file; just check.",
       "check": "recorded",
       "uses": ["heavy"],
+      "record": {
+        "state": "dropped",
+        "why": "The same fix landed with Parameters and locals carry their pointer types (commit 5747598, on main since 38fb3d61): an open-bus load counts its address as used. Emerald lifted and ran 600 of 600 on that tree (lane 2, 0f5940f3).",
+        "by": "6056824b",
+        "at": "2026-11-24T22:33:22Z"
+      },
       "notes": [
         {
           "at": "2026-11-24T21:33:38Z",
