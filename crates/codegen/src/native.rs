@@ -7535,6 +7535,8 @@ impl FnPrinter<'_, '_> {
             return c.text_named(&|x| self.val(x), &|x, k| self.load_value(x, k));
         }
         match form {
+            // A copy is the whole value, not an operand (no parentheses).
+            Some((x, narrow::Form::Copy)) => self.whole(x),
             Some((x, form)) => form.print_with(&self.val(x), &|y| self.whole(y)),
             None => expr(op, &|x| self.val(x), &|x| self.whole(x)),
         }
