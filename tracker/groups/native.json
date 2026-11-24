@@ -4931,26 +4931,12 @@
       "detail": "From the owner, 2026-11-20. A shaped function returns every register it may change, so scratch registers a callee merely clobbered print as results: (r0, r2, r3) = GetMonData2(g, r13, v19, 0x3au32, r2)? where C has one return value, and r2 is passed in only because the callee's summary reads it on some path. docs/native-stage-b.md, known gaps, shapes return too much. Wanted: a function's results are the registers some caller reads after the call before writing them (whole program, with the callee sets for indirect calls; a function whose address is taken keeps what any indirect caller may read); a clobbered register nobody reads is not returned and the caller's copy is dead (AAPCS says r1-r3 are, but prove it per function, don't assume: hand-written assembly returns in r1-r3). The same for parameters only a dead path reads. Metrics: functions returning more than one register, and tuple-assigning calls (new, barred); score against pret's prototypes (void / one value) in {unit:native/lift-pret-score}. Check (code-shape work, judged on the C programs, Metroid and Emerald): just lift-check passes with 0 differences on every program and every planted fault caught; the metric barred on the C rows and in the private bars of Metroid and Emerald; both games build and run 600 of 600 frames headless; Emerald route check still 0 differences once {unit:native/emerald-native-route} is done; just check passes.",
       "uses": ["heavy"],
       "tags": ["slow-check"],
-      "record": {
-        "state": "done",
-        "by": "c2e64a37",
-        "at": "2026-11-24T19:36:07Z",
-        "evidence": "Results are what callers read: r0 and unknown tail-call demand only for FNS functions, a longjmp restore's jump no tail call, a callee's unreturned clobbers dead in the caller. just lift-check passed at 2f545afc: 37 programs 0 differences, every planted fault caught. New metrics results_several, tuple_calls barred on every row (C rows 0/0 but c-jump-gcc 1/2, uidivmod's read remainder) and in mods' Metroid/Emerald bars. Metroid vs main's rule: results_several 1976->1061, tuple_calls 7290->5110, regs_call_entries 955->745; 600/600 frames. Emerald: 663->626, 23191->22220, 3622->3279; 600/600 frames after fixing main's open-bus-through-typed-field build break. pret-score's new results rows: Metroid void/one agree 34->793 of 2554; Emerald void 6705->6913, one 2891->2802 (unread values dropped). Emerald route unit not done: skipped. just check passed after the last main merge (c558dda1; lift-metrics 0 over there).",
-        "branch": "unit/native/lift-returns-read",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-24T19:36:07Z",
-          "by": "c2e64a37",
-          "host": "quack",
-          "pid": 2962519,
-          "start": "95218086",
-          "beats": true,
-          "session": "c2e64a37-522b-4b92-bd5a-4e44a366654a",
-          "lane": "quack/2"
-        },
-        "pushed": true
-      },
       "notes": [
+        {
+          "at": "2026-11-24T19:42:05Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - Check run on code from before the main merge: the Evidence and the 2026-11-24 note say `just lift-check` (37 programs, 0 differences, every planted fault caught) and the Metroid and Emerald 600/600-frame runs …"
+        },
         {
           "at": "2026-11-24T19:31:07Z",
           "by": "c2e64a37",
@@ -4962,6 +4948,18 @@
           "text": "2026-11-20: where a names-file prototype exists, the signatures-from-prototypes unit prints its result. This unit is the analysis for functions with none, scored against the prototypes."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-24T19:42:05Z",
+        "findings": "- Check run on code from before the main merge: the Evidence and the 2026-11-24 note say `just lift-check` (37 programs, 0 differences, every planted fault caught) and the Metroid and Emerald 600/600-frame runs were done at 2f545afc/ad85c204. That is before merge c558dda1, which brought in the prototype shapes. After the merge, only `just check` and lift-metrics were run. The merge changes the same code path this unit edits: `shapes_of` (crates/codegen/src/native.rs:9888) now takes prototype shapes through `holes.protos`, `sum_shapes` and `proto_agreement`, and `FnPrinter::clobbers` (native.rs:8835) masks out `changed(s) & !c.results`, where `results` can now come from a forced prototype. That means a proto-shaped callee's clobbers are now marked dead in callers on the merged code, and no correctness run covered it. Fix: on the branch head, rerun `just lift-check` (0 differences on every program, every planted fault caught) and the Metroid and Emerald headless runs (600 of 600 frames each), then put the new commit and results in the evidence.\n- Part of the card's What was split off instead of done: the card asks for 'The same for parameters only a dead path reads'. The 2026-11-24 note moves dead-path parameters (and results read past a stopped caller) to a new unit, {unit:native/lift-returns-past-holes}. The card never asked for that split, and nothing in the diff drops a parameter that only a dead path reads: the changes in crates/codegen/src/native/shape.rs only touch results, `addressed`, by-value demand and `changed`. Fix: either implement dead-path parameter pruning here and measure it on the C programs, Metroid and Emerald, or get the owner to agree to move it to the other unit and record that decision (`just decisions`) before closing this one.",
+        "sent": {
+          "evidence": "Results are what callers read: r0 and unknown tail-call demand only for FNS functions, a longjmp restore's jump no tail call, a callee's unreturned clobbers dead in the caller. just lift-check passed at 2f545afc: 37 programs 0 differences, every planted fault caught. New metrics results_several, tuple_calls barred on every row (C rows 0/0 but c-jump-gcc 1/2, uidivmod's read remainder) and in mods' Metroid/Emerald bars. Metroid vs main's rule: results_several 1976->1061, tuple_calls 7290->5110, regs_call_entries 955->745; 600/600 frames. Emerald: 663->626, 23191->22220, 3622->3279; 600/600 frames after fixing main's open-bus-through-typed-field build break. pret-score's new results rows: Metroid void/one agree 34->793 of 2554; Emerald void 6705->6913, one 2891->2802 (unread values dropped). Emerald route unit not done: skipped. just check passed after the last main merge (c558dda1; lift-metrics 0 over there).",
+          "by": "c2e64a37",
+          "host": "quack",
+          "branch": "unit/native/lift-returns-read",
+          "change": "45277e5896d1676b1ec8fb0c9210c2a4161743c6"
+        }
+      },
       "round": "2026-11-24T17:06:07Z"
     },
     {
