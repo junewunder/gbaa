@@ -157,7 +157,8 @@
 //!
 //! `--cut DIR [KEY]...` (unit `native/lift-mod-cut`;
 //! `codegen::native::cut`) cuts functions KEY (hex keys, or names as the
-//! names files give them) into a mod at DIR: each one's whole printed
+//! names files give them, a renamed one's earlier name too:
+//! `codegen::names::SourceMap::resolve`) into a mod at DIR: each one's whole printed
 //! text, names and all, to `DIR/src/<name>.rs` to edit and `DIR/orig/`
 //! as cut, and `DIR/replace.toml`, a holes file whose `[[cut]]`s
 //! `--replace DIR/replace.toml` builds the lift with (each cut in its
@@ -171,7 +172,8 @@
 //! `--find FIELD` (unit `native/lift-find-field`; `just lift-find`;
 //! `codegen::native::find_field`) lifts and writes nothing (no OUT): it
 //! lists the functions whose loads and stores the lift places on FIELD,
-//! a field of a struct the names files type or a datum by name, writers
+//! a field of a struct the names files type or a datum by name (any
+//! layer's), writers
 //! then readers, by source line and path, then those whose address is
 //! one of several, the field's among them. Fails when nothing names it.
 //!
@@ -504,6 +506,8 @@ fn main() -> ExitCode {
         );
         Ok::<_, String>(all)
     });
+    // The map, for `--cut` and `--find` to take a name any layer gave.
+    let src_map;
     match files.and_then(|fs| codegen::names::SourceMap::load(&sha, &fs)) {
         Ok(map) => {
             holes.names = map
@@ -586,6 +590,7 @@ fn main() -> ExitCode {
             let dwarf = !no_local_names && (!map.locals.is_empty() || map.typed.has_protos());
             let text = map.text.is_some();
             let map = std::sync::Arc::new(map);
+            src_map = Some(map.clone());
             if dwarf {
                 holes.dwarf = Some(map.clone());
             }
@@ -620,11 +625,13 @@ fn main() -> ExitCode {
             }
         }
         for k in &cut_keys {
-            let by_name = holes
-                .fn_names
-                .iter()
-                .find(|(_, n)| *n == k)
-                .map(|(&key, _)| key);
+            // An identifier, or another name of one function's (an
+            // earlier layer's, the decomp's: native/names-keep-source-lines).
+            let by_name = src_map
+                .as_ref()
+                .and_then(|m| m.resolve(k))
+                .filter(|&(kind, _)| kind == codegen::names::Kind::Func)
+                .map(|(_, key)| key);
             let key = by_name
                 .or_else(|| {
                     cut_mod
@@ -663,6 +670,16 @@ fn main() -> ExitCode {
     let lifted = codegen::native::lift(&bytes, &name, &holes);
     if let Some(field) = &find {
         use codegen::native::find_field;
+        // A datum's other name (an earlier layer's, the decomp's) finds
+        // it by its identifier.
+        let field = &src_map
+            .as_ref()
+            .filter(|m| m.key_of(field).is_none())
+            .and_then(|m| match m.resolve(field)? {
+                (codegen::names::Kind::Data, a) => Some(m.ident(codegen::names::Kind::Data, a)?),
+                _ => None,
+            })
+            .map_or_else(|| field.clone(), str::to_string);
         let names = find_field::Names {
             data: &holes.names,
             types: holes.types.as_deref(),
