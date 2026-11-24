@@ -5382,19 +5382,8 @@
         "by": "e601e02d",
         "at": "2026-11-24T23:47:24Z",
         "evidence": "At main dd9a7df9 and mods 066d9b6 (pushed): just lift Metroid --bars mods/metroid/lift-bars.toml prints 'every metric within its bar', 0 over/no-bar/names-no-metric, 600 of 600 frames; Emerald (holes file mods 571d124, --mem 12G) the same, 600 of 600. results_several, tuple_calls removed (noted on {unit:native/lift-returns-read}); ref_new_at_use added (Emerald also bitfield_joined, data_constants_unnamed, fn_keys_left, rom_static_fn_keys). Rises explained in the files: lines_prelude 1390 (main's prelude); for_counter_arith Metroid 33 (lift-for-step-via), Emerald 259 (lift-for-top-tested, +37 fors); Emerald functions/blocks +25, fn_words_not_proven +27 (holes file's 25 roots). No repo code changed: branch equals main, so no just check rerun.",
-        "branch": "unit/native/game-lift-bars-refresh",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T23:47:24Z",
-          "by": "e601e02d",
-          "host": "quack",
-          "pid": 1981458,
-          "start": "101567385",
-          "beats": true,
-          "session": "e601e02d-14ee-414b-a2f5-20bb17652527",
-          "lane": "quack/1"
-        },
-        "pushed": true
+        "landed": "2026-11-24T23:47:38Z"
       },
       "notes": [
         {
@@ -5402,8 +5391,7 @@
           "by": "8347a61f",
           "text": "Metroid --bars lift on main fails 33 metrics: no bar for rom_static_fn_keys, fn_keys_left, rom_refs, locals_noted, bitfield_*; over: entries_beyond_one 2998>809, lines_prelude 1337>1314, functions_iwram 9>8. Emerald similar; its holes file needs [[roots]] (not on main)."
         }
-      ],
-      "round": "2026-11-24T22:53:05Z"
+      ]
     },
     {
       "id": "native/lift-aligned-params",
