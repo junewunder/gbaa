@@ -5316,6 +5316,8 @@
     {
       "id": "native/lift-returns-past-holes",
       "title": "Results read past a stopped caller; dead-path parameters",
+      "detail": "Left by A call takes back only the registers its caller reads ({unit:native/lift-returns-read}), 2026-11-24: Metroid still has 1,061 shaped functions giving back several registers. Causes, in docs/native-stage-b.md's known gap: a direct caller whose run stopped at a hole demands all four of every callee (what it reads before the hole, on paths that write the register before it, is seen and could narrow it); a caller in another code context likewise; an unknown jump by value (Metroid's IWRAM 0x03003ba0) gives every addressed function all that its callers read; and a parameter only a path the summaries can't prove dead reads stays one (Emerald's GetMonData2 r2). Measure with results_several, tuple_calls and just pret-score's results rows. Check (code-shape work, judged on the C programs, Metroid and Emerald): just lift-check passes with 0 differences on every program and every planted fault caught; the metrics barred lower on the C rows and in Metroid's and Emerald's private bars; both games build and run 600 of 600 frames headless; just check passes.",
+      "check": "recorded",
       "uses": ["heavy"]
     }
   ]

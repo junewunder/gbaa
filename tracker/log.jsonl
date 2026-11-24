@@ -4131,3 +4131,4 @@
 {"at":"2026-11-24T17:20:53Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-for-index","text":"A for loop's counter indexes arrays as elements: on main"}
 {"at":"2026-11-24T17:20:59Z","actor":"loop","tag":"ce4e72fe","host":"quack","cmd":"claim","id":"native/lift-indent","text":"Lifted statements are indented by their nesting: claimed"}
 {"at":"2026-11-24T17:44:41Z","actor":"loop","tag":"c2e64a37","host":"quack","cmd":"add-unit","id":"native/lift-returns-past-holes","text":"new unit: Results read past a stopped caller; dead-path parameters"}
+{"at":"2026-11-24T17:44:50Z","actor":"loop","tag":"c2e64a37","host":"quack","cmd":"edit","id":"native/lift-returns-past-holes","text":"Results read past a stopped caller; dead-path parameters: edited (check, detail)"}
