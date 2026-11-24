@@ -32,7 +32,9 @@
 //! whose address is a word of the ROM may be the callee. A tail call made
 //! with a local still at or above its sp hands the frame on: the locals go
 //! to its bytes before it too, whatever the callee is known to read (one
-//! in another context, a RAM copy, isn't known here).
+//! in another context, a RAM copy, isn't known here). So does a call
+//! whose return site is another function's entry, which the callee
+//! returns into: a tail call after the call.
 //!
 //! The lift (`native/frame-locals`) prints the slots that don't escape, in
 //! the function's own frame, as Rust locals ([`Frame::locals`]), and their
@@ -155,7 +157,8 @@ pub struct Frame {
     /// frame from an address above its own sp (a pointer to a stack
     /// argument), and the frame is done with after it (the callee never
     /// returns, or it is a tail call); and every tail call made with a
-    /// slot of the frame at or above its sp, which the callee runs on.
+    /// slot of the frame at or above its sp, which the callee runs on (a
+    /// call returning into another function's entry is one, after it).
     pub flush: BTreeSet<(u32, usize)>,
     /// Its stack switches ([`switches`](Frame::switches)): the
     /// instructions that set sp to a value not made from the frame's.
@@ -468,7 +471,8 @@ impl State {
 }
 
 /// One call: its sp (if known), its callee (if known), and whether it is
-/// a tail call or a fall.
+/// a tail call or a fall (or a call that returns into another function's
+/// entry, which the frame is handed on to).
 type Call = (Option<i32>, Option<u32>, bool);
 
 /// What one function's run found, before the program's other functions
@@ -497,6 +501,8 @@ struct Raw {
 
 struct Run<'a, 'e> {
     blocks: &'a BTreeMap<u32, FBlock<'a>>,
+    /// Every function's entry.
+    entries: &'a BTreeSet<u32>,
     env: &'e dyn Env,
     ins: BTreeMap<u32, State>,
     work: Vec<u32>,
@@ -693,7 +699,15 @@ impl Run<'_, '_> {
             }
             Edge::Call { target, ret } => {
                 self.pass(self.env.params(*target, addr) & 0xfff, s, Kind::Call);
-                self.raw.calls.insert(at, (Run::sp(s), *target, false));
+                // A return site that is no block of this function, where
+                // the callee returns: another function's entry, which the
+                // call returns into, as a tail call after it (the lift's
+                // `call_then`): it runs on in the frame (agbcc's shared
+                // epilogue pops it; native/entry-jump-test-program).
+                let into = !self.blocks.contains_key(ret)
+                    && self.entries.contains(ret)
+                    && self.env.returns(*target);
+                self.raw.calls.insert(at, (Run::sp(s), *target, into));
                 let mut after = s.clone();
                 for r in [0, 1, 2, 3, 12, 14] {
                     after.regs[r] = V::Other;
@@ -702,6 +716,9 @@ impl Run<'_, '_> {
                 match Run::sp(s) {
                     Some(sp) => after.words.retain(|&k, _| k >= sp),
                     None => after.words.clear(),
+                }
+                if into {
+                    self.pass(0x5fff, &after, Kind::Call);
                 }
                 self.flow(*ret, &after);
             }
@@ -742,8 +759,9 @@ fn origin(insts: &[Inst], mut x: ValueId) -> ValueId {
     }
 }
 
-/// One function's run, from `entry` over `blocks`.
-fn run(entry: u32, blocks: &BTreeMap<u32, FBlock>, env: &dyn Env) -> Raw {
+/// One function's run, from `entry` over `blocks`; `entries`, every
+/// function's.
+fn run(entry: u32, blocks: &BTreeMap<u32, FBlock>, entries: &BTreeSet<u32>, env: &dyn Env) -> Raw {
     let mut held = BTreeMap::new();
     let (mut switches, mut fresh) = (BTreeSet::new(), BTreeSet::new());
     // Each pass's `holds` only grows, and feeds the next: rerun until it
@@ -751,6 +769,7 @@ fn run(entry: u32, blocks: &BTreeMap<u32, FBlock>, env: &dyn Env) -> Raw {
     for _ in 0..8 {
         let mut r = Run {
             blocks,
+            entries,
             env,
             ins: BTreeMap::new(),
             work: Vec::new(),
@@ -996,7 +1015,11 @@ pub fn frames<'a>(
     funcs: &[(u32, BTreeMap<u32, FBlock<'a>>)],
     env: &dyn Env,
 ) -> BTreeMap<u32, Frame> {
-    let raws: Vec<(u32, Raw)> = funcs.iter().map(|(e, bs)| (*e, run(*e, bs, env))).collect();
+    let entries: BTreeSet<u32> = funcs.iter().map(|(e, _)| *e).collect();
+    let raws: Vec<(u32, Raw)> = funcs
+        .iter()
+        .map(|(e, bs)| (*e, run(*e, bs, &entries, env)))
+        .collect();
     let by: BTreeMap<u32, Reads> = raws.iter().map(|(e, r)| (*e, Reads::of(r))).collect();
     let most = Reads::most(&by, |f| env.taken(f));
     let reads = |c: Option<u32>| c.and_then(|c| by.get(&c).copied()).unwrap_or(most);
