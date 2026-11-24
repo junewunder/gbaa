@@ -105,7 +105,9 @@
 //! first did; the lift prints a counted loop as a `for` over its range: of
 //! one block from a constant start (unit `native/lift-for-loops`), or of
 //! any number of blocks to a bound the guard before it proves the range
-//! of (unit `native/lift-for-bounds`). The report counts both
+//! of (unit `native/lift-for-bounds`), the bound loaded from RAM each
+//! round where nothing in a round stores to it (unit
+//! `native/lift-for-ram-bounds`). The report counts both
 //! (`loops_for`, `loops_not_for`). A measure by hand too. `GBAA_FOR_WHY=1`
 //! prints to stderr why each loop of several blocks stays a `loop`.
 //!
