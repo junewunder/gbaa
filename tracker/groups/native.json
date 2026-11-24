@@ -4431,15 +4431,22 @@
       "uses": ["heavy"],
       "priority": 26,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "e05cd9ee",
-        "session": "e05cd9ee-8882-41b4-8c2c-828884da23df",
-        "host": "quack",
-        "pid": 2962519,
-        "start": "95218086",
-        "at": "2026-11-24T05:32:54Z",
+        "at": "2026-11-24T06:05:34Z",
+        "evidence": "Scope narrowed by the owner (q/narrow-loop-unit-bounds-held, answer a: bounds held in registers). Counted loops of several blocks, calls, continue, counting down and u8 counters to a register-held bound print as for. c/loops: sum, draw_down, draw_odd, grow print as for; draw_global, draw_row, grid, first_long stay loop (RAM bounds, top-tested), as do Emerald's HealPlayerParty and CheckBagHasItem, left to {unit:native/lift-for-ram-bounds}, {unit:native/lift-for-top-tested}, {unit:native/lift-for-step-via}. Emerald 993 for / 3390 loop (was 353 / 4030), 600/600 frames; Metroid 195 / 499 (bar 499), 600/600. After merging main at 2187ee22: just check exit 0; just lift-check passed, 0 differences on every program, every planted fault caught. Review fixes (after_dot doc order, docs' Metroid counts) in 99d705fa.",
         "branch": "unit/native/lift-for-bounds",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T06:05:34Z",
+          "by": "e05cd9ee",
+          "host": "quack",
+          "pid": 2962519,
+          "start": "95218086",
+          "beats": true,
+          "session": "e05cd9ee-8882-41b4-8c2c-828884da23df",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
