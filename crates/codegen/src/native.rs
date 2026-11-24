@@ -6670,6 +6670,9 @@ impl FnPrinter<'_, '_> {
                         let vs = self.access_values(insts, i, &typed, &refs)?;
                         self.value_name(&vs, c)
                     });
+                    // A constant filling a global's field whole is a
+                    // literal of its type (native/lift-equipment-words).
+                    let lit = konst(insts, value).filter(|_| named.is_none() && plant.is_empty());
                     let val = format!("{}{plant}", named.unwrap_or_else(|| self.val(value)));
                     let mem = match (&typed[i], &objs[i], refs[i]) {
                         _ if let Some(o) = self.callers_off(i) => {
@@ -6687,10 +6690,14 @@ impl FnPrinter<'_, '_> {
                                 };
                                 format!("{}.set_{}({v});", b.owner, b.ident)
                             }
-                            _ => globals::store(p, bytes(width), &val),
+                            _ => lit
+                                .and_then(|c| globals::store_const(p, bytes(width), c))
+                                .unwrap_or_else(|| globals::store(p, bytes(width), &val)),
                         },
                         (None, Some(o), _) => {
-                            o.store(&format!("{}{m}", self.val(addr)), bytes(width), &val)
+                            let a = format!("{}{m}", self.val(addr));
+                            lit.and_then(|c| o.store_const(&a, bytes(width), c))
+                                .unwrap_or_else(|| o.store(&a, bytes(width), &val))
                         }
                         (None, None, Some(r)) if r.named => match r.fold {
                             Some(f) => {
@@ -9770,7 +9777,7 @@ mod tests {
         };
         let (t, m) = text(&with);
         let (plain, pm) = text(&Holes::parse("").unwrap());
-        for (note, stored) in [("// c/t.c:3", "0x5"), ("// c/u.h:4", "0x6")] {
+        for (note, stored) in [("// c/t.c:3", "= 5;"), ("// c/u.h:4", "= 6;")] {
             let at = t.find(note).unwrap_or_else(|| panic!("{note} in {t}"));
             let next = t[at..].lines().nth(1).unwrap();
             assert!(next.contains(stored), "{note} then {next}");
