@@ -202,8 +202,9 @@ pub struct Summary {
     /// constant `bx r3` into its IWRAM mixer), by target: the registers
     /// of r4–r11 (bit `n - 4` for rN) that may still hold bits of their
     /// entry values there, on some path. The lift jumps with every
-    /// register, so the target takes these from this function's callers,
-    /// which no summary here sees ([`Passing::pointed`]).
+    /// register, so the target takes these from this function's callers:
+    /// those [`Passing::foreign`] says it takes are this function's reads,
+    /// which it takes in turn.
     pub foreign: BTreeMap<u32, u8>,
     pub undefined_reads: BTreeMap<(u32, u8), Option<u32>>,
     /// The holes of entry values of r4–r11 returned in r0–r3, by the
@@ -299,6 +300,13 @@ pub struct Passing {
     /// jumped into or called directly, as a ROM function whose key no
     /// word holds. `None`: every one (no ROM to look in).
     pub pointed: Option<BTreeSet<u32>>,
+    /// Another code context's functions, by key: what each takes of
+    /// r4–r11 ([`Summary::takes`], bit `n - 4` for rN). A jump into one
+    /// (WarioWare's sound driver's `bx r0` into its six IWRAM routines)
+    /// runs its extended entry with every register the jumper has, so
+    /// the jumper takes from its callers those it still has as they came,
+    /// as a tail call's caller does (unit `native/ram-jump-passes-regs`).
+    pub foreign: BTreeMap<u32, u8>,
 }
 
 fn defines(params: u8, exit: &[Bits; 5]) -> u16 {
@@ -794,6 +802,25 @@ impl<'a> Sum<'a> {
                 n.ra = false;
             }
             *o = n;
+        }
+    }
+
+    /// A jump at `at` into `to`, a function of another code context's,
+    /// in `s`: it runs on in `to`'s extended entry with every register,
+    /// so what `to` takes ([`Passing::foreign`]) is this function's own
+    /// read, as for a tail call ([`Sum::call`]).
+    pub(super) fn jump_out(&mut self, s: &State, at: u32, to: u32) {
+        let takes = self.passing.foreign.get(&to).copied().unwrap_or(0);
+        for n in entry_regs(takes) {
+            if let Some((regs, _)) = s.regs[n as usize].taint() {
+                for e in entry_regs(regs) {
+                    self.entry_reads.insert((at, e, Via::Takes(to, n)));
+                }
+            }
+            let by = s.chg[n as usize - 4];
+            if by != 0 {
+                self.changed_read(at, n, by);
+            }
         }
     }
 

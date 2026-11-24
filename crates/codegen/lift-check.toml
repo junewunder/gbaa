@@ -1598,6 +1598,96 @@ rom_static_fn_keys = 3
 rom_refs = 17
 gap_targets = 5
 
+[program.native-ram-jump]
+rom = "agb/native-ram-jump.gba"
+route = "units/native-ram-jump-600.toml"
+# A jump into a RAM copy passes the registers it reads
+# (native/ram-jump-passes-regs): tj_jump jumps into tj_c, copied to IWRAM,
+# which reads r8 and r9 as tj_set, tj_jump's caller, left them; the report
+# says tj_jump takes them. Stage A's old call (--takes-zeroed) passes tj_jump
+# none.
+planted_flags = ["--takes-zeroed"]
+
+[program.native-ram-jump.bars]
+io_unnamed = 19
+lines = 20541
+lines_prelude = 1337
+texts_left = 0
+functions = 113
+functions_iwram = 4
+functions_lifted = 110
+functions_unrecognised = 113
+functions_replaced = 3
+standins = 3
+functions_summary_hole = 83
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 52
+hard_holes = 0
+entries_beyond_one = 23
+guest_pc_plain = 0
+functions_result_unneeded = 0
+blocks = 1713
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 7192
+reg_local_writes = 3073
+unpacked_unread = 0
+regs_call_entries = 14
+unread_lets = 0
+adc_sums = 0
+bank_sp_calls = 261
+sp_arith_unescaped = 0
+lr_returned = 0
+loops_not_for = 136
+labelled_blocks = 206
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 12
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 227
+load_computed_ram = 0
+load_computed_io = 6
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 704
+store_const_ram = 0
+store_const_io = 25
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 449
+store_computed_ram = 1
+store_computed_io = 6
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 347
+pointer_unexplained = 1
+ref_unexplained = 35
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 669
+sp_accesses_callers_frame = 7
+call_fn_calls = 62
+call_fn_four_complete = 57
+jumps_by_value = 9
+branches_on_raw_flags = 28
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 54
+fn_keys_left = 57
+rom_static_fn_keys = 3
+rom_refs = 17
+gap_targets = 5
+
 [program.native-gives]
 rom = "agb/native-gives.gba"
 route = "units/native-gives-600.toml"
