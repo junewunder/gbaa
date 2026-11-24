@@ -4227,3 +4227,4 @@
 {"at":"2026-11-24T22:32:11Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/minish-builds","text":"Minish Cap's lift builds: its hard holes closed: edited (detail)"}
 {"at":"2026-11-24T22:32:14Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/rogue-build","text":"Rogue's lift builds: GenerateFloorLayout's r11 passed: edited (detail)"}
 {"at":"2026-11-24T22:32:16Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/gcc-switch-recovery","text":"Recovery resolves the modern-GCC switches Rogue lists: edited (detail)"}
+{"at":"2026-11-24T22:32:18Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/warioware-stop-30003a8","text":"WarioWare's lift: the call to IWRAM 0x030003a8 (frame 39): edited (detail)"}
