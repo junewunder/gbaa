@@ -2023,6 +2023,39 @@
         "host": "quack"
       },
       "answer": null
+    },
+    {
+      "id": "q/getmondata-s-argument-calls-prove",
+      "title": "GetMonData's two-argument calls: prove r2 unread, or trust pret?",
+      "context": "{unit:native/lift-proto-two-forms}: 876 of Emerald's 888 refused prototypes are GetBoxMonData's third argument, read only for some constant fields. Today the summaries refuse a prototype on any proven read (decided 2026-11-24).",
+      "options": [
+        {
+          "key": "a",
+          "label": "Prove it per constant field",
+          "changes": "a new path-sensitive summary: a read reached only under a switch on a constant argument isn't a read at calls passing other constants; more work, and the lift stays exact",
+          "releases": ["native/lift-proto-two-forms"]
+        },
+        {
+          "key": "b",
+          "label": "Trust pret's two-argument prototype at those calls",
+          "changes": "quick, but loosens 'refuse only on a proven read': a wrong prototype would print a call that drops a live argument",
+          "releases": ["native/lift-proto-two-forms"]
+        },
+        {
+          "key": "c",
+          "label": "Leave the 876 refused",
+          "changes": "the unit is dropped; those calls keep their register-passing form",
+          "drops": ["native/lift-proto-two-forms"]
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/lift-proto-two-forms"],
+      "asked": {
+        "at": "2026-11-24T22:37:14Z",
+        "by": "6056824b",
+        "host": "quack"
+      },
+      "answer": null
     }
   ]
 }
