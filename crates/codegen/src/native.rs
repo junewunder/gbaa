@@ -7379,10 +7379,22 @@ impl FnPrinter<'_, '_> {
                     let mem = match self.holes.open_bus.contains_key(&at) {
                         true => {
                             self.soft.open_bus_printed.insert(at);
-                            format!(
-                                "{{ let a: u32 = {}{m}; if a >> 28 != 0 {{ 0 }} else {{ {f}(g, a) }} }}",
-                                self.val(addr)
-                            )
+                            // A typed field's access prints from its base
+                            // pointer, so the address value may have no
+                            // `let`: the field's address by name instead.
+                            let named = mem
+                                .strip_prefix("g.get(")
+                                .and_then(|e| e.strip_suffix(')'))
+                                .filter(|_| matches!(refs[i], Some(r) if r.named));
+                            match named {
+                                Some(p) => format!(
+                                    "{{ let a: u32 = {p}.addr(); if a >> 28 != 0 {{ 0 }} else {{ g.get({p}) }} }}"
+                                ),
+                                None => format!(
+                                    "{{ let a: u32 = {}{m}; if a >> 28 != 0 {{ 0 }} else {{ {f}(g, a) }} }}",
+                                    self.val(addr)
+                                ),
+                            }
                         }
                         false => mem,
                     };
