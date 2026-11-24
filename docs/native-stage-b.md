@@ -364,8 +364,8 @@ What the done pieces left open, for the units that come next.
   a fall passes on as parameters, so `x_` stays whole for fall targets. A
   stand-in, and a jump through a register to a target no table names
   (`call_fn`), are still entered by the plain entry.
-- **A store to `IME` the recompiler can't fold** (piece 1) still ticks
-  at its block's end, not at the store.
+- **A store to `IME` the recompiler can't fold** (piece 1; through a
+  register a loop sets) still ticks at its block's end, not at the store.
 - **Shapes return too much** (piece 3). Many shaped functions return all
   four registers, because a caller whose run stopped (a fall into library
   code) calls them, and a jump by value the run didn't prove a return
