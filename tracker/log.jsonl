@@ -4001,3 +4001,4 @@
 {"at":"2026-11-24T10:18:22Z","actor":"loop","tag":"119d7968","host":"quack","cmd":"done","id":"merge/quack-lane4-native-lift-equipment-words","text":"Merge main on quack lane 4: done"}
 {"at":"2026-11-24T10:22:58Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane4-native-lift-equipment-words","text":"Merge main on quack lane 4: on main"}
 {"at":"2026-11-24T10:22:58Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-equipment-words","text":"Metroid's gEquipment prints by field, not u32 words: on main"}
+{"at":"2026-11-24T10:23:02Z","actor":"loop","tag":"7630b372","host":"quack","cmd":"claim","id":"native/mirror-flow-on","text":"Mirror's lift with the function flow back on: claimed"}
