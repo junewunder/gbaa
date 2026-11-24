@@ -104,7 +104,12 @@ panel is only over the digits). The energy tanks row is the same, since
    result as "differs from its lift (the edit): IWRAM byte 0x03001530
    (gEquipment.maxEnergy) 99 -> 45", naming the byte by field and in
    decimal, and say the stop apart from the check; the stop itself is a
-   lifter finding for a unit of its own.
+   lifter finding for a unit of its own. (Settled by
+   native/metroid-fn-check-stop: the stock lift stopped there too. With
+   no input the game copies a function to IWRAM that the holes file
+   lacked, because its copies came from a run with presses. `just holes
+   ROM --frames 18000 --press l@1` shows that copy, and with it in the
+   holes file fn-check runs its 18,000 frames.)
 5. **The side PNGs show a small change small.** Each is the frame at 1x,
    three across (728x160): ten pixels of HUD digits in one corner. To read
    the digits I cropped and scaled the HUD by hand (ImageMagick).
