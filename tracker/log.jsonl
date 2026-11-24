@@ -3947,3 +3947,4 @@
 {"at":"2026-11-24T08:02:21Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/rogue-imperium-build","text":"Rogue's and Imperium's lifts build: on main"}
 {"at":"2026-11-24T08:02:26Z","actor":"loop","tag":"f4ff2870","host":"quack","cmd":"claim","id":"native/lift-frame-exact-narrow","text":"Exact sp passed only where a stack address reaches RAM: claimed"}
 {"at":"2026-11-24T08:04:00Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane2-native-c-list-test-program","text":"new unit: Merge main on quack lane 2"}
+{"at":"2026-11-24T08:04:06Z","actor":"loop","tag":"79cd9198","host":"quack","cmd":"claim","id":"merge/quack-lane2-native-c-list-test-program","text":"Merge main on quack lane 2: claimed"}

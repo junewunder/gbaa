@@ -698,7 +698,19 @@
       "detail": "Branch `unit/native/c-list-test-program` holds {unit:native/c-list-test-program}, finished but not on main: `just check` fails on the branch with main merged in (error: recipe `check` failed on line 18 with exit code 101). Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
       "check": "recorded",
       "lane": "quack/2",
-      "branch": "unit/native/c-list-test-program"
+      "branch": "unit/native/c-list-test-program",
+      "record": {
+        "state": "claimed",
+        "by": "79cd9198",
+        "session": "79cd9198-1cd4-4750-94db-508de374b137",
+        "host": "quack",
+        "pid": 2962519,
+        "start": "95218086",
+        "at": "2026-11-24T08:04:06Z",
+        "branch": "unit/native/c-list-test-program",
+        "beats": true
+      },
+      "round": "2026-11-24T08:04:06Z"
     }
   ]
 }
