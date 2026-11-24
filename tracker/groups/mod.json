@@ -1085,6 +1085,12 @@
         }
       ],
       "round": "2026-11-20T13:49:04Z"
+    },
+    {
+      "id": "mod/retire-tools",
+      "title": "Mod-view tools are gone: naming, mod-run, nightly step",
+      "detail": "Owner said delete (2026-11-20). Per docs/research/mod-view-retirement.md 'What goes': delete crates/naming, route-check's mod_run.rs (--mod-run; lift_mod_run.rs stays), hole-report nightly's readable step, the just recipes naming, mod-run, mod-states, names-states, readable-states, readable-suites, timing-modes, and their docs/tools/commands.md entries. Done when they are gone and just check passes.",
+      "check": "recorded"
     }
   ]
 }
