@@ -1,0 +1,13 @@
+# agb/native-entry-jump for 600 frames with no input: the entry-jump program
+# of the stage-A lifter's check (native/entry-jump-test-program; `just
+# lift-check`), its lift (gbaa-lift) against the play build at --timing
+# native by route-check --native. What it draws:
+# agb/native-entry-jump/SCENE.md.
+rom = "$GBAA_DATA/agb/native-entry-jump.gba"
+
+[[checkpoint]]
+name = "native-entry-jump-600"
+frame = 600
+hash = "034490afe017b4ef"
+# Verified: mGBA 0.10.5 (`just mgba-diff`) draws the same at frame 600
+# (2026-11-24).
