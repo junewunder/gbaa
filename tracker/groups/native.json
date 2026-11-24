@@ -452,15 +452,23 @@
       "uses": ["heavy"],
       "minMinutes": 120,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "91d18000",
-        "session": "91d18000-784e-438e-a02f-f3dfa1f9cc45",
-        "host": "quack",
-        "pid": 2964711,
-        "start": "95219683",
-        "at": "2026-11-24T05:15:37Z",
+        "checker": "a299b79f5ffde0776",
+        "at": "2026-11-24T06:58:02Z",
+        "evidence": "gbaa-lift --fn-ids dense (native::dense_ids: a function every read address of which the flow proved is an ID from 1 in rom.gba and the code's constants; DENSE; call_fn/irq_entry/bx key forms take IDs). just lift-check green on all 30 programs with a dense build each: route-check --dense 'draws the same 600 frames, its records the same but RAM'; Metroid's dense build (481 dense, 679 words) passes route-check --native --dense on units/metroid-native.toml, 2,700 frames. fn_keys_left barred: 0 on the C programs but c-fnptr-gcc 6 (flow precision; target in {unit:native/fnref-dense-keys-left}, decision d/dense-ids-land-with-fn-keys-left-as-measured), Metroid 326. just check green after merging main (01:43). Checker re-ran lift-check, lift-metrics and just check: pass.",
         "branch": "unit/native/fnref-dense",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T06:58:02Z",
+          "by": "91d18000",
+          "host": "quack",
+          "pid": 2964711,
+          "start": "95219683",
+          "beats": true,
+          "session": "91d18000-784e-438e-a02f-f3dfa1f9cc45",
+          "lane": "quack/4"
+        }
       },
       "notes": [
         {
