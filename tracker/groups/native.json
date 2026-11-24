@@ -4628,15 +4628,22 @@
       "detail": "From {unit:native/lift-pret-score}'s first numbers: values_named is 121 on Emerald where the map has 2,807 value names, the weakest row. {unit:native/lift-value-names} names a constant only where a field, global or enum-typed parameter takes a family; pret's families are mostly #defines passed to int parameters, so GetMonData(mon, MON_DATA_MAX_HP) in HealPlayerParty (src/script_pokemon_util.c:39) prints 0x3au32. Find what ties a family to a parameter (the decomp's own call sites name the constant: the source line each call's line note gives; or a parameter's name and the family's prefix) and have pret-names write it into [values], then print the name at a call's constant argument, and a sum as NAME + j where the base is a member. Never guess: a value two families hold stays a number unless the tie is the decomp's. Metric: values_named on Emerald and Metroid (rises), a C row for it (c/switch or a new program with a #define family passed to a function). Check: just lift-check passes with 0 differences and every planted fault caught; Metroid's lift builds and runs 600 of 600 frames; just check passes.",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "3af99f7a",
-        "session": "3af99f7a-4c57-416a-92bc-2639b34b4dfc",
-        "host": "quack",
-        "pid": 2964711,
-        "start": "95219683",
-        "at": "2026-11-24T15:20:41Z",
+        "at": "2026-11-24T16:28:28Z",
+        "evidence": "All on branch head 12ae181 (main 7e01a5c merged in, after the let-names and element-address merges): just lift-check passed, 37 programs, 0 differences, every planted fault and both planted hard holes caught (job liftcheck4b, exit 0); just lift on Metroid: 600 of 600 frames, no stop, 0 hard holes, values_named 1656 (was 1496); just check passed (check4b, exit 0). Same three also passed at cc41317. values_named Emerald 248 -> 4891; c-switch 7 -> 9 per build (ROW_CLEAR/ROW_BAR to fill_rect).",
         "branch": "unit/native/lift-value-args",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T16:28:28Z",
+          "by": "3af99f7a",
+          "host": "quack",
+          "pid": 2964711,
+          "start": "95219683",
+          "beats": true,
+          "session": "3af99f7a-4c57-416a-92bc-2639b34b4dfc",
+          "lane": "quack/4"
+        }
       },
       "notes": [
         {
