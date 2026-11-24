@@ -755,6 +755,14 @@
         "host": "quack",
         "landed": "2026-11-24T10:22:58Z"
       }
+    },
+    {
+      "id": "merge/quack-lane2-native-ram-jump-passes-regs",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/native/ram-jump-passes-regs` holds {unit:native/ram-jump-passes-regs}, finished but not on main: merging main conflicts in docs/tools/commands.md justfile. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/native/ram-jump-passes-regs"
     }
   ]
 }
