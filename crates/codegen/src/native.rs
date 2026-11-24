@@ -132,7 +132,9 @@
 //!   address, which a stop names (unit `native/first-stop-guest-pc`:
 //!   compiled code keeps no other pc): `runtime::guest_pc::set` in a build
 //!   with the crate's `guest-pc` feature (`just lift`'s, the checks'),
-//!   nothing in a plain one (unit `native/lift-one-entry`); calls are Rust calls; a return is a jump to the value
+//!   nothing in a plain one (unit `native/lift-one-entry`). The printer
+//!   prints them; [`pc_marks`] takes them out of src/ into `pcs.txt`, and
+//!   the crate's build script puts them back in a `guest-pc` build; calls are Rust calls; a return is a jump to the value
 //!   `lr` held on entry, [`RET`] (prelude), told by value since compiled
 //!   code moves it through the stack.
 //! - Memory is `ld8/16/32` and `st8/16/32` over `Game::ram` (EWRAM then
@@ -213,6 +215,7 @@ pub mod aligned;
 pub mod banks;
 pub mod bitfields;
 pub mod bounds;
+pub mod casts;
 pub mod cond;
 pub mod counted;
 pub mod cut;
@@ -232,6 +235,7 @@ pub mod metrics;
 pub mod modules;
 pub mod named;
 pub mod narrow;
+pub mod pc_marks;
 pub mod rom_data;
 pub mod shape;
 pub mod switch;
@@ -865,6 +869,9 @@ pub struct Lifted {
     /// With [`Holes::find_touches`], each load and store of a printed
     /// function whose RAM place the lift knows ([`find_field`]).
     pub touches: Vec<find_field::Touch>,
+    /// Where each block's `pc` was taken out of the modules
+    /// ([`pc_marks`]): the crate's `pcs.txt`.
+    pub pc_table: String,
 }
 
 /// The literals of `funcs`' constant jumps (not calls) to a RAM
@@ -970,7 +977,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let mut disc = discovery::discover(rom.to_vec());
     // Discovery's gaps: a jump into ROM where it found no code (a scanned
     // fragment it stopped short in, a `bl`'s second half it took for a
-    // literal pool). Each such target is decoded as code from there, and
+    // literal pool; a `bx` to a known place, a `bx pc` veneer's ARM
+    // code). Each such target is decoded as code from there, and
     // again from what that reaches, so the lift has the code the play
     // build would hand to its interpreter. Listed in the report.
     // The holes file's targets for jumps Recovery left unresolved are
@@ -1659,6 +1667,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             cut_texts: BTreeMap::new(),
             dense_words: BTreeMap::new(),
             touches: std::mem::take(&mut soft.touches),
+            pc_table: String::new(),
         };
     }
     fns.sort_unstable();
@@ -1826,7 +1835,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .iter()
         .filter(|(k, _)| holes.cut_want.contains(k) || holes.cuts.contains_key(k))
         .filter(|(k, _)| !holes.fn_check.contains_key(k))
-        .cloned()
+        // As the crate's src/ has it: no block markers (pc_marks).
+        .map(|(k, t)| (*k, pc_marks::strip(t).0))
         .collect();
     let mut cut_in = 0;
     for (k, t) in out.iter_mut() {
@@ -1860,6 +1870,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     }
     let plains: Vec<String> = fns_reached.iter().map(|&k| plain(k)).collect();
     let mut files = modules::split(main, table, &plains, &out, holes.copies);
+    // The block markers out of the text, into `pcs.txt` (native/lift-pc-markers).
+    let pc_table = pc_marks::strip_modules(&mut files.files);
     if dense_fns.is_empty() {
         // DENSE's blank line, comment and empty table.
         files.wiring += 3;
@@ -2312,6 +2324,15 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             - line_notes
             - text_lines),
     );
+    // The integer casts the lifted functions print (native/lift-cast-types):
+    // in the function modules, `m_<key>.rs` and an IWRAM copy's `m<i>_<key>.rs`.
+    let n_casts: usize = files
+        .files
+        .iter()
+        .filter(|(p, _)| p.starts_with('m') && p.as_str() != "main.rs")
+        .map(|(_, t)| casts::count(t))
+        .sum();
+    m.push("casts", n(n_casts));
     // Only where the names files give DWARF variables or prototypes.
     if holes.dwarf.is_some() {
         m.push("locals_named", n(soft.locals_named));
@@ -2533,6 +2554,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             false => BTreeMap::new(),
         },
         touches: soft.touches,
+        pc_table,
     }
 }
 
@@ -2543,7 +2565,12 @@ fn missing(ctx: &Ctx, funcs: &[Func]) -> BTreeSet<u32> {
     let mut out = BTreeSet::new();
     for gb in funcs.iter().flat_map(|f| f.blocks.values()) {
         for x in exits(ctx, gb) {
-            if let Plan::Static(k) | Plan::Rekey(k) = x.plan
+            // A `bx` to a known place (a `bx pc` veneer's ARM code) too.
+            if let Plan::Static(k)
+            | Plan::Rekey(k)
+            | Plan::Dynamic {
+                target: Some(k), ..
+            } = x.plan
                 && (0x0800_0000..0x0A00_0000).contains(&(k & !1))
                 && !ctx.is_code(k)
             {
@@ -2555,13 +2582,14 @@ fn missing(ctx: &Ctx, funcs: &[Func]) -> BTreeSet<u32> {
 }
 
 /// Take the ROM from `k` (a key) as code, up to the next instruction
-/// discovery has or 64 instructions on: the block builder stops at the
-/// first exit, so what lies past it is used only if something reaches it.
+/// discovery has, a Thumb `bx pc` or an ARM `b`, `bx lr` or `bx pc`, or
+/// 64 instructions on: the block builder stops at the first exit, so what
+/// lies past it is used only if something reaches it.
 /// A Thumb `bl`'s halves are joined, the prefix's entry too if discovery
 /// split them.
-fn force_code(rom: &[u8], disc: &mut Discovery, k: u32) {
+pub(crate) fn force_code(rom: &[u8], disc: &mut Discovery, k: u32) {
     use analysis::discovery::{Code, Evidence};
-    use armv4t::decode::{Instr, decode_thumb};
+    use armv4t::decode::{Cond, Instr, Reg, decode_arm, decode_thumb};
     let thumb = k & 1 != 0;
     let mut a = k & !1;
     let half = |a: u32| -> Option<u16> {
@@ -2588,17 +2616,37 @@ fn force_code(rom: &[u8], disc: &mut Discovery, k: u32) {
         }
         data(a)
     };
-    for _ in 0..64 {
-        if disc.code.get(&a).is_some_and(|c| c.thumb == thumb) {
+    // A Thumb `bx pc` ends the run too, and in ARM an unconditional `b`,
+    // `bx lr` or `bx pc` (a `bx rN` may be a call, after `mov lr, pc`):
+    // what follows is reached only by a jump, in the other state (a `bx
+    // pc` veneer's ARM code two or four bytes on, which a Thumb run past
+    // it would claim as Thumb, and the next veneer's Thumb code after
+    // that ARM `b`: newlib's, side by side). Thumb runs on past its `b`s:
+    // a gap function's every branch a round of its own would outrun the
+    // rounds. For the same reason code discovery has in the other state
+    // stops the run past its first instruction: the two would overwrite
+    // each other.
+    for i in 0..64 {
+        if disc.code.get(&a).is_some_and(|c| c.thumb == thumb || i > 0) {
             return;
         }
         if !thumb {
-            if (a - 0x0800_0000) as usize + 4 > rom.len() {
-                return;
-            }
+            let o = (a - 0x0800_0000) as usize;
+            let Some(w) = rom.get(o..o + 4) else { return };
             disc.code.insert(a, code(4));
             a += 4;
-            continue;
+            match decode_arm(u32::from_le_bytes(w.try_into().unwrap()), a - 4) {
+                Instr::Branch {
+                    cond: Cond::Al,
+                    link: false,
+                    ..
+                }
+                | Instr::Bx {
+                    cond: Cond::Al,
+                    rm: Reg::Pc | Reg::Lr,
+                } => return,
+                _ => continue,
+            }
         }
         let Some(h) = half(a) else { return };
         match decode_thumb(h, a) {
@@ -2626,6 +2674,10 @@ fn force_code(rom: &[u8], disc: &mut Discovery, k: u32) {
                 if no_return(a) {
                     return;
                 }
+            }
+            Instr::Bx { rm: Reg::Pc, .. } => {
+                disc.code.insert(a, code(2));
+                return;
             }
             _ => {
                 disc.code.insert(a, code(2));

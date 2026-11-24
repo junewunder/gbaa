@@ -654,8 +654,9 @@ fn main() -> ExitCode {
          native-host = {{ path = \"{c}/native-host\" }}\n\
          # The prelude's task coroutines (task_resume).\n\
          corosensei = \"0.3.4\"\n\n\
-         # Each block's guest pc kept for a stop to name (the prelude's `pc`):\n\
-         # `just lift` and the checks build with it, a plain build without.\n\
+         # Each block's guest pc kept for a stop to name (the prelude's `pc`,\n\
+         # put back from pcs.txt by build.rs): `just lift` and the checks\n\
+         # build with it, a plain build without.\n\
          [features]\nguest-pc = []\n\n\
          [profile.release]\ndebug = false\nincremental = false\n",
         c = crates.display()
@@ -688,6 +689,19 @@ fn main() -> ExitCode {
         Ok(())
     };
     let r = write(&out.join("Cargo.toml"), cargo.as_bytes())
+        // Each block's `pc`, out of src/ and back in a `guest-pc` build's copy.
+        .and_then(|_| {
+            write(
+                &out.join("build.rs"),
+                codegen::native::pc_marks::BUILD_RS.as_bytes(),
+            )
+        })
+        .and_then(|_| {
+            write(
+                &out.join(codegen::native::pc_marks::TABLE),
+                lifted.pc_table.as_bytes(),
+            )
+        })
         .and_then(|_| {
             lifted
                 .files

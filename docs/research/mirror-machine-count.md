@@ -50,11 +50,11 @@ are a line or two.
 | 1 | Temporaries named `vN` | `\bv[0-9]+\b` | 606,337 | 6,163 | A multi-use value is named for what it holds (filed, `native/lift-let-names`); `value_lets` 208,204 |
 | 2 | Register names `r0`-`r14` | `\br([0-9]\|1[0-4])\b` | 359,948 | 3,377 | Mirror's names map has DWARF types, locals and lines (`native/mirror-dwarf-map`, ready): katam's locals name what's left |
 | 3 | A u32 as an address: typed pointer built from a bare u32 | `Ref::<…>::new(` | 62,289 | 572 | Mirror's DWARF map (types of parameters and locals), then stage B's typed pointers; none filed for the u32 itself |
-| 4 | Block markers `pc(0x…)` | `\bpc\(0x` | 58,170 | 714 | filed: `native/lift-pc-markers` |
+| 4 | Block markers `pc(0x…)` | `\bpc\(0x` | 58,170 | 714 | done (`native/lift-pc-markers`, 2026-11-24): 0, kept in the crate's `pcs.txt` and put back by its build script in a `guest-pc` build |
 | 5 | Load rotates for a misaligned address | `ShiftType::Ror` | 44,881 | 432 | `native/lift-aligned-loads` (2026-11-24): 12,090 left, raw `ld32`/`ld16` through untyped pointers; `load_rotates_left` 13,040 |
 | 6 | Adds of zero (Thumb's `adds rd, rs, #0` as a move) | `wrapping_add\(0x0\)` | 41,107 | 367 | done (`native/lift-add-zero`, 2026-11-24): 0 |
 | 7 | A u32 as an address: byte loads and stores through a computed value | `\b(ld\|st)(8\|16\|32)\(g,` | 40,309 | 238 | Mirror's DWARF map and `native/lift-index-names` (merging); `load_computed_unknown` 48,412, `store_computed_unknown` 33,281 |
-| 8 | Casts | ` as (u8\|u16\|u32\|i8\|i16\|i32\|u64\|i64)\b` | 39,068 | 368 | filed: `native/lift-cast-types`; `narrowing_casts` 7,265 |
+| 8 | Casts | ` as (u8\|u16\|u32\|i8\|i16\|i32\|u64\|i64)\b` | 39,068 | 368 | `native/lift-cast-types` (2026-11-24): 35,531, a value printed at a width compared, narrowed and shifted in it; `casts` (barred on the lift-check programs). Left: signed compares of `u32` values (`(vN as i32)` 6,521, `(rN as i32)` 1,166), which want whole-function signedness; `prim::sext` (5,849) is a cast the count doesn't see; `narrowing_casts` 7,265 |
 | 9 | sp passed to a callee | `\(g, (r13\|sp)[,)]` | 29,362 | 311 | Exact sp passed only where a stack address reaches RAM (`native/lift-frame-exact-narrow`, ready); stage A keeps sp a parameter by decision |
 | 10 | `bank_sp` before a store | `bank_sp\(` | 14,068 | 127 | `native/lift-frame-exact-narrow`; `bank_sp_calls` 14,068 |
 | 11 | Bare addresses | see above | 18,562 (RAM 7,545, ROM 11,017) | 198 (129, 69) | RAM: Mirror's DWARF map, `native/lift-global-bitfields` (ready); ROM: function words are `native/fnref-dense` and `native/rom-statics` (both waiting) |
@@ -101,6 +101,10 @@ text all the same: 58,170 lines, one in every 12.
 
     pc(0x08152b31);
 
+Since `native/lift-pc-markers` src/ has none: the crate's `pcs.txt` keeps
+where each went, and its `build.rs` puts them back in a `guest-pc` build's
+copy of each module.
+
 **5. Rotates.** ARM's `ldr` from a misaligned address rotates, so every load the lifter can't
 prove aligned keeps the rotate, even through a typed field of a struct it knows is aligned:
 
@@ -128,6 +132,13 @@ the whole lift (main at 7995104 with the change, flow on).
 
     structSize = r1 as u16 as u32;
     let v34: bool = ((v8 << 16) as i32) >= 0;
+
+Since `native/lift-cast-types` a value the lift printed at a width compares, narrows and shifts in
+it (`codegen::native::casts`): `((v13 as i16 as u32) as i32) <= 3` is `(v13 as i16) <= 3`,
+`(v2.wrapping_sub(0xa1) as u16 as u32) > 2` is `(v2.wrapping_sub(0xa1) as u16) > 2`, and a signed
+compare's constant is an `i32` literal (`-0xe00000`, not `(0xff200000u32 as i32)`). What is left is
+mostly `u32` values compared signed, which a local typed `i32` would print bare only if its other
+uses (wrapping arithmetic, stores, calls) were `i32` too.
 
 **9-10, 12, 15-16. The guest stack.** Every call passes sp; every function that keeps a frame moves
 it; a store first tells the IRQ path where sp is:
@@ -180,9 +191,9 @@ units do):
 - `native/lift-add-zero`: an add of zero prints as the value; bar 41,107
   (done 2026-11-24: 0).
 - `native/lift-pc-markers`: block markers out of the text a modder reads;
-  bar 58,170.
+  bar 58,170 (done 2026-11-24: 0; `pcs.txt` holds the 58,170).
 - `native/lift-cast-types`: values typed by width so the casts go; bar
-  39,068 (`narrowing_casts` 7,265).
+  39,068 (`narrowing_casts` 7,265); 35,531 after it (row 8).
 - `native/lift-let-names`: a value read twice is named for what it
   holds; bar 606,337 `vN` (`value_lets` 208,204).
 

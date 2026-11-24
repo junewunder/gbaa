@@ -209,9 +209,9 @@ This is `pen_set` from one of the repo's own C test programs
 the game's RAM, named after its address (`d_0300000c`) because this program
 has no file of names. Its argument is a named parameter, `r0`, used
 directly. The rest is the literal part: the argument keeps its register's
-name, the stack pointer is passed though nothing here uses it (`_`), and
-`pc(0x08000271)` keeps the guest address for a stop to name (it does
-nothing outside a check build).
+name, and the stack pointer is passed though nothing here uses it (`_`).
+The guest address of each block is kept beside the code, not in it
+(`pcs.txt`): a check build puts it back, for a stop to name.
 
 ```c
 void pen_set(u8 state)
@@ -223,7 +223,6 @@ void pen_set(u8 state)
 
 ```rust
 pub fn f_08000271(g: &mut Game, _: u32, r0: u32) -> Result<(), Exit> {
-    pc(0x08000271);
     g.ram.d_0300000c = r0 as u8;
     g.ram.d_0300000d = 0x0u32 as u8;
     return Ok(());

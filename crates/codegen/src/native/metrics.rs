@@ -73,6 +73,10 @@
 //! guest block's code printed where it had already: both barred, the
 //! second at 0 on the C programs.
 //!
+//! Casts (`super::casts`, native/lift-cast-types): `casts`, the integer
+//! casts (` as u8` to ` as i64`) the function modules print (barred).
+//! A value printed at a width is compared, narrowed and shifted in it.
+//!
 //! Function words (`super::fnref`): the words of ROM outside code that hold
 //! a function's key, `fn_words_not_proven` those the flow didn't prove
 //! (barred), `fn_words_proven` the rest (no bar: it should rise).
