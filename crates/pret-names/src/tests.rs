@@ -76,7 +76,7 @@ fn names_entries_and_explains_misses() {
             },
         ],
     };
-    let n = match_names(&syms(), &rom, &ours);
+    let mut n = match_names(&syms(), &rom, &ours);
     let by: BTreeMap<u32, &Name> = n.entries.iter().map(|e| (e.key, &e.name)).collect();
     assert_eq!(
         by[&0x0800_0001],
@@ -201,6 +201,14 @@ fn names_entries_and_explains_misses() {
         Some("Main")
     );
     assert!(toml.contains("0x08000011 = { func = \"Main\", offset = 0x10 }"));
+    // An object with no DWARF: its functions take its C file as `src`.
+    n.obj_srcs.insert("main.o".into(), "src/main.c".into());
+    let toml = n.toml(&["test".into()], sha, "pret/test@0", None);
+    assert!(toml.contains(
+        "0x03000001 = { name = \"Copied\", size = 16, file = \"main.o\", rom = 0x08000031, src = \"src/main.c\" }"
+    ));
+    let m = codegen::names::SourceMap::from_texts(sha, &[&toml]).unwrap();
+    assert_eq!(m.functions[&0x0800_0001].src.as_deref(), Some("src/main.c"));
 }
 
 /// Two units whose abbrev tables run together unterminated (agbcc's):

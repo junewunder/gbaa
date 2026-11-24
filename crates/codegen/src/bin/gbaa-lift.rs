@@ -119,7 +119,9 @@
 //!
 //! `src/` is `main.rs` (the prelude, RAM, `ENTRY`), `fns.rs` (`FNS`) and
 //! the functions in modules of about 4,000 lines (`codegen::native::modules`,
-//! unit `native/lift-modules`), so rustc builds them in parallel; a `.rs`
+//! unit `native/lift-modules`), so rustc builds them in parallel: one per
+//! source file the names files give (`script_pokemon_util.rs`; unit
+//! `native/lift-modules-by-source`), the rest by address; a `.rs`
 //! file there from an earlier lift that this one didn't write is removed.
 //! `--copies N` writes the modules N times over under different names: a
 //! synthetic large lift, for measuring the build of a game-sized crate.
@@ -519,6 +521,11 @@ fn main() -> ExitCode {
                     };
                     Some((a, (id.to_string(), size)))
                 })
+                .collect();
+            holes.fn_srcs = map
+                .functions
+                .iter()
+                .filter_map(|(&k, f)| Some((k, f.src.clone()?)))
                 .collect();
             holes.fn_names = map
                 .functions

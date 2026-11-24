@@ -144,6 +144,10 @@ pub struct Names {
     pub rom: PoolHits,
     pub pret_funcs: usize,
     pub copies: Vec<CopyNames>,
+    /// The C file of an object built without DWARF (`agb_flash.o`,
+    /// `src/agb_flash.c`): its functions' `src`, where DWARF gives none
+    /// (unit `native/lift-modules-by-source`: the lift's module for it).
+    pub obj_srcs: BTreeMap<String, String>,
 }
 
 /// A copy out of ROM and the pret functions in its source, keyed by run
@@ -614,7 +618,12 @@ impl Names {
             let rom = e
                 .rom
                 .map_or(String::new(), |r| format!(", rom = 0x{r:08x}"));
-            let dw = dbg.map_or(String::new(), |d| d.func_fields(e.rom.unwrap_or(e.key)));
+            let mut dw = dbg.map_or(String::new(), |d| d.func_fields(e.rom.unwrap_or(e.key)));
+            if dw.is_empty()
+                && let Some(s) = e.file.as_ref().and_then(|f| self.obj_srcs.get(f))
+            {
+                dw = format!(", src = {}", quoted(s));
+            }
             file + &rom + &dw
         };
         for e in &self.entries {
