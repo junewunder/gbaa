@@ -1110,7 +1110,8 @@
       "id": "mod/half-speed-on-lift",
       "title": "Kirby's half-speed mod ported to a lift cut",
       "detail": "Owner (2026-11-20): port Kirby & the Amazing Mirror's half-speed mod copy (mods/kirby, mod view) to a lift cut (gbaa-lift --cut, just lift-mod-run), before the mod-view copy is deleted. Done when the lift mod runs at half speed beside stock (lift-mod-run evidence) and lives in the private mods repo.",
-      "check": "recorded"
+      "check": "recorded",
+      "uses": ["heavy"]
     }
   ]
 }
