@@ -5078,7 +5078,19 @@
       "detail": "From {unit:native/lift-for-bounds}: agbcc often computes i + 1 into another register early in the body and moves it back in the latch (HealPlayerParty: r9 = r8 + 1 at the top, r8 = r9 as u8 at the end); native::bounds evaluates only the latch, so the step isn't of the counter ('step not of the counter' with GBAA_FOR_WHY=1). Carry the counter's sums through the blocks that dominate the latch inside the loop, the second register written once. Check as the parent's (just lift-check 0 differences, bars on C rows, Metroid and Emerald, 600 of 600 frames, just check).",
       "check": "recorded",
       "needs": ["native/lift-for-bounds"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "358be71f",
+        "session": "358be71f-dc77-4c24-8ffc-f995bc083a0a",
+        "host": "quack",
+        "pid": 2962519,
+        "start": "95218086",
+        "at": "2026-11-24T19:42:11Z",
+        "branch": "unit/native/lift-for-step-via",
+        "beats": true
+      },
+      "round": "2026-11-24T19:42:11Z"
     },
     {
       "id": "native/emerald-sio32-play-timing",
