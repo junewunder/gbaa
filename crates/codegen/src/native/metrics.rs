@@ -347,6 +347,7 @@ pub fn lower_bars(
 
 /// The metrics with no bar: they are meant to rise.
 pub const UNBARRED: &[&str] = &[
+    "proto_shapes",
     "functions_recognised",
     "ram_globals",
     "load_ram_global",
