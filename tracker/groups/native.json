@@ -4551,6 +4551,13 @@
           "lane": "quack/4"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-24T11:47:46Z",
+          "by": "bbbce6bc",
+          "text": "A copy used more than once still prints as its own let (let v27: u32 = r0; x = v27;): no alias forwarding. {unit:native/lift-let-names} may want to fold such lets into their source."
+        }
+      ],
       "round": "2026-11-24T11:08:33Z"
     },
     {
