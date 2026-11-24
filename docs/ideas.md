@@ -19,7 +19,9 @@ C to 61k of assembly), and its names are mostly placeholders
   multiplayer mod.
 - **An always-on world you drop into.** A server that keeps a game going
   with nobody in it, where players join and leave as they like, and the CPU
-  Kirbys are turned off so they aren't wandering about on their own.
+  Kirbys are turned off so they aren't wandering about on their own. The
+  CPU Kirbys off is a lift mod now, checked on the first room
+  (`docs/research/mirror-cpu-kirbys-off.md`).
 - **Typing the room code in the game**, instead of in gbaa's menu.
 - **Pausing for one player only.** The game's own pause stops every
   player, and only the one who paused can unpause. A per-game mod could
