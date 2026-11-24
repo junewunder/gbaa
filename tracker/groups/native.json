@@ -4950,6 +4950,13 @@
           "lane": "quack/1"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-24T18:20:56Z",
+          "by": "ce4e72fe",
+          "text": "Shared $GBAA_DATA/c/c-loops-agbcc.gba was rebuilt at 12:19 from c/loops sources older than {unit:native/lift-for-index} (14 functions, bars want 18), failing lift-check bars; just c-tests from main fixed it. A lane on an old branch running c-tests will undo it."
+        }
+      ],
       "round": "2026-11-24T17:20:59Z"
     },
     {
