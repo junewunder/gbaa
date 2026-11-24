@@ -4933,15 +4933,22 @@
       "title": "Lifted statements are indented by their nesting",
       "detail": "From the owner, 2026-11-20. In out/lift-emerald every statement sits at 16 spaces whatever its depth, pc(..) and loop/block openers at 4, and a call at 20: HealPlayerParty's two nested loops read flat. Print each statement at its block's depth (4 spaces a level), openers and closers with it, comments (// src/file.c:31, // dwarf r8: i) at the statement they belong to. No rustfmt run over the lift (850,000 lines; and a cut's three-way merge wants stable text): the printer does it. A printer test on a C program's lift: every line's leading spaces are 4 times its brace depth. A re-cut of an older cut still merges (git merge-file ignores nothing: say in docs/tools/commands.md that cuts made before this need --ours whitespace or a re-cut). Done when: the test passes, just lift-check and just check pass.",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "ce4e72fe",
-        "session": "ce4e72fe-7c7c-460c-8ffc-481c58f0c630",
-        "host": "quack",
-        "pid": 2962048,
-        "start": "95217572",
-        "at": "2026-11-24T17:20:59Z",
+        "at": "2026-11-24T18:20:53Z",
+        "evidence": "native::indent re-indents each lifted function by brace depth (4 spaces a level) before cut base and pc markers; test lift_indent lifts c-loops-agbcc and finds every module line at 4x its depth (passes, not skipped). just lift-check passed (all programs, planted faults caught); just check exit 0 at 6efc46a0. commands.md says pre-indent cuts conflict on whitespace: keep --ours side re-indented or re-cut.",
         "branch": "unit/native/lift-indent",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T18:20:53Z",
+          "by": "ce4e72fe",
+          "host": "quack",
+          "pid": 2962048,
+          "start": "95217572",
+          "beats": true,
+          "session": "ce4e72fe-7c7c-460c-8ffc-481c58f0c630",
+          "lane": "quack/1"
+        }
       },
       "round": "2026-11-24T17:20:59Z"
     },
