@@ -147,10 +147,10 @@
       "detail": "june sees the sample's score against pret, its cost per function and some named functions side by side with pret's, and decides whether naming runs on all of Emerald and on games with no decomp.",
       "needs": ["mod/naming-sample", "mod/naming-firered"],
       "record": {
-        "state": "parked",
-        "why": "june looked: naming isn't ready, and a lot is changing right now; parked until she brings it back",
-        "by": "24176b67",
-        "at": "2026-11-01T00:30:00Z"
+        "state": "dropped",
+        "why": "crates/naming is deleted (the owner said delete the mod view, 2026-11-20, and left naming out of the lift); nothing is left to gate.",
+        "by": "8b80f2e1",
+        "at": "2026-11-24T22:26:24Z"
       }
     },
     {
