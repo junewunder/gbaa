@@ -4300,3 +4300,4 @@
 {"at":"2026-11-24T22:52:49Z","actor":"session","tag":"6056824b","host":"quack","cmd":"overseer","text":"overseer fdddd3 on quack attached, replacing f14c6a on quack"}
 {"at":"2026-11-24T22:53:05Z","actor":"loop","tag":"e601e02d","host":"quack","cmd":"claim","id":"native/game-lift-bars-refresh","text":"Metroid's and Emerald's private lift bars match main again: claimed"}
 {"at":"2026-11-24T22:53:10Z","actor":"loop","tag":"990952a6","host":"quack","cmd":"claim","id":"native/lift-for-ram-bounds","text":"Loops to a bound read from RAM print as for: claimed (picking up after a67a0150)"}
+{"at":"2026-11-24T22:53:15Z","actor":"loop","tag":"81cfc956","host":"quack","cmd":"claim","id":"native/emerald-m4a-compressed","text":"Emerald's lift mixes m4a's compressed samples as play does: claimed"}
