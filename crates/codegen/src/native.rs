@@ -340,6 +340,15 @@ pub struct Holes {
     pub lr: BTreeSet<u32>,
     /// By the jump's instruction address: its targets (keys), and why.
     pub jumps: BTreeMap<u32, (Vec<u32>, String)>,
+    /// Function starts only data reaches (`[[roots]] keys = [0x…], why =
+    /// "…"`): a callback in a ROM struct that discovery's pointer scan
+    /// doesn't rank as code (Emerald's tileset init callbacks), as
+    /// `gbaa-holes` counts its run's calls through a register to code
+    /// discovery lacked. By key (interworking form, in ROM), and why. They
+    /// join discovery's first descent ([`discovery::discover_with`]), so
+    /// the lift has them as functions where the play build would hand them
+    /// to its interpreter.
+    pub roots: BTreeMap<u32, String>,
     /// By function key: the indirect calls (their addresses) that reach a
     /// function reading one of r4-r11 as it came, and why (`[[takes]]
     /// entry = 0x…, sites = [0x…], why = "…"`): each passes it the
@@ -586,7 +595,7 @@ impl Holes {
     /// Parse a holes file: `[[standin]] entry = 0x…, why = "…", code =
     /// '''…'''` (and `lr = true` for [`Holes::lr`], `check = { seed, runs,
     /// digest }` for [`Holes::checks`]), `[[jump]] at = 0x…, targets = [0x…], why = "…"`,
-    /// `[[takes]]` ([`Holes::takes`]), `[[copy]]` ([`Holes::copies_seen`]),
+    /// `[[takes]]` ([`Holes::takes`]), `[[roots]]` ([`Holes::roots`]), `[[copy]]` ([`Holes::copies_seen`]),
     /// `[[stack]]` ([`Holes::stacks`]), `[[open_bus]] at = 0x…, why = "…"`
     /// ([`Holes::open_bus`]), and at the top, `skip_fn_flow =
     /// "why"` and `allocators = [0x…]` ([`Holes::allocators`]).
@@ -718,6 +727,22 @@ impl Holes {
                             roots,
                             why: str_of(e, "why")?,
                         });
+                    }
+                    "roots" => {
+                        let why = str_of(e, "why")?;
+                        let keys = e
+                            .get("keys")
+                            .and_then(|v| v.as_array())
+                            .ok_or("roots: missing keys")?;
+                        for v in keys {
+                            let k = int(v, "keys")?;
+                            if !(0x0800_0000..0x0A00_0000).contains(&(k & !1)) {
+                                return Err(format!("roots: {k:#010x} is outside the ROM"));
+                            }
+                            if h.roots.insert(k, why.clone()).is_some() {
+                                return Err(format!("roots: {k:#010x} twice"));
+                            }
+                        }
                     }
                     "open_bus" => {
                         let at = int(e.get("at").ok_or("open_bus: missing at")?, "at")?;
@@ -974,7 +999,9 @@ struct Code<'a> {
 
 /// Lift `rom` whole. `name` is the program's name for its front end.
 pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
-    let mut disc = discovery::discover(rom.to_vec());
+    // The holes file's roots: function starts only data reaches.
+    let roots: Vec<u32> = holes.roots.keys().copied().collect();
+    let mut disc = discovery::discover_with(rom.to_vec(), &roots);
     // Discovery's gaps: a jump into ROM where it found no code (a scanned
     // fragment it stopped short in, a `bl`'s second half it took for a
     // literal pool; a `bx` to a known place, a `bx pc` veneer's ARM
@@ -10780,6 +10807,14 @@ why = "a table"
         assert!(Holes::parse("[[open_bus]]\nwhy = \"x\"\n").is_err());
         let twice = "[[open_bus]]\nat = 0x10\nwhy = \"x\"\n";
         assert!(Holes::parse(&format!("{twice}{twice}")).is_err());
+        // Roots: function starts only data reaches, one why for the list.
+        let h = Holes::parse("[[roots]]\nkeys = [0x080a0b21, 0x080a0c01]\nwhy = \"tilesets\"\n")
+            .unwrap();
+        assert_eq!(h.roots.len(), 2);
+        assert_eq!(h.roots[&0x080a_0c01], "tilesets");
+        assert!(Holes::parse("[[roots]]\nkeys = [0x03000001]\nwhy = \"x\"\n").is_err());
+        assert!(Holes::parse("[[roots]]\nkeys = [0x08000001, 0x08000001]\nwhy = \"x\"\n").is_err());
+        assert!(Holes::parse("[[roots]]\nwhy = \"x\"\n").is_err());
         let h = Holes::parse(
             "[[takes]]\nentry = 0x08000015\nsites = [0x08000006, 0x08000020]\nwhy = \"its caller's r5\"\n",
         )

@@ -193,6 +193,7 @@ impl Game {
         });
         // The save chip the ROM's library tag names, as the play build's bus.
         g.hw.save = runtime::save::Save::new(runtime::save::Kind::detect(ROM));
+        g.hw.gpio = runtime::gpio::Gpio::for_rom(ROM);
         g.hw.irq.set_handler(irq_entry);
         g.hw.on_frame_end(record);
         g
@@ -530,6 +531,12 @@ fn io_write16(g: &mut Game, o: u32, v: u32) {
     hw::write_io(g, o, v as u16);
 }
 
+/// A ROM halfword the program loads: the GPIO port's registers once it
+/// has taken a store, as runtime::bus's.
+fn rom_half(g: &Game, o: usize) -> u32 {
+    g.hw.gpio.read(o).map_or_else(|| rom16(o), u32::from)
+}
+
 fn rom16(o: usize) -> u32 {
     // Past the ROM's end, the texts an edit made longer (`text::EXTRA`).
     let moved = || {
@@ -568,7 +575,7 @@ pub fn ld8(g: &mut Game, a: u32) -> u32 {
         7 => g.hw.ppu.oam[(a & 0x3FF) as usize] as u32,
         8..=0xD => {
             let o = (a & 0x1FF_FFFF) as usize;
-            (rom16(o & !1) >> ((o & 1) * 8)) & 0xFF
+            (rom_half(g, o & !1) >> ((o & 1) * 8)) & 0xFF
         }
         0 if a < BIOS_SIZE => bios_read(g, a, 1),
         0xE | 0xF => g.hw.save.read(a as u16) as u32,
@@ -588,7 +595,7 @@ pub fn ld16(g: &mut Game, a: u32) -> u32 {
         6 => vram_at(g, a).map_or(0, |o| le(&g.hw.ppu.vram, o)),
         7 => le(&g.hw.ppu.oam, (a & 0x3FE) as usize),
         0xD if eeprom_at(g, a) => g.hw.save.eeprom_status() as u32,
-        8..=0xD => rom16((a & 0x1FF_FFFE) as usize),
+        8..=0xD => rom_half(g, (a & 0x1FF_FFFE) as usize),
         0 if a < BIOS_SIZE => bios_read(g, a, 2),
         // The save has an 8-bit bus: wider loads see the byte repeated.
         0xE | 0xF => g.hw.save.read((a & !1) as u16) as u32 * 0x0101,
@@ -608,7 +615,7 @@ pub fn ld32(g: &mut Game, a: u32) -> u32 {
         }
         5..=7 => ld16(g, a) | ld16(g, a.wrapping_add(2)) << 16,
         // ROM (the EEPROM answers halfword loads only, as the play build's).
-        8..=0xD => rom16((a & 0x1FF_FFFE) as usize) | rom16((a.wrapping_add(2) & 0x1FF_FFFE) as usize) << 16,
+        8..=0xD => rom_half(g, (a & 0x1FF_FFFE) as usize) | rom_half(g, (a.wrapping_add(2) & 0x1FF_FFFE) as usize) << 16,
         0xE | 0xF => g.hw.save.read((a & !3) as u16) as u32 * 0x0101_0101,
         0 if a < BIOS_SIZE => bios_read(g, a, 4),
         _ => unmapped("a word load", a),
@@ -683,7 +690,9 @@ pub fn st16(g: &mut Game, a: u32, v: u32) {
             g.hw.ppu.oam[o..o + 2].copy_from_slice(&b);
         }
         0xD if eeprom_at(g, a) => g.hw.save.eeprom_write(v as u16, 1),
-        0 | 1 | 8..=0xD => {}
+        // The cartridge's GPIO port (its clock), as runtime::bus.
+        8 => g.hw.gpio.write(a & 0xFF_FFFE, v as u16),
+        0 | 1 | 9..=0xD => {}
         // The addressed byte lane at the unaligned address, as runtime::bus;
         // mGBA 0.10.5 drops these stores (units/native-save-600.toml).
         0xE | 0xF => g.hw.save.write(a as u16, b[(a & 1) as usize]),
