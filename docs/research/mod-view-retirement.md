@@ -85,3 +85,15 @@ history. `docs/decisions.md` records the retirement.
 The card's gate, "not before a commercial game she mods runs as a native
 build": Kirby & the Amazing Mirror (half-speed's game) runs natively into
 play once `native/mirror-native-route` lands; Emerald doesn't yet.
+
+## The owner's answer (2026-11-20)
+
+Delete now; port half-speed, drop Emerald's two: the listed code goes, a
+unit ports Kirby's half-speed to a lift cut, and text-speed and main-menu
+are deleted (redone on the lift once Emerald's lift builds). The work is
+split by layer, each removing its part of "What goes" with `just check`
+passing: the tools (`crates/naming`, `--mod-run`, the nightly step and their
+recipes), then gbaa-recompile's mod-view modes and the mod copies (after
+half-speed is on the lift), then codegen's readable printing, moving what
+the lift calls to a shared module. The retirement itself closes with the
+docs and `docs/decisions.md`.
