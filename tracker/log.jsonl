@@ -4275,3 +4275,4 @@
 {"at":"2026-11-24T22:36:04Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-proto-r3-align","text":"GCC's push of r3 to align the stack reads no parameter: edited (priority)"}
 {"at":"2026-11-24T22:36:07Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-libgcc-div","text":"libgcc's division calls print as / and %: edited (priority)"}
 {"at":"2026-11-24T22:36:09Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-stack-typed-locals","text":"A lent stack local takes its DWARF type: edited (priority, add-needs)"}
+{"at":"2026-11-24T22:36:11Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-lend-wider","text":"More pointer parameters borrowed: compares and walks: edited (priority, add-needs)"}
