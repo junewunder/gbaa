@@ -4221,3 +4221,4 @@
 {"at":"2026-11-24T22:31:05Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/emerald-sio32-play-timing","text":"Emerald play build: librfu ID-check IRQs as interpreted: on main"}
 {"at":"2026-11-24T22:31:50Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/game-lift-bars-refresh","text":"Metroid's and Emerald's private lift bars match main again: edited (detail)"}
 {"at":"2026-11-24T22:32:01Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/emerald-m4a-compressed","text":"Emerald's lift mixes m4a's compressed samples as play does: edited (detail)"}
+{"at":"2026-11-24T22:32:04Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/emerald-native-route","text":"Emerald's lift matches the play build on a route: edited (detail)"}
