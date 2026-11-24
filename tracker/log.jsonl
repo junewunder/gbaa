@@ -4017,3 +4017,4 @@
 {"at":"2026-11-24T11:04:20Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-longjmp","text":"The lift runs setjmp and longjmp: a context restore: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-24T11:04:26Z","actor":"loop","tag":"fd9d0b98","host":"quack","cmd":"claim","id":"native/lift-longjmp","text":"The lift runs setjmp and longjmp: a context restore: claimed"}
 {"at":"2026-11-24T11:08:29Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/mirror-flow-on","text":"Mirror's lift with the function flow back on: on main"}
+{"at":"2026-11-24T11:08:33Z","actor":"loop","tag":"bbbce6bc","host":"quack","cmd":"claim","id":"native/lift-add-zero","text":"An add of zero prints as the value it copies: claimed"}

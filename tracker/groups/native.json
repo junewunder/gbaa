@@ -4532,7 +4532,19 @@
       "id": "native/lift-add-zero",
       "title": "An add of zero prints as the value it copies",
       "detail": "docs/research/mirror-machine-count.md, row 6. agbcc moves registers with adds rd, rs, #0; the lift prints x.wrapping_add(0x0) (r0 = v2.wrapping_add(0x0)). Where the flags it sets are dead, print x. Bar on 04e94cca: 41,107 'wrapping_add(0x0)' in Mirror's src/m_*.rs. Done when: it falls near 0, lift-check passes, C programs and a game judged.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "bbbce6bc",
+        "session": "bbbce6bc-050a-4866-9137-92c907e8b1f9",
+        "host": "quack",
+        "pid": 2964711,
+        "start": "95219683",
+        "at": "2026-11-24T11:08:33Z",
+        "branch": "unit/native/lift-add-zero",
+        "beats": true
+      },
+      "round": "2026-11-24T11:08:33Z"
     },
     {
       "id": "native/lift-pc-markers",
