@@ -30,16 +30,26 @@
 //! `native/lift-struct-globals`) is that struct, `#[repr(C)]` in the
 //! `ram_t` module beside `Ram`, so an access prints its field's path
 //! (`g.ram.gPen.color`) over the same bytes, not an element (`gPen[3]`):
-//! where the datum is exactly the global, the struct is plain (no union,
-//! no bitfield, every field at its type's alignment) and every access to
-//! it lands in one scalar field or covers whole ones, which it then
-//! reads or writes each in turn. Else it keeps its element type.
+//! where the datum is exactly the global, the struct has a layout (no
+//! union, every field at its type's alignment: [`Types::layout`]) and
+//! every access to it lands in one scalar field or covers whole ones,
+//! which it then reads or writes each in turn, and no computed access
+//! indexes it as an array of its elements. Else it keeps its element
+//! type.
+//!
+//! Its bitfields (unit `native/lift-global-bitfields`) are one storage
+//! field for those sharing bytes (`left_up_speed_hue: u8`), so an access
+//! the code doesn't say more of reads or writes that, named for them all,
+//! as a joined accessor through a pointer is; the `ram_t` struct has a
+//! getter and a setter for each (`tick()`, `set_tick(v)`), which an
+//! access prints as where [`super::bitfields`] proves it the field's
+//! ([`Bit`]).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::sync::Arc;
 
-use crate::types::{Step, Ty, Types};
+use crate::types::{self, Step, Ty, Types};
 
 /// EWRAM's size: IWRAM follows it in `Game::ram`.
 const EWRAM: u32 = 0x4_0000;
@@ -115,6 +125,30 @@ pub struct Place {
     /// (`[values]`; native/lift-value-names): only for an access of the
     /// whole of it.
     pub values: Option<BTreeMap<u32, String>>,
+    /// The bitfield the access names, where the block's code says which
+    /// ([`super::bitfields`]; native/lift-global-bitfields): the lift
+    /// sets it, [`Globals::place`] never does.
+    pub bit: Option<Bit>,
+}
+
+/// A struct global's bitfield an access names ([`Globals::bitfield`]):
+/// the place of the struct holding it (`g.ram.gClock`), its identifier,
+/// which is its getter's (`g.ram.gClock.tick()`, its value) and setter's
+/// (`set_tick(v)`), and its lowest bit counted from the access's.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Bit {
+    pub owner: String,
+    pub ident: String,
+    pub lo: u32,
+    /// A load whose every use reads only the field's bits: printed as
+    /// the getter, shifted to the access's bits.
+    pub read: bool,
+    /// A store printed as the setter, its load left out.
+    pub fold: Option<super::bitfields::Fold>,
+    /// A store printed as the setter of the value it stores shifted
+    /// down, its load printed as it is: nothing it keeps of that load
+    /// can have changed in memory since ([`super::bitfields::Found::sets`]).
+    pub set: Option<u32>,
 }
 
 /// `ty` as the Rust type of a `Ram` field or a `ram_t` struct's field: a
@@ -130,8 +164,8 @@ fn rust_ty(t: &Types, ty: &Ty) -> String {
     }
 }
 
-/// `ty`'s alignment as a `ram_t` struct lays it out, if it is plain
-/// ([`Types::plain`]) all the way down and each field is at its
+/// `ty`'s alignment as a `ram_t` struct lays it out, if it has a layout
+/// ([`Types::layout`]) all the way down and each field is at its
 /// alignment.
 fn align(t: &Types, ty: &Ty) -> Option<u32> {
     match ty {
@@ -140,16 +174,16 @@ fn align(t: &Types, ty: &Ty) -> Option<u32> {
         Ty::U32 | Ty::Ptr(_) => Some(4),
         Ty::Array(e, _) => align(t, e),
         Ty::Named(n) => {
-            let (_, size, fs) = t.plain(n)?;
+            let l = t.layout(n)?;
             let mut a = 1;
-            for (_, off, fty) in fs {
+            for (_, off, fty) in &l.fields {
                 let fa = align(t, fty)?;
                 if off % fa != 0 {
                     return None;
                 }
                 a = a.max(fa);
             }
-            (size % a == 0).then_some(a)
+            (l.size % a == 0).then_some(a)
         }
     }
 }
@@ -176,21 +210,39 @@ fn steps(p: &[Step]) -> String {
     s
 }
 
+/// The steps from `ty` to the deepest field or element of its `ram_t`
+/// layout ([`Types::layout`]) that holds the `w` bytes at `off`, its type
+/// and the offset in it.
+fn descend(t: &Types, ty: &Ty, off: u32, w: u32) -> Option<(Vec<Step>, Ty, u32)> {
+    let inner = match ty {
+        Ty::Array(e, n) => {
+            let es = t.size(e);
+            (es > 0 && off / es < *n && off % es + w <= es)
+                .then(|| (Step::Idx(off / es), (**e).clone(), off % es))
+        }
+        Ty::Named(n) => t
+            .layout(n)?
+            .fields
+            .into_iter()
+            .find(|(_, fo, fty)| *fo <= off && off + w <= fo + t.size(fty))
+            .map(|(id, fo, fty)| (Step::Field(id), fty, off - fo)),
+        _ => None,
+    };
+    match inner {
+        Some((s, e, o)) => {
+            let (mut p, leaf, rest) = descend(t, &e, o, w)?;
+            p.insert(0, s);
+            Some((p, leaf, rest))
+        }
+        None => Some((Vec::new(), ty.clone(), off)),
+    }
+}
+
 /// Where an access of `w` bytes at `off` into the struct global `base`
 /// of type `ty` is: in one scalar field, or over whole ones.
 fn struct_place(t: &Types, ty: &Ty, base: &str, off: u32, w: u32) -> Option<Place> {
-    let (p, rest) = t.path(ty, off, w, None);
-    // The field the path ends at.
-    let mut leaf = ty;
-    for st in &p {
-        leaf = match (st, leaf) {
-            (Step::Idx(_), Ty::Array(e, _)) => e,
-            (Step::Field(f), Ty::Named(n)) => t.plain(n)?.2.into_iter().find(|x| x.0 == f)?.2,
-            _ => return None,
-        };
-    }
-    if let Some(s) = scalar(leaf) {
-        let o = rest.unwrap_or(0);
+    let (p, leaf, o) = descend(t, ty, off, w)?;
+    if let Some(s) = scalar(&leaf) {
         return (o + w <= s).then(|| Place {
             place: format!("{base}{}", steps(&p)),
             elem: s,
@@ -199,6 +251,7 @@ fn struct_place(t: &Types, ty: &Ty, base: &str, off: u32, w: u32) -> Option<Plac
             values: (o == 0 && w == s)
                 .then(|| t.values_of(ty, &p).cloned())
                 .flatten(),
+            bit: None,
         });
     }
     // Over whole scalars, side by side.
@@ -206,8 +259,8 @@ fn struct_place(t: &Types, ty: &Ty, base: &str, off: u32, w: u32) -> Option<Plac
     let mut at = off;
     while at < off + w {
         let (p, s) = [4, 2, 1].into_iter().find_map(|s| {
-            let (p, leaf) = t.walk(ty, at, s, None)?;
-            (scalar(&leaf) == Some(s)).then_some((p, s))
+            let (p, leaf, o) = descend(t, ty, at, s)?;
+            (o == 0 && scalar(&leaf) == Some(s)).then_some((p, s))
         })?;
         if at + s > off + w {
             return None;
@@ -221,7 +274,61 @@ fn struct_place(t: &Types, ty: &Ty, base: &str, off: u32, w: u32) -> Option<Plac
         shift: 0,
         parts,
         values: None,
+        bit: None,
     })
+}
+
+/// The bitfields' getters and setters of the `ram_t` struct `l`
+/// (native/lift-global-bitfields): `x()` the field's value, `set_x(v)`
+/// its bits set to `v`'s low ones, the rest of its storage kept, as C's
+/// `s.x = v` does. Empty for a struct with none.
+fn bit_methods(t: &Types, l: &types::Layout) -> String {
+    if l.bits.is_empty() {
+        return String::new();
+    }
+    let mut s = format!("    impl {} {{\n", l.ident);
+    for b in &l.bits {
+        let Some(st) = l.fields.iter().find(|f| f.0 == b.storage) else {
+            continue;
+        };
+        let bits = 8 * t.size(&st.2);
+        let ty = format!("u{bits}");
+        let low = if b.n >= 32 {
+            u32::MAX
+        } else {
+            (1u32 << b.n) - 1
+        };
+        let mask = low << b.lo;
+        let (f, lo, n, id) = (&b.storage, b.lo, b.n, b.ident);
+        let get = match lo {
+            0 => format!("self.{f} as u32 & {low:#x}"),
+            _ => format!("(self.{f} as u32 >> {lo}) & {low:#x}"),
+        };
+        let put = match lo {
+            0 => format!("v & {mask:#x}"),
+            _ => format!("(v << {lo}) & {mask:#x}"),
+        };
+        let keep = !mask & (u32::MAX >> (32 - bits));
+        write!(
+            s,
+            "        /// `{c}`: bits {lo}-{hi} of `{f}`.
+        #[inline(always)]
+        pub fn {id}(&self) -> u32 {{
+            {get}
+        }}
+        /// `{id}` set to `v`'s low {n} bits, the rest of `{f}` kept.
+        #[inline(always)]
+        pub fn set_{id}(&mut self, v: u32) {{
+            self.{f} = (self.{f} as u32 & {keep:#x} | {put}) as {ty};
+        }}
+",
+            c = b.c,
+            hi = lo + n - 1,
+        )
+        .unwrap();
+    }
+    s.push_str("    }\n");
+    s
 }
 
 impl Globals {
@@ -325,7 +432,12 @@ impl Globals {
     /// Type the globals the names files' `types` give a plain struct
     /// that is all of them (module doc), where every access of
     /// `accesses` (offset, width) to one lands in its fields and no
-    /// computed range of `ranges` (offset, end, width) reaches it.
+    /// computed range of `ranges` (offset, end, width) is an element of
+    /// it ([`Globals::object`]'s `Obj::Index`), which typing would lose.
+    /// Any other range (one over many globals, as a loose value set
+    /// gives, or narrower than the element) reads and writes the bytes
+    /// either way, and the struct is the same bytes
+    /// (native/lift-equipment-words).
     pub fn type_structs(
         &mut self,
         types: &Arc<Types>,
@@ -345,7 +457,9 @@ impl Globals {
             };
             let end = g.lo + g.len;
             let ok = g.lo % al == 0
-                && !ranges.iter().any(|&(lo, hi, _)| lo < end && g.lo < hi)
+                && !ranges
+                    .iter()
+                    .any(|&(lo, hi, w)| lo >= g.lo && hi <= end && w == g.elem && g.len > g.elem)
                 && accesses
                     .iter()
                     .filter(|&&(o, w)| o < end && g.lo < o + w)
@@ -382,9 +496,10 @@ impl Globals {
             if done.contains_key(&n) {
                 continue;
             }
-            let Some((id, size, fs)) = t.plain(&n) else {
+            let Some(l) = t.layout(&n) else {
                 continue;
             };
+            let (id, size) = (l.ident, l.size);
             let mut s = format!(
                 "    /// `{n}`, {size} bytes.
     #[repr(C)]
@@ -392,7 +507,8 @@ impl Globals {
 "
             );
             let mut at = 0;
-            for (f, off, ty) in fs {
+            for (f, off, ty) in &l.fields {
+                let off = *off;
                 if off > at {
                     writeln!(s, "        _p{at}_: [u8; {}],", off - at).unwrap();
                 }
@@ -420,6 +536,7 @@ impl Globals {
     const _: () = assert!(size_of::<{id}>() == {size});"
             )
             .unwrap();
+            s.push_str(&bit_methods(t, &l));
             done.insert(n, s);
         }
         if done.is_empty() {
@@ -474,7 +591,62 @@ pub mod ram_t {
             shift: (off - g.lo - i * g.elem) * 8,
             parts: Vec::new(),
             values,
+            bit: None,
         })
+    }
+
+    /// The struct global holding the access of `width` bytes at offset
+    /// `off`: its type, its place and the access's offset in it.
+    fn typed_at(&self, off: u32, width: u32) -> Option<(&Types, &Ty, String, u32)> {
+        let (_, g) = self.0.range(..=off).next_back()?;
+        if off + width > g.lo + g.len {
+            return None;
+        }
+        Some((
+            self.1.as_deref()?,
+            g.typed.as_ref()?,
+            format!("g.ram.{}", g.name),
+            off - g.lo,
+        ))
+    }
+
+    /// The bitfields the access of `width` bytes at offset `off` into a
+    /// struct global holds with others, by their bits counted from the
+    /// access's ([`Types::bits_at`]; native/lift-global-bitfields): empty
+    /// unless it is their accessor, as [`super::bitfields::find`] takes
+    /// them.
+    pub fn bits_at(&self, off: u32, width: u32) -> Vec<(u32, u32)> {
+        match self.typed_at(off, width) {
+            Some((t, ty, _, o)) if t.joined(ty, o, width).is_some() => t.bits_at(ty, o, width),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Whether the access of `width` bytes at offset `off` holds a
+    /// bitfield of a struct global ([`Types::joined`]).
+    pub fn holds_bits(&self, off: u32, width: u32) -> bool {
+        self.typed_at(off, width)
+            .is_some_and(|(t, ty, _, o)| t.joined(ty, o, width).is_some())
+    }
+
+    /// The bitfield `bits` (one of [`Globals::bits_at`]'s) of the access
+    /// of `width` bytes at offset `off`: the place of the struct holding
+    /// it and its identifier, if that struct's `ram_t` layout has it.
+    pub fn bitfield(&self, off: u32, width: u32, bits: (u32, u32)) -> Option<(String, String)> {
+        let (t, ty, base, o) = self.typed_at(off, width)?;
+        if !t.is_bitfield(ty, o, width, bits) {
+            return None;
+        }
+        let (mut p, _) = t.walk(ty, o, width, Some(bits))?;
+        let Some(Step::Field(id)) = p.pop() else {
+            return None;
+        };
+        // The struct holding it: its `ram_t` struct has its getter.
+        let Some(Ty::Named(n)) = t.at_steps(ty, &p) else {
+            return None;
+        };
+        let has = t.layout(n)?.bits.iter().any(|b| b.ident == id);
+        has.then(|| (format!("{base}{}", steps(&p)), id))
     }
 
     /// Name the values a field or global takes (`[values]`;
@@ -629,6 +801,13 @@ impl Obj {
         }
     }
 
+    /// A store of the constant `c` through `a` that fills its field
+    /// whole, as [`store_const`]: a pinned field only.
+    pub fn store_const(&self, a: &str, width: u32, c: u32) -> Option<String> {
+        let Obj::Pin(p, off) = self else { return None };
+        Some(format!("pin({a}, {off:#x}); {}", store_const(p, width, c)?))
+    }
+
     fn elem(&self, a: &str) -> String {
         let Obj::Index {
             global,
@@ -663,6 +842,7 @@ pub fn load(p: &Place, width: u32) -> String {
         (_, true, _) => format!("{} as u32", p.place),
         (0, _, 4) => format!("({} & {:#x})", p.place, mask(width)),
         (s, _, 4) => format!("({} >> {s} & {:#x})", p.place, mask(width)),
+        (0, _, _) => format!("({} as u32 & {:#x})", p.place, mask(width)),
         (s, _, _) => format!("(({} as u32) >> {s} & {:#x})", p.place, mask(width)),
     }
 }
@@ -695,10 +875,29 @@ pub fn store(p: &Place, width: u32, v: &str) -> String {
     }
     let (s, m) = (p.shift, mask(width));
     let keep = !(m << s) & mask(p.elem);
-    format!(
-        "{0} = {0} & {keep:#x} | (({v} & {m:#x}) << {s}) as {t};",
-        p.place
-    )
+    match s {
+        0 => format!("{0} = {0} & {keep:#x} | ({v} & {m:#x}) as {t};", p.place),
+        _ => format!(
+            "{0} = {0} & {keep:#x} | (({v} & {m:#x}) << {s}) as {t};",
+            p.place
+        ),
+    }
+}
+
+/// A store of the constant `c` filling `p` whole, as a statement: a bare
+/// literal its field's type takes, in decimal below 10000 (a count, an
+/// amount: `g.ram.gEquipment.maxEnergy = 99;`), else hex. `None` where
+/// `p` is parts, the store fills less than it, or `c` doesn't fit
+/// (native/lift-equipment-words).
+pub fn store_const(p: &Place, width: u32, c: u32) -> Option<String> {
+    if !p.parts.is_empty() || width != p.elem || c & mask(width) != c {
+        return None;
+    }
+    Some(if c < 10_000 {
+        format!("{} = {c};", p.place)
+    } else {
+        format!("{} = {c:#x};", p.place)
+    })
 }
 
 fn mask(width: u32) -> u32 {
@@ -975,6 +1174,19 @@ names = [
             store(&p, 4, "v1"),
             "{ let pv: u32 = v1; g.ram.gPen.pos.x = pv as u16; g.ram.gPen.pos.y = (pv >> 16) as u16; }"
         );
+        // A constant filling a field whole is a literal of its type.
+        let p = g.place(EWRAM + 6, 2).unwrap();
+        assert_eq!(
+            store_const(&p, 2, 99).as_deref(),
+            Some("g.ram.gPen.color = 99;")
+        );
+        assert_eq!(
+            store_const(&p, 2, 0xff00).as_deref(),
+            Some("g.ram.gPen.color = 0xff00;")
+        );
+        assert_eq!(store_const(&p, 2, 0x1_0000), None);
+        assert_eq!(store_const(&g.place(EWRAM + 7, 1).unwrap(), 1, 3), None);
+        assert_eq!(store_const(&g.place(EWRAM, 4).unwrap(), 4, 3), None);
         // Padding is in no field: a word over it isn't the struct's.
         assert_eq!(g.place(EWRAM + 4, 4), None);
         let s = g.structs();
@@ -992,9 +1204,156 @@ names = [
         g.type_structs(&t, &acc2, &[]);
         assert_eq!(g.0[&EWRAM].typed, None);
         assert_eq!(g.0[&EWRAM].ty(Some(&t)), "[u32; 2]");
-        // So does one a computed range reaches.
+        // So does one a computed range indexes by its elements.
         let mut g = Globals::carve(&acc, &[], &names);
-        g.type_structs(&t, &acc, &[(EWRAM, EWRAM + 8, 2)]);
+        g.type_structs(&t, &acc, &[(EWRAM, EWRAM + 8, 4)]);
         assert_eq!(g.0[&EWRAM].typed, None);
+        // A range narrower than its elements, or over other globals too
+        // (a loose value set), isn't an element of it: the struct holds
+        // (native/lift-equipment-words).
+        let mut g = Globals::carve(&acc, &[], &names);
+        g.type_structs(
+            &t,
+            &acc,
+            &[
+                (EWRAM, EWRAM + 8, 2),
+                (EWRAM, EWRAM + 0x14, 4),
+                (EWRAM + 5, EWRAM + 7, 1),
+            ],
+        );
+        assert_eq!(g.0[&EWRAM].typed, Some(Ty::Named("struct Pen".into())));
+    }
+
+    fn clock_types() -> Arc<Types> {
+        let sha = "0000000000000000000000000000000000000000";
+        let text = format!(
+            r#"
+[map]
+rom_sha1 = "{sha}"
+source = "test"
+format = 1
+
+[data]
+0x03000000 = {{ name = "gClock", size = 8, proto = "struct Clock" }}
+
+[types."struct Clock"]
+kind = "struct"
+size = 8
+fields = [
+  {{ name = "beats", off = 0, size = 2, type = "u16", bits = [0, 10] }},
+  {{ name = "level", off = 0, size = 2, type = "u16", bits = [10, 6] }},
+  {{ name = "tick", off = 2, size = 1, type = "u8", bits = [0, 4] }},
+  {{ name = "next", off = 2, size = 1, type = "u8", bits = [4, 2] }},
+  {{ name = "frames", off = 4, size = 4, type = "u32" }},
+]
+"#
+        );
+        let m = crate::names::SourceMap::from_texts(sha, &[&text]).unwrap();
+        Arc::new(m.typed.clone())
+    }
+
+    #[test]
+    fn a_struct_global_with_bitfields_is_its_struct() {
+        let t = clock_types();
+        let l = t.layout("struct Clock").unwrap();
+        let fs: Vec<(&str, u32, &Ty)> =
+            l.fields.iter().map(|f| (f.0.as_str(), f.1, &f.2)).collect();
+        // The byte's fields take the padding after them: a halfword.
+        assert_eq!(
+            fs,
+            [
+                ("beats_level", 0, &Ty::U16),
+                ("tick_next", 2, &Ty::U16),
+                ("frames", 4, &Ty::U32)
+            ]
+        );
+        // level's accessor is the byte at 1: its bits in the storage.
+        let level = l.bits.iter().find(|b| b.ident == "level").unwrap();
+        assert_eq!(
+            (level.storage.as_str(), level.lo, level.n),
+            ("beats_level", 10, 6)
+        );
+        let names = BTreeMap::from([(0x0300_0000, ("gClock".to_string(), 8))]);
+        let acc = [
+            (EWRAM, 2),
+            (EWRAM + 1, 1),
+            (EWRAM + 2, 1),
+            (EWRAM, 4),
+            (EWRAM + 4, 4),
+        ];
+        let mut g = Globals::carve(&acc, &[], &names);
+        g.type_structs(&t, &acc, &[]);
+        assert_eq!(g.0[&EWRAM].ty(Some(&t)), "ram_t::Clock");
+        let s = g.structs();
+        assert!(
+            s.contains(
+                "        pub beats_level: u16,
+        pub tick_next: u16,
+        pub frames: u32,
+"
+            ),
+            "{s}"
+        );
+        assert!(
+            s.contains(
+                "        pub fn level(&self) -> u32 {
+            (self.beats_level as u32 >> 10) & 0x3f
+        }"
+            ),
+            "{s}"
+        );
+        assert!(
+            s.contains(
+                "        pub fn set_level(&mut self, v: u32) {
+            self.beats_level = (self.beats_level as u32 & 0x3ff | (v << 10) & 0xfc00) as u16;
+        }"
+            ),
+            "{s}"
+        );
+        // A byte of a storage, a word over two.
+        let p = g.place(EWRAM + 2, 1).unwrap();
+        assert_eq!(load(&p, 1), "(g.ram.gClock.tick_next as u32 & 0xff)");
+        assert_eq!(
+            store(&p, 1, "v1"),
+            "g.ram.gClock.tick_next = g.ram.gClock.tick_next & 0xff00 | (v1 & 0xff) as u16;"
+        );
+        let p = g.place(EWRAM, 4).unwrap();
+        assert_eq!(p.parts.len(), 2);
+        // The bitfields an access is the accessor of, and their names.
+        assert!(g.holds_bits(EWRAM, 4));
+        assert!(!g.holds_bits(EWRAM + 4, 4));
+        assert_eq!(g.bits_at(EWRAM, 4), []);
+        assert_eq!(g.bits_at(EWRAM + 1, 1), [(2, 6)]);
+        assert_eq!(g.bits_at(EWRAM + 2, 1), [(0, 4), (4, 2)]);
+        assert_eq!(
+            g.bitfield(EWRAM + 1, 1, (2, 6)),
+            Some(("g.ram.gClock".to_string(), "level".to_string()))
+        );
+        assert_eq!(g.bitfield(EWRAM + 2, 1, (1, 2)), None);
+    }
+
+    #[test]
+    fn bitfields_no_integer_holds_keep_the_old_type() {
+        // Three bytes of bitfields: no u8, u16 or u32 is them.
+        let sha = "0000000000000000000000000000000000000000";
+        let text = format!(
+            r#"
+[map]
+rom_sha1 = "{sha}"
+source = "test"
+format = 1
+
+[types."struct Odd"]
+kind = "struct"
+size = 4
+fields = [
+  {{ name = "a", off = 0, size = 2, type = "u16", bits = [4, 10] }},
+  {{ name = "b", off = 1, size = 2, type = "u16", bits = [6, 9] }},
+  {{ name = "c", off = 3, size = 1, type = "u8" }},
+]
+"#
+        );
+        let m = crate::names::SourceMap::from_texts(sha, &[&text]).unwrap();
+        assert!(m.typed.layout("struct Odd").is_none());
     }
 }

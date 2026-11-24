@@ -2,7 +2,7 @@
 # Written by `just pret-names` (crates/pret-names). Don't edit.
 
 [map]
-rom_sha1 = "556ccfe1d444d6c0ad1f4919c84d844498599c5d"
+rom_sha1 = "9826a53a3fea30577275a5d0f486736de222707c"
 source = "c-bits-agbcc.elf"
 format = 1
 #
@@ -23,7 +23,9 @@ format = 1
 0x08000301 = { name = "ball_move", size = 232, file = "bits-main.o", src = "c/bits/main.c", proto = "void ball_move(struct Ball *b)" }
 0x080003e9 = { name = "ball_draw", size = 160, file = "bits-main.o", src = "c/bits/main.c", proto = "void ball_draw(const struct Ball *b, s32 i)" }
 0x08000489 = { name = "ball_blink", size = 76, file = "bits-main.o", src = "c/bits/main.c", proto = "void ball_blink(struct Ball *b)" }
-0x080004d5 = { name = "AgbMain", size = 152, file = "bits-main.o", src = "c/bits/main.c", proto = "void AgbMain(void)" }
+0x080004d5 = { name = "clock_step", size = 120, file = "bits-main.o", src = "c/bits/main.c", proto = "void clock_step(void)" }
+0x0800054d = { name = "clock_draw", size = 108, file = "bits-main.o", src = "c/bits/main.c", proto = "void clock_draw(void)" }
+0x080005b9 = { name = "AgbMain", size = 212, file = "bits-main.o", src = "c/bits/main.c", proto = "void AgbMain(void)" }
 
 # Our entries pret has no symbol for, inside one of its functions.
 [inside]
@@ -44,10 +46,11 @@ format = 1
 # pret's data: variables, tables and buffers in RAM and ROM.
 [data]
 0x02000000 = { name = "__ewram_start", size = 0, aliases = ["__ewram_end"] }
-0x03000000 = { name = "gFrame", size = 4, aliases = ["__data_end", "__bss_start", "__data_start"], type = "u32" }
+0x03000000 = { name = "gClock", size = 4, aliases = ["__data_end", "__bss_start", "__data_start"], type = "struct Clock" }
+0x03000004 = { name = "gFrame", size = 4, type = "u32" }
 0x03000010 = { name = "gBalls", size = 32, type = "struct Ball [4]" }
 0x03000030 = { name = "__bss_end", size = 0 }
-0x0800056c = { name = "sColors", size = 32, file = "bits-main.o", type = "const const u16 [16]" }
+0x0800068c = { name = "sColors", size = 32, file = "bits-main.o", type = "const const u16 [16]" }
 
 # Each function's parameters and variables from DWARF: a register (`reg`)
 # or a stack slot (`slot`, an offset from sp after the prologue), over
@@ -94,9 +97,9 @@ format = 1
 0x08000489 = [
   { name = "b", reg = 3, from = 0x08000488, to = 0x080004d4, type = "struct Ball *", param = true },
 ]
-0x080004d5 = [
-  { name = "i", reg = 5, from = 0x080004d4, to = 0x0800056c, type = "s32" },
-  { name = "b", reg = 4, from = 0x080004d4, to = 0x0800056c, type = "struct Ball *" },
+0x080005b9 = [
+  { name = "i", reg = 5, from = 0x080005b8, to = 0x0800068c, type = "s32" },
+  { name = "b", reg = 4, from = 0x080005b8, to = 0x0800068c, type = "struct Ball *" },
 ]
 
 # The line table: each row's address and its line, in the `src` of the
@@ -130,72 +133,93 @@ format = 1
 0x0800025c = 22
 0x08000266 = 23
 0x08000268 = 24
-0x08000270 = 41
-0x08000280 = 42
-0x08000284 = 46
-0x08000294 = 47
-0x08000298 = 51
-0x080002a0 = 52
-0x080002a4 = 55
-0x080002aa = 56
-0x080002b2 = 57
-0x080002bc = 58
-0x080002be = 59
-0x080002c4 = 60
-0x080002ce = 61
-0x080002d6 = 62
-0x080002ea = 63
-0x080002f0 = 64
-0x080002f8 = 65
-0x08000300 = 68
-0x08000304 = 69
-0x0800030a = 71
-0x08000312 = 72
-0x08000318 = 74
-0x0800031e = 75
-0x0800032a = 76
-0x08000330 = 78
-0x08000336 = 79
-0x08000342 = 80
-0x08000352 = 81
-0x08000368 = 82
-0x08000378 = 84
-0x08000384 = 85
-0x0800039a = 86
-0x080003b0 = 87
-0x080003c8 = 89
-0x080003de = 90
-0x080003e8 = 93
-0x080003f0 = 94
-0x080003fe = 96
-0x08000408 = 97
-0x0800041a = 99
-0x08000430 = 100
-0x08000454 = 101
-0x08000462 = 102
-0x0800047a = 103
-0x08000488 = 106
-0x0800048c = 107
-0x080004a2 = 108
-0x080004ac = 109
-0x080004ba = 111
-0x080004d0 = 112
-0x080004d4 = 115
-0x080004d8 = 119
-0x080004dc = 120
-0x080004e4 = 119
-0x080004ec = 121
-0x08000506 = 123
-0x0800050a = 124
-0x0800050e = 125
-0x08000522 = 126
-0x08000528 = 127
-0x08000530 = 124
-0x08000538 = 129
-0x08000544 = 130
-0x08000554 = 131
-0x0800055a = 122
-0x0800056c = "c/bits/main.c:133"
+0x08000270 = 57
+0x08000280 = 58
+0x08000284 = 62
+0x08000294 = 63
+0x08000298 = 67
+0x080002a0 = 68
+0x080002a4 = 71
+0x080002aa = 72
+0x080002b2 = 73
+0x080002bc = 74
+0x080002be = 75
+0x080002c4 = 76
+0x080002ce = 77
+0x080002d6 = 78
+0x080002ea = 79
+0x080002f0 = 80
+0x080002f8 = 81
+0x08000300 = 84
+0x08000304 = 85
+0x0800030a = 87
+0x08000312 = 88
+0x08000318 = 90
+0x0800031e = 91
+0x0800032a = 92
+0x08000330 = 94
+0x08000336 = 95
+0x08000342 = 96
+0x08000352 = 97
+0x08000368 = 98
+0x08000378 = 100
+0x08000384 = 101
+0x0800039a = 102
+0x080003b0 = 103
+0x080003c8 = 105
+0x080003de = 106
+0x080003e8 = 109
+0x080003f0 = 110
+0x080003fe = 112
+0x08000408 = 113
+0x0800041a = 115
+0x08000430 = 116
+0x08000454 = 117
+0x08000462 = 118
+0x0800047a = 119
+0x08000488 = 122
+0x0800048c = 123
+0x080004a2 = 124
+0x080004ac = 125
+0x080004ba = 127
+0x080004d0 = 128
+0x080004d4 = 132
+0x080004d6 = 133
+0x080004e2 = 135
+0x080004f8 = 136
+0x08000500 = 137
+0x08000510 = 138
+0x08000528 = 139
+0x0800053a = 141
+0x0800054c = 144
+0x08000550 = 145
+0x08000560 = 147
+0x08000570 = 148
+0x08000582 = 149
+0x08000590 = 150
+0x080005a2 = 151
+0x080005b8 = 154
+0x080005bc = 158
+0x080005c0 = 159
+0x080005c8 = 158
+0x080005d0 = 160
+0x080005da = 161
+0x080005e0 = 162
+0x080005fa = 163
+0x080005fc = 164
+0x08000600 = 165
+0x08000604 = 166
+0x08000618 = 167
+0x0800061e = 168
+0x08000626 = 165
+0x0800062e = 170
+0x08000632 = 171
+0x08000636 = 172
+0x08000642 = 173
+0x08000652 = 174
+0x0800066e = 176
+0x08000674 = 163
+0x0800068c = "c/bits/main.c:178"
 
 # Structs, unions and enums by C name (a typedef's for an anonymous one):
 # fields with byte offset, size, type and bitfield bits [lowest, width].
@@ -217,6 +241,19 @@ fields = [
   { name = "shade", off = 6, size = 2, type = "u16", bits = [10, 5] },
 ]
 
+[types."struct Clock"]
+kind = "struct"
+size = 4
+fields = [
+  { name = "beats", off = 0, size = 2, type = "u16", bits = [0, 10] },
+  { name = "level", off = 0, size = 2, type = "u16", bits = [10, 6] },
+  { name = "tick", off = 2, size = 1, type = "u8", bits = [0, 4] },
+  { name = "next", off = 2, size = 1, type = "u8", bits = [4, 2] },
+  { name = "run", off = 2, size = 1, type = "u8", bits = [6, 1] },
+  { name = "flash", off = 2, size = 1, type = "u8", bits = [7, 1] },
+]
+
 # #define families of pret's include/constants/ that a field takes, by
-# the prefix its name spells (`optionsTextSpeed`: OPTIONS_TEXT_SPEED_*):
-# each value's one name, and the fields, as `type.field`.
+# the prefix its name spells (`optionsTextSpeed`: OPTIONS_TEXT_SPEED_*),
+# and enums a field or global takes by its type (`GameMode`):
+# each value's one name, the fields, as `type.field`, and the globals.
