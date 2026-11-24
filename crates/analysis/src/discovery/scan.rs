@@ -34,7 +34,7 @@
 //! 4, being loaded from a literal pool by code found, sitting next to a
 //! known function start in a table (or beside another Thumb pointer, two
 //! words from one: a table of structs of two function pointers and a word
-//! of data; or in a column of starts, one record of three to eight words
+//! of data; or in a column of starts, one record of two to eight words
 //! from one and two from another: [`column`]; or in a run of Thumb
 //! pointers whose base code loads: [`based`]) or being a constant getter (pool
 //! loads, then `bx lr`: [`getter`]) scores 2, and more than one word
@@ -208,10 +208,13 @@ pub fn batch(
     out
 }
 
-/// The record sizes [`column`] tries, in bytes: a table of structs whose
-/// records are wider than two words (narrower ones are the neighbour
-/// rules' already).
-const COLUMN_STRIDES: std::ops::RangeInclusive<u32> = 3..=8;
+/// The record sizes [`column`] tries, in words: a table of structs of two
+/// words or more. One word is the neighbour rule's; two words is the pair
+/// rule's only where the record's other word is a Thumb pointer too, so
+/// records of a handler and a word of data need the column: WarioWare's
+/// tables of empty `bx lr` callbacks (0x083db40c: 0x0809dd55 and
+/// 0x0809dd59 between two starts found by their pushes).
+const COLUMN_STRIDES: std::ops::RangeInclusive<u32> = 2..=8;
 
 /// Whether the word at `at` sits in a column of known function starts: one
 /// record of some size ([`COLUMN_STRIDES`], in words) away from one and
