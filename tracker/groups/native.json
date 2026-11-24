@@ -4595,19 +4595,8 @@
         "by": "d938b67f",
         "at": "2026-11-24T14:45:46Z",
         "evidence": "Mirror lift, same printer with and without the new pass (--no-let-names): vN tokens in src/m_*.rs 524,112 -> 305,363, lets_named 76,366; that lift built and played 600 of 600 frames with no stop (just lift, first-stop). just lift-check passed (every metric within its bar, all native checks pass). After merging main, codegen tests and just check passed (exit 0).",
-        "branch": "unit/native/lift-let-names",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T14:45:46Z",
-          "by": "d938b67f",
-          "host": "quack",
-          "pid": 2962519,
-          "start": "95218086",
-          "beats": true,
-          "session": "d938b67f-60f6-466a-bbe6-ac81a76ad3a4",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "landed": "2026-11-24T14:58:13Z"
       },
       "notes": [
         {
@@ -4615,8 +4604,7 @@
           "by": "d938b67f",
           "text": "Left as vN: bool compares, sums, loads with nothing named behind them. Mirror's lift was built and played before merging main (pc-markers, cast-types), not after; just check and codegen tests passed after. The pass: native/value_names.rs, last on each function's text."
         }
-      ],
-      "round": "2026-11-24T12:43:41Z"
+      ]
     },
     {
       "id": "native/lift-pret-score",
