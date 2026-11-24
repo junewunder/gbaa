@@ -9,7 +9,7 @@
 //! `--gap` functions, by address, from a named library function on each
 //! side; and the nearest reference library function's own-token similarity
 //! at least `--min`) with a real name in the game's own map are
-//! the trial: the agent (`claude -p` as `naming ask` runs it) sees the
+//! the trial: the agent (`claude -p` with no tools, `claude.rs`) sees the
 //! function's readable print and the three nearest reference library
 //! functions', named, and answers which one it is, or none. At most
 //! `--limit` new calls (default 0: write the prompts' plan and score what
@@ -327,7 +327,7 @@ pub fn run(roms: &[Rom], objects: &BTreeSet<String>, out: &Path, o: &Opts) -> Re
             games[g],
             bars.join(", ")
         );
-        naming::Rng::new(o.seed ^ g as u64).shuffle(&mut list);
+        crate::claude::Rng::new(o.seed ^ g as u64).shuffle(&mut list);
         println!(
             "{}: {} functions, {} named by xmatch --library, {missed} unnamed with a name a reference library has; {} unnamed library-looking (in a run, gap {}, nearest >= {}), {} with a real name ({} of them in a reference library)",
             games[g],
@@ -472,7 +472,7 @@ fn ask(
                     let next = queue.lock().unwrap().next();
                     let Some((path, p, mut t)) = next else { break };
                     let _ = std::fs::write(path.with_extension("prompt"), &p);
-                    match naming::claude(&o.model, o.effort.as_deref(), SYSTEM, &p) {
+                    match crate::claude::claude(&o.model, o.effort.as_deref(), SYSTEM, &p) {
                         Ok((text, usage)) => {
                             t.extend(usage);
                             match parse_choice(&text) {

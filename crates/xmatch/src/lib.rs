@@ -646,7 +646,7 @@ pub fn nearest(a: &Side, b: &Side, ys: &[usize], n: usize) -> Vec<Vec<(usize, f6
         .collect()
 }
 
-/// A function's size class, by guest instructions (the naming sample's).
+/// A function's size class, by guest instructions: under 16, 16–100, over 100.
 pub fn class(insns: usize) -> usize {
     match insns {
         0..16 => 0,

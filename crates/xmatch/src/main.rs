@@ -35,6 +35,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::process::ExitCode;
 use xmatch::{Config, Fun, Matcher, Pair, Region, Score, Side, Stage, Tok, Verdict, class, score};
 
+mod claude;
 mod judge;
 
 const ROM_BASE: u32 = 0x0800_0000;
