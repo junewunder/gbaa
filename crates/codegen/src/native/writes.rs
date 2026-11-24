@@ -402,16 +402,17 @@ fn local(
                         w.any = true;
                     }
                 }
-                Some(x) if !x.top && !x.sp => match x.hull {
-                    Some((lo, hi)) => match (lo >> 24, hi >> 24) {
-                        (0x02 | 0x03, _) | (_, 0x02 | 0x03) | (0x04, _) | (_, 0x04) => {
-                            w.add(lo & !(n - 1), hi.saturating_add(n))
+                Some(x) if !x.top && !x.sp => {
+                    if let Some((lo, hi)) = x.hull {
+                        match (lo >> 24, hi >> 24) {
+                            (0x02 | 0x03, _) | (_, 0x02 | 0x03) | (0x04, _) | (_, 0x04) => {
+                                w.add(lo & !(n - 1), hi.saturating_add(n))
+                            }
+                            (0x05..=0x0f, 0x05..=0x0f) => {}
+                            _ => w.any = true,
                         }
-                        (0x05..=0x0f, 0x05..=0x0f) => {}
-                        _ => w.any = true,
-                    },
-                    None => {}
-                },
+                    }
+                }
                 _ => w.any = true,
             }
             // An I/O hull may reach DMA's registers.
