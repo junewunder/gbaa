@@ -5095,19 +5095,8 @@
         "by": "7d882d0d",
         "at": "2026-11-24T22:43:45Z",
         "evidence": "At 849d8a3+bar fix (main merged twice; conflicts with {unit:native/lift-for-step-via} settled keeping both): just lift-check passed (38 pass, no bar over; main's C ROMs in a private GBAA_DATA, as memory/shared-c-roms.md); Metroid 256 for / 440 not (was 232), 600/600 and units/metroid-native.toml 2700 frames 0 differences; Emerald 1115 for / 3268 not, 600/600 no stop; just check passed.",
-        "branch": "unit/native/lift-for-top-tested",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T22:43:45Z",
-          "by": "7d882d0d",
-          "host": "quack",
-          "pid": 1607382,
-          "start": "100803860",
-          "beats": true,
-          "session": "7d882d0d-f613-48b9-b3b8-07290b168e90",
-          "lane": "quack/3"
-        },
-        "pushed": true
+        "landed": "2026-11-24T22:49:37Z"
       },
       "notes": [
         {
@@ -5115,8 +5104,7 @@
           "by": "702486fe",
           "text": "Work on the branch (Exit/Top tests, bounds.rs): Metroid 232->254 for, 600/600; lift-check passed; just check ok. Emerald build fails: v45/v23 out of scope in GetTextEntryPosition (naming_screen), a loop not a for; unknown if main does too. Next: lift Emerald on main, compare."
         }
-      ],
-      "round": "2026-11-24T19:23:35Z"
+      ]
     },
     {
       "id": "native/lift-for-step-via",
