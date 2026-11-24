@@ -8,10 +8,13 @@
 //! both again dumping up to N of them (`--sides`, default
 //! [`SIDES`]: the first of each run, then spread over the rest) and writes
 //! `out/lift-mod-run/<route>/side-N.png` for each: stock, the mod, and
-//! stock dimmed with the differing pixels in red. A view, not a check: it
-//! fails only when a program can't run.
+//! stock dimmed with the differing pixels in red. For each it prints the
+//! differing pixels' bounding box and writes `zoom-N.png`: that box (and
+//! a margin of [`MARGIN`]) cut from stock and from the mod, scaled up
+//! (native/lift-mod-run-zoom; a 4-digit HUD edit is a few dozen pixels).
+//! A view, not a check: it fails only when a program can't run.
 
-use crate::mod_run::{read, side_by_side, write};
+use crate::mod_run::{GAP, GAP_GREY, read, side_by_side, write};
 use crate::native::runner;
 use crate::route::{Route, Vars};
 use crate::{Stop, Stop::*};
@@ -20,6 +23,14 @@ use std::path::{Path, PathBuf};
 
 /// How many side-by-side PNGs to write unless `--sides` says.
 pub const SIDES: usize = 16;
+
+/// Pixels of context kept around the differing pixels' box in a zoom.
+const MARGIN: u32 = 4;
+
+/// A zoom's panels are scaled up to about this many pixels on their
+/// longer side, by a whole factor of 1 to [`ZOOM_MAX`].
+const ZOOM_TO: u32 = 240;
+const ZOOM_MAX: u32 = 16;
 
 pub fn run(
     stock: &str,
@@ -100,6 +111,18 @@ pub fn run(
         let (w, h, px) = side_by_side(ws, hgt, &ps, &pm);
         write(&side, w, h, &px)?;
         println!("{name} frame {f}: {n} pixels differ: {}", side.display());
+        if let Some(b) = bbox(ws, hgt, &ps, &pm) {
+            let z = out.join(format!("zoom-{f}.png"));
+            let (zw, zh, zx, k) = zoom(ws, hgt, &ps, &pm, b);
+            write(&z, zw, zh, &zx)?;
+            let (x0, y0, x1, y1) = b;
+            println!(
+                "{name} frame {f}: they differ in x {x0}-{x1}, y {y0}-{y1} ({}x{}): {} at {k}x",
+                x1 - x0 + 1,
+                y1 - y0 + 1,
+                z.display()
+            );
+        }
     }
     Ok(format!(
         "{} of {frames} frames differ: {}; side-by-side PNGs of {} in {}",
@@ -108,6 +131,58 @@ pub fn run(
         pick.len(),
         out.display()
     ))
+}
+
+/// The box holding every pixel where two `w`x`h` RGB images differ:
+/// `(x0, y0, x1, y1)`, inclusive. None when they are the same.
+fn bbox(w: u32, h: u32, a: &[u8], b: &[u8]) -> Option<(u32, u32, u32, u32)> {
+    let mut bx: Option<(u32, u32, u32, u32)> = None;
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 3) as usize;
+            if a[i..i + 3] != b[i..i + 3] {
+                bx = Some(match bx {
+                    None => (x, y, x, y),
+                    Some((x0, y0, x1, y1)) => (x0.min(x), y0.min(y), x1.max(x), y1.max(y)),
+                });
+            }
+        }
+    }
+    bx
+}
+
+/// Box `b` grown by [`MARGIN`] (inside the frame), cut from stock and the
+/// mod and scaled up by a whole factor, side by side with a grey gap: the
+/// zoom's width, height, bytes and factor.
+fn zoom(
+    w: u32,
+    h: u32,
+    stock: &[u8],
+    modded: &[u8],
+    b: (u32, u32, u32, u32),
+) -> (u32, u32, Vec<u8>, u32) {
+    let x0 = b.0.saturating_sub(MARGIN);
+    let y0 = b.1.saturating_sub(MARGIN);
+    let x1 = (b.2 + MARGIN).min(w - 1);
+    let y1 = (b.3 + MARGIN).min(h - 1);
+    let (cw, ch) = (x1 - x0 + 1, y1 - y0 + 1);
+    let k = (ZOOM_TO / cw.max(ch)).clamp(1, ZOOM_MAX);
+    let (pw, ph) = (cw * k, ch * k);
+    let wide = 2 * pw + GAP as u32;
+    let mut px = Vec::with_capacity((wide * ph * 3) as usize);
+    for y in 0..ph {
+        let sy = y0 + y / k;
+        for (n, img) in [stock, modded].into_iter().enumerate() {
+            if n == 1 {
+                px.extend([GAP_GREY; 3 * GAP]);
+            }
+            for x in 0..pw {
+                let i = ((sy * w + x0 + x / k) * 3) as usize;
+                px.extend(&img[i..i + 3]);
+            }
+        }
+    }
+    (wide, ph, px, k)
 }
 
 /// A `--frame-hashes` file's hashes by frame.
@@ -173,7 +248,47 @@ fn picks(differ: &[u64], n: usize) -> Vec<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{picks, ranges};
+    use super::{MARGIN, bbox, picks, ranges, zoom};
+    use crate::mod_run::GAP;
+
+    #[test]
+    fn the_box_holds_every_differing_pixel() {
+        // 4x3 images: (1, 0) and (2, 2) differ.
+        let a = vec![0u8; 4 * 3 * 3];
+        let mut b = a.clone();
+        b[3] = 1;
+        b[(2 * 4 + 2) * 3 + 2] = 9;
+        assert_eq!(bbox(4, 3, &a, &b), Some((1, 0, 2, 2)));
+        assert_eq!(bbox(4, 3, &a, &a), None);
+    }
+
+    #[test]
+    fn the_zoom_scales_the_box_and_its_margin() {
+        // A 40x30 frame differing at one pixel, (20, 10): the box grows
+        // to 9x9, scaled by 240 / 9 = 26, held to 16.
+        let (w, h) = (40u32, 30u32);
+        let a = vec![0u8; (w * h * 3) as usize];
+        let mut b = a.clone();
+        let i = ((10 * w + 20) * 3) as usize;
+        b[i..i + 3].copy_from_slice(&[255, 255, 255]);
+        let (zw, zh, px, k) = zoom(w, h, &a, &b, (20, 10, 20, 10));
+        let side = (2 * MARGIN + 1) * 16;
+        assert_eq!((zw, zh, k), (2 * side + GAP as u32, side, 16));
+        assert_eq!(px.len(), (zw * zh * 3) as usize);
+        // The mod's panel has the white pixel in its middle, 16x16.
+        let at = |x: u32, y: u32| {
+            let i = ((y * zw + x) * 3) as usize;
+            px[i]
+        };
+        let m = side + GAP as u32;
+        assert_eq!(at(m + MARGIN * 16, MARGIN * 16), 255);
+        assert_eq!(at(m + MARGIN * 16 + 15, MARGIN * 16 + 15), 255);
+        assert_eq!(at(m + MARGIN * 16 + 16, MARGIN * 16), 0);
+        assert_eq!(at(MARGIN * 16, MARGIN * 16), 0);
+        // A box at the frame's corner keeps the margin inside it.
+        let (zw, zh, _, k) = zoom(w, h, &a, &a, (0, 0, 0, 0));
+        assert_eq!((zw, zh, k), (2 * 5 * 16 + GAP as u32, 5 * 16, 16));
+    }
 
     #[test]
     fn frames_list_as_runs() {
