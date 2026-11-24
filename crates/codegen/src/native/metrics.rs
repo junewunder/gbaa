@@ -130,6 +130,9 @@
 //! name (no bar: it should rise), and `locals_noted`, the variables left a
 //! `// dwarf rN: name` comment instead (barred; `lines` leaves them out).
 //! Both only where the names files give `[locals]` or prototypes.
+//! `lets_named` (`native/lift-let-names`): the values printed as their
+//! own `let` that took a name from what they hold, not `vN` (no bar: it
+//! should rise; [`super::value_names`]).
 //!
 //! I/O registers (`native/lift-io-names`): `io_named`, the constant-address
 //! I/O loads and stores printed by a register's name (`st16(g, REG_IME,
@@ -362,6 +365,7 @@ pub const UNBARRED: &[&str] = &[
     "io_named",
     "values_named",
     "locals_named",
+    "lets_named",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each
