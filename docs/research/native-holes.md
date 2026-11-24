@@ -334,11 +334,11 @@ The counts are the numbers file's; what they are, beyond the summary's:
   most of the reached ones. That code is a BIOS copy (0x0300404c from
   0x080af3a4, entered only by a jump) and a copy only the run shows
   (0x030056f0-0x030068a4 from 0x080b197c), both discovered now.
-- **Emerald Rogue and Imperium.** Unresolved jumps, mostly unreached and
-  most not tables now (below); Rogue's
-  mixer's template stamping (0x030059f0-0x03005b10,
-  `codegen::variants`); libgcc's soft-float division helper (below); and
-  the busy loops calling functions.
+- **Emerald Rogue and Imperium.** Hard holes 1 and 0 since 2026-11-24
+  (a `bx` with sp and lr as they came is a tail call, `tail_calls`; the
+  rest in mods/<game>/holes.toml: native/rogue-build, gcc-switch-recovery);
+  Rogue's mixer's template stamping (`codegen::variants`); libgcc's
+  soft-float division helper (below); and the busy loops calling functions.
 
 ### Kirby: Nightmare's task switcher
 
