@@ -4846,6 +4846,11 @@
       "title": "pret-names places agbcc's bitfield that straddles its unit",
       "detail": "agbcc lets a bitfield straddle its declared type's unit (struct { u8 a:4, b:2, c:1, d:1; u16 beats:10; }: beats at bits 8-17). Its DWARF 2 gives data_member_location 2, byte_size 2, bit_offset 14, so lo = 16 - 14 - 10 is negative; crates/pret-names/src/dwarf.rs saturates it to 0 (beats at off 2 bits 0-9, wrong). Place it from the struct's start (off 0, a u32 unit, bits 8-17) and check that types.rs' accessor handles it. Found by {unit:native/lift-global-bitfields} (c/bits orders its fields to avoid it). Check: a test on such a struct; just check.",
       "check": "recorded"
+    },
+    {
+      "id": "native/lift-mod-run-ram-field",
+      "title": "lift-mod-run names the first RAM field the mod changes",
+      "uses": ["heavy"]
     }
   ]
 }
