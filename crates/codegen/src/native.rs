@@ -7974,6 +7974,7 @@ impl FnPrinter<'_, '_> {
     /// the `match` replaces ([`FnPrinter::unguard`]).
     ///
     /// [`uses`]: FnPrinter::uses
+    #[allow(clippy::too_many_arguments)]
     fn operands(
         &self,
         insts: &[Inst],
