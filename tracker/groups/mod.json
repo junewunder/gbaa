@@ -1080,6 +1080,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T21:55:21Z",
+          "by": "2ddc0f0e",
+          "text": "owner said delete. Split: {unit:mod/retire-tools}, {unit:mod/half-speed-on-lift}, {unit:mod/retire-recompile}, {unit:mod/retire-readable-codegen}. Left here: mod-view-design.md retired header, commands.md, design-doc rewording, decisions.md."
+        },
+        {
           "at": "2026-11-20T13:50:54Z",
           "by": "2685c6e5",
           "text": "Asked the owner (may the mod view be deleted; port or drop its mods). The list is docs/research/mod-view-retirement.md on this branch (commit d1f72e88, main merged). On the answer: delete per the list, move kept helpers to a shared module, decisions.md."
