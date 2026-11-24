@@ -4246,3 +4246,4 @@
 {"at":"2026-11-24T22:32:52Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-signed-values","text":"Values compared signed print as i32 through their uses: edited (detail)"}
 {"at":"2026-11-24T22:32:54Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-aligned-params","text":"Untyped pointer loads drop rotates their callers prove 0: edited (detail)"}
 {"at":"2026-11-24T22:32:56Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-for-ram-bounds-games","text":"Games' loops to a bound in RAM print as for: edited (detail)"}
+{"at":"2026-11-24T22:32:58Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/fnref-dense-keys-left","text":"Dense builds leave no ROM keys: c-fnptr-gcc, then Metroid: edited (detail)"}
