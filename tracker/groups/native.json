@@ -4850,7 +4850,14 @@
     {
       "id": "native/lift-mod-run-ram-field",
       "title": "lift-mod-run names the first RAM field the mod changes",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-24T09:31:00Z",
+          "by": "f17b6716",
+          "text": "From the Amazing Mirror mod note: route-check --lift-mod-run could name the first RAM field to differ per frame (gKirbys[0].base.xspeed at 1661: 332 stock, 352 mod). Reuse codegen::native::fn_check_names' table (FN_CHECK_RAM) and fn_check.rs's ram_name walk."
+        }
+      ]
     }
   ]
 }
