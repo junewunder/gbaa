@@ -4248,13 +4248,25 @@
       "id": "native/fn-check-spike-digest",
       "title": "native-spike's fn-check digest recorded again",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "2d61bb47",
+        "session": "2d61bb47-c874-48f0-8f47-3bc230986acb",
+        "host": "quack",
+        "pid": 2964711,
+        "start": "95219683",
+        "at": "2026-11-24T08:27:26Z",
+        "branch": "unit/native/fn-check-spike-digest",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-20T12:17:51Z",
           "by": "bacb4d04",
           "text": "holes/fn-check/native-spike.toml records digest d5b8c6ef8edc19e6 for 0x0800017d; fn-check now gives d71c7747314b43f2 ('the reference's ends changed'), already at 61d15e26. Find why the reference changed, then re-record or fix."
         }
-      ]
+      ],
+      "round": "2026-11-24T08:27:26Z"
     },
     {
       "id": "native/lift-mod-run-name",
