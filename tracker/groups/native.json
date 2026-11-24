@@ -4309,6 +4309,11 @@
       "uses": ["heavy"],
       "notes": [
         {
+          "at": "2026-11-24T06:29:56Z",
+          "by": "e4b6a739",
+          "text": "Amazing Mirror's cut KirbyGroundAccel ({unit:native/mirror-agent-mod}) shows it on every field load: (prim::shift(Ror, v19, (v14+8 & 3) << 3, false).0 & 0x10) for kirby->base.flags & 0x10; the modder had to see past the rotate to read each test."
+        },
+        {
           "at": "2026-11-24T06:22:37Z",
           "by": "9cee3887",
           "text": "Mirror LLM pilot (docs/research/llm-pilot.md, round two): rewrites dropped rotates for pointer parameters (Kirby's, a sprite's: 7 of 20), aligned in the game but provable only from callers or the struct's alignment; and for stack arguments (2): sp is always aligned."
