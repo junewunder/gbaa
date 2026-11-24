@@ -3935,3 +3935,4 @@
 {"at":"2026-11-24T07:25:06Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/entry-jump-test-program","text":"A test program: a b and a returning call into an entry: on main"}
 {"at":"2026-11-24T07:25:11Z","actor":"loop","tag":"5549a28e","host":"quack","cmd":"claim","id":"native/ime-i-set-test-program","text":"A test program: IME turned on while I is set: claimed"}
 {"at":"2026-11-24T07:34:14Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/mirror-cpu-kirbys-off","text":"A Kirby mod on the lift: the CPU Kirbys turned off: on main"}
+{"at":"2026-11-24T07:34:20Z","actor":"loop","tag":"e48d610c","host":"quack","cmd":"claim","id":"native/c-list-test-program","text":"A C test program with a linked list and a node pool: claimed"}

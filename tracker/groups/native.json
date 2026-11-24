@@ -4081,7 +4081,19 @@
       "id": "native/c-list-test-program",
       "title": "A C test program with a linked list and a node pool",
       "detail": "No C program in c/ follows pointers held in memory, so pointer work (Ref types, the heap's types, typed paths through a field that is a pointer) is judged only on games. Add c/list as {unit:native/c-test-programs} added the others, built by agbcc and by modern GCC: nodes from a static pool, linked through a next field, walked, inserted and removed each frame, one field a function pointer called per node, the result drawn. names/c-list-*.toml with its types, two rows in lift-check.toml with bars (the computed-unknown and ref metrics among them) and a planted store, a 600-frame route. Done when: just c-tests builds both, just lift-check passes with 0 differences and the planted faults caught; just check passes.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "e48d610c",
+        "session": "e48d610c-6c81-436f-b9a9-3a1447de0f29",
+        "host": "quack",
+        "pid": 2962519,
+        "start": "95218086",
+        "at": "2026-11-24T07:34:20Z",
+        "branch": "unit/native/c-list-test-program",
+        "beats": true
+      },
+      "round": "2026-11-24T07:34:20Z"
     },
     {
       "id": "native/lift-text-editable",
