@@ -5107,15 +5107,22 @@
       "uses": ["heavy"],
       "priority": 30,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "66d510b9",
-        "session": "66d510b9-b94d-456e-972d-1f65fb02c678",
-        "host": "quack",
-        "pid": 2963642,
-        "start": "95218853",
-        "at": "2026-11-24T13:39:21Z",
+        "at": "2026-11-24T14:32:02Z",
+        "evidence": "Branch d3acc29+merge 099f5ac: [[roots]] parse+discover_with, Hw::gpio RTC in prelude (lines_prelude 1364->1373), tests from e9b0b8c9; [[open_bus]] already on main. just holes-all --only emerald: hard 0 (241 s); just lift Emerald with mods/emerald/holes.toml: 600 of 600 frames, no stop; just check passes before and after merging main. Route branch merges with main's bars (noted).",
         "branch": "unit/native/land-emerald-route-lifter",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T14:32:02Z",
+          "by": "66d510b9",
+          "host": "quack",
+          "pid": 2963642,
+          "start": "95218853",
+          "beats": true,
+          "session": "66d510b9-b94d-456e-972d-1f65fb02c678",
+          "lane": "quack/3"
+        }
       },
       "round": "2026-11-24T13:39:21Z"
     }
