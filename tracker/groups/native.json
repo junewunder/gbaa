@@ -4632,19 +4632,8 @@
         "by": "3af99f7a",
         "at": "2026-11-24T16:28:28Z",
         "evidence": "All on branch head 12ae181 (main 7e01a5c merged in, after the let-names and element-address merges): just lift-check passed, 37 programs, 0 differences, every planted fault and both planted hard holes caught (job liftcheck4b, exit 0); just lift on Metroid: 600 of 600 frames, no stop, 0 hard holes, values_named 1656 (was 1496); just check passed (check4b, exit 0). Same three also passed at cc41317. values_named Emerald 248 -> 4891; c-switch 7 -> 9 per build (ROW_CLEAR/ROW_BAR to fill_rect).",
-        "branch": "unit/native/lift-value-args",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T16:28:28Z",
-          "by": "3af99f7a",
-          "host": "quack",
-          "pid": 2964711,
-          "start": "95219683",
-          "beats": true,
-          "session": "3af99f7a-4c57-416a-92bc-2639b34b4dfc",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "landed": "2026-11-24T16:33:08Z"
       },
       "notes": [
         {
@@ -4657,20 +4646,7 @@
           "by": "13a4cae4",
           "text": "$GBAA_DATA/names/{pokeemerald,mzm,tmc,katam}.toml remade with args/sums (just pret-names pokeemerald, just decomp-names). mods/emerald/holes.toml's [[roots]] needs {unit:native/emerald-native-route}'s code: main's gbaa-lift refuses it until that lands."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-24T15:20:35Z",
-        "findings": "- The card's main correctness check was run on older code than what will merge. The Evidence says `just lift-check` passed at fb2cf91, \"before the last main merge\". Main was merged in twice after that (f7072f7 and 22723fd), and those merges brought in the let-naming change ({unit:native/lift-let-names}, 9e1e3a0). That change rewrites the same `Op::SetReg` printing that this unit hooks `arg_sum` into, at crates/codegen/src/native.rs:6864-6882. So the combined code has never had a lift-check, and `just check` (which passed at f7072f7) does not run one. The Evidence also doesn't say which commit the Metroid 600-of-600-frames run used. To fix: on the branch head (22723fd or later), run `just lift-check` (37 programs, 0 differences, every planted fault and both planted holes caught) and `just lift` on Metroid (600 of 600 frames, no stop), then record both with that commit in the unit's evidence.",
-        "sent": {
-          "evidence": "pret-names ties a parameter to a family from the decomp's own calls ([values] args/sums; 366 params on Emerald, 104 on Metroid); the lift names a call's constant there and a sum's where pret passes sums (GetMonData2(g, r13, v10, MON_DATA_MAX_HP, r2); j.wrapping_add(MON_DATA_MOVE1)). values_named, same code, old map vs new: Emerald 248 -> 4891 (whole lift, mods 5c20f6c holes: HEAD's [[roots]] is ahead of main), Metroid 1496 -> 1656, C row c-switch 7 -> 9 per build (ROW_* passed to fill_rect, ROMs byte-identical). just lift-check passed at fb2cf91 (before the last main merge): 37 programs 0 differences, every planted fault and both planted holes caught. Metroid: just lift built, 600 of 600 frames, no stop. just check passed (long job, exit 0) after merging main at f7072f7. pret-score table at fb2cf91.",
-          "by": "13a4cae4",
-          "host": "quack",
-          "branch": "unit/native/lift-value-args",
-          "change": "d5bf860119ae6a1fa5f19d88eff3584853749902"
-        }
-      },
-      "round": "2026-11-24T13:28:10Z"
+      ]
     },
     {
       "id": "native/lift-element-address",
