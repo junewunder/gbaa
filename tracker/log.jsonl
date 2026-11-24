@@ -3864,3 +3864,4 @@
 {"at":"2026-11-23T19:40:40Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/mirror-dwarf-map","text":"Mirror's names map has DWARF types, locals and lines: on main"}
 {"at":"2026-11-23T19:45:08Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-for-bounds","text":"Loops counted to a variable bound print as for: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-23T19:45:11Z","actor":"loop","tag":"manual","host":"quack","cmd":"lanes-stopped","text":"quack: the last lane stopped and tidied up; the machine may sleep now"}
+{"at":"2026-11-24T05:14:30Z","actor":"session","tag":"9a39864c","host":"quack","cmd":"overseer","text":"overseer f14c6a on quack attached, replacing 562264 on quack"}
