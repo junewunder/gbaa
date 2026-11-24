@@ -4485,7 +4485,14 @@
       "id": "native/lift-pointer-types",
       "title": "Parameters and locals carry their pointer types",
       "detail": "From the owner, 2026-11-20. Every pointer in the lift is a u32, and a typed access is built where it is used: g.get(Ref::<t::BagPocket>::new(r4.wrapping_add(0x2039dd8)).capacity()). Emerald: load_computed_unknown 43,661, store_computed_unknown 30,777, computed_unknown_unnamed 19,459, ref_unexplained 23,696, pointer_unexplained 4,829; Mirror: 62,289 Ref::<T>::new( ({unit:native/mirror-machine-count}, row 3). Wanted: a parameter, local, return value or field that holds a pointer has the type Ref<T> (or FnRef) in its declaration, so a use is p.capacity() or g.get(p.capacity()) with no ::new at the use, and pointer arithmetic is .idx(i) / .add(n) / a field path. Two sources, kept apart and counted apart: types the lift proves (value sets, {unit:native/ref-heap}'s tokens, what a callee does with its parameter, carried to callers and callees until they agree), which is what a game with no decomp gets; and types the names files give (prototypes, DWARF), the answer key that scores the first. A type changes no byte read, as now (--no-field-types is the control). Metrics: Ref::new at a use (new, barred), computed_unknown_unnamed down; and how many proven types agree with DWARF's on Emerald and Metroid, in the pret score ({unit:native/lift-pret-score}). Check (code-shape work, judged on the C programs, Metroid and Emerald): just lift-check passes with 0 differences on every program and every planted fault caught; the metric barred on the C rows and in the private bars of Metroid and Emerald; both games build and run 600 of 600 frames headless; Emerald route check still 0 differences once {unit:native/emerald-native-route} is done; just check passes.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-24T06:22:39Z",
+          "by": "9cee3887",
+          "text": "Mirror LLM pilot (docs/research/llm-pilot.md, round two): 10 of 20 rewrites bind the pointer parameter once (let k = Ref::<t::Kirby>::new(a[0])) and use k.field() throughout; the lift rebuilds Ref::new(v) per access."
+        }
+      ]
     },
     {
       "id": "native/lift-signature-holes",
