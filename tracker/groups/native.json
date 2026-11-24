@@ -5350,6 +5350,13 @@
       "detail": "Left by A call takes back only the registers its caller reads ({unit:native/lift-returns-read}), 2026-11-24: Metroid still has 1,061 shaped functions giving back several registers. Causes, in docs/native-stage-b.md's known gap: a direct caller whose run stopped at a hole demands all four of every callee (what it reads before the hole, on paths that write the register before it, is seen and could narrow it); a caller in another code context likewise; an unknown jump by value (Metroid's IWRAM 0x03003ba0) gives every addressed function all that its callers read; and a parameter only a path the summaries can't prove dead reads stays one (Emerald's GetMonData2 r2). Measure with results_several, tuple_calls and just pret-score's results rows. Check (code-shape work, judged on the C programs, Metroid and Emerald): just lift-check passes with 0 differences on every program and every planted fault caught; the metrics barred lower on the C rows and in Metroid's and Emerald's private bars; both games build and run 600 of 600 frames headless; just check passes.",
       "check": "recorded",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-proto-r3-align",
+      "title": "GCC's push of r3 to align the stack reads no parameter",
+      "detail": "From {unit:native/lift-signature-holes}: GCC's prologue pushes r3 only to keep sp 8-byte aligned, and its pop puts it back; the summaries count the push as a read of r3 (Cause::Reads), so a prototype that doesn't pass r3 is refused (c-fnptr-gcc's cb_objects and main_cb_run, c-loops-gcc's draw_global and draw_row: proto_shapes_refused 2 each). A pushed register whose slot only its own pop reads, and that the function doesn't return, is no read. Check: those rows' proto_shapes_refused 2 -> 0, bars lowered; just lift-check passes; just check passes.",
+      "check": "recorded",
+      "uses": ["heavy"]
     }
   ]
 }
