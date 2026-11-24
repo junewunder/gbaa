@@ -4054,15 +4054,22 @@
       "detail": "docs/native-stage-b.md, Known gaps, falls and calls into an entry: a call that returns into another function's entry, and a b (not a fall) into an entry, have no test program, so those paths are checked by no run. Add one as {unit:native/taker-test-program} did (source only in the repo; just agb-tests builds it): hand-written assembly for both shapes, each drawing what its registers held, a row in crates/codegen/lift-check.toml with its bars and a planted fault, and a 600-frame route. Fix what it finds, or file it if large. Done when: just lift-check passes with the new row, 0 differences and the planted fault caught; just check passes.",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "88798491",
-        "session": "88798491-3f87-4ad9-b48f-804e82becdf5",
-        "host": "quack",
-        "pid": 2962048,
-        "start": "95217572",
-        "at": "2026-11-24T06:38:24Z",
+        "at": "2026-11-24T07:07:10Z",
+        "evidence": "just lift-check --only native-entry-jump --only native-fallthrough: passed. agb/native-entry-jump 600 frames, 0 differences in pictures, RAM, I/O, display memories; packed layout same; planted --fall-as-tail-call caught (frame 1: EWRAM byte 0x020000c4: play 0x3b, native 0x3c). Before the fix the lift stopped at frame 0 (ej_e popped ej_c's frame, kept as Rust locals): frame.rs now hands the frame on at a call returning into an entry. mGBA matches frame 600 (034490afe017b4ef). No other program's metrics moved (lift-metrics). just check passed before and after merging main (docs only).",
         "branch": "unit/native/entry-jump-test-program",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T07:07:10Z",
+          "by": "88798491",
+          "host": "quack",
+          "pid": 2962048,
+          "start": "95217572",
+          "beats": true,
+          "session": "88798491-3f87-4ad9-b48f-804e82becdf5",
+          "lane": "quack/1"
+        }
       },
       "round": "2026-11-24T06:38:24Z"
     },
