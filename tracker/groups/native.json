@@ -4534,15 +4534,22 @@
       "uses": ["heavy"],
       "tags": ["slow-check"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "bbbce6bc",
-        "session": "bbbce6bc-050a-4866-9137-92c907e8b1f9",
-        "host": "quack",
-        "pid": 2964711,
-        "start": "95219683",
-        "at": "2026-11-24T11:08:33Z",
+        "at": "2026-11-24T11:47:44Z",
+        "evidence": "narrow::Form::Copy prints adds/subs rd, rs, #0 as its operand. Mirror's just lift (flow on, 7995104 + change): 'wrapping_add(0x0)' in src/m_*.rs 41,107 -> 0, 0 hard holes, 600 of 600 frames, no stop. 14 C programs' lifts: 0 each. just lift-check passed (before merging main); just check passed after merging main; new unit test an_add_of_zero_is_a_copy.",
         "branch": "unit/native/lift-add-zero",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T11:47:44Z",
+          "by": "bbbce6bc",
+          "host": "quack",
+          "pid": 2964711,
+          "start": "95219683",
+          "beats": true,
+          "session": "bbbce6bc-050a-4866-9137-92c907e8b1f9",
+          "lane": "quack/4"
+        }
       },
       "round": "2026-11-24T11:08:33Z"
     },

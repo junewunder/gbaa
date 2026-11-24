@@ -4031,3 +4031,4 @@
 {"at":"2026-11-24T11:31:03Z","actor":"loop","tag":"f1d95093","host":"quack","cmd":"claim","id":"native/warioware-builds","text":"WarioWare's lift builds: its hard holes closed: claimed (picking up after 597d5e84)"}
 {"at":"2026-11-24T11:42:17Z","actor":"loop","tag":"f1d95093","host":"quack","cmd":"add-unit","id":"native/warioware-stop-30003a8","text":"new unit: WarioWare's lift: the call to IWRAM 0x030003a8 (frame 39)"}
 {"at":"2026-11-24T11:47:41Z","actor":"loop","tag":"bbbce6bc","host":"quack","cmd":"edit","id":"native/lift-add-zero","text":"An add of zero prints as the value it copies: edited (tags)"}
+{"at":"2026-11-24T11:47:44Z","actor":"loop","tag":"bbbce6bc","host":"quack","cmd":"done","id":"native/lift-add-zero","text":"An add of zero prints as the value it copies: done"}
