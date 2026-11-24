@@ -4588,15 +4588,22 @@
       "detail": "docs/research/mirror-machine-count.md, row 8. Halfword and byte arguments are narrowed on entry (structSize = r1 as u16 as u32), signed compares go through as i32. Give a local or parameter the width the prototypes, DWARF or its uses say (u8, u16, i32) and print without the casts. Bar on 04e94cca: 39,068 ' as u8|u16|u32|i8|i16|i32|u64|i64' in Mirror's src/m_*.rs (narrowing_casts 7,265). Done when: it falls, lift-check passes, C programs and a game judged.",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "3411b93a",
-        "session": "3411b93a-486d-4b55-a56b-d294befc6207",
-        "host": "quack",
-        "pid": 2963642,
-        "start": "95218853",
-        "at": "2026-11-24T12:10:46Z",
+        "at": "2026-11-24T13:29:05Z",
+        "evidence": "Amazing Mirror's lift (mods holes, default names), casts in src/m_*.rs: 38,958 on the base commit's lifter -> 35,531 (new barred metric casts, bars on all 37 lift-check programs); its native route units/kirby-mirror-native.toml passes 3,000 frames, 0 differences, audio the same. C programs 666 -> 639 (c-switch-agbcc 38->30). just lift-check passed (all native checks, planted faults caught); after merging main, lift-metrics 0 over and just check passed. Left: u32 values compared signed, filed as {unit:native/lift-signed-values}.",
         "branch": "unit/native/lift-cast-types",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T13:29:05Z",
+          "by": "3411b93a",
+          "host": "quack",
+          "pid": 2963642,
+          "start": "95218853",
+          "beats": true,
+          "session": "3411b93a-486d-4b55-a56b-d294befc6207",
+          "lane": "quack/3"
+        }
       },
       "round": "2026-11-24T12:10:46Z"
     },
