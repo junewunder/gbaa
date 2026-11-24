@@ -4592,21 +4592,9 @@
         "by": "3411b93a",
         "at": "2026-11-24T13:29:05Z",
         "evidence": "Amazing Mirror's lift (mods holes, default names), casts in src/m_*.rs: 38,958 on the base commit's lifter -> 35,531 (new barred metric casts, bars on all 37 lift-check programs); its native route units/kirby-mirror-native.toml passes 3,000 frames, 0 differences, audio the same. C programs 666 -> 639 (c-switch-agbcc 38->30). just lift-check passed (all native checks, planted faults caught); after merging main, lift-metrics 0 over and just check passed. Left: u32 values compared signed, filed as {unit:native/lift-signed-values}.",
-        "branch": "unit/native/lift-cast-types",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T13:29:05Z",
-          "by": "3411b93a",
-          "host": "quack",
-          "pid": 2963642,
-          "start": "95218853",
-          "beats": true,
-          "session": "3411b93a-486d-4b55-a56b-d294befc6207",
-          "lane": "quack/3"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-24T12:10:46Z"
+        "landed": "2026-11-24T13:39:17Z"
+      }
     },
     {
       "id": "native/lift-let-names",
