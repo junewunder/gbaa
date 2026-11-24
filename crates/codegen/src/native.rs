@@ -184,7 +184,9 @@
 //! - CPU state: `mrs` and `msr` outside the reset and the IRQ wrappers
 //!   (theirs are printed: [`PsrFns`]), user-bank transfers, exception
 //!   returns, stack switches ([`Frame::switches`]: a task switcher's, which a stand-in
-//!   runs on the prelude's host coroutines, `task_resume`);
+//!   runs on the prelude's host coroutines, `task_resume`; but a context
+//!   restore some save matches, `longjmp`'s, which unwinds to the caller of
+//!   `setjmp`: [`longjmp`]);
 //! - an indirect jump Recovery didn't resolve;
 //! - a BIOS call the prelude doesn't have;
 //! - an undefined instruction, a jump to no code (but a compiler's trap,
@@ -224,6 +226,7 @@ pub mod heap;
 pub mod lift_check;
 pub mod live;
 pub mod local_names;
+pub mod longjmp;
 pub mod metrics;
 pub mod modules;
 pub mod named;
@@ -1408,6 +1411,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .map(|(&k, _)| k)
         .collect();
     let lr_ret = lr_entries(&codes, &all, holes);
+    // `setjmp`'s callers and `longjmp`'s restores (native/lift-longjmp).
+    let jumps = longjmp::find(&codes);
     let sp_exact = exact_sp(&codes, &all, holes, &sets, &psr_fns);
     // Each function's text by key, in print order: the modules' contents.
     let mut out: Vec<(u32, String)> = Vec::new();
@@ -1443,6 +1448,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     all: &all,
                     sums: &c.sums,
                     takers: &takers,
+                    jumps: &jumps,
                     shapes: &shapes.shaped,
                     me: shapes
                         .shaped
@@ -1500,6 +1506,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     block_direct: None,
                     mark: None,
                     open_mark: None,
+                    restoring: false,
                 };
                 let text = p.print(c.sums.get(f.entry));
                 (text, p.found)
@@ -4172,6 +4179,8 @@ struct FnPrinter<'a, 'b> {
     sums: &'a Summaries,
     /// Every context's functions that take r4-r11 from their callers.
     takers: &'a BTreeSet<u32>,
+    /// The program's context saves and restores ([`longjmp`]).
+    jumps: &'a longjmp::Jumps,
     /// Every shaped function's parameters and results.
     shapes: &'a BTreeMap<u32, Shape>,
     /// This one's, `None` for the four-register form.
@@ -4211,6 +4220,9 @@ struct FnPrinter<'a, 'b> {
     mark: Option<usize>,
     /// An open `match`'s mark and its arms before the rest that fall off.
     open_mark: Option<(usize, usize)>,
+    /// It has a context restore ([`longjmp`]): its `ldm` keeps the
+    /// buffer in `ctx_buf`, and a return after it is a `restore`.
+    restoring: bool,
     /// The insts whose guards print nothing while a block's uses are
     /// counted: a compare tree's tests ([`FnPrinter::operands`]).
     /// Empty but then.
@@ -4494,8 +4506,13 @@ impl FnPrinter<'_, '_> {
         // (the prelude's `task_resume`, `task_yield`, `task_exit`).
         // A context restore (`longjmp`'s `ldm`) is one too, named: its
         // return goes into the frame of its save's caller (`setjmp`'s),
-        // whose r4-r11 and sp are that function's locals natively.
+        // whose r4-r11 and sp are that function's locals natively. One a
+        // save matches is lifted ([`longjmp`]): no hole; one with no save
+        // to match is a hole, named.
         for &at in self.frame.map(|fr| &fr.switches).into_iter().flatten() {
+            if self.jumps.restores.contains_key(&at) {
+                continue;
+            }
             let restore = f
                 .blocks
                 .values()
@@ -4532,6 +4549,11 @@ impl FnPrinter<'_, '_> {
         let ty = ret_ty(self.me);
         let head = s.len();
         s.push_str(&self.declare_locals());
+        self.restoring = self.jumps.restores_in(f);
+        if self.restoring {
+            s.push_str("    let mut ctx_buf: u32 = 0;\n");
+        }
+        let catch = self.jumps.catch(f.entry).is_some();
         // The entry first: label 0.
         let mut order: Vec<u32> = vec![f.entry];
         order.extend(f.blocks.keys().copied().filter(|&k| k != f.entry));
@@ -4539,7 +4561,10 @@ impl FnPrinter<'_, '_> {
         (self.dead, self.live_in, self.local) = self.dead_writes();
         (self.field_at, self.field_idx) = self.field_types();
         self.banked = self.redundant_banks();
-        if let Some(p) = self.plan(&order) {
+        // A catch point prints in the `match` form: a restore goes on at
+        // its save's return site's label ([`longjmp`]).
+        let plan = if catch { None } else { self.plan(&order) };
+        if let Some(p) = plan {
             if !self.holes.no_for_loops {
                 self.find_fors(&p.tree);
             }
@@ -4571,16 +4596,28 @@ impl FnPrinter<'_, '_> {
         }
         self.soft.fns_match += 1;
         self.soft.blocks_match += order.len();
-        if f.blocks.len() == 1 {
-            s.push_str("    let b = 0usize;\n    loop {\n        match b {\n");
+        if catch {
+            let mut arms = String::new();
+            for k in &order {
+                let label = self.labels[k];
+                arms.push_str(&self.arm(label));
+            }
+            s.push_str(&catch_form(&arms, &ty));
+            let body = fill_ctx_regs(&s[head..]);
+            s.truncate(head);
+            s.push_str(&body);
         } else {
-            s.push_str("    let mut b = 0usize;\n    loop {\n        match b {\n");
+            if f.blocks.len() == 1 {
+                s.push_str("    let b = 0usize;\n    loop {\n        match b {\n");
+            } else {
+                s.push_str("    let mut b = 0usize;\n    loop {\n        match b {\n");
+            }
+            for k in &order {
+                let label = self.labels[k];
+                s.push_str(&self.arm(label));
+            }
+            s.push_str("            _ => unreachable!(),\n        }\n    }\n}\n\n");
         }
-        for k in &order {
-            let label = self.labels[k];
-            s.push_str(&self.arm(label));
-        }
-        s.push_str("            _ => unreachable!(),\n        }\n    }\n}\n\n");
         self.frame_gone(&mut s, head, sum);
         let e = self.entries(&s[head..], &ty);
         s.insert_str(head, &e);
@@ -6658,7 +6695,13 @@ impl FnPrinter<'_, '_> {
                 None => writeln!(s, "{ind}{body}").unwrap(),
             };
             match inst.op {
-                Op::Insn(a) => at = a,
+                Op::Insn(a) => {
+                    at = a;
+                    // A context restore: the buffer it loads ([`longjmp`]).
+                    if let Some(&rn) = self.jumps.restores.get(&a) {
+                        writeln!(s, "{ind}ctx_buf = {};", self.reg(rn as usize)).unwrap();
+                    }
+                }
                 Op::Timing(_) | Op::YieldFlag(..) => {}
                 Op::SetReg(r, x) if local[i] => {
                     // Its own `let`, or (a name or a constant) none.
@@ -8152,7 +8195,17 @@ impl FnPrinter<'_, '_> {
             ),
             Some(s) => self.regs_value(s.results),
         };
-        format!("{}return Ok({e});", self.give())
+        // After a context restore, a return into its save's caller
+        // ([`longjmp`]).
+        let restore = if self.restoring {
+            format!(
+                "if ctx_buf != 0 {{ restore(ctx_buf, [{}]); }} ",
+                (0..4).map(|r| self.reg(r)).collect::<Vec<_>>().join(", ")
+            )
+        } else {
+            String::new()
+        };
+        format!("{restore}{}return Ok({e});", self.give())
     }
 
     /// A tail call, `call` of `k` (`None`: through `call_fn`) giving
@@ -8355,6 +8408,21 @@ impl FnPrinter<'_, '_> {
             }
             Plan::Call { target, ret } => {
                 self.passes_at(at, target);
+                // A call of a context save in a catch point ([`longjmp`]):
+                // the buffer it is given, where a restore of it goes on,
+                // and what the save stores natively (the registers a
+                // restore sets back, [`catch_form`]).
+                if self.jumps.save_fns.contains(&target)
+                    && let Some(&l) = self.labels.get(&ret)
+                    && self.jumps.catch(self.f.entry).is_some()
+                {
+                    writeln!(
+                        s,
+                        "{ind}ctx_buf = {}; ctx_at = {l}; ctx_regs = {CTX_REGS};",
+                        self.reg(0)
+                    )
+                    .unwrap();
+                }
                 let c = self.call_stmt(target);
                 let c = self.call_then(c, ret, at);
                 writeln!(s, "{ind}{wait}{c}").unwrap();
@@ -9050,6 +9118,69 @@ fn plain(shapes: &BTreeMap<u32, Shape>, never: &BTreeSet<u32>, k: u32) -> String
     } else {
         format!("f_{k:08x}")
     }
+}
+
+/// What a catch point's call of a context save stores, till its function
+/// prints whole: the registers [`catch_form`] sets back.
+const CTX_REGS: &str = "\u{5}";
+/// And where [`catch_form`] sets them back.
+const CTX_BACK: &str = "\u{6}";
+
+/// A catch point's `match` form ([`longjmp`]), its `arms` printed: run in
+/// the prelude's `catch_restore`, and a restore of the buffer its last
+/// call of a save was given goes on at that call's return site
+/// (`ctx_at`), r0-r3 as the restore returned them, its r4-r11 and sp as
+/// they were at the call. [`fill_ctx_regs`] names those registers. Its
+/// `return v` keeps the `Result` ([`cannot_exit`]), as the closure's type
+/// says.
+fn catch_form(arms: &str, ty: &str) -> String {
+    format!(
+        "    let mut b = 0usize;
+    let (mut ctx_buf, mut ctx_at): (u32, usize) = (0, 0);
+    let mut ctx_regs = {CTX_REGS};
+    loop {{
+        let thrown = match catch_restore(|| -> Result<{ty}, Exit> {{ loop {{
+        match b {{
+{arms}            _ => unreachable!(),
+        }}
+        }} }}) {{
+            Ok(v) => return v,
+            Err(t) => t,
+        }};
+        let got = restored(thrown, ctx_buf);
+{CTX_BACK}        b = ctx_at;
+    }}
+}}
+
+"
+    )
+}
+
+/// A catch point's text with its registers in ([`catch_form`]): those of
+/// r0-r11 and sp its body names, taken at each call of the save and set
+/// back with r0-r3 as the restore gave them.
+fn fill_ctx_regs(s: &str) -> String {
+    let words = rust_words(s);
+    let has = |r: usize| words.contains(&format!("r{r}"));
+    let kept: Vec<String> = (4..12)
+        .chain([13])
+        .filter(|&r| has(r))
+        .map(|r| format!("r{r}"))
+        .collect();
+    let mut back = String::new();
+    for r in (0..4).filter(|&r| has(r)) {
+        writeln!(back, "        r{r} = got[{r}];").unwrap();
+    }
+    for (i, r) in kept.iter().enumerate() {
+        writeln!(back, "        {r} = ctx_regs[{i}];").unwrap();
+    }
+    let first = s.find(CTX_REGS).unwrap_or(0);
+    let (head, rest) = s.split_at(first);
+    let rest = rest
+        .replacen(CTX_REGS, &format!("[0u32; {}]", kept.len()), 1)
+        .replace(CTX_REGS, &format!("[{}]", kept.join(", ")))
+        .replace(CTX_BACK, &back);
+    format!("{head}{rest}")
 }
 
 /// A function's return type: all of r0-r3 (`None`), or its results.
