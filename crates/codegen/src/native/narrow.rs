@@ -175,6 +175,9 @@ pub enum Form {
     AddCarry(ValueId, ValueId),
     /// `x + c`.
     CarryOnly(ValueId),
+    /// `x` itself: a load's rotate by an amount proven 0
+    /// ([`super::aligned`]).
+    Same,
 }
 
 impl Form {
@@ -229,6 +232,7 @@ impl Form {
             Form::Shift(ShiftType::Lsr, c) => format!("{x} >> {c}"),
             Form::Shift(ShiftType::Asr, c) => format!("(({x} as i32) >> {c}) as u32"),
             Form::Shift(ShiftType::Ror, c) => format!("{x}.rotate_right({c})"),
+            Form::Same => x.to_string(),
             f => panic!("{f:?} reads another value"),
         }
     }
