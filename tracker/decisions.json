@@ -1581,7 +1581,8 @@
       "why": "Sprint of 2026-11-24: mods/ is one checkout every worker links, with no branches, so bars landed before their code or never. Workers report a unit's Metroid and Emerald numbers and never commit mods/*/lift-bars.toml; the foreman sets them at each merge.",
       "by": "6056824b",
       "at": "2026-11-24T22:33:30Z",
-      "scope": ["native/*"]
+      "scope": ["native/*"],
+      "until": "2026-11-24T22:36:53Z"
     },
     {
       "id": "d/rogue-s-r11-is-passed-exactly-not-zeroed",
