@@ -4453,13 +4453,25 @@
       "detail": "A context restore (newlib's longjmp, ldm r0!,{r4-r12,sp,lr}; moonbeam 0x08038328, Duktape's error throw) is a CPU state hard hole in every lift that has one (Minish Cap's OAM builder longjmps on overflow too). Lift it generally: e.g. setjmp's caller as a catch point the restore unwinds to (a Rust panic or a loop over a resume flag), r4-r11 and sp from the saved block. Done when: moonbeam's longjmp is no hard hole, a C test program using setjmp/longjmp (both compilers) passes the lift check, just check passes.",
       "uses": ["heavy"],
       "tags": ["native"],
+      "record": {
+        "state": "claimed",
+        "by": "eb832f19",
+        "session": "eb832f19-0499-490c-aa4c-e04d62575dea",
+        "host": "quack",
+        "pid": 2962048,
+        "start": "95217572",
+        "at": "2026-11-24T10:13:40Z",
+        "branch": "unit/native/lift-longjmp",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-24T05:45:02Z",
           "by": "c2d4d707",
           "text": "Minish Cap has two: OAM builder 0x030065e8 (ldr sp,[r11,#20]; ldr pc,[r11,#24], holes at 0x03006708/0x0300670c) and 0x03005f24, UpdateEntities' resume (DeleteThisEntity): sp from a global struct [0x03005fe4..+12], then into the loop at 0x03005fa4. Not setjmp's ldm block."
         }
-      ]
+      ],
+      "round": "2026-11-24T10:13:40Z"
     },
     {
       "id": "native/mirror-flow-on",

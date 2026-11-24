@@ -3997,3 +3997,4 @@
 {"at":"2026-11-24T10:12:20Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane4-native-lift-equipment-words","text":"new unit: Merge main on quack lane 4"}
 {"at":"2026-11-24T10:12:26Z","actor":"loop","tag":"119d7968","host":"quack","cmd":"claim","id":"merge/quack-lane4-native-lift-equipment-words","text":"Merge main on quack lane 4: claimed"}
 {"at":"2026-11-24T10:13:34Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-mod-run-zoom","text":"lift-mod-run's side PNGs zoom on the differing pixels: on main"}
+{"at":"2026-11-24T10:13:40Z","actor":"loop","tag":"eb832f19","host":"quack","cmd":"claim","id":"native/lift-longjmp","text":"The lift runs setjmp and longjmp: a context restore: claimed"}
