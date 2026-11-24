@@ -4488,6 +4488,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T11:00:48Z",
+          "by": "7630b372",
+          "text": "Regs::call barely moved (2,191 -> 2,195) and call_fn( sites stay 396: complete callee sets alone don't remove four-register entries; that needs the call sites to use the sets (fnref-dense / fnref-live-registers)."
+        },
+        {
           "at": "2026-11-20T13:14:46Z",
           "by": "99ba7b7d",
           "text": "Not the same as {unit:native/fnref-live-registers} (the tracker's warning): this only turns the flow on for Mirror. memory/lift-cost-corpus.md: Mirror holes-only --flow 1,054 s on quack; whole lift with flow likely ~20-50 min: run it as a long job."
