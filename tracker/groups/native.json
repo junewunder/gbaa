@@ -4645,6 +4645,13 @@
           "lane": "quack/4"
         }
       },
+      "notes": [
+        {
+          "at": "2026-11-24T15:04:42Z",
+          "by": "13a4cae4",
+          "text": "$GBAA_DATA/names/{pokeemerald,mzm,tmc,katam}.toml remade with args/sums (just pret-names pokeemerald, just decomp-names). mods/emerald/holes.toml's [[roots]] needs {unit:native/emerald-native-route}'s code: main's gbaa-lift refuses it until that lands."
+        }
+      ],
       "round": "2026-11-24T13:28:10Z"
     },
     {
