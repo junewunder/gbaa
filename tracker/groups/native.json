@@ -5042,7 +5042,19 @@
       "detail": "From {unit:native/lift-for-bounds}: its proof takes a loop whose latch jumps back while the counter is in range, the guard before the loop proving the first round. A loop whose header tests the range and leaves, its latch jumping back unconditionally (while-shaped; 120 of Metroid's 525 loops left say 'jump back not a guarded jump' with GBAA_FOR_WHY=1 on gbaa-lift; first_long in c/loops), needs no guard before it, but the header's code before its test runs when the range is empty: print as for only where nothing runs before the test or on the way out it takes. Check as the parent's (just lift-check 0 differences, bars on C rows, Metroid and Emerald, 600 of 600 frames, just check).",
       "check": "recorded",
       "needs": ["native/lift-for-bounds"],
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "702486fe",
+        "session": "702486fe-e391-4253-818a-e25816dc0591",
+        "host": "quack",
+        "pid": 2963642,
+        "start": "95218853",
+        "at": "2026-11-24T19:23:35Z",
+        "branch": "unit/native/lift-for-top-tested",
+        "beats": true
+      },
+      "round": "2026-11-24T19:23:35Z"
     },
     {
       "id": "native/lift-for-step-via",
