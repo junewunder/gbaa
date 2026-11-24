@@ -66,8 +66,9 @@ fn a_later_file_wins_per_key_and_report_tables_are_ignored() {
     let m = SourceMap::from_texts(SHA, &[&pret, &given]).unwrap();
     assert_eq!(m.ident(Kind::Func, 0x0800_0001), Some("Main"));
     assert_eq!(m.ident(Kind::Func, 0x0800_0021), Some("DrawThing"));
-    // The later entry replaces the whole entry, not just its name.
-    assert_eq!(m.functions[&0x0800_0021].file, None);
+    // The later entry keeps what it doesn't say of the one before.
+    assert_eq!(m.functions[&0x0800_0021].file.as_deref(), Some("main.o"));
+    assert_eq!(m.functions[&0x0800_0021].size, Some(16));
     assert_eq!(m.ident(Kind::Func, 0x0800_0061), Some("NewHelper"));
     assert_eq!(m.ident(Kind::Func, 0x0300_0001), Some("Copied"));
     assert_eq!(m.ident(Kind::Data, 0x0200_0000), Some("gHeap"));
@@ -76,7 +77,53 @@ fn a_later_file_wins_per_key_and_report_tables_are_ignored() {
     assert_eq!(m.ident(Kind::Func, 0x0800_0041), None);
     assert_eq!(m.idents().count(), 5);
     assert_eq!(m.key_of("Helper"), None);
+    assert_eq!(m.resolve("Helper"), Some((Kind::Func, 0x0800_0021)));
     assert_eq!(m.key_of("DrawThing"), Some((Kind::Func, 0x0800_0021)));
+}
+
+#[test]
+fn a_rename_keeps_the_decomps_source_lines_and_name() {
+    let decomp = format!(
+        "{}[functions]
+         0x0805b2fd = {{ name = \"sub_0805B2FC\", size = 164, file = \"kirby.o\", src = \"src/kirby.c\", proto = \"void sub_0805B2FC(struct Kirby *kirby)\" }}
+         [data]
+0x02000000 = {{ name = \"gUnk_02000000\", size = 8, type = \"u32[2]\" }}
+         [lines]
+0x0805b2fc = 14490
+",
+        head(SHA)
+    );
+    let hand = format!(
+        "{}[functions]
+         0x0805b2fd = {{ name = \"KirbyGroundAccel\", file = \"kirby.o\", katam = \"sub_0805B2FC\" }}
+         0x0805c071 = {{ name = \"KirbyWallBump\", katam = \"sub_0805C070\" }}
+         [data]
+0x02000000 = {{ name = \"gPair\" }}
+",
+        head(SHA)
+    );
+    let m = SourceMap::from_texts(SHA, &[&decomp, &hand]).unwrap();
+    let f = &m.functions[&0x0805_b2fd];
+    assert_eq!(f.name, "KirbyGroundAccel");
+    assert_eq!(f.src.as_deref(), Some("src/kirby.c"));
+    assert_eq!(f.size, Some(164));
+    // The prototype is renamed with it, so its parameters still parse.
+    assert_eq!(
+        f.proto.as_deref(),
+        Some("void KirbyGroundAccel(struct Kirby *kirby)")
+    );
+    // The `katam` name and the earlier layer's are one, listed once.
+    assert_eq!(f.aka, ["sub_0805B2FC"]);
+    let d = &m.data[&0x0200_0000];
+    assert_eq!((d.size, d.proto.as_deref()), (Some(8), Some("u32[2]")));
+    assert_eq!(d.aka, ["gUnk_02000000"]);
+    for n in ["KirbyGroundAccel", "sub_0805B2FC"] {
+        assert_eq!(m.resolve(n), Some((Kind::Func, 0x0805_b2fd)), "{n}");
+    }
+    // A hand name alone gives the decomp's name from `katam`.
+    assert_eq!(m.resolve("sub_0805C070"), Some((Kind::Func, 0x0805_c071)));
+    assert_eq!(m.resolve("gUnk_02000000"), Some((Kind::Data, 0x0200_0000)));
+    assert_eq!(m.resolve("NoSuchName"), None);
 }
 
 #[test]
