@@ -4158,7 +4158,19 @@
       "title": "A typed global's bitfield prints as its field",
       "detail": "From {unit:native/lift-bitfields}: a bitfield through a typed pointer now prints as its field (set_bits, get/set, or a joined accessor; codegen::native::bitfields). A typed global holding a bitfield still keeps the access-width type (globals.rs: Types::plain refuses a struct with a bitfield), so a constant-address access to it prints as bytes and masks. Add a global with bitfields to a c/ program (c/bits has none: every access there is through a pointer) and print its accesses through the same analysis. Check: just lift-check 0 differences, planted faults caught; Metroid 600 of 600 frames; just check.",
       "check": "recorded",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "f2d7754b",
+        "session": "f2d7754b-1304-439e-b07b-81be9f8e400d",
+        "host": "quack",
+        "pid": 2962519,
+        "start": "95218086",
+        "at": "2026-11-24T08:18:36Z",
+        "branch": "unit/native/lift-global-bitfields",
+        "beats": true
+      },
+      "round": "2026-11-24T08:18:36Z"
     },
     {
       "id": "native/fnref-ram-anchors",
