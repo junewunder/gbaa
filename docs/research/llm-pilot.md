@@ -290,7 +290,7 @@ RAM, stays a `loop` (no proof of its range without one). Metroid: 95 of
 696 loops; the C programs: their startup's clear of IWRAM. Then
 `native/lift-for-bounds` (`codegen::native::bounds`): loops of several
 blocks, to a parameter's bound, counting down, proven symbolically from
-the guard before the loop; Metroid 169 of 694 (2026-11-23). A bound read
+the guard before the loop; Metroid 195 of 694 (2026-11-23). A bound read
 from RAM each round (a global's, a field's) stays a `loop`: nothing yet
 shows the body's calls leave it.
 

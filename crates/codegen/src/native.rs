@@ -8694,14 +8694,14 @@ fn tree_lets(
     s
 }
 
-/// The words of `text` that may name a local: identifiers not after a `.`
-/// and not starting with a digit.
 /// Whether the word at `s` of `b` follows a `.` (a field or method), not
 /// a range's `..` (`0..r5`, a `for`'s: unit `native/lift-for-bounds`).
 pub(crate) fn after_dot(b: &[u8], s: usize) -> bool {
     s > 0 && b[s - 1] == b'.' && !(s > 1 && b[s - 2] == b'.')
 }
 
+/// The words of `text` that may name a local: identifiers not after a `.`
+/// and not starting with a digit.
 fn rust_words(text: &str) -> BTreeSet<String> {
     let b = text.as_bytes();
     let word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';

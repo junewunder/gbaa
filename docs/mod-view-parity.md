@@ -56,7 +56,7 @@ that adds it. The owner agreed the "Not wanted" list (2026-11-19).
 | Locals as variables, values not re-synced to registers | `let vN` values inlined into their use; registers are still `r0`-`r14` | Unit: `native/lift-register-locals` (in progress) |
 | `file:line` comments from DWARF's line table | `// c/switch/main.c:218` above the statement each source line's first instruction starts, where the names files have `[lines]` (`line_notes`: 126 on c-switch-agbcc, 105 to 181 on the C programs; 61,260 on Metroid) | Has it (`native/lift-line-comments`, 2026-11-20) |
 | Literal-pool loads folded into the access | Constants inline: `st16(g, REG_DISPSTAT, 0x8u32)`, `g.ram.gTally` | Has it |
-| Loops with their variables, `for` loops | `'l2: loop`; 169 `for` and 525 `loop` on Metroid (`native/lift-for-loops`, `native/lift-for-bounds`) | Has it |
+| Loops with their variables, `for` loops | `'l2: loop`; 195 `for` and 499 `loop` on Metroid (`native/lift-for-loops`, `native/lift-for-bounds`) | Has it |
 | Switch shapes | A compare tree as a `match` on case values (`tally`: `5 => …`, `0x28 => …`). A jump table as a `match` on the target address (`pen_update`). The mod view never wrote jump tables (its design's gap 9) | Has it (more than the mod view had) |
 | Callee-saved registers proven per callee, reloads dropped | The summaries' callee-saves proof; 584 of 2,623 unproven on Metroid (soft) | Has it |
 | No timing in the printed code (the "without timing" builds) | The lift has no cycle counting at all | Has it |
