@@ -1230,6 +1230,42 @@ as a seed, a budget and a digest, never as states.
   time passes) is counted, not compared ("none compared" if all).
 - Not yet: a function first called past the lift's stop can't be checked.
 
+## Stack locals passed by address (`native/lift-stack-arrays`)
+
+Designed 2026-11-24 (printing: `native/lift-lent-print`). A slot whose
+address only reaches callees is a Rust local; the rest stays bytes.
+
+- **A borrowed parameter** is a direct callee's r0-r3, never a pointer
+  call's (`call_fn`), whose value the callee only adds constants to,
+  loads and stores through (at a constant offset, or at an index: a
+  checked one), and passes on in r0-r3 to another borrowed parameter. A
+  store of it, a return of it, a compare, a BIOS call or a pointer call
+  with it, a join with another value: it isn't borrowed. Every caller
+  must pass a lent slot or a borrowed parameter of its own there (one
+  type a parameter). The greatest such set, over the call graph
+  (`frame::lend`).
+- **A lent slot** is an escaping one whose only escapes are passes of an
+  exact frame address to borrowed parameters. Its object (the slots from
+  that address up to the saved registers, as for any escape) is one
+  local, `[u8; N]` by access width; DWARF's type where a names file has
+  one is a later step (`native/lift-stack-typed-locals`).
+- **A pointer to a host local** is a `Lent<'_>`, the prelude's
+  `&[Cell<u8>]` (copyable, aliasable: two arguments may be the same
+  object, as `rect_union(&a, &a)` is, with `g: &mut Game` beside them).
+  It has no guest address: a borrowed parameter is never a number, so
+  nothing compares or stores it, and an access past its end panics,
+  naming the function. Other pointers stay guest addresses, unchanged.
+- **sp.** A function whose slots are all locals or lent keeps nothing in
+  memory: no sp, no `bank_sp` (`native/lift-frame-gone`'s rule, with lent
+  slots counted as locals). A slot whose address reaches RAM keeps the
+  guest stack, sp exact where it must be (`native/lift-frame-exact-narrow`).
+- **Checked by** the native check as today's locals are: it compares RAM,
+  and a lent local's bytes reach RAM only through code the lift prints.
+  `--shadow-locals` keeps a lent local in the frame's bytes too (the
+  `Lent` carries its guest address there) and reports a load that
+  differs: a write the analysis missed. The planted control makes a store
+  through a borrowed parameter one more (`--plant-lent=ADDR`).
+
 ## The units that follow
 
 All are filed in the group (`native`); the ones this design added are

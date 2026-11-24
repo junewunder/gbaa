@@ -2083,6 +2083,27 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         soft.sp_slots[2],
     )
     .unwrap();
+    {
+        let skip: BTreeSet<u32> = holes.standins.keys().copied().collect();
+        let (mut slots, mut fns, mut acc, mut borrowed, mut ptrs) = (0, 0, 0, 0, 0);
+        for c in &codes {
+            let l = frame::lend::of_code(&c.ctx, &c.funcs, &c.sums, &c.frames, &skip);
+            slots += l.lent.values().map(BTreeSet::len).sum::<usize>();
+            fns += l.lent.len();
+            acc += l.accesses(&c.frames);
+            borrowed += l
+                .borrowed
+                .values()
+                .map(|m| m.count_ones() as usize)
+                .sum::<usize>();
+            ptrs += l.pointers;
+        }
+        writeln!(
+            report,
+            "lent slots (native/lift-stack-arrays): {slots} escaping slots in {fns} functions lend their address only to borrowed parameters ({borrowed} of {ptrs} pointer parameters borrowed), {acc} sp-relative accesses to them"
+        )
+        .unwrap();
+    }
     match (&fnrefs, &holes.skip_fn_flow) {
         (Some(f), _) => report.push_str(&f.0.report(&f.1, &f.2)),
         (None, why) => writeln!(

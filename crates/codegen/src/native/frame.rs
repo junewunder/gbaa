@@ -52,6 +52,11 @@
 //! caller's). `gbaa-lift --shadow-locals` checks a lift against both at
 //! run time.
 //!
+//! Which escaping slots only lend their address to callees that borrow it
+//! ([`lend`], `native/lift-stack-arrays`) uses each direct call's exact
+//! frame addresses in r0-r3 ([`Frame::lends`]) and every other pass
+//! ([`Frame::passed_else`]).
+//!
 //! The run is on [`FBlock`]s (a block's IR and what each exit does), so
 //! the tests build them by hand; [`of_code`] builds them from a lifted
 //! context's functions.
@@ -174,6 +179,14 @@ pub struct Frame {
     /// before it calls the game's main. What runs there doesn't run on
     /// the sp the function was entered with.
     pub apart: BTreeSet<u32>,
+    /// The exact frame addresses each direct call passes in r0-r3, by its
+    /// exit's (block, inst index): (register, offset). What the slots of
+    /// `native/lift-stack-arrays` lend ([`lend`]).
+    pub lends: BTreeMap<(u32, usize), BTreeSet<(u8, i32)>>,
+    /// The frame addresses passed to callees any other way: made by
+    /// arithmetic the run didn't follow, in r4-r11, to a pointer call, a
+    /// tail call or a BIOS call. A slot one of these reaches isn't lent.
+    pub passed_else: BTreeSet<i32>,
 }
 
 impl Frame {
@@ -505,6 +518,10 @@ struct Raw {
     fresh: BTreeSet<u32>,
     /// [`Frame::apart`].
     apart: BTreeSet<u32>,
+    /// [`Frame::lends`].
+    lends: BTreeMap<(u32, usize), BTreeSet<(u8, i32)>>,
+    /// [`Frame::passed_else`].
+    passed_else: BTreeSet<i32>,
 }
 
 struct Run<'a, 'e> {
@@ -541,10 +558,21 @@ impl Run<'_, '_> {
         }
     }
 
-    fn pass(&mut self, regs: u16, s: &State, k: Kind) {
+    /// `lend`: the exit of a direct call, which may borrow an exact frame
+    /// address in r0-r3 ([`Frame::lends`]).
+    fn pass(&mut self, regs: u16, s: &State, k: Kind, lend: Option<(u32, usize)>) {
         for (r, v) in s.regs[..16].iter().enumerate() {
             if regs & 1 << r != 0 && r != 13 {
                 self.escape(v, k);
+                if k != Kind::Call {
+                    continue;
+                }
+                match (lend, v) {
+                    (Some(at), V::Sp(o)) if r < 4 => {
+                        self.raw.lends.entry(at).or_default().insert((r as u8, *o));
+                    }
+                    _ => self.raw.passed_else.extend(v.bases()),
+                }
             }
         }
     }
@@ -709,7 +737,8 @@ impl Run<'_, '_> {
                 }
             }
             Edge::Call { target, ret } => {
-                self.pass(self.env.params(*target, addr) & 0xfff, s, Kind::Call);
+                let lend = target.map(|_| at);
+                self.pass(self.env.params(*target, addr) & 0xfff, s, Kind::Call, lend);
                 // A return site that is no block of this function, where
                 // the callee returns: another function's entry, which the
                 // call returns into, as a tail call after it (the lift's
@@ -729,13 +758,13 @@ impl Run<'_, '_> {
                     None => after.words.clear(),
                 }
                 if into {
-                    self.pass(0x5fff, &after, Kind::Call);
+                    self.pass(0x5fff, &after, Kind::Call, None);
                 }
                 self.flow(*ret, &after);
             }
-            Edge::Return => self.pass(0xf, s, Kind::Returned),
+            Edge::Return => self.pass(0xf, s, Kind::Returned, None),
             Edge::Tail(t) => {
-                self.pass(0x5fff, s, Kind::Call);
+                self.pass(0x5fff, s, Kind::Call, None);
                 self.raw.calls.insert(at, (Run::sp(s), *t, true));
             }
             Edge::TailOr(ks) => {
@@ -743,7 +772,7 @@ impl Run<'_, '_> {
                 self.exit(at, addr, &Edge::Goto(ks.clone()), s);
             }
             Edge::Swi(next) => {
-                self.pass(0xf, s, Kind::Call);
+                self.pass(0xf, s, Kind::Call, None);
                 let mut after = s.clone();
                 for r in &mut after.regs[..4] {
                     *r = V::Other;
@@ -1018,6 +1047,8 @@ fn resolve(raw: Raw, reads: &dyn Fn(Option<u32>) -> Reads, env: &dyn Env) -> Fra
         switches: raw.switches,
         fresh: raw.fresh,
         apart: raw.apart,
+        lends: raw.lends,
+        passed_else: raw.passed_else,
     }
 }
 
@@ -1188,6 +1219,7 @@ pub fn of_code(
     frames(&fs, &env)
 }
 
+pub mod lend;
 mod stores;
 pub use stores::{SP, StoreFn, stores};
 
