@@ -238,6 +238,7 @@ pub mod modules;
 pub mod named;
 pub mod narrow;
 pub mod pc_marks;
+pub mod ref_binds;
 pub mod rom_data;
 pub mod shape;
 pub mod switch;
@@ -420,6 +421,9 @@ pub struct Holes {
     /// Every `let` of a value `vN` (`gbaa-lift --no-let-names`), none
     /// named for what it holds ([`value_names`]).
     pub no_let_names: bool,
+    /// Every pointer variable `u32` (`gbaa-lift --no-ref-binds`), none
+    /// declared the `Ref<T>` its accesses make ([`ref_binds`]).
+    pub no_ref_binds: bool,
     /// Stage A's old IRQs (`gbaa-lift --irq-at-waits`): `Game::cpsr` as
     /// bookkeeping only, so an IRQ due at a wait inside a critical section
     /// runs there, where the hardware holds it until the I bit clears. The
@@ -2548,6 +2552,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("value_lets", soft.value_lets);
     // Of those, the ones named for what they hold (native/lift-let-names).
     m.push("lets_named", n(soft.lets_named));
+    // Pointer variables declared `Ref<T>` (native/lift-pointer-types; no
+    // bar: they should rise), by where the type came from: the names
+    // files' (`t::…`) and the heap runs' (proven); and the typed pointers
+    // still made at a use, `Ref::<T>::new(…)` (barred).
+    m.push("refs_bound_named", n(soft.refs_bound_named));
+    m.push("refs_bound_proven", n(soft.refs_bound_proven));
     // Register locals (native/lift-register-locals): writes of r0-r12's
     // mut locals printed (a value only its block reads is a `let`), and
     // functions whose entry unpacks a register or flag never read as it
@@ -2565,6 +2575,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let text = || files.files.iter().map(|(_, t)| t.as_str());
     m.push("unread_lets", text().map(unread::unread_lets).sum());
     m.push("adc_sums", text().map(unread::adc_sums).sum());
+    m.push("ref_new_at_use", text().map(ref_binds::at_use).sum());
     // Structured loops (native/lift-for-loops): those printed as `for`
     // (no bar: it should rise) and the rest, as `loop` (barred).
     m.push("loops_for", soft.loops_for);
@@ -4354,6 +4365,10 @@ struct Soft {
     locals_noted: usize,
     /// The `let vN` values named for what they hold ([`value_names`]).
     lets_named: usize,
+    /// Pointer variables declared `Ref<T>` ([`ref_binds`]), by where
+    /// their type came from: the names files', a heap run's.
+    refs_bound_named: usize,
+    refs_bound_proven: usize,
     /// And those whose plain entry still packs its arguments into
     /// [`Regs::call`] for `x_` (barred): what they take as they came is
     /// more than those (a flag, r4-r12, an lr not proven `RET`).
@@ -4818,6 +4833,7 @@ impl FnPrinter<'_, '_> {
             s.insert_str(head, &e);
             self.name_locals(&mut s, head, e.len());
             self.name_values(&mut s, head);
+            self.bind_refs(&mut s, head);
             return s;
         }
         self.soft.fns_match += 1;
@@ -4849,6 +4865,7 @@ impl FnPrinter<'_, '_> {
         s.insert_str(head, &e);
         self.name_locals(&mut s, head, e.len());
         self.name_values(&mut s, head);
+        self.bind_refs(&mut s, head);
         s
     }
 
@@ -5008,6 +5025,28 @@ impl FnPrinter<'_, '_> {
         if n > 0 {
             s.replace_range(head.., &text);
             self.soft.lets_named += n;
+        }
+    }
+
+    /// The function's pointer variables declared as the `Ref<T>` their
+    /// accesses make of them ([`ref_binds`]): last, after the names.
+    fn bind_refs(&mut self, s: &mut String, head: usize) {
+        if self.holes.no_ref_binds {
+            return;
+        }
+        // Its entries as printed stay ([`one_entry`] finds them so): a
+        // parameter's binding goes after them.
+        let all = self.soft.entries.get(&self.f.entry).map(Entries::all);
+        let after = all
+            .as_ref()
+            .and_then(|e| s[head..].find(e.as_str()).map(|i| i + e.len()))
+            .unwrap_or(0);
+        let (text, n) = ref_binds::bind(&s[head..], after);
+        let kept = all.is_none_or(|e| !s[head..].contains(&e) || text.contains(&e));
+        if n != ref_binds::Bound::default() && kept {
+            s.replace_range(head.., &text);
+            self.soft.refs_bound_named += n.named;
+            self.soft.refs_bound_proven += n.proven;
         }
     }
 
@@ -7982,7 +8021,7 @@ impl FnPrinter<'_, '_> {
             if skip[i] || dead[i] || (self.gone_if_unused(i, &inst.op) && uses[i] == 0) {
                 continue;
             }
-            for x in self.operands(i, inst, typed, refs, conds, forms) {
+            for x in self.operands(insts, i, inst, typed, refs, conds, forms) {
                 uses[x.index()] += 1;
             }
         }
@@ -7996,8 +8035,10 @@ impl FnPrinter<'_, '_> {
     /// the `match` replaces ([`FnPrinter::unguard`]).
     ///
     /// [`uses`]: FnPrinter::uses
+    #[allow(clippy::too_many_arguments)]
     fn operands(
         &self,
+        insts: &[Inst],
         i: usize,
         inst: &Inst,
         typed: &[Option<Place>],
@@ -8014,6 +8055,18 @@ impl FnPrinter<'_, '_> {
         let base = refs[i].and_then(|r| r.base).map(|(b, _)| b);
         let idx = refs[i].and_then(|r| r.idx);
         let fold = refs[i].and_then(|r| r.fold);
+        // A holes file's `[[open_bus]]` load prints over its address
+        // alone, whatever else would name it.
+        if let Op::Load { addr, .. } = inst.op
+            && !self.holes.open_bus.is_empty()
+            && let Some(at) = insts[..i].iter().rev().find_map(|x| match x.op {
+                Op::Insn(a) => Some(a),
+                _ => None,
+            })
+            && self.holes.open_bus.contains_key(&at)
+        {
+            return vec![addr];
+        }
         let ops = match inst.op {
             // Printed as nothing.
             Op::Timing(_) | Op::YieldFlag(..) => return Vec::new(),
@@ -8107,7 +8160,7 @@ impl FnPrinter<'_, '_> {
             let whole = !matches!(op, Op::Exit(_) | Op::SetCpsr { .. } | Op::SetSpsr { .. });
             let ops = match &conds[i] {
                 Some(f) if !f.takes_inlined() => Vec::new(),
-                _ => self.operands(i, inst, typed, refs, conds, forms),
+                _ => self.operands(insts, i, inst, typed, refs, conds, forms),
             };
             for x in ops {
                 let x = x.index();
