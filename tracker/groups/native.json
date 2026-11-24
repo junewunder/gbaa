@@ -4431,15 +4431,22 @@
       "uses": ["heavy"],
       "tags": ["native"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "eb832f19",
-        "session": "eb832f19-0499-490c-aa4c-e04d62575dea",
-        "host": "quack",
-        "pid": 2962048,
-        "start": "95217572",
-        "at": "2026-11-24T10:13:40Z",
+        "at": "2026-11-24T10:58:50Z",
+        "evidence": "A restore a save matches now unwinds to the save's direct caller (codegen::native::longjmp, prelude restore/catch_restore; decision 'A context restore unwinds to its save's direct caller'). moonbeam lift: 6 hard holes, longjmp's 0x08038328 restore gone (2 catch points printed). New c/jump (setjmp.s, newlib's shape) both compilers: lift-check --only c-jump-gcc and c-jump-agbcc pass (0 hard holes, 600 frames equal to the play build incl. packed/dense, planted store caught; frame 600 c65f548e64c1e8f9 = mGBA). All 36 lift-check tables within bars. just check passed after merging main. Unit test a_context_restore_a_save_matches_unwinds_to_the_saves_caller.",
         "branch": "unit/native/lift-longjmp",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T10:58:50Z",
+          "by": "eb832f19",
+          "host": "quack",
+          "pid": 2962048,
+          "start": "95217572",
+          "beats": true,
+          "session": "eb832f19-0499-490c-aa4c-e04d62575dea",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {

@@ -4010,3 +4010,4 @@
 {"at":"2026-11-24T10:39:11Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-frame-exact-narrow","text":"Exact sp passed only where a stack address reaches RAM: on main"}
 {"at":"2026-11-24T10:39:15Z","actor":"loop","tag":"c08a6e47","host":"quack","cmd":"claim","id":"native/lift-aligned-loads","text":"A load the lift proves aligned drops its rotate: claimed"}
 {"at":"2026-11-24T10:57:33Z","actor":"loop","tag":"c08a6e47","host":"quack","cmd":"add-unit","id":"native/lift-aligned-params","text":"new unit: Untyped pointer loads drop rotates their callers prove 0"}
+{"at":"2026-11-24T10:58:50Z","actor":"loop","tag":"eb832f19","host":"quack","cmd":"done","id":"native/lift-longjmp","text":"The lift runs setjmp and longjmp: a context restore: done"}
