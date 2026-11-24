@@ -4310,19 +4310,8 @@
         "by": "b9afc3fc",
         "at": "2026-11-24T10:04:04Z",
         "evidence": "SamusInit's store now prints pin(v93 & !1, 0x41530); g.ram.gEquipment.maxEnergy = 99; (gEquipment: ram_t::Equipment). Cause: type_structs vetoed any struct a computed range overlapped, incl. value sets over many globals; now only an element-indexing range does. Metroid struct globals 3 -> 51, lines unchanged 245520. just lift Metroid: 600 of 600 frames, no stop; bars hold. lift-check passed (0 differences, every program; added missing rom_refs/rom_static_fn_keys bars on c-list and native-ime-i-set, which failed on main f7d7007 too). just check passed after merging main (8b7fd04). After that merge lift-metrics shows c-bits 15>13 functions: another lane rebuilt c-bits ROMs in GBAA_DATA at 04:51, not this branch.",
-        "branch": "unit/native/lift-equipment-words",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T10:04:04Z",
-          "by": "b9afc3fc",
-          "host": "quack",
-          "pid": 2964711,
-          "start": "95219683",
-          "beats": true,
-          "session": "b9afc3fc-aa37-45bf-919b-238502d77d5f",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "landed": "2026-11-24T10:22:58Z"
       },
       "notes": [
         {
@@ -4330,8 +4319,7 @@
           "by": "f2d7754b",
           "text": "Seen from {unit:native/lift-global-bitfields}: Metroid's gHazeInfo and gSectionInfo (structs with bitfields) stay words only because type_structs' computed ranges reach them (byte sweeps, e.g. 0x4005b..0x4015b); their layouts and accesses fit. gHatchData, gBombChains: struct arrays."
         }
-      ],
-      "round": "2026-11-24T08:54:47Z"
+      ]
     },
     {
       "id": "native/lift-find-field",
