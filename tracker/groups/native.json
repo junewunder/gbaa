@@ -5063,6 +5063,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T21:14:47Z",
+          "by": "a67a0150",
+          "text": "Fix 3: the owner already narrowed this (decision: Narrow the for-loop unit to bounds held in registers): HealPlayerParty is a for only after this, {unit:native/lift-for-top-tested} and {unit:native/lift-for-step-via}. Fix 2: after {unit:native/lift-open-bus-typed}, lift Emerald, 600/600."
+        },
+        {
           "at": "2026-11-24T21:14:36Z",
           "by": "a67a0150",
           "text": "Fix 1 done 2026-11-24 on main e0e67935 merged in: Metroid 600/600 frames, loops_for 234, loops_not_for 462 (main alone 232/464). The 442 bar is {unit:native/lift-for-top-tested}'s, not on main: keep it. just check passed."
