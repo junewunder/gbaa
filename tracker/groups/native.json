@@ -5172,15 +5172,22 @@
       "uses": ["heavy"],
       "priority": 96,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "81cfc956",
-        "session": "81cfc956-e6c1-470c-9ec4-89a365fbffd2",
-        "host": "quack",
-        "pid": 1982541,
-        "start": "101568383",
-        "at": "2026-11-24T22:53:15Z",
+        "at": "2026-11-24T23:53:24Z",
+        "evidence": "Cause: the lifted bl to m4a's compressed-sample path (x_03001e64) passed r12 as 0; the callee multiplies by it (the mixer's step). Rule: Summary::ip, a read of r12 as it came (not a store) makes direct/tail calls pass the caller's r12; a pointer-reachable reader is a hard hole. Unit test a_call_passes_r12_to_a_callee_reading_it_as_it_came fails without it (ip None). Whole lift + play build (--timing native, with the serial fix) under just long --mem 12G; route-check --native on units/emerald-native.toml (from origin/unit/native/emerald-native-route) still stops at frame 977's padding byte, so the records were diffed by hand (Python, the check's skips: code copies, stack from 0x03007c58, KEYINPUT): over all 5400 frames 0 frames differ in picture, audio or gSoundInfo, and only 4 RAM bytes differ: sTempTextPrinter/sTextPrinters padding 0x0202019a/b, 0x020201be/f. just check passes.",
         "branch": "unit/native/emerald-m4a-compressed",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T23:53:24Z",
+          "by": "81cfc956",
+          "host": "quack",
+          "pid": 1982541,
+          "start": "101568383",
+          "beats": true,
+          "session": "81cfc956-e6c1-470c-9ec4-89a365fbffd2",
+          "lane": "quack/3"
+        }
       },
       "round": "2026-11-24T22:53:15Z"
     },
