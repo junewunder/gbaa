@@ -55,7 +55,8 @@ use std::collections::{BTreeMap, BTreeSet};
 mod summary;
 pub use summary::{
     Assume, Bits, Category, Cause, Comparison, Passing, Sets, Summaries, Summary, Verdict, compare,
-    context_restore, proto_regs, summarize, summarize_passing, summarize_sets, summarize_with,
+    context_pairs, context_restore, proto_regs, summarize, summarize_passing, summarize_sets,
+    summarize_with,
 };
 use summary::{Org, Sum};
 
@@ -402,8 +403,8 @@ impl Walk<'_> {
         lib.inside(k) && !lib.routines.contains_key(&k)
     }
 
-    /// Go on at `to` with `s`.
-    fn flow(&mut self, to: u32, s: &State) -> Result<(), String> {
+    /// Go on at `to` with `s`, from the exit at `at`.
+    fn flow(&mut self, at: u32, to: u32, s: &State) -> Result<(), String> {
         if !self.blocks.contains_key(&to) {
             if self.inner(to) {
                 return self.stop(format!("0x{to:08x}: jumps into a library routine's code"));
@@ -450,6 +451,7 @@ impl Walk<'_> {
                             .fold(0u8, |m, r| m | 1 << (r - 4));
                         *sum.foreign.entry(to).or_default() |= m;
                         *sum.lr_into.entry(to).or_insert(true) &= s.regs[14] == V::Entry(14);
+                        sum.jump_out(s, at, to);
                     }
                     return self.stop(format!("jumps to 0x{to:08x}, which has no code here"));
                 }
@@ -682,7 +684,7 @@ impl Walk<'_> {
     fn exit(&mut self, x: &ExitInfo, e: Exit, t: V, s: &State) -> Result<(), String> {
         let at = x.at;
         match x.plan {
-            Plan::Static(k) => self.flow(k, s),
+            Plan::Static(k) => self.flow(at, k, s),
             Plan::Call { target, ret } => {
                 if self.inner(target) {
                     return self.stop(format!(
@@ -706,7 +708,7 @@ impl Walk<'_> {
                 }
                 after.called(self.sum.as_ref().is_some_and(|s| s.keeps(target)));
                 after.keep(s, kept);
-                self.flow(ret, &after)
+                self.flow(at, ret, &after)
             }
             Plan::Swi { next } => {
                 let Exit::Swi { comment, .. } = e else {
@@ -730,7 +732,7 @@ impl Walk<'_> {
                 }
                 after.flags = [V::Other; 4];
                 after.sure = 0;
-                self.flow(next, &after)
+                self.flow(at, next, &after)
             }
             Plan::Dynamic {
                 ret: None,
@@ -772,14 +774,14 @@ impl Walk<'_> {
                 }
                 after.called(false);
                 after.keep(s, kept);
-                self.flow(ret, &after)
+                self.flow(at, ret, &after)
             }
             Plan::Dynamic { .. } => {
                 if matches!(e, Exit::ExceptionReturn(_)) {
                     return self.fail(format!("0x{at:08x}: an exception return"));
                 }
                 for k in successors(self.ctx, x) {
-                    self.flow(k, s)?;
+                    self.flow(at, k, s)?;
                 }
                 Ok(())
             }
