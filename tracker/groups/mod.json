@@ -1101,15 +1101,22 @@
       "detail": "Owner said delete (2026-11-20). Per docs/research/mod-view-retirement.md 'What goes': delete crates/naming, route-check's mod_run.rs (--mod-run; lift_mod_run.rs stays), hole-report nightly's readable step, the just recipes naming, mod-run, mod-states, names-states, readable-states, readable-suites, timing-modes, and their docs/tools/commands.md entries. Done when they are gone and just check passes.",
       "check": "recorded",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "8b80f2e1",
-        "session": "8b80f2e1-d02e-474e-aeab-830d63add5cf",
-        "host": "quack",
-        "pid": 1609731,
-        "start": "100806701",
-        "at": "2026-11-24T22:03:32Z",
+        "at": "2026-11-24T22:26:22Z",
+        "evidence": "Deleted crates/naming (xmatch judge's claude -p and Rng moved to xmatch/src/claude.rs), route-check --mod-run (helpers into lift_mod_run.rs), the nightly's readable step, recipes naming/mod-run/mod-states/names-states/readable-states/readable-suites/timing-modes and their commands.md entries. just check passed (exit 0) on the commit, main merged (already up to date).",
         "branch": "unit/mod/retire-tools",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T22:26:22Z",
+          "by": "8b80f2e1",
+          "host": "quack",
+          "pid": 1609731,
+          "start": "100806701",
+          "beats": true,
+          "session": "8b80f2e1-d02e-474e-aeab-830d63add5cf",
+          "lane": "quack/2"
+        }
       },
       "notes": [
         {
