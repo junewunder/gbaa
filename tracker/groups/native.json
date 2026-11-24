@@ -4960,6 +4960,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T17:14:07Z",
+          "by": "3ec7bc8f",
+          "text": "Shared $GBAA_DATA/c now holds the new c-loops ROMs (just c-tests): main's lift-check on c-loops fails until this branch lands. Left: gcc's pointer-to-end loops (move_bars, pocket_count) and byte-offset counters (add_rows) aren't for; Emerald 234 fors still scale the counter."
+        },
+        {
           "at": "2026-11-24T14:47:44Z",
           "by": "af2ac9d3",
           "text": "{unit:native/lift-element-address} names an element's address where base and scaled index meet in one block (Emerald 7,676). Left: the multiply kept in a register and added to its base in another block (r4 = 0x64*v4), and two scaled indices in one sum (0x58*v30 + ((v14>>4)<<1))."
