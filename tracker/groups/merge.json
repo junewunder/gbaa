@@ -816,21 +816,9 @@
         "by": "1caecb3a",
         "at": "2026-11-24T21:48:48Z",
         "evidence": "Merged origin/main (25511d5); lift-check.toml c-loops bars kept both sides, ref_new_at_use measured on the branch's ROMs (private GBAA_DATA, shared c/ ROMs are main's): lift-metrics 0 over; just check passed (exit 0).",
-        "branch": "unit/native/lift-for-step-via",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T21:48:48Z",
-          "by": "1caecb3a",
-          "host": "quack",
-          "pid": 1558077,
-          "start": "100707199",
-          "beats": true,
-          "session": "1caecb3a-060c-4ad5-80d7-27afd5f9a76b",
-          "lane": "quack/4"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-24T21:41:15Z"
+        "landed": "2026-11-24T21:53:48Z"
+      }
     }
   ]
 }

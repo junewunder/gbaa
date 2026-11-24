@@ -5122,19 +5122,8 @@
         "by": "85a8eaf9",
         "at": "2026-11-24T21:40:54Z",
         "evidence": "At bdcb5a24 (+ merge ab70dba of main e0e6793): just lift-check passed with c/ built into a private GBAA_DATA copy (c-loops agbcc and gcc 600 frames, 0 differences; every planted fault caught; c-loops bars met). Metroid 600/600, 232->233 for. Emerald 1069->1078 for, 600/600 (holes less the two [[open_bus]], whose build break is main's: {unit:native/lift-open-bus-typed}); for_counter_arith bar 235->241, decided. just check passed before and after the merge. No separate review subagent: the loop reviews the diff.",
-        "branch": "unit/native/lift-for-step-via",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T21:40:54Z",
-          "by": "85a8eaf9",
-          "host": "quack",
-          "pid": 1558077,
-          "start": "100707199",
-          "beats": true,
-          "session": "85a8eaf9-1b43-4860-ab03-730fe50d19b8",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "landed": "2026-11-24T21:53:48Z"
       },
       "notes": [
         {
@@ -5152,8 +5141,7 @@
           "by": "358be71f",
           "text": "Next: also drop the via write when the dropped step was its only reader (for_counter_arith). Lane 1's for-ram-bounds edits c/loops/SCENE.md and c-loops bars too: expect a conflict. Metroid 233/463, 600/600; lines_prelude 1373 > bar 1364 (not this unit)."
         }
-      ],
-      "round": "2026-11-24T19:42:11Z"
+      ]
     },
     {
       "id": "native/emerald-sio32-play-timing",
