@@ -1473,6 +1473,48 @@ fn a_call_passes_the_register_its_callee_returns_as_it_came() {
 }
 
 #[test]
+fn a_call_passes_r12_to_a_callee_reading_it_as_it_came() {
+    // Reset: `mov r12, #5; bl f; ldr r1, [r0]; b .`, `f: add r0, r0, r12;
+    // bx lr`: hand-written code sharing its caller's r12 (the Pokémon
+    // games' m4a mixer and its compressed-sample path's step). The call
+    // passes r12, so f adds 5 as the machine's does, not 0.
+    let words = [
+        0xE3A0_C005u32, // 0x00 mov r12, #5
+        0xEB00_0001,    // 0x04 bl 0x10
+        0xE590_1000,    // 0x08 ldr r1, [r0]
+        0xEAFF_FFFE,    // 0x0c b .
+        0xE080_000C,    // 0x10 add r0, r0, r12
+        0xE12F_FF1E,    // 0x14 bx lr
+    ];
+    let (rom, d) = program(&words, &[ROM_BASE, 0x0800_0010]);
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    let f = &sums.by_entry[&0x0800_0010];
+    assert_eq!(f.ip, Some(crate::saves::Cause::Reads(0x0800_0010)));
+    assert_eq!(hard_holes(&sums, 0x0800_0010), Vec::<String>::new());
+    // The caller set its own: it reads none as it came.
+    assert_eq!(sums.by_entry[&ROM_BASE].ip, None);
+    let lifted = crate::native::lift(&rom, "t", &crate::native::Holes::default());
+    assert!(lifted.holes.is_empty(), "{:?}", lifted.holes);
+    let text: String = lifted.files.iter().map(|(_, t)| t.as_str()).collect();
+    assert!(
+        text.contains(
+            "x_08000010(g, Regs { r: [r0, r1, r2, r3, 0, 0, 0, 0, 0, 0, 0, 0, r12, r13, RET]"
+        ),
+        "{text}"
+    );
+    // A pointer to f: a pointer call zeroes r12, a hard hole.
+    let mut rom = rom;
+    rom.extend(0x0800_0010u32.to_le_bytes());
+    let ctx = Ctx::new(&rom, &d);
+    let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+    assert_eq!(
+        hard_holes(&sums, 0x0800_0010),
+        vec!["0x08000010: reads r12 at entry: a pointer call zeroes it".to_string()]
+    );
+}
+
+#[test]
 fn an_entry_hi_register_passed_to_a_callee_is_hard() {
     // `w: push {lr}; mov r0, r8; bl s; pop {r0}; bx r0`, `s: adds r0, #1;
     // bx lr`: s reads the r8 that w took as it came (TMC's `player.s`

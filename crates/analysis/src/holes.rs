@@ -516,7 +516,9 @@ pub fn summary_kind(hole: &str) -> String {
 /// on or returned; a direct call passes it, `takes r4-r11 from its
 /// callers`, soft; the zero of a function that only passes it on is the
 /// hole of the read it reaches), or where a function that changes them
-/// may be called through a pointer. A return with r4-r11 changed (hand-written code's
+/// may be called through a pointer; and where a pointer may call a
+/// function that reads r12 as it came (hand-written code sharing its
+/// caller's: a direct call passes it). A return with r4-r11 changed (hand-written code's
 /// scratch registers) is not itself hard: the reads are. Nor is a read
 /// whose every bit is masked away (`masks away r4-r11's entry bits`), the
 /// caller's frame pointer read through a frame record, or a read in a
@@ -524,10 +526,11 @@ pub fn summary_kind(hole: &str) -> String {
 /// called tail-calls or falls into it). The other kinds are counted under other
 /// holes (an unknown jump, a mode change, RAM code) or aren't holes for a
 /// native build (an indirect call is an `FnRef`).
-pub const SUMMARY_HARD: [&str; 4] = [
+pub const SUMMARY_HARD: [&str; 5] = [
     "returns with sp changed",
     "reads r4-r11 a callee changed",
     "reads r4-r11 at entry",
+    "reads r12 at entry",
     "changes r4-r11 and may be called through a pointer",
 ];
 

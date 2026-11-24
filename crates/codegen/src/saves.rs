@@ -499,6 +499,19 @@ impl Walk<'_> {
                 .collect(),
             None => BTreeSet::new(),
         };
+        // The values some op uses other than as a store's value
+        // ([`Sum::read_ip`]).
+        let used_not_stored: BTreeSet<ValueId> = match self.sum {
+            Some(_) => insts
+                .iter()
+                .flat_map(|i| match i.op {
+                    Op::Store { addr, .. } => vec![addr],
+                    op => op.operands().into_iter().collect(),
+                })
+                .chain(insts.iter().filter_map(|i| i.guard))
+                .collect(),
+            None => BTreeSet::new(),
+        };
         let mut at = gb.block.start;
         for (i, inst) in insts.iter().enumerate() {
             let val = |v: ValueId| vals[v.index()];
@@ -527,6 +540,9 @@ impl Walk<'_> {
                         && used.contains(&ValueId(i as u32))
                     {
                         sum.read(&s, r.index(), Cause::Reads(at));
+                        if r.index() == 12 && used_not_stored.contains(&ValueId(i as u32)) {
+                            sum.read_ip(&s, Cause::Reads(at));
+                        }
                     }
                     s.regs[r.index()]
                 }
