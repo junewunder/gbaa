@@ -4103,3 +4103,4 @@
 {"at":"2026-11-24T16:28:59Z","actor":"loop","tag":"66065018","host":"quack","cmd":"unclaim","id":"native/lift-stack-arrays","text":"A stack array passed by address is a typed local: handed back by its session, its work kept (1 commit on its branch); ready"}
 {"at":"2026-11-24T16:29:18Z","actor":"loop","tag":"3ca58cea","host":"quack","cmd":"claim","id":"native/lift-stack-arrays","text":"A stack array passed by address is a typed local: claimed (picking up after 66065018)"}
 {"at":"2026-11-24T16:33:08Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-value-args","text":"A constant passed to a call prints as pret's name for it: on main"}
+{"at":"2026-11-24T16:33:13Z","actor":"loop","tag":"51bbc90d","host":"quack","cmd":"claim","id":"native/lift-pointer-types","text":"Parameters and locals carry their pointer types: claimed"}
