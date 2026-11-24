@@ -682,7 +682,19 @@
       "detail": "Branch `unit/native/entry-jump-test-program` holds {unit:native/entry-jump-test-program}, finished but not on main: merging main conflicts in justfile. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
       "check": "recorded",
       "lane": "quack/1",
-      "branch": "unit/native/entry-jump-test-program"
+      "branch": "unit/native/entry-jump-test-program",
+      "record": {
+        "state": "claimed",
+        "by": "d26ff255",
+        "session": "d26ff255-810a-4517-a306-980178d87d11",
+        "host": "quack",
+        "pid": 2962048,
+        "start": "95217572",
+        "at": "2026-11-24T07:07:28Z",
+        "branch": "unit/native/entry-jump-test-program",
+        "beats": true
+      },
+      "round": "2026-11-24T07:07:28Z"
     }
   ]
 }
