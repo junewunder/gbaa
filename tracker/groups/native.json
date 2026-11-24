@@ -5039,15 +5039,22 @@
       "needs": ["native/lift-for-bounds"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "1fbd91b3",
-        "session": "1fbd91b3-4822-44bf-9b77-6bfc87a7e408",
-        "host": "quack",
-        "pid": 2962048,
-        "start": "95217572",
-        "at": "2026-11-24T18:32:29Z",
+        "at": "2026-11-24T20:41:23Z",
+        "evidence": "Loops to a RAM bound print as for: native::writes summarises each function's RAM stores (callees to a fixed point, IRQ handlers joined); bounds.rs takes a bound the latch loads, the printer checks no store in a round reaches it. c-loops draw_global and draw_row print as for with both compilers (agbcc 15/7, gcc 8/14; casts +1 each, bar raised). After merging main at aa820315: just lift-check passed, every program 0 differences (c-loops included), every planted fault caught; just check exit 0. loops_not_for bars lowered: c-loops-agbcc 9->7, c-loops-gcc 17->14, c-jump-agbcc 7->6, Emerald 3355->3325 (mods). Before the merge: Metroid 600 of 600 frames, loops_not_for 500 (its bar 442 is another branch's); Emerald 600 of 600 with the holes file earlier units used (mods 5c20f6c). Games' gains come from loaded bytes zero-extended in proofs; no game loop reaches the store check: {unit:native/lift-for-ram-bounds-games}. Emerald with the current holes file failed to build at an open-bus load: {unit:native/lift-open-bus-typed}. Decision: a store through a sum with a non-RAM constant stays out of RAM.",
         "branch": "unit/native/lift-for-ram-bounds",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T20:41:23Z",
+          "by": "1fbd91b3",
+          "host": "quack",
+          "pid": 2962048,
+          "start": "95217572",
+          "beats": true,
+          "session": "1fbd91b3-4822-44bf-9b77-6bfc87a7e408",
+          "lane": "quack/1"
+        }
       },
       "round": "2026-11-24T18:32:29Z"
     },

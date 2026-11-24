@@ -4171,3 +4171,4 @@
 {"at":"2026-11-24T20:30:13Z","actor":"loop","tag":"1fbd91b3","host":"quack","cmd":"edit","id":"native/lift-for-ram-bounds-games","text":"Games' loops to a bound in RAM print as for: edited (needs, check, detail)"}
 {"at":"2026-11-24T20:41:06Z","actor":"loop","tag":"1fbd91b3","host":"quack","cmd":"add-unit","id":"native/lift-open-bus-typed","text":"new unit: An open-bus load through a typed field prints its address"}
 {"at":"2026-11-24T20:41:11Z","actor":"loop","tag":"5f29d09f","host":"quack","cmd":"done","id":"native/names-keep-source-lines","text":"A names file's rename keeps the decomp's source lines: done"}
+{"at":"2026-11-24T20:41:23Z","actor":"loop","tag":"1fbd91b3","host":"quack","cmd":"done","id":"native/lift-for-ram-bounds","text":"Loops to a bound read from RAM print as for: done"}
