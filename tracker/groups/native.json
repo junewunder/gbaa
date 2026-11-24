@@ -5081,17 +5081,17 @@
       "minMinutes": 100,
       "record": {
         "state": "claimed",
-        "by": "358be71f",
-        "session": "358be71f-dc77-4c24-8ffc-f995bc083a0a",
+        "by": "85a8eaf9",
+        "session": "85a8eaf9-1b43-4860-ab03-730fe50d19b8",
         "host": "quack",
-        "pid": 2962519,
-        "start": "95218086",
-        "at": "2026-11-24T19:42:11Z",
+        "pid": 1558077,
+        "start": "100707199",
+        "at": "2026-11-24T20:29:42Z",
         "branch": "unit/native/lift-for-step-via",
-        "beats": true,
-        "handedBack": "2026-11-24T20:14:03Z",
+        "resumed": "358be71f",
+        "prevSession": "358be71f-dc77-4c24-8ffc-f995bc083a0a",
         "pushed": true,
-        "ended": "2026-11-24T20:14:14Z"
+        "beats": true
       },
       "notes": [
         {
