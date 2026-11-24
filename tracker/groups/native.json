@@ -4857,7 +4857,14 @@
       "detail": "From the owner, 2026-11-20 (split from {unit:native/lift-for-bounds} so each is one sitting): array indexing by the loop variable where possible. After a loop prints as for i in a..b, what its body computes from the counter still prints as arithmetic: 0x64u32.wrapping_mul(r8).wrapping_add(0x20244ec) for &gPlayerParty[i], (r6 << 2) plus a loaded base for itemSlots[i], and agbcc's strength-reduced form where a second register steps by the element size beside the counter (r4 += 8 each pass, CheckBagHasItem). Wanted: an address or access that is a typed array's base plus the counter times its element size prints as the element (gPlayerParty[i], pocket.itemSlots[i].itemId), with {unit:native/lift-element-address}'s printing; a stepped pointer that is provably base + i * size on every pass is not a variable of its own but that element; where the array is a global of known length and the range is within it, no run-time index check is printed. The same address as before (--no-field-types is the control). Add the shapes to the loops C program of {unit:native/lift-for-bounds} (an array of structs, a field array through a pointer, two arrays by one counter, a stepped pointer). Metrics: named_index_accesses up; for loops whose body still multiplies or shifts the counter (new, barred on the C rows). Example: HealPlayerParty and CheckBagHasItem in out/lift-emerald. Check (code-shape work, judged on the C programs, Metroid and Emerald): just lift-check passes with 0 differences on every program and every planted fault caught; the metric barred on the C rows and in the private bars of Metroid and Emerald; both games build and run 600 of 600 frames headless; Emerald route check still 0 differences once {unit:native/emerald-native-route} is done; just check passes.",
       "needs": ["native/lift-for-bounds", "native/lift-element-address"],
       "uses": ["heavy"],
-      "priority": 25
+      "priority": 25,
+      "notes": [
+        {
+          "at": "2026-11-24T14:47:44Z",
+          "by": "af2ac9d3",
+          "text": "{unit:native/lift-element-address} names an element's address where base and scaled index meet in one block (Emerald 7,676). Left: the multiply kept in a register and added to its base in another block (r4 = 0x64*v4), and two scaled indices in one sum (0x58*v30 + ((v14>>4)<<1))."
+        }
+      ]
     },
     {
       "id": "native/fnref-ram-lift-cost",
