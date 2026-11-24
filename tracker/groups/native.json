@@ -5449,7 +5449,7 @@
     {
       "id": "native/lift-pointer-signatures",
       "title": "Pointer parameters take Ref types in their signatures",
-      "detail": "Split from {unit:native/lift-pointer-types}: a parameter it binds keeps u32 in the signature and is bound again as the body's first line (let n: Ref<t::Node> = Ref::new(n);). Wanted: the signature says n: Ref<t::Node>, a return value that holds a pointer returns Ref<T>, and callers pass a Ref they hold (or make one once at the call), carried to callers and callees until they agree; adapters (x_, a_) convert. Check: just lift-check 0 differences and every planted fault caught; Metroid and Emerald build and run 600 of 600 frames; just check.",
+      "detail": "Split from {unit:native/lift-pointer-types}: a parameter it binds keeps u32 in the signature and is bound again as the body's first line (let n: Ref<t::Node> = Ref::new(n);). Wanted: the signature says n: Ref<t::Node>, a return value that holds a pointer returns Ref<T>, and callers pass a Ref they hold (or make one once at the call), carried to callers and callees until they agree; adapters (x_, a_) convert. Check: just lift-check 0 differences and every planted fault caught; Metroid and Emerald build and run 600 of 600 frames; just check. Sprint 2026-11-24: new metric params_rebound (a body's first-line let n: Ref<T> = Ref::new(n);), barred 0 on the C rows; the eight lines bars {unit:native/lift-pointer-types} raised come back down. A parameter whose callers disagree, or that prints as Lent, stays as it is. Metroid's native route 0 differences. After {unit:native/lift-lent-print}; not beside the call-shape units.",
       "check": "recorded",
       "needs": ["native/lift-pointer-types"],
       "uses": ["heavy"]

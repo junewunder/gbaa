@@ -4234,3 +4234,4 @@
 {"at":"2026-11-24T22:32:27Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-stack-typed-locals","text":"A lent stack local takes its DWARF type: edited (detail)"}
 {"at":"2026-11-24T22:32:29Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-lend-wider","text":"More pointer parameters borrowed: compares and walks: edited (detail)"}
 {"at":"2026-11-24T22:32:31Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-pointer-registers","text":"Register locals hold the Ref type the lift's flow gives: edited (detail)"}
+{"at":"2026-11-24T22:32:33Z","actor":"session","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-pointer-signatures","text":"Pointer parameters take Ref types in their signatures: edited (detail)"}
