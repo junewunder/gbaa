@@ -1657,6 +1657,7 @@ unread_lets = 0
 adc_sums = 0
 bank_sp_calls = 261
 sp_arith_unescaped = 0
+sp_arith_exact = 34
 lr_returned = 0
 loops_not_for = 136
 labelled_blocks = 206
