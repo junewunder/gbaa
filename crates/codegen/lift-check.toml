@@ -2958,8 +2958,6 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 4
 fn_keys_left = 4
-rom_static_fn_keys = 4
-rom_refs = 0
 gap_targets = 0
 
 [program.c-list-gcc]
@@ -3057,8 +3055,6 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 4
 fn_keys_left = 4
-rom_static_fn_keys = 4
-rom_refs = 0
 gap_targets = 0
 
 [program.native-entry-jump]
@@ -3240,6 +3236,4 @@ entry_lr_returns_call_fn = 0
 gap_targets = 15
 fn_words_not_proven = 58
 fn_keys_left = 62
-rom_static_fn_keys = 3
-rom_refs = 17
 sp_accesses_callers_frame = 7
