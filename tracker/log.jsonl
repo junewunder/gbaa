@@ -4266,3 +4266,4 @@
 {"at":"2026-11-24T22:35:45Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-pointer-registers","text":"Register locals hold the Ref type the lift's flow gives: edited (priority)"}
 {"at":"2026-11-24T22:35:47Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/emerald-native-route","text":"Emerald's lift matches the play build on a route: edited (priority)"}
 {"at":"2026-11-24T22:35:50Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-restore-saved-block","text":"A restore loading sp and pc from a saved block unwinds: edited (priority)"}
+{"at":"2026-11-24T22:35:52Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/minish-builds","text":"Minish Cap's lift builds: its hard holes closed: edited (priority)"}

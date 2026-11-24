@@ -3852,6 +3852,7 @@
       "detail": "Minish Cap had 27 hard holes with the flow on 2026-11-19 ({unit:native/fnref-flow-emerald}); the 2026-11-14 table had 31: no code 21, summaries 7, jumps 3. The 21 no-code holes likely share one cause: find it first. Close each by a lifter or discovery rule where the cause is general, by the game's holes file (mods/<game>/holes.toml, each entry with its reason) only where it is the game's own. Run just holes-all on main before and --against it after (just long start, --mem 4G is enough: memory/lift-cost-corpus.md): no other game's hard holes may rise. A cause too big for about 3 hours becomes its own unit, needed by this one. Done when: just lift on Minish Cap has 0 hard holes and builds, its first stop is recorded (and filed as a unit if it isn't 600 of 600); just check passes. Sprint 2026-11-24: stale above: 4 hard holes are left (mods a6294ff): ZeldaFollowAction's r5 ({unit:native/lift-takes-across-copies}) and 3 from two context restores that aren't setjmp's ({unit:native/lift-restore-saved-block}).",
       "needs": ["native/lift-longjmp", "native/lift-takes-across-copies", "native/lift-restore-saved-block"],
       "uses": ["heavy"],
+      "priority": 87,
       "minMinutes": 150,
       "notes": [
         {
