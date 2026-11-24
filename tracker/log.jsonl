@@ -4042,3 +4042,4 @@
 {"at":"2026-11-24T12:03:22Z","actor":"loop","tag":"5416770a","host":"quack","cmd":"done","id":"merge/quack-lane3-native-lift-aligned-loads","text":"Merge main on quack lane 3: done"}
 {"at":"2026-11-24T12:10:42Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane3-native-lift-aligned-loads","text":"Merge main on quack lane 3: on main"}
 {"at":"2026-11-24T12:10:42Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-aligned-loads","text":"A load the lift proves aligned drops its rotate: on main"}
+{"at":"2026-11-24T12:10:46Z","actor":"loop","tag":"3411b93a","host":"quack","cmd":"claim","id":"native/lift-cast-types","text":"Values typed by width so the lift drops its casts: claimed"}
