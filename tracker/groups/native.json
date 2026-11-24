@@ -5191,13 +5191,25 @@
       "check": "recorded",
       "uses": ["heavy"],
       "priority": 94,
+      "record": {
+        "state": "claimed",
+        "by": "05a949e7",
+        "session": "05a949e7-7734-403c-9118-ed25950c446e",
+        "host": "quack",
+        "pid": 1981458,
+        "start": "101567385",
+        "at": "2026-11-24T23:47:44Z",
+        "branch": "unit/native/lift-takes-across-copies",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-24T05:45:00Z",
           "by": "c2d4d707",
           "text": "Near {unit:native/ram-jump-passes-regs} (a jump into a copy passing r4-r11 across contexts): the same cross-context summaries may serve both; do them together if one lands first. Minish's two entries (0x08060ba1, 0x080609e9) are in mods/minish-cap/holes.toml already."
         }
-      ]
+      ],
+      "round": "2026-11-24T23:47:44Z"
     },
     {
       "id": "native/fnref-dense-keys-left",
