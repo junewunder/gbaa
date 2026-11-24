@@ -303,6 +303,29 @@ fn a_store_to_ime_ends_a_native_block() {
 }
 
 #[test]
+fn a_second_store_to_ime_through_the_same_register_ends_its_block() {
+    // `ldr r1, =0x0400_0208; strh r0, [r1]; strh r0, [r1]; nop; bx lr`:
+    // after the split at the first store, the second one's block doesn't
+    // load r1, but the whole block proved it an `IME` store, so it ends
+    // that block too (native/emerald-sio32-play-timing: Emerald's
+    // Sio32IDMain, whose IRQ the interpreter took twice, compiled code once).
+    let words = [
+        0xE59F_100C,
+        0xE1C1_00B0,
+        0xE1C1_00B0,
+        0xE1A0_0000,
+        0xE12F_FF1E,
+    ];
+    let (mut rom, d) = program(&words, &[0x0800_0000]);
+    rom.extend(0x0400_0208u32.to_le_bytes());
+    let mut ctx = Ctx::new(&rom, &d);
+    ctx.cfg.clock = crate::func::Clock::Native;
+    let f = build_func(&ctx, 0x0800_0000);
+    let lens: Vec<(u32, usize)> = f.blocks.iter().map(|(&k, b)| (k, b.insns.len())).collect();
+    assert_eq!(lens, [(0x0800_0000, 2), (0x0800_0008, 1), (0x0800_000c, 2)]);
+}
+
+#[test]
 fn a_conditional_instructions_effects_share_one_if() {
     // `movseq r0, r1; bx lr`: N, Z, C and r0 under one guard, the flags
     // as one CPSR write (C rewritten with its old value: `mov` with no

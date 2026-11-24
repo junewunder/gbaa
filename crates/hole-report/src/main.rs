@@ -36,7 +36,7 @@
 //! ([`corpus::Line`]). `gbaa-holes --corpus FILE …` runs every game of a
 //! corpus file and prints one table ([`corpus`], `just holes-all`);
 //! `gbaa-holes --nightly FILE …` takes each game through the hole report,
-//! its play and readable builds and its lift, and diffs that with the run
+//! its play build and its lift, and diffs that with the run
 //! before ([`nightly`], `just nightly`).
 //!
 //! What the run records, per instruction executed: the address and

@@ -150,6 +150,12 @@
 //! `lets_named` (`native/lift-let-names`): the values printed as their
 //! own `let` that took a name from what they hold, not `vN` (no bar: it
 //! should rise; [`super::value_names`]).
+//! Pointer variables (`native/lift-pointer-types`, [`super::ref_binds`]):
+//! `refs_bound_named` and `refs_bound_proven`, the parameters and `let`s
+//! declared the `Ref<T>` their accesses make of them, by where `T` came
+//! from (the names files', a heap run's; no bars: they should rise), and
+//! `ref_new_at_use`, the `Ref::<T>::new(…)` and `Ref::<T>::to(…)` still
+//! printed at a use (barred).
 //!
 //! I/O registers (`native/lift-io-names`): `io_named`, the constant-address
 //! I/O loads and stores printed by a register's name (`st16(g, REG_IME,
@@ -388,6 +394,8 @@ pub const UNBARRED: &[&str] = &[
     "values_named",
     "locals_named",
     "lets_named",
+    "refs_bound_named",
+    "refs_bound_proven",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each

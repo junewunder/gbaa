@@ -96,7 +96,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
 - `just nightly [--out DIR] [--against DIR] [--only NAME]… [--skip STEP]…
   [--step-minutes N]` (native/nightly-corpus; `crates/hole-report/src/nightly.rs`
   has the whole of it): each game of `holes/corpus.toml` through the hole
-  report, its play and readable builds and `just lift` (with the corpus's
+  report, its play build and `just lift` (with the corpus's
   `lift` name), a step that fails or passes `--step-minutes` (default 120)
   recorded and the rest run. Writes `out/nightly/<date>/summary.toml`,
   `summary.txt` and `<name>/summary.txt` (hard holes by kind, built or not,
@@ -673,41 +673,12 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   that call, past a budget; the per-game list is
   `crates/runtime/spins.toml`) and the BIOS's copies move it; its build
   runs only at `--timing native` or `--interp`.
-  `just timing-modes` runs `out/kirby-{exact,static,instant}` (built first,
-  the doc says how) along timing-lab's route and compares them with exact.
   `just snapshots-readable [ROM] [NAMES] [LIST] [FILE]` rewrites
   `mods/emerald/snapshots/emerald-readable.rs` from
   `emerald-readable.list` with pret's map (about 30 s with the saves proof, not heavy).
   `just sst-gen 500 4000 --readable` runs sst-gen with each generated fn
   readable (2026-10-27, the readable lowering: 22,500 cases and 4,000
   sequences, 0 differ).
-- `just readable-states ROM NAMES LIST [--every N] ROUTE…` (heavy: builds
-  two generated crates; NAMES `""`: unnamed): the named play view (`out/<name>-named`) and the
-  same with `--readable LIST` (`out/<name>-readable`) built and run through
-  `route-check --same-states` as `names-states` does. A list line `*` is
-  every function printed, the IWRAM copies' and continuation roots' too
-  (`emit::all_entries`): `mods/emerald/readable/all.list`.
-  `mods/emerald/readable/200.list` is the 200 functions the build cost was
-  measured on. Emerald, every function readable, the new-game route with
-  `--every 250`, 2026-10-28: 15,155 of 15,157 listed functions readable
-  (112,737 of 112,838 blocks), all 23 frames the same, 642,730 bytes each;
-  named and typed with `pokeemerald.toml`, 2026-10-28: 15,167 of 15,167
-  (112,738 of 112,940 blocks), all 23 the same.
-  `just readable-suites [--every N]` runs it unnamed with `all.list` on
-  the CPU suites: jsmolka's arm, thumb, memory, nes and bios tests and
-  both armwrestler builds, along `units/jsmolka-*.toml` and
-  `units/armwrestler-*.toml` (the armwrestler routes walk every page as
-  `just armwrestler` does, each page a checkpoint). 2026-10-28,
-  `mod/readable-exact`, `--every 25`: all seven the same at every point
-  (12 points each for jsmolka's, 20 for armwrestler's); blocks in the
-  readable form, arm 1 of 150, thumb 122 of 177, memory 0 of 77, nes 0
-  of 3, bios 0 of 64, armwrestler 64 of 201 (the form takes Thumb ROM
-  blocks only; the rest are ARM). The same day `just sst-gen 500 4000
-  --readable`: 22,500 cases and 4,000 sequences, 0 differ. `just
-  own-state-check ROM N K "" "--readable mods/emerald/readable/all.list"`
-  checks our save states with every function readable: Emerald 1000 100
-  (15,167 functions, 112,738 of 112,940 blocks readable) and
-  armwrestler-fixed 200 150 pass (2026-10-28).
 - `just liveness-states ROM [--every N] ROUTE…` (heavy: builds two
   generated crates, about 5 min each for Emerald): recompiles ROM with flag
   liveness on and off (`out/<name>-liveness`, `out/<name>-no-liveness`),
@@ -724,30 +695,6 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   `--every 50`, 2026-10-24: all 184 frames the same, 642,720 bytes each;
   25 min with both builds (before the fix, the new-game route's frame 950
   differed).
-- The naming loop (`docs/mod-view-design.md`, "The naming loop";
-  `crates/naming`; not heavy, but every `ask` spends the owner's model
-  usage, so it runs only on the capped sample until june passes the
-  naming gate). `just naming prepare ROM PRET OUT [--seed N]` draws the
-  sample from the functions PRET (`$GBAA_DATA/names/pokeemerald.toml`)
-  names, leaving out libgcc, m4a and the SDK's libraries, whose names
-  every print is given: 100 per size class, about 30 whole subtrees first;
-  it writes `OUT/sample.toml` (about 20 s on Emerald). `just naming ask
-  ROM OUT ROUND [--jobs N] [--model M] [--limit N]` asks `claude -p`
-  (no tools, safe mode, from an empty folder in `/tmp`; default model
-  Sonnet 5.5, 6 at a time) for each function's name: ROUND `0` (code
-  alone), `1` (bottom-up, callees' round-1 names, round 0's data vote),
-  `2` (callers' names too), or the leak controls `nocode` and `recog`.
-  Each answer, with its tokens, seconds and list cost, goes to
-  `OUT/<round>/<key>.toml`, its prompt to `<key>.prompt`; a rerun asks
-  only what is missing. `just naming score OUT` scores every round
-  against pret (subtoken P/R/F1, exact match, data by vote, cost) and
-  writes `OUT/report.md`. Emerald's sample is `work/mod-naming/s1/`.
-  The sibling leak control: `just naming sibling ROM PRET SIB_ROM SIB_PRET
-  OUT [--seed N] [--count 30]` (FireRed's ROM and names, then Emerald's)
-  writes a sample of ROM's functions whose code, call offsets masked and
-  8+ instructions, is the same as one of SIB_ROM's (unique in each) under
-  another, non-placeholder pret name; `ask … 0` and `score` as above, the
-  report adding how many answers give the sibling's name. About 40 s.
 - Matching functions across a compiler change
   (`docs/research/cross-compiler-matching.md`; `crates/xmatch`; heavy only
   in that it runs discovery twice). `just xmatch score A.gba A.toml B.gba
@@ -789,19 +736,13 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   [--jobs N] [--gap N] [--min S] [--seed N]` (mod/opus-library-judge;
   spends the owner's model usage: `--limit` caps the new calls, default 0,
   which only scores what OUT holds) takes each ROM as the game, names it
-  from the others' libraries, and asks `claude -p` (as `naming ask`, default
-  Opus 5.5, 4 at a time) which of the three nearest reference library
+  from the others' libraries, and asks `claude -p` (no tools, safe mode, from an
+  empty folder in `/tmp`; default Opus 5.5, 4 at a time) which of the three nearest reference library
   functions each unnamed library-looking function is (within `--gap` 16
   functions of named library code on both sides), or none; answers in
   `OUT/<game>/<key>.toml`, prompts beside them, the score in
   `OUT/report.md`. About 4 min without calls; the six-ROM trial is
   `work/opus-judge/trial/`.
-- `just names-states ROM NAMES [--every N] ROUTE…` (heavy: builds two
-  generated crates): `--names-check`, then the unnamed and named prints
-  (`out/<name>-unnamed`, `out/<name>-named`, NAMES the source map, e.g.
-  `$GBAA_DATA/names/pokeemerald.toml`) built and run through
-  `route-check --same-states` as `liveness-states` does. Names change no
-  lowering, so any difference is a naming bug.
 - A mod copy (`docs/mod-view-design.md`, "A mod copy";
   `codegen::modcopy`). `just mod-cut ROM NAMES DIR FUNC…`
   (`gbaa-recompile ROM --names NAMES --cut DIR FUNC…`, FUNCs by pret name
@@ -832,18 +773,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   'start@400,start@700,a@800,a@950'` with `--frames 1002 --state-at 1001
   --state-out S` (frame 1001 ends inside the call), `--state S --frames
   300`, and `--frames 1300 --rewind 1000+31`: each loaded or rewound run
-  prints `(1 at a call the mod added …)` and runs on. `just mod-states ROM NAMES DIR [--every N] ROUTE…`
-  (heavy: two generated crates) builds the named print and the modded one
-  (`out/<name>-named`, `out/<name>-mod`) and runs `route-check
-  --same-states`, printing that resume count per route. To see an
-  edit: `just mod-run ROM NAMES DIR [--dump-at N,…] ROUTE` (heavy: the
-  same two crates; NAMES `""` names both from the maps in
-  `$GBAA_DATA/names` that name ROM by sha1) runs both along ROUTE (`route-check --mod-run`),
-  dumps the frames `--dump-at` names (default the route's checkpoints),
-  says which pairs are the same and writes `out/mod-run/<route>/side-N.png`
-  for each that differs: stock, the mod, and stock dimmed with the
-  differing pixels in red, left to right. It never fails on a difference
-  (that is what a mod is for), only when a build can't run.
+  prints `(1 at a call the mod added …)` and runs on.
 - What to cut for a change to a struct field (`codegen::find`;
   `docs/research/agent-first-mod.md`, item 5). `just mod-find ROM NAMES
   FIELD` (`gbaa-recompile --find ROM FIELD --names NAMES`; NAMES "": the
@@ -1296,7 +1226,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   the bytes; `--layout packed`, the play layout, puts them in the
   lifter's order with the rest of RAM as `bytes`, and `g.ram[offset]`
   finds a byte in the field that holds it, native/lift-packed-layout; names from DIR's names files for this ROM, default `$GBAA_DATA/names` (the mod view's maps, library ones included; they apply only by the ROM's sha1) with the repo's `names/` over it (native/lift-names-default; `--no-data-names` leaves out `$GBAA_DATA/names`), each `--names` layering its DIR's over those before, in place of the default;
-  native/ram-globals; a datum of size 0 in the map (a label: a global the linker script places, as katam's RAM, which pret-names types from its `extern` declarations) spans its type's size, and the report's `types` line counts the constant RAM accesses that land on a typed global's scalar and on a named struct field, native/mirror-katam-names: Kirby & the Amazing Mirror's lift takes katam's map with `--names $GBAA_DATA/names --names names`, the hand names over it; and functions' entries, and constant addresses in named data, by name: native/lift-fn-names; and, where they give `[locals]` or prototypes, each register local and parameter by its DWARF variable's name where liveness agrees (every access of the register in the variable's range, the value it comes in with read only by a `push` but a parameter's, every value written fitting its C type; a parameter the prototype names whose local is never written takes that name), else a `// dwarf r4: name` comment where the variable's range starts (native/lift-local-names, `codegen::native::local_names`; the report's `locals_named`, no bar, and `locals_noted`, barred on the C rows, which `lines` leaves out; `--no-local-names` leaves them out); and, where they give a function's prototype, its parameters and result, hole or not, unless its summary proves the prototype wrong (native/lift-signature-holes, `codegen::native::shape`: the report's `prototype refused` lines, `proto_shapes` and `proto_shapes_refused`; `--no-prototype-shapes` keeps the summaries' shapes, and the report's `summary holes by kind` and `the summaries' shapes against the prototypes` lines score those; `--plant-proto=KEY`, function KEY's prototype taken to return nothing, unchecked, is lift-check's planted control on c-chain-agbcc); and, where they have a text table (`[text]`, or `crates/codegen/text-tables.toml`'s for the ROM), a `// text: …` comment above the statement using a constant that points at text or at a table of pointers to it, as the mod view's notes (native/lift-text; the report's `text_notes`, which `lines` leaves out), and each string they lead to a static in `src/text.rs` whose literal the build encodes into the ROM, so an edit shows on screen (native/lift-text-editable; `text_statics` and `texts_left`, the report's `texts as statics` line; `--text-edit FILE`, `TEXT_… = "…"`, prints those literals instead: mods/metroid/text-start-game.toml); and, where they have a line table (`[lines]`), a `// c/switch/main.c:42` comment above the statement each source line's first instruction starts (native/lift-line-comments; the report's `line_notes`, which `lines` leaves out); and, where the files give types, accesses through a pointer they type as its named fields, `g.get(Ref::<t::Body>::new(r1).vx())`, over the same `ld*`/`st*`: native/lift-typed-access, `codegen::native::fields`, off with `--no-field-types` (a value that is a typed array's base plus an index scaled by its element's size, an element's address passed on or kept rather than loaded through, prints by name, `Ref::<[t::Pokemon; 6]>::new(gPlayerParty).idx(r8).addr()`, or a field's in it, `.idx(i).hp().addr()`: native/lift-element-address, `fields::address_indexed`, the report's `named_element_addresses`; in a `for`, a register the loop steps beside its variable by an element's size each round, agbcc's strength-reduced `p[i]`, prints as that element of what it pointed at before the loop, `g.get(Ref::<[t::Bar; 6]>::new(r1).idx(i_first.wrapping_sub(i)).len())`, its step left out and, where the variable's start isn't a constant, its first value kept as `i_first`: native/lift-for-index, `FnPrinter::stepped_ptrs`, the report's `for_stepped_elements`, with `for_counter_arith`, barred, the `for`s whose body still multiplies or shifts the variable; `GBAA_STEP_WHY=1` prints each candidate) (a typed `get` stops the program on a pointer its C type's alignment rules out, so such a load prints without the rotate a misaligned `ldr` or `ldrh` gives it; so does one through a heap object's `Ref`, a stack local's, or at an address its arithmetic proves aligned, from constants and sp: native/lift-aligned-loads, `codegen::native::aligned`, the report's `load_rotates_left`, barred); a bitfield by the bits the code changes or reads, a one-field write as `g.set_bits(p.hue(), v)`, an access the compiler joined over several fields through an accessor named for them all (`p.left_up_speed_hue()`): native/lift-bitfields, `codegen::native::bitfields`, the report's `bitfields` line; a struct global's bitfields at its constant address as its `ram_t` struct's storage field named for those sharing bytes (`g.ram.gClock.tick_next_run_flash`), and, where proven the field's, its getter and setter (`g.ram.gClock.flash()`, `g.ram.gClock.set_beats(v)`): native/lift-global-bitfields; `names/c-*-agbcc.toml` are the agbcc C tests' files, made by `target/release/pret-names ELF ROM OUT` after `just c-tests` changes a ROM), its registers locals, blocks a `loop { match }` over
+  native/ram-globals; a datum of size 0 in the map (a label: a global the linker script places, as katam's RAM, which pret-names types from its `extern` declarations) spans its type's size, and the report's `types` line counts the constant RAM accesses that land on a typed global's scalar and on a named struct field, native/mirror-katam-names: Kirby & the Amazing Mirror's lift takes katam's map with `--names $GBAA_DATA/names --names names`, the hand names over it; and functions' entries, and constant addresses in named data, by name: native/lift-fn-names; and, where they give `[locals]` or prototypes, each register local and parameter by its DWARF variable's name where liveness agrees (every access of the register in the variable's range, the value it comes in with read only by a `push` but a parameter's, every value written fitting its C type; a parameter the prototype names whose local is never written takes that name), else a `// dwarf r4: name` comment where the variable's range starts (native/lift-local-names, `codegen::native::local_names`; the report's `locals_named`, no bar, and `locals_noted`, barred on the C rows, which `lines` leaves out; `--no-local-names` leaves them out); and, where they give a function's prototype, its parameters and result, hole or not, unless its summary proves the prototype wrong (native/lift-signature-holes, `codegen::native::shape`: the report's `prototype refused` lines, `proto_shapes` and `proto_shapes_refused`; `--no-prototype-shapes` keeps the summaries' shapes, and the report's `summary holes by kind` and `the summaries' shapes against the prototypes` lines score those; `--plant-proto=KEY`, function KEY's prototype taken to return nothing, unchecked, is lift-check's planted control on c-chain-agbcc); and, where they have a text table (`[text]`, or `crates/codegen/text-tables.toml`'s for the ROM), a `// text: …` comment above the statement using a constant that points at text or at a table of pointers to it, as the mod view's notes (native/lift-text; the report's `text_notes`, which `lines` leaves out), and each string they lead to a static in `src/text.rs` whose literal the build encodes into the ROM, so an edit shows on screen (native/lift-text-editable; `text_statics` and `texts_left`, the report's `texts as statics` line; `--text-edit FILE`, `TEXT_… = "…"`, prints those literals instead: mods/metroid/text-start-game.toml); and, where they have a line table (`[lines]`), a `// c/switch/main.c:42` comment above the statement each source line's first instruction starts (native/lift-line-comments; the report's `line_notes`, which `lines` leaves out); and, where the files give types, accesses through a pointer they type as its named fields, `g.get(Ref::<t::Body>::new(r1).vx())`, over the same `ld*`/`st*`: native/lift-typed-access, `codegen::native::fields`, off with `--no-field-types`; a parameter or `let` whose accesses all make one type of it is declared that `Ref<T>`, so the access is `g.get(n.x())` and another use `n.addr()`: native/lift-pointer-types, `codegen::native::ref_binds`, the report's `refs_bound_named`, `refs_bound_proven` and `ref_new_at_use` (barred), off with `--no-ref-binds` (a value that is a typed array's base plus an index scaled by its element's size, an element's address passed on or kept rather than loaded through, prints by name, `Ref::<[t::Pokemon; 6]>::new(gPlayerParty).idx(r8).addr()`, or a field's in it, `.idx(i).hp().addr()`: native/lift-element-address, `fields::address_indexed`, the report's `named_element_addresses`; in a `for`, a register the loop steps beside its variable by an element's size each round, agbcc's strength-reduced `p[i]`, prints as that element of what it pointed at before the loop, `g.get(Ref::<[t::Bar; 6]>::new(r1).idx(i_first.wrapping_sub(i)).len())`, its step left out and, where the variable's start isn't a constant, its first value kept as `i_first`: native/lift-for-index, `FnPrinter::stepped_ptrs`, the report's `for_stepped_elements`, with `for_counter_arith`, barred, the `for`s whose body still multiplies or shifts the variable; `GBAA_STEP_WHY=1` prints each candidate) (a typed `get` stops the program on a pointer its C type's alignment rules out, so such a load prints without the rotate a misaligned `ldr` or `ldrh` gives it; so does one through a heap object's `Ref`, a stack local's, or at an address its arithmetic proves aligned, from constants and sp: native/lift-aligned-loads, `codegen::native::aligned`, the report's `load_rotates_left`, barred); a bitfield by the bits the code changes or reads, a one-field write as `g.set_bits(p.hue(), v)`, an access the compiler joined over several fields through an accessor named for them all (`p.left_up_speed_hue()`): native/lift-bitfields, `codegen::native::bitfields`, the report's `bitfields` line; a struct global's bitfields at its constant address as its `ram_t` struct's storage field named for those sharing bytes (`g.ram.gClock.tick_next_run_flash`), and, where proven the field's, its getter and setter (`g.ram.gClock.flash()`, `g.ram.gClock.set_beats(v)`): native/lift-global-bitfields; `names/c-*-agbcc.toml` are the agbcc C tests' files, made by `target/release/pret-names ELF ROM OUT` after `just c-tests` changes a ROM), its registers locals, blocks a `loop { match }` over
   local labels, calls Rust calls; then the recipe builds it into
   `target/recompiled` (`gbaa-native-<name>`, the native programs' headless
   flags or, with none, gbaa-desktop's window to play in: `--scale N`, `--mute`; it keeps the game's `.sav` in `saves/<name>/` as the play build does, and its menus leave out save states, rewind, scripts and netplay; `crates/native-host`). It reads `holes/<name>.toml` when there is

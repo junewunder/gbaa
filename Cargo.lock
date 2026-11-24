@@ -1294,15 +1294,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "naming"
-version = "0.1.0"
-dependencies = [
- "analysis",
- "codegen",
- "toml",
-]
-
-[[package]]
 name = "native-fn-diff"
 version = "0.1.0"
 dependencies = [
@@ -2785,7 +2776,6 @@ dependencies = [
  "armv4t",
  "codegen",
  "fn-diff",
- "naming",
  "runtime",
  "toml",
 ]

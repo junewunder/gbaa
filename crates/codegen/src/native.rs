@@ -238,6 +238,7 @@ pub mod modules;
 pub mod named;
 pub mod narrow;
 pub mod pc_marks;
+pub mod ref_binds;
 pub mod rom_data;
 pub mod shape;
 pub mod switch;
@@ -420,6 +421,9 @@ pub struct Holes {
     /// Every `let` of a value `vN` (`gbaa-lift --no-let-names`), none
     /// named for what it holds ([`value_names`]).
     pub no_let_names: bool,
+    /// Every pointer variable `u32` (`gbaa-lift --no-ref-binds`), none
+    /// declared the `Ref<T>` its accesses make ([`ref_binds`]).
+    pub no_ref_binds: bool,
     /// Stage A's old IRQs (`gbaa-lift --irq-at-waits`): `Game::cpsr` as
     /// bookkeeping only, so an IRQ due at a wait inside a critical section
     /// runs there, where the hardware holds it until the I bit clears. The
@@ -1582,6 +1586,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     bound: Default::default(),
                     fors: BTreeMap::new(),
                     steps: BTreeMap::new(),
+                    top_fors: BTreeMap::new(),
                     ptr_cands: Vec::new(),
                     ptr_steps: BTreeMap::new(),
                     ptr_reads: BTreeMap::new(),
@@ -2548,6 +2553,12 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("value_lets", soft.value_lets);
     // Of those, the ones named for what they hold (native/lift-let-names).
     m.push("lets_named", n(soft.lets_named));
+    // Pointer variables declared `Ref<T>` (native/lift-pointer-types; no
+    // bar: they should rise), by where the type came from: the names
+    // files' (`t::…`) and the heap runs' (proven); and the typed pointers
+    // still made at a use, `Ref::<T>::new(…)` (barred).
+    m.push("refs_bound_named", n(soft.refs_bound_named));
+    m.push("refs_bound_proven", n(soft.refs_bound_proven));
     // Register locals (native/lift-register-locals): writes of r0-r12's
     // mut locals printed (a value only its block reads is a `let`), and
     // functions whose entry unpacks a register or flag never read as it
@@ -2586,6 +2597,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             .map(|(_, t)| unread::tuple_calls(t))
             .sum(),
     );
+    m.push("ref_new_at_use", text().map(ref_binds::at_use).sum());
     // Structured loops (native/lift-for-loops): those printed as `for`
     // (no bar: it should rise) and the rest, as `loop` (barred).
     m.push("loops_for", soft.loops_for);
@@ -4375,6 +4387,10 @@ struct Soft {
     locals_noted: usize,
     /// The `let vN` values named for what they hold ([`value_names`]).
     lets_named: usize,
+    /// Pointer variables declared `Ref<T>` ([`ref_binds`]), by where
+    /// their type came from: the names files', a heap run's.
+    refs_bound_named: usize,
+    refs_bound_proven: usize,
     /// And those whose plain entry still packs its arguments into
     /// [`Regs::call`] for `x_` (barred): what they take as they came is
     /// more than those (a flag, r4-r12, an lr not proven `RET`).
@@ -4509,6 +4525,10 @@ struct FnPrinter<'a, 'b> {
     /// and the write of each one's step, left out: its block and inst.
     fors: BTreeMap<usize, counted::For>,
     steps: BTreeMap<u32, usize>,
+    /// The `for`s whose start tests their range ([`bounds::Test::Top`]),
+    /// by label: the label falling out of the loop goes to, which the
+    /// start's exit breaks to, so a `for` that runs out goes there too.
+    top_fors: BTreeMap<usize, usize>,
     /// The pointers a `for` steps beside its variable that print as the
     /// element they are ([`counted::Stepped`]; native/lift-for-index):
     /// the candidates the typed flow takes; their steps, left out, by
@@ -4811,7 +4831,7 @@ impl FnPrinter<'_, '_> {
         let plan = if catch { None } else { self.plan(&order) };
         if let Some(p) = plan {
             if !self.holes.no_for_loops {
-                self.find_fors(&p.tree);
+                self.find_fors(&p.tree, None);
                 self.stepped_ptrs();
             }
             self.soft.fns_structured += 1;
@@ -4839,6 +4859,7 @@ impl FnPrinter<'_, '_> {
             s.insert_str(head, &e);
             self.name_locals(&mut s, head, e.len());
             self.name_values(&mut s, head);
+            self.bind_refs(&mut s, head);
             return s;
         }
         self.soft.fns_match += 1;
@@ -4870,6 +4891,7 @@ impl FnPrinter<'_, '_> {
         s.insert_str(head, &e);
         self.name_locals(&mut s, head, e.len());
         self.name_values(&mut s, head);
+        self.bind_refs(&mut s, head);
         s
     }
 
@@ -5029,6 +5051,28 @@ impl FnPrinter<'_, '_> {
         if n > 0 {
             s.replace_range(head.., &text);
             self.soft.lets_named += n;
+        }
+    }
+
+    /// The function's pointer variables declared as the `Ref<T>` their
+    /// accesses make of them ([`ref_binds`]): last, after the names.
+    fn bind_refs(&mut self, s: &mut String, head: usize) {
+        if self.holes.no_ref_binds {
+            return;
+        }
+        // Its entries as printed stay ([`one_entry`] finds them so): a
+        // parameter's binding goes after them.
+        let all = self.soft.entries.get(&self.f.entry).map(Entries::all);
+        let after = all
+            .as_ref()
+            .and_then(|e| s[head..].find(e.as_str()).map(|i| i + e.len()))
+            .unwrap_or(0);
+        let (text, n) = ref_binds::bind(&s[head..], after);
+        let kept = all.is_none_or(|e| !s[head..].contains(&e) || text.contains(&e));
+        if n != ref_binds::Bound::default() && kept {
+            s.replace_range(head.., &text);
+            self.soft.refs_bound_named += n.named;
+            self.soft.refs_bound_proven += n.proven;
         }
     }
 
@@ -5817,29 +5861,40 @@ impl FnPrinter<'_, '_> {
     /// of what is printed inside the loop goes to a block that reads it
     /// before writing it, as there the function's own local, which the
     /// loop didn't write, is read.
-    fn find_fors(&mut self, seq: &[plan::Node]) {
-        for n in seq {
+    ///
+    /// `fall` is where falling off `seq` goes, as [`FnPrinter::seq`]
+    /// prints it: a loop's, where falling out of it goes (a `for` tested
+    /// at its start runs out there). Inside an inlined edge, taken as
+    /// nowhere.
+    fn find_fors(&mut self, seq: &[plan::Node], fall: Option<usize>) {
+        let len = seq.len();
+        for (i, n) in seq.iter().enumerate() {
+            let after = if i + 1 == len { fall } else { None };
             match n {
                 plan::Node::Block { exits, .. } => {
                     for e in exits.iter().flat_map(|o| &o.edges) {
                         if let plan::How::Inline(s) = &e.how {
-                            self.find_fors(s);
+                            self.find_fors(s, None);
                         }
                     }
                 }
                 plan::Node::Loop { label, body } => {
                     let found = self
                         .counted_loop(*label, body)
-                        .or_else(|| self.bounded_loop(*label, body));
-                    if let Some((f, h, step)) = found
+                        .map(|(f, h, step)| (f, h, step, None))
+                        .or_else(|| self.bounded_loop(*label, body, after));
+                    if let Some((f, h, step, top)) = found
                         && !self.steps.contains_key(&h)
                     {
                         self.fors.insert(*label, f);
                         self.steps.insert(h, step);
+                        if let Some(y) = top {
+                            self.top_fors.insert(*label, y);
+                        }
                     }
-                    self.find_fors(body);
+                    self.find_fors(body, None);
                 }
-                plan::Node::Labeled { body, .. } => self.find_fors(body),
+                plan::Node::Labeled { label, body } => self.find_fors(body, Some(*label)),
                 plan::Node::Region { .. } => {}
             }
         }
@@ -6199,9 +6254,8 @@ impl FnPrinter<'_, '_> {
 
     /// Loop `label` (`body`) as a `for` over a range [`bounds::prove`]
     /// proves (unit `native/lift-for-bounds`): a body of any number of
-    /// blocks, whose one jump back to its start is its latch's, guarded;
-    /// one way in from outside it. With its latch's key and the inst of
-    /// its step.
+    /// blocks, whose one jump back to its start is its latch's; one way
+    /// in from outside it. With its latch's key and the inst of its step.
     ///
     /// The counter is the register written once in a round (the blocks
     /// the latch is reached from without passing the start), by the latch
@@ -6213,16 +6267,40 @@ impl FnPrinter<'_, '_> {
     /// What is printed inside but runs once the loop is done may write it:
     /// the binding is `mut`. A pointer call in a round (whose writes
     /// aren't known) leaves the loop a `loop`.
+    ///
+    /// The range is tested by the latch's jump back, or by an exit of
+    /// the latch's before its unguarded jump back, or by the loop's start
+    /// ([`bounds::Test`]; unit `native/lift-for-top-tested`). A start
+    /// that tests it runs nothing before its test, but flags dead where
+    /// its exit goes (`after`, where falling out of the loop goes, so a
+    /// `for` that runs out goes there too: with the label, the fourth
+    /// item). Its rounds may be none, as the range's.
     fn bounded_loop(
         &self,
         label: usize,
         body: &[plan::Node],
-    ) -> Option<(counted::For, u32, usize)> {
-        let r = self.bounded_why(label, body);
-        if std::env::var_os("GBAA_FOR_WHY").is_some()
-            && let Err(why) = &r
-        {
-            eprintln!("for-why {:#010x} 'l{label}: {why}", self.f.entry);
+        after: Option<usize>,
+    ) -> Option<(counted::For, u32, usize, Option<usize>)> {
+        let r = self.bounded_why(label, body, after);
+        if std::env::var_os("GBAA_FOR_WHY").is_some() {
+            match &r {
+                Err(why) => eprintln!(
+                    "for-why {:#010x} 'l{label} at {:#010x}: {why}",
+                    self.f.entry,
+                    self.key_of(label)
+                ),
+                Ok((f, _, _, top)) => eprintln!(
+                    "for-why {:#010x} 'l{label}: a for, r{} {}{}",
+                    self.f.entry,
+                    f.reg,
+                    f.range(),
+                    if top.is_some() {
+                        ", tested at its start"
+                    } else {
+                        ""
+                    }
+                ),
+            }
         }
         r.ok()
     }
@@ -6233,7 +6311,8 @@ impl FnPrinter<'_, '_> {
         &self,
         label: usize,
         body: &[plan::Node],
-    ) -> Result<(counted::For, u32, usize), String> {
+        out_to: Option<usize>,
+    ) -> Result<(counted::For, u32, usize, Option<usize>), String> {
         let h = self.key_of(label);
         if h == self.f.entry {
             return Err("the entry".into());
@@ -6242,12 +6321,16 @@ impl FnPrinter<'_, '_> {
         // its exit's index among the block's exits, and its target.
         let mut inside: Vec<u32> = Vec::new();
         let mut edges: Vec<(u32, usize, u32)> = Vec::new();
+        let mut start_outs: Option<&[plan::Out]> = None;
         let mut todo: Vec<&plan::Node> = body.iter().collect();
         while let Some(n) = todo.pop() {
             match n {
                 plan::Node::Block { node, exits: outs } => {
                     let k = self.key_of(*node);
                     inside.push(k);
+                    if k == h {
+                        start_outs = Some(outs);
+                    }
                     for (i, o) in outs.iter().enumerate() {
                         for e in &o.edges {
                             if let plan::How::Inline(s) = &e.how {
@@ -6290,10 +6373,8 @@ impl FnPrinter<'_, '_> {
         let lxs = exits(self.ctx, lb);
         let back = *lxs.get(bi).ok_or("no exit")?;
         let latch = &lb.block.insts;
-        if !matches!(back.plan, Plan::Static(k) | Plan::Rekey(k) if k == h)
-            || latch[back.index].guard.is_none()
-        {
-            return Err("jump back not a guarded jump".into());
+        if !matches!(back.plan, Plan::Static(k) | Plan::Rekey(k) if k == h) {
+            return Err("jump back not a jump".into());
         }
         // The round: the blocks the latch is reached from without passing
         // the start. The rest printed inside run once the loop is done.
@@ -6309,6 +6390,30 @@ impl FnPrinter<'_, '_> {
                     go.push(e.0);
                 }
             }
+        }
+        // Where the range may be tested: the jump back, guarded; else the
+        // latch's last guarded exit before it, or the start's first exit.
+        let mut tests: Vec<bounds::Test> = Vec::new();
+        let mut top_why = String::new();
+        if latch[back.index].guard.is_some() {
+            tests.push(bounds::Test::Back);
+        } else {
+            if let Some(x) = lxs
+                .iter()
+                .rfind(|x| x.index < back.index && latch[x.index].guard.is_some())
+            {
+                tests.push(bounds::Test::Exit(x.index));
+            }
+            match self.start_test(h, l, &round, start_outs, out_to) {
+                Ok((e, leaves)) => {
+                    top_why = "start tests; ".into();
+                    tests.push(bounds::Test::Top(&self.f.blocks[&h].block.insts, e, leaves))
+                }
+                Err(w) => top_why = format!("start: {w}; "),
+            }
+        }
+        if tests.is_empty() {
+            return Err(format!("jump back not a guarded jump; {top_why}"));
         }
         // What each part writes: each register a block sets, or a call or
         // `swi` may (all of them, a pointer call: unknown).
@@ -6410,19 +6515,35 @@ impl FnPrinter<'_, '_> {
                 why += &format!("r{r} read after the loop; ");
                 continue;
             }
-            let proven = match bounds::why(&bounds::Loop {
-                reg: r,
-                latch,
-                back: back.index,
-                way_in: &self.f.blocks[&p].block.insts,
-                enter: px.index,
-                kept: kept & !(1 << r),
-            }) {
+            let via = self.step_via(r, kept & !(1 << r), by_calls, l, h, &round, &edges);
+            let mut proven = Err("");
+            let mut by = None;
+            for &t in &tests {
+                proven = bounds::why(&bounds::Loop {
+                    reg: r,
+                    latch,
+                    back: back.index,
+                    way_in: &self.f.blocks[&p].block.insts,
+                    enter: px.index,
+                    kept: kept & !(1 << r),
+                    test: t,
+                    via: &via,
+                });
+                if proven.is_ok() {
+                    by = Some(t);
+                    break;
+                }
+            }
+            let proven = match proven {
                 Ok(p) => p,
                 Err(w) => {
                     why += &format!("r{r}: {w}; ");
                     continue;
                 }
+            };
+            let top = match by {
+                Some(bounds::Test::Top(..)) => out_to,
+                _ => None,
             };
             let mut f = counted::For {
                 reg: r,
@@ -6435,13 +6556,164 @@ impl FnPrinter<'_, '_> {
                 ptrs: Vec::new(),
             };
             f.ptrs = self.stepped_in(&f, l, back.index, &round, &inside, h);
-            return Ok((f, l, proven.step));
+            return Ok((f, l, proven.step, top));
         }
         Err(if why.is_empty() {
-            "no counter".into()
+            format!("{top_why}no counter")
         } else {
-            why
+            format!("{top_why}{why}")
         })
+    }
+
+    /// Where loop start `h` (latch `l`, the round `round`, its plan's
+    /// exits `outs`) may test the loop's range ([`bounds::Test::Top`]):
+    /// the index of its first exit, guarded, and whether that one leaves;
+    /// or why not. A jump out of the round, the rest of the block the
+    /// round's; or into it, the block's one other exit a plain jump out.
+    /// The way out planned as a break to `after` (where falling out of the
+    /// loop goes) with the flags dead there; nothing before it but pure
+    /// values, reads and flag writes.
+    fn start_test(
+        &self,
+        h: u32,
+        l: u32,
+        round: &[u32],
+        outs: Option<&[plan::Out]>,
+        after: Option<usize>,
+    ) -> Result<(usize, bool), &'static str> {
+        if h == l {
+            return Err("the latch");
+        }
+        let b = &self.f.blocks[&h];
+        let insts = &b.block.insts;
+        let xs = exits(self.ctx, b);
+        let jump = |x: &ExitInfo| match x.plan {
+            Plan::Static(t) | Plan::Rekey(t) => Some(t),
+            _ => None,
+        };
+        let x = *xs.first().ok_or("no exit")?;
+        if insts[x.index].guard.is_none() {
+            return Err("first exit unguarded");
+        }
+        let tx = jump(&x).ok_or("first exit not a jump")?;
+        // Its first exit leaves, the rest of the block a round's; or it
+        // stays and the block's one other exit, a jump, leaves.
+        let (out, t, leaves, test_end) = if !round.contains(&tx) {
+            (0, tx, true, x.index)
+        } else {
+            let [_, y] = xs[..] else {
+                return Err("first exit stays, not two exits");
+            };
+            let ty = jump(&y).filter(|_| insts[y.index].guard.is_none());
+            match ty {
+                Some(ty) if !round.contains(&ty) => (1, ty, false, y.index),
+                _ => return Err("no exit out of the loop"),
+            }
+        };
+        let quiet = |i: &Inst| {
+            pure(&i.op)
+                || matches!(
+                    i.op,
+                    Op::GetReg(_)
+                        | Op::GetFlag(_)
+                        | Op::SetFlag(..)
+                        | Op::YieldFlag(..)
+                        | Op::Insn(_)
+                        | Op::Timing(_)
+                )
+        };
+        let before = insts[..test_end].iter().enumerate();
+        if !before
+            .into_iter()
+            .all(|(i, inst)| i == x.index || quiet(inst))
+        {
+            return Err("runs code before its test");
+        }
+        let outs = outs.ok_or("not printed inside")?;
+        let edges = &outs.get(out).ok_or("no exit planned")?.edges;
+        let after = after.ok_or("nothing after the loop")?;
+        if !matches!(edges[..], [plan::Edge { how: plan::How::Break(y), .. }] if y == after) {
+            return Err("exit not out to after the loop");
+        }
+        if self.live_in.get(&t).is_none_or(|v| v & live::FLAGS != 0) {
+            return Err("flags live after the loop");
+        }
+        Ok((x.index, leaves))
+    }
+
+    /// The registers loop `h`'s latch `l` starts each round with a known
+    /// value of, for [`bounds::Loop::via`]: each written once in the round
+    /// (and by no call there), in a block other than the latch that every
+    /// way from the start to the latch passes, as a [`bounds::Sym`] over
+    /// the counter `r` and the registers `kept` nothing in the loop
+    /// writes, all as they were at the loop's start (unit
+    /// `native/lift-for-step-via`: agbcc's `r9 = r8 + 1` early in the
+    /// body, `r8 = r9 as u8` in the latch).
+    #[allow(clippy::too_many_arguments)]
+    fn step_via(
+        &self,
+        r: usize,
+        kept: u16,
+        by_calls: u16,
+        l: u32,
+        h: u32,
+        round: &[u32],
+        edges: &[(u32, usize, u32)],
+    ) -> Vec<(usize, bounds::Sym)> {
+        // Whether every way from the start to the latch within the round
+        // passes block `d`.
+        let on_every_way = |d: u32| {
+            if d == h {
+                return true;
+            }
+            let mut seen: Vec<u32> = vec![h];
+            let mut go: Vec<u32> = vec![h];
+            while let Some(k) = go.pop() {
+                for e in edges.iter().filter(|e| e.0 == k) {
+                    let t = e.2;
+                    if t == l {
+                        return false;
+                    }
+                    if t != d && t != h && round.contains(&t) && !seen.contains(&t) {
+                        seen.push(t);
+                        go.push(t);
+                    }
+                }
+            }
+            true
+        };
+        let mut via = Vec::new();
+        for q in 0..13 {
+            if q == r || by_calls & 1 << q != 0 {
+                continue;
+            }
+            let set = |i: &Inst| matches!(i.op, Op::SetReg(x, _) if x.index() == q);
+            let mut at = round
+                .iter()
+                .filter(|k| self.f.blocks[*k].block.insts.iter().any(set));
+            let (Some(&d), None) = (at.next(), at.next()) else {
+                continue;
+            };
+            let insts = &self.f.blocks[&d].block.insts;
+            if d == l || insts.iter().filter(|i| set(i)).count() != 1 || !on_every_way(d) {
+                continue;
+            }
+            // The counter is written only by the latch: at `d` it is as
+            // at the loop's start.
+            let mut regs: [Option<bounds::Sym>; 16] = Default::default();
+            for (x, s) in regs.iter_mut().enumerate() {
+                if x == r || kept & 1 << x != 0 {
+                    *s = Some(bounds::Sym::reg(x));
+                }
+            }
+            bounds::eval(insts, &mut regs, insts.len());
+            if let Some(s) = regs[q].take()
+                && s.base.is_none_or(|b| b < 16)
+            {
+                via.push((q, s));
+            }
+        }
+        via
     }
 
     /// The keys an exit's printed code may jump to ([`FnPrinter::exit`]):
@@ -6554,6 +6826,11 @@ impl FnPrinter<'_, '_> {
                 // Falling out of the loop goes where falling off it does;
                 // falling off its body goes round again.
                 let after = self.fall.take();
+                // A `for` tested at its start runs out where its start's
+                // exit goes ([`FnPrinter::find_fors`] took it from there).
+                if let Some(&y) = self.top_fors.get(label) {
+                    assert_eq!(after, Some(y), "loop {label}'s start's exit");
+                }
                 let direct = self.direct.take();
                 self.loops.push((*label, after));
                 let b = self.seq(body);
@@ -8019,7 +8296,7 @@ impl FnPrinter<'_, '_> {
             if skip[i] || dead[i] || (self.gone_if_unused(i, &inst.op) && uses[i] == 0) {
                 continue;
             }
-            for x in self.operands(i, inst, typed, refs, conds, forms) {
+            for x in self.operands(insts, i, inst, typed, refs, conds, forms) {
                 uses[x.index()] += 1;
             }
         }
@@ -8033,8 +8310,10 @@ impl FnPrinter<'_, '_> {
     /// the `match` replaces ([`FnPrinter::unguard`]).
     ///
     /// [`uses`]: FnPrinter::uses
+    #[allow(clippy::too_many_arguments)]
     fn operands(
         &self,
+        insts: &[Inst],
         i: usize,
         inst: &Inst,
         typed: &[Option<Place>],
@@ -8051,6 +8330,18 @@ impl FnPrinter<'_, '_> {
         let base = refs[i].and_then(|r| r.base).map(|(b, _)| b);
         let idx = refs[i].and_then(|r| r.idx);
         let fold = refs[i].and_then(|r| r.fold);
+        // A holes file's `[[open_bus]]` load prints over its address
+        // alone, whatever else would name it.
+        if let Op::Load { addr, .. } = inst.op
+            && !self.holes.open_bus.is_empty()
+            && let Some(at) = insts[..i].iter().rev().find_map(|x| match x.op {
+                Op::Insn(a) => Some(a),
+                _ => None,
+            })
+            && self.holes.open_bus.contains_key(&at)
+        {
+            return vec![addr];
+        }
         let ops = match inst.op {
             // Printed as nothing.
             Op::Timing(_) | Op::YieldFlag(..) => return Vec::new(),
@@ -8144,7 +8435,7 @@ impl FnPrinter<'_, '_> {
             let whole = !matches!(op, Op::Exit(_) | Op::SetCpsr { .. } | Op::SetSpsr { .. });
             let ops = match &conds[i] {
                 Some(f) if !f.takes_inlined() => Vec::new(),
-                _ => self.operands(i, inst, typed, refs, conds, forms),
+                _ => self.operands(insts, i, inst, typed, refs, conds, forms),
             };
             for x in ops {
                 let x = x.index();

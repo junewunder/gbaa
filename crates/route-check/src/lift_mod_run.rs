@@ -1,6 +1,6 @@
 //! `route-check --lift-mod-run STOCK MOD [--sides N] ROUTE.toml`: a lift
 //! mod's frames beside the stock lift's (`just lift-mod-run`, unit
-//! `native/lift-mod-run`; the mod view's [`crate::mod_run`], for the
+//! `native/lift-mod-run`; the retired mod view's `--mod-run`, for the
 //! lift). STOCK and MOD are native programs (each a binary, optionally
 //! followed by its flags), run headless along the route as the native
 //! check runs them ([`crate::native::runner`]), every frame hashed. It
@@ -14,12 +14,17 @@
 //! (native/lift-mod-run-zoom; a 4-digit HUD edit is a few dozen pixels).
 //! A view, not a check: it fails only when a program can't run.
 
-use crate::mod_run::{GAP, GAP_GREY, read, side_by_side, write};
 use crate::native::runner;
 use crate::route::{Route, Vars};
 use crate::{Stop, Stop::*};
 use std::collections::BTreeMap;
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
+
+/// The gap between panels, in pixels, and its grey.
+const GAP: usize = 4;
+const GAP_GREY: u8 = 0x40;
 
 /// How many side-by-side PNGs to write unless `--sides` says.
 pub const SIDES: usize = 16;
@@ -246,10 +251,65 @@ fn picks(differ: &[u64], n: usize) -> Vec<u64> {
     pick
 }
 
+/// Stock, the mod, and stock dimmed with the differing pixels in red, as
+/// one RGB image with a grey gap between panels: its width, height and
+/// bytes.
+fn side_by_side(w: u32, h: u32, stock: &[u8], modded: &[u8]) -> (u32, u32, Vec<u8>) {
+    let (w, h) = (w as usize, h as usize);
+    let wide = 3 * w + 2 * GAP;
+    let mut px = Vec::with_capacity(wide * h * 3);
+    let gap = [GAP_GREY; 3 * GAP];
+    for y in 0..h {
+        let row = |p: &[u8]| -> Vec<u8> { p[y * w * 3..(y + 1) * w * 3].to_vec() };
+        let (s, m) = (row(stock), row(modded));
+        px.extend(&s);
+        px.extend(gap);
+        px.extend(&m);
+        px.extend(gap);
+        for (a, b) in s.chunks(3).zip(m.chunks(3)) {
+            if a == b {
+                let grey = ((a[0] as u32 + a[1] as u32 + a[2] as u32) / 9 + 40) as u8;
+                px.extend([grey; 3]);
+            } else {
+                px.extend([255, 0, 0]);
+            }
+        }
+    }
+    (wide as u32, h as u32, px)
+}
+
+/// An RGB PNG's width, height and bytes.
+fn read(path: &Path) -> Result<(u32, u32, Vec<u8>), Stop> {
+    let err = |e: &dyn std::fmt::Display| Unrun(format!("{}: {e}", path.display()));
+    let mut dec = png::Decoder::new(BufReader::new(File::open(path).map_err(|e| err(&e))?));
+    dec.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut r = dec.read_info().map_err(|e| err(&e))?;
+    let mut buf = vec![0; r.output_buffer_size().ok_or_else(|| err(&"too large"))?];
+    let info = r.next_frame(&mut buf).map_err(|e| err(&e))?;
+    if info.color_type != png::ColorType::Rgb {
+        return Err(err(&"not an RGB image"));
+    }
+    buf.truncate(info.buffer_size());
+    Ok((info.width, info.height, buf))
+}
+
+fn write(path: &Path, w: u32, h: u32, px: &[u8]) -> Result<(), Stop> {
+    let err = |e: &dyn std::fmt::Display| Unrun(format!("{}: {e}", path.display()));
+    let mut enc = png::Encoder::new(
+        BufWriter::new(File::create(path).map_err(|e| err(&e))?),
+        w,
+        h,
+    );
+    enc.set_color(png::ColorType::Rgb);
+    enc.set_depth(png::BitDepth::Eight);
+    let mut wr = enc.write_header().map_err(|e| err(&e))?;
+    wr.write_image_data(px).map_err(|e| err(&e))?;
+    wr.finish().map_err(|e| err(&e))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{MARGIN, bbox, picks, ranges, zoom};
-    use crate::mod_run::GAP;
+    use super::{GAP, GAP_GREY, MARGIN, bbox, picks, ranges, side_by_side, zoom};
 
     #[test]
     fn the_box_holds_every_differing_pixel() {
@@ -309,5 +369,22 @@ mod tests {
         // More runs than room: the first runs' starts.
         assert_eq!(picks(&[1, 3, 5, 7], 2), [1, 3]);
         assert!(picks(&[1, 2], 0).is_empty());
+    }
+
+    #[test]
+    fn three_panels_with_the_difference_in_red() {
+        // 2x1 images: the second pixel differs.
+        let stock = [10, 10, 10, 1, 2, 3];
+        let modded = [10, 10, 10, 9, 9, 9];
+        let (w, h, px) = side_by_side(2, 1, &stock, &modded);
+        assert_eq!((w, h), (6 + 2 * GAP as u32, 1));
+        assert_eq!(px.len(), w as usize * 3);
+        assert_eq!(&px[..6], &stock);
+        assert_eq!(&px[6..6 + 3 * GAP], &[GAP_GREY; 3 * GAP]);
+        let m = 6 + 3 * GAP;
+        assert_eq!(&px[m..m + 6], &modded);
+        let d = m + 6 + 3 * GAP;
+        assert_eq!(&px[d..d + 3], &[43; 3]);
+        assert_eq!(&px[d + 3..d + 6], &[255, 0, 0]);
     }
 }

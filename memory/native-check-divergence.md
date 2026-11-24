@@ -42,3 +42,8 @@ What found Metroid's six timing causes in one session (native/metroid-native-che
   file's `[[roots]]`); bytes copied from uninitialised stack (struct padding), which differ because
   the lift never writes folded pushes to IWRAM. Name each address with the pokeemerald ELF's `nm -S`
   and the `.map` (the `.bss` of an object file when `nm` has no symbol).
+- **One IRQ fewer compiled** (Emerald's librfu ID check, native/emerald-sio32-play-timing, 2026-11-24): a
+  value toggled by each IRQ one step apart from frame 3. The interpreter takes an IRQ that `IME=1` lets
+  through at the next instruction, compiled code at its block's end, so a block must end at every `IME`
+  store; one through a register loaded before an earlier split didn't. Read the generated function
+  (`grep -rn 'pub fn f_<addr+1>' out/<play>/parts`) for a `tick_native` after each `IME` store.
