@@ -773,19 +773,32 @@ pub fn successors(ctx: &Ctx, x: &ExitInfo) -> Vec<u32> {
 /// block too: an IRQ it lets through is taken at the tick after it, so the
 /// compiled code takes it at the same instruction as the interpreter, which
 /// ticks after each one (native/ime-release). Elsewhere the store's tick
-/// would only be later by a block, as any I/O write's is. So does an idle
+/// would only be later by a block, as any I/O write's is. `ime` keeps the
+/// `IME` stores each block proves as built whole, for the blocks its
+/// splits leave: a store through a register the block before the split
+/// loaded (`ldr r4, =IME` ... `strh r0, [r4]` twice) is one there too,
+/// though its own block can't fold the address
+/// (native/emerald-sio32-play-timing). So does an idle
 /// loop's conditional branch (and with [`Config::idle_exits`], the native
 /// lift's, only that): where it isn't taken the loop is left, and
 /// the interpreter syncs there ([`Idle::Exit`], `rt::idle_exit`, which
 /// brings up a clock a DMA in the loop moved); in the block's middle the
 /// not-taken path would have no exit to sync at
 /// (native/play-native-metroid-interp).
-fn build_block(ctx: &Ctx, k: u32, stops: &BTreeSet<u32>) -> GBlock {
+fn build_block(ctx: &Ctx, k: u32, stops: &BTreeSet<u32>, ime: &mut BTreeSet<u32>) -> GBlock {
     let gb = build_block_until(ctx, k, stops, None);
     let native = ctx.cfg.clock == Clock::Native;
     if native || ctx.cfg.idle_exits {
-        let ime = if native { ime_store(&gb.block) } else { None };
-        let split = [ime, idle_branch(ctx, &gb)].into_iter().flatten().min();
+        let first = if native {
+            ime.extend(ime_stores(&gb.block));
+            gb.insns
+                .iter()
+                .map(|&(at, _)| at)
+                .find(|at| ime.contains(at))
+        } else {
+            None
+        };
+        let split = [first, idle_branch(ctx, &gb)].into_iter().flatten().min();
         if let Some(at) = split
             && gb.insns.last().is_some_and(|&(last, _)| last != at)
         {
@@ -818,19 +831,22 @@ fn idle_branch(ctx: &Ctx, gb: &GBlock) -> Option<u32> {
     })
 }
 
-/// The address of the first instruction in `b` that stores to `IME`.
-fn ime_store(b: &Block) -> Option<u32> {
+/// The addresses of the instructions in `b` that store to `IME`.
+fn ime_stores(b: &Block) -> Vec<u32> {
     let mut at = 0;
-    b.insts.iter().find_map(|inst| match inst.op {
-        Op::Insn(a) => {
-            at = a;
-            None
-        }
-        Op::Store { addr, .. } => fold(b, addr)
-            .is_some_and(|a| (0x0400_0208..0x0400_020C).contains(&a))
-            .then_some(at),
-        _ => None,
-    })
+    b.insts
+        .iter()
+        .filter_map(|inst| match inst.op {
+            Op::Insn(a) => {
+                at = a;
+                None
+            }
+            Op::Store { addr, .. } => fold(b, addr)
+                .is_some_and(|a| (0x0400_0208..0x0400_020C).contains(&a))
+                .then_some(at),
+            _ => None,
+        })
+        .collect()
 }
 
 /// [`build_block`], ending after the instruction at `last` if it gets
@@ -917,12 +933,13 @@ pub fn build_func(ctx: &Ctx, entry: u32) -> Func {
     let mut stops: BTreeSet<u32> = ctx.entries.clone();
     stops.insert(entry);
     let mut blocks: BTreeMap<u32, GBlock> = BTreeMap::new();
+    let mut ime = BTreeSet::new();
     let mut work = vec![entry];
     while let Some(k) = work.pop() {
         if blocks.contains_key(&k) {
             continue;
         }
-        let gb = build_block(ctx, k, &stops);
+        let gb = build_block(ctx, k, &stops, &mut ime);
         let xs = exits(ctx, &gb);
         blocks.insert(k, gb);
         for x in xs {
