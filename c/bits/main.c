@@ -3,7 +3,9 @@
  * keeps its direction, speed and colour in one byte's bitfields and its
  * bounce count, trail and visibility in a halfword's; every access to them
  * goes through a pointer to the ball. Writes are constant (`b->up = 0`) and
- * computed (`b->left = !b->left`, `b->bounces++`). */
+ * computed (`b->left = !b->left`, `b->bounces++`). A global, the scene's
+ * clock, keeps its own bitfields, every access to them at its constant
+ * address (`gClock.tick++`), not through a pointer. */
 #include "gba.h"
 #include "draw.h"
 
@@ -24,7 +26,21 @@ struct Ball {
     u16 shade : 5;
 };
 
+/* The clock: the beats so far, frames in the beat and the ball the next
+ * blink turns over. The halfword's fields come first: agbcc lets a
+ * bitfield straddle its type's unit (`u16 beats : 10` after a byte's
+ * fields), which pret-names doesn't place. */
+struct Clock {
+    u16 beats : 10;
+    u16 level : 6;
+    u8 tick : 4;
+    u8 next : 2;
+    u8 run : 1;
+    u8 flash : 1;
+};
+
 struct Ball gBalls[NUM_BALLS];
+struct Clock gClock;
 u32 gFrame;
 
 static const u16 sColors[16] = {
@@ -111,6 +127,29 @@ NOINLINE void ball_blink(struct Ball *b)
         b->speed++;
 }
 
+/* A beat each 16 frames: the clock's bar flashes and fills one more. */
+NOINLINE void clock_step(void)
+{
+    if (!gClock.run)
+        return;
+    gClock.tick = gClock.tick + 1;
+    if (gClock.tick == 0) {
+        gClock.flash = !gClock.flash;
+        gClock.beats++;
+        gClock.level = gClock.beats >> 2;
+    }
+}
+
+NOINLINE void clock_draw(void)
+{
+    u16 c = gClock.flash ? RGB(31, 31, 31) : RGB(8, 8, 8);
+
+    fill_rect(0, 6, 16, 1, BACKDROP);
+    fill_rect(0, 6, gClock.tick, 1, c);
+    fill_rect(0, 7, 64, 1, BACKDROP);
+    fill_rect(0, 7, gClock.level, 1, c);
+}
+
 void AgbMain(void)
 {
     s32 i;
@@ -118,6 +157,8 @@ void AgbMain(void)
 
     for (i = 0; i < NUM_BALLS; i++)
         ball_init(&gBalls[i], i);
+    gClock.next = 0;
+    gClock.run = 1;
     VIDEO_MODE3_VBLANK_IRQ();
     for (;;) {
         VBlankIntrWait();
@@ -126,8 +167,12 @@ void AgbMain(void)
             ball_move(b);
             ball_draw(b, i);
         }
-        if ((gFrame & 63) == 0)
-            ball_blink(&gBalls[(gFrame >> 6) & 3]);
+        clock_step();
+        clock_draw();
+        if ((gFrame & 63) == 0) {
+            ball_blink(&gBalls[gClock.next]);
+            gClock.next++;
+        }
         gFrame++;
     }
 }

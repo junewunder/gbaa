@@ -2184,8 +2184,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .unwrap();
         writeln!(
             report,
-            "bitfields (native/lift-bitfields): {} writes print as set_bits, {} accesses of several fields through their joined accessor, {} accesses holding bitfields name none (left as arithmetic)",
-            soft.bitfield_sets, soft.bitfield_joined, soft.bitfield_arith,
+            "bitfields (native/lift-bitfields): {} writes print as set_bits or a struct global's setter, {} loads as a struct global's getter, {} accesses of several fields through their joined accessor, {} accesses holding bitfields name none (left as arithmetic)",
+            soft.bitfield_sets, soft.bitfield_global_reads, soft.bitfield_joined, soft.bitfield_arith,
         )
         .unwrap();
     }
@@ -3813,8 +3813,12 @@ struct Soft {
     /// Of those, the ones printed as an element by a variable index
     /// (native/lift-index-names).
     named_index: u64,
-    /// Bitfield writes printed as `set_bits` (native/lift-bitfields).
+    /// Bitfield writes printed as `set_bits` (native/lift-bitfields), or
+    /// as a struct global's setter (native/lift-global-bitfields).
     bitfield_sets: u64,
+    /// Loads of a struct global's bitfield printed as its getter
+    /// (native/lift-global-bitfields).
+    bitfield_global_reads: u64,
     /// Accesses holding bitfields through a typed pointer that name none.
     bitfield_arith: u64,
     /// Accesses holding several fields, bitfields among them, printed
@@ -5894,7 +5898,7 @@ impl FnPrinter<'_, '_> {
         &self,
         insts: &[Inst],
     ) -> (Vec<Option<Place>>, Vec<Option<Obj>>, Vec<Option<HeapRef>>) {
-        let typed: Vec<Option<Place>> = insts
+        let mut typed: Vec<Option<Place>> = insts
             .iter()
             .map(|inst| {
                 let (a, w) = const_access(insts, &inst.op)?;
@@ -6044,6 +6048,36 @@ impl FnPrinter<'_, '_> {
                 refs[s].as_mut().expect("named").fold = Some(*fold);
             }
         }
+        // A struct global's bitfield the code names prints as its getter
+        // or setter (native/lift-global-bitfields).
+        for (&i, &bits) in &bitfields.bits {
+            let Some((a, w)) = const_access(insts, &insts[i].op) else {
+                continue;
+            };
+            let (Some(p), Some((owner, ident))) =
+                (&mut typed[i], self.globals.bitfield(a, w, bits))
+            else {
+                continue;
+            };
+            p.bit = Some(globals::Bit {
+                owner,
+                ident,
+                lo: bits.0,
+                read: bitfields.reads.contains(&i),
+                fold: None,
+                set: bitfields.sets.contains(&i).then_some(bits.0),
+            });
+        }
+        for (&s, fold) in &bitfields.folds {
+            let named = |i: usize| typed[i].as_ref().is_some_and(|p| p.bit.is_some());
+            if named(s) && named(fold.load) {
+                typed[s]
+                    .as_mut()
+                    .and_then(|p| p.bit.as_mut())
+                    .expect("named")
+                    .fold = Some(*fold);
+            }
+        }
         (typed, objs, refs)
     }
 
@@ -6131,7 +6165,8 @@ impl FnPrinter<'_, '_> {
     }
 
     /// The block's bitfield accesses ([`bitfields`]): which field each
-    /// names, and the stores printed as `set_bits`.
+    /// names, and the stores printed as `set_bits`; through a typed
+    /// pointer or into a struct global at its constant address.
     fn bitfields(&self, insts: &[Inst]) -> bitfields::Found {
         if self.holes.fields.is_none() {
             return bitfields::Found::default();
@@ -6139,9 +6174,12 @@ impl FnPrinter<'_, '_> {
         let unread = self.dead.get(&self.cur).filter(|d| d.len() == insts.len());
         bitfields::find(
             insts,
-            |i| match self.holds_bitfields(i, &insts[i]) {
-                true => self.bitfield_unit(i, &insts[i]),
-                false => Vec::new(),
+            |i| match const_access(insts, &insts[i].op) {
+                // A struct global's, at its constant address
+                // (native/lift-global-bitfields).
+                Some((a, w)) => self.globals.bits_at(a, w),
+                None if self.holds_bitfields(i, &insts[i]) => self.bitfield_unit(i, &insts[i]),
+                None => Vec::new(),
             },
             |i| unread.is_some_and(|d| d[i]),
         )
@@ -6219,6 +6257,9 @@ impl FnPrinter<'_, '_> {
             .collect();
         // A bitfield's load a `set_bits` takes the place of.
         for f in refs.iter().flatten().filter_map(|r| r.fold) {
+            skip[f.load] = true;
+        }
+        for f in typed.iter().flatten().filter_map(|p| p.bit.as_ref()?.fold) {
             skip[f.load] = true;
         }
         // A compare tree at the block's end prints as a `match`: its
@@ -6498,7 +6539,12 @@ impl FnPrinter<'_, '_> {
                     );
                 }
                 Op::Load { width, addr } => {
-                    self.count_bitfield(i, inst, refs[i]);
+                    let off = match (&typed[i], &objs[i]) {
+                        (Some(_), _) => const_access(insts, &inst.op).map(|a| a.0),
+                        (None, Some(Obj::Pin(_, o))) => Some(*o),
+                        _ => None,
+                    };
+                    self.count_bitfield(i, inst, refs[i], &typed[i], off);
                     let mut rom = false;
                     let (f, m) = match width {
                         Width::Byte => ("ld8", ""),
@@ -6509,7 +6555,18 @@ impl FnPrinter<'_, '_> {
                         _ if let Some(o) = self.callers_off(i) => {
                             format!("{f}(g, {}{m})", callers_addr(o))
                         }
-                        (Some(p), _, _) => globals::load(p, bytes(width)),
+                        (Some(p), _, _) => match &p.bit {
+                            // Only its field's bits are read: its value
+                            // where the access has it.
+                            Some(b) if b.read => {
+                                self.soft.bitfield_global_reads += 1;
+                                match b.lo {
+                                    0 => format!("{}.{}()", b.owner, b.ident),
+                                    k => format!("({}.{}() << {k})", b.owner, b.ident),
+                                }
+                            }
+                            _ => globals::load(p, bytes(width)),
+                        },
                         (None, Some(o), _) => {
                             o.load(&format!("{}{m}", self.val(addr)), bytes(width))
                         }
@@ -6586,7 +6643,12 @@ impl FnPrinter<'_, '_> {
                     }
                 }
                 Op::Store { width, addr, value } => {
-                    self.count_bitfield(i, inst, refs[i]);
+                    let off = match (&typed[i], &objs[i]) {
+                        (Some(_), _) => const_access(insts, &inst.op).map(|a| a.0),
+                        (None, Some(Obj::Pin(_, o))) => Some(*o),
+                        _ => None,
+                    };
+                    self.count_bitfield(i, inst, refs[i], &typed[i], off);
                     let (f, m) = match width {
                         Width::Byte => ("st8", ""),
                         Width::Half => ("st16", " & !1"),
@@ -6613,24 +6675,26 @@ impl FnPrinter<'_, '_> {
                         _ if let Some(o) = self.callers_off(i) => {
                             format!("{f}(g, {}{m}, {val});", callers_addr(o))
                         }
-                        (Some(p), _, _) => globals::store(p, bytes(width), &val),
+                        (Some(p), _, _) => match &p.bit {
+                            Some(b) if b.fold.is_some() || b.set.is_some() => {
+                                self.soft.bitfield_sets += 1;
+                                let v = match (b.fold, b.set) {
+                                    (Some(f), _) => self.fold_value(f.v, plant),
+                                    (None, Some(lo)) => {
+                                        self.fold_value(bitfields::FoldValue::Of(value, lo), plant)
+                                    }
+                                    (None, None) => unreachable!(),
+                                };
+                                format!("{}.set_{}({v});", b.owner, b.ident)
+                            }
+                            _ => globals::store(p, bytes(width), &val),
+                        },
                         (None, Some(o), _) => {
                             o.store(&format!("{}{m}", self.val(addr)), bytes(width), &val)
                         }
                         (None, None, Some(r)) if r.named => match r.fold {
                             Some(f) => {
-                                let v = match f.v {
-                                    bitfields::FoldValue::Const(c) => format!("{c:#x}u32{plant}"),
-                                    bitfields::FoldValue::Of(x, 0) if plant.is_empty() => {
-                                        self.whole(x)
-                                    }
-                                    bitfields::FoldValue::Of(x, 0) => {
-                                        format!("{}{plant}", self.val(x))
-                                    }
-                                    bitfields::FoldValue::Of(x, k) => {
-                                        format!("({} >> {k}){plant}", self.val(x))
-                                    }
-                                };
+                                let v = self.fold_value(f.v, plant);
                                 self.soft.bitfield_sets += 1;
                                 format!("g.set_bits({}, {v});", self.field_ptr(i, r, addr))
                             }
@@ -6764,10 +6828,44 @@ impl FnPrinter<'_, '_> {
         s
     }
 
+    /// What a `set_bits` or a bitfield's setter puts in its field, with
+    /// `plant` (a planted store's `.wrapping_add(1)`, or nothing).
+    fn fold_value(&self, v: bitfields::FoldValue, plant: &str) -> String {
+        match v {
+            bitfields::FoldValue::Const(c) => format!("{c:#x}u32{plant}"),
+            bitfields::FoldValue::Of(x, 0) if plant.is_empty() => self.whole(x),
+            bitfields::FoldValue::Of(x, 0) => format!("{}{plant}", self.val(x)),
+            bitfields::FoldValue::Of(x, k) => format!("({} >> {k}){plant}", self.val(x)),
+        }
+    }
+
     /// Count access `i` where it holds bitfields through a typed pointer
     /// ([`FnPrinter::bitfield_unit`]): by the field it names, or as one
     /// left to the arithmetic (native/lift-bitfields).
-    fn count_bitfield(&mut self, i: usize, inst: &Inst, r: Option<HeapRef>) {
+    ///
+    /// One into a struct global (at its constant address, or pinned to
+    /// it: `off`, its offset in `Game::ram`) whose layout holds the bitfields prints through their storage
+    /// field, named for them all: joined, but where it is the getter or
+    /// setter, counted where printed (native/lift-global-bitfields).
+    fn count_bitfield(
+        &mut self,
+        i: usize,
+        inst: &Inst,
+        r: Option<HeapRef>,
+        typed: &Option<Place>,
+        off: Option<u32>,
+    ) {
+        let w = match inst.op {
+            Op::Load { width, .. } | Op::Store { width, .. } => bytes(width),
+            _ => return,
+        };
+        if off.is_some_and(|o| self.globals.holds_bits(o, w)) {
+            match typed.as_ref().and_then(|p| p.bit.as_ref()) {
+                Some(b) if b.read || b.fold.is_some() || b.set.is_some() => {}
+                _ => self.soft.bitfield_joined += 1,
+            }
+            return;
+        }
         if !self.holds_bitfields(i, inst) {
             return;
         }
