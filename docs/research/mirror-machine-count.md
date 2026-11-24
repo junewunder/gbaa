@@ -51,7 +51,7 @@ are a line or two.
 | 2 | Register names `r0`-`r14` | `\br([0-9]\|1[0-4])\b` | 359,948 | 3,377 | Mirror's names map has DWARF types, locals and lines (`native/mirror-dwarf-map`, ready): katam's locals name what's left |
 | 3 | A u32 as an address: typed pointer built from a bare u32 | `Ref::<…>::new(` | 62,289 | 572 | Mirror's DWARF map (types of parameters and locals), then stage B's typed pointers; none filed for the u32 itself |
 | 4 | Block markers `pc(0x…)` | `\bpc\(0x` | 58,170 | 714 | done (`native/lift-pc-markers`, 2026-11-24): 0, kept in the crate's `pcs.txt` and put back by its build script in a `guest-pc` build |
-| 5 | Load rotates for a misaligned address | `ShiftType::Ror` | 44,881 | 432 | filed: `native/lift-aligned-loads` |
+| 5 | Load rotates for a misaligned address | `ShiftType::Ror` | 44,881 | 432 | `native/lift-aligned-loads` (2026-11-24): 12,090 left, raw `ld32`/`ld16` through untyped pointers; `load_rotates_left` 13,040 |
 | 6 | Adds of zero (Thumb's `adds rd, rs, #0` as a move) | `wrapping_add\(0x0\)` | 41,107 | 367 | done (`native/lift-add-zero`, 2026-11-24): 0 |
 | 7 | A u32 as an address: byte loads and stores through a computed value | `\b(ld\|st)(8\|16\|32)\(g,` | 40,309 | 238 | Mirror's DWARF map and `native/lift-index-names` (merging); `load_computed_unknown` 48,412, `store_computed_unknown` 33,281 |
 | 8 | Casts | ` as (u8\|u16\|u32\|i8\|i16\|i32\|u64\|i64)\b` | 39,068 | 368 | filed: `native/lift-cast-types`; `narrowing_casts` 7,265 |
@@ -113,6 +113,11 @@ prove aligned keeps the rotate, even through a typed field of a struct it knows 
     let v108: u32 = (v74 << 2).wrapping_add(0x3002560);   // then Ror by (v108 & 3) << 3
 
 `v108` is a multiple of 4 plus an aligned base: the rotate is by 0.
+Since `native/lift-aligned-loads` (2026-11-24) a typed field's load, a heap
+object's, a stack local's and one at an address proven aligned (constants,
+sp and the arithmetic between) print without it: 44,881 to 12,090 on the
+Amazing Mirror. What's left reads a pointer parameter or a loaded pointer
+plus an offset with no type, aligned only as its callers make it.
 
 **6. Adds of zero.** agbcc moves registers with `adds rd, rs, #0`:
 
