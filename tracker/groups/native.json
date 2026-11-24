@@ -4241,19 +4241,8 @@
         "by": "2d61bb47",
         "at": "2026-11-24T08:49:58Z",
         "evidence": "Bisected first-parent main (current ROM, c824d29 reproduces d5b8c6ef): 5bd7e6d beam start at mGBA's -> fab20835, then 45af4af merging {unit:native/lift-frame-gone} (dead frames leave no sp/lr) -> d71c7747; both intended. Re-recorded; just fn-check --replace holes/fn-check/native-spike.toml: 2000 runs same, digest d71c7747314b43f2 (as recorded), interpreter agreed; just check exit 0 after merging main (e61379d).",
-        "branch": "unit/native/fn-check-spike-digest",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T08:49:58Z",
-          "by": "2d61bb47",
-          "host": "quack",
-          "pid": 2964711,
-          "start": "95219683",
-          "beats": true,
-          "session": "2d61bb47-c874-48f0-8f47-3bc230986acb",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "landed": "2026-11-24T08:54:43Z"
       },
       "notes": [
         {
@@ -4261,8 +4250,7 @@
           "by": "bacb4d04",
           "text": "holes/fn-check/native-spike.toml records digest d5b8c6ef8edc19e6 for 0x0800017d; fn-check now gives d71c7747314b43f2 ('the reference's ends changed'), already at 61d15e26. Find why the reference changed, then re-record or fix."
         }
-      ],
-      "round": "2026-11-24T08:27:26Z"
+      ]
     },
     {
       "id": "native/lift-mod-run-name",
