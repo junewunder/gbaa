@@ -33,7 +33,8 @@
 //! where the datum is exactly the global, the struct has a layout (no
 //! union, every field at its type's alignment: [`Types::layout`]) and
 //! every access to it lands in one scalar field or covers whole ones,
-//! which it then reads or writes each in turn. Else it keeps its element
+//! which it then reads or writes each in turn, and no computed access
+//! indexes it as an array of its elements. Else it keeps its element
 //! type.
 //!
 //! Its bitfields (unit `native/lift-global-bitfields`) are one storage
@@ -431,7 +432,12 @@ impl Globals {
     /// Type the globals the names files' `types` give a plain struct
     /// that is all of them (module doc), where every access of
     /// `accesses` (offset, width) to one lands in its fields and no
-    /// computed range of `ranges` (offset, end, width) reaches it.
+    /// computed range of `ranges` (offset, end, width) is an element of
+    /// it ([`Globals::object`]'s `Obj::Index`), which typing would lose.
+    /// Any other range (one over many globals, as a loose value set
+    /// gives, or narrower than the element) reads and writes the bytes
+    /// either way, and the struct is the same bytes
+    /// (native/lift-equipment-words).
     pub fn type_structs(
         &mut self,
         types: &Arc<Types>,
@@ -451,7 +457,9 @@ impl Globals {
             };
             let end = g.lo + g.len;
             let ok = g.lo % al == 0
-                && !ranges.iter().any(|&(lo, hi, _)| lo < end && g.lo < hi)
+                && !ranges
+                    .iter()
+                    .any(|&(lo, hi, w)| lo >= g.lo && hi <= end && w == g.elem && g.len > g.elem)
                 && accesses
                     .iter()
                     .filter(|&&(o, w)| o < end && g.lo < o + w)
@@ -793,6 +801,13 @@ impl Obj {
         }
     }
 
+    /// A store of the constant `c` through `a` that fills its field
+    /// whole, as [`store_const`]: a pinned field only.
+    pub fn store_const(&self, a: &str, width: u32, c: u32) -> Option<String> {
+        let Obj::Pin(p, off) = self else { return None };
+        Some(format!("pin({a}, {off:#x}); {}", store_const(p, width, c)?))
+    }
+
     fn elem(&self, a: &str) -> String {
         let Obj::Index {
             global,
@@ -867,6 +882,22 @@ pub fn store(p: &Place, width: u32, v: &str) -> String {
             p.place
         ),
     }
+}
+
+/// A store of the constant `c` filling `p` whole, as a statement: a bare
+/// literal its field's type takes, in decimal below 10000 (a count, an
+/// amount: `g.ram.gEquipment.maxEnergy = 99;`), else hex. `None` where
+/// `p` is parts, the store fills less than it, or `c` doesn't fit
+/// (native/lift-equipment-words).
+pub fn store_const(p: &Place, width: u32, c: u32) -> Option<String> {
+    if !p.parts.is_empty() || width != p.elem || c & mask(width) != c {
+        return None;
+    }
+    Some(if c < 10_000 {
+        format!("{} = {c};", p.place)
+    } else {
+        format!("{} = {c:#x};", p.place)
+    })
 }
 
 fn mask(width: u32) -> u32 {
@@ -1143,6 +1174,19 @@ names = [
             store(&p, 4, "v1"),
             "{ let pv: u32 = v1; g.ram.gPen.pos.x = pv as u16; g.ram.gPen.pos.y = (pv >> 16) as u16; }"
         );
+        // A constant filling a field whole is a literal of its type.
+        let p = g.place(EWRAM + 6, 2).unwrap();
+        assert_eq!(
+            store_const(&p, 2, 99).as_deref(),
+            Some("g.ram.gPen.color = 99;")
+        );
+        assert_eq!(
+            store_const(&p, 2, 0xff00).as_deref(),
+            Some("g.ram.gPen.color = 0xff00;")
+        );
+        assert_eq!(store_const(&p, 2, 0x1_0000), None);
+        assert_eq!(store_const(&g.place(EWRAM + 7, 1).unwrap(), 1, 3), None);
+        assert_eq!(store_const(&g.place(EWRAM, 4).unwrap(), 4, 3), None);
         // Padding is in no field: a word over it isn't the struct's.
         assert_eq!(g.place(EWRAM + 4, 4), None);
         let s = g.structs();
@@ -1160,10 +1204,24 @@ names = [
         g.type_structs(&t, &acc2, &[]);
         assert_eq!(g.0[&EWRAM].typed, None);
         assert_eq!(g.0[&EWRAM].ty(Some(&t)), "[u32; 2]");
-        // So does one a computed range reaches.
+        // So does one a computed range indexes by its elements.
         let mut g = Globals::carve(&acc, &[], &names);
-        g.type_structs(&t, &acc, &[(EWRAM, EWRAM + 8, 2)]);
+        g.type_structs(&t, &acc, &[(EWRAM, EWRAM + 8, 4)]);
         assert_eq!(g.0[&EWRAM].typed, None);
+        // A range narrower than its elements, or over other globals too
+        // (a loose value set), isn't an element of it: the struct holds
+        // (native/lift-equipment-words).
+        let mut g = Globals::carve(&acc, &[], &names);
+        g.type_structs(
+            &t,
+            &acc,
+            &[
+                (EWRAM, EWRAM + 8, 2),
+                (EWRAM, EWRAM + 0x14, 4),
+                (EWRAM + 5, EWRAM + 7, 1),
+            ],
+        );
+        assert_eq!(g.0[&EWRAM].typed, Some(Ty::Named("struct Pen".into())));
     }
 
     fn clock_types() -> Arc<Types> {

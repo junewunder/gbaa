@@ -2120,7 +2120,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     .unwrap();
     writeln!(
         report,
-        "frames gone (native/lift-frame-gone): {} functions keep nothing of their frame in memory and print no sp arithmetic, {} of them still passing sp on (a callee's or a BIOS call's frame, bank_sp); {} more with no slot escaping keep their sp arithmetic to pass sp on as the guest has it, to code whose frame escapes (stored stack addresses the native check holds to the guest's) or that runs on their frame (written to memory for it), {} print sp arithmetic for no such reason; {} stack locals left out, written and never read; {} functions return their entry lr{}",
+        "frames gone (native/lift-frame-gone): {} functions keep nothing of their frame in memory and print no sp arithmetic, {} of them still passing sp on (a callee's or a BIOS call's frame, bank_sp); {} more with no slot escaping keep their sp arithmetic to pass sp on as the guest has it, to code that may store a stack address outside the stack (which the native check holds to the guest's) or that runs on their frame (written to memory for it), {} print sp arithmetic for no such reason; {} stack locals left out, written and never read; {} functions return their entry lr{}",
         soft.frameless,
         soft.frameless_pass_sp,
         soft.sp_arith_exact,
@@ -2352,6 +2352,11 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // arithmetic though no slot of their frame escapes, and functions
     // returning a register that holds only their entry lr (both barred).
     m.push("sp_arith_unescaped", n(soft.sp_arith_unescaped));
+    // Functions whose frame is in locals alone but keep their sp
+    // arithmetic to pass sp on as the guest has it, to code that may
+    // store a stack address outside the stack or that runs on their frame
+    // (native/lift-frame-exact-narrow).
+    m.push("sp_arith_exact", n(soft.sp_arith_exact));
     m.push("lr_returned", n(soft.lr_returned.len()));
     // The `let`s of IR values printed (native/lift-inline-temps): a pure
     // value used once, or a constant, prints inside its use instead.
@@ -3339,17 +3344,25 @@ fn lr_entries(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> BTreeSet<u3
 
 /// The functions that pass sp on to code needing the guest's sp exactly
 /// (`native/lift-frame-gone`), whose sp arithmetic stays printed though
-/// nothing of their frame is in memory: a frameless function's callees
-/// run on its entry sp, and one whose frame escapes stores addresses in
-/// it (a pointer to a local, in a global), which the native check holds
-/// to the guest's. Code needs sp exactly where its own frame escapes (or
-/// sp loses its offset, or it switches stacks, or writes its locals to
-/// the frame for a callee), it is a stand-in or has no frame, or it
-/// passes sp on to such code: a call, a tail call or fall, a call by value
-/// to one of a complete callee set (to any function if the set isn't
-/// complete); or, where the IRQ handlers need it (an IRQ wrapper's own
-/// code does), a BIOS call, an idle loop's edge or a store that may reach
-/// I/O, where `bank_sp` gives the handlers the stack they run on.
+/// nothing of their frame is in memory: a frameless function's callees run
+/// on its entry sp, and one that may store an address in its frame outside
+/// the stack (a pointer to a local, in a global) stores one the native
+/// check holds to the guest's. Code needs sp exactly where its own frame's
+/// addresses may be stored outside the stack ([`frame::stores`],
+/// native/lift-frame-exact-narrow: by itself, or by a callee it hands one
+/// to; not a frame only lent to callees that read and write through the
+/// address, nor one stored only into the DMA registers, a DMA's source,
+/// which the native check doesn't compare; a frame whose sp the run lost
+/// stores whatever it puts in it but its saves), or it switches stacks, it
+/// is a stand-in or has no frame; or it passes sp on to such code: a call,
+/// a tail call or fall, a call by value to one of a complete callee set
+/// (to any function if the set isn't complete), unless sp is a constant
+/// there (the reset's crt0 sets each mode's stack before it calls the
+/// game's main: [`Frame::apart`]); or, where the IRQ handlers need it (an
+/// IRQ wrapper's own code does), where they may run, on the stack
+/// `bank_sp` gives them: a BIOS call, an idle loop's edge, or a store that
+/// may run them ([`may_release_irq`]: to `IME` or `HALTCNT`;
+/// native/lift-frame-exact-narrow).
 fn exact_sp(
     codes: &[Code],
     all: &BTreeSet<u32>,
@@ -3357,6 +3370,85 @@ fn exact_sp(
     sets: &Sets,
     psr: &PsrFns,
 ) -> BTreeSet<u32> {
+    // Whether each function's frame addresses may be stored outside the
+    // stack, where the native check holds them to the guest's
+    // (native/lift-frame-exact-narrow).
+    let blocks: Vec<Vec<(u32, BTreeMap<u32, frame::FBlock>)>> = codes
+        .iter()
+        .map(|c| {
+            c.funcs
+                .iter()
+                .map(|f| (f.entry, frame::fblocks(&c.ctx, f, all)))
+                .collect()
+        })
+        .collect();
+    let ios: Vec<_> = codes
+        .iter()
+        .map(|c| {
+            // The DMA registers (DMA0SAD to DMA3CNT), which the native
+            // check doesn't compare: a constant address, else Recovery's
+            // value set.
+            move |insts: &[Inst], addr: ValueId, at: u32| {
+                let (lo, hi) = match konst(insts, addr) {
+                    Some(a) => (a, a),
+                    None => match c.ctx.disc.rec.accesses.get(&at) {
+                        Some(x) if !x.sp && !x.top => match x.hull {
+                            Some(h) => h,
+                            None => return false,
+                        },
+                        _ => return false,
+                    },
+                };
+                (0x0400_00B0..0x0400_00DC).contains(&lo) && (0x0400_00B0..0x0400_00DC).contains(&hi)
+            }
+        })
+        .collect();
+    let store_fns: Vec<frame::StoreFn> = codes
+        .iter()
+        .zip(&blocks)
+        .zip(&ios)
+        .flat_map(|((c, bs), io)| {
+            bs.iter().map(move |(e, b)| frame::StoreFn {
+                io,
+                entry: *e,
+                blocks: b,
+                frame: c.frames.get(e),
+            })
+        })
+        .collect();
+    // A jump by value's callees, where it is closed (as below).
+    let mut jumps: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+    for c in codes {
+        for f in &c.funcs {
+            for gb in f.blocks.values() {
+                for x in exits(&c.ctx, gb) {
+                    let Plan::Dynamic {
+                        ret: None, target, ..
+                    } = x.plan
+                    else {
+                        continue;
+                    };
+                    let thumb = gb.block.thumb;
+                    let Ok(ts) = dyn_targets(&c.ctx, holes, x.at, thumb, target) else {
+                        continue;
+                    };
+                    let out: Vec<u32> = ts
+                        .into_iter()
+                        .filter(|t| !f.blocks.contains_key(t))
+                        .collect();
+                    if closed_jump(&c.ctx, x.at, thumb) && out.iter().all(|t| all.contains(t)) {
+                        jumps.insert(x.at, out);
+                    }
+                }
+            }
+        }
+    }
+    let set_of = |at: u32| {
+        sets.get(&at)
+            .map(|cs| cs.iter().copied().collect())
+            .or_else(|| jumps.get(&at).cloned())
+    };
+    let stores = frame::stores(&store_fns, &set_of);
     // What each function passes sp on to.
     #[derive(Default)]
     struct Passes {
@@ -3370,17 +3462,19 @@ fn exact_sp(
         for f in &c.funcs {
             let mut p = Passes::default();
             let frame = c.frames.get(&f.entry);
+            // Its frame's addresses may be stored outside the stack, or
+            // sp isn't the frame's.
             p.own = holes.standins.contains_key(&f.entry)
-                || frame.is_none_or(|fr| {
-                    fr.lost
-                        || fr.escaping() > 0
-                        || !fr.flush.is_empty()
-                        || !fr.switches.is_empty()
-                        || !fr.fresh.is_empty()
-                });
+                || stores.get(&f.entry).is_none_or(|m| m & frame::SP != 0)
+                || frame.is_none_or(|fr| !fr.switches.is_empty() || !fr.fresh.is_empty());
             let sum = c.sums.get(f.entry);
             for (&k, gb) in &f.blocks {
                 for x in exits(&c.ctx, gb) {
+                    // On a stack of its own: the callee doesn't run on
+                    // this function's sp, nor do the IRQ handlers.
+                    if frame.is_some_and(|fr| fr.apart.contains(&x.at)) {
+                        continue;
+                    }
                     let mut callee = |t: u32| {
                         if !f.blocks.contains_key(&t) {
                             if all.contains(&t) {
@@ -3438,16 +3532,18 @@ fn exact_sp(
                     }
                 }
                 let insts = &gb.block.insts;
+                let mut at = k & !1;
                 for (i, inst) in insts.iter().enumerate() {
-                    let Op::Store { addr, .. } = inst.op else {
+                    if let Op::Insn(a) = inst.op {
+                        at = a;
+                    }
+                    let Op::Store { addr, width, .. } = inst.op else {
                         continue;
                     };
                     let stack = frame
                         .and_then(|fr| fr.places.get(&(k, i)))
                         .is_some_and(|pl| matches!(pl, frame::Place::Exact(..)));
-                    let not_io = konst(insts, addr)
-                        .is_some_and(|a| metrics::REGIONS[metrics::region(a)] != "io");
-                    if !stack && !not_io {
+                    if !stack && may_release_irq(&c.ctx, insts, addr, width, at) {
                         p.irq = true;
                     }
                 }
@@ -3495,6 +3591,38 @@ fn exact_sp(
         }
         irq = now;
     }
+}
+
+/// Whether a store may run the IRQ handlers in the native build: one that
+/// may reach `IME` (written 0 to 1, it runs what is due:
+/// [`runtime::hw::write_ime`]) or `HALTCNT` (a halt syncs). No other
+/// store runs them (a DMA's runs through the program's memory, a sound
+/// register's counts the timers, neither syncs). Where it may reach, as
+/// the printer's `bank_sp` has it: a constant address, else Recovery's
+/// value set (`FnPrinter::vsa_where`); unknown, it may.
+fn may_release_irq(ctx: &Ctx, insts: &[Inst], addr: ValueId, width: Width, at: u32) -> bool {
+    let (lo, hi) = match konst(insts, addr) {
+        Some(a) => (a, a),
+        None => match ctx.disc.rec.accesses.get(&at) {
+            Some(x) if x.stack_only() => return false,
+            Some(x) if !x.top => match x.hull {
+                Some(h) => h,
+                None => return false,
+            },
+            _ => return true,
+        },
+    };
+    let n = match width {
+        Width::Byte => 1,
+        Width::Half => 2,
+        Width::Word => 4,
+    };
+    let (lo, hi) = (lo & !(n - 1), (hi & !(n - 1)).saturating_add(n));
+    // IME's halfword, and POSTFLG's with HALTCNT (a halfword store to
+    // POSTFLG halts too).
+    [(0x0400_0208, 0x0400_020A), (0x0400_0300, 0x0400_0302)]
+        .iter()
+        .any(|&(a, b)| lo < b && a < hi)
 }
 
 /// One context's functions, summaries and frames. `named`: the indirect
@@ -6713,6 +6841,9 @@ impl FnPrinter<'_, '_> {
                         let vs = self.access_values(insts, i, &typed, &refs)?;
                         self.value_name(&vs, c)
                     });
+                    // A constant filling a global's field whole is a
+                    // literal of its type (native/lift-equipment-words).
+                    let lit = konst(insts, value).filter(|_| named.is_none() && plant.is_empty());
                     let val = format!("{}{plant}", named.unwrap_or_else(|| self.val(value)));
                     let mem = match (&typed[i], &objs[i], refs[i]) {
                         _ if let Some(o) = self.callers_off(i) => {
@@ -6730,10 +6861,14 @@ impl FnPrinter<'_, '_> {
                                 };
                                 format!("{}.set_{}({v});", b.owner, b.ident)
                             }
-                            _ => globals::store(p, bytes(width), &val),
+                            _ => lit
+                                .and_then(|c| globals::store_const(p, bytes(width), c))
+                                .unwrap_or_else(|| globals::store(p, bytes(width), &val)),
                         },
                         (None, Some(o), _) => {
-                            o.store(&format!("{}{m}", self.val(addr)), bytes(width), &val)
+                            let a = format!("{}{m}", self.val(addr));
+                            lit.and_then(|c| o.store_const(&a, bytes(width), c))
+                                .unwrap_or_else(|| o.store(&a, bytes(width), &val))
                         }
                         (None, None, Some(r)) if r.named => match r.fold {
                             Some(f) => {
@@ -9901,7 +10036,7 @@ mod tests {
         };
         let (t, m) = text(&with);
         let (plain, pm) = text(&Holes::parse("").unwrap());
-        for (note, stored) in [("// c/t.c:3", "0x5"), ("// c/u.h:4", "0x6")] {
+        for (note, stored) in [("// c/t.c:3", "= 5;"), ("// c/u.h:4", "= 6;")] {
             let at = t.find(note).unwrap_or_else(|| panic!("{note} in {t}"));
             let next = t[at..].lines().nth(1).unwrap();
             assert!(next.contains(stored), "{note} then {next}");
