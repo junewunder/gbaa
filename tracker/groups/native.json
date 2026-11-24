@@ -4435,19 +4435,8 @@
         "by": "e05cd9ee",
         "at": "2026-11-24T06:05:34Z",
         "evidence": "Scope narrowed by the owner (q/narrow-loop-unit-bounds-held, answer a: bounds held in registers). Counted loops of several blocks, calls, continue, counting down and u8 counters to a register-held bound print as for. c/loops: sum, draw_down, draw_odd, grow print as for; draw_global, draw_row, grid, first_long stay loop (RAM bounds, top-tested), as do Emerald's HealPlayerParty and CheckBagHasItem, left to {unit:native/lift-for-ram-bounds}, {unit:native/lift-for-top-tested}, {unit:native/lift-for-step-via}. Emerald 993 for / 3390 loop (was 353 / 4030), 600/600 frames; Metroid 195 / 499 (bar 499), 600/600. After merging main at 2187ee22: just check exit 0; just lift-check passed, 0 differences on every program, every planted fault caught. Review fixes (after_dot doc order, docs' Metroid counts) in 99d705fa.",
-        "branch": "unit/native/lift-for-bounds",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T06:05:34Z",
-          "by": "e05cd9ee",
-          "host": "quack",
-          "pid": 2962519,
-          "start": "95218086",
-          "beats": true,
-          "session": "e05cd9ee-8882-41b4-8c2c-828884da23df",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "landed": "2026-11-24T06:14:47Z"
       },
       "notes": [
         {
@@ -4465,20 +4454,7 @@
           "by": "1c7acd5d",
           "text": "Emerald rerun at d4e065ef done: 993 fors, 3390 loops left, 600/600; bars committed in mods (5b598d8, metroid 499). Only left: just check (cut off by the 14:50 stop), merge main, then just done. Follow-ups filed: lift-for-ram-bounds, -top-tested, -step-via."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-23T19:45:08Z",
-        "findings": "- The card's main cases still print as `loop`. Its example is HealPlayerParty (`for (i = 0; i < gPlayerPartyCount; i++)`, a bound that is a global), and it asks for bounds from a parameter, a global and a field, nested loops, and loops with break. In the current lifts, out/lift-emerald/src/m_080f8815.rs:1374 (HealPlayerParty) and out/lift-emerald/src/m_080d52d1.rs:2686 (CheckBagHasItem, a field bound) are still `'lN: loop`. In c/loops (out/lift-c-loops-agbcc/src/m_08000000.rs), the same goes for draw_global (:233, the global bound), draw_row (:275, the field bound), grid's two nested loops (:489, :502) and first_long (:359, the break). Only sum, draw_down, draw_odd and grow became `for`. docs/research/llm-pilot.md:2348 itself says a bound read from RAM each round stays a `loop`. The session moved these shapes into follow-up units it filed itself (lift-for-ram-bounds, -top-tested, -step-via); the card didn't ask for that split. Two ways to fix: (a) prove that a bound loaded from a global or a field doesn't change during a round, using the callees' summaries of what they write, plus the nested and value-start shapes, so the card's examples and the c/loops shapes print as `for`; or (b) ask the owner to narrow the card to bounds held in registers. Either way, the Evidence should say which c/loops functions and which of the two named Emerald functions print as `for`.\n- crates/codegen/src/native.rs, at the diff's hunk near old line 8446 (around new line 8696): the new `after_dot` was put between `rust_words`' doc comment (\"The words of `text` that may name a local…\") and `fn rust_words`. So `after_dot` now has both doc paragraphs and `rust_words` has none. Fix: move `after_dot` and its own doc comment above the `rust_words` doc comment.\n- docs/mod-view-parity.md:59 (\"169 `for` and 525 `loop` on Metroid\") and docs/research/llm-pilot.md:2347 (\"Metroid 169 of 694\") give an older count. The Evidence's final Metroid lift at d4e065ef is 195 `for` and 499 `loop` (bar 499 in mods/metroid/lift-bars.toml). Update both docs to 195 and 499 (195 of 694).",
-        "sent": {
-          "evidence": "At d4e065ef (main merged, up to date): just lift-check passed, 30 programs 0 differences incl. new c-loops-agbcc/gcc (c/loops, mGBA-matched 45ce6655274c0721), every planted fault caught; loops_not_for barred on C rows (lowered). Metroid 195 for/499 loop (was 101/593), 600/600, bar 499 in mods/metroid/lift-bars.toml (its lines_prelude and entries_beyond_one over-bars predate this: 1328/2997 on a 2026-11-21 lift in the main checkout). Emerald 993/3390 (was 353/4030), 600/600, bars in new mods/emerald/lift-bars.toml (lifted with the committed holes file). Emerald route check waits on {unit:native/emerald-native-route}. just check passed. Counters named by local_names where DWARF allows; x_ bodies keep notes.",
-          "by": "1c7acd5d",
-          "host": "quack",
-          "branch": "unit/native/lift-for-bounds",
-          "change": "6fc4207b69080c8188adc44834b1172092f2393d"
-        }
-      },
-      "round": "2026-11-23T17:31:59Z"
+      ]
     },
     {
       "id": "native/lift-stack-arrays",
