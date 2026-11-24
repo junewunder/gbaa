@@ -5207,6 +5207,13 @@
       "detail": "From {unit:native/lift-stack-arrays}' design (docs/native-port-design.md, 'Stack locals passed by address'): that unit prints a lent slot as [u8; N] by access width and its borrowers' accesses by offset. Wanted: where a names file has DWARF's type for the stack variable (names.locals) and every access fits it, the local is that type (t::Ctx) and accesses through the Lent are its fields. Check (code-shape work, judged on the C programs, Metroid and Emerald): just lift-check 0 differences, every planted fault caught; both games 600 of 600 frames; just check.",
       "needs": ["native/lift-stack-arrays"],
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-lend-wider",
+      "title": "More pointer parameters borrowed: compares and walks",
+      "detail": "frame::lend ({unit:native/lift-stack-arrays}) takes a parameter out on any compare that reaches a branch (26 of the C programs' pointer parameters), a store of it (19), arithmetic past a constant offset (10: a pointer walk, an index) and a return (8: a struct return's hidden pointer, also a summary hole in agbcc's rect_union). GBAA_LEND_DEBUG=1 lists each. Widen it: a null check of a borrowed pointer (never null), an index checked against the Lent's length, a struct return's pointer returned unread. Check: lent accesses up on the C rows; just lift-check 0 differences, every planted fault caught; just check.",
+      "needs": ["native/lift-stack-arrays"],
+      "uses": ["heavy"]
     }
   ]
 }
