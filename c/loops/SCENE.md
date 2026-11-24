@@ -21,6 +21,12 @@ a field array through a pointer (`p->slots[i].id`, as pret's bag),
 `add_rows` two arrays by one counter, and `sum_movers` a pointer stepped
 beside the counter (`b++`).
 
+A `u8` counter stepped through a second register (unit
+native/lift-for-step-via): `heal_rows` has an inner loop and reads `i`
+after it, so agbcc computes `i + 1` into another register before the
+inner loop and moves it back, narrowed, at the end (as pret's
+`HealPlayerParty`).
+
 Twelve bar lengths, `gLens`, grow by 1 to 4 every fourth frame and wrap
 past 40. Four columns of bars (2 pixels high, at most 24 wide, 6 apart
 from y 8): at x 0 the first `gBarCount` (4 to 11, stepping every 16
@@ -35,8 +41,11 @@ first length at least 20 to 35. Six movers' lengths grow by 1 or 2 each
 frame and wrap past 40: at y 116 a bar their lengths and hues summed long
 (low byte); at y 124 one four pixels for each item the pocket's first 4
 to 11 slots hold of kind `(frame >> 2) & 3`; at y 132 one `gTotals[(frame >> 1)
-& 3]` long (its low 7 bits), the sum of `gLens` and `gRow.len`.
+& 3]` long (its low 7 bits), the sum of `gLens` and `gRow.len`. From y 140,
+one to four rows (`(frame & 3) + 1`), 4 apart: four bars at x 120, 148,
+176 and 204, `gLens[j]` plus the row long in hues 0 to 3, and one at x 92
+the row plus 4 long in hue row + 4.
 
-Mode 3, BG2 on, black. Frame 600: hash `f7dfbac3dbb5ca31`, the same in
+Mode 3, BG2 on, black. Frame 600: hash `ef67e38173b46e8d`, the same in
 mGBA 0.10.5 and our interpreter, and in both builds (`just mgba-diff`,
-2026-11-24).
+2026-11-24, native/lift-for-step-via).
