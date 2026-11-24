@@ -5049,6 +5049,17 @@
       "check": "recorded",
       "needs": ["native/lift-for-bounds"],
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "a67a0150",
+        "session": "a67a0150-1e0c-4ab1-a123-7046e9f53591",
+        "host": "quack",
+        "pid": 1616693,
+        "start": "100832556",
+        "at": "2026-11-24T20:50:36Z",
+        "branch": "unit/native/lift-for-ram-bounds",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-24T20:50:20Z",
