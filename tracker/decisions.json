@@ -1553,6 +1553,19 @@
       "by": "6056824b",
       "at": "2026-11-24T22:33:24Z",
       "scope": ["native/*"]
+    },
+    {
+      "id": "d/dead-path-parameters-and-games-ram-bound-loops",
+      "title": "Dead-path parameters and games' RAM-bound loops are follow-on units",
+      "why": "Sprint of 2026-11-24, foreman in june's place, shown to her at the cut: the two splits the review asked the owner to record are accepted. Dead-path parameters belong to Results read past a stopped caller, and RAM-bound for loops on games to their follow-on unit.",
+      "by": "6056824b",
+      "at": "2026-11-24T22:33:26Z",
+      "scope": [
+        "native/lift-returns-read",
+        "native/lift-returns-past-holes",
+        "native/lift-for-ram-bounds",
+        "native/lift-for-ram-bounds-games"
+      ]
     }
   ]
 }
