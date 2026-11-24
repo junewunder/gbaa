@@ -4131,6 +4131,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T10:34:37Z",
+          "by": "8347a61f",
+          "text": "Metroid --bars lift still fails on 33 other metrics main's units left unbarred/stale (rom_static_fn_keys, fn_keys_left, entries_beyond_one 2998>809...). Emerald's committed holes file (mods 571d124) uses [[roots]], not on main: lift with 5c20f6c's."
+        },
+        {
           "at": "2026-11-24T10:04:36Z",
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - mods/metroid/lift-bars.toml and mods/emerald/lift-bars.toml (the private mods repo, linked into lane clones): the branch adds a new barred metric, `sp_arith_exact` (pushed in crates/codegen/src/native.rs at th…"
