@@ -4261,13 +4261,25 @@
       "title": "lift-mod-run takes the game's name from the mod",
       "detail": "From {unit:native/lift-agent-mod} (docs/research/lift-agent-mod.md, hurt 1): lift-mod-run and the fn-check it calls take the name from the ROM's file name, so Metroid's 'Metroid - Zero Mission (USA).gba' finds no mods/metroid/holes.toml and the lift fails (11 hard holes); the agent worked around it with a symlink named metroid.gba. Take the name from DIR's parent (mods/<name>/) or a --name flag, passed on to fn-check. Check: lift-mod-run on the real Metroid path with mods/metroid/energy lists 1806-2700; just check.",
       "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "d78e67ee",
+        "session": "d78e67ee-c428-4f84-8766-298c84dd1f23",
+        "host": "quack",
+        "pid": 2962048,
+        "start": "95217572",
+        "at": "2026-11-24T08:37:21Z",
+        "branch": "unit/native/lift-mod-run-name",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-24T06:29:49Z",
           "by": "e4b6a739",
           "text": "Amazing Mirror hit it too ({unit:native/mirror-agent-mod}): 'Kirby & The Amazing Mirror.gba' names no holes file; same symlink workaround, out/rom-links/kirby-mirror.gba."
         }
-      ]
+      ],
+      "round": "2026-11-24T08:37:21Z"
     },
     {
       "id": "native/lift-equipment-words",
