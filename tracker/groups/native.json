@@ -4398,21 +4398,9 @@
         "by": "68e9a5ec",
         "at": "2026-11-24T09:59:26Z",
         "evidence": "just lift-mod-run on c-switch-agbcc with a pen_update cut whose zigzag x += 3: 570 of 600 frames differ; each listed frame prints its box (frame 31: they differ in x 41-43, y 10-11 (3x2)) and writes zoom-N.png, stock and mod cropped with a 4 px margin and scaled (16x at frame 31, viewed: stock's pen trail vs the mod's skip). New unit tests for bbox and zoom. just check passes (main had nothing new to merge).",
-        "branch": "unit/native/lift-mod-run-zoom",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T09:59:26Z",
-          "by": "68e9a5ec",
-          "host": "quack",
-          "pid": 2962048,
-          "start": "95217572",
-          "beats": true,
-          "session": "68e9a5ec-74ff-42bc-a7e5-09056138c6dc",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-24T09:51:16Z"
+        "landed": "2026-11-24T10:13:34Z"
+      }
     },
     {
       "id": "native/lift-cut-header-helpers",
