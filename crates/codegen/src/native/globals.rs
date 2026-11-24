@@ -870,7 +870,7 @@ pub fn store(p: &Place, width: u32, v: &str) -> String {
         return if p.elem == 4 {
             format!("{} = {v};", p.place)
         } else {
-            format!("{} = {v} as {t};", p.place)
+            format!("{} = {};", p.place, super::casts::cast(v, &t))
         };
     }
     let (s, m) = (p.shift, mask(width));

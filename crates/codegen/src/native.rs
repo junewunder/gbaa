@@ -215,6 +215,7 @@ pub mod aligned;
 pub mod banks;
 pub mod bitfields;
 pub mod bounds;
+pub mod casts;
 pub mod cond;
 pub mod counted;
 pub mod cut;
@@ -2317,6 +2318,15 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             - line_notes
             - text_lines),
     );
+    // The integer casts the lifted functions print (native/lift-cast-types):
+    // in the function modules, `m_<key>.rs` and an IWRAM copy's `m<i>_<key>.rs`.
+    let n_casts: usize = files
+        .files
+        .iter()
+        .filter(|(p, _)| p.starts_with('m') && p.as_str() != "main.rs")
+        .map(|(_, t)| casts::count(t))
+        .sum();
+    m.push("casts", n(n_casts));
     // Only where the names files give DWARF variables or prototypes.
     if holes.dwarf.is_some() {
         m.push("locals_named", n(soft.locals_named));

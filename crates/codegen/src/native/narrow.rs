@@ -18,6 +18,11 @@
 //! - any other shift by a constant 1 to 31 as Rust's operator:
 //!   `x << c`, `x >> c`, `((x as i32) >> c) as u32`, `x.rotate_right(c)`.
 //!
+//! A narrowed or shifted value that already printed at a width goes
+//! through [`super::casts`]: `(x as u16 as u32) as u8 as u32` is `x as u8
+//! as u32`, and an arithmetic shift of `x as i16 as u32` by less than 16
+//! shifts the `i16`.
+//!
 //! The metrics: `shift_pairs_left` (barred) counts the guest's shift
 //! pairs, a `lsl #c` and the `lsr #c` or `asr #c` of its result right
 //! after it, whose second shift still printed as a shift (one the IR
@@ -222,11 +227,12 @@ impl Form {
     /// [`Form::print_with`] of a form that reads no other value.
     pub fn print(self, x: &str) -> String {
         match self {
-            Form::Narrow { bits: 8, signed } => {
-                format!("{x} as {}8 as u32", if signed { "i" } else { "u" })
-            }
-            Form::Narrow { bits: 16, signed } => {
-                format!("{x} as {}16 as u32", if signed { "i" } else { "u" })
+            Form::Narrow {
+                bits: b @ (8 | 16),
+                signed,
+            } => {
+                let t = format!("{}{b}", if signed { "i" } else { "u" });
+                format!("{} as u32", super::casts::cast(x, &t))
             }
             Form::Narrow {
                 bits,
@@ -235,7 +241,7 @@ impl Form {
             Form::Narrow { bits, signed: true } => format!("prim::sext({x}, {bits})"),
             Form::Shift(ShiftType::Lsl, c) => format!("{x} << {c}"),
             Form::Shift(ShiftType::Lsr, c) => format!("{x} >> {c}"),
-            Form::Shift(ShiftType::Asr, c) => format!("(({x} as i32) >> {c}) as u32"),
+            Form::Shift(ShiftType::Asr, c) => super::casts::asr(x, c),
             Form::Shift(ShiftType::Ror, c) => format!("{x}.rotate_right({c})"),
             Form::Same => x.to_string(),
             f => panic!("{f:?} reads another value"),
