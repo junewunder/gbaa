@@ -4871,19 +4871,8 @@
         "by": "a1175287",
         "at": "2026-11-24T21:27:21Z",
         "evidence": "On 0f5940f3 (c05eb64 + latest main e0e6793 merged): just lift Metroid --name metroid: 600 of 600 frames, no stop; ref_new_at_use 2955, refs_bound_named 1977, refs_bound_proven 408. just lift Emerald --name emerald: 600 of 600, no stop; ref_new_at_use 33780, refs_bound_named 20326, refs_bound_proven 1906. just lift-check: passed (0 differences, every planted fault caught). just check: passed (exit 0).",
-        "branch": "unit/native/lift-pointer-types",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-24T21:27:21Z",
-          "by": "a1175287",
-          "host": "quack",
-          "pid": 1609731,
-          "start": "100806701",
-          "beats": true,
-          "session": "a1175287-9c83-40ff-9573-de79131c0d85",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "landed": "2026-11-24T21:39:58Z"
       },
       "notes": [
         {
@@ -4901,20 +4890,7 @@
           "by": "51bbc90d",
           "text": "Branch has it all, main merged at 31955b1. Passed: lift-check (GBAA_DATA=private dir, memory/shared-c-roms.md), Metroid 600/600 (ref_new_at_use 8164 to 2703). Left: Emerald just lift on the last commit (5747598 fixes main's open-bus vN not printed) and just check; then done."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-24T20:29:25Z",
-        "findings": "- The game runs and `just check` were not done on the branch as it now stands. The card's check asks for Metroid and Emerald each to build and run 600 of 600 frames headless (`just lift`), with their ref_new_at_use given, and for `just check` to pass. The Evidence covers the Emerald run, its numbers and `just check` only up to the merge of main at 8927d97. `.git/logs/HEAD` shows that the session then merged origin/main again at aa82031 (commit e3ce4f3). That merge is 'Emerald's signatures print from pret's prototypes' ({unit:native/lift-signature-holes}), and it changes how Emerald's parameters are named and typed, which is exactly what ref_binds rewrites. After it, the session only re-ran lift-check and raised the c-fnptr-gcc lines bar from 634 to 635 (c05eb64); the earlier session's note says the same. Metroid's 600/600 (ref_new_at_use 8164 to 2703) is older still: it ran before 5747598 (the open-bus fix in `operands`, crates/codegen/src/native.rs) and before both merges. What to do: on c05eb64 or later, run `just lift` for Emerald and for Metroid and confirm 600 of 600 frames with no stop. Record each game's ref_new_at_use, refs_bound_named and refs_bound_proven. Then run `just check`, and record all of it with `just done`.",
-        "sent": {
-          "evidence": "Merged origin/main (8927d97). just lift-check passed: 0 differences, every planted fault caught. just lift Emerald: 600 of 600 frames, no stop; ref_new_at_use 33821, refs_bound_named 20437, refs_bound_proven 1921. Metroid 600/600 earlier (ref_new_at_use 8164 to 2703). just check passed after allowing operands' too_many_arguments.",
-          "by": "3564e068",
-          "host": "quack",
-          "branch": "unit/native/lift-pointer-types",
-          "change": "8d77396d3990bc7c701b3f96ff5d98dfc1d627f0"
-        }
-      },
-      "round": "2026-11-24T16:33:13Z"
+      ]
     },
     {
       "id": "native/lift-signature-holes",
