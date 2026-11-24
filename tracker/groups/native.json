@@ -4940,6 +4940,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T23:24:57Z",
+          "by": "e601e02d",
+          "text": "Its results_several and tuple_calls bars were taken out of Metroid's and Emerald's private bars ({unit:native/game-lift-bars-refresh}, main dd9a7df9: main measures neither). Landing this unit adds them back to both files at its measured values."
+        },
+        {
           "at": "2026-11-24T19:42:05Z",
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - Check run on code from before the main merge: the Evidence and the 2026-11-24 note say `just lift-check` (37 programs, 0 differences, every planted fault caught) and the Metroid and Emerald 600/600-frame runs …"
@@ -4948,11 +4953,6 @@
           "at": "2026-11-24T19:31:07Z",
           "by": "c2e64a37",
           "text": "Last main merge (c558dda1) brought prototype shapes in: lift-metrics 0 over on every program after it, but lift-check, Metroid and Emerald ran on ad85c204/2f545afc (before). Dead-path params and stopped callers: {unit:native/lift-returns-past-holes}."
-        },
-        {
-          "at": "2026-11-21T04:34:56Z",
-          "by": "74e66c41",
-          "text": "2026-11-20: where a names-file prototype exists, the signatures-from-prototypes unit prints its result. This unit is the analysis for functions with none, scored against the prototypes."
         }
       ],
       "review": {
