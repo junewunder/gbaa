@@ -451,6 +451,17 @@
       "needs": ["native/fnref-flow", "native/fnref-heap-sites", "native/fnref-ram-default"],
       "uses": ["heavy"],
       "minMinutes": 120,
+      "record": {
+        "state": "claimed",
+        "by": "91d18000",
+        "session": "91d18000-784e-438e-a02f-f3dfa1f9cc45",
+        "host": "quack",
+        "pid": 2964711,
+        "start": "95219683",
+        "at": "2026-11-24T05:15:37Z",
+        "branch": "unit/native/fnref-dense",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-20T11:33:27Z",
@@ -462,7 +473,8 @@
           "by": "59a5588e",
           "text": "2026-11-20, function-flow thread: on the C programs the heap holds no word (none allocates but c/heap). c-fnptr's 6 and 10 are held by RAM globals: a load via a pointer into gObjs reads every cell. {unit:native/fnref-ram-pointers} is what unblocks this."
         }
-      ]
+      ],
+      "round": "2026-11-24T05:15:37Z"
     },
     {
       "id": "native/indirect-call-args",
