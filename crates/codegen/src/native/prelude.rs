@@ -1114,6 +1114,33 @@ pub fn call_fn(g: &mut Game, k: u32, sp: u32, a: [u32; 4]) -> Result<[u32; 4], E
     }
 }
 
+/// A context restore's return (`longjmp`'s; native/lift-longjmp): into
+/// the caller of the save that stored `buf`, with r0-r3, by unwinding.
+pub fn restore(buf: u32, r: [u32; 4]) -> ! {
+    std::panic::resume_unwind(Box::new(Restored { buf, r }))
+}
+
+/// What a [`restore`] unwinds with.
+pub struct Restored {
+    buf: u32,
+    r: [u32; 4],
+}
+
+/// A catch point's body (a caller of `setjmp`), run till a [`restore`].
+pub fn catch_restore<T>(body: impl FnOnce() -> T) -> Result<T, Box<dyn std::any::Any + Send>> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(body))
+}
+
+/// The registers a restore of `buf` returns with; any other unwinding
+/// (another buffer's, a panic) goes on up.
+pub fn restored(thrown: Box<dyn std::any::Any + Send>, buf: u32) -> [u32; 4] {
+    match thrown.downcast::<Restored>() {
+        Ok(t) if buf != 0 && t.buf == buf => t.r,
+        Ok(t) => std::panic::resume_unwind(t),
+        Err(p) => std::panic::resume_unwind(p),
+    }
+}
+
 /// Whether `k` is a dense function's ID (`--fn-ids dense`).
 #[inline(always)]
 pub fn is_dense_id(k: u32) -> bool {

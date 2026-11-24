@@ -1067,18 +1067,39 @@ const CONTEXT: u16 = 0x6ff0;
 /// `jmp_buf` for pointers would): such a reader finds the lift's zeroes
 /// there, as it does in a stack frame's saved registers.
 fn context_saves(funcs: &[Func]) -> BTreeSet<u32> {
+    context_pairs(funcs.iter()).0
+}
+
+/// The context saves ([`context_saves`]) of `funcs`, and the restores a
+/// save matches, each with its base register (`longjmp`'s `ldm r0!`: r0):
+/// the restores the lift prints as a return into the caller of the save
+/// that stored the block (native/lift-longjmp).
+pub fn context_pairs<'a>(
+    funcs: impl Iterator<Item = &'a Func> + Clone,
+) -> (BTreeSet<u32>, BTreeMap<u32, u8>) {
     let blocks = |load: bool| {
         funcs
-            .iter()
+            .clone()
             .flat_map(|f| f.blocks.values())
             .flat_map(|b| &b.insns)
-            .filter_map(move |&(at, i)| context_block(&i, load).map(|(m, r)| (at, m, r)))
+            .filter_map(move |&(at, i)| context_block(&i, load).map(|(m, r)| (at, m, r, i)))
     };
-    let restores: Vec<(BlockMode, u16)> = blocks(true).map(|(_, m, r)| (m, r)).collect();
-    blocks(false)
-        .filter(|&(_, m, r)| restores.contains(&(m, r)))
-        .map(|(at, ..)| at)
-        .collect()
+    let restores: Vec<(u32, BlockMode, u16, Instr)> = blocks(true).collect();
+    let saves: Vec<(u32, BlockMode, u16, Instr)> = blocks(false)
+        .filter(|&(_, m, r, _)| restores.iter().any(|x| (x.1, x.2) == (m, r)))
+        .collect();
+    let base = |i: &Instr| match *i {
+        Instr::Block { rn, .. } => rn as u8,
+        _ => unreachable!("a context block is a block transfer"),
+    };
+    (
+        saves.iter().map(|x| x.0).collect(),
+        restores
+            .iter()
+            .filter(|x| saves.iter().any(|s| (s.1, s.2) == (x.1, x.2)))
+            .map(|x| (x.0, base(&x.3)))
+            .collect(),
+    )
 }
 
 /// `i`'s way and registers if it is a context block transfer the way
