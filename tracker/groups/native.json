@@ -4907,6 +4907,13 @@
         "branch": "unit/native/lift-signature-holes",
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-24T18:36:41Z",
+          "by": "51bbc90d",
+          "text": "Emerald's lift on main fails to compile at GetTextEntryPosition: an [[open_bus]] load reads a vN never printed (uses counted on the typed path). Fixed on branch unit/native/lift-pointer-types (5747598, FnPrinter::operands); lands with that unit."
+        }
+      ],
       "round": "2026-11-24T16:58:52Z"
     },
     {
