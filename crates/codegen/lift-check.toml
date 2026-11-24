@@ -46,6 +46,11 @@
 # build leaves as keys, at the values measured; 0 on the C programs but
 # c-fnptr-gcc, whose callback words a frame's pushed r3 holds in the stacks'
 # cell (an indirect call's callee assumed to read the caller's frame).
+# rom_static_fn_keys and rom_refs (native/rom-statics), at the values
+# measured: the function words the flow read in a ROM static that a dense
+# build leaves as keys (agb's 3 in a byte static, read a byte at a time), and
+# the loads from a word static that holds a pointer into ROM data (a RomRef's
+# soft hole).
 
 [program.affine]
 rom = "agb/affine.gba"
@@ -127,6 +132,8 @@ entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 55
 fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 sp_accesses_callers_frame = 7
 
 [program.mosaic-modes]
@@ -211,6 +218,8 @@ entry_lr_returns_call_fn = 1
 gap_targets = 24
 fn_words_not_proven = 54
 fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 sp_accesses_callers_frame = 4
 
 [program.native-spike]
@@ -299,6 +308,8 @@ entry_lr_returns_call_fn = 0
 gap_targets = 22
 fn_words_not_proven = 58
 fn_keys_left = 62
+rom_static_fn_keys = 3
+rom_refs = 16
 sp_accesses_callers_frame = 8
 
 [program.native-fallthrough]
@@ -385,6 +396,8 @@ entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 56
 fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 sp_accesses_callers_frame = 8
 
 [program.native-irq-hold]
@@ -472,6 +485,8 @@ entry_lr_returns_call_fn = 0
 gap_targets = 11
 fn_words_not_proven = 58
 fn_keys_left = 62
+rom_static_fn_keys = 3
+rom_refs = 17
 sp_accesses_callers_frame = 7
 
 [program.native-frame-locals]
@@ -562,6 +577,8 @@ entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 55
 fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 
 [program.native-ime-release]
 rom = "agb/native-ime-release.gba"
@@ -648,6 +665,8 @@ entry_lr_returns_call_fn = 0
 gap_targets = 15
 fn_words_not_proven = 58
 fn_keys_left = 62
+rom_static_fn_keys = 3
+rom_refs = 17
 
 [program.native-bios-calls]
 rom = "agb/native-bios-calls.gba"
@@ -738,6 +757,8 @@ entry_lr_returns_call_fn = 0
 gap_targets = 7
 fn_words_not_proven = 55
 fn_keys_left = 58
+rom_static_fn_keys = 3
+rom_refs = 17
 
 [program.native-bios-more]
 rom = "agb/native-bios-more.gba"
@@ -830,6 +851,8 @@ entry_lr_returns_call_fn = 2
 gap_targets = 165
 fn_words_not_proven = 55
 fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 16
 
 [program.native-tasks]
 rom = "agb/native-tasks.gba"
@@ -937,6 +960,8 @@ gap_targets = 5
 # widening both ways: read without the stride the count stays 59.
 fn_words_not_proven = 60
 fn_keys_left = 68
+rom_static_fn_keys = 3
+rom_refs = 17
 
 [program.native-dma]
 rom = "agb/native-dma.gba"
@@ -1025,6 +1050,8 @@ entry_lr_returns_call_fn = 1
 gap_targets = 80
 fn_words_not_proven = 61
 fn_keys_left = 67
+rom_static_fn_keys = 3
+rom_refs = 16
 
 [program.native-save]
 rom = "agb/native-save.gba"
@@ -1113,6 +1140,8 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 55
 fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5
 
 [program.native-bios-region]
@@ -1200,6 +1229,8 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 59
 fn_keys_left = 63
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 11
 
 [program.native-bios-affine]
@@ -1288,6 +1319,8 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 56
 fn_keys_left = 60
+rom_static_fn_keys = 3
+rom_refs = 18
 gap_targets = 5
 
 [program.native-serial]
@@ -1378,6 +1411,8 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 58
 fn_keys_left = 61
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5
 
 [program.native-irq-wrapper]
@@ -1470,6 +1505,8 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 60
 fn_keys_left = 68
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5
 
 [program.native-takes]
@@ -1557,6 +1594,8 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 55
 fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5
 
 [program.native-gives]
@@ -1644,6 +1683,8 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 55
 fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5
 
 [program.c-fnptr-agbcc]
@@ -1736,6 +1777,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-fnptr-gcc]
@@ -1828,6 +1871,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 5
 fn_keys_left = 6
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-switch-agbcc]
@@ -1922,6 +1967,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 2
 gap_targets = 0
 
 [program.c-switch-gcc]
@@ -2016,6 +2063,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 2
 gap_targets = 0
 
 [program.c-chain-agbcc]
@@ -2108,6 +2157,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-chain-gcc]
@@ -2200,6 +2251,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-heap-agbcc]
@@ -2293,6 +2346,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-heap-gcc]
@@ -2386,6 +2441,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-bits-agbcc]
@@ -2479,6 +2536,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-bits-gcc]
@@ -2572,6 +2631,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-loops-agbcc]
@@ -2664,6 +2725,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-loops-gcc]
@@ -2756,6 +2819,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-list-agbcc]
@@ -3032,4 +3097,6 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 59
 fn_keys_left = 64
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5

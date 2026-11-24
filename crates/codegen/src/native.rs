@@ -1120,6 +1120,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let mut konst = Vec::new();
     let mut ranges = Vec::new();
     let mut rom_ranges = Vec::new();
+    let mut rom_sites = Vec::new();
     // The code's constants and pool words, for its text
     // (native/lift-text-editable).
     let mut code_consts = BTreeSet::new();
@@ -1150,6 +1151,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                         }
                     } else if let Some((lo, hi, w)) = computed_rom(&c.ctx, insts, &inst.op, at) {
                         rom_ranges.push((lo, hi + w, w));
+                        rom_sites.push((at, lo, hi, w));
                     }
                 }
             }
@@ -1166,31 +1168,6 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     if let Some(t) = &holes.values {
         globals.name_values(t.clone());
     }
-    // ROM's objects: what the computed loads the value sets bound to ROM
-    // reach (native/rom-data-statics).
-    let rom_data = RomData::carve(&rom_ranges, rom.len() as u32);
-    // The game's text as statics an editor can change
-    // (native/lift-text-editable).
-    let texts = match &holes.text {
-        Some(map) => text_statics::collect(
-            &codes[0].ctx,
-            map,
-            &code_consts,
-            &rom_data,
-            &holes.text_edits,
-        ),
-        None => text_statics::collect(
-            &codes[0].ctx,
-            &Default::default(),
-            &code_consts,
-            &rom_data,
-            &holes.text_edits,
-        ),
-    };
-    let texts = match texts {
-        Ok(t) => t,
-        Err(e) => panic!("{e}"),
-    };
     let typed_line = holes.types.as_deref().map(|t| typed_fields(t, &konst));
     let flow_ins: Vec<FlowIn> = codes
         .iter()
@@ -1235,6 +1212,47 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             Some((flow, words, call_fn))
         }
         _ => None,
+    };
+    // ROM's objects: what the computed loads the value sets bound to ROM
+    // reach (native/rom-data-statics); one past the flow's widest read
+    // only where it read no function word (native/rom-statics; without
+    // a flow, where there is none).
+    let rom_data = {
+        let read = fnrefs.as_ref().map(|(f, _, _)| &f.read);
+        RomData::carve(
+            &rom_ranges,
+            rom,
+            |x| all.contains(&x),
+            |a| read.is_none_or(|r| r.contains(&a)),
+        )
+    };
+    // The computed ROM loads no static holds (`load_computed_rom`, if the
+    // function is printed): where, and the extent the value sets give.
+    let rom_left: Vec<(u32, u32, u32, u32)> = rom_sites
+        .into_iter()
+        .filter(|&(_, lo, hi, w)| rom_data.object(lo, hi, w).is_none())
+        .collect();
+    // The game's text as statics an editor can change
+    // (native/lift-text-editable).
+    let texts = match &holes.text {
+        Some(map) => text_statics::collect(
+            &codes[0].ctx,
+            map,
+            &code_consts,
+            &rom_data,
+            &holes.text_edits,
+        ),
+        None => text_statics::collect(
+            &codes[0].ctx,
+            &Default::default(),
+            &code_consts,
+            &rom_data,
+            &holes.text_edits,
+        ),
+    };
+    let texts = match texts {
+        Ok(t) => t,
+        Err(e) => panic!("{e}"),
     };
     // Heap pointers as `Ref<T>` (native/ref-heap): RAM at the start is
     // the program start's copies, else 0.
@@ -1287,6 +1305,17 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let dense = match &fnrefs {
         Some((f, words, _)) => dense_ids(f, words, &ins, rom, holes),
         None => Dense::default(),
+    };
+    // The function words a ROM static holds that the run read and a dense
+    // build leaves as keys (native/rom-statics): by address, the key.
+    let static_keys: BTreeMap<u32, u32> = match &fnrefs {
+        Some((f, words, _)) => words
+            .iter()
+            .filter(|(w, _)| f.read.contains(w) && !dense.words.contains_key(w))
+            .filter(|(w, _)| rom_data.overlapping(**w, **w + 4).is_some())
+            .map(|(w, (k, _))| (*w, *k))
+            .collect(),
+        None => BTreeMap::new(),
     };
     let (dense_at, dense_ids_map) = match holes.fn_ids_dense {
         true => (dense.at.clone(), dense.ids.clone()),
@@ -1986,7 +2015,40 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             dense.left,
         )
         .unwrap();
+        let list: Vec<String> = static_keys
+            .iter()
+            .map(|(w, k)| {
+                let o = rom_data.overlapping(*w, *w + 4).expect("in a static");
+                format!("{w:#010x} f_{k:08x} in {}", o.name)
+            })
+            .collect();
+        writeln!(
+            report,
+            "function words in ROM statics left as keys (native/rom-statics): {}{}{}",
+            list.len(),
+            if list.is_empty() { "" } else { ": " },
+            list.join(", ")
+        )
+        .unwrap();
     }
+    let list: Vec<String> = rom_left
+        .iter()
+        .map(|(at, lo, hi, w)| {
+            let st = codes
+                .iter()
+                .find_map(|c| c.ctx.disc.rec.accesses.get(at))
+                .map_or(0, |x| x.stride);
+            format!("{at:#010x} u{} {lo:#010x}..={hi:#010x} by {st}", w * 8)
+        })
+        .collect();
+    writeln!(
+        report,
+        "computed ROM loads no static holds (native/rom-statics; load_computed_rom counts those printed): {}{}{}",
+        list.len(),
+        if list.is_empty() { "" } else { ": " },
+        list.join(", ")
+    )
+    .unwrap();
     writeln!(
         report,
         "indirect call arguments (native/indirect-call-args): {} of {} call_fn calls have a complete callee set, {} of them passing all of r0-r3; of the {} complete sets, {} have callees whose summaries read all four between them, {} a four-register callee (a summary hole, a stand-in)",
@@ -2208,6 +2270,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     m.push("lines_prelude", n(prelude));
     m.push("lines_types", n(type_lines));
     m.push("rom_statics", n(rom_data.len()));
+    m.push("rom_refs", n(soft.rom_refs.len()));
     m.push("functions", n(n_funcs));
     m.push(
         "functions_iwram",
@@ -2343,6 +2406,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         m.push("fn_words_not_proven", n(f.1.len() - fn_proven));
         m.push("fn_ids_dense", n(dense.ids.len()));
         m.push("fn_keys_left", dense.left);
+        m.push("rom_static_fn_keys", n(static_keys.len()));
     }
     // Only a lift with names has them (native/lift-data-names-inline):
     // the data constants named, and those inside a named datum left as
@@ -3833,6 +3897,10 @@ struct Soft {
     /// (function, block, inst).
     shift_pairs: BTreeSet<u32>,
     pairs_left: BTreeSet<u32>,
+    /// The word loads from a ROM static that holds ROM data pointers, by
+    /// address: each may load a pointer into ROM (a `RomRef` in the
+    /// design, a guest address here; native/rom-statics).
+    rom_refs: BTreeSet<u32>,
     narrowings: BTreeSet<(u32, u32, usize)>,
     /// Flag writes printed, and of them those nothing reads
     /// ([`FnPrinter::dead_writes`]: none but with `--keep-dead-writes`).
@@ -6448,7 +6516,11 @@ impl FnPrinter<'_, '_> {
                         (None, None, None) => match self.rom_static(insts, &inst.op, at) {
                             Some(o) => {
                                 rom = true;
-                                o.load(&format!("{}{m}", self.val(addr)))
+                                let (ptrs, e) = (o.ptrs, o.load(&format!("{}{m}", self.val(addr))));
+                                if ptrs {
+                                    self.soft.rom_refs.insert(at);
+                                }
+                                e
                             }
                             None => format!("{f}(g, {})", self.io_addr(insts, addr, width, m)),
                         },
