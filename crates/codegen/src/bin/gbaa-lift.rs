@@ -1,5 +1,5 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
-//! [--names DIR]... [--no-data-names] [--layout guest|packed] [--drop-standin KEY] [--plant AT]
+//! [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT]
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT]
 //! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
@@ -39,6 +39,13 @@
 //! `--layout packed` makes them fields in the lifter's order, the rest of
 //! RAM bytes, the play layout, which must draw the same frames (unit
 //! `native/lift-packed-layout`).
+//! `--fn-ids dense` (unit `native/fnref-dense`) makes each function whose
+//! every address the function flow proved an ID from 1 (`DENSE`): its
+//! words in the crate's copy of the ROM (`rom.gba`) and its constants in
+//! the code are the ID; the rest keep their keys, as at `--fn-ids rom`
+//! (the default, the native check's: RAM then holds the play build's
+//! numbers). A dense build must draw the same frames (`route-check
+//! --dense`).
 //!
 //! `--bars FILE` (`crates/codegen/lift-check.toml`, unit
 //! `native/lift-bars`) holds the report's metrics to the maxima of
@@ -176,7 +183,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...] | gbaa-lift ROM --find FIELD [FLAGS]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...] | gbaa-lift ROM --find FIELD [FLAGS]"
         );
         ExitCode::FAILURE
     };
@@ -203,6 +210,7 @@ fn main() -> ExitCode {
     let (mut interp_every, mut plant_reference) = (8, false);
     let mut fn_check_cuts = false;
     let mut layout = codegen::native::globals::Layout::Guest;
+    let mut fn_ids_dense = false;
     let mut text_edit = None;
     let (mut cut_dir, mut cut_keys): (Option<PathBuf>, Vec<String>) = (None, Vec::new());
     let mut find: Option<String> = None;
@@ -302,6 +310,7 @@ fn main() -> ExitCode {
             ("--layout", Some(l)) if l == "packed" => {
                 layout = codegen::native::globals::Layout::Packed
             }
+            ("--fn-ids", Some(l)) if l == "rom" || l == "dense" => fn_ids_dense = l == "dense",
             ("--drop-standin", Some(k)) if hex(k).is_some() => drop = hex(k),
             ("--plant", Some(a)) if hex(a).is_some() => plant = hex(a),
             ("--fn-check", Some(k)) if hex(k).is_some() => fn_check.push(hex(k).unwrap()),
@@ -403,11 +412,13 @@ fn main() -> ExitCode {
     }
     holes.plant = plant;
     holes.plant_reference = plant_reference;
-    // A packed layout's RAM isn't the guest's bytes: no interpreter.
+    // A packed layout's RAM isn't the guest's bytes, nor is a dense
+    // build's (its function pointers are IDs): no interpreter.
     holes.fn_check_interp = match layout {
-        codegen::native::globals::Layout::Guest => interp_every,
-        codegen::native::globals::Layout::Packed => 0,
+        codegen::native::globals::Layout::Guest if !fn_ids_dense => interp_every,
+        _ => 0,
     };
+    holes.fn_ids_dense = fn_ids_dense;
     holes.fall_as_tail_call = tail;
     holes.irq_at_waits = irq_at_waits;
     holes.ime_at_waits = ime_at_waits;
@@ -675,7 +686,12 @@ fn main() -> ExitCode {
                 .try_for_each(|(f, t)| write(&src.join(f), t.as_bytes()))
         })
         .and_then(|_| stale(&src))
-        .and_then(|_| write(&out.join("rom.gba"), &bytes))
+        .and_then(|_| {
+            write(
+                &out.join("rom.gba"),
+                &dense_rom(&bytes, &lifted.dense_words),
+            )
+        })
         .and_then(|_| write(&out.join("report.txt"), lifted.report.as_bytes()))
         .and_then(|_| {
             write(
@@ -774,4 +790,15 @@ fn data_dir() -> Option<PathBuf> {
         Some(d) if !d.is_empty() => Some(PathBuf::from(d)),
         _ => std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share/gbaa")),
     }
+}
+
+/// The ROM with each word of `words` (its address, the ID) holding the
+/// ID: a dense build's copy (`--fn-ids dense`).
+fn dense_rom(rom: &[u8], words: &std::collections::BTreeMap<u32, u32>) -> Vec<u8> {
+    let mut b = rom.to_vec();
+    for (&a, &id) in words {
+        let o = (a - 0x0800_0000) as usize;
+        b[o..o + 4].copy_from_slice(&id.to_le_bytes());
+    }
+    b
 }

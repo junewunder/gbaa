@@ -156,13 +156,13 @@ build for the host.
   `fn_words_not_proven` (barred) and `fn_words_proven`.
   `GBAA_FNREF_TRACE=1` traces it. Proofs are weak on agb: see "Known
   gaps", the pile.
-- **Function pointers as dense IDs** (`native/fnref-dense`). The proven
-  words rewritten in the lifter's copy of ROM data, `FNS` dense from 1
-  under a new `--fn-ids dense`; ROM keys stay the native check's (RAM holds
-  the play build's numbers). Check: `lift-check` green with ROM keys, and
-  each program's dense build draws the same 600 frames (`route-check
-  --native … --packed`); bar: 0 ROM keys left in a dense build. Waits on
-  the heap split by allocation site (`native/fnref-heap-sites`).
+- **Function pointers as dense IDs** (`native/fnref-dense`). Done
+  (`native::dense_ids`): at `--fn-ids dense` a function every address of
+  which the flow proved is an ID from 1 (`DENSE`) in the crate's ROM copy
+  and the code's constants; the rest keep their keys, which `call_fn`
+  still finds. `lift-check` builds each program so (`route-check
+  --dense`: the same frames, records but RAM). Metrics `fn_ids_dense`,
+  `fn_keys_left` (0 on the C programs but c-fnptr-gcc's 6; Metroid 326).
 - **Indirect calls pass what their callees read**
   (`native/indirect-call-args`). Done: a call (not a jump by value)
   whose `native/fnref-flow` callee set is complete reads the union of

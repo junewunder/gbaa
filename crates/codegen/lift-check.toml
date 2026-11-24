@@ -40,6 +40,12 @@
 # native/lift-gives' 1322 -> 1327; 1322 -> 1323 on its branch): st8 passes a
 # byte store to a sound or timer register on as a byte (hw::write_io8), as the
 # play build's bus, not its pair rewritten (Amazing Mirror's PSG differed).
+# lines_prelude raised 1328 -> 1337 (native/fnref-dense): call_fn and irq_entry
+# take a dense function's ID (`DENSE`, empty at --fn-ids rom). fn_keys_left
+# (native/fnref-dense): the function words and code constants a --fn-ids dense
+# build leaves as keys, at the values measured; 0 on the C programs but
+# c-fnptr-gcc, whose callback words a frame's pushed r3 holds in the stacks'
+# cell (an indirect call's callee assumed to read the caller's frame).
 
 [program.affine]
 rom = "agb/affine.gba"
@@ -48,7 +54,7 @@ route = "units/affine-600.toml"
 [program.affine.bars]
 io_unnamed = 19
 lines = 21003
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 109
 functions_iwram = 3
@@ -120,6 +126,7 @@ branches_on_raw_flags = 30
 entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 55
+fn_keys_left = 59
 sp_accesses_callers_frame = 7
 
 [program.mosaic-modes]
@@ -129,7 +136,7 @@ route = "units/mosaic-modes-600.toml"
 [program.mosaic-modes.bars]
 io_unnamed = 19
 lines = 15348
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 102
 functions_iwram = 3
@@ -203,6 +210,7 @@ branches_on_raw_flags = 22
 entry_lr_returns_call_fn = 1
 gap_targets = 24
 fn_words_not_proven = 54
+fn_keys_left = 59
 sp_accesses_callers_frame = 4
 
 [program.native-spike]
@@ -218,7 +226,7 @@ planted_hole = { drop_standin = 0x08002728, names = "error: hard hole in f_08002
 [program.native-spike.bars]
 io_unnamed = 19
 lines = 22239
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 110
 functions_iwram = 3
@@ -290,6 +298,7 @@ branches_on_raw_flags = 36
 entry_lr_returns_call_fn = 0
 gap_targets = 22
 fn_words_not_proven = 58
+fn_keys_left = 62
 sp_accesses_callers_frame = 8
 
 [program.native-fallthrough]
@@ -303,7 +312,7 @@ planted_flags = ["--fall-as-tail-call"]
 [program.native-fallthrough.bars]
 io_unnamed = 19
 lines = 20568
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 112
 functions_iwram = 3
@@ -375,6 +384,7 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 56
+fn_keys_left = 59
 sp_accesses_callers_frame = 8
 
 [program.native-irq-hold]
@@ -389,7 +399,7 @@ planted_flags = ["--irq-at-waits"]
 [program.native-irq-hold.bars]
 io_unnamed = 19
 lines = 20772
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 114
 functions_iwram = 3
@@ -461,6 +471,7 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 gap_targets = 11
 fn_words_not_proven = 58
+fn_keys_left = 62
 sp_accesses_callers_frame = 7
 
 [program.native-frame-locals]
@@ -477,7 +488,7 @@ planted_flags = ["--plant-slot=0x08000182"]
 [program.native-frame-locals.bars]
 io_unnamed = 19
 lines = 20540
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 113
 functions_iwram = 3
@@ -550,6 +561,7 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 55
+fn_keys_left = 59
 
 [program.native-ime-release]
 rom = "agb/native-ime-release.gba"
@@ -562,7 +574,7 @@ planted_flags = ["--ime-at-waits"]
 [program.native-ime-release.bars]
 io_unnamed = 19
 lines = 20733
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 113
 functions_iwram = 3
@@ -635,6 +647,7 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 gap_targets = 15
 fn_words_not_proven = 58
+fn_keys_left = 62
 
 [program.native-bios-calls]
 rom = "agb/native-bios-calls.gba"
@@ -651,7 +664,7 @@ route = "units/native-bios-calls-600.toml"
 [program.native-bios-calls.bars]
 io_unnamed = 19
 lines = 20921
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 109
 functions_iwram = 3
@@ -724,6 +737,7 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 gap_targets = 7
 fn_words_not_proven = 55
+fn_keys_left = 58
 
 [program.native-bios-more]
 rom = "agb/native-bios-more.gba"
@@ -740,7 +754,7 @@ route = "units/native-bios-more-600.toml"
 [program.native-bios-more.bars]
 io_unnamed = 19
 lines = 22581
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 104
 functions_iwram = 3
@@ -815,6 +829,7 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 2
 gap_targets = 165
 fn_words_not_proven = 55
+fn_keys_left = 59
 
 [program.native-tasks]
 rom = "agb/native-tasks.gba"
@@ -834,7 +849,7 @@ planted_hole = { drop_standin = 0x080001a4, names = "error: hard hole in f_08000
 [program.native-tasks.bars]
 io_unnamed = 19
 lines = 20949
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 122
 functions_iwram = 3
@@ -921,6 +936,7 @@ gap_targets = 5
 # 0x080073d8, f_03000094, which an msr there takes. An accident of the
 # widening both ways: read without the stride the count stays 59.
 fn_words_not_proven = 60
+fn_keys_left = 68
 
 [program.native-dma]
 rom = "agb/native-dma.gba"
@@ -933,7 +949,7 @@ planted_store = 0x08000180
 [program.native-dma.bars]
 io_unnamed = 19
 lines = 15131
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 107
 functions_iwram = 3
@@ -1008,6 +1024,7 @@ branches_on_raw_flags = 22
 entry_lr_returns_call_fn = 1
 gap_targets = 80
 fn_words_not_proven = 61
+fn_keys_left = 67
 
 [program.native-save]
 rom = "agb/native-save.gba"
@@ -1023,7 +1040,7 @@ planted_store = 0x080002ac
 [program.native-save.bars]
 io_unnamed = 19
 lines = 20791
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 112
 functions_iwram = 3
@@ -1095,6 +1112,7 @@ jumps_by_value = 8
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 55
+fn_keys_left = 59
 gap_targets = 5
 
 [program.native-bios-region]
@@ -1109,7 +1127,7 @@ route = "units/native-bios-region-601.toml"
 [program.native-bios-region.bars]
 io_unnamed = 19
 lines = 20699
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 114
 functions_iwram = 3
@@ -1181,6 +1199,7 @@ jumps_by_value = 8
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 59
+fn_keys_left = 63
 gap_targets = 11
 
 [program.native-bios-affine]
@@ -1196,7 +1215,7 @@ route = "units/native-bios-affine-600.toml"
 [program.native-bios-affine.bars]
 io_unnamed = 19
 lines = 21016
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 110
 functions_iwram = 3
@@ -1268,6 +1287,7 @@ jumps_by_value = 9
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 56
+fn_keys_left = 60
 gap_targets = 5
 
 [program.native-serial]
@@ -1285,7 +1305,7 @@ planted_store = 0x0800017c
 [program.native-serial.bars]
 io_unnamed = 19
 lines = 21512
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 117
 functions_iwram = 3
@@ -1357,6 +1377,7 @@ jumps_by_value = 9
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 58
+fn_keys_left = 61
 gap_targets = 5
 
 [program.native-irq-wrapper]
@@ -1376,7 +1397,7 @@ planted_store = 0x080001f4
 [program.native-irq-wrapper.bars]
 io_unnamed = 19
 lines = 21034
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 118
 functions_iwram = 3
@@ -1448,6 +1469,7 @@ jumps_by_value = 8
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 60
+fn_keys_left = 68
 gap_targets = 5
 
 [program.native-takes]
@@ -1462,7 +1484,7 @@ planted_flags = ["--takes-zeroed"]
 [program.native-takes.bars]
 io_unnamed = 19
 lines = 20559
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 113
 functions_iwram = 3
@@ -1534,6 +1556,7 @@ jumps_by_value = 8
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 55
+fn_keys_left = 59
 gap_targets = 5
 
 [program.native-gives]
@@ -1548,7 +1571,7 @@ planted_flags = ["--gives-kept"]
 [program.native-gives.bars]
 io_unnamed = 19
 lines = 20543
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 113
 functions_iwram = 3
@@ -1620,6 +1643,7 @@ jumps_by_value = 8
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 55
+fn_keys_left = 59
 gap_targets = 5
 
 [program.c-fnptr-agbcc]
@@ -1639,7 +1663,7 @@ computed_unknown_unnamed = 5
 bitfield_arith = 0
 bitfield_joined = 0
 lines = 644
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 18
 functions_iwram = 0
@@ -1711,6 +1735,7 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
 gap_targets = 0
 
 [program.c-fnptr-gcc]
@@ -1730,7 +1755,7 @@ computed_unknown_unnamed = 17
 bitfield_arith = 0
 bitfield_joined = 0
 lines = 721
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 18
 functions_iwram = 0
@@ -1802,6 +1827,7 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 5
+fn_keys_left = 6
 gap_targets = 0
 
 [program.c-switch-agbcc]
@@ -1823,7 +1849,7 @@ computed_unknown_unnamed = 14
 bitfield_arith = 0
 bitfield_joined = 0
 lines = 669
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 10
 functions_iwram = 0
@@ -1895,6 +1921,7 @@ jumps_by_value = 2
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
 gap_targets = 0
 
 [program.c-switch-gcc]
@@ -1916,7 +1943,7 @@ computed_unknown_unnamed = 15
 bitfield_arith = 0
 bitfield_joined = 0
 lines = 753
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 10
 functions_iwram = 0
@@ -1988,6 +2015,7 @@ jumps_by_value = 2
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
 gap_targets = 0
 
 [program.c-chain-agbcc]
@@ -2007,7 +2035,7 @@ computed_unknown_unnamed = 5
 bitfield_arith = 0
 bitfield_joined = 0
 lines = 698
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 13
 functions_iwram = 0
@@ -2079,6 +2107,7 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
 gap_targets = 0
 
 [program.c-chain-gcc]
@@ -2098,7 +2127,7 @@ computed_unknown_unnamed = 10
 bitfield_arith = 0
 bitfield_joined = 0
 lines = 708
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 13
 functions_iwram = 0
@@ -2170,6 +2199,7 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
 gap_targets = 0
 
 [program.c-heap-agbcc]
@@ -2190,7 +2220,7 @@ computed_unknown_unnamed = 11
 bitfield_arith = 0
 bitfield_joined = 0
 lines = 769
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 22
 functions_iwram = 0
@@ -2262,6 +2292,7 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
 gap_targets = 0
 
 [program.c-heap-gcc]
@@ -2282,7 +2313,7 @@ computed_unknown_unnamed = 37
 bitfield_arith = 0
 bitfield_joined = 0
 lines = 802
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 19
 functions_iwram = 0
@@ -2354,6 +2385,7 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
 gap_targets = 0
 
 [program.c-bits-agbcc]
@@ -2370,7 +2402,7 @@ planted_store = 0x08000292
 lines = 441
 io_unnamed = 0
 texts_left = 0
-lines_prelude = 1328
+lines_prelude = 1337
 functions = 13
 functions_iwram = 0
 functions_lifted = 13
@@ -2446,6 +2478,7 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
 gap_targets = 0
 
 [program.c-bits-gcc]
@@ -2462,7 +2495,7 @@ planted_store = 0x080002a2
 lines = 495
 io_unnamed = 0
 texts_left = 0
-lines_prelude = 1328
+lines_prelude = 1337
 functions = 13
 functions_iwram = 0
 functions_lifted = 13
@@ -2538,6 +2571,7 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
 gap_targets = 0
 
 [program.c-loops-agbcc]
@@ -2553,7 +2587,7 @@ planted_store = 0x08000600
 lines = 635
 io_unnamed = 0
 texts_left = 0
-lines_prelude = 1328
+lines_prelude = 1337
 functions = 14
 functions_iwram = 0
 functions_lifted = 14
@@ -2629,6 +2663,7 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
 gap_targets = 0
 
 [program.c-loops-gcc]
@@ -2644,7 +2679,7 @@ planted_store = 0x080005d4
 lines = 726
 io_unnamed = 0
 texts_left = 0
-lines_prelude = 1328
+lines_prelude = 1337
 functions = 14
 functions_iwram = 0
 functions_lifted = 14
@@ -2720,6 +2755,7 @@ jumps_by_value = 0
 branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
+fn_keys_left = 0
 gap_targets = 0
 
 [program.native-entry-jump]
@@ -2735,7 +2771,7 @@ planted_flags = ["--fall-as-tail-call"]
 [program.native-entry-jump.bars]
 io_unnamed = 19
 lines = 20664
-lines_prelude = 1328
+lines_prelude = 1337
 texts_left = 0
 functions = 116
 functions_iwram = 3
@@ -2807,4 +2843,5 @@ jumps_by_value = 8
 branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 59
+fn_keys_left = 64
 gap_targets = 5

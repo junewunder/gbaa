@@ -73,6 +73,11 @@
 //! Function words (`super::fnref`): the words of ROM outside code that hold
 //! a function's key, `fn_words_not_proven` those the flow didn't prove
 //! (barred), `fn_words_proven` the rest (no bar: it should rise).
+//! Dense IDs (`native/fnref-dense`): `fn_ids_dense`, the functions every
+//! address of which the flow proved, which `--fn-ids dense` numbers from
+//! 1 (no bar: it should rise), and `fn_keys_left`, the function words in
+//! ROM and the code's constants such a build leaves as keys (barred; 0 on
+//! the C programs): counted whatever the build's IDs.
 //!
 //! Returns (`native/lift-pop-return`): the jumps by value the summaries
 //! proved a jump to the function's entry lr (`pop {pc}`, `pop {r0}; bx
@@ -321,6 +326,7 @@ pub const UNBARRED: &[&str] = &[
     "load_ram_global",
     "store_ram_global",
     "fn_words_proven",
+    "fn_ids_dense",
     "call_fn_complete",
     "load_ram_object",
     "load_rom_static",
