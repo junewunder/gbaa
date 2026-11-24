@@ -4731,6 +4731,11 @@
       "detail": "Emerald Rogue and Imperium (pokeemerald-expansion, modern GCC) have 13 switch jumps Recovery leaves unresolved; {unit:native/rogue-imperium-build} gave their targets in mods/<game>/holes.toml (each [[jump]] names its cause). The causes, all general: (1) a continuation entry inside a function (Rogue 0x080ba12b, reached by far-jump bls) is analysed alone without the table base the function spilled to the stack, and collect() lets its Unresolved win over the function's Resolved; (2) a bound on lsrs r3, r2, #24 doesn't bound lsrs r3, r2, #22 of the same r2 (Rogue 0x081c3064); (3) ldr r2, [r9]; mov pc, r2 with r9 = table + 4*idx computed before the bound on idx (Rogue 0x0818079c, Imperium 0x081c39dc); (4) ldrsh indexes whose zero-extended-copy bound is lost at a join (Rogue 0x0807e002, 0x08184db0; Imperium 0x080787fe, 0x081b8fd0); (5) a table base in a register or stack slot lost on far-jump paths or after a call (Rogue 0x080bceca, 0x081e2676; Imperium 0x080ba974, 0x0809015c, 0x081c1b92). Done when: Recovery resolves them (each case a hand-assembled test in crates/analysis/src/jumptable/tests.rs), the two holes files drop those [[jump]]s and both games still have 0 hard holes past them, just jt-score holds, holes-all --against main shows no game's hard holes up, just check passes.",
       "check": "recorded",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-mod-run-ab",
+      "title": "lift-mod-run compares a mod with its switch flipped",
+      "uses": ["heavy"]
     }
   ]
 }

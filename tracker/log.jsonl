@@ -3921,3 +3921,4 @@
 {"at":"2026-11-24T06:58:02Z","actor":"loop","tag":"91d18000","host":"quack","cmd":"done","id":"native/fnref-dense","text":"Function pointers as dense FnRef IDs: done, checked by a299b79f5ffde0776"}
 {"at":"2026-11-24T07:01:08Z","actor":"loop","tag":"e794753c","host":"quack","cmd":"add-unit","id":"native/rogue-build","text":"new unit: Rogue's lift builds: GenerateFloorLayout's r11 passed"}
 {"at":"2026-11-24T07:01:17Z","actor":"loop","tag":"e794753c","host":"quack","cmd":"add-unit","id":"native/gcc-switch-recovery","text":"new unit: Recovery resolves the modern-GCC switches Rogue lists"}
+{"at":"2026-11-24T07:01:55Z","actor":"loop","tag":"d88dc2ac","host":"quack","cmd":"add-unit","id":"native/lift-mod-run-ab","text":"new unit: lift-mod-run compares a mod with its switch flipped"}
