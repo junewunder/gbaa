@@ -5403,7 +5403,7 @@
     {
       "id": "native/lift-stack-typed-locals",
       "title": "A lent stack local takes its DWARF type",
-      "detail": "From {unit:native/lift-stack-arrays}' design (docs/native-port-design.md, 'Stack locals passed by address'): that unit prints a lent slot as [u8; N] by access width and its borrowers' accesses by offset. Wanted: where a names file has DWARF's type for the stack variable (names.locals) and every access fits it, the local is that type (t::Ctx) and accesses through the Lent are its fields. Check (code-shape work, judged on the C programs, Metroid and Emerald): just lift-check 0 differences, every planted fault caught; both games 600 of 600 frames; just check.",
+      "detail": "From {unit:native/lift-stack-arrays}' design (docs/native-port-design.md, 'Stack locals passed by address'): that unit prints a lent slot as [u8; N] by access width and its borrowers' accesses by offset. Wanted: where a names file has DWARF's type for the stack variable (names.locals) and every access fits it, the local is that type (t::Ctx) and accesses through the Lent are its fields. Check (code-shape work, judged on the C programs, Metroid and Emerald): just lift-check 0 differences, every planted fault caught; both games 600 of 600 frames; just check. Sprint 2026-11-24: new metric lent_locals_untyped, barred on the C rows and both games. 'Fits': each access's offset and width is one scalar field of the type. After {unit:native/lift-lent-frameless}. Metroid's native route 0 differences.",
       "needs": ["native/lift-lent-print"],
       "uses": ["heavy"]
     },
