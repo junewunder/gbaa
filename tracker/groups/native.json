@@ -5529,7 +5529,14 @@
       "title": "An open-bus load through a typed field prints its address",
       "detail": "From {unit:native/lift-for-ram-bounds}: Emerald with the current holes file (mods 571d124, [[open_bus]] at GetTextEntryPosition's template reads) failed to compile on that branch: naming_screen's open-bus load prints { let a: u32 = v45; ... } but v45, its address, is never let (a named field's access doesn't count its address used, FnPrinter::uses). Likely on main too (unchecked: main's run was cut off). Fix: an [[open_bus]] load counts its address as used. Check: Emerald's lift builds and runs 600 of 600 frames with the current holes file; just check.",
       "check": "recorded",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-24T21:33:38Z",
+          "by": "85a8eaf9",
+          "text": "Confirmed on main's logic: Emerald lifted at aa820315's code (step-via's via off) with mods holes 571d124 gives naming_screen_1.rs byte-identical to {unit:native/lift-for-step-via}'s, whose build fails (v45/v23). Without the two [[open_bus]]: builds, 600/600 frames."
+        }
+      ]
     }
   ]
 }
