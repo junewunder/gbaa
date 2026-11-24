@@ -778,7 +778,19 @@
       "detail": "Branch `unit/native/lift-aligned-loads` holds {unit:native/lift-aligned-loads}, finished but not on main: merging main conflicts in docs/research/mirror-machine-count.md. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
       "check": "recorded",
       "lane": "quack/3",
-      "branch": "unit/native/lift-aligned-loads"
+      "branch": "unit/native/lift-aligned-loads",
+      "record": {
+        "state": "claimed",
+        "by": "5416770a",
+        "session": "5416770a-4868-4252-829c-cc785c7fc1a5",
+        "host": "quack",
+        "pid": 2963642,
+        "start": "95218853",
+        "at": "2026-11-24T11:57:13Z",
+        "branch": "unit/native/lift-aligned-loads",
+        "beats": true
+      },
+      "round": "2026-11-24T11:57:13Z"
     }
   ]
 }
