@@ -3843,6 +3843,17 @@
       "detail": "Minish Cap had 27 hard holes with the flow on 2026-11-19 ({unit:native/fnref-flow-emerald}); the 2026-11-14 table had 31: no code 21, summaries 7, jumps 3. The 21 no-code holes likely share one cause: find it first. Close each by a lifter or discovery rule where the cause is general, by the game's holes file (mods/<game>/holes.toml, each entry with its reason) only where it is the game's own. Run just holes-all on main before and --against it after (just long start, --mem 4G is enough: memory/lift-cost-corpus.md): no other game's hard holes may rise. A cause too big for about 3 hours becomes its own unit, needed by this one. Done when: just lift on Minish Cap has 0 hard holes and builds, its first stop is recorded (and filed as a unit if it isn't 600 of 600); just check passes.",
       "uses": ["heavy"],
       "minMinutes": 150,
+      "record": {
+        "state": "claimed",
+        "by": "c2d4d707",
+        "session": "c2d4d707-1ad7-48ab-805d-c4b7a372fb40",
+        "host": "quack",
+        "pid": 2962048,
+        "start": "95217572",
+        "at": "2026-11-24T05:18:20Z",
+        "branch": "unit/native/minish-builds",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-20T12:58:54Z",
