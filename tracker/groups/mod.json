@@ -1105,6 +1105,12 @@
       "detail": "Owner said delete (2026-11-20). Per docs/research/mod-view-retirement.md: emit.rs readable_items/readable_impl/readable_macros and the readable argument; lower.rs readable_plan/exit_readable/readable_blocks; func.rs readable fields; print.rs and text.rs readable printer; fn_diff.rs readable picks. Keep what the lift calls (the list's 'What stays'): move those helpers to a shared module. Done when gone and just check passes.",
       "check": "recorded",
       "needs": ["mod/retire-recompile"]
+    },
+    {
+      "id": "mod/half-speed-on-lift",
+      "title": "Kirby's half-speed mod ported to a lift cut",
+      "detail": "Owner (2026-11-20): port Kirby & the Amazing Mirror's half-speed mod copy (mods/kirby, mod view) to a lift cut (gbaa-lift --cut, just lift-mod-run), before the mod-view copy is deleted. Done when the lift mod runs at half speed beside stock (lift-mod-run evidence) and lives in the private mods repo.",
+      "check": "recorded"
     }
   ]
 }

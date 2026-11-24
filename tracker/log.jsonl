@@ -4203,3 +4203,4 @@
 {"at":"2026-11-24T21:54:46Z","actor":"loop","tag":"2ddc0f0e","host":"quack","cmd":"add-unit","id":"mod/retire-tools","text":"new unit: Mod-view tools are gone: naming, mod-run, nightly step"}
 {"at":"2026-11-24T21:54:48Z","actor":"loop","tag":"2ddc0f0e","host":"quack","cmd":"add-unit","id":"mod/retire-recompile","text":"new unit: gbaa-recompile loses --readable, --mod, --cut, --names"}
 {"at":"2026-11-24T21:54:50Z","actor":"loop","tag":"2ddc0f0e","host":"quack","cmd":"add-unit","id":"mod/retire-readable-codegen","text":"new unit: Codegen's readable printing is gone"}
+{"at":"2026-11-24T21:54:52Z","actor":"loop","tag":"2ddc0f0e","host":"quack","cmd":"add-unit","id":"mod/half-speed-on-lift","text":"new unit: Kirby's half-speed mod ported to a lift cut"}
