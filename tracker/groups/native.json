@@ -4705,7 +4705,14 @@
       "id": "native/cut-callee-shapes",
       "title": "A cut's calls build in fn-check's lift too",
       "detail": "From {unit:native/mirror-agent-mod} (docs/research/mirror-agent-mod.md, hurt 2): a cut prints its callees' return shapes as its lift had them (KirbyGroundAccel: r3 = KirbyGroundFriction(...), a u32). fn-check's lift (--fn-check-cuts) checks the cut behind an adapter that reads r0-r3, so the callee's shape widens to (r1, r2, r3) and the cut no longer compiles; lift-mod-run exits 1, fn-check never runs. Fix: the cut's call sites adapt to whatever shape the build gives (or fn-check keeps the lift's shapes). Check: lift-mod-run on mods/kirby-mirror/walk-speed reaches fn-check and reports KirbyGroundAccel; Metroid's energy mod still does; just check.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-24T07:01:57Z",
+          "by": "d88dc2ac",
+          "text": "Mirror's cpu-kirbys-off cut (sub_080332BC) hits this 7 times. Also: Replacement::of copies only the fn, so a file-level const in the cut is 'not found' in fn-check (the mod build sees it). Carry the file's other items along (docs/research/mirror-cpu-kirbys-off.md, hurt 3)."
+        }
+      ]
     },
     {
       "id": "native/lift-find-on-route",
