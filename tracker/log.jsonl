@@ -3964,3 +3964,4 @@
 {"at":"2026-11-24T08:37:16Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/ime-i-set-test-program","text":"A test program: IME turned on while I is set: on main"}
 {"at":"2026-11-24T08:37:21Z","actor":"loop","tag":"d78e67ee","host":"quack","cmd":"claim","id":"native/lift-mod-run-name","text":"lift-mod-run takes the game's name from the mod: claimed"}
 {"at":"2026-11-24T08:49:58Z","actor":"loop","tag":"2d61bb47","host":"quack","cmd":"done","id":"native/fn-check-spike-digest","text":"native-spike's fn-check digest recorded again: done"}
+{"at":"2026-11-24T08:51:27Z","actor":"loop","tag":"d78e67ee","host":"quack","cmd":"done","id":"native/lift-mod-run-name","text":"lift-mod-run takes the game's name from the mod: done"}
