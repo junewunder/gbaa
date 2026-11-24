@@ -3878,3 +3878,4 @@
 {"at":"2026-11-24T05:23:06Z","actor":"owner","tag":"9a39864c","host":"quack","cmd":"answer","text":"the owner answered \"Narrow the for-loop unit to bounds held in registers?\": Narrow it","q":"q/narrow-loop-unit-bounds-held","d":"d/narrow-loop-unit-bounds-held","via":"9a39864c"}
 {"at":"2026-11-24T05:25:27Z","actor":"owner","tag":"9a39864c","host":"quack","cmd":"answer","text":"the owner answered \"May the native check skip struct padding copied from stack garbage?\": Name them in the holes file","q":"q/may-native-check-skip-struct","d":"d/may-native-check-skip-struct","via":"9a39864c"}
 {"at":"2026-11-24T05:28:10Z","actor":"loop","tag":"7733e7b3","host":"quack","cmd":"done","id":"native/lift-find-field","text":"The lift finds a field's writers for a modder: done"}
+{"at":"2026-11-24T05:28:28Z","actor":"loop","tag":"c1790615","host":"quack","cmd":"done","id":"native/lift-cut-header-helpers","text":"A lift cut's header explains pin, ix/rix and sext: done"}

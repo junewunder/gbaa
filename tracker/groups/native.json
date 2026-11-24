@@ -4227,18 +4227,22 @@
       "detail": "From {unit:native/lift-agent-mod} (hurt 6): the cut file's header explains lN, vN, pc(), bank_sp and r13 but not pin(addr, off) (on both lines the agent edited: does it change with the value?), ix/rix or prim::sext. One header line for each helper an edit meets, only those the cut uses. Check: a Metroid cut of SamusInit has them; just lift-check if output changes; just check.",
       "minMinutes": 40,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "c1790615",
-        "session": "c1790615-1b03-4f09-93c5-92709b5b99ad",
-        "host": "quack",
-        "pid": 2963642,
-        "start": "95218853",
-        "at": "2026-11-24T05:14:57Z",
+        "at": "2026-11-24T05:28:28Z",
+        "evidence": "cut::head adds one header line each for pin(addr, off), ix/rix and prim::sext, only where the cut uses them; a Metroid cut of SamusInit showed all four (session 203737ec); codegen cut tests pass. Latest main merged (dac9754); just check passed (exit 0) after the merge.",
         "branch": "unit/native/lift-cut-header-helpers",
-        "resumed": "15fb1e04",
-        "prevSession": "15fb1e04-9feb-4620-9b0a-8e1f840d39c9",
-        "pushed": true,
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T05:28:28Z",
+          "by": "c1790615",
+          "host": "quack",
+          "pid": 2963642,
+          "start": "95218853",
+          "beats": true,
+          "session": "c1790615-1b03-4f09-93c5-92709b5b99ad",
+          "lane": "quack/3"
+        }
       },
       "notes": [
         {
