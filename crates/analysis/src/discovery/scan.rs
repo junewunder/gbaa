@@ -35,7 +35,8 @@
 //! known function start in a table (or beside another Thumb pointer, two
 //! words from one: a table of structs of two function pointers and a word
 //! of data; or in a column of starts, one record of three to eight words
-//! from one and two from another: [`column`]) or being a constant getter (pool
+//! from one and two from another: [`column`]; or in a run of Thumb
+//! pointers whose base code loads: [`based`]) or being a constant getter (pool
 //! loads, then `bx lr`: [`getter`]) scores 2, and more than one word
 //! pointing there scores 1. A candidate needs [`MIN_SCORE`]. A batch takes
 //! candidates best first and drops any whose body overlaps one taken
@@ -100,6 +101,8 @@ pub fn batch(
     stats.batches += 1;
     let mut cands: BTreeMap<u32, Cand> = BTreeMap::new();
     let len = prog.rom().len() as u32;
+    // The ROM addresses code loads from a literal pool: a table's base.
+    let loaded: HashSet<u32> = view.pools.iter().filter_map(|&p| prog.read(p, 4)).collect();
     for at in (ROM_BASE..ROM_BASE + (len & !3)).step_by(4) {
         if view.insn_at(at).is_some() || view.insn_at(at + 2).is_some() || view.in_table(at) {
             continue;
@@ -125,7 +128,8 @@ pub fn batch(
             || start_at(at + 4)
             || ((thumb_ptr(at.wrapping_sub(4)) || thumb_ptr(at + 4))
                 && (start_at(at.wrapping_sub(8)) || start_at(at + 8)))
-            || column(at, &start_at);
+            || column(at, &start_at)
+            || based(at, &loaded, &thumb_ptr);
     }
     stats.candidates += cands.len();
 
@@ -221,6 +225,32 @@ fn column(at: u32, start_at: &dyn Fn(u32) -> bool) -> bool {
         let (a1, a2) = (at + s, at + 2 * s);
         (start_at(a1) && (start_at(a2) || start_at(b1))) || (start_at(b1) && start_at(b2))
     })
+}
+
+/// The most words [`based`] walks back to a table's base.
+const BASED_MAX: u32 = 64;
+
+/// Whether the word at `at` is in a run of two or more Thumb pointers
+/// whose first word's address code loads from a literal pool: a table of
+/// function pointers indexed from its base (c/list's `kActs` as modern GCC
+/// builds it, `ldr r3, [r3, r0]` from the table's address, its leaves with
+/// no push and no start found beside them).
+fn based(at: u32, loaded: &HashSet<u32>, thumb_ptr: &dyn Fn(u32) -> bool) -> bool {
+    if !thumb_ptr(at) {
+        return false;
+    }
+    let mut b = at;
+    for _ in 0..BASED_MAX {
+        if loaded.contains(&b) && (b != at || thumb_ptr(at + 4)) {
+            return true;
+        }
+        let prev = b.wrapping_sub(4);
+        if !thumb_ptr(prev) {
+            return false;
+        }
+        b = prev;
+    }
+    false
 }
 
 /// The highest BIOS call number.

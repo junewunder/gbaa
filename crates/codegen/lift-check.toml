@@ -46,6 +46,11 @@
 # build leaves as keys, at the values measured; 0 on the C programs but
 # c-fnptr-gcc, whose callback words a frame's pushed r3 holds in the stacks'
 # cell (an indirect call's callee assumed to read the caller's frame).
+# rom_static_fn_keys and rom_refs (native/rom-statics), at the values
+# measured: the function words the flow read in a ROM static that a dense
+# build leaves as keys (agb's 3 in a byte static, read a byte at a time), and
+# the loads from a word static that holds a pointer into ROM data (a RomRef's
+# soft hole).
 
 [program.affine]
 rom = "agb/affine.gba"
@@ -128,6 +133,8 @@ entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 55
 fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 sp_accesses_callers_frame = 7
 
 [program.mosaic-modes]
@@ -213,6 +220,8 @@ entry_lr_returns_call_fn = 1
 gap_targets = 24
 fn_words_not_proven = 54
 fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 sp_accesses_callers_frame = 4
 
 [program.native-spike]
@@ -302,6 +311,8 @@ entry_lr_returns_call_fn = 0
 gap_targets = 22
 fn_words_not_proven = 58
 fn_keys_left = 62
+rom_static_fn_keys = 3
+rom_refs = 16
 sp_accesses_callers_frame = 8
 
 [program.native-fallthrough]
@@ -389,6 +400,8 @@ entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 56
 fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 sp_accesses_callers_frame = 8
 
 [program.native-irq-hold]
@@ -477,6 +490,8 @@ entry_lr_returns_call_fn = 0
 gap_targets = 11
 fn_words_not_proven = 58
 fn_keys_left = 62
+rom_static_fn_keys = 3
+rom_refs = 17
 sp_accesses_callers_frame = 7
 
 [program.native-frame-locals]
@@ -568,6 +583,8 @@ entry_lr_returns_call_fn = 0
 gap_targets = 5
 fn_words_not_proven = 55
 fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 
 [program.native-ime-release]
 rom = "agb/native-ime-release.gba"
@@ -655,6 +672,8 @@ entry_lr_returns_call_fn = 0
 gap_targets = 15
 fn_words_not_proven = 58
 fn_keys_left = 62
+rom_static_fn_keys = 3
+rom_refs = 17
 
 [program.native-bios-calls]
 rom = "agb/native-bios-calls.gba"
@@ -746,6 +765,8 @@ entry_lr_returns_call_fn = 0
 gap_targets = 7
 fn_words_not_proven = 55
 fn_keys_left = 58
+rom_static_fn_keys = 3
+rom_refs = 17
 
 [program.native-bios-more]
 rom = "agb/native-bios-more.gba"
@@ -839,6 +860,8 @@ entry_lr_returns_call_fn = 2
 gap_targets = 165
 fn_words_not_proven = 55
 fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 16
 
 [program.native-tasks]
 rom = "agb/native-tasks.gba"
@@ -947,6 +970,8 @@ gap_targets = 5
 # widening both ways: read without the stride the count stays 59.
 fn_words_not_proven = 60
 fn_keys_left = 68
+rom_static_fn_keys = 3
+rom_refs = 17
 
 [program.native-dma]
 rom = "agb/native-dma.gba"
@@ -1036,6 +1061,8 @@ entry_lr_returns_call_fn = 1
 gap_targets = 80
 fn_words_not_proven = 61
 fn_keys_left = 67
+rom_static_fn_keys = 3
+rom_refs = 16
 
 [program.native-save]
 rom = "agb/native-save.gba"
@@ -1125,6 +1152,8 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 55
 fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5
 
 [program.native-bios-region]
@@ -1213,6 +1242,8 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 59
 fn_keys_left = 63
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 11
 
 [program.native-bios-affine]
@@ -1302,6 +1333,8 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 56
 fn_keys_left = 60
+rom_static_fn_keys = 3
+rom_refs = 18
 gap_targets = 5
 
 [program.native-serial]
@@ -1393,6 +1426,8 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 58
 fn_keys_left = 61
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5
 
 [program.native-irq-wrapper]
@@ -1486,6 +1521,8 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 60
 fn_keys_left = 68
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5
 
 [program.native-takes]
@@ -1574,6 +1611,8 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 55
 fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5
 
 [program.native-gives]
@@ -1662,6 +1701,8 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 55
 fn_keys_left = 59
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5
 
 [program.c-fnptr-agbcc]
@@ -1755,6 +1796,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-fnptr-gcc]
@@ -1848,6 +1891,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 5
 fn_keys_left = 6
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-switch-agbcc]
@@ -1943,6 +1988,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 2
 gap_targets = 0
 
 [program.c-switch-gcc]
@@ -2038,6 +2085,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 2
 gap_targets = 0
 
 [program.c-chain-agbcc]
@@ -2131,6 +2180,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-chain-gcc]
@@ -2224,6 +2275,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-heap-agbcc]
@@ -2318,6 +2371,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-heap-gcc]
@@ -2412,6 +2467,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-bits-agbcc]
@@ -2506,6 +2563,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-bits-gcc]
@@ -2600,6 +2659,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-loops-agbcc]
@@ -2693,6 +2754,8 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
 gap_targets = 0
 
 [program.c-loops-gcc]
@@ -2786,6 +2849,202 @@ branches_on_raw_flags = 0
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 0
 fn_keys_left = 0
+rom_static_fn_keys = 0
+rom_refs = 0
+gap_targets = 0
+
+[program.c-list-agbcc]
+rom = "c/c-list-agbcc.gba"
+route = "units/c-list-agbcc-600.toml"
+# A C program (native/c-list-test-program; c/README.md, c/list/SCENE.md), built
+# by agbcc (GCC 2.95) with `just c-tests`: a linked list over a
+# static node pool (a free list and a sorted live list through one next
+# field), walked, inserted into through a Node ** and removed from each
+# frame, each node's act function pointer called. The planted store is
+# AgbMain's gFrame++.
+planted_store = 0x080005f8
+
+[program.c-list-agbcc.bars]
+rom_refs = 0
+sp_arith_exact = 0
+rom_static_fn_keys = 4
+lines = 700
+io_unnamed = 0
+texts_left = 0
+lines_prelude = 1337
+functions = 17
+functions_iwram = 0
+functions_lifted = 17
+functions_unrecognised = 17
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 3
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 1
+hard_holes = 0
+entries_beyond_one = 21
+functions_result_unneeded = 0
+guest_pc_plain = 0
+blocks = 75
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 0
+shift_pairs_left = 0
+dead_flag_writes = 0
+bank_sp_calls = 18
+sp_arith_unescaped = 0
+lr_returned = 0
+value_lets = 172
+reg_local_writes = 81
+unpacked_unread = 0
+regs_call_entries = 0
+unread_lets = 0
+adc_sums = 0
+loops_not_for = 8
+labelled_blocks = 3
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 1
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 44
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 9
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 27
+pointer_unexplained = 0
+ref_unexplained = 0
+locals_noted = 13
+data_constants_unnamed = 0
+computed_unknown_unnamed = 7
+bitfield_arith = 0
+bitfield_joined = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 9
+sp_accesses_callers_frame = 1
+call_fn_calls = 1
+call_fn_four_complete = 0
+jumps_by_value = 0
+branches_on_raw_flags = 0
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 4
+fn_keys_left = 4
+gap_targets = 0
+
+[program.c-list-gcc]
+rom = "c/c-list-gcc.gba"
+route = "units/c-list-gcc-600.toml"
+# A C program (native/c-list-test-program; c/README.md, c/list/SCENE.md), built
+# by modern arm-none-eabi-gcc with `just c-tests`: a linked list over a
+# static node pool (a free list and a sorted live list through one next
+# field), walked, inserted into through a Node ** and removed from each
+# frame, each node's act function pointer called. The planted store is
+# AgbMain's gFrame++.
+planted_store = 0x08000612
+
+[program.c-list-gcc.bars]
+rom_refs = 0
+sp_arith_exact = 0
+rom_static_fn_keys = 4
+lines = 782
+io_unnamed = 0
+texts_left = 0
+lines_prelude = 1337
+functions = 17
+functions_iwram = 0
+functions_lifted = 17
+functions_unrecognised = 17
+functions_replaced = 0
+standins = 0
+functions_summary_hole = 3
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 1
+hard_holes = 0
+entries_beyond_one = 21
+functions_result_unneeded = 0
+guest_pc_plain = 0
+blocks = 83
+functions_in_match = 0
+blocks_in_match = 0
+compare_trees_left = 0
+shift_pairs_left = 0
+dead_flag_writes = 0
+bank_sp_calls = 23
+sp_arith_unescaped = 0
+lr_returned = 0
+value_lets = 207
+reg_local_writes = 96
+unpacked_unread = 0
+regs_call_entries = 0
+unread_lets = 0
+adc_sums = 0
+loops_not_for = 10
+labelled_blocks = 6
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 1
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 1
+load_computed_ram = 0
+load_computed_io = 0
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 43
+store_const_ram = 0
+store_const_io = 6
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 9
+store_computed_ram = 0
+store_computed_io = 0
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 28
+pointer_unexplained = 0
+ref_unexplained = 0
+locals_noted = 46
+data_constants_unnamed = 0
+computed_unknown_unnamed = 15
+bitfield_arith = 0
+bitfield_joined = 0
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 9
+sp_accesses_callers_frame = 1
+call_fn_calls = 1
+call_fn_four_complete = 0
+jumps_by_value = 0
+branches_on_raw_flags = 0
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 4
+fn_keys_left = 4
 gap_targets = 0
 
 [program.native-entry-jump]
@@ -2875,4 +3134,96 @@ branches_on_raw_flags = 28
 entry_lr_returns_call_fn = 0
 fn_words_not_proven = 59
 fn_keys_left = 64
+rom_static_fn_keys = 3
+rom_refs = 17
 gap_targets = 5
+
+[program.native-ime-i-set]
+rom = "agb/native-ime-i-set.gba"
+route = "units/native-ime-i-set-601.toml"
+# IME set again while I is set (native/ime-i-set-test-program): is_probe
+# clears IME and sets I, polls VCOUNT past line 160, sets IME, then an msr
+# clears I, where the hardware takes the V-blank IRQ. Stage A's old IRQs
+# (--irq-at-waits) ignore I and run it at the IME store.
+planted_flags = ["--irq-at-waits"]
+
+[program.native-ime-i-set.bars]
+rom_refs = 17
+sp_arith_exact = 33
+rom_static_fn_keys = 3
+io_unnamed = 19
+lines = 20778
+lines_prelude = 1337
+texts_left = 0
+functions = 115
+functions_iwram = 3
+functions_lifted = 110
+functions_unrecognised = 115
+functions_replaced = 5
+standins = 5
+functions_summary_hole = 80
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 51
+hard_holes = 0
+entries_beyond_one = 23
+guest_pc_plain = 0
+functions_result_unneeded = 0
+blocks = 1737
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+value_lets = 7267
+reg_local_writes = 3103
+unpacked_unread = 0
+regs_call_entries = 13
+unread_lets = 0
+adc_sums = 0
+bank_sp_calls = 270
+sp_arith_unescaped = 0
+lr_returned = 0
+loops_not_for = 140
+labelled_blocks = 210
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 17
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 216
+load_computed_ram = 0
+load_computed_io = 7
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 722
+store_const_ram = 0
+store_const_io = 36
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 444
+store_computed_ram = 0
+store_computed_io = 2
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 355
+pointer_unexplained = 0
+ref_unexplained = 48
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 653
+call_fn_calls = 65
+call_fn_four_complete = 60
+jumps_by_value = 8
+branches_on_raw_flags = 28
+entry_lr_returns_call_fn = 0
+gap_targets = 15
+fn_words_not_proven = 58
+fn_keys_left = 62
+sp_accesses_callers_frame = 7

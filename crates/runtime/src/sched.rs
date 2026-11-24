@@ -178,6 +178,20 @@ impl<P: Platform> Machine<P> {
         self.bus.take_data_cycles();
         let ime_on = self.bus.io.events & event::IME_ON != 0;
         self.bus.io.events &= !event::IME_ON;
+        // `IME` set again while the CPSR's I bit is set: what is pending
+        // now is held by I alone, so the `msr` that clears I takes it, as
+        // the hardware does and the native library's `irq_release` does
+        // (native/ime-i-set-test-program). Not in IRQ mode: there it is a
+        // handler's wrapper putting `IME` back, and the BIOS's return
+        // clears I, where the native library runs nothing.
+        if ime_on
+            && self.cpu.cpsr & I_BIT != 0
+            && self.cpu.cpsr & 0x1F != mode::IRQ
+            && self.bus.io.irq_pending()
+        {
+            self.sched.irq_line = true;
+            self.sched.held |= self.bus.io.raw16(reg::IE) & self.bus.io.raw16(reg::IF);
+        }
         if core::mem::take(&mut self.sched.fresh) {
             return self.sched.halted || self.sched.frame_ended || self.irq_takeable();
         }
