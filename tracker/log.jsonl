@@ -3956,3 +3956,4 @@
 {"at":"2026-11-24T08:21:46Z","actor":"loop","tag":"5549a28e","host":"quack","cmd":"done","id":"native/ime-i-set-test-program","text":"A test program: IME turned on while I is set: done"}
 {"at":"2026-11-24T08:21:59Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane1-native-ime-i-set-test-program","text":"new unit: Merge main on quack lane 1"}
 {"at":"2026-11-24T08:22:04Z","actor":"loop","tag":"68877ea6","host":"quack","cmd":"claim","id":"merge/quack-lane1-native-ime-i-set-test-program","text":"Merge main on quack lane 1: claimed"}
+{"at":"2026-11-24T08:24:18Z","actor":"loop","tag":"f2d7754b","host":"quack","cmd":"add-unit","id":"native/names-straddling-bitfields","text":"new unit: pret-names places agbcc's bitfield that straddles its unit"}
