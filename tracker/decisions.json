@@ -1566,6 +1566,14 @@
         "native/lift-for-ram-bounds",
         "native/lift-for-ram-bounds-games"
       ]
+    },
+    {
+      "id": "d/libgcc-division-is-known-by-its-names-file",
+      "title": "libgcc division is known by its names-file symbol",
+      "why": "Sprint of 2026-11-24, foreman in june's place, shown to her at the cut: printing libgcc's division calls as / and % finds the callee by the names file's symbol. That is naming, not the recognition by code bytes june parked on 2026-11-01.",
+      "by": "6056824b",
+      "at": "2026-11-24T22:33:28Z",
+      "scope": ["native/lift-libgcc-div"]
     }
   ]
 }
