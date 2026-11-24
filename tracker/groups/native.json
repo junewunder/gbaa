@@ -4886,6 +4886,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-24T20:09:47Z",
+          "by": "3564e068",
+          "text": "Merged main again (aa82031, prototype shapes): lift-check passed after raising c-fnptr-gcc lines 634->635: the prototype-named parameter is rebound as Ref<t::Obj> in its body; {unit:native/lift-pointer-signatures} should take that line back."
+        },
+        {
           "at": "2026-11-24T18:36:32Z",
           "by": "51bbc90d",
           "text": "Branch has it all, main merged at 31955b1. Passed: lift-check (GBAA_DATA=private dir, memory/shared-c-roms.md), Metroid 600/600 (ref_new_at_use 8164 to 2703). Left: Emerald just lift on the last commit (5747598 fixes main's open-bus vN not printed) and just check; then done."
