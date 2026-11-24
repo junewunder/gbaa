@@ -4951,6 +4951,12 @@
           "text": "Metroid --bars lift on main fails 33 metrics: no bar for rom_static_fn_keys, fn_keys_left, rom_refs, locals_noted, bitfield_*; over: entries_beyond_one 2998>809, lines_prelude 1337>1314, functions_iwram 9>8. Emerald similar; its holes file needs [[roots]] (not on main)."
         }
       ]
+    },
+    {
+      "id": "native/lift-aligned-params",
+      "title": "Untyped pointer loads drop rotates their callers prove 0",
+      "detail": "Follows {unit:native/lift-aligned-loads}: Mirror's ShiftType::Ror fell 44,881 to 12,090 (load_rotates_left 13,040); what is left is raw ld32/ld16 through an untyped pointer parameter or loaded pointer plus an offset (r4.wrapping_add(0x24): 5,874), aligned only as callers make it. Carry each register's known-zero low bits across blocks and from every caller's arguments (or a checked Ref where the pointer came from), as codegen::native::aligned does within a block. Done when: load_rotates_left falls on Mirror and the C rows, lift-check passes.",
+      "uses": ["heavy"]
     }
   ]
 }
