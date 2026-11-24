@@ -5453,6 +5453,13 @@
           "text": "From {unit:native/lift-for-ram-bounds}: C loops print as for, no game loop does. Metroid GBAA_FOR_WHY: shape fails first (step not of the counter 198, compare not of counter and bound 108). Emerald: IRQ handler's table calls likely make its writes anywhere (unchecked)."
         }
       ]
+    },
+    {
+      "id": "native/lift-open-bus-typed",
+      "title": "An open-bus load through a typed field prints its address",
+      "detail": "From {unit:native/lift-for-ram-bounds}: Emerald with the current holes file (mods 571d124, [[open_bus]] at GetTextEntryPosition's template reads) failed to compile on that branch: naming_screen's open-bus load prints { let a: u32 = v45; ... } but v45, its address, is never let (a named field's access doesn't count its address used, FnPrinter::uses). Likely on main too (unchecked: main's run was cut off). Fix: an [[open_bus]] load counts its address as used. Check: Emerald's lift builds and runs 600 of 600 frames with the current holes file; just check.",
+      "check": "recorded",
+      "uses": ["heavy"]
     }
   ]
 }
