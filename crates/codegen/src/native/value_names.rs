@@ -625,9 +625,15 @@ mod tests {
         assert_eq!(n.matches("let a: u32").count(), 2, "{n}");
         // One read in the next one's right side: two names.
         let t = "let v1: u32 = g.ram.gAlpha;\nr0 = v1;\nlet v2: u32 = g.ram.gAlpha;\ng.ram.gB = v1;\nr1 = v2; r2 = v2;\n";
-        let t = t.replace("let v2: u32 = g.ram.gAlpha;\ng.ram.gB = v1;", "let v2: u32 = { pin(v1, 0); g.ram.gAlpha };");
+        let t = t.replace(
+            "let v2: u32 = g.ram.gAlpha;\ng.ram.gB = v1;",
+            "let v2: u32 = { pin(v1, 0); g.ram.gAlpha };",
+        );
         let n = run(&t);
-        assert!(n.contains("let alpha2: u32 = { pin(alpha, 0); g.ram.gAlpha };"), "{n}");
+        assert!(
+            n.contains("let alpha2: u32 = { pin(alpha, 0); g.ram.gAlpha };"),
+            "{n}"
+        );
     }
 
     #[test]
