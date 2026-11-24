@@ -4868,17 +4868,17 @@
       "minMinutes": 60,
       "record": {
         "state": "claimed",
-        "by": "51bbc90d",
-        "session": "51bbc90d-6279-4fe6-a573-c93fe21a816b",
+        "by": "3564e068",
+        "session": "3564e068-c3d5-4be5-a213-2119361e9d49",
         "host": "quack",
         "pid": 2964711,
         "start": "95219683",
-        "at": "2026-11-24T16:33:13Z",
+        "at": "2026-11-24T18:37:05Z",
         "branch": "unit/native/lift-pointer-types",
-        "beats": true,
-        "handedBack": "2026-11-24T18:36:44Z",
+        "resumed": "51bbc90d",
+        "prevSession": "51bbc90d-6279-4fe6-a573-c93fe21a816b",
         "pushed": true,
-        "ended": "2026-11-24T18:36:59Z"
+        "beats": true
       },
       "notes": [
         {
