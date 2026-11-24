@@ -145,7 +145,7 @@ pub struct Proto {
 
 /// Names an accessor can't take: `Ptr`'s own methods and Rust's keywords.
 const PTR_METHODS: &[&str] = &[
-    "at", "field", "idx", "add", "clone", "self", "Self", "super", "crate",
+    "at", "field", "idx", "add", "addr", "clone", "self", "Self", "super", "crate",
 ];
 
 impl Types {
