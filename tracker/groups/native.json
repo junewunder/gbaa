@@ -4901,7 +4901,19 @@
       "id": "native/lift-signature-holes",
       "title": "Emerald's signatures print from pret's prototypes",
       "detail": "From the owner, 2026-11-20. A function whose summary has a hole (the analysis couldn't finish saying which of r0-r3 it reads and writes) takes and returns all four: CB2_InitTitleScreen(g, sp, a: [u32; 4]) -> Result<[u32; 4], Exit> for a void(void). Emerald: functions_summary_hole 3,912 of 15,215, regs_call_entries 3,622, callee_saves_unproven 3,878. The owner's call (2026-11-20, replacing this unit's first form, which kept prototypes as the answer key only): print from the prototypes; a game with no decomp will get its signatures from an agent or an algorithm later, and either writes the same names-file entries. So: (1) where the names files give a prototype, the function's parameters and result are the prototype's (count, names, and void / one value), hole or not, and callers pass and take back only those. (2) It must stay safe: where the summary proves the function reads a register the prototype doesn't give it, or a caller reads a result the prototype says isn't there (hand-written assembly, a wrong prototype), keep the summary's shape for that function and count it (new metric, listed by name in the report); the native check and fn-check are what catch a wrong prototype, with a planted wrong prototype as the control in lift-check. (3) A switch (--no-prototype-shapes) prints the summaries' shapes as today, and the table of holes by cause (a callee with a hole, an indirect call with an incomplete set, a jump by value, a fall into another function, a stand-in) goes in docs/research/ with how often the summaries agree with the prototypes where both speak: that is what an unworked game would get, scored in {unit:native/lift-pret-score}. Don't edit fnref.rs here. Metrics: regs_call_entries down, barred on the games; prototype shapes used and refused. Check (code-shape work, judged on the C programs, Metroid and Emerald): just lift-check passes with 0 differences on every program and every planted fault caught; the metric barred on the C rows and in the private bars of Metroid and Emerald; both games build and run 600 of 600 frames headless; Emerald route check still 0 differences once {unit:native/emerald-native-route} is done; just check passes.",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "record": {
+        "state": "claimed",
+        "by": "c2904337",
+        "session": "c2904337-c363-4edb-b766-d05827276eb2",
+        "host": "quack",
+        "pid": 2963642,
+        "start": "95218853",
+        "at": "2026-11-24T16:58:52Z",
+        "branch": "unit/native/lift-signature-holes",
+        "beats": true
+      },
+      "round": "2026-11-24T16:58:52Z"
     },
     {
       "id": "native/lift-returns-read",
