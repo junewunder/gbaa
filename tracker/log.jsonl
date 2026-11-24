@@ -3960,3 +3960,5 @@
 {"at":"2026-11-24T08:27:21Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/rom-statics","text":"Function words in ROM statics as FnRefs: on main"}
 {"at":"2026-11-24T08:27:26Z","actor":"loop","tag":"2d61bb47","host":"quack","cmd":"claim","id":"native/fn-check-spike-digest","text":"native-spike's fn-check digest recorded again: claimed"}
 {"at":"2026-11-24T08:30:50Z","actor":"loop","tag":"68877ea6","host":"quack","cmd":"done","id":"merge/quack-lane1-native-ime-i-set-test-program","text":"Merge main on quack lane 1: done"}
+{"at":"2026-11-24T08:37:16Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane1-native-ime-i-set-test-program","text":"Merge main on quack lane 1: on main"}
+{"at":"2026-11-24T08:37:16Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/ime-i-set-test-program","text":"A test program: IME turned on while I is set: on main"}
