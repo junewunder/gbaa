@@ -4658,7 +4658,8 @@
     {
       "id": "native/lift-find-on-route",
       "title": "lift-find narrows a field's writers to those a route ran",
-      "detail": "From {unit:native/mirror-agent-mod} (hurt 1): just lift-find on Kirby's xspeed lists 1139 writers and 547 readers (every enemy, boss and state); the walk's KirbyGroundAccel is one line among them. What found it was a Lua write watch on gKirbys[0].base.xspeed during frames 1655-1700 of the mirror route (8 s): pc 0x0805B382. Wanted: lift-find --route R --frames A-B (or a recipe) runs the play build along the route with a write watch on the field's address and lists only the functions that wrote it there, with the values. Check: on the mirror route, frames 1650-1700, xspeed names KirbyGroundAccel (and KirbyWalk); just check."
+      "detail": "From {unit:native/mirror-agent-mod} (hurt 1): just lift-find on Kirby's xspeed lists 1139 writers and 547 readers (every enemy, boss and state); the walk's KirbyGroundAccel is one line among them. What found it was a Lua write watch on gKirbys[0].base.xspeed during frames 1655-1700 of the mirror route (8 s): pc 0x0805B382. Wanted: lift-find --route R --frames A-B (or a recipe) runs the play build along the route with a write watch on the field's address and lists only the functions that wrote it there, with the values. Check: on the mirror route, frames 1650-1700, xspeed names KirbyGroundAccel (and KirbyWalk); just check.",
+      "uses": ["heavy"]
     },
     {
       "id": "native/names-keep-source-lines",
