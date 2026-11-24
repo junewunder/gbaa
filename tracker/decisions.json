@@ -1503,6 +1503,14 @@
       "by": "c08a6e47",
       "at": "2026-11-24T11:56:48Z",
       "scope": ["native/*"]
+    },
+    {
+      "id": "d/emerald-route-s-lifter-parts-land-on-main-ahead",
+      "title": "Emerald route's lifter parts land on main ahead of the route",
+      "why": "mods holes file uses [[roots]]/[[open_bus]] that main rejects; RTC and open-bus units would redo branch work",
+      "by": "9a39864c",
+      "at": "2026-11-24T13:31:02Z",
+      "scope": ["native/land-emerald-route-lifter"]
     }
   ]
 }
