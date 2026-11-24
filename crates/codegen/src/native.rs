@@ -241,6 +241,7 @@ pub mod shape;
 pub mod switch;
 pub mod text_statics;
 pub mod unread;
+pub mod value_names;
 
 use globals::{Globals, Layout, Obj, Place};
 use metrics::{Metrics, Where};
@@ -405,6 +406,9 @@ pub struct Holes {
     /// Stage A's old counted loops (`gbaa-lift --no-for-loops`): every
     /// loop a `loop`, none a `for` (`native/lift-for-loops`).
     pub no_for_loops: bool,
+    /// Every `let` of a value `vN` (`gbaa-lift --no-let-names`), none
+    /// named for what it holds ([`value_names`]).
+    pub no_let_names: bool,
     /// Stage A's old IRQs (`gbaa-lift --irq-at-waits`): `Game::cpsr` as
     /// bookkeeping only, so an IRQ due at a wait inside a critical section
     /// runs there, where the hardware holds it until the I bit clears. The
@@ -1954,9 +1958,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     .unwrap();
     writeln!(
         report,
-        "value lets printed: {}, values printed inside their use: {}{}",
+        "value lets printed: {}, values printed inside their use: {}, lets named for what they hold: {}{}",
         soft.value_lets,
         soft.inlined,
+        soft.lets_named,
         if holes.keep_temps {
             " (--keep-temps: every value its own let)"
         } else {
@@ -2424,6 +2429,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     // The `let`s of IR values printed (native/lift-inline-temps): a pure
     // value used once, or a constant, prints inside its use instead.
     m.push("value_lets", soft.value_lets);
+    // Of those, the ones named for what they hold (native/lift-let-names).
+    m.push("lets_named", n(soft.lets_named));
     // Register locals (native/lift-register-locals): writes of r0-r12's
     // mut locals printed (a value only its block reads is a `let`), and
     // functions whose entry unpacks a register or flag never read as it
@@ -4215,6 +4222,8 @@ struct Soft {
     /// ([`local_names`]).
     locals_named: usize,
     locals_noted: usize,
+    /// The `let vN` values named for what they hold ([`value_names`]).
+    lets_named: usize,
     /// And those whose plain entry still packs its arguments into
     /// [`Regs::call`] for `x_` (barred): what they take as they came is
     /// more than those (a flag, r4-r12, an lr not proven `RET`).
@@ -4651,6 +4660,7 @@ impl FnPrinter<'_, '_> {
             let e = self.entries(&s[head..], &ty);
             s.insert_str(head, &e);
             self.name_locals(&mut s, head, e.len());
+            self.name_values(&mut s, head);
             return s;
         }
         self.soft.fns_match += 1;
@@ -4681,6 +4691,7 @@ impl FnPrinter<'_, '_> {
         let e = self.entries(&s[head..], &ty);
         s.insert_str(head, &e);
         self.name_locals(&mut s, head, e.len());
+        self.name_values(&mut s, head);
         s
     }
 
@@ -4805,6 +4816,41 @@ impl FnPrinter<'_, '_> {
         let lr = sum.filter(|s| s.returns).map_or(0, |s| s.lr_left);
         if lr & self.returned() != 0 {
             self.soft.lr_returned.push(self.f.entry);
+        }
+    }
+
+    /// The `let vN` values of the function's text from `head` named for
+    /// what they hold ([`value_names`]): last, over every other pass's
+    /// text.
+    fn name_values(&mut self, s: &mut String, head: usize) {
+        if self.holes.no_let_names {
+            return;
+        }
+        let map = self.holes.dwarf.as_deref().or(self.holes.text.as_deref());
+        // Where a call returns: its r0-r3 and r12 are the callee's.
+        let returns = self
+            .f
+            .blocks
+            .values()
+            .flat_map(|gb| exits(self.ctx, gb))
+            .filter_map(|x| match x.plan {
+                Plan::Call { ret, .. }
+                | Plan::CallVia { ret, .. }
+                | Plan::Dynamic { ret: Some(ret), .. }
+                | Plan::Swi { next: ret } => Some(ret & !1),
+                _ => None,
+            })
+            .collect();
+        let ctx = value_names::Ctx {
+            map,
+            values: self.holes.values.as_deref(),
+            entry: self.f.entry,
+            returns,
+        };
+        let (text, n) = value_names::name(&s[head..], &ctx);
+        if n > 0 {
+            s.replace_range(head.., &text);
+            self.soft.lets_named += n;
         }
     }
 
@@ -10139,7 +10185,10 @@ mod tests {
         );
         // The range starts after the first write: a comment, not a name.
         let (f, m) = lifted(0x0800_0014);
-        assert!(f.contains("r2") && !f.contains("let left"), "{f}");
+        assert!(f.contains("r2") && !f.contains("let mut left"), "{f}");
+        // A read of r2 where its block starts takes the variable's name
+        // (native/lift-let-names).
+        assert!(f.contains("let left: u32 = r2;"), "{f}");
         assert!(
             f.contains(&format!("{}r2: left", local_names::LOCAL_NOTE)),
             "{f}"
