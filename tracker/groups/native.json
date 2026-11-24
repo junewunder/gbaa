@@ -4761,6 +4761,14 @@
       "title": "lift-mod-run compares a mod with its switch flipped",
       "detail": "Showing a mod's switch (a const) off gives stock's frames took a copy of the mod with it flipped and a second full run (stock lifted again, 4.5 min), since lift-mod-run compares only with stock and writes over out/lift-mod-run/<route>/. Let it take a second mod, or --set NAME=VALUE, as the reference, and write under the mod's name. From docs/research/mirror-cpu-kirbys-off.md, hurt 4. Done: on Amazing Mirror's cpu-kirbys-off mod one command shows the switch on equals stock and off differs.",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/rom-statics-metroid-keys",
+      "title": "Metroid's ROM statics hold no function keys",
+      "detail": "Split from {unit:native/rom-statics} (2026-11-24): its bar of 0 function keys read from a ROM static in a dense build holds on c-fnptr (no statics) but Metroid has 38 (metric rom_static_fn_keys; the lift report lists them): 13 in ROM_0808C71C at 0x0808ca9c-0x0808cacc (used as an address at 0x030016ca), 3 in ROM_0835F948, 1 in ROM_0875E6A8, 21 in ROM_0875FD54. Each is a word of a function the flow can't make dense: a word of it held by a flow hole (arithmetic on a pile read at 0x080020ba, 0x08062502, 0x08067f72, 0x0806054e, 0x03003bf0, 0x0800e008, or used as an address at 0x030016ca). Fixing those is function-flow work (fnref.rs, the flow thread's). Done when: rom_static_fn_keys 0 on Metroid's --fn-ids dense lift; Metroid's dense build passes route-check --native --dense on units/metroid-native.toml; just lift-check and just check pass.",
+      "check": "independent",
+      "needs": ["native/fnref-dense-keys-left"],
+      "uses": ["heavy"]
     }
   ]
 }
