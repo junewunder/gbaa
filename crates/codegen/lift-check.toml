@@ -2857,7 +2857,7 @@ route = "units/c-bits-gcc-600.toml"
 planted_store = 0x080002a2
 
 [program.c-bits-gcc.bars]
-lines = 496
+lines = 498
 io_unnamed = 0
 texts_left = 0
 lines_prelude = 1390
