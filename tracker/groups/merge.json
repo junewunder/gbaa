@@ -691,6 +691,14 @@
         "host": "quack",
         "landed": "2026-11-24T07:25:06Z"
       }
+    },
+    {
+      "id": "merge/quack-lane2-native-c-list-test-program",
+      "title": "Merge main on quack lane 2",
+      "detail": "Branch `unit/native/c-list-test-program` holds {unit:native/c-list-test-program}, finished but not on main: `just check` fails on the branch with main merged in (error: recipe `check` failed on line 18 with exit code 101). Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
+      "check": "recorded",
+      "lane": "quack/2",
+      "branch": "unit/native/c-list-test-program"
     }
   ]
 }
