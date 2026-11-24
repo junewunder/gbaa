@@ -3953,3 +3953,4 @@
 {"at":"2026-11-24T08:18:31Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane2-native-c-list-test-program","text":"Merge main on quack lane 2: on main"}
 {"at":"2026-11-24T08:18:31Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/c-list-test-program","text":"A C test program with a linked list and a node pool: on main"}
 {"at":"2026-11-24T08:18:36Z","actor":"loop","tag":"f2d7754b","host":"quack","cmd":"claim","id":"native/lift-global-bitfields","text":"A typed global's bitfield prints as its field: claimed"}
+{"at":"2026-11-24T08:21:46Z","actor":"loop","tag":"5549a28e","host":"quack","cmd":"done","id":"native/ime-i-set-test-program","text":"A test program: IME turned on while I is set: done"}
