@@ -5078,7 +5078,8 @@
         "branch": "unit/native/lift-for-top-tested",
         "beats": true,
         "handedBack": "2026-11-24T20:45:19Z",
-        "pushed": true
+        "pushed": true,
+        "ended": "2026-11-24T20:45:32Z"
       },
       "notes": [
         {
