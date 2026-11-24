@@ -3899,15 +3899,22 @@
       "needs": ["native/emerald-builds"],
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "e794753c",
-        "session": "e794753c-2faf-43c6-9880-66be4dc07d40",
-        "host": "quack",
-        "pid": 2963642,
-        "start": "95218853",
-        "at": "2026-11-24T05:41:57Z",
+        "at": "2026-11-24T07:57:32Z",
+        "evidence": "Imperium: 0 hard holes (14 before), lift builds (just lift --name imperium), first stop 1 of 600 frames, no-function 0x08003355, filed as {unit:native/imperium-first-stops}. Rogue: 18 to 1 hard hole; the last (GenerateFloorLayout's r11 through 29 pointer-entered functions) split off as {unit:native/rogue-build}, per the card's split rule. General: Recovery takes a bx with sp/lr as at entry for a tail call (tail_calls; tests in jumptable/tests.rs); game-own entries in mods/<game>/holes.toml (mods 1d39b14); the 13 switches as {unit:native/gcc-switch-recovery}. holes-all --against main 4ff1b2c: no other game up (WarioWare 7=7, Emerald 0=0 without [[roots]]). just check passes after merging main (20fc879).",
         "branch": "unit/native/rogue-imperium-build",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T07:57:32Z",
+          "by": "e794753c",
+          "host": "quack",
+          "pid": 2963642,
+          "start": "95218853",
+          "beats": true,
+          "session": "e794753c-2faf-43c6-9880-66be4dc07d40",
+          "lane": "quack/3"
+        }
       },
       "notes": [
         {
