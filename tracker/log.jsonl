@@ -4094,3 +4094,4 @@
 {"at":"2026-11-24T15:31:07Z","actor":"loop","tag":"209afec8","host":"quack","cmd":"done","id":"native/land-emerald-route-lifter","text":"Land the Emerald route branch's lifter parts on main: done"}
 {"at":"2026-11-24T15:40:11Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/land-emerald-route-lifter","text":"Land the Emerald route branch's lifter parts on main: on main"}
 {"at":"2026-11-24T15:40:16Z","actor":"loop","tag":"66065018","host":"quack","cmd":"claim","id":"native/lift-stack-arrays","text":"A stack array passed by address is a typed local: claimed"}
+{"at":"2026-11-24T16:12:56Z","actor":"loop","tag":"66065018","host":"quack","cmd":"add-unit","id":"native/lift-stack-typed-locals","text":"new unit: A lent stack local takes its DWARF type"}
