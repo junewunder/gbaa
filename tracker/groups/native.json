@@ -4669,15 +4669,22 @@
       "detail": "From {unit:native/lift-pret-score}'s first numbers. The lift splits its functions into modules by address (native/modules.rs: Emerald's 266 files are m_080f8815.rs and the like, the largest 37,841 lines), where the names map gives 15,025 of Emerald's 15,144 functions their source file (src = \"src/script_pokemon_util.c\"). Where the names files give a function's source file, put it in a module named for that file (script_pokemon_util.rs; a file too large for one module split as now, numbered), functions with none staying in address modules; each module's header names its source file. Cuts (gbaa-lift --cut), the stop report and lift-find must still find a function. Check: just lift-check passes with 0 differences; Metroid's lift builds and runs 600 of 600 frames; Emerald's lift (text only until {unit:native/emerald-builds}) has a module for each of pret's src/*.c that holds code; just check passes.",
       "uses": ["heavy"],
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "7bea1fd0",
-        "session": "7bea1fd0-3d2f-469e-b4fd-c8feb150d8d6",
-        "host": "quack",
-        "pid": 2962519,
-        "start": "95218086",
-        "at": "2026-11-24T14:58:19Z",
+        "at": "2026-11-24T16:43:39Z",
+        "evidence": "just lift-check passed: 37 programs, 0 differences (first run caught a C program's lib.c becoming src/lib.rs; lib now reserved). Metroid: just lift builds, 600 of 600 frames, 202 files (198 source modules, 2 address). Emerald text-only lift: 438 files, a module for each of the 294 pret src/*.c that hold code (16 others hold none); needs pret-names' new src for agb_flash/siirtc/librfu_intr, checked with a regenerated map in /tmp. Metroid --cut AcidWormHandleRotation into acid_worm.rs, --replace build 600/600; lift-find maxEnergy 8 writers 17 readers. just check passed after merging main.",
         "branch": "unit/native/lift-modules-by-source",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-24T16:43:39Z",
+          "by": "7bea1fd0",
+          "host": "quack",
+          "pid": 2962519,
+          "start": "95218086",
+          "beats": true,
+          "session": "7bea1fd0-3d2f-469e-b4fd-c8feb150d8d6",
+          "lane": "quack/2"
+        }
       },
       "round": "2026-11-24T14:58:19Z"
     },
