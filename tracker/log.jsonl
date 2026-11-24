@@ -4293,3 +4293,4 @@
 {"at":"2026-11-24T22:37:12Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"ask","text":"asked the owner: Mirror's task-struct lookups: a per-game helper in the lift?","q":"q/mirror-s-task-struct-lookups"}
 {"at":"2026-11-24T22:37:14Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"ask","text":"asked the owner: GetMonData's two-argument calls: prove r2 unread, or trust pret?","q":"q/getmondata-s-argument-calls-prove"}
 {"at":"2026-11-24T22:41:34Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"mod/retire-tools","text":"Mod-view tools are gone: naming, mod-run, nightly step: on main"}
+{"at":"2026-11-24T22:43:45Z","actor":"loop","tag":"7d882d0d","host":"quack","cmd":"done","id":"native/lift-for-top-tested","text":"Loops tested at the top print as for: done"}
