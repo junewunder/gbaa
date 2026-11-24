@@ -762,7 +762,19 @@
       "detail": "Branch `unit/native/ram-jump-passes-regs` holds {unit:native/ram-jump-passes-regs}, finished but not on main: merging main conflicts in docs/tools/commands.md justfile. Merge origin/main into that branch, settle the conflicts keeping both sides' intent, run `just check`, commit on the branch, then record this unit done. The loop merges the branch into main after you.",
       "check": "recorded",
       "lane": "quack/2",
-      "branch": "unit/native/ram-jump-passes-regs"
+      "branch": "unit/native/ram-jump-passes-regs",
+      "record": {
+        "state": "claimed",
+        "by": "60303338",
+        "session": "60303338-097c-4a75-8cc1-c58c0be96005",
+        "host": "quack",
+        "pid": 2962519,
+        "start": "95218086",
+        "at": "2026-11-24T11:20:33Z",
+        "branch": "unit/native/ram-jump-passes-regs",
+        "beats": true
+      },
+      "round": "2026-11-24T11:20:33Z"
     }
   ]
 }
