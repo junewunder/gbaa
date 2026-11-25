@@ -5629,7 +5629,8 @@
         "branch": "unit/native/lift-returns-past-holes",
         "beats": true,
         "handedBack": "2026-11-25T06:12:44Z",
-        "pushed": true
+        "pushed": true,
+        "ended": "2026-11-25T06:12:55Z"
       },
       "notes": [
         {
