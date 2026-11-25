@@ -843,7 +843,8 @@
           "beats": true,
           "session": "7d404c81-689c-455a-b509-a4c5a6bf63e3",
           "lane": "quack/2"
-        }
+        },
+        "pushed": true
       },
       "round": "2026-11-25T02:55:10Z"
     }
