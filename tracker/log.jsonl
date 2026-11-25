@@ -4382,3 +4382,4 @@
 {"at":"2026-11-25T04:52:18Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane3-native-imperium-first-stops","text":"Merge main on quack lane 3: on main"}
 {"at":"2026-11-25T04:52:18Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/imperium-first-stops","text":"Imperium's lift runs 600 frames: its first stops: on main"}
 {"at":"2026-11-25T04:52:22Z","actor":"loop","tag":"fa3c994f","host":"quack","cmd":"claim","id":"native/emerald-lent-local-stop","text":"Emerald's lift stops at frame 5055 on a lent local: claimed"}
+{"at":"2026-11-25T04:53:59Z","actor":"loop","tag":"2b1424bb","host":"quack","cmd":"decide","text":"decided: A restore of a saved block unwinds to the frame of its sp","d":"d/a-restore-of-a-saved-block-unwinds-to-the-frame"}

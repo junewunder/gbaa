@@ -1600,6 +1600,14 @@
       "at": "2026-11-25T01:37:47Z",
       "scope": ["native/lift-returns-read"],
       "until": "2026-11-25T07:00:00Z"
+    },
+    {
+      "id": "d/a-restore-of-a-saved-block-unwinds-to-the-frame",
+      "title": "A restore of a saved block unwinds to the frame of its sp",
+      "why": "From {unit:native/lift-restore-saved-block}: ldr sp,[rb,#o] then, ending its block, ldr pc,[rb,#o2] or a constant jump, matched by a str sp at the same offset (beside an adr'd code address at #o2 for a loaded pc; a constant target in the saver's code or code it jumps or returns into), is a Plan::Unwind: prelude resume(key, sp, r0-r12, sets), a panic. A function with the target among its blocks, or jumping or returning into it as another function's entry, prints in match form in catch_restore and takes an unwinding whose sp is its own at the call under way and whose key is its: r0-r3 and the r4-r12 the restorer's function writes come from it, the rest stay its own. Matched by offset, not proven: a task switcher of this shape would panic uncaught. Minish Cap 4 to 0 hard holes; no other corpus game moved.",
+      "by": "2b1424bb",
+      "at": "2026-11-25T04:53:59Z",
+      "scope": ["group:native"]
     }
   ]
 }
