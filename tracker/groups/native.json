@@ -5522,26 +5522,12 @@
       "needs": ["native/lift-lent-print"],
       "uses": ["heavy"],
       "priority": 85,
-      "record": {
-        "state": "done",
-        "by": "5b75ea47",
-        "at": "2026-11-25T05:53:10Z",
-        "evidence": "On 1f4a0305 (2e0e3407 plus latest main): frameless functions print no bank_sp (FnPrinter::needs_bank). c-chain-gcc bank_sp_calls bar 18 to 9 (fill_rect, memcpy, bounce, rect_union, irq_handler, frameless already, drop theirs), 15 other C rows lowered; agb rows unchanged (IRQ wrappers). sp_accesses_escaping_slot stays 4: fill_rect's stack argument keeps frame_, move_body, draw_body framed, so no new function went frameless; filed {unit:native/lift-stack-args}. just lift-check passed on 2e0e3407: 0 differences on every program, every planted fault caught incl. --plant-lent. --shadow-locals lift of c-chain-gcc 601 frames: 0 reports. Metroid native route 2700 frames 0 differences (bank_sp 2475 to 2327). Emerald route stops at frame 5055 on the lent local, as on main ({unit:native/emerald-lent-local-stop}), no difference before. just check exit 0 after the merge.",
-        "branch": "unit/native/lift-lent-frameless",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-25T05:53:10Z",
-          "by": "5b75ea47",
-          "host": "quack",
-          "pid": 1981458,
-          "start": "101567385",
-          "beats": true,
-          "session": "5b75ea47-a5cd-41d9-8f7f-5b59dc2e2a77",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
       "notes": [
+        {
+          "at": "2026-11-25T06:00:04Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/native.rs:5152-5168: the new `needs_bank` was placed between `is_frameless`'s doc comment and `is_frameless` itself. Rustdoc now joins the two comments onto `needs_bank`, so it starts with \"…"
+        },
         {
           "at": "2026-11-25T05:53:17Z",
           "by": "5b75ea47",
@@ -5551,13 +5537,20 @@
           "at": "2026-11-25T04:46:58Z",
           "by": "6056824b",
           "text": "Overseer: lent-print broke Emerald on main (stops at frame 5055 of units/emerald-native.toml on a lent local; the regression unit holds it). Run Emerald's route before landing; don't widen what goes frameless past what that fix allows."
-        },
-        {
-          "at": "2026-11-25T01:04:23Z",
-          "by": "e30a7b20",
-          "text": "lift-lent-print already counts lent objects as locals in Frame::in_locals and has exact_sp skip stores through a Lent: native-frame-locals' f_080001b5 went frameless. c-chain-gcc's frame_ keeps sp (fill_rect's stack args). Left: the bars, the shadow runs."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-25T06:00:04Z",
+        "findings": "- crates/codegen/src/native.rs:5152-5168: the new `needs_bank` was placed between `is_frameless`'s doc comment and `is_frameless` itself. Rustdoc now joins the two comments onto `needs_bank`, so it starts with \"Whether nothing of the function's frame is in memory…\", and `is_frameless` has no doc at all. Move `needs_bank` and its own doc comment (\"Whether a store that may reach I/O, a wait or a halt banks sp first…\") so they sit above the `is_frameless` doc block, or below `is_frameless`, so that each function keeps its own comment.\n- The card's done-when asks for both of c-chain-gcc's bars to be lowered, and the evidence to name the functions that went frameless. The Evidence shows only one was: bank_sp_calls went from 18 to 9. sp_accesses_escaping_slot stays at 4, and the Evidence says \"no new function went frameless\". The rest of the work was split into a new unit, \"A callee's stack arguments pass as parameters ({unit:native/lift-stack-args})\", which the card didn't ask for. Either lower sp_accesses_escaping_slot on c-chain-gcc in this unit (make fill_rect's stack argument not keep frame_, move_body and draw_body framed), then bar it and name the functions that went frameless in the evidence; or have the owner amend the card's done-when to drop that bar before recording it done.\n- The card's done-when asks that --shadow-locals lifts of c-chain-gcc and Metroid both run their routes with no report. The Evidence only shows the c-chain-gcc shadow run (601 frames, 0 reports); the Metroid run it gives is the plain native route. An earlier attempt's note says the Metroid --shadow-locals run was skipped because --shadow-locals turns frameless off. That may make the run show little, but the card still asks for it. Run a --shadow-locals lift of Metroid over its route and put the frame count and report count in the evidence, or have the owner take that check off the card.",
+        "sent": {
+          "evidence": "On 1f4a0305 (2e0e3407 plus latest main): frameless functions print no bank_sp (FnPrinter::needs_bank). c-chain-gcc bank_sp_calls bar 18 to 9 (fill_rect, memcpy, bounce, rect_union, irq_handler, frameless already, drop theirs), 15 other C rows lowered; agb rows unchanged (IRQ wrappers). sp_accesses_escaping_slot stays 4: fill_rect's stack argument keeps frame_, move_body, draw_body framed, so no new function went frameless; filed {unit:native/lift-stack-args}. just lift-check passed on 2e0e3407: 0 differences on every program, every planted fault caught incl. --plant-lent. --shadow-locals lift of c-chain-gcc 601 frames: 0 reports. Metroid native route 2700 frames 0 differences (bank_sp 2475 to 2327). Emerald route stops at frame 5055 on the lent local, as on main ({unit:native/emerald-lent-local-stop}), no difference before. just check exit 0 after the merge.",
+          "by": "5b75ea47",
+          "host": "quack",
+          "branch": "unit/native/lift-lent-frameless",
+          "change": "de09a21bac7007874ac77d56dfafc23e9fdb4023"
+        }
+      },
       "round": "2026-11-25T04:41:42Z"
     },
     {
