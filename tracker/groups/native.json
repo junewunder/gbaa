@@ -5787,6 +5787,12 @@
           "text": "The copier stand-in's resume path (busy byte 0x03004880 set) never ran in frames 1-129: 5 calls, each finishing. Past 130, if route-check differs after a call with busy set, look there first (mods/warioware/holes.toml, f_030003a8)."
         }
       ]
+    },
+    {
+      "id": "native/lift-clone-count",
+      "title": "The lift's report lists its repeated pure regions",
+      "detail": "docs/native-port-design.md, 'LLM rewrites that add helpers and change signatures', section 2: a clone count over the lift, each maximal pure region (an expression tree, or a single-entry single-exit region that only loads and computes one register) normalised (inputs by role, constants kept), listed by occurrences x size with the functions it is in: the candidates an LLM pass names as helpers. Check: Mirror's report lists the task struct lookup near its 1,070 sites; just lift-check passes; just check.",
+      "uses": ["heavy"]
     }
   ]
 }
