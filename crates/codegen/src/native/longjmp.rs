@@ -374,10 +374,11 @@ pub(super) fn find_unwinds(codes: &[(&Ctx, &[Func])]) -> Vec<Unwind> {
                 let Some(&(at, last)) = gb.insns.last() else {
                     continue;
                 };
-                if gb.insns[n + 1..gb.insns.len() - 1]
-                    .iter()
-                    .any(|(_, x)| writes_sp(x))
-                    || at == sp_at
+                // (The load ending its block is no restore of this shape.)
+                if at == sp_at
+                    || gb.insns[n + 1..gb.insns.len() - 1]
+                        .iter()
+                        .any(|(_, x)| writes_sp(x))
                 {
                     continue;
                 }
