@@ -951,7 +951,12 @@ fn main() -> ExitCode {
         .copied()
         .filter(|&a| a >= 0x0800_0000)
         .collect();
-    let lacked = roots.iter().filter(|a| !disc.funcs.contains_key(a)).count();
+    let lacked_keys: Vec<u32> = roots
+        .iter()
+        .copied()
+        .filter(|a| !disc.funcs.contains_key(a))
+        .collect();
+    let lacked = lacked_keys.len();
     let disc = if run_roots && lacked > 0 {
         let t = std::time::Instant::now();
         let d = analysis::discovery::discover_with(rom.to_vec(), &roots);
@@ -1083,6 +1088,15 @@ fn main() -> ExitCode {
             " (--no-run-roots: not given to it)"
         }
     );
+    if lacked > 0 {
+        // The lift doesn't run the game: these go to it as the holes file's
+        // `[[roots]]` (native/imperium-first-stops).
+        let keys: Vec<String> = lacked_keys.iter().map(|k| format!("{k:#010x}")).collect();
+        println!(
+            "  the ones not discovered, for the lift's holes file:\n[[roots]]\nkeys = [{}]\nwhy = \"seen in gbaa-holes' run\"\n",
+            keys.join(", ")
+        );
+    }
     println!(
         "run: {} frames, {} instructions, presses {}",
         run.frames,
