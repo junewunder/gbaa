@@ -4349,3 +4349,4 @@
 {"at":"2026-11-25T02:54:52Z","actor":"loop","tag":"d3ccf311","host":"quack","cmd":"done","id":"native/lift-lent-print","text":"Lent stack slots print as locals, borrowers as Lent: done"}
 {"at":"2026-11-25T02:55:05Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane2-native-lift-lent-print","text":"new unit: Merge main on quack lane 2"}
 {"at":"2026-11-25T02:55:10Z","actor":"loop","tag":"7d404c81","host":"quack","cmd":"claim","id":"merge/quack-lane2-native-lift-lent-print","text":"Merge main on quack lane 2: claimed"}
+{"at":"2026-11-25T03:03:14Z","actor":"loop","tag":"7d404c81","host":"quack","cmd":"done","id":"merge/quack-lane2-native-lift-lent-print","text":"Merge main on quack lane 2: done"}

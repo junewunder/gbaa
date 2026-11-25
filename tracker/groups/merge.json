@@ -828,15 +828,22 @@
       "lane": "quack/2",
       "branch": "unit/native/lift-lent-print",
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "7d404c81",
-        "session": "7d404c81-689c-455a-b509-a4c5a6bf63e3",
-        "host": "quack",
-        "pid": 1981823,
-        "start": "101567893",
-        "at": "2026-11-25T02:55:10Z",
+        "at": "2026-11-25T03:03:14Z",
+        "evidence": "Merged origin/main into unit/native/lift-lent-print (a1cd2737): settled justfile lift-check doc and docs/tools/commands.md planted_flags list, keeping main's native-copy-takes and 21 planted lifts plus the branch's c-chain-gcc and --plant-lent; just check passed (exit 0).",
         "branch": "unit/native/lift-lent-print",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-25T03:03:14Z",
+          "by": "7d404c81",
+          "host": "quack",
+          "pid": 1981823,
+          "start": "101567893",
+          "beats": true,
+          "session": "7d404c81-689c-455a-b509-a4c5a6bf63e3",
+          "lane": "quack/2"
+        }
       },
       "round": "2026-11-25T02:55:10Z"
     }
