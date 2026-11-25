@@ -233,8 +233,11 @@ impl Frame {
     /// those that don't escape, lie below the entry sp (above it is the
     /// caller's frame: the stack arguments, a frame a fall shares), and
     /// that every access reaches at an offset its width divides (an
-    /// unaligned one reaches the bytes the hardware's rounding picks).
-    pub fn locals(&self) -> Vec<Local> {
+    /// unaligned one reaches the bytes the hardware's rounding picks);
+    /// and the objects `lent` (bytes `lo..hi`, [`lend::Lends::objects`];
+    /// `native/lift-lent-print`), each one local of bytes, whose address
+    /// its callees borrow.
+    pub fn locals(&self, lent: &[(i32, i32)]) -> Vec<Local> {
         let mut odd = BTreeSet::new();
         let mut words = BTreeSet::new();
         for p in self.places.values() {
@@ -247,7 +250,8 @@ impl Frame {
                 }
             }
         }
-        self.slots
+        let mut v: Vec<Local> = self
+            .slots
             .iter()
             .filter(|s| !s.escapes() && s.lo < s.hi && s.hi <= 0)
             .filter(|s| !odd.iter().any(|&o| s.lo <= o && o < s.hi))
@@ -257,8 +261,17 @@ impl Frame {
                 word: s.lo % 4 == 0
                     && s.hi - s.lo == 4
                     && !words.iter().any(|&o| s.lo <= o && o < s.hi),
+                lent: false,
             })
-            .collect()
+            .collect();
+        v.extend(lent.iter().map(|&(lo, hi)| Local {
+            lo,
+            len: (hi - lo) as u32,
+            word: false,
+            lent: true,
+        }));
+        v.sort_by_key(|l| l.lo);
+        v
     }
 
     /// Where the access at inst `i` of block `b` lands in `locals` (this
@@ -266,12 +279,13 @@ impl Frame {
     /// access's width.
     pub fn local_at(&self, locals: &[Local], b: u32, i: usize) -> Option<(Local, u32, u8)> {
         let (s, o, n) = self.slot_at(b, i)?;
-        let l = locals.iter().find(|l| l.lo == s.lo)?;
-        Some((*l, (o - l.lo) as u32, n))
+        let l = locals.iter().find(|l| l.holds(s.lo))?;
+        (o + n as i32 <= l.lo + l.len as i32).then_some((*l, (o - l.lo) as u32, n))
     }
 
     /// Whether nothing of the frame is in memory (`native/lift-frame-gone`):
-    /// sp keeps its offset, no slot escapes, no call writes the locals to
+    /// sp keeps its offset, no slot escapes but into a lent object of
+    /// `locals` (`native/lift-lent-print`), no call writes the locals to
     /// the frame's bytes, no stack switch or fresh stack, and every access
     /// into the frame lands in one of `locals` (this frame's
     /// [`Frame::locals`]) or in the caller's frame, whole at or above the
@@ -281,7 +295,11 @@ impl Frame {
     /// nothing.
     pub fn in_locals(&self, locals: &[Local]) -> bool {
         !self.lost
-            && self.escaping() == 0
+            && self
+                .slots
+                .iter()
+                .filter(|s| s.escapes())
+                .all(|s| locals.iter().any(|l| l.lent && l.holds(s.lo)))
             && self.flush.is_empty()
             && self.switches.is_empty()
             && self.fresh.is_empty()
@@ -312,15 +330,22 @@ impl Frame {
 
 /// A slot printed as a Rust local: bytes `lo..lo + len` from the entry sp,
 /// a `u32` if it is one aligned word only ever accessed whole (`word`),
-/// else bytes.
+/// else bytes; or a lent object (`lent`, bytes), whose address callees
+/// borrow as a `Lent` (`native/lift-lent-print`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Local {
     pub lo: i32,
     pub len: u32,
     pub word: bool,
+    pub lent: bool,
 }
 
 impl Local {
+    /// Whether frame offset `k` is in it.
+    pub fn holds(&self, k: i32) -> bool {
+        self.lo <= k && k < self.lo + self.len as i32
+    }
+
     /// Its Rust name: `l<bytes below the entry sp>`.
     pub fn name(&self) -> String {
         format!("l{}", -self.lo)
