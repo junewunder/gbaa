@@ -444,7 +444,7 @@ pub struct Holes {
     /// Stage A's old call of a function that takes r4-r11 from its
     /// callers (`gbaa-lift --takes-zeroed`): each call that passes them
     /// (a direct call, a `[[takes]]` site) passes zeroes instead, as the
-    /// plain entry did. The taker check's planted control
+    /// plain entry did, and r12 too ([`Summary::ip`]). The taker check's planted control
     /// (`native/taker-test-program`): the native check must catch it on
     /// `agb/native-takes`.
     pub takes_zeroed: bool,
@@ -9054,6 +9054,14 @@ impl FnPrinter<'_, '_> {
         }
     }
 
+    /// Whether a direct call passes `k` r12 ([`Summary::ip`]): false for
+    /// a stand-in, or with `--takes-zeroed`.
+    fn ip(&self, k: u32) -> bool {
+        !self.holes.standins.contains_key(&k)
+            && !self.holes.takes_zeroed
+            && self.sums.get(k).is_some_and(|s| s.ip.is_some())
+    }
+
     /// The registers of r4-r11 (bit `n - 4` for rN) `k` returns in r0-r3
     /// as they came ([`Summary::echoes`]): a call passes them, so it
     /// returns the caller's, as the machine does. 0 for a stand-in.
@@ -9130,9 +9138,9 @@ impl FnPrinter<'_, '_> {
     /// A plain call of `k` with this function's registers: what it
     /// assigns its results to, and the call (without `?`).
     fn call(&self, k: u32) -> (String, String) {
-        let (m, e) = (self.passed(k), self.echoes(k));
-        if m | e != 0 {
-            return (self.results_lhs(k), taking(k, self.taken(m) | e));
+        let (m, e, ip) = (self.passed(k), self.echoes(k), self.ip(k));
+        if m | e != 0 || ip {
+            return (self.results_lhs(k), taking(k, self.taken(m) | e, ip));
         }
         let four = (0..4).map(|r| self.reg(r)).collect::<Vec<_>>().join(", ");
         match self.shape(k) {
@@ -9348,7 +9356,7 @@ impl FnPrinter<'_, '_> {
                     "{:#010x} => {{ {}{}?; }} ",
                     self.id(e),
                     self.results_lhs(e),
-                    taking(e, m)
+                    taking(e, m, false)
                 )
                 .unwrap();
             }
@@ -9965,9 +9973,10 @@ fn complete_sets(flow: &fnref::Flow) -> Sets {
 }
 
 /// A call of `k`, which takes the registers of `m` (bit `n - 4` for rN,
-/// of r4-r11) from its callers: its extended entry with r0-r3 and those
-/// of the caller's, the rest as `Regs::call` gives them (without `?`).
-fn taking(k: u32, m: u8) -> String {
+/// of r4-r11) from its callers, and r12 with `ip` ([`Summary::ip`]): its
+/// extended entry with r0-r3 and those of the caller's, the rest as
+/// `Regs::call` gives them (without `?`).
+fn taking(k: u32, m: u8, ip: bool) -> String {
     let hi: Vec<String> = (4..12)
         .map(|r| {
             if m & 1 << (r - 4) != 0 {
@@ -9978,8 +9987,9 @@ fn taking(k: u32, m: u8) -> String {
         })
         .collect();
     format!(
-        "x_{k:08x}(g, Regs {{ r: [r0, r1, r2, r3, {}, 0, r13, RET], f: [false; 4] }})",
-        hi.join(", ")
+        "x_{k:08x}(g, Regs {{ r: [r0, r1, r2, r3, {}, {}, r13, RET], f: [false; 4] }})",
+        hi.join(", "),
+        if ip { "r12" } else { "0" }
     )
 }
 
@@ -11842,7 +11852,7 @@ why = "a table"
             .unwrap();
         assert!(h.takes[&0x0800_0015].0.is_empty());
         assert_eq!(
-            taking(0x0800_0015, 0b10_0010),
+            taking(0x0800_0015, 0b10_0010, false),
             "x_08000015(g, Regs { r: [r0, r1, r2, r3, 0, r5, 0, 0, 0, r9, 0, 0, 0, r13, RET], f: [false; 4] })"
         );
         assert!(Holes::parse("[[nothing]]\nx = 1\n").is_err());
