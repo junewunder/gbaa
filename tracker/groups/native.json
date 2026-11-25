@@ -4927,13 +4927,12 @@
       "uses": ["heavy"],
       "tags": ["slow-check"],
       "priority": 99,
-      "record": {
-        "state": "blocked",
-        "why": "the loop's review asked for fixes a second time, so it waits for the overseer rather than going round again: - memory/shared-c-test-roms.md (new file) and its line in memory/MEMORY.md:21 duplicate a note that is already there: memory/shared-c-roms.md. Both have the same title, 'The C test ROMs in $GBAA_DATA are shared by every lane', and MEMORY.md now lists that title twice. The two notes also give differ…",
-        "by": "manual",
-        "at": "2026-11-25T00:26:29Z"
-      },
       "notes": [
+        {
+          "at": "2026-11-25T00:27:04Z",
+          "by": "6056824b",
+          "text": "Overseer: code and evidence stand. Only fix: delete memory/shared-c-test-roms.md and its MEMORY.md line (fold its details into memory/shared-c-roms.md), merge main, rerun checks on that head. Land soon: mods already bars its two metrics."
+        },
         {
           "at": "2026-11-25T00:18:24Z",
           "by": "c69dfdbb",
@@ -4943,24 +4942,12 @@
           "at": "2026-11-24T23:24:57Z",
           "by": "e601e02d",
           "text": "Its results_several and tuple_calls bars were taken out of Metroid's and Emerald's private bars ({unit:native/game-lift-bars-refresh}, main dd9a7df9: main measures neither). Landing this unit adds them back to both files at its measured values."
-        },
-        {
-          "at": "2026-11-24T19:42:05Z",
-          "by": "manual",
-          "text": "The loop's review asked for fixes before landing (all on the card): - Check run on code from before the main merge: the Evidence and the 2026-11-24 note say `just lift-check` (37 programs, 0 differences, every planted fault caught) and the Metroid and Emerald 600/600-frame runs …"
         }
       ],
       "review": {
-        "fixes": 2,
+        "fixes": 0,
         "at": "2026-11-25T00:26:29Z",
-        "findings": "- memory/shared-c-test-roms.md (new file) and its line in memory/MEMORY.md:21 duplicate a note that is already there: memory/shared-c-roms.md. Both have the same title, 'The C test ROMs in $GBAA_DATA are shared by every lane', and MEMORY.md now lists that title twice. The two notes also give different fixes. The new one says rerun `just c-tests` from your checkout; the existing one says build main's ROMs into a symlinked private data dir. Fix: delete memory/shared-c-test-roms.md and its MEMORY.md line. Then either merge the new note's useful details into memory/shared-c-roms.md (the `ls -la --time-style` check, and that the bars step lifts within a minute of starting) or leave them out. Regenerate MEMORY.md with `just memor…` (the recipe its header names), so one note with one fix remains.",
-        "sent": {
-          "evidence": "On head 2a39ea8 (merge of main at its tip, nothing newer on main at recording): just lift-check passed, 37 programs 0 differences, every planted fault and hard hole caught; lift-metrics 0 over, 0 under (98 bars lowered after the merge), results_several and tuple_calls 0 on every C row but c-jump-gcc (1, 2); Metroid lift 600 of 600 frames, its native route 2700 frames 0 differences; Emerald lift 600 of 600 frames; just check passed. Private bars: Metroid results_several 68 tuple_calls 872, Emerald 287 and 17862 (mods 64a3ad8, unpushed). Dead-path parameters moved to {unit:native/lift-returns-past-holes} by the recorded decision. Emerald route check waits on {unit:native/emerald-native-route}.",
-          "by": "c69dfdbb",
-          "host": "quack",
-          "branch": "unit/native/lift-returns-read",
-          "change": "45b6b774644c0b5e426449c51752de4d58c19ecf"
-        }
+        "findings": "- memory/shared-c-test-roms.md (new file) and its line in memory/MEMORY.md:21 duplicate a note that is already there: memory/shared-c-roms.md. Both have the same title, 'The C test ROMs in $GBAA_DATA are shared by every lane', and MEMORY.md now lists that title twice. The two notes also give different fixes. The new one says rerun `just c-tests` from your checkout; the existing one says build main's ROMs into a symlinked private data dir. Fix: delete memory/shared-c-test-roms.md and its MEMORY.md line. Then either merge the new note's useful details into memory/shared-c-roms.md (the `ls -la --time-style` check, and that the bars step lifts within a minute of starting) or leave them out. Regenerate MEMORY.md with `just memor…` (the recipe its header names), so one note with one fix remains."
       },
       "round": "2026-11-24T17:06:07Z"
     },
