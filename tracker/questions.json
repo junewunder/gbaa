@@ -2149,6 +2149,38 @@
         "host": "quack"
       },
       "answer": null
+    },
+    {
+      "id": "q/llm-call-forms",
+      "title": "May a call use a narrower form of its callee, tested only?",
+      "context": "Design: docs/native-port-design.md, 'LLM rewrites that add helpers and change signatures' (from {unit:native/llm-helpers-signatures-design}). Emerald's GetMonData has a two-argument and a three-argument prototype; the third argument is read only for some constant fields. Its own question asks prove or trust pret; this adds a third way, declared and tested.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Declared by the LLM, tested",
+          "changes": "a [[form]] (the narrower prototype at calls whose argument is a listed constant) prints there, the omitted argument passed as 0; fn-check's new variants rerun each such call with it random and require the same ends, and the route checks the rest; loosens 'refuse only on a proven read' to 'a declared form stands until a test shows the read'; builds {unit:native/lift-call-forms}"
+        },
+        {
+          "key": "b",
+          "label": "Only where proven",
+          "changes": "no form file: the path-sensitive summary of GetMonData's question (its option a) is the only way",
+          "drops": ["native/lift-call-forms"]
+        },
+        {
+          "key": "c",
+          "label": "Never",
+          "changes": "the calls keep the widest form, the junk argument printed",
+          "drops": ["native/lift-call-forms"]
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/lift-call-forms"],
+      "asked": {
+        "at": "2026-11-25T06:05:01Z",
+        "by": "485d4a85",
+        "host": "quack"
+      },
+      "answer": null
     }
   ]
 }

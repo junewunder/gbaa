@@ -4402,3 +4402,4 @@
 {"at":"2026-11-25T06:04:17Z","actor":"loop","tag":"485d4a85","host":"quack","cmd":"add-unit","id":"native/lift-call-forms","text":"new unit: A function's second form at chosen calls, tested unread"}
 {"at":"2026-11-25T06:04:39Z","actor":"loop","tag":"485d4a85","host":"quack","cmd":"ask","text":"asked the owner: How should an LLM pass add a helper many functions share?","q":"q/llm-shared-helpers"}
 {"at":"2026-11-25T06:04:51Z","actor":"loop","tag":"485d4a85","host":"quack","cmd":"ask","text":"asked the owner: May an LLM pass change a function's signature?","q":"q/llm-signatures"}
+{"at":"2026-11-25T06:05:01Z","actor":"loop","tag":"485d4a85","host":"quack","cmd":"ask","text":"asked the owner: May a call use a narrower form of its callee, tested only?","q":"q/llm-call-forms"}
