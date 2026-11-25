@@ -5420,21 +5420,9 @@
         "by": "dd60d8a9",
         "at": "2026-11-25T05:37:49Z",
         "evidence": "just lift on WarioWare: 0 hard holes, builds, first stop frame 130 of 600 (was 39), filed as {unit:native/warioware-stop-80f0669}. The copier at 0x030003a8 is a stand-in with its why (hand-written resumable asm, no lifter rule), state in guest RAM incl. its literal 0x030004d0; plus a [[copy]] for the IWRAM division 0x03000c18 (stop at 63). mods af8e86e. route-check --native, new units/warioware-native.toml cut to 129 frames: pass, 0 differences in pictures/RAM/IO/VRAM/OAM, audio same. Logged plant: 5 copier calls, fresh path, copy+fill and 0-byte runs ran; the busy/resume path never ran before 130, so unchecked. just check passes on the main merge ea21eafd.",
-        "branch": "unit/native/warioware-stop-30003a8",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-25T05:37:49Z",
-          "by": "dd60d8a9",
-          "host": "quack",
-          "pid": 1983326,
-          "start": "101568883",
-          "beats": true,
-          "session": "dd60d8a9-7381-4b9c-b856-8373397f17f2",
-          "lane": "quack/4"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-25T04:31:24Z"
+        "landed": "2026-11-25T06:06:16Z"
+      }
     },
     {
       "id": "native/lift-signed-values",
