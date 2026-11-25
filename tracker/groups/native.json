@@ -5628,6 +5628,13 @@
         "branch": "unit/native/lift-returns-past-holes",
         "beats": true
       },
+      "notes": [
+        {
+          "at": "2026-11-25T06:12:39Z",
+          "by": "874a3e9d",
+          "text": "Branch 9e5659e3: stopped callers demand only hidden_after. Emerald 287->285, 17862->17468; Metroid unmoved (68/872): by-value demand from IWRAM 0x030016c5, fed by 0x0805d5bd's passed-on r2/r3 (indirect-call params) and 0x080010c5's forwarded r1. Fix that next."
+        }
+      ],
       "round": "2026-11-25T05:42:07Z"
     },
     {
