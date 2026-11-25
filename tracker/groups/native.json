@@ -5661,7 +5661,14 @@
       "title": "Emerald: GetMonData's two-argument calls take a prototype",
       "detail": "From {unit:native/lift-signature-holes}: pret declares GetMonData with two parameters and with three (GetBoxMonData2 and GetBoxMonData3 at one address), so a two-argument call passes whatever r2 holds and GetBoxMonData reads it for the fields that copy out. The summaries prove the read, so Emerald refuses 682 prototypes (501 callers pass their entry r2 on, 181 whose callers pass the r2 they left) and 194 more through return f(x) and falls: 876 of its 888 proto_shapes_refused (docs/research/signature-holes.md). Where every call's field is a constant that copies nothing out, the read isn't reached: a per-call reading of the field (the values names give MON_DATA_*) could take the prototype there. Check (code-shape work, judged on the C programs and Emerald): Emerald's proto_shapes_refused down, barred in mods/emerald/lift-bars.toml; Emerald builds and runs 600 of 600 frames headless, and its route check stays at 0 differences once {unit:native/emerald-native-route} is done; just lift-check passes; just check passes.",
       "check": "recorded",
-      "uses": ["heavy"]
+      "uses": ["heavy"],
+      "notes": [
+        {
+          "at": "2026-11-25T06:21:45Z",
+          "by": "485d4a85",
+          "text": "Design: docs/native-port-design.md, 'LLM rewrites that add helpers and change signatures'. q/llm-call-forms adds a third way: Emerald's [[form]] for GetMonData, tested by unread-argument variants ({unit:native/lift-call-forms})."
+        }
+      ]
     },
     {
       "id": "native/lift-for-ram-bounds-games",
