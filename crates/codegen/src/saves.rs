@@ -809,6 +809,17 @@ impl Walk<'_> {
             Plan::Undefined { trap: false } => {
                 self.fail(format!("0x{at:08x}: an undefined instruction"))
             }
+            // A context restore's jump into the frame of the function that
+            // saved its block (`native::longjmp`): the path returns
+            // nowhere, and r0-r3 go on there as they are.
+            Plan::Unwind => {
+                if let Some(sum) = &mut self.sum {
+                    for r in 0..4 {
+                        sum.read(s, r, Cause::Reads(at));
+                    }
+                }
+                Ok(())
+            }
         }
     }
 }

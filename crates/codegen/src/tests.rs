@@ -2043,6 +2043,83 @@ fn a_context_restore_a_save_matches_unwinds_to_the_saves_caller() {
 }
 
 #[test]
+fn a_restore_loading_sp_and_pc_from_a_saved_block_unwinds_to_its_saver() {
+    let lift = |words: &[u32]| {
+        let rom: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let lifted = crate::native::lift(&rom, "t", &crate::native::Holes::default());
+        let holes: Vec<String> = lifted.holes.iter().map(|h| h.what.clone()).collect();
+        let text: String = lifted.files.iter().map(|(_, t)| t.as_str()).collect();
+        (holes, text)
+    };
+    // `g` keeps its sp and its call's return site (`adr`) in a block at
+    // 0x03000000 and calls `bail`, which loads them back (an OAM
+    // builder's give-up): `ldr sp, [r12, #4]; ldr pc, [r12, #8]`.
+    let (holes, text) = lift(&[
+        0xE3A0_0403, // 0x00 mov r0, #0x03000000
+        0xEB00_0000, // 0x04 bl g
+        0xEAFF_FFFE, // 0x08 b .
+        0xE92D_4810, // 0x0c g: push {r4, r11, lr}
+        0xE3A0_B403, // 0x10 mov r11, #0x03000000
+        0xE28F_3008, // 0x14 add r3, pc, #8 (0x24)
+        0xE58B_3008, // 0x18 str r3, [r11, #8]
+        0xE58B_D004, // 0x1c str sp, [r11, #4]
+        0xEB00_0002, // 0x20 bl bail
+        0xE8BD_4810, // 0x24 pop {r4, r11, lr}
+        0xE12F_FF1E, // 0x28 bx lr
+        0xE1A0_0000, // 0x2c nop
+        0xE3A0_C403, // 0x30 bail: mov r12, #0x03000000
+        0xE3A0_0007, // 0x34 mov r0, #7
+        0xE59C_D004, // 0x38 ldr sp, [r12, #4]
+        0xE59C_F008, // 0x3c ldr pc, [r12, #8]
+    ]);
+    assert!(holes.is_empty(), "{holes:?}");
+    // The jump unwinds with the loaded pc's key and sp, r12 its own
+    // write; `g` catches it on its sp and goes on at the return site.
+    assert!(text.contains("resume(v"), "{text}");
+    assert!(text.contains("0x1000);"), "{text}");
+    assert!(
+        text.contains("resumed(thrown, Some(r13), &[0x08000024]);"),
+        "{text}"
+    );
+    // `loop` keeps its sp in the block and calls `step` each round;
+    // `step` loads the round's r4 and the sp back and jumps to the call's
+    // return site (an entity loop going on after a deletion).
+    let (holes, text) = lift(&[
+        0xE3A0_0003, // 0x00 mov r0, #3
+        0xEB00_0001, // 0x04 bl loop
+        0xEAFF_FFFE, // 0x08 b .
+        0xE1A0_0000, // 0x0c nop
+        0xE92D_4810, // 0x10 loop: push {r4, r11, lr}
+        0xE3A0_B403, // 0x14 mov r11, #0x03000000
+        0xE58B_D00C, // 0x18 str sp, [r11, #12]
+        0xE1A0_4000, // 0x1c mov r4, r0
+        0xE254_4001, // 0x20 top: subs r4, r4, #1
+        0x48BD_4810, // 0x24 popmi {r4, r11, lr}
+        0x412F_FF1E, // 0x28 bxmi lr
+        0xE58B_4000, // 0x2c str r4, [r11]
+        0xEB00_0002, // 0x30 bl step
+        0xEAFF_FFF9, // 0x34 after: b top
+        0xE1A0_0000, // 0x38 nop
+        0xE1A0_0000, // 0x3c nop
+        0xE3A0_C403, // 0x40 step: mov r12, #0x03000000
+        0xE59C_4000, // 0x44 ldr r4, [r12]
+        0xE59C_D00C, // 0x48 ldr sp, [r12, #12]
+        0xEAFF_FFF8, // 0x4c b after
+    ]);
+    assert!(holes.is_empty(), "{holes:?}");
+    // r4 and r12 are what `step` wrote; the rest are `loop`'s own.
+    assert!(text.contains("0x1010);"), "{text}");
+    assert!(
+        text.contains("resumed(thrown, Some(r13), &[0x08000034]);"),
+        "{text}"
+    );
+    assert!(
+        text.contains("if got.sets & 1 << 4 != 0 { r4 = got.r[4]; }"),
+        "{text}"
+    );
+}
+
+#[test]
 fn a_context_save_its_restore_reloads_takes_nothing() {
     const NOP: u32 = 0xE1A0_0000;
     const SAVE: u32 = 0xE8A0_7FF0;
