@@ -383,6 +383,13 @@ pub struct Holes {
     /// fails unless every `sp` outside IWRAM the play build's interpreter
     /// saw lies in one (`start..=end`, an empty stack's `sp` its end).
     pub stacks: Vec<SeenStack>,
+    /// RAM whose bytes the game writes but never reads, so they may hold
+    /// anything (`[[garbage]] start = 0x…, end = 0x…, why = "…"`): a
+    /// struct's padding that a whole-struct copy carries along with a
+    /// stack's leftovers (Emerald's text printers'). The lift doesn't use
+    /// them; the native check (`route-check --native`) skips them and
+    /// prints that it does. Each lies in EWRAM or IWRAM.
+    pub garbage: Vec<SeenGarbage>,
     /// Loads the game makes of unmapped memory (`[[open_bus]] at = 0x…,
     /// why = "…"`, by the load's instruction address): a lookup through a
     /// table entry that isn't a pointer, which the hardware answers with
@@ -628,7 +635,7 @@ impl Holes {
     /// '''…'''` (and `lr = true` for [`Holes::lr`], `check = { seed, runs,
     /// digest }` for [`Holes::checks`]), `[[jump]] at = 0x…, targets = [0x…], why = "…"`,
     /// `[[takes]]` ([`Holes::takes`]), `[[roots]]` ([`Holes::roots`]), `[[copy]]` ([`Holes::copies_seen`]),
-    /// `[[stack]]` ([`Holes::stacks`]), `[[open_bus]] at = 0x…, why = "…"`
+    /// `[[stack]]` ([`Holes::stacks`]), `[[garbage]]` ([`Holes::garbage`]), `[[open_bus]] at = 0x…, why = "…"`
     /// ([`Holes::open_bus`]), and at the top, `skip_fn_flow =
     /// "why"` and `allocators = [0x…]` ([`Holes::allocators`]).
     pub fn parse(text: &str) -> Result<Holes, String> {
@@ -782,19 +789,26 @@ impl Holes {
                             return Err(format!("open_bus: {at:#010x} twice"));
                         }
                     }
-                    "stack" => {
+                    "stack" | "garbage" => {
                         let field = |f: &str| -> Result<u32, String> {
-                            int(e.get(f).ok_or(format!("stack: missing {f}"))?, f)
+                            int(e.get(f).ok_or(format!("{k}: missing {f}"))?, f)
                         };
                         let (start, end) = (field("start")?, field("end")?);
                         if start >= end {
-                            return Err(format!("stack: {start:#010x} not below {end:#010x}"));
+                            return Err(format!("{k}: {start:#010x} not below {end:#010x}"));
                         }
-                        h.stacks.push(SeenStack {
-                            start,
-                            end,
-                            why: str_of(e, "why")?,
-                        });
+                        let why = str_of(e, "why")?;
+                        if k == "stack" {
+                            h.stacks.push(SeenStack { start, end, why });
+                            continue;
+                        }
+                        let in_ram = |lo: u32, hi: u32| start >= lo && end <= hi;
+                        if !in_ram(0x0200_0000, 0x0204_0000) && !in_ram(0x0300_0000, 0x0300_8000) {
+                            return Err(format!(
+                                "garbage: {start:#010x}..{end:#010x} isn't inside EWRAM or IWRAM"
+                            ));
+                        }
+                        h.garbage.push(SeenGarbage { start, end, why });
                     }
                     _ => return Err(format!("unknown table {k}")),
                 }
@@ -817,6 +831,14 @@ pub struct SeenCopy {
 /// One `[[stack]]` of the holes file ([`Holes::stacks`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SeenStack {
+    pub start: u32,
+    pub end: u32,
+    pub why: String,
+}
+
+/// One `[[garbage]]` of the holes file ([`Holes::garbage`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SeenGarbage {
     pub start: u32,
     pub end: u32,
     pub why: String,
@@ -12314,6 +12336,31 @@ why = "a table"
         );
         assert!(Holes::parse("[[stack]]\nstart = 0x10\nend = 0x10\nwhy = \"x\"\n").is_err());
         assert!(Holes::parse("[[stack]]\nstart = 0x10\nwhy = \"x\"\n").is_err());
+        // Garbage: RAM the game never reads, inside EWRAM or IWRAM.
+        let h =
+            Holes::parse("[[garbage]]\nstart = 0x02020000\nend = 0x02020002\nwhy = \"padding\"\n")
+                .unwrap();
+        assert_eq!(
+            h.garbage,
+            vec![SeenGarbage {
+                start: 0x0202_0000,
+                end: 0x0202_0002,
+                why: "padding".into(),
+            }]
+        );
+        assert!(h.stacks.is_empty());
+        assert!(
+            Holes::parse("[[garbage]]\nstart = 0x08000000\nend = 0x08000002\nwhy = \"x\"\n")
+                .is_err()
+        );
+        assert!(
+            Holes::parse("[[garbage]]\nstart = 0x0203fffe\nend = 0x03000002\nwhy = \"x\"\n")
+                .is_err()
+        );
+        assert!(
+            Holes::parse("[[garbage]]\nstart = 0x02000002\nend = 0x02000002\nwhy = \"x\"\n")
+                .is_err()
+        );
         let h = Holes::parse("[[open_bus]]\nat = 0x0803500c\nwhy = \"no room\"\n").unwrap();
         assert_eq!(h.open_bus[&0x0803_500c], "no room");
         assert!(Holes::parse("[[open_bus]]\nwhy = \"x\"\n").is_err());
