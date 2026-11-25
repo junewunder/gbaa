@@ -2118,6 +2118,37 @@
         "host": "quack"
       },
       "answer": null
+    },
+    {
+      "id": "q/llm-signatures",
+      "title": "May an LLM pass change a function's signature?",
+      "context": "Design: docs/native-port-design.md, 'LLM rewrites that add helpers and change signatures' (from {unit:native/llm-helpers-signatures-design}). Callers are lifted code printed from each function's shape; a stand-in keeps four registers, so a rewrite can't take fewer arguments or return a typed value. Prototypes come only from the names files (a decomp's DWARF) today.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Yes, through a per-game prototype file",
+          "changes": "the LLM writes mods/<game>/protos.toml, which the lift uses as it uses the names files' prototypes (winning over them), still refused where the summaries prove a read; every caller changes at the next lift; a stand-in may take that shape; builds {unit:native/lift-proto-overrides}"
+        },
+        {
+          "key": "b",
+          "label": "Only decomp prototypes",
+          "changes": "no override file; games without a decomp keep the summaries' shapes, and stand-ins keep four registers; drops the unit"
+        },
+        {
+          "key": "c",
+          "label": "Not now",
+          "changes": "the unit waits",
+          "parks": true
+        }
+      ],
+      "default": "a",
+      "blocks": ["native/lift-proto-overrides"],
+      "asked": {
+        "at": "2026-11-25T06:04:51Z",
+        "by": "485d4a85",
+        "host": "quack"
+      },
+      "answer": null
     }
   ]
 }
