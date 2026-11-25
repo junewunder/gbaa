@@ -1515,6 +1515,70 @@ fn a_call_passes_r12_to_a_callee_reading_it_as_it_came() {
 }
 
 #[test]
+fn a_takes_with_no_sites_spares_an_r12_reader() {
+    // `bl f; ldr r1, [r0]; b .`, `f: add r0, r0, r12; ldr r1, [r4];
+    // bx lr`, and f's key as a word: m4a's IWRAM mixer piece, whose key
+    // only a word in compressed data holds. A pointer call would zero
+    // r12, a hard hole; a `[[takes]]` with no sites says none reaches it
+    // (its plain entry stops), so none (native/imperium-first-stops).
+    let words = [
+        0xEB00_0002u32, // 0x00 bl 0x10
+        0xE590_1000,    // 0x04 ldr r1, [r0]
+        0xEAFF_FFFE,    // 0x08 b .
+        0xE1A0_0000,    // 0x0c nop
+        0xE080_000C,    // 0x10 add r0, r0, r12
+        0xE594_1000,    // 0x14 ldr r1, [r4]
+        0xE12F_FF1E,    // 0x18 bx lr
+        0x0800_0010,    // 0x1c f's key
+    ];
+    let (rom, _) = program(&words, &[ROM_BASE, 0x0800_0010]);
+    let lifted = crate::native::lift(&rom, "t", &crate::native::Holes::default());
+    assert!(
+        lifted
+            .holes
+            .iter()
+            .any(|h| h.what.contains("reads r12 at entry")),
+        "{:?}",
+        lifted.holes
+    );
+    let holes =
+        crate::native::Holes::parse("[[takes]]\nentry = 0x08000010\nsites = []\nwhy = \"t\"\n")
+            .unwrap();
+    let lifted = crate::native::lift(&rom, "t", &holes);
+    assert!(lifted.holes.is_empty(), "{:?}", lifted.holes);
+}
+
+#[test]
+fn a_read_under_the_condition_of_its_write_reads_that_write() {
+    // `f: cmp r0, #0; rsble r12, r0, #32; orrle r1, r1, r0, lsr r12;
+    // mov r0, r1; bx lr`, a pointer to f in the ROM: libgcc's double
+    // normalisation (modern GCC) writes r12 and reads it under one
+    // condition, so it never reads r12 as it came, and its pointer is no
+    // hard hole (native/imperium-first-stops). Read under the other
+    // condition (`orrgt`), r12 is the caller's: a hard hole.
+    for (orr, reads) in [(0xD181_1C30u32, false), (0xC181_1C30, true)] {
+        let words = [
+            0xEB00_0002u32, // 0x00 bl 0x10
+            0xE590_1000,    // 0x04 ldr r1, [r0]
+            0xEAFF_FFFE,    // 0x08 b .
+            0xE1A0_0000,    // 0x0c nop
+            0xE350_0000,    // 0x10 cmp r0, #0
+            0xD260_C020,    // 0x14 rsble r12, r0, #32
+            orr,            // 0x18 orr{le,gt} r1, r1, r0, lsr r12
+            0xE1A0_0001,    // 0x1c mov r0, r1
+            0xE12F_FF1E,    // 0x20 bx lr
+            0x0800_0010,    // 0x24 a pointer to f
+        ];
+        let (rom, d) = program(&words, &[ROM_BASE, 0x0800_0010]);
+        let ctx = Ctx::new(&rom, &d);
+        let sums = crate::saves::summarize(&ctx, &build_all(&ctx).funcs);
+        let f = &sums.by_entry[&0x0800_0010];
+        assert_eq!(f.ip.is_some(), reads, "{orr:#x}: {:?}", f.ip);
+        assert_eq!(hard_holes(&sums, 0x0800_0010).is_empty(), !reads);
+    }
+}
+
+#[test]
 fn an_entry_hi_register_passed_to_a_callee_is_hard() {
     // `w: push {lr}; mov r0, r8; bl s; pop {r0}; bx r0`, `s: adds r0, #1;
     // bx lr`: s reads the r8 that w took as it came (TMC's `player.s`

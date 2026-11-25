@@ -1634,6 +1634,13 @@ pub fn summarize_passing(
         } else {
             found.extend(ip.iter().copied());
         }
+        // One a `[[takes]]` names with no site reaching it is only jumped
+        // into, its plain entry a stop ([`Passing::named`]): no pointer
+        // call reaches it (m4a's IWRAM mixer piece whose key only a word
+        // in compressed data holds; native/imperium-first-stops). A site
+        // passes r4–r11, not r12.
+        let at_sites: BTreeSet<u32> = passing.sites.values().flatten().copied().collect();
+        found.retain(|k| !passing.named.contains(k) || at_sites.contains(k));
         for k in found {
             let s = sums.get_mut(&k).expect("a summary");
             let at = s.ip.map_or(k, Cause::at);
