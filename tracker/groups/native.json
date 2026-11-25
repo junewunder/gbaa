@@ -4932,19 +4932,8 @@
         "by": "a1b250a0",
         "at": "2026-11-25T01:42:34Z",
         "evidence": "Review fix made: memory/shared-c-test-roms.md deleted, its check folded into memory/shared-c-roms.md, MEMORY.md regenerated (b29eeb5). Merged main 2336dc5 as 3d2d339a (lift-check.toml bar conflict settled at measured values, lift-metrics 0 over 0 under). On that head: just lift-check passed (37 programs, 0 differences, every planted fault caught); Metroid native route pass, 2700 frames 0 differences; Metroid and Emerald lifts 600 of 600 frames, no stop; results_several/tuple_calls at their bars (Metroid 68/872, Emerald 287/17862); pret-score results void/one 96.4% Emerald, 97.4% Metroid; just check passed. mods 49ed407 raises 4 game bars from the merge with {unit:native/lift-for-ram-bounds} (decision recorded). Emerald route check waits on {unit:native/emerald-native-route}, not done.",
-        "branch": "unit/native/lift-returns-read",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-25T01:42:34Z",
-          "by": "a1b250a0",
-          "host": "quack",
-          "pid": 1981823,
-          "start": "101567893",
-          "beats": true,
-          "session": "a1b250a0-739c-4542-8c45-d6c0ef26ac11",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "landed": "2026-11-25T02:10:00Z"
       },
       "notes": [
         {
@@ -4962,13 +4951,7 @@
           "by": "c69dfdbb",
           "text": "Private bars for results_several/tuple_calls are committed in the mods repo (64a3ad8, metroid and emerald lift-bars.toml) but not pushed: sessions don't push."
         }
-      ],
-      "review": {
-        "fixes": 0,
-        "at": "2026-11-25T00:26:29Z",
-        "findings": "- memory/shared-c-test-roms.md (new file) and its line in memory/MEMORY.md:21 duplicate a note that is already there: memory/shared-c-roms.md. Both have the same title, 'The C test ROMs in $GBAA_DATA are shared by every lane', and MEMORY.md now lists that title twice. The two notes also give different fixes. The new one says rerun `just c-tests` from your checkout; the existing one says build main's ROMs into a symlinked private data dir. Fix: delete memory/shared-c-test-roms.md and its MEMORY.md line. Then either merge the new note's useful details into memory/shared-c-roms.md (the `ls -la --time-style` check, and that the bars step lifts within a minute of starting) or leave them out. Regenerate MEMORY.md with `just memor…` (the recipe its header names), so one note with one fix remains."
-      },
-      "round": "2026-11-24T17:06:07Z"
+      ]
     },
     {
       "id": "native/lift-indent",
