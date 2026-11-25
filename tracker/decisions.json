@@ -1591,6 +1591,15 @@
       "by": "6056824b",
       "at": "2026-11-24T22:33:32Z",
       "scope": ["native/rogue-build"]
+    },
+    {
+      "id": "d/game-bars-raised-for-the-returns-unit-merged",
+      "title": "Game bars raised for the returns unit merged with for-ram-bounds",
+      "why": "{unit:native/lift-returns-read} merged with main 2336dc5 ({unit:native/lift-for-ram-bounds}). Metroid: for_counter_arith 33->34, locals_noted 1911->1912. Emerald: ref_new_at_use 33780->33792, for_counter_arith 259->264. Cause: the for-ram-bounds unit's new fors (its note named +4 for Emerald and +1 for Metroid's for_counter_arith); the rest comes from the two units together and was not traced. Metroid's native route stays at 0 differences over 2700 frames; both games run 600 of 600 frames.",
+      "by": "a1b250a0",
+      "at": "2026-11-25T01:37:47Z",
+      "scope": ["native/lift-returns-read"],
+      "until": "2026-11-25T07:00:00Z"
     }
   ]
 }
