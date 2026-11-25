@@ -4387,3 +4387,4 @@
 {"at":"2026-11-25T04:58:02Z","actor":"loop","tag":"5b75ea47","host":"quack","cmd":"add-unit","id":"native/lift-stack-args","text":"new unit: A callee's stack arguments pass as parameters"}
 {"at":"2026-11-25T05:09:30Z","actor":"loop","tag":"dd60d8a9","host":"quack","cmd":"add-unit","id":"native/warioware-stop-80f0669","text":"new unit: WarioWare's lift: the call to 0x080f0669 (frame 130)"}
 {"at":"2026-11-25T05:27:06Z","actor":"loop","tag":"2b1424bb","host":"quack","cmd":"done","id":"native/lift-restore-saved-block","text":"A restore loading sp and pc from a saved block unwinds: done"}
+{"at":"2026-11-25T05:37:49Z","actor":"loop","tag":"dd60d8a9","host":"quack","cmd":"done","id":"native/warioware-stop-30003a8","text":"WarioWare's lift: the call to IWRAM 0x030003a8 (frame 39): done"}
