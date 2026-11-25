@@ -5292,7 +5292,14 @@
       "check": "recorded",
       "needs": ["native/gcc-switch-recovery"],
       "uses": ["heavy"],
-      "priority": 60
+      "priority": 60,
+      "notes": [
+        {
+          "at": "2026-11-25T03:42:36Z",
+          "by": "b10f4712",
+          "text": "Rogue's m4a (RHH style, as Imperium's) patches its IWRAM mixer's instructions; the native lift runs them unpatched (Imperium stops at frame 436 from it). Expect it once Rogue builds: {unit:native/lift-patched-iwram-loops}."
+        }
+      ]
     },
     {
       "id": "native/gcc-switch-recovery",
