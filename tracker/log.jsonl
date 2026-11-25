@@ -4347,3 +4347,4 @@
 {"at":"2026-11-25T02:38:49Z","actor":"loop","tag":"18cd958f","host":"quack","cmd":"edit","id":"native/imperium-stops-302","text":"Imperium's lift runs 600 frames: past frame 302: edited (min-minutes, detail)"}
 {"at":"2026-11-25T02:54:39Z","actor":"loop","tag":"18cd958f","host":"quack","cmd":"done","id":"native/imperium-first-stops","text":"Imperium's lift runs 600 frames: its first stops: done"}
 {"at":"2026-11-25T02:54:52Z","actor":"loop","tag":"d3ccf311","host":"quack","cmd":"done","id":"native/lift-lent-print","text":"Lent stack slots print as locals, borrowers as Lent: done"}
+{"at":"2026-11-25T02:55:05Z","actor":"session","tag":"manual","host":"quack","cmd":"add-unit","id":"merge/quack-lane2-native-lift-lent-print","text":"new unit: Merge main on quack lane 2"}
