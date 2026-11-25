@@ -5813,6 +5813,13 @@
       "title": "A game's own prototype file; stand-ins in its shape",
       "detail": "docs/native-port-design.md, 'LLM rewrites that add helpers and change signatures', section 3: mods/<game>/protos.toml [[proto]] fn, proto, why, read as the names files' prototypes and winning over them; a refusal of an override fails the lift naming the read; [[standin]] proto = true prints in the prototype's shape and its callers take it; fn-check's wrapper enters reference and replacement each in its own shape. Check: a C program's planted wrong override caught by the native check; a shaped stand-in passes fn-check; lift-check; just check.",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-call-forms",
+      "title": "A function's second form at chosen calls, tested unread",
+      "detail": "docs/native-port-design.md, 'LLM rewrites that add helpers and change signatures', sections 3-4: [[form]] fn, proto, when = constant values of an argument (or sites); at those calls the lifter prints the narrower form, a wrapper passing 0 for the dropped argument; fn-check's new variants run each such call with it as passed and random, which must give the same ends. Check: a C program with a two-form function, a form planted where the argument is read caught; lift-check; just check.",
+      "needs": ["native/lift-proto-overrides"],
+      "uses": ["heavy"]
     }
   ]
 }
