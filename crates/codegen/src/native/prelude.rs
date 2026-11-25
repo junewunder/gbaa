@@ -741,6 +741,70 @@ pub fn st32(g: &mut Game, a: u32, v: u32) {
     }
 }
 
+/// A pointer to a caller's stack local, lent to a callee that borrows it
+/// (native/lift-lent-print; docs/native-port-design.md, "Stack locals
+/// passed by address"): the local's bytes as cells, so two arguments may
+/// be the same object beside `g: &mut Game`, and the offset in it. It is
+/// no number: nothing compares or stores it. An access past its end stops
+/// the program, naming the function. `--shadow-locals` lifts carry its guest address (`addr`;
+/// else 0), whose bytes they keep too.
+#[derive(Clone, Copy)]
+pub struct Lent<'a> {
+    b: &'a [std::cell::Cell<u8>],
+    at: i32,
+    guest: u32,
+}
+
+impl<'a> Lent<'a> {
+    /// A borrower that reaches nothing of what it is passed.
+    pub const NONE: Lent<'static> = Lent { b: &[], at: 0, guest: 0 };
+
+    /// Byte `at` of local `l`.
+    pub fn of(l: &'a mut [u8], at: i32) -> Lent<'a> {
+        Lent { b: std::cell::Cell::from_mut(l).as_slice_of_cells(), at, guest: 0 }
+    }
+
+    /// Byte `at` of local `l`, which the frame's bytes from `guest` shadow.
+    pub fn shadow(l: &'a mut [u8], at: i32, guest: u32) -> Lent<'a> {
+        Lent { guest, ..Lent::of(l, at) }
+    }
+
+    /// `k` bytes on.
+    pub fn at(self, k: i32) -> Lent<'a> {
+        Lent { at: self.at + k, ..self }
+    }
+
+    /// Its guest address (`--shadow-locals`), else 0.
+    pub fn addr(self) -> u32 {
+        if self.guest == 0 { 0 } else { self.guest.wrapping_add(self.at as u32) }
+    }
+
+    fn bytes(self, k: i32, n: usize, f: u32) -> &'a [std::cell::Cell<u8>] {
+        let o = self.at + k;
+        if o < 0 || o as usize + n > self.b.len() {
+            panic!("{f:#010x}: {n} bytes at {o} of a lent local of {}", self.b.len());
+        }
+        &self.b[o as usize..o as usize + n]
+    }
+
+    fn ld(self, k: i32, n: usize, f: u32) -> u32 {
+        self.bytes(k, n, f).iter().rev().fold(0, |v, c| v << 8 | c.get() as u32)
+    }
+
+    fn st(self, k: i32, n: usize, v: u32, f: u32) {
+        for (j, c) in self.bytes(k, n, f).iter().enumerate() {
+            c.set((v >> (8 * j)) as u8);
+        }
+    }
+
+    pub fn ld8(self, k: i32, f: u32) -> u32 { self.ld(k, 1, f) }
+    pub fn ld16(self, k: i32, f: u32) -> u32 { self.ld(k, 2, f) }
+    pub fn ld32(self, k: i32, f: u32) -> u32 { self.ld(k, 4, f) }
+    pub fn st8(self, k: i32, v: u32, f: u32) { self.st(k, 1, v, f) }
+    pub fn st16(self, k: i32, v: u32, f: u32) { self.st(k, 2, v, f) }
+    pub fn st32(self, k: i32, v: u32, f: u32) { self.st(k, 4, v, f) }
+}
+
 /// `IntrWait` (r0: discard old flags, r1: the interrupts to wait for), as
 /// the play build's BIOS does it: the flags at `0x0300_7FF8` the game's
 /// handler sets, `IME` forced on (straight to `Hw`: the BIOS runs with I

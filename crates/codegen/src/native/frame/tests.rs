@@ -661,14 +661,15 @@ fn locals_are_the_frames_own_slots_that_dont_escape() {
     let odd = b.sp(-14);
     b.st(odd, x);
     let f = one(b, Edge::Return);
-    let locals = f.locals();
+    let locals = f.locals(&[]);
     let at_lo = |lo: i32| locals.iter().find(|l| l.lo == lo).copied();
     assert_eq!(
         at_lo(-16),
         Some(Local {
             lo: -16,
             len: 4,
-            word: true
+            word: true,
+            lent: false,
         })
     );
     assert!(at_lo(-12).is_some_and(|l| l.word));
@@ -695,7 +696,8 @@ fn locals_are_the_frames_own_slots_that_dont_escape() {
         Local {
             lo: -16,
             len: 4,
-            word: true
+            word: true,
+            lent: false,
         }
         .name(),
         "l16"
@@ -1006,6 +1008,60 @@ fn a_slot_passed_to_a_borrowing_callee_is_lent() {
     // lent; the one at -16, which the frame took to escape with it (an
     // object runs up to the saved r4 at -8), is reached by nothing.
     assert_eq!(l.lent, BTreeMap::from([(1, BTreeSet::from([-12]))]));
+    // One object, the bytes reached; the call lends it from -16.
+    assert_eq!(l.objects, BTreeMap::from([(1, vec![(-12, -8)])]));
+    let passes: Vec<_> = l.lent_passes[&1].values().cloned().collect();
+    assert_eq!(passes, vec![vec![(0, -16)]]);
+}
+
+#[test]
+fn a_tail_call_borrows_nothing() {
+    // The callee reads through r0, but function 1 reaches it by a tail
+    // call: its registers come by `Regs`, which can't hold a host local.
+    let mut c = B::default();
+    let p = c.get(0);
+    c.ld(p);
+    let mut fns = lender(c);
+    fns[0].1[0].2 = Edge::Tail(Some(2));
+    fns[0].1.truncate(1);
+    let l = lends_of(&fns);
+    assert!(l.borrowed.is_empty());
+    assert!(l.lent.is_empty());
+}
+
+#[test]
+fn a_borrower_passing_its_pointer_on_is_a_pass() {
+    // Function 2 passes r0 + 4 on to function 3, which reads it.
+    let mut c = B::default();
+    let p = c.get(0);
+    let four = c.k(4);
+    let q = c.add(p, four);
+    c.set(0, q);
+    let mut d = B::default();
+    let p = d.get(0);
+    d.ld(p);
+    let mut fns = lender(B::default());
+    fns[1] = func(
+        2,
+        vec![
+            (
+                2,
+                c,
+                Edge::Call {
+                    target: Some(3),
+                    ret: 4,
+                },
+            ),
+            (4, B::default(), Edge::Return),
+        ],
+    );
+    fns.push(func(3, vec![(3, d, Edge::Return)]));
+    let l = lends_of(&fns);
+    assert_eq!(l.borrowed, BTreeMap::from([(2, 1), (3, 1)]));
+    let passes: Vec<_> = l.passes[&2].values().cloned().collect();
+    assert_eq!(passes, vec![vec![(0, 0, 4)]]);
+    // It reaches bytes 4..8 from -16: the slot at -12.
+    assert_eq!(l.objects, BTreeMap::from([(1, vec![(-12, -8)])]));
 }
 
 #[test]

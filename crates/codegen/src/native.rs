@@ -478,6 +478,11 @@ pub struct Holes {
     /// its value plus one. The native check skips the guest stack, so it
     /// must catch this where the slot's value reaches a global.
     pub plant_slot: Option<u32>,
+    /// The lent-locals check's planted control (`gbaa-lift --plant-lent
+    /// AT`, `native/lift-lent-print`): the store of the instruction at
+    /// this address, which must be through a borrowed parameter (a
+    /// `Lent`), stores its value plus one; the native check must catch it.
+    pub plant_lent: Option<u32>,
     /// Shadow every stack local in the frame's bytes (`gbaa-lift
     /// --shadow-locals`): a local starts as its bytes, every store to it
     /// writes them too, and every load reads them and prints a line to
@@ -1540,7 +1545,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         .collect();
     let takers: BTreeSet<u32> = passed_by.keys().copied().collect();
     let lr_ret = lr_entries(&codes, &all, holes);
-    let sp_exact = exact_sp(&codes, &all, holes, &sets, &psr_fns);
+    let lends = code_lends(&codes, holes, &shapes.shaped);
+    let sp_exact = exact_sp(&codes, &lends, &all, holes, &sets, &psr_fns);
     // What RAM each function may store to (native/lift-for-ram-bounds).
     let ram_writes = writes::ram_writes(
         codes.iter().map(|c| (&c.ctx, &c.funcs[..], &c.frames)),
@@ -1554,7 +1560,7 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     let mut soft = Soft::default();
     let mut fns = Vec::new();
     let entry = key(0x0800_0000, false);
-    for c in &codes {
+    for (c, lends) in codes.iter().zip(&lends) {
         for f in &c.funcs {
             fns.push(f.entry);
             let check = holes.fn_check.get(&f.entry);
@@ -1606,8 +1612,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
                     locals: c
                         .frames
                         .get(&f.entry)
-                        .map(Frame::locals)
+                        .map(|fr| fr.locals(lends.objects.get(&f.entry).map_or(&[], Vec::as_slice)))
                         .unwrap_or_default(),
+                    lends,
+                    exit_i: None,
                     cur: f.entry,
                     globals: &globals,
                     rom_data: &rom_data,
@@ -2191,11 +2199,10 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
     )
     .unwrap();
     {
-        let skip: BTreeSet<u32> = holes.standins.keys().copied().collect();
-        let (mut slots, mut fns, mut acc, mut borrowed, mut ptrs) = (0, 0, 0, 0, 0);
-        for c in &codes {
-            let l = frame::lend::of_code(&c.ctx, &c.funcs, &c.sums, &c.frames, &skip);
+        let (mut slots, mut fns, mut acc, mut borrowed, mut ptrs, mut objs) = (0, 0, 0, 0, 0, 0);
+        for (c, l) in codes.iter().zip(&lends) {
             slots += l.lent.values().map(BTreeSet::len).sum::<usize>();
+            objs += l.objects.values().map(Vec::len).sum::<usize>();
             fns += l.lent.len();
             acc += l.accesses(&c.frames);
             borrowed += l
@@ -2207,7 +2214,8 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
         }
         writeln!(
             report,
-            "lent slots (native/lift-stack-arrays): {slots} escaping slots in {fns} functions lend their address only to borrowed parameters ({borrowed} of {ptrs} pointer parameters borrowed), {acc} sp-relative accesses to them"
+            "lent slots (native/lift-stack-arrays): {slots} escaping slots in {fns} functions lend their address only to borrowed parameters ({borrowed} of {ptrs} pointer parameters borrowed), {acc} sp-relative accesses to them; printed (native/lift-lent-print) as {objs} host locals, {} accesses through a Lent",
+            soft.lent_accesses
         )
         .unwrap();
     }
@@ -2424,6 +2432,18 @@ pub fn lift(rom: &[u8], name: &str, holes: &Holes) -> Lifted {
             writeln!(report, "  {h}").unwrap();
             hard.push(h);
         }
+    }
+    if let Some(at) = holes.plant_lent
+        && !soft.planted_lent
+    {
+        let h = Hole {
+            func: at,
+            at,
+            kind: HoleKind::HolesFile,
+            what: "--plant-lent: no store through a borrowed parameter there".into(),
+        };
+        writeln!(report, "  {h}").unwrap();
+        hard.push(h);
     }
     if let Some(at) = holes.plant_slot
         && !soft.planted_slot
@@ -3384,6 +3404,7 @@ fn fn_check_texts(
         Holes {
             plant: None,
             plant_slot: None,
+            plant_lent: None,
             ..holes.clone()
         }
     };
@@ -3440,9 +3461,12 @@ fn fn_check_texts(
         found.extend(nf);
         t.push_str("// The replacement: the lift again (with --plant's store, if one is in it).\n");
         t.push_str(&prefix_fn(&nt, k, "new_"));
-        if holes.plant_reference && (holes.plant.is_some() || holes.plant_slot.is_some()) {
+        if holes.plant_reference
+            && (holes.plant.is_some() || holes.plant_slot.is_some() || holes.plant_lent.is_some())
+        {
             "the lift with --plant's store, as the reference is (--plant-reference)".to_string()
-        } else if holes.plant.is_some() || holes.plant_slot.is_some() {
+        } else if holes.plant.is_some() || holes.plant_slot.is_some() || holes.plant_lent.is_some()
+        {
             "the lift with --plant's store (a planted wrong replacement)".to_string()
         } else {
             "the lift itself".to_string()
@@ -3665,6 +3689,7 @@ fn lr_entries(codes: &[Code], all: &BTreeSet<u32>, holes: &Holes) -> BTreeSet<u3
 /// native/lift-frame-exact-narrow).
 fn exact_sp(
     codes: &[Code],
+    lends: &[frame::lend::Lends],
     all: &BTreeSet<u32>,
     holes: &Holes,
     sets: &Sets,
@@ -3758,7 +3783,7 @@ fn exact_sp(
         own: bool,
     }
     let mut fns: BTreeMap<u32, Passes> = BTreeMap::new();
-    for c in codes {
+    for (c, lend) in codes.iter().zip(lends) {
         for f in &c.funcs {
             let mut p = Passes::default();
             let frame = c.frames.get(&f.entry);
@@ -3843,7 +3868,13 @@ fn exact_sp(
                     let stack = frame
                         .and_then(|fr| fr.places.get(&(k, i)))
                         .is_some_and(|pl| matches!(pl, frame::Place::Exact(..)));
-                    if !stack && may_release_irq(&c.ctx, insts, addr, width, at) {
+                    // Through a borrowed parameter: a host local's
+                    // (native/lift-lent-print).
+                    let lent = lend
+                        .through
+                        .get(&f.entry)
+                        .is_some_and(|t| t.contains_key(&(k, i)));
+                    if !stack && !lent && may_release_irq(&c.ctx, insts, addr, width, at) {
                         p.irq = true;
                     }
                 }
@@ -3974,6 +4005,81 @@ fn may_release_irq(ctx: &Ctx, insts: &[Inst], addr: ValueId, width: Width, at: u
     [(0x0400_0208, 0x0400_020A), (0x0400_0300, 0x0400_0302)]
         .iter()
         .any(|&(a, b)| lo < b && a < hi)
+}
+
+/// Each context's stack locals lent to callees ([`frame::lend`];
+/// native/lift-lent-print). A function borrows nothing that is a
+/// stand-in, a checked one, a four-register one (its registers come in an
+/// array, which can't hold a host local), one a call reaches by its `x_`
+/// entry (it takes r4-r11 or r12 from its callers, or gives r4-r11 back
+/// as they came), or one another context calls or jumps to by address (a
+/// RAM copy's call, which this context's run doesn't see).
+fn code_lends(
+    codes: &[Code],
+    holes: &Holes,
+    shaped: &BTreeMap<u32, Shape>,
+) -> Vec<frame::lend::Lends> {
+    let mut foreign: BTreeSet<u32> = BTreeSet::new();
+    for c in codes {
+        let own: BTreeSet<u32> = c.funcs.iter().map(|f| f.entry).collect();
+        for f in &c.funcs {
+            for gb in f.blocks.values() {
+                for x in exits(&c.ctx, gb) {
+                    let t = match x.plan {
+                        Plan::Call { target, .. } => Some(target),
+                        Plan::Static(k) | Plan::Rekey(k) => Some(k),
+                        Plan::Dynamic { target, .. } => target,
+                        _ => None,
+                    };
+                    foreign.extend(t.filter(|t| !own.contains(t)));
+                }
+            }
+        }
+    }
+    codes
+        .iter()
+        .map(|c| {
+            let skip: BTreeSet<u32> = c
+                .funcs
+                .iter()
+                .map(|f| f.entry)
+                .filter(|k| {
+                    // A call passing it r4-r11 or r12, or taking r4-r11
+                    // back as they came, goes by `x_` and its `Regs`
+                    // ([`FnPrinter::call`]).
+                    let by_regs = c
+                        .sums
+                        .get(*k)
+                        .is_some_and(|s| s.passed() != 0 || !s.echoes.is_empty() || s.ip.is_some());
+                    holes.standins.contains_key(k)
+                        || holes.fn_check.contains_key(k)
+                        || !shaped.contains_key(k)
+                        || foreign.contains(k)
+                        || by_regs
+                })
+                .collect();
+            let l = frame::lend::of_code(&c.ctx, &c.funcs, &c.sums, &c.frames, &skip);
+            // `GBAA_LEND_DEBUG=1`: what this skip takes out of the run's own.
+            if std::env::var_os("GBAA_LEND_DEBUG").is_some() {
+                let none = BTreeSet::new();
+                let all = frame::lend::of_code(&c.ctx, &c.funcs, &c.sums, &c.frames, &none);
+                for (k, m) in all.borrowed.iter().filter(|(k, _)| !l.borrowed.contains_key(k)) {
+                    let s = c.sums.get(*k);
+                    eprintln!(
+                        "lend {k:#x}: borrows {m:#x} but skipped: standin {} checked {} shaped {} foreign {} passed {:#x} echoes {} ip {}",
+                        holes.standins.contains_key(k),
+                        holes.fn_check.contains_key(k),
+                        shaped.contains_key(k),
+                        foreign.contains(k),
+                        s.map_or(0, |s| s.passed()),
+                        s.is_some_and(|s| !s.echoes.is_empty()),
+                        s.is_some_and(|s| s.ip.is_some()),
+                    );
+                }
+            }
+            l
+        })
+        .collect()
 }
 
 /// One context's functions, summaries and frames. `named`: the indirect
@@ -4335,6 +4441,11 @@ struct Soft {
     locals_unread: usize,
     /// The `--plant-slot` store printed.
     planted_slot: bool,
+    /// The `--plant-lent` store printed.
+    planted_lent: bool,
+    /// The loads and stores printed through a borrowed parameter, a
+    /// `Lent`'s (native/lift-lent-print).
+    lent_accesses: usize,
     /// The holes file's `[[open_bus]]` loads printed.
     open_bus_printed: BTreeSet<u32>,
     /// Conditions resting on a raw flag ([`cond::raw`]).
@@ -4556,8 +4667,17 @@ struct FnPrinter<'a, 'b> {
     /// What RAM each function and block may store to, and the IRQ
     /// handlers ([`writes`]).
     ram_writes: &'a writes::RamWrites,
-    /// Its slots printed as Rust locals ([`Frame::locals`]).
+    /// Its slots printed as Rust locals ([`Frame::locals`]), its lent
+    /// objects among them.
     locals: Vec<Local>,
+    /// Its context's lends ([`frame::lend`]; native/lift-lent-print): its
+    /// borrowed parameters print as `pN: Lent<'_>`, their accesses as the
+    /// `Lent`'s, and what it lends or passes on to a borrowed parameter
+    /// as a `Lent`.
+    lends: &'a frame::lend::Lends,
+    /// The exit being printed, by inst index: which call's lends
+    /// [`FnPrinter::call`] passes.
+    exit_i: Option<usize>,
     /// The block being printed.
     cur: u32,
     /// RAM's typed globals.
@@ -5309,6 +5429,17 @@ impl FnPrinter<'_, '_> {
         // Each entry is kept apart ([`Entries`]): [`one_entry`] keeps
         // those the program calls once every function is printed.
         let mut e = Entries::default();
+        // Its borrowed parameters (native/lift-lent-print): `pN: Lent<'_>`,
+        // and rN, where the body reads it as it came, the `Lent`'s guest
+        // address (with `--shadow-locals`; else 0): what it computes from
+        // that reaches only the `Lent`'s accesses and passes, which print
+        // over it.
+        let borrowed = self.lends.borrowed.get(&k).copied().unwrap_or(0);
+        let lent_lets: String = taken
+            .iter()
+            .filter(|&&(i, _, _)| i < 4 && borrowed & 1 << i != 0)
+            .map(|&(i, m, ref name)| format!("    let {m}{name}: u32 = p{i}.addr();\n"))
+            .collect();
         if in_f {
             self.soft.body_in_plain += 1;
             // Its arguments by name; `_` for one the body doesn't take.
@@ -5326,7 +5457,10 @@ impl FnPrinter<'_, '_> {
                 ),
                 Some(sh) => std::iter::once(13)
                     .chain(shape::regs(sh.params))
-                    .map(|r| format!("{}: u32", arg(r)))
+                    .map(|r| match r < 4 && borrowed & 1 << r != 0 {
+                        true => format!("p{r}: Lent<'_>"),
+                        false => format!("{}: u32", arg(r)),
+                    })
                     .collect::<Vec<_>>()
                     .join(", "),
             };
@@ -5364,12 +5498,21 @@ impl FnPrinter<'_, '_> {
             }
             e.no_x = format!(
                 "pub fn f_{k:08x}(g: &mut Game, {sig}) -> Result<{ty}, Exit> {{\n{}",
-                let_line(names, from) + &keep_lines
+                let_line(names, from) + &keep_lines + &lent_lets
             );
-            e.keep_x = format!(
-                "pub fn x_{k:08x}(g: &mut Game, s: Regs) -> Result<{ty}, Exit> {{ f_{k:08x}(g, {call}) }}\n{}",
-                e.no_x
-            );
+            // Registers can't hold a host local: nothing enters a borrower
+            // by them ([`frame::lend`]), but a named one keeps `x_`.
+            e.keep_x = if borrowed != 0 {
+                format!(
+                    "pub fn x_{k:08x}(g: &mut Game, s: Regs) -> Result<{ty}, Exit> {{ let _ = (g, s); panic!(\"0x{k:08x} borrows a host local: no entry by registers\") }}\n{}",
+                    e.no_x
+                )
+            } else {
+                format!(
+                    "pub fn x_{k:08x}(g: &mut Game, s: Regs) -> Result<{ty}, Exit> {{ f_{k:08x}(g, {call}) }}\n{}",
+                    e.no_x
+                )
+            };
             let all = e.all();
             self.soft.entries.insert(k, e);
             return all;
@@ -5406,11 +5549,16 @@ impl FnPrinter<'_, '_> {
             ),
             Some(sh) => {
                 let ps: String = shape::regs(sh.params)
-                    .map(|r| format!(", a{r}: u32"))
+                    .map(|r| match r < 4 && borrowed & 1 << r != 0 {
+                        true => format!(", p{r}: Lent<'_>"),
+                        false => format!(", a{r}: u32"),
+                    })
                     .collect();
                 let a: Vec<String> = (0..4)
                     .map(|r| {
-                        if sh.params & 1 << r != 0 {
+                        if borrowed & 1 << r != 0 {
+                            format!("p{r}.addr()")
+                        } else if sh.params & 1 << r != 0 {
                             format!("a{r}")
                         } else {
                             "0".into()
@@ -5674,14 +5822,19 @@ impl FnPrinter<'_, '_> {
                     if !index.contains_key(&ret) && !self.all.contains(&ret) =>
                 {
                     let reads = match self.shape(target) {
-                        Some(c) if plain(target) => live::low(c.params),
+                        Some(c) if plain(target) => {
+                            live::low(c.params & !self.lent_regs(keys[b], i))
+                        }
                         _ => live::low(0xf) | high(target),
                     };
                     (Vec::new(), reads)
                 }
-                // A shaped callee's call prints its parameters only.
+                // A shaped callee's call prints its parameters only, and
+                // a `Lent` for each it borrows (native/lift-lent-print).
                 Plan::Call { target, ret } => match self.shape(target) {
-                    Some(c) if plain(target) => then(ret, live::low(c.params)),
+                    Some(c) if plain(target) => {
+                        then(ret, live::low(c.params & !self.lent_regs(keys[b], i)))
+                    }
                     _ => then(ret, live::low(0xf) | high(target)),
                 },
                 Plan::CallVia { reg, ret, .. } => then(
@@ -5790,9 +5943,7 @@ impl FnPrinter<'_, '_> {
                 let Op::Store { addr, .. } = inst.op else {
                     return false;
                 };
-                let local = self
-                    .frame
-                    .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
+                let local = self.in_local(i);
                 !local
                     && typed[i].is_none()
                     && objs[i].is_none()
@@ -7214,9 +7365,7 @@ impl FnPrinter<'_, '_> {
                             Op::Load { width, .. } | Op::Store { width, .. } => bytes(width),
                             _ => unreachable!(),
                         };
-                        let local = self
-                            .frame
-                            .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
+                        let local = self.in_local(i);
                         if local {
                             return None;
                         }
@@ -7405,9 +7554,7 @@ impl FnPrinter<'_, '_> {
         };
         let at = self.field_at.get(&(self.cur, i))?;
         let maps = self.holes.fields.as_deref()?;
-        let local = self
-            .frame
-            .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
+        let local = self.in_local(i);
         (!local).then_some((at, bytes(width), maps))
     }
 
@@ -7568,9 +7715,7 @@ impl FnPrinter<'_, '_> {
             .map(|i| {
                 // A stack local's slot is at an offset its accesses'
                 // widths divide, from the entry sp ([`frame`]).
-                let local = self
-                    .frame
-                    .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
+                let local = self.in_local(i);
                 let heap = typed[i].is_none()
                     && objs[i].is_none()
                     && refs[i].is_some()
@@ -7749,9 +7894,7 @@ impl FnPrinter<'_, '_> {
             if matches!(inst.op, Op::Load { .. })
                 && !used[i]
                 && !self.holes.shadow_locals
-                && self
-                    .frame
-                    .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some())
+                && self.in_local(i)
             {
                 continue;
             }
@@ -7919,8 +8062,24 @@ impl FnPrinter<'_, '_> {
                         }
                         false => mem,
                     };
-                    let e = match self.local(i) {
-                        Some((l, d, n)) => {
+                    let e = match (self.local(i), self.lent_at(i)) {
+                        (_, Some((r, k, n))) => {
+                            self.soft.lent_accesses += 1;
+                            let x = format!(
+                                "p{r}.ld{}({}, {:#010x})",
+                                n * 8,
+                                off_text(k),
+                                self.f.entry
+                            );
+                            if self.holes.shadow_locals {
+                                format!(
+                                    "{{ let x: u32 = {x}; let m: u32 = {mem}; if x != m {{ eprintln!(\"shadow local: {at:#010x} loads {{x:#x}} through p{r}, the frame's bytes hold {{m:#x}}\"); }} x }}"
+                                )
+                            } else {
+                                x
+                            }
+                        }
+                        (Some((l, d, n)), None) => {
                             let x = local_read(&l, d, n);
                             if self.holes.shadow_locals {
                                 format!(
@@ -7931,7 +8090,7 @@ impl FnPrinter<'_, '_> {
                                 x
                             }
                         }
-                        None => {
+                        (None, None) => {
                             let w = self.count(
                                 insts,
                                 addr,
@@ -7975,10 +8134,13 @@ impl FnPrinter<'_, '_> {
                         Width::Word => ("st32", " & !3"),
                     };
                     let local = self.local(i);
+                    let lent = self.lent_at(i);
                     let plant = if self.holes.plant == Some(at)
                         || (local.is_some() && self.holes.plant_slot == Some(at))
+                        || (lent.is_some() && self.holes.plant_lent == Some(at))
                     {
                         self.soft.planted_slot |= local.is_some();
+                        self.soft.planted_lent |= lent.is_some();
                         ".wrapping_add(1)"
                     } else {
                         ""
@@ -8035,8 +8197,22 @@ impl FnPrinter<'_, '_> {
                             format!("{f}(g, {}, {val});", self.io_addr(insts, addr, width, m))
                         }
                     };
-                    let body = match local {
-                        Some((l, d, n)) => {
+                    let body = match (local, lent) {
+                        (_, Some((r, k, n))) => {
+                            self.soft.lent_accesses += 1;
+                            let w = format!(
+                                "p{r}.st{}({}, {val}, {:#010x});",
+                                n * 8,
+                                off_text(k),
+                                self.f.entry
+                            );
+                            if self.holes.shadow_locals {
+                                format!("{w} {mem}")
+                            } else {
+                                w
+                            }
+                        }
+                        (Some((l, d, n)), None) => {
                             let w = local_write(&l, d, n, &val);
                             if self.holes.shadow_locals {
                                 format!("{w} {mem}")
@@ -8044,7 +8220,7 @@ impl FnPrinter<'_, '_> {
                                 w
                             }
                         }
-                        None => {
+                        (None, None) => {
                             let w = self.count(
                                 insts,
                                 addr,
@@ -8495,10 +8671,7 @@ impl FnPrinter<'_, '_> {
         conds: &[Option<cond::Form>],
         forms: &[Option<(ValueId, narrow::Form)>],
     ) -> Vec<ValueId> {
-        let local = !self.holes.shadow_locals
-            && self
-                .frame
-                .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some());
+        let local = !self.holes.shadow_locals && self.in_local(i);
         let field = typed[i].is_some();
         let callers = self.callers_off(i).is_some();
         let base = refs[i].and_then(|r| r.base).map(|(b, _)| b);
@@ -9094,6 +9267,26 @@ impl FnPrinter<'_, '_> {
             .and_then(|f| f.callers_only(self.cur, i))
     }
 
+    /// The access at inst `i` of the current block through a borrowed
+    /// parameter ([`frame::lend::Lends::through`]; native/lift-lent-print):
+    /// (parameter, offset, width).
+    fn lent_at(&self, i: usize) -> Option<(u8, i32, u8)> {
+        self.lends
+            .through
+            .get(&self.f.entry)?
+            .get(&(self.cur, i))
+            .copied()
+    }
+
+    /// Whether the access at inst `i` of the current block is a host
+    /// local's: a stack local's ([`Frame::local_at`]) or through a
+    /// borrowed parameter ([`FnPrinter::lent_at`]).
+    fn in_local(&self, i: usize) -> bool {
+        self.frame
+            .is_some_and(|f| f.local_at(&self.locals, self.cur, i).is_some())
+            || self.lent_at(i).is_some()
+    }
+
     /// The stack local the access at inst `i` of the current block lands
     /// in, if any ([`Frame::local_at`]), counted.
     fn local(&mut self, i: usize) -> Option<(Local, u32, u8)> {
@@ -9332,15 +9525,115 @@ impl FnPrinter<'_, '_> {
                 "[r0, r1, r2, r3] = ".into(),
                 format!("f_{k:08x}(g, r13, [{four}])"),
             ),
-            Some(c) => (
-                lhs(c.results),
-                format!(
-                    "f_{k:08x}(g, r13{})",
-                    shape::regs(c.params)
-                        .map(|r| format!(", {}", self.arg_reg(k, r)))
-                        .collect::<String>()
-                ),
-            ),
+            Some(c) => {
+                let (lent, q) = self.lent_args();
+                let args: String = shape::regs(c.params)
+                    .map(|r| match lent.iter().find(|(x, _)| *x == r) {
+                        Some((_, e)) => format!(", {e}"),
+                        None => format!(", {}", self.arg_reg(k, r)),
+                    })
+                    .collect();
+                let call = format!("f_{k:08x}(g, r13{args})");
+                let call = match q {
+                    Some(q) => format!("{{ let q = {q}; {call} }}"),
+                    None => call,
+                };
+                (lhs(c.results), call)
+            }
+        }
+    }
+
+    /// The `Lent`s the call at the exit printing passes
+    /// (native/lift-lent-print), by its register: a lent object of this
+    /// frame (`Lent::of(&mut lN, offset)`, with `--shadow-locals` its
+    /// guest address too), or this function's borrowed parameter plus a
+    /// constant (`pN.at(k)`). An object passed in two registers is one
+    /// borrow, `q`, given second: its `Lent` at its start.
+    fn lent_args(&self) -> (Vec<(usize, String)>, Option<String>) {
+        let Some(i) = self.exit_i else {
+            return (Vec::new(), None);
+        };
+        let at = (self.cur, i);
+        let mut out = Vec::new();
+        if let Some(ps) = self
+            .lends
+            .passes
+            .get(&self.f.entry)
+            .and_then(|m| m.get(&at))
+        {
+            for &(r, p, c) in ps {
+                let e = if c == 0 {
+                    format!("p{p}")
+                } else {
+                    format!("p{p}.at({})", off_text(c))
+                };
+                out.push((r as usize, e));
+            }
+        }
+        let mut q = None;
+        let lent = self
+            .lends
+            .lent_passes
+            .get(&self.f.entry)
+            .and_then(|m| m.get(&at));
+        for &(r, o) in lent.into_iter().flatten() {
+            let local = |o: i32| self.locals.iter().find(|l| l.lent && l.holds(o)).copied();
+            let twice = |l: &Local| {
+                lent.into_iter()
+                    .flatten()
+                    .filter(|&&(_, o)| local(o).as_ref() == Some(l))
+                    .count()
+                    > 1
+            };
+            let e = match local(o) {
+                Some(l) if twice(&l) => {
+                    assert!(
+                        q.as_ref().is_none_or(|(x, _)| *x == l.lo),
+                        "{:#010x}: two objects each lent twice in one call",
+                        self.f.entry
+                    );
+                    q = Some((l.lo, self.lent_of(&l, 0)));
+                    if o == l.lo {
+                        "q".to_string()
+                    } else {
+                        format!("q.at({})", off_text(o - l.lo))
+                    }
+                }
+                Some(l) => self.lent_of(&l, o - l.lo),
+                // Its borrowers reach nothing of the frame.
+                None => "Lent::NONE".to_string(),
+            };
+            out.push((r as usize, e));
+        }
+        (out, q.map(|(_, e)| e))
+    }
+
+    /// The registers r0-r3 (bit `n` for rN) the call at exit `i` of
+    /// block `b` passes a `Lent` in ([`FnPrinter::lent_args`]): not the
+    /// register's value.
+    fn lent_regs(&self, b: u32, i: usize) -> u8 {
+        let k = self.f.entry;
+        let at = (b, i);
+        let own = self.lends.passes.get(&k).and_then(|m| m.get(&at));
+        let lent = self.lends.lent_passes.get(&k).and_then(|m| m.get(&at));
+        own.into_iter()
+            .flatten()
+            .map(|p| p.0)
+            .chain(lent.into_iter().flatten().map(|p| p.0))
+            .fold(0, |m, r| m | 1 << r)
+    }
+
+    /// Lent object `l` of this frame as a `Lent` at byte `d` of it.
+    fn lent_of(&self, l: &Local, d: i32) -> String {
+        if self.holes.shadow_locals {
+            format!(
+                "Lent::shadow(&mut {}, {}, {})",
+                l.name(),
+                off_text(d),
+                local_addr(l, 0)
+            )
+        } else {
+            format!("Lent::of(&mut {}, {})", l.name(), off_text(d))
         }
     }
 
@@ -9620,7 +9913,16 @@ impl FnPrinter<'_, '_> {
         b
     }
 
+    /// Exit `x`'s code ([`FnPrinter::exit_code`]), with the call it makes
+    /// knowing its exit ([`FnPrinter::exit_i`]).
     fn exit(&mut self, e: Exit, x: &ExitInfo, thumb: bool) -> String {
+        self.exit_i = Some(x.index);
+        let s = self.exit_code(e, x, thumb);
+        self.exit_i = None;
+        s
+    }
+
+    fn exit_code(&mut self, e: Exit, x: &ExitInfo, thumb: bool) -> String {
         self.tail_for = false;
         let ind = "                    ";
         let at = x.at;
@@ -10643,6 +10945,15 @@ fn callers_addr(o: i32) -> String {
         "r13".into()
     } else {
         format!("r13.wrapping_add({o:#x})")
+    }
+}
+
+/// A signed offset as the printer writes it: `0x4`, `-0x4`.
+fn off_text(k: i32) -> String {
+    if k < 0 {
+        format!("-{:#x}", -(k as i64))
+    } else {
+        format!("{k:#x}")
     }
 }
 
