@@ -5169,6 +5169,17 @@
       "check": "recorded",
       "uses": ["heavy"],
       "priority": 94,
+      "record": {
+        "state": "claimed",
+        "by": "87399151",
+        "session": "87399151-c678-4997-85ac-cbcfc6495830",
+        "host": "quack",
+        "pid": 1983326,
+        "start": "101568883",
+        "at": "2026-11-25T01:45:58Z",
+        "branch": "unit/native/lift-takes-across-copies",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-25T01:15:55Z",

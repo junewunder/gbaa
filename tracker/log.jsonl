@@ -4337,3 +4337,4 @@
 {"at":"2026-11-25T01:42:34Z","actor":"loop","tag":"a1b250a0","host":"quack","cmd":"done","id":"native/lift-returns-read","text":"A call takes back only the registers its caller reads: done"}
 {"at":"2026-11-25T01:42:41Z","actor":"loop","tag":"a1b250a0","host":"quack","cmd":"note","id":"native/lift-returns-read","text":"A call takes back only the registers its caller reads: note: mods 49ed407 (Metroid and Emerald lift-bars.toml, bars raised after merging main 2336dc5) is committed in the mods repo but not pushed: sessions don't push."}
 {"at":"2026-11-25T01:45:52Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-lent-print","text":"Lent stack slots print as locals, borrowers as Lent: back to ready: the loop's review asked for fixes"}
+{"at":"2026-11-25T01:45:58Z","actor":"loop","tag":"87399151","host":"quack","cmd":"claim","id":"native/lift-takes-across-copies","text":"A takes site may pass r4-r11 into another code context: claimed"}
