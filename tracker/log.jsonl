@@ -4358,3 +4358,4 @@
 {"at":"2026-11-25T03:22:09Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"merge/quack-lane2-native-lift-lent-print","text":"Merge main on quack lane 2: on main"}
 {"at":"2026-11-25T03:22:09Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-lent-print","text":"Lent stack slots print as locals, borrowers as Lent: on main"}
 {"at":"2026-11-25T03:22:15Z","actor":"loop","tag":"2b1424bb","host":"quack","cmd":"claim","id":"native/lift-restore-saved-block","text":"A restore loading sp and pc from a saved block unwinds: claimed"}
+{"at":"2026-11-25T03:26:59Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/lift-pointer-registers","text":"Register locals hold the Ref type the lift's flow gives: back to ready: the loop's review asked for fixes"}

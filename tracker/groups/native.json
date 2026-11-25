@@ -5547,32 +5547,30 @@
       "needs": ["native/lift-pointer-types"],
       "uses": ["heavy"],
       "priority": 91,
-      "record": {
-        "state": "done",
-        "by": "c1e9bd20",
-        "at": "2026-11-25T03:18:21Z",
-        "evidence": "Register locals (mut params, let mut, the entries' tuple names) declared once with one made Ref type are typed Ref<T>; assignments wrap. ref_new_at_use: Metroid 2955 (main today) -> 1835, Emerald 33780 -> 26408. On merged head f7b8c225: just check passed; just lift-check passed (0 differences, planted faults caught); Metroid just lift 600/600 no stop, native route units/metroid-native.toml 2700 frames 0 differences. Emerald just lift 600/600 no stop on 5269be74 (pre-merge); its rerun on f7b8c225 stopped at the lifter reading mods/emerald/holes.toml: 'unknown table garbage', a table another lane added to the shared private file, not this branch's change. C rows' ref_new bars lowered, lines raised 1-10 on 26 rows (tuple lets split). native-copy-takes given its missing results_several/tuple_calls bars (main merged two units side by side).",
-        "branch": "unit/native/lift-pointer-registers",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-25T03:18:21Z",
-          "by": "c1e9bd20",
-          "host": "quack",
-          "pid": 1981458,
-          "start": "101567385",
-          "beats": true,
-          "session": "c1e9bd20-e210-4bfc-88e1-e6036effc34a",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
       "notes": [
+        {
+          "at": "2026-11-25T03:26:59Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - The Emerald part of the card's check (Emerald builds and runs 600 of 600 frames) was not run on the merged head f7b8c225. The Evidence says Emerald reached 600/600 on 5269be74, before the merge. The rerun on f…"
+        },
         {
           "at": "2026-11-25T03:18:29Z",
           "by": "c1e9bd20",
           "text": "Left: pointer arithmetic as .add(n) (assignments print Ref::new(p.addr().wrapping_add(k))); in Metroid, (v<<3) index exprs, statics made Refs at use, Ref::to of rN, rN of two types. mods/emerald/holes.toml has a [garbage] table this lifter rejects."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-25T03:26:59Z",
+        "findings": "- The Emerald part of the card's check (Emerald builds and runs 600 of 600 frames) was not run on the merged head f7b8c225. The Evidence says Emerald reached 600/600 on 5269be74, before the merge. The rerun on f7b8c225 stopped when the lifter read mods/emerald/holes.toml and failed with 'unknown table garbage'. I confirmed the cause: that file now has two `[[garbage]]` tables (around lines 100-108, added for the Emerald native route unit), and the lifter on this branch rejects any table it doesn't know (crates/codegen/src/native.rs:794). So the stop is not this branch's fault. But the merge brought in two units that change the same entries text this branch now rewrites: the change that lets a takes site pass r4-r11 into another code context ({unit:native/lift-takes-across-copies}) and the change that makes a call take back only the registers its caller reads ({unit:native/lift-returns-read}). The new keep_x/no_x shared-end code in crates/codegen/src/native.rs:5112-5170 is exactly where those changes meet, so the merged lifter has not been shown to work on Emerald. What to do: on the merged head, run `just lift` for Emerald with a holes file that leaves out the `[[garbage]]` tables (a temporary copy without them), or wait until the lifter accepts `[[garbage]]`. Confirm 600/600 frames with no stop, then put the result in the evidence.",
+        "sent": {
+          "evidence": "Register locals (mut params, let mut, the entries' tuple names) declared once with one made Ref type are typed Ref<T>; assignments wrap. ref_new_at_use: Metroid 2955 (main today) -> 1835, Emerald 33780 -> 26408. On merged head f7b8c225: just check passed; just lift-check passed (0 differences, planted faults caught); Metroid just lift 600/600 no stop, native route units/metroid-native.toml 2700 frames 0 differences. Emerald just lift 600/600 no stop on 5269be74 (pre-merge); its rerun on f7b8c225 stopped at the lifter reading mods/emerald/holes.toml: 'unknown table garbage', a table another lane added to the shared private file, not this branch's change. C rows' ref_new bars lowered, lines raised 1-10 on 26 rows (tuple lets split). native-copy-takes given its missing results_several/tuple_calls bars (main merged two units side by side).",
+          "by": "c1e9bd20",
+          "host": "quack",
+          "branch": "unit/native/lift-pointer-registers",
+          "change": "762364a43ed403a53d52e7ab361ec71fd1cda4dc"
+        }
+      },
       "round": "2026-11-25T01:15:32Z"
     },
     {
