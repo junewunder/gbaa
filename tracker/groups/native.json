@@ -4728,19 +4728,8 @@
         "by": "148dc342",
         "at": "2026-11-25T04:11:37Z",
         "evidence": "route-check --native on units/emerald-native.toml (fresh lift + play build at --timing native, branch 128214c with main 9d6c8f1 merged): pass, 5400 frames, 0 differences in pictures, RAM, I/O, palette, VRAM, OAM, audio the same in 5400; the text printers' padding skipped by the new holes key [[garbage]] (route-check prints each). just check passed before and after merging main 466c8a4. After that merge the lift stops at f5055 on a lent local (main's lent-print, not this branch): filed as {unit:native/emerald-lent-local-stop}.",
-        "branch": "unit/native/emerald-native-route",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-25T04:11:37Z",
-          "by": "148dc342",
-          "host": "quack",
-          "pid": 1983326,
-          "start": "101568883",
-          "beats": true,
-          "session": "148dc342-80d9-4492-a993-39ac8ca61241",
-          "lane": "quack/4"
-        },
-        "pushed": true
+        "landed": "2026-11-25T04:31:19Z"
       },
       "notes": [
         {
@@ -4758,8 +4747,7 @@
           "by": "66d510b9",
           "text": "[[roots]] and the RTC (Hw::gpio) land on main via {unit:native/land-emerald-route-lifter}. Merging main into this branch conflicts only in lift-check.toml and the numbers doc: take main's (lines_prelude 1373) and regenerate with just lift-metrics --write-doc."
         }
-      ],
-      "round": "2026-11-23T16:41:33Z"
+      ]
     },
     {
       "id": "native/lift-rtc",
