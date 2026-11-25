@@ -5161,32 +5161,30 @@
       "check": "recorded",
       "uses": ["heavy"],
       "priority": 94,
-      "record": {
-        "state": "done",
-        "by": "05a949e7",
-        "at": "2026-11-25T00:59:46Z",
-        "evidence": "Passing::foreign (ram-jump's fixpoint) extended to named [[takes]] sites and direct calls into another context; it covered neither Minish crossing (both are calls, not jumps). Unit test a_takes_site_passes_into_another_context fails without it. agb/native-copy-takes (ROM->IWRAM->ROM pointer calls): lift-check passed, all 38 programs, --takes-zeroed caught (frame 1). Minish: ZeldaFollowAction's hole closes with 22 more takes entries up to AgbMain, where r5 is set (movs r5,#255 at 0x08055f10); its lift passes r5 at 0x03005f94, 0x0805e5e2, 0x0805e600. Hard holes stay 4, not 3: the resume 0x03005f24 now reads r5 at 0x03005f94, noted on {unit:native/lift-restore-saved-block}. just check passed before and after merging main (a8ca79f4).",
-        "branch": "unit/native/lift-takes-across-copies",
-        "host": "quack",
-        "landing": {
-          "at": "2026-11-25T00:59:46Z",
-          "by": "05a949e7",
-          "host": "quack",
-          "pid": 1981458,
-          "start": "101567385",
-          "beats": true,
-          "session": "05a949e7-7734-403c-9118-ed25950c446e",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
       "notes": [
+        {
+          "at": "2026-11-25T01:06:26Z",
+          "by": "manual",
+          "text": "The loop's review asked for fixes before landing (all on the card): - One of the card's Done-when items isn't met. The card asks for \"Minish Cap's hard holes 4 to 3\", and the Evidence says they \"stay 4, not 3\". The ZeldaFollowAction hole (0x08060ba1) closed, but a new hard hole …"
+        },
         {
           "at": "2026-11-24T05:45:00Z",
           "by": "c2d4d707",
           "text": "Near {unit:native/ram-jump-passes-regs} (a jump into a copy passing r4-r11 across contexts): the same cross-context summaries may serve both; do them together if one lands first. Minish's two entries (0x08060ba1, 0x080609e9) are in mods/minish-cap/holes.toml already."
         }
       ],
+      "review": {
+        "fixes": 1,
+        "at": "2026-11-25T01:06:26Z",
+        "findings": "- One of the card's Done-when items isn't met. The card asks for \"Minish Cap's hard holes 4 to 3\", and the Evidence says they \"stay 4, not 3\". The ZeldaFollowAction hole (0x08060ba1) closed, but a new hard hole took its place: the resume 0x03005f24 now reads r5 at 0x03005f94. The session pushed that hole onto another unit, the one where a restore that loads sp and pc from a saved block unwinds ({unit:native/lift-restore-saved-block}), and this card never allowed that. The next session should do one of two things. Option one: close that read so Minish's hard holes really reach 3, then record the new count. It could do that by passing r5 through the restore/resume path at 0x03005f24, or with a holes-file entry in mods/minish-cap/holes.toml if the resume is a stand-in. Option two: if that work truly belongs to the restore unit, ask the owner to change this card's Done-when, so it doesn't land as done with the count unchanged. The rest checks out: the code change in crates/codegen/src/native.rs (foreign_takes / reaches_changed / passed_by) and crates/codegen/src/saves/summary.rs, the unit test a_takes_site_passes_into_another_context, the agb/native-copy-takes program and its --takes-zeroed control, and the r5 = 255 source at 0x08055f10.",
+        "sent": {
+          "evidence": "Passing::foreign (ram-jump's fixpoint) extended to named [[takes]] sites and direct calls into another context; it covered neither Minish crossing (both are calls, not jumps). Unit test a_takes_site_passes_into_another_context fails without it. agb/native-copy-takes (ROM->IWRAM->ROM pointer calls): lift-check passed, all 38 programs, --takes-zeroed caught (frame 1). Minish: ZeldaFollowAction's hole closes with 22 more takes entries up to AgbMain, where r5 is set (movs r5,#255 at 0x08055f10); its lift passes r5 at 0x03005f94, 0x0805e5e2, 0x0805e600. Hard holes stay 4, not 3: the resume 0x03005f24 now reads r5 at 0x03005f94, noted on {unit:native/lift-restore-saved-block}. just check passed before and after merging main (a8ca79f4).",
+          "by": "05a949e7",
+          "host": "quack",
+          "branch": "unit/native/lift-takes-across-copies",
+          "change": "f36a6127d4dc9f7e9913991c224becafe71f28ef"
+        }
+      },
       "round": "2026-11-24T23:47:44Z"
     },
     {
