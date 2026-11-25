@@ -5496,19 +5496,8 @@
         "by": "d3ccf311",
         "at": "2026-11-25T02:54:52Z",
         "evidence": "On e494b45a (review fix: fn code's doc moved back above fn code; latest main merged, bars re-measured with lift-metrics --lower-bars, 0 over): just check exit 0; just lift-check passed, 0 differences on every program, every planted fault caught incl. c-chain-gcc --plant-lent=0x080003b2 (frame 47, IWRAM 0x03000048); --shadow-locals lift of c-chain-gcc (4 Lent uses) run 601 frames reports nothing; Metroid native route units/metroid-native.toml pass, 2700 frames, 0 differences.",
-        "branch": "unit/native/lift-lent-print",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-25T02:54:52Z",
-          "by": "d3ccf311",
-          "host": "quack",
-          "pid": 1981823,
-          "start": "101567893",
-          "beats": true,
-          "session": "d3ccf311-cee7-4f64-bf35-dce80f9817e9",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "landed": "2026-11-25T03:22:09Z"
       },
       "notes": [
         {
@@ -5516,20 +5505,7 @@
           "by": "manual",
           "text": "The loop's review asked for fixes before landing (all on the card): - crates/codegen/src/native.rs:3929-3939: the new `code_lends` function was inserted between `fn code`'s doc comment and `fn code` itself. The three lines starting \"/// One context's functions, summaries and fra…"
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-25T01:45:52Z",
-        "findings": "- crates/codegen/src/native.rs:3929-3939: the new `code_lends` function was inserted between `fn code`'s doc comment and `fn code` itself. The three lines starting \"/// One context's functions, summaries and frames. `named`: …\" now open `code_lends`'s rustdoc, so `code_lends` gets the wrong first sentence and `fn code` (just below `code_lends`) loses its doc. Fix: move those three lines back to directly above `fn code<'a>(ctx: Ctx<'a>, …`, so `code_lends`'s doc starts at \"/// Each context's stack locals lent to callees …\".",
-        "sent": {
-          "evidence": "Full just lift-check (all 37 programs, before the main merge) passed: 0 differences on each 600-frame route, every planted fault caught incl. c-chain-gcc --plant-lent=0x080003b2 (bounce's ctx->hits++ through its Lent: frame 47, IWRAM 0x03000048, and the picture), both planted holes caught. After merging main: lift-check --only c-chain-gcc --only native-frame-locals passes, lift-metrics within bars, just check exit 0. --shadow-locals lift of c-chain-gcc on the final head: 600 frames, empty stderr. Metroid lift built, native route 2700 frames 0 differences (it prints no Lent now: its borrowers echo r4-r11, noted on {unit:native/lift-lent-games}). c-chain-gcc: frame_'s ctx is l44: [u8; 20]; step_world, move_body, bounce, draw_body take p0: Lent<'_>. Bars: lines_prelude 1390->1454 all rows, c-chain-gcc casts 49->51; lines 632->618 etc lowered. No review subagent (the loop reviews the diff).",
-          "by": "e30a7b20",
-          "host": "quack",
-          "branch": "unit/native/lift-lent-print",
-          "change": "83b33d1b940fa2d747314c8c5f1dcb526bf141c4"
-        }
-      },
-      "round": "2026-11-25T00:26:35Z"
+      ]
     },
     {
       "id": "native/lift-lent-frameless",
