@@ -5508,7 +5508,14 @@
       "check": "recorded",
       "needs": ["native/lift-lent-frameless", "native/lift-lend-wider"],
       "uses": ["heavy"],
-      "priority": 77
+      "priority": 77,
+      "notes": [
+        {
+          "at": "2026-11-25T01:04:25Z",
+          "by": "e30a7b20",
+          "text": "Metroid prints no Lent yet: borrowers 0x0805baad, 0x080584d9, 0x0806ef2d give r4-r11 back as they came (echoes), so their calls go by x_ and Regs, and code_lends skips them; the 9 others borrow only for them. GBAA_LEND_DEBUG=1 lists each skip and why."
+        }
+      ]
     },
     {
       "id": "native/lift-pointer-registers",
