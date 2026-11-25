@@ -5045,6 +5045,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-25T00:54:21Z",
+          "by": "990952a6",
+          "text": "Game bars (mods/, left alone: another lane mid-edit) need, when this lands: Metroid for_counter_arith 33->34, loops_not_for 438; Emerald for_counter_arith 259->263, ref_new_at_use 33780->33784, loops_not_for 3236. Both from more loops printing as for."
+        },
+        {
           "at": "2026-11-24T21:14:47Z",
           "by": "a67a0150",
           "text": "Fix 3: the owner already narrowed this (decision: Narrow the for-loop unit to bounds held in registers): HealPlayerParty is a for only after this, {unit:native/lift-for-top-tested} and {unit:native/lift-for-step-via}. Fix 2: after {unit:native/lift-open-bus-typed}, lift Emerald, 600/600."
@@ -5053,11 +5058,6 @@
           "at": "2026-11-24T21:14:36Z",
           "by": "a67a0150",
           "text": "Fix 1 done 2026-11-24 on main e0e67935 merged in: Metroid 600/600 frames, loops_for 234, loops_not_for 462 (main alone 232/464). The 442 bar is {unit:native/lift-for-top-tested}'s, not on main: keep it. just check passed."
-        },
-        {
-          "at": "2026-11-24T20:50:20Z",
-          "by": "manual",
-          "text": "The loop's review asked for fixes before landing (all on the card): - The card's game check was not run on this branch as it lands. The Evidence says Metroid's 600 of 600 frames and its loops_not_for count of 500 were measured before the merge with main (aa820315), and the bar o…"
         }
       ],
       "review": {
