@@ -1101,7 +1101,7 @@ with the native check and no replaced-library list.
 - The stack stays where the game has it: `sp` is a parameter and the
   frames are IWRAM bytes. A frame recovered as Rust locals is stage B's
   (section 1). `bank_sp` puts sp in its mode's bank at a wait or I/O store
-  (once a run: `native::banks`); `Game::sp`, system mode's, is a handler's.
+  (once a run: `native::banks`; none frameless); `Game::sp`, system mode's, is a handler's.
 - Memory is `ld8/16/32` and `st8/16/32` over `Game::ram` (EWRAM then
   IWRAM: the check layout is the only layout a byte program has), the
   library's I/O (`Hw::read16`/`write16`; the I/O block's unused
@@ -1257,7 +1257,7 @@ doc comments of `frame::lend` and `native::code_lends`).
   naming the function. Other pointers stay guest addresses, unchanged.
 - **sp.** A function whose slots are all locals or lent keeps nothing in
   memory: no sp, no `bank_sp` (`native/lift-frame-gone`'s rule, with lent
-  slots counted as locals). A slot whose address reaches RAM keeps the
+  slots counted as locals; `FnPrinter::needs_bank`). A slot whose address reaches RAM keeps the
   guest stack, sp exact where it must be (`native/lift-frame-exact-narrow`).
 - **Checked by** the native check as today's locals are: it compares RAM,
   and a lent local's bytes reach RAM only through code the lift prints.
