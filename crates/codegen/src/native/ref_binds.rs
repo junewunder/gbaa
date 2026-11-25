@@ -572,7 +572,8 @@ fn one_fn(
                 continue;
             }
             let path_before = p(k - 1) == Some(b':') && p(k - 2) == Some(b':');
-            let field = p(k - 1) == Some(b'.');
+            // `a.w` (not a range's `0..w`).
+            let field = p(k - 1) == Some(b'.') && p(k - 2) != Some(b'.');
             let after_colon = p(k + 1) == Some(b':');
             let mac = p(k + 1) == Some(b'!') && matches!(p(k + 2), Some(b'(' | b'[' | b'{'));
             if field || path_before || after_colon || mac {
@@ -954,6 +955,13 @@ mod tests {
             "{o}"
         );
         assert_eq!(at_use(&o), 0);
+    }
+
+    #[test]
+    fn a_range_bound_is_a_use() {
+        let t = "fn f(g: &mut Game) {\n    let (mut n) = (0u32);\n    g.get(Ref::<u8>::new(n));\n    for i in 0..n { }\n}\n";
+        let (o, _) = bind(t, 0);
+        assert!(o.contains("for i in 0..n.addr() { }"), "{o}");
     }
 
     #[test]
