@@ -5551,6 +5551,11 @@
       },
       "notes": [
         {
+          "at": "2026-11-25T04:46:58Z",
+          "by": "6056824b",
+          "text": "Overseer: lent-print broke Emerald on main (stops at frame 5055 of units/emerald-native.toml on a lent local; the regression unit holds it). Run Emerald's route before landing; don't widen what goes frameless past what that fix allows."
+        },
+        {
           "at": "2026-11-25T01:04:23Z",
           "by": "e30a7b20",
           "text": "lift-lent-print already counts lent objects as locals in Frame::in_locals and has exact_sp skip stores through a Lent: native-frame-locals' f_080001b5 went frameless. c-chain-gcc's frame_ keeps sp (fill_rect's stack args). Left: the bars, the shadow runs."
