@@ -4928,15 +4928,22 @@
       "tags": ["slow-check"],
       "priority": 95,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "c69dfdbb",
-        "session": "c69dfdbb-9a16-4c43-9b36-8c0384924b32",
-        "host": "quack",
-        "pid": 1983326,
-        "start": "101568883",
-        "at": "2026-11-24T22:53:20Z",
+        "at": "2026-11-25T00:18:22Z",
+        "evidence": "On head 2a39ea8 (merge of main at its tip, nothing newer on main at recording): just lift-check passed, 37 programs 0 differences, every planted fault and hard hole caught; lift-metrics 0 over, 0 under (98 bars lowered after the merge), results_several and tuple_calls 0 on every C row but c-jump-gcc (1, 2); Metroid lift 600 of 600 frames, its native route 2700 frames 0 differences; Emerald lift 600 of 600 frames; just check passed. Private bars: Metroid results_several 68 tuple_calls 872, Emerald 287 and 17862 (mods 64a3ad8, unpushed). Dead-path parameters moved to {unit:native/lift-returns-past-holes} by the recorded decision. Emerald route check waits on {unit:native/emerald-native-route}.",
         "branch": "unit/native/lift-returns-read",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-25T00:18:22Z",
+          "by": "c69dfdbb",
+          "host": "quack",
+          "pid": 1983326,
+          "start": "101568883",
+          "beats": true,
+          "session": "c69dfdbb-9a16-4c43-9b36-8c0384924b32",
+          "lane": "quack/4"
+        }
       },
       "notes": [
         {

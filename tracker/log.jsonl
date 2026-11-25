@@ -4307,3 +4307,4 @@
 {"at":"2026-11-24T23:47:38Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/game-lift-bars-refresh","text":"Metroid's and Emerald's private lift bars match main again: on main"}
 {"at":"2026-11-24T23:47:44Z","actor":"loop","tag":"05a949e7","host":"quack","cmd":"claim","id":"native/lift-takes-across-copies","text":"A takes site may pass r4-r11 into another code context: claimed"}
 {"at":"2026-11-24T23:53:24Z","actor":"loop","tag":"81cfc956","host":"quack","cmd":"done","id":"native/emerald-m4a-compressed","text":"Emerald's lift mixes m4a's compressed samples as play does: done"}
+{"at":"2026-11-25T00:18:22Z","actor":"loop","tag":"c69dfdbb","host":"quack","cmd":"done","id":"native/lift-returns-read","text":"A call takes back only the registers its caller reads: done"}
