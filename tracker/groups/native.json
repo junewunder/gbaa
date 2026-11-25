@@ -5034,19 +5034,8 @@
         "by": "990952a6",
         "at": "2026-11-25T00:54:23Z",
         "evidence": "Head 9c90199e (main b40c1b2b merged in; earlier merge d27f4d5e settled conflicts with lift-for-top-tested/step-via; a bound loaded by the start's test is refused). just check passed; just lift-check passed, c-loops agbcc+gcc 600 frames 0 differences, planted stores caught, loops_not_for 8 and 16 (bars lowered; casts +1 each for draw_global's u8 bound, gcc ref_new_at_use 9->13 from more fors). Metroid native route units/metroid-native.toml 2700 frames 0 differences; loops_for 258, loops_not_for 438 under its bar 440 (for_counter_arith 34, bar 33 raised in a copy). Emerald just lift with current mods holes file (open-bus-typed landed): 600 of 600 frames no stop, loops_for 1147, loops_not_for 3236 under main's bar 3268 (the 3325 bar is superseded). Fix 3: the owner's decision 'Dead-path parameters and games' RAM-bound loops are follow-on units' moves HealPlayerParty to {unit:native/lift-for-ram-bounds-games}; no game loop takes the RAM-bound path yet.",
-        "branch": "unit/native/lift-for-ram-bounds",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-25T00:54:23Z",
-          "by": "990952a6",
-          "host": "quack",
-          "pid": 1981823,
-          "start": "101567893",
-          "beats": true,
-          "session": "990952a6-7c29-45d0-bbbc-f6d9830334f4",
-          "lane": "quack/2"
-        },
-        "pushed": true
+        "landed": "2026-11-25T01:01:48Z"
       },
       "notes": [
         {
@@ -5064,20 +5053,7 @@
           "by": "a67a0150",
           "text": "Fix 1 done 2026-11-24 on main e0e67935 merged in: Metroid 600/600 frames, loops_for 234, loops_not_for 462 (main alone 232/464). The 442 bar is {unit:native/lift-for-top-tested}'s, not on main: keep it. just check passed."
         }
-      ],
-      "review": {
-        "fixes": 1,
-        "at": "2026-11-24T20:50:20Z",
-        "findings": "- The card's game check was not run on this branch as it lands. The Evidence says Metroid's 600 of 600 frames and its loops_not_for count of 500 were measured before the merge with main (aa820315), and the bar of 442 was left as 'another branch's', so Metroid's loops_not_for bar was never checked against this branch. Fix: after the merge, run Metroid's native 600-frame check and its lift-check bar, record the result, and either confirm loops_not_for is at or below its bar or set the bar from this branch.\n- Emerald's 600 of 600 frames was shown only with an older holes file (mods 5c20f6c). With the current holes file the Emerald build fails at an open-bus load, and that failure was split off to {unit:native/lift-open-bus-typed}. The card asks for both games at 600 of 600 on the code that lands, so this check is missing. Fix: get Emerald to build and play 600 of 600 with the current mods holes file, either by landing {unit:native/lift-open-bus-typed} first and rerunning, or by showing the failure is on main without this branch and getting the owner to accept that. Then record the frames and the Emerald loops_not_for bar of 3325 measured on that build.\n- The card's main goal was split off without the card asking for it. The card names game loops whose bound is reloaded from RAM each round (Emerald's HealPlayerParty / gPlayerPartyCount, 'most of pret's'), but the Evidence says 'no game loop reaches the store check' and moves that work to {unit:native/lift-for-ram-bounds-games}. Emerald's 30-loop gain comes from zero-extending loaded bytes in proofs, not from the new RAM-bound path. Fix: either make the writes summary and store check cover at least the named case (HealPlayerParty prints as for, with GBAA_FOR_WHY showing why the others stay loops), or ask the owner (just ask) to accept narrowing this unit to the C programs plus the follow-on unit, and record that answer in the Evidence.",
-        "sent": {
-          "evidence": "Loops to a RAM bound print as for: native::writes summarises each function's RAM stores (callees to a fixed point, IRQ handlers joined); bounds.rs takes a bound the latch loads, the printer checks no store in a round reaches it. c-loops draw_global and draw_row print as for with both compilers (agbcc 15/7, gcc 8/14; casts +1 each, bar raised). After merging main at aa820315: just lift-check passed, every program 0 differences (c-loops included), every planted fault caught; just check exit 0. loops_not_for bars lowered: c-loops-agbcc 9->7, c-loops-gcc 17->14, c-jump-agbcc 7->6, Emerald 3355->3325 (mods). Before the merge: Metroid 600 of 600 frames, loops_not_for 500 (its bar 442 is another branch's); Emerald 600 of 600 with the holes file earlier units used (mods 5c20f6c). Games' gains come from loaded bytes zero-extended in proofs; no game loop reaches the store check: {unit:native/lift-for-ram-bounds-games}. Emerald with the current holes file failed to build at an open-bus load: {unit:native/lift-open-bus-typed}. Decision: a store through a sum with a non-RAM constant stays out of RAM.",
-          "by": "1fbd91b3",
-          "host": "quack",
-          "branch": "unit/native/lift-for-ram-bounds",
-          "change": "d0481784953b8969ad09bc12bcce46895f360ccd"
-        }
-      },
-      "round": "2026-11-24T18:32:29Z"
+      ]
     },
     {
       "id": "native/lift-for-top-tested",
