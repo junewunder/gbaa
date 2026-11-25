@@ -5617,6 +5617,7 @@
       "needs": ["native/lift-returns-read"],
       "uses": ["heavy"],
       "priority": 84,
+      "minMinutes": 120,
       "record": {
         "state": "claimed",
         "by": "874a3e9d",
