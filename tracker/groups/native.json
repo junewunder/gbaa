@@ -5719,7 +5719,19 @@
       "detail": "A regression on main, found by {unit:native/emerald-native-route} (2026-11-24): its route check passed on its branch (units/emerald-native.toml, 5,400 frames, 0 differences), but with main's {unit:native/lift-lent-print} merged in (landed 22:22; Emerald was not lifted for that landing) Emerald's lift stops at frame 5055 of that route, on a lent local. Reproduce on main's head: just lift Emerald (just long start --mem 12G), then the command in units/emerald-native.toml's header; the stop names the function. A likely cause, unchecked: the lend run doesn't see callers in RAM copies or through pointers, so a slot is printed as a local that a caller it never saw still reads through sp. Fix it as a rule (frame::lend or the printer), with a C or agb test program in lift-check that stops without the rule. Done when: that route's command prints 0 differences over 5,400 frames on the head that lands; just lift-check passes; Metroid's native route (units/metroid-native.toml) has 0 differences; just check passes.",
       "uses": ["heavy"],
       "tags": ["slow-check"],
-      "priority": 100
+      "priority": 100,
+      "record": {
+        "state": "claimed",
+        "by": "fa3c994f",
+        "session": "fa3c994f-e99c-4f77-ba3e-93896e2eb535",
+        "host": "quack",
+        "pid": 1982541,
+        "start": "101568383",
+        "at": "2026-11-25T04:52:22Z",
+        "branch": "unit/native/emerald-lent-local-stop",
+        "beats": true
+      },
+      "round": "2026-11-25T04:52:22Z"
     }
   ]
 }
