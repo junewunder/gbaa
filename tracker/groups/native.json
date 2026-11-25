@@ -5325,15 +5325,22 @@
       "uses": ["heavy"],
       "priority": 93,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "18cd958f",
-        "session": "18cd958f-9c1f-4071-a90b-48386eb01519",
-        "host": "quack",
-        "pid": 1982541,
-        "start": "101568383",
-        "at": "2026-11-25T00:22:32Z",
+        "at": "2026-11-25T02:54:39Z",
+        "evidence": "Split at the loop's 2-hour mark, not finished to 600: just lift on Imperium (job imp-lift4) builds with 0 hard holes and runs 302 of 600 frames (was 1), stopping at no-function 0x080033fd (an m4a jump-table entry). The rest is {unit:native/imperium-stops-302}, whose holes file already lists the whole table as roots (not yet lifted). Fixed on the way: run roots as [[roots]], conditional r12 reads in the summaries, takes with no sites sparing r12 readers, librfu spin edge. Two new codegen tests; just check passes after merging main (l3check4).",
         "branch": "unit/native/imperium-first-stops",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-25T02:54:39Z",
+          "by": "18cd958f",
+          "host": "quack",
+          "pid": 1982541,
+          "start": "101568383",
+          "beats": true,
+          "session": "18cd958f-9c1f-4071-a90b-48386eb01519",
+          "lane": "quack/3"
+        }
       },
       "round": "2026-11-25T00:22:32Z"
     },
