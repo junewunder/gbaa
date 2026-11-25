@@ -384,6 +384,13 @@ pub struct Holes {
     /// fails unless every `sp` outside IWRAM the play build's interpreter
     /// saw lies in one (`start..=end`, an empty stack's `sp` its end).
     pub stacks: Vec<SeenStack>,
+    /// RAM whose bytes the game writes but never reads, so they may hold
+    /// anything (`[[garbage]] start = 0x…, end = 0x…, why = "…"`): a
+    /// struct's padding that a whole-struct copy carries along with a
+    /// stack's leftovers (Emerald's text printers'). The lift doesn't use
+    /// them; the native check (`route-check --native`) skips them and
+    /// prints that it does. Each lies in EWRAM or IWRAM.
+    pub garbage: Vec<SeenGarbage>,
     /// Loads the game makes of unmapped memory (`[[open_bus]] at = 0x…,
     /// why = "…"`, by the load's instruction address): a lookup through a
     /// table entry that isn't a pointer, which the hardware answers with
@@ -629,7 +636,7 @@ impl Holes {
     /// '''…'''` (and `lr = true` for [`Holes::lr`], `check = { seed, runs,
     /// digest }` for [`Holes::checks`]), `[[jump]] at = 0x…, targets = [0x…], why = "…"`,
     /// `[[takes]]` ([`Holes::takes`]), `[[roots]]` ([`Holes::roots`]), `[[copy]]` ([`Holes::copies_seen`]),
-    /// `[[stack]]` ([`Holes::stacks`]), `[[open_bus]] at = 0x…, why = "…"`
+    /// `[[stack]]` ([`Holes::stacks`]), `[[garbage]]` ([`Holes::garbage`]), `[[open_bus]] at = 0x…, why = "…"`
     /// ([`Holes::open_bus`]), and at the top, `skip_fn_flow =
     /// "why"` and `allocators = [0x…]` ([`Holes::allocators`]).
     pub fn parse(text: &str) -> Result<Holes, String> {
@@ -783,19 +790,26 @@ impl Holes {
                             return Err(format!("open_bus: {at:#010x} twice"));
                         }
                     }
-                    "stack" => {
+                    "stack" | "garbage" => {
                         let field = |f: &str| -> Result<u32, String> {
-                            int(e.get(f).ok_or(format!("stack: missing {f}"))?, f)
+                            int(e.get(f).ok_or(format!("{k}: missing {f}"))?, f)
                         };
                         let (start, end) = (field("start")?, field("end")?);
                         if start >= end {
-                            return Err(format!("stack: {start:#010x} not below {end:#010x}"));
+                            return Err(format!("{k}: {start:#010x} not below {end:#010x}"));
                         }
-                        h.stacks.push(SeenStack {
-                            start,
-                            end,
-                            why: str_of(e, "why")?,
-                        });
+                        let why = str_of(e, "why")?;
+                        if k == "stack" {
+                            h.stacks.push(SeenStack { start, end, why });
+                            continue;
+                        }
+                        let in_ram = |lo: u32, hi: u32| start >= lo && end <= hi;
+                        if !in_ram(0x0200_0000, 0x0204_0000) && !in_ram(0x0300_0000, 0x0300_8000) {
+                            return Err(format!(
+                                "garbage: {start:#010x}..{end:#010x} isn't inside EWRAM or IWRAM"
+                            ));
+                        }
+                        h.garbage.push(SeenGarbage { start, end, why });
                     }
                     _ => return Err(format!("unknown table {k}")),
                 }
@@ -818,6 +832,14 @@ pub struct SeenCopy {
 /// One `[[stack]]` of the holes file ([`Holes::stacks`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SeenStack {
+    pub start: u32,
+    pub end: u32,
+    pub why: String,
+}
+
+/// One `[[garbage]]` of the holes file ([`Holes::garbage`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SeenGarbage {
     pub start: u32,
     pub end: u32,
     pub why: String,
@@ -5290,16 +5312,55 @@ impl FnPrinter<'_, '_> {
         if self.holes.no_ref_binds {
             return;
         }
-        // Its entries as printed stay ([`one_entry`] finds them so): a
-        // parameter's binding goes after them.
-        let all = self.soft.entries.get(&self.f.entry).map(Entries::all);
-        let after = all
+        // Its entries as printed stay ([`one_entry`] finds them so), but
+        // for the end its two copies share (`no_x` and `keep_x`: the
+        // register locals' `let`, which a register local typed changes):
+        // a parameter's binding goes after them.
+        let k = self.f.entry;
+        let all = self.soft.entries.get(&k).map(Entries::all);
+        let at = all
             .as_ref()
-            .and_then(|e| s[head..].find(e.as_str()).map(|i| i + e.len()))
-            .unwrap_or(0);
-        let (text, n) = ref_binds::bind(&s[head..], after);
-        let kept = all.is_none_or(|e| !s[head..].contains(&e) || text.contains(&e));
-        if n != ref_binds::Bound::default() && kept {
+            .and_then(|e| s[head..].find(e.as_str()).map(|i| (i, i + e.len())));
+        let after = at.map_or(0, |a| a.1);
+        let shared = self.soft.entries.get(&k).map_or(0, |e| {
+            let (a, b) = (e.keep_x.as_bytes(), e.no_x.as_bytes());
+            a.iter()
+                .rev()
+                .zip(b.iter().rev())
+                .take_while(|(x, y)| x == y)
+                .count()
+        });
+        let keep = at.map(|(a, b)| {
+            let mid = b - shared.min(b - a);
+            ref_binds::Keep {
+                frozen: (a, mid),
+                track: (mid, b),
+            }
+        });
+        let (text, n, moved) = ref_binds::bind_in(&s[head..], after, keep);
+        if n == ref_binds::Bound::default() {
+            return;
+        }
+        // The entries as they are now: each copy's own start, then the
+        // common end as bound.
+        let mut new_all = all.clone();
+        if let (Some(e), Some(keep), Some((a, b))) = (self.soft.entries.get_mut(&k), keep, moved) {
+            let end = &text[a..b];
+            let old = keep.track.1 - keep.track.0;
+            let mut ne = Entries {
+                adapter: e.adapter.clone(),
+                keep_x: format!("{}{end}", &e.keep_x[..e.keep_x.len() - old]),
+                no_x: format!("{}{end}", &e.no_x[..e.no_x.len() - old]),
+                taker: e.taker,
+            };
+            if !text.contains(&ne.all()) {
+                return;
+            }
+            new_all = Some(ne.all());
+            std::mem::swap(e, &mut ne);
+        }
+        let kept = new_all.is_none_or(|e| at.is_none() || text.contains(&e));
+        if kept {
             s.replace_range(head.., &text);
             self.soft.refs_bound_named += n.named;
             self.soft.refs_bound_proven += n.proven;
@@ -12474,6 +12535,31 @@ why = "a table"
         );
         assert!(Holes::parse("[[stack]]\nstart = 0x10\nend = 0x10\nwhy = \"x\"\n").is_err());
         assert!(Holes::parse("[[stack]]\nstart = 0x10\nwhy = \"x\"\n").is_err());
+        // Garbage: RAM the game never reads, inside EWRAM or IWRAM.
+        let h =
+            Holes::parse("[[garbage]]\nstart = 0x02020000\nend = 0x02020002\nwhy = \"padding\"\n")
+                .unwrap();
+        assert_eq!(
+            h.garbage,
+            vec![SeenGarbage {
+                start: 0x0202_0000,
+                end: 0x0202_0002,
+                why: "padding".into(),
+            }]
+        );
+        assert!(h.stacks.is_empty());
+        assert!(
+            Holes::parse("[[garbage]]\nstart = 0x08000000\nend = 0x08000002\nwhy = \"x\"\n")
+                .is_err()
+        );
+        assert!(
+            Holes::parse("[[garbage]]\nstart = 0x0203fffe\nend = 0x03000002\nwhy = \"x\"\n")
+                .is_err()
+        );
+        assert!(
+            Holes::parse("[[garbage]]\nstart = 0x02000002\nend = 0x02000002\nwhy = \"x\"\n")
+                .is_err()
+        );
         let h = Holes::parse("[[open_bus]]\nat = 0x0803500c\nwhy = \"no room\"\n").unwrap();
         assert_eq!(h.open_bus[&0x0803_500c], "no room");
         assert!(Holes::parse("[[open_bus]]\nwhy = \"x\"\n").is_err());

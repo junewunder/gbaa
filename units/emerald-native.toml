@@ -1,0 +1,48 @@
+# Pokémon Emerald (US, sha1 f3ae0881…, the pokeemerald build): reset, the intro, Start at the title, A
+# through the main menu, Birch's speech and the naming screen to the truck, units/emerald-newgame.toml's
+# presses. The lift (`just lift ROM out/lift-emerald --name emerald`, holes file mods/emerald/holes.toml)
+# against the play build at --timing native (`just recompile ROM out/emerald-play --timing native --name
+# emerald-play`, then `just build-recompiled out/emerald-play`), by route-check --native
+# target/recompiled/release/gbaa-native-emerald target/recompiled/release/gbaa-emerald-play
+# units/emerald-native.toml --name emerald: 0 differences, audio too (native/emerald-native-route; the text
+# printers' padding, written from the stack and never read, is the holes file's [[garbage]]). Headless, no
+# save: a blank cartridge.
+rom = "$HOME/ROMs/gba/Pokemon - Emerald Version.gba"
+
+# Start skips the intro, A leaves the title.
+[[press]]
+button = "start"
+at = 300
+
+[[press]]
+button = "a"
+at = 900
+
+# A every 20 frames through Birch's speech and the naming screen (AAAAAAA) to the truck.
+[[press]]
+button = "a"
+from = 1100
+to = 5380
+every = 20
+
+# The hashes are the play build's at --timing native (the lift's the same); main-menu, birch-speech and truck
+# are units/emerald-newgame.toml's (mGBA's, or ours where its blend is known wrong), naming isn't.
+[[checkpoint]]
+name = "main-menu"
+frame = 1000
+hash = "ac053b526342aa1f"
+
+[[checkpoint]]
+name = "birch-speech"
+frame = 2000
+hash = "6aefd56637162416"
+
+[[checkpoint]]
+name = "naming"
+frame = 3800
+hash = "63d9a5753f61edfd"
+
+[[checkpoint]]
+name = "truck"
+frame = 5400
+hash = "26c2f9d4009c5696"
