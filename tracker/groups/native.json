@@ -5538,13 +5538,25 @@
       "needs": ["native/lift-lent-print"],
       "uses": ["heavy"],
       "priority": 85,
+      "record": {
+        "state": "claimed",
+        "by": "5b75ea47",
+        "session": "5b75ea47-a5cd-41d9-8f7f-5b59dc2e2a77",
+        "host": "quack",
+        "pid": 1981458,
+        "start": "101567385",
+        "at": "2026-11-25T04:41:42Z",
+        "branch": "unit/native/lift-lent-frameless",
+        "beats": true
+      },
       "notes": [
         {
           "at": "2026-11-25T01:04:23Z",
           "by": "e30a7b20",
           "text": "lift-lent-print already counts lent objects as locals in Frame::in_locals and has exact_sp skip stores through a Lent: native-frame-locals' f_080001b5 went frameless. c-chain-gcc's frame_ keeps sp (fill_rect's stack args). Left: the bars, the shadow runs."
         }
-      ]
+      ],
+      "round": "2026-11-25T04:41:42Z"
     },
     {
       "id": "native/lift-lent-games",
