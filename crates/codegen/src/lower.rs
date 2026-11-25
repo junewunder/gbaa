@@ -2478,7 +2478,7 @@ pub fn never_returns(ctx: &Ctx, f: &Func) -> bool {
                 (None, None) => false,
             },
             Plan::Swi { next } => mine(next),
-            Plan::Undefined { .. } => false,
+            Plan::Undefined { .. } | Plan::Unwind => false,
         }
     })
 }

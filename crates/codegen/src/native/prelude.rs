@@ -1231,6 +1231,34 @@ pub fn restored(thrown: Box<dyn std::any::Any + Send>, buf: u32) -> [u32; 4] {
     }
 }
 
+/// A context restore's jump that loaded sp and pc from a saved block
+/// (native/lift-restore-saved-block): into the frame of the function that
+/// saved it, the one whose sp is `sp` and which has the block `key`, by
+/// unwinding; with r0-r12, of which r4-r12 only as `sets` says (bit `n`
+/// for rN: those the restorer wrote; the rest are that frame's own).
+pub fn resume(key: u32, sp: u32, r: [u32; 13], sets: u16) -> ! {
+    std::panic::resume_unwind(Box::new(Resumed { key, sp, r, sets }))
+}
+
+/// What a [`resume`] unwinds with.
+pub struct Resumed {
+    pub key: u32,
+    pub sp: u32,
+    pub r: [u32; 13],
+    pub sets: u16,
+}
+
+/// A resume point's catch ([`resume`]): the unwinding if it is a resume
+/// of this frame (its sp `sp`, where it names one) at one of `keys`; any
+/// other unwinding (another frame's, a panic) goes on up.
+pub fn resumed(thrown: Box<dyn std::any::Any + Send>, sp: Option<u32>, keys: &[u32]) -> Resumed {
+    match thrown.downcast::<Resumed>() {
+        Ok(t) if sp.is_none_or(|s| s == t.sp) && keys.contains(&t.key) => *t,
+        Ok(t) => std::panic::resume_unwind(t),
+        Err(p) => std::panic::resume_unwind(p),
+    }
+}
+
 /// Whether `k` is a dense function's ID (`--fn-ids dense`).
 #[inline(always)]
 pub fn is_dense_id(k: u32) -> bool {

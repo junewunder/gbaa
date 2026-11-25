@@ -1,0 +1,254 @@
+# Names for c-resume-gcc.gba (c/resume/, built by `just c-tests`), from its ELF's symbols and DWARF.
+# Written by `just c-names` (crates/pret-names). Don't edit.
+
+[map]
+rom_sha1 = "8adf3727b7529eb7efced2f6b0f0b871f90aabb5"
+source = "gbaa c/resume/ (c-resume-gcc.elf, just c-tests)"
+format = 1
+#
+# Keys are codegen's function keys (bit 0 set = Thumb; an IWRAM copy's
+# run address, with `rom` its source) or data addresses.
+
+# Our entries with a pret function symbol (`label`: an asm label) here.
+[functions]
+0x08000000 = { name = "_start", size = 0, file = "crt0.o" }
+0x08000160 = { name = "irq_handler", size = 0, file = "crt0.o" }
+0x0800018d = { name = "VBlankIntrWait", size = 0, file = "crt0.o" }
+0x08000191 = { name = "guard_call", size = 0, file = "resume-resume.o" }
+0x080001c5 = { name = "bail", size = 0, file = "resume-resume.o" }
+0x080001d5 = { name = "run_list", size = 0, file = "resume-resume.o" }
+0x0800022d = { name = "skip", size = 0, file = "resume-resume.o" }
+0x08000259 = { name = "fill_rect", size = 156, file = "draw.c", src = "c/common/draw.c", proto = "void fill_rect(s32 x, s32 y, s32 w, s32 h, u16 color)" }
+0x08000349 = { name = "search", size = 100, file = "main.c", src = "c/resume/main.c", proto = "u32 search(u32 n, u32 limit)" }
+0x080003ad = { name = "nudge", size = 28, file = "main.c", src = "c/resume/main.c", proto = "u32 nudge(u32 i)" }
+0x080003c9 = { name = "step", size = 68, file = "main.c", src = "c/resume/main.c", proto = "u32 step(u32 i)" }
+0x0800040d = { name = "bar", size = 54, file = "main.c", src = "c/resume/main.c", proto = "void bar(s32 row, s32 len, u16 color)" }
+0x08000445 = { name = "frame", size = 120, file = "main.c", src = "c/resume/main.c", proto = "void frame(void)" }
+0x080004bd = { name = "AgbMain", size = 64, file = "main.c", src = "c/resume/main.c", proto = "void AgbMain(void)" }
+
+# Our entries pret has no symbol for, inside one of its functions.
+[inside]
+0x08000194 = { func = "guard_call", offset = 0x4 }
+0x080001c8 = { func = "bail", offset = 0x4 }
+0x080001d8 = { func = "run_list", offset = 0x4 }
+0x08000230 = { func = "skip", offset = 0x4 }
+
+# Our entries with no function name: a pret function in the other mode,
+# pret data (discovery took it for code), or nothing.
+[unnamed]
+
+# pret functions that aren't our entries, and why.
+[missed]
+0x080002f5 = { name = "plot", size = 30, why = "unreached; no ROM word points at it" }
+0x08000315 = { name = "memcpy", size = 26, why = "unreached; no ROM word points at it" }
+0x08000331 = { name = "memset", size = 22, why = "unreached; no ROM word points at it" }
+
+# Code copied out of ROM to run in RAM (BIOS copies discovery found), by
+# destination: the pret functions in it, keyed by run address.
+[copies]
+
+# pret's data: variables, tables and buffers in RAM and ROM.
+[data]
+0x02000000 = { name = "__ewram_start", size = 0, aliases = ["__ewram_end"] }
+0x03000000 = { name = "gDeepest", size = 4, aliases = ["__data_end", "__bss_start", "__data_start"], type = "u32" }
+0x03000004 = { name = "gBails", size = 4, type = "u32" }
+0x03000008 = { name = "gSkips", size = 4, type = "u32" }
+0x0300000c = { name = "gFrame", size = 4, type = "u32" }
+0x03000010 = { name = "gLoop", size = 20, type = "u32 [5]" }
+0x03000024 = { name = "gGuard", size = 12, type = "u32 [3]" }
+0x03000030 = { name = "__bss_end", size = 0 }
+
+# Each function's parameters and variables from DWARF: a register (`reg`)
+# or a stack slot (`slot`, an offset from sp after the prologue), over
+# [from, to). Variables agbcc gave no location are left out.
+[locals]
+0x08000259 = [
+  { name = "x", reg = 0, from = 0x08000258, to = 0x080002f4, type = "s32", param = true },
+  { name = "y", reg = 1, from = 0x08000258, to = 0x0800027c, type = "s32", param = true },
+  { name = "y", reg = 1, from = 0x080002d2, to = 0x080002d8, type = "s32", param = true },
+  { name = "w", reg = 2, from = 0x08000258, to = 0x0800025e, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x0800025e, to = 0x08000268, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x0800026a, to = 0x08000276, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x08000278, to = 0x080002a6, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x080002c0, to = 0x080002de, type = "s32", param = true },
+  { name = "w", reg = 6, from = 0x080002e0, to = 0x080002f4, type = "s32", param = true },
+  { name = "h", reg = 3, from = 0x08000258, to = 0x0800027c, type = "s32", param = true },
+  { name = "h", reg = 3, from = 0x080002d2, to = 0x080002d4, type = "s32", param = true },
+  { name = "h", reg = 5, from = 0x080002f0, to = 0x080002f4, type = "s32", param = true },
+  { name = "color", slot = 16, from = 0x08000258, to = 0x080002f4, type = "u16", param = true },
+]
+0x08000349 = [
+  { name = "n", reg = 0, from = 0x08000348, to = 0x08000362, type = "u32", param = true },
+  { name = "n", reg = 9, from = 0x08000362, to = 0x08000394, type = "u32", param = true },
+  { name = "n", reg = 2, from = 0x08000394, to = 0x080003ac, type = "u32", param = true },
+  { name = "limit", reg = 1, from = 0x08000348, to = 0x08000362, type = "u32", param = true },
+  { name = "limit", reg = 8, from = 0x08000362, to = 0x0800039a, type = "u32", param = true },
+]
+0x080003ad = [
+  { name = "i", reg = 0, from = 0x080003ac, to = 0x080003b4, type = "u32", param = true },
+]
+0x080003c9 = [
+  { name = "i", reg = 0, from = 0x080003c8, to = 0x080003d2, type = "u32", param = true },
+  { name = "i", reg = 4, from = 0x080003d2, to = 0x080003e6, type = "u32", param = true },
+  { name = "i", reg = 4, from = 0x080003ec, to = 0x0800040c, type = "u32", param = true },
+  { name = "k", reg = 5, from = 0x080003d8, to = 0x080003e6, type = "u32" },
+  { name = "k", reg = 5, from = 0x080003ec, to = 0x0800040c, type = "u32" },
+]
+0x0800040d = [
+  { name = "row", reg = 0, from = 0x0800040c, to = 0x0800041e, type = "s32", param = true },
+  { name = "row", reg = 1, from = 0x0800041e, to = 0x08000425, type = "s32", param = true },
+  { name = "row", reg = 4, from = 0x08000425, to = 0x0800043c, type = "s32", param = true },
+  { name = "len", reg = 1, from = 0x0800040c, to = 0x08000412, type = "s32", param = true },
+  { name = "color", reg = 2, from = 0x0800040c, to = 0x08000420, type = "u16", param = true },
+  { name = "color", reg = 6, from = 0x08000420, to = 0x0800043c, type = "u16", param = true },
+]
+0x08000445 = [
+  { name = "got", reg = 0, from = 0x0800045a, to = 0x0800045c, type = "u32" },
+  { name = "got", reg = 6, from = 0x0800045c, to = 0x080004a2, type = "u32" },
+  { name = "sum", reg = 0, from = 0x08000466, to = 0x0800046a, type = "u32" },
+  { name = "sum", reg = 5, from = 0x0800046a, to = 0x08000482, type = "u32" },
+]
+
+# The line table: each row's address and its line, in the `src` of the
+# function holding it, else "file:line".
+[lines]
+0x08000258 = "draw.c:7"
+0x0800025a = "draw.c:7"
+0x0800025c = "draw.c:7"
+0x0800025e = "draw.c:11"
+0x08000260 = "draw.c:7"
+0x08000262 = "draw.c:11"
+0x08000266 = "draw.c:11"
+0x08000268 = "draw.c:11"
+0x0800026a = "draw.c:12"
+0x0800026c = "draw.c:12"
+0x08000270 = "draw.c:13"
+0x08000274 = "draw.c:13"
+0x08000278 = "draw.c:14"
+0x0800027c = "draw.c:15"
+0x08000292 = "draw.c:17"
+0x080002a8 = "draw.c:18"
+0x080002aa = "draw.c:17"
+0x080002b0 = "draw.c:15"
+0x080002ba = "draw.c:20"
+0x080002c0 = "draw.c:15"
+0x080002c8 = "draw.c:15"
+0x080002d2 = "draw.c:14"
+0x080002d8 = "draw.c:13"
+0x080002dc = "draw.c:13"
+0x080002e0 = "draw.c:14"
+0x080002e4 = "draw.c:14"
+0x080002e6 = "draw.c:12"
+0x080002ea = "draw.c:14"
+0x080002ee = "draw.c:12"
+0x080002f0 = "draw.c:12"
+0x080002f4 = "draw.c:24"
+0x080002fc = "draw.c:26"
+0x080002fe = "draw.c:25"
+0x08000302 = "draw.c:25"
+0x08000304 = "draw.c:25"
+0x08000306 = "draw.c:25"
+0x08000308 = "draw.c:25"
+0x0800030e = "draw.c:25"
+0x08000310 = "draw.c:26"
+0x08000314 = "lib.c:8"
+0x08000316 = "lib.c:8"
+0x08000318 = "lib.c:8"
+0x0800031a = "lib.c:12"
+0x0800031e = "lib.c:13"
+0x08000320 = "lib.c:13"
+0x08000322 = "lib.c:12"
+0x08000328 = "lib.c:15"
+0x08000330 = "lib.c:21"
+0x08000336 = "lib.c:22"
+0x0800033c = "lib.c:22"
+0x0800033e = "lib.c:21"
+0x08000344 = "lib.c:24"
+0x08000348 = "main.c:23"
+0x08000354 = "main.c:23"
+0x08000362 = "main.c:30"
+0x0800036a = "main.c:32"
+0x0800036c = "main.c:32"
+0x0800036e = "main.c:24"
+0x08000374 = "main.c:25"
+0x08000376 = "main.c:26"
+0x0800037a = "main.c:27"
+0x0800037c = "main.c:28"
+0x0800037e = "main.c:27"
+0x08000382 = "main.c:28"
+0x08000386 = "main.c:30"
+0x0800038a = "main.c:33"
+0x080003ac = "main.c:37"
+0x080003ae = "main.c:38"
+0x080003b0 = "main.c:38"
+0x080003b2 = "main.c:39"
+0x080003b4 = "main.c:38"
+0x080003b8 = "main.c:39"
+0x080003bc = "main.c:41"
+0x080003c8 = "main.c:47"
+0x080003ca = "main.c:46"
+0x080003cc = "main.c:46"
+0x080003ce = "main.c:47"
+0x080003d0 = "main.c:47"
+0x080003d6 = "main.c:47"
+0x080003d8 = "main.c:49"
+0x080003dc = "main.c:51"
+0x080003e0 = "main.c:55"
+0x080003e4 = "main.c:55"
+0x080003e6 = "main.c:56"
+0x080003ec = "main.c:51"
+0x080003f0 = "main.c:52"
+0x080003f6 = "main.c:53"
+0x080003fe = "main.c:50"
+0x08000404 = "main.c:50"
+0x08000406 = "main.c:50"
+0x0800040c = "main.c:62"
+0x0800040e = "main.c:59"
+0x08000412 = "main.c:59"
+0x08000414 = "main.c:62"
+0x08000418 = "main.c:59"
+0x0800041c = "main.c:62"
+0x08000426 = "main.c:60"
+0x0800042e = "main.c:63"
+0x0800043a = "main.c:64"
+0x08000444 = "main.c:71"
+0x08000446 = "main.c:67"
+0x08000448 = "main.c:71"
+0x0800044a = "main.c:72"
+0x0800044c = "main.c:71"
+0x0800044e = "main.c:72"
+0x08000456 = "main.c:73"
+0x08000458 = "main.c:72"
+0x0800045a = "main.c:73"
+0x0800045e = "main.c:73"
+0x08000466 = "main.c:74"
+0x08000470 = "main.c:75"
+0x08000472 = "main.c:75"
+0x08000476 = "main.c:75"
+0x08000478 = "main.c:75"
+0x0800047c = "main.c:76"
+0x0800047e = "main.c:76"
+0x08000480 = "main.c:77"
+0x08000482 = "main.c:76"
+0x0800048a = "main.c:77"
+0x08000496 = "main.c:78"
+0x080004a2 = "main.c:79"
+0x080004bc = "main.c:83"
+0x080004c2 = "main.c:82"
+0x080004c4 = "main.c:83"
+0x080004c6 = "main.c:83"
+0x080004cc = "main.c:83"
+0x080004d2 = "main.c:83"
+0x080004d8 = "main.c:85"
+0x080004dc = "main.c:86"
+0x080004e0 = "main.c:87"
+0x080004e6 = "main.c:84"
+
+# Structs, unions and enums by C name (a typedef's for an anonymous one):
+# fields with byte offset, size, type and bitfield bits [lowest, width].
+
+# #define families of pret's include/constants/ that a field takes, by
+# the prefix its name spells (`optionsTextSpeed`: OPTIONS_TEXT_SPEED_*),
+# and enums a field or global takes by its type (`GameMode`):
+# each value's one name, the fields, as `type.field`, the globals,
+# and the parameters pret's calls pass them to, as `function:index`.
