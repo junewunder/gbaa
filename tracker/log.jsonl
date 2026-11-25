@@ -4341,3 +4341,4 @@
 {"at":"2026-11-25T02:09:53Z","actor":"loop","tag":"87399151","host":"quack","cmd":"done","id":"native/lift-takes-across-copies","text":"A takes site may pass r4-r11 into another code context: done"}
 {"at":"2026-11-25T02:10:00Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-returns-read","text":"A call takes back only the registers its caller reads: on main"}
 {"at":"2026-11-25T02:10:07Z","actor":"loop","tag":"d3ccf311","host":"quack","cmd":"claim","id":"native/lift-lent-print","text":"Lent stack slots print as locals, borrowers as Lent: claimed"}
+{"at":"2026-11-25T02:16:13Z","actor":"loop","tag":"manual","host":"quack","cmd":"merged","id":"native/lift-takes-across-copies","text":"A takes site may pass r4-r11 into another code context: on main"}
