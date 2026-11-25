@@ -4352,3 +4352,4 @@
 {"at":"2026-11-25T03:03:14Z","actor":"loop","tag":"7d404c81","host":"quack","cmd":"done","id":"merge/quack-lane2-native-lift-lent-print","text":"Merge main on quack lane 2: done"}
 {"at":"2026-11-25T03:04:06Z","actor":"loop","tag":"manual","host":"quack","cmd":"reopen","id":"native/imperium-first-stops","text":"Imperium's lift runs 600 frames: its first stops: back to ready: the loop's review asked for fixes"}
 {"at":"2026-11-25T03:04:11Z","actor":"loop","tag":"b10f4712","host":"quack","cmd":"claim","id":"native/imperium-first-stops","text":"Imperium's lift runs 600 frames: its first stops: claimed"}
+{"at":"2026-11-25T03:12:15Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"add-unit","id":"native/llm-helpers-signatures-design","text":"new unit: LLM rewrites add helpers and change signatures: design"}
