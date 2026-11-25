@@ -5622,7 +5622,19 @@
       "check": "recorded",
       "needs": ["native/lift-returns-read"],
       "uses": ["heavy"],
-      "priority": 84
+      "priority": 84,
+      "record": {
+        "state": "claimed",
+        "by": "874a3e9d",
+        "session": "874a3e9d-8331-4255-9612-15026d84d306",
+        "host": "quack",
+        "pid": 1981823,
+        "start": "101567893",
+        "at": "2026-11-25T05:42:07Z",
+        "branch": "unit/native/lift-returns-past-holes",
+        "beats": true
+      },
+      "round": "2026-11-25T05:42:07Z"
     },
     {
       "id": "native/lift-proto-r3-align",
