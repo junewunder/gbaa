@@ -5807,6 +5807,12 @@
       "detail": "docs/native-port-design.md, 'LLM rewrites that add helpers and change signatures', section 4: a [[helper]] with a body of its own is checked at each call on the run against the pattern's expansion (ref_h_NAME) from the same state, the variants changing its inputs and the RAM it loaded; the fn-check driver at a region's grain. Check: a planted wrong body on the C program is caught, the derived body passes; just check.",
       "needs": ["native/lift-helper-match"],
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/lift-proto-overrides",
+      "title": "A game's own prototype file; stand-ins in its shape",
+      "detail": "docs/native-port-design.md, 'LLM rewrites that add helpers and change signatures', section 3: mods/<game>/protos.toml [[proto]] fn, proto, why, read as the names files' prototypes and winning over them; a refusal of an override fails the lift naming the read; [[standin]] proto = true prints in the prototype's shape and its callers take it; fn-check's wrapper enters reference and replacement each in its own shape. Check: a C program's planted wrong override caught by the native check; a shaped stand-in passes fn-check; lift-check; just check.",
+      "uses": ["heavy"]
     }
   ]
 }
