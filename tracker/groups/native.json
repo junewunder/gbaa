@@ -5746,21 +5746,9 @@
         "by": "485d4a85",
         "at": "2026-11-25T06:21:47Z",
         "evidence": "Section 'LLM rewrites that add helpers and change signatures' in docs/native-port-design.md (132 lines, budget raised to 1482 with reason): today's limits, helpers by example, signatures and per-call forms, each check's reach, the two units under each choice; 5 units filed, 3 questions asked (q/llm-shared-helpers, q/llm-signatures, q/llm-call-forms); just check passed after merging main (15031e63).",
-        "branch": "unit/native/llm-helpers-signatures-design",
         "host": "quack",
-        "landing": {
-          "at": "2026-11-25T06:21:47Z",
-          "by": "485d4a85",
-          "host": "quack",
-          "pid": 1981458,
-          "start": "101567385",
-          "beats": true,
-          "session": "485d4a85-886c-4575-8409-93a299c65c41",
-          "lane": "quack/1"
-        },
-        "pushed": true
-      },
-      "round": "2026-11-25T06:00:09Z"
+        "landed": "2026-11-25T06:26:24Z"
+      }
     },
     {
       "id": "native/lift-patched-iwram-loops",
