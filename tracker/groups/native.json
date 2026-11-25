@@ -5739,6 +5739,13 @@
       "detail": "Found by {unit:native/lift-lent-frameless} (2026-11-25): c-chain-gcc's frame_, move_body and draw_body keep sp and a frame in memory only for fill_rect's fifth argument, stored at [sp] before the call and read by fill_rect as its caller's frame (Frame::callers_only): sp_accesses_escaping_slot 4 there is exactly those stores. Wanted: a callee whose every access to its caller's frame is a load at a constant offset at or above its entry sp, called only by direct calls, takes each such word as a parameter (x_ loads it from s.r[13]+o); each caller's slot then counts as a local (Frame::in_locals), so those three go frameless and print no sp or bank_sp. Check (judged on the C programs): just lift-check 0 differences, every planted fault caught; c-chain-gcc's sp_accesses_escaping_slot and bank_sp_calls bars lowered; Metroid's native route (units/metroid-native.toml) 0 differences; just check.",
       "check": "recorded",
       "uses": ["heavy"]
+    },
+    {
+      "id": "native/warioware-stop-80f0669",
+      "title": "WarioWare's lift: the call to 0x080f0669 (frame 130)",
+      "detail": "After WarioWare's lift: the call to IWRAM 0x030003a8 (frame 39) ({unit:native/warioware-stop-30003a8}): with the copier's stand-in and the IWRAM division's [[copy]] (mods/warioware/holes.toml) the lift stops at frame 130 of 600: f_080f1239 (pc 0x080f1417) calls 0x080f0669, no function: a Thumb function in the sound driver's ROM (0x080f0668: orrs r0, r0; bne; bx lr; then push r4-r11), between its copied routines, that discovery didn't find (likely a pointer call or a table entry). Its ROM neighbour 0x08002620 also copies 0x08000910..0x08000ae0 (an ARM integer square root) to 0x030001c0, which no [[copy]] names yet. Done when: just lift on WarioWare has 0 hard holes, builds, and its first stop is past frame 130 (filed as a unit if not 600 of 600); route-check --native on units/warioware-native.toml (its header has the commands) matches the play build to the new stop, or the first difference is filed; just check passes.",
+      "check": "recorded",
+      "uses": ["heavy"]
     }
   ]
 }
