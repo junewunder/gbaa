@@ -1366,7 +1366,7 @@ by hand through `just capped`, `just long start` or that systemd-run line;
   (native/lift-pret-score; what each measure is: `crates/pret-score`'s
   module doc): the lift's printing scored against pret, Emerald and
   Metroid, one table: a row per measure, a column per game, each cell the
-  lift's number / what its names map offers. The games, their lifts, maps
+  lift's number / what its names map offers (results: its prototypes'). The games, their lifts, maps
   and decomps: `crates/pret-score/games.toml`. It reads the lifts as they
   are: lift each first (`just lift`; `gbaa-lift` alone when no build is
   wanted: Emerald's took 28 min, 1.4 GB). Writes `OUT/summary.toml`
