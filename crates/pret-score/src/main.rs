@@ -40,7 +40,8 @@ fn score(g: &pret_score::Game, data: &Path) -> Result<Score, String> {
         .map(|r| r.summary())
         .unwrap_or_default();
     let c = c_lines(&data.join(&g.decomp).join("src"))?;
-    let offer = offer(&read(&data.join(&g.map))?, c)?;
+    let map = read(&data.join(&g.map))?;
+    let offer = offer(&map, c)?;
     let src = lift.join("src");
     let mut files = Vec::new();
     let mut names: Vec<PathBuf> = std::fs::read_dir(&src)
@@ -52,6 +53,7 @@ fn score(g: &pret_score::Game, data: &Path) -> Result<Score, String> {
     for p in &names {
         files.push(read(p)?);
     }
+    let results = pret_score::results(&map, files.iter().map(String::as_str))?;
     let fns = fn_lines(files.iter().map(String::as_str));
     let noted = fns.len() as u64;
     let (median, worst) = pret_score::worst(fns);
@@ -66,6 +68,7 @@ fn score(g: &pret_score::Game, data: &Path) -> Result<Score, String> {
         fns_noted: noted,
         median,
         worst,
+        results,
     })
 }
 
