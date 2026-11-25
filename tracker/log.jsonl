@@ -4313,3 +4313,4 @@
 {"at":"2026-11-25T00:22:32Z","actor":"loop","tag":"18cd958f","host":"quack","cmd":"claim","id":"native/imperium-first-stops","text":"Imperium's lift runs 600 frames: its first stops: claimed"}
 {"at":"2026-11-25T00:26:29Z","actor":"loop","tag":"manual","host":"quack","cmd":"block","id":"native/lift-returns-read","text":"A call takes back only the registers its caller reads: stuck: the loop's review asked for fixes a second time"}
 {"at":"2026-11-25T00:26:35Z","actor":"loop","tag":"e30a7b20","host":"quack","cmd":"claim","id":"native/lift-lent-print","text":"Lent stack slots print as locals, borrowers as Lent: claimed"}
+{"at":"2026-11-25T00:26:53Z","actor":"oversee","tag":"6056824b","host":"quack","cmd":"edit","id":"native/lift-returns-read","text":"A call takes back only the registers its caller reads: edited (priority)"}
