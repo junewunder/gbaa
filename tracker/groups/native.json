@@ -5727,7 +5727,19 @@
       "id": "native/llm-helpers-signatures-design",
       "title": "LLM rewrites add helpers and change signatures: design",
       "detail": "From the owner, 2026-11-24 (her thoughts on q/mirror-s-task-struct-lookups and q/getmondata-s-argument-calls-prove; not yet a decision). Today an LLM rewrite is one function in, one function out, in the lift's fixed shape, checked by just fn-check; it can't add an item several functions share, and it can't change a signature, since every caller is lifted code. She wants the LLM pass able to do both: name a repeated inlined shape as a new Rust function or macro (case by case: katam's TaskGetStructPtr, 1,070 times in the Amazing Mirror's lift), and change a function's signature (Emerald's GetMonData, declared with two parameters and with three). She doubts the lifter can find such things by rule over and over. Write the design, a section of docs/native-port-design.md, no code: (1) what a rewrite may and may not do today, from fn_check.rs, the stand-in shape, {unit:native/standin-lift-names} and {unit:native/cut-callee-shapes}; (2) shared helpers: who finds the repeated shape (a clone count over the lift is mechanical; the choice and the name aren't), where the helper lives (private, mods/<game>/), whether the LLM rewrites each site or declares the shape once and the lifter applies it at every exact match, macro or function and what decides; (3) signatures: how a changed signature reaches every caller at once, and per-call-site forms; (4) the check for each, tests not proof as for rewrites (june, 2026-11-13): what fn-check, lift-check's planted faults and a game's native route each catch, and what nothing catches; (5) what becomes of {unit:native/lift-task-struct} and {unit:native/lift-proto-two-forms} under each choice, and the units to file. Done when: the section is on main, it ends with the choices that are the owner's as just ask questions (options, what each changes, a default), and just check passes.",
-      "priority": 79
+      "priority": 79,
+      "record": {
+        "state": "claimed",
+        "by": "485d4a85",
+        "session": "485d4a85-886c-4575-8409-93a299c65c41",
+        "host": "quack",
+        "pid": 1981458,
+        "start": "101567385",
+        "at": "2026-11-25T06:00:09Z",
+        "branch": "unit/native/llm-helpers-signatures-design",
+        "beats": true
+      },
+      "round": "2026-11-25T06:00:09Z"
     },
     {
       "id": "native/lift-patched-iwram-loops",
