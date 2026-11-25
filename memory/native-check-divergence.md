@@ -47,3 +47,8 @@ What found Metroid's six timing causes in one session (native/metroid-native-che
   through at the next instruction, compiled code at its block's end, so a block must end at every `IME`
   store; one through a register loaded before an earlier split didn't. Read the generated function
   (`grep -rn 'pub fn f_<addr+1>' out/<play>/parts`) for a `tick_native` after each `IME` store.
+- **Audio and m4a's state only, from a sound's start** (Emerald, native/emerald-m4a-compressed,
+  2026-11-24): a hand-written callee read its caller's r12 (the mixer's step), which a lifted call
+  passed as 0, so the channel never advanced. Read the call in `out/<lift>/src` for a `0` in a register
+  the callee's `x_` reads (`s.r[N]`); the summaries now pass r12 (`Summary::ip`). The whole route's
+  records then matched but for the four text-printer padding bytes.
