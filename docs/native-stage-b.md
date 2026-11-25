@@ -366,11 +366,10 @@ What the done pieces left open, for the units that come next.
   (`call_fn`), are still entered by the plain entry.
 - **A store to `IME` the recompiler can't fold** (piece 1; through a
   register a loop sets) still ticks at its block's end, not at the store.
-- **Shapes return too much** (piece 3). Results are what callers read
-  (native/lift-returns-read), but a caller whose run stopped at a hole,
-  or in another code context, still reads all four of each callee, and
-  an unknown jump by value gives its callers' reads to every function a
-  pointer reaches (native/lift-returns-past-holes).
+- **Shapes return too much** (piece 3). Results are what callers read,
+  past a caller's hole what its path still holds (native/lift-returns-past-holes),
+  but a caller in another code context or cut short reads all four, and an
+  unknown jump by value gives its callers' reads to every pointer's function.
 - **The pile** (piece 3, function addresses). Most words aren't proven
   and nearly every `call_fn` set is every address-taken function. No one
   kind of read holds them (`research/fnref-held-words.md`). The pieces
