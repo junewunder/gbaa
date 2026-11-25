@@ -59,10 +59,14 @@
 # lines raised on eight C rows by the parameters it binds, one line each
 # (`let n: Ref<t::Node> = Ref::new(n);`, till signatures take the type:
 # native/lift-pointer-signatures): c-fnptr-gcc 633 -> 634, c-switch-gcc 644 -> 645, c-chain-gcc 631 -> 632, c-heap-gcc 705 -> 706, c-bits-agbcc 439 -> 442, c-bits-gcc 495 -> 498, c-list-agbcc 596 -> 597, c-list-gcc 665 -> 666.
-# lines raised on thirty rows by 1 to 10 (native/lift-pointer-registers):
+# lines raised on 26 rows by 1 to 10 (native/lift-pointer-registers):
 # a register local typed Ref<T> takes its own line out of the entries'
 # tuple `let` (`let mut pData: Ref<t::SamusData> = Ref::new(0u32);`), and
 # ref_new_at_use lowered on thirty with it.
+# native-copy-takes (native/lift-takes-across-copies) given results_several
+# and tuple_calls (native/lift-returns-read, merged beside it), and its
+# lines, value_lets, reg_local_writes and loops_not_for lowered to what
+# the two together lift.
 # lines_prelude raised 1328 -> 1337 (native/fnref-dense): call_fn and irq_entry
 # take a dense function's ID (`DENSE`, empty at --fn-ids rom). fn_keys_left
 # (native/fnref-dense): the function words and code constants a --fn-ids dense
@@ -93,8 +97,10 @@ rom = "agb/affine.gba"
 route = "units/affine-600.toml"
 
 [program.affine.bars]
+results_several = 10
+tuple_calls = 18
 io_unnamed = 19
-lines = 18617
+lines = 18579
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 305
@@ -119,8 +125,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 291
-value_lets = 6433
-reg_local_writes = 3081
+value_lets = 6420
+reg_local_writes = 3062
 unpacked_unread = 0
 regs_call_entries = 13
 proto_shapes_refused = 0
@@ -130,7 +136,7 @@ bank_sp_calls = 257
 sp_arith_unescaped = 0
 sp_arith_exact = 33
 lr_returned = 0
-loops_not_for = 135
+loops_not_for = 134
 for_counter_arith = 1
 labelled_blocks = 206
 blocks_printed_again = 0
@@ -183,8 +189,10 @@ rom = "agb/mosaic-modes.gba"
 route = "units/mosaic-modes-600.toml"
 
 [program.mosaic-modes.bars]
+results_several = 11
+tuple_calls = 20
 io_unnamed = 19
-lines = 13480
+lines = 13462
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 270
@@ -209,8 +217,8 @@ compare_trees_left = 10
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 283
-value_lets = 4267
-reg_local_writes = 2202
+value_lets = 4260
+reg_local_writes = 2192
 unpacked_unread = 0
 regs_call_entries = 15
 proto_shapes_refused = 0
@@ -281,8 +289,10 @@ planted_store = 0x08000186
 planted_hole = { drop_standin = 0x08002728, names = "error: hard hole in f_08002728 at 0x08002730: CPU state: mrs" }
 
 [program.native-spike.bars]
+results_several = 10
+tuple_calls = 18
 io_unnamed = 19
-lines = 19603
+lines = 19565
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 422
@@ -307,8 +317,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 291
-value_lets = 6725
-reg_local_writes = 3190
+value_lets = 6712
+reg_local_writes = 3171
 unpacked_unread = 0
 regs_call_entries = 15
 proto_shapes_refused = 0
@@ -318,7 +328,7 @@ bank_sp_calls = 263
 sp_arith_unescaped = 0
 sp_arith_exact = 30
 lr_returned = 0
-loops_not_for = 139
+loops_not_for = 138
 for_counter_arith = 0
 labelled_blocks = 213
 blocks_printed_again = 0
@@ -375,8 +385,10 @@ route = "units/native-fallthrough-600.toml"
 planted_flags = ["--fall-as-tail-call"]
 
 [program.native-fallthrough.bars]
+results_several = 10
+tuple_calls = 18
 io_unnamed = 19
-lines = 18195
+lines = 18146
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 306
@@ -401,8 +413,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 290
-value_lets = 6409
-reg_local_writes = 3083
+value_lets = 6391
+reg_local_writes = 3059
 unpacked_unread = 0
 regs_call_entries = 15
 proto_shapes_refused = 0
@@ -412,7 +424,7 @@ bank_sp_calls = 260
 sp_arith_unescaped = 0
 sp_arith_exact = 33
 lr_returned = 0
-loops_not_for = 133
+loops_not_for = 132
 for_counter_arith = 0
 labelled_blocks = 206
 blocks_printed_again = 0
@@ -470,8 +482,10 @@ route = "units/native-irq-hold-601.toml"
 planted_flags = ["--irq-at-waits"]
 
 [program.native-irq-hold.bars]
+results_several = 10
+tuple_calls = 18
 io_unnamed = 19
-lines = 18375
+lines = 18336
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 305
@@ -496,8 +510,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 297
-value_lets = 6464
-reg_local_writes = 3099
+value_lets = 6450
+reg_local_writes = 3080
 unpacked_unread = 0
 regs_call_entries = 13
 proto_shapes_refused = 0
@@ -507,7 +521,7 @@ bank_sp_calls = 267
 sp_arith_unescaped = 0
 sp_arith_exact = 33
 lr_returned = 0
-loops_not_for = 137
+loops_not_for = 136
 for_counter_arith = 0
 labelled_blocks = 210
 blocks_printed_again = 0
@@ -567,8 +581,10 @@ route = "units/native-frame-locals-600.toml"
 planted_flags = ["--plant-slot=0x08000182"]
 
 [program.native-frame-locals.bars]
+results_several = 10
+tuple_calls = 18
 io_unnamed = 19
-lines = 18163
+lines = 18124
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 309
@@ -593,8 +609,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 291
-value_lets = 6401
-reg_local_writes = 3067
+value_lets = 6388
+reg_local_writes = 3048
 unpacked_unread = 0
 regs_call_entries = 13
 proto_shapes_refused = 0
@@ -604,7 +620,7 @@ bank_sp_calls = 261
 sp_arith_unescaped = 0
 sp_arith_exact = 33
 lr_returned = 0
-loops_not_for = 133
+loops_not_for = 132
 for_counter_arith = 0
 labelled_blocks = 206
 blocks_printed_again = 0
@@ -661,8 +677,10 @@ route = "units/native-ime-release-601.toml"
 planted_flags = ["--ime-at-waits"]
 
 [program.native-ime-release.bars]
+results_several = 10
+tuple_calls = 18
 io_unnamed = 19
-lines = 18335
+lines = 18296
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 293
@@ -687,8 +705,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 297
-value_lets = 6452
-reg_local_writes = 3089
+value_lets = 6438
+reg_local_writes = 3070
 unpacked_unread = 0
 regs_call_entries = 13
 proto_shapes_refused = 0
@@ -698,7 +716,7 @@ bank_sp_calls = 271
 sp_arith_unescaped = 0
 sp_arith_exact = 34
 lr_returned = 0
-loops_not_for = 137
+loops_not_for = 136
 for_counter_arith = 0
 labelled_blocks = 210
 blocks_printed_again = 0
@@ -759,8 +777,10 @@ route = "units/native-bios-calls-600.toml"
 # (native/ref-heap-static-arrays).
 
 [program.native-bios-calls.bars]
+results_several = 10
+tuple_calls = 19
 io_unnamed = 19
-lines = 18526
+lines = 18488
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 309
@@ -785,8 +805,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 294
-value_lets = 6490
-reg_local_writes = 3135
+value_lets = 6477
+reg_local_writes = 3116
 unpacked_unread = 0
 regs_call_entries = 13
 proto_shapes_refused = 0
@@ -796,7 +816,7 @@ bank_sp_calls = 259
 sp_arith_unescaped = 0
 sp_arith_exact = 33
 lr_returned = 0
-loops_not_for = 134
+loops_not_for = 133
 for_counter_arith = 0
 labelled_blocks = 206
 blocks_printed_again = 0
@@ -857,8 +877,10 @@ route = "units/native-bios-more-600.toml"
 # restarts the program.
 
 [program.native-bios-more.bars]
+results_several = 16
+tuple_calls = 34
 io_unnamed = 19
-lines = 20037
+lines = 20032
 lines_prelude = 1390
 ref_new_at_use = 1
 casts = 404
@@ -883,8 +905,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 312
-value_lets = 6819
-reg_local_writes = 3174
+value_lets = 6817
+reg_local_writes = 3172
 unpacked_unread = 0
 regs_call_entries = 16
 proto_shapes_refused = 0
@@ -960,8 +982,10 @@ planted_store = 0x08000288
 planted_hole = { drop_standin = 0x080001a4, names = "error: hard hole in f_080001a4 at 0x080001c0: CPU state: a stack switch" }
 
 [program.native-tasks.bars]
+results_several = 7
+tuple_calls = 14
 io_unnamed = 19
-lines = 18539
+lines = 18529
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 304
@@ -986,8 +1010,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 324
-value_lets = 6505
-reg_local_writes = 3060
+value_lets = 6501
+reg_local_writes = 3054
 unpacked_unread = 0
 regs_call_entries = 13
 proto_shapes_refused = 0
@@ -1068,8 +1092,10 @@ route = "units/native-dma-600.toml"
 planted_store = 0x08000180
 
 [program.native-dma.bars]
+results_several = 11
+tuple_calls = 20
 io_unnamed = 19
-lines = 13255
+lines = 13237
 lines_prelude = 1390
 ref_new_at_use = 2
 casts = 273
@@ -1094,8 +1120,8 @@ compare_trees_left = 10
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 291
-value_lets = 4274
-reg_local_writes = 2230
+value_lets = 4267
+reg_local_writes = 2220
 unpacked_unread = 0
 regs_call_entries = 15
 proto_shapes_refused = 0
@@ -1167,8 +1193,10 @@ route = "units/native-save-600.toml"
 planted_store = 0x080002ac
 
 [program.native-save.bars]
+results_several = 11
+tuple_calls = 20
 io_unnamed = 19
-lines = 18398
+lines = 18355
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 333
@@ -1193,8 +1221,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 292
-value_lets = 6499
-reg_local_writes = 3085
+value_lets = 6484
+reg_local_writes = 3063
 unpacked_unread = 0
 regs_call_entries = 13
 proto_shapes_refused = 0
@@ -1204,7 +1232,7 @@ bank_sp_calls = 263
 sp_arith_unescaped = 0
 sp_arith_exact = 35
 lr_returned = 0
-loops_not_for = 134
+loops_not_for = 133
 for_counter_arith = 0
 labelled_blocks = 208
 blocks_printed_again = 0
@@ -1262,8 +1290,10 @@ route = "units/native-bios-region-601.toml"
 # (nowhere); agb/native-bios-region/src/main.rs.
 
 [program.native-bios-region.bars]
+results_several = 11
+tuple_calls = 20
 io_unnamed = 19
-lines = 18313
+lines = 18274
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 293
@@ -1288,8 +1318,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 298
-value_lets = 6436
-reg_local_writes = 3089
+value_lets = 6422
+reg_local_writes = 3070
 unpacked_unread = 0
 regs_call_entries = 13
 proto_shapes_refused = 0
@@ -1299,7 +1329,7 @@ bank_sp_calls = 268
 sp_arith_unescaped = 0
 sp_arith_exact = 35
 lr_returned = 0
-loops_not_for = 135
+loops_not_for = 134
 for_counter_arith = 0
 labelled_blocks = 206
 blocks_printed_again = 0
@@ -1358,8 +1388,10 @@ route = "units/native-bios-affine-600.toml"
 # agb/native-bios-affine/src/main.rs.
 
 [program.native-bios-affine.bars]
+results_several = 10
+tuple_calls = 18
 io_unnamed = 19
-lines = 18609
+lines = 18563
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 385
@@ -1384,8 +1416,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 305
-value_lets = 6556
-reg_local_writes = 3127
+value_lets = 6539
+reg_local_writes = 3105
 unpacked_unread = 0
 regs_call_entries = 13
 proto_shapes_refused = 0
@@ -1395,7 +1427,7 @@ bank_sp_calls = 258
 sp_arith_unescaped = 0
 sp_arith_exact = 33
 lr_returned = 0
-loops_not_for = 134
+loops_not_for = 133
 for_counter_arith = 0
 labelled_blocks = 208
 blocks_printed_again = 0
@@ -1456,8 +1488,10 @@ route = "units/native-serial-600.toml"
 planted_store = 0x0800017c
 
 [program.native-serial.bars]
+results_several = 11
+tuple_calls = 20
 io_unnamed = 19
-lines = 19005
+lines = 18962
 lines_prelude = 1390
 ref_new_at_use = 1
 casts = 420
@@ -1482,8 +1516,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 346
-value_lets = 6721
-reg_local_writes = 3137
+value_lets = 6706
+reg_local_writes = 3115
 unpacked_unread = 0
 regs_call_entries = 13
 proto_shapes_refused = 0
@@ -1493,7 +1527,7 @@ bank_sp_calls = 270
 sp_arith_unescaped = 0
 sp_arith_exact = 36
 lr_returned = 0
-loops_not_for = 137
+loops_not_for = 136
 for_counter_arith = 0
 labelled_blocks = 214
 blocks_printed_again = 0
@@ -1556,8 +1590,10 @@ route = "units/native-irq-wrapper-600.toml"
 planted_store = 0x080001f4
 
 [program.native-irq-wrapper.bars]
+results_several = 12
+tuple_calls = 20
 io_unnamed = 19
-lines = 18608
+lines = 18568
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 312
@@ -1582,8 +1618,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 301
-value_lets = 6546
-reg_local_writes = 3121
+value_lets = 6532
+reg_local_writes = 3101
 unpacked_unread = 0
 regs_call_entries = 15
 proto_shapes_refused = 0
@@ -1593,7 +1629,7 @@ bank_sp_calls = 273
 sp_arith_unescaped = 0
 sp_arith_exact = 33
 lr_returned = 0
-loops_not_for = 137
+loops_not_for = 136
 for_counter_arith = 0
 labelled_blocks = 210
 blocks_printed_again = 0
@@ -1651,8 +1687,10 @@ route = "units/native-takes-600.toml"
 planted_flags = ["--takes-zeroed"]
 
 [program.native-takes.bars]
+results_several = 10
+tuple_calls = 18
 io_unnamed = 19
-lines = 18184
+lines = 18146
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 305
@@ -1677,8 +1715,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 290
-value_lets = 6402
-reg_local_writes = 3073
+value_lets = 6389
+reg_local_writes = 3054
 unpacked_unread = 0
 regs_call_entries = 13
 proto_shapes_refused = 0
@@ -1688,7 +1726,7 @@ bank_sp_calls = 262
 sp_arith_unescaped = 0
 sp_arith_exact = 33
 lr_returned = 0
-loops_not_for = 133
+loops_not_for = 132
 for_counter_arith = 0
 labelled_blocks = 206
 blocks_printed_again = 0
@@ -1747,8 +1785,10 @@ route = "units/native-ram-jump-600.toml"
 planted_flags = ["--takes-zeroed"]
 
 [program.native-ram-jump.bars]
+results_several = 10
+tuple_calls = 18
 io_unnamed = 19
-lines = 18167
+lines = 18129
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 306
@@ -1773,8 +1813,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 290
-value_lets = 6394
-reg_local_writes = 3070
+value_lets = 6381
+reg_local_writes = 3051
 unpacked_unread = 0
 regs_call_entries = 14
 proto_shapes_refused = 0
@@ -1784,7 +1824,7 @@ bank_sp_calls = 261
 sp_arith_unescaped = 0
 sp_arith_exact = 34
 lr_returned = 0
-loops_not_for = 133
+loops_not_for = 132
 for_counter_arith = 0
 labelled_blocks = 206
 blocks_printed_again = 0
@@ -1832,6 +1872,104 @@ rom_static_fn_keys = 3
 rom_refs = 17
 gap_targets = 5
 
+[program.native-copy-takes]
+rom = "agb/native-copy-takes.gba"
+route = "units/native-copy-takes-600.toml"
+# A takes site in one code context reaching a taker in another
+# (native/lift-takes-across-copies): tc_set (ROM) calls tc_c, copied to
+# IWRAM, which calls tc_b (ROM) through a pointer, and tc_b reads r8 and r9
+# as tc_set left them; holes/native-copy-takes.toml's [[takes]] name both
+# calls. Stage A's old call (--takes-zeroed) passes them none.
+planted_flags = ["--takes-zeroed"]
+
+[program.native-copy-takes.bars]
+io_unnamed = 19
+results_several = 10
+tuple_calls = 18
+lines = 18141
+lines_prelude = 1390
+ref_new_at_use = 0
+casts = 305
+texts_left = 0
+functions = 113
+functions_iwram = 4
+functions_lifted = 110
+functions_unrecognised = 113
+functions_replaced = 3
+standins = 3
+functions_summary_hole = 83
+four_register_functions_without_summary_hole = 0
+callee_saves_unproven = 53
+hard_holes = 0
+entries_beyond_one = 23
+guest_pc_plain = 0
+functions_result_unneeded = 0
+blocks = 1714
+functions_in_match = 1
+blocks_in_match = 206
+compare_trees_left = 13
+dead_flag_writes = 0
+shift_pairs_left = 0
+load_rotates_left = 296
+value_lets = 6395
+reg_local_writes = 3050
+unpacked_unread = 0
+regs_call_entries = 13
+proto_shapes_refused = 0
+unread_lets = 0
+adc_sums = 0
+bank_sp_calls = 262
+sp_arith_unescaped = 0
+sp_arith_exact = 34
+lr_returned = 0
+loops_not_for = 132
+for_counter_arith = 0
+labelled_blocks = 206
+blocks_printed_again = 0
+load_const_ram = 0
+load_const_io = 12
+load_const_rom = 0
+load_const_display = 0
+load_const_sram = 0
+load_const_other = 0
+load_sp = 228
+load_computed_ram = 0
+load_computed_io = 6
+load_computed_rom = 0
+load_computed_display = 0
+load_computed_sram = 0
+load_computed_other = 0
+load_computed_unknown = 710
+store_const_ram = 0
+store_const_io = 25
+store_const_rom = 0
+store_const_display = 0
+store_const_sram = 0
+store_const_other = 0
+store_sp = 453
+store_computed_ram = 1
+store_computed_io = 6
+store_computed_rom = 0
+store_computed_display = 0
+store_computed_sram = 0
+store_computed_other = 0
+store_computed_unknown = 352
+pointer_unexplained = 1
+ref_unexplained = 46
+sp_accesses_local_slot = 0
+sp_accesses_escaping_slot = 674
+sp_accesses_callers_frame = 7
+call_fn_calls = 64
+call_fn_four_complete = 56
+jumps_by_value = 8
+branches_on_raw_flags = 28
+entry_lr_returns_call_fn = 0
+fn_words_not_proven = 58
+fn_keys_left = 61
+rom_static_fn_keys = 4
+rom_refs = 17
+gap_targets = 5
+
 [program.native-gives]
 rom = "agb/native-gives.gba"
 route = "units/native-gives-600.toml"
@@ -1842,8 +1980,10 @@ route = "units/native-gives-600.toml"
 planted_flags = ["--gives-kept"]
 
 [program.native-gives.bars]
+results_several = 10
+tuple_calls = 18
 io_unnamed = 19
-lines = 18168
+lines = 18130
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 305
@@ -1868,8 +2008,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 290
-value_lets = 6393
-reg_local_writes = 3069
+value_lets = 6380
+reg_local_writes = 3050
 unpacked_unread = 0
 regs_call_entries = 13
 proto_shapes_refused = 0
@@ -1879,7 +2019,7 @@ bank_sp_calls = 262
 sp_arith_unescaped = 0
 sp_arith_exact = 34
 lr_returned = 0
-loops_not_for = 133
+loops_not_for = 132
 for_counter_arith = 0
 labelled_blocks = 206
 blocks_printed_again = 0
@@ -1937,13 +2077,15 @@ route = "units/c-fnptr-agbcc-600.toml"
 planted_store = 0x080005d4
 
 [program.c-fnptr-agbcc.bars]
+results_several = 0
+tuple_calls = 0
 locals_noted = 10
 data_constants_unnamed = 0
 io_unnamed = 0
 computed_unknown_unnamed = 5
 bitfield_arith = 0
 bitfield_joined = 0
-lines = 566
+lines = 563
 lines_prelude = 1390
 ref_new_at_use = 16
 casts = 55
@@ -1969,7 +2111,7 @@ dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 2
 value_lets = 144
-reg_local_writes = 73
+reg_local_writes = 70
 unpacked_unread = 0
 regs_call_entries = 0
 proto_shapes_refused = 0
@@ -2037,6 +2179,8 @@ route = "units/c-fnptr-gcc-600.toml"
 planted_store = 0x08000390
 
 [program.c-fnptr-gcc.bars]
+results_several = 0
+tuple_calls = 0
 locals_noted = 26
 data_constants_unnamed = 0
 io_unnamed = 0
@@ -2046,7 +2190,7 @@ bitfield_joined = 0
 # lines raised 634 -> 635 (native/lift-pointer-types): with its prototype's
 # parameter name, bounce_update rebinds `obj` as Ref<t::Obj> in its body, until
 # native/lift-pointer-signatures types the parameter in the signature.
-lines = 635
+lines = 633
 lines_prelude = 1390
 ref_new_at_use = 5
 casts = 43
@@ -2072,7 +2216,7 @@ dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 2
 value_lets = 153
-reg_local_writes = 81
+reg_local_writes = 79
 unpacked_unread = 0
 regs_call_entries = 0
 proto_shapes_refused = 2
@@ -2142,6 +2286,8 @@ route = "units/c-switch-agbcc-600.toml"
 planted_store = 0x080005ca
 
 [program.c-switch-agbcc.bars]
+results_several = 0
+tuple_calls = 0
 locals_noted = 4
 data_constants_unnamed = 0
 io_unnamed = 0
@@ -2244,6 +2390,8 @@ route = "units/c-switch-gcc-600.toml"
 planted_store = 0x080005a0
 
 [program.c-switch-gcc.bars]
+results_several = 0
+tuple_calls = 0
 locals_noted = 32
 data_constants_unnamed = 0
 io_unnamed = 0
@@ -2347,6 +2495,8 @@ planted_store = 0x0800058e
 planted_flags = ["--plant-proto=0x08000271"]
 
 [program.c-chain-agbcc.bars]
+results_several = 0
+tuple_calls = 0
 locals_noted = 7
 data_constants_unnamed = 0
 io_unnamed = 0
@@ -2447,6 +2597,8 @@ route = "units/c-chain-gcc-600.toml"
 planted_store = 0x08000550
 
 [program.c-chain-gcc.bars]
+results_several = 0
+tuple_calls = 0
 locals_noted = 37
 data_constants_unnamed = 0
 io_unnamed = 0
@@ -2548,13 +2700,15 @@ route = "units/c-heap-agbcc-600.toml"
 planted_store = 0x08000692
 
 [program.c-heap-agbcc.bars]
+results_several = 0
+tuple_calls = 0
 locals_noted = 15
 data_constants_unnamed = 0
 io_unnamed = 0
 computed_unknown_unnamed = 5
 bitfield_arith = 0
 bitfield_joined = 0
-lines = 664
+lines = 662
 lines_prelude = 1390
 ref_new_at_use = 4
 casts = 34
@@ -2580,7 +2734,7 @@ dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 2
 value_lets = 148
-reg_local_writes = 93
+reg_local_writes = 91
 unpacked_unread = 0
 regs_call_entries = 0
 proto_shapes_refused = 0
@@ -2649,13 +2803,15 @@ route = "units/c-heap-gcc-600.toml"
 planted_store = 0x0800060e
 
 [program.c-heap-gcc.bars]
+results_several = 0
+tuple_calls = 0
 locals_noted = 32
 data_constants_unnamed = 0
 io_unnamed = 0
 computed_unknown_unnamed = 37
 bitfield_arith = 0
 bitfield_joined = 0
-lines = 707
+lines = 705
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 31
@@ -2681,7 +2837,7 @@ dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 18
 value_lets = 181
-reg_local_writes = 92
+reg_local_writes = 87
 unpacked_unread = 0
 regs_call_entries = 0
 proto_shapes_refused = 0
@@ -2754,6 +2910,8 @@ route = "units/c-bits-agbcc-600.toml"
 planted_store = 0x08000292
 
 [program.c-bits-agbcc.bars]
+results_several = 0
+tuple_calls = 0
 lines = 446
 io_unnamed = 0
 texts_left = 0
@@ -2861,6 +3019,8 @@ route = "units/c-bits-gcc-600.toml"
 planted_store = 0x080002a2
 
 [program.c-bits-gcc.bars]
+results_several = 0
+tuple_calls = 0
 lines = 497
 io_unnamed = 0
 texts_left = 0
@@ -2966,7 +3126,9 @@ route = "units/c-loops-agbcc-600.toml"
 planted_store = 0x0800081e
 
 [program.c-loops-agbcc.bars]
-lines = 782
+results_several = 0
+tuple_calls = 0
+lines = 781
 io_unnamed = 0
 texts_left = 0
 lines_prelude = 1390
@@ -2997,7 +3159,7 @@ sp_arith_unescaped = 0
 sp_arith_exact = 0
 lr_returned = 0
 value_lets = 158
-reg_local_writes = 126
+reg_local_writes = 124
 unpacked_unread = 0
 regs_call_entries = 0
 proto_shapes_refused = 0
@@ -3073,6 +3235,8 @@ route = "units/c-loops-gcc-600.toml"
 planted_store = 0x080007f6
 
 [program.c-loops-gcc.bars]
+results_several = 0
+tuple_calls = 0
 lines = 846
 io_unnamed = 0
 texts_left = 0
@@ -3175,10 +3339,12 @@ route = "units/c-list-agbcc-600.toml"
 planted_store = 0x080005f8
 
 [program.c-list-agbcc.bars]
+results_several = 0
+tuple_calls = 0
 rom_refs = 0
 sp_arith_exact = 0
 rom_static_fn_keys = 4
-lines = 600
+lines = 591
 io_unnamed = 0
 texts_left = 0
 lines_prelude = 1390
@@ -3208,7 +3374,7 @@ bank_sp_calls = 18
 sp_arith_unescaped = 0
 lr_returned = 0
 value_lets = 146
-reg_local_writes = 75
+reg_local_writes = 66
 unpacked_unread = 0
 regs_call_entries = 0
 proto_shapes_refused = 0
@@ -3277,10 +3443,12 @@ route = "units/c-list-gcc-600.toml"
 planted_store = 0x08000612
 
 [program.c-list-gcc.bars]
+results_several = 0
+tuple_calls = 0
 rom_refs = 0
 sp_arith_exact = 0
 rom_static_fn_keys = 4
-lines = 661
+lines = 660
 io_unnamed = 0
 texts_left = 0
 lines_prelude = 1390
@@ -3310,7 +3478,7 @@ bank_sp_calls = 23
 sp_arith_unescaped = 0
 lr_returned = 0
 value_lets = 171
-reg_local_writes = 85
+reg_local_writes = 83
 unpacked_unread = 0
 regs_call_entries = 0
 proto_shapes_refused = 0
@@ -3378,7 +3546,9 @@ route = "units/c-jump-agbcc-600.toml"
 planted_store = 0x080004ae
 
 [program.c-jump-agbcc.bars]
-lines = 631
+results_several = 0
+tuple_calls = 0
+lines = 626
 locals_noted = 4
 io_unnamed = 0
 texts_left = 0
@@ -3410,8 +3580,8 @@ bank_sp_calls = 7
 sp_arith_unescaped = 0
 sp_arith_exact = 2
 lr_returned = 0
-value_lets = 131
-reg_local_writes = 69
+value_lets = 129
+reg_local_writes = 68
 unpacked_unread = 0
 regs_call_entries = 3
 proto_shapes_refused = 0
@@ -3476,6 +3646,8 @@ route = "units/c-jump-gcc-600.toml"
 planted_store = 0x0800047c
 
 [program.c-jump-gcc.bars]
+results_several = 1
+tuple_calls = 2
 lines = 763
 locals_noted = 21
 io_unnamed = 0
@@ -3574,8 +3746,10 @@ route = "units/native-entry-jump-600.toml"
 planted_flags = ["--fall-as-tail-call"]
 
 [program.native-entry-jump.bars]
+results_several = 10
+tuple_calls = 18
 io_unnamed = 19
-lines = 18284
+lines = 18235
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 305
@@ -3600,8 +3774,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 296
-value_lets = 6428
-reg_local_writes = 3091
+value_lets = 6410
+reg_local_writes = 3067
 unpacked_unread = 0
 regs_call_entries = 17
 proto_shapes_refused = 0
@@ -3611,7 +3785,7 @@ bank_sp_calls = 260
 sp_arith_unescaped = 0
 sp_arith_exact = 34
 lr_returned = 0
-loops_not_for = 133
+loops_not_for = 132
 for_counter_arith = 0
 labelled_blocks = 206
 blocks_printed_again = 0
@@ -3669,11 +3843,13 @@ route = "units/native-ime-i-set-601.toml"
 planted_flags = ["--irq-at-waits"]
 
 [program.native-ime-i-set.bars]
+results_several = 10
+tuple_calls = 18
 rom_refs = 17
 sp_arith_exact = 33
 rom_static_fn_keys = 3
 io_unnamed = 19
-lines = 18378
+lines = 18339
 lines_prelude = 1390
 ref_new_at_use = 0
 casts = 304
@@ -3698,8 +3874,8 @@ compare_trees_left = 13
 dead_flag_writes = 0
 shift_pairs_left = 0
 load_rotates_left = 297
-value_lets = 6463
-reg_local_writes = 3100
+value_lets = 6449
+reg_local_writes = 3081
 unpacked_unread = 0
 regs_call_entries = 13
 proto_shapes_refused = 0
@@ -3708,7 +3884,7 @@ adc_sums = 0
 bank_sp_calls = 270
 sp_arith_unescaped = 0
 lr_returned = 0
-loops_not_for = 137
+loops_not_for = 136
 for_counter_arith = 0
 labelled_blocks = 210
 blocks_printed_again = 0

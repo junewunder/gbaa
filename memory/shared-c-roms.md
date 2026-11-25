@@ -15,3 +15,5 @@ hook: another lane's `just c-tests` from an older branch swaps them under you; b
   (`for e in ~/.local/share/gbaa/*; do [ "$(basename $e)" = c ] || ln -s $e /tmp/d/; done; mkdir /tmp/d/c`),
   then `GBAA_DATA=/tmp/d just c-tests` and run `GBAA_DATA=/tmp/d just
   lift-metrics` / `just long start … -- env GBAA_DATA=/tmp/d just lift-check`.
+  The bars step of `just lift-check` lifts the C programs within a minute
+  of its start, so the private dir matters most then.
