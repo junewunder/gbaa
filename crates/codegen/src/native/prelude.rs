@@ -412,6 +412,15 @@ fn unexplained(a: u32, off: usize, e: usize, n: usize) -> ! {
 #[repr(transparent)]
 pub struct Ref<T>(pub u32, std::marker::PhantomData<T>);
 
+// A copy, whatever `T` is (a derive would ask `T: Copy`): a pointer
+// variable is declared one (native/lift-pointer-types).
+impl<T> Clone for Ref<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T> Copy for Ref<T> {}
+
 impl<T> Ref<T> {
     #[inline(always)]
     pub fn new(a: u32) -> Ref<T> {
@@ -422,6 +431,14 @@ impl<T> Ref<T> {
     #[inline(always)]
     pub fn to(a: u32, off: u32) -> Ref<T> {
         Ref(a.wrapping_sub(off), std::marker::PhantomData)
+    }
+
+    /// The guest address: C's `&x` of what this points at, an element's
+    /// or a field's address printed by name (native/lift-element-address),
+    /// or a pointer variable used as a number (native/lift-pointer-types).
+    #[inline(always)]
+    pub const fn addr(self) -> u32 {
+        self.0
     }
 }
 

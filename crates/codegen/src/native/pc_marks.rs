@@ -19,12 +19,7 @@ pub use build::{Mark, TABLE, fnv, parse, restore};
 /// The lifted crate's `build.rs`.
 pub const BUILD_RS: &str = include_str!("pc_marks_build.rs");
 
-/// Whether `f` (a name under src/) is a module of lifted functions: the
-/// ones [`modules`](super::modules) names `m_<key>.rs` (`m<i>_` for a
-/// copy).
-pub fn is_module(f: &str) -> bool {
-    f.starts_with('m') && f != "main.rs" && f.ends_with(".rs")
-}
+pub use super::modules::is_module;
 
 /// The key of a `pc(0x…);` statement, `s` exactly that.
 fn key_of(s: &str) -> Option<u32> {

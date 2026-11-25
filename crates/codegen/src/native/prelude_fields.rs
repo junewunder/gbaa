@@ -8,13 +8,6 @@
 /// The `t` module's name for a typed pointer.
 pub type Ptr<T> = Ref<T>;
 
-impl<T> Clone for Ref<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-impl<T> Copy for Ref<T> {}
-
 impl<T> Ref<T> {
     pub const fn at(a: u32) -> Ref<T> {
         Ref(a, std::marker::PhantomData)

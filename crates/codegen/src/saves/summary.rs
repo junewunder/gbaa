@@ -145,6 +145,9 @@ pub struct Summary {
     /// For each register in `passed_after`, a caller that passes it on
     /// and how.
     pub passed_by: BTreeMap<u8, (u32, Cause)>,
+    /// For each register in `read_after`, a caller whose own instruction
+    /// reads it, and that instruction's address.
+    pub read_by: BTreeMap<u8, (u32, u32)>,
     /// The registers callers return as their own result without reading
     /// (`return f(x);`), where a caller of theirs reads it with its own
     /// instruction or forwards it again.
@@ -168,6 +171,15 @@ pub struct Summary {
     /// file names ([`Passing`]); any other way in zeroes them, a hole.
     /// One only returned in r0–r3 isn't here ([`Summary::entry_returns`]).
     pub takes: u8,
+    /// Why it reads r12 as it came (`None`: it doesn't), on some path:
+    /// its own instruction, or a callee's it passes it on to. Compiled
+    /// code never does (r12 is scratch at a call), but hand-written code
+    /// may share its caller's: the Pokémon games' m4a mixer keeps the
+    /// sample rate's step in r12 across its `bl` to the compressed-sample
+    /// path, which multiplies by it. The lift passes it at each direct
+    /// call and tail call (unit `native/emerald-m4a-compressed`); a
+    /// pointer call zeroes it, a hard hole (`reads r12 at entry`).
+    pub ip: Option<Cause>,
     /// The registers of r4–r11 (bit `n - 4` for rN) it gives back: ones it
     /// may change ([`Summary::changes`]) that a caller reads after a
     /// direct call to it before writing them (hand-written code that
@@ -306,6 +318,10 @@ pub struct Passing {
     /// runs its extended entry with every register the jumper has, so
     /// the jumper takes from its callers those it still has as they came,
     /// as a tail call's caller does (unit `native/ram-jump-passes-regs`).
+    /// A call to one, direct or at a [`Passing::sites`] call, passes it
+    /// the caller's registers all the same (Minish Cap's IWRAM entity
+    /// loop's pointer call to its ROM NPC updater; unit
+    /// `native/lift-takes-across-copies`).
     pub foreign: BTreeMap<u32, u8>,
 }
 
@@ -390,6 +406,8 @@ pub(super) struct Sum<'a> {
     /// The functions proven to keep r4–r11 and sp ([`super::Proof`]).
     kept: &'a BTreeSet<u32>,
     params: BTreeMap<u8, Cause>,
+    /// [`Summary::ip`], the first read found.
+    ip: Option<Cause>,
     /// r0–r3 and r12's origins, joined over every return.
     exit: Option<Vec<Org>>,
     /// (callee, register): a read after a direct call (or one of a
@@ -525,6 +543,7 @@ impl<'a> Sum<'a> {
             saves,
             kept,
             params: BTreeMap::new(),
+            ip: None,
             exit: None,
             used: BTreeMap::new(),
             undefined: BTreeMap::new(),
@@ -685,6 +704,16 @@ impl<'a> Sum<'a> {
         }
     }
 
+    /// r12 read in state `s`, for `cause`, where the value reaches a use
+    /// other than a store's ([`Summary::ip`]): saving it (`push {r12}`, a
+    /// context save, an IRQ handler's `stmfd sp!, {r0-r3, r12, lr}`) is
+    /// no use.
+    pub(super) fn read_ip(&mut self, s: &State, cause: Cause) {
+        if self.ip.is_none() && s.org[4].entry {
+            self.ip = Some(cause);
+        }
+    }
+
     /// A read at `at` of `r`, one of r4–r11 that `by`, called directly
     /// before, may have changed: `by` gives it back and the lift's call
     /// takes it ([`Summary::gives`]). A stand-in has no extended entry to
@@ -741,6 +770,16 @@ impl<'a> Sum<'a> {
                 self.read(s, r, cause);
             }
         }
+        // A direct callee reading r12 as it came reads this call's
+        // (the lift passes it, [`Summary::ip`]).
+        if let Some(c) = callee
+            && !self.passing.replaced.contains(&c)
+            && self.sums.get(&c).is_some_and(|x| x.ip.is_some())
+        {
+            let cause = Cause::Callee { callee: c, at };
+            self.read(s, 12, cause);
+            self.read_ip(s, cause);
+        }
         // What a callee takes of r4–r11 is this call's own registers (the
         // lift passes them): one still as it came is taken in turn.
         let takers: Vec<u32> = match callee {
@@ -756,9 +795,15 @@ impl<'a> Sum<'a> {
         };
         for c in takers {
             self.refs.insert(c);
+            // A callee in another code context (a named site's in an
+            // IWRAM copy calling a ROM function, or a ROM function's
+            // constant call into the copy) takes what that context's
+            // summary says ([`Passing::foreign`], unit
+            // `native/lift-takes-across-copies`).
             let takes = match self.sums.get(&c) {
-                Some(x) if !self.passing.replaced.contains(&c) => x.takes,
-                _ => 0,
+                _ if self.passing.replaced.contains(&c) => 0,
+                Some(x) => x.takes,
+                None => self.passing.foreign.get(&c).copied().unwrap_or(0),
             };
             // (A stack address through a named pointer call escapes
             // there: `native::frame` is handed the named sites.)
@@ -1363,11 +1408,13 @@ pub fn summarize_passing(
             read_after: 0,
             passed_after: 0,
             passed_by: BTreeMap::new(),
+            read_by: BTreeMap::new(),
             forwarded_after: 0,
             forwards: sum.forwards(),
             keeps: proof.kept.contains(&k),
             changes: sum.changes,
             takes,
+            ip: sum.ip,
             gives: sums.get(&k).map_or(0, |s| s.gives),
             passes: sum.passes.clone(),
             holes: sum.holes.clone(),
@@ -1434,6 +1481,7 @@ pub fn summarize_passing(
             || old.exit != new.exit
             || old.changes != new.changes
             || old.takes != new.takes
+            || old.ip.is_some() != new.ip.is_some()
             || old.echoes != new.echoes
             || old.lr_left != new.lr_left
             || old.returns != new.returns
@@ -1472,8 +1520,9 @@ pub fn summarize_passing(
     for (caller, u) in used {
         for ((c, r), cause) in u {
             if let Some(s) = sums.get_mut(&c) {
-                if let Cause::Reads(_) = cause {
+                if let Cause::Reads(at) = cause {
                     s.read_after |= 1 << r;
+                    s.read_by.entry(r).or_insert((caller, at));
                 } else {
                     s.passed_after |= 1 << r;
                     s.passed_by.entry(r).or_insert((caller, cause));
@@ -1552,6 +1601,44 @@ pub fn summarize_passing(
         for k in found {
             sums.get_mut(&k).expect("a summary").holes.insert(format!(
                 "0x{k:08x}: changes r4-r11 and may be called through a pointer"
+            ));
+        }
+    }
+    // A read of r12 as it came ([`Summary::ip`]) is passed by a direct
+    // call and a tail call, never by a pointer call (`call_fn`, a holes
+    // file's `[[takes]]` site alike: `Regs::call` zeroes it): hard where a
+    // pointer may reach the reader, as for r4–r11.
+    let ip: BTreeSet<u32> = sums
+        .iter()
+        .filter(|(_, s)| s.ip.is_some())
+        .map(|(&k, _)| k)
+        .collect();
+    if !ip.is_empty() {
+        let mut found: BTreeSet<u32> = sets
+            .values()
+            .flatten()
+            .filter(|k| ip.contains(k))
+            .copied()
+            .collect();
+        if ctx.base == analysis::program::ROM_BASE {
+            found.extend(
+                ctx.rom
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|&w| u32::from_le_bytes(w))
+                    .filter(|w| ip.contains(w)),
+            );
+        } else if let Some(p) = &passing.pointed {
+            found.extend(ip.intersection(p).copied());
+        } else {
+            found.extend(ip.iter().copied());
+        }
+        for k in found {
+            let s = sums.get_mut(&k).expect("a summary");
+            let at = s.ip.map_or(k, Cause::at);
+            s.holes.insert(format!(
+                "0x{at:08x}: reads r12 at entry: a pointer call zeroes it"
             ));
         }
     }

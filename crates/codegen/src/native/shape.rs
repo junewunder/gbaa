@@ -15,10 +15,12 @@
 //!   `forwarded_after`: its direct callers, and indirect ones whose
 //!   complete callee set has it; the summary's `results` are these it
 //!   defines);
-//! - r0, always: an indirect call's caller reads it where the callee set
-//!   is incomplete (the summaries take such a callee to define r0 and
-//!   leave r1-r3 undefined), and a call through `call_fn` gets it back
-//!   from the function's adapter; every function's demand includes it;
+//! - r0, where a pointer can reach it ([`Node::addressed`], `FNS`'s
+//!   functions; native/lift-returns-read): an indirect call's caller reads
+//!   it where the callee set is incomplete (the summaries take such a
+//!   callee to define r0 and leave r1-r3 undefined), and a call through
+//!   `call_fn` gets it back from the function's adapter. One no pointer
+//!   reaches gives back only what its callers read (a C `void` nothing);
 //! - all of r0-r3 where a caller's reads aren't known: a direct caller
 //!   whose run stopped at a hole (what it reads past the hole is unseen),
 //!   one in another code context (the ROM and an IWRAM copy are
@@ -31,16 +33,42 @@
 //! - what may be read after a function that falls or jumps into its
 //!   entry, since its return goes there ([`Shape`]'s demand is a fixed
 //!   point over those jumps), and after one that jumps to a function by
-//!   value (a tail call through `call_fn`) wherever it may go.
+//!   value (a tail call through `call_fn`) where it may go: any function
+//!   a pointer reaches (a jump after a context restore, `longjmp`'s, goes
+//!   back into its save's caller by unwinding, no function's return).
 //!
 //! A result it may leave as it came on some paths (its entry value) is a
 //! parameter too, so that path returns what the caller passed. A register
 //! it never changes isn't a result: the caller's value stands; nor is one
 //! that holds only its entry lr on every return ([`Summary::lr_left`]:
-//! agbcc's `pop {r0}; bx r0`), the return address, no value.
+//! agbcc's `pop {r0}; bx r0`), the return address, no value. One it may
+//! change but no caller reads isn't a result either ([`changed`]), and a
+//! caller's copy of it is dead across the call (`FnPrinter::clobbers`):
+//! a scratch register clobbered prints as nothing. Hand-written code
+//! returning in r1-r3 (`__aeabi_uidivmod`'s remainder) keeps them, as
+//! its callers read them.
+//!
+//! **Prototypes** (unit `native/lift-signature-holes`; the owner's call,
+//! 2026-11-20). Where the names files give a function's prototype
+//! ([`Node::proto`]: `crate::saves::proto_regs`), its shape is the
+//! prototype's, hole or not: its parameters and its one value or none.
+//! The summaries stay the safety check: the prototype is refused, and the
+//! function keeps the summaries' shape (four registers where they give
+//! none), where they prove it wrong ([`refusal`]): the function reads a
+//! register past the prototype's parameters (an instruction of its own, a
+//! callee's or a BIOS call's at the end of a chain it passes it on
+//! through; not an indirect call, which the summaries take to read all
+//! four), a caller reads a register after it that the prototype doesn't
+//! return ([`Node::proven_after`], carried over `return f(x);` and falls
+//! as the demand is), it returns a result as it came that the prototype
+//! doesn't pass, or it takes or gives r4-r11. What the summaries can't
+//! prove (a read past a hole, a caller's past its own) the prototype
+//! settles: the native check and fn-check are what catch a wrong one, and
+//! `gbaa-lift --plant-proto=KEY` ([`Node::forced`]) plants one the check
+//! must catch. A stand-in keeps four registers.
 
 use crate::func::{Ctx, Func, Plan, exits};
-use crate::saves::{Summaries, Summary};
+use crate::saves::{Cause, Summaries, Summary};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// A shaped function's registers (bit `n` for rN, r0-r3).
@@ -132,6 +160,24 @@ pub struct Node<'a> {
     /// A stand-in from the holes file replaces it: it keeps the
     /// four-register form.
     pub standin: bool,
+    /// Its address may be taken (`FNS`'s: a pointer can reach it), so
+    /// an indirect call whose callee set is incomplete, or a tail call
+    /// by value, may reach it.
+    pub addressed: bool,
+    /// Its prototype's shape, from the names files ([`crate::saves::proto_regs`]).
+    pub proto: Option<Shape>,
+    /// The prototype is taken unchecked (the planted wrong prototype).
+    pub forced: bool,
+    /// Its parameters past what the prototype could leave out: the
+    /// registers the summary's causes prove read ([`proven_params`]).
+    pub proven_params: u8,
+    /// What its callers' runs prove read after it: their own
+    /// instructions' reads, and passing on to a callee whose chain ends in
+    /// one ([`proven_after`]).
+    pub proven_after: u8,
+    /// Where each proof is, for the report: by register, the reading
+    /// instruction and its function (params first, then reads after).
+    pub proofs: BTreeMap<u8, String>,
 }
 
 /// The shapes, and why the rest have none.
@@ -144,6 +190,11 @@ pub struct Shapes {
     /// The registers a jump by value's tail call may leave read, added to
     /// every function's results.
     pub by_value: u8,
+    /// The shaped functions whose shape is their prototype's.
+    pub from_proto: BTreeSet<u32>,
+    /// The functions whose prototype the summaries prove wrong, and why
+    /// ([`refusal`]): they keep the summaries' shape, or four registers.
+    pub refused: BTreeMap<u32, String>,
 }
 
 /// Every function's shape. `nodes` are all functions, by key.
@@ -178,7 +229,10 @@ pub fn shapes(nodes: &BTreeMap<u32, Node>) -> Shapes {
         .iter()
         .map(|(&k, n)| {
             let d = match n.sum {
-                Some(s) => (s.read_after | s.passed_after | s.forwarded_after) as u8 & 0xf | 1,
+                Some(s) => {
+                    (s.read_after | s.passed_after | s.forwarded_after) as u8 & 0xf
+                        | u8::from(n.addressed)
+                }
                 None => 0xf,
             };
             (k, d)
@@ -236,10 +290,45 @@ pub fn shapes(nodes: &BTreeMap<u32, Node>) -> Shapes {
                 }
             }
         }
-        for t in demand.values_mut() {
-            if *t | by_value != *t {
+        // A tail call by value goes only where a pointer can.
+        for (k, t) in demand.iter_mut() {
+            if nodes[k].addressed && *t | by_value != *t {
                 *t |= by_value;
                 grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    // What callers are proven to read after each returns, carried as
+    // the demand is: over `return f(x);` and into what it jumps into.
+    let mut proven: BTreeMap<u32, u8> = nodes.iter().map(|(&k, n)| (k, n.proven_after)).collect();
+    loop {
+        let mut grew = false;
+        for (&k, n) in nodes {
+            let d = proven[&k];
+            let forwards = n.sum.map(|s| &s.forwards).into_iter().flatten();
+            for (&r, cs) in forwards {
+                if r > 3 || d & 1 << r == 0 {
+                    continue;
+                }
+                for c in cs {
+                    if let Some(t) = proven.get_mut(c)
+                        && *t & 1 << r == 0
+                    {
+                        *t |= 1 << r;
+                        grew = true;
+                    }
+                }
+            }
+            for j in &n.edges.jumps {
+                if let Some(t) = proven.get_mut(j)
+                    && *t | d != *t
+                {
+                    *t |= d;
+                    grew = true;
+                }
             }
         }
         if !grew {
@@ -251,8 +340,23 @@ pub fn shapes(nodes: &BTreeMap<u32, Node>) -> Shapes {
         ..Shapes::default()
     };
     for (&k, n) in nodes {
+        if n.standin {
+            continue;
+        }
+        if let Some(p) = n.proto {
+            match refusal(n, p, proven[&k]) {
+                Some(why) if !n.forced => {
+                    out.refused.insert(k, why);
+                }
+                _ => {
+                    out.shaped.insert(k, p);
+                    out.from_proto.insert(k);
+                    continue;
+                }
+            }
+        }
         let Some(s) = n.sum else { continue };
-        if n.standin || !s.holes.is_empty() {
+        if !s.holes.is_empty() {
             continue;
         }
         if let Some(&c) = unsound.get(&k) {
@@ -264,6 +368,144 @@ pub fn shapes(nodes: &BTreeMap<u32, Node>) -> Shapes {
     out
 }
 
+/// Why the summaries prove prototype shape `p` wrong for `n`, if they
+/// do; `proven` is what its callers are proven to read after it.
+fn refusal(n: &Node, p: Shape, proven: u8) -> Option<String> {
+    let list = |m: u8| {
+        regs(m)
+            .map(|r| format!("r{r}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    // Where the proof is, for the first register of `m`.
+    let at = |m: u8, after: bool| {
+        regs(m)
+            .next()
+            .and_then(|r| n.proofs.get(&(r as u8 + if after { 4 } else { 0 })))
+            .map_or(String::new(), |w| format!(" ({w})"))
+    };
+    let extra = n.proven_params & !p.params;
+    if extra != 0 {
+        return Some(format!(
+            "reads {}, which its prototype doesn't pass{}",
+            list(extra),
+            at(extra, false)
+        ));
+    }
+    let extra = proven & 0xf & !p.results;
+    if extra != 0 {
+        return Some(format!(
+            "a caller reads {} after it, which its prototype doesn't return{}",
+            list(extra),
+            at(extra, true)
+        ));
+    }
+    let s = n.sum?;
+    let entry = (0..4)
+        .filter(|&r| s.exit[r].entry)
+        .fold(0u8, |m, r| m | 1 << r);
+    let extra = p.results & entry & !p.params;
+    if extra != 0 && s.returns {
+        return Some(format!(
+            "may return {} as it came, which its prototype doesn't pass",
+            list(extra)
+        ));
+    }
+    if p.results & s.lr_left != 0 {
+        return Some(format!(
+            "returns its return address in {}",
+            list(p.results & s.lr_left)
+        ));
+    }
+    if s.passed() != 0 {
+        return Some("takes r4-r11 from its callers".into());
+    }
+    if s.gives != 0 {
+        return Some("gives r4-r11 back to its callers".into());
+    }
+    None
+}
+
+/// Where [`proven_params`] and [`proven_after`] found each register (by
+/// register; a read after it at the register plus 4), as the report
+/// words it.
+pub fn proofs(sums: &Summaries, k: u32) -> BTreeMap<u8, String> {
+    let mut out = BTreeMap::new();
+    let Some(s) = sums.get(k) else { return out };
+    for &r in s.causes.keys().filter(|&&r| r < 4) {
+        match sums.root(k, r) {
+            Some((f, Cause::Reads(at))) => {
+                out.insert(r, format!("read at 0x{at:08x}, in 0x{f:08x}"));
+            }
+            Some((f, Cause::Bios { n, at })) => {
+                out.insert(r, format!("swi 0x{n:02x} at 0x{at:08x}, in 0x{f:08x}"));
+            }
+            _ => {}
+        }
+    }
+    for (&r, &(caller, at)) in &s.read_by {
+        if r < 4 {
+            out.insert(r + 4, format!("read at 0x{at:08x}, in 0x{caller:08x}"));
+        }
+    }
+    for (&r, &(caller, c)) in &s.passed_by {
+        if r > 3 || out.contains_key(&(r + 4)) {
+            continue;
+        }
+        let root = match c {
+            Cause::Callee { callee, .. } => sums.root(callee, r),
+            _ => Some((caller, c)),
+        };
+        if let Some((f, Cause::Reads(at) | Cause::Bios { at, .. })) = root {
+            out.insert(
+                r + 4,
+                format!("passed on by 0x{caller:08x}, read at 0x{at:08x}, in 0x{f:08x}"),
+            );
+        }
+    }
+    out
+}
+
+/// The registers of r0-r3 `k`'s summary proves read at entry: those whose
+/// cause, followed through the callees it is passed on to, is an
+/// instruction's read or a BIOS call's ([`Summaries::root`]); not an
+/// indirect call's, which the summaries take to read all four.
+pub fn proven_params(sums: &Summaries, k: u32) -> u8 {
+    let Some(s) = sums.get(k) else { return 0 };
+    s.causes
+        .keys()
+        .filter(|&&r| r < 4)
+        .filter(|&&r| {
+            matches!(
+                sums.root(k, r),
+                Some((_, Cause::Reads(_) | Cause::Bios { .. }))
+            )
+        })
+        .fold(0, |m, &r| m | 1 << r)
+}
+
+/// What `k`'s callers' runs prove read after it (r0-r3): their own
+/// instructions' reads (`read_after`), and the registers they pass on to
+/// a callee whose chain ends in such a read (`passed_after`'s, by
+/// [`Summary::passed_by`]).
+pub fn proven_after(sums: &Summaries, k: u32) -> u8 {
+    let Some(s) = sums.get(k) else { return 0 };
+    let mut m = s.read_after as u8 & 0xf;
+    for (&r, &(caller, c)) in &s.passed_by {
+        if r > 3 || s.passed_after & 1 << r == 0 {
+            continue;
+        }
+        let root = match c {
+            Cause::Callee { callee, .. } => sums.root(callee, r),
+            _ => Some((caller, c)),
+        };
+        if matches!(root, Some((_, Cause::Reads(_) | Cause::Bios { .. }))) {
+            m |= 1 << r;
+        }
+    }
+    m
+}
+
 /// A clean summary's shape, given what may be read after it returns.
 fn shape(s: &Summary, demand: u8) -> Shape {
     if !s.returns {
@@ -272,15 +514,10 @@ fn shape(s: &Summary, demand: u8) -> Shape {
             results: 0,
         };
     }
-    let (mut changed, mut entry) = (0u8, 0u8);
-    for (r, &b) in s.exit[..4].iter().enumerate() {
-        if b.entry {
-            entry |= 1 << r;
-        }
-        if b.def || b.clob || !b.entry {
-            changed |= 1 << r;
-        }
-    }
+    let changed = changed(s);
+    let entry = (0..4)
+        .filter(|&r| s.exit[r].entry)
+        .fold(0u8, |m, r| m | 1 << r);
     // The entry lr left in a register (agbcc's `pop {r0}; bx r0`) is
     // no value a caller reads (`native/lift-frame-gone`).
     let results = (demand & changed | s.results as u8 & 0xf) & !s.lr_left;
@@ -290,13 +527,28 @@ fn shape(s: &Summary, demand: u8) -> Shape {
     }
 }
 
+/// The registers of r0-r3 a returning function's summary says it may
+/// leave other than they came (bit `n` for rN). Those of them that aren't
+/// its results no caller reads after it: a caller's copy is dead there.
+pub fn changed(s: &Summary) -> u8 {
+    (0..4)
+        .filter(|&r| {
+            let b = s.exit[r];
+            b.def || b.clob || !b.entry
+        })
+        .fold(0, |m, r| m | 1 << r)
+}
+
 /// The summaries of one context's functions, by key.
+/// `proto` gives a function's prototype shape and whether it is forced.
 pub fn nodes_of<'a>(
     ctx_index: usize,
     funcs: &[Func],
     sums: &'a Summaries,
     edges: impl Fn(&Func) -> Edges,
     standin: impl Fn(u32) -> bool,
+    addressed: impl Fn(u32) -> bool,
+    proto: impl Fn(u32) -> Option<(Shape, bool)>,
 ) -> Vec<(u32, Node<'a>)> {
     funcs
         .iter()
@@ -308,6 +560,12 @@ pub fn nodes_of<'a>(
                     sum: sums.get(f.entry),
                     edges: edges(f),
                     standin: standin(f.entry),
+                    addressed: addressed(f.entry),
+                    proto: proto(f.entry).map(|(p, _)| p),
+                    forced: proto(f.entry).is_some_and(|(_, f)| f),
+                    proven_params: proven_params(sums, f.entry),
+                    proven_after: proven_after(sums, f.entry),
+                    proofs: proofs(sums, f.entry),
                 },
             )
         })
@@ -353,6 +611,12 @@ mod tests {
                 calls_by_value: BTreeSet::new(),
             },
             standin: false,
+            addressed: true,
+            proto: None,
+            forced: false,
+            proven_params: 0,
+            proven_after: s.read_after as u8 & 0xf,
+            proofs: BTreeMap::new(),
         }
     }
 
@@ -482,6 +746,125 @@ mod tests {
         let s = shapes(&nodes);
         assert_eq!(s.shaped[&2].results, 0b0011);
         assert_eq!(s.shaped[&1].results, 0b0011);
+    }
+
+    fn proto(n: &mut Node, params: u8, results: u8) {
+        n.proto = Some(Shape { params, results });
+    }
+
+    #[test]
+    fn a_prototype_shapes_a_function_with_a_hole() {
+        // f(a) -> void, its run stopped: four registers from the
+        // summaries, its prototype's shape with one.
+        let mut f = sum(0b0001, 0, [DEF; 4]);
+        f.holes
+            .insert("0x08000010: a jump to an unknown place".into());
+        f.stopped = true;
+        let mut n = node(&f, &[], &[]);
+        proto(&mut n, 0b0001, 0);
+        let nodes = BTreeMap::from([(1, n)]);
+        let s = shapes(&nodes);
+        assert_eq!(
+            s.shaped[&1],
+            Shape {
+                params: 0b0001,
+                results: 0
+            }
+        );
+        assert!(s.from_proto.contains(&1));
+    }
+
+    #[test]
+    fn a_prototype_the_summary_proves_short_is_refused() {
+        // The summary proves r1 read; the prototype passes r0 only: the
+        // summary's shape stands.
+        let f = sum(0b0011, 0b0001, [DEF, KEEP, KEEP, KEEP]);
+        let mut n = node(&f, &[], &[]);
+        n.proven_params = 0b0011;
+        proto(&mut n, 0b0001, 1);
+        let nodes = BTreeMap::from([(1, n)]);
+        let s = shapes(&nodes);
+        assert!(s.refused[&1].contains("reads r1"));
+        assert_eq!(s.shaped[&1].params, 0b0011);
+        assert!(!s.from_proto.contains(&1));
+    }
+
+    #[test]
+    fn a_result_a_caller_reads_refuses_a_void_prototype() {
+        // A caller's own instruction reads r0 after it: void is wrong.
+        let f = sum(0, 0b0001, [DEF, KEEP, KEEP, KEEP]);
+        let mut n = node(&f, &[], &[]);
+        proto(&mut n, 0, 0);
+        let s = shapes(&BTreeMap::from([(1, n)]));
+        assert!(s.refused[&1].contains("a caller reads r0"));
+    }
+
+    #[test]
+    fn a_read_after_a_forwarder_is_a_read_after_its_callee() {
+        // c returns x's r0 unread (`return x();`) and its caller reads
+        // r0: x's void prototype is refused.
+        let x = sum(0, 0, [DEF, KEEP, KEEP, KEEP]);
+        let mut c = sum(0, 0b0001, [DEF, KEEP, KEEP, KEEP]);
+        c.callees.insert(1);
+        c.forwards.insert(0, BTreeSet::from([1]));
+        let mut nx = node(&x, &[], &[]);
+        nx.proven_after = 0;
+        proto(&mut nx, 0, 0);
+        let nodes = BTreeMap::from([(1, nx), (2, node(&c, &[1], &[]))]);
+        let s = shapes(&nodes);
+        assert!(s.refused.contains_key(&1));
+    }
+
+    #[test]
+    fn a_planted_prototype_is_taken_unchecked() {
+        let f = sum(0, 0b0001, [DEF, KEEP, KEEP, KEEP]);
+        let mut n = node(&f, &[], &[]);
+        proto(&mut n, 0, 0);
+        n.forced = true;
+        let s = shapes(&BTreeMap::from([(1, n)]));
+        assert!(s.refused.is_empty());
+        assert_eq!(s.shaped[&1].results, 0);
+    }
+
+    #[test]
+    fn a_stand_in_keeps_four_registers_whatever_its_prototype() {
+        let f = sum(0b0001, 0, [DEF; 4]);
+        let mut n = node(&f, &[], &[]);
+        proto(&mut n, 0b0001, 0);
+        n.standin = true;
+        let s = shapes(&BTreeMap::from([(1, n)]));
+        assert!(s.shaped.is_empty());
+    }
+
+    #[test]
+    fn a_function_no_pointer_reaches_gives_only_what_its_callers_read() {
+        // f changes r0-r2; its one caller reads r1 after it. Not
+        // addressed: no r0 for an indirect caller, nor a tail call by
+        // value's demand (t jumps by value to an unknown place, its caller
+        // reading r0-r3).
+        let f = sum(0b0001, 0b0010, [DEF, DEF, DEF, KEEP]);
+        let mut main = sum(0, 0, [DEF; 4]);
+        main.callees.insert(1);
+        let mut t = sum(0, 0, [DEF; 4]);
+        t.read_after = 0xf;
+        t.holes
+            .insert("0x08000300: a jump to an unknown place".into());
+        let mut tn = node(&t, &[], &[]);
+        tn.edges.by_value.insert(0x0800_0300);
+        let mut fnode = node(&f, &[], &[]);
+        fnode.addressed = false;
+        let g = sum(0b0001, 0, [DEF, DEF, DEF, KEEP]);
+        let nodes = BTreeMap::from([
+            (1, fnode),
+            (2, node(&main, &[1], &[])),
+            (3, tn),
+            (4, node(&g, &[], &[])),
+        ]);
+        let s = shapes(&nodes);
+        assert_eq!(s.by_value, 0xf);
+        assert_eq!(s.shaped[&1].results, 0b0010);
+        // g's address is taken: what the tail call's caller reads.
+        assert_eq!(s.shaped[&4].results, 0b0111);
     }
 
     #[test]

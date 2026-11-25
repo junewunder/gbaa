@@ -97,6 +97,10 @@ pub struct Types {
     /// its parameter's C type is an enum family's (`PenState state`), by
     /// key and register.
     arg_values: BTreeMap<(u32, usize), String>,
+    /// Those of `arg_values` the decomp's calls pass a sum of one of the
+    /// family's names (`[values]`' `sums`): a sum's constant there takes
+    /// its name.
+    arg_sums: BTreeSet<(u32, usize)>,
 }
 
 /// A struct as `Ram`'s `ram_t` lays it out ([`Types::layout`]).
@@ -145,7 +149,7 @@ pub struct Proto {
 
 /// Names an accessor can't take: `Ptr`'s own methods and Rust's keywords.
 const PTR_METHODS: &[&str] = &[
-    "at", "field", "idx", "add", "clone", "self", "Self", "super", "crate",
+    "at", "field", "idx", "add", "addr", "clone", "self", "Self", "super", "crate",
 ];
 
 impl Types {
@@ -320,13 +324,82 @@ impl Types {
                 t.protos.insert(k, p);
             }
         }
+        // The parameters the decomp's calls pass a family's names to
+        // (native/lift-value-args): argument register `i` where each
+        // parameter before it is one register. The prototype is the
+        // function's DWARF's, whatever its name there (`GetMonData2`'s
+        // is `GetMonData3`'s: one address).
+        for (fam, v) in &m.values {
+            if !t.values.contains_key(fam) {
+                continue;
+            }
+            for (f, i) in &v.args {
+                for (&k, item) in &m.functions {
+                    if &item.name != f {
+                        continue;
+                    }
+                    let regs = item
+                        .proto
+                        .as_deref()
+                        .map_or(0, |c| t.one_register_params(c, &enums));
+                    if *i < regs {
+                        let have = t.arg_values.entry((k, *i)).or_insert_with(|| fam.clone());
+                        if *have == *fam && v.sums.contains(&(f.clone(), *i)) {
+                            t.arg_sums.insert((k, *i));
+                        }
+                    }
+                }
+            }
+        }
         t
     }
 
+    /// How many of prototype `c`'s parameters from the first are one
+    /// register each (a pointer, an array, an integer of 32 bits or less),
+    /// up to four. The function's name is the one `c` gives.
+    fn one_register_params(&self, c: &str, enums: &BTreeMap<&str, u32>) -> usize {
+        let Some(open) = c.find('(') else { return 0 };
+        let Some(name) = c[..open]
+            .rsplit(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
+            .next()
+            .filter(|n| !n.is_empty())
+        else {
+            return 0;
+        };
+        let Some((_, params)) = crate::dwarf::proto_params(c, name) else {
+            return 0;
+        };
+        params
+            .iter()
+            .take(4)
+            .take_while(|(_, ty)| {
+                let ty = normal(ty);
+                if ty.contains('[') && !ty.contains('(') {
+                    return true;
+                }
+                matches!(
+                    self.read(&ty, enums),
+                    Some(Ty::Ptr(_) | Ty::U8 | Ty::U16 | Ty::U32)
+                )
+            })
+            .count()
+    }
+
     /// The names of the values function `key`'s argument in register `r`
-    /// takes, by value, where its parameter's type is an enum family's.
+    /// takes, by value, where its parameter's type is an enum family's or
+    /// the decomp's calls pass it the family's names (native/lift-value-args).
     pub fn values_of_arg(&self, key: u32, r: usize) -> Option<&BTreeMap<u32, String>> {
         self.values.get(self.arg_values.get(&(key, r))?)
+    }
+
+    /// [`Types::values_of_arg`] where the decomp's calls also pass that
+    /// argument a sum one of the names is the base of (`MON_DATA_MOVE1 +
+    /// j`): a sum's constant there takes its name.
+    pub fn sum_values_of_arg(&self, key: u32, r: usize) -> Option<&BTreeMap<u32, String>> {
+        if !self.arg_sums.contains(&(key, r)) {
+            return None;
+        }
+        self.values_of_arg(key, r)
     }
 
     /// Whether the map gives any function's prototype.
@@ -1420,6 +1493,48 @@ fields = [
         assert!(t.is_bitfield(&objs, 4, 1, (4, 4)));
         assert!(!t.is_bitfield(&objs, 4, 1, (4, 3)));
         assert!(!t.is_bitfield(&objs, 7, 1, (0, 8)));
+    }
+
+    #[test]
+    fn a_bitfield_straddling_its_unit_reads_from_the_struct_start() {
+        // agbcc's struct { u8 a:4, b:2, c:1, d:1; u16 beats:10; }, as
+        // pret-names places it: beats in the word at 0, bits 8-17.
+        let text = format!(
+            r#"[map]
+rom_sha1 = "{SHA}"
+[data]
+0x03000000 = {{ name = "gClock", size = 4, type = "struct Clock" }}
+[types."struct Clock"]
+kind = "struct"
+size = 4
+fields = [
+  {{ name = "a", off = 0, size = 1, type = "u8", bits = [0, 4] }},
+  {{ name = "b", off = 0, size = 1, type = "u8", bits = [4, 2] }},
+  {{ name = "c", off = 0, size = 1, type = "u8", bits = [6, 1] }},
+  {{ name = "d", off = 0, size = 1, type = "u8", bits = [7, 1] }},
+  {{ name = "beats", off = 0, size = 4, type = "u16", bits = [8, 10] }},
+]
+"#
+        );
+        let m = SourceMap::from_texts(SHA, &[&text]).unwrap();
+        let t = &m.typed;
+        let clock = t.global_at(0x0300_0000).unwrap().1.clone();
+        let f = |s: &str| Step::Field(s.into());
+        // A word's load and `>> 8 & 0x3ff`: beats; the byte's `& 0xf`: a.
+        assert_eq!(
+            t.path(&clock, 0, 4, Some((8, 10))),
+            (vec![f("beats")], None)
+        );
+        assert_eq!(t.path(&clock, 0, 1, Some((0, 4))), (vec![f("a")], None));
+        let text = t.module(&m).to_string();
+        let want =
+            "pub const fn beats (self) -> Ptr < Bits < u32 , 8 , 10 > > { self . field (0) }";
+        assert!(text.contains(want), "{want} in {text}");
+        // One word holds them all.
+        let l = t.layout("struct Clock").unwrap();
+        assert_eq!(l.fields, [("a_b_c_d_beats".to_string(), 0, Ty::U32)]);
+        let beats = l.bits.iter().find(|b| b.ident == "beats").unwrap();
+        assert_eq!((beats.lo, beats.n), (8, 10));
     }
 
     #[test]

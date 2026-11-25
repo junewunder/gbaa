@@ -151,6 +151,7 @@ build for the host.
   Result<u32, Exit>` (`()`, `u32` or a tuple), with a four-register
   adapter `a_<key>` for `FNS` and `ENTRY`; four-register functions
   without a summary hole are 0 (bar 0).
+- **Shapes from the prototypes** (`native/lift-signature-holes`): `shape.rs`; `docs/research/signature-holes.md`.
 - **No `Result` where nothing exits**: `native::no_result`; `functions_result_unneeded` 0.
 - **Function addresses followed to every use** (`native/fnref-flow`).
   Done (`crates/codegen/src/native/fnref.rs`, whose module doc is the
@@ -206,8 +207,8 @@ local), so locals need an escape analysis first.
   every local in the frame's bytes too, `shadow local:` where a load
   differs (`docs/tools/commands.md`). Frameless: `native/lift-frame-gone`.
 
-Escaping slots passed as `&mut` (the design's section 1 form 1) come with
-typed pointers, below; until then they are soft holes, counted.
+Escaping slots passed as `&mut`: `native/lift-stack-arrays` (design,
+`frame::lend`), printed by `native/lift-lent-print` and its follow-ups.
 
 ### 5. Typed data
 
@@ -281,7 +282,7 @@ first tests stage A and the shortcuts on a real agbcc game that builds.
 
 - **Lifted crates split into modules that build**
   (`native/lift-modules`). Done (`codegen::native::modules`): modules of
-  about 4,000 lines, so rustc's codegen runs on several cores.
+  about 4,000 lines, so rustc's codegen runs on several cores; by source file where the names give one.
 - **Metroid lifts with no hard holes and builds**
   (`native/metroid-lifts`). Done (2026-11-08, quack): `--name metroid`,
   `mods/metroid/holes.toml` (private: its stand-ins port the game's code),
@@ -346,7 +347,7 @@ Not filed, for stage C or later: the 8 jumps by value per program as a
 `match` on the target's code (the structuring plan takes them as jumps to
 labels; native/lift-structured), the functions whose
 callee-saves aren't proven (soft: each function keeps its own r4-r11),
-escaping stack slots as `&mut`, and replacing agb's allocator. Also not
+and replacing agb's allocator. Also not
 filed: discovery's own fix for the gaps the lifter decodes (a `bl`'s
 second half taken for a pool, a scan stopped short; `gap_targets`); file
 it if a game needs it.
@@ -363,13 +364,13 @@ What the done pieces left open, for the units that come next.
   a fall passes on as parameters, so `x_` stays whole for fall targets. A
   stand-in, and a jump through a register to a target no table names
   (`call_fn`), are still entered by the plain entry.
-- **A store to `IME` the recompiler can't fold** (piece 1) still ticks
-  at its block's end, not at the store.
-- **Shapes return too much** (piece 3). Many shaped functions return all
-  four registers, because a caller whose run stopped (a fall into library
-  code) calls them, and a jump by value the run didn't prove a return
-  adds r0 to every function. `native/indirect-call-args` and the stack
-  units narrow those as the summaries' holes close.
+- **A store to `IME` the recompiler can't fold** (piece 1; through a
+  register a loop sets) still ticks at its block's end, not at the store.
+- **Shapes return too much** (piece 3). Results are what callers read
+  (native/lift-returns-read), but a caller whose run stopped at a hole,
+  or in another code context, still reads all four of each callee, and
+  an unknown jump by value gives its callers' reads to every function a
+  pointer reaches (native/lift-returns-past-holes).
 - **The pile** (piece 3, function addresses). Most words aren't proven
   and nearly every `call_fn` set is every address-taken function. No one
   kind of read holds them (`research/fnref-held-words.md`). The pieces

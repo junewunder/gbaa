@@ -47,7 +47,13 @@
 //!   (no bar: it should rise) and, where it lands inside a field,
 //!   `named_inside_accesses`; of either, `named_index_accesses` (no
 //!   bar) print as an element by a variable index (`.idx(i)`, `.add(i)`;
-//!   native/lift-index-names). A lift with types also has
+//!   native/lift-index-names). `named_element_addresses` (no bar) counts
+//!   the values, not accesses, printed as an element's or its field's
+//!   address by name (`.idx(i).addr()`, native/lift-element-address);
+//!   `for_stepped_elements` (no bar) the pointers a `for` steps beside its
+//!   variable printed as the element they are, and `for_counter_arith`
+//!   (barred) the `for`s whose body still multiplies or shifts the
+//!   variable (native/lift-for-index). A lift with types also has
 //!   `computed_unknown_unnamed`, barred: the `computed_unknown` accesses
 //!   no type names. Of those through a typed pointer that hold bitfields
 //!   (`super::bitfields`, native/lift-bitfields): `bitfield_sets` print
@@ -108,6 +114,13 @@
 //! return nor a `call_fn` arm (no bar: it should rise), so that the
 //! r0-r3 such an arm would pass aren't live at entry.
 //!
+//! Results (native/lift-returns-read): `results_several`, the shaped
+//! functions giving back more than one of r0-r3, and `tuple_calls`, the
+//! statements assigning a call's results to a tuple of two or more
+//! (`(r1, r2) = f(g, …)`, read from the function modules' text, not the
+//! prelude's): both barred, as C gives
+//! back one value or none.
+//!
 //! Frames gone (`native/lift-frame-gone`): `sp_arith_unescaped`, the
 //! functions printing sp arithmetic though no slot of their frame
 //! escapes, nor do they pass sp on to code needing it exactly or write
@@ -137,6 +150,12 @@
 //! `lets_named` (`native/lift-let-names`): the values printed as their
 //! own `let` that took a name from what they hold, not `vN` (no bar: it
 //! should rise; [`super::value_names`]).
+//! Pointer variables (`native/lift-pointer-types`, [`super::ref_binds`]):
+//! `refs_bound_named` and `refs_bound_proven`, the parameters and `let`s
+//! declared the `Ref<T>` their accesses make of them, by where `T` came
+//! from (the names files', a heap run's; no bars: they should rise), and
+//! `ref_new_at_use`, the `Ref::<T>::new(…)` and `Ref::<T>::to(…)` still
+//! printed at a use (barred).
 //!
 //! I/O registers (`native/lift-io-names`): `io_named`, the constant-address
 //! I/O loads and stores printed by a register's name (`st16(g, REG_IME,
@@ -148,8 +167,10 @@
 //! Value names (`native/lift-value-names`): `values_named`, the constants
 //! a store to or compare with a field or global that takes a family of
 //! the names files' `[values]` prints by its name (`g.ram.gPen.state =
-//! PEN_RIGHT as u8`; no bar: it should rise). Their constants in
-//! `main.rs` are data, not in `lines`.
+//! PEN_RIGHT as u8`; no bar: it should rise), and those a call passes to
+//! a parameter that takes one, alone or as a sum's constant
+//! (`fill_rect(g, r13, 0x0u32, ROW_BAR, …)`; `native/lift-value-args`).
+//! Their constants in `main.rs` are data, not in `lines`.
 //!
 //! Data names (`native/lift-data-names-inline`, [`super::named`]): in a
 //! lift with names, `data_constants_named`, the constant addresses inside
@@ -333,6 +354,7 @@ pub fn lower_bars(
 
 /// The metrics with no bar: they are meant to rise.
 pub const UNBARRED: &[&str] = &[
+    "proto_shapes",
     "functions_recognised",
     "ram_globals",
     "load_ram_global",
@@ -349,6 +371,7 @@ pub const UNBARRED: &[&str] = &[
     "named_field_accesses",
     "named_inside_accesses",
     "named_index_accesses",
+    "named_element_addresses",
     "bitfield_sets",
     "data_constants_named",
     "ref_types",
@@ -360,6 +383,7 @@ pub const UNBARRED: &[&str] = &[
     "compare_trees_matched",
     "compare_tree_blocks",
     "loops_for",
+    "for_stepped_elements",
     "narrowing_casts",
     "plain_entry_bodies",
     "closed_tables",
@@ -370,6 +394,8 @@ pub const UNBARRED: &[&str] = &[
     "values_named",
     "locals_named",
     "lets_named",
+    "refs_bound_named",
+    "refs_bound_proven",
 ];
 
 /// The bars of `program` in a bars file: `[program.<name>.bars]`, each

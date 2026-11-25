@@ -1,7 +1,7 @@
 //! `gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE]
 //! [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT]
 //! [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT]
-//! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-for-loops] [--copies N] [--holes-only [--flow]]
+//! [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-ref-binds] [--no-prototype-shapes] [--plant-proto=KEY] [--no-for-loops] [--copies N] [--holes-only [--flow]]
 //! [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N]
 //! [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...]`,
 //! or `gbaa-lift ROM --find FIELD [FLAGS]`:
@@ -37,7 +37,10 @@
 //! `--no-local-names` leaves that out. A value printed as its own `let`
 //! takes a name from what it holds (a global's, a field's, its register's
 //! variable's: `codegen::native::value_names`, unit
-//! `native/lift-let-names`); `--no-let-names` leaves them `vN`. `--layout guest` (the
+//! `native/lift-let-names`); `--no-let-names` leaves them `vN`. A pointer
+//! variable is declared the `Ref<T>` its accesses make of it
+//! (`codegen::native::ref_binds`, unit `native/lift-pointer-types`);
+//! `--no-ref-binds` leaves it `u32`, each access making its `Ref`. `--layout guest` (the
 //! default) puts them at the guest's offsets, the native check's layout;
 //! `--layout packed` makes them fields in the lifter's order, the rest of
 //! RAM bytes, the play layout, which must draw the same frames (unit
@@ -85,6 +88,14 @@
 //! check must catch on `agb/native-frame-locals` (unit
 //! `native/frame-locals`).
 //!
+//! Where the names files give a function's prototype, its parameters and
+//! result are the prototype's, hole or not, unless its summary proves
+//! the prototype wrong (`codegen::native::shape`, unit
+//! `native/lift-signature-holes`; the report lists each refused);
+//! `--no-prototype-shapes` prints the summaries' shapes alone.
+//! `--plant-proto=KEY` takes function KEY's prototype to return nothing,
+//! unchecked: a planted wrong prototype the native check must catch.
+//!
 //! `--shadow-locals` keeps every stack local in the frame's bytes as well
 //! and prints a `shadow local:` line to stderr wherever a load from a
 //! local differs from them: something the escape analysis didn't see
@@ -105,13 +116,19 @@
 //! first did; the lift prints a counted loop as a `for` over its range: of
 //! one block from a constant start (unit `native/lift-for-loops`), or of
 //! any number of blocks to a bound the guard before it proves the range
-//! of (unit `native/lift-for-bounds`). The report counts both
+//! of (unit `native/lift-for-bounds`), or tested at its start, which may
+//! leave before the first round (unit `native/lift-for-top-tested`); the
+//! bound may be loaded from RAM each round where nothing in a round stores
+//! to it (unit `native/lift-for-ram-bounds`). The report counts both
 //! (`loops_for`, `loops_not_for`). A measure by hand too. `GBAA_FOR_WHY=1`
-//! prints to stderr why each loop of several blocks stays a `loop`.
+//! prints to stderr why each loop of several blocks stays a `loop`, and
+//! each one's range that doesn't.
 //!
 //! `src/` is `main.rs` (the prelude, RAM, `ENTRY`), `fns.rs` (`FNS`) and
 //! the functions in modules of about 4,000 lines (`codegen::native::modules`,
-//! unit `native/lift-modules`), so rustc builds them in parallel; a `.rs`
+//! unit `native/lift-modules`), so rustc builds them in parallel: one per
+//! source file the names files give (`script_pokemon_util.rs`; unit
+//! `native/lift-modules-by-source`), the rest by address; a `.rs`
 //! file there from an earlier lift that this one didn't write is removed.
 //! `--copies N` writes the modules N times over under different names: a
 //! synthetic large lift, for measuring the build of a game-sized crate.
@@ -145,7 +162,8 @@
 //!
 //! `--cut DIR [KEY]...` (unit `native/lift-mod-cut`;
 //! `codegen::native::cut`) cuts functions KEY (hex keys, or names as the
-//! names files give them) into a mod at DIR: each one's whole printed
+//! names files give them, a renamed one's earlier name too:
+//! `codegen::names::SourceMap::resolve`) into a mod at DIR: each one's whole printed
 //! text, names and all, to `DIR/src/<name>.rs` to edit and `DIR/orig/`
 //! as cut, and `DIR/replace.toml`, a holes file whose `[[cut]]`s
 //! `--replace DIR/replace.toml` builds the lift with (each cut in its
@@ -159,7 +177,8 @@
 //! `--find FIELD` (unit `native/lift-find-field`; `just lift-find`;
 //! `codegen::native::find_field`) lifts and writes nothing (no OUT): it
 //! lists the functions whose loads and stores the lift places on FIELD,
-//! a field of a struct the names files type or a datum by name, writers
+//! a field of a struct the names files type or a datum by name (any
+//! layer's), writers
 //! then readers, by source line and path, then those whose address is
 //! one of several, the field's among them. Fails when nothing names it.
 //!
@@ -186,7 +205,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || {
         eprintln!(
-            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...] | gbaa-lift ROM --find FIELD [FLAGS]"
+            "usage: gbaa-lift ROM OUT [--name NAME] [--holes FILE] [--bars FILE] [--names DIR]... [--no-data-names] [--layout guest|packed] [--fn-ids rom|dense] [--drop-standin KEY] [--plant AT] [--fall-as-tail-call] [--irq-at-waits] [--ime-at-waits] [--takes-zeroed] [--gives-kept] [--plant-slot=AT] [--shadow-locals] [--keep-dead-writes] [--keep-temps] [--no-field-types] [--no-local-names] [--no-let-names] [--no-ref-binds] [--no-prototype-shapes] [--plant-proto=KEY] [--no-for-loops] [--copies N] [--holes-only [--flow]] [--fn-check KEY]... [--replace FILE] [--seed N] [--runs N] [--interp-every N] [--plant-reference] [--fn-check-cuts] [--text-edit FILE] [--cut DIR [KEY]...] | gbaa-lift ROM --find FIELD [FLAGS]"
         );
         ExitCode::FAILURE
     };
@@ -208,6 +227,8 @@ fn main() -> ExitCode {
     let mut no_data_names = false;
     let mut no_for_loops = false;
     let mut no_let_names = false;
+    let mut no_ref_binds = false;
+    let (mut no_proto_shapes, mut plant_proto) = (false, None);
     let (mut holes_only, mut holes_flow) = (false, false);
     let (mut plant_slot, mut shadow, mut copies) = (None, false, 1);
     let (mut fn_check, mut replace, mut seed, mut runs) = (Vec::new(), None, None, None);
@@ -261,8 +282,16 @@ fn main() -> ExitCode {
             no_local_names = true;
             continue;
         }
+        if a == "--no-ref-binds" {
+            no_ref_binds = true;
+            continue;
+        }
         if a == "--no-let-names" {
             no_let_names = true;
+            continue;
+        }
+        if a == "--no-prototype-shapes" {
+            no_proto_shapes = true;
             continue;
         }
         if a == "--no-for-loops" {
@@ -300,6 +329,13 @@ fn main() -> ExitCode {
             continue;
         }
         // One word, so the lift check's `planted_flags` can name it.
+        if let Some(k) = a.strip_prefix("--plant-proto=") {
+            match hex(k) {
+                Some(k) => plant_proto = Some(k),
+                None => return usage(),
+            }
+            continue;
+        }
         if let Some(at) = a.strip_prefix("--plant-slot=") {
             match hex(at) {
                 Some(at) => plant_slot = Some(at),
@@ -436,6 +472,7 @@ fn main() -> ExitCode {
     holes.keep_temps = keep_temps;
     holes.no_for_loops = no_for_loops;
     holes.no_let_names = no_let_names;
+    holes.no_ref_binds = no_ref_binds;
     holes.plant_slot = plant_slot;
     holes.shadow_locals = shadow;
     holes.copies = copies;
@@ -480,6 +517,8 @@ fn main() -> ExitCode {
         );
         Ok::<_, String>(all)
     });
+    // The map, for `--cut` and `--find` to take a name any layer gave.
+    let src_map;
     match files.and_then(|fs| codegen::names::SourceMap::load(&sha, &fs)) {
         Ok(map) => {
             holes.names = map
@@ -499,6 +538,11 @@ fn main() -> ExitCode {
                     };
                     Some((a, (id.to_string(), size)))
                 })
+                .collect();
+            holes.fn_srcs = map
+                .functions
+                .iter()
+                .filter_map(|(&k, f)| Some((k, f.src.clone()?)))
                 .collect();
             holes.fn_names = map
                 .functions
@@ -525,6 +569,30 @@ fn main() -> ExitCode {
                     locals: map.locals.clone(),
                 }));
             }
+            // Prototypes: each function's shape where the summaries don't
+            // prove it wrong (native/lift-signature-holes).
+            if !no_proto_shapes {
+                holes.protos = map
+                    .functions
+                    .iter()
+                    .filter_map(|(&k, item)| {
+                        let (params, results) =
+                            codegen::saves::proto_regs(&map, item.proto.as_deref()?, &item.name)?;
+                        Some((k, (params, results as u8 & 0xf)))
+                    })
+                    .collect();
+            }
+            if let Some(k) = plant_proto {
+                match holes.protos.get(&k) {
+                    Some(&(_, r)) if r != 0 => holes.plant_proto = Some(k),
+                    _ => {
+                        eprintln!(
+                            "gbaa-lift: --plant-proto: 0x{k:08x} has no prototype returning a value"
+                        );
+                        return ExitCode::FAILURE;
+                    }
+                }
+            }
             // A line table: each source line's first instruction gets its
             // `// file:line` comment.
             holes.lines = codegen::native::line_starts(&map);
@@ -533,6 +601,7 @@ fn main() -> ExitCode {
             let dwarf = !no_local_names && (!map.locals.is_empty() || map.typed.has_protos());
             let text = map.text.is_some();
             let map = std::sync::Arc::new(map);
+            src_map = Some(map.clone());
             if dwarf {
                 holes.dwarf = Some(map.clone());
             }
@@ -567,11 +636,13 @@ fn main() -> ExitCode {
             }
         }
         for k in &cut_keys {
-            let by_name = holes
-                .fn_names
-                .iter()
-                .find(|(_, n)| *n == k)
-                .map(|(&key, _)| key);
+            // An identifier, or another name of one function's (an
+            // earlier layer's, the decomp's: native/names-keep-source-lines).
+            let by_name = src_map
+                .as_ref()
+                .and_then(|m| m.resolve(k))
+                .filter(|&(kind, _)| kind == codegen::names::Kind::Func)
+                .map(|(_, key)| key);
             let key = by_name
                 .or_else(|| {
                     cut_mod
@@ -610,6 +681,16 @@ fn main() -> ExitCode {
     let lifted = codegen::native::lift(&bytes, &name, &holes);
     if let Some(field) = &find {
         use codegen::native::find_field;
+        // A datum's other name (an earlier layer's, the decomp's) finds
+        // it by its identifier.
+        let field = &src_map
+            .as_ref()
+            .filter(|m| m.key_of(field).is_none())
+            .and_then(|m| match m.resolve(field)? {
+                (codegen::names::Kind::Data, a) => Some(m.ident(codegen::names::Kind::Data, a)?),
+                _ => None,
+            })
+            .map_or_else(|| field.clone(), str::to_string);
         let names = find_field::Names {
             data: &holes.names,
             types: holes.types.as_deref(),

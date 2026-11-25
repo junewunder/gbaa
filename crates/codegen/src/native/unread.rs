@@ -1,8 +1,11 @@
-//! Two measures of the printed lift's text (unit `native/lift-plain-arith`):
+//! Measures of the printed lift's text (unit `native/lift-plain-arith`):
 //! the `let`s nothing reads (`unread_lets`), and the sums still printed as
 //! `prim::add_with_carry(..).0` (`adc_sums`), whose flags the printer
 //! writes from their own `.1` and `.2` if anything reads them, so the sum
-//! itself prints as plain arithmetic ([`super::narrow::Form`]).
+//! itself prints as plain arithmetic ([`super::narrow::Form`]); and
+//! (`native/lift-returns-read`) the calls that assign a tuple of
+//! registers (`tuple_calls`: `(r1, r2) = f(g, …)`), a callee giving back
+//! more than one result.
 //!
 //! They read the text rather than the printer's plan, so a `let` any path
 //! prints (a compare tree's arms, a stand-in) counts. A function is the
@@ -14,6 +17,48 @@
 /// The `let`s of `text` (Rust source) nothing after them reads.
 pub fn unread_lets(text: &str) -> u64 {
     fn_bodies(text).into_iter().map(unread_in).sum()
+}
+
+/// The statements of `text` that assign a call's results to a tuple of
+/// two or more names, `let` or not: `(r0, r1) = f(g, …)?;`. A tuple of
+/// values on the right (`(a, b) = (x, y)`) isn't a call.
+pub fn tuple_calls(text: &str) -> u64 {
+    let ident = |s: &str| {
+        let s = s.trim().trim_start_matches("mut ");
+        !s.is_empty() && s.chars().all(|c| c == '_' || c.is_ascii_alphanumeric())
+    };
+    let mut n = 0;
+    let mut from = 0;
+    while let Some(p) = text[from..].find(") = ") {
+        let close = from + p;
+        from = close + 4;
+        let Some(open) = text[..close].rfind('(') else {
+            continue;
+        };
+        let inner = &text[open + 1..close];
+        let names: Vec<&str> = inner.split(',').collect();
+        if names.len() < 2 || !names.iter().all(|s| ident(s)) {
+            continue;
+        }
+        // A statement's start: a line's indent, a block's `{ `, `let `.
+        let before = text[..open].trim_end_matches(' ');
+        let before = before
+            .strip_suffix("let")
+            .unwrap_or(before)
+            .trim_end_matches(' ');
+        if !(before.is_empty() || before.ends_with(['\n', '{', ';'])) {
+            continue;
+        }
+        // A call: a path then `(`.
+        let rhs = &text[from..];
+        let callee = rhs
+            .find(|c: char| !(c == '_' || c == ':' || c.is_ascii_alphanumeric()))
+            .map_or("", |e| &rhs[..e]);
+        if !callee.is_empty() && rhs[callee.len()..].starts_with('(') {
+            n += 1;
+        }
+    }
+    n
 }
 
 /// The `prim::add_with_carry(..).0` calls of `text`.
@@ -235,6 +280,12 @@ pub fn unread_at(f: &str) -> Vec<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tuple_call_assigns_two_results_from_a_call() {
+        let f = "fn f() {\n    (r1, r2) = bar(g, r13, 1)?;\n    let (a, mut b) = baz(g);\n    (r0, r1) = (r1, r0);\n    r0 = one(g);\n    { (r2, r3) = m::q(g); }\n    st(g, (a, b) = 1);\n}\n";
+        assert_eq!(tuple_calls(f), 3);
+    }
 
     #[test]
     fn a_let_is_unread_until_a_use_before_its_next_let() {

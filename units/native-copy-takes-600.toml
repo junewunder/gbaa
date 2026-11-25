@@ -1,0 +1,13 @@
+# agb/native-copy-takes for 600 frames with no input: the cross-context
+# takes program of the stage-A lifter's check (native/lift-takes-across-copies;
+# `just lift-check`), its lift (gbaa-lift) against the play build at
+# --timing native by route-check --native. What it draws:
+# agb/native-copy-takes/SCENE.md.
+rom = "$GBAA_DATA/agb/native-copy-takes.gba"
+
+[[checkpoint]]
+name = "native-copy-takes-600"
+frame = 600
+hash = "ba172157a4755a93"
+# Verified: mGBA 0.10.5 (`just mgba-diff`) draws the same at frame 600
+# (2026-11-24).

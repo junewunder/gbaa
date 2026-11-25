@@ -27,9 +27,10 @@ struct Ball {
 };
 
 /* The clock: the beats so far, frames in the beat and the ball the next
- * blink turns over. The halfword's fields come first: agbcc lets a
- * bitfield straddle its type's unit (`u16 beats : 10` after a byte's
- * fields), which pret-names doesn't place. */
+ * blink turns over. The halfword's fields come first, so no bitfield
+ * straddles its type's unit (agbcc allows `u16 beats : 10` after a
+ * byte's fields, at bits 8-17; pret-names places that from the struct's
+ * start, a test of its own). */
 struct Clock {
     u16 beats : 10;
     u16 level : 6;

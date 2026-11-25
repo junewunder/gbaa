@@ -14,7 +14,10 @@
 //! stored and compared values with). Other tables (pret-names' report:
 //! `[inside]`, `[unnamed]`, `[missed]`) are ignored.
 //!
-//! Files load in order and a later one wins per key. One file may not give
+//! Files load in order and a later one wins per key, keeping what it
+//! doesn't say of the entry before (its size, file, prototype and source
+//! file) and that entry's name as another name, which a cut or a find
+//! takes too. One file may not give
 //! one name to two addresses unless their `file`s differ (statics of two
 //! source files). The identifier table then makes every name a Rust
 //! identifier that names exactly one key, so a named print inverts exactly.
@@ -41,6 +44,10 @@ pub struct Item {
     pub proto: Option<String>,
     /// A function's source file, from DWARF (`src/pokemon.c`).
     pub src: Option<String>,
+    /// Its other names: an earlier layer's this one renamed, and a hand
+    /// file's `katam` or `aka` (the decomp's name), which `--cut` and
+    /// `--find` take too (native/names-keep-source-lines).
+    pub aka: Vec<String>,
 }
 
 /// Where a local lives (`[locals]`).
@@ -105,6 +112,13 @@ pub struct Values {
     pub names: Vec<(String, u32)>,
     pub fields: Vec<(String, String)>,
     pub globals: Vec<String>,
+    /// The function parameters the decomp's calls pass its names to, as
+    /// (function's name, parameter index) (`GetMonData2`, 1;
+    /// native/lift-value-args).
+    pub args: Vec<(String, usize)>,
+    /// Those of `args` a call passes a sum one of its names is the base
+    /// of (`MON_DATA_MOVE1 + j`): a sum's constant there may take a name.
+    pub sums: Vec<(String, usize)>,
 }
 
 /// Every map file, layered, and the identifier of each named key.
@@ -348,13 +362,44 @@ fn item(v: &toml::Value, at: &str) -> Result<Item, String> {
         .ok_or_else(|| format!("{at}: not an inline table"))?;
     let s = |f: &str| t.get(f).and_then(|v| v.as_str()).map(str::to_string);
     let name = s("name").ok_or_else(|| format!("{at}: no name"))?;
+    let aka = ["katam", "aka"]
+        .iter()
+        .filter_map(|f| s(f))
+        .filter(|a| *a != name)
+        .collect();
     Ok(Item {
         name,
         size: t.get("size").and_then(|v| v.as_integer()).map(|n| n as u64),
         file: s("file"),
         proto: s("proto").or_else(|| s("type")),
         src: s("src"),
+        aka,
     })
+}
+
+/// `new` laid over `old`, an earlier layer's entry for the same key: what
+/// `new` doesn't say (size, file, prototype or type, source file) it keeps
+/// from `old`, so a hand rename keeps the decomp's source lines, and
+/// `old`'s names become its other names. A function's prototype names it:
+/// it is renamed too.
+fn over(mut new: Item, old: &Item, kind: Kind) -> Item {
+    new.size = new.size.or(old.size);
+    new.file = new.file.or_else(|| old.file.clone());
+    new.src = new.src.or_else(|| old.src.clone());
+    if new.proto.is_none() {
+        new.proto = old.proto.as_ref().map(|p| match kind {
+            Kind::Func if old.name != new.name => {
+                p.replacen(&format!("{}(", old.name), &format!("{}(", new.name), 1)
+            }
+            _ => p.clone(),
+        });
+    }
+    for a in std::iter::once(&old.name).chain(&old.aka) {
+        if *a != new.name && !new.aka.contains(a) {
+            new.aka.push(a.clone());
+        }
+    }
+    new
 }
 
 fn local(v: &toml::Value, at: &str) -> Result<Local, String> {
@@ -443,6 +488,18 @@ fn values(v: &toml::Value, at: &str) -> Result<Values, String> {
             .ok_or_else(|| format!("{at}: a global is its name"))?;
         globals.push(g.to_string());
     }
+    let takers = |key: &str| -> Result<Vec<(String, usize)>, String> {
+        arr(key)
+            .map(|a| {
+                a.as_str()
+                    .and_then(|a| a.rsplit_once(':'))
+                    .and_then(|(f, i)| Some((f.to_string(), i.parse().ok()?)))
+                    .ok_or_else(|| format!("{at}: an {key} entry is \"function:index\""))
+            })
+            .collect()
+    };
+    let args = takers("args")?;
+    let sums = takers("sums")?;
     let mut names = Vec::new();
     for n in arr("names") {
         let n = n
@@ -465,6 +522,8 @@ fn values(v: &toml::Value, at: &str) -> Result<Values, String> {
         names,
         fields,
         globals,
+        args,
+        sums,
     })
 }
 
@@ -528,7 +587,8 @@ impl SourceMap {
     }
 
     /// Lays one file over what is loaded: its `[map]` header checked, then
-    /// each key it names replaces the entry before.
+    /// each key it names replaces the entry before, but for what it
+    /// doesn't say ([`over`]).
     fn layer(&mut self, rom_sha1: &str, text: &str) -> Result<(), String> {
         let doc: toml::Table = text.parse().map_err(|e| format!("{e}"))?;
         let head = doc
@@ -629,8 +689,20 @@ impl SourceMap {
         if let Some(v) = doc.get("text") {
             self.text = Some(crate::text::Charmap::new(crate::text::parse_entries(v)?));
         }
-        self.functions.extend(funcs);
-        self.data.extend(data);
+        for (k, i) in funcs {
+            let i = match self.functions.get(&k) {
+                Some(old) => over(i, old, Kind::Func),
+                None => i,
+            };
+            self.functions.insert(k, i);
+        }
+        for (k, i) in data {
+            let i = match self.data.get(&k) {
+                Some(old) => over(i, old, Kind::Data),
+                None => i,
+            };
+            self.data.insert(k, i);
+        }
         Ok(())
     }
 
@@ -760,6 +832,35 @@ impl SourceMap {
     /// The key an identifier names: the table's inverse.
     pub fn key_of(&self, ident: &str) -> Option<(Kind, u32)> {
         self.keys.get(ident).copied()
+    }
+
+    /// The key a name names: an identifier, else another name of one
+    /// key's ([`Item::aka`]: an earlier layer's, the decomp's), else the
+    /// name as given of one key.
+    pub fn resolve(&self, name: &str) -> Option<(Kind, u32)> {
+        if let Some(k) = self.key_of(name) {
+            return Some(k);
+        }
+        let all = || {
+            self.functions
+                .iter()
+                .map(|(&k, i)| ((Kind::Func, k), i))
+                .chain(self.data.iter().map(|(&k, i)| ((Kind::Data, k), i)))
+        };
+        let one = |hits: Vec<(Kind, u32)>| match hits[..] {
+            [k] => Some(k),
+            _ => None,
+        };
+        one(all()
+            .filter(|(_, i)| i.aka.iter().any(|a| a == name))
+            .map(|(k, _)| k)
+            .collect())
+        .or_else(|| {
+            one(all()
+                .filter(|(_, i)| i.name == name)
+                .map(|(k, _)| k)
+                .collect())
+        })
     }
 
     /// The data `x` lands on or in, as its identifier and `x`'s offset:
