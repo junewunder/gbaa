@@ -5175,15 +5175,22 @@
       "uses": ["heavy"],
       "priority": 94,
       "record": {
-        "state": "claimed",
+        "state": "done",
         "by": "05a949e7",
-        "session": "05a949e7-7734-403c-9118-ed25950c446e",
-        "host": "quack",
-        "pid": 1981458,
-        "start": "101567385",
-        "at": "2026-11-24T23:47:44Z",
+        "at": "2026-11-25T00:59:46Z",
+        "evidence": "Passing::foreign (ram-jump's fixpoint) extended to named [[takes]] sites and direct calls into another context; it covered neither Minish crossing (both are calls, not jumps). Unit test a_takes_site_passes_into_another_context fails without it. agb/native-copy-takes (ROM->IWRAM->ROM pointer calls): lift-check passed, all 38 programs, --takes-zeroed caught (frame 1). Minish: ZeldaFollowAction's hole closes with 22 more takes entries up to AgbMain, where r5 is set (movs r5,#255 at 0x08055f10); its lift passes r5 at 0x03005f94, 0x0805e5e2, 0x0805e600. Hard holes stay 4, not 3: the resume 0x03005f24 now reads r5 at 0x03005f94, noted on {unit:native/lift-restore-saved-block}. just check passed before and after merging main (a8ca79f4).",
         "branch": "unit/native/lift-takes-across-copies",
-        "beats": true
+        "host": "quack",
+        "landing": {
+          "at": "2026-11-25T00:59:46Z",
+          "by": "05a949e7",
+          "host": "quack",
+          "pid": 1981458,
+          "start": "101567385",
+          "beats": true,
+          "session": "05a949e7-7734-403c-9118-ed25950c446e",
+          "lane": "quack/1"
+        }
       },
       "notes": [
         {
